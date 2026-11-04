@@ -887,6 +887,9 @@ class ResourceWorker(ceph_native.Worker):
         # Native absence does not remove retained owned cleanup work.
         evidence["exists"] = owned or bool(entries)
         evidence["resource"] = {"id": "" if unrecorded or not entries else str(native_id), "path": ""}
+        if entries:
+            # The values readiness compares, read back for a comparison of the desired and the real pool.
+            evidence["pool"] = ceph_native.pool_reading(entries[0])
         return ready and not unrecorded and bool(entries) and self.pool_ready(entries[0], pool)
 
     def pool_ready(self, entry, pool):

@@ -17,6 +17,7 @@ import (
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/media"
+	"github.com/crmarques/bootwright/internal/nativeartifacts/comparisonlocal"
 	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
 	"github.com/crmarques/bootwright/internal/nativeartifacts/renderlocal"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -85,6 +86,7 @@ type serviceDependencies struct {
 	Controller       controllerDependencies
 	Lifecycle        lifecycleDependencies
 	Media            mediaDependencies
+	Comparison       comparisonDependencies
 	Reporter         power.Reporter
 	// AmbientRoute is the acquisition route the invoking environment selected
 	// for a context-free command, and is nothing for every other entry point.
@@ -123,6 +125,7 @@ func localServiceDependencies(process processDependencies) (serviceDependencies,
 		Reporter:         process.LifecycleProgress,
 		Controller:       controllerPorts,
 		AmbientRoute:     process.AmbientRoute,
+		Comparison:       comparisonDependencies{Account: account.comparison, Terminal: os.Getenv("TERM"), Language: os.Getenv("LANG")},
 		Media:            localMediaDependencies(repository, process.Confirmer, process.LifecycleProgress, process.MediaPresenter, process.AmbientRoute, files),
 		Lifecycle: lifecycleDependencies{
 			Workspace: repository, Inputs: contexts.Inputs{Repository: repository, Selection: account},
@@ -170,6 +173,10 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	clusters := clusterpreflight.Service{Graph: effectiveGraph{state: services.DesiredState}, Selection: currentSelection(deps.Selection), Container: services.ContainerPreflight, Storage: services.StoragePreflight}
 	services.ClustersPreflight = clusters
 	services.Artifacts = artifactrendering.Service{Compiler: services.DesiredState, Encode: encoding.YAML, Files: renderlocal.Files{}}
+	services.Comparison = comparisonlocal.Service{
+		Trees: renderlocal.Files{}, Account: deps.Comparison.Account, In: deps.Streams.In, Out: deps.Streams.Out, Err: deps.Streams.Err,
+		Terminal: deps.Comparison.Terminal, Language: deps.Comparison.Language,
+	}
 	services.EnvironmentPreflight = environmentpreflight.Service{Graph: effectiveGraph{state: services.DesiredState}, Selection: currentSelection(deps.Selection), Controller: services.Controller, Capacity: storagePreflight, Clusters: clusters}
 	return services
 }

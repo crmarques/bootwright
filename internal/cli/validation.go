@@ -232,6 +232,8 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 		}
 	case "render":
 		return validateRenderDirectories(flags)
+	case "diff":
+		return validateDiffFlags(command)
 	case "machine list":
 		if boolValue(flags, "short") && selectedJSON(command) {
 			return "--short conflicts with " + structuredLabel(command) + " output"

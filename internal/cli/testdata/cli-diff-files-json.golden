@@ -1,0 +1,341 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "diff",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": {
+      "name": "lab",
+      "revision": "rev-8c41d07e"
+    },
+    "operation": {
+      "id": "op-3f9a0c12",
+      "verb": "apply",
+      "state": "done",
+      "apply": "op-3f9a0c12",
+      "revision": "rev-1b7e55a0",
+      "applied": "readable"
+    },
+    "input": "changed",
+    "plan": {
+      "state": "differs",
+      "reason": "",
+      "changed": 1,
+      "added": 1,
+      "removed": 1,
+      "rebuilt": []
+    },
+    "observed": false,
+    "blocks": {
+      "observed": 0,
+      "unknown": 0,
+      "unprojected": 0
+    },
+    "objects": [
+      {
+        "kind": "CephPool",
+        "name": "rbd-archive",
+        "path": "storage/pools.yaml",
+        "difference": "added",
+        "plan": "added",
+        "blocks": [
+          "ceph-pool-rbd-archive"
+        ],
+        "realization": "",
+        "real": {
+          "source": "applied",
+          "state": "absent",
+          "path": "",
+          "document": null,
+          "notCompared": [],
+          "notes": [],
+          "reason": "no operation of this context realized it",
+          "remedy": ""
+        },
+        "desired": {
+          "document": {
+            "apiVersion": "bootwright.io/v1alpha1",
+            "kind": "CephPool",
+            "metadata": {
+              "name": "rbd-archive"
+            },
+            "spec": {
+              "clusterRef": "ceph-lab",
+              "role": "rbd",
+              "replicated": {
+                "size": 3,
+                "minSize": 2
+              },
+              "autoscale": {
+                "mode": "on"
+              }
+            }
+          }
+        }
+      },
+      {
+        "kind": "CephPool",
+        "name": "rbd-data",
+        "path": "storage/pools.yaml",
+        "difference": "changed",
+        "plan": "changed",
+        "blocks": [
+          "ceph-pool-rbd-data"
+        ],
+        "realization": "done",
+        "real": {
+          "source": "applied",
+          "state": "present",
+          "path": "storage/archive.yaml",
+          "document": {
+            "apiVersion": "bootwright.io/v1alpha1",
+            "kind": "CephPool",
+            "metadata": {
+              "name": "rbd-data"
+            },
+            "spec": {
+              "clusterRef": "ceph-lab",
+              "role": "rbd",
+              "replicated": {
+                "size": 2,
+                "minSize": 2
+              },
+              "autoscale": {
+                "mode": "on"
+              }
+            }
+          },
+          "notCompared": [],
+          "notes": [],
+          "reason": "",
+          "remedy": ""
+        },
+        "desired": {
+          "document": {
+            "apiVersion": "bootwright.io/v1alpha1",
+            "kind": "CephPool",
+            "metadata": {
+              "name": "rbd-data"
+            },
+            "spec": {
+              "clusterRef": "ceph-lab",
+              "role": "rbd",
+              "replicated": {
+                "size": 3,
+                "minSize": 2
+              },
+              "autoscale": {
+                "mode": "on"
+              }
+            }
+          }
+        }
+      },
+      {
+        "kind": "CephClient",
+        "name": "rbd-canary",
+        "path": "",
+        "difference": "removed",
+        "plan": "removed",
+        "blocks": [
+          "ceph-client-rbd-canary"
+        ],
+        "realization": "done",
+        "real": {
+          "source": "applied",
+          "state": "present",
+          "path": "storage/clients.yaml",
+          "document": {
+            "apiVersion": "bootwright.io/v1alpha1",
+            "kind": "CephClient",
+            "metadata": {
+              "name": "rbd-canary"
+            },
+            "spec": {
+              "clusterRef": "ceph-lab",
+              "poolRef": "rbd-data",
+              "access": "readWrite"
+            }
+          },
+          "notCompared": [],
+          "notes": [],
+          "reason": "",
+          "remedy": ""
+        },
+        "desired": {
+          "document": null
+        }
+      },
+      {
+        "kind": "CephClient",
+        "name": "rbd-stray",
+        "path": "",
+        "difference": "unmanaged",
+        "plan": "",
+        "blocks": [],
+        "realization": "",
+        "real": {
+          "source": "applied",
+          "state": "present",
+          "path": "storage/clients.yaml",
+          "document": {
+            "apiVersion": "bootwright.io/v1alpha1",
+            "kind": "CephClient",
+            "metadata": {
+              "name": "rbd-stray"
+            },
+            "spec": {
+              "clusterRef": "ceph-lab",
+              "poolRef": "rbd-data",
+              "access": "readWrite"
+            }
+          },
+          "notCompared": [],
+          "notes": [],
+          "reason": "",
+          "remedy": ""
+        },
+        "desired": {
+          "document": null
+        }
+      },
+      {
+        "kind": "CephClient",
+        "name": "rbd-reader",
+        "path": "storage/clients.yaml",
+        "difference": "none",
+        "plan": "same",
+        "blocks": [
+          "ceph-client-rbd-reader"
+        ],
+        "realization": "done",
+        "real": {
+          "source": "applied",
+          "state": "present",
+          "path": "storage/clients.yaml",
+          "document": null,
+          "notCompared": [],
+          "notes": [],
+          "reason": "",
+          "remedy": ""
+        },
+        "desired": {
+          "document": null
+        }
+      }
+    ],
+    "files": [
+      {
+        "desired": "",
+        "real": "storage/archive.yaml",
+        "objects": [
+          "CephPool/rbd-data"
+        ],
+        "patch": [
+          "--- /dev/null",
+          "+++ applied/storage/archive.yaml",
+          "@@ -0,0 +1,12 @@",
+          "+apiVersion: bootwright.io/v1alpha1",
+          "+kind: CephPool",
+          "+metadata:",
+          "+  name: rbd-data",
+          "+spec:",
+          "+  clusterRef: ceph-lab",
+          "+  role: rbd",
+          "+  replicated:",
+          "+    size: 2",
+          "+    minSize: 2",
+          "+  autoscale:",
+          "+    mode: on"
+        ]
+      },
+      {
+        "desired": "storage/clients.yaml",
+        "real": "storage/clients.yaml",
+        "objects": [
+          "CephClient/rbd-canary",
+          "CephClient/rbd-stray"
+        ],
+        "patch": [
+          "--- desired/storage/clients.yaml",
+          "+++ applied/storage/clients.yaml",
+          "@@ -1,7 +1,25 @@",
+          " apiVersion: bootwright.io/v1alpha1",
+          " kind: CephClient",
+          " metadata:",
+          "+  name: rbd-canary",
+          "+spec:",
+          "+  clusterRef: ceph-lab",
+          "+  poolRef: rbd-data",
+          "+  access: readWrite",
+          "+---",
+          "+apiVersion: bootwright.io/v1alpha1",
+          "+kind: CephClient",
+          "+metadata:",
+          "   name: rbd-reader",
+          "+spec:",
+          "+  clusterRef: ceph-lab",
+          "+  poolRef: rbd-data",
+          "+  access: readWrite",
+          "+---",
+          "+apiVersion: bootwright.io/v1alpha1",
+          "+kind: CephClient",
+          "+metadata:",
+          "+  name: rbd-stray",
+          " spec:",
+          "   clusterRef: ceph-lab",
+          "   poolRef: rbd-data"
+        ]
+      },
+      {
+        "desired": "storage/pools.yaml",
+        "real": "",
+        "objects": [
+          "CephPool/rbd-archive",
+          "CephPool/rbd-data"
+        ],
+        "patch": [
+          "--- desired/storage/pools.yaml",
+          "+++ /dev/null",
+          "@@ -1,25 +0,0 @@",
+          "-apiVersion: bootwright.io/v1alpha1",
+          "-kind: CephPool",
+          "-metadata:",
+          "-  name: rbd-archive",
+          "-spec:",
+          "-  clusterRef: ceph-lab",
+          "-  role: rbd",
+          "-  replicated:",
+          "-    size: 3",
+          "-    minSize: 2",
+          "-  autoscale:",
+          "-    mode: on",
+          "----",
+          "-apiVersion: bootwright.io/v1alpha1",
+          "-kind: CephPool",
+          "-metadata:",
+          "-  name: rbd-data",
+          "-spec:",
+          "-  clusterRef: ceph-lab",
+          "-  role: rbd",
+          "-  replicated:",
+          "-    size: 3",
+          "-    minSize: 2",
+          "-  autoscale:",
+          "-    mode: on"
+        ]
+      }
+    ],
+    "summary": {
+      "none": 1,
+      "changed": 1,
+      "added": 1,
+      "removed": 1,
+      "unmanaged": 1,
+      "unknown": 0,
+      "applied": 0
+    }
+  },
+  "diagnostics": [],
+  "logs": []
+}

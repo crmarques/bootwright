@@ -169,6 +169,14 @@ options:
         false.
     type: bool
     required: false
+  os:
+    description:
+      - What an observation read of the installed system's release, C(id)
+        and C(versionId) from C(ID) and C(VERSION_ID) of C(/etc/os-release)
+        and C(kernel), the release of its running kernel; empty when the
+        observation did not reach it.
+    type: dict
+    required: false
   update:
     description:
       - What the update within the release did or what an observation read,

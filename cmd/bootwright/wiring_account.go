@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/crmarques/bootwright/internal/controller/privilege"
+	"github.com/crmarques/bootwright/internal/nativeartifacts/comparisonlocal"
 	"github.com/crmarques/bootwright/internal/secrets/material"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 	"github.com/crmarques/bootwright/internal/workspace/invokerfs"
@@ -84,6 +85,19 @@ func (a invokingAccount) files() *invokerfs.Opener {
 		}
 		return invokerfs.Account{UID: account.UID, GID: account.GID, Groups: append([]uint32(nil), account.Groups...)}, nil
 	})
+}
+
+type comparisonDependencies struct {
+	Account            func(context.Context) (comparisonlocal.Account, error)
+	Terminal, Language string
+}
+
+func (a invokingAccount) comparison(ctx context.Context) (comparisonlocal.Account, error) {
+	account, err := a.resolver.Resolve(ctx)
+	if err != nil {
+		return comparisonlocal.Account{}, errors.New("invoking account cannot be verified")
+	}
+	return comparisonlocal.Account{UID: account.UID, GID: account.GID, Groups: append([]uint32(nil), account.Groups...), Home: account.Home}, nil
 }
 
 // openerFiles binds the invoking account's opener to the composition root's

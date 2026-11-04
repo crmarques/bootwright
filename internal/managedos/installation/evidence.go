@@ -41,6 +41,14 @@ type UpdateEvidence struct {
 	Transaction int64  `json:"transaction"`
 }
 
+type OSEvidence struct {
+	ID        string `json:"id"`
+	Kernel    string `json:"kernel"`
+	VersionID string `json:"versionId"`
+}
+
+var osReleaseToken = regexp.MustCompile(`^[A-Za-z0-9._-]{0,64}$`)
+
 // Evidence is the only result shape the installation adapter may return. It
 // records what a later consumer needs — the marker digest, the guest's host key
 // and the address it answered on — and nothing secret.
@@ -51,14 +59,15 @@ type Evidence struct {
 	HostKey string `json:"hostKey"`
 	// Image is the installer image still published, publicly or beneath the
 	// private subtree. A completed private installation has withdrawn it.
-	Image              bool     `json:"image"`
-	Marker             string   `json:"marker"`
-	Media              string   `json:"media"`
-	Network            bool     `json:"network"`
-	NetworkDifferences []string `json:"networkDifferences"`
-	NetworkReboot      bool     `json:"networkReboot"`
-	Postcondition      bool     `json:"postcondition"`
-	Power              string   `json:"power"`
+	Image              bool       `json:"image"`
+	Marker             string     `json:"marker"`
+	Media              string     `json:"media"`
+	Network            bool       `json:"network"`
+	NetworkDifferences []string   `json:"networkDifferences"`
+	NetworkReboot      bool       `json:"networkReboot"`
+	OS                 OSEvidence `json:"os"`
+	Postcondition      bool       `json:"postcondition"`
+	Power              string     `json:"power"`
 	// Private is material only the installing machine may read. A completed
 	// installation has already withdrawn it, so evidence still reporting it is
 	// unfinished work rather than a settled state.
@@ -349,6 +358,9 @@ func decodeEvidence(data []byte, digest string) (Evidence, error) {
 	if !wellFormedUpdate(evidence.Update) {
 		return Evidence{}, refusal("lifecycle.state", "the installation evidence reports a malformed update", "")
 	}
+	if !wellFormedOS(evidence.OS) {
+		return Evidence{}, refusal("lifecycle.state", "the installation evidence reports a malformed release", "")
+	}
 	if evidence.Request != digest {
 		return Evidence{}, refusal("lifecycle.state", "the installation evidence names another request", "")
 	}
@@ -388,4 +400,9 @@ func wellFormedUpdate(update UpdateEvidence) bool {
 		return update == UpdateEvidence{State: update.State}
 	}
 	return false
+}
+
+func wellFormedOS(system OSEvidence) bool {
+	return osReleaseToken.MatchString(system.ID) && osReleaseToken.MatchString(system.VersionID) &&
+		(system.Kernel == "" || updateKernel.MatchString(system.Kernel))
 }

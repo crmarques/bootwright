@@ -561,6 +561,12 @@ func TestAnInadmissibleProjectionReadsItsObjectUnknown(t *testing.T) {
 			"its projection claims a field its implementation does not observe: spec.retention"},
 		"an oversized note": {Projection{Kind: api.ArtifactServer, Name: "alpha", Observed: image, Notes: []string{strings.Repeat("n", 201)}},
 			"its projection of ArtifactServer/alpha carries a note longer than 200 bytes or holding a control character"},
+		"a control note": {Projection{Kind: api.ArtifactServer, Name: "alpha", Observed: image, Notes: []string{"deleted\x7f"}},
+			"its projection of ArtifactServer/alpha carries a note longer than 200 bytes or holding a control character"},
+		"a C1 control note": {Projection{Kind: api.ArtifactServer, Name: "alpha", Observed: image, Notes: []string{"next\u0085line"}},
+			"its projection of ArtifactServer/alpha carries a note longer than 200 bytes or holding a control character"},
+		"a path for a name": {Projection{Kind: api.ArtifactServer, Name: "../x", Observed: image},
+			`its projection of ArtifactServer names an object by an invalid name: "../x"`},
 		"too many notes": {Projection{Kind: api.ArtifactServer, Name: "alpha", Observed: image, Notes: make([]string, 9)},
 			"its projection of ArtifactServer/alpha carries more than 8 notes"},
 	} {
@@ -577,28 +583,28 @@ func TestAnInadmissibleProjectionReadsItsObjectUnknown(t *testing.T) {
 	}
 }
 
-func TestAConflictingLeafIsOnlyANoteOnBothSides(t *testing.T) {
+func TestAConflictingLeafReadsAsAppliedWithANote(t *testing.T) {
 	declared := api.NewCatalog([]api.Object{api.NewObject(api.InfraProvider, "libvirt", api.Value{},
 		libvirtSpec(profile("rhel", field("diskGiB", api.IntegerValue("80"))), profile("sno", field("diskGiB", api.IntegerValue("120")))))})
-	read := diffRead{desired: declared, context: ContextIdentity{Name: "lab"}}
+	read := diffRead{applied: diffSide{authored: declared, effective: declared}, context: ContextIdentity{Name: "lab"}}
 	fragments := []fragment{
 		{block: "machine-rhel-01", projection: Projection{Kind: api.InfraProvider, Name: "libvirt", Observed: libvirtSpec(profile("rhel", field("diskGiB", api.IntegerValue("100"))))}},
 		{block: "machine-rhel-03", projection: Projection{Kind: api.InfraProvider, Name: "libvirt", Observed: libvirtSpec(profile("rhel", field("diskGiB", api.IntegerValue("80"))), profile("sno", field("diskGiB", api.IntegerValue("120"))))}},
 	}
 	side := read.projectedSide(api.InfraProvider, "libvirt", RealSide{Source: sideObserved, State: sidePresent}, fragments)
-	want := libvirtSpec(profile("rhel"), profile("sno", field("diskGiB", api.IntegerValue("120"))))
-	if side.desired == nil || !side.desired.Spec().Equal(want) || !side.real.Object.Spec().Equal(want) {
-		t.Fatalf("desired %+v, real %+v", side.desired, side.real.Object)
+	want := libvirtSpec(profile("rhel", field("diskGiB", api.IntegerValue("80"))), profile("sno", field("diskGiB", api.IntegerValue("120"))))
+	if side.Object == nil || !side.Object.Spec().Equal(want) {
+		t.Fatalf("real %+v", side.Object)
 	}
 	conflict := "spec.libvirt.machineProfiles[rhel].diskGiB: machine-rhel-01 observes 100, machine-rhel-03 observes 80"
-	if !slices.Contains(side.real.Notes, conflict) || slices.Contains(side.real.NotCompared, "spec.libvirt.machineProfiles[rhel].diskGiB") {
-		t.Fatalf("notes %v, not compared %v", side.real.Notes, side.real.NotCompared)
+	if !slices.Contains(side.Notes, conflict) || slices.Contains(side.NotCompared, "spec.libvirt.machineProfiles[rhel].diskGiB") {
+		t.Fatalf("notes %v, not compared %v", side.Notes, side.NotCompared)
 	}
 }
 
 func TestAnUnreadableAppliedRevisionReadsObservedUnknownWithARemedy(t *testing.T) {
 	read := diffRead{appliedReason: "the applied revision is gone", context: ContextIdentity{Name: "lab"}}
-	side := read.observedSide("ArtifactServer/alpha", []string{"alpha-1"}, map[string]blockReading{"alpha-1": {state: sidePresent}}, nil).real
+	side := read.observedSide("ArtifactServer/alpha", []string{"alpha-1"}, map[string]blockReading{"alpha-1": {state: sidePresent}}, nil, claimedNames{})
 	if side.State != sideUnknown || side.Reason != "the applied revision is gone" || side.Remedy != reviewStatus("lab") {
 		t.Fatalf("side = %+v", side)
 	}
@@ -626,17 +632,17 @@ func TestAProjectorErrorReadsUnknownWithAFixedReason(t *testing.T) {
 	}
 }
 
-func TestAnItemOnlyAnUnknownBlockWouldProjectIsNotCompared(t *testing.T) {
+func TestAnUnobservedProfileIsKeptAsAppliedAndNotCompared(t *testing.T) {
 	for name, tt := range map[string]struct {
 		bravo       scriptedObservation
 		profiles    api.Value
 		notCompared []string
 	}{
 		"bravo unknown": {scriptedObservation{observation: Observation{Effect: reconciliation.EffectUnknown}},
-			libvirtSpec(profile("alpha", field("diskGiB", api.IntegerValue("80")))),
-			[]string{"spec.libvirt.machineProfiles[alpha].cpu", "spec.libvirt.machineProfiles[bravo]"}},
+			libvirtSpec(profile("alpha", field("cpu", api.IntegerValue("4")), field("diskGiB", api.IntegerValue("80"))), profile("bravo", field("diskGiB", api.IntegerValue("120")))),
+			[]string{"spec.libvirt.machineProfiles[alpha].cpu", "spec.libvirt.machineProfiles[bravo].diskGiB"}},
 		"bravo absent": {scriptedObservation{observation: Observation{Effect: reconciliation.EffectNoEffect}},
-			libvirtSpec(profile("alpha", field("diskGiB", api.IntegerValue("80"))), profile("bravo")),
+			libvirtSpec(profile("alpha", field("cpu", api.IntegerValue("4")), field("diskGiB", api.IntegerValue("80"))), profile("bravo", field("diskGiB", api.IntegerValue("120")))),
 			[]string{"spec.libvirt.machineProfiles[alpha].cpu", "spec.libvirt.machineProfiles[bravo].diskGiB"}},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -656,7 +662,7 @@ func TestAnItemOnlyAnUnknownBlockWouldProjectIsNotCompared(t *testing.T) {
 			}
 			f.service.capabilities = testResolver{capability: projecting}
 			libvirt := objectOf(t, f.observe(t), api.InfraProvider, "libvirt")
-			if libvirt.Real.State != "present" || libvirt.Desired == nil || !libvirt.Desired.Spec().Equal(tt.profiles) {
+			if libvirt.Real.State != "present" || libvirt.Desired == nil || !libvirt.Desired.Spec().Equal(provider.Spec()) || !libvirt.Real.Object.Spec().Equal(tt.profiles) {
 				t.Fatalf("libvirt reads %+v against %+v", libvirt.Real, libvirt.Desired)
 			}
 			if !slices.Equal(libvirt.Real.NotCompared, tt.notCompared) {

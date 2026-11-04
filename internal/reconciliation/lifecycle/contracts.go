@@ -381,16 +381,27 @@ type ProjectedPath struct {
 	Path string
 }
 
+type ProjectionHolder struct {
+	Kind  api.Kind
+	Name  string
+	Field string
+}
+
 type Projection struct {
 	Kind     api.Kind
 	Name     string
 	Observed api.Value
 	Notes    []string
+	Holder   *ProjectionHolder
 }
 
 type Projector interface {
 	ProjectedPaths() []ProjectedPath
 	Project(applied api.Catalog, block reconciliation.Block, evidence json.RawMessage) ([]Projection, error)
+}
+
+type Discoverer interface {
+	Discovers() []api.Kind
 }
 
 type NothingLive interface {

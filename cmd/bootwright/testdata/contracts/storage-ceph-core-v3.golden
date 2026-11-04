@@ -1,5 +1,5 @@
 implementation: storage-ceph-core-v3
-content-digest: 92b0f0493c14bde3e7302d5830328a4ef27c8616a35dd170801ef61dbd3a2917
+content-digest: e4b15f5a421245b2879eef0409afd3bb8397b8e32ec9eb66e2e4b02ea413fbd5
 request-version: ceph-core-v39
 automation-formats: -custody-v1, ceph-bootstrap-recovery-v1, ceph-bootstrap-state-v1, ceph-client-auth-v1, ceph-cluster-device-identities-v2, ceph-dashboard-port-attempt-v1, ceph-dashboard-port-repair-v1, ceph-dashboard-redeploy-v1, ceph-dashboard-user-v1, ceph-device-identities-v2, ceph-filesystem-attempt-v1, ceph-host-cache-v1, ceph-native-teardown-v1, ceph-osd-device-clear-v1, ceph-osd-device-intent-v1, ceph-physical-device-binding-v1, ceph-policy-attempt-v1, ceph-pool-attempt-v2, ceph-rbd-image-attempt-v1, ceph-registry-v1, ceph-runtime-profile-v3, ceph-service-inputs-v1, ceph-subvolume-attempt-v1, ceph-subvolume-group-attempt-v1, ceph-tiebreaker-removal-v1, ceph-tunnel-custody-v1, ceph-tunnel-redeploy-v1, ceph-tunnel-relabel-v1, ceph-tunnel-stage-v1, ceph-tunnel-v3
 mark-formats: .bootwright-registry-, bootwright-owner, bootwright:
@@ -315,6 +315,22 @@ evidence-schema:
   health string
   hosts []string
   incarnation string
+  inventory *struct ceph.InventoryEvidence omitempty
+  inventory.omitted int
+  inventory.osds []struct ceph.OSDEvidence
+  inventory.osds[].host string
+  inventory.osds[].id int
+  inventory.osds[].path string
+  inventory.osds[].uuid string
+  inventory.pools []struct ceph.PoolEvidence
+  inventory.pools[].applications []string
+  inventory.pools[].autoscale string
+  inventory.pools[].maxBytes int64
+  inventory.pools[].maxObjects int64
+  inventory.pools[].minSize int
+  inventory.pools[].name string
+  inventory.pools[].size int
+  inventory.pools[].type string
   mgrActive string
   mgrStandbys []string
   monAddrs []struct ceph.MonitorAddress
@@ -329,6 +345,15 @@ evidence-schema:
   owned bool
   owner string
   partial bool
+  pool *struct ceph.PoolEvidence omitempty
+  pool.applications []string
+  pool.autoscale string
+  pool.maxBytes int64
+  pool.maxObjects int64
+  pool.minSize int
+  pool.name string
+  pool.size int
+  pool.type string
   ready bool
   removed bool
   request string

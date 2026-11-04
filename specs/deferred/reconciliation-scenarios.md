@@ -188,7 +188,7 @@ Each rule is an acceptance clause for any scenario slice.
   a scenario never reuses it as evidence that real state equals desired
   state.
 - **Never widen proof evidence.** A field a comparison needs enters a
-  projection ([B600](../milestones/backlog.md#b600) to
+  projection ([B600](../milestones/m2.md#b600) to
   [B605](../milestones/backlog.md#b605)), never a capability's proof
   evidence or its content digest.
 - **No converter.** A scenario's durable-format move refuses earlier records

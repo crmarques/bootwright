@@ -1,6 +1,7 @@
 package libvirt
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 
@@ -99,6 +100,7 @@ type MachineEvidence struct {
 	// so an empty Domain means absent only while Answered is true. Evidence
 	// without the field decodes as silent.
 	Answered   bool           `json:"answered"`
+	Attached   []DiskEvidence `json:"attached,omitempty"`
 	Controller string         `json:"controller"`
 	Disks      []DiskEvidence `json:"disks"`
 	Domain     string         `json:"domain"`
@@ -659,5 +661,10 @@ func decodeMachineEvidence(data []byte, digest string) (MachineEvidence, error) 
 	if evidence.Request != digest {
 		return MachineEvidence{}, refusal("lifecycle.state", "the machine evidence names another request", "")
 	}
+	if slices.ContainsFunc(evidence.Attached, func(disk DiskEvidence) bool { return !attachedTarget.MatchString(disk.Target) }) {
+		return MachineEvidence{}, refusal("lifecycle.state", "the machine evidence lists an attached disk under a target no host observation reports", "")
+	}
 	return evidence, nil
 }
+
+var attachedTarget = regexp.MustCompile(`\A[a-z]{1,8}[0-9a-z]{0,8}\z`)

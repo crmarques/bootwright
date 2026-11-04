@@ -1,5 +1,5 @@
 implementation: machine-libvirt-v1
-content-digest: cdc1385b33efabedfa35f9e32dee2181bc0fed66134b2668f19d6ed22e07f482
+content-digest: 23d3b1f1cca980ea32d2878bd6647620e907ac511e4c18bbfda8a78687bf2b88
 request-version: machine-libvirt-v8
 automation-formats: https://bootwright.io/substrate/v1
 mark-formats: https://bootwright.io/substrate/v1
@@ -11,6 +11,7 @@ effect-pins:
   bootwright
   data-media-ssd-scsi-v1
   shared-bmc-claim
+  attached-disk-evidence-v1
 request-identity:
   identity.context
   identity.object
@@ -79,6 +80,13 @@ request-schema:
 evidence-schema:
   absent bool
   answered bool
+  attached []struct libvirt.DiskEvidence omitempty
+  attached[].bus string omitempty
+  attached[].name string
+  attached[].present bool
+  attached[].rotationRate int omitempty
+  attached[].sizeGiB int
+  attached[].target string omitempty
   controller string
   disks []struct libvirt.DiskEvidence
   disks[].bus string omitempty

@@ -35,6 +35,7 @@
       {
         "kind": "CephPool",
         "name": "rbd-archive",
+        "path": "storage/pools.yaml",
         "difference": "added",
         "plan": "added",
         "blocks": [
@@ -44,6 +45,7 @@
         "real": {
           "source": "applied",
           "state": "absent",
+          "path": "",
           "document": null,
           "notCompared": [],
           "notes": [],
@@ -69,28 +71,12 @@
               }
             }
           }
-        },
-        "patch": [
-          "--- /dev/null",
-          "+++ desired/CephPool/rbd-archive",
-          "@@ -0,0 +1,12 @@",
-          "+apiVersion: bootwright.io/v1alpha1",
-          "+kind: CephPool",
-          "+metadata:",
-          "+  name: rbd-archive",
-          "+spec:",
-          "+  clusterRef: ceph-lab",
-          "+  role: rbd",
-          "+  replicated:",
-          "+    size: 3",
-          "+    minSize: 2",
-          "+  autoscale:",
-          "+    mode: on"
-        ]
+        }
       },
       {
         "kind": "CephPool",
         "name": "rbd-data",
+        "path": "storage/pools.yaml",
         "difference": "changed",
         "plan": "changed",
         "blocks": [
@@ -100,6 +86,7 @@
         "real": {
           "source": "applied",
           "state": "present",
+          "path": "storage/pools.yaml",
           "document": {
             "apiVersion": "bootwright.io/v1alpha1",
             "kind": "CephPool",
@@ -142,24 +129,12 @@
               }
             }
           }
-        },
-        "patch": [
-          "--- applied/CephPool/rbd-data",
-          "+++ desired/CephPool/rbd-data",
-          "@@ -6,7 +6,7 @@",
-          "   clusterRef: ceph-lab",
-          "   role: rbd",
-          "   replicated:",
-          "-    size: 2",
-          "+    size: 3",
-          "     minSize: 2",
-          "   autoscale:",
-          "     mode: on"
-        ]
+        }
       },
       {
         "kind": "CephClient",
         "name": "rbd-canary",
+        "path": "",
         "difference": "removed",
         "plan": "removed",
         "blocks": [
@@ -169,6 +144,7 @@
         "real": {
           "source": "applied",
           "state": "present",
+          "path": "storage/clients.yaml",
           "document": {
             "apiVersion": "bootwright.io/v1alpha1",
             "kind": "CephClient",
@@ -188,24 +164,12 @@
         },
         "desired": {
           "document": null
-        },
-        "patch": [
-          "--- applied/CephClient/rbd-canary",
-          "+++ /dev/null",
-          "@@ -1,8 +0,0 @@",
-          "-apiVersion: bootwright.io/v1alpha1",
-          "-kind: CephClient",
-          "-metadata:",
-          "-  name: rbd-canary",
-          "-spec:",
-          "-  clusterRef: ceph-lab",
-          "-  poolRef: rbd-data",
-          "-  access: readWrite"
-        ]
+        }
       },
       {
         "kind": "CephClient",
         "name": "rbd-fenced",
+        "path": "storage/clients.yaml",
         "difference": "unknown",
         "plan": "same",
         "blocks": [
@@ -215,6 +179,7 @@
         "real": {
           "source": "applied",
           "state": "unknown",
+          "path": "",
           "document": null,
           "notCompared": [],
           "notes": [],
@@ -223,12 +188,12 @@
         },
         "desired": {
           "document": null
-        },
-        "patch": []
+        }
       },
       {
         "kind": "CephClient",
         "name": "rbd-reader",
+        "path": "storage/clients.yaml",
         "difference": "none",
         "plan": "same",
         "blocks": [
@@ -238,6 +203,7 @@
         "real": {
           "source": "applied",
           "state": "present",
+          "path": "storage/clients.yaml",
           "document": null,
           "notCompared": [],
           "notes": [],
@@ -246,8 +212,76 @@
         },
         "desired": {
           "document": null
-        },
-        "patch": []
+        }
+      }
+    ],
+    "files": [
+      {
+        "desired": "storage/clients.yaml",
+        "real": "storage/clients.yaml",
+        "objects": [
+          "CephClient/rbd-canary",
+          "CephClient/rbd-fenced"
+        ],
+        "patch": [
+          "--- desired/storage/clients.yaml",
+          "+++ applied/storage/clients.yaml",
+          "@@ -1,6 +1,15 @@",
+          " apiVersion: bootwright.io/v1alpha1",
+          " kind: CephClient",
+          " metadata:",
+          "+  name: rbd-canary",
+          "+spec:",
+          "+  clusterRef: ceph-lab",
+          "+  poolRef: rbd-data",
+          "+  access: readWrite",
+          "+---",
+          "+apiVersion: bootwright.io/v1alpha1",
+          "+kind: CephClient",
+          "+metadata:",
+          "   name: rbd-fenced",
+          " spec:",
+          "   clusterRef: ceph-lab"
+        ]
+      },
+      {
+        "desired": "storage/pools.yaml",
+        "real": "storage/pools.yaml",
+        "objects": [
+          "CephPool/rbd-archive",
+          "CephPool/rbd-data"
+        ],
+        "patch": [
+          "--- desired/storage/pools.yaml",
+          "+++ applied/storage/pools.yaml",
+          "@@ -1,25 +1,12 @@",
+          " apiVersion: bootwright.io/v1alpha1",
+          " kind: CephPool",
+          " metadata:",
+          "-  name: rbd-archive",
+          "-spec:",
+          "-  clusterRef: ceph-lab",
+          "-  role: rbd",
+          "-  replicated:",
+          "-    size: 3",
+          "-    minSize: 2",
+          "-  autoscale:",
+          "-    mode: on",
+          "----",
+          "-apiVersion: bootwright.io/v1alpha1",
+          "-kind: CephPool",
+          "-metadata:",
+          "   name: rbd-data",
+          " spec:",
+          "   clusterRef: ceph-lab",
+          "   role: rbd",
+          "   replicated:",
+          "-    size: 3",
+          "+    size: 2",
+          "     minSize: 2",
+          "   autoscale:",
+          "     mode: on"
+        ]
       }
     ],
     "summary": {
@@ -255,6 +289,7 @@
       "changed": 1,
       "added": 1,
       "removed": 1,
+      "unmanaged": 0,
       "unknown": 1,
       "applied": 0
     }

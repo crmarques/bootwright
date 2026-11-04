@@ -9,6 +9,11 @@
   "network": true,
   "networkDifferences": [],
   "networkReboot": true,
+  "os": {
+    "id": "",
+    "kernel": "",
+    "versionId": ""
+  },
   "postcondition": true,
   "power": "On",
   "private": false,

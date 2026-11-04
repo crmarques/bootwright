@@ -2,6 +2,7 @@ package ceph
 
 import (
 	"encoding/json"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -361,5 +362,64 @@ func TestUnitDaemonsNameSingletonServices(t *testing.T) {
 		if effect, err := EvaluateEvidence(evidenceBytes(t, e), r, "digest", false); effect != want || (want == reconciliation.EffectUnknown) != (err != nil) {
 			t.Fatalf("a prometheus daemon of service %q is %s (%v), want %s", service, effect, err, want)
 		}
+	}
+}
+
+func TestEvidenceAdmitsAClusterInventoryOnlyWithinItsScope(t *testing.T) {
+	r := runtimeRequest()
+	inventory := func() *InventoryEvidence {
+		return &InventoryEvidence{Pools: []PoolEvidence{*readPool(".mgr", 3, 2, "mgr"), *readPool("by-hand", 3, 2, "rbd")}, OSDs: []OSDEvidence{{Host: "node-1", ID: 9, Path: "/dev/vdc", UUID: addedOSD}}}
+	}
+	e := readyEvidence(r)
+	e.Inventory = inventory()
+	if effect, err := EvaluateEvidence(evidenceBytes(t, e), r, "digest", false); err != nil || effect != reconciliation.EffectCompleted {
+		t.Fatalf("a bounded inventory was rejected: %s %v", effect, err)
+	}
+	cases := map[string]func(*Evidence){
+		"declared path":   func(e *Evidence) { e.Inventory.OSDs[0].Path = "/dev/vdb" },
+		"foreign host":    func(e *Evidence) { e.Inventory.OSDs[0].Host = "foreign" },
+		"declared id":     func(e *Evidence) { e.Inventory.OSDs[0].ID = 0 },
+		"path":            func(e *Evidence) { e.Inventory.OSDs[0].Path = "/etc/passwd" },
+		"uuid":            func(e *Evidence) { e.Inventory.OSDs[0].UUID = "osd-node-1" },
+		"unsorted pools":  func(e *Evidence) { slices.Reverse(e.Inventory.Pools) },
+		"duplicate pools": func(e *Evidence) { e.Inventory.Pools[1].Name = ".mgr" },
+		"pool name":       func(e *Evidence) { e.Inventory.Pools[1].Name = "bad/name" },
+		"pool type":       func(e *Evidence) { e.Inventory.Pools[1].Type = "mirrored" },
+		"applications":    func(e *Evidence) { e.Inventory.Pools[1].Applications = []string{"rgw", "rbd"} },
+		"negative quota":  func(e *Evidence) { e.Inventory.Pools[1].MaxBytes = -1 },
+		"omitted":         func(e *Evidence) { e.Inventory.Omitted = -1 },
+		"own pool":        func(e *Evidence) { e.Pool = readPool("by-hand", 3, 2, "rbd") },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			e := readyEvidence(r)
+			e.Inventory = inventory()
+			mutate(&e)
+			if effect, err := EvaluateEvidence(evidenceBytes(t, e), r, "digest", false); err == nil || effect != reconciliation.EffectUnknown {
+				t.Fatalf("unsafe inventory accepted: %s %v", effect, err)
+			}
+		})
+	}
+}
+
+func TestEvidenceReadingMembersAreClosed(t *testing.T) {
+	r := runtimeRequest()
+	e := readyEvidence(r)
+	e.Inventory = &InventoryEvidence{Pools: []PoolEvidence{*readPool("by-hand", 3, 2, "rbd")}, OSDs: []OSDEvidence{}}
+	data := evidenceBytes(t, e)
+	for name, edit := range map[string][2]string{
+		"pool member":      {`"applications":["rbd"],`, `"applications":["rbd"],"extra":1,`},
+		"inventory member": {`"omitted":0,`, `"omitted":0,"extra":1,`},
+		"null pools":       {`"pools":[{`, `"pools":null,"x":[{`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			changed := strings.Replace(string(data), edit[0], edit[1], 1)
+			if changed == string(data) {
+				t.Fatalf("the edit %q matched nothing", edit[0])
+			}
+			if _, err := decodeEvidence([]byte(changed)); err == nil {
+				t.Fatal("an open reading member was decoded")
+			}
+		})
 	}
 }

@@ -35,6 +35,7 @@
       {
         "kind": "Machine",
         "name": "rhel-01",
+        "path": "machines/rhel.yaml",
         "difference": "none",
         "plan": "same",
         "blocks": [
@@ -44,6 +45,7 @@
         "real": {
           "source": "observed",
           "state": "partial",
+          "path": "machines/rhel.yaml",
           "document": null,
           "notCompared": [
             "spec.substrate.libvirt.profileRef",
@@ -61,12 +63,12 @@
         },
         "desired": {
           "document": null
-        },
-        "patch": []
+        }
       },
       {
         "kind": "Machine",
         "name": "rhel-02",
+        "path": "machines/rhel.yaml",
         "difference": "unknown",
         "plan": "same",
         "blocks": [
@@ -76,6 +78,7 @@
         "real": {
           "source": "observed",
           "state": "unknown",
+          "path": "",
           "document": null,
           "notCompared": [],
           "notes": [],
@@ -84,12 +87,12 @@
         },
         "desired": {
           "document": null
-        },
-        "patch": []
+        }
       },
       {
         "kind": "InfraProvider",
         "name": "lab-libvirt",
+        "path": "infra/provider.yaml",
         "difference": "changed",
         "plan": "same",
         "blocks": [
@@ -99,6 +102,7 @@
         "real": {
           "source": "observed",
           "state": "present",
+          "path": "infra/provider.yaml",
           "document": {
             "apiVersion": "bootwright.io/v1alpha1",
             "kind": "InfraProvider",
@@ -148,22 +152,12 @@
               }
             }
           }
-        },
-        "patch": [
-          "--- real/InfraProvider/lab-libvirt",
-          "+++ desired/InfraProvider/lab-libvirt",
-          "@@ -6,5 +6,5 @@",
-          "   libvirt:",
-          "     machineProfiles:",
-          "       - name: rhel",
-          "-        diskGiB: 100",
-          "+        diskGiB: 80",
-          "         dataDisks: []"
-        ]
+        }
       },
       {
         "kind": "CephClient",
         "name": "rbd-reader",
+        "path": "storage/clients.yaml",
         "difference": "none",
         "plan": "same",
         "blocks": [
@@ -173,6 +167,7 @@
         "real": {
           "source": "applied",
           "state": "present",
+          "path": "storage/clients.yaml",
           "document": null,
           "notCompared": [],
           "notes": [
@@ -183,7 +178,35 @@
         },
         "desired": {
           "document": null
-        },
+        }
+      }
+    ],
+    "files": [
+      {
+        "desired": "infra/provider.yaml",
+        "real": "infra/provider.yaml",
+        "objects": [
+          "InfraProvider/lab-libvirt"
+        ],
+        "patch": [
+          "--- desired/infra/provider.yaml",
+          "+++ real/infra/provider.yaml",
+          "@@ -6,5 +6,5 @@",
+          "   libvirt:",
+          "     machineProfiles:",
+          "       - name: rhel",
+          "-        diskGiB: 80",
+          "+        diskGiB: 100",
+          "         dataDisks: []"
+        ]
+      },
+      {
+        "desired": "machines/rhel.yaml",
+        "real": "machines/rhel.yaml",
+        "objects": [
+          "Machine/rhel-01",
+          "Machine/rhel-02"
+        ],
         "patch": []
       }
     ],
@@ -192,6 +215,7 @@
       "changed": 1,
       "added": 0,
       "removed": 0,
+      "unmanaged": 0,
       "unknown": 1,
       "applied": 1
     }

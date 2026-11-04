@@ -259,6 +259,7 @@ func TestEvidenceMatchesItsGoldens(t *testing.T) {
 				Address: request.Address, HostKey: "ssh-ed25519 AAAAHOST", Image: true, Marker: string(marker),
 				Postcondition: true, Power: "On", Reachable: true, Request: digest, Tree: true, TreeContent: true,
 				TreeIdentity: dvdDigest, Network: true, NetworkReboot: true, NetworkDifferences: []string{},
+				OS:     OSEvidence{ID: "rhel", Kernel: "5.14.0-570.12.1.el9_6.x86_64", VersionID: "9.8"},
 				Update: UpdateEvidence{State: updateNone},
 			},
 			func(data []byte) error { return ValidatePresence(data, request, digest, string(marker)) },

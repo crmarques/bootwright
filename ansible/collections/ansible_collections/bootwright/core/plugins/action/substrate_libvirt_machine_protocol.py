@@ -9,6 +9,8 @@ from __future__ import annotations
 # Exact type identity is the validation here: a bool is not an int and a capability object is never a subclass.
 # pylint: disable=unidiomatic-typecheck
 
+import re
+
 from ansible.plugins.action import ActionBase
 from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol
 from ansible_collections.bootwright.core.plugins.module_utils.adapter_protocol import publishes, unreached
@@ -23,6 +25,8 @@ POWER_STATES = ("", "On", "Off")
 # reports, because an empty domain from a silent hypervisor proves nothing.
 DOMAIN_STATES = ("", "running", "idle", "paused", "in shutdown", "shut off", "crashed", "pmsuspended")
 MAX_DISKS = 32
+# The one target form an attached disk is published under, since its target names it in diff: a short kernel-style name.
+ATTACHED_TARGET = re.compile(r"[a-z]{1,8}[0-9a-z]{0,8}\Z")
 
 
 def state(value):
@@ -67,6 +71,14 @@ def disks_of(observation):
     return [disk_evidence(entry) for entry in disks]
 
 
+def attached_of(observation):
+    """The disks the domain holds beyond the frozen ones, bounded like the frozen ones, each under a bounded target."""
+    attached = observation.get("attached") or []
+    if len(attached) > MAX_DISKS:
+        raise ValueError("disk count")
+    return [disk for disk in map(disk_evidence, attached) if ATTACHED_TARGET.fullmatch(disk.get("target", "")) and disk["name"] == disk["target"]]
+
+
 def presence(observation, power, system, request_digest):
     if power not in POWER_STATES:
         raise ValueError("power state")
@@ -91,6 +103,9 @@ def presence(observation, power, system, request_digest):
         and all(entry["present"] for entry in evidence["disks"]) and bool(evidence["disks"])
     )
     evidence["postcondition"] = complete
+    attached = attached_of(observation)
+    if attached:
+        evidence["attached"] = attached
     return evidence
 
 

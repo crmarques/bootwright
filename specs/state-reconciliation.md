@@ -1965,9 +1965,9 @@ It compares three sides:
 
 | Side | Source |
 | --- | --- |
-| desired | The effective catalog of the context's selected input revision, compiled under the same lock, which is exactly what `apply` reads. |
-| applied | The effective catalog of the input revision the owning apply froze, compiled by this build, and used only while that revision's bytes still match the input digest the apply recorded. |
-| real | What a read-only observation of each realized block proves, [read live](#reading-the-real-side-live) and projected by its capability. It is not read from records; without an observation the applied side stands in for it. |
+| desired | The authored catalog of the context's selected input revision, each object as its input file declares it before inheritance and defaults, with that file, compiled under the same lock, which is exactly what `apply` reads. |
+| applied | The authored catalog, with each object's file, of the input revision the owning apply froze, compiled by this build, and used only while that revision's bytes still match the input digest the apply recorded. Its effective catalog decides which observed value differs. |
+| real | The applied object with what a read-only observation of each realized block proves [overlaid](#readings-and-their-fold) on it, [read live](#reading-the-real-side-live) and projected by its capability, and each object such a read found that no apply declared. It is not read from records; without an observation the applied side stands in for it. |
 
 The owning apply is the current operation when it is an apply, the apply a
 current removal takes back, and none when the context holds no operation or
@@ -2011,8 +2011,21 @@ contexts](contexts.md#storage-locking-and-publication), never as a refusal.
 
 Both sides are compared in canonical form: a field whose value is absent is
 dropped, and a list the schema names by key is ordered by that key, so the
-authored order of a named list is never shown as a difference. A `Secret`
-object is shown as its declaration, never its bytes.
+authored order of a named list is never shown as a difference. Each side is
+compared as authored, so a field its file leaves to inheritance or a default
+is absent on both sides unless a live read proves a value other than the
+applied effective one. A `Secret` object is shown as its declaration, never
+its bytes.
+
+Each object belongs to the file that declares it, by its path relative to the
+input directory: the desired side's file in the selected revision and the
+applied and real sides' file in the revision the owning apply froze. An
+object found live that no apply declared belongs to
+`<directory of the discovering block's object's file>/<kind in lower case>-<name>.yaml`,
+and a [split](#readings-and-their-fold) copy to
+`<directory of the file of the object it was split from>/<copy name>.yaml`,
+each followed by `-<n>` from 2 before `.yaml` while that path belongs to
+another object of either revision.
 
 *Drift* is an owned object whose observed real side differs from the applied
 side its records state. A comparison reports it and nothing repairs it; inside
@@ -2145,28 +2158,70 @@ of a present or partial reading, with the catalog of the revision the apply
 froze, into spec fragments of API objects, its own or another's. It is not
 asked while that revision cannot be read; such objects read unknown with the
 applied reason. A fragment is admitted only when it names a known kind other
-than `Secret` and an object, its value is a spec mapping, every field it
+than `Secret` and, by a valid object name, an object the applied revision
+declares or one of a kind its capability
+[discovers](#readings-and-their-fold), any holder it names is, by a valid
+object name, an object the applied revision declares with a reference field to the
+fragment's kind, its value is a spec mapping, every field it
 claims is a path its `ProjectedPaths` and the [table
 below](#observable-fields-by-implementation) list, and it carries at most 8
-notes of at most 200 bytes without control characters; otherwise its block
+notes of at most 200 bytes without control characters (C0, DEL or C1); otherwise its block
 reads unknown, naming why. Before anything is admitted, any fragment, note or
 name holding a part of 8 bytes or more of the material lent to the run refuses
 the whole comparison with `lifecycle.state`
 `a projection of block <id> carries Secret material, so diff shows nothing`.
-Fragments merge by field and named lists align by their key; a field two
-fragments observe differently is dropped from both sides and named in the note
-`<path>: <block> observes <value>, <block> observes <value>`. The declared
-object is then reduced to the fields the merged fragments carry: a named item
-keeps the fields its observed siblings carry, an item with no observed
-counterpart keeps only its key, so it shows as declared and not realized, and
-every dropped declared path, shallowest first, is listed as not compared.
+Fragments merge by field and named lists align by their key. A field two
+fragments observe differently is resolved by **Attribution** below when both
+name a holder; otherwise it is dropped from the merged fragments and named in
+the note `<path>: <block> observes <value>, <block> observes <value>`.
+
+**Overlay.** The real object is the applied object with the merged fragments
+laid over it: a field whose observed value equals the applied effective value
+at that path keeps its authored form, present or absent, and any other
+observed value replaces it. Each observed item of a named list is laid over
+its applied counterpart, and an observed item no apply declared is added. A
+named list inside an observed item holds exactly the items the fragments
+observe there, so an applied item they omit is not realized; a named list of
+the object itself keeps each applied item no fragment observes, as applied,
+because a projection observes the items its blocks realize and no others.
 While a block whose implementation's `ProjectedPaths` name the object's kind
-reads unknown, an item with no observed counterpart is instead dropped and
-listed as not compared, because that block may hold it. A
+reads unknown, an applied item with no observed counterpart is kept in every
+list, because that block may hold it. Every authored leaf path of the
+applied object that no fragment carries, shallowest first, is listed as not
+compared; it reads as applied and is never a difference of its own. A
 present or partial object no fragment renders keeps the applied side, with
 the note `observed <state>; <implementation> renders no field, so the fields shown are what apply <op> applied`,
 naming each distinct implementation of its present or partial blocks, sorted
 and joined by `, ` before `render` when several.
+
+**Attribution.** A projection may name its *holder*, the object whose own
+block read it, and the holder's field that names the projected object, as an
+installation of `Machine/<m>` that reads the release of the
+`MachineInstallProfile` its `spec.os.installProfileRef` names. When fragments
+that name holders observe a field differently, their holders are grouped by
+the values they observe at the fields in dispute; a holder that observes none
+of them joins no group and keeps the object. The group observing the
+applied effective values keeps the object; with none, the largest group keeps
+it, and a tie goes to the group whose first holder in name order comes first.
+Each other group's values form a copy of the object named
+`<object>-<first holder of the group>`, followed by `-<n>` from 2 while the
+applied revision declares that name or another copy or discovered object
+holds it; a name over the kind's limit, or not a valid
+name, is not split and its fields read as a conflict above. Each holder of
+that group names the copy at its field, which is a difference of the holder,
+and the copy carries the note `split from <Kind>/<object>: <holders> observe <path> <value>`.
+
+**Discovery.** A capability that implements `Discoverer` names the kinds its
+observation inventories inside the scope its own block owns, as the pools of
+a Ceph cluster this context created. Its projection may name an object of
+those kinds that the applied revision does not declare: the fragment is the
+object's whole spec, admitted as any fragment is, and its notes name each
+required field it could not read. Such an object's real side is present and
+observed; it is `unmanaged` unless the desired side declares it, and then it
+compares as any other object. Discovery never reads beyond a scope the
+context owns, so what a host holds outside one is neither listed here nor
+taken back by a removal. A comparison restores no data: an object's contents,
+such as a pool's objects, are never part of either side.
 
 An object an abandoned context of the same name left on a host reads as this
 context's, because no native identity yet distinguishes the two, the known
@@ -2180,8 +2235,12 @@ projection claiming any other field is refused as above.
 | Implementation | Object | Observed fields | Notes |
 | --- | --- | --- | --- |
 | `machine-libvirt-v1` | `Machine` | `spec.substrate.providerRef` | domain state; emulated BMC power |
-| `machine-libvirt-v1` | `InfraProvider` | `spec.libvirt.machineProfiles[].name`, `[].diskGiB`, `[].dataDisks[].name`, `[].dataDisks[].sizeGiB`, `[].dataDisks[].media` | missing disks |
+| `machine-libvirt-v1` | `InfraProvider` | `spec.libvirt.machineProfiles[].name`, `[].diskGiB`, `[].dataDisks[].name`, `[].dataDisks[].sizeGiB`, `[].dataDisks[].media` | missing disks; a data disk attached by hand, also beside a profile that declares none |
 | `cluster-install-agent-v1` | `OpenShiftCluster` | `spec.nodes[].name`, `[].labels`, `[].taints` | declared labels and taints a node lacks |
+| `os-install-anaconda-v1` | `MachineInstallProfile` | `spec.os.version`, held by the `Machine` whose `spec.os.installProfileRef` names it | `ID` and `VERSION_ID` of `/etc/os-release`; the running kernel |
+| `storage-ceph-core-v3` | `CephPool` | `spec.replicated.size`, `spec.replicated.minSize`, `spec.application`, `spec.autoscale.mode`, `spec.quota.maxBytes`, `spec.quota.maxObjects` | a pool's own block |
+| `storage-ceph-core-v3` | `CephPool`, discovered | `spec.clusterRef`, `spec.nativeName` and the fields above | the cluster block's pools that no applied object declares or derives, each named `<cluster>-<pool>` when the applied revision declares several clusters |
+| `storage-ceph-core-v3` | `CephCluster` | `spec.services[]` of `service_type` `osd` | an OSD no declared OSD service explains, as one service per host; one it cannot place on a declared host and device, as a count in a note |
 
 ## Bootstrap completion and GitOps readiness
 

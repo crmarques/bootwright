@@ -195,6 +195,11 @@
             "network": true,
             "networkDifferences": [],
             "networkReboot": true,
+            "os": {
+              "id": "",
+              "kernel": "",
+              "versionId": ""
+            },
             "postcondition": true,
             "power": "On",
             "private": false,
@@ -254,6 +259,11 @@
             "network": true,
             "networkDifferences": [],
             "networkReboot": true,
+            "os": {
+              "id": "",
+              "kernel": "",
+              "versionId": ""
+            },
             "postcondition": false,
             "power": "Off",
             "private": false,
@@ -305,6 +315,11 @@
             "network": false,
             "networkDifferences": [],
             "networkReboot": false,
+            "os": {
+              "id": "",
+              "kernel": "",
+              "versionId": ""
+            },
             "postcondition": true,
             "power": "",
             "private": false,

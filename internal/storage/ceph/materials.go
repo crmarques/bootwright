@@ -164,7 +164,12 @@ func gatewayMaterial(e lifecycle.Execution, r Request, operation string) ([]life
 	return files, nil
 }
 
+const UnrecordedReading = "unrecorded"
+
 func (c Capability) run(ctx context.Context, e lifecycle.Execution, operation string, r Request) (lifecycle.RunResult, error) {
+	if operation == "observe" && r.Action == "cluster" && !lifecycle.Recorded(e) {
+		return c.invoke(ctx, e, operation, r, map[string]string{"reading": UnrecordedReading}, nil)
+	}
 	return c.invoke(ctx, e, operation, r, nil, nil)
 }
 

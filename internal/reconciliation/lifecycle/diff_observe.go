@@ -36,14 +36,9 @@ type blockReading struct {
 	projected      bool
 }
 
-type observedSide struct {
-	real    RealSide
-	desired *api.Object
-	pruned  bool
-}
-
 type fragment struct {
 	block      string
+	owner      string
 	projection Projection
 }
 
@@ -325,16 +320,20 @@ func (s Service) projectReadings(read *diffRead, blocks []reconciliation.Block, 
 		if !ok {
 			continue
 		}
-		projections, err := projector.Project(read.applied, block, reading.evidence)
+		projections, err := projector.Project(read.applied.effective, block, reading.evidence)
 		if err != nil {
 			err = failure("lifecycle.state", "the evidence of block "+block.ID+" could not be projected", "")
 		}
 		if lent := refuseLentMaterial(projections, material, block.ID, read.context.Name); lent != nil {
 			return lent
 		}
+		var discovers []api.Kind
+		if discoverer, ok := capability.(Discoverer); ok {
+			discovers = discoverer.Discovers()
+		}
 		for _, projection := range projections {
 			if err == nil {
-				err = admissible(projector.ProjectedPaths(), projection)
+				err = admissible(projector.ProjectedPaths(), discovers, read.applied.authored, projection)
 			}
 		}
 		if err != nil {
@@ -370,7 +369,7 @@ func foldObjects(read *diffRead, blocks []reconciliation.Block, readings map[str
 		own[identity] = append(own[identity], block.ID)
 		for _, projection := range readings[block.ID].projections {
 			target := string(projection.Kind) + "/" + projection.Name
-			fragments[target] = append(fragments[target], fragment{block: block.ID, projection: projection})
+			fragments[target] = append(fragments[target], fragment{block: block.ID, owner: identity, projection: projection})
 		}
 		switch reading := readings[block.ID]; {
 		case reading.state == sideUnknown:
@@ -382,16 +381,39 @@ func foldObjects(read *diffRead, blocks []reconciliation.Block, readings map[str
 			read.blocks.Observed++
 		}
 	}
-	read.sides = map[string]observedSide{}
+	names := read.claimedNames()
+	for _, identity := range mapKeys(fragments) {
+		kind, name, _ := strings.Cut(identity, "/")
+		if !declaredIn(read.applied.authored, api.Kind(kind), name) {
+			names.names[identity] = true
+		}
+	}
+	read.sides, read.patches = map[string]RealSide{}, map[string][]holderPatch{}
+	var splits []split
+	for _, identity := range mapKeys(fragments) {
+		kept, split := read.attribute(identity, fragments[identity], names)
+		fragments[identity], splits = kept, append(splits, split...)
+	}
 	for _, identity := range slices.Concat(mapKeys(own), mapKeys(fragments)) {
 		ids := own[identity]
 		if len(ids) == 0 {
-			for _, source := range fragments[identity] {
-				ids = append(ids, source.block)
-			}
+			ids = fragmentBlocks(fragments[identity])
 		}
-		read.sides[identity] = read.observedSide(identity, ids, readings, fragments[identity])
+		read.sides[identity] = read.observedSide(identity, ids, readings, fragments[identity], names)
 	}
+	for _, copied := range splits {
+		read.sides[copied.identity()] = read.splitSide(copied, readings, names)
+	}
+}
+
+func fragmentBlocks(fragments []fragment) []string {
+	var ids []string
+	for _, source := range fragments {
+		if !slices.Contains(ids, source.block) {
+			ids = append(ids, source.block)
+		}
+	}
+	return ids
 }
 
 func foldState(ids []string, readings map[string]blockReading) string {
@@ -410,7 +432,7 @@ func foldState(ids []string, readings map[string]blockReading) string {
 	return sidePresent
 }
 
-func (r diffRead) observedSide(identity string, ids []string, readings map[string]blockReading, fragments []fragment) observedSide {
+func (r diffRead) observedSide(identity string, ids []string, readings map[string]blockReading, fragments []fragment, names claimedNames) RealSide {
 	side := RealSide{Source: sideObserved, State: foldState(ids, readings)}
 	switch {
 	case side.State == sideUnknown:
@@ -420,13 +442,13 @@ func (r diffRead) observedSide(identity string, ids []string, readings map[strin
 				break
 			}
 		}
-		return observedSide{real: side}
+		return side
 	case side.State == sideAbsent:
 		side.Reason = "its observation proves none of it exists"
-		return observedSide{real: side}
+		return side
 	case r.appliedReason != "":
 		side.State, side.Reason, side.Remedy = sideUnknown, r.appliedReason, reviewStatus(r.context.Name)
-		return observedSide{real: side}
+		return side
 	}
 	for _, id := range ids {
 		side.Notes = append(side.Notes, readings[id].notes...)
@@ -434,11 +456,14 @@ func (r diffRead) observedSide(identity string, ids []string, readings map[strin
 	kind, name, _ := strings.Cut(identity, "/")
 	if len(fragments) == 0 {
 		side.Source = sideApplied
-		if applied, found := r.applied.Find(api.Kind(kind), name); found {
+		if applied, found := r.applied.authored.Find(api.Kind(kind), name); found {
 			side.Object = canonicalObject(applied)
 		}
 		side.Notes = append(side.Notes, "observed "+side.State+"; "+unrendered(ids, readings)+" no field, so the fields shown are what apply "+r.owning.ID+" applied")
-		return observedSide{real: side}
+		return side
+	}
+	if _, declared := r.applied.authored.Find(api.Kind(kind), name); !declared {
+		return r.discoveredSide(api.Kind(kind), name, side, fragments, names)
 	}
 	return r.projectedSide(api.Kind(kind), name, side, fragments)
 }
@@ -457,45 +482,6 @@ func unrendered(ids []string, readings map[string]blockReading) string {
 		return implementations[0] + " renders"
 	}
 	return strings.Join(implementations, ", ") + " render"
-}
-
-func (r diffRead) projectedSide(kind api.Kind, name string, side RealSide, fragments []fragment) observedSide {
-	shape := api.Schema(kind)
-	merged := api.MapValue()
-	var conflicts []string
-	for _, source := range fragments {
-		side.Notes = append(side.Notes, source.projection.Notes...)
-		value, found := merge(merged, canonical(source.projection.Observed, shape), shape, "spec")
-		merged = value
-		for _, path := range found {
-			if !slices.Contains(conflicts, path) {
-				conflicts = append(conflicts, path)
-			}
-		}
-	}
-	merged = canonical(without(merged, shape, "spec", conflicts), shape)
-	if !merged.Present() {
-		merged = api.MapValue()
-	}
-	side.Notes = append(side.Notes, conflictNotes(fragments, shape, conflicts)...)
-	observed := api.NewObject(kind, name, api.Value{}, merged)
-	side.Object = &observed
-	result := observedSide{real: side}
-	declared, found := r.desired.Find(kind, name)
-	if !found {
-		return result
-	}
-	pruned, dropped := prune(without(canonical(declared.Spec(), shape), shape, "spec", conflicts), merged, shape, "spec", r.unproven[kind])
-	if declared.Labels().Len() != 0 {
-		dropped = append(dropped, "metadata.labels")
-	}
-	if !pruned.Present() {
-		pruned = api.MapValue()
-	}
-	desired := api.NewObject(kind, name, api.Value{}, pruned)
-	result.desired, result.pruned = &desired, true
-	result.real.NotCompared = limitPaths(dropped)
-	return result
 }
 
 func limitPaths(paths []string) []string {

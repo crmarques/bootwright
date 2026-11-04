@@ -121,6 +121,106 @@ func TestMachineProjectionOmitsDataDisksTheRequestFreezesNone(t *testing.T) {
 	requireProjection(t, projections[1], api.InfraProvider, "lab-libvirt", profile(text("name", "rhel"), number("diskGiB", "60")), nil)
 }
 
+func attachedEvidence(t *testing.T, attached ...DiskEvidence) json.RawMessage {
+	t.Helper()
+	var evidence MachineEvidence
+	if err := json.Unmarshal(projectionEvidence(t, "root-only"), &evidence); err != nil {
+		t.Fatal(err)
+	}
+	evidence.Attached = attached
+	return encode(t, evidence)
+}
+
+func attachedDisk(target string, size int, rotation int) DiskEvidence {
+	return DiskEvidence{Name: target, Present: true, SizeGiB: size, Target: target, Bus: "virtio", RotationRate: rotation}
+}
+
+func TestMachineProjectionShowsADataDiskAttachedBesideAProfileDeclaringNone(t *testing.T) {
+	evidence := attachedEvidence(t, attachedDisk("vdc", 40, 0), attachedDisk("vdb", 30, 1))
+	projections := mustProject(t, projectionRequest(t), evidence)
+	requireProjection(t, projections[1], api.InfraProvider, "lab-libvirt", profile(
+		text("name", "rhel"), number("diskGiB", "60"),
+		field("dataDisks", api.ListValue(dataDisk("vdb", "30", "ssd"), dataDisk("vdc", "40"))),
+	), nil)
+	for _, leaf := range projectedLeaves(projections[1].Observed, api.Schema(api.InfraProvider), "spec") {
+		if !slices.Contains(NewMachine(nil).ProjectedPaths(), lifecycle.ProjectedPath{Kind: api.InfraProvider, Path: leaf}) {
+			t.Errorf("an attached disk claims %s, which ProjectedPaths does not list", leaf)
+		}
+	}
+}
+
+func TestMachineProjectionListsAnAttachedDiskBesideDeclaredOnesInNameOrder(t *testing.T) {
+	var evidence MachineEvidence
+	if err := json.Unmarshal(projectionEvidence(t, "resized-root"), &evidence); err != nil {
+		t.Fatal(err)
+	}
+	evidence.Attached = []DiskEvidence{attachedDisk("vdd", 5, 0)}
+	request := projectionRequest(t, Disk{Name: "data1", SizeGiB: 50}, Disk{Name: "data2", SizeGiB: 20})
+	projections := mustProject(t, request, encode(t, evidence))
+	requireProjection(t, projections[1], api.InfraProvider, "lab-libvirt", profile(
+		text("name", "rhel"), number("diskGiB", "100"),
+		field("dataDisks", api.ListValue(dataDisk("data1", "50"), dataDisk("data2", "20"), dataDisk("vdd", "5"))),
+	), nil)
+}
+
+func TestMachineProjectionNotesAnAttachedDiskItCannotName(t *testing.T) {
+	evidence := attachedEvidence(t,
+		attachedDisk("vdc", 0, 0), attachedDisk("data1", 7, 0), DiskEvidence{Name: "vde", Present: false, Target: "vde"})
+	request := projectionRequest(t, Disk{Name: "data1", SizeGiB: 50})
+	var seen MachineEvidence
+	if err := json.Unmarshal(evidence, &seen); err != nil {
+		t.Fatal(err)
+	}
+	seen.Disks = append(seen.Disks, DiskEvidence{Name: "data1", Present: true, SizeGiB: 50})
+	projections := mustProject(t, request, encode(t, seen))
+	requireProjection(t, projections[1], api.InfraProvider, "lab-libvirt", profile(
+		text("name", "rhel"), number("diskGiB", "60"), field("dataDisks", api.ListValue(dataDisk("data1", "50"))),
+	), []string{
+		"machine-rhel-01: disk vdc attached outside the profile has no readable whole-GiB size",
+		"machine-rhel-01: disk data1 attached outside the profile cannot be named",
+	})
+}
+
+func TestMachineProjectionRefusesAnAttachedDiskTargetNoHostReports(t *testing.T) {
+	for _, target := range []string{"VDB", "vd c", strings.Repeat("x", 17), "", "vd\u00e9", "vd\x1b"} {
+		disk := attachedDisk(target, 30, 0)
+		disk.Name = "vdc"
+		if projections, err := project(t, labCatalog(), projectionRequest(t), attachedEvidence(t, disk)); err == nil {
+			t.Fatalf("an attached disk under target %q projected %+v", target, projections)
+		}
+	}
+}
+
+func TestMachineProjectionKeepsItsNotesWithinTheEngineBound(t *testing.T) {
+	var attached []DiskEvidence
+	for _, target := range []string{"vdc", "vdd", "vde", "vdf", "vdg", "vdh", "vdi", "vdj", "vdk", "vdl", "vdm", "vdn"} {
+		attached = append(attached, attachedDisk(target, 0, 0))
+	}
+	var evidence MachineEvidence
+	if err := json.Unmarshal(attachedEvidence(t, attached...), &evidence); err != nil {
+		t.Fatal(err)
+	}
+	evidence.State, evidence.Power = "held \x1b[31m by "+strings.Repeat("x", 300), strings.Repeat("y", 300)
+	request := projectionRequest(t, Disk{Name: "data1", SizeGiB: 50})
+	projections := mustProject(t, request, encode(t, evidence))
+	for _, projection := range projections {
+		if len(projection.Notes) > 8 {
+			t.Fatalf("%s carries %d notes", projection.Kind, len(projection.Notes))
+		}
+		for _, note := range projection.Notes {
+			if len(note) > 200 || strings.ContainsFunc(note, func(r rune) bool { return r < 0x20 }) || strings.Contains(note, "xxx") || strings.Contains(note, "yyy") {
+				t.Fatalf("note %q", note)
+			}
+		}
+	}
+	if notes := projections[1].Notes; notes[len(notes)-1] != "machine-rhel-01: 6 more disk notes" {
+		t.Fatalf("notes %q", notes)
+	}
+	if !slices.Equal(projections[0].Notes, []string{"machine-rhel-01: its domain state is not one libvirt names", "machine-rhel-01: its BMC power is not one it reports"}) {
+		t.Fatalf("machine notes %q", projections[0].Notes)
+	}
+}
+
 func TestMachineProjectionMarksAnSSDDataDisk(t *testing.T) {
 	request := projectionRequest(t, Disk{Name: "data1", SizeGiB: 50, Media: "ssd", Bus: "scsi", Target: "sda", RotationRate: 1})
 	projections := mustProject(t, request, projectionEvidence(t, "ssd-data"))

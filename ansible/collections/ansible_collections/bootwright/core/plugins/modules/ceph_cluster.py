@@ -29,6 +29,8 @@ options:
     description:
       - Runner-owned private material file paths.
       - C(retirement) set to C(tiebreaker) selects a provided stretch tiebreaker's removal on destroy, or its read-only observation on observe.
+      - C(reading) set to C(unrecorded) marks a cluster observation no operation records, which alone lists the cluster's pools and the
+        OSDs no declared service places.
     type: dict
     required: true
   outputs:
@@ -76,7 +78,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import ceph_core
 
 # The closed, non-secret values material may carry beside its paths. AnsibleModule masks every leaf of a no_log option as a
 # substring of each result string, so a selector left masked would censor the refusal names and evidence versions that contain it.
-SELECTORS = frozenset(("tiebreaker",))
+SELECTORS = frozenset(("tiebreaker", "unrecorded"))
 
 
 def main():
@@ -95,10 +97,13 @@ def main():
         # The retirement selector is a value beside the material paths, never a path the transport reads.
         material = dict(params["material"])
         retirement = material.pop("retirement", None)
-        if retirement in SELECTORS:
-            module.no_log_values.discard(retirement)
+        reading = material.pop("reading", None)
+        for selector in (retirement, reading):
+            if selector in SELECTORS:
+                module.no_log_values.discard(selector)
         transport = ceph_core.Transport(params["request"], material)
-        result = ceph_core.execute(params["request"], params["operation"], params["digest"], transport, params["outputs"], retirement=retirement)
+        result = ceph_core.execute(params["request"], params["operation"], params["digest"], transport, params["outputs"], retirement=retirement,
+                                   reading=reading)
     except Exception as error:
         reason, detail = ceph_core.refusal(error, ceph_core.CLUSTER_REASONS)
         failure = {"reason": reason}

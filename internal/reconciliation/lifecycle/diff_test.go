@@ -194,7 +194,7 @@ func TestDiffNamesAddedChangedAndRemovedObjects(t *testing.T) {
 		bravo.Real.Object.Spec().Get("image").Text() != "v1" {
 		t.Fatalf("bravo = %+v", bravo)
 	}
-	if charlie.Plan != "removed" || charlie.Realization != RealizationDone || charlie.Desired != nil || charlie.Real.State != "present" || charlie.Real.Object == nil {
+	if charlie.Plan != "removed" || charlie.Realization != RealizationDone || charlie.Desired != nil || charlie.Real.State != "present" || charlie.Real.Object == nil || charlie.Real.Discovered {
 		t.Fatalf("charlie = %+v", charlie)
 	}
 	if delta.Plan != "added" || delta.Realization != "" || delta.Real.State != "absent" || delta.Real.Reason != "apply "+operation+" did not declare it" {

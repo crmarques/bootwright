@@ -3,51 +3,59 @@ Against:  apply op-3f9a0c12 (done) of input revision rev-1b7e55a0, as its record
 Input:    changed since op-3f9a0c12; bootwright apply refuses it until bootwright destroy --context lab takes back what that apply owns
 Plan:     this executable plans 1 block differently, 1 more and 1 fewer
 
-diff applied/CephPool/rbd-archive desired/CephPool/rbd-archive
-# plan: added (ceph-pool-rbd-archive); realized: none
-# no operation of this context realized it
---- /dev/null
-+++ desired/CephPool/rbd-archive
-@@ -0,0 +1,12 @@
-+apiVersion: bootwright.io/v1alpha1
-+kind: CephPool
-+metadata:
-+  name: rbd-archive
+diff desired/storage/clients.yaml applied/storage/clients.yaml
+# CephClient/rbd-canary: plan: removed (ceph-client-rbd-canary); realized: done
+--- desired/storage/clients.yaml
++++ applied/storage/clients.yaml
+@@ -1,6 +1,15 @@
+ apiVersion: bootwright.io/v1alpha1
+ kind: CephClient
+ metadata:
++  name: rbd-canary
 +spec:
 +  clusterRef: ceph-lab
-+  role: rbd
-+  replicated:
-+    size: 3
-+    minSize: 2
-+  autoscale:
-+    mode: on
++  poolRef: rbd-data
++  access: readWrite
++---
++apiVersion: bootwright.io/v1alpha1
++kind: CephClient
++metadata:
+   name: rbd-reader
+ spec:
+   clusterRef: ceph-lab
 
-diff applied/CephPool/rbd-data desired/CephPool/rbd-data
-# plan: changed (ceph-pool-rbd-data); realized: done
---- applied/CephPool/rbd-data
-+++ desired/CephPool/rbd-data
-@@ -6,7 +6,7 @@
+diff desired/storage/pools.yaml applied/storage/pools.yaml
+# CephPool/rbd-archive: plan: added (ceph-pool-rbd-archive); realized: none
+# CephPool/rbd-archive: no operation of this context realized it
+# CephPool/rbd-data: plan: changed (ceph-pool-rbd-data); realized: done
+--- desired/storage/pools.yaml
++++ applied/storage/pools.yaml
+@@ -1,25 +1,12 @@
+ apiVersion: bootwright.io/v1alpha1
+ kind: CephPool
+ metadata:
+-  name: rbd-archive
+-spec:
+-  clusterRef: ceph-lab
+-  role: rbd
+-  replicated:
+-    size: 3
+-    minSize: 2
+-  autoscale:
+-    mode: on
+----
+-apiVersion: bootwright.io/v1alpha1
+-kind: CephPool
+-metadata:
+   name: rbd-data
+ spec:
    clusterRef: ceph-lab
    role: rbd
    replicated:
--    size: 2
-+    size: 3
+-    size: 3
++    size: 2
      minSize: 2
    autoscale:
      mode: on
 
-diff applied/CephClient/rbd-canary desired/CephClient/rbd-canary
-# plan: removed (ceph-client-rbd-canary); realized: done
---- applied/CephClient/rbd-canary
-+++ /dev/null
-@@ -1,8 +0,0 @@
--apiVersion: bootwright.io/v1alpha1
--kind: CephClient
--metadata:
--  name: rbd-canary
--spec:
--  clusterRef: ceph-lab
--  poolRef: rbd-data
--  access: readWrite
-
-3 objects differ: 1 changed, 1 added, 1 removed, 0 unknown; 1 unchanged
+3 objects differ: 1 changed, 1 added, 1 removed, 0 unmanaged, 0 unknown; 1 unchanged

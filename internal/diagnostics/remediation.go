@@ -32,6 +32,7 @@ var defaultRemediations = map[string]string{
 	"cli.not-implemented": "run bootwright help <command> to see which forms this build runs",
 	"render.publish":      "choose an --output-dir this account can write that holds no link or other non-regular file at the artifact's name",
 	"runtime.encode":      "repeat the command; a repeated failure is a Bootwright defect to report",
+	"runtime.tool":        "pass --tool a program on PATH, or a path to an executable this account can run",
 	"runtime.log":         "make the context's log directory writable by the invoking user and repeat the command",
 	"runtime.interrupted": "repeat the command",
 	"runtime.canceled":    "repeat the command",

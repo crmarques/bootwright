@@ -156,7 +156,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [os-install-anaconda-v22]
+            choices: [os-install-anaconda-v23]
       bootwright_os_install_digest:
         type: str
         required: true

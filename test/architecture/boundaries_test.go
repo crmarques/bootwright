@@ -56,6 +56,7 @@ func packageRoles() map[string]packageRole {
 		"internal/reconciliation/ansiblerunner":    adapterRole,
 		"internal/managedos/medialocal":            adapterRole,
 		"internal/nativeartifacts/renderlocal":     adapterRole,
+		"internal/nativeartifacts/comparisonlocal": adapterRole,
 		"internal/machine/sshlocal":                adapterRole,
 		"internal/storage/preflightlocal":          adapterRole,
 		"internal/containercluster/preflightlocal": adapterRole,
@@ -537,9 +538,12 @@ func effectGrants() map[string][]string {
 		// os/signal, since privilege.Begin is the one signal subscription.
 		// The render adapter publishes one file into the output directory the
 		// operator names, through a held handle on that directory and a
-		// temporary file beside it, and replaces only a regular file.
-		"internal/nativeartifacts/renderlocal": {"crypto/rand", "os", "syscall"},
-		"cmd/bootwright":                       {"crypto/rand.Read", "io", modulePath + "internal/cli", "net/http.Request", "os", "syscall", "unsafe"},
+		// temporary file beside it, and replaces only a regular file. It
+		// writes a comparison tree through directory descriptors opened
+		// without following a link, and removes only the entries it made.
+		"internal/nativeartifacts/renderlocal":     {"crypto/rand", "golang.org/x/sys/unix", "os", "syscall"},
+		"internal/nativeartifacts/comparisonlocal": {"io", "os", "os/exec", "syscall"},
+		"cmd/bootwright":                           {"crypto/rand.Read", "io", modulePath + "internal/cli", "net/http.Request", "os", "syscall", "unsafe"},
 	}
 }
 

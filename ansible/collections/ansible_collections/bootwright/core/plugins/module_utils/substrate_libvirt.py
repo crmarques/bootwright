@@ -24,6 +24,9 @@ RPM = "/usr/bin/rpm"
 IP = "/usr/sbin/ip"
 
 MAX_OUTPUT = 1 << 20
+ATTACHED_DISK_LIMIT = 32
+# An attached disk is listed only under a short kernel-style target, the name diff gives it; libvirt accepts any string there.
+ATTACHED_TARGET = re.compile(r"[a-z]{1,8}[0-9a-z]{0,8}\Z")
 UNIT_STATES = ("active", "activating", "deactivating", "inactive", "failed")
 ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C.UTF-8"}
 
@@ -527,7 +530,35 @@ def domain_metadata(runner, uri, name, context="", machine="", uuid="", disks=No
     }
     if disks and any(d.get("media") in ("ssd", "hdd") for d in disks):
         result["diskMedia"] = {disk["name"]: disk_media(root, disk) for disk in disks if disk.get("media") in ("ssd", "hdd")}
+    if disks:
+        attached = attached_disks(root, disks)
+        if attached:
+            result["attached"] = attached
     return result
+
+
+def attached_disks(root, disks):
+    """List the disks the domain holds beyond the frozen ones, read-only and bounded.
+
+    A disk is outside the request when its target is not one the request froze,
+    whoever attached it. Each is named by its target, in target order, and
+    carries the path its image is read from, or none when it is not a file.
+    """
+    frozen = {disk.get("target", "") for disk in disks}
+    found = {}
+    for item in root.findall("./devices/disk[@device='disk']"):
+        target, source = item.find("target"), item.find("source")
+        device = target.get("dev", "") if target is not None else ""
+        if ATTACHED_TARGET.fullmatch(device) is None or device in frozen or device in found:
+            continue
+        rate = target.get("rotation_rate", "")
+        found[device] = {
+            "bus": target.get("bus", ""),
+            "path": source.get("file", "") if source is not None and item.get("type") == "file" else "",
+            "rotationRate": int(rate) if rate.isascii() and rate.isdigit() and len(rate) <= 5 else 0,
+            "target": device,
+        }
+    return [found[device] for device in sorted(found)[:ATTACHED_DISK_LIMIT]]
 
 
 def disk_media(root, disk):
@@ -810,7 +841,7 @@ def observe_machine(runner, request, read=None):
         if disk.get("media") in ("ssd", "hdd") and disk["name"] in metadata.get("diskMedia", {}):
             entry.update(metadata["diskMedia"][disk["name"]])
         disks.append(entry)
-    return {
+    observation = {
         "answered": metadata["answered"],
         "controller": container_image(runner, controller["unit"]),
         "disks": disks,
@@ -821,3 +852,11 @@ def observe_machine(runner, request, read=None):
         "unit": unit_state(runner, controller["unit"] + ".service"),
         "uuid": metadata["uuid"],
     }
+    attached = [
+        {"name": disk["target"], "present": True, "sizeGiB": disk_size_gib(runner, disk["path"]) if disk["path"] else 0,
+         "bus": disk["bus"], "target": disk["target"], "rotationRate": disk["rotationRate"]}
+        for disk in metadata.get("attached", [])
+    ]
+    if attached:
+        observation["attached"] = attached
+    return observation

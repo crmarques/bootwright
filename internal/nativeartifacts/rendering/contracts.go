@@ -33,3 +33,10 @@ type Files interface {
 	Resolve(string) (string, error)
 	Publish(ctx context.Context, directory, name string, data []byte, private bool) (string, error)
 }
+
+type TreeFile struct {
+	Path string
+	Data []byte
+}
+
+type ComparisonPair struct{ Desired, Other string }

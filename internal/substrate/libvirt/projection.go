@@ -12,7 +12,15 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const rootDisk = "root"
+const (
+	rootDisk     = "root"
+	maxDiskNotes = 8
+)
+
+var (
+	domainStates = []string{"running", "idle", "paused", "in shutdown", domainOff, "crashed", "pmsuspended"}
+	powerStates  = []string{"On", "Off"}
+)
 
 func (MachineCapability) ProjectedPaths() []lifecycle.ProjectedPath {
 	return []lifecycle.ProjectedPath{
@@ -47,7 +55,7 @@ func (MachineCapability) Project(applied api.Catalog, block reconciliation.Block
 		Observed: nestedMap([]string{"substrate"}, api.FieldValue{Name: "providerRef", Value: api.StringValue(providerRef)}),
 	}
 	profile := lifecycle.Projection{
-		Kind: api.InfraProvider, Name: providerRef, Notes: missingDiskNotes(name, request, observed),
+		Kind: api.InfraProvider, Name: providerRef, Notes: boundedNotes(name, slices.Concat(missingDiskNotes(name, request, observed), unnamedDiskNotes(name, request, observed))),
 		Observed: api.MapValue(api.FieldValue{Name: "libvirt", Value: api.MapValue(
 			api.FieldValue{Name: "machineProfiles", Value: api.ListValue(profileItem(profileRef, request, observed))},
 		)}),
@@ -73,13 +81,26 @@ func placement(applied api.Catalog, machine string) (string, string) {
 
 func machineNotes(name string, observed MachineEvidence) []string {
 	var notes []string
-	if observed.State != "" {
+	switch {
+	case slices.Contains(domainStates, observed.State):
 		notes = append(notes, "machine-"+name+": domain "+observed.State)
+	case observed.State != "":
+		notes = append(notes, "machine-"+name+": its domain state is not one libvirt names")
 	}
-	if observed.Power != "" {
+	switch {
+	case slices.Contains(powerStates, observed.Power):
 		notes = append(notes, "machine-"+name+": its BMC reports power "+observed.Power)
+	case observed.Power != "":
+		notes = append(notes, "machine-"+name+": its BMC power is not one it reports")
 	}
 	return notes
+}
+
+func boundedNotes(name string, notes []string) []string {
+	if len(notes) <= maxDiskNotes {
+		return notes
+	}
+	return append(notes[:maxDiskNotes-1:maxDiskNotes-1], "machine-"+name+": "+strconv.Itoa(len(notes)-maxDiskNotes+1)+" more disk notes")
 }
 
 func missingDiskNotes(name string, request MachineRequest, observed MachineEvidence) []string {
@@ -104,7 +125,9 @@ func profileItem(profileRef string, request MachineRequest, observed MachineEvid
 			data = append(data, disk)
 		}
 	}
-	if slices.ContainsFunc(request.Disks, func(disk Disk) bool { return disk.Name != rootDisk }) {
+	data = slices.Concat(data, attachedDisks(request, observed))
+	declares := slices.ContainsFunc(request.Disks, func(disk Disk) bool { return disk.Name != rootDisk })
+	if declares || len(data) > 0 {
 		slices.SortFunc(data, func(first, second DiskEvidence) int { return strings.Compare(first.Name, second.Name) })
 		items := make([]api.Value, 0, len(data))
 		for _, disk := range data {
@@ -113,6 +136,37 @@ func profileItem(profileRef string, request MachineRequest, observed MachineEvid
 		fields = append(fields, api.FieldValue{Name: "dataDisks", Value: api.ListValue(items...)})
 	}
 	return api.MapValue(fields...)
+}
+
+func attachedDisks(request MachineRequest, observed MachineEvidence) []DiskEvidence {
+	taken := map[string]bool{rootDisk: true}
+	for _, disk := range request.Disks {
+		taken[disk.Name] = true
+	}
+	var named []DiskEvidence
+	for _, disk := range observed.Attached {
+		if disk.Present && substrate.SafeSegment(disk.Target) && !taken[disk.Target] && disk.SizeGiB > 0 {
+			taken[disk.Target] = true
+			disk.Name = disk.Target
+			named = append(named, disk)
+		}
+	}
+	return named
+}
+
+func unnamedDiskNotes(name string, request MachineRequest, observed MachineEvidence) []string {
+	named := attachedDisks(request, observed)
+	var notes []string
+	for _, disk := range observed.Attached {
+		switch {
+		case !disk.Present || slices.ContainsFunc(named, func(seen DiskEvidence) bool { return seen.Target == disk.Target }):
+		case disk.SizeGiB <= 0 && substrate.SafeSegment(disk.Target):
+			notes = append(notes, "machine-"+name+": disk "+disk.Target+" attached outside the profile has no readable whole-GiB size")
+		default:
+			notes = append(notes, "machine-"+name+": disk "+disk.Target+" attached outside the profile cannot be named")
+		}
+	}
+	return notes
 }
 
 func dataDiskItem(disk DiskEvidence) api.Value {

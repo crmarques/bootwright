@@ -2,6 +2,7 @@ package cli
 
 import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -33,6 +34,21 @@ func diffClient(name string) *api.Object {
 	return &object
 }
 
+func placeDiff(result *lifecycle.DiffResult) *lifecycle.DiffResult {
+	paths := map[api.Kind]string{
+		api.CephPool: "storage/pools.yaml", api.CephClient: "storage/clients.yaml",
+		api.InfraProvider: "infra/provider.yaml", api.Machine: "machines/rhel.yaml",
+	}
+	for index := range result.Objects {
+		object := &result.Objects[index]
+		object.Path = paths[object.Kind]
+		if object.Real.State != "absent" {
+			object.Real.Path = paths[object.Kind]
+		}
+	}
+	return result
+}
+
 func diffApplied(object *api.Object, realization lifecycle.RealizationStatus, plan string, blocks ...string) lifecycle.ObjectDiff {
 	return lifecycle.ObjectDiff{
 		Kind: object.Kind(), Name: object.Name(), Plan: plan, Blocks: blocks, Realization: realization,
@@ -51,13 +67,13 @@ func diffRecorded() *lifecycle.DiffResult {
 	removed := diffApplied(diffClient("rbd-canary"), lifecycle.RealizationDone, "removed", "ceph-client-rbd-canary")
 	unchanged := diffApplied(diffClient("rbd-reader"), lifecycle.RealizationDone, "same", "ceph-client-rbd-reader")
 	unchanged.Desired = diffClient("rbd-reader")
-	return &lifecycle.DiffResult{
+	return placeDiff(&lifecycle.DiffResult{
 		Context:   lifecycle.ContextIdentity{Name: "lab", Revision: diffSelectedRevision, Mode: "ready"},
 		Operation: lifecycle.DiffOperation{ID: diffApplyID, Verb: "apply", State: "done", Apply: diffApplyID, Revision: diffAppliedRevision, Applied: "readable"},
 		Input:     "changed",
 		Plan:      lifecycle.DiffPlan{State: "differs", Changed: 1, Added: 1, Removed: 1, Rebuilt: []string{}},
 		Objects:   []lifecycle.ObjectDiff{added, changed, removed, unchanged},
-	}
+	})
 }
 
 func diffUnknown() *lifecycle.DiffResult {
@@ -75,7 +91,7 @@ func diffUnknown() *lifecycle.DiffResult {
 		},
 	}
 	result.Objects = []lifecycle.ObjectDiff{unknown, result.Objects[3]}
-	return result
+	return placeDiff(result)
 }
 
 func diffNone() *lifecycle.DiffResult {
@@ -144,7 +160,7 @@ func diffObserved() *lifecycle.DiffResult {
 	applied := diffApplied(diffClient("rbd-reader"), lifecycle.RealizationDone, "same", "ceph-client-rbd-reader")
 	applied.Desired = diffClient("rbd-reader")
 	applied.Real.Notes = []string{"observed present; client-ceph-v1 renders no field, so the fields shown are what apply " + diffApplyID + " applied"}
-	return &lifecycle.DiffResult{
+	return placeDiff(&lifecycle.DiffResult{
 		Context:   lifecycle.ContextIdentity{Name: "lab", Revision: diffAppliedRevision, Mode: "ready"},
 		Operation: lifecycle.DiffOperation{ID: diffApplyID, Verb: "apply", State: "done", Apply: diffApplyID, Revision: diffAppliedRevision, Applied: "readable"},
 		Input:     "unchanged",
@@ -152,7 +168,7 @@ func diffObserved() *lifecycle.DiffResult {
 		Observed:  true,
 		Blocks:    lifecycle.DiffBlocks{Observed: 3, Unknown: 1, Unprojected: 1},
 		Objects:   []lifecycle.ObjectDiff{partial, unknown, provider, applied},
-	}
+	})
 }
 
 func diffRebuilt() *lifecycle.DiffResult {
@@ -187,8 +203,29 @@ func diffDoneWithFailedBlock() *lifecycle.DiffResult {
 	return result
 }
 
+func diffFiled() *lifecycle.DiffResult {
+	result := diffRecorded()
+	moved := result.Objects[1]
+	moved.Real.Path = "storage/archive.yaml"
+	stray := diffClient("rbd-stray")
+	unmanaged := lifecycle.ObjectDiff{
+		Kind: api.CephClient, Name: "rbd-stray", Plan: "", Realization: "",
+		Real: lifecycle.RealSide{Source: "applied", State: "present", Discovered: true, Path: "storage/clients.yaml", Object: stray},
+		Path: "",
+	}
+	result.Objects = []lifecycle.ObjectDiff{result.Objects[0], moved, result.Objects[2], unmanaged, result.Objects[3]}
+	result.Markers = lifecycle.DiffMarkers{
+		Desired: []desiredstate.SourceFile{desiredstate.NewSourceFile("storage/.keep", []byte("desired\n"))},
+		Applied: []desiredstate.SourceFile{desiredstate.NewSourceFile("storage/.keep", []byte("applied\n"))},
+	}
+	return result
+}
+
 func diffGoldens() []cliGolden {
 	return []cliGolden{
+		{golden: "cli-diff-color", args: "diff --color always", record: func(r *dispatchRecord) { r.result.lifecycleDiff = diffMixed() }},
+		{golden: "cli-diff-files", args: "diff", record: func(r *dispatchRecord) { r.result.lifecycleDiff = diffFiled() }},
+		{golden: "cli-diff-files-json", args: "diff --output json", record: func(r *dispatchRecord) { r.result.lifecycleDiff = diffFiled() }},
 		{golden: "cli-diff-build", args: "diff", record: func(r *dispatchRecord) { r.result.lifecycleDiff = diffRebuilt() }},
 		{golden: "cli-diff-lost-record", args: "diff", record: func(r *dispatchRecord) { r.result.lifecycleDiff = diffLostRecord() }},
 		{golden: "cli-diff-paused", args: "diff", record: func(r *dispatchRecord) { r.result.lifecycleDiff = diffPaused() }},

@@ -597,7 +597,7 @@ def test_observation_projects_monitor_addresses_and_dashboard_access_without_sec
 
 
 def cluster_evidence(request, **dashboard):
-    value = {"version": "ceph-core-evidence-v13", "request": "d" * 64, "action": "cluster", "owner": request["owner"], "fsid": request["fsid"],
+    value = {"version": "ceph-core-evidence-v14", "request": "d" * 64, "action": "cluster", "owner": request["owner"], "fsid": request["fsid"],
              "owned": True, "exists": True, "ready": True, "removed": False, "partial": False, "health": "HEALTH_OK",
              "hosts": [h["name"] for h in request["hosts"]], "monitors": ["node-1"], "monAddrs": [{"host": "node-1", "address": "192.0.2.1"}],
              "mgrActive": "node-1", "mgrStandbys": ["node-2"], "osds": [], "resource": {"id": "", "path": ""}, "client": "",

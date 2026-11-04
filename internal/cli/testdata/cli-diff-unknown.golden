@@ -3,9 +3,9 @@ Against:  apply op-3f9a0c12 (done) of input revision rev-1b7e55a0, as its record
 Input:    unchanged since op-3f9a0c12; bootwright status --context lab names the next step
 Plan:     this executable plans the same blocks
 
-diff applied/CephClient/rbd-fenced desired/CephClient/rbd-fenced
-# plan: same (ceph-client-rbd-fenced); realized: failed
-# its blocks read failed: ceph-client-rbd-fenced
-# remedy: review its durable state with bootwright status --context lab
+diff desired/storage/clients.yaml applied/storage/clients.yaml
+# CephClient/rbd-fenced: plan: same (ceph-client-rbd-fenced); realized: failed
+# CephClient/rbd-fenced: its blocks read failed: ceph-client-rbd-fenced
+# CephClient/rbd-fenced: remedy: review its durable state with bootwright status --context lab
 
-1 object differs: 0 changed, 0 added, 0 removed, 1 unknown; 1 unchanged
+1 object differs: 0 changed, 0 added, 0 removed, 0 unmanaged, 1 unknown; 1 unchanged

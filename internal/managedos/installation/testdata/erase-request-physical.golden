@@ -135,9 +135,9 @@
       "size": 0
     },
     "user": "bootwright",
-    "version": "os-install-anaconda-v22"
+    "version": "os-install-anaconda-v23"
   },
-  "installDigest": "dfa41ae095a396314e564bc74e28565fd54c4ff4e783bf6a7da17838b592938d",
+  "installDigest": "0da46f35be376d594fa5ac5e16d5e5d2571ff199bedc52a98b64f74164b46172",
   "network": "network --bootproto=static --device=enp1s0 --ip=198.51.100.41 --netmask=255.255.255.0 --hostname=metal-01.lab.example.test --onboot=on --activate --gateway=198.51.100.1 --nameserver=192.0.2.1\n",
   "targets": [
     {

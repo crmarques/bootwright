@@ -1299,7 +1299,11 @@ whose map entry never booted against no declared disk instead of refusing
 `foreign-osd`, and such an OSD keeps the cluster unready, named in the
 not-ready detail as `unbooted@osd.<id>.<osd fsid>`, so the apply goes on
 to OSD preparation and the services call; every other OSD beyond the declared
-disks still refuses `foreign-osd`. A clear whose completion was never
+disks still refuses `foreign-osd`, except to an observation no operation
+records, a [`diff --observe` read](state-reconciliation.md#reading-the-real-side-live),
+which reads the cluster partial, names it as `unplaced@osd.<id>` and returns
+it in its inventory, so the comparison can show it; that read authorizes
+nothing. A clear whose completion was never
 recorded completes in OSD preparation when the disk now holds a complete OSD
 carrying neither the OSD fsid nor the PV UUID its intent proved, since the
 zap evidently ran: it drops the PV's devices-file entry as above and records

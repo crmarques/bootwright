@@ -2,6 +2,7 @@ package lifecycle
 
 import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -31,6 +32,12 @@ type DiffResult struct {
 	Observed  bool
 	Blocks    DiffBlocks
 	Objects   []ObjectDiff
+	Markers   DiffMarkers
+}
+
+type DiffMarkers struct {
+	Desired []desiredstate.SourceFile
+	Applied []desiredstate.SourceFile
 }
 
 type DiffOperation struct{ ID, Verb, State, Apply, Revision, Applied string }
@@ -50,6 +57,7 @@ type ObjectDiff struct {
 	Plan        string
 	Blocks      []string
 	Realization RealizationStatus
+	Path        string
 	Desired     *api.Object
 	Real        RealSide
 }
@@ -57,6 +65,8 @@ type ObjectDiff struct {
 type RealSide struct {
 	Source      string
 	State       string
+	Path        string
+	Discovered  bool
 	Object      *api.Object
 	NotCompared []string
 	Notes       []string

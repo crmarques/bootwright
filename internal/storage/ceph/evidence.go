@@ -5,12 +5,13 @@ import (
 	"net/netip"
 	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/canonicaljson"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-const EvidenceVersion = "ceph-core-evidence-v13"
+const EvidenceVersion = "ceph-core-evidence-v14"
 
 const DashboardPort = "8443"
 
@@ -58,6 +59,23 @@ type OSDEvidence struct {
 	UUID string `json:"uuid"`
 }
 
+type PoolEvidence struct {
+	Applications []string `json:"applications"`
+	Autoscale    string   `json:"autoscale"`
+	MaxBytes     int64    `json:"maxBytes"`
+	MaxObjects   int64    `json:"maxObjects"`
+	MinSize      int      `json:"minSize"`
+	Name         string   `json:"name"`
+	Size         int      `json:"size"`
+	Type         string   `json:"type"`
+}
+
+type InventoryEvidence struct {
+	Omitted int            `json:"omitted"`
+	OSDs    []OSDEvidence  `json:"osds"`
+	Pools   []PoolEvidence `json:"pools"`
+}
+
 type ResourceEvidence struct {
 	ID   string `json:"id"`
 	Path string `json:"path"`
@@ -70,32 +88,34 @@ type UnitDaemon struct {
 }
 
 type Evidence struct {
-	Action          string            `json:"action"`
-	Client          string            `json:"client"`
-	Daemons         []UnitDaemon      `json:"daemons"`
-	Dashboard       DashboardEvidence `json:"dashboard"`
-	Endpoint        EndpointEvidence  `json:"endpoint"`
-	Exists          bool              `json:"exists"`
-	FSID            string            `json:"fsid"`
-	Health          string            `json:"health"`
-	Hosts           []string          `json:"hosts"`
-	Incarnation     string            `json:"incarnation"`
-	MGRActive       string            `json:"mgrActive"`
-	MGRStandbys     []string          `json:"mgrStandbys"`
-	MonAddrs        []MonitorAddress  `json:"monAddrs"`
-	Monitors        []string          `json:"monitors"`
-	OSDs            []OSDEvidence     `json:"osds"`
-	Owned           bool              `json:"owned"`
-	Owner           string            `json:"owner"`
-	Partial         bool              `json:"partial"`
-	Ready           bool              `json:"ready"`
-	Removed         bool              `json:"removed"`
-	Request         string            `json:"request"`
-	Resource        ResourceEvidence  `json:"resource"`
-	Specializations []string          `json:"specializations,omitempty"`
-	SSO             string            `json:"sso"`
-	Stretch         *StretchEvidence  `json:"stretch,omitempty"`
-	Version         string            `json:"version"`
+	Action          string             `json:"action"`
+	Client          string             `json:"client"`
+	Daemons         []UnitDaemon       `json:"daemons"`
+	Dashboard       DashboardEvidence  `json:"dashboard"`
+	Endpoint        EndpointEvidence   `json:"endpoint"`
+	Exists          bool               `json:"exists"`
+	FSID            string             `json:"fsid"`
+	Health          string             `json:"health"`
+	Hosts           []string           `json:"hosts"`
+	Incarnation     string             `json:"incarnation"`
+	Inventory       *InventoryEvidence `json:"inventory,omitempty"`
+	MGRActive       string             `json:"mgrActive"`
+	MGRStandbys     []string           `json:"mgrStandbys"`
+	MonAddrs        []MonitorAddress   `json:"monAddrs"`
+	Monitors        []string           `json:"monitors"`
+	OSDs            []OSDEvidence      `json:"osds"`
+	Owned           bool               `json:"owned"`
+	Owner           string             `json:"owner"`
+	Partial         bool               `json:"partial"`
+	Pool            *PoolEvidence      `json:"pool,omitempty"`
+	Ready           bool               `json:"ready"`
+	Removed         bool               `json:"removed"`
+	Request         string             `json:"request"`
+	Resource        ResourceEvidence   `json:"resource"`
+	Specializations []string           `json:"specializations,omitempty"`
+	SSO             string             `json:"sso"`
+	Stretch         *StretchEvidence   `json:"stretch,omitempty"`
+	Version         string             `json:"version"`
 }
 
 func evidenceFailure() error {
@@ -113,6 +133,14 @@ func decodeEvidence(data []byte) (Evidence, error) {
 		expected++
 		if !validSpecializationsMember(fields) {
 			return Evidence{}, evidenceFailure()
+		}
+	}
+	for _, member := range []string{"pool", "inventory"} {
+		if _, ok := fields[member]; ok {
+			expected++
+			if !validReadingMember(fields, member) {
+				return Evidence{}, evidenceFailure()
+			}
 		}
 	}
 	if raw, ok := fields["stretch"]; ok {
@@ -175,6 +203,101 @@ func decodeEvidence(data []byte) (Evidence, error) {
 		return Evidence{}, evidenceFailure()
 	}
 	return e, nil
+}
+
+const (
+	maxInventoryPools   = 128
+	maxInventoryListing = 65536
+	maxUnplacedOSDs     = 64
+	maxPoolApplications = 4
+	poolMembers         = "applications autoscale maxBytes maxObjects minSize name size type"
+	inventoryMembers    = "omitted osds pools"
+	unplacedOSDMembers  = "host id path uuid"
+)
+
+var poolName = regexp.MustCompile(`\A[A-Za-z0-9_.][A-Za-z0-9_.-]{0,62}\z`)
+var poolApplication = regexp.MustCompile(`\A[A-Za-z0-9_.-]{1,32}\z`)
+var unplacedPath = regexp.MustCompile(`\A/dev/[A-Za-z0-9][A-Za-z0-9_.:+-]{0,63}\z`)
+var osdUUID = regexp.MustCompile(`\A[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\z`)
+
+func validReadingMember(fields map[string]json.RawMessage, member string) bool {
+	raw := fields[member]
+	if member == "pool" {
+		return closedPool(raw)
+	}
+	inventory, err := reconciliation.DecodeEvidence[map[string]json.RawMessage](raw, 60*1024, "Ceph inventory members")
+	if err != nil || !closedMembers(inventory, strings.Fields(inventoryMembers)...) {
+		return false
+	}
+	pools, err := reconciliation.DecodeEvidence[[]json.RawMessage](inventory["pools"], 60*1024, "Ceph inventory pools")
+	if err != nil || len(pools) > maxInventoryPools || slices.ContainsFunc(pools, func(pool json.RawMessage) bool { return !closedPool(pool) }) {
+		return false
+	}
+	osds, err := reconciliation.DecodeEvidence[[]map[string]json.RawMessage](inventory["osds"], 60*1024, "Ceph inventory OSDs")
+	return err == nil && len(osds) <= maxUnplacedOSDs && !slices.ContainsFunc(osds, func(osd map[string]json.RawMessage) bool {
+		return !closedMembers(osd, strings.Fields(unplacedOSDMembers)...)
+	})
+}
+
+func closedPool(raw json.RawMessage) bool {
+	members, err := reconciliation.DecodeEvidence[map[string]json.RawMessage](raw, 4096, "Ceph pool members")
+	return err == nil && closedMembers(members, strings.Fields(poolMembers)...)
+}
+
+func validPoolReading(p PoolEvidence) bool {
+	if !poolName.MatchString(p.Name) || !slices.Contains([]string{"", "replicated", "erasure"}, p.Type) || !slices.Contains([]string{"", "on", "off", "warn"}, p.Autoscale) ||
+		p.Size < 0 || p.MinSize < 0 || p.MaxBytes < 0 || p.MaxObjects < 0 || len(p.Applications) > maxPoolApplications || !strictlyAscending(p.Applications) {
+		return false
+	}
+	return !slices.ContainsFunc(p.Applications, func(name string) bool { return !poolApplication.MatchString(name) })
+}
+
+func validReadings(e Evidence, r Request) bool {
+	if e.Pool != nil && (r.Action != "pool" || r.Pool == nil || !e.Exists || e.Pool.Name != r.Pool.Name || !validPoolReading(*e.Pool)) {
+		return false
+	}
+	if e.Inventory == nil {
+		return true
+	}
+	inventory := e.Inventory
+	if r.Action != "cluster" || inventory.Omitted < 0 || inventory.Omitted > maxInventoryListing {
+		return false
+	}
+	names := []string{}
+	for _, pool := range inventory.Pools {
+		if !validPoolReading(pool) {
+			return false
+		}
+		names = append(names, pool.Name)
+	}
+	if !strictlyAscending(names) {
+		return false
+	}
+	declared, ids, uuids := dataDeviceSet(r), map[int]bool{}, map[string]bool{}
+	for _, osd := range e.OSDs {
+		ids[osd.ID] = true
+		uuids[osd.UUID] = true
+	}
+	for _, osd := range inventory.OSDs {
+		if !validUnplacedOSD(osd, r, declared) || ids[osd.ID] || osd.UUID != "" && uuids[osd.UUID] {
+			return false
+		}
+		ids[osd.ID] = true
+		uuids[osd.UUID] = true
+	}
+	return true
+}
+
+func validUnplacedOSD(osd OSDEvidence, r Request, declared map[string]bool) bool {
+	switch {
+	case osd.ID < 0 || osd.ID > 99999 || osd.UUID != "" && !osdUUID.MatchString(osd.UUID):
+		return false
+	case osd.Host == "":
+		return osd.Path == ""
+	case !slices.Contains(hostNames(r), osd.Host):
+		return false
+	}
+	return osd.Path == "" || unplacedPath.MatchString(osd.Path) && !declared[osd.Host+"\x00"+osd.Path]
 }
 
 var specializationID = regexp.MustCompile(`\A[a-z][a-z0-9]*(?:-[a-z0-9]+)*\z`)
@@ -466,7 +589,7 @@ func EvaluateEvidence(data []byte, r Request, digest string, removal bool) (reco
 	if err != nil {
 		return reconciliation.EffectUnknown, err
 	}
-	if e.Version != EvidenceVersion || e.Request != digest || digest == "" || e.Action != r.Action || e.Owner != r.Owner || r.Owner == "" || e.FSID != r.FSID || r.FSID == "" || !validateScope(e, r) || !validDashboard(e, r) || !validEndpoint(e, r) || !validSSO(e, r) || !validIncarnation(e.Incarnation) || !validStretchEvidence(e, r) {
+	if e.Version != EvidenceVersion || e.Request != digest || digest == "" || e.Action != r.Action || e.Owner != r.Owner || r.Owner == "" || e.FSID != r.FSID || r.FSID == "" || !validateScope(e, r) || !validDashboard(e, r) || !validEndpoint(e, r) || !validSSO(e, r) || !validIncarnation(e.Incarnation) || !validStretchEvidence(e, r) || !validReadings(e, r) {
 		return reconciliation.EffectUnknown, evidenceFailure()
 	}
 	if e.Ready && (!e.Owned || !e.Exists || e.Partial || e.Removed) || e.Removed && (!e.Owned || e.Exists || e.Ready || e.Partial) || e.Partial && (!e.Owned || !e.Exists || e.Ready || e.Removed) {

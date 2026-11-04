@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -95,20 +96,32 @@ const (
 	maxShownValue      = 40
 )
 
-func admissible(paths []ProjectedPath, projection Projection) error {
+func admissible(paths []ProjectedPath, discovers []api.Kind, applied api.Catalog, projection Projection) error {
 	identity := string(projection.Kind) + "/" + projection.Name
+	_, declared := applied.Find(projection.Kind, projection.Name)
+	holder := projection.Holder
 	switch {
 	case projection.Kind == api.Secret || !slices.Contains(api.Kinds(), projection.Kind):
 		return failure("lifecycle.state", "its projection names a kind its implementation does not observe: "+string(projection.Kind), "")
 	case projection.Name == "":
 		return failure("lifecycle.state", "its projection of "+string(projection.Kind)+" names no object", "")
+	case !api.ValidLexical("name", projection.Name):
+		return failure("lifecycle.state", "its projection of "+string(projection.Kind)+" names an object by an invalid name: "+strconv.Quote(projection.Name), "")
+	case holder != nil && !api.ValidLexical("name", holder.Name):
+		return failure("lifecycle.state", "its projection of "+identity+" names a holder by an invalid name: "+strconv.Quote(holder.Name), "")
+	case !declared && !slices.Contains(discovers, projection.Kind):
+		return failure("lifecycle.state", "its projection names an object the applied revision does not declare: "+identity, "")
+	case holder != nil && !declaredIn(applied, holder.Kind, holder.Name):
+		return failure("lifecycle.state", "its projection of "+identity+" names a holder the applied revision does not declare: "+string(holder.Kind)+"/"+holder.Name, "")
+	case holder != nil && !referencesKind(holder.Kind, holder.Field, projection.Kind):
+		return failure("lifecycle.state", "its projection of "+identity+" names a holder field that does not reference "+string(projection.Kind)+": "+holder.Field, "")
 	case projection.Observed.Type() != api.Mapping:
 		return failure("lifecycle.state", "its projection of "+identity+" is not a spec mapping", "")
 	case len(projection.Notes) > maxProjectionNotes:
 		return failure("lifecycle.state", "its projection of "+identity+" carries more than "+strconv.Itoa(maxProjectionNotes)+" notes", "")
 	}
 	for _, note := range projection.Notes {
-		if len(note) > maxProjectionNote || strings.ContainsFunc(note, func(r rune) bool { return r < 0x20 }) {
+		if len(note) > maxProjectionNote || strings.ContainsFunc(note, unicode.IsControl) {
 			return failure("lifecycle.state", "its projection of "+identity+" carries a note longer than "+strconv.Itoa(maxProjectionNote)+" bytes or holding a control character", "")
 		}
 	}
@@ -118,6 +131,11 @@ func admissible(paths []ProjectedPath, projection Projection) error {
 		}
 	}
 	return nil
+}
+
+func declaredIn(catalog api.Catalog, kind api.Kind, name string) bool {
+	_, found := catalog.Find(kind, name)
+	return found
 }
 
 func claimedPaths(value api.Value, shape *api.Shape, prefix string) []string {
@@ -262,82 +280,6 @@ func without(value api.Value, shape *api.Shape, path string, conflicts []string)
 		return api.ListValue(items...)
 	}
 	return value
-}
-
-func prune(declared, observed api.Value, shape *api.Shape, path string, unproven bool) (api.Value, []string) {
-	switch {
-	case !declared.Present():
-		return declared, nil
-	case !observed.Present():
-		return api.Value{}, []string{path}
-	case declared.Type() == api.Mapping && observed.Type() == api.Mapping && !freeMap(shape):
-		var fields []api.FieldValue
-		var dropped []string
-		for _, field := range declared.Fields() {
-			value, lost := prune(field.Value, observed.Get(field.Name), childShape(shape, field.Name), joinPath(path, field.Name), unproven)
-			dropped = append(dropped, lost...)
-			if value.Present() {
-				fields = append(fields, api.FieldValue{Name: field.Name, Value: value})
-			}
-		}
-		return api.MapValue(fields...), dropped
-	case declared.Type() == api.Sequence && observed.Type() == api.Sequence && nameKey(shape) != "":
-		return pruneItems(declared, observed, shape, path, unproven)
-	}
-	return declared, nil
-}
-
-func pruneItems(declared, observed api.Value, shape *api.Shape, path string, unproven bool) (api.Value, []string) {
-	key := nameKey(shape)
-	counterparts := itemsByKey(observed, key)
-	template := api.Value{}
-	for _, item := range observed.Items() {
-		template = union(template, item, shape.Element)
-	}
-	var items []api.Value
-	var dropped []string
-	for _, item := range declared.Items() {
-		name := item.Get(key)
-		_, found := counterparts[name.Text()]
-		if !found && unproven {
-			dropped = append(dropped, itemPath(path, name.Text()))
-			continue
-		}
-		against := template
-		if !found {
-			against = api.MapValue(api.FieldValue{Name: key, Value: name})
-		}
-		value, lost := prune(item, against, shape.Element, itemPath(path, name.Text()), unproven)
-		dropped = append(dropped, lost...)
-		if value.Present() {
-			items = append(items, value)
-		}
-	}
-	return api.ListValue(items...), dropped
-}
-
-func union(first, second api.Value, shape *api.Shape) api.Value {
-	switch {
-	case !first.Present():
-		return second
-	case !second.Present():
-		return first
-	case first.Type() == api.Mapping && second.Type() == api.Mapping && !freeMap(shape):
-		var fields []api.FieldValue
-		for _, name := range fieldNames(first, second) {
-			fields = append(fields, api.FieldValue{Name: name, Value: union(first.Get(name), second.Get(name), childShape(shape, name))})
-		}
-		return api.MapValue(fields...)
-	case first.Type() == api.Sequence && second.Type() == api.Sequence && nameKey(shape) != "":
-		key := nameKey(shape)
-		previous, next := itemsByKey(first, key), itemsByKey(second, key)
-		var items []api.Value
-		for _, name := range itemKeys(key, first, second) {
-			items = append(items, union(previous[name], next[name], shape.Element))
-		}
-		return api.ListValue(items...)
-	}
-	return first
 }
 
 func valueAt(value api.Value, shape *api.Shape, prefix, target string) (api.Value, bool) {

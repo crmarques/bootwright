@@ -205,6 +205,26 @@ def test_a_machine_postcondition_needs_every_proof():
         assert not substrate_libvirt_machine_protocol.presence(observation, power, system, DIGEST)["postcondition"]
 
 
+def test_a_disk_attached_beside_the_frozen_ones_is_published_without_changing_the_proof():
+    attached = {"name": "vdc", "present": True, "sizeGiB": 30, "bus": "virtio", "target": "vdc", "rotationRate": 0}
+    evidence = substrate_libvirt_machine_protocol.presence(machine_observation(attached=[attached]), "Off", "uuid", DIGEST)
+    assert evidence["attached"] == [attached]
+    assert evidence["postcondition"]
+    assert "attached" not in substrate_libvirt_machine_protocol.presence(machine_observation(), "Off", "uuid", DIGEST)
+    with pytest.raises(ValueError, match="disk count"):
+        substrate_libvirt_machine_protocol.presence(machine_observation(attached=[attached] * 33), "Off", "uuid", DIGEST)
+    with pytest.raises(ValueError, match="disk evidence"):
+        substrate_libvirt_machine_protocol.presence(machine_observation(attached=[{"name": "vdc"}]), "Off", "uuid", DIGEST)
+
+
+def test_an_attached_disk_whose_target_is_no_bounded_device_name_is_not_published():
+    attached = {"name": "vdc", "present": True, "sizeGiB": 30, "bus": "virtio", "target": "vdc", "rotationRate": 0}
+    unnamed = [dict(attached, name=target, target=target) for target in ("VDB", "x" * 17, "vd c", "", "vd\u00e9")]
+    evidence = substrate_libvirt_machine_protocol.presence(machine_observation(attached=[attached] + unnamed), "Off", "uuid", DIGEST)
+    assert evidence["attached"] == [attached]
+    assert "attached" not in substrate_libvirt_machine_protocol.presence(machine_observation(attached=unnamed), "Off", "uuid", DIGEST)
+
+
 def test_a_power_state_the_controller_never_reported_is_refused():
     with pytest.raises(ValueError):
         substrate_libvirt_machine_protocol.presence(machine_observation(), "Spinning", "uuid", DIGEST)

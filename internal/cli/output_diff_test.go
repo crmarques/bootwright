@@ -64,9 +64,10 @@ func TestDiffEscapesHostileNamesAndReasons(t *testing.T) {
 	}
 	var envelope struct {
 		Result struct {
-			Objects []struct {
-				Patch []string `json:"patch"`
-			} `json:"objects"`
+			Files []struct {
+				Desired string   `json:"desired"`
+				Patch   []string `json:"patch"`
+			} `json:"files"`
 		} `json:"result"`
 	}
 	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
@@ -75,7 +76,7 @@ func TestDiffEscapesHostileNamesAndReasons(t *testing.T) {
 	var textPatch []string
 	lines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
 	for index, line := range lines {
-		if strings.HasPrefix(line, "--- applied/CephPool/evil") {
+		if line == "--- desired/storage/pools.yaml" {
 			for _, patchLine := range lines[index:] {
 				if patchLine == "" {
 					break
@@ -87,9 +88,15 @@ func TestDiffEscapesHostileNamesAndReasons(t *testing.T) {
 	if len(textPatch) < 3 || !strings.Contains(strings.Join(textPatch, "\n"), `\\t`) {
 		t.Fatalf("the text patch %q lacks an escaped backslash line", textPatch)
 	}
-	if got := envelope.Result.Objects[1].Patch; !slices.Equal(got, textPatch) {
-		t.Fatalf("JSON patch = %q, want the text patch lines %q", got, textPatch)
+	for _, file := range envelope.Result.Files {
+		if file.Desired == "storage/pools.yaml" {
+			if !slices.Equal(file.Patch, textPatch) {
+				t.Fatalf("JSON patch = %q, want the text patch lines %q", file.Patch, textPatch)
+			}
+			return
+		}
 	}
+	t.Fatalf("no JSON file lists storage/pools.yaml: %+v", envelope.Result.Files)
 }
 
 func TestDiffDecidesDifferenceFromEncodedBytes(t *testing.T) {
@@ -105,6 +112,7 @@ func TestDiffDecidesDifferenceFromEncodedBytes(t *testing.T) {
 		{"unknown wins", lifecycle.ObjectDiff{Desired: pool, Real: lifecycle.RealSide{State: "unknown"}}, "", "d", differenceUnknown},
 		{"absent and declared", lifecycle.ObjectDiff{Desired: pool, Real: lifecycle.RealSide{State: "absent"}}, "", "d", differenceAdded},
 		{"present and undeclared", lifecycle.ObjectDiff{Real: lifecycle.RealSide{State: "present", Object: pool}}, "r", "", differenceRemoved},
+		{"present, undeclared and discovered", lifecycle.ObjectDiff{Real: lifecycle.RealSide{State: "present", Discovered: true, Object: pool}}, "r", "", differenceUnmanaged},
 		{"equal bytes", lifecycle.ObjectDiff{Desired: pool, Real: lifecycle.RealSide{State: "present", Object: &same}}, "x", "x", differenceNone},
 		{"other bytes", lifecycle.ObjectDiff{Desired: other, Real: lifecycle.RealSide{State: "present", Object: pool}}, "x", "y", differenceChanged},
 	}
@@ -149,8 +157,8 @@ func TestDiffNamesWhatAnObservedComparisonReadAndDidNotCompare(t *testing.T) {
 	for _, want := range []string{
 		"Against:  what apply op-3f9a0c12 (done) realized, read live: 2 blocks observed, 1 unknown, 3 not projected\n",
 		"Build:    this executable plans 1 block of op-3f9a0c12 differently from the build that froze it; --observe does not read it\n",
-		"diff real/CephClient/rbd-reader desired/CephClient/rbd-reader\n# plan: same (ceph-client-rbd-reader); realized: done\n# not compared: spec.clusterRef, spec.role\n# ceph-pool-rbd-data: pool listed without its size\n",
-		"1 object differs: 1 changed, 0 added, 0 removed, 0 unknown; 1 unchanged; 1 compared as applied; 1 object partially realized.\n",
+		"diff desired/storage/clients.yaml real/storage/clients.yaml\n# CephClient/rbd-reader: plan: same (ceph-client-rbd-reader); realized: done\n# CephClient/rbd-reader: not compared: spec.clusterRef, spec.role\n# CephClient/rbd-reader: ceph-pool-rbd-data: pool listed without its size\n",
+		"1 object differs: 1 changed, 0 added, 0 removed, 0 unmanaged, 0 unknown; 1 unchanged; 1 compared as applied; 1 object partially realized.\n",
 	} {
 		if !strings.Contains(text, want) {
 			t.Errorf("output lacks %q:\n%s", want, text)
@@ -171,7 +179,7 @@ func TestDiffReportsPartialRealizationWithoutComparedFieldDifferences(t *testing
 				t.Fatalf("comparison lacks footer %q:\n%s", want, text)
 			}
 			var out bytes.Buffer
-			status, err := writeDiffStatus(context.Background(), &out, result, true, true, stateencoding.YAML, stateencoding.JSON)
+			status, err := writeDiffStatus(context.Background(), &out, result, diffOptions{json: true, exitCode: true, yamlEncode: stateencoding.YAML, jsonEncode: stateencoding.JSON})
 			if err != nil || status != 0 {
 				t.Fatalf("JSON status = %d (%v), want 0", status, err)
 			}
@@ -181,12 +189,15 @@ func TestDiffReportsPartialRealizationWithoutComparedFieldDifferences(t *testing
 			if err := json.Unmarshal(out.Bytes(), &envelope); err != nil {
 				t.Fatal(err)
 			}
-			comparison := envelope.Result
+			comparison, wantFiles := envelope.Result, 0
+			if state == "partial" {
+				wantFiles = 1
+			}
 			if comparison.Summary != (diffSummary{None: 1}) || len(comparison.Objects) != 1 {
 				t.Fatalf("JSON comparison changed: %+v", comparison)
 			}
 			object := comparison.Objects[0]
-			if object.Difference != differenceNone || object.Real.State != state || len(object.Patch) != 0 || string(object.Real.Document) != "null" || string(object.Desired.Document) != "null" {
+			if object.Difference != differenceNone || object.Real.State != state || len(comparison.Files) != wantFiles || string(object.Real.Document) != "null" || string(object.Desired.Document) != "null" {
 				t.Fatalf("JSON object changed: %+v", object)
 			}
 		})
@@ -212,12 +223,12 @@ func TestDiffSummaryNamesPartialRealizations(t *testing.T) {
 			result.Objects[0].Real.Source = "applied"
 			return result
 		}, "No differences in compared fields: 1 object compared, 1 as applied; 1 object partially realized.\n"},
-		{"partial beside field differences", diffObserved, "2 objects differ: 1 changed, 0 added, 0 removed, 1 unknown; 2 unchanged; 1 compared as applied; 1 object partially realized.\n"},
+		{"partial beside field differences", diffObserved, "2 objects differ: 1 changed, 0 added, 0 removed, 0 unmanaged, 1 unknown; 2 unchanged; 1 compared as applied; 1 object partially realized.\n"},
 		{"partial without a document normalizes to unknown", func() *lifecycle.DiffResult {
 			result := diffPartial()
 			result.Objects[0].Real.Object = nil
 			return result
-		}, "1 object differs: 0 changed, 0 added, 0 removed, 1 unknown; 0 unchanged; 0 compared as applied\n"},
+		}, "1 object differs: 0 changed, 0 added, 0 removed, 0 unmanaged, 1 unknown; 0 unchanged; 0 compared as applied\n"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if text := writeDiffText(t, test.result()); !strings.HasSuffix(text, test.want) {
@@ -270,9 +281,10 @@ func TestDiffSummaryNamesOneObjectInTheSingular(t *testing.T) {
 		{"none, one", diffSummary{None: 1}, 1, "No differences: 1 object compared."},
 		{"none, several", diffSummary{None: 2}, 2, "No differences: 2 objects compared."},
 		{"none, zero", diffSummary{}, 0, "No differences: 0 objects compared."},
-		{"one differs", diffSummary{Changed: 1}, 1, "1 object differs: 1 changed, 0 added, 0 removed, 0 unknown; 0 unchanged"},
-		{"one differs of several", diffSummary{Unknown: 1, None: 2}, 3, "1 object differs: 0 changed, 0 added, 0 removed, 1 unknown; 2 unchanged"},
-		{"several differ", diffSummary{Changed: 1, Added: 1}, 2, "2 objects differ: 1 changed, 1 added, 0 removed, 0 unknown; 0 unchanged"},
+		{"one differs", diffSummary{Changed: 1}, 1, "1 object differs: 1 changed, 0 added, 0 removed, 0 unmanaged, 0 unknown; 0 unchanged"},
+		{"one differs of several", diffSummary{Unknown: 1, None: 2}, 3, "1 object differs: 0 changed, 0 added, 0 removed, 0 unmanaged, 1 unknown; 2 unchanged"},
+		{"an unmanaged object differs", diffSummary{Unmanaged: 1}, 1, "1 object differs: 0 changed, 0 added, 0 removed, 1 unmanaged, 0 unknown; 0 unchanged"},
+		{"several differ", diffSummary{Changed: 1, Added: 1}, 2, "2 objects differ: 1 changed, 1 added, 0 removed, 0 unmanaged, 0 unknown; 0 unchanged"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if got := diffSummaryLine(result, test.summary, test.objects, 0); got != test.want {
@@ -289,10 +301,10 @@ func TestDiffShowsAPresentSideWithoutADocumentAsUnknown(t *testing.T) {
 		Real: lifecycle.RealSide{Source: "applied", State: "present"},
 	}}
 	text := writeDiffText(t, result)
-	if !strings.Contains(text, "1 object differs: 0 changed, 0 added, 0 removed, 1 unknown; 0 unchanged\n") {
+	if !strings.Contains(text, "1 object differs: 0 changed, 0 added, 0 removed, 0 unmanaged, 1 unknown; 0 unchanged\n") {
 		t.Fatalf("a present side with no document did not read unknown:\n%s", text)
 	}
-	if !strings.Contains(text, "# the real side holds no document to show\n") || strings.Contains(text, "/dev/null") {
+	if !strings.Contains(text, "# CephClient/c: the real side holds no document to show\n") || strings.Contains(text, "/dev/null") {
 		t.Fatalf("a present side with no document was shown as a hunk or without a reason:\n%s", text)
 	}
 }

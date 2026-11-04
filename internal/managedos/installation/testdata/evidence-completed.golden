@@ -9,6 +9,11 @@
   "network": true,
   "networkDifferences": [],
   "networkReboot": true,
+  "os": {
+    "id": "rhel",
+    "kernel": "5.14.0-570.12.1.el9_6.x86_64",
+    "versionId": "9.8"
+  },
   "postcondition": true,
   "power": "On",
   "private": false,

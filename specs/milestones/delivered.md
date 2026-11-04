@@ -6001,9 +6001,9 @@ property of the engine rather than of each call site.
 `TestObservationsStayWithinTheConcurrencyBound`,
 `TestCancellationStopsFurtherObservations`,
 `TestAnInadmissibleProjectionReadsItsObjectUnknown`,
-`TestAConflictingLeafIsOnlyANoteOnBothSides`,
+`TestAConflictingLeafReadsAsAppliedWithANote`,
 `TestMergeUnionsAndExcludesConflicts`,
-`TestPruneKeepsOnlyObservedLeavesAndNamesTheRest`,
+`TestOverlayReplacesOnlyWhatDiffersFromTheEffectiveValue`,
 `TestApplyAdmitsOnlyTheFourScenarios`,
 `TestEveryChangedInputOverACompletedApplyRefuses`,
 `TestAChangedInputOverACompletedApplyNamesWhatChanged`,
@@ -6045,7 +6045,7 @@ runs, and an `--observe` holds the shared lock so an `apply` refuses meanwhile
 running to its own deadline ([B573](backlog.md#b573)). Only the libvirt Machine
 has a projector: a Ceph pool, a bare-metal Machine, the managed services and
 the artifact server, an OS tree and its install, the agent install, and the
-Ceph image, host and core are the candidates [B600](backlog.md#b600) to
+Ceph image, host and core are the candidates [B600](m2.md#b600) to
 [B605](backlog.md#b605), and a present object no projector renders shows the
 applied side with a note saying so. A libvirt disk resized by hand beside a
 running controller reads unknown with the size refusal as its reason rather

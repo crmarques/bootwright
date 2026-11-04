@@ -112,10 +112,10 @@ def unsettled(error):
 
 
 def blocking_entry(value):
-    """A blocking health check code, a daemon a host has not yet running, a never-booted OSD naming no device, or a service unit's or
-    gateway's unmet daemon count or endpoint."""
+    """A blocking health check code, a daemon a host has not yet running, a never-booted OSD naming no device, an OSD no declared
+    service places, or a service unit's or gateway's unmet daemon count or endpoint."""
     return isinstance(value, str) and (ceph_native.HEALTH_CHECK.fullmatch(value) is not None or ceph_native.PENDING_DAEMON.fullmatch(value) is not None
-                                       or ceph_native.PENDING_OSD.fullmatch(value) is not None
+                                       or ceph_native.PENDING_OSD.fullmatch(value) is not None or ceph_native.UNPLACED_OSD.fullmatch(value) is not None
                                        or ceph_native_units.PENDING.fullmatch(value) is not None or ceph_native_object.PENDING.fullmatch(value) is not None)
 
 
@@ -233,8 +233,9 @@ def evidence(value, request_digest, request=None):
         return host_evidence(value, request_digest, request)
     fields = {"version", "request", "action", "fsid", "owner", "owned", "exists", "ready", "removed", "partial", "health", "hosts", "monitors", "monAddrs",
               "mgrActive", "mgrStandbys", "osds", "resource", "client", "dashboard", "endpoint", "daemons", "sso", "incarnation"}
-    ceph_native.require(isinstance(value, dict) and fields <= set(value) <= fields | {"specializations", "stretch"}, "evidence")
+    ceph_native.require(isinstance(value, dict) and fields <= set(value) <= fields | {"specializations", "stretch", "pool", "inventory"}, "evidence")
     ceph_native_stretch.evidence(value, request)
+    reading_evidence(value, request)
     ceph_native.require("specializations" not in value or specialization_ids(value["specializations"]), "evidence")
     ceph_native.require(value["version"] == ceph_native.EVIDENCE_VERSION and value["request"] == request_digest and ceph_native.digest(request_digest),
                         "evidence")
@@ -292,6 +293,53 @@ def evidence(value, request_digest, request=None):
     ceph_native.require(not value["removed"] or value["owned"] and not value["exists"] and not value["ready"], "evidence")
     ceph_native.require(len(ceph_native.canonical(value)) <= 60000, "evidence")
     return value
+
+
+POOL_READING = frozenset(("applications", "autoscale", "maxBytes", "maxObjects", "minSize", "name", "size", "type"))
+
+
+def pool_evidence(pool):
+    """One pool's read values: a bounded name, its protection, replica pair, applications, autoscale mode and quota."""
+    ceph_native.require(isinstance(pool, dict) and set(pool) == POOL_READING and isinstance(pool["name"], str)
+                        and ceph_native.POOL_NAME.fullmatch(pool["name"]) is not None, "evidence")
+    ceph_native.require(pool["type"] in ("", "replicated", "erasure") and pool["autoscale"] in ("", *ceph_native.POOL_AUTOSCALE), "evidence")
+    ceph_native.require(all(type(pool[k]) is int and 0 <= pool[k] <= ceph_native.INT64_MAX for k in ("size", "minSize", "maxBytes", "maxObjects")), "evidence")
+    applications = pool["applications"]
+    ceph_native.require(isinstance(applications, list) and len(applications) <= ceph_native.POOL_APPLICATIONS
+                        and all(isinstance(name, str) and ceph_native.POOL_APPLICATION.fullmatch(name) for name in applications)
+                        and applications == sorted(set(applications)), "evidence")
+
+
+def reading_evidence(value, request=None):
+    """A pool block's own read values, and a read-only cluster observation's pool inventory and OSDs no declared service places."""
+    if "pool" in value:
+        ceph_native.require(value["action"] == "pool" and value["exists"], "evidence")
+        pool_evidence(value["pool"])
+        ceph_native.require(request is None or value["pool"]["name"] == request["pool"]["name"], "evidence")
+    if "inventory" not in value:
+        return
+    inventory = value["inventory"]
+    ceph_native.require(value["action"] == "cluster" and isinstance(inventory, dict) and set(inventory) == {"pools", "omitted", "osds"},
+                        "evidence")
+    pools, osds = inventory["pools"], inventory["osds"]
+    ceph_native.require(type(inventory["omitted"]) is int and 0 <= inventory["omitted"] <= ceph_native.POOL_LISTING, "evidence")
+    ceph_native.require(isinstance(pools, list) and len(pools) <= ceph_native.POOL_LIMIT, "evidence")
+    for pool in pools:
+        pool_evidence(pool)
+    names = [pool["name"] for pool in pools]
+    ceph_native.require(names == sorted(set(names)), "evidence")
+    ceph_native.require(isinstance(osds, list) and len(osds) <= ceph_native.UNPLACED_LIMIT, "evidence")
+    wanted = None if request is None else {host["name"] for host in request["hosts"]}
+    for osd in osds:
+        # An unplaced OSD's host, data device and OSD fsid are each empty when the observation could not name them.
+        ceph_native.require(isinstance(osd, dict) and set(osd) == {"host", "path", "id", "uuid"}
+                            and (osd["host"] == "" or ceph_native.named(osd["host"]) and (wanted is None or osd["host"] in wanted)), "evidence")
+        ceph_native.require(osd["path"] == "" or isinstance(osd["path"], str) and osd["host"] != "" and osd["path"].startswith("/dev/")
+                            and ceph_native.KERNEL_DEVICE.fullmatch(osd["path"][len("/dev/"):]) is not None, "evidence")
+        ceph_native.require(type(osd["id"]) is int and 0 <= osd["id"] <= 99999 and isinstance(osd["uuid"], str)
+                            and (osd["uuid"] == "" or ceph_native.OSD_UUID.fullmatch(osd["uuid"]) is not None), "evidence")
+    ids = [osd["id"] for osd in osds] + [osd["id"] for osd in value["osds"]]
+    ceph_native.require(len(set(ids)) == len(ids), "evidence")
 
 
 def daemon_evidence(value, request=None):
@@ -682,7 +730,8 @@ class Transport:
         return result
 
 
-def observe_state(request, request_digest, bootstrap, transport, deadline=None, now=time.monotonic, blocking=None, activation=None):
+def observe_state(request, request_digest, bootstrap, transport, deadline=None, now=time.monotonic, blocking=None, activation=None, *,
+                  unrecorded=False):
     """One validated snapshot; an optional deadline bounds all of its probes, an optional list receives the health check
     codes that kept readiness unproved, and another whether only a stretch cluster's activation is still missing."""
     def read(host, phase):
@@ -701,7 +750,8 @@ def observe_state(request, request_digest, bootstrap, transport, deadline=None, 
         ceph_native.require(now() < min(deadline, started + budget), "not-ready")
         return result
 
-    observed = read(bootstrap, "observe")
+    ceph_native.require(not unrecorded or request["action"] == "cluster", "request")
+    observed = read(bootstrap, ceph_native.UNRECORDED_OBSERVE if unrecorded else "observe")
     ceph_native.require(isinstance(observed, dict), "evidence")
     observed = dict(observed)
     checks = observed.pop("blocking", [])
@@ -1006,15 +1056,23 @@ def execute_tiebreaker(request, operation, request_digest, transport, outputs):
     return {"changed": result.get("changed", False), "evidence": tiebreaker_evidence(value, request_digest, request)}
 
 
+def admit_selectors(request, operation, outputs, retirement, reading):
+    """The closed selectors beside the material: a tiebreaker's retirement, and the unrecorded reading only a cluster observation with no
+    output takes."""
+    ceph_native.require(retirement in (None, "tiebreaker"), "request")
+    ceph_native.require(reading is None or reading == "unrecorded" and operation == "observe" and retirement is None
+                        and request["action"] == "cluster" and not outputs, "request")
+
+
 def execute(request, operation, request_digest, transport, outputs=None, *, now=time.monotonic, pause=time.sleep, connect=tls_certificate,
-            retirement=None):
-    """Keep read-only observation distinct from any preparation or mutation."""
+            retirement=None, reading=None):
+    """Keep read-only observation distinct from any preparation or mutation; only an observation no operation records reads unrecorded."""
     ceph_native.validate(request)
     ceph_native.require(operation in ("apply", "observe", "destroy"))
     ceph_native.require(ceph_native.digest(request_digest))
+    admit_selectors(request, operation, outputs, retirement, reading)
     if operation != "observe":
         ceph_native.require(ceph_native.supported_transport(request), "unsupported-release")
-    ceph_native.require(retirement in (None, "tiebreaker"), "request")
     if retirement is not None:
         return execute_tiebreaker(request, operation, request_digest, transport, outputs)
     bootstrap = next(h for h in request["hosts"] if h["name"] == request["bootstrap"])
@@ -1090,7 +1148,7 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
         changed = transport.call(bootstrap, "destroy")["changed"]
     pending = []
     observation = (wait_ready(request, request_digest, bootstrap, transport, now, pause) if operation == "apply"
-                   else observe_state(request, request_digest, bootstrap, transport, blocking=pending))
+                   else observe_state(request, request_digest, bootstrap, transport, blocking=pending, unrecorded=reading is not None))
     # Read-only observations may return partial evidence. Mutation completion
     # is not claimed until the actual desired postcondition is observed.
     if operation == "apply":

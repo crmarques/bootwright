@@ -146,7 +146,7 @@ def identities(core_request, form="{serial}"):
 
 
 def observation(core_request, ready=False):
-    return {"version": "ceph-core-evidence-v13", "request": "", "action": core_request["action"], "owner": core_request["owner"], "fsid": core_request["fsid"],
+    return {"version": "ceph-core-evidence-v14", "request": "", "action": core_request["action"], "owner": core_request["owner"], "fsid": core_request["fsid"],
             "owned": True, "exists": ready, "ready": ready, "removed": not ready, "partial": False, "health": "HEALTH_OK" if ready else "",
             "hosts": [h["name"] for h in core_request["hosts"]] if ready else [], "monitors": [], "monAddrs": [], "mgrActive": "", "mgrStandbys": [],
             "osds": [], "resource": {"id": "", "path": ""}, "client": "", "dashboard": dict(EMPTY_DASHBOARD),

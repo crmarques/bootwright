@@ -48,6 +48,11 @@ UPDATE_KEYS = frozenset(("kernel", "packages", "pin", "rebooted", "release", "st
 UPDATE_PINS = ("release", "contentView", "variable")
 RELEASE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 KERNEL = re.compile(r"[A-Za-z0-9._+~-]{1,128}")
+# What the installed system names as its release: ID and VERSION_ID of
+# /etc/os-release and its running kernel, each empty when unread.
+OS_KEYS = frozenset(("id", "kernel", "versionId"))
+OS_TOKEN = re.compile(r"[A-Za-z0-9._-]{0,64}")
+EMPTY_OS = {"id": "", "kernel": "", "versionId": ""}
 EMPTY_UPDATE = {"kernel": "", "packages": 0, "pin": "", "rebooted": False, "release": "", "state": "", "transaction": 0}
 # The ownership states the registration worker reads or a removal leaves; only
 # an owned, a pending or an unregistered registration names its consumer.
@@ -135,6 +140,18 @@ def update(value, required=True):
     return dict(value)
 
 
+def system(value):
+    """The release the installed system names, or none read; the same rules as Go's decode."""
+    if value in (None, "", {}):
+        return dict(EMPTY_OS)
+    if not isinstance(value, dict) or set(value) != OS_KEYS or not all(isinstance(value[key], str) for key in OS_KEYS):
+        raise ValueError("os")
+    if (not OS_TOKEN.fullmatch(value["id"]) or not OS_TOKEN.fullmatch(value["versionId"])
+            or (value["kernel"] != "" and not KERNEL.fullmatch(value["kernel"]))):
+        raise ValueError("os")
+    return {key: value[key] for key in sorted(OS_KEYS)}
+
+
 def update_proved(evidence, arguments):
     """A complete update for a request updating within its release, none for any other."""
     if flag(arguments.get("updateRequired")):
@@ -166,6 +183,7 @@ def presence(arguments, request_digest):
         "network": flag(arguments.get("network")),
         "networkDifferences": differences(arguments.get("networkDifferences")),
         "networkReboot": flag(arguments.get("networkReboot")),
+        "os": system(arguments.get("os")),
         "postcondition": False,
         "power": str(power),
         "private": bool(observation.get("private")),
@@ -251,6 +269,7 @@ def absence(arguments, request_digest):
         "network": False,
         "networkDifferences": [],
         "networkReboot": False,
+        "os": dict(EMPTY_OS),
         "postcondition": False,
         "power": "",
         "private": False,

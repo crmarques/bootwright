@@ -13,7 +13,10 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-type Files struct{ UID func() int }
+type Files struct {
+	UID  func() int
+	step func(string)
+}
 
 func (Files) Resolve(path string) (string, error) {
 	absolute, err := filepath.Abs(path)

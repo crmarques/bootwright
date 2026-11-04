@@ -790,6 +790,60 @@ def test_a_disk_a_running_domain_holds_reads_its_size(tmp_path):
     assert observation["disks"] == [{"name": "root", "present": True, "sizeGiB": 60}]
 
 
+# A disk attached to the domain by hand is outside the frozen request, so it is
+# listed apart from the frozen disks, by target and read-only.
+def test_a_disk_attached_by_hand_is_observed_beside_the_frozen_ones(tmp_path):
+    image = tmp_path / "hand.img"
+    image.write_bytes(b"")
+    domain = OWNED_DOMAIN.replace("</domain>", """<devices>
+<disk type="file" device="disk"><source file="/frozen/root.qcow2"/><target dev="vda" bus="virtio"/></disk>
+<disk type="file" device="disk"><source file="%s"/><target dev="vdc" bus="virtio"/></disk>
+<disk type="block" device="disk"><source dev="/dev/sdz"/><target dev="sdb" bus="scsi" rotation_rate="7200"/></disk>
+<disk type="file" device="cdrom"><source file="/iso/boot.iso"/><target dev="sda" bus="sata"/></disk>
+</devices></domain>""" % image)
+    answers = {
+        "dumpxml bootwright-lab-rhel-01": (0, domain, ""),
+        "domstate bootwright-lab-rhel-01": (0, "running\n", ""),
+        "info --force-share --output json " + str(image): (0, '{"virtual-size": 32212254720}', ""),
+    }
+    request = machine_request([{"name": "root", "path": "/frozen/root.qcow2", "target": "vda", "sizeGiB": 60}])
+    observation = observe_machine(runner_for(answers), request, reader())
+    assert observation["attached"] == [
+        {"name": "sdb", "present": True, "sizeGiB": 0, "bus": "scsi", "target": "sdb", "rotationRate": 7200},
+        {"name": "vdc", "present": True, "sizeGiB": 30, "bus": "virtio", "target": "vdc", "rotationRate": 0},
+    ]
+    assert [disk["name"] for disk in observation["disks"]] == ["root"]
+
+
+def test_a_domain_holding_only_its_frozen_disks_reports_none_attached():
+    domain = OWNED_DOMAIN.replace("</domain>", """<devices>
+<disk type="file" device="disk"><source file="/frozen/root.qcow2"/><target dev="vda" bus="virtio"/></disk>
+</devices></domain>""")
+    answers = {"dumpxml bootwright-lab-rhel-01": (0, domain, ""), "domstate bootwright-lab-rhel-01": (0, "running\n", "")}
+    request = machine_request([{"name": "root", "path": "/frozen/root.qcow2", "target": "vda", "sizeGiB": 60}])
+    assert "attached" not in observe_machine(runner_for(answers), request, reader())
+
+
+# A target is named in diff notes and data-disk names, so only a bounded
+# kernel-style target is listed; libvirt accepts any string there.
+def test_an_attached_disk_whose_target_is_no_bounded_device_name_is_not_listed():
+    targets = ("vdc", "VDB", "sd b", "x" * 17, "nvme0n1", "vd-c", "1vd")
+    disks = "".join('<disk type="file" device="disk"><target dev="%s" bus="virtio"/></disk>' % target for target in targets)
+    domain = OWNED_DOMAIN.replace("</domain>", "<devices>" + disks + "</devices></domain>")
+    answers = {"dumpxml bootwright-lab-rhel-01": (0, domain, ""), "domstate bootwright-lab-rhel-01": (0, "running\n", "")}
+    request = machine_request([{"name": "root", "path": "/frozen/root.qcow2", "target": "vda", "sizeGiB": 60}])
+    attached = observe_machine(runner_for(answers), request, reader())["attached"]
+    assert [disk["target"] for disk in attached] == ["nvme0n1", "vdc"]
+
+
+def test_the_attached_disks_are_bounded():
+    disks = "".join('<disk type="file" device="disk"><target dev="x%03d" bus="virtio"/></disk>' % number for number in range(40))
+    domain = OWNED_DOMAIN.replace("</domain>", "<devices>" + disks + "</devices></domain>")
+    answers = {"dumpxml bootwright-lab-rhel-01": (0, domain, ""), "domstate bootwright-lab-rhel-01": (0, "running\n", "")}
+    request = machine_request([{"name": "root", "path": "/frozen/root.qcow2", "target": "vda", "sizeGiB": 60}])
+    assert len(observe_machine(runner_for(answers), request, reader())["attached"]) == 32
+
+
 def pool_request(path):
     return {"networks": [], "packages": [], "poolName": "p", "poolPath": str(path), "services": [], "uri": "qemu:///system"}
 

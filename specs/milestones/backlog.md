@@ -170,7 +170,8 @@ Alias cell.
 | [B595](#b595) | new, 2026-10-14 (X91 audit) | enabling | Storage | A Ceph refusal table test and a docs-check entry | Found by the X91 audit; no consumer until the first Ceph delta scenario |
 | [B598](#b598) | new, 2026-10-14 (X91 audit) | safety | State reconciliation and Workspace | Input restored byte for byte after an edit settles a completed apply | D155 accepts exact-byte restoration for a future named slice; current refusal stays |
 | [B599](#b599) | new, 2026-10-14 (X91 audit) | safety | Substrate and Managed OS | Every observe task writes only inside the runner's private directories | Found by the X91 audit; its extent is what the allowlist test finds, and the audit names two candidates |
-| [B600](#b600) | new, 2026-10-14 (X91 audit) | product | Storage | `diff --observe` proves a Ceph pool's size, minimum size and role | Candidate; found by the X91 audit; one projector, promoted when an operator asks for it |
+| [B1117](#b1117) | new, 2026-11-04 (D230) | product | CLI | `diff` pages a long text result | Candidate; parked by D230 |
+| [B1119](#b1119) | new, 2026-11-04 (D230; found by B1113) | safety | Substrate | `diff --observe` reads a libvirt guest that holds a disk attached by hand beside its declared data disks | Candidate; parked: it changes what the domain ownership proof accepts |
 | [B601](#b601) | new, 2026-10-14 (X91 audit) | product | Substrate | `diff --observe` names a bare-metal Machine's hardware NICs and the BMC address that answered | Candidate; found by the X91 audit; one projector, promoted when an operator asks for it |
 | [B602](#b602) | new, 2026-10-14 (X91 audit) | product | Infrastructure services | `diff --observe` names a managed service's and the artifact server's bind address, ports and listeners | Candidate; found by the X91 audit; one projector, promoted when an operator asks for it |
 | [B603](#b603) | new, 2026-10-14 (X91 audit) | product | Managed OS | `diff --observe` names an OS tree's and an install's address | Candidate; found by the X91 audit; one projector, promoted when an operator asks for it |
@@ -1672,7 +1673,7 @@ without writing
 role test shows detected drift of a completed setting refusing without writing,
 and M2c's [B81](m2.md#b81) must route its quota, compression and EC-overwrite
 setters through the same records. **Exit evidence:** that role test. The
-projector that proves them is [B600](#b600).
+projector that proves them is [B600](m2.md#b600).
 
 ### B588
 
@@ -1772,16 +1773,26 @@ would leave files elsewhere. **Smallest fix:** observe writes nothing outside th
 runner's private directories. **Exit evidence:** the allowlist test with no entry
 that writes outside them.
 
-### B600
+### B1117
 
-Candidate. A projector for the Ceph StoragePool: `Ready` proves
-`spec.replicated.size`, `spec.replicated.minSize` and `spec.role` equal to the
-frozen request
-(`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py:2992-2993`),
-and `Exists && !Ready` renders a note. It carries the evidence widening of the
-design's per-capability item for the pool. **Requires:** the projector port that
-B565 delivers. **Definition:** Candidate. **Exit evidence:** a projection golden
-and the observable-field table row in the diff spec.
+`diff` pipes a text result longer than the terminal through a pager. Parked by
+[D230](#d230) so that `diff` runs no program the operator did not
+name; `--color always` piped to `less -R` serves meanwhile. **Definition:**
+Candidate.
+
+### B1119
+
+Candidate. The libvirt domain ownership proof (`domain_disk_bindings` in
+`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/substrate_libvirt.py`)
+requires the domain to hold exactly its frozen disks, so a guest whose profile
+declares data disks and that also holds a disk attached by hand is not proved
+owned, and `diff --observe` reads it unknown instead of showing the added disk
+([observable fields](../state-reconciliation.md#observable-fields-by-implementation)).
+The strict proof stays for apply and destroy, because a removal takes the
+domain's storage back; the item decides whether an observation may prove the
+frozen disks while naming the others, without widening what a removal owns.
+**Definition:** Candidate. **Exit evidence:** an observation test of such a
+guest that reads the attached disk, and a removal test that still refuses it.
 
 ### B601
 
@@ -6810,3 +6821,28 @@ Session clauses, pending the owner's review:
 - an existing allocation on a remote host gets no reuse credit and is
   reported unproved;
 - a remote filesystem is never treated as one a local pool shares.
+
+### D230
+
+**owner** (2026-11-04): asked that `bootwright diff` set the desired state
+beside the real state the way vimdiff or git does, so that a server upgraded
+from RHEL 9.8 to 10.0, a disk added to a Ceph node or a pool created by hand
+shows as the line that differs, and so that a disaster-recovery drill can read
+the differences months after provisioning, take the real values into the
+desired state, destroy and provision again and get the real state back. The
+owner answered that the left side is clean canonical YAML holding everything
+the input files hold, without comments, and the right side the equivalent
+YAML with real values; that plain `diff` keeps reading records only and only
+`--observe` reads the hosts; and authorized every slice in one session
+(X300, X301). The [comparison rules](../state-reconciliation.md#comparing-desired-and-real-state)
+and the [command](../cli.md#desired-and-realized-state-comparison) own the
+result. Session clauses, pending the owner's review:
+- the real side overlays observed values on the applied object, so an
+  unobserved field reads as applied and is counted, never shown as removed;
+- hosts that share an object and read different values split it, the group
+  that reads the applied values keeping the name;
+- an object found inside a scope the context owns that no apply declared is
+  `unmanaged`; nothing outside an owned scope is listed;
+- `--tool` runs the named program once per differing file pair, with no
+  shell; a pager is not added ([B1117](#b1117));
+- the comparison restores configuration, never data.

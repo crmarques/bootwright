@@ -308,3 +308,37 @@ def test_each_update_refusal_is_named_with_its_detail(reason, detail, monkeypatc
 def test_a_detail_outside_the_closed_set_is_never_published(detail, monkeypatch):
     result, published = run({"phase": "refused", "reason": "update-failed", "detail": detail}, monkeypatch)
     assert result == {"changed": False} and published == [{"phase": "refused", "reason": "update-failed"}]
+
+
+RELEASE = {"id": "rhel", "kernel": "5.14.0-570.12.1.el9_6.x86_64", "versionId": "9.6"}
+
+
+# An observation that reached the installed system publishes the release it
+# read; an unread one, and every removal, publish it empty, and neither moves
+# the postcondition.
+def test_presence_carries_the_release_the_observation_read():
+    evidence, refused = protocol.completion(proved(os=RELEASE))
+    assert evidence["os"] == RELEASE and evidence["postcondition"] is True and refused is None
+    for unread in (None, "", {}):
+        evidence, refused = protocol.completion(proved(os=unread))
+        assert evidence["os"] == {"id": "", "kernel": "", "versionId": ""} and refused is None
+    assert protocol.absence({"observation": {}, "os": RELEASE}, DIGEST)["os"] == {"id": "", "kernel": "", "versionId": ""}
+
+
+@pytest.mark.parametrize("read", [
+    dict(RELEASE, id="r" * 65),
+    dict(RELEASE, versionId="9 6"),
+    dict(RELEASE, versionId='"9.6"'),
+    dict(RELEASE, kernel="5.14/0"),
+    dict(RELEASE, kernel="k" * 129),
+    dict(RELEASE, id="rhel\n"),
+    dict(RELEASE, versionId=9.6),
+    dict(RELEASE, extra=""),
+    {key: value for key, value in RELEASE.items() if key != "kernel"},
+    "rhel",
+], ids=repr)
+def test_a_malformed_release_is_never_published(read, monkeypatch):
+    with pytest.raises(ValueError, match="os"):
+        protocol.presence(proved(os=read), DIGEST)
+    result, published = run(dict(proved(os=read), phase="completed", outcome="unchanged", observed=True), monkeypatch)
+    assert result.get("failed") is True and not published

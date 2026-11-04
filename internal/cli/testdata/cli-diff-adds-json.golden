@@ -36,6 +36,7 @@
       {
         "kind": "CephClient",
         "name": "rbd-reader",
+        "path": "storage/clients.yaml",
         "difference": "none",
         "plan": "same",
         "blocks": [
@@ -45,6 +46,7 @@
         "real": {
           "source": "applied",
           "state": "present",
+          "path": "storage/clients.yaml",
           "document": null,
           "notCompared": [],
           "notes": [],
@@ -53,15 +55,16 @@
         },
         "desired": {
           "document": null
-        },
-        "patch": []
+        }
       }
     ],
+    "files": [],
     "summary": {
       "none": 1,
       "changed": 0,
       "added": 0,
       "removed": 0,
+      "unmanaged": 0,
       "unknown": 0,
       "applied": 0
     }

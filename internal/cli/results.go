@@ -177,7 +177,13 @@ func (r *Runner) writeLifecycleInspection(ctx context.Context, command *cobra.Co
 		}
 		return true, writeLifecycleStatus(out, result.lifecycleStatus, selectedJSON(command))
 	case path == "diff" && result.lifecycleDiff != nil:
-		status, err := writeDiffStatus(ctx, out, result.lifecycleDiff, selectedJSON(command), boolValue(command.Flags(), "exit-code"), r.config.EncodeEffectiveYAML, r.config.EncodeEffectiveJSON)
+		flags := command.Flags()
+		status, err := writeDiffStatus(ctx, out, result.lifecycleDiff, diffOptions{
+			json: selectedJSON(command), exitCode: boolValue(flags, "exit-code"),
+			outputDir: stringValue(flags, "output-dir"), tool: stringValue(flags, "tool"),
+			yamlEncode: r.config.EncodeEffectiveYAML, jsonEncode: r.config.EncodeEffectiveJSON,
+			comparison: r.config.Services.Comparison, style: r.config.Presentation,
+		})
 		r.resultStatus = status
 		return true, err
 	}

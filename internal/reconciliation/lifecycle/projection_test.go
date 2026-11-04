@@ -48,19 +48,25 @@ func TestMergeUnionsAndExcludesConflicts(t *testing.T) {
 	}
 }
 
-func TestPruneKeepsOnlyObservedLeavesAndNamesTheRest(t *testing.T) {
+func TestOverlayReplacesOnlyWhatDiffersFromTheEffectiveValue(t *testing.T) {
 	shape := api.Schema(api.InfraProvider)
-	declared := api.MapValue(field("libvirt", api.MapValue(
+	authored := api.MapValue(field("libvirt", api.MapValue(
 		field("uri", api.StringValue("qemu:///system")),
 		field("machineProfiles", api.ListValue(profile("rhel", field("cpu", api.IntegerValue("4")), field("diskGiB", api.IntegerValue("80"))))),
 	)))
 	observed := libvirtSpec(profile("rhel", field("diskGiB", api.IntegerValue("100"))))
-	pruned, dropped := prune(declared, observed, shape, "spec", false)
-	if want := libvirtSpec(profile("rhel", field("diskGiB", api.IntegerValue("80")))); !pruned.Equal(want) {
-		t.Fatalf("pruned = %+v", pruned)
+	want := api.MapValue(field("libvirt", api.MapValue(
+		field("uri", api.StringValue("qemu:///system")),
+		field("machineProfiles", api.ListValue(profile("rhel", field("cpu", api.IntegerValue("4")), field("diskGiB", api.IntegerValue("100"))))),
+	)))
+	if got := canonical(overlay(authored, authored, observed, shape, false, false), shape); !got.Equal(want) {
+		t.Fatalf("overlay = %+v", got)
 	}
-	if want := []string{"spec.libvirt.uri", "spec.libvirt.machineProfiles[rhel].cpu"}; !slices.Equal(dropped, want) {
-		t.Fatalf("not compared = %v", dropped)
+	if same := overlay(authored, authored, libvirtSpec(profile("rhel", field("diskGiB", api.IntegerValue("80")))), shape, false, false); !same.Equal(authored) {
+		t.Fatalf("an observation equal to the applied value changed it: %+v", same)
+	}
+	if paths := uncompared(authored, observed, shape, "spec", "", false, false); !slices.Equal(paths, []string{"spec.libvirt.uri", "spec.libvirt.machineProfiles[rhel].cpu"}) {
+		t.Fatalf("not compared = %v", paths)
 	}
 	paths := make([]string, 14)
 	for index := range paths {
@@ -71,28 +77,50 @@ func TestPruneKeepsOnlyObservedLeavesAndNamesTheRest(t *testing.T) {
 	}
 }
 
-func TestPruneKeepsADeclaredItemWithoutAnObservedCounterpart(t *testing.T) {
+func TestOverlayKeepsADefaultedFieldAbsentUnlessItsObservedValueDiffers(t *testing.T) {
 	shape := api.Schema(api.InfraProvider)
-	declared := libvirtSpec(
-		profile("rhel", field("diskGiB", api.IntegerValue("80")), field("cpu", api.IntegerValue("4"))),
+	authored := libvirtSpec(profile("rhel"))
+	effective := libvirtSpec(profile("rhel", field("diskGiB", api.IntegerValue("120"))))
+	if got := overlay(authored, effective, effective, shape, false, false); !got.Equal(authored) {
+		t.Fatalf("a default observed as applied appeared: %+v", got)
+	}
+	resized := libvirtSpec(profile("rhel", field("diskGiB", api.IntegerValue("200"))))
+	if got := canonical(overlay(authored, effective, resized, shape, false, false), shape); !got.Equal(resized) {
+		t.Fatalf("a default observed otherwise = %+v", got)
+	}
+}
+
+func TestOverlayKeepsUnobservedOuterItemsAndHoldsObservedInnerLists(t *testing.T) {
+	shape := api.Schema(api.InfraProvider)
+	disk := func(name, size string) api.Value {
+		return api.MapValue(field("name", api.StringValue(name)), field("sizeGiB", api.IntegerValue(size)))
+	}
+	authored := libvirtSpec(
+		profile("rhel", field("diskGiB", api.IntegerValue("80")), field("cpu", api.IntegerValue("4")), field("dataDisks", api.ListValue(disk("data1", "50"), disk("data2", "60")))),
 		profile("sno", field("diskGiB", api.IntegerValue("120"))),
-		profile("win", field("cpu", api.IntegerValue("2"))),
 	)
-	observed := libvirtSpec(profile("sno", field("diskGiB", api.IntegerValue("120"))), profile("rhel"))
-	pruned, dropped := prune(declared, observed, shape, "spec", false)
-	want := libvirtSpec(profile("rhel", field("diskGiB", api.IntegerValue("80"))), profile("sno", field("diskGiB", api.IntegerValue("120"))), profile("win"))
-	if !pruned.Equal(want) {
-		t.Fatalf("pruned = %+v", pruned)
+	observed := libvirtSpec(profile("rhel", field("dataDisks", api.ListValue(disk("data1", "50")))), profile("win", field("diskGiB", api.IntegerValue("50"))))
+	want := libvirtSpec(
+		profile("rhel", field("diskGiB", api.IntegerValue("80")), field("cpu", api.IntegerValue("4")), field("dataDisks", api.ListValue(disk("data1", "50")))),
+		profile("sno", field("diskGiB", api.IntegerValue("120"))), profile("win", field("diskGiB", api.IntegerValue("50"))),
+	)
+	if got := canonical(overlay(authored, authored, observed, shape, false, false), shape); !got.Equal(want) {
+		t.Fatalf("overlay = %+v", got)
 	}
-	if want := []string{"spec.libvirt.machineProfiles[rhel].cpu", "spec.libvirt.machineProfiles[win].cpu"}; !slices.Equal(dropped, want) {
-		t.Fatalf("not compared = %v", dropped)
+	if paths := uncompared(authored, observed, shape, "spec", "", false, false); !slices.Equal(paths, []string{
+		"spec.libvirt.machineProfiles[rhel].diskGiB", "spec.libvirt.machineProfiles[rhel].cpu", "spec.libvirt.machineProfiles[sno].diskGiB",
+	}) {
+		t.Fatalf("not compared = %v", paths)
 	}
-	pruned, dropped = prune(declared, observed, shape, "spec", true)
-	if want := libvirtSpec(profile("rhel", field("diskGiB", api.IntegerValue("80"))), profile("sno", field("diskGiB", api.IntegerValue("120")))); !pruned.Equal(want) {
-		t.Fatalf("pruned beside an unknown reading = %+v", pruned)
+	kept := libvirtSpec(
+		profile("rhel", field("diskGiB", api.IntegerValue("80")), field("cpu", api.IntegerValue("4")), field("dataDisks", api.ListValue(disk("data1", "50"), disk("data2", "60")))),
+		profile("sno", field("diskGiB", api.IntegerValue("120"))), profile("win", field("diskGiB", api.IntegerValue("50"))),
+	)
+	if got := canonical(overlay(authored, authored, observed, shape, true, false), shape); !got.Equal(kept) {
+		t.Fatalf("overlay beside an unknown reading = %+v", got)
 	}
-	if want := []string{"spec.libvirt.machineProfiles[rhel].cpu", "spec.libvirt.machineProfiles[win]"}; !slices.Equal(dropped, want) {
-		t.Fatalf("not compared beside an unknown reading = %v", dropped)
+	if paths := uncompared(authored, observed, shape, "spec", "", true, false); !slices.Contains(paths, "spec.libvirt.machineProfiles[rhel].dataDisks[data2].sizeGiB") {
+		t.Fatalf("not compared beside an unknown reading = %v", paths)
 	}
 }
 
@@ -120,9 +148,9 @@ func TestClaimedPathsGeneralizeNamedItemsThatValueAtAddressesByKey(t *testing.T)
 }
 
 // A free map such as a node's labels is one field: a projection claims it
-// whole, and a declared key the observation lacks stays declared, so a label
-// removed after it was applied shows as a difference rather than as a field
-// left uncompared.
+// whole and the observed map replaces the applied one, so a label removed
+// after it was applied shows as a difference rather than as a field left
+// uncompared.
 func TestAFreeMapIsClaimedAndComparedWhole(t *testing.T) {
 	shape := api.Schema(api.OpenShiftCluster)
 	labels := func(fields ...api.FieldValue) api.Value {
@@ -133,9 +161,11 @@ func TestAFreeMapIsClaimedAndComparedWhole(t *testing.T) {
 	if paths := claimedPaths(observed, shape, "spec"); !slices.Equal(paths, []string{"spec.nodes[].name", "spec.nodes[].labels"}) {
 		t.Fatalf("claimed %v", paths)
 	}
-	pruned, dropped := prune(declared, observed, shape, "spec", false)
-	if len(dropped) != 0 || !pruned.Equal(declared) {
-		t.Fatalf("pruned %+v, dropping %v", pruned, dropped)
+	if real := overlay(declared, declared, observed, shape, false, false); !real.Equal(observed) {
+		t.Fatalf("overlay %+v", real)
+	}
+	if paths := uncompared(declared, observed, shape, "spec", "", false, false); len(paths) != 0 {
+		t.Fatalf("not compared %v", paths)
 	}
 	if _, conflicts := merge(observed, labels(field("example.test/row", api.StringValue("2"))), shape, "spec"); !slices.Equal(conflicts, []string{"spec.nodes[worker-0].labels"}) {
 		t.Fatalf("conflicts = %v", conflicts)

@@ -194,6 +194,9 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 	if message := validateInvocation(command, path); message != "" {
 		return r.failure(command, path, "cli.usage", message, 2, selectedJSON(command))
 	}
+	if message := r.diffToolRefusal(command, path); message != "" {
+		return r.failure(command, path, "cli.usage", message, 2, selectedJSON(command))
+	}
 	if path == "" || path == "completion" || (path == "render" && stringValue(command.Flags(), "input-dir") == "" && stringValue(command.Flags(), "output-dir") == "") {
 		if err := r.writeSelectedHelp(command); err != nil {
 			return 1
@@ -285,6 +288,9 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 		var failure *resultFailure
 		if errors.As(presentErr, &failure) {
 			return r.failure(command, path, failure.code, failure.message, failure.exitCode, selectedJSON(command))
+		}
+		if reported := diagnostics.Of(presentErr); len(reported) != 0 {
+			return r.writeServiceDiagnostics(command, path, result, reported, false, logs)
 		}
 		if presentErr != nil {
 			return 1

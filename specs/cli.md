@@ -825,7 +825,7 @@ continuing. A completed apply is the exception, for the reason above. These are
 next steps only; the receipt's `next` still names what the operation's own
 records call for.
 
-### Desired and realized state comparison
+## Desired and realized state comparison
 
 `diff` sets the context's desired state beside what its apply realized, object
 by object, by the [comparison rules](state-reconciliation.md#comparing-desired-and-real-state).
@@ -833,9 +833,12 @@ It accepts no positional operand, input path or mode, and it reads the
 selected context's immutable input revision, which is exactly what `apply`
 reads. It reads durable records under the shared lock, so it contacts no host,
 registers no operation, allocates no identity, writes no record, binds no
-Secret and creates no log. While an apply or destroy holds the context it
+Secret and creates no log; only `--output-dir` and `--tool` write files,
+outside the store. While an apply or destroy holds the context it
 refuses `lifecycle.lease`, naming the safe retry; every other refusal is a
 lifecycle read's own.
+
+### Observation and exit status
 
 `--observe` also reads each block the context's apply realized through that
 block's bounded read-only observation, on the host that block froze, by the
@@ -852,10 +855,12 @@ comparison found, unless `--exit-code` is set, and writes no
 
 `--exit-code` changes nothing about the comparison or what it writes. It makes
 the exit status say whether the comparison found anything: `3` when any object
-is `changed`, `added`, `removed` or `unknown`, and `0` when none is, so a script
+is `changed`, `added`, `removed`, `unmanaged` or `unknown`, and `0` when none is, so a script
 can test for drift. Status `3` is not a failure: standard error stays empty,
 the result is the one the command writes without the flag, and a structured
 result carries `ok` `false` and `exitCode` `3` with no diagnostic.
+
+### Comparison header
 
 The text result opens with these header lines, each value starting at column 11:
 
@@ -870,41 +875,58 @@ The text result opens with these header lines, each value starting at column 11:
 No `Input` value says that `apply` continues, settles or realizes the input,
 because only `status` decides which command passes over the records.
 
-Each object whose difference is not `none`, or whose real side is `partial` or
-`unknown`, follows after a blank line, in API kind order and then name:
+### Files and patches
+
+The comparison is shown file by file. Each side is a set of files, the input
+files that declare its objects, by their path relative to the input
+directory: `desired/<path>` holds the canonical YAML of the objects the
+selected revision's file declares, and `<source>/<path>` the same for the
+other side, where `<source>` is `applied` without `--observe` and `real` with
+it. A file's YAML is its objects in API kind order and then name, each as its
+side states it by the
+[comparison rules](state-reconciliation.md#comparing-desired-and-real-state),
+with no comment, separated by `---` lines. A real side that is absent leaves
+the object out of its file, and an unknown real side shows the desired object,
+so it adds no difference line.
+
+Each file holding an object whose difference is not `none`, or whose real side
+is `partial` or `unknown`, follows after a blank line, in path order:
 
 ```text
-diff <source>/<Kind>/<name> desired/<Kind>/<name>
-# plan: <same|changed|added|removed> (<block ids>); realized: <realization>
-# not compared: <path>, <path>, ...
-# <note>
-# <reason>
-# remedy: <remedy>
---- <source>/<Kind>/<name>
-+++ desired/<Kind>/<name>
+diff desired/<path> <source>/<path>
+# <Kind>/<name>: plan: <same|changed|added|removed> (<block ids>); realized: <realization>
+# <Kind>/<name>: not compared: <path>, <path>, ...
+# <Kind>/<name>: <note>
+# <Kind>/<name>: <reason>
+# <Kind>/<name>: remedy: <remedy>
+--- desired/<path>
++++ <source>/<path>
 @@ -<line>,<count> +<line>,<count> @@
 ```
 
-`<source>` is `applied`: the object as the input revision the apply froze
-declares it, or `real`: the fields an `--observe` read projected, beside the
-desired object reduced to those same fields. A `# not compared:` line names,
-for a `real` side only, the declared paths no projection observed, at most 12
-and then `and <n> more`; they are never a difference. The plan line reads
+The `#` lines appear for each such object of the file, in the file's object
+order. A `# not compared:` line names, for a `real` side only, the authored
+paths no projection observed, at most 12 and then `and <n> more`; they read
+as applied and are never a difference. The plan line reads
 `# plan: added` for an added instance that additive apply admits, `# plan: none` for an object no block realizes, and `realized` reads `none`
 for an object the operation does not name. A `#` line carries a note, then the reason and remedy of an absent or
-unknown real side. The `---` side is `/dev/null` when the real side is absent,
-and the `+++` side is `/dev/null` when the object is no longer declared. The
-hunks are a unified line difference of the canonical YAML of a catalog holding
-that one object, with three lines of context, adjacent hunks merged, and every
-line shown with the display escaping of the [output contract](cli/output.md#json-output).
+unknown real side. The `---` side is `/dev/null` when the selected revision
+has no such file, and the `+++` side is `/dev/null` when the other side holds
+no object of it. The hunks are a unified line difference of the two files,
+with three lines of context, adjacent hunks merged, and every line shown with
+the display escaping of the [output contract](cli/output.md#json-output).
 Counts are always written, even when `1`, and an empty side starts at line `0`.
 A pair of sides so large that their line comparison would exceed four million
 line pairs shows the changed region between their common first and last lines
-as one replacement. An unknown object shows no hunk.
+as one replacement. An object moved to another file leaves the one and joins
+the other.
+
+### Differences and summary
 
 Whether an object differs is decided from the encoded bytes of its two sides:
 unknown beats everything, an absent real side beside a declared object is
-`added`, an undeclared object with a real side is `removed`, equal bytes are
+`added`, an undeclared object whose real side is present is `removed` when the
+applied revision declares it and `unmanaged` otherwise, equal bytes are
 `none`, and the rest are `changed`. A line the object's hunks do not hold is
 never a difference.
 
@@ -914,7 +936,7 @@ encoded fields are equal, the object has difference `none`; its partial state
 alone does not make `--exit-code` return `3`.
 
 The result closes after a blank line with
-`<d> objects differ: <c> changed, <a> added, <r> removed, <u> unknown; <n> unchanged`,
+`<d> objects differ: <c> changed, <a> added, <r> removed, <m> unmanaged, <u> unknown; <n> unchanged`,
 or, when nothing differs, `No differences: <n> objects compared.` A count of
 one is singular: `1 object differs: ...` and `No differences: 1 object
 compared.` With
@@ -931,6 +953,42 @@ the line begins `No differences in compared fields` instead of `No differences`;
 the object and as-applied counts stay the same. With no partial real side,
 the summary is unchanged. JSON keeps its existing fields and counts; each
 object's `real.state` carries its realization state.
+
+### Color, trees and comparison programs
+
+When the global [`--color`](cli/commands.md#global-flags) styles human
+output, a `diff`, `---` and `+++` line is bold, an `@@` line cyan, a removed
+line red, an added line green and a `#` line dim.
+
+`--output-dir <dir>` also writes both sides as files, so a directory
+comparison tool can show them side by side: `<dir>/desired/<path>` and
+`<dir>/<source>/<path>` for every file of either side, differing or not, and
+`<dir>/notes.txt` holding the header lines and every `#` line of the text
+result in its order. Each tree is then a complete input directory of that
+side's objects, beside a copy of that revision's other input files byte for
+byte. The directory must not exist or be an empty directory the invoking account
+owns, opened without following a link and left with its mode; what it creates
+has mode `0700`, its files `0600`, and a failure removes only what it created, with the invoking account's credentials as
+every operator-named path is ([local privilege](#local-privilege-and-user-identity)),
+and the result names it on its last line, `Wrote <dir>`. No Secret material is written, because no side holds
+any.
+
+`--tool <program>` runs a comparison program over each listed file pair in
+path order, after the result is written: the two trees are written as
+`--output-dir` writes them, to a private directory removed when the last
+program exits, and `<program> <dir>/desired/<path> <dir>/<source>/<path>` runs
+with the terminal's standard streams, an empty file standing for a missing
+side. The trees and the program run with the invoking account's credentials,
+never root's, so `--tool` grants nothing the account does not hold; the
+program receives only `TERM`, `LANG`, that account's `HOME` and the `PATH`
+`/usr/local/bin:/usr/bin:/bin`. `<program>` is a name looked up on that `PATH` or a
+path, run without a shell and with no other argument; its exit status is not
+the command's. A program
+that cannot be started refuses `runtime.tool`, naming it, and so does `--tool`
+when the invoking account is root, as a direct root launch or one through
+another elevator is, with the remedy of writing the trees with `--output-dir`
+and running the program on them. `--tool` needs a
+terminal and the text output, and conflicts with `--output-dir`.
 
 ## Resource inspection and explicit access
 

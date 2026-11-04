@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 
+	"github.com/crmarques/bootwright/internal/nativeartifacts/comparisonlocal"
+	"github.com/crmarques/bootwright/internal/nativeartifacts/renderlocal"
 	"github.com/crmarques/bootwright/internal/workspace/invokerfs"
 	"github.com/crmarques/bootwright/internal/workspace/selectionfs"
 )
@@ -13,6 +15,9 @@ func main() {
 		os.Exit(code)
 	}
 	if handled, code := invokerfs.ServeHelper(os.Args[1:]); handled {
+		os.Exit(code)
+	}
+	if handled, code := comparisonlocal.ServeHelper(context.Background(), os.Args[1:], os.Stdin, os.Stdout, renderlocal.Files{}); handled {
 		os.Exit(code)
 	}
 	os.Exit(runInteractive(context.Background(), os.Args[1:], os.Stdout, os.Stderr))

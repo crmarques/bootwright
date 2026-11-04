@@ -1,6 +1,6 @@
 implementation: os-install-anaconda-v1
-content-digest: 9c21171de070bafa8f28acbef95ca1aff1db735725d8e991645f90278b74beaf
-request-version: os-install-anaconda-v22
+content-digest: ed2c21f6ca570e5e8c4931fdae40be9473e33d61d527556b642a2279eb4a78d8
+request-version: os-install-anaconda-v23
 automation-formats: none
 mark-formats: none
 proof-ids: .bootwright-tree-identity, /etc/bootwright/registration.json, /etc/bootwright/update.json
@@ -171,6 +171,10 @@ evidence-schema:
   network bool
   networkDifferences []string
   networkReboot bool
+  os struct installation.OSEvidence
+  os.id string
+  os.kernel string
+  os.versionId string
   postcondition bool
   power string
   private bool

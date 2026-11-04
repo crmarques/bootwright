@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -38,8 +39,9 @@ type diffRead struct {
 	owning        operationstore.Operation
 	owningPlan    reconciliation.Plan
 	owningStates  map[string]reconciliation.BlockState
-	desired       api.Catalog
-	applied       api.Catalog
+	desired       diffSide
+	applied       diffSide
+	markers       DiffMarkers
 	appliedReason string
 	input         string
 	adds          bool
@@ -52,8 +54,44 @@ type diffRead struct {
 	digest        string
 	observed      bool
 	blocks        DiffBlocks
-	sides         map[string]observedSide
+	sides         map[string]RealSide
+	patches       map[string][]holderPatch
 	unproven      map[api.Kind]bool
+}
+
+type diffSide struct {
+	authored, effective api.Catalog
+	paths               map[string]string
+}
+
+func sideOf(state *compilation.State, sources desiredstate.Sources) diffSide {
+	if state == nil {
+		return diffSide{}
+	}
+	side := diffSide{authored: state.Authored(), effective: state.Effective(), paths: map[string]string{}}
+	for _, object := range side.authored.Objects() {
+		if origin, found := state.Origin(object.Identity()); found && origin.Path != "" {
+			side.paths[object.Identity()] = relativePath(sources.Roots, origin.Path)
+		}
+	}
+	return side
+}
+
+func relativePath(roots []string, path string) string {
+	for _, root := range roots {
+		if relative, err := filepath.Rel(root, path); err == nil && relative != ".." && !strings.HasPrefix(relative, "../") {
+			return relative
+		}
+	}
+	return path
+}
+
+func relativeFiles(sources desiredstate.Sources, files []desiredstate.SourceFile) []desiredstate.SourceFile {
+	relative := make([]desiredstate.SourceFile, 0, len(files))
+	for _, file := range files {
+		relative = append(relative, desiredstate.NewSourceFile(relativePath(sources.Roots, file.Path()), file.Bytes()))
+	}
+	return relative
 }
 
 func (s Service) Diff(ctx context.Context, request DiffRequest) (*DiffResult, error) {
@@ -105,12 +143,17 @@ func (s Service) readDiff(ctx context.Context, view View, observed bool) (diffRe
 	if err != nil {
 		return diffRead{}, err
 	}
-	read.desired = desired.Effective()
-	applied, frozen, reason := s.appliedCatalog(ctx, view, read.owning, desired)
+	selected := view.Inputs()
+	read.desired = sideOf(desired, selected)
+	read.markers.Desired = relativeFiles(selected, selected.Markers)
+	applied, frozen, reason := s.appliedState(ctx, view, read.owning, desired)
 	if err := ctx.Err(); err != nil {
 		return diffRead{}, err
 	}
-	read.applied, read.appliedReason = applied, reason
+	read.applied, read.appliedReason = sideOf(applied, frozen), reason
+	if applied != nil {
+		read.markers.Applied = relativeFiles(frozen, frozen.Markers)
+	}
 	read.fresh, read.planReason = s.freshPlan(ctx, view, desired)
 	read.delta = reconciliation.Compare(read.owningPlan, read.fresh)
 	read.rebuilt = s.rebuiltBlocks(ctx, view, read.owning, read.owningPlan, frozen)
@@ -164,12 +207,12 @@ func (s Service) owningApply(ctx context.Context, store recordReader, current op
 	return removedApply(ctx, store, current.Source)
 }
 
-func (s Service) appliedCatalog(ctx context.Context, view View, owning operationstore.Operation, desired *compilation.State) (api.Catalog, desiredstate.Sources, string) {
+func (s Service) appliedState(ctx context.Context, view View, owning operationstore.Operation, desired *compilation.State) (*compilation.State, desiredstate.Sources, string) {
 	if owning.ID == "" {
-		return api.Catalog{}, desiredstate.Sources{}, ""
+		return nil, desiredstate.Sources{}, ""
 	}
-	unreadable := func(detail string) (api.Catalog, desiredstate.Sources, string) {
-		return api.Catalog{}, desiredstate.Sources{}, "the input revision " + owning.Revision + " that apply " + owning.ID + " froze cannot be read: " + detail
+	unreadable := func(detail string) (*compilation.State, desiredstate.Sources, string) {
+		return nil, desiredstate.Sources{}, "the input revision " + owning.Revision + " that apply " + owning.ID + " froze cannot be read: " + detail
 	}
 	sources, err := view.Revision(ctx, owning.Revision)
 	if err != nil {
@@ -179,13 +222,13 @@ func (s Service) appliedCatalog(ctx context.Context, view View, owning operation
 		return unreadable("its bytes no longer match the input digest apply " + owning.ID + " recorded")
 	}
 	if owning.InputDigest == inputDigest(view) {
-		return desired.Effective(), sources, ""
+		return desired, sources, ""
 	}
 	state, err := s.compileSources(ctx, sources)
 	if err != nil {
 		return unreadable(firstMessage(err))
 	}
-	return state.Effective(), sources, ""
+	return state, sources, ""
 }
 
 func (s Service) freshPlan(ctx context.Context, view View, desired *compilation.State) (reconciliation.Plan, string) {
@@ -264,7 +307,7 @@ func (r diffRead) result() *DiffResult {
 	if r.owning.ID != "" {
 		operation.Applied = cmp.Or(r.appliedReason, diffReadable)
 	}
-	return &DiffResult{Context: r.context, Operation: operation, Input: r.input, Adds: r.adds, Plan: plan, Observed: r.observed, Blocks: r.blocks, Objects: joinObjects(r)}
+	return &DiffResult{Context: r.context, Operation: operation, Input: r.input, Adds: r.adds, Plan: plan, Observed: r.observed, Blocks: r.blocks, Objects: joinObjects(r), Markers: r.markers}
 }
 
 type objectPlan struct {
@@ -289,7 +332,7 @@ func (r diffRead) objectPlans() map[string]objectPlan {
 
 func joinObjects(read diffRead) []ObjectDiff {
 	plans := read.objectPlans()
-	identities := catalogIdentities(read.desired, read.applied)
+	identities := catalogIdentities(read.desired.authored, read.applied.authored)
 	for _, key := range slices.Concat(mapKeys(plans), mapKeys(read.realized), mapKeys(read.sides)) {
 		kind, name, _ := strings.Cut(key, "/")
 		if identity := (objectIdentity{kind: api.Kind(kind), name: name}); !slices.Contains(identities, identity) {
@@ -302,20 +345,21 @@ func joinObjects(read diffRead) []ObjectDiff {
 		key := string(identity.kind) + "/" + identity.name
 		object := ObjectDiff{
 			Kind: identity.kind, Name: identity.name, Plan: plans[key].change, Blocks: slices.Clone(plans[key].blocks),
-			Realization: read.realized[key], Real: recordedSide(read, key),
+			Realization: read.realized[key], Path: read.desired.paths[key], Real: recordedSide(read, key),
 		}
-		if declared, found := read.desired.Find(identity.kind, identity.name); found {
+		if declared, found := read.desired.authored.Find(identity.kind, identity.name); found {
 			object.Desired = canonicalObject(declared)
 		}
 		if side, found := read.sides[key]; found {
-			object.Real = side.real
-			if side.pruned {
-				object.Desired = side.desired
-			}
+			object.Real = side
 		}
 		if object.Desired == nil && object.Real.State == sideAbsent {
 			continue
 		}
+		object.Real.Path = cmp.Or(object.Real.Path, read.applied.paths[key])
+		object.Real.Object = patchHolder(object.Real.Object, read.patches[key])
+		_, declared := read.applied.authored.Find(identity.kind, identity.name)
+		object.Real.Discovered = !declared && (object.Real.State == sidePresent || object.Real.State == sidePartial)
 		objects = append(objects, object)
 	}
 	return objects
@@ -365,7 +409,7 @@ func (r diffRead) appliedSide(identity string, realized bool) RealSide {
 		return side
 	}
 	kind, name, _ := strings.Cut(identity, "/")
-	applied, found := r.applied.Find(api.Kind(kind), name)
+	applied, found := r.applied.authored.Find(api.Kind(kind), name)
 	switch {
 	case found:
 		side.Object = canonicalObject(applied)

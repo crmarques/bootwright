@@ -1,0 +1,34 @@
+---
+# Every observation that reaches the installed system reads the release it
+# names, ID and VERSION_ID of /etc/os-release, and its running kernel, over the
+# pinned fleet connection. The read writes nothing; each value is cut to the
+# characters and length the evidence admits, and a missing one reads empty.
+- name: Read the installed machine's release and running kernel
+  ansible.builtin.include_tasks: guest.yml
+  vars:
+    managedos_install_anaconda_guest_command:
+      - /usr/bin/sh
+      - -c
+      - |-
+        set -u
+        value() { sed -n "s/^$1=//p" /etc/os-release 2>/dev/null | head -n 1 | tr -d "\"'" | head -c 64 | tr -cd 'A-Za-z0-9._-'; }
+        printf 'id=%s\n' "$(value ID)"
+        printf 'version=%s\n' "$(value VERSION_ID)"
+        printf 'kernel=%s\n' "$(head -c 128 /proc/sys/kernel/osrelease 2>/dev/null | tr -cd 'A-Za-z0-9._+~-')"
+      - bootwright-os-release
+
+- name: Name the release the machine read
+  ansible.builtin.set_fact:
+    managedos_install_anaconda_os: >-
+      {{ {'id': managedos_install_anaconda_os_lines[0][3:],
+          'kernel': managedos_install_anaconda_os_lines[2][7:],
+          'versionId': managedos_install_anaconda_os_lines[1][8:]}
+         if (managedos_install_anaconda_guest.rc | default(1) | int) == 0
+            and managedos_install_anaconda_os_lines | length == 3
+            and managedos_install_anaconda_os_lines[0].startswith('id=')
+            and managedos_install_anaconda_os_lines[1].startswith('version=')
+            and managedos_install_anaconda_os_lines[2].startswith('kernel=')
+         else {} }}
+  vars:
+    managedos_install_anaconda_os_lines: "{{ (managedos_install_anaconda_guest.stdout | default('')).splitlines() }}"
+  changed_when: false

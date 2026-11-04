@@ -79,10 +79,13 @@ SUBVOLUME_PATH = re.compile(r"/volumes/(?:_nogroup|[A-Za-z0-9][A-Za-z0-9_.-]{0,1
                             r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\Z")
 CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "tunnel_preflight", "authorize", "bootstrap", "tunnel_configure", "tunnel_mount",
                          "cache", "enroll", "license", "services", "stretch_locate", "stretch_enable", "dashboard", "dashboard_read", "dashboard_present",
-                         "observe", "bootstrap_state", "host_state", "destroy", "tiebreaker_observe", "tiebreaker_remove"))
-CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "tunnel_preflight", "observe", "bootstrap_state", "host_state", "dashboard_read",
-                                   "dashboard_present", "tiebreaker_observe"))
-EVIDENCE_VERSION = "ceph-core-evidence-v13"
+                         "observe", "unrecorded_observe", "bootstrap_state", "host_state", "destroy", "tiebreaker_observe", "tiebreaker_remove"))
+CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "tunnel_preflight", "observe", "unrecorded_observe", "bootstrap_state", "host_state",
+                                   "dashboard_read", "dashboard_present", "tiebreaker_observe"))
+# The cluster observation of a read no operation records, such as `bootwright diff --observe`: the only phase that lists the cluster's
+# pools and reports an OSD no declared service places instead of refusing it foreign-osd.
+UNRECORDED_OBSERVE = "unrecorded_observe"
+EVIDENCE_VERSION = "ceph-core-evidence-v14"
 # The specialization ids the last dispatched phase's worker applied; the remote wrapper reads it once per process.
 APPLIED = []
 DASHBOARD_USER = "admin"
@@ -133,6 +136,21 @@ INCARNATION = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}
 PENDING_DAEMON = re.compile(r"(mon|mgr)\.[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}\Z")
 # A never-booted OSD that names no device, by its ID and OSD fsid: the next apply purges it when an owned clear left it.
 PENDING_OSD = re.compile(r"unbooted@osd\.[0-9]{1,5}\.[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\Z")
+# An OSD of this cluster beyond the declared disks, which only an unrecorded observation reports, with the declared host and
+# device it runs on when it names them, and keeps unready; every recorded phase still refuses it foreign-osd.
+UNPLACED_OSD = re.compile(r"unplaced@osd\.[0-9]{1,5}\Z")
+UNPLACED_LIMIT = 64
+# The kernel name `osd metadata` gives an OSD's data device.
+KERNEL_DEVICE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:+-]{0,63}\Z")
+# The pools a read-only cluster observation inventories: names bounded in length and alphabet, at most POOL_LIMIT of them.
+POOL_NAME = re.compile(r"[A-Za-z0-9_.][A-Za-z0-9_.-]{0,62}\Z")
+POOL_LIMIT = 128
+POOL_APPLICATION = re.compile(r"[A-Za-z0-9_.-]{1,32}\Z")
+POOL_APPLICATIONS = 4
+POOL_TYPES = {1: "replicated", 3: "erasure"}
+POOL_AUTOSCALE = ("on", "off", "warn")
+POOL_LISTING = 65536
+INT64_MAX = (1 << 63) - 1
 # Each admitted daemon type: (executor, host rule identity|request|service, counted toward readiness, image rule).
 DAEMON_TYPES = {
     "mon": ("cluster", "identity", True, "ceph"),
@@ -942,6 +960,29 @@ def never_booted(item):
             and isinstance(state, list) and "exists" in state and "new" in state)
 
 
+def pool_reading(entry):
+    """The values a pool observation compares, from one `osd pool ls detail` entry; a value of another type or bound reads empty."""
+    def count(field):
+        value = entry.get(field)
+        return value if type(value) is int and 0 <= value <= INT64_MAX else 0
+    metadata = entry.get("application_metadata")
+    applications = sorted(name for name in metadata if isinstance(name, str) and POOL_APPLICATION.fullmatch(name)) if isinstance(metadata, dict) else []
+    mode = entry.get("pg_autoscale_mode")
+    return {"name": entry["pool_name"], "type": POOL_TYPES.get(entry.get("type"), "") if type(entry.get("type")) is int else "",
+            "size": count("size"), "minSize": count("min_size"), "applications": applications[:POOL_APPLICATIONS],
+            "autoscale": mode if mode in POOL_AUTOSCALE else "", "maxBytes": count("quota_max_bytes"), "maxObjects": count("quota_max_objects")}
+
+
+def pool_inventory(listed):
+    """The bounded pool readings of one `osd pool ls detail` listing, sorted by name, and how many it leaves out."""
+    require(isinstance(listed, list) and len(listed) <= POOL_LISTING and all(isinstance(entry, dict) for entry in listed), "native-output")
+    named_entries = [entry for entry in listed if isinstance(entry.get("pool_name"), str) and POOL_NAME.fullmatch(entry["pool_name"])]
+    names = [entry["pool_name"] for entry in named_entries]
+    require(len(set(names)) == len(names), "native-output")
+    kept = sorted(named_entries, key=lambda entry: entry["pool_name"])[:POOL_LIMIT]
+    return [pool_reading(entry) for entry in kept], len(listed) - len(kept)
+
+
 def unstarted_osd(item, osds):
     """The one map entry of an OSD whose metadata names no device and that never booted, or None: no disk proves it, and it proves no readiness."""
     entries = [value for value in osds if value.get("osd") == item.get("id")]
@@ -1298,6 +1339,9 @@ class Worker:
         self.command_deadline = None
         self.blocking = []
         self.base_ready = False
+        # Only an unrecorded observation reports what no declared service explains instead of refusing it.
+        self.reading = False
+        self.unplaced = []
         from ansible_collections.bootwright.core.plugins.module_utils import native_specializations
         self.selection = native_specializations.Selection({"host-cephadm": self.verified_tool, "image-cephadm": self.image_payload})
         self._tool_bytes = None
@@ -4213,15 +4257,24 @@ class Worker:
                 ready = ready and len(identifiers) == service["placement"].get("count", len(service["placement"]["hosts"]))
         ready = self.observe_osds(evidence, running, ready)
         ready = self.observe_resource(evidence, ready)
-        if self.request["action"] == "cluster":
-            evidence["monAddrs"] = self.monitor_addresses(expected_mons, monmap)
-            evidence["dashboard"] = self.dashboard_observation()
+        self.observe_cluster_reads(evidence, expected_mons, monmap)
         evidence["removed"] = evidence["owned"] and not evidence["exists"]
         # A manager container this host is restarting is unfinished work, named beside the blocking health checks.
         self.blocking = (pending + self.blocking)[:16]
         evidence["ready"] = self.with_stretch(evidence, ready and pg_ready and healthy and license_ready and not pending)
         evidence["partial"] = evidence["exists"] and not evidence["ready"]
         return evidence
+
+    def observe_cluster_reads(self, evidence, expected_mons, monmap):
+        """A cluster block's monitor addresses and dashboard; only an unrecorded observation also lists its pools and the OSDs no
+        declared service places."""
+        if self.request["action"] != "cluster":
+            return
+        evidence["monAddrs"] = self.monitor_addresses(expected_mons, monmap)
+        evidence["dashboard"] = self.dashboard_observation()
+        if self.reading:
+            pools, omitted = pool_inventory(self.ceph("osd", "pool", "ls", "detail"))
+            evidence["inventory"] = {"pools": pools, "omitted": omitted, "osds": self.unplaced}
 
     def with_stretch(self, evidence, ready):
         """A stretch cluster is ready only once its activation is verified and holds; the rest of its readiness is kept for activation."""
@@ -4246,7 +4299,30 @@ class Worker:
         require(identities is not None, "device-identity")
         return identities[(host["name"], device["path"])]
 
+    def unplaced_osds(self, metadata, osdmap, excluded, known_uuids, devices):
+        """Each OSD of this map beyond the declared disks, by ID: its host only when the request declares it, its one data device
+        only there and when no declared data device of that host, and its OSD fsid only when well formed and not yet named."""
+        hosts = {host["name"]: set() for host in self.request["hosts"]}
+        for host, device in devices:
+            hosts[host["name"]].add(self.metadata_device_name(host, device))
+        unplaced, uuids = [], set(known_uuids)
+        for item in metadata:
+            osd_id = item.get("id")
+            if type(osd_id) is not int or not 0 <= osd_id <= 99999 or osd_id in excluded:
+                continue
+            device, host = item.get("devices"), item.get("hostname")
+            host = host if isinstance(host, str) and host in hosts else ""
+            placed = host and isinstance(device, str) and KERNEL_DEVICE.fullmatch(device) is not None and device not in hosts[host]
+            entries = [entry for entry in osdmap["osds"] if entry.get("osd") == osd_id]
+            uuid = entries[0].get("uuid") if len(entries) == 1 else None
+            uuid = uuid if isinstance(uuid, str) and OSD_UUID.fullmatch(uuid) and uuid not in uuids else ""
+            uuids.add(uuid)
+            unplaced.append({"host": host, "id": osd_id, "path": "/dev/" + device if placed else "", "uuid": uuid})
+        require(len(unplaced) <= UNPLACED_LIMIT, "foreign-osd")
+        return sorted(unplaced, key=lambda osd: osd["id"])
+
     def observe_osds(self, evidence, running, ready):
+        self.unplaced = []
         running_osds = {daemon.get("daemon_id"): daemon for daemon in running if daemon["daemon_type"] == "osd"}
         require(len(running_osds) == sum(daemon["daemon_type"] == "osd" for daemon in running), "native-output")
         devices = [(h, d) for h in self.request["hosts"] for d in h["devices"] if d["path"] not in auxiliary_device_paths(self.request, h["name"])]
@@ -4257,11 +4333,12 @@ class Worker:
                                                    for item in metadata), "native-output")
         ready = ready and all("device_ids" in item for item in metadata)
         require(isinstance(osdmap, dict) and isinstance(osdmap.get("osds"), list) and all(isinstance(item, dict) for item in osdmap["osds"]), "native-output")
-        require(len(running_osds) <= len(devices), "foreign-osd")
+        require(self.reading or len(running_osds) <= len(devices), "foreign-osd")
         if self.markers.read(DEVICE_IDENTITIES) is None:
             # Before services publish the identities no OSD may exist to prove.
             require(not metadata and not running_osds, "device-identity")
             return False
+        matched = set()
         for host, device in devices:
             device_id = self.metadata_device_name(host, device) + "=" + self.expected_device_id(host, device)
             groups = osd_device_group(self.request, host, device["path"])
@@ -4281,6 +4358,7 @@ class Worker:
                 ready = False
                 continue
             item = candidates[0]
+            matched.add(item.get("id"))
             osds = [o for o in osdmap["osds"] if o.get("osd") == item.get("id")]
             require(len(osds) == 1, "native-output")
             osd = osds[0]
@@ -4297,10 +4375,15 @@ class Worker:
         # A never-booted OSD naming no device, such as the one an interrupted creation leaves once an owned clear zapped
         # its volume, counts against no declared disk and keeps the cluster unready, so the next apply reaches its purge.
         unstarted = [entry for entry in (unstarted_osd(item, osdmap["osds"]) for item in metadata) if entry is not None]
-        require(len(metadata) - len(unstarted) <= len(devices), "foreign-osd")
+        if self.reading:
+            excluded = matched | {entry.get("osd") for entry in unstarted}
+            self.unplaced = self.unplaced_osds(metadata, osdmap, excluded, [osd["uuid"] for osd in evidence["osds"]], devices)
+        require(len(running_osds) <= len(devices) + len(self.unplaced), "foreign-osd")
+        require(len(metadata) - len(unstarted) <= len(devices) + len(self.unplaced), "foreign-osd")
         named = ["unbooted@osd." + str(entry["osd"]) + "." + str(entry.get("uuid")) for entry in unstarted]
-        self.blocking = ([entry for entry in named if PENDING_OSD.fullmatch(entry)] + self.blocking)[:16]
-        return ready
+        named += ["unplaced@osd." + str(osd["id"]) for osd in self.unplaced]
+        self.blocking = ([entry for entry in named if PENDING_OSD.fullmatch(entry) or UNPLACED_OSD.fullmatch(entry)] + self.blocking)[:16]
+        return ready and not self.unplaced
 
     def observe_resource(self, evidence, ready):
         require(self.request["action"] == "cluster")
@@ -4389,7 +4472,9 @@ def dispatch(envelope):
         result = getattr(worker, phase)(envelope["private"])
     elif phase == "services":
         result = worker.services(devices, service) if orphans is None else worker.services(devices, service, orphans)
-    elif phase == "observe":
+    elif phase in ("observe", UNRECORDED_OBSERVE):
+        require(phase == "observe" or worker.request["action"] == "cluster", "request")
+        worker.reading = phase == UNRECORDED_OBSERVE
         # The health checks that kept readiness unproved travel beside the closed evidence, for the refusal's detail only.
         result = dict(worker.observe(), blocking=list(worker.blocking))
         if worker.request["action"] == "cluster" and "stretch" in worker.request:

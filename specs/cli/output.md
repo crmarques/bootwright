@@ -935,11 +935,11 @@ never changes a block's state, the result or the exit status.
 
 ### Diff results
 
-`diff` returns the comparison as one object whose fields are in this order, each
-object of `objects` beside the unified `patch` lines the text result prints:
+`diff` returns the comparison as one object whose fields are in this order,
+its `files` holding the unified `patch` lines the text result prints:
 
 ```json
-{"context":{"name":"lab","revision":"rev-8c41d07e"},"operation":{"id":"op-3f9a0c12","verb":"apply","state":"done","apply":"op-3f9a0c12","revision":"rev-1b7e55a0","applied":"readable"},"input":"changed","plan":{"state":"differs","reason":"","changed":1,"added":0,"removed":0,"rebuilt":[]},"observed":false,"blocks":{"observed":0,"unknown":0,"unprojected":0},"objects":[{"kind":"CephPool","name":"rbd-data","difference":"changed","plan":"changed","blocks":["ceph-pool-rbd-data"],"realization":"done","real":{"source":"applied","state":"present","document":{},"notCompared":[],"notes":[],"reason":"","remedy":""},"desired":{"document":{}},"patch":["--- applied/CephPool/rbd-data","+++ desired/CephPool/rbd-data"]}],"summary":{"none":0,"changed":1,"added":0,"removed":0,"unknown":0,"applied":0}}
+{"context":{"name":"lab","revision":"rev-8c41d07e"},"operation":{"id":"op-3f9a0c12","verb":"apply","state":"done","apply":"op-3f9a0c12","revision":"rev-1b7e55a0","applied":"readable"},"input":"changed","plan":{"state":"differs","reason":"","changed":1,"added":0,"removed":0,"rebuilt":[]},"observed":false,"blocks":{"observed":0,"unknown":0,"unprojected":0},"objects":[{"kind":"CephPool","name":"rbd-data","path":"storage/pool.yaml","difference":"changed","plan":"changed","blocks":["ceph-pool-rbd-data"],"realization":"done","real":{"source":"applied","state":"present","path":"storage/pool.yaml","document":{},"notCompared":[],"notes":[],"reason":"","remedy":""},"desired":{"document":{}}}],"files":[{"desired":"storage/pool.yaml","real":"storage/pool.yaml","objects":["CephPool/rbd-data"],"patch":["--- desired/storage/pool.yaml","+++ applied/storage/pool.yaml"]}],"summary":{"none":0,"changed":1,"added":0,"removed":0,"unmanaged":0,"unknown":0,"applied":0}}
 ```
 
 | Field | Contract |
@@ -950,17 +950,18 @@ object of `objects` beside the unified `patch` lines the text result prints:
 | `adds` | `true`, and omitted otherwise, when `input` is `changed` and an [additive apply](../state-reconciliation.md#additive-apply) admits the change; `diff` without `--observe` predicts that admission without proving the custody of the produced material the added instances borrow. |
 | `plan` | `state` (`none`, `same`, `differs` or `unplanned`), the planner's `reason` when `unplanned`, the counts of `changed`, `added` and `removed` blocks, and `rebuilt`, the ids of the blocks another build plans differently. |
 | `observed`, `blocks` | Whether the comparison read a host, and the counts of blocks `observed`, left `unknown` and `unprojected`. Without a host read they are `false` and zeros. |
-| `objects` | Every declared, applied or planned object in API kind order and then name, except one that is both undeclared and absent. |
-| `objects[].difference` | `none`, `changed`, `added`, `removed` or `unknown`. |
+| `objects` | Every declared, applied, planned or discovered object in API kind order and then name, except one that is both undeclared and absent. |
+| `objects[].path`, `real.path` | The input file of the desired and of the other side, relative to the input directory, or `""` where that side holds no object. |
+| `objects[].difference` | `none`, `changed`, `added`, `removed`, `unmanaged` or `unknown`. |
 | `objects[].plan`, `blocks`, `realization` | The object's plan change, its block ids in plan order and its [realization](#lifecycle-and-status-results), each `""` or empty when no block names the object. |
-| `objects[].real` | `source` (`applied`, or `observed` for a side `--observe` read), `state` (`present`, `partial`, `absent` or `unknown`), `document`, `notCompared` (the declared paths a live read did not compare), `notes`, `reason` and `remedy`. |
-| `objects[].desired` | `document` of the declared object. |
-| `document` | The effective-state encoder's canonical JSON of the one object, set only when `difference` is `changed`, `added` or `removed` and that side exists; otherwise `null`. |
-| `patch` | The unified patch lines of the text result, empty unless `difference` is `changed`, `added` or `removed`. |
-| `summary` | The counts `none`, `changed`, `added`, `removed` and `unknown` of objects by difference, and `applied`, the objects compared with the applied side because no host read projected them, which is `0` without one. |
+| `objects[].real` | `source` (`applied`, or `observed` for a side `--observe` read), `state` (`present`, `partial`, `absent` or `unknown`), `path`, `document`, `notCompared` (the authored paths a live read did not compare), `notes`, `reason` and `remedy`. |
+| `objects[].desired` | `document` of the declared object as authored. |
+| `document` | The effective-state encoder's canonical JSON of the one object as that side states it, set only when `difference` is `changed`, `added`, `removed` or `unmanaged` and that side exists; otherwise `null`. |
+| `files` | Each file the text result lists, in path order: `desired` and `real`, its path on each side or `""` for `/dev/null`, `objects`, the `<Kind>/<name>` of its listed objects, and `patch`, its unified patch lines. |
+| `summary` | The counts `none`, `changed`, `added`, `removed`, `unmanaged` and `unknown` of objects by difference, and `applied`, the objects compared with the applied side because no host read projected them, which is `0` without one. |
 
-Every string passes through the display escaping above. The command adds no
-diagnostic code.
+Every string passes through the display escaping above. The command adds
+only the diagnostic code `runtime.tool`.
 
 ## Diagnostic taxonomy and order
 
@@ -1011,6 +1012,7 @@ it to a variable.
 | `cli.not-implemented` | The command is defined but its application use case is not available. |
 | `render.publish` | A rendered artifact could not be safely published: its directory or file is unusable, exists as a non-regular file, or overlaps the input. |
 | `runtime.encode` | A trustworthy result could not be encoded. |
+| `runtime.tool` | A comparison program `diff --tool` names could not be started. |
 | `runtime.log` | A required private operation log could not be safely maintained. |
 | `runtime.interrupted` | An operating-system interrupt canceled the command. |
 | `runtime.canceled` | The supplied context was canceled without an interrupt. |
