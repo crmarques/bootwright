@@ -1,6 +1,6 @@
 implementation: os-install-anaconda-v1
-content-digest: ed2c21f6ca570e5e8c4931fdae40be9473e33d61d527556b642a2279eb4a78d8
-request-version: os-install-anaconda-v23
+content-digest: c7c88d5a77072722c74da7b5d5eebe1f9533a65374c97323ea201df1be996654
+request-version: os-install-anaconda-v24
 automation-formats: none
 mark-formats: none
 proof-ids: .bootwright-tree-identity, /etc/bootwright/registration.json, /etc/bootwright/update.json
@@ -32,6 +32,7 @@ request-identity:
   target.uri
   target.hardware.rootDevice
   target.hardware.serialNumber
+  target.hardware.sizeBytes
   target.hardware.wwn
   placement.machine
 request-schema:
@@ -128,18 +129,19 @@ request-schema:
   target.firmware.secureBoot *bool omitempty
   target.hardware *struct installation.Hardware omitempty
   target.hardware.clearOnInstall []struct installation.ClearTarget omitempty
-  target.hardware.clearOnInstall[].deviceName string
+  target.hardware.clearOnInstall[].deviceName string omitempty
   target.hardware.clearOnInstall[].intervals []struct installation.EraseRegion
   target.hardware.clearOnInstall[].intervals[].length int64
   target.hardware.clearOnInstall[].intervals[].offset int64
   target.hardware.clearOnInstall[].serialNumber string
   target.hardware.clearOnInstall[].sizeBytes int64
-  target.hardware.clearOnInstall[].wwn string
+  target.hardware.clearOnInstall[].wwn string omitempty
   target.hardware.interfaces []struct installation.Interface
   target.hardware.interfaces[].macAddress string
   target.hardware.interfaces[].name string
   target.hardware.rootDevice string omitempty
   target.hardware.serialNumber string omitempty
+  target.hardware.sizeBytes int64 omitempty
   target.hardware.wwn string omitempty
   target.hostKeyRef string omitempty
   target.hostKeyType string omitempty

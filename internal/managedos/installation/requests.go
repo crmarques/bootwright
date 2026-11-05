@@ -75,6 +75,7 @@ type Hardware struct {
 	Interfaces     []Interface   `json:"interfaces"`
 	RootDevice     string        `json:"rootDevice,omitempty"`
 	SerialNumber   string        `json:"serialNumber,omitempty"`
+	SizeBytes      int64         `json:"sizeBytes,omitempty"`
 	WWN            string        `json:"wwn,omitempty"`
 }
 

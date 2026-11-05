@@ -227,7 +227,11 @@ func impacts(verb reconciliation.Verb, request Request) []string {
 		}
 		if request.Target.Hardware != nil {
 			for _, target := range request.Target.Hardware.ClearOnInstall {
-				impacts = append(impacts, "clear-disk "+request.Identity.Object+" "+target.WWN)
+				disk := target.WWN
+				if disk == "" {
+					disk = "serial:" + target.SerialNumber
+				}
+				impacts = append(impacts, "clear-disk "+request.Identity.Object+" "+disk)
 			}
 		}
 	}

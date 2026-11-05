@@ -249,7 +249,8 @@ provider.
 A bare-metal non-provided machine has at least one NIC; every NIC has a MAC in
 `substrate.baremetal.nics`; `substrate.baremetal.bmc` address and credentials
 are present; and `hardware.rootDevice.deviceName` or
-`substrate.baremetal.rootDevice.wwn` is present. Its BMC address, like every
+`substrate.baremetal.rootDevice.wwn` is present, or, on a Bootwright-installed
+Machine, that `rootDevice`'s `serialNumber` with `sizeBytes`. Its BMC address, like every
 authored one, selects one exact `/redfish/v1/Systems/<id>` ComputerSystem in
 the [one spelling](#bmc-and-root-device-shape) the realized target sends. These
 declarations identify an install target but do not authorize a destructive
@@ -301,7 +302,7 @@ substrate reads; NIC names and substrate-neutral root-device hints stay in
 | --- | --- | --- | --- |
 | `baremetal` | `bmc` | object | The management controller; exact shape [below](#bmc-and-root-device-shape). |
 | `baremetal` | `nics` | array | Set of `{nicRef, macAddress}` keyed by `nicRef`; `nicRef` names a `hardware.nics[].name`, at most one entry per NIC; `macAddress` is EUI-48. |
-| `baremetal` | `rootDevice` | object | Physical-disk hints `wwn`, `hctl` and `serialNumber`, each a non-empty string. |
+| `baremetal` | `rootDevice` | object | Physical-disk hints `wwn`, `hctl` and `serialNumber`, each a non-empty string, and `sizeBytes`, the root disk's exact capacity, 4096-aligned up to 64 TiB, only on a Bootwright-installed Machine. |
 | `baremetal` | `firmware` | object | Declared firmware settings; [shape](#firmware-block). |
 | `libvirt`, `kubevirt` | `profileRef` | string | Provider-local `machineProfiles[].name`. |
 | `libvirt`, `kubevirt` | `interfaceAttachments` | array | Set of `{interface, attachmentRef}` keyed by `interface`, as [network configuration](#network-configuration) states. |
@@ -629,17 +630,21 @@ server and refuses unless it does
 `hardware.rootDevice` admits only `deviceName`, `model`, `vendor`,
 `minSizeGigabytes` and boolean `rotational`, on every substrate and with or
 without `installProfileRef`; `substrate.baremetal.rootDevice` admits `wwn`,
-`hctl` and `serialNumber`, which only a physical disk carries, since the disks a
-virtual substrate creates carry no WWN, SCSI address or serial number
-([substrates](../substrates.md#machine-realization)).
+`hctl`, `serialNumber` and `sizeBytes`, which only a physical disk carries, since
+the disks a virtual substrate creates carry no WWN, SCSI address or serial number
+([substrates](../substrates.md#machine-realization)). `sizeBytes` refuses
+`api.invariant` at `$.spec.substrate.baremetal.rootDevice.sizeBytes` on a
+Machine Bootwright does not install, since only that installation compares it,
+and when it is not a multiple of 4096.
 `deviceName` is a device path: a clean absolute path beneath `/dev/` built
 only from ASCII letters, digits, `.`, `_`, `-`, `/`, `:` and `+`, so
 whitespace, control characters, quotes, other shell metacharacters and `.` or
 `..` segments are refused, because the path reaches installer directives and
 shell words verbatim. `minSizeGigabytes` is non-negative. For a bare-metal
 install, `hardware.rootDevice.deviceName` or `substrate.baremetal.rootDevice.wwn`
-is mandatory, and a Bootwright-installed Machine narrows `deviceName` to its
-by-id form below; predicate-only hints are not an adequate destructive target
+is mandatory, or, on a Bootwright-installed Machine, `serialNumber` with
+`sizeBytes`; a Bootwright-installed Machine narrows `deviceName` to its by-id
+form below; predicate-only hints are not an adequate destructive target
 selector. Which hints an installation carries,
 and which it refuses, is the rule of the consumer that installs the Machine:
 [managed OS](../managed-os.md#installation) or the
@@ -647,19 +652,28 @@ and which it refuses, is the rule of the consumer that installs the Machine:
 Nothing installs an OS-ready Machine: there `deviceName` and `wwn` name the
 root disk that a Ceph OSD selection must not name, compared with each explicit
 OSD device path, `wwn` as its `/dev/disk/by-id/wwn-0x` path without regard to
-case or a `0x` prefix, and every other hint warns `api.deferred` at its path,
-since it selects no disk.
+case or a `0x` prefix, and every other hint but `sizeBytes`, which refuses,
+warns `api.deferred` at its path, since it selects no disk.
 
 A bare-metal Bootwright-installed Machine names its root disk by a durable
-identity: `deviceName` is `/dev/disk/by-id/wwn-0x` followed by 16 or 32
-lowercase hexadecimal digits, the form
-[managed physical hosts](../ceph.md#devices-and-destructive-ownership) use
-for OSD paths. The installation erases that disk, and a kernel name such as
-`/dev/sda` moves with probe order, firmware and hot-added disks, so it refuses
-at `hardware.rootDevice.deviceName`, naming the by-id form. Its `%pre` stops
-before storage unless the name is a whole disk reporting any declared `wwn` and
-`serialNumber`
-([physical installation](../managed-os.md#physical-installation)).
+identity in exactly one of two forms. Either `deviceName` is
+`/dev/disk/by-id/wwn-0x` followed by 16 or 32 lowercase hexadecimal digits, the
+form [managed physical hosts](../ceph.md#devices-and-destructive-ownership) use
+for OSD paths, beside which `wwn`, `serialNumber` and `sizeBytes` may stand as
+proofs; or `deviceName` is absent and `substrate.baremetal.rootDevice` declares
+`serialNumber` and `sizeBytes`, for a disk whose WWN cannot be learned before an
+OS boots or that has none, such as an NVMe disk, and a `wwn` then refuses, since
+a disk with a known WWN is named by its path. The installation erases that
+disk, and a kernel name such as `/dev/sda` moves with probe order, firmware and
+hot-added disks, so it refuses at `hardware.rootDevice.deviceName`, naming both
+forms. Its `%pre` stops before storage unless the path is a whole disk
+reporting every declared identity, or exactly one whole disk reports the serial
+number and is fixed, writable and exactly `sizeBytes` long ([physical
+installation](../managed-os.md#physical-installation)). A serial number that
+selects a disk, here or as a target named without `deviceName` below, is
+declared by no other Machine; a second declaration refuses `api.invariant` at
+its field, naming the other Machine, because two disks sharing a serial number
+cannot be told apart.
 
 ### Firmware block
 
@@ -696,10 +710,17 @@ on removal; omission retains its disks.
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `method` | string | yes | — | `logicalOverwrite` zeroes and reads back every byte; `metadataClear` only the regions that make a disk read as empty to native probes, which is not sanitization. |
-| `targets` | array | yes | — | 1 to 16 whole disks keyed by `deviceName`, including `hardware.rootDevice.deviceName`. |
-| `targets[].deviceName`, `wwn`, `serialNumber` | string | yes | — | The disk's exact path and live sysfs identity, distinct across targets. |
+| `targets` | array | yes | — | 1 to 16 whole disks keyed by `serialNumber`, including the root disk. |
+| `targets[].deviceName`, `wwn` | string | together or neither | — | The disk's exact path and the live sysfs WWN it reports, distinct across targets; omitted, the worker selects the one whole disk reporting `serialNumber` and `sizeBytes`. |
+| `targets[].serialNumber` | string | yes | — | The disk's live sysfs serial number, distinct across targets. |
 | `targets[].sizeBytes` | integer | yes | — | Exact logical capacity, a multiple of 4096 up to 64 TiB, and at most 896 GiB for a `logicalOverwrite` target. |
 | `targets[].method` | string | no | the policy's `method` | The same choice, for this disk only. |
+
+The root target is the one whose `deviceName` is
+`hardware.rootDevice.deviceName`, or, for a root declared by serial number, the
+target without `deviceName` whose `serialNumber` and `sizeBytes` are the root
+device's. A target naming only one of `deviceName` and `wwn` refuses
+`api.invariant` at its `targets[<i>]` path.
 
 ### Install-time data-disk clear
 
@@ -710,12 +731,14 @@ owns what the installation does with it.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `targets` | array | yes | — | 1 to 15 whole data disks, an atomic sequence keyed by `deviceName`. |
-| `targets[].deviceName` | string | yes | — | `/dev/disk/by-id/wwn-0x` followed by 16 or 32 lowercase hexadecimal digits. |
-| `targets[].wwn` | string | yes | — | The WWN `deviceName` names, compared without regard to case or a `0x` prefix. |
+| `targets` | array | yes | — | 1 to 15 whole data disks, an atomic sequence keyed by `serialNumber`. |
+| `targets[].deviceName` | string | with `wwn` | — | `/dev/disk/by-id/wwn-0x` followed by 16 or 32 lowercase hexadecimal digits. |
+| `targets[].wwn` | string | with `deviceName` | — | The WWN `deviceName` names, compared without regard to case or a `0x` prefix. |
 | `targets[].serialNumber` | string | yes | — | 1 to 256 ASCII letters, digits and `._:+/=-`. |
 | `targets[].sizeBytes` | integer | yes | — | Exact capacity, a multiple of 4096 of at most 64 TiB. |
 
+A target names `deviceName` and `wwn` together, or neither, in which case the
+`%pre` selects the one whole disk reporting its `serialNumber` and `sizeBytes`.
 Each refusal is `api.invariant` at the field's path. Every identity is
 distinct across the targets, and a target whose `deviceName`, `wwn` or
 `serialNumber` is the root device's, from `hardware.rootDevice.deviceName` and

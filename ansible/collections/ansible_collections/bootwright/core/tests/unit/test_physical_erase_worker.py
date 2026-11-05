@@ -194,6 +194,16 @@ class EraseBoundaryTests(unittest.TestCase):
                 changed = dict(request, targets=[dict(request["targets"][0], sizeBytes=value)])
                 worker.validate_request(changed)
 
+    def test_a_target_names_its_disk_by_path_and_wwn_or_by_serial_number_alone(self):
+        request = self.request()
+        serial = {key: request["targets"][0][key] for key in ("method", "serialNumber", "sizeBytes")}
+        worker.validate_request(dict(request, targets=[serial]))
+        for key in ("deviceName", "wwn"):
+            with self.subTest(lone=key), self.assertRaisesRegex(worker.Refusal, "^target$"):
+                worker.validate_request(dict(request, targets=[dict(serial, **{key: request["targets"][0][key]})]))
+        with self.assertRaisesRegex(worker.Refusal, "target-identity"):
+            worker.validate_request(dict(request, targets=[serial, dict(request["targets"][0])]))
+
 
 class WorkerLivenessTests(unittest.TestCase):
     def test_stale_partial_from_a_stopped_service_is_not_live_work(self):

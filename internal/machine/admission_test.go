@@ -656,3 +656,82 @@ func TestFirmwareOnALibvirtProviderRefusesAtTheArm(t *testing.T) {
 		t.Fatalf("firmware on a libvirt provider: %#v", issues)
 	}
 }
+
+// rootDeclared replaces a Machine's root-device declaration: the
+// substrate-neutral deviceName and the bare-metal hints.
+func rootDeclared(machine api.Object, deviceName string, physical api.Value) api.Object {
+	spec := machine.Spec().WithPath(physical, "substrate", "baremetal", "rootDevice")
+	declared := spec.Get("hardware", "rootDevice").Without("deviceName")
+	if deviceName != "" {
+		declared = declared.With("deviceName", api.StringValue(deviceName))
+	}
+	return machine.WithSpec(spec.WithPath(declared, "hardware", "rootDevice"))
+}
+
+func replaced(catalog api.Catalog, objects ...api.Object) api.Catalog {
+	all := append([]api.Object{}, objects...)
+	for _, existing := range catalog.Objects() {
+		if !slices.ContainsFunc(objects, func(o api.Object) bool { return o.Identity() == existing.Identity() }) {
+			all = append(all, existing)
+		}
+	}
+	return api.NewCatalog(all)
+}
+
+// A Bootwright-installed bare-metal Machine may name its root disk by serial
+// number and exact size alone; a serial number without its size, a size on a
+// Machine Bootwright does not install and an unaligned size refuse.
+func TestABaremetalRootDiskMayBeNamedBySerialNumberAndSize(t *testing.T) {
+	machine, catalog := installedFixture()
+	bySerial := m("serialNumber", "SYNTHETIC-ROOT-01").With("sizeBytes", api.IntegerValue("480103981056"))
+	serial := rootDeclared(machine, "", bySerial)
+	if issues := Validate(serial, replaced(catalog, serial)); len(issues) != 0 {
+		t.Fatalf("a root disk named by serial number and size was refused: %v", issues)
+	}
+	alone := rootDeclared(machine, "", m("serialNumber", "SYNTHETIC-ROOT-01"))
+	if issues := Validate(alone, replaced(catalog, alone)); !mentions(issues, "$.spec.hardware.rootDevice") {
+		t.Fatalf("a serial number without its size was admitted as a root selector: %v", issues)
+	}
+	unaligned := rootDeclared(machine, "", bySerial.With("sizeBytes", api.IntegerValue("480103981057")))
+	issues := Validate(unaligned, replaced(catalog, unaligned))
+	if len(issues) != 1 || issues[0].Field != "$.spec.substrate.baremetal.rootDevice.sizeBytes" || issues[0].Remediation != "set sizeBytes to the root disk's exact logical capacity, as blockdev --getsize64 reports it" {
+		t.Fatalf("issues = %+v", issues)
+	}
+	provisioned, provisionedCatalog := fixture()
+	provisioned = rootDeclared(provisioned, "/dev/sda", bySerial)
+	provided := provisioned.WithSpec(provisioned.Spec().WithPath(api.BoolValue(true), "os", "provided"))
+	for name, other := range map[string]api.Object{"installer-provisioned": provisioned, "OS-ready": provided} {
+		issues := Validate(other, replaced(provisionedCatalog, other))
+		refused := false
+		for _, issue := range issues {
+			if issue.Field == "$.spec.substrate.baremetal.rootDevice.sizeBytes" {
+				refused = issue.Code == "api.invariant" && issue.Remediation == "remove spec.substrate.baremetal.rootDevice.sizeBytes"
+			}
+		}
+		if !refused {
+			t.Fatalf("%s: sizeBytes was not refused: %v", name, issues)
+		}
+	}
+}
+
+// A serial number that alone selects a disk is declared by no other Machine,
+// because two disks reporting one serial cannot be told apart by it.
+func TestASelectingSerialNumberIsDeclaredByNoOtherMachine(t *testing.T) {
+	machine, catalog := installedFixture()
+	serial := rootDeclared(machine, "", m("serialNumber", "SYNTHETIC-SHARED-01").With("sizeBytes", api.IntegerValue("480103981056")))
+	other := object(api.Machine, "other", m("os", m("provided", true), "hardware", m("rootDevice", m("deviceName", "/dev/disk/by-id/wwn-0x5000000000000001"))))
+	other = rootDeclared(other, "/dev/disk/by-id/wwn-0x5000000000000001", m("serialNumber", "SYNTHETIC-SHARED-01"))
+	issues := validateSelectingSerials(serial, replaced(catalog, serial, other))
+	if len(issues) != 1 || issues[0].Field != "$.spec.substrate.baremetal.rootDevice.serialNumber" ||
+		issues[0].Message != "a disk selected by its serial number needs a serial number no other Machine declares, and Machine/other declares SYNTHETIC-SHARED-01" {
+		t.Fatalf("issues = %+v", issues)
+	}
+	byPath := rootDeclared(machine, "/dev/disk/by-id/wwn-0x5000000000000002", m("serialNumber", "SYNTHETIC-SHARED-01"))
+	if issues := validateSelectingSerials(byPath, replaced(catalog, byPath, other)); len(issues) != 0 {
+		t.Fatalf("a serial number beside its path was refused: %v", issues)
+	}
+	clear := byPath.WithSpec(byPath.Spec().WithPath(m("targets", list(m("serialNumber", "SYNTHETIC-SHARED-01").With("sizeBytes", api.IntegerValue("8192")))), "hardware", "clearOnInstall"))
+	if issues := validateSelectingSerials(clear, replaced(catalog, clear, other)); len(issues) != 1 || issues[0].Field != "$.spec.hardware.clearOnInstall.targets[0].serialNumber" {
+		t.Fatalf("issues = %+v", issues)
+	}
+}

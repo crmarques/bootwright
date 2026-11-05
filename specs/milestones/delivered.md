@@ -11673,3 +11673,32 @@ and the elevated command is unchanged.
 `TestARefreshWarningNeverReachesJSONStandardError` gains a case whose only
 refresh fails and requires no warning; it failed against the previous
 supervisor. The delivering commit records the gates and their results.
+
+### X298 — Physical disks named by serial number and size
+
+Delivers B1104 in-tree; it awaits operator acceptance on
+[its M1 row](m1.md#b1104) ([D229](backlog.md#d229)). **Kind:** safety.
+**Owners:** Managed OS and Machine.
+
+A Bootwright-installed bare-metal Machine may name its root disk by
+`substrate.baremetal.rootDevice.serialNumber` and `sizeBytes` without a
+`deviceName`, and a [clear-on-install](../managed-os.md#physical-data-disk-clear)
+or [erase-on-removal](../state-reconciliation.md#opt-in-physical-logical-overwrite)
+target by `serialNumber` and `sizeBytes` without `deviceName` and `wwn`
+([root-device rule](../api/machines.md#bmc-and-root-device-shape)); every WWN
+declaration keeps its proofs. The physical `%pre` resolves such a disk to
+exactly one fixed, writable whole disk of that size before any storage
+directive and writes the storage include naming its kernel name only after
+every proof and clear ([physical installation](../managed-os.md#physical-installation)),
+and the erase worker resolves a target by the same rule. Contracts:
+os-install-anaconda-v23 to v24, kickstart-anaconda-v18 to v19 and
+physical-erase-v8 to v9. The `%pre` is executed against a synthetic sysfs for
+one, none and two matches, NVMe namespaces, removable, read-only and virtual
+disks and another size, and the erase worker's resolution by unit tests.
+**Left open:** the root disk's install-time WWN is not recorded in
+installation evidence ([physical removal](../managed-os.md#physical-removal)).
+**Unverified on hardware:** that the BMC's reported serial number and capacity
+equal the sysfs serial and `blockdev --getsize64`, and that the installer
+image's `od` reads an NVMe controller's `serial` attribute. The delivering
+commit records the gates and their results; the Ceph OSD selection by serial
+number is [X299](m2.md#b1105).

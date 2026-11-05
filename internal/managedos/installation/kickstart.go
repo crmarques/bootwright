@@ -8,11 +8,12 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const kickstartVersion = "kickstart-anaconda-v18"
+const kickstartVersion = "kickstart-anaconda-v19"
 
 // guestHostKeys are the keys a guest-agent installation generates here rather
 // than at first boot, so the republished copy is the key sshd presents. Each
@@ -112,6 +113,7 @@ type Installation struct {
 	Repositories  []Repository
 	RootDevice    string
 	RootSerial    string
+	RootSizeBytes int64
 	RootWWN       string
 	SELinux       string
 	Timezone      string
@@ -132,15 +134,16 @@ func RenderKickstart(input Installation) (string, error) {
 		return "", err
 	}
 	// Only a disk its substrate created may be left for the installer to
-	// choose; a physical one is named by its by-id WWN path.
-	if input.Physical && !durableRootDevice(input.RootDevice) {
-		return "", refusal("lifecycle.state", "a physical installation names no root disk by its /dev/disk/by-id/wwn-0x path to erase",
-			"set spec.hardware.rootDevice.deviceName to the disk's /dev/disk/by-id/wwn-0x path; a wwn-only selection is not yet supported")
+	// choose; a physical one is named by its by-id WWN path or serial and size.
+	if input.Physical && !durableRootDevice(input.RootDevice) && !serialRootInstallation(input) {
+		return "", refusal("lifecycle.state", "a physical installation names no root disk by its /dev/disk/by-id/wwn-0x path or by its serial number and size to erase",
+			"set spec.hardware.rootDevice.deviceName to the disk's /dev/disk/by-id/wwn-0x path, 16 or 32 lowercase hexadecimal digits, or set spec.substrate.baremetal.rootDevice.serialNumber and sizeBytes to the disk's serial number and exact capacity in bytes; a kernel name such as /dev/sda is refused, and a wwn-only selection is not yet supported")
 	}
-	if (input.RootWWN != "" || input.RootSerial != "") && !input.Physical ||
+	if (input.RootWWN != "" || input.RootSerial != "" || input.RootSizeBytes != 0) && !input.Physical ||
+		input.RootSizeBytes != 0 && (input.RootSizeBytes < 4096 || input.RootSizeBytes > machineref.MaxClearBytes || input.RootSizeBytes%4096 != 0) ||
 		input.RootWWN != "" && "/dev/disk/by-id/wwn-"+input.RootWWN != input.RootDevice ||
 		input.RootSerial != "" && !rootSerial.MatchString(input.RootSerial) {
-		return "", refusal("lifecycle.state", "the root disk WWN or serial number this installation freezes is not one its %pre can compare with the disk its deviceName names",
+		return "", refusal("lifecycle.state", "the root disk WWN, serial number or size this installation freezes is not one its %pre can compare with the disk its deviceName names",
 			"plan the installation again with this release")
 	}
 	if reason := refusedClearTargets(input); reason != "" {
@@ -444,12 +447,21 @@ func timezoneLine(input Installation) string {
 	return line
 }
 
-// storageLines clear and partition exactly the named device, or leave the
-// installer to choose when a Machine its substrate created names none.
+const diskInclude = "/tmp/bootwright-disk.ks"
+
+func serialRootInstallation(input Installation) bool {
+	return input.RootDevice == "" && input.RootSerial != "" && input.RootSizeBytes > 0
+}
+
+// storageLines clear and partition exactly the named or %pre-resolved device,
+// or leave the installer to choose when a Machine its substrate created names none.
 func storageLines(input Installation) []string {
 	autopart := "autopart --type=lvm"
 	if input.DiskEncryption != nil {
 		autopart = "%include " + storageInclude
+	}
+	if input.Physical && input.RootDevice == "" {
+		return []string{"%include " + diskInclude, autopart}
 	}
 	if input.RootDevice == "" {
 		return []string{"clearpart --all --initlabel", autopart}
@@ -723,35 +735,91 @@ func targetProofLines(input Installation) []string {
 			"exit 1",
 			"fi")
 	}
+	bySerial := serialRootInstallation(input)
+	identity, resolver := false, false
+	subject := "the declared root device " + input.RootDevice
+	if bySerial {
+		subject = "the disk reporting the declared root serial number " + input.RootSerial
+		lines = append(lines, identityFunctionLines()...)
+		lines = append(lines, serialResolverLines()...)
+		lines = append(lines, serialRootLines(input.RootSerial)...)
+		identity, resolver = true, true
+	} else {
+		lines = append(lines, `bootwright_root=$(readlink -f -- '`+input.RootDevice+`' || true)`)
+	}
 	lines = append(lines,
-		`bootwright_root=$(readlink -f -- '`+input.RootDevice+`' || true)`,
 		`if [ -z "${bootwright_root}" ] || [ ! -b "${bootwright_root}" ]; then`,
-		`echo 'Bootwright: the declared root device `+input.RootDevice+
-			` is not a block device here; refusing before any disk is touched.' >&2`,
+		`echo 'Bootwright: `+subject+` is not a block device here; refusing before any disk is touched.' >&2`,
 		"exit 1",
 		"fi",
 		`if [ "$(lsblk -ndo TYPE -- "${bootwright_root}")" != disk ]; then`,
-		`echo 'Bootwright: the declared root device `+input.RootDevice+
-			` is not a whole disk; refusing before any disk is touched.' >&2`,
+		`echo 'Bootwright: `+subject+` is not a whole disk; refusing before any disk is touched.' >&2`,
 		"exit 1",
 		"fi")
-	lines = append(lines, rootIdentityLines(input)...)
-	if len(input.ClearTargets) != 0 && input.RootWWN == "" && input.RootSerial == "" {
+	if !identity && (input.RootWWN != "" || input.RootSerial != "") {
+		lines = append(lines, identityFunctionLines()...)
+		identity = true
+	}
+	lines = append(lines, rootIdentityLines(input, subject)...)
+	if !identity && len(input.ClearTargets) != 0 {
 		lines = append(lines, identityFunctionLines()...)
 	}
+	if !resolver && slices.ContainsFunc(input.ClearTargets, func(target ClearTarget) bool { return target.DeviceName == "" }) {
+		lines = append(lines, serialResolverLines()...)
+	}
 	lines = append(lines, clearLines(input)...)
+	if bySerial {
+		lines = append(lines, `printf '%s\n' "ignoredisk --only-use=${bootwright_root_name}" "clearpart --all --initlabel --drives=${bootwright_root_name}" > `+diskInclude)
+	}
 	return append(lines, "%end", "")
 }
 
+func serialResolverLines() []string {
+	return []string{
+		`bootwright_resolve() {`,
+		`local entry value form count=0 found=''`,
+		`for entry in /sys/class/block/*; do`,
+		`if [ ! -e "${entry}" ] || [ -e "${entry}/partition" ]; then continue; fi`,
+		`value="${entry}/device/vpd_pg80" form=vpd`,
+		`if [ -e "${entry}/device/serial" ]; then value="${entry}/device/serial" form=text; fi`,
+		`if ! value=$(bootwright_identity "${value}" "${form}" 2>/dev/null); then continue; fi`,
+		`if [ "${value}" = "$1" ]; then count=$((count + 1)) found=$(basename -- "${entry}"); fi`,
+		`done`,
+		`printf '%s %s\n' "${count}" "${found}"`,
+		`}`,
+	}
+}
+
+func serialRootLines(serial string) []string {
+	return []string{
+		`read -r bootwright_count bootwright_root_name <<< "$(bootwright_resolve '` + serial + `')"`,
+		`if [ "${bootwright_count}" = 0 ]; then`,
+		`echo 'Bootwright: no whole disk here reports the declared root serial number ` + serial + `; refusing before any disk is touched.' >&2`,
+		"exit 1",
+		"fi",
+		`if [ "${bootwright_count}" != 1 ]; then`,
+		`echo "Bootwright: ${bootwright_count} disks here report the declared root serial number ` + serial + `; refusing before any disk is touched." >&2`,
+		"exit 1",
+		"fi",
+		`if [[ ! "${bootwright_root_name}" =~ ^(sd[a-z]+|nvme[0-9]+n[0-9]+)$ ]] ||`,
+		`[ "$(cat -- "/sys/class/block/${bootwright_root_name}/removable" 2>/dev/null)" != 0 ] ||`,
+		`[ "$(cat -- "/sys/class/block/${bootwright_root_name}/ro" 2>/dev/null)" != 0 ]; then`,
+		`echo 'Bootwright: the disk reporting the declared root serial number ` + serial + ` is not a fixed, writable sd or nvme disk; refusing before any disk is touched.' >&2`,
+		"exit 1",
+		"fi",
+		`bootwright_root="/dev/${bootwright_root_name}"`,
+	}
+}
+
 // rootIdentityLines read sysfs as the physical erase worker does; unreadable is a mismatch.
-func rootIdentityLines(input Installation) []string {
-	if input.RootWWN == "" && input.RootSerial == "" {
+func rootIdentityLines(input Installation, subject string) []string {
+	if input.RootWWN == "" && input.RootSerial == "" && input.RootSizeBytes == 0 {
 		return nil
 	}
 	refuse := func(what string) []string {
-		return []string{`echo 'Bootwright: the declared root device ` + input.RootDevice + ` ` + what + `; refusing before any disk is touched.' >&2`, "exit 1", "fi"}
+		return []string{`echo 'Bootwright: ` + subject + ` ` + what + `; refusing before any disk is touched.' >&2`, "exit 1", "fi"}
 	}
-	lines := append(identityFunctionLines(), `bootwright_disk="/sys/class/block/$(basename -- "${bootwright_root}")"`)
+	lines := []string{`bootwright_disk="/sys/class/block/$(basename -- "${bootwright_root}")"`}
 	if input.RootWWN != "" {
 		lines = append(lines,
 			`bootwright_wwid="${bootwright_disk}/device/wwid"`,
@@ -769,6 +837,13 @@ func rootIdentityLines(input Installation) []string {
 		lines = append(lines, refuse("reports no readable serial number")...)
 		lines = append(lines, `if [ "${bootwright_serial}" != '`+input.RootSerial+`' ]; then`)
 		lines = append(lines, refuse("reports a serial number other than "+input.RootSerial)...)
+	}
+	if input.RootSizeBytes != 0 {
+		size := strconv.FormatInt(input.RootSizeBytes, 10)
+		lines = append(lines, `if ! bootwright_size=$(blockdev --getsize64 "${bootwright_root}"); then`)
+		lines = append(lines, refuse("reports no readable size")...)
+		lines = append(lines, `if [ "${bootwright_size}" != '`+size+`' ]; then`)
+		lines = append(lines, refuse("reports a size other than "+size+" bytes")...)
 	}
 	return lines
 }

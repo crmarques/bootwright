@@ -159,7 +159,7 @@ func encryptionPostLines(input Installation) []string {
 	lines := []string{"%post --erroronfail --interpreter=/bin/bash", "set -euo pipefail", "umask 077", "export LC_ALL=C"}
 	devices := `$(lsblk -rpno NAME,FSTYPE | awk '$2 == "crypto_LUKS" {print $1}')`
 	if input.Physical {
-		lines = append(lines, physicalEncryptionScope(input.RootDevice)...)
+		lines = append(lines, physicalEncryptionScope(input)...)
 		devices = `"${bootwright_devices[@]}"`
 	}
 	lines = append(lines, recoveryFetchLines()...)
@@ -261,9 +261,17 @@ func rootEncryptionUnproved(contextName string, request Request) error {
 }
 
 // physicalEncryptionScope proves root and all bindings belong only to the authorized disk.
-func physicalEncryptionScope(root string) []string {
-	return []string{
-		`bootwright_root=$(readlink -f -- '` + root + `')`,
+func physicalEncryptionScope(input Installation) []string {
+	lines := []string{`bootwright_root=$(readlink -f -- '` + input.RootDevice + `')`}
+	if serialRootInstallation(input) {
+		lines = append(identityFunctionLines(), serialResolverLines()...)
+		lines = append(lines,
+			`read -r bootwright_count bootwright_root_name <<< "$(bootwright_resolve '`+input.RootSerial+`')"`,
+			`test "${bootwright_count}" = 1`,
+			`[[ "${bootwright_root_name}" =~ ^(sd[a-z]+|nvme[0-9]+n[0-9]+)$ ]] || exit 1`,
+			`bootwright_root="/dev/${bootwright_root_name}"`)
+	}
+	return append(lines,
 		`test -n "${bootwright_root}"`,
 		`test "$(lsblk -dnro TYPE -- "${bootwright_root}")" = disk`,
 		`bootwright_root_source=$(findmnt -nvo SOURCE /)`,
@@ -278,5 +286,5 @@ func physicalEncryptionScope(root string) []string {
 		`bootwright_parents=$(lsblk -srpn -o NAME,TYPE -- "${bootwright_device}" | awk '$2 == "disk" {print $1}' | sort -u)`,
 		`test "${bootwright_parents}" = "${bootwright_root}"`,
 		`done`,
-	}
+	)
 }

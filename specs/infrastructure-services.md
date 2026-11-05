@@ -563,7 +563,7 @@ private tree whose work has completed treats it as unfinished work to converge,
 and the inverse removes it, except where the consumer states that its content
 is needed for as long as its own block is retained.
 
-Two consumers use it. A [physical installation](managed-os.md#physical-installation)
+Two consumers use it. A [physical installation](managed-os.md#physical-private-publication)
 delivers the host key its machine will present, which is material Bootwright
 generated, and the installer image whose Kickstart names where that key is
 fetched; neither outlives the boot that installs it. A managed-OS installation

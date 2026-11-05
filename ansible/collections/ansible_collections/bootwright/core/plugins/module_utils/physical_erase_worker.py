@@ -28,7 +28,7 @@ CHUNK = 4 * 1024 * 1024
 BLKGETSIZE64 = 0x80081272
 BLKGETDISKSEQ = 0x80081280
 BLKFLSBUF = 0x1261
-VERSION = "physical-erase-v8"
+VERSION = "physical-erase-v9"
 METHODS = ("logicalOverwrite", "metadataClear")
 # BlueStore keeps its replica bdev labels at these offsets of the OSD's LV;
 # the window also covers the few MiB a ceph-volume LV starts into the disk.
@@ -256,11 +256,44 @@ def disk_serial(node):
     return value
 
 
+def flag(path):
+    try:
+        return text(path)
+    except (Refusal, OSError):
+        return None
+
+
+def resolve_serial(serial, root=Path("/sys")):
+    """The one fixed, writable whole sd or nvme disk reporting serial."""
+    # A disk whose serial cannot be read is skipped, so it never matches; two
+    # paths of one multipath disk, namespaces of one NVMe controller and a
+    # cloned serial all match twice, and the worker never chooses.
+    matches = []
+    for node in sorted((root / "class/block").iterdir()):
+        if (node / "partition").exists():
+            continue
+        try:
+            observed = disk_serial(node)
+        except (Refusal, OSError):
+            continue
+        if observed == serial:
+            matches.append(node)
+    if not matches:
+        raise Refusal("disk-serial-absent")
+    if len(matches) != 1:
+        raise Refusal("disk-serial-ambiguous")
+    node = matches[0]
+    if not re.fullmatch(r"sd[a-z]+|nvme[0-9]+n[0-9]+", node.name) or flag(node / "removable") != "0" or flag(node / "ro") != "0":
+        raise Refusal("whole-block-device")
+    return "/dev/" + node.name
+
+
 class BlockDisk:
     """Linux block identity includes diskseq, so a recycled dev_t cannot pass."""
 
     def __init__(self, expected, exclusive=True):
-        path = Path(expected["deviceName"]).resolve(strict=True)
+        named = expected["deviceName"] if "deviceName" in expected else resolve_serial(expected["serialNumber"])
+        path = Path(named).resolve(strict=True)
         self.buffer = None
         # The read-only probe proves identity before stacked holders release.
         access = os.O_RDWR | os.O_EXCL | os.O_DIRECT if exclusive else os.O_RDONLY
@@ -298,9 +331,13 @@ class BlockDisk:
             raise Refusal("disk-size")
         # These sysfs attributes are hardware-derived. Missing attributes are
         # unknown, never filled from a stale udev database or a guessed path.
-        wwn = text(self.sys / "wwid") if (self.sys / "wwid").exists() else text(self.sys / "device/wwid")
-        serial = disk_serial(self.sys)
-        if not matches_wwn(wwn, expected["wwn"]) or serial != expected["serialNumber"]:
+        # A target declared by serial number alone declares no WWN, so none
+        # is read.
+        if "wwn" in expected:
+            wwn = text(self.sys / "wwid") if (self.sys / "wwid").exists() else text(self.sys / "device/wwid")
+            if not matches_wwn(wwn, expected["wwn"]):
+                raise Refusal("disk-identity")
+        if disk_serial(self.sys) != expected["serialNumber"]:
             raise Refusal("disk-identity")
         if number_ioctl(self.fd, BLKGETDISKSEQ) != before:
             raise Refusal("disk-replaced")
@@ -440,16 +477,18 @@ def validate_request(request):
         raise Refusal("targets")
     seen = [set(), set(), set()]
     for target in request["targets"]:
-        if set(target) != {"deviceName", "method", "wwn", "serialNumber", "sizeBytes"}:
+        if set(target) not in ({"deviceName", "method", "wwn", "serialNumber", "sizeBytes"}, {"method", "serialNumber", "sizeBytes"}):
             raise Refusal("target")
         if target["method"] not in METHODS:
             raise Refusal("target-method")
         for index, key in enumerate(("deviceName", "wwn", "serialNumber")):
+            if key not in target:
+                continue
             value = target[key]
             if not isinstance(value, str) or not value or len(value) > 256 or not value.isprintable() or value in seen[index]:
                 raise Refusal("target-identity")
             seen[index].add(value)
-        if not target["deviceName"].startswith("/dev/") or ".." in target["deviceName"].split("/"):
+        if "deviceName" in target and (not target["deviceName"].startswith("/dev/") or ".." in target["deviceName"].split("/")):
             raise Refusal("target-path")
         size = target["sizeBytes"]
         if not isinstance(size, int) or isinstance(size, bool) or size < 4096 or size % 4096 or size > 64 * 1024**4:

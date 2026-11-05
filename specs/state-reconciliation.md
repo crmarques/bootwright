@@ -2416,8 +2416,9 @@ exception: Bootwright never claims ownership of or destroys the physical
 machine. Before changing it, an implementation must durably hold an exclusive
 context claim, prove the exact management controller/System identity, prove
 the complete live MAC set matches the immutable `Machine`, select one whole
-root disk from the authored hint by a durable disk identity such as its WWN,
-never by a kernel device name another boot may give another disk, prove the
+root disk from the authored hint by a durable disk identity, its WWN path or
+its serial number and exact size resolved on the live host to exactly one whole
+disk, never by a kernel device name another boot may give another disk, prove the
 machine is off, and consume `data-loss`. The live MAC set matches when the MACs
 the system reports for its own network ports, a management controller's host
 interface excepted, are exactly those the `Machine` declares, no more and no
@@ -2434,7 +2435,8 @@ is set-only: no removal reverts it. A declared
 [install-time clear](managed-os.md#physical-data-disk-clear) of a Machine's data
 disks is another: it runs only inside the installation apply that consumes
 `data-loss`, after the in-installer proofs of every disk it names, shows as one
-`clear-disk <machine> <wwn>` impact per disk, and no removal reverts it.
+`clear-disk <machine> <wwn>` impact per disk, `serial:<serialNumber>` standing
+for the WWN of a disk declared without one, and no removal reverts it.
 
 The interval between the controller's last proof and the installer's first
 write is a residual race, not an ownership proof. No MAC set, root-device hint,
@@ -2455,10 +2457,16 @@ system. Offline erase follows its separate safety contract below
 
 `Machine.spec.hardware.eraseOnRemoval` is an explicit removal policy whose
 `method` is `logicalOverwrite` or `metadataClear`; omission retains disks. Each
-target supplies `deviceName`, `wwn`, `serialNumber` and exact `sizeBytes`, and
-may name its own `method`, which overrides the policy's for that disk; the
-frozen request records each target's resolved method. The approved
-`hardware.rootDevice.deviceName` must be listed; data disks are individually listed.
+target supplies `serialNumber` and exact `sizeBytes`, and either both
+`deviceName` and `wwn` or neither; a target without them is the one whole disk
+the RAM worker finds reporting that serial number, which must be fixed,
+writable and exactly that size, and none or several refuse before the first
+write. A target may name its own `method`, which overrides the policy's for
+that disk; the frozen request records each target's resolved method. The
+approved root disk must be listed: the target with
+`hardware.rootDevice.deviceName`, or, for a root declared by serial number, the
+target without `deviceName` with its `serialNumber` and `sizeBytes`; data disks
+are individually listed.
 The initial execution bound is 16 whole disks, each at most 64 TiB with a
 4096-byte aligned logical size. These are implementation bounds, not hardware
 sanitize capabilities. Each target's method is in
@@ -2469,11 +2477,12 @@ installation depends on it. Reverse order unregisters and removes installation
 content before erase, and releases the hardware claim only after erase. Removal
 consumes `data-loss`, and its plan names a `boot-offline-erase <machine>`
 impact and one `logical-overwrite <deviceName>` or `metadata-clear <deviceName>`
-impact per target. It never chooses disks from authorization or discovery.
+impact per target, `serial:<serialNumber>` standing for the `deviceName` of a
+target without one. It never chooses disks from authorization or discovery.
 An original installation block proved never started is retained without booting
 or writing disks; the policy's removal records retention, never an erase receipt.
 Missing original records refuse rather than imply that no installation started.
-The original system UUID, exact complete physical MAC set, WWN, serial and size
+The original system UUID, exact complete physical MAC set, any declared WWN, serial and size
 must agree immediately before media insertion and in the RAM worker. Missing
 identity is unknown. The worker then
 [releases holders](#device-mapper-holder-release) over the targets. All targets

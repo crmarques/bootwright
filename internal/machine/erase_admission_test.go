@@ -82,3 +82,62 @@ func TestEraseAdmissionBoundsOnlyLogicalOverwriteTargetsTo896GiB(t *testing.T) {
 		t.Fatal("the logicalOverwrite bound moved without its spec")
 	}
 }
+
+// A root disk declared by serial number and size is included by the erase
+// target without deviceName that declares the same serial number and size; a
+// target naming only one of deviceName and wwn refuses at the target, and a
+// root target whose size is not the declared root size includes nothing.
+func TestEraseAdmissionIncludesARootDeclaredBySerialNumberAndSize(t *testing.T) {
+	machine, _ := fixture()
+	spec := machine.Spec().WithPath(api.StringValue("rhel"), "os", "installProfileRef").
+		WithPath(api.BoolValue(true), "substrate", "baremetal", "bmc", "tls", "verify").
+		WithPath(api.StringValue("established"), "substrate", "baremetal", "bmc", "virtualMedia", "tls", "trust").
+		WithPath(m("serialNumber", "SYNTHETIC-ROOT-01").With("sizeBytes", api.IntegerValue("480103981056")), "substrate", "baremetal", "rootDevice")
+	machine = machine.WithSpec(spec.WithPath(spec.Get("hardware", "rootDevice").Without("deviceName"), "hardware", "rootDevice"))
+	root := m("serialNumber", "SYNTHETIC-ROOT-01").With("sizeBytes", api.IntegerValue("480103981056"))
+	data := m("deviceName", "/dev/disk/by-id/wwn-0x5000000000000001", "wwn", "0x5000000000000001", "serialNumber", "DATA").With("sizeBytes", api.IntegerValue("8192"))
+	erase := func(targets ...api.Value) []api.Issue {
+		changed := machine.WithSpec(machine.Spec().WithPath(m("method", "metadataClear", "targets", list(targets...)), "hardware", "eraseOnRemoval"))
+		return validateErase(changed, substrate.ArmBaremetal)
+	}
+	if issues := erase(data, root); len(issues) != 0 {
+		t.Fatalf("a root target named by serial number and size was refused: %v", issues)
+	}
+	for name, test := range map[string]struct {
+		targets []api.Value
+		field   string
+	}{
+		"another root size":           {[]api.Value{data, root.With("sizeBytes", api.IntegerValue("480103985152"))}, ".targets"},
+		"the root serial with a path": {[]api.Value{root.With("deviceName", api.StringValue("/dev/disk/by-id/wwn-0x5000000000000002")).With("wwn", api.StringValue("0x5000000000000002"))}, ".targets"},
+		"a lone deviceName":           {[]api.Value{root, data.Without("wwn")}, ".targets[1]"},
+		"a lone wwn":                  {[]api.Value{root, data.Without("deviceName")}, ".targets[1]"},
+		"a repeated serial":           {[]api.Value{root, data.With("serialNumber", api.StringValue("SYNTHETIC-ROOT-01"))}, ".targets[1].serialNumber"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			issues := erase(test.targets...)
+			if len(issues) != 1 || issues[0].Field != "$.spec.hardware.eraseOnRemoval"+test.field {
+				t.Fatalf("issues = %+v", issues)
+			}
+		})
+	}
+	if issues := erase(data); len(issues) != 1 || issues[0].Message != "erase targets must include the root disk, by hardware.rootDevice.deviceName or by the serialNumber and sizeBytes of spec.substrate.baremetal.rootDevice" {
+		t.Fatalf("issues = %+v", issues)
+	}
+}
+
+// A root disk declared by path and size is included only by its path's target
+// of that size.
+func TestEraseAdmissionComparesTheDeclaredRootSize(t *testing.T) {
+	machine, _ := fixture()
+	spec := machine.Spec().WithPath(api.StringValue("rhel"), "os", "installProfileRef").
+		WithPath(api.BoolValue(true), "substrate", "baremetal", "bmc", "tls", "verify").
+		WithPath(api.StringValue("established"), "substrate", "baremetal", "bmc", "virtualMedia", "tls", "trust").
+		WithPath(api.IntegerValue("8192"), "substrate", "baremetal", "rootDevice", "sizeBytes")
+	target := m("deviceName", "/dev/sda", "wwn", "naa.example", "serialNumber", "EXAMPLE-01")
+	for size, included := range map[string]bool{"8192": true, "12288": false} {
+		changed := machine.WithSpec(spec.WithPath(m("method", "metadataClear", "targets", list(target.With("sizeBytes", api.IntegerValue(size)))), "hardware", "eraseOnRemoval"))
+		if issues := validateErase(changed, substrate.ArmBaremetal); (len(issues) == 0) != included {
+			t.Fatalf("a %s-byte root target: issues %+v", size, issues)
+		}
+	}
+}

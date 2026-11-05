@@ -123,3 +123,83 @@ class IdentityTests(unittest.TestCase):
                 attribute.write_bytes(data)
                 with self.assertRaisesRegex(worker.Refusal, "identity"):
                     worker.sequence_number(attribute)
+
+
+def block(root, name, serial=None, removable="0", ro="0", partition=False, native=False):
+    node = root / "class/block" / name
+    (node / "device").mkdir(parents=True)
+    (node / "removable").write_text(removable + "\n")
+    (node / "ro").write_text(ro + "\n")
+    if partition:
+        (node / "partition").write_text("1\n")
+    if serial is not None and native:
+        (node / "device/serial").write_text(serial + "  \n")
+    elif serial is not None:
+        data = serial.encode()
+        (node / "device/vpd_pg80").write_bytes(b"\x00\x80" + len(data).to_bytes(2, "big") + data)
+    return node
+
+
+class SerialResolutionTests(unittest.TestCase):
+    """A target declared without a path is the one whole disk reporting its serial."""
+
+    def test_exactly_one_whole_disk_reporting_the_serial_is_resolved(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            block(root, "sda", "EXAMPLE-DATA-01")
+            block(root, "sda1", "EXAMPLE-DATA-01", partition=True)
+            block(root, "sdb", "EXAMPLE-DATA-02")
+            unreadable = block(root, "sdc")
+            (unreadable / "device/vpd_pg80").write_bytes(b"\x00\x83\x00\x01x")
+            block(root, "loop0")
+            self.assertEqual(worker.resolve_serial("EXAMPLE-DATA-01", root), "/dev/sda")
+            block(root, "nvme0n1", "EXAMPLE-NVME-01", native=True)
+            self.assertEqual(worker.resolve_serial("EXAMPLE-NVME-01", root), "/dev/nvme0n1")
+
+    def test_no_match_and_several_matches_refuse(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            block(root, "sda", "EXAMPLE-DATA-01")
+            with self.assertRaisesRegex(worker.Refusal, "disk-serial-absent"):
+                worker.resolve_serial("EXAMPLE-DATA-09", root)
+            block(root, "sdb", "EXAMPLE-DATA-01")
+            with self.assertRaisesRegex(worker.Refusal, "disk-serial-ambiguous"):
+                worker.resolve_serial("EXAMPLE-DATA-01", root)
+            block(root, "nvme0n1", "EXAMPLE-NVME-01", native=True)
+            block(root, "nvme0n2", "EXAMPLE-NVME-01", native=True)
+            with self.assertRaisesRegex(worker.Refusal, "disk-serial-ambiguous"):
+                worker.resolve_serial("EXAMPLE-NVME-01", root)
+
+    def test_a_removable_read_only_or_other_kind_of_disk_refuses(self):
+        for name, changes in (("sda", {"removable": "1"}), ("sda", {"ro": "1"}), ("vda", {}), ("sr0", {})):
+            with self.subTest(name=name, changes=changes), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                block(root, name, "EXAMPLE-DATA-01", **changes)
+                with self.assertRaisesRegex(worker.Refusal, "whole-block-device"):
+                    worker.resolve_serial("EXAMPLE-DATA-01", root)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (block(root, "sda", "EXAMPLE-DATA-01") / "ro").unlink()
+            with self.assertRaisesRegex(worker.Refusal, "whole-block-device"):
+                worker.resolve_serial("EXAMPLE-DATA-01", root)
+
+    def test_a_serial_target_reads_no_wwid_and_compares_its_size(self):
+        disk = object.__new__(worker.BlockDisk)
+        with tempfile.TemporaryDirectory() as temporary:
+            node = block(Path(temporary), "sda", "EXAMPLE-DATA-01")
+            (node / "diskseq").write_text("7\n")
+            disk.fd, disk.sequence, disk.sys = None, 7, node
+            sizes = {worker.BLKGETDISKSEQ: 7, worker.BLKGETSIZE64: 8192}
+            original = worker.number_ioctl
+            worker.number_ioctl = lambda fd, command: sizes[command]
+            try:
+                expected = {"method": "metadataClear", "serialNumber": "EXAMPLE-DATA-01", "sizeBytes": 8192}
+                self.assertEqual(disk.identify(expected), 7)
+                with self.assertRaisesRegex(worker.Refusal, "disk-identity"):
+                    disk.identify(dict(expected, serialNumber="EXAMPLE-DATA-02"))
+                with self.assertRaisesRegex(worker.Refusal, "disk-size"):
+                    disk.identify(dict(expected, sizeBytes=12288))
+                with self.assertRaises(FileNotFoundError):
+                    disk.identify(dict(expected, deviceName="/dev/sda", wwn="0x5000000000000001"))
+            finally:
+                worker.number_ioctl = original

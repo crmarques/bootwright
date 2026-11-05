@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -56,6 +57,70 @@ cryptsetup() { cat >/dev/null; }
 				}
 			} else if err == nil || len(bound) != 0 {
 				t.Fatalf("unsafe topology reached clevis: %v %s %s", err, output, bound)
+			}
+		})
+	}
+}
+
+// A TPM2-encrypted root declared by serial number is resolved again in the
+// %post by the %pre's rule, so the binding follows the one disk reporting that
+// serial and never a kernel name: none or two such disks bind nothing.
+func TestPhysicalTPMBindingResolvesASerialRootAgain(t *testing.T) {
+	for scenario, serials := range map[string][]string{"owned": {"sda"}, "absent": {}, "ambiguous": {"sda", "sdb"}} {
+		t.Run(scenario, func(t *testing.T) {
+			input := physicalInstallation()
+			input.RootDevice, input.RootSerial, input.RootSizeBytes = "", "ZC1A2B3C", 480103981056
+			input.DiskEncryption = &KickstartEncryption{}
+			blocks := filepath.Join(t.TempDir(), "block")
+			for _, name := range []string{"sda", "sdb"} {
+				serial := "OTHER"
+				if slices.Contains(serials, name) {
+					serial = input.RootSerial
+				}
+				if err := os.MkdirAll(filepath.Join(blocks, name, "device"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(blocks, name, "device", "serial"), []byte(serial+"\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			lines := encryptionPostLines(input)
+			script := strings.Join(lines[1:], "\n")
+			if strings.Contains(script, "readlink -f -- ''") {
+				t.Fatal("the TPM binding resolves an empty root path")
+			}
+			script = strings.ReplaceAll(script, strings.Join(recoveryFetchLines(), "\n"), "bootwright_recovery=synthetic-recovery")
+			script = strings.ReplaceAll(script, "/usr/bin/dracut -f --regenerate-all", "true")
+			script = strings.ReplaceAll(script, "%end", "")
+			script = strings.ReplaceAll(script, "/sys/class/block", blocks)
+			log := filepath.Join(t.TempDir(), "bound")
+			mocks := `
+findmnt() { printf '/dev/mapper/root\n'; }
+lsblk() {
+ case "$*" in
+  -dnro\ TYPE\ --\ /dev/sda) echo disk;;
+  *NAME,TYPE,FSTYPE\ --\ /dev/sda) printf '/dev/sda disk\n/dev/sda2 part crypto_LUKS\n';;
+  *) printf '/dev/sda disk\n';;
+ esac
+}
+clevis() {
+ if [ "$2" = bind ]; then printf '%s\n' "$*" >> "$binding_log"; cat >/dev/null
+ elif [ "$2" = list ]; then printf "1: tpm2 '{}'\n"
+ elif [ "$2" = pass ]; then printf 'slot-key'
+ else return 1; fi
+}
+cryptsetup() { cat >/dev/null; }
+`
+			command := exec.Command("/bin/bash", "-c", mocks+script)
+			command.Env = append(os.Environ(), "binding_log="+log)
+			output, err := command.CombinedOutput()
+			bound, _ := os.ReadFile(log)
+			if scenario == "owned" {
+				if err != nil || strings.Count(string(bound), "luks bind") != 1 || !strings.Contains(string(bound), "-d /dev/sda2") {
+					t.Fatalf("owned binding: %v %s %s", err, output, bound)
+				}
+			} else if err == nil || len(bound) != 0 {
+				t.Fatalf("an unresolved serial root reached clevis: %v %s %s", err, output, bound)
 			}
 		})
 	}

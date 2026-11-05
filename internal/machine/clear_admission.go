@@ -43,11 +43,14 @@ func validateClear(o api.Object, physical bool) []api.Issue {
 	for index, target := range targets {
 		field := fmt.Sprintf("%s.targets[%d]", path, index)
 		device, wwn, serial := target.Get("deviceName").Text(), target.Get("wwn").Text(), target.Get("serialNumber").Text()
+		if target.Has("deviceName") != target.Has("wwn") {
+			issues = append(issues, invariant(field, "a clear target names its disk by its /dev/disk/by-id/wwn-0x deviceName with its wwn, or by serialNumber and sizeBytes alone", "declare both deviceName and wwn, or neither"))
+		}
 		hex := clearDevicePath.FindStringSubmatch(device)
-		if hex == nil {
+		if target.Has("deviceName") && hex == nil {
 			issues = append(issues, invariant(field+".deviceName", "a clear target is named by its /dev/disk/by-id/wwn-0x path, 16 or 32 lowercase hexadecimal digits", "set deviceName to the data disk's /dev/disk/by-id/wwn-0x path"))
 		}
-		if hex != nil && clearWWN(wwn) != hex[1] {
+		if hex != nil && target.Has("wwn") && clearWWN(wwn) != hex[1] {
 			issues = append(issues, invariant(field+".wwn", "a clear target's wwn must be the WWN its deviceName names", "set wwn to 0x and the hexadecimal digits of the target's deviceName"))
 		}
 		if !clearSerial.MatchString(serial) {
@@ -59,7 +62,7 @@ func validateClear(o api.Object, physical bool) []api.Issue {
 			}
 			seen[slot][value] = true
 		}
-		if device == root || clearWWN(wwn) == rootWWN && rootWWN != "" || serial == rootSerial && rootSerial != "" {
+		if device != "" && device == root || clearWWN(wwn) == rootWWN && rootWWN != "" || serial == rootSerial && rootSerial != "" {
 			issues = append(issues, invariant(field, "a clear target must not be the root device, by deviceName, wwn or serialNumber", "remove the root disk from spec.hardware.clearOnInstall.targets; the installation already clears it"))
 		}
 		size, err := strconv.ParseInt(target.Get("sizeBytes").Text(), 10, 64)

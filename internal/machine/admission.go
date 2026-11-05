@@ -283,6 +283,8 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	issues = appendIssues(issues, validateHardware(o, c, variant)...)
 	issues = appendIssues(issues, validateErase(o, variant)...)
 	issues = appendIssues(issues, validateClear(o, variant == substrate.ArmBaremetal)...)
+	issues = appendIssues(issues, validateRootSize(o)...)
+	issues = appendIssues(issues, validateSelectingSerials(o, c)...)
 	network := s.Get("network")
 	configured := network.Has("configRef") || network.Has("inline")
 	issues = appendIssues(issues, validateNetworkContacts(o, c, configured)...)
@@ -315,7 +317,7 @@ func validateProvision(o api.Object) []api.Issue {
 			issues = appendIssues(issues, invariant("$."+path, "OS-ready Machines declare contacts only", "remove "+path+"; an OS-ready Machine declares contacts only"))
 		}
 		for _, name := range substrate.MachineRootDeviceHints(o).Names() {
-			if path := substrate.RootDeviceHintPath(name); name != "deviceName" && name != "wwn" {
+			if path := substrate.RootDeviceHintPath(name); name != "deviceName" && name != "wwn" && name != "sizeBytes" {
 				issues = appendIssues(issues, api.Issue{Code: "api.deferred", Field: "$." + path,
 					Message:     "nothing installs an OS-ready Machine, so " + path + " selects no disk; only deviceName and wwn name its root disk, to keep it out of Ceph OSD selections",
 					Remediation: "remove " + path + ", or keep it knowing nothing reads it on an OS-ready Machine"})
@@ -627,8 +629,11 @@ func validateBaremetal(o api.Object) []api.Issue {
 	if installed(o) && !s.Has("os", "install", "hostKeyRef") {
 		issues = appendIssues(issues, invariant("$.spec.os.install.hostKeyRef", "bare-metal installation requires the SSH host key it delivers", "set spec.os.install.hostKeyRef to the sshKeyPair Secret whose pair the installation delivers as the host key"))
 	}
-	if !s.Has("hardware", "rootDevice", "deviceName") && !s.Has("substrate", substrate.ArmBaremetal, "rootDevice", "wwn") {
-		issues = appendIssues(issues, invariant("$.spec.hardware.rootDevice", "bare-metal installation requires deviceName or wwn as its target selector", "set spec.hardware.rootDevice.deviceName or spec.substrate.baremetal.rootDevice.wwn"))
+	physical := s.Get("substrate", substrate.ArmBaremetal, "rootDevice")
+	bySerial := installed(o) && physical.Has("serialNumber") && physical.Has("sizeBytes")
+	if !s.Has("hardware", "rootDevice", "deviceName") && !physical.Has("wwn") && !bySerial {
+		issues = appendIssues(issues, invariant("$.spec.hardware.rootDevice", "bare-metal installation requires deviceName, wwn, or on a Bootwright-installed Machine serialNumber with sizeBytes, as its target selector",
+			"set spec.hardware.rootDevice.deviceName, spec.substrate.baremetal.rootDevice.wwn, or on a Bootwright-installed Machine spec.substrate.baremetal.rootDevice.serialNumber and sizeBytes"))
 	}
 	return issues
 }

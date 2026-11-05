@@ -25,6 +25,8 @@ type installerHost struct {
 	prepare func(t *testing.T, blocks, proc string)
 	mocks   string
 	env     []string
+	// include receives the storage include the %pre wrote, empty when none.
+	include *string
 }
 
 // runTargetProof runs the rendered target-proof %pre against a synthetic
@@ -88,7 +90,9 @@ func runTargetProof(t *testing.T, input Installation, host installerHost) (strin
 	if host.prepare != nil {
 		host.prepare(t, blocks, proc)
 	}
-	script := strings.NewReplacer("/sys/class/net", sysfs, "/sys/class/block", blocks, "/sys/fs/btrfs", filepath.Join(sysfs, "..", "btrfs"), "/proc/", proc+"/").Replace(strings.Join(lines[start+1:end], "\n"))
+	include := filepath.Join(sysfs, "..", "bootwright-disk.ks")
+	script := strings.NewReplacer("/sys/class/net", sysfs, "/sys/class/block", blocks, "/sys/fs/btrfs", filepath.Join(sysfs, "..", "btrfs"), "/proc/", proc+"/",
+		diskInclude, include).Replace(strings.Join(lines[start+1:end], "\n"))
 	mocks := `
 readlink() { case "${@: -1}" in /dev/*) ;; *) command readlink "$@"; return;; esac; if builtin [ -z "$resolved" ]; then return 1; fi; printf '%s\n' "$resolved"; }
 [() { if builtin [ "$1 $2" = "! -b" ]; then case "$3" in /dev/sda|/dev/sda1) return 1;; *) return 0;; esac; fi; builtin [ "$@"; }
@@ -102,6 +106,13 @@ lsblk() { case "${@: -1}" in /dev/sda) echo disk;; /dev/sda1) echo part;; esac; 
 	}
 	if err != nil && strings.Contains(string(output), "reached storage") {
 		t.Fatalf("the target proof failed after reaching storage:\n%s", output)
+	}
+	written, readErr := os.ReadFile(include)
+	if err != nil && readErr == nil {
+		t.Fatalf("a target proof that stopped left a storage include:\n%s", written)
+	}
+	if host.include != nil {
+		*host.include = string(written)
 	}
 	return string(output), err
 }
@@ -290,6 +301,15 @@ func TestTheKickstartRefusesARootIdentityItCannotCompare(t *testing.T) {
 		"an identity on a guest disk": func(i *Installation) {
 			i.Physical, i.RootDevice, i.ExpectedMACs, i.RootSerial = false, "/dev/vda", nil, "ZC1A2B3C"
 		},
+		"a size on a guest disk": func(i *Installation) {
+			i.Physical, i.RootDevice, i.ExpectedMACs, i.RootSizeBytes = false, "/dev/vda", nil, 480103981056
+		},
+		"a serial without its size": func(i *Installation) { i.RootDevice, i.RootSerial = "", "ZC1A2B3C" },
+		"an unaligned size":         func(i *Installation) { i.RootDevice, i.RootSerial, i.RootSizeBytes = "", "ZC1A2B3C", 480103981057 },
+		"a size past 64 TiB":        func(i *Installation) { i.RootSizeBytes = 64<<40 + 4096 },
+		"a wwn without its path": func(i *Installation) {
+			i.RootDevice, i.RootSerial, i.RootSizeBytes, i.RootWWN = "", "ZC1A2B3C", 480103981056, "0x5000c500a1b2c3d4"
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			input := physicalInstallation()
@@ -298,5 +318,120 @@ func TestTheKickstartRefusesARootIdentityItCannotCompare(t *testing.T) {
 				t.Fatal("the renderer carried a root identity its pre-installation script cannot compare")
 			}
 		})
+	}
+}
+
+// serialDisk is one block device under the synthetic /sys/class/block: its
+// serial number as a native attribute, or none, and its removable and
+// read-only flags.
+type serialDisk struct {
+	name, serial, removable, ro string
+	partition                   bool
+}
+
+func serialHost(t *testing.T, disks []serialDisk, size string) installerHost {
+	t.Helper()
+	declared := []installerNIC{{"eno1", "52:54:00:9a:1b:01", "e1000e", ""}, {"eno2", "52:54:00:9a:1b:02", "e1000e", ""}}
+	return installerHost{nics: declared, root: "/dev/unused", prepare: func(t *testing.T, blocks, _ string) {
+		for _, disk := range disks {
+			node := filepath.Join(blocks, disk.name)
+			if err := os.MkdirAll(filepath.Join(node, "device"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			files := map[string]string{"removable": disk.removable + "\n", "ro": disk.ro + "\n"}
+			if disk.serial != "" {
+				files["device/serial"] = disk.serial + "\n"
+			}
+			if disk.partition {
+				files["partition"] = "1\n"
+			}
+			for name, content := range files {
+				if err := os.WriteFile(filepath.Join(node, name), []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+	}, mocks: `
+[() { if builtin [ "$1 $2" = "! -b" ]; then case "$3" in /dev/sd*|/dev/nvme*|/dev/vd*) return 1;; *) return 0;; esac; fi; builtin [ "$@"; }
+lsblk() { case "${@: -1}" in /dev/sd*|/dev/nvme*|/dev/vd*) echo disk;; esac; }
+blockdev() { printf '%s\n' "$size"; }
+`, env: []string{"size=" + size}}
+}
+
+// A root disk declared by serial number and size is resolved on the booted
+// machine to exactly one fixed, writable sd or nvme whole disk of exactly that
+// size, and only then does the %pre write the include naming its kernel name;
+// none, two, a removable, read-only or virtual disk, and another size each
+// stop it before any storage directive with no include written. A partition
+// and a device whose serial cannot be read are never candidates.
+func TestThePhysicalTargetProofResolvesASerialRootToExactlyOneDisk(t *testing.T) {
+	const serial, size = "ZC1A2B3C", "480103981056"
+	input := physicalInstallation()
+	input.RootDevice, input.RootSerial, input.RootSizeBytes = "", serial, 480103981056
+	fixed := func(name, reported string) serialDisk { return serialDisk{name, reported, "0", "0", false} }
+	const (
+		absent    = "no whole disk here reports the declared root serial number " + serial
+		ambiguous = "2 disks here report the declared root serial number " + serial
+		kind      = "the disk reporting the declared root serial number " + serial + " is not a fixed, writable sd or nvme disk"
+		sized     = "the disk reporting the declared root serial number " + serial + " reports a size other than " + size + " bytes"
+	)
+	for name, test := range map[string]struct {
+		disks      []serialDisk
+		size, disk string
+		refusal    string
+	}{
+		"one SCSI disk": {[]serialDisk{fixed("sda", serial), fixed("sdb", "OTHER-01")}, size, "sda", ""},
+		"one NVMe disk": {[]serialDisk{fixed("nvme0n1", serial), fixed("sda", "OTHER-01")}, size, "nvme0n1", ""},
+		"a partition and an unreadable sibling beside it": {[]serialDisk{fixed("sda", serial), {"sda1", serial, "0", "0", true}, fixed("sdb", ""), fixed("loop0", "")}, size, "sda", ""},
+		"no disk":                               {[]serialDisk{fixed("sda", "OTHER-01")}, size, "", absent},
+		"two paths of a multipath disk":         {[]serialDisk{fixed("sda", serial), fixed("sdb", serial)}, size, "", ambiguous},
+		"two namespaces of one NVMe controller": {[]serialDisk{fixed("nvme0n1", serial), fixed("nvme0n2", serial)}, size, "", ambiguous},
+		"a removable disk":                      {[]serialDisk{{"sda", serial, "1", "0", false}}, size, "", kind},
+		"a read-only disk":                      {[]serialDisk{{"sda", serial, "0", "1", false}}, size, "", kind},
+		"a virtual disk":                        {[]serialDisk{fixed("vda", serial)}, size, "", kind},
+		"another size":                          {[]serialDisk{fixed("sda", serial)}, "480103985152", "", sized},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var include string
+			host := serialHost(t, test.disks, test.size)
+			host.include = &include
+			output, err := runTargetProof(t, input, host)
+			if test.refusal == "" {
+				want := "ignoredisk --only-use=" + test.disk + "\nclearpart --all --initlabel --drives=" + test.disk + "\n"
+				if err != nil || include != want {
+					t.Fatalf("the declared disk was not resolved: %v, include %q\n%s", err, include, output)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(output, "Bootwright: "+test.refusal+"; refusing before any disk is touched.") || include != "" {
+				t.Fatalf("%s was not refused before storage: %v, include %q\n%s", name, err, include, output)
+			}
+		})
+	}
+}
+
+// Whatever names its root disk, a physical Kickstart partitions only the disk
+// its %pre proved: no clearpart without --drives, and a root declared by
+// serial number reaches storage only through the include the %pre writes.
+func TestAPhysicalKickstartPartitionsOnlyTheDiskItsPreProved(t *testing.T) {
+	bySerial := physicalInstallation()
+	bySerial.RootDevice, bySerial.RootSerial, bySerial.RootSizeBytes = "", "ZC1A2B3C", 480103981056
+	encrypted := bySerial
+	encrypted.DiskEncryption = &KickstartEncryption{}
+	cleared := bySerial
+	cleared.ClearTargets = []ClearTarget{{Intervals: MetadataClearRegions(107374182400), SerialNumber: "DATA-01", SizeBytes: 107374182400}}
+	for name, input := range map[string]Installation{"by path": physicalInstallation(), "by serial": bySerial, "encrypted by serial": encrypted, "clearing by serial": cleared} {
+		rendered, err := RenderKickstart(input)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		for _, line := range strings.Split(rendered, "\n") {
+			if strings.HasPrefix(line, "clearpart") && !strings.Contains(line, "--drives=") {
+				t.Fatalf("%s renders %q", name, line)
+			}
+		}
+		if input.RootDevice == "" && (!strings.Contains(rendered, "\n%include "+diskInclude+"\n") || strings.Contains(rendered, "\nclearpart ") || strings.Contains(rendered, "\nignoredisk ")) {
+			t.Fatalf("%s does not partition through the %%pre's include:\n%s", name, rendered)
+		}
 	}
 }

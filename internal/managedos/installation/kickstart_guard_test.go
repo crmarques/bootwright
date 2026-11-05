@@ -91,7 +91,7 @@ func kickstartStrings(t *testing.T) []kickstartString {
 					t.Fatalf("KickstartEncryption.%s is a %s the Kickstart guard does not know", encryption.Field(inner).Name, encryption.Field(inner).Type)
 				}
 			}
-		case field.Type.Kind() == reflect.Bool || field.Type.Kind() == reflect.Int:
+		case field.Type.Kind() == reflect.Bool || field.Type.Kind() == reflect.Int || field.Type.Kind() == reflect.Int64:
 		default:
 			t.Fatalf("Installation.%s is a %s the Kickstart guard does not know", field.Name, field.Type)
 		}

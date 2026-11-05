@@ -11,7 +11,8 @@ import (
 
 // Every admitted root-device hint reaches the realized target with the type it
 // was declared with, on a Machine its substrate creates and on a physical one
-// alike; the hints only a physical disk can carry (wwn, hctl, serialNumber) are
+// alike; the hints only a physical disk can carry (wwn, hctl, serialNumber,
+// sizeBytes) are
 // declared in the bare-metal arm and never reach a Machine its substrate
 // creates. A hint declared as zero or false is present, so a consumer never reads
 // it as one never declared, and a size no integer type holds keeps its text.
@@ -25,12 +26,13 @@ func TestTheRootDeviceHintsAreReadAsDeclared(t *testing.T) {
 		"every hint": {
 			m("deviceName", "/dev/disk/by-path/pci-0000:00:04.0", "hctl", "1:0:0:0", "model", "1e3", "vendor", "0o17",
 				"serialNumber", "0987654321", "wwn", "0x5000c500a1b2c3d4", "minSizeGigabytes", api.IntegerValue("0"),
-				"rotational", false),
+				"rotational", false, "sizeBytes", api.IntegerValue("480103981056")),
 			RootDeviceHints{
 				DeviceName: "/dev/disk/by-path/pci-0000:00:04.0", HCTL: "1:0:0:0", Model: "1e3", Vendor: "0o17",
-				SerialNumber: "0987654321", WWN: "0x5000c500a1b2c3d4", MinSizeGigabytes: "0", Rotational: &fixed,
+				SerialNumber: "0987654321", WWN: "0x5000c500a1b2c3d4", MinSizeGigabytes: "0", SizeBytes: "480103981056",
+				Rotational: &fixed,
 			},
-			[]string{"deviceName", "hctl", "minSizeGigabytes", "model", "rotational", "serialNumber", "vendor", "wwn"},
+			[]string{"deviceName", "hctl", "minSizeGigabytes", "model", "rotational", "serialNumber", "sizeBytes", "vendor", "wwn"},
 		},
 		"none":           {m(), RootDeviceHints{}, nil},
 		"zero size":      {m("minSizeGigabytes", api.IntegerValue("0")), RootDeviceHints{MinSizeGigabytes: "0"}, []string{"minSizeGigabytes"}},
@@ -49,14 +51,14 @@ func TestTheRootDeviceHintsAreReadAsDeclared(t *testing.T) {
 				objects := targetCatalog().Objects()
 				declared, physical, want := m(), m(), test.want
 				for _, hint := range test.declared.Fields() {
-					if slices.Contains([]string{"hctl", "serialNumber", "wwn"}, hint.Name) {
+					if slices.Contains([]string{"hctl", "serialNumber", "sizeBytes", "wwn"}, hint.Name) {
 						physical = physical.With(hint.Name, hint.Value)
 					} else {
 						declared = declared.With(hint.Name, hint.Value)
 					}
 				}
 				if machine == "guest" {
-					physical, want.HCTL, want.SerialNumber, want.WWN = m(), "", "", ""
+					physical, want.HCTL, want.SerialNumber, want.WWN, want.SizeBytes = m(), "", "", "", ""
 				}
 				for index, object := range objects {
 					if object.Kind() == api.Machine && object.Name() == machine {
@@ -83,6 +85,20 @@ func TestTheRootDeviceHintsAreReadAsDeclared(t *testing.T) {
 					t.Fatalf("names = %v, want %v", want.Names(), test.names)
 				}
 			})
+		}
+	}
+}
+
+// A hint only a physical disk carries is declared in the bare-metal arm, so a
+// refusal naming it points there; every other hint is under hardware.
+func TestEachRootDeviceHintNamesTheFieldThatDeclaresIt(t *testing.T) {
+	for name, want := range map[string]string{
+		"hctl": "spec.substrate.baremetal.rootDevice.hctl", "serialNumber": "spec.substrate.baremetal.rootDevice.serialNumber",
+		"sizeBytes": "spec.substrate.baremetal.rootDevice.sizeBytes", "wwn": "spec.substrate.baremetal.rootDevice.wwn",
+		"deviceName": "spec.hardware.rootDevice.deviceName", "minSizeGigabytes": "spec.hardware.rootDevice.minSizeGigabytes",
+	} {
+		if got := RootDeviceHintPath(name); got != want {
+			t.Errorf("RootDeviceHintPath(%q) = %q, want %q", name, got, want)
 		}
 	}
 }

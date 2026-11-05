@@ -10,7 +10,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [physical-erase-v8]
+            choices: [physical-erase-v9]
           deadlineSeconds:
             type: int
             required: true
@@ -34,9 +34,11 @@ argument_specs:
             elements: dict
             required: true
             options:
+              # A target declared by serial number and size alone carries
+              # neither deviceName nor wwn; the worker requires both or neither.
               deviceName:
                 type: str
-                required: true
+                required: false
               method:
                 type: str
                 required: true
@@ -49,7 +51,7 @@ argument_specs:
                 required: true
               wwn:
                 type: str
-                required: true
+                required: false
       bootwright_physical_erase_digest:
         type: str
         required: true

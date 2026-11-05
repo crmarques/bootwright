@@ -1,6 +1,6 @@
-implementation: physical-erase-v8
-content-digest: 0297c2fb0b232b2ff0621a4d88570c9de698e69cc82707b67baac6e9d9da262e
-request-version: physical-erase-v8
+implementation: physical-erase-v9
+content-digest: 0ad98f4de447c70da9b12ece4afc2f5e6190845cf36a48a95d6b4c5533713c82
+request-version: physical-erase-v9
 automation-formats: none
 mark-formats: none
 proof-ids: bootwright.erase=1
@@ -14,6 +14,7 @@ request-identity:
   installDigest
   targets[].deviceName
   targets[].serialNumber
+  targets[].sizeBytes
   targets[].wwn
 request-schema:
   deadlineSeconds int
@@ -111,18 +112,19 @@ request-schema:
   install.target.firmware.secureBoot *bool omitempty
   install.target.hardware *struct installation.Hardware omitempty
   install.target.hardware.clearOnInstall []struct installation.ClearTarget omitempty
-  install.target.hardware.clearOnInstall[].deviceName string
+  install.target.hardware.clearOnInstall[].deviceName string omitempty
   install.target.hardware.clearOnInstall[].intervals []struct installation.EraseRegion
   install.target.hardware.clearOnInstall[].intervals[].length int64
   install.target.hardware.clearOnInstall[].intervals[].offset int64
   install.target.hardware.clearOnInstall[].serialNumber string
   install.target.hardware.clearOnInstall[].sizeBytes int64
-  install.target.hardware.clearOnInstall[].wwn string
+  install.target.hardware.clearOnInstall[].wwn string omitempty
   install.target.hardware.interfaces []struct installation.Interface
   install.target.hardware.interfaces[].macAddress string
   install.target.hardware.interfaces[].name string
   install.target.hardware.rootDevice string omitempty
   install.target.hardware.serialNumber string omitempty
+  install.target.hardware.sizeBytes int64 omitempty
   install.target.hardware.wwn string omitempty
   install.target.hostKeyRef string omitempty
   install.target.hostKeyType string omitempty
@@ -146,11 +148,11 @@ request-schema:
   installDigest string
   network string
   targets []struct installation.EraseTarget
-  targets[].deviceName string
+  targets[].deviceName string omitempty
   targets[].method string
   targets[].serialNumber string
   targets[].sizeBytes int64
-  targets[].wwn string
+  targets[].wwn string omitempty
   version string
 evidence-schema:
   version string
@@ -165,11 +167,11 @@ evidence-schema:
   receipt.uuid string
   receipt.macs []string
   receipt.targets []struct installation.EraseCoverage
-  receipt.targets[].deviceName string
+  receipt.targets[].deviceName string omitempty
   receipt.targets[].method string
   receipt.targets[].serialNumber string
   receipt.targets[].sizeBytes int64
-  receipt.targets[].wwn string
+  receipt.targets[].wwn string omitempty
   receipt.targets[].written int64
   receipt.targets[].verified int64
   retained bool omitempty

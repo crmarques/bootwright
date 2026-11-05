@@ -95,3 +95,33 @@ func TestClearOnInstallRefusesTheRootDiskByItsDeclaredWWN(t *testing.T) {
 		t.Fatalf("the root disk's WWN was admitted as a clear target: %v", issues)
 	}
 }
+
+// A clear target declared without deviceName and wwn is named by its serial
+// number and size alone, which the installation resolves on the live host; a
+// target naming only one of deviceName and wwn refuses, and one declaring the
+// root disk's serial refuses as the root disk.
+func TestClearOnInstallAdmitsATargetNamedBySerialNumberAndSize(t *testing.T) {
+	serial := m("serialNumber", "SYNTHETIC-NVME-01").With("sizeBytes", api.IntegerValue("107374182400"))
+	if issues := validateClear(clearMachine(serial, clearTarget("5000000000000001", "SYNTHETIC-CEPH-01")), true); len(issues) != 0 {
+		t.Fatalf("a target named by serial number and size was refused: %v", issues)
+	}
+	for name, test := range map[string]struct {
+		target api.Value
+		field  string
+	}{
+		"a lone deviceName":      {serial.With("deviceName", api.StringValue("/dev/disk/by-id/wwn-0x5000000000000003")), ".targets[0]"},
+		"a lone wwn":             {serial.With("wwn", api.StringValue("0x5000000000000003")), ".targets[0]"},
+		"the root serial number": {serial.With("serialNumber", api.StringValue("SYNTHETIC-ROOT-01")), ".targets[0]"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			issues := validateClear(clearMachine(test.target), true)
+			if len(issues) != 1 || issues[0].Field != "$.spec.hardware.clearOnInstall"+test.field || issues[0].Code != "api.invariant" {
+				t.Fatalf("issues = %+v", issues)
+			}
+		})
+	}
+	issues := validateClear(clearMachine(serial.With("wwn", api.StringValue("0x5000000000000003"))), true)
+	if !strings.Contains(issues[0].Message, "by serialNumber and sizeBytes alone") || issues[0].Remediation != "declare both deviceName and wwn, or neither" {
+		t.Fatalf("issue = %+v", issues[0])
+	}
+}

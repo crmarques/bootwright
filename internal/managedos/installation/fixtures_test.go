@@ -223,7 +223,7 @@ func splitRootDevice(hints api.Value) (declared, physical api.Value) {
 	declared, physical = api.MapValue(), api.MapValue()
 	for _, hint := range hints.Fields() {
 		switch hint.Name {
-		case "wwn", "hctl", "serialNumber":
+		case "wwn", "hctl", "serialNumber", "sizeBytes":
 			physical = physical.With(hint.Name, hint.Value)
 		default:
 			declared = declared.With(hint.Name, hint.Value)

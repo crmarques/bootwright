@@ -17,10 +17,12 @@ Each is, or must become, an executable guard. Check every one a change touches.
 
 - A destructive physical path proves the exact target (system identity, complete
   MAC set, powered off) immediately before it inserts media, and again inside
-  the installer. A root disk is named by a device path; an empty or wwn-only
-  selector refuses. On bare metal a kernel name such as `/dev/sda` is no disk
-  identity: `deviceName` must be a `/dev/disk/by-id/wwn-0x...` path, and `%pre`
-  refuses before any storage directive unless it resolves to a whole disk
+  the installer. A root disk is named by a device path or, on bare metal, by
+  its serial number and exact size; an empty or wwn-only selector refuses. On
+  bare metal a kernel name such as `/dev/sda` is no disk identity: `deviceName`
+  must be a `/dev/disk/by-id/wwn-0x...` path, or absent beside `serialNumber`
+  and `sizeBytes`, and `%pre` refuses before any storage directive unless it
+  resolves to a whole disk, a serial declaration to exactly one
   ([physical installation](../../../specs/managed-os.md#physical-installation)).
   Read [the disk-safety finding](../../knowledge/openshift-agent-disk-safety.md).
 - Consumer roles dispatch on the frozen substrate and fail closed on an unknown

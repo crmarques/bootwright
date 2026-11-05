@@ -478,7 +478,7 @@ func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 			_, _, err := Requests(catalog, "controller", testContext)
 			expectRefusal(t, err, "lifecycle.unsupported")
 			reported := diagnostics.Of(err)[0]
-			if reported.Message != "a managed-OS installation selects its root disk by deviceName, which a physical Machine's wwn and serialNumber may prove, and cannot carry the other root-device hints the Machine declares" {
+			if reported.Message != "a managed-OS installation selects its root disk by deviceName or, on a physical Machine, by serialNumber and sizeBytes, and cannot carry the other root-device hints the Machine declares" {
 				t.Fatalf("message = %q", reported.Message)
 			}
 			if reported.Remediation != test.remediation {
@@ -499,24 +499,33 @@ func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 	}
 }
 
-// A physical Machine's wwn and serialNumber stand beside its by-id deviceName
-// and are frozen, the wwn in its canonical 0x form, for the %pre to compare;
-// a wwn naming another disk than the path, or a serial number the %pre cannot
-// carry as one word, refuses before registration instead.
+// A physical Machine's wwn, serialNumber and sizeBytes stand beside its by-id
+// deviceName, or a serialNumber with its sizeBytes names the disk alone, and
+// are frozen, the wwn in its canonical 0x form, for the %pre to compare; a wwn
+// naming another disk than the path or standing without one, or a serial
+// number the %pre cannot carry as one word, refuses before registration
+// instead, and a serial number without its size names no root disk.
 func TestAPhysicalInstallationFreezesTheRootDiskIdentityItDeclares(t *testing.T) {
 	const path = "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"
+	size := field("sizeBytes", api.IntegerValue("480103981056"))
 	for name, test := range map[string]struct {
 		hints               api.Value
 		wwn, serial, reason string
 	}{
 		"a wwn and serial":     {api.MapValue(text("deviceName", path), text("wwn", "0x5000c500a1b2c3d4"), text("serialNumber", "ZC1A2B3C")), "0x5000c500a1b2c3d4", "ZC1A2B3C", ""},
+		"a serial and size":    {api.MapValue(text("serialNumber", "ZC1A2B3C"), size), "", "ZC1A2B3C", ""},
+		"a path, wwn and size": {api.MapValue(text("deviceName", path), text("wwn", "0x5000c500a1b2c3d4"), size), "0x5000c500a1b2c3d4", "", ""},
+		"a serial without its size": {api.MapValue(text("serialNumber", "ZC1A2B3C")), "", "",
+			"a physical installation erases only a root disk named by its /dev/disk/by-id/wwn-0x path or by its serial number and exact size, and the Machine names neither"},
+		"a wwn without its path": {api.MapValue(text("serialNumber", "ZC1A2B3C"), size, text("wwn", "0x5000c500a1b2c3d4")), "", "",
+			"a physical installation proves its root disk by the wwn the Machine declares only beside the deviceName that names it, and that wwn names another disk or stands alone"},
 		"an uppercase wwn":     {api.MapValue(text("deviceName", path), text("wwn", "0X5000C500A1B2C3D4")), "0x5000c500a1b2c3d4", "", ""},
 		"a wwn without its 0x": {api.MapValue(text("deviceName", path), text("wwn", "5000c500a1b2c3d4")), "0x5000c500a1b2c3d4", "", ""},
 		"a serial alone":       {api.MapValue(text("deviceName", path), text("serialNumber", "WD-WCC4N1234567")), "", "WD-WCC4N1234567", ""},
 		"another disk's wwn": {api.MapValue(text("deviceName", path), text("wwn", "0x5000c500a1b2c3d5")), "", "",
-			"a physical installation proves its root disk by the wwn the Machine declares, and that wwn names another disk than its deviceName"},
+			"a physical installation proves its root disk by the wwn the Machine declares only beside the deviceName that names it, and that wwn names another disk or stands alone"},
 		"a wwn in another form": {api.MapValue(text("deviceName", path), text("wwn", "naa.5000c500a1b2c3d4")), "", "",
-			"a physical installation proves its root disk by the wwn the Machine declares, and that wwn names another disk than its deviceName"},
+			"a physical installation proves its root disk by the wwn the Machine declares only beside the deviceName that names it, and that wwn names another disk or stands alone"},
 		"a serial with a space": {api.MapValue(text("deviceName", path), text("serialNumber", "ZC1A 2B3C")), "", "",
 			"a physical installation compares its root disk's serial number inside the installer, and the serialNumber the Machine declares is not one it can compare"},
 		"a serial with a quote": {api.MapValue(text("deviceName", path), text("serialNumber", "ZC1A'2B3C")), "", "",
@@ -539,8 +548,21 @@ func TestAPhysicalInstallationFreezesTheRootDiskIdentityItDeclares(t *testing.T)
 				t.Fatalf("a carried root disk identity was refused: %+v", refused)
 			}
 			request, _ := onlyRequest(t, catalog)
-			if hardware := request.Target.Hardware; hardware == nil || hardware.RootDevice != path || hardware.WWN != test.wwn || hardware.SerialNumber != test.serial {
+			wantPath, wantSize := path, int64(0)
+			if !test.hints.Has("deviceName") {
+				wantPath = ""
+			}
+			if test.hints.Has("sizeBytes") {
+				wantSize = 480103981056
+			}
+			if hardware := request.Target.Hardware; hardware == nil || hardware.RootDevice != wantPath || hardware.WWN != test.wwn || hardware.SerialNumber != test.serial || hardware.SizeBytes != wantSize {
 				t.Fatalf("frozen hardware = %+v", request.Target.Hardware)
+			}
+			if wantSize != 0 && !strings.Contains(request.Kickstart, "!= '480103981056'") {
+				t.Fatal("the target proof does not compare the frozen root disk size")
+			}
+			if wantPath == "" && (!strings.Contains(request.Kickstart, "%include "+diskInclude) || strings.Contains(request.Kickstart, "\nclearpart --all --initlabel\n")) {
+				t.Fatal("a root disk named by serial number is not partitioned through the include its target proof writes")
 			}
 			if test.wwn != "" && !strings.Contains(request.Kickstart, "!= 'naa.5000c500a1b2c3d4'") ||
 				test.serial != "" && !strings.Contains(request.Kickstart, "!= '"+test.serial+"'") {

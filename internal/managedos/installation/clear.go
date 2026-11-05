@@ -10,26 +10,43 @@ import (
 )
 
 type ClearTarget struct {
-	DeviceName   string        `json:"deviceName"`
+	DeviceName   string        `json:"deviceName,omitempty"`
 	Intervals    []EraseRegion `json:"intervals"`
 	SerialNumber string        `json:"serialNumber"`
 	SizeBytes    int64         `json:"sizeBytes"`
-	WWN          string        `json:"wwn"`
+	WWN          string        `json:"wwn,omitempty"`
+}
+
+func (target ClearTarget) label() string {
+	if target.DeviceName == "" {
+		return "serial number " + target.SerialNumber
+	}
+	return target.DeviceName
+}
+
+func clearTargetOrder(a, b ClearTarget) int {
+	if order := strings.Compare(a.DeviceName, b.DeviceName); order != 0 {
+		return order
+	}
+	return strings.Compare(a.SerialNumber, b.SerialNumber)
 }
 
 func clearTargetsFor(machine api.Object) []ClearTarget {
 	var targets []ClearTarget
 	for _, declared := range machine.Spec().Get("hardware", "clearOnInstall", "targets").Items() {
 		size, _ := strconv.ParseInt(declared.Get("sizeBytes").Text(), 10, 64)
-		targets = append(targets, ClearTarget{
+		target := ClearTarget{
 			DeviceName:   declared.Get("deviceName").Text(),
 			Intervals:    MetadataClearRegions(size),
 			SerialNumber: declared.Get("serialNumber").Text(),
 			SizeBytes:    size,
-			WWN:          "0x" + canonicalWWN(declared.Get("wwn").Text()),
-		})
+		}
+		if wwn := declared.Get("wwn"); wwn.Present() {
+			target.WWN = "0x" + canonicalWWN(wwn.Text())
+		}
+		targets = append(targets, target)
 	}
-	slices.SortFunc(targets, func(a, b ClearTarget) int { return strings.Compare(a.DeviceName, b.DeviceName) })
+	slices.SortFunc(targets, clearTargetOrder)
 	return targets
 }
 
@@ -40,21 +57,28 @@ func refusedClearTargets(input Installation) string {
 	if !input.Physical || len(input.ClearTargets) > machineref.MaxClearTargets {
 		return "only a physical installation clears declared data disks, at most 15"
 	}
-	seen := map[string]bool{input.RootDevice: true, input.RootWWN: input.RootWWN != "", input.RootSerial: input.RootSerial != ""}
+	seen := map[string]bool{}
+	for _, identity := range []string{input.RootDevice, input.RootWWN, input.RootSerial} {
+		seen[identity] = identity != ""
+	}
 	for index, target := range input.ClearTargets {
-		if index > 0 && input.ClearTargets[index-1].DeviceName >= target.DeviceName {
-			return "the clear targets are not in deviceName order"
+		if index > 0 && clearTargetOrder(input.ClearTargets[index-1], target) >= 0 {
+			return "the clear targets are not in deviceName and serialNumber order"
 		}
-		if !durableRootDevice(target.DeviceName) || "/dev/disk/by-id/wwn-"+target.WWN != target.DeviceName || !rootSerial.MatchString(target.SerialNumber) {
-			return "the clear target " + target.DeviceName + " carries an identity its %pre cannot compare"
+		bySerial := target.DeviceName == "" && target.WWN == ""
+		if !bySerial && (!durableRootDevice(target.DeviceName) || "/dev/disk/by-id/wwn-"+target.WWN != target.DeviceName) || !rootSerial.MatchString(target.SerialNumber) {
+			return "the clear target " + target.label() + " carries an identity its %pre cannot compare"
 		}
 		if target.SizeBytes < 4096 || target.SizeBytes > machineref.MaxClearBytes || target.SizeBytes%4096 != 0 ||
 			!slices.Equal(target.Intervals, MetadataClearRegions(target.SizeBytes)) {
-			return "the clear target " + target.DeviceName + " carries a size or intervals its %pre cannot clear"
+			return "the clear target " + target.label() + " carries a size or intervals its %pre cannot clear"
 		}
 		for _, identity := range []string{target.DeviceName, target.WWN, target.SerialNumber} {
+			if identity == "" {
+				continue
+			}
 			if seen[identity] {
-				return "the clear target " + target.DeviceName + " repeats the root disk's or another target's identity"
+				return "the clear target " + target.label() + " repeats the root disk's or another target's identity"
 			}
 			seen[identity] = true
 		}
@@ -85,25 +109,41 @@ func clearLines(input Installation) []string {
 
 func clearProofLines(target ClearTarget, node string) []string {
 	refuse := func(what string) []string {
-		return []string{`echo 'Bootwright: the declared clear target ` + target.DeviceName + ` ` + what + `; refusing before any disk is touched.' >&2`, "exit 1", "fi"}
+		return []string{`echo 'Bootwright: the declared clear target ` + target.label() + ` ` + what + `; refusing before any disk is touched.' >&2`, "exit 1", "fi"}
 	}
-	lines := []string{
-		node + `=$(readlink -f -- '` + target.DeviceName + `' || true)`,
-		`if [ -z "${` + node + `}" ] || [ ! -b "${` + node + `}" ]; then`,
+	var lines []string
+	if target.DeviceName == "" {
+		lines = append(lines,
+			`read -r bootwright_count bootwright_name <<< "$(bootwright_resolve '`+target.SerialNumber+`')"`,
+			`if [ "${bootwright_count}" = 0 ]; then`)
+		lines = append(lines, refuse("is reported by no whole disk here")...)
+		lines = append(lines, `if [ "${bootwright_count}" != 1 ]; then`,
+			`echo "Bootwright: the declared clear target `+target.label()+` is reported by ${bootwright_count} disks here; refusing before any disk is touched." >&2`,
+			"exit 1", "fi",
+			`if [[ ! "${bootwright_name}" =~ ^(sd[a-z]+|nvme[0-9]+n[0-9]+)$ ]] ||`,
+			`[ "$(cat -- "/sys/class/block/${bootwright_name}/removable" 2>/dev/null)" != 0 ] ||`,
+			`[ "$(cat -- "/sys/class/block/${bootwright_name}/ro" 2>/dev/null)" != 0 ]; then`)
+		lines = append(lines, refuse("is not a fixed, writable sd or nvme disk")...)
+		lines = append(lines, node+`="/dev/${bootwright_name}"`)
+	} else {
+		lines = append(lines, node+`=$(readlink -f -- '`+target.DeviceName+`' || true)`)
 	}
+	lines = append(lines, `if [ -z "${`+node+`}" ] || [ ! -b "${`+node+`}" ]; then`)
 	lines = append(lines, refuse("is not a block device here")...)
 	lines = append(lines, `if [ "$(lsblk -ndo TYPE -- "${`+node+`}")" != disk ]; then`)
 	lines = append(lines, refuse("is not a whole disk")...)
 	lines = append(lines, `if [ "${`+node+`}" = "${bootwright_root}" ]; then`)
 	lines = append(lines, refuse("is the root disk")...)
-	lines = append(lines,
-		`bootwright_disk="/sys/class/block/$(basename -- "${`+node+`}")"`,
-		`bootwright_wwid="${bootwright_disk}/device/wwid"`,
-		`if [ -e "${bootwright_disk}/wwid" ]; then bootwright_wwid="${bootwright_disk}/wwid"; fi`,
-		`if ! bootwright_wwid=$(bootwright_identity "${bootwright_wwid}" text); then`)
-	lines = append(lines, refuse("reports no readable WWN")...)
-	lines = append(lines, `if [ "${bootwright_wwid}" != 'naa.`+strings.TrimPrefix(target.WWN, "0x")+`' ]; then`)
-	lines = append(lines, refuse("reports a WWN other than "+target.WWN)...)
+	lines = append(lines, `bootwright_disk="/sys/class/block/$(basename -- "${`+node+`}")"`)
+	if target.WWN != "" {
+		lines = append(lines,
+			`bootwright_wwid="${bootwright_disk}/device/wwid"`,
+			`if [ -e "${bootwright_disk}/wwid" ]; then bootwright_wwid="${bootwright_disk}/wwid"; fi`,
+			`if ! bootwright_wwid=$(bootwright_identity "${bootwright_wwid}" text); then`)
+		lines = append(lines, refuse("reports no readable WWN")...)
+		lines = append(lines, `if [ "${bootwright_wwid}" != 'naa.`+strings.TrimPrefix(target.WWN, "0x")+`' ]; then`)
+		lines = append(lines, refuse("reports a WWN other than "+target.WWN)...)
+	}
 	lines = append(lines,
 		`bootwright_serial="${bootwright_disk}/device/vpd_pg80" bootwright_form=vpd`,
 		`if [ -e "${bootwright_disk}/device/serial" ]; then bootwright_serial="${bootwright_disk}/device/serial" bootwright_form=text; fi`,
@@ -223,7 +263,7 @@ func clearUsageLines(names string, refuse func(string) []string) []string {
 
 func clearWriteLines(target ClearTarget, node string) []string {
 	refuse := func(what string) []string {
-		return []string{`echo 'Bootwright: the declared clear target ` + target.DeviceName + ` ` + what + `; refusing before the installer touches storage.' >&2`, "exit 1", "fi"}
+		return []string{`echo 'Bootwright: the declared clear target ` + target.label() + ` ` + what + `; refusing before the installer touches storage.' >&2`, "exit 1", "fi"}
 	}
 	var lines []string
 	for _, interval := range target.Intervals {

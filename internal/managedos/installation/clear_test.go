@@ -497,3 +497,106 @@ func TestADeclaredClearReachesTheRequestKickstartAndPlan(t *testing.T) {
 		t.Fatalf("the plan shows %v consuming %v", plan.Definitions[0].Impacts, plan.Definitions[0].Consumes)
 	}
 }
+
+// serialClearTarget is a clear target declared by serial number and size
+// alone, which the %pre resolves on the booted machine.
+func serialClearTarget(serial string, size int64) ClearTarget {
+	return ClearTarget{Intervals: MetadataClearRegions(size), SerialNumber: serial, SizeBytes: size}
+}
+
+// A clear target declared without deviceName and wwn freezes before every
+// target named by its path, in serialNumber order, and plans its clear as
+// serial:<serialNumber>, since it has no WWN to name.
+func TestASerialClearTargetFreezesFirstAndIsPlannedBySerialNumber(t *testing.T) {
+	size := api.FieldValue{Name: "sizeBytes", Value: api.IntegerValue("8192")}
+	serial := func(value string) api.FieldValue {
+		return api.FieldValue{Name: "serialNumber", Value: api.StringValue(value)}
+	}
+	byPath := api.MapValue(api.FieldValue{Name: "deviceName", Value: api.StringValue("/dev/disk/by-id/wwn-0x5000000000000001")},
+		api.FieldValue{Name: "wwn", Value: api.StringValue("0x5000000000000001")}, serial("A"), size)
+	machine := api.NewObject(api.Machine, "metal-01", api.MapValue(), api.MapValue()).WithSpec(api.MapValue().WithPath(api.MapValue(api.FieldValue{Name: "targets",
+		Value: api.ListValue(byPath, api.MapValue(serial("NVME-02"), size), api.MapValue(serial("NVME-01"), size))}), "hardware", "clearOnInstall"))
+	got := clearTargetsFor(machine)
+	want := []ClearTarget{serialClearTarget("NVME-01", 8192), serialClearTarget("NVME-02", 8192), clearTarget("5000000000000001", "A", 8192)}
+	if !slices.EqualFunc(got, want, func(a, b ClearTarget) bool {
+		return a.DeviceName == b.DeviceName && a.WWN == b.WWN && a.SerialNumber == b.SerialNumber && a.SizeBytes == b.SizeBytes && slices.Equal(a.Intervals, b.Intervals)
+	}) {
+		t.Fatalf("froze %+v, want %+v", got, want)
+	}
+	if _, err := RenderKickstart(clearInstallation(got...)); err != nil {
+		t.Fatalf("the frozen order was refused: %v", err)
+	}
+	if _, err := RenderKickstart(clearInstallation(got[2], got[0])); err == nil {
+		t.Fatal("a serial target after a target named by its path was rendered")
+	}
+	for name, target := range map[string]ClearTarget{
+		"a lone deviceName": {DeviceName: "/dev/disk/by-id/wwn-0x5000000000000003", SerialNumber: "NVME-03", SizeBytes: 8192, Intervals: MetadataClearRegions(8192)},
+		"a lone wwn":        {WWN: "0x5000000000000003", SerialNumber: "NVME-03", SizeBytes: 8192, Intervals: MetadataClearRegions(8192)},
+	} {
+		if _, err := RenderKickstart(clearInstallation(target)); err == nil {
+			t.Fatalf("%s was rendered", name)
+		}
+	}
+	request := Request{Identity: Identity{Object: "metal-01"}, Target: Target{Physical: true, Hardware: &Hardware{ClearOnInstall: got}}}
+	impacts := impacts(reconciliation.Apply, request)
+	for _, wantImpact := range []string{"clear-disk metal-01 serial:NVME-01", "clear-disk metal-01 serial:NVME-02", "clear-disk metal-01 0x5000000000000001"} {
+		if !slices.Contains(impacts, wantImpact) {
+			t.Fatalf("the apply impacts %v omit %s", impacts, wantImpact)
+		}
+	}
+}
+
+// A clear target declared by serial number is the one fixed, writable whole
+// disk reporting it; the %pre clears it only after proving it is not the root
+// disk and has its size, and refuses before any write when none, several or
+// the root disk reports the serial.
+func TestTheClearResolvesASerialTargetToExactlyOneDisk(t *testing.T) {
+	disks := []clearDisk{
+		{name: "sdb", byID: "/dev/disk/by-id/unused-b", serial: "NVME-01", size: 8192},
+		clearDisks[1],
+	}
+	flags := func(names ...string) func(blocks, proc string) {
+		return func(blocks, _ string) {
+			for _, name := range names {
+				for _, flag := range []string{"removable", "ro"} {
+					if err := os.WriteFile(filepath.Join(blocks, name, flag), []byte("0\n"), 0o644); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+		}
+	}
+	input := clearInstallation(serialClearTarget("NVME-01", 8192), clearTarget("5000000000000002", "CEPH-02", 2*MetadataClearWindow+4096))
+	host, log := clearHost(t, disks, flags("sdb", "sdc"))
+	if output, err := runTargetProof(t, input, host); err != nil || !slices.Contains(readLog(t, log), "write /dev/sdb 0 8192") {
+		t.Fatalf("the serial target was not cleared: %v %v\n%s", err, readLog(t, log), output)
+	}
+	for name, test := range map[string]struct {
+		disks   []clearDisk
+		flagged []string
+		refusal string
+	}{
+		"no disk": {[]clearDisk{{name: "sdb", byID: "/dev/disk/by-id/unused-b", serial: "OTHER", size: 8192}, clearDisks[1]}, []string{"sdb", "sdc"},
+			"the declared clear target serial number NVME-01 is reported by no whole disk here"},
+		"two disks": {[]clearDisk{disks[0], clearDisks[1], {name: "sdd", byID: "/dev/disk/by-id/unused-d", serial: "NVME-01", size: 8192}}, []string{"sdb", "sdc", "sdd"},
+			"the declared clear target serial number NVME-01 is reported by 2 disks here"},
+		"the root disk": {[]clearDisk{{name: "sda", byID: "/dev/disk/by-id/unused-a", serial: "NVME-01", size: 8192}, clearDisks[1]}, []string{"sda", "sdc"},
+			"the declared clear target serial number NVME-01 is the root disk"},
+		"a removable disk": {disks, []string{"sdc"}, "the declared clear target serial number NVME-01 is not a fixed, writable sd or nvme disk"},
+		"another size": {[]clearDisk{{name: "sdb", byID: "/dev/disk/by-id/unused-b", serial: "NVME-01", size: 12288}, clearDisks[1]}, []string{"sdb", "sdc"},
+			"the declared clear target serial number NVME-01 reports a size other than 8192 bytes"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			host, log := clearHost(t, test.disks, flags(test.flagged...))
+			output, err := runTargetProof(t, input, host)
+			if err == nil || !strings.Contains(output, "Bootwright: "+test.refusal+"; refusing before any disk is touched.") {
+				t.Fatalf("%s was not refused: %v\n%s", name, err, output)
+			}
+			for _, entry := range readLog(t, log) {
+				if strings.HasPrefix(entry, "write ") || strings.HasPrefix(entry, "remove ") {
+					t.Fatalf("%s wrote before refusing: %v", name, readLog(t, log))
+				}
+			}
+		})
+	}
+}

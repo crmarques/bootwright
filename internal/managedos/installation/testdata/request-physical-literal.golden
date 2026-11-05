@@ -132,7 +132,10 @@
           "name": "enp1s0"
         }
       ],
-      "rootDevice": "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"
+      "rootDevice": "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4",
+      "serialNumber": "SYNTHETIC-ROOT-01",
+      "sizeBytes": 480103981056,
+      "wwn": "0x5000c500a1b2c3d4"
     },
     "hostKeyRef": "metal-01-host-key",
     "hostKeyType": "ed25519",
@@ -141,5 +144,5 @@
   },
   "tlsCertificateRef": "lab-artifacts-tls",
   "user": "bootwright",
-  "version": "os-install-anaconda-v23"
+  "version": "os-install-anaconda-v24"
 }

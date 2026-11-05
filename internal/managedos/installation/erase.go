@@ -128,7 +128,7 @@ func eraseImpacts(request EraseRequest) []string {
 		if target.Method == EraseMetadataClear {
 			verb = "metadata-clear "
 		}
-		impacts = append(impacts, verb+target.DeviceName)
+		impacts = append(impacts, verb+eraseTargetName(target))
 	}
 	return impacts
 }
