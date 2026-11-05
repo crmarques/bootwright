@@ -2,6 +2,7 @@
 
 [Audit directory format](../README.md)
 
+- [Consolidated report: the merged findings, the disagreements settled and the sequence](report-final.md)
 - [Codex report: independently checked findings, coverage and validation](report-codex.md)
 - [Claude report: the code against its specifications, lane by lane](report-claude.md)
 
@@ -24,3 +25,12 @@ Codex assessed the same product baseline and reviewed the later container-build
 delta through `88fbf7be1`. Its report records 18 confirmed discrepancies,
 separates source proof from synthetic execution and operator qualification,
 and documents the models and effort used for the validation subtasks.
+
+The consolidated report was written after both, on 2026-11-05 at `85cd3ac9a`,
+where every product file both reports cite is unchanged. It re-verifies each
+Codex finding against its Claude counterpart and the source, settles the three
+severity disputes, gives every Claude-only Medium finding a fresh refutation
+pass, reviews the container-build delta, and records 320 consolidated findings
+(2 High, 66 Medium, 252 Low) with the disposition of every source entry. It
+authorizes no implementation; the remediation sequence is a proposal for the
+owner.
