@@ -112,9 +112,9 @@ func validateExportProduced(produced []lifecycle.Produced, r ConsumerRequest, ow
 	if err := validateExportEntryKeys(byName); err != nil {
 		return err
 	}
-	for name, kind := range map[string]string{"ceph-rbd": "rbd", "cephfs": "fs"} {
-		for field, suffix := range map[string]string{"provisioner": "prov", "controller-expand": "prov", "node-stage": "node"} {
-			if byName[name].Data["csi.storage.k8s.io/"+field+"-secret-name"] != "rook-"+prefix+"-"+kind+"-"+suffix {
+	for name, kind := range map[string]string{"ceph-rbd": "rbd", "cephfs": "cephfs"} {
+		for field, role := range map[string]string{"provisioner": "provisioner", "controller-expand": "provisioner", "node-stage": "node"} {
+			if byName[name].Data["csi.storage.k8s.io/"+field+"-secret-name"] != "rook-csi-"+kind+"-"+role+"-"+prefix {
 				return fail()
 			}
 		}
@@ -126,7 +126,7 @@ func validateExportProduced(produced []lifecycle.Produced, r ConsumerRequest, ow
 		return fail()
 	}
 	for _, suffix := range []string{"health", "rbd-node", "rbd-prov", "fs-node", "fs-prov"} {
-		name, id := "rook-"+prefix+"-"+suffix, prefix+"-"+suffix
+		name, id := csiSecretNames[suffix]+prefix, prefix+"-"+suffix
 		if suffix == "health" {
 			name, id = "rook-ceph-operator-creds", "client."+id
 		}
@@ -250,11 +250,13 @@ func exportKey(value, kind string) bool {
 	return len(data) == 12+size && binary.LittleEndian.Uint16(data[:2]) == typ && int(binary.LittleEndian.Uint16(data[10:12])) == size
 }
 
+var csiSecretNames = map[string]string{"rbd-node": "rook-csi-rbd-node-", "rbd-prov": "rook-csi-rbd-provisioner-", "fs-node": "rook-csi-cephfs-node-", "fs-prov": "rook-csi-cephfs-provisioner-"}
+
 func exportEntries(r ConsumerRequest, owner string) map[string]string {
 	expected := map[string]string{"external-cluster-user-command": "ConfigMap", "rook-ceph-mon-endpoints": "ConfigMap", "rook-ceph-mon": "Secret", "rook-ceph-operator-creds": "Secret", "monitoring-endpoint": "CephCluster", "ceph-rbd": "StorageClass", "cephfs": "StorageClass"}
 	prefix := ConsumerPrincipalPrefix(owner, r.Name)
-	for _, suffix := range []string{"rbd-node", "rbd-prov", "fs-node", "fs-prov"} {
-		expected["rook-"+prefix+"-"+suffix] = "Secret"
+	for _, name := range csiSecretNames {
+		expected[name+prefix] = "Secret"
 	}
 	if r.Gateway != nil {
 		expected["ceph-rgw"] = "StorageClass"

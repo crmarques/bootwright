@@ -5,13 +5,13 @@
     "cephfs": "StorageClass",
     "external-cluster-user-command": "ConfigMap",
     "monitoring-endpoint": "CephCluster",
-    "rook-bw-decfe99dd8c77b66-fs-node": "Secret",
-    "rook-bw-decfe99dd8c77b66-fs-prov": "Secret",
-    "rook-bw-decfe99dd8c77b66-rbd-node": "Secret",
-    "rook-bw-decfe99dd8c77b66-rbd-prov": "Secret",
     "rook-ceph-mon": "Secret",
     "rook-ceph-mon-endpoints": "ConfigMap",
-    "rook-ceph-operator-creds": "Secret"
+    "rook-ceph-operator-creds": "Secret",
+    "rook-csi-cephfs-node-bw-decfe99dd8c77b66": "Secret",
+    "rook-csi-cephfs-provisioner-bw-decfe99dd8c77b66": "Secret",
+    "rook-csi-rbd-node-bw-decfe99dd8c77b66": "Secret",
+    "rook-csi-rbd-provisioner-bw-decfe99dd8c77b66": "Secret"
   },
   "fsid": "d4abb618-ae4a-5062-a0a9-152f2ad78e5a",
   "keyType": "aes",
@@ -50,5 +50,5 @@
   "ready": true,
   "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "rgwUser": "",
-  "version": "ceph-export-evidence-v1"
+  "version": "ceph-export-evidence-v2"
 }

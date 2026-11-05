@@ -272,12 +272,12 @@ func syntheticDetails(r ConsumerRequest, owner string) []exportEntry {
 			kind := "rbd"
 			entry.Data["pool"] = r.Pool
 			if entry.Name == "cephfs" {
-				kind = "fs"
+				kind = "cephfs"
 				entry.Data["pool"] = r.DefaultDataPool
 				entry.Data["fsName"] = r.Filesystem
 			}
-			for field, suffix := range map[string]string{"provisioner": "prov", "controller-expand": "prov", "node-stage": "node"} {
-				entry.Data["csi.storage.k8s.io/"+field+"-secret-name"] = "rook-" + prefix + "-" + kind + "-" + suffix
+			for field, role := range map[string]string{"provisioner": "provisioner", "controller-expand": "provisioner", "node-stage": "node"} {
+				entry.Data["csi.storage.k8s.io/"+field+"-secret-name"] = "rook-csi-" + kind + "-" + role + "-" + prefix
 			}
 		case "ceph-rgw":
 			entry.Data = map[string]string{"endpoint": fmt.Sprintf("%s:%d", r.Gateway.FQDN, r.Gateway.Port), "poolPrefix": r.Gateway.Zone}
@@ -286,10 +286,8 @@ func syntheticDetails(r ConsumerRequest, owner string) []exportEntry {
 		case "ceph-rgw-tls-cert":
 			entry.Data = map[string]string{"cert": "synthetic-certificate"}
 		default:
-			id := strings.TrimPrefix(entry.Name, "rook-")
-			if entry.Name == "rook-ceph-operator-creds" {
-				id = "client." + prefix + "-health"
-			}
+			id := map[string]string{"rook-ceph-operator-creds": "client." + prefix + "-health", "rook-csi-rbd-node-" + prefix: prefix + "-rbd-node", "rook-csi-rbd-provisioner-" + prefix: prefix + "-rbd-prov",
+				"rook-csi-cephfs-node-" + prefix: prefix + "-fs-node", "rook-csi-cephfs-provisioner-" + prefix: prefix + "-fs-prov"}[entry.Name]
 			entry.Data = map[string]string{"userID": id, "userKey": key}
 		}
 	}
@@ -304,6 +302,44 @@ func detailsProduced(t *testing.T, entries []exportEntry) []lifecycle.Produced {
 	}
 	return []lifecycle.Produced{{Name: ConsumerOutput, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: data})}}
 }
+
+// ocs-operator's snapshot classes pick the details Secret whose name contains
+// rook-csi-<rbd|cephfs>-provisioner, so the four CSI Secrets carry Rook's names.
+func TestExportDetailsNameTheCSISecretsAsOCSOperatorLooksThemUp(t *testing.T) {
+	r, _ := DecodeConsumerRequest(managedExportPlan(t, false).Request)
+	owner := "apply-test"
+	prefix := ConsumerPrincipalPrefix(owner, r.Name)
+	renamed := map[string]string{"rook-csi-rbd-node-" + prefix: "rook-" + prefix + "-rbd-node", "rook-csi-rbd-provisioner-" + prefix: "rook-" + prefix + "-rbd-prov",
+		"rook-csi-cephfs-node-" + prefix: "rook-" + prefix + "-fs-node", "rook-csi-cephfs-provisioner-" + prefix: "rook-" + prefix + "-fs-prov"}
+	good := syntheticDetails(r, owner)
+	for name := range renamed {
+		if !slices.ContainsFunc(good, func(e exportEntry) bool { return e.Name == name && e.Kind == "Secret" }) {
+			t.Fatalf("details lack the CSI Secret %s", name)
+		}
+	}
+	produced := detailsProduced(t, good)
+	defer lifecycle.ClearProduced(produced)
+	if err := validateExportProduced(produced, r, owner); err != nil {
+		t.Fatal(err)
+	}
+	old := syntheticDetails(r, owner)
+	for i := range old {
+		if previous, ok := renamed[old[i].Name]; ok {
+			old[i].Name = previous
+		}
+		for key, value := range old[i].Data {
+			if previous, ok := renamed[value]; ok && strings.HasSuffix(key, "-secret-name") {
+				old[i].Data[key] = previous
+			}
+		}
+	}
+	stale := detailsProduced(t, old)
+	defer lifecycle.ClearProduced(stale)
+	if err := validateExportProduced(stale, r, owner); err == nil {
+		t.Fatal("details under the former rook-<prefix>-<suffix> names validated")
+	}
+}
+
 func TestExportProducedDetailsValidator(t *testing.T) {
 	block := managedExportPlan(t, true)
 	r, _ := DecodeConsumerRequest(block.Request)

@@ -63,6 +63,13 @@ untracked review notes of that branch.
   Secrets `rgw-admin-ops-user` and `ceph-rgw-tls-cert` (R3:C33, confirmed with
   the conditions below). Under restricted authentication the CSI Secret names
   are carried by the StorageClass parameters, not fixed.
+  Bootwright names its four CSI Secrets `rook-csi-{rbd,cephfs}-{node,provisioner}-<id>`
+  because ocs-operator's snapshot class lookup (`getClusterIDAndSecretName` in
+  `controllers/storagecluster/volumesnapshotterclasses.go`, release-4.21)
+  starts from `rook-csi-<type>-provisioner` and switches to a details Secret
+  only when its name contains that string; any other name leaves the
+  VolumeSnapshotClasses and the VolumeGroupSnapshotClass naming a missing
+  Secret, so every snapshot fails.
 - The mon entry is the quorum leader's address, on the msgr2 port by default
   (`--v2-port-enable` defaults to true downstream); `maxMonId` is `"0"` and
   `mapping` is `"{}"` (R3:C31, confirmed).

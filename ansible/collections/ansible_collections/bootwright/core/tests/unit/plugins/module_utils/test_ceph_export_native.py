@@ -80,9 +80,33 @@ def test_fresh_continuation_and_observation_keep_keys(monkeypatch):
         assert entry["key"] not in json.dumps(native.markers.records)
     details = json.loads(first["private"])
     assert next(entry for entry in details if entry["name"] == "rook-ceph-operator-creds")["data"]["userID"].startswith("client.bw-")
-    for entry in details:
-        if entry["name"].startswith("rook-bw-"):
-            assert not entry["data"]["userID"].startswith("client.")
+    csi = [entry for entry in details if entry["name"].startswith("rook-csi-")]
+    assert len(csi) == 4
+    for entry in csi:
+        assert not entry["data"]["userID"].startswith("client.")
+
+
+def test_csi_secret_names_carry_the_names_ocs_operator_looks_up(monkeypatch):
+    # ocs-operator's getClusterIDAndSecretName (controllers/storagecluster/volumesnapshotterclasses.go, release-4.21) starts from
+    # rook-csi-<type>-provisioner and switches to a details Secret only when its name contains that string.
+    native = worker(monkeypatch)
+    details = json.loads(native.execute(True, {})["private"])
+    secrets = {entry["name"] for entry in details if entry["kind"] == "Secret"}
+    names = {kind + "-" + role: "rook-csi-" + kind + "-" + role + "-" + native.identifier
+             for kind in ("rbd", "cephfs") for role in ("node", "provisioner")}
+    assert set(names.values()) <= secrets
+    assert all("rook-csi-" + kind + "-provisioner" in names[kind + "-provisioner"] for kind in ("rbd", "cephfs"))
+    classes = {entry["name"]: entry["data"] for entry in details if entry["kind"] == "StorageClass"}
+    for storage_class, kind in (("ceph-rbd", "rbd"), ("cephfs", "cephfs")):
+        parameters = {key: value for key, value in classes[storage_class].items() if key.startswith("csi.storage.k8s.io/")}
+        assert parameters == {
+            "csi.storage.k8s.io/provisioner-secret-name": names[kind + "-provisioner"],
+            "csi.storage.k8s.io/controller-expand-secret-name": names[kind + "-provisioner"],
+            "csi.storage.k8s.io/node-stage-secret-name": names[kind + "-node"]}
+    users = {entry["name"]: entry["data"]["userID"] for entry in details if entry["name"] in names.values()}
+    assert users == {names[key]: native.identifier + "-" + suffix
+                     for key, suffix in (("rbd-node", "rbd-node"), ("rbd-provisioner", "rbd-prov"),
+                                         ("cephfs-node", "fs-node"), ("cephfs-provisioner", "fs-prov"))}
 
 
 def test_lost_native_reply_recovers_without_mint(monkeypatch):

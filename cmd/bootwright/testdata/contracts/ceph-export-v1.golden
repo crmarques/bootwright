@@ -1,5 +1,5 @@
 implementation: ceph-export-v1
-content-digest: a087e9035d78569b64e9f62cef7d1a04820c484922e3abe373dc9b2c03dad0ea
+content-digest: f4300ee4395a7d4dcd86da333add85ff6752c3641602f8566f40c628208cbdf7
 request-version: ceph-export-request-v3
 automation-formats: -custody-v1
 mark-formats: bootwright-managed-export, bootwright-owner

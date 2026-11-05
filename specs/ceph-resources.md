@@ -1401,7 +1401,7 @@ nodes that run it.
 | Erasure-coded RBD pool, missing `csi` group, monitoring service or gateway FQDN | Admission names the reference; select a replicated RBD pool and declare each prerequisite. |
 | Ambiguous public address on a selected MON or MGR host | Planning requires exactly one address inside the declared Ceph public networks per selected host. |
 | Direct RGW placement selects fewer daemons than eligible hosts | Planning requires an ingress VIP or a placement whose count covers its selected hosts. |
-| Disallowed key type, missing native prerequisite or mismatched owned identity | Realization refuses before creating credentials; correct the declared prerequisites or restore the original owned state. It does not change cipher policy or adopt foreign entities. |
+| Disallowed key type, missing native prerequisite or mismatched owned identity | Realization refuses before creating credentials; correct the declared prerequisites or restore the original owned state. |
 | Removing a consumer while its hosts survive, or with physical hosts | Removal refuses; consumer retirement requires every installed host to be an owned virtual Machine removed by the same destroy, a [provided stretch tiebreaker](ceph.md#a-provided-tiebreakers-removal) left to its cluster block. |
 | Removing a consumer while a consuming container cluster survives the removal | Removal refuses before registration, naming the consuming cluster and the consumer; retirement also requires every container cluster whose `fdf` package names the consumer to be removed by the same destroy, its nodes owned virtual Machines that destroy stops and deletes. A consumer whose `fdf` block started but never completed still makes the destroy refuse. A surviving consumer waits for [B491](milestones/m2.md#b491)'s consumer quiescence. |
 
@@ -1467,7 +1467,7 @@ completion:
 | `rook-ceph-mon` | Secret | `fsid`; `admin-secret` and `mon-secret` as fixed placeholders |
 | `rook-ceph-operator-creds` | Secret | the health principal |
 | `monitoring-endpoint` | CephCluster | `MonitoringEndpoint`: the public addresses of the MGR hosts; `MonitoringPort`: the `prometheus` port |
-| `rook-<principal>` for the four CSI principals | Secret | `userID`, `userKey` |
+| `rook-csi-{rbd,cephfs}-{node,provisioner}-<id>` for the four CSI principals | Secret | `userID`, `userKey` |
 | `ceph-rbd` | StorageClass | `pool` and the RBD secret names |
 | `cephfs` | StorageClass | `fsName`, the default data pool as `pool`, and the CephFS secret names |
 | `ceph-rgw`, with a gateway | StorageClass | `endpoint`: `<fqdn>:<port>`; `poolPrefix`: the zone |

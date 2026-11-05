@@ -149,7 +149,7 @@ func automationFormats() map[string]automationFormat {
 	formats := map[string]automationFormat{
 		"addon-instance-request-v4":  {class: formatMirrored},
 		"ceph-export-request-v3":     {class: formatMirrored},
-		"ceph-export-evidence-v1":    {class: formatMirrored},
+		"ceph-export-evidence-v2":    {class: formatMirrored},
 		"cluster-network-request-v2": {class: formatMirrored},
 		"cluster-objects-v2":         {class: formatMirrored},
 		// The host block writes them; the core block's workers read them back

@@ -22,7 +22,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import ceph_native
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import Custody, Refusal, canonical, require, unique_object
 
 VERSION = "ceph-export-request-v3"
-EVIDENCE_VERSION = "ceph-export-evidence-v1"
+EVIDENCE_VERSION = "ceph-export-evidence-v2"
 PHASES = ("export_apply", "export_observe")
 REASONS = ("gateway-dns", "export-foreign-principal", "export-key-type", "export-prerequisite", "export-identity")
 RGW_CAPS = {"buckets": "*", "users": "*", "usage": "read", "metadata": "read", "zone": "read", "info": "read"}
@@ -302,13 +302,18 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
                    entry("Secret", "rook-ceph-mon", {"admin-secret": "admin-secret", "mon-secret": "mon-secret", "fsid": self.request["fsid"]}),
                    entry("Secret", "rook-ceph-operator-creds", {"userID": keys["health"]["entity"], "userKey": keys["health"]["key"]}),
                    entry("CephCluster", "monitoring-endpoint", {"MonitoringEndpoint": facts["monitoringEndpoint"], "MonitoringPort": facts["monitoringPort"]})]
-        for suffix in ("rbd-node", "rbd-prov", "fs-node", "fs-prov"):
-            entries.append(entry("Secret", "rook-" + self.identifier + "-" + suffix,
+        # ocs-operator's snapshot class lookup (controllers/storagecluster/volumesnapshotterclasses.go getClusterIDAndSecretName) matches
+        # a details Secret by containing rook-csi-<type>-provisioner, so the names follow Rook's restricted-auth form.
+        names = {}
+        for suffix, kind, role in (("rbd-node", "rbd", "node"), ("rbd-prov", "rbd", "provisioner"),
+                                   ("fs-node", "cephfs", "node"), ("fs-prov", "cephfs", "provisioner")):
+            names[kind, role] = "rook-csi-" + kind + "-" + role + "-" + self.identifier
+            entries.append(entry("Secret", names[kind, role],
                                  {"userID": keys[suffix]["entity"].removeprefix("client."), "userKey": keys[suffix]["key"]}))
         for name, kind, data in (("ceph-rbd", "rbd", {"pool": self.export["pool"]}),
-                                 ("cephfs", "fs", {"pool": self.export["defaultDataPool"], "fsName": self.export["filesystem"]})):
-            for field, suffix in (("provisioner", "prov"), ("controller-expand", "prov"), ("node-stage", "node")):
-                data["csi.storage.k8s.io/" + field + "-secret-name"] = "rook-" + self.identifier + "-" + kind + "-" + suffix
+                                 ("cephfs", "cephfs", {"pool": self.export["defaultDataPool"], "fsName": self.export["filesystem"]})):
+            for field, role in (("provisioner", "provisioner"), ("controller-expand", "provisioner"), ("node-stage", "node")):
+                data["csi.storage.k8s.io/" + field + "-secret-name"] = names[kind, role]
             entries.append(entry("StorageClass", name, data))
         gateway = self.export.get("gateway")
         if gateway:
