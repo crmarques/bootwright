@@ -156,7 +156,7 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
         filesystems = self.fs_dump()["filesystems"]
         selected_fs = [entry for entry in filesystems if entry["mdsmap"]["fs_name"] == filesystem]
         require(len(selected_fs) == 1 and self.markers.read("filesystem-id." + filesystem + ".json") == {"id": selected_fs[0]["id"]}, "export-prerequisite")
-        groups = self.ceph("fs", "subvolumegroup", "ls", filesystem)
+        groups = self.manager_retry(self.ceph, "fs", "subvolumegroup", "ls", filesystem)
         require(isinstance(groups, list) and any(group.get("name") == "csi" for group in groups), "export-prerequisite")
         monmap = self.ceph("mon", "dump")
         allowed = monmap.get("auth_allowed_ciphers")

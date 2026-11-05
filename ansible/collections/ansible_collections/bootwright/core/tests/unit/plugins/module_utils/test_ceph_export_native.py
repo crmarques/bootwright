@@ -240,6 +240,28 @@ def test_native_prerequisites_and_allowed_cipher_shape(monkeypatch):
     assert not native.markers.writes
 
 
+def test_subvolumegroup_listing_is_retried_while_the_manager_restarts(monkeypatch):
+    # The export follows the prometheus unit, whose enabling respawns the manager; the volumes module may still be loading.
+    native, responses = prerequisite_worker(monkeypatch)
+    elapsed, attempts = [0], []
+    native.clock = lambda: elapsed[0]
+    native.pause = lambda seconds: elapsed.__setitem__(0, elapsed[0] + seconds)
+    answer = native.ceph
+
+    def ceph(*args):
+        if args == ("fs", "subvolumegroup", "ls", "files"):
+            attempts.append(args)
+            if len(attempts) < 3:
+                raise ceph_native.NativeFailure("native-command", "ceph fs subvolumegroup ls files", b"volumes module is loading")
+        return answer(*args)
+    monkeypatch.setattr(native, "ceph", ceph)
+    assert native.prerequisites()["leader"] == "node-1"
+    assert len(attempts) == 3 and elapsed[0] == 2 * ceph_native.MANAGER_INTERVAL
+    responses[("fs", "subvolumegroup", "ls", "files")] = [{"name": "other"}]
+    with pytest.raises(ceph_native.Refusal, match="export-prerequisite"):
+        native.prerequisites()
+
+
 @pytest.mark.parametrize("fault", ["pool-incarnation", "missing-csi", "missing-monitoring", "foreign-monitor", "foreign-manager"])
 def test_missing_or_foreign_prerequisites_refuse_before_writes(monkeypatch, fault):
     native, responses = prerequisite_worker(monkeypatch)
