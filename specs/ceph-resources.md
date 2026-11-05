@@ -1399,7 +1399,7 @@ nodes that run it.
 | --- | --- |
 | External-cluster details | Admission refuses the external arm under B107; use a managed cluster. |
 | Erasure-coded RBD pool, missing `csi` group, monitoring service or gateway FQDN | Admission names the reference; select a replicated RBD pool and declare each prerequisite. |
-| Ambiguous public address on a selected MON or MGR host | Planning requires exactly one address inside the declared Ceph public networks per selected host. |
+| Ambiguous public address on a selected MON or MGR host, or a shared MON short name | Planning requires one address in the Ceph public networks per selected host and unique MON short names. |
 | Direct RGW placement selects fewer daemons than eligible hosts | Planning requires an ingress VIP or a placement whose count covers its selected hosts. |
 | Disallowed key type, missing native prerequisite or mismatched owned identity | Realization refuses before creating credentials; correct the declared prerequisites or restore the original owned state. |
 | Removing a consumer while its hosts survive, or with physical hosts | Removal refuses; consumer retirement requires every installed host to be an owned virtual Machine removed by the same destroy, a [provided stretch tiebreaker](ceph.md#a-provided-tiebreakers-removal) left to its cluster block. |
