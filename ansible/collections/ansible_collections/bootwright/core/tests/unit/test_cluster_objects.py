@@ -65,7 +65,7 @@ def test_absent_create_uses_frozen_identity_and_manager(tmp_path, object_request
     result = Engine(object_request, oc.read, oc.write, clock=lambda: 0).execute()
     assert result["changed"] and result["state"]["postcondition"]
     calls = oc.calls()
-    assert calls[0]["argv"][3:5] == ["get", "Namespace.v1"]
+    assert calls[0]["argv"][3:5] == ["get", "Namespace.v1."]
     assert "--ignore-not-found=true" in calls[0]["argv"]
     assert "--filename=-" in calls[1]["argv"]
     body = json.loads(calls[1]["stdin"])
@@ -154,7 +154,8 @@ def test_projection_excludes_secret_values_and_installplan_steps():
     assert '"bundleLookups"' in plan
 
 
-@pytest.mark.parametrize("api_version,qualified", [("one.example/v1", "Example.v1.one.example"), ("two.example/v1", "Example.v1.two.example")])
+@pytest.mark.parametrize("api_version,qualified", [
+    ("one.example/v1", "Example.v1.one.example"), ("two.example/v1", "Example.v1.two.example"), ("v1", "Example.v1.")])
 def test_resource_qualification(api_version, qualified):
     assert native.resource({"kind": "Example", "apiVersion": api_version, "name": "example"}) == qualified
 

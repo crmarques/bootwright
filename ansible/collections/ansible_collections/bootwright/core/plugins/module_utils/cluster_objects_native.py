@@ -32,7 +32,7 @@ def resource(value, listing=False):
             or (value.get("namespace") and not re.fullmatch(r"[a-z0-9][a-z0-9-]*", value["namespace"]))):
         raise ValueError("invalid object identity")
     version = value["apiVersion"].split("/")
-    return ".".join([value["kind"], version[-1]] + version[:-1])
+    return ".".join([value["kind"], version[-1]] + (version[:-1] or [""]))
 
 
 def projection(value, fields):

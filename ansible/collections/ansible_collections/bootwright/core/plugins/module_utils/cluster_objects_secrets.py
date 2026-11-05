@@ -51,7 +51,7 @@ def read_private(params):
     projection = native.JSON_TEMPLATE + native.template_tree({
         "metadata": {"uid": True, "creationTimestamp": True, "annotations": {model.OWNER: True}, "labels": True},
         "type": True, "data": True})
-    argv = ["get", "Secret.v1", obj["name"], "--namespace", obj["namespace"],
+    argv = ["get", "Secret.v1.", obj["name"], "--namespace", obj["namespace"],
             "--ignore-not-found=true", "-o", "go-template=" + projection]
     code, output, ignored_error = native.run(params["oc"], params["kubeconfig"], argv, params["deadline"])
     if code:
