@@ -18,7 +18,7 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
-func managedExportPlan(t *testing.T, gateway bool) reconciliation.BlockDefinition {
+func managedExportPlan(t *testing.T, gateway bool, edits ...func(api.Value) api.Value) reconciliation.BlockDefinition {
 	t.Helper()
 	refs := requestMap("rbdPoolRef", "block", "filesystemRef", "files", "cephxKeyType", "aes")
 	children := []api.Object{cephfsPool("block", "rbd"), filesystemOf("subvolumeGroups", api.ListValue(requestMap("name", "csi")))}
@@ -40,6 +40,9 @@ func managedExportPlan(t *testing.T, gateway bool) reconciliation.BlockDefinitio
 				}
 			}
 			spec = spec.WithPath(api.ListValue(services...), "services")
+		}
+		for _, edit := range edits {
+			spec = edit(spec)
 		}
 		return spec
 	}
@@ -131,6 +134,71 @@ func TestExportEvidenceGolden(t *testing.T) {
 		}
 	}
 }
+func withNodeFQDNs(spec api.Value) api.Value {
+	nodes := spec.Get("topology", "nodes").Items()
+	for i, node := range nodes {
+		nodes[i] = node.WithPath(api.StringValue(node.Get("name").Text()+".example.test"), "fqdn")
+	}
+	return spec.WithPath(api.ListValue(nodes...), "topology", "nodes")
+}
+
+// cephadm names each MON after its host's short name, which is what
+// quorum_leader_name reports, so an FQDN-declared node's monitor is keyed by
+// the part of its hostname before the first dot.
+func TestExportKeysMonitorsByTheirMONIDForFQDNNodes(t *testing.T) {
+	block := managedExportPlan(t, true, withNodeFQDNs)
+	r, err := DecodeConsumerRequest(block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := []string{}
+	for name := range r.Monitors {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	if !slices.Equal(names, []string{"node-1", "node-2", "node-3"}) {
+		t.Fatalf("monitors keyed by %v, want the MON IDs node-1..node-3", names)
+	}
+	owner := "apply-test"
+	principals := map[string]map[string]string{}
+	for suffix, caps := range r.Principals {
+		principals["client."+ConsumerPrincipalPrefix(owner, r.Name)+"-"+suffix] = caps
+	}
+	e := ConsumerEvidence{Leader: "node-1", Address: r.Monitors["node-1"], Entries: exportEntries(r, owner), Principals: principals, KeyType: r.KeyType, RGWUser: ConsumerPrincipalPrefix(owner, r.Name) + "-ops", Version: ConsumerEvidenceVersion, Name: r.Name, Owner: owner, FSID: FSIDFor(owner, r.Cluster), Request: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", Ready: true}
+	data, err := json.Marshal(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effect, err := EvaluateExportEvidence(data, r, owner, e.Request); err != nil || effect != reconciliation.EffectCompleted {
+		t.Fatalf("evidence naming MON node-1: %s %v", effect, err)
+	}
+	produced := detailsProduced(t, syntheticDetails(r, owner))
+	defer lifecycle.ClearProduced(produced)
+	if err := validateExportProduced(produced, r, owner); err != nil {
+		t.Fatalf("details naming MON node-1: %v", err)
+	}
+}
+
+func TestExportRefusesMonitorShortNameCollisions(t *testing.T) {
+	collide := func(spec api.Value) api.Value {
+		nodes := spec.Get("topology", "nodes").Items()
+		for i, node := range nodes {
+			nodes[i] = node.WithPath(api.StringValue("ceph."+node.Get("name").Text()+".example.test"), "fqdn")
+		}
+		return spec.WithPath(api.ListValue(nodes...), "topology", "nodes")
+	}
+	refs := requestMap("rbdPoolRef", "block", "filesystemRef", "files", "cephxKeyType", "aes")
+	children := []api.Object{cephfsPool("block", "rbd"), filesystemOf("subvolumeGroups", api.ListValue(requestMap("name", "csi"))), childOf(api.CephConsumer, "consumer", "dataFoundation", refs)}
+	change := func(spec api.Value) api.Value {
+		spec = withMDS(spec)
+		services := append(spec.Get("services").Items(), requestMap("service_type", "prometheus", "placement", requestMap("count", 1)))
+		return collide(spec.WithPath(api.ListValue(services...), "services"))
+	}
+	catalog := filesystemCatalog(change, children...)
+	_, err := NewConsumer(nil).Plan(context.Background(), lifecycle.PlanInput{Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "synthetic"}, Controller: "controller", State: compilation.NewState(catalog, catalog, nil)})
+	refusedWith(t, err, "api.invariant", "Ceph consumer requires monitor hosts whose short names are unique", "declare monitor hosts whose hostnames differ before the first dot")
+}
+
 func TestExportRequestRejectsExpandedCapsAndRuntimeScope(t *testing.T) {
 	block := managedExportPlan(t, false)
 	r, _ := DecodeConsumerRequest(block.Request)

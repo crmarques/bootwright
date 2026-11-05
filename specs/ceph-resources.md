@@ -1477,9 +1477,9 @@ completion:
 The details are a pure function of the retained keys and the non-secret facts
 the block recorded at its first assembly, so a continuation reproduces the
 same bytes. Before offering them the block checks them: every key is a
-non-empty string of the declared type, the recorded leader is a monitor the
-cluster's request declares, by name, and its address is that monitor's
-declared public address, the monitoring endpoint names at least one address
+non-empty string of the declared type, the recorded leader is the MON ID
+(the host's short name) of a monitor the request declares, at its declared
+public address, the monitoring endpoint names at least one address
 and a port, `ceph-rgw` names exactly the gateway's endpoint, the
 RGW keys are non-empty, and `ceph-rgw-tls-cert` is present exactly when the
 gateway terminates TLS. Its evidence names the principals, their capabilities

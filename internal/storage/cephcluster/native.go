@@ -17,6 +17,11 @@ func NativeHostname(node api.Value) string {
 	return fallback(node.Get("fqdn"), textOf(node, "name"))
 }
 
+func NativeShortName(node api.Value) string {
+	short, _, _ := strings.Cut(NativeHostname(node), ".")
+	return short
+}
+
 func nativeNode(cluster api.Object, hostname string) (api.Value, bool) {
 	var result api.Value
 	count := 0

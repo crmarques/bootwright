@@ -346,7 +346,11 @@ func exportMonitoring(catalog api.Catalog, cluster api.Object, r *ConsumerReques
 				return failure("api.invariant", "Ceph consumer requires one unambiguous public address per monitor and manager host", "declare one address in the Ceph public networks on each selected host")
 			}
 			if typ == "mon" {
-				r.Monitors[name] = candidates[0]
+				id := cephcluster.NativeShortName(node)
+				if _, taken := r.Monitors[id]; taken {
+					return failure("api.invariant", "Ceph consumer requires monitor hosts whose short names are unique", "declare monitor hosts whose hostnames differ before the first dot")
+				}
+				r.Monitors[id] = candidates[0]
 			} else {
 				r.MonitoringHosts = append(r.MonitoringHosts, candidates[0])
 			}
