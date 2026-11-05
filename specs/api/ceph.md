@@ -353,8 +353,10 @@ checks:
 - native placement resolves to owned Machines and service counts fit finite
   candidate sets, with consistent site and label bindings;
 - OSD selectors are bounded and internally consistent, exclude the Machine's
-  root device, by path, WWN or serial number, from explicit data, DB, and WAL
-  paths, and admit a `/dev/disk/by-serial/<serialNumber>` path only on a
+  root device, named by its path, WWN path or serial-number path, from explicit
+  data, DB, and WAL paths (a root declared by serial number that a WWN path
+  names is refused by host preparation as `device-root`, once the live disk
+  reports its serial), and admit a `/dev/disk/by-serial/<serialNumber>` path only on a
   Bootwright-installed bare-metal Machine whose `hardware.eraseOnRemoval`
   declares that serial without `deviceName`;
 - policies, pools, filesystems, gateways, NFS exports, SMB resources, and

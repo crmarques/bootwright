@@ -322,11 +322,13 @@ func TestTheKickstartRefusesARootIdentityItCannotCompare(t *testing.T) {
 }
 
 // serialDisk is one block device under the synthetic /sys/class/block: its
-// serial number as a native attribute, or none, and its removable and
-// read-only flags.
+// serial number as a native attribute, or none, its removable and read-only
+// flags, whether it is a partition and the content of its hidden attribute, or
+// none (a hidden NVMe path node reads 1).
 type serialDisk struct {
 	name, serial, removable, ro string
 	partition                   bool
+	hidden                      string
 }
 
 func serialHost(t *testing.T, disks []serialDisk, size string) installerHost {
@@ -344,6 +346,9 @@ func serialHost(t *testing.T, disks []serialDisk, size string) installerHost {
 			}
 			if disk.partition {
 				files["partition"] = "1\n"
+			}
+			if disk.hidden != "" {
+				files["hidden"] = disk.hidden + "\n"
 			}
 			for name, content := range files {
 				if err := os.WriteFile(filepath.Join(node, name), []byte(content), 0o644); err != nil {
@@ -368,7 +373,7 @@ func TestThePhysicalTargetProofResolvesASerialRootToExactlyOneDisk(t *testing.T)
 	const serial, size = "ZC1A2B3C", "480103981056"
 	input := physicalInstallation()
 	input.RootDevice, input.RootSerial, input.RootSizeBytes = "", serial, 480103981056
-	fixed := func(name, reported string) serialDisk { return serialDisk{name, reported, "0", "0", false} }
+	fixed := func(name, reported string) serialDisk { return serialDisk{name, reported, "0", "0", false, ""} }
 	const (
 		absent    = "no whole disk here reports the declared root serial number " + serial
 		ambiguous = "2 disks here report the declared root serial number " + serial
@@ -382,12 +387,18 @@ func TestThePhysicalTargetProofResolvesASerialRootToExactlyOneDisk(t *testing.T)
 	}{
 		"one SCSI disk": {[]serialDisk{fixed("sda", serial), fixed("sdb", "OTHER-01")}, size, "sda", ""},
 		"one NVMe disk": {[]serialDisk{fixed("nvme0n1", serial), fixed("sda", "OTHER-01")}, size, "nvme0n1", ""},
-		"a partition and an unreadable sibling beside it": {[]serialDisk{fixed("sda", serial), {"sda1", serial, "0", "0", true}, fixed("sdb", ""), fixed("loop0", "")}, size, "sda", ""},
+		"a partition and an unreadable sibling beside it": {[]serialDisk{fixed("sda", serial), {"sda1", serial, "0", "0", true, ""}, fixed("sdb", ""), fixed("loop0", "")}, size, "sda", ""},
+		"a dual-port NVMe disk and its hidden path node":  {[]serialDisk{fixed("nvme0n1", serial), {"nvme0c0n1", serial, "0", "0", false, "1"}}, size, "nvme0n1", ""},
+		"a hidden path node of an absent head node":       {[]serialDisk{{"nvme0c0n1", serial, "0", "0", false, "1"}}, size, "", absent},
+		"a hidden path node beside two visible disks":     {[]serialDisk{fixed("nvme0n1", serial), fixed("nvme1n1", serial), {"nvme0c0n1", serial, "0", "0", false, "1"}}, size, "", ambiguous},
+		"a second disk that is not hidden":                {[]serialDisk{fixed("nvme0n1", serial), {"nvme0c0n1", serial, "0", "0", false, ""}}, size, "", ambiguous},
+		"a second disk whose hidden flag reads 0":         {[]serialDisk{fixed("nvme0n1", serial), {"nvme0c0n1", serial, "0", "0", false, "0"}}, size, "", ambiguous},
+		"a second disk whose hidden flag is not 0 or 1":   {[]serialDisk{fixed("nvme0n1", serial), {"nvme0c0n1", serial, "0", "0", false, "yes"}}, size, "", ambiguous},
 		"no disk":                               {[]serialDisk{fixed("sda", "OTHER-01")}, size, "", absent},
 		"two paths of a multipath disk":         {[]serialDisk{fixed("sda", serial), fixed("sdb", serial)}, size, "", ambiguous},
 		"two namespaces of one NVMe controller": {[]serialDisk{fixed("nvme0n1", serial), fixed("nvme0n2", serial)}, size, "", ambiguous},
-		"a removable disk":                      {[]serialDisk{{"sda", serial, "1", "0", false}}, size, "", kind},
-		"a read-only disk":                      {[]serialDisk{{"sda", serial, "0", "1", false}}, size, "", kind},
+		"a removable disk":                      {[]serialDisk{{"sda", serial, "1", "0", false, ""}}, size, "", kind},
+		"a read-only disk":                      {[]serialDisk{{"sda", serial, "0", "1", false, ""}}, size, "", kind},
 		"a virtual disk":                        {[]serialDisk{fixed("vda", serial)}, size, "", kind},
 		"another size":                          {[]serialDisk{fixed("sda", serial)}, "480103985152", "", sized},
 	} {

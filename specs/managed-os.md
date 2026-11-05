@@ -1270,8 +1270,9 @@ MAC-set predicate of
 declared by-id path must resolve to a whole disk. A root declared by serial
 number is resolved first: the `%pre` reads the serial number of every block
 device in `/sys/class/block` that is not a partition, under the sysfs rules
-below, skips one it cannot read, and requires exactly one to report the
-declared serial; that one must be an `sd` or `nvme` kernel disk whose
+below, skips one it cannot read and a hidden NVMe path node (a `hidden`
+attribute reading `1`, such as `nvme0c0n1`, which is its head node's own
+disk), and requires exactly one to report the declared serial; that one must be an `sd` or `nvme` kernel disk whose
 `removable` and `ro` attributes read `0` and a whole disk, and `blockdev
 --getsize64` must report exactly `sizeBytes`. None, more than one, such as two
 paths of a multipath disk, namespaces of one NVMe controller or a cloned

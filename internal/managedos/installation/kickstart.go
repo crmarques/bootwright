@@ -779,7 +779,7 @@ func serialResolverLines() []string {
 		`bootwright_resolve() {`,
 		`local entry value form count=0 found=''`,
 		`for entry in /sys/class/block/*; do`,
-		`if [ ! -e "${entry}" ] || [ -e "${entry}/partition" ]; then continue; fi`,
+		`if [ ! -e "${entry}" ] || [ -e "${entry}/partition" ] || [ "$(cat -- "${entry}/hidden" 2>/dev/null)" = 1 ]; then continue; fi`,
 		`value="${entry}/device/vpd_pg80" form=vpd`,
 		`if [ -e "${entry}/device/serial" ]; then value="${entry}/device/serial" form=text; fi`,
 		`if ! value=$(bootwright_identity "${value}" "${form}" 2>/dev/null); then continue; fi`,

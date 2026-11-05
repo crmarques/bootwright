@@ -2461,7 +2461,8 @@ target supplies `serialNumber` and exact `sizeBytes`, and either both
 `deviceName` and `wwn` or neither; a target without them is the one whole disk
 the RAM worker finds reporting that serial number, which must be fixed,
 writable and exactly that size, and none or several refuse before the first
-write. A target may name its own `method`, which overrides the policy's for
+write; a partition and a hidden NVMe path node (its `hidden` attribute reads
+`1`) are not candidates, the node being its head node's own disk. A target may name its own `method`, which overrides the policy's for
 that disk; the frozen request records each target's resolved method. The
 approved root disk must be listed: the target with
 `hardware.rootDevice.deviceName`, or, for a root declared by serial number, the

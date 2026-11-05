@@ -374,7 +374,12 @@ func TestEachCephBlockNamesExactlyTheRefusalsItsModuleMayPublish(t *testing.T) {
 	const path = "collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_core.py"
 	source := string(ansible.Assets()[path])
 	token := regexp.MustCompile(`"([a-z0-9-]+)"`)
-	for name, refusals := range map[string]map[string]error{"HOST_REASONS": hostRefusals(), "CLUSTER_REASONS": adapterRefusals()} {
+	// A physical host selecting a disk by serial number and declaring a root serial adds the refusals only it can raise.
+	physical := Host{Name: "ceph-1", Machine: "node-1", Physical: true, RootSerial: "ROOT-1", Devices: []Device{{Path: "/dev/disk/by-serial/SER-1", Serial: "SER-1", SizeBytes: 1 << 40}}}
+	host := hostRefusals()
+	maps.Copy(host, serialDeviceRefusals(physical))
+	maps.Copy(host, rootDeviceRefusals(physical))
+	for name, refusals := range map[string]map[string]error{"HOST_REASONS": host, "CLUSTER_REASONS": adapterRefusals()} {
 		_, tuple, found := strings.Cut(source, "\n"+name+" = (\n")
 		tuple, _, closed := strings.Cut(tuple, "\n)\n")
 		if !found || !closed {

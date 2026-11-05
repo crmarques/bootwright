@@ -267,10 +267,13 @@ def resolve_serial(serial, root=Path("/sys")):
     """The one fixed, writable whole sd or nvme disk reporting serial."""
     # A disk whose serial cannot be read is skipped, so it never matches; two
     # paths of one multipath disk, namespaces of one NVMe controller and a
-    # cloned serial all match twice, and the worker never chooses.
+    # cloned serial all match twice, and the worker never chooses. A hidden
+    # NVMe path node (nvme0c0n1) is its head node's own disk, so only a
+    # hidden attribute reading 1 skips it; a missing, unreadable or other
+    # value counts it, which can only add a match and refuse.
     matches = []
     for node in sorted((root / "class/block").iterdir()):
-        if (node / "partition").exists():
+        if (node / "partition").exists() or flag(node / "hidden") == "1":
             continue
         try:
             observed = disk_serial(node)

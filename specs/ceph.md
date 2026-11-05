@@ -955,9 +955,9 @@ host block through its preparation evidence. Only the entries coded `lifecycle.u
 `package-license`, `package-platform`, `dashboard-verify`,
 `client-quiescence-unqualified`, `call-home-unqualified`,
 `native-option-undeclared`, `ssh-policy-host-excluded`,
-`ssh-policy-unavailable`, `tunnel-host-key-excluded`, `device-not-empty` and
-`foreign-osd`) leave it failed. A censored failure that names
-no refusal stays the generic adapter failure, which fails the attempt.
+`ssh-policy-unavailable`, `tunnel-host-key-excluded`, `device-not-empty`,
+`foreign-osd`, `device-*`) leave it failed. A censored failure that names
+no refusal stays the generic adapter failure, failing the attempt.
 
 ### Cluster execution budget
 
@@ -1160,9 +1160,11 @@ disk its Machine declares as a
 without `deviceName` and with that `serialNumber`, whose `sizeBytes` it takes,
 because physical retirement needs that target anyway. A serial the Machine
 declares no such target for, one its target names by `deviceName`, and the
-root disk's serial refuse `api.invariant` at the selector. Host preparation
-resolves it on the live host, before the first destructive effect, to the one
-whole disk whose sysfs serial number, read as the [physical
+root disk's serial refuse `api.invariant` at the selector. Preparation refuses
+`device-root` a disk reporting a serial-declared root's serial.
+It resolves the serial path on the live host, before the first destructive
+effect, to the one whole disk, a hidden NVMe path node (`hidden` reads `1`)
+excepted, whose sysfs serial number, read as the [physical
 erase](state-reconciliation.md#opt-in-physical-logical-overwrite) worker reads
 it, is that serial, a fixed, writable `sd` or `nvme` disk exactly `sizeBytes`
 long. It records the disk's kernel path, its observed WWN when it has one, and

@@ -58,6 +58,7 @@ UNIT_DAEMON = re.compile(r"[a-z][a-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9_.-]{0,250}\Z")
 HOST_REASONS = (
     "fips-policy", "fips-not-enabled", "stretch-intent",
     "unsupported-release", "image-pull", "image-platform", "image-profile", "route-probe", "device-identity", "runtime-profile", "not-ready",
+    "device-serial-absent", "device-serial-ambiguous", "device-serial-mismatch", "device-alias", "device-root",
     "package-acquisition", "package-resolution", "package-signature", "package-transaction", "request", "artifact", "ownership", "evidence",
     "material", "packages", "package-artifact", "package-drift", "package-journal", "package-license",
     "package-limit", "package-timeout", "package-platform", "package-host", "foreign-cluster", "native-command", "native-timeout", "native-output",
@@ -1535,7 +1536,7 @@ def dashboard_phase(request, operation, request_digest, bootstrap, transport, ob
 
 def host_request(value):
     """A frozen host block request: its cluster's host scope and one of its hosts."""
-    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "pulls", "version"} and value["version"] == "ceph-host-v12")
+    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "pulls", "version"} and value["version"] == "ceph-host-v13")
     cluster = ceph_native.validate_scope(value["cluster"])
     ceph_native.require("packages" in cluster)
     ceph_native.require(sum(host["name"] == value["host"] for host in cluster["hosts"]) == 1)

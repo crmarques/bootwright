@@ -625,7 +625,7 @@ def package_url(value):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v40")
+    require(request["version"] == "ceph-core-v41")
     if "security" in request:
         security = request["security"]
         require(isinstance(security, dict) and set(security) == {"fips", "cephxKeyType"})
@@ -736,11 +736,11 @@ def validate_hosts(request):
     for host in hosts:
         require(isinstance(host, dict) and set(host) >= {"name", "machine", "address", "user", "port", "devices", "labels", "location", "sshKeyRef"})
         require(not set(host) - {"name", "machine", "address", "user", "port", "devices", "labels", "location", "sshKeyRef",
-                                 "hostKeyRef", "knownHosts", "knownHostsRef", "physical", "hardware", "provided"})
+                                 "hostKeyRef", "knownHosts", "knownHostsRef", "physical", "hardware", "provided", "rootSerial"})
         provided = host.get("provided", False)
         require(type(provided) is bool and ("provided" not in host or provided))
         require(not provided or named(host.get("knownHostsRef")) and not host["devices"]
-                and not {"hostKeyRef", "knownHosts", "physical", "hardware"} & set(host))
+                and not {"hostKeyRef", "knownHosts", "physical", "hardware", "rootSerial"} & set(host))
         require(provided or "knownHostsRef" not in host)
         require(all(named(host[k]) for k in ("name", "machine", "user")))
         require(named(host["sshKeyRef"]))
@@ -758,6 +758,8 @@ def validate_hosts(request):
         require(isinstance(host["devices"], list) and len(host["devices"]) <= 128)
         physical = host.get("physical", False)
         require(type(physical) is bool and ("hardware" not in host or physical))
+        # The Machine's declared root disk serial, which no selected disk may report.
+        require("rootSerial" not in host or physical and re.fullmatch(r"[A-Za-z0-9._:+/=-]{1,256}", host["rootSerial"]) is not None)
         if physical:
             hardware = host.get("hardware")
             require(isinstance(hardware, dict) and set(hardware) == {"uuid", "macs"})
@@ -887,7 +889,8 @@ def device_path(value):
 
 def selected_device(host, value):
     path = device_path(value)
-    found = [d for d in host["devices"] if path in (d["path"], "/dev/disk/by-id/virtio-" + d["serial"])]
+    # A virtio alias names a virtual disk's serial; a physical host selects only by its frozen path.
+    found = [d for d in host["devices"] if path == d["path"] or not host.get("physical") and path == "/dev/disk/by-id/virtio-" + d["serial"]]
     require(len(found) == 1, "device-unproved")
     return found[0]
 

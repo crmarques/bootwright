@@ -74,7 +74,7 @@ def request_value():
               "devices": [{"path": "/dev/sda", "serial": "drive-scsi" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    return {"controller": "controller", "version": "ceph-core-v40", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v41", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": IMAGE,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "5.0.3-1", "packageRepository": "https://publisher.example.test/ceph",
@@ -2029,6 +2029,20 @@ def test_physical_device_observation_refuses_changed_live_identity(request_value
     assert markers.records == retained
 
 
+@pytest.mark.parametrize("root_serial,refused", [("serial-1", True), ("serial-2", False), (None, False)])
+def test_a_physical_host_refuses_a_selected_disk_that_is_its_machines_root_disk_before_any_record(request_value, tmp_path, monkeypatch, root_serial, refused):
+    if root_serial is not None:
+        request_value["hosts"][0]["rootSerial"] = root_serial
+    worker, markers, unused = physical_runtime(request_value, tmp_path, monkeypatch)
+    before = copy.deepcopy(markers.records)
+    if refused:
+        with pytest.raises(ceph_native.Refusal, match="^device-root$"):
+            worker.device_identity()
+        assert markers.records == before
+    else:
+        assert worker.device_identity() == {"changed": True}
+
+
 @pytest.mark.parametrize("damage", ["uuid", "missing-mac", "extra-mac", "unreadable"])
 def test_physical_hardware_requires_original_uuid_and_complete_mac_inventory(tmp_path, damage):
     uuid = tmp_path / "class/dmi/id/product_uuid"
@@ -2273,6 +2287,56 @@ def test_a_serial_selection_refuses_before_any_record_unless_exactly_one_qualifi
         state["links"] = {}
     before = copy.deepcopy(markers.records)
     with pytest.raises(ceph_native.Refusal, match="^" + reason + "$"):
+        worker.device_identity()
+    assert markers.records == before
+
+
+@pytest.mark.parametrize("physical,root_serial", [(False, "ROOT-1"), (True, ""), (True, "ROOT 1"), (True, "R" * 257)])
+def test_a_root_serial_is_admitted_only_on_a_physical_host_and_only_in_its_declared_form(request_value, tmp_path, physical, root_serial):
+    request_value["hosts"][0]["rootSerial"] = root_serial
+    if physical:
+        request_value["hosts"][0].update(physical=True, hardware=copy.deepcopy(PHYSICAL_HARDWARE))
+        request_value["hosts"][0]["devices"] = []
+    with pytest.raises(ceph_native.Refusal, match="^request$"):
+        host_runtime(request_value, tmp_path, lambda argv, timeout, limit: (0, b""))
+
+
+@pytest.mark.parametrize("physical,selects", [(True, False), (False, True)])
+def test_a_virtio_alias_selects_a_device_by_serial_only_on_a_virtual_host(physical, selects):
+    host = {"physical": physical, "devices": [{"path": SERIAL_PATH, "serial": SERIAL, "sizeBytes": SERIAL_SIZE}]}
+    alias = "/dev/disk/by-id/virtio-" + SERIAL
+    assert ceph_native.selected_device(host, SERIAL_PATH) == host["devices"][0]
+    if selects:
+        assert ceph_native.selected_device(host, alias) == host["devices"][0]
+    else:
+        with pytest.raises(ceph_native.Refusal, match="^device-unproved$"):
+            ceph_native.selected_device(host, alias)
+
+
+def test_a_serial_selection_ignores_the_hidden_path_nodes_of_its_dual_port_nvme_disk(request_value, tmp_path, monkeypatch):
+    worker, markers, unused, sysfs = serial_runtime(request_value, tmp_path, monkeypatch)
+    (sysfs_disk(sysfs, "nvme0c0n1", SERIAL) / "hidden").write_text("1\n")
+    assert worker.device_identity() == {"changed": True}
+    assert markers.records[runtime.DEVICES]["devices"][0]["kernelPath"] == "/dev/nvme0n1"
+
+
+@pytest.mark.parametrize("hidden", [None, "0", "yes"])
+def test_a_serial_selection_counts_a_path_node_that_is_not_proved_hidden(request_value, tmp_path, monkeypatch, hidden):
+    worker, markers, unused, sysfs = serial_runtime(request_value, tmp_path, monkeypatch)
+    node = sysfs_disk(sysfs, "nvme0c0n1", SERIAL)
+    if hidden is not None:
+        (node / "hidden").write_text(hidden + "\n")
+    before = copy.deepcopy(markers.records)
+    with pytest.raises(ceph_native.Refusal, match="^device-serial-ambiguous$"):
+        worker.device_identity()
+    assert markers.records == before
+
+
+def test_a_serial_selection_of_the_machines_root_disk_refuses_as_device_root(request_value, tmp_path, monkeypatch):
+    request_value["hosts"][0]["rootSerial"] = SERIAL
+    worker, markers, unused, unused_sysfs = serial_runtime(request_value, tmp_path, monkeypatch)
+    before = copy.deepcopy(markers.records)
+    with pytest.raises(ceph_native.Refusal, match="^device-root$"):
         worker.device_identity()
     assert markers.records == before
 

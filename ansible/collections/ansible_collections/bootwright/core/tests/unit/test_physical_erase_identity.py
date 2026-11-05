@@ -125,13 +125,15 @@ class IdentityTests(unittest.TestCase):
                     worker.sequence_number(attribute)
 
 
-def block(root, name, serial=None, removable="0", ro="0", partition=False, native=False):
+def block(root, name, serial=None, removable="0", ro="0", partition=False, native=False, hidden=None):
     node = root / "class/block" / name
     (node / "device").mkdir(parents=True)
     (node / "removable").write_text(removable + "\n")
     (node / "ro").write_text(ro + "\n")
     if partition:
         (node / "partition").write_text("1\n")
+    if hidden is not None:
+        (node / "hidden").write_text(hidden + "\n")
     if serial is not None and native:
         (node / "device/serial").write_text(serial + "  \n")
     elif serial is not None:
@@ -167,6 +169,29 @@ class SerialResolutionTests(unittest.TestCase):
                 worker.resolve_serial("EXAMPLE-DATA-01", root)
             block(root, "nvme0n1", "EXAMPLE-NVME-01", native=True)
             block(root, "nvme0n2", "EXAMPLE-NVME-01", native=True)
+            with self.assertRaisesRegex(worker.Refusal, "disk-serial-ambiguous"):
+                worker.resolve_serial("EXAMPLE-NVME-01", root)
+
+    def test_a_hidden_nvme_path_node_is_the_same_disk_as_its_head_node(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            block(root, "nvme0n1", "EXAMPLE-NVME-01", native=True, hidden="0")
+            block(root, "nvme0c0n1", "EXAMPLE-NVME-01", native=True, hidden="1")
+            block(root, "nvme0c1n1", "EXAMPLE-NVME-01", native=True, hidden="1")
+            self.assertEqual(worker.resolve_serial("EXAMPLE-NVME-01", root), "/dev/nvme0n1")
+
+    def test_a_path_node_not_proved_hidden_still_counts(self):
+        for hidden in (None, "0", "yes", ""):
+            with self.subTest(hidden=hidden), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                block(root, "nvme0n1", "EXAMPLE-NVME-01", native=True)
+                block(root, "nvme0c0n1", "EXAMPLE-NVME-01", native=True, hidden=hidden)
+                with self.assertRaisesRegex(worker.Refusal, "disk-serial-ambiguous"):
+                    worker.resolve_serial("EXAMPLE-NVME-01", root)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            block(root, "nvme0n1", "EXAMPLE-NVME-01", native=True)
+            (block(root, "nvme0c0n1", "EXAMPLE-NVME-01", native=True) / "hidden").mkdir()
             with self.assertRaisesRegex(worker.Refusal, "disk-serial-ambiguous"):
                 worker.resolve_serial("EXAMPLE-NVME-01", root)
 

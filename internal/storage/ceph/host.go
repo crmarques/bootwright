@@ -18,7 +18,7 @@ import (
 )
 
 const HostImplementation = "storage-ceph-host-v1"
-const HostVersion = "ceph-host-v12"
+const HostVersion = "ceph-host-v13"
 const HostEvidenceVersion = "ceph-host-evidence-v4"
 const SharedLabel = "system_u:object_r:container_file_t:s0"
 const maxHostEvidence = 24576
@@ -446,6 +446,16 @@ func serialDeviceRefusals(host Host) map[string]error {
 	}
 }
 
+func rootDeviceRefusals(host Host) map[string]error {
+	if !host.Physical || host.RootSerial == "" {
+		return nil
+	}
+	return map[string]error{
+		"device-root": failure("lifecycle.unsupported", "Ceph host "+host.Name+" of Machine "+host.Machine+" selects a data, DB or WAL disk that reports the serial number "+host.RootSerial+", which Machine "+host.Machine+" declares for its root disk",
+			"select another disk for the OSD services on Machine "+host.Machine+"; the root disk, whatever path names it, is never an OSD, DB or WAL device"),
+	}
+}
+
 func packageRefusals() map[string]error {
 	return map[string]error{
 		"packages":            failure("lifecycle.unknown", "the Ceph host package preparation refused its request, source or result", "the adapter detail names the refusing step; check that the declared hosted RHEL DVD tree and the IBM Ceph repository serve the authored package selection to the host, then apply again"),
@@ -530,6 +540,7 @@ func (c HostCapability) run(ctx context.Context, e lifecycle.Execution, operatio
 		refusals["transport"] = providedTransport(host)
 	}
 	maps.Copy(refusals, serialDeviceRefusals(host))
+	maps.Copy(refusals, rootDeviceRefusals(host))
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: HostImplementation, Operation: operation, Variable: "bootwright_ceph_host", Canonical: canonical,
 		Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Cluster.Controller}, Materials: files, Refusals: refusals, NativeErrors: true, Deadline: hostDeadline(operation)}))
 }

@@ -36,7 +36,7 @@ options:
       nvmeof-native, nvmeof-identity, nvmeof-foreign, nvmeof-budget, sso-unverified, stretch-intent, stretch-interrupted,
       stretch-location, stretch-weight, stretch-rule, stretch-foreign, stretch-pools, stretch-drift, tiebreaker-foreign,
       tiebreaker-unreachable, device-not-empty, foreign-osd, osd-partial, osd-clear-failed, osd-clear-unproved,
-      osd-orphan-booted, osd-orphan-unproved]
+      osd-orphan-booted, osd-orphan-unproved, device-serial-absent, device-serial-ambiguous, device-serial-mismatch, device-alias, device-root]
   detail:
     description: Non-secret refusal cause, a refusal name or an exception type and code site.
     type: str

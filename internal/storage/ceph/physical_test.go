@@ -174,6 +174,35 @@ func TestPhysicalCephPlansSerialIntentFromTheMachineErasePolicy(t *testing.T) {
 	}
 }
 
+func TestPhysicalCephFreezesTheRootSerialItsMachineDeclares(t *testing.T) {
+	for name, test := range map[string]struct {
+		machine func(api.Value) api.Value
+		want    string
+	}{
+		"declared by serial": {func(spec api.Value) api.Value {
+			return spec.WithPath(requestMap("serialNumber", "ROOT-2", "sizeBytes", 1<<39), "substrate", "baremetal", "rootDevice")
+		}, "ROOT-2"},
+		"not declared": {nil, ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			catalog, cluster := physicalSerialCatalog(test.machine)
+			r, err := baseRequest(catalog, cluster, "synthetic")
+			if err != nil {
+				t.Fatal(diagnostics.Of(err))
+			}
+			for _, host := range r.Hosts {
+				if want := test.want; host.Machine != "node-2" && host.RootSerial != "" || host.Machine == "node-2" && host.RootSerial != want {
+					t.Fatalf("host %s freezes root serial %q, want %q on node-2 only", host.Machine, host.RootSerial, want)
+				}
+			}
+			frozen, err := r.Canonical()
+			if err != nil || strings.Contains(string(frozen), `"rootSerial"`) != (test.want != "") {
+				t.Fatalf("the frozen request root serial does not follow the Machine: %v", err)
+			}
+		})
+	}
+}
+
 func TestPhysicalCephRefusesASerialSelectionItsMachineDoesNotDeclare(t *testing.T) {
 	const undeclared = "the serial number SER-2 that this OSD selection names is no eraseOnRemoval target of Machine node-2 declared without deviceName, which would give its exact size"
 	const undeclaredRemedy = "declare the disk in spec.hardware.eraseOnRemoval.targets of Machine node-2 with its serialNumber and sizeBytes and no deviceName, or select it by that target's deviceName"

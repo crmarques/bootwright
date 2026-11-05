@@ -16,7 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v40"
+const Version = "ceph-core-v41"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -46,6 +46,7 @@ type Host struct {
 	Physical      bool              `json:"physical,omitempty"`
 	Port          int               `json:"port"`
 	Provided      bool              `json:"provided,omitempty"`
+	RootSerial    string            `json:"rootSerial,omitempty"`
 	SSHKeyRef     string            `json:"sshKeyRef"`
 	User          string            `json:"user"`
 }
@@ -449,6 +450,7 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 		h.Physical = substrate.RealizesPhysicalNICs(provider)
 		var err error
 		if h.Physical {
+			h.RootSerial = substrate.MachineRootDeviceHints(m).SerialNumber
 			h.Devices, err = physicalDevices(c, cluster, m, name)
 		} else {
 			h.Devices, err = virtualDevices(c, m, contextName)

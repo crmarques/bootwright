@@ -37,7 +37,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 
 ROOT = "/var/lib/bootwright/ceph-host"
 PACKAGE_ROOT = "/var/lib/bootwright/ceph-packages"
-VERSION = "ceph-host-v12"
+VERSION = "ceph-host-v13"
 PROFILE_VERSION = "ceph-runtime-profile-v3"
 ROUTE_VERSION = "ceph-host-route-v3"
 DEVICES_VERSION = "ceph-device-identities-v3"
@@ -872,6 +872,8 @@ class HostRuntime:
                 and type(item.get("size")) is int and item["size"] == device["sizeBytes"], "device-identity")
         major, minor = (int(value) for value in pair.split(":"))
         require(major > 0 and minor >= 0, "device-identity")
+        # The Machine's root disk, declared by serial, has no WWN admission could compare; no selected disk may be it.
+        require(not self.host.get("rootSerial") or item.get("serial") != self.host["rootSerial"], "device-root")
         result = {"path": device["path"], "serial": item["serial"], "sizeBytes": item["size"],
                   "rotational": int(rotational), "major": major, "minor": minor}
         if device.get("wwn"):
@@ -1076,7 +1078,7 @@ def route_cases(value):
 @contextlib.contextmanager
 def staged(directory, synthetic, uid, gid):
     """Retain the synthetic bytes outside the read-only mounted children."""
-    request = {"version": "ceph-core-v40", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
+    request = {"version": "ceph-core-v41", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
                "clusterSSHTransport": "verifiedTunnel", "clusterSSHUser": probe.USER,
                "hosts": [{"name": probe.HOST, "address": probe.ADDRESS, "port": probe.OUTER_PORT}]}
     known = ("[" + probe.ADDRESS + "]:" + str(probe.OUTER_PORT) + " " + synthetic["keys"]["outer"]["public"] + "\n").encode()

@@ -720,6 +720,20 @@ func TestAPhysicalBindingHoldsEachSelectionToItsOwnShape(t *testing.T) {
 	}
 }
 
+func TestARootSerialRefusalNamesTheMachineAndItsSerialOnlyOnAPhysicalHostThatDeclaresOne(t *testing.T) {
+	host := Host{Name: "ceph-2", Machine: "node-2", Physical: true, RootSerial: "ROOT-2"}
+	refusedWith(t, rootDeviceRefusals(host)["device-root"], "lifecycle.unsupported", "Ceph host ceph-2 of Machine node-2 selects a data, DB or WAL disk that reports the serial number ROOT-2, which Machine node-2 declares for its root disk",
+		"select another disk for the OSD services on Machine node-2; the root disk, whatever path names it, is never an OSD, DB or WAL device")
+	host.RootSerial = ""
+	if len(rootDeviceRefusals(host)) != 0 {
+		t.Fatal("a host without a declared root serial names a root refusal")
+	}
+	host.RootSerial, host.Physical = "ROOT-2", false
+	if len(rootDeviceRefusals(host)) != 0 {
+		t.Fatal("a virtual host names a root refusal")
+	}
+}
+
 func TestSerialDeviceRefusalsNameTheMachineAndEverySerialItsHostSelects(t *testing.T) {
 	host := Host{Name: "ceph-2", Machine: "node-2", Physical: true, Devices: []Device{{Path: "/dev/disk/by-id/wwn-0x5000000000000001", WWN: "0x5000000000000001"},
 		{Path: "/dev/disk/by-serial/SER-2", Serial: "SER-2", SizeBytes: 1 << 40}, {Path: "/dev/disk/by-serial/SER-3", Serial: "SER-3", SizeBytes: 1 << 40}}}

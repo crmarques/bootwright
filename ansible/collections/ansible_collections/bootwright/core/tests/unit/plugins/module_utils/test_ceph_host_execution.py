@@ -40,7 +40,7 @@ def host_request(request_value):
          "certificateRef": "serving-tls"}
         for host in cluster["hosts"]]}
     cluster["auxiliary"] = [{"name": "haproxy", "image": host_fixtures.HAPROXY}, {"name": "keepalived", "image": host_fixtures.KEEPALIVED}]
-    return {"version": "ceph-host-v12", "cluster": cluster, "host": "node-2",
+    return {"version": "ceph-host-v13", "cluster": cluster, "host": "node-2",
             "pulls": [{"group": "pull-haproxy-keepalived", "names": ["haproxy", "keepalived"]}]}
 
 

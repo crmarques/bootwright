@@ -211,9 +211,9 @@ func automationFormats() map[string]automationFormat {
 		"bootwright-contained-public-label-probe-v1": transient("the bytes the label probe writes in its own scratch and reads back"),
 		"ceph-packages-v2":                           transient("the guest package transaction policy ceph_packages.transaction_request builds and the shared resolver reads within one run"),
 
-		"ceph-host-v12":                {class: formatMirrored},
+		"ceph-host-v13":                {class: formatMirrored},
 		"ceph-host-evidence-v4":        {class: formatMirrored},
-		"ceph-core-v40":                {class: formatMirrored},
+		"ceph-core-v41":                {class: formatMirrored},
 		"ceph-core-evidence-v14":       {class: formatMirrored},
 		"ceph-tiebreaker-evidence-v1":  {class: formatMirrored},
 		"ceph-packages-v3":             {class: formatMirrored},
