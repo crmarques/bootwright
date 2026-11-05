@@ -2,6 +2,7 @@
 
 [Audit directory format](../README.md)
 
+- [Codex report: independently checked findings, coverage and validation](report-codex.md)
 - [Claude report: the code against its specifications, lane by lane](report-claude.md)
 
 Claude Fable 5.1 assessed `f8b15669f` on 2026-11-05, orchestrating Claude
@@ -18,3 +19,8 @@ authorizes no implementation or live run.
 Reading order: section 1 for the verdict and the six items to fix first,
 section 4 for the ordered roadmap, section 6 for any one lane's full record,
 section 7 for the method and the gates.
+
+Codex assessed the same product baseline and reviewed the later container-build
+delta through `88fbf7be1`. Its report records 18 confirmed discrepancies,
+separates source proof from synthetic execution and operator qualification,
+and documents the models and effort used for the validation subtasks.
