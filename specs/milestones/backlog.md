@@ -6897,3 +6897,19 @@ review: selectors take `matchLabels` only and no `priority`; the case, not
 Bootwright, owns the namespaces, workloads, IngressControllers and
 EgressFirewalls; and node forwarding between the two networks is parked as
 [B1124](#b1124).
+
+### D232
+
+**owner** (2026-11-05): the owner asked for an end-to-end case in which
+Bootwright provisions single-node OpenShift, a managed Ceph cluster and the
+`fdf` package attaching them through Data Foundation, sized so that each
+component has the resources it needs on a larger host than the owner's laptop,
+and asked that the code of the `fdf` path be reviewed and its issues fixed
+before the case runs. Offered a NooBaa resource override in the package or a
+larger node, the owner chose the larger node: the package is unchanged. This
+opens slice X303 with [B1127](m4.md#b1127), [B1128](m4.md#b1128),
+[B1129](m4.md#b1129) and [B1131](m4.md#b1131). Session clauses, pending the
+owner's review: the case declares no object gateway; it keeps the consumer's
+key type at `aes256k`, which the IBM Storage Ceph 9.9.x monitors require, and
+leaves the client question to [B628](m2.md#b628); and the fail-fast refusal of
+a replaced CSV is recorded as [B1130](m4.md#b1130), not implemented.

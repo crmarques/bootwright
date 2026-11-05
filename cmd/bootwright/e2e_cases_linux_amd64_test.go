@@ -39,6 +39,13 @@ var e2eRenders = map[string][]e2eRender{
 		{name: "tpm2 off", sets: append(fipsControllerSubscriptions(), "security.tpm2=false")},
 		{name: "environments off", sets: []string{"environments.enabled=false"}},
 	},
+	"lab-sno-ceph-df": {
+		{name: "default", sets: dataFoundationSubscription()},
+		{name: "ibm catalog", sets: append(dataFoundationSubscription(),
+			"fdf.subscription.source=ibm",
+			"fdf.catalog.image=icr.io/cpopen/isf-data-foundation-catalog@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+		)},
+	},
 	"lab-network-variants":           {{name: "default"}},
 	"lab-3-nodes-ceph-host-variants": {{name: "default"}},
 	"lab-3-nodes-ocp":                {{name: "metallb off", sets: []string{"addons.metallb=false"}}},
@@ -282,5 +289,11 @@ func fipsControllerSubscriptions() []string {
 	return []string{
 		"addons.subscriptions.nmstate.channel=stable", "addons.subscriptions.nmstate.startingCSV=kubernetes-nmstate-operator.v4.22.0",
 		"addons.subscriptions.metallb.channel=stable", "addons.subscriptions.metallb.startingCSV=metallb-operator.v4.22.0",
+	}
+}
+
+func dataFoundationSubscription() []string {
+	return []string{
+		"fdf.subscription.channel=stable-4.21", "fdf.subscription.startingCSV=odf-operator.v4.21.11-rhodf",
 	}
 }

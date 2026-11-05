@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephConsumer
+metadata:
+  name: sno-storage
+
+spec:
+  clusterRef: ceph-e2e
+
+  dataFoundation:
+    rbdPoolRef: rbd-data
+    filesystemRef: files
+    cephxKeyType: {{ .Values.fdf.cephxKeyType }}

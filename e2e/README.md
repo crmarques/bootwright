@@ -26,6 +26,7 @@ its renders, each service switch its runbook offers included, listed there.
 | [lab-3-nodes-ceph](lab-3-nodes-ceph/runbook.md) | 3 | 13 | 26 | 220 | [B626](../specs/milestones/m2.md#b626), one run per release |
 | [lab-5-nodes-ceph-stretch](lab-5-nodes-ceph-stretch/runbook.md) | 5, two contexts | 12 | 20 | 200 | [B486](../specs/milestones/m2.md#b486), [B487](../specs/milestones/m2.md#b487), [B893](../specs/milestones/m2.md#b893), [B894](../specs/milestones/m2.md#b894); the emulated half of [B488](../specs/milestones/m2.md#b488) |
 | [lab-sno](lab-sno/runbook.md) | 1 | 9 | 18 | 130 | [B61](../specs/milestones/m3.md#b61), [B1125](../specs/milestones/m4.md#b1125) |
+| [lab-sno-ceph-df](lab-sno-ceph-df/runbook.md) | 4, larger host | 25 | 58 | 400 | rehearses the `fdf` path of [B85](../specs/milestones/m4.md#b85) and [B761](../specs/milestones/m4.md#b761) on a single node, as [B1131](../specs/milestones/m4.md#b1131); accepts none |
 | [lab-sno-fips-controller](lab-sno-fips-controller/runbook.md) | 2, two contexts on two controllers | 14 | 24 | 200 | [B743](../specs/milestones/delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host) and [B722](../specs/milestones/delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host); [B1123](../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node), [B720](../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node), [B726](../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node), [B729](../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node), [B889](../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node), [B755](../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node) and [B757](../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node); accepted |
 | [lab-3-nodes-ocp](lab-3-nodes-ocp/runbook.md) | 3, larger host | 22 | 56 | 400 | [B66](../specs/milestones/m3.md#b66) |
 | [lab-3-nodes-ocp-features](lab-3-nodes-ocp-features/runbook.md) | 3, larger host | 28 | 56 | 400 | [B721](../specs/milestones/m3.md#b721), [B724](../specs/milestones/m3.md#b724); IPv6: [B725](../specs/milestones/m3.md#b725), [B703](../specs/milestones/m1.md#b703) |
@@ -36,7 +37,7 @@ declared guests plus the provider's reserve
 ([capacity admission](../specs/substrates.md#capacity-admission)). Memory is
 `MemAvailable`, and swap never counts; disk is free space on the filesystem
 under `/var/lib/libvirt`. A 16-CPU, 32 GiB laptop leaves at most about 28 GiB
-available, so the last three cases need a larger host. Run one case at a time:
+available, so the cases marked "larger host" need one. Run one case at a time:
 they share the bridge `virbr-e2e`, the guest subnet `198.51.100.0/24` and the
 service ports.
 

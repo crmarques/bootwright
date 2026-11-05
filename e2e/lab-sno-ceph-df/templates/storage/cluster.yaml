@@ -1,0 +1,110 @@
+{{- $c := .Values.ceph -}}
+{{- $dom := .Values.host.domain -}}
+apiVersion: bootwright.io/v1alpha1
+kind: CephCluster
+metadata:
+  name: ceph-e2e
+
+spec:
+  management: managed
+
+  distribution:
+    ibm:
+      callHome: {{ $c.callHome }}
+
+      packages:
+        source: vendor
+
+  release: {{ $c.release }}
+  packageVersion: {{ $c.packageVersion }}
+
+  image:
+    base: {{ $c.image.base }}
+    version: {{ $c.image.version }}
+
+  entitlementRef: ibm-ceph
+
+  cephadm:
+    addressRef: ip
+
+    ansible:
+      packageVersion: {{ $c.ansiblePackageVersion }}
+
+    clusterSSH:
+      user: bootwright
+      keyRef: ceph-cluster-key
+      transport: verifiedTunnel
+
+    bootstrap:
+      nodeRef: rhel-01
+      addressRef: ip
+
+  networks:
+    publicCIDRs:
+      - {{ .Values.host.cidr }}
+
+  config:
+    global:
+      osd_pool_default_size: '2'
+      osd_pool_default_min_size: '2'
+
+    osd:
+      osd_memory_target_autotune: 'false'
+      osd_memory_target: '2147483648'
+
+  services:
+    - service_type: mon
+
+      placement:
+        count: 3
+        label: ceph-core
+
+    - service_type: mgr
+
+      placement:
+        count: 2
+        label: ceph-core
+
+    - service_type: osd
+      service_id: data
+
+      placement:
+        label: ceph-core
+
+      spec:
+        data_devices:
+          paths:
+            - /dev/sda
+
+    - service_type: mds
+      service_id: files
+
+      placement:
+        count: 2
+        label: ceph-core
+
+    - service_type: prometheus
+
+      placement:
+        hosts:
+          - rhel-03.{{ $dom }}
+
+      spec:
+        retention_time: 7d
+        retention_size: 5GB
+        port: 9095
+
+  topology:
+    nodes:
+{{- range $n := until 3 }}
+      - name: rhel-0{{ add $n 1 }}
+        fqdn: rhel-0{{ add $n 1 }}.{{ $dom }}
+        machineRef: rhel-0{{ add $n 1 }}
+
+        labels:
+          - ceph-core
+{{ end }}
+  images:
+    prometheus:
+      base: {{ $c.images.prometheus.base }}
+      version: {{ $c.images.prometheus.version }}

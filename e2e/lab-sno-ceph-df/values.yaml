@@ -1,0 +1,122 @@
+# Default input of the lab-sno-ceph-df case. Override keys with e2e/render.sh
+# --set or a --values file. fdf.subscription.channel and .startingCSV have no
+# default: a render without them fails with `required`.
+
+host:
+  # The controller address the managed services bind and the guests reach;
+  # "auto" takes this host's default-route source address at render time.
+  address: auto
+  domain: e2e.example.test
+
+  upstreamDNS:
+    - 1.1.1.1
+
+  upstreamNTP:
+    - 162.159.200.1
+
+  # The NAT network Bootwright creates for the guests.
+  bridge: virbr-e2e
+  cidr: 198.51.100.0/24
+  gateway: 198.51.100.1
+  prefix: 24
+
+openshift:
+  version: 4.21.15
+
+# The single-node OpenShift guest sno-01. Data Foundation's NooBaa pods request
+# about 10.75 GiB and 2.8 CPU on top of the OpenShift platform, so the lab-sno
+# size (8 vCPU, 16 GiB) would leave them Pending.
+sno:
+  address: 198.51.100.31
+  cpu: 12
+  memoryMiB: 32768
+  diskGiB: 120
+
+# Media names as added with `bootwright media add --name`.
+rhel:
+  version: "9.8"
+  bootMedia: rhel-9.8-x86_64-boot.iso
+  dvdMedia: rhel-9.8-x86_64-dvd.iso
+
+# The Ceph guests rhel-01 to rhel-03, in this order. Each gets one virtual SSD
+# of osdDiskGiB GiB for its OSD.
+cephNodes:
+  addresses:
+    - 198.51.100.11
+    - 198.51.100.12
+    - 198.51.100.13
+
+  cpu: 4
+  memoryMiB: 8192
+  diskGiB: 40
+  osdDiskGiB: 50
+
+# IBM Storage Ceph. A release moves these together: release, packageVersion,
+# ansiblePackageVersion, image, callHome and the auxiliary images below.
+ceph:
+  release: 9.9.2.0
+  packageVersion: 20.2.2-349.el9cp
+  ansiblePackageVersion: 5.0.3-1.el9cp
+
+  # enabled for 20.2.x builds (9.9.1.2, 9.9.2.0); disabled for 20.1.0-221
+  # (9.9.0.3), whose Call Home is opt-in.
+  callHome: enabled
+
+  image:
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+    version: v9.9.2-26947
+
+  # The guests' package repository for the release's RPMs.
+  repository:
+    id: ibm-storage-ceph-9
+    displayName: IBM Storage Ceph 9 packages
+    baseURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/
+    gpgKeyURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH
+
+  # Auxiliary images, authored as digests of the build above (D171). Only the
+  # prometheus service the CephConsumer admission requires is deployed here.
+  # Move it with ceph.image. The digest must identify the linux/amd64 platform
+  # manifest, not the image index; see e2e/lab-3-nodes-ceph/values.yaml.
+  images:
+    prometheus:
+      base: cp.icr.io/cp/ibm-ceph/prometheus
+      version: sha256:6483d0ca844408e25a0477bf8f0b2ba46105202a080fcf550ee9933189741bf2
+
+# IBM Fusion Data Foundation (the fdf package) in external mode over the Ceph
+# cluster above.
+fdf:
+  # The type of every CephX key the CephConsumer mints. The IBM Storage Ceph
+  # 9.9.x monitors allow only aes256k, and the consumer refuses a key type the
+  # monitor policy disallows before it mints anything (see
+  # .agents/knowledge/cephx-key-types.md, "Current native key evidence"). Data
+  # Foundation then needs a release that reads AES256K keys, per the IBM
+  # advisory cited there: 4.21.11 or later on 4.21, 4.22.4 or later on 4.22.
+  cephxKeyType: aes256k
+
+  # OLM channel and exact CSV of the odf-operator package, which no default can
+  # supply: read them from
+  #   oc get packagemanifest odf-operator -n openshift-marketplace -o json
+  # (status.channels[].name and .currentCSV) on a cluster of the same release
+  # and catalog. The render fails with `required` while either is empty.
+  subscription:
+    channel: ""
+    startingCSV: ""
+
+    # redhat-operators installs Red Hat OpenShift Data Foundation from the
+    # cluster's Red Hat catalog. ibm installs IBM Fusion Data Foundation through
+    # the owned catalog source isf-data-foundation-catalog below, and then the
+    # OpenShift pull secret must also carry cp.icr.io.
+    source: redhat-operators
+
+  # Used only with source ibm: the IBM catalog image the operator chooses, by
+  # tag or digest, and the explicit priority of its catalog source.
+  catalog:
+    image: ""
+    priority: 100
+
+  # Make ocs-external-storagecluster-ceph-rbd the cluster's default
+  # StorageClass.
+  defaultStorageClass: false
+
+  # How long Bootwright waits for the operator and the StorageCluster.
+  timeout: 1h

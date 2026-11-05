@@ -1,0 +1,34 @@
+{{- $sub := .Values.fdf.subscription }}
+{{- $ibm := eq $sub.source "ibm" }}
+{{- if and (not $ibm) (ne $sub.source "redhat-operators") }}
+{{- fail "fdf.subscription.source is redhat-operators or ibm" }}
+{{- end }}
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonBinding
+metadata:
+  name: sno-data-foundation
+
+spec:
+  clusterRef: sno
+
+  packages:
+    fdf:
+      cephConsumerRef: sno-storage
+      defaultStorageClass: {{ .Values.fdf.defaultStorageClass }}
+      timeout: {{ .Values.fdf.timeout }}
+
+      subscription:
+        channel: {{ required "set fdf.subscription.channel" $sub.channel | quote }}
+        startingCSV: {{ required "set fdf.subscription.startingCSV" $sub.startingCSV | quote }}
+{{- if $ibm }}
+{{- $catalog := .Values.fdf.catalog }}
+        source: isf-data-foundation-catalog
+
+        catalogSource:
+          name: isf-data-foundation-catalog
+          image: {{ required "set fdf.catalog.image for the ibm source" $catalog.image }}
+          priority: {{ $catalog.priority }}
+          securityContextConfig: restricted
+{{- else }}
+        source: redhat-operators
+{{- end }}
