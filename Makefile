@@ -12,21 +12,40 @@ COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null)
 SOURCE ?= $(if $(COMMIT),$(if $(shell git status --porcelain --untracked-files=no 2>/dev/null),modified,clean))
 STAMP = -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.source=$(SOURCE)
 
-# The container build takes its Go from go.mod and forwards each proxy and
-# module-mirror variable set in the environment or on the command line by name,
-# so its value never appears in the echoed command.
+# The container build takes its Go from go.mod. Each proxy and module-mirror
+# setting of the environment or the command line may carry a credential, and an
+# engine records build arguments in image metadata and build history, so the
+# recipe hands them over as a build secret in a private file it removes.
 CONTAINER_ENGINE ?= $(firstword $(shell command -v podman docker 2>/dev/null))
 CONTAINER_OUT ?= bin
 PROXY_CA ?=
+GO_IMAGE ?=
 GO_VERSION = $(shell awk '$$1 == "go" { print $$2; exit }' go.mod)
-CONTAINER_FORWARDED = HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy GOPROXY GOSUMDB GOPRIVATE GONOSUMDB GONOPROXY GO_IMAGE
+CONTAINER_SETTINGS = HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy GOPROXY GOSUMDB GOPRIVATE GONOSUMDB GONOPROXY
 comma := ,
 
 build:
 	CGO_ENABLED=0 $(GO) build -trimpath -buildvcs=false -ldflags '$(STAMP)' -o bin/bootwright ./cmd/bootwright
 
 container-build:
-	$(or $(CONTAINER_ENGINE),$(error container-build needs podman or docker on PATH, or CONTAINER_ENGINE)) build --output type=local,dest=$(CONTAINER_OUT) --build-arg GO_VERSION=$(or $(GO_VERSION),$(error go.mod names no go version)) --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg SOURCE=$(SOURCE) $(foreach name,$(CONTAINER_FORWARDED),$(if $($(name)),--build-arg $(name))) $(if $(PROXY_CA),--secret id=proxy-ca$(comma)src=$(PROXY_CA)) .
+	@set -eu; \
+	engine='$(or $(CONTAINER_ENGINE),$(error container-build needs podman or docker on PATH, or CONTAINER_ENGINE))'; \
+	settings="$$(mktemp)"; \
+	trap 'rm -f "$$settings"' EXIT; \
+	trap 'exit 130' INT TERM; \
+	passed=; \
+	for name in $(CONTAINER_SETTINGS); do \
+		eval "value=\$${$$name-}"; \
+		if test -n "$$value"; then printf '%s=%s\n' "$$name" "$$value" >>"$$settings"; passed="$$passed $$name"; fi; \
+	done; \
+	echo "$$engine build into $(CONTAINER_OUT) with Go $(GO_VERSION); settings passed as a secret:$${passed:- none}"; \
+	"$$engine" build --output type=local,dest='$(CONTAINER_OUT)' \
+		--build-arg GO_VERSION='$(or $(GO_VERSION),$(error go.mod names no go version))' \
+		--build-arg VERSION='$(VERSION)' --build-arg COMMIT='$(COMMIT)' --build-arg SOURCE='$(SOURCE)' \
+		$(if $(GO_IMAGE),--build-arg GO_IMAGE='$(GO_IMAGE)') \
+		--secret id=build-env,src="$$settings" \
+		$(if $(PROXY_CA),--secret id=proxy-ca$(comma)src='$(PROXY_CA)') \
+		.
 
 test:
 	$(GO) test ./...

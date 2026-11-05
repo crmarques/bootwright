@@ -109,16 +109,26 @@ make container-build HTTPS_PROXY=http://proxy.example:3128 PROXY_CA=corp-ca.pem
 ```
 
 `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`, in either case, and `GOPROXY`,
-`GOSUMDB`, `GOPRIVATE`, `GONOSUMDB`, `GONOPROXY` and `GO_IMAGE` pass to the
-build by name whenever they are set, so a value never appears in the echoed
-command; a host `GOPROXY` therefore reaches the build as well. Neither engine
-records a proxy variable in the image history; the `GO*` variables are
-recorded in the build stage's. `PROXY_CA` names the CA certificate of a proxy
-that intercepts TLS: the module download trusts it as a build secret, and no
-layer keeps it. With Docker, a proxy passed this way also carries the
-base-image pull; Podman pulls through the proxy of its caller. `GO_IMAGE` replaces the image, for example with
+`GOSUMDB`, `GOPRIVATE`, `GONOSUMDB` and `GONOPROXY` reach the build whenever
+they are set, so a host `GOPROXY` reaches it as well. Any of them may carry a
+credential, such as `http://user:password@proxy.example:3128`, and an engine
+records build arguments: Podman in the build stage's image metadata, Docker
+in the build record that `docker buildx history inspect` shows, values
+included. The recipe therefore writes them to a file only its user can read,
+passes it as the `build-env` build secret and removes it, and echoes only
+their names; the build reads them for the module download, and no image,
+cache or build record keeps them. `PROXY_CA` names the CA certificate of a
+proxy that intercepts TLS, passed the same way as the `proxy-ca` secret.
+`TestContainerBuildPassesSettingsOnlyAsASecret` keeps every other value out
+of the build arguments. A build without `make` passes its own settings file,
+one `NAME=value` per line: `--secret id=build-env,src=<file>`.
+
+The engine pulls the base image through the proxy of its caller's
+environment; a Docker daemon also uses its own proxy configuration.
+`GO_IMAGE` replaces the image, for example with
 `<mirror>/golang:<tag>@sha256:<digest>` from a registry mirror pinned by
-digest.
+digest; it is a build argument and so must carry no credential, which an
+engine login supplies instead.
 
 `TestContainerBuildTakesGoFromGoMod` holds the `go` directive to the toolchain
 [scripts/go](../scripts/go) selects, so the image and host builds use the same

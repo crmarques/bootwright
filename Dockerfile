@@ -7,11 +7,6 @@ ARG GO_IMAGE=docker.io/library/golang:${GO_VERSION}-trixie
 
 FROM ${GO_IMAGE} AS build
 
-ARG GOPROXY=
-ARG GOSUMDB=
-ARG GOPRIVATE=
-ARG GONOSUMDB=
-ARG GONOPROXY=
 ARG VERSION=
 ARG COMMIT=
 ARG SOURCE=
@@ -19,10 +14,14 @@ ARG SOURCE=
 WORKDIR /src
 COPY . .
 
-RUN --mount=type=secret,id=proxy-ca \
+RUN --mount=type=secret,id=build-env \
+    --mount=type=secret,id=proxy-ca \
     --mount=type=cache,id=bootwright-go-mod,target=/go/pkg/mod \
     --mount=type=cache,id=bootwright-go-build,target=/root/.cache/go-build \
     set -eu; \
+    if test -s /run/secrets/build-env; then \
+        while IFS= read -r setting; do export "$setting"; done </run/secrets/build-env; \
+    fi; \
     if test -s /run/secrets/proxy-ca; then \
         cat /etc/ssl/certs/ca-certificates.crt /run/secrets/proxy-ca >/tmp/ca-bundle.pem; \
         export SSL_CERT_FILE=/tmp/ca-bundle.pem GIT_SSL_CAINFO=/tmp/ca-bundle.pem; \

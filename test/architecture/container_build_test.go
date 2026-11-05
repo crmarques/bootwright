@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -32,7 +33,7 @@ func TestContainerBuildTakesGoFromGoMod(t *testing.T) {
 	if !strings.Contains(makefile, "GO_VERSION = $(shell awk '$$1 == \"go\" { print $$2; exit }' go.mod)") {
 		t.Error("the Makefile does not read GO_VERSION from the go directive of go.mod")
 	}
-	if !regexp.MustCompile(`(?m)^container-build:\n\t.* build .*--build-arg GO_VERSION=\$\(or \$\(GO_VERSION\),`).MatchString(makefile) {
+	if !strings.Contains(containerBuildRecipe(t, makefile), "--build-arg GO_VERSION='$(or $(GO_VERSION),") {
 		t.Error("the Makefile container-build recipe does not pass GO_VERSION to the Dockerfile")
 	}
 	dockerfile := read("Dockerfile")
@@ -42,4 +43,48 @@ func TestContainerBuildTakesGoFromGoMod(t *testing.T) {
 	if !strings.Contains(dockerfile, " make build;") {
 		t.Error("the Dockerfile compiles outside the Makefile build recipe, which owns the flags and the stamp")
 	}
+}
+
+// buildArguments are the only values the container build takes as build
+// arguments, which an engine records in image metadata and build history;
+// every other setting may carry a credential and travels as a build secret.
+var buildArguments = []string{"GO_VERSION", "GO_IMAGE", "VERSION", "COMMIT", "SOURCE"}
+
+func TestContainerBuildPassesSettingsOnlyAsASecret(t *testing.T) {
+	root := filepath.Join("..", "..")
+	dockerfile, err := os.ReadFile(filepath.Join(root, "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, match := range regexp.MustCompile(`(?m)^ARG ([A-Za-z_]+)`).FindAllStringSubmatch(string(dockerfile), -1) {
+		if !slices.Contains(buildArguments, match[1]) {
+			t.Errorf("the Dockerfile declares build argument %s; a setting that may carry a credential belongs in the build-env secret", match[1])
+		}
+	}
+	if !strings.Contains(string(dockerfile), "--mount=type=secret,id=build-env") {
+		t.Error("the Dockerfile does not read the build-env secret")
+	}
+	makefile, err := os.ReadFile(filepath.Join(root, "Makefile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	recipe := containerBuildRecipe(t, string(makefile))
+	for _, match := range regexp.MustCompile(`--build-arg ([A-Za-z_$(]+)`).FindAllStringSubmatch(recipe, -1) {
+		if !slices.Contains(buildArguments, match[1]) {
+			t.Errorf("the container-build recipe passes build argument %s; a setting that may carry a credential belongs in the build-env secret", match[1])
+		}
+	}
+	if !strings.Contains(recipe, "--secret id=build-env,src=") {
+		t.Error("the container-build recipe does not pass the build-env secret")
+	}
+}
+
+func containerBuildRecipe(t *testing.T, makefile string) string {
+	t.Helper()
+	_, recipe, found := strings.Cut(makefile, "\ncontainer-build:\n")
+	if !found {
+		t.Fatal("the Makefile has no container-build target")
+	}
+	recipe, _, _ = strings.Cut(recipe, "\n\n")
+	return recipe
 }
