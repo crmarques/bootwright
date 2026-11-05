@@ -27,7 +27,8 @@ class Engine:
         self.request, self.read, self.write = request, read, write
         self.clock, self.sleep = clock, sleep
         self.deadline = request["deadline"]
-        self.state = {"receipts": [dict(receipt) for receipt in request.get("receipts", [])], "observations": [], "olm": [], "dependents": [], "checks": []}
+        request["receipts"] = [dict(receipt) for receipt in request.get("receipts") or []]
+        self.state = {"receipts": [dict(receipt) for receipt in request["receipts"]], "observations": [], "olm": [], "dependents": [], "checks": []}
         self.changed = False
         self.unknown = False
         self.not_ready = False

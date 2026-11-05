@@ -175,6 +175,14 @@ def test_lagging_condition_and_failure():
     assert model.condition(check, live)[3]
 
 
+def test_first_apply_accepts_the_null_receipts_of_empty_evidence(tmp_path, object_request):
+    object_request["receipts"] = None
+    oc = ScriptedOC(tmp_path, [response(), response(owned(object_request))])
+    result = Engine(object_request, oc.read, oc.write, clock=lambda: 0).execute()
+    assert result["state"]["classification"] == "completed"
+    assert [r["uid"] for r in result["state"]["receipts"]] == ["uid-1"]
+
+
 def test_unknown_read_at_deadline_never_writes(object_request):
     writes = []
     with pytest.raises(Refused, match="read unknown"):
