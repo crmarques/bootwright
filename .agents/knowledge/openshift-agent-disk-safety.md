@@ -18,7 +18,7 @@ leftover TPM keys from a previous operating system can leave an encrypted
 deployment stuck (claim R6:C17 of the M3 research notes, which this repository
 does not track, confirmed by their review). The
 controller's pre-boot TPM read is positive-only: it can show that keys exist,
-never that none do. [B720](../../specs/milestones/m3.md#b720) owns the
+never that none do. [B720](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node) owns the
 encryption item.
 
 Redfish fields of the TPM read: the system's `TrustedModules[]` entries carry

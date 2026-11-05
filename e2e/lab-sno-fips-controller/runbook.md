@@ -17,8 +17,10 @@ server's certificate, verifies the fetch and removes the certificate after
 the boot ([boot media](../../specs/openshift-clusters.md#boot-media)).
 
 It accepted [B743](../../specs/milestones/delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host) and, by the owner's choice, [B722](../../specs/milestones/delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host)
-on one node. Its default input also encrypts the node's disk under its TPM2
-([B720](../../specs/milestones/m3.md#b720)) and plugs the node into two
+on one node, and its run of 2026-11-05 accepted the items below
+([X302](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node)).
+Its default input also encrypts the node's disk under its TPM2
+([B720](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node)) and plugs the node into two
 isolated environments (D231):
 
 | | staging | production |
@@ -33,12 +35,12 @@ isolated environments (D231):
 The node's own network stays `virbr-e2e`, with the default ingress. Bootwright
 builds the secondary networks, the NMState and MetalLB add-ons and the pools,
 whose `serviceAllocation` ties each pool to its IngressController
-([B1123](../../specs/milestones/m4.md#b1123),
-[B726](../../specs/milestones/m3.md#b726),
-[B729](../../specs/milestones/m3.md#b729),
-[B889](../../specs/milestones/m3.md#b889),
-[B755](../../specs/milestones/m4.md#b755),
-[B757](../../specs/milestones/m4.md#b757)). The runbook itself builds the
+([B1123](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node),
+[B726](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node),
+[B729](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node),
+[B889](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node),
+[B755](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node),
+[B757](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node)). The runbook itself builds the
 trunk and the app containers on this host, and applies with `oc` the
 namespaces, workloads, IngressControllers, EgressFirewalls and NetworkPolicies under
 `workloads/`, which are outside Bootwright's

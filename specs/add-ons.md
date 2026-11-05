@@ -336,7 +336,7 @@ the same tests is accepted on continuation; any other plan fails the attempt
 naming its CSVs, and Bootwright never approves an upgrade plan. A Subscription
 reporting `ResolutionFailed` fails the attempt at once, naming its message; that
 the condition is never transient on a Subscription of a ready catalog is an
-assumption, re-verified by [B755](milestones/m4.md#b755).
+assumption, re-verified by [B1125](milestones/m4.md#b1125).
 
 The operator is installed when the Subscription's installed CSV is the
 `startingCSV` and that CSV reports `Succeeded`; the current CSV is reported,

@@ -559,7 +559,7 @@ gates and a focused before/after review, not new tests that mirror sentences.
 
 **Findings:** F17-07 and R2-05-08.
 **Carriers:** template clauses of [B61](../../../../specs/milestones/m3.md#b61)
-and [B755](../../../../specs/milestones/m4.md#b755); a new example-index item if needed.
+and [B755](../../../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node); a new example-index item if needed.
 **Owners:** Verification documentation, Container cluster and Add-ons.
 
 Add the two blank row templates from the existing gate requirements now, and

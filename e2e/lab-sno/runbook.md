@@ -10,12 +10,11 @@ NMState and MetalLB add-ons. Context `lab-sno`, cluster `sno`.
 It accepts [B61](../../specs/milestones/m3.md#b61) with
 [B705](../../specs/milestones/m3.md#b705),
 [B706](../../specs/milestones/m3.md#b706) and
-[B462](../../specs/milestones/m3.md#b462) (default render),
-[B755](../../specs/milestones/m4.md#b755) (`addons.nmstate`) and
-[B757](../../specs/milestones/m4.md#b757) (`addons.metallb`), one ledger row per
-item run. `security.tpm2` only rehearses
-[B720](../../specs/milestones/m3.md#b720), which qualifies on three nodes in
-[lab-3-nodes-ocp-features](../lab-3-nodes-ocp-features/runbook.md); FIPS was
+[B462](../../specs/milestones/m3.md#b462) (default render) and
+[B1125](../../specs/milestones/m4.md#b1125) (`addons.nmstate` and `addons.metallb`, with their
+drills), one ledger row per item run. `security.tpm2` only rehearses
+[B720](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node), accepted on one node by
+[lab-sno-fips-controller](../lab-sno-fips-controller/runbook.md); FIPS was
 accepted on one node from a FIPS controller ([B722](../../specs/milestones/delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host)).
 
 Run every numbered step in order, in one Bash session from the checkout

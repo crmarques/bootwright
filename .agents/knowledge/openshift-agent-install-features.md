@@ -5,7 +5,7 @@ reach the agent installer's inputs, and what each does when it is wrong.
 [Container clusters](../../specs/openshift-clusters.md) owns the required
 behavior; this page records native facts for
 [B719](../../specs/milestones/m3.md#b719) (install-time manifests),
-[B720](../../specs/milestones/m3.md#b720) (TPM2 disk encryption),
+[B720](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node) (TPM2 disk encryption),
 [B721](../../specs/milestones/m3.md#b721) (installation proxy),
 [B722](../../specs/milestones/delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host) (FIPS, accepted) and
 [B724](../../specs/milestones/m3.md#b724) (registry mirrors).

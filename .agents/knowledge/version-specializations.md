@@ -154,7 +154,7 @@ page that owns its reasoning.
 | Whether a build's cephadm renders oauth2-proxy with `ssl_insecure_skip_verify` or mounts its `custom_configs`: the deployed container's arguments, environment, mounted `--config` file and CA mount, read on its host after the apply, are the postcondition | [Resources, readiness and access](../../specs/ceph.md#resources-readiness-and-access) |
 | A build infers the management gateway's `certificate_source` (`inline` with bound leaves, `cephadm-signed` without) and may keep or omit the leaves in `orch ls --export`: normalization runs the selected image's own `ServiceSpec`, and the served leaf's SHA-256 is the postcondition | [Resources, readiness and access](../../specs/ceph.md#resources-readiness-and-access) |
 | `imageDigestSources[].sourcePolicy` is rendered exactly when authored and the installer judges the release | [B724](../../specs/milestones/m3.md#b724) |
-| Disk encryption renders only `none`, `all`, `masters` and `workers`, the selectors the installer's validation accepts in the 4.20 to 4.23 branches read (RV R6:C13); the installer judges the release | [B720](../../specs/milestones/m3.md#b720) |
+| Disk encryption renders only `none`, `all`, `masters` and `workers`, the selectors the installer's validation accepts in the 4.20 to 4.23 branches read (RV R6:C13); the installer judges the release | [B720](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node) |
 
 ## Adding a specialization
 

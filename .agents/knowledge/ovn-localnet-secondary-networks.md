@@ -3,7 +3,7 @@
 How a localnet ClusterUserDefinedNetwork (CUDN) reaches an external network
 and what fails when it does not. [Container clusters](../../specs/openshift-clusters.md)
 owns the required behavior; this page records native facts for
-[B726](../../specs/milestones/m3.md#b726), the secondary networks of a
+[B726](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node), the secondary networks of a
 OpenShiftCluster, and
 [B719](../../specs/milestones/m3.md#b719), which renders the install-time
 settings they depend on.

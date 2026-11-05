@@ -42,7 +42,7 @@ did not read.
   `metallb-system` as its namespace. The upstream `bundle/` CSV is a template
   that lacks the disconnected flag, so a table built from it is wrong (M4 RV-R1
   C50, corrected; correction 2). No `dependencies.yaml` was found, but that was a
-  404, so [B757](../../specs/milestones/m4.md#b757) re-verifies that the
+  404, so [B1125](../../specs/milestones/m4.md#b1125) re-verifies that the
   InstallPlan holds a single CSV.
 
 ## Readiness
@@ -53,7 +53,7 @@ The `MetalLB` resource reports conditions `Available`, `Upgradeable`,
 Deployment are ready, and `Available` follows the readiness of the `controller`
 Deployment and the `speaker` DaemonSet with a 5-second requeue (R4:C8).
 `Degraded` also reports transient sync failures (not researched; re-verified by
-[B757](../../specs/milestones/m4.md#b757)), so it is reported and never fails
+[B1125](../../specs/milestones/m4.md#b1125)), so it is reported and never fails
 fast. The speaker is a host-network DaemonSet on every
 Linux node and tolerates the control-plane taint, so single-node and compact
 clusters get a speaker per node (R4:C22, RV). The operator performs no platform
@@ -86,7 +86,7 @@ check, so it installs on platform `none` (R4:C22, medium confidence).
   that names the install interface does not match. Pools on the machine network
   therefore omit `interfaces` ([container clusters](../../specs/openshift-clusters.md),
   node networking; an inference that
-  [B729](../../specs/milestones/m3.md#b729) re-verifies).
+  [B1126](../../specs/milestones/m3.md#b1126) re-verifies).
 - An interface enslaved to an OVS bridge as a localnet uplink carries no host
   address and does not route replies, so it is never a MetalLB announcing
   interface (inference; B729 re-verifies the addressed-NIC path).
@@ -110,7 +110,7 @@ OpenShift 4.21 documents these facts for an egress IP on a secondary NIC
 - The feature is documented for bare metal only, and a node takes egress IPs
   only when labeled `k8s.ovn.org/egress-assignable`.
 
-UNVERIFIED, re-verified by [B729](../../specs/milestones/m3.md#b729)'s run
+UNVERIFIED, re-verified by [B1126](../../specs/milestones/m3.md#b1126)'s run
 (nothing here is read from documentation):
 
 - That an egress IP leaves through an OVS bridge's internal interface on a
@@ -122,7 +122,7 @@ UNVERIFIED, re-verified by [B729](../../specs/milestones/m3.md#b729)'s run
 
 MetalLB validates its configuration resources with webhooks served by its
 controller, so a pool created before the controller serves may be refused
-(R4:C18, medium). [B757](../../specs/milestones/m4.md#b757) re-verifies this
+(R4:C18, medium). [B1125](../../specs/milestones/m4.md#b1125) re-verifies this
 after `Available`.
 
 ## Platforms and API surface

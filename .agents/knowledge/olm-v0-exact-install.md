@@ -255,7 +255,7 @@ L1-07):
 - A Subscription exposes `status.installPlanRef.{name,uid}` and
   `status.installedCSV`. The InstallPlan has `spec.approval`, `spec.approved`,
   `spec.clusterServiceVersionNames` and an owner reference to the Subscription.
-  [B755](../../specs/milestones/m4.md#b755) re-verifies the owner reference.
+  [B1125](../../specs/milestones/m4.md#b1125) re-verifies the owner reference.
 - v1 required `spec.version` on a Succeeded CSV before it counted the check.
 - v1 refused any InstallPlan that listed more than one CSV. That is an
   inference from the code: it never ran against an operator whose plan pulls

@@ -9430,7 +9430,7 @@ B805's KubeVirt `kubeconfigRef` classification and B816's KubeVirt marks,
 lost-reply adoption and `kubevirt-vm:` key move to [B87](m1.md#b87), B805's
 vCenter `credentialsRef` classification to [B99](m1.md#b99), the restored seal
 counters to [B103](backlog.md#b103), and B820's acceptance-row templates to
-[B61](m3.md#b61) and [B755](m4.md#b755); the specs' Not yet met lines follow
+[B61](m3.md#b61) and [B755](#x302--two-isolated-environments-on-one-node); the specs' Not yet met lines follow
 them. B816's F09-01 stays declined under D38, and B820's optional structured
 help fields are declined by D188. Refusals, diagnostics and specs name a
 baseboard management controller BMC, keeping "controller" for the
@@ -11605,7 +11605,7 @@ restored and both contexts purged.
 3. The node's `lsblk` still listed `sr0` with the agent image's label after the
    BMC reported the eject; the libvirt side was not read before the destroy,
    whose own eject succeeded.
-4. TPM2 disk encryption ([B720](m3.md#b720)) was not exercised.
+4. TPM2 disk encryption ([B720](#x302--two-isolated-environments-on-one-node)) was not exercised.
 
 **What stays open.** [B1099](backlog.md#b1099)'s remote reuse credit,
 [B1095](backlog.md#b1095) to [B1098](backlog.md#b1098) and
@@ -11729,3 +11729,124 @@ retirement are covered by synthetic tests.
 capacity equal its sysfs serial and size, and which `/dev/disk/by-id` names
 an NVMe disk receives on the managed OS. The delivering commit records the
 gates and their results.
+
+### X302 — Two isolated environments on one node
+
+**Items:** B1123, B1120, B1121 and B1122, completed; and B720, B726, B729,
+B889, B755 and B757, completed on the owner's choice of this row.
+**Kind:** product. **Owners:** Add-ons and Container cluster.
+
+The owner accepts, in conversation on 2026-11-05, the run of
+[`e2e/lab-sno-fips-controller`](../../e2e/lab-sno-fips-controller/runbook.md)
+recorded in the [acceptance ledger](../../docs/acceptance.md#ledger), and
+names the ten items it completes ([D231](backlog.md#d231)). The case ran its
+default input: OpenShift 4.22.21 on `sno-01`, built from a FIPS-mode RHEL 9.8
+controller guest that drives this Fedora 44 laptop's libvirt as root over SSH.
+The node's disk is encrypted under its TPM2, and its second NIC carries
+VLAN 10 (staging, `192.0.2.0/24`) and VLAN 20 (production, `203.0.113.0/24`)
+from a trunk the runbook builds on the laptop.
+
+The rows of B720, B726, B729, B889, B755 and B757 name other profiles:
+lab-features for B720, lab-networks for B726, B729 and B889, and addons-sno
+and addons-lb with their drills for B755 and B757. The owner accepted this
+row in their place, with what it did not exercise recorded below and carried
+by [B1125](m4.md#b1125) and [B1126](m3.md#b1126). No item registered an
+acceptance baseline before the run, so this record designates each
+delivering commit below as its baseline, the owner's exception as for X294.
+Both contexts were purged without an evidence archive, so the row carries no
+log digest.
+
+**What delivered which item.** The run continued one apply operation
+(`op-c51a64e74acf247e47a39b605d747d07`) across four builds of the task
+branch, each installed on the FIPS controller before the next apply, as an
+Ansible-only fix allows. The branch was then renumbered (D229, X298, B1104
+and B1105 had landed on main as other records) and rebased; each rebased
+commit is patch-identical to the one built except for those IDs, and B1121's
+also for one test line wrapped for pep8.
+
+- B1123: `822f1f22c`, built as `f460b67b0` (`serviceAllocation`), with its
+  specification `2d74c7337`, built as `871e46357`.
+- The case: `e97ebd2f8`, built as `fc6109303`, which registered the
+  operation. It folds the runbook and workload fixes the run found, none of
+  which the binary carries.
+- B1120: `c912ff373`, built as `894d724d5`.
+- B1121: `1a8cbd6d7`, built as `7ee19d447`.
+- B1122: `3e08c7507`, built as `a813c3dec`, which ran the final apply, the
+  verification, the drill and both destroys.
+- B720, B726 and B889: their in-tree deliveries
+  (X123, X125 and X196), which every build descends from; B729,
+  B755 and B757 are operator gates.
+
+**The run**, each check against its item's exit evidence:
+
+- Install: boot media 7 m 6 s, machine 30 s, installation 52 m 57 s. The node
+  read `fips_enabled` 1. An independently fetched `oc` 4.22.21 matched its
+  published checksum. `status`, `diff --observe` and a settle apply were
+  clean, and every cluster operator was Available, none Progressing or
+  Degraded.
+- B720: `/dev/vda4` is LUKS2 `luks-root`, bound by clevis `sss` to a `tpm2`
+  pin (`sha256`, `ecc`). The node unlocked with no one at the console on every
+  boot: `clevis-luks-askpass` logged `Unlocked ... successfully`, and the boot
+  list shows twelve consecutive unattended boots, because the runbook's
+  reboot by a debug pod reran on each boot until that pod failed (the case
+  now reboots by `shutdown -r +1`).
+- B1120, B1121 and B1122: the first add-on attempt refused every first create
+  with "cluster object request or answer is invalid", the next created nothing
+  because `oc` refused `Namespace.v1`, and the next stayed unknown on
+  `Namespace//metallb-system` while the operators' types were not served.
+  With each fix built and installed, the apply continued; with all three it
+  completed: MetalLB 2 m 0 s, NMState 1 m 33 s, secondary networks 16 s.
+- B755 and B757: both operators installed at the catalog's head CSV on
+  `stable` (`kubernetes-nmstate-operator.4.22.0-202610280730`,
+  `metallb-operator.v4.22.0-202610271454`), each CSV `Succeeded`. The settle
+  apply had nothing to do, and the destroy retired both instances with the
+  cluster without contacting it.
+- B726 and B889: the cluster network block applied both Localnet networks on
+  bridges carrying the node's environment addresses (`hostAddresses:
+  bridge`), each namespace received exactly one NetworkAttachmentDefinition
+  named for its environment, and each environment's pods took addresses on
+  its VLAN (`192.0.2.3`, `203.0.113.2`).
+- B1123 and B729: each environment's IngressController took its router address
+  from its own pool alone, `192.0.2.200` and `203.0.113.200`, announced on
+  that environment's bridge. Inside each environment every path answered:
+  pod to pod on the VLAN and through the cluster network, pod to the
+  environment's app container on the laptop, pod through its own ingress, and
+  the app container to the pods and through the ingress. Across environments
+  the first matrix let a pod read the other environment's app through the
+  other router (200 with its host), because the ingress operator's own
+  `router-<name>` policy admits any source and had replaced the case's
+  same-named policies. With an egress policy per environment namespace in
+  their place, all 22 probes from pods and every probe from the app
+  containers answered as expected, and the committed policies read no drift
+  against the live ones. The default ingress admitted no environment route,
+  and the console answered 200.
+- The verified-fetch drill repeated [X294](#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host)'s
+  answers: after the eject, `Inserted: false`, `VerifyCertificate: true` and
+  no certificate; an unrelated certificate failed with
+  `CERTIFICATE_VERIFY_FAILED`; the server's own failed only on its 404; the
+  restored device read as before, and `diff --observe` read no difference.
+
+**Cleanup.** The FIPS context's destroy
+(`op-db49acaa1db93f84c89724a0e3ec9441`) refused `lifecycle.live` while
+`sno-01` ran, then completed 10/10 after `machine stop`. The bootstrap
+context's destroy (`op-86b8b72f0106b0b70ab41be764089306`) completed 8/8 after
+`machine stop`, and both contexts were purged. Root's SSH authorization, sshd
+and the firewall grants were restored, and the trunk and app containers
+removed.
+
+**Not exercised**, carried by B1125 and B1126:
+
+1. No interruption drill ran: neither the install's nor B755's and B757's
+   add-on drills, nor a destroy over an interrupted apply with the cluster
+   API unreachable.
+2. The facts B755 and B757 re-verify were not read, and the add-on row
+   template B755 adds to the ledger was not written.
+3. No pool on the machine network, no Service reached from the controller
+   (the controller has no route to either environment, by design), and no VM
+   attached to a Localnet network. The egress-IP fact B889 names was not read.
+
+**What stays open.** [B1124](backlog.md#b1124), forwarding between the
+environment networks through the node. The items whose operator gate was
+B755's, B757's or B729's row, such as [B735](m4.md#b735),
+[B84](m4.md#b84), [B727](m4.md#b727) and [B758](m4.md#b758), keep their
+status until the owner accepts them.

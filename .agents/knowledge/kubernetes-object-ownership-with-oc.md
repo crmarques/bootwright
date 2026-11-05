@@ -6,7 +6,7 @@ whether it owns it, waits on it and deletes it. The
 owns the required behavior; the program and its ownership evidence are
 [B750](../../specs/milestones/delivered.md#b750), the adapter is
 [B751](../../specs/milestones/delivered.md#b751), and the first live proof is
-[B755](../../specs/milestones/m4.md#b755). The OLM objects are in
+[B755](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node). The OLM objects are in
 [olm-v0-exact-install.md](olm-v0-exact-install.md).
 
 Provenance: `R2:C<n>` is a claim id of the M4 definition's research of
@@ -23,7 +23,7 @@ re-verify on this tree" marks a v1 fact the research did not confirm.
 - `kubectl get --ignore-not-found` ignores only API NotFound errors, so an
   absent object prints nothing and exits 0 while other errors still fail. The
   source says so; no research claim ran it, and
-  [B755](../../specs/milestones/m4.md#b755) re-verifies it on the gate's `oc`.
+  [B1125](../../specs/milestones/m4.md#b1125) re-verifies it on the gate's `oc`.
 - Apply of a custom resource before its CRD is served fails client-side, before
   any request: `resource mapping not found for name: "<n>" namespace: "<ns>"
   from "<file>": ... ensure CRDs are installed first`. A server-side dry run

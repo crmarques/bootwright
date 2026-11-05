@@ -21,8 +21,8 @@ It accepts [B66](../../specs/milestones/m3.md#b66) with
 [B260](../../specs/milestones/m3.md#b260). B66 requires
 [B61](../../specs/milestones/m3.md#b61)'s accepted row first, from
 [lab-sno](../lab-sno/runbook.md). The MetalLB selection repeats
-[B757](../../specs/milestones/m4.md#b757)'s profile on three masters once B66 is
-accepted. [B729](../../specs/milestones/m3.md#b729) needs five nodes and three
+the addons-lb profile ([B1125](../../specs/milestones/m4.md#b1125)) on three masters once B66 is
+accepted. [B1126](../../specs/milestones/m3.md#b1126) needs five nodes and three
 networks and is not here.
 
 B66's exit evidence names a ledger row of the

@@ -2420,7 +2420,7 @@ Install-time `ovs-bridge`, `ovs-interface` and `linux-bridge` interfaces in a
 node's `networkConfig`, and a customized `br-ex` through the documented
 MachineConfig writing `/etc/nmstate/openshift/<host>.yml`. Parked on
 2026-10-20 (D172). **Definition needs:** a live test of `nmstatectl gc` and the
-live image with each. On 2026-10-28 (D194) [B889](m3.md#b889) took the
+live image with each. On 2026-10-28 (D194) [B889](delivered.md#x302--two-isolated-environments-on-one-node) took the
 post-installation half, a node address moved onto a localnet's bridge by the
 cluster network block; the install-time bridges stay parked here.
 
@@ -5467,7 +5467,7 @@ review, the owner stated that each of their networks is one VLAN, that a
 second VLAN per network "would break my environment setup (outside bootwright
 control)", and asked: "plan the implementation what is missing support and
 then implement ... the solution must be as good as possible in terms of
-well-designed architecture and ux". It authorizes [B889](m3.md#b889) and
+well-designed architecture and ux". It authorizes [B889](delivered.md#x302--two-isolated-environments-on-one-node) and
 [B885](m3.md#b885) as slice X196 on M3, out of sequence. Taken by the
 session, pending the owner's review: (1) a node address on a localnet's VLAN is
 declared, never inferred: `uplink.hostAddresses: bridge`, default `none`, and
@@ -6892,7 +6892,7 @@ interfaces and the app containers, which Bootwright only names as an external
 attachment ([product scope](../project.md#product-scope)). Offered a pool
 `serviceAllocation` in the MetalLB package, an e2e-made annotated Service, or
 annotating the router Service, the owner chose `serviceAllocation`, opening
-[B1123](m4.md#b1123) as slice X302. Session clauses, pending the owner's
+[B1123](delivered.md#x302--two-isolated-environments-on-one-node) as slice X302. Session clauses, pending the owner's
 review: selectors take `matchLabels` only and no `priority`; the case, not
 Bootwright, owns the namespaces, workloads, IngressControllers and
 EgressFirewalls; and node forwarding between the two networks is parked as

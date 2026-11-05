@@ -15,8 +15,8 @@ masters plus the provider's 4 CPU, 8 GiB, 40 GiB `capacityReserve`, as
 [capacity admission](../../specs/substrates.md#capacity-admission) counts them),
 plus media space.
 
-It accepts [B720](../../specs/milestones/m3.md#b720) (TPM2),
-[B721](../../specs/milestones/m3.md#b721) (proxy) and
+It rehearses [B720](../../specs/milestones/delivered.md#x302--two-isolated-environments-on-one-node) (TPM2), accepted on one node
+by lab-sno-fips-controller, and accepts [B721](../../specs/milestones/m3.md#b721) (proxy) and
 [B724](../../specs/milestones/m3.md#b724) (mirror) on the default render, and
 [B725](../../specs/milestones/m3.md#b725) with
 [B703](../../specs/milestones/m1.md#b703) on `ipv6: true`; each is a

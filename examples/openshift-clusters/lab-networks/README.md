@@ -1,6 +1,6 @@
 # Secondary-network and MetalLB rehearsal
 
-A synthetic preparation profile for [B729](../../../specs/milestones/m3.md#b729)
+A synthetic preparation profile for [B1126](../../../specs/milestones/m3.md#b1126)
 and the [acceptance matrix](../../../specs/openshift-coverage.md#acceptance-profiles):
 a localnet secondary network, OVN host routing and global forwarding, with
 NMState and MetalLB add-ons. No live run or owner acceptance is claimed, and
