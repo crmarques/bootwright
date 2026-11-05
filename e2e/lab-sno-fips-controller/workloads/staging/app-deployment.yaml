@@ -1,0 +1,44 @@
+# Applied by the runbook with oc, not by Bootwright: workloads, their
+# isolation and the per-environment ingress are the case's own (D231). The
+# addresses and names follow values.yaml's defaults.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  namespace: staging
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: app
+
+  template:
+    metadata:
+      labels:
+        app: app
+
+      annotations:
+        k8s.v1.cni.cncf.io/networks: staging
+
+    spec:
+      containers:
+        - name: app
+          image: registry.access.redhat.com/ubi9/python-312
+          command:
+            - /bin/sh
+            - -c
+            - mkdir -p /tmp/www && echo staging-openshift > /tmp/www/index.html && exec python3 -m http.server 8080 --directory /tmp/www
+
+          ports:
+            - containerPort: 8080
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault

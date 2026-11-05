@@ -1,0 +1,25 @@
+# Applied by the runbook with oc, not by Bootwright: workloads, their
+# isolation and the per-environment ingress are the case's own (D231). The
+# addresses and names follow values.yaml's defaults.
+# The cluster network reaches every namespace and every router, so this
+# namespace admits only its own pods and the ingress routers. The other
+# environment cannot reach this one's router: see egress-networkpolicy.yaml.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: isolate
+  namespace: staging
+
+spec:
+  podSelector: {}
+
+  policyTypes:
+    - Ingress
+
+  ingress:
+    - from:
+        - podSelector: {}
+
+        - namespaceSelector:
+            matchLabels:
+              policy-group.network.openshift.io/ingress: ""

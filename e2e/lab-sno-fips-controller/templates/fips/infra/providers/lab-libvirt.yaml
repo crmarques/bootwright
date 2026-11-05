@@ -36,3 +36,13 @@ spec:
       libvirt:
         bridge: {{ .Values.host.bridge }}
         management: external
+{{- if .Values.environments.enabled }}
+
+    # The VLAN trunk the runbook builds on libvirt-host; Bootwright only
+    # proves the bridge is there.
+    - name: trunk
+
+      libvirt:
+        bridge: {{ .Values.environments.trunk.bridge }}
+        management: external
+{{- end }}

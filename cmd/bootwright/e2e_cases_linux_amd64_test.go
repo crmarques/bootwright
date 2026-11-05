@@ -32,9 +32,13 @@ type e2eRender struct {
 }
 
 var e2eRenders = map[string][]e2eRender{
-	"lab-rhel":                       {{name: "default"}},
-	"lab-sno":                        {{name: "default"}},
-	"lab-sno-fips-controller":        {{name: "default"}, {name: "tpm2 on", sets: []string{"security.tpm2=true"}}},
+	"lab-rhel": {{name: "default"}},
+	"lab-sno":  {{name: "default"}},
+	"lab-sno-fips-controller": {
+		{name: "default", sets: fipsControllerSubscriptions()},
+		{name: "tpm2 off", sets: append(fipsControllerSubscriptions(), "security.tpm2=false")},
+		{name: "environments off", sets: []string{"environments.enabled=false"}},
+	},
 	"lab-network-variants":           {{name: "default"}},
 	"lab-3-nodes-ceph-host-variants": {{name: "default"}},
 	"lab-3-nodes-ocp":                {{name: "metallb off", sets: []string{"addons.metallb=false"}}},
@@ -272,4 +276,11 @@ func planE2EInput(t *testing.T, directory string) (string, []prerequisites.HostR
 		return err.Error(), nil
 	}
 	return "", reservations
+}
+
+func fipsControllerSubscriptions() []string {
+	return []string{
+		"addons.subscriptions.nmstate.channel=stable", "addons.subscriptions.nmstate.startingCSV=kubernetes-nmstate-operator.v4.22.0",
+		"addons.subscriptions.metallb.channel=stable", "addons.subscriptions.metallb.startingCSV=metallb-operator.v4.22.0",
+	}
 }

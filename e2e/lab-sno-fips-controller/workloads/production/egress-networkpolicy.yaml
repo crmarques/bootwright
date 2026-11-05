@@ -1,0 +1,43 @@
+# Applied by the runbook with oc, not by Bootwright: workloads, their
+# isolation and the per-environment ingress are the case's own (D231). The
+# addresses and names follow values.yaml's defaults.
+# The ingress operator admits any source to every router on the cluster
+# network, and a policy in openshift-ingress can only add to that. So this
+# namespace's pods send on the cluster network only to their own pods, DNS
+# and their own router, and nowhere in the cluster, service, node or other
+# environment network. The production network itself is a secondary network, which
+# no NetworkPolicy governs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress
+  namespace: production
+
+spec:
+  podSelector: {}
+
+  policyTypes:
+    - Egress
+
+  egress:
+    - to:
+        - podSelector: {}
+
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-dns
+
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: openshift-ingress
+          podSelector:
+            matchLabels:
+              ingresscontroller.operator.openshift.io/deployment-ingresscontroller: production
+
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.128.0.0/14
+              - 172.30.0.0/16
+              - 198.51.100.0/24
+              - 192.0.2.0/24

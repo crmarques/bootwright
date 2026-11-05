@@ -1,0 +1,16 @@
+# Applied by the runbook with oc, not by Bootwright: workloads, their
+# isolation and the per-environment ingress are the case's own (D231). The
+# addresses and names follow values.yaml's defaults.
+apiVersion: v1
+kind: Service
+metadata:
+  name: app
+  namespace: production
+
+spec:
+  selector:
+    app: app
+
+  ports:
+    - port: 8080
+      targetPort: 8080

@@ -8,6 +8,15 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: sno
+{{- if .Values.environments.enabled }}
+
+      interfaceAttachments:
+        - interface: enp1s0
+          attachmentRef: lab-guests
+
+        - interface: {{ .Values.environments.trunk.interface }}
+          attachmentRef: trunk
+{{- end }}
 
   hardware:
     rootDevice:
@@ -18,7 +27,9 @@ spec:
 
   network:
     configRef: lab-guests
+{{- if not .Values.environments.enabled }}
     attachmentRef: lab-guests
+{{- end }}
     installAddressRef: ip
 
     addresses:
@@ -28,3 +39,18 @@ spec:
       - name: ip
         address: {{ .Values.guest.address }}/{{ .Values.host.prefix }}
         interface: enp1s0
+{{- if .Values.environments.enabled }}
+{{- $trunk := .Values.environments.trunk.interface }}
+{{- with .Values.environments.staging }}
+
+      - name: staging
+        address: {{ .nodeAddress }}/{{ .prefix }}
+        interface: {{ $trunk }}.{{ .vlan }}
+{{- end }}
+{{- with .Values.environments.production }}
+
+      - name: production
+        address: {{ .nodeAddress }}/{{ .prefix }}
+        interface: {{ $trunk }}.{{ .vlan }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,28 @@
+# Applied by the runbook with oc, not by Bootwright: workloads, their
+# isolation and the per-environment ingress are the case's own (D231). The
+# addresses and names follow values.yaml's defaults.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: probe
+  namespace: staging
+
+  annotations:
+    k8s.v1.cni.cncf.io/networks: staging
+
+spec:
+  containers:
+    - name: probe
+      image: registry.access.redhat.com/ubi9/python-312
+      command:
+        - sleep
+        - infinity
+
+      securityContext:
+        allowPrivilegeEscalation: false
+        runAsNonRoot: true
+        capabilities:
+          drop:
+            - ALL
+        seccompProfile:
+          type: RuntimeDefault

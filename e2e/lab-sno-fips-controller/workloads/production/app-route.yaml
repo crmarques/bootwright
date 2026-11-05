@@ -1,0 +1,18 @@
+# Applied by the runbook with oc, not by Bootwright: workloads, their
+# isolation and the per-environment ingress are the case's own (D231). The
+# addresses and names follow values.yaml's defaults.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: app
+  namespace: production
+
+spec:
+  host: app.production.apps.sno.e2e.example.test
+
+  to:
+    kind: Service
+    name: app
+
+  port:
+    targetPort: 8080

@@ -24,6 +24,37 @@ spec:
 
         ipv6:
           enabled: false
+{{- if .Values.environments.enabled }}
+{{- $trunk := .Values.environments.trunk.interface }}
+
+      - name: {{ $trunk }}
+        type: ethernet
+        state: up
+        mtu: 1500
+
+        ipv4:
+          enabled: false
+
+        ipv6:
+          enabled: false
+{{- range $env := list .Values.environments.staging .Values.environments.production }}
+
+      - name: {{ $trunk }}.{{ $env.vlan }}
+        type: vlan
+        state: up
+
+        vlan:
+          base-iface: {{ $trunk }}
+          id: {{ $env.vlan }}
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+{{- end }}
+{{- end }}
 
     dns-resolver:
       config:

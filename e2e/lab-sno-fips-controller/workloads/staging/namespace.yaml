@@ -1,0 +1,9 @@
+# Applied by the runbook with oc, not by Bootwright: workloads, their
+# isolation and the per-environment ingress are the case's own (D231). The
+# addresses and names follow values.yaml's defaults.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: staging
+  labels:
+    lab.example.test/environment: staging

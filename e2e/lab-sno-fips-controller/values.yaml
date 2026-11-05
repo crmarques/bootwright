@@ -37,7 +37,7 @@ controller:
   name: fips-controller
   address: 198.51.100.10
   cpu: 4
-  memoryMiB: 6144
+  memoryMiB: 4096
   diskGiB: 60
 
 # Each context's emulated BMC on this host: the bootstrap one on loopback, the
@@ -47,7 +47,7 @@ ports:
   fipsBMC: 8010
 
 openshift:
-  version: 4.21.15
+  version: 4.22.21
 
 guest:
   address: 198.51.100.31
@@ -58,4 +58,55 @@ guest:
 # The cluster is always FIPS; tpm2 also encrypts the node's installation
 # disk, unlocked by the guest TPM2.
 security:
-  tpm2: false
+  tpm2: true
+
+# Two isolated environments on one VLAN trunk (D231). The case builds the
+# trunk bridge, one VLAN interface per environment and one app container per
+# environment on this host (runbook.md, step 6); Bootwright names the bridge
+# as an external attachment and gives sno-01 a second NIC on it. On the node,
+# each VLAN interface is the uplink of its environment's Localnet bridge, which
+# carries the node's address there, so that environment's MetalLB pool
+# announces on it and its IngressController takes its address from it. Pods
+# draw from podSubnet, which holds neither the pool nor the host app. The
+# workload manifests under workloads/ assume these defaults.
+environments:
+  enabled: true
+
+  trunk:
+    bridge: br-e2e-trunk
+    interface: enp2s0
+
+  staging:
+    vlan: 10
+    bridge: br-stg
+    prefix: 24
+    cidr: 192.0.2.0/24
+    gatewayAddress: 192.0.2.1
+    nodeAddress: 192.0.2.31
+    appAddress: 192.0.2.50
+    podSubnet: 192.0.2.0/25
+    pool: 192.0.2.200-192.0.2.207
+
+  production:
+    vlan: 20
+    bridge: br-prd
+    prefix: 24
+    cidr: 203.0.113.0/24
+    gatewayAddress: 203.0.113.1
+    nodeAddress: 203.0.113.31
+    appAddress: 203.0.113.50
+    podSubnet: 203.0.113.0/25
+    pool: 203.0.113.200-203.0.113.207
+
+# The operators' OLM channel and exact CSV, read from the release's operator
+# catalog before rendering (runbook.md, step 2). The render fails until both
+# are set while environments are enabled.
+addons:
+  subscriptions:
+    nmstate:
+      channel: ""
+      startingCSV: ""
+
+    metallb:
+      channel: ""
+      startingCSV: ""

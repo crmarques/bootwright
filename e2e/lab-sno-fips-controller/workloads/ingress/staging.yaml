@@ -1,0 +1,26 @@
+# Applied by the runbook with oc, not by Bootwright: workloads, their
+# isolation and the per-environment ingress are the case's own (D231). The
+# addresses and names follow values.yaml's defaults.
+# Its router Service carries
+# ingresscontroller.operator.openshift.io/owning-ingresscontroller: staging,
+# which only the staging MetalLB pool selects.
+apiVersion: operator.openshift.io/v1
+kind: IngressController
+metadata:
+  name: staging
+  namespace: openshift-ingress-operator
+
+spec:
+  domain: staging.apps.sno.e2e.example.test
+  replicas: 1
+
+  endpointPublishingStrategy:
+    type: LoadBalancerService
+
+    loadBalancer:
+      scope: External
+      dnsManagementPolicy: Unmanaged
+
+  namespaceSelector:
+    matchLabels:
+      lab.example.test/environment: staging

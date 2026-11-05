@@ -35,6 +35,44 @@ spec:
     - name: master-0
       role: controlPlane
       machineRef: sno-01
+{{- if .Values.environments.enabled }}
+{{- $trunk := .Values.environments.trunk.interface }}
+
+  # MetalLB announces each environment's pool on its bridge, which needs host
+  # routing and forwarding on the node (package metallb).
+  networking:
+    ovnKubernetesConfig:
+      gatewayConfig:
+        routingViaHost: true
+        ipForwarding: Global
+
+    secondaryNetworks:
+{{- range $name, $env := dict "staging" .Values.environments.staging "production" .Values.environments.production }}
+      - name: {{ $name }}
+        topology: Localnet
+
+        uplink:
+          bridge: {{ $env.bridge }}
+          interface: {{ $trunk }}.{{ $env.vlan }}
+          hostAddresses: bridge
+
+        ipam:
+          mode: Enabled
+
+          subnets:
+            - {{ $env.podSubnet }}
+
+          # .1 is the host containers' unused gateway.
+          excludeSubnets:
+            - {{ $env.gatewayAddress }}/32
+            - {{ $env.nodeAddress }}/32
+            - {{ $env.appAddress }}/32
+
+        namespaceSelector:
+          matchLabels:
+            lab.example.test/environment: {{ $name }}
+{{- end }}
+{{- end }}
 
   security:
     fips:
