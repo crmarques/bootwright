@@ -17,6 +17,10 @@ make build
 ./bin/bootwright validate -f examples/machines/lab-rhel
 ```
 
+A host with only Docker or Podman runs `make container-build` instead;
+[building in a container](docs/development.md#building-in-a-container) covers
+the output directory, proxies, mirrors and the build cache.
+
 Then run the e2e [`lab-rhel`](e2e/lab-rhel/runbook.md) case, which installs
 one RHEL guest like
 [`examples/machines/lab-rhel`](examples/machines/lab-rhel/README.md) through an

@@ -77,11 +77,59 @@ runs Ansible unpacks the build's own automation, so a build that changes only
 [changing the build between runs](operator-guide.md#changing-the-build-between-runs)
 says what a lock change requires.
 
+## Building in a container
+
+A host with only Docker or Podman builds the executable from the
+[Dockerfile](../Dockerfile), which runs `make build` in the Go image of the
+`go` directive of [go.mod](../go.mod):
+
+```sh
+make container-build
+make container-build CONTAINER_OUT=dist CONTAINER_ENGINE=docker
+```
+
+It writes `bootwright` into `CONTAINER_OUT`, `bin` by default, with Podman when
+both engines are installed. The result is the same static executable a host
+build makes, for the building host's architecture, stamped with the identity
+`make build` would give the checkout. A host without `make` passes the version
+itself: `docker build --build-arg GO_VERSION=<go.mod version> --output type=local,dest=bin .`;
+from a checkout whose `.git` is a directory it then stamps itself in the build.
+
+Go's module and build caches are cache mounts the engine keeps between builds:
+on the reference host a cold build took 31 seconds, a rebuild after a source
+change 8, and a build that leaves go.mod unchanged downloads nothing. The
+compile runs with `GOPROXY=off`. `podman image prune --build-cache` or
+`docker builder prune` empties the caches.
+
+Behind a proxy, set it in the environment or on the command line:
+
+```sh
+HTTPS_PROXY=http://proxy.example:3128 NO_PROXY=.example make container-build
+make container-build HTTPS_PROXY=http://proxy.example:3128 PROXY_CA=corp-ca.pem
+```
+
+`HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`, in either case, and `GOPROXY`,
+`GOSUMDB`, `GOPRIVATE`, `GONOSUMDB`, `GONOPROXY` and `GO_IMAGE` pass to the
+build by name whenever they are set, so a value never appears in the echoed
+command; a host `GOPROXY` therefore reaches the build as well. Neither engine
+records a proxy variable in the image history; the `GO*` variables are
+recorded in the build stage's. `PROXY_CA` names the CA certificate of a proxy
+that intercepts TLS: the module download trusts it as a build secret, and no
+layer keeps it. With Docker, a proxy passed this way also carries the
+base-image pull; Podman pulls through the proxy of its caller. `GO_IMAGE` replaces the image, for example with
+`<mirror>/golang:<tag>@sha256:<digest>` from a registry mirror pinned by
+digest.
+
+`TestContainerBuildTakesGoFromGoMod` holds the `go` directive to the toolchain
+[scripts/go](../scripts/go) selects, so the image and host builds use the same
+Go.
+
 ## Verification tiers
 
 | Command | Result |
 | --- | --- |
 | `make build` | Build `bin/bootwright`, stamped with the version, commit and source state of the checkout it was built from. |
+| `make container-build` | Build the same executable into `CONTAINER_OUT` with Docker or Podman only; [building in a container](#building-in-a-container). |
 | `make focus` | Run the inner loop: the narrowest checks of the branch's diff, in concurrent lanes. It is no gate; [the tiers](../.agents/skills/code-implementation/references/verification.md#focus) say what it selects and what it leaves to `make check`. |
 | `make quick` | Run formatting, vet, the architecture suite and the packages a change on this branch reaches; [the tiers](../.agents/skills/code-implementation/references/verification.md) say when to run it and [architecture verification](../specs/architecture.md#architecture-verification) how it selects them. |
 | `make docs-check` | Check guidance links, anchors, cited paths and tests, documented command lines, skill frontmatter and byte budgets over the files Git tracks, every capability's refusal table and the engine's table of unclaimed objects against the code that refuses, beside the working-tree walks [architecture verification](../specs/architecture.md#architecture-verification) names, and hold the pages to the [milestone rules](../specs/milestones.md) (`TestDocsMilestonePagesAgreeWithTheirStatus`): each milestone's Status Delivery agrees with its page and its Next names only open work; a done milestone keeps no item or planned slice and requires only done milestones; every item has one row of a known Kind, one detail section and no delivered record, and leaves its page when it completes; each planned slice has one row of a known Kind naming only its page's items; and an item's Delivery names a planned slice exactly when that slice's row lists the item, with no empty slice suffix. |

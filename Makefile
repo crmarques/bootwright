@@ -1,4 +1,4 @@
-.PHONY: build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check focus quick race check-offline check check-go
+.PHONY: build container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check focus quick race check-offline check check-go
 
 GO := ./scripts/go
 VULNDB ?= https://vuln.go.dev
@@ -6,14 +6,27 @@ VULNDB ?= https://vuln.go.dev
 # A release build overrides these; an ordinary build identifies the working tree
 # it came from. Outside a repository they stay empty and `version` reports an
 # unidentified build instead of claiming a revision it cannot prove. Every one
-# is expanded by the build recipe alone, so no other target runs Git.
+# is expanded by the two build recipes alone, so no other target runs Git.
 VERSION ?= $(shell git describe --tags --dirty 2>/dev/null)
 COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null)
 SOURCE ?= $(if $(COMMIT),$(if $(shell git status --porcelain --untracked-files=no 2>/dev/null),modified,clean))
 STAMP = -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.source=$(SOURCE)
 
+# The container build takes its Go from go.mod and forwards each proxy and
+# module-mirror variable set in the environment or on the command line by name,
+# so its value never appears in the echoed command.
+CONTAINER_ENGINE ?= $(firstword $(shell command -v podman docker 2>/dev/null))
+CONTAINER_OUT ?= bin
+PROXY_CA ?=
+GO_VERSION = $(shell awk '$$1 == "go" { print $$2; exit }' go.mod)
+CONTAINER_FORWARDED = HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy GOPROXY GOSUMDB GOPRIVATE GONOSUMDB GONOPROXY GO_IMAGE
+comma := ,
+
 build:
 	CGO_ENABLED=0 $(GO) build -trimpath -buildvcs=false -ldflags '$(STAMP)' -o bin/bootwright ./cmd/bootwright
+
+container-build:
+	$(or $(CONTAINER_ENGINE),$(error container-build needs podman or docker on PATH, or CONTAINER_ENGINE)) build --output type=local,dest=$(CONTAINER_OUT) --build-arg GO_VERSION=$(or $(GO_VERSION),$(error go.mod names no go version)) --build-arg VERSION=$(VERSION) --build-arg COMMIT=$(COMMIT) --build-arg SOURCE=$(SOURCE) $(foreach name,$(CONTAINER_FORWARDED),$(if $($(name)),--build-arg $(name))) $(if $(PROXY_CA),--secret id=proxy-ca$(comma)src=$(PROXY_CA)) .
 
 test:
 	$(GO) test ./...
