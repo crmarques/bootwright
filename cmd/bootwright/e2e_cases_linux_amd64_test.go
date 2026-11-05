@@ -294,6 +294,6 @@ func fipsControllerSubscriptions() []string {
 
 func dataFoundationSubscription() []string {
 	return []string{
-		"fdf.subscription.channel=stable-4.21", "fdf.subscription.startingCSV=odf-operator.v4.21.11-rhodf",
+		"fdf.subscription.startingCSV=odf-operator.v4.22.4-rhodf",
 	}
 }

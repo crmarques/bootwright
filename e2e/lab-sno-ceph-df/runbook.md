@@ -39,19 +39,19 @@ another input variant from the beginning.
 
 | `--set` | Default | Effect |
 | --- | --- | --- |
-| `fdf.subscription.channel`, `fdf.subscription.startingCSV` | none | the `odf-operator` OLM channel and its exact CSV; the render fails with `required` while either is empty |
+| `fdf.subscription.channel`, `fdf.subscription.startingCSV` | `stable-4.22`, none | the `odf-operator` OLM channel and its exact CSV; the render fails with `required` while either is empty |
 | `fdf.subscription.source` | `redhat-operators` | `redhat-operators` installs Red Hat OpenShift Data Foundation; `ibm` installs IBM Fusion Data Foundation through the owned catalog source `isf-data-foundation-catalog` |
 | `fdf.catalog.image`, `fdf.catalog.priority` | none, `100` | with `ibm`: the IBM catalog image the operator chooses (required) and the catalog source's priority |
 | `fdf.cephxKeyType` | `aes256k` | the type of every key the consumer mints; see [Key types](#key-types) |
 | `fdf.defaultStorageClass` | `false` | make the RBD class the cluster's default StorageClass |
 | `fdf.timeout` | `1h` | how long Bootwright waits for the operator and the StorageCluster |
-| `openshift.version` | `4.21.15` | the OpenShift release |
+| `openshift.version` | `4.22.21` | the OpenShift release |
 | `sno.cpu`, `sno.memoryMiB`, `sno.diskGiB` | `12`, `32768`, `120` | the node's size; Data Foundation's NooBaa pods request about 10.75 GiB and 2.8 CPU beside the platform, so 16 GiB leaves them Pending |
 | `cephNodes.cpu`, `.memoryMiB`, `.diskGiB`, `.osdDiskGiB` | `4`, `8192`, `40`, `50` | the Ceph guests' size |
-| `ceph.*` | IBM Storage Ceph 9.9.2.0 | the release, package versions, image and prometheus digest, which move together |
+| `ceph.*` | IBM Storage Ceph 9.9.1.2 | the release, package versions, image and prometheus digest, which move together |
 
-The channel and CSV have no default. Read them from a cluster of the same
-release and catalog:
+The CSV has no default. Read it from a cluster of the same release and
+catalog:
 
 ```sh
 oc get packagemanifest odf-operator -n openshift-marketplace -o json
@@ -63,16 +63,17 @@ CSV, odf-operator may approve an InstallPlan that also upgrades it to the head;
 the installed CSV then never equals `startingCSV` and the apply fails only when
 `fdf.timeout` expires ([B1130](../../specs/milestones/m4.md#b1130)). The first run therefore needs a
 cluster to read from, such as a finished [lab-sno](../lab-sno/runbook.md) run
-of the same `openshift.version` (its packagemanifest lists the Red Hat catalog),
-or a cluster that serves the IBM catalog image you chose. Use a Data Foundation
-release that reads AES256K keys: 4.21.11 or later on 4.21, 4.22.4 or later on
-4.22.
+rendered with `--set openshift.version=4.22.21` (its packagemanifest lists the
+Red Hat catalog), or a cluster that serves the IBM catalog image you chose. Use
+a Data Foundation 4.22 release that reads AES256K keys: 4.22.4 or later.
 
-The release and the other Ceph coordinates are those of
-[lab-3-nodes-ceph](../lab-3-nodes-ceph/runbook.md#releases-b626); the other
-Ceph releases there carry no recorded prometheus digest, so replace
-`ceph.images.prometheus` with the digest of the same build, a linux/amd64
-platform manifest. You set `openshift-pull-secret` and `ibm-registry`;
+The Ceph coordinates are those of the owner-accepted IBM Storage Ceph 9.9.1.2
+run of [lab-3-nodes-ceph](../lab-3-nodes-ceph/runbook.md#releases-b626) on
+2026-11-03 ([X289](../../specs/milestones/delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03)): packages
+`20.2.1-405.el9cp`, `cephadm-ansible` `5.0.3-1.el9cp`, the `ceph-9-rhel9`
+image by the linux/amd64 digest that run pulled, and its prometheus digest.
+Another release moves them together and replaces `ceph.images.prometheus` with
+the digest of the same build. You set `openshift-pull-secret` and `ibm-registry`;
 Bootwright generates the machine key, `ceph-cluster-key`, the BMC credentials
 and TLS, the artifact server certificate and the cluster administrator key.
 
@@ -84,7 +85,7 @@ refuses a key type the monitors disallow before it mints a principal
 Bootwright never widens the monitors' cipher policy. The Rook and Data
 Foundation documentation keeps the CSI key type `aes` until every node runs a
 kernel of Linux 7.0 or later, because the kernel RBD and CephFS clients cannot
-read `aes256k` keys before it. RHCOS 4.21 ships an older kernel, so the PVC
+read `aes256k` keys before it. RHCOS 4.22 runs a RHEL kernel older than Linux 7.0, so the PVC
 checks of step 6 can fail at the mount or map even with the StorageCluster
 `Ready`. Record `uname -r` of the node (step 6) and the pod events; such a
 failure is a finding for B628 and B761, not a mistake of this runbook, and
@@ -130,7 +131,7 @@ Set the choices; the channel and CSV come from the packagemanifest above:
 ```sh
 PULL_SECRET_FILE="$HOME/openshift-pull-secret"
 IBM_REGISTRY_FILE="$HOME/ibm-ceph-registry.txt"
-FDF_CHANNEL=""
+FDF_CHANNEL="stable-4.22"
 FDF_CSV=""
 FDF_SOURCE="redhat-operators"   # or ibm
 FDF_CATALOG_IMAGE=""            # needed only with ibm

@@ -21,7 +21,7 @@ host:
   prefix: 24
 
 openshift:
-  version: 4.21.15
+  version: 4.22.21
 
 # The single-node OpenShift guest sno-01. Data Foundation's NooBaa pods request
 # about 10.75 GiB and 2.8 CPU on top of the OpenShift platform, so the lab-sno
@@ -52,10 +52,12 @@ cephNodes:
   osdDiskGiB: 50
 
 # IBM Storage Ceph. A release moves these together: release, packageVersion,
-# ansiblePackageVersion, image, callHome and the auxiliary images below.
+# ansiblePackageVersion, image, callHome and the auxiliary images below. These
+# are the pins of the owner-accepted IBM Storage Ceph 9.9.1.2 run of
+# lab-3-nodes-ceph on 2026-11-03 (X289), its image by the digest it pulled.
 ceph:
-  release: 9.9.2.0
-  packageVersion: 20.2.2-349.el9cp
+  release: 9.9.1.2
+  packageVersion: 20.2.1-405.el9cp
   ansiblePackageVersion: 5.0.3-1.el9cp
 
   # enabled for 20.2.x builds (9.9.1.2, 9.9.2.0); disabled for 20.1.0-221
@@ -63,8 +65,8 @@ ceph:
   callHome: enabled
 
   image:
-    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
-    version: v9.9.2-26947
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9
+    version: sha256:8dae4b5b8f07c7fa95bd1d68b22d4c1dd4c2d323d533d807dc1ceae4e329cb7f
 
   # The guests' package repository for the release's RPMs.
   repository:
@@ -73,8 +75,9 @@ ceph:
     baseURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/
     gpgKeyURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH
 
-  # Auxiliary images, authored as digests of the build above (D171). Only the
-  # prometheus service the CephConsumer admission requires is deployed here.
+  # Auxiliary images, authored as digests of the build above (D171): the
+  # prometheus digest that 9.9.1.2 run pulled. Only the prometheus service the
+  # CephConsumer admission requires is deployed here.
   # Move it with ceph.image. The digest must identify the linux/amd64 platform
   # manifest, not the image index; see e2e/lab-3-nodes-ceph/values.yaml.
   images:
@@ -90,16 +93,18 @@ fdf:
   # monitor policy disallows before it mints anything (see
   # .agents/knowledge/cephx-key-types.md, "Current native key evidence"). Data
   # Foundation then needs a release that reads AES256K keys, per the IBM
-  # advisory cited there: 4.21.11 or later on 4.21, 4.22.4 or later on 4.22.
+  # advisory cited there: on 4.22, 4.22.4 or later.
   cephxKeyType: aes256k
 
-  # OLM channel and exact CSV of the odf-operator package, which no default can
-  # supply: read them from
+  # OLM channel and exact CSV of the odf-operator package. The channel is
+  # Data Foundation 4.22's, matching openshift.version; no default can supply
+  # the CSV: read the channel's head from
   #   oc get packagemanifest odf-operator -n openshift-marketplace -o json
-  # (status.channels[].name and .currentCSV) on a cluster of the same release
-  # and catalog. The render fails with `required` while either is empty.
+  # (status.channels[].currentCSV) on a cluster of the same release and
+  # catalog, 4.22.4 or later. The render fails with `required` while it is
+  # empty.
   subscription:
-    channel: ""
+    channel: stable-4.22
     startingCSV: ""
 
     # redhat-operators installs Red Hat OpenShift Data Foundation from the
