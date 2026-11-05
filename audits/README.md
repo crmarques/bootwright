@@ -2,7 +2,8 @@
 
 Keep each audit and its follow-ups under `audits/<NNN>-<topic>/`. Number
 audits across topics, starting at `001`; use a short topic name. The
-specification audit is `001-spec`, and the add-ons audit is `002-addons`.
+specification audit is `001-spec`, the add-ons audit is `002-addons`, and
+the code audit is `003-code`.
 
 ## Directory format
 
@@ -69,3 +70,4 @@ or effects.
 
 - [Specification audit 001](001-spec/README.md)
 - [Add-ons audit 002](002-addons/README.md)
+- [Code audit 003](003-code/README.md)
