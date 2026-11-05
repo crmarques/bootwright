@@ -6,10 +6,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"slices"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 type PhysicalRetirementReceipt struct {
@@ -198,7 +200,7 @@ func originalPhysicalDevices(e lifecycle.Execution, cluster string, host Host) (
 			return physicalDiskBinding{}, failure("lifecycle.state", "physical retirement lacks the original completed Ceph host disk binding", "restore the original apply and removal records")
 		}
 		for _, device := range host.Devices {
-			found = append(found, HostDevice{Path: device.Path, WWN: device.WWN})
+			found = append(found, HostDevice{Path: device.Path, WWN: device.WWN, Serial: device.Serial, SizeBytes: device.SizeBytes})
 		}
 		return physicalDiskBinding{Devices: found}, nil
 	}
@@ -250,20 +252,42 @@ func (c PhysicalRetirementCapability) erasedHost(e lifecycle.Execution, host Hos
 }
 
 func proveErasedDevices(targets []Device, binding physicalDiskBinding) error {
-	seen := map[string]Device{}
+	bySerial, byWWN := map[string]Device{}, map[string]Device{}
 	for _, target := range targets {
-		if _, duplicate := seen[target.WWN]; duplicate || target.WWN == "" {
+		if _, duplicate := bySerial[target.Serial]; duplicate || target.Serial == "" {
 			return physicalPolicyFailure()
 		}
-		seen[target.WWN] = target
+		bySerial[target.Serial] = target
+		if target.WWN == "" {
+			continue
+		}
+		if _, duplicate := byWWN[target.WWN]; duplicate {
+			return physicalPolicyFailure()
+		}
+		byWWN[target.WWN] = target
 	}
 	for _, device := range binding.Devices {
-		target, found := seen[device.WWN]
+		if _, serial := substrate.SerialDevicePath(device.Path); serial {
+			target, found := bySerial[device.Serial]
+			if !found || target.SizeBytes != device.SizeBytes || binding.Observed && target.WWN != "" && comparableWWN(target.WWN) != comparableWWN(device.WWN) {
+				return failure("lifecycle.state", "physical erase does not cover an original Ceph disk's serial number and capacity, or the WWN its erase target declares", "restore the original disk binding and continue the same verified removal")
+			}
+			continue
+		}
+		target, found := byWWN[device.WWN]
 		if !found || binding.Observed && (target.Serial != device.Serial || target.SizeBytes != device.SizeBytes) {
 			return failure("lifecycle.state", "physical erase does not cover an original Ceph disk's WWN, serial and capacity", "restore the original disk binding and continue the same verified removal")
 		}
 	}
 	return nil
+}
+
+func comparableWWN(wwn string) string {
+	lowered := strings.ToLower(wwn)
+	if hex, found := strings.CutPrefix(lowered, "naa."); found {
+		return hex
+	}
+	return strings.TrimPrefix(lowered, "0x")
 }
 
 func originalCoreUnstarted(e lifecycle.Execution, cluster string) (bool, error) {

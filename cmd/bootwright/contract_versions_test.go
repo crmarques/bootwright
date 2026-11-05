@@ -155,8 +155,8 @@ func automationFormats() map[string]automationFormat {
 		// The host block writes them; the core block's workers read them back
 		// for the manager account, the cephadm cache and the OSD identities.
 		"ceph-runtime-profile-v3":         persistedBy(ceph.HostImplementation, ceph.Implementation),
-		"ceph-physical-device-binding-v1": persistedBy(ceph.HostImplementation, ceph.Implementation),
-		"ceph-device-identities-v2":       persistedBy(ceph.HostImplementation, ceph.Implementation),
+		"ceph-physical-device-binding-v2": persistedBy(ceph.HostImplementation, ceph.Implementation),
+		"ceph-device-identities-v3":       persistedBy(ceph.HostImplementation, ceph.Implementation),
 		"ceph-host-route-v3":              host,
 		"ceph-package-decision-v1":        host,
 		"ceph-package-artifacts-v1":       host,
@@ -187,7 +187,7 @@ func automationFormats() map[string]automationFormat {
 		"ceph-dashboard-port-repair-v1":     core,
 		"ceph-dashboard-port-attempt-v1":    core,
 		"ceph-dashboard-user-v1":            core,
-		"ceph-cluster-device-identities-v2": core,
+		"ceph-cluster-device-identities-v3": core,
 		"ceph-osd-device-intent-v1":         core,
 		"ceph-osd-device-clear-v1":          core,
 		"ceph-service-inputs-v1":            core,
@@ -211,9 +211,9 @@ func automationFormats() map[string]automationFormat {
 		"bootwright-contained-public-label-probe-v1": transient("the bytes the label probe writes in its own scratch and reads back"),
 		"ceph-packages-v2":                           transient("the guest package transaction policy ceph_packages.transaction_request builds and the shared resolver reads within one run"),
 
-		"ceph-host-v11":                {class: formatMirrored},
+		"ceph-host-v12":                {class: formatMirrored},
 		"ceph-host-evidence-v4":        {class: formatMirrored},
-		"ceph-core-v39":                {class: formatMirrored},
+		"ceph-core-v40":                {class: formatMirrored},
 		"ceph-core-evidence-v14":       {class: formatMirrored},
 		"ceph-tiebreaker-evidence-v1":  {class: formatMirrored},
 		"ceph-packages-v3":             {class: formatMirrored},

@@ -28,6 +28,21 @@ func retirementRecord(block reconciliation.Block, verb reconciliation.Verb, data
 	return lifecycle.BlockEvidence{Kind: block.Kind, Object: block.Object, Implementation: block.Implementation, Block: block, State: reconciliation.BlockDone, Verb: verb, Evidence: data}
 }
 
+// eraseTargetsOf declares each device as the fixture's erase receipts name it:
+// a WWN disk by its WWN beside its synthetic serial, a serial disk by its own.
+func eraseTargetsOf(machine string, devices []Device) []PhysicalEraseTarget {
+	targets := []PhysicalEraseTarget{}
+	for disk, device := range devices {
+		if device.WWN == "" {
+			targets = append(targets, PhysicalEraseTarget{Serial: device.Serial, SizeBytes: device.SizeBytes})
+			continue
+		}
+		targets = append(targets, PhysicalEraseTarget{Serial: syntheticSerial(machine, disk), SizeBytes: 1 << 40, WWN: device.WWN})
+	}
+	slices.SortFunc(targets, func(a, b PhysicalEraseTarget) int { return strings.Compare(a.Serial, b.Serial) })
+	return targets
+}
+
 func physicalRetirementFixture(t *testing.T) (PhysicalRetirementCapability, lifecycle.Execution, Request, map[string]PhysicalErasure) {
 	t.Helper()
 	return physicalRetirementFixtureFrom(t, physicalCatalog)
@@ -42,10 +57,7 @@ func physicalRetirementFixtureFrom(t *testing.T, catalogOf func() (api.Catalog, 
 	}
 	request := physicalRetirementRequest(catalog, cluster)
 	for i := range request.Hosts {
-		request.Hosts[i].EraseWWNs = []string{}
-		for _, device := range request.Hosts[i].Devices {
-			request.Hosts[i].EraseWWNs = append(request.Hosts[i].EraseWWNs, device.WWN)
-		}
+		request.Hosts[i].EraseTargets = eraseTargetsOf(request.Hosts[i].Machine, request.Hosts[i].Devices)
 	}
 	data, _ := request.Canonical()
 	block := retirementBlock(t, PhysicalRetirementBlockID(cluster.Cluster), string(api.CephCluster), cluster.Cluster, PhysicalRetirementImplementation, data)
@@ -59,6 +71,10 @@ func physicalRetirementFixtureFrom(t *testing.T, catalogOf func() (api.Catalog, 
 		cluster.Packages.Sources = append(cluster.Packages.Sources, PackageSource{Host: host.Name})
 		erasure := PhysicalErasure{MACs: slices.Clone(identity.MACs), Targets: []Device{}}
 		for disk, device := range host.Devices {
+			if device.WWN == "" {
+				erasure.Targets = append(erasure.Targets, Device{Serial: device.Serial, SizeBytes: device.SizeBytes})
+				continue
+			}
 			erasure.Targets = append(erasure.Targets, Device{WWN: device.WWN, Serial: syntheticSerial(host.Machine, disk), SizeBytes: 1 << 40})
 		}
 		proofs[host.Machine] = erasure
@@ -72,6 +88,11 @@ func physicalRetirementFixtureFrom(t *testing.T, catalogOf func() (api.Catalog, 
 		evidence := preparedEvidence(t, hostExecution, hostRequest, func(value *HostEvidence) {
 			value.Devices = []HostDevice{}
 			for disk, device := range host.Devices {
+				if device.WWN == "" {
+					value.Devices = append(value.Devices, HostDevice{Path: device.Path, Serial: device.Serial, SizeBytes: device.SizeBytes, KernelPath: syntheticKernelPath(disk),
+						DeviceID: "SYNTHETIC_" + device.Serial, Alias: "/dev/disk/by-id/nvme-SYNTHETIC_" + device.Serial})
+					continue
+				}
 				value.Devices = append(value.Devices, HostDevice{Path: device.Path, WWN: device.WWN, Serial: syntheticSerial(host.Machine, disk),
 					KernelPath: syntheticKernelPath(disk), DeviceID: "SYNTHETIC_" + syntheticSerial(host.Machine, disk), SizeBytes: 1 << 40})
 			}
@@ -268,7 +289,7 @@ func TestPhysicalRetirementPolicyRefusesMissingDataDBOrWALIntent(t *testing.T) {
 		t.Fatal("retained physical hosts admitted as retirement")
 	}
 	for i := range request.Hosts {
-		request.Hosts[i].EraseWWNs = []string{request.Hosts[i].Devices[0].WWN}
+		request.Hosts[i].EraseTargets = eraseTargetsOf(request.Hosts[i].Machine, request.Hosts[i].Devices[:1])
 	}
 	if err := request.authorized(); err != nil {
 		t.Fatal(err)
@@ -286,7 +307,7 @@ func TestPhysicalRetirementOmissionRetainsAndCannotAuthorizeLaterErasure(t *test
 		t.Fatal(err)
 	}
 	for index := range request.Hosts {
-		request.Hosts[index].EraseWWNs = []string{}
+		request.Hosts[index].EraseTargets = []PhysicalEraseTarget{}
 	}
 	data, _ := request.Canonical()
 	execution.Block = retirementBlock(t, execution.Block.ID, execution.Block.Kind, execution.Block.Object, execution.Block.Implementation, data)
@@ -324,7 +345,7 @@ func TestMonitorOnlyPhysicalHostStillNeedsItsOriginalRootErasePolicy(t *testing.
 	if err := request.authorized(); err != nil {
 		t.Fatal("a monitor-only host with a frozen root target was refused", err)
 	}
-	request.Hosts[0].EraseWWNs = []string{}
+	request.Hosts[0].EraseTargets = []PhysicalEraseTarget{}
 	data, _ = request.Canonical()
 	execution.Block = retirementBlock(t, execution.Block.ID, execution.Block.Kind, execution.Block.Object, execution.Block.Implementation, data)
 	if _, err := capability.Apply(context.Background(), execution); err != nil {
@@ -342,7 +363,7 @@ func TestPhysicalPolicyCleanupGoldenRequiresPositiveCoreAndInstallationNoEffectP
 			execution.RemovalProved = nil
 			request, _ := DecodePhysicalRetirementRequest(execution.Block.Request)
 			for index := range request.Hosts {
-				request.Hosts[index].EraseWWNs = []string{}
+				request.Hosts[index].EraseTargets = []PhysicalEraseTarget{}
 			}
 			data, _ := request.Canonical()
 			execution.Block = retirementBlock(t, execution.Block.ID, execution.Block.Kind, execution.Block.Object, execution.Block.Implementation, data)
@@ -389,7 +410,7 @@ func TestPhysicalRetirementPolicyCountsEitherEraseMethodAndNothingElse(t *testin
 			objects := catalog.Objects()
 			for i, machine := range objects {
 				if machine.Kind() == api.Machine {
-					target := requestMap("deviceName", "/dev/disk/by-id/wwn-0x7000000000000001", "wwn", "0x7000000000000001")
+					target := requestMap("deviceName", "/dev/disk/by-id/wwn-0x7000000000000001", "wwn", "0x7000000000000001", "serialNumber", "root-serial", "sizeBytes", 1<<40)
 					objects[i] = machine.WithSpec(machine.Spec().WithPath(requestMap("method", method, "targets", api.ListValue(target)), "hardware", "eraseOnRemoval"))
 				}
 			}
@@ -399,10 +420,96 @@ func TestPhysicalRetirementPolicyCountsEitherEraseMethodAndNothingElse(t *testin
 				t.Fatal(err)
 			}
 			for _, host := range physicalRetirementRequest(catalog, cluster).Hosts {
-				if got := slices.Equal(host.EraseWWNs, []string{"0x7000000000000001"}); got != counted {
-					t.Fatalf("%s policy on %s recorded erase WWNs %v", method, host.Machine, host.EraseWWNs)
+				if got := slices.Equal(host.EraseTargets, []PhysicalEraseTarget{{Serial: "root-serial", SizeBytes: 1 << 40, WWN: "0x7000000000000001"}}); got != counted {
+					t.Fatalf("%s policy on %s recorded erase targets %v", method, host.Machine, host.EraseTargets)
 				}
 			}
 		})
+	}
+}
+
+func serialRetirementCatalog() (api.Catalog, api.Object) { return physicalSerialCatalog(nil) }
+
+func TestPhysicalRetirementCoversASerialSelectionByItsSerialNumberAndSize(t *testing.T) {
+	capability, execution, _, _ := physicalRetirementFixtureFrom(t, serialRetirementCatalog)
+	request, err := DecodePhysicalRetirementRequest(execution.Block.Request)
+	if err != nil || request.Hosts[1].Devices[0] != (Device{Path: "/dev/disk/by-serial/SER-2", Serial: "SER-2", SizeBytes: serialSize}) {
+		t.Fatalf("serial retirement policy %+v: %v", request, err)
+	}
+	if err := request.authorized(); err != nil {
+		t.Fatal(err)
+	}
+	request.Hosts[1].EraseTargets = []PhysicalEraseTarget{{Serial: "SER-2", SizeBytes: serialSize + 4096}}
+	if err := request.authorized(); err == nil {
+		t.Fatal("an erase target of another size covered a serial selection")
+	}
+	result, err := capability.Destroy(context.Background(), execution)
+	var proof PhysicalRetirementEvidence
+	if err != nil || json.Unmarshal(result.Evidence, &proof) != nil || !proof.Retired || len(proof.Receipts) != 3 {
+		t.Fatalf("complete serial retirement refused: %+v %v", proof, err)
+	}
+	for _, damage := range []string{"other-size", "other-serial", "declared-wwn-unobserved", "declared-wwn-other"} {
+		t.Run(damage, func(t *testing.T) {
+			capability, execution, _, proofs := physicalRetirementFixtureFrom(t, serialRetirementCatalog)
+			value := proofs["node-2"]
+			switch damage {
+			case "other-size":
+				value.Targets[0].SizeBytes += 4096
+			case "other-serial":
+				value.Targets[0].Serial = "ANOTHER"
+			case "declared-wwn-unobserved":
+				value.Targets[0].WWN = "0x7000000000000001"
+			default:
+				value.Targets[0].WWN = "naa.7000000000000002"
+				setObservedWWN(t, &execution, "node-2", "0x7000000000000001")
+			}
+			proofs["node-2"] = value
+			if result, err := capability.Destroy(context.Background(), execution); err == nil || result.Outcome == reconciliation.OutcomeUnchanged {
+				t.Fatal("an erase receipt that does not cover the serial selection counted as retirement")
+			}
+		})
+	}
+	t.Run("declared-wwn-observed", func(t *testing.T) {
+		capability, execution, _, proofs := physicalRetirementFixtureFrom(t, serialRetirementCatalog)
+		value := proofs["node-2"]
+		value.Targets[0].WWN = "naa.7000000000000001"
+		proofs["node-2"] = value
+		setObservedWWN(t, &execution, "node-2", "0x7000000000000001")
+		if _, err := capability.Destroy(context.Background(), execution); err != nil {
+			t.Fatal("the WWN a serial disk reported, spelled as its erase target declares it, was refused", err)
+		}
+	})
+}
+
+// setObservedWWN rewrites the original host binding of machine as if its
+// serial disk had reported wwn, keeping the binding proved.
+func setObservedWWN(t *testing.T, execution *lifecycle.Execution, machine, wwn string) {
+	t.Helper()
+	for i, pair := range execution.RemovalProved {
+		if pair.Applied.Implementation != HostImplementation || pair.Applied.Block.ID != HostBlockID("example", machine) {
+			continue
+		}
+		evidence, err := decodeHostEvidence(pair.Applied.Evidence, pair.Applied.Block.RequestDigest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		evidence.Devices[0].WWN = wwn
+		data, _ := json.Marshal(evidence)
+		execution.RemovalProved[i].Applied.Evidence = data
+		return
+	}
+	t.Fatal("no host binding for", machine)
+}
+
+func TestUnstartedSerialRetirementCarriesTheFrozenSerialIntent(t *testing.T) {
+	_, execution, _, _ := physicalRetirementFixtureFrom(t, serialRetirementCatalog)
+	request, _ := DecodePhysicalRetirementRequest(execution.Block.Request)
+	host := policyHosts(request)[1]
+	binding := physicalDiskBinding{Devices: []HostDevice{{Path: host.Devices[0].Path, Serial: host.Devices[0].Serial, SizeBytes: host.Devices[0].SizeBytes}}}
+	if err := proveErasedDevices([]Device{{Serial: "SER-2", SizeBytes: serialSize}}, binding); err != nil {
+		t.Fatal(err)
+	}
+	if err := proveErasedDevices([]Device{{Serial: "SER-2", SizeBytes: serialSize - 4096}}, binding); err == nil {
+		t.Fatal("unstarted serial intent admitted an erase receipt of another size")
 	}
 }

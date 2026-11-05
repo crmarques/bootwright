@@ -11702,3 +11702,30 @@ equal the sysfs serial and `blockdev --getsize64`, and that the installer
 image's `od` reads an NVMe controller's `serial` attribute. The delivering
 commit records the gates and their results; the Ceph OSD selection by serial
 number is [X299](m2.md#b1105).
+
+### X299 — Physical OSD disks selected by serial number
+
+Delivers B1105 in-tree; it awaits operator acceptance on
+[its M2 row](m2.md#b1105) ([D229](backlog.md#d229)). **Kind:** safety.
+**Owners:** Storage, with Machine.
+
+A physical Ceph host's native OSD path may be
+`/dev/disk/by-serial/<serialNumber>`, naming the disk its Machine declares as
+an `eraseOnRemoval` target without `deviceName`, whose size the request takes
+from that target; admission and request planning refuse an undeclared serial,
+one declared by `deviceName`, the root disk's serial, a malformed serial and
+one serial on two hosts. Host preparation resolves it by the physical erase
+worker's sysfs resolution before the first destructive effect, binds its
+kernel path, observed WWN and stable by-id alias, submits the alias in the
+per-host service document, and readback refuses any change
+([devices and destructive ownership](../ceph.md#devices-and-destructive-ownership)).
+Physical retirement covers a serial selection by its erase target's serial
+number and size. Every WWN selection keeps its proofs. Contracts:
+ceph-core-v39 to v40, ceph-host-v11 to v12 and
+storage-ceph-physical-retirement-v1 to v2, which moves the SMB and replication
+effect pins. Resolution, binding, alias choice, readback, submission and
+retirement are covered by synthetic tests.
+**Unverified on hardware:** that a disk's BMC-reported serial number and
+capacity equal its sysfs serial and size, and which `/dev/disk/by-id` names
+an NVMe disk receives on the managed OS. The delivering commit records the
+gates and their results.

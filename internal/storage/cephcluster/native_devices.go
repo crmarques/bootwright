@@ -2,8 +2,10 @@ package cephcluster
 
 import (
 	"slices"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -63,7 +65,9 @@ func (a *admission) nativeOSD(spec api.Value, field string, nodes []api.Value, p
 			}
 			for _, device := range nativeDevicePaths(selector) {
 				if rootDevice(machine, device) {
-					a.invalid(field+"."+key, "explicit OSD allocation cannot use the Machine root device", "remove the Machine root device from the OSD selector and select a dedicated data device")
+					a.invalid(field+"."+key, rootOSDReason, rootOSDRemedy)
+				} else if _, _, reason, remedy := SerialSelection(a.catalog, machine, device); reason != "" {
+					a.invalid(field+"."+key, reason, remedy)
 				}
 			}
 		}
@@ -89,6 +93,34 @@ func (a *admission) nativeOSD(spec api.Value, field string, nodes []api.Value, p
 			}
 		}
 	}
+}
+
+const (
+	rootOSDReason = "explicit OSD allocation cannot use the Machine root device"
+	rootOSDRemedy = "remove the Machine root device from the OSD selector and select a dedicated data device"
+)
+
+func SerialSelection(catalog api.Catalog, m api.Object, path string) (serial string, size int64, reason, remedy string) {
+	serial, ok := substrate.SerialDevicePath(path)
+	if !ok {
+		if strings.HasPrefix(path, substrate.SerialDevicePrefix) {
+			return "", 0, "a /dev/disk/by-serial/ path carries a serial number of 1 to 128 ASCII letters, digits and ._:+- characters", "select this disk by its /dev/disk/by-id/wwn-0x path"
+		}
+		return "", 0, "", ""
+	}
+	provider, _ := catalog.Find(api.InfraProvider, m.Spec().Get("substrate", "providerRef").Text())
+	if !machine.Installed(m) || !substrate.RealizesPhysicalNICs(provider) {
+		return "", 0, "a /dev/disk/by-serial/ path names a disk that a Bootwright-installed bare-metal Machine declares by serial number, and Machine " + m.Name() + " is not one", "select a device path that exists on this host"
+	}
+	if substrate.MachineRootDeviceHints(m).SerialNumber == serial {
+		return "", 0, rootOSDReason, rootOSDRemedy
+	}
+	size, byDevice, found := substrate.SerialEraseTarget(m, serial)
+	if !found || byDevice {
+		return "", 0, "the serial number " + serial + " that this OSD selection names is no eraseOnRemoval target of Machine " + m.Name() + " declared without deviceName, which would give its exact size",
+			"declare the disk in spec.hardware.eraseOnRemoval.targets of Machine " + m.Name() + " with its serialNumber and sizeBytes and no deviceName, or select it by that target's deviceName"
+	}
+	return serial, size, "", ""
 }
 
 func nativeMember(cluster api.Object, serviceType, nodeName string) bool {

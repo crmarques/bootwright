@@ -258,7 +258,7 @@ func TestRequestSizesAtTheBound(t *testing.T) {
 	if decoded, err := DecodePhysicalRetirementRequest(frozen); err != nil || len(decoded.Hosts) != maxClusterHosts {
 		t.Fatalf("the largest physical retirement policy did not decode: %v", err)
 	}
-	retirement.Hosts = append(retirement.Hosts, PhysicalRetirementHost{Machine: "node-99", Name: "node-99", Devices: []Device{}, EraseWWNs: []string{}})
+	retirement.Hosts = append(retirement.Hosts, PhysicalRetirementHost{Machine: "node-99", Name: "node-99", Devices: []Device{}, EraseTargets: []PhysicalEraseTarget{}})
 	frozen, err = retirement.Canonical()
 	if err != nil {
 		t.Fatal(err)

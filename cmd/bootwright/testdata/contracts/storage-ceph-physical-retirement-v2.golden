@@ -1,6 +1,6 @@
-implementation: storage-ceph-physical-retirement-v1
-content-digest: c278273c035e12b44eca61c1c7ec12c2bd31f3f7fba10e9e54c009cd6c4a6190
-request-version: storage-ceph-physical-retirement-v1
+implementation: storage-ceph-physical-retirement-v2
+content-digest: 1b62f110925d53862d3b78e0a205891c9ec549a22ef7d0a621adfae046c97676
+request-version: storage-ceph-physical-retirement-v2
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -11,7 +11,12 @@ request-identity:
   cluster
   hosts[].name
   hosts[].machine
-  hosts[].eraseWWNs
+  hosts[].eraseTargets[].serial
+  hosts[].eraseTargets[].sizeBytes
+  hosts[].eraseTargets[].wwn
+  hosts[].devices[].path
+  hosts[].devices[].serial
+  hosts[].devices[].sizeBytes
   hosts[].devices[].wwn
 request-schema:
   cluster string
@@ -22,7 +27,10 @@ request-schema:
   hosts[].devices[].serial string
   hosts[].devices[].sizeBytes int64
   hosts[].devices[].wwn string omitempty
-  hosts[].eraseWWNs []string
+  hosts[].eraseTargets []struct ceph.PhysicalEraseTarget
+  hosts[].eraseTargets[].serial string
+  hosts[].eraseTargets[].sizeBytes int64
+  hosts[].eraseTargets[].wwn string omitempty
   hosts[].machine string
   hosts[].name string
   version string

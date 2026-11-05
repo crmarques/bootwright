@@ -103,3 +103,52 @@ func TestPhysicalCephCompositionValidatesOriginalMachinePresence(t *testing.T) {
 		})
 	}
 }
+
+// TestPhysicalCephExampleSelectsAnOSDDiskByItsMachineDeclaredSerialNumber
+// edits the example as its README describes: metal-02 declares its OSD disk
+// by serial number and size alone and the cluster selects it by
+// /dev/disk/by-serial/; the frozen requests carry that serial intent with
+// the size from the Machine, and nothing else changes.
+func TestPhysicalCephExampleSelectsAnOSDDiskByItsMachineDeclaredSerialNumber(t *testing.T) {
+	sources := editedExample(t, "physical-3-nodes-ceph",
+		exampleEdit{"infra/machines/metal-02.yaml", "        - deviceName: /dev/disk/by-id/wwn-0x5000000000000002\n          wwn: '0x5000000000000002'\n          serialNumber: SYNTHETIC-CEPH-02\n          sizeBytes: 107374182400\n          method: metadataClear\n",
+			"        - serialNumber: SYNTHETIC-CEPH-02\n          sizeBytes: 107374182400\n          method: metadataClear\n"},
+		exampleEdit{"storage/cluster.yaml", "            - /dev/disk/by-id/wwn-0x5000000000000002\n", "            - /dev/disk/by-serial/SYNTHETIC-CEPH-02\n"})
+	state, _ := compileAcceptance(t, sources)
+	if refused := productionUnsupported(t, state); len(refused) != 0 {
+		t.Fatalf("refused %+v", refused)
+	}
+	definitions := productionDefinitions(t, state, "physical-3-nodes-ceph")
+	want := ceph.Device{Path: "/dev/disk/by-serial/SYNTHETIC-CEPH-02", Serial: "SYNTHETIC-CEPH-02", SizeBytes: 107374182400}
+	found := 0
+	for _, block := range definitions {
+		switch block.ID {
+		case ceph.ClusterBlockID("ceph-lab"):
+			request, err := ceph.DecodeRequest(block.Request)
+			if err != nil {
+				t.Fatal(diagnostics.Of(err))
+			}
+			for _, host := range request.Hosts {
+				if host.Machine == "metal-02" && !slices.Equal(host.Devices, []ceph.Device{want}) || host.Machine != "metal-02" && host.Devices[0].WWN == "" {
+					t.Fatalf("host %s plans %+v", host.Machine, host.Devices)
+				}
+			}
+			found++
+		case ceph.PhysicalRetirementBlockID("ceph-lab"):
+			var request ceph.PhysicalRetirementRequest
+			if err := json.Unmarshal(block.Request, &request); err != nil {
+				t.Fatal(err)
+			}
+			for _, host := range request.Hosts {
+				covered := slices.Contains(host.EraseTargets, ceph.PhysicalEraseTarget{Serial: "SYNTHETIC-CEPH-02", SizeBytes: 107374182400})
+				if host.Machine == "metal-02" != covered {
+					t.Fatalf("retirement policy of %s: %+v", host.Machine, host.EraseTargets)
+				}
+			}
+			found++
+		}
+	}
+	if found != 2 {
+		t.Fatal("missing cluster or retirement block")
+	}
+}

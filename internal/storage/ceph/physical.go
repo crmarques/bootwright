@@ -10,11 +10,15 @@ import (
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/storage/cephcluster"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 var physicalWWN = regexp.MustCompile(`^/dev/disk/by-id/wwn-0x[0-9a-f]{16}(?:[0-9a-f]{16})?$`)
 var physicalKernelPath = regexp.MustCompile(`^/dev/(?:sd[a-z]+|nvme[0-9]+n[0-9]+)$`)
 var physicalSerial = regexp.MustCompile(`^[!-~]{1,128}$`)
+var physicalObservedWWN = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,256}$`)
+var physicalAlias = regexp.MustCompile(`^/dev/disk/by-id/[A-Za-z0-9_.:+-]{1,200}$`)
 var hardwareUUID = regexp.MustCompile(`^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$`)
 var hardwareMAC = regexp.MustCompile(`^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$`)
 
@@ -23,8 +27,9 @@ const (
 	maxPhysicalDevices = maxEraseTargets - 1
 )
 
-func physicalDevices(cluster api.Object, node string) ([]Device, error) {
+func physicalDevices(c api.Catalog, cluster, m api.Object, node string) ([]Device, error) {
 	paths := []string{}
+	sizes := map[string]int64{}
 	for _, service := range cluster.Spec().Get("services").Items() {
 		if service.Get("service_type").Text() != "osd" {
 			continue
@@ -38,8 +43,14 @@ func physicalDevices(cluster api.Object, node string) ([]Device, error) {
 		}
 		for _, member := range []string{"data_devices", "db_devices", "wal_devices"} {
 			for _, path := range service.Get("spec", member, "paths").Items() {
-				if !physicalWWN.MatchString(path.Text()) {
-					return nil, failure("lifecycle.unsupported", "physical OSD devices require explicit canonical WWN by-id paths", "use /dev/disk/by-id/wwn-0x followed by 16 or 32 lowercase hexadecimal digits; partitions and dynamic selectors are refused")
+				serial, size, reason, remedy := cephcluster.SerialSelection(c, m, path.Text())
+				switch {
+				case reason != "":
+					return nil, failure("api.invariant", reason, remedy)
+				case serial != "":
+					sizes[path.Text()] = size
+				case !physicalWWN.MatchString(path.Text()):
+					return nil, failure("lifecycle.unsupported", "physical OSD devices require explicit canonical WWN by-id paths or /dev/disk/by-serial/ paths", "use /dev/disk/by-id/wwn-0x followed by 16 or 32 lowercase hexadecimal digits, or /dev/disk/by-serial/ followed by the serial number of a disk the Machine's eraseOnRemoval policy declares without deviceName; partitions and dynamic selectors are refused")
 				}
 				paths = append(paths, path.Text())
 			}
@@ -52,6 +63,10 @@ func physicalDevices(cluster api.Object, node string) ([]Device, error) {
 	}
 	devices := []Device{}
 	for _, path := range paths {
+		if serial, ok := substrate.SerialDevicePath(path); ok {
+			devices = append(devices, Device{Path: path, Serial: serial, SizeBytes: sizes[path]})
+			continue
+		}
 		devices = append(devices, Device{Path: path, WWN: strings.TrimPrefix(path, "/dev/disk/by-id/wwn-")})
 	}
 	return devices, nil
@@ -59,7 +74,7 @@ func physicalDevices(cluster api.Object, node string) ([]Device, error) {
 
 func physicalDeviceBudgetFailure(cluster, node string, disks int) error {
 	return failure("lifecycle.unsupported", fmt.Sprintf("CephCluster %s selects %d disks on physical Ceph host %s, past the %d that its Machine's eraseOnRemoval policy can cover beside the root disk within its %d targets", cluster, disks, node, maxPhysicalDevices, maxEraseTargets),
-		fmt.Sprintf("select at most %d distinct WWN disks for host %s across the data_devices, db_devices and wal_devices paths of the OSD services of CephCluster %s", maxPhysicalDevices, node, cluster))
+		fmt.Sprintf("select at most %d distinct disks for host %s across the data_devices, db_devices and wal_devices paths of the OSD services of CephCluster %s", maxPhysicalDevices, node, cluster))
 }
 
 func physicalHosts(hosts []Host) bool {
@@ -116,12 +131,17 @@ func uniquePhysicalDevices(hosts []Host) error {
 	seenPhysical := map[string]bool{}
 	for _, host := range hosts {
 		for _, device := range host.Devices {
-			if device.WWN != "" {
-				if seenPhysical[device.WWN] {
-					return failure("api.invariant", "a physical WWN is selected on multiple hosts", "select independently owned local disks")
-				}
-				seenPhysical[device.WWN] = true
+			key := device.WWN
+			if key == "" && host.Physical {
+				key = "serial\x00" + device.Serial
 			}
+			if key == "" {
+				continue
+			}
+			if seenPhysical[key] {
+				return failure("api.invariant", "a physical WWN or disk serial number is selected on multiple hosts", "select independently owned local disks")
+			}
+			seenPhysical[key] = true
 		}
 	}
 	return nil

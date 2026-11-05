@@ -32,16 +32,16 @@ import uuid
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_host_route_probe as probe, ceph_native, ceph_native_observe as observe, ceph_tunnel, ceph_tunnel_custody as custody, ceph_pull_broker,
-    native_diagnostics, physical_machine_identity,
+    native_diagnostics, physical_erase_worker, physical_machine_identity,
 )
 
 ROOT = "/var/lib/bootwright/ceph-host"
 PACKAGE_ROOT = "/var/lib/bootwright/ceph-packages"
-VERSION = "ceph-host-v11"
+VERSION = "ceph-host-v12"
 PROFILE_VERSION = "ceph-runtime-profile-v3"
 ROUTE_VERSION = "ceph-host-route-v3"
-DEVICES_VERSION = "ceph-device-identities-v2"
-BINDING_VERSION = "ceph-physical-device-binding-v1"
+DEVICES_VERSION = "ceph-device-identities-v3"
+BINDING_VERSION = "ceph-physical-device-binding-v2"
 EVIDENCE_VERSION = "ceph-host-evidence-v4"
 PROFILE = "runtime-profile.json"
 PAYLOAD = "cephadm-payload"
@@ -58,6 +58,17 @@ BIND_OPTIONS = frozenset(("ro", "z", "rprivate", "nosuid", "nodev", "rbind"))
 IMAGE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}\Z")
 IDENTIFIER = re.compile(r"[0-9a-f]{64}\Z")
 DEVICE_ID = re.compile(r"[A-Za-z0-9_.:+/-]{1,512}\Z")
+# A physical OSD path of this form names the disk its Machine declares by serial number; it is resolved here and
+# never reaches a native tool, which receives the stable by-id alias the binding records instead.
+SERIAL_PREFIX = "/dev/disk/by-serial/"
+SERIAL = re.compile(r"[A-Za-z0-9._:+-]{1,128}\Z")
+ALIAS = re.compile(r"/dev/disk/by-id/[A-Za-z0-9_.:+-]{1,200}\Z")
+OBSERVED_WWN = re.compile(r"[A-Za-z0-9._:-]{1,256}\Z")
+KERNEL_DISK = re.compile(r"/dev/(?:sd[a-z]+|nvme[0-9]+n[0-9]+)\Z")
+MAX_BLOCK_ENTRIES = 4096
+# The physical erase worker's own sysfs serial resolution, under this host's refusal names.
+SERIAL_REFUSALS = {"disk-serial-absent": "device-serial-absent", "disk-serial-ambiguous": "device-serial-ambiguous",
+                   "whole-block-device": "device-serial-mismatch"}
 MAX_PAYLOAD = 2 << 20
 MAX_PROBE = 4 << 20
 PULL_ATTEMPTS = 3
@@ -829,8 +840,9 @@ class HostRuntime:
 
     def block_device(self, device):
         """Bind the declared path to one disk with its frozen media identity, its device number, serial and size."""
-        actual = os.path.realpath(device["path"])
-        columns = "PATH,TYPE,SERIAL,SIZE,ROTA,MAJ:MIN" + (",WWN,RO,RM" if device.get("wwn") else "")
+        by_serial = device["path"].startswith(SERIAL_PREFIX)
+        actual = serial_disk(device["serial"]) if by_serial else os.path.realpath(device["path"])
+        columns = "PATH,TYPE,SERIAL,SIZE,ROTA,MAJ:MIN" + (",WWN,RO,RM" if device.get("wwn") or by_serial else "")
         output = self.command(["/usr/bin/lsblk", "--json", "--bytes", "--paths", "--nodeps", "--output", columns, actual],
                               30, 65536, "device-identity")
         try:
@@ -842,6 +854,11 @@ class HostRuntime:
         require(isinstance(item, dict) and item.get("path") == actual and item.get("type") == "disk", "device-identity")
         pair = item.get("maj:min")
         require(isinstance(pair, str) and re.fullmatch(r"[0-9]+:[0-9]+", pair) is not None, "device-identity")
+        if by_serial:
+            require(KERNEL_DISK.fullmatch(actual) is not None and item.get("ro") in (False, 0) and item.get("rm") in (False, 0)
+                    and item.get("serial") == device["serial"] and type(item.get("size")) is int and item["size"] == device["sizeBytes"],
+                    "device-serial-mismatch")
+            require(item.get("wwn") is None or isinstance(item["wwn"], str) and OBSERVED_WWN.fullmatch(item["wwn"]) is not None, "device-identity")
         if device.get("wwn"):
             require(actual != device["path"] and re.fullmatch(r"/dev/(?:sd[a-z]+|nvme[0-9]+n[0-9]+)", actual) is not None, "device-identity")
             require(item.get("wwn") == device["wwn"] and item.get("ro") in (False, 0) and item.get("rm") in (False, 0), "device-identity")
@@ -850,7 +867,7 @@ class HostRuntime:
             require(type(item.get("size")) is int and 0 < item["size"] < 1 << 63, "device-identity")
         rotational = item.get("rota")
         require(type(rotational) in (bool, int) and rotational in (0, 1)
-                and (device.get("wwn") or bool(rotational) == device.get("rotational", False)), "device-identity")
+                and (device.get("wwn") or by_serial or bool(rotational) == device.get("rotational", False)), "device-identity")
         require(device.get("wwn") or item.get("serial") == device["serial"]
                 and type(item.get("size")) is int and item["size"] == device["sizeBytes"], "device-identity")
         major, minor = (int(value) for value in pair.split(":"))
@@ -859,10 +876,14 @@ class HostRuntime:
                   "rotational": int(rotational), "major": major, "minor": minor}
         if device.get("wwn"):
             result.update(wwn=device["wwn"], kernelPath=actual)
+        elif by_serial:
+            raw = self.command(["/usr/bin/udevadm", "info", "--query=property", "--name=" + actual], 30, 128 << 10, "device-identity")
+            result.update(wwn=item.get("wwn") or "", kernelPath=actual, alias=stable_alias(raw, actual, device["serial"], (major, minor)))
         return result
 
     def udev(self, observed):
-        raw = self.command(["/usr/bin/udevadm", "info", "--query=property", "--name=" + observed["path"]], 30, 128 << 10, "device-identity")
+        name = observed["kernelPath"] if observed["path"].startswith(SERIAL_PREFIX) else observed["path"]
+        raw = self.command(["/usr/bin/udevadm", "info", "--query=property", "--name=" + name], 30, 128 << 10, "device-identity")
         return properties(raw, observed)
 
     def device_identity(self):
@@ -892,9 +913,11 @@ class HostRuntime:
                 else:
                     identifier = native_form(environment)
                 value = {"host": self.host["name"], "path": device["path"], "serial": observed["serial"], "deviceID": identifier}
-                if device.get("wwn"):
+                if "kernelPath" in observed:
                     value.update(wwn=observed["wwn"], kernelPath=observed["kernelPath"], sizeBytes=observed["sizeBytes"],
                                  rotational=bool(observed["rotational"]))
+                if "alias" in observed:
+                    value["alias"] = observed["alias"]
                 rows.append(row(value, self.request, self.host["name"]))
             if self.host.get("physical"):
                 require(len({entry["kernelPath"] for entry in rows}) == len({entry["deviceID"] for entry in rows}) == len(rows), "device-identity")
@@ -907,9 +930,12 @@ class HostRuntime:
             return {"changed": True}
 
     def physical_row(self, observed, environment):
-        return {"host": self.host["name"], "path": observed["path"], "serial": observed["serial"],
-                "deviceID": native_form(environment), "wwn": observed["wwn"], "kernelPath": observed["kernelPath"],
-                "sizeBytes": observed["sizeBytes"], "rotational": bool(observed["rotational"])}
+        value = {"host": self.host["name"], "path": observed["path"], "serial": observed["serial"],
+                 "deviceID": native_form(environment), "wwn": observed["wwn"], "kernelPath": observed["kernelPath"],
+                 "sizeBytes": observed["sizeBytes"], "rotational": bool(observed["rotational"])}
+        if "alias" in observed:
+            value["alias"] = observed["alias"]
+        return value
 
     def physical_readback(self, values):
         if not self.host.get("physical"):
@@ -917,7 +943,13 @@ class HostRuntime:
         physical_hardware(self.host)
         paths = []
         for device, retained in zip(self.host["devices"], values):
-            observed = self.block_device(device)
+            try:
+                observed = self.block_device(device)
+            except Refusal as error:
+                # A bound disk whose serial no longer resolves as it did has changed since its binding.
+                if str(error) in SERIAL_REFUSALS.values() or str(error) == "device-alias":
+                    raise Refusal("device-identity") from None
+                raise
             environment = self.udev(observed)
             current = self.physical_row(observed, environment)
             require(current == retained, "device-identity")
@@ -1044,7 +1076,7 @@ def route_cases(value):
 @contextlib.contextmanager
 def staged(directory, synthetic, uid, gid):
     """Retain the synthetic bytes outside the read-only mounted children."""
-    request = {"version": "ceph-core-v39", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
+    request = {"version": "ceph-core-v40", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
                "clusterSSHTransport": "verifiedTunnel", "clusterSSHUser": probe.USER,
                "hosts": [{"name": probe.HOST, "address": probe.ADDRESS, "port": probe.OUTER_PORT}]}
     known = ("[" + probe.ADDRESS + "]:" + str(probe.OUTER_PORT) + " " + synthetic["keys"]["outer"]["public"] + "\n").encode()
@@ -1112,6 +1144,49 @@ def physical_hardware(host, root="/sys"):
         raise Refusal("device-identity") from None
 
 
+def serial_disk(serial, root="/sys"):
+    """The kernel path of the one fixed, writable whole sd or nvme disk whose sysfs serial is serial, as the erase worker resolves it."""
+    require(isinstance(serial, str) and SERIAL.fullmatch(serial) is not None, "device-identity")
+    try:
+        with os.scandir(os.path.join(root, "class/block")) as entries:
+            require(sum(1 for unused in entries) <= MAX_BLOCK_ENTRIES, "device-identity")
+        return physical_erase_worker.resolve_serial(serial, Path(root))
+    except physical_erase_worker.Refusal as error:
+        raise Refusal(SERIAL_REFUSALS.get(str(error), "device-identity")) from None
+    except OSError:
+        raise Refusal("device-identity") from None
+
+
+def stable_alias(raw, node, serial, number):
+    """The disk's /dev/disk/by-id/wwn-0x link, else the first in byte order of its other by-id links naming its serial; each must resolve to node."""
+    require(isinstance(raw, bytes) and 0 < len(raw) <= 128 << 10, "device-identity")
+    try:
+        lines = raw.decode("ascii").splitlines()
+    except UnicodeError:
+        raise Refusal("device-identity") from None
+    values = {}
+    for line in lines:
+        require("=" in line and len(line) <= 65536, "device-identity")
+        name, value = line.split("=", 1)
+        if name in ("MAJOR", "MINOR", "DEVLINKS", "ID_WWN_WITH_EXTENSION"):
+            require(name not in values, "device-identity")
+            values[name] = value
+    require(values.get("MAJOR") == str(number[0]) and values.get("MINOR") == str(number[1]), "device-identity")
+    links = sorted(set(values.get("DEVLINKS", "").split()), key=lambda link: link.encode())
+    by_id = "/dev/disk/by-id/"
+    extension = values.get("ID_WWN_WITH_EXTENSION", "")
+    candidates = [by_id + "wwn-" + extension] if extension.startswith("0x") and by_id + "wwn-" + extension in links else []
+    for link in links:
+        name = link[len(by_id):]
+        if (link.startswith(by_id) and not name.startswith(("wwn-", "lvm-pv-uuid-", "dm-", "md-")) and "-part" not in name
+                and serial in name):
+            candidates.append(link)
+    for link in candidates:
+        if ALIAS.fullmatch(link) is not None and os.path.realpath(link) == node:
+            return link
+    raise Refusal("device-alias")
+
+
 def properties(raw, device):
     """Only the identity fields udev binds to the proved device number."""
     require(isinstance(raw, bytes) and 0 < len(raw) <= 128 << 10, "device-identity")
@@ -1165,8 +1240,15 @@ def row(value, request, host):
     devices = [device for device in wanted[0]["devices"] if device["path"] == value.get("path")]
     require(value.get("host") == host and len(devices) == 1, "device-identity")
     if wanted[0].get("physical"):
-        require(set(value) == {"host", "path", "serial", "deviceID", "wwn", "kernelPath", "sizeBytes", "rotational"}, "device-identity")
-        require(value["wwn"] == devices[0]["wwn"] and isinstance(value["serial"], str) and 0 < len(value["serial"]) <= 128
+        fields = {"host", "path", "serial", "deviceID", "wwn", "kernelPath", "sizeBytes", "rotational"}
+        if devices[0]["path"].startswith(SERIAL_PREFIX):
+            # A serial selection keeps its declared serial and size and records the WWN it observed, or none, and its alias.
+            require(set(value) == fields | {"alias"} and value["serial"] == devices[0]["serial"] and value["sizeBytes"] == devices[0]["sizeBytes"]
+                    and isinstance(value["wwn"], str) and (value["wwn"] == "" or OBSERVED_WWN.fullmatch(value["wwn"]) is not None)
+                    and isinstance(value["alias"], str) and ALIAS.fullmatch(value["alias"]) is not None, "device-identity")
+        else:
+            require(set(value) == fields and value["wwn"] == devices[0]["wwn"], "device-identity")
+        require(isinstance(value["serial"], str) and 0 < len(value["serial"]) <= 128
                 and all(33 <= ord(c) <= 126 for c in value["serial"]), "device-identity")
         require(type(value["sizeBytes"]) is int and 0 < value["sizeBytes"] < 1 << 63 and type(value["rotational"]) is bool, "device-identity")
         require(isinstance(value["kernelPath"], str)

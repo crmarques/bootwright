@@ -74,7 +74,7 @@ def request_value():
               "devices": [{"path": "/dev/sda", "serial": "drive-scsi" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    return {"controller": "controller", "version": "ceph-core-v39", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v40", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": IMAGE,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "5.0.3-1", "packageRepository": "https://publisher.example.test/ceph",
@@ -2159,3 +2159,177 @@ def test_physical_host_evidence_at_the_disk_bound_fits_its_decoder_with_the_long
                 "image": IMAGE, "ready": True, "removed": False, "imageID": "c" * 64, "uid": 167, "gid": 167, "label": runtime.SHARED_LABEL,
                 "policySHA256": "f" * 64, "cephadmSHA256": "e" * 64, "planDigest": "a" * 64, "route": True, "devices": devices}
     assert len(ceph_native.canonical(evidence)) <= 16000
+
+
+SERIAL = "SYNTH-SERIAL-1"
+SERIAL_PATH = "/dev/disk/by-serial/" + SERIAL
+SERIAL_SIZE = 1 << 40
+NVME_ALIAS = "/dev/disk/by-id/nvme-SYNTHETIC_NVME_" + SERIAL
+
+
+def sysfs_disk(root, name, serial, removable="0", ro="0", partition=False):
+    node = root / "class/block" / name
+    (node / "device").mkdir(parents=True)
+    (node / "device/serial").write_text(serial + "\n")
+    (node / "removable").write_text(removable + "\n")
+    (node / "ro").write_text(ro + "\n")
+    if partition:
+        (node / "partition").write_text("1\n")
+    return node
+
+
+def serial_runtime(request_value, tmp_path, monkeypatch, wwn=None):
+    """One physical host selecting one disk by its Machine's declared serial number, resolved over a synthetic sysfs."""
+    host = request_value["hosts"][0]
+    host.update(physical=True, hardware=copy.deepcopy(PHYSICAL_HARDWARE))
+    host["devices"] = [{"path": SERIAL_PATH, "serial": SERIAL, "sizeBytes": SERIAL_SIZE}]
+    osd = request_value["services"].pop()
+    osd["placement"]["hosts"] = [h["name"] for h in request_value["hosts"][1:]]
+    service = {"service_type": "osd", "service_id": "physical", "placement": {"hosts": [host["name"]]},
+               "spec": {"data_devices": {"paths": [SERIAL_PATH]}}}
+    request_value["services"].extend([osd, service])
+    sysfs = tmp_path / "sys"
+    sysfs_disk(sysfs, "nvme0n1", SERIAL)
+    sysfs_disk(sysfs, "nvme0n1p1", SERIAL, partition=True)
+    (sysfs / "class/block/sdz").mkdir()
+    original = runtime.serial_disk
+    monkeypatch.setattr(runtime, "serial_disk", lambda serial: original(serial, str(sysfs)))
+    monkeypatch.setattr(runtime, "physical_hardware", lambda host: None)
+    links = {NVME_ALIAS: "/dev/nvme0n1", NVME_ALIAS + "_1": "/dev/nvme0n1", "/dev/disk/by-id/wwn-0x5000000000000009": "/dev/nvme0n1",
+             "/dev/disk/by-id/nvme-OTHER": "/dev/nvme0n1"}
+    state = {"links": links, "disk": {"path": "/dev/nvme0n1", "type": "disk", "serial": SERIAL, "size": SERIAL_SIZE, "rota": False,
+                                      "maj:min": "259:0", "wwn": wwn, "ro": False, "rm": False},
+             "devlinks": [NVME_ALIAS + "_1", NVME_ALIAS, "/dev/disk/by-id/nvme-OTHER", "/dev/disk/by-path/pci-0000:01:00.0-nvme-1"]}
+    if wwn:
+        state["devlinks"].append("/dev/disk/by-id/wwn-" + wwn)
+    monkeypatch.setattr(runtime.os.path, "realpath", lambda path: state["links"].get(path, path))
+    podman = Podman(request_value, present=True)
+
+    def command(argv, timeout, limit):
+        if argv[0] == "/usr/bin/lsblk":
+            assert argv[-1] == state["disk"]["path"]
+            return 0, json.dumps({"blockdevices": [state["disk"]]}).encode()
+        if argv[0] == "/usr/bin/udevadm":
+            assert argv[-1] == "--name=" + state["disk"]["path"]
+            major, minor = state["disk"]["maj:min"].split(":")
+            wwns = "ID_WWN=%s\nID_WWN_WITH_EXTENSION=%s\n" % (state["disk"]["wwn"], state["disk"]["wwn"]) if state["disk"]["wwn"] else ""
+            return 0, ("MAJOR=%s\nMINOR=%s\nID_MODEL=SYNTHETIC_NVME\nID_SERIAL_SHORT=%s\n%sDEVLINKS=%s\n"
+                       % (major, minor, state["disk"]["serial"], wwns, " ".join(state["devlinks"]))).encode()
+        return podman(argv, timeout, limit)
+
+    worker, markers, unused = host_runtime(request_value, tmp_path, command)
+    seed_profile(markers, request_value)
+
+    def contained(*args, **kwargs):
+        return {"version": "ceph-host-device-id-v1", "deviceID": runtime.native_form(json.loads(args[3][0])["environment"]),
+                "dependencyInput": "ceph_volume.util.disk.UdevData.environment"}
+
+    monkeypatch.setattr(worker, "contained", contained)
+    return worker, markers, state, sysfs
+
+
+@pytest.mark.parametrize("wwn,alias", [(None, NVME_ALIAS), ("0x5000000000000009", "/dev/disk/by-id/wwn-0x5000000000000009")])
+def test_a_serial_selection_binds_one_disk_with_its_stable_alias(request_value, tmp_path, monkeypatch, wwn, alias):
+    worker, markers, unused, unused_sysfs = serial_runtime(request_value, tmp_path, monkeypatch, wwn)
+    assert worker.device_identity() == {"changed": True}
+    row = markers.records[runtime.DEVICES]["devices"][0]
+    assert row == {"host": "node-1", "path": SERIAL_PATH, "serial": SERIAL, "sizeBytes": SERIAL_SIZE, "wwn": wwn or "", "kernelPath": "/dev/nvme0n1",
+                   "alias": alias, "deviceID": "SYNTHETIC_NVME_" + SERIAL, "rotational": False}
+    assert markers.records[runtime.BINDING]["devices"] == [row]
+    retained = copy.deepcopy(markers.records)
+    assert worker.device_identity() == {"changed": False} and markers.records == retained
+    assert worker.host_devices() == {"devices": [row]}
+    assert worker.request["hosts"][0]["devices"] == [{"path": SERIAL_PATH, "serial": SERIAL, "sizeBytes": SERIAL_SIZE}]
+
+
+@pytest.mark.parametrize("damage,reason", [
+    ("absent", "device-serial-absent"), ("multipath", "device-serial-ambiguous"), ("namespace", "device-serial-ambiguous"),
+    ("removable", "device-serial-mismatch"), ("read-only", "device-serial-mismatch"), ("virtual", "device-serial-mismatch"),
+    ("size", "device-serial-mismatch"), ("lsblk-read-only", "device-serial-mismatch"), ("no-alias", "device-alias"),
+    ("foreign-alias", "device-alias"),
+])
+def test_a_serial_selection_refuses_before_any_record_unless_exactly_one_qualified_disk_reports_it(request_value, tmp_path, monkeypatch, damage, reason):
+    worker, markers, state, sysfs = serial_runtime(request_value, tmp_path, monkeypatch)
+    block = sysfs / "class/block"
+    if damage == "absent":
+        (block / "nvme0n1/device/serial").write_text("ANOTHER\n")
+    elif damage == "multipath":
+        sysfs_disk(sysfs, "sdb", SERIAL)
+    elif damage == "namespace":
+        sysfs_disk(sysfs, "nvme0n2", SERIAL)
+    elif damage == "removable":
+        (block / "nvme0n1/removable").write_text("1\n")
+    elif damage == "read-only":
+        (block / "nvme0n1/ro").write_text("1\n")
+    elif damage == "virtual":
+        (block / "nvme0n1").rename(block / "vda")
+    elif damage == "size":
+        state["disk"]["size"] += 4096
+    elif damage == "lsblk-read-only":
+        state["disk"]["ro"] = True
+    elif damage == "no-alias":
+        state["devlinks"] = ["/dev/disk/by-path/pci-0000:01:00.0-nvme-1", "/dev/disk/by-id/nvme-eui.0000000000000001"]
+    else:
+        state["links"] = {}
+    before = copy.deepcopy(markers.records)
+    with pytest.raises(ceph_native.Refusal, match="^" + reason + "$"):
+        worker.device_identity()
+    assert markers.records == before
+
+
+@pytest.mark.parametrize("change", ["kernel-path", "alias", "wwn", "size", "absent"])
+def test_serial_readback_refuses_any_change_of_kernel_path_alias_wwn_or_size(request_value, tmp_path, monkeypatch, change):
+    worker, markers, state, sysfs = serial_runtime(request_value, tmp_path, monkeypatch)
+    worker.device_identity()
+    retained = copy.deepcopy(markers.records)
+    block = sysfs / "class/block"
+    if change == "kernel-path":
+        (block / "nvme0n1").rename(block / "nvme1n1")
+        state["disk"]["path"] = "/dev/nvme1n1"
+        state["links"] = {link: "/dev/nvme1n1" for link in state["links"]}
+    elif change == "alias":
+        state["devlinks"].append("/dev/disk/by-id/nvme-A_" + SERIAL)
+        state["links"]["/dev/disk/by-id/nvme-A_" + SERIAL] = "/dev/nvme0n1"
+    elif change == "wwn":
+        state["disk"]["wwn"] = "eui.0000000000000001"
+    elif change == "size":
+        state["disk"]["size"] += 4096
+    else:
+        (block / "nvme0n1/device/serial").write_text("ANOTHER\n")
+    with pytest.raises(ceph_native.Refusal, match="^device-identity$"):
+        worker.host_devices()
+    assert markers.records == retained
+
+
+def test_device_rows_hold_a_serial_selection_and_a_wwn_selection_to_their_own_key_sets(request_value):
+    host = request_value["hosts"][0]
+    host.update(physical=True, hardware=copy.deepcopy(PHYSICAL_HARDWARE))
+    host["devices"] = [{"path": SERIAL_PATH, "serial": SERIAL, "sizeBytes": SERIAL_SIZE},
+                       {"path": PHYSICAL_PATH, "wwn": PHYSICAL_WWN, "serial": "", "sizeBytes": 0}]
+    serial = {"host": "node-1", "path": SERIAL_PATH, "serial": SERIAL, "sizeBytes": SERIAL_SIZE, "wwn": "", "kernelPath": "/dev/nvme0n1",
+              "alias": NVME_ALIAS, "deviceID": "SYNTHETIC_NVME_" + SERIAL, "rotational": False}
+    wwn = {"host": "node-1", "path": PHYSICAL_PATH, "wwn": PHYSICAL_WWN, "serial": "serial-1", "kernelPath": "/dev/sda",
+           "deviceID": "SYNTHETIC_DISK_serial-1", "sizeBytes": 1 << 40, "rotational": True}
+    assert runtime.row(serial, request_value, "node-1") == serial and runtime.row(wwn, request_value, "node-1") == wwn
+    for damaged in ({key: value for key, value in serial.items() if key != "alias"}, dict(serial, alias="/dev/nvme0n1"),
+                    dict(serial, alias=SERIAL_PATH), dict(serial, serial="ANOTHER"), dict(serial, sizeBytes=SERIAL_SIZE + 4096),
+                    dict(serial, wwn=None), dict(serial, wwn="bad wwn"), dict(wwn, alias=NVME_ALIAS)):
+        with pytest.raises(ceph_native.Refusal, match="^device-identity$"):
+            runtime.row(damaged, request_value, "node-1")
+
+
+def test_a_serial_selection_never_resolves_an_unbounded_block_class(tmp_path):
+    for index in range(runtime.MAX_BLOCK_ENTRIES + 1):
+        (tmp_path / "class/block" / ("loop%d" % index)).mkdir(parents=True)
+    with pytest.raises(ceph_native.Refusal, match="^device-identity$"):
+        runtime.serial_disk(SERIAL, str(tmp_path))
+
+
+def test_physical_host_evidence_of_serial_selections_at_the_disk_bound_fits_its_decoder_with_the_longest_fields(request_value):
+    devices = [{"path": "/dev/disk/by-serial/" + "S" * 127 + chr(65 + disk), "serial": "S" * 127 + chr(65 + disk), "deviceID": "D" * 512,
+                "wwn": "W" * 256, "kernelPath": "/dev/nvme%dn1" % disk, "sizeBytes": (1 << 63) - 1, "rotational": False,
+                "alias": "/dev/disk/by-id/" + "A" * 200} for disk in range(PHYSICAL_DISKS_BOUND)]
+    evidence = {"version": runtime.EVIDENCE_VERSION, "request": "d" * 64, "host": "h" * 253, "owner": "o" * 253, "fsid": request_value["fsid"],
+                "image": IMAGE, "ready": True, "removed": False, "imageID": "c" * 64, "uid": 167, "gid": 167, "label": runtime.SHARED_LABEL,
+                "policySHA256": "f" * 64, "cephadmSHA256": "e" * 64, "planDigest": "a" * 64, "route": True, "devices": devices}
+    assert len(ceph_native.canonical(evidence)) <= 24000 < 24576

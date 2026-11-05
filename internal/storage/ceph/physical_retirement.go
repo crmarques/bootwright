@@ -13,13 +13,19 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const PhysicalRetirementImplementation = "storage-ceph-physical-retirement-v1"
+const PhysicalRetirementImplementation = "storage-ceph-physical-retirement-v2"
+
+type PhysicalEraseTarget struct {
+	Serial    string `json:"serial"`
+	SizeBytes int64  `json:"sizeBytes"`
+	WWN       string `json:"wwn,omitempty"`
+}
 
 type PhysicalRetirementHost struct {
-	Devices   []Device `json:"devices"`
-	EraseWWNs []string `json:"eraseWWNs"`
-	Machine   string   `json:"machine"`
-	Name      string   `json:"name"`
+	Devices      []Device              `json:"devices"`
+	EraseTargets []PhysicalEraseTarget `json:"eraseTargets"`
+	Machine      string                `json:"machine"`
+	Name         string                `json:"name"`
 }
 
 type PhysicalRetirementRequest struct {
@@ -82,13 +88,13 @@ func DecodePhysicalRetirementRequest(data []byte) (PhysicalRetirementRequest, er
 		return r, physicalPolicyFailure()
 	}
 	for _, host := range r.Hosts {
-		if host.Machine <= previous || host.Name == "" || len(host.Devices) > maxPhysicalDevices || len(host.EraseWWNs) > maxEraseTargets || len(host.EraseWWNs) > 0 && !strictlySorted(host.EraseWWNs) {
+		if host.Machine <= previous || host.Name == "" || len(host.Devices) > maxPhysicalDevices || len(host.EraseTargets) > maxEraseTargets || !validEraseTargets(host.EraseTargets) {
 			return r, physicalPolicyFailure()
 		}
 		previous = host.Machine
 		paths := []string{}
 		for _, device := range host.Devices {
-			if !physicalWWN.MatchString(device.Path) || device.Path != "/dev/disk/by-id/wwn-"+device.WWN || device.Serial != "" || device.SizeBytes != 0 || device.Rotational {
+			if !retirementDevice(device) {
 				return r, physicalPolicyFailure()
 			}
 			paths = append(paths, device.Path)
@@ -98,6 +104,27 @@ func DecodePhysicalRetirementRequest(data []byte) (PhysicalRetirementRequest, er
 		}
 	}
 	return r, nil
+}
+
+func retirementDevice(device Device) bool {
+	if device.Rotational {
+		return false
+	}
+	if serial, ok := substrate.SerialDevicePath(device.Path); ok {
+		return device.Serial == serial && device.WWN == "" && validEraseSize(device.SizeBytes)
+	}
+	return physicalWWN.MatchString(device.Path) && device.Path == "/dev/disk/by-id/wwn-"+device.WWN && device.Serial == "" && device.SizeBytes == 0
+}
+
+func validEraseSize(size int64) bool { return size >= 4096 && size <= 64<<40 }
+
+func validEraseTargets(targets []PhysicalEraseTarget) bool {
+	for i, target := range targets {
+		if target.Serial == "" || len(target.Serial) > 256 || !validEraseSize(target.SizeBytes) || len(target.WWN) > 256 || i > 0 && targets[i-1].Serial >= target.Serial {
+			return false
+		}
+	}
+	return true
 }
 
 const PhysicalRetirementFamily = "storage-physical-retirement"
@@ -127,15 +154,15 @@ func physicalRetirementRequest(catalog api.Catalog, cluster Request) PhysicalRet
 			continue
 		}
 		machine, _ := catalog.Find(api.Machine, host.Machine)
-		entry := PhysicalRetirementHost{Name: host.Name, Machine: host.Machine, Devices: slices.Clone(host.Devices), EraseWWNs: []string{}}
+		entry := PhysicalRetirementHost{Name: host.Name, Machine: host.Machine, Devices: slices.Clone(host.Devices), EraseTargets: []PhysicalEraseTarget{}}
 		policy := machine.Spec().Get("hardware", "eraseOnRemoval")
 		if method := policy.Get("method").Text(); method == "logicalOverwrite" || method == "metadataClear" {
 			for _, target := range policy.Get("targets").Items() {
-				entry.EraseWWNs = append(entry.EraseWWNs, target.Get("wwn").Text())
+				size, _ := target.Get("sizeBytes").Int64()
+				entry.EraseTargets = append(entry.EraseTargets, PhysicalEraseTarget{Serial: target.Get("serialNumber").Text(), SizeBytes: size, WWN: target.Get("wwn").Text()})
 			}
 		}
-		slices.Sort(entry.EraseWWNs)
-		entry.EraseWWNs = slices.Compact(entry.EraseWWNs)
+		slices.SortFunc(entry.EraseTargets, func(a, b PhysicalEraseTarget) int { return strings.Compare(a.Serial, b.Serial) })
 		r.Hosts = append(r.Hosts, entry)
 	}
 	slices.SortFunc(r.Hosts, func(a, b PhysicalRetirementHost) int { return strings.Compare(a.Machine, b.Machine) })
@@ -148,12 +175,18 @@ func physicalPolicyFailure() error {
 
 func (r PhysicalRetirementRequest) authorized() error {
 	for _, host := range r.Hosts {
-		if len(host.EraseWWNs) == 0 {
+		if len(host.EraseTargets) == 0 {
 			return physicalRemovalRefusal()
 		}
 		for _, device := range host.Devices {
-			if !slices.Contains(host.EraseWWNs, device.WWN) {
-				return failure("lifecycle.unsupported", "physical Ceph retirement requires explicit erasure of every selected data, DB and WAL disk", "include the root disk and every selected Ceph WWN in each Machine's original eraseOnRemoval policy")
+			covered := slices.ContainsFunc(host.EraseTargets, func(target PhysicalEraseTarget) bool {
+				if device.WWN != "" {
+					return target.WWN == device.WWN
+				}
+				return target.Serial == device.Serial && target.SizeBytes == device.SizeBytes
+			})
+			if !covered {
+				return failure("lifecycle.unsupported", "physical Ceph retirement requires explicit erasure of every selected data, DB and WAL disk", "include the root disk and every selected Ceph disk, by its WWN or its serial number and size, in each Machine's original eraseOnRemoval policy")
 			}
 		}
 	}

@@ -84,7 +84,7 @@ func TestPhysicalHostsPlanEverySelectedDiskUpToTheBound(t *testing.T) {
 
 func TestPhysicalHostOneDiskPastTheBoundRefusesByTheErasePolicy(t *testing.T) {
 	reason := fmt.Sprintf("CephCluster example selects %d disks on physical Ceph host node-2, past the 15 that its Machine's eraseOnRemoval policy can cover beside the root disk within its 16 targets", maxPhysicalDevices+1)
-	const remedy = "select at most 15 distinct WWN disks for host node-2 across the data_devices, db_devices and wal_devices paths of the OSD services of CephCluster example"
+	const remedy = "select at most 15 distinct disks for host node-2 across the data_devices, db_devices and wal_devices paths of the OSD services of CephCluster example"
 	for name, catalogOf := range map[string]func(int, int) (api.Catalog, api.Object){"one service per disk": physicalCatalogOf, "one service per host": physicalCatalogPerHost} {
 		catalog, cluster := catalogOf(3, maxPhysicalDevices)
 		services := cluster.Spec().Get("services").Items()
@@ -179,13 +179,13 @@ func TestPhysicalRetirementOfFiveDiskHostsNeedsEveryDiskReceipt(t *testing.T) {
 	fiveDisks := func() (api.Catalog, api.Object) { return physicalCatalogPerHost(3, 5) }
 	capability, execution, _, _ := physicalRetirementFixtureFrom(t, fiveDisks)
 	request, err := DecodePhysicalRetirementRequest(execution.Block.Request)
-	if err != nil || len(request.Hosts[0].Devices) != 5 || len(request.Hosts[0].EraseWWNs) != 5 {
+	if err != nil || len(request.Hosts[0].Devices) != 5 || len(request.Hosts[0].EraseTargets) != 5 {
 		t.Fatalf("five-disk policy %+v: %v", request, err)
 	}
 	if err := request.authorized(); err != nil {
 		t.Fatal(err)
 	}
-	request.Hosts[1].EraseWWNs = request.Hosts[1].EraseWWNs[:4]
+	request.Hosts[1].EraseTargets = request.Hosts[1].EraseTargets[:4]
 	if err := request.authorized(); err == nil {
 		t.Fatal("a fifth disk outside the original erase policy was admitted")
 	}

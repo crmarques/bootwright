@@ -10,8 +10,12 @@
           "wwn": "0x5000000000000001"
         }
       ],
-      "eraseWWNs": [
-        "0x5000000000000001"
+      "eraseTargets": [
+        {
+          "serial": "SYNTHETIC-node-1",
+          "sizeBytes": 1099511627776,
+          "wwn": "0x5000000000000001"
+        }
       ],
       "machine": "node-1",
       "name": "node-1"
@@ -25,8 +29,12 @@
           "wwn": "0x5000000000000002"
         }
       ],
-      "eraseWWNs": [
-        "0x5000000000000002"
+      "eraseTargets": [
+        {
+          "serial": "SYNTHETIC-node-2",
+          "sizeBytes": 1099511627776,
+          "wwn": "0x5000000000000002"
+        }
       ],
       "machine": "node-2",
       "name": "node-2"
@@ -40,12 +48,16 @@
           "wwn": "0x5000000000000003"
         }
       ],
-      "eraseWWNs": [
-        "0x5000000000000003"
+      "eraseTargets": [
+        {
+          "serial": "SYNTHETIC-node-3",
+          "sizeBytes": 1099511627776,
+          "wwn": "0x5000000000000003"
+        }
       ],
       "machine": "node-3",
       "name": "node-3"
     }
   ],
-  "version": "storage-ceph-physical-retirement-v1"
+  "version": "storage-ceph-physical-retirement-v2"
 }

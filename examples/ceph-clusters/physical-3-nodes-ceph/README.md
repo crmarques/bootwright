@@ -23,6 +23,15 @@ addresses, disk names, WWNs, media and credentials.
   the root disk, listed in one OSD service per host; partitions, shared WWNs,
   multipath targets and missing serials refuse, and three to eleven storage
   hosts are admitted. The OSD memory target is 4 GiB.
+- A disk whose WWN its BMC does not report, such as an NVMe disk, may be
+  selected by its serial number instead: drop `deviceName` and `wwn` from its
+  `eraseOnRemoval` target, keeping `serialNumber` and `sizeBytes`, and list it
+  in the OSD service as `/dev/disk/by-serial/<serialNumber>`. No such path
+  exists on the host; host preparation finds the one fixed, writable whole
+  disk reporting that serial number at exactly that size, refuses none or
+  several, and gives cephadm the disk's stable `/dev/disk/by-id` link
+  ([devices](../../../specs/ceph.md#devices-and-destructive-ownership)). The
+  shipped files keep the WWN form.
 - Foreign signatures, mounted filesystems and nonempty DB/WAL disks refuse;
   no zap or replacement is authorized, and retrying cannot accept a substitute.
   Instead each Machine declares its OSD disk in `clearOnInstall`: the

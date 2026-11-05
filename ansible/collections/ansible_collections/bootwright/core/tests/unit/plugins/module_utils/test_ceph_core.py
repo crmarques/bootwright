@@ -18,7 +18,8 @@ import pytest
 import yaml
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_core, ceph_host_worker, ceph_native, ceph_native_resources, ceph_native_worker, ceph_pull_broker, ceph_registry_discovery, ceph_tunnel_staging,
+    ceph_core, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_resources, ceph_native_worker, ceph_pull_broker, ceph_registry_discovery,
+    ceph_tunnel_staging,
 )
 from ansible_collections.bootwright.core.plugins.module_utils import native_diagnostics, native_specializations
 from ansible_collections.bootwright.core.tests.unit.plugins.module_utils import test_native_specializations as specs
@@ -38,7 +39,7 @@ def core_request():
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v39", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v40", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -363,7 +364,7 @@ def host_block(core_request):
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "e" * 64, "mediaSize": 1024,
          "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"} for host in cluster["hosts"]]}
-    request = {"version": "ceph-host-v11", "cluster": cluster, "host": "node-2", "pulls": []}
+    request = {"version": "ceph-host-v12", "cluster": cluster, "host": "node-2", "pulls": []}
     record = {"version": "ceph-host-evidence-v4", "host": "node-2", "owner": cluster["owner"], "fsid": cluster["fsid"], "image": cluster["image"],
               "ready": False, "removed": False, "imageID": "", "uid": 0, "gid": 0, "label": "", "policySHA256": "", "cephadmSHA256": "",
               "planDigest": "", "route": False, "devices": []}
@@ -617,7 +618,7 @@ def test_private_input_is_opened_without_links_and_not_in_argv(core_request, tmp
                                             "native_specializations", "ceph_pull_broker", "ceph_native_nfs", "ceph_native_nvmeof", "ceph_native_observability",
                                             "ceph_native_units", "ceph_native_object", "ceph_smb_native", "ceph_replication_native",
                                             "ceph_export_dns", "ceph_export_native",
-                                            "physical_machine_identity"}
+                                            "physical_machine_identity", "physical_erase_process", "physical_erase_worker"}
         assert 0 < envelope["budget"] <= min(640, timeout - 1)
         return 0, b'{"ok":true,"result":{"changed":false}}'
 
@@ -2499,3 +2500,98 @@ def test_a_cluster_bootstrapped_again_under_the_same_fsid_presents_another_incar
     for bad in ("not a time", 7, None, "2026-01-01T00:00:00.000000+0000", "2026-01-01 00:00:00.000000"):
         with pytest.raises(ceph_native.Refusal, match="^evidence$"):
             ceph_core.evidence(dict(value, incarnation=bad), "d" * 64, core_request)
+
+
+def serial_selected(core_request):
+    """Every host physical, each selecting one disk by its Machine's declared serial number, with the rows its preparation bound."""
+    services = [service for service in core_request["services"] if service["service_type"] != "osd"]
+    rows = []
+    for number, host in enumerate(core_request["hosts"], start=1):
+        serial = "SYNTH-SERIAL-%d" % number
+        host.update(physical=True, hardware={"uuid": "11111111-1111-4111-8111-1111111111%02d" % number, "macs": ["02:00:00:00:%02x:01" % number]})
+        host["devices"] = [{"path": "/dev/disk/by-serial/" + serial, "serial": serial, "sizeBytes": 1 << 40}]
+        services.append({"service_type": "osd", "service_id": "data-%d" % number, "placement": {"hosts": [host["name"]]},
+                         "spec": {"data_devices": {"paths": [host["devices"][0]["path"]]}}})
+        rows.append({"host": host["name"], "path": host["devices"][0]["path"], "serial": serial, "sizeBytes": 1 << 40, "wwn": "",
+                     "kernelPath": "/dev/nvme0n1", "alias": "/dev/disk/by-id/nvme-SYNTHETIC_" + serial, "deviceID": "SYNTHETIC_" + serial,
+                     "rotational": False})
+    core_request["services"] = services
+    return rows
+
+
+def test_a_serial_selection_submits_its_bound_alias_and_never_its_serial_path(core_request, monkeypatch):
+    rows = serial_selected(core_request)
+    monkeypatch.setattr(ceph_host_runtime, "physical_hardware", lambda host: None)
+    ceph_native.validate(core_request)
+    markers = Markers()
+    markers.published[ceph_native.DEVICE_IDENTITIES] = {"version": ceph_native.DEVICE_IDENTITIES_VERSION, "fsid": core_request["fsid"], "devices": rows}
+    native, unused = worker(core_request, {}, markers)
+    submitted = [value for service in core_request["services"] for value in native.service_spec(service) if value["service_type"] == "osd"]
+    assert [value["spec"]["data_devices"]["paths"] for value in submitted] == [[row["alias"]] for row in rows]
+    assert "/dev/disk/by-serial/" not in json.dumps(submitted)
+    del markers.published[ceph_native.DEVICE_IDENTITIES]
+    with pytest.raises(ceph_native.Refusal, match="^device-identity$"):
+        native.service_spec(core_request["services"][-1])
+    for damaged in ({key: value for key, value in rows[2].items() if key != "alias"}, dict(rows[2], alias="/dev/disk/by-serial/SYNTH-SERIAL-3")):
+        markers.published[ceph_native.DEVICE_IDENTITIES] = {"version": ceph_native.DEVICE_IDENTITIES_VERSION, "fsid": core_request["fsid"],
+                                                            "devices": rows[:2] + [damaged]}
+        with pytest.raises(ceph_native.Refusal, match="^device-identity$"):
+            native.service_spec(core_request["services"][-1])
+
+
+def test_a_serial_selection_resolves_every_requested_path_through_its_bound_kernel_path(core_request, monkeypatch):
+    rows = serial_selected(core_request)
+    monkeypatch.setattr(ceph_host_runtime, "physical_hardware", lambda host: None)
+    ceph_native.validate(core_request)
+    native, unused = worker(core_request, {})
+    native.physical_devices = lambda: {rows[0]["path"]: rows[0]}
+    monkeypatch.setattr(ceph_native.os.path, "realpath", lambda path: "/dev/nvme0n1" if path == rows[0]["alias"] else "/unresolved" + path)
+    assert native.node_of(rows[0]["path"]) == "/dev/nvme0n1"
+    assert native.osd_data_specs("/dev/nvme0n1") == [core_request["services"][2]["spec"]]
+    assert native.stable_device_path(native.host, rows[0]) == rows[0]["alias"]
+    monkeypatch.setattr(ceph_native.os.path, "realpath", lambda path: "/dev/nvme1n1")
+    with pytest.raises(ceph_native.Refusal, match="^device-identity$"):
+        native.stable_device_path(native.host, rows[0])
+    native.physical_devices = lambda: {}
+    with pytest.raises(ceph_native.Refusal, match="^device-identity$"):
+        native.node_of(rows[0]["path"])
+
+
+@pytest.mark.parametrize("damage", ["wwn", "path", "unaligned", "small", "bool-size", "shared", "grammar", "virtual"])
+def test_the_worker_holds_a_serial_selection_to_its_frozen_shape(core_request, damage):
+    serial_selected(core_request)
+    ceph_native.validate(copy.deepcopy(core_request))
+    device = core_request["hosts"][1]["devices"][0]
+    if damage == "wwn":
+        device["wwn"] = "0x5000000000000001"
+    elif damage == "path":
+        device["serial"] = "ANOTHER"
+    elif damage == "unaligned":
+        device["sizeBytes"] += 512
+    elif damage == "small":
+        device["sizeBytes"] = 0
+    elif damage == "bool-size":
+        device["sizeBytes"] = True
+    elif damage == "shared":
+        device.update(path=core_request["hosts"][0]["devices"][0]["path"], serial=core_request["hosts"][0]["devices"][0]["serial"])
+        core_request["services"][3]["spec"]["data_devices"]["paths"] = [device["path"]]
+    elif damage == "grammar":
+        device.update(path="/dev/disk/by-serial/a b", serial="a b")
+        core_request["services"][3]["spec"]["data_devices"]["paths"] = [device["path"]]
+    else:
+        del core_request["hosts"][1]["physical"], core_request["hosts"][1]["hardware"]
+    with pytest.raises(ceph_native.Refusal):
+        ceph_native.validate(core_request)
+
+
+def test_host_evidence_admits_an_alias_only_beside_a_serial_selection(core_request):
+    rows = serial_selected(core_request)
+    request = {"cluster": core_request, "host": "node-1"}
+    record = {"version": ceph_host_runtime.EVIDENCE_VERSION, "request": "d" * 64, "host": "node-1", "owner": core_request["owner"],
+              "fsid": core_request["fsid"], "image": core_request["image"], "ready": False, "removed": False, "imageID": "", "uid": 0, "gid": 0,
+              "label": "", "policySHA256": "", "cephadmSHA256": "", "planDigest": "", "route": False,
+              "devices": [{key: value for key, value in rows[0].items() if key != "host"}]}
+    assert ceph_core.host_evidence(copy.deepcopy(record), "d" * 64, request)["devices"][0]["alias"] == rows[0]["alias"]
+    record["devices"][0].pop("alias")
+    with pytest.raises(ceph_native.Refusal):
+        ceph_core.host_evidence(record, "d" * 64, request)

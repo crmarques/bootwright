@@ -1040,7 +1040,7 @@ calls. The services call validates every mon, mgr, osd and mds specification
 and its original attempt, submits the pending documents together through the
 native multi-document apply, and proves their readback. A lost response retains
 each service's attempt identity; continuation never adopts a foreign service.
-Physical hosts may therefore select their distinct WWN devices in separate
+Physical hosts may therefore select their distinct devices in separate
 OSD specifications without multiplying bounded remote calls.
 A stretch cluster's deadline adds its two activation calls and one more
 readiness wait, the one before activation: 2 × 660 s + 900 s. Seven stretch
@@ -1152,7 +1152,32 @@ as path, serial and size; the original Machine proof and host runtime must
 agree. This proves virtual presentation, with no physical qualification claim.
 
 Managed physical hosts use the same native explicit path selectors, restricted
-here to `/dev/disk/by-id/wwn-0x` plus 16 or 32 lowercase hexadecimal digits.
+here to `/dev/disk/by-id/wwn-0x` plus 16 or 32 lowercase hexadecimal digits,
+or `/dev/disk/by-serial/<serialNumber>` with 1 to 128 ASCII letters, digits
+and `._:+-`. No such directory exists on a host: the second form names the
+disk its Machine declares as a
+[`hardware.eraseOnRemoval`](api/machines.md#physical-erase-policy) target
+without `deviceName` and with that `serialNumber`, whose `sizeBytes` it takes,
+because physical retirement needs that target anyway. A serial the Machine
+declares no such target for, one its target names by `deviceName`, and the
+root disk's serial refuse `api.invariant` at the selector. Host preparation
+resolves it on the live host, before the first destructive effect, to the one
+whole disk whose sysfs serial number, read as the [physical
+erase](state-reconciliation.md#opt-in-physical-logical-overwrite) worker reads
+it, is that serial, a fixed, writable `sd` or `nvme` disk exactly `sizeBytes`
+long. It records the disk's kernel path, its observed WWN when it has one, and
+a stable alias: its `/dev/disk/by-id/wwn-0x` link when it has one, else the
+first in byte order of its other `/dev/disk/by-id` links that contain the
+serial and resolve to it. The alias, never the serial path, enters the native
+service document; the binding is frozen with the host's device record, and
+readback re-resolves the serial and refuses any change of kernel path, alias,
+WWN or size. No such disk refuses `device-serial-absent`; more than one, such
+as two paths of a multipath disk, namespaces of one NVMe controller or a
+cloned serial, refuses `device-serial-ambiguous`; a disk of another size or
+kind refuses `device-serial-mismatch`; one without such an alias refuses
+`device-alias`. Each is coded `lifecycle.unsupported` and names the Machine
+and the serials its host selects, and the first binding raises them before
+any disk is written.
 A physical host admits every distinct local whole disk its OSD services select,
 data, DB and WAL paths together, up to the most that its Machine's
 [erase policy](state-reconciliation.md#opt-in-physical-logical-overwrite) can cover beside the root disk: one fewer than
@@ -1164,9 +1189,10 @@ One disk past it refuses at request planning, coded `lifecycle.unsupported`,
 with reason
 `CephCluster <cluster> selects <disks> disks on physical Ceph host <host>, past the 15 that its Machine's eraseOnRemoval policy can cover beside the root disk within its 16 targets`
 and remedy
-`select at most 15 distinct WWN disks for host <host> across the data_devices, db_devices and wal_devices paths of the OSD services of CephCluster <cluster>`.
-Shared WWNs across hosts, partitions and multipath targets refuse at any count.
-The request records WWN intent without inventing a serial or capacity.
+`select at most 15 distinct disks for host <host> across the data_devices, db_devices and wal_devices paths of the OSD services of CephCluster <cluster>`.
+Shared WWNs or serial numbers across hosts, partitions and multipath targets
+refuse at any count. The request records WWN intent without inventing a serial
+or capacity, or a serial selection's serial and size from its Machine.
 A fresh installation of a managed physical host can clear declared OSD disks
 that a destroyed or abandoned cluster left, through its Machine's
 [`hardware.clearOnInstall`](managed-os.md#physical-data-disk-clear); nothing
@@ -1190,7 +1216,8 @@ reader is shared with the offline erase worker. See the
 and [its original-address capture](https://github.com/torvalds/linux/blob/v6.12/drivers/net/bonding/bond_main.c).
 
 Host preparation records each disk's observed serial, size, rotational status,
-kernel path and native image SDK identity. It compares lsblk and udev WWNs and
+kernel path, stable alias for a serial selection, and native image SDK
+identity. It compares lsblk and udev WWNs and
 device numbers, rejects read-only/removable disks and ambiguous aliases, and
 re-proves the same facts on read-only host readiness. A replay cannot extend
 or replace the bound disk set. See the
@@ -1200,7 +1227,8 @@ This code path has synthetic coverage; live physical acceptance remains unrun.
 Physical retirement requires the original opt-in
 [erase policy](state-reconciliation.md#opt-in-physical-logical-overwrite), with
 either method on each disk as its Machine's owner chose, to cover the root disk
-and every selected data, DB and WAL WWN. A `metadataClear` OSD disk reads as
+and every selected data, DB and WAL disk, by its WWN or by its serial number
+and size. A `metadataClear` OSD disk reads as
 empty to native probes afterwards but is not sanitized. Ceph contributes
 the retirement policy Managed OS installation and erasure honor through
 [their retirement port](managed-os.md#physical-removal): each physical node's
@@ -1211,11 +1239,12 @@ realized cluster's removal refuses before registration. Storage first records a 
 so consumer removal and managed-OS cleanup can precede the offline erase worker.
 A separate terminal verification block then matches every complete original-policy
 erase receipt to the original machine UUID, complete MAC set and observed Ceph
-disk WWN, serial and capacity. Only that terminal proof permits claim release.
+disk serial and capacity, and its WWN where the erase target declares one. Only that terminal proof permits claim release.
 A stopped host, a released claim, or a pending disposition proves no erasure.
 
 When the original core cluster block is positively unstarted, the terminal
-verification may use its frozen WWN intent without an observed OSD binding;
+verification may use its frozen WWN or serial-and-size intent without an
+observed OSD binding;
 the original sealed dependency scope must prove that unstarted state. Missing
 evidence cannot substitute for it. Every started core block requires its
 completed original host binding. A partial or lost erase receipt leaves the

@@ -686,3 +686,54 @@ func (hostProofs) FIPS([]lifecycle.BlockEvidence, string, string) error { return
 func (hostProofs) PhysicalMachine(reconciliation.Block, []byte) (PhysicalIdentity, bool, error) {
 	return PhysicalIdentity{}, false, failure("lifecycle.state", "physical proof unavailable", "")
 }
+
+func TestAPhysicalBindingHoldsEachSelectionToItsOwnShape(t *testing.T) {
+	serial := Device{Path: "/dev/disk/by-serial/SER-2", Serial: "SER-2", SizeBytes: 1 << 40}
+	wwn := Device{Path: "/dev/disk/by-id/wwn-0x5000000000000001", WWN: "0x5000000000000001"}
+	bound := HostDevice{Path: serial.Path, Serial: serial.Serial, SizeBytes: serial.SizeBytes, KernelPath: "/dev/nvme0n1", DeviceID: "SYNTHETIC_SER-2",
+		Alias: "/dev/disk/by-id/nvme-SYNTHETIC_SER-2"}
+	byWWN := HostDevice{Path: wwn.Path, WWN: wwn.WWN, Serial: "S-1", SizeBytes: 1 << 40, KernelPath: "/dev/sdb", DeviceID: "SYNTHETIC_S-1"}
+	observed := bound
+	observed.WWN = "eui.0000000000000001"
+	if !physicalBinding(bound, serial) || !physicalBinding(observed, serial) || !physicalBinding(byWWN, wwn) {
+		t.Fatal("a bound serial or WWN selection was refused")
+	}
+	for name, change := range map[string]func(*HostDevice){
+		"no alias":       func(d *HostDevice) { d.Alias = "" },
+		"kernel alias":   func(d *HostDevice) { d.Alias = "/dev/nvme0n1" },
+		"serial alias":   func(d *HostDevice) { d.Alias = serial.Path },
+		"other serial":   func(d *HostDevice) { d.Serial = "SER-3" },
+		"other size":     func(d *HostDevice) { d.SizeBytes += 4096 },
+		"malformed wwn":  func(d *HostDevice) { d.WWN = "eui 1" },
+		"virtual kernel": func(d *HostDevice) { d.KernelPath = "/dev/vda" },
+	} {
+		changed := bound
+		change(&changed)
+		if physicalBinding(changed, serial) {
+			t.Errorf("%s: a serial binding was admitted", name)
+		}
+	}
+	aliased := byWWN
+	aliased.Alias = "/dev/disk/by-id/scsi-SYNTHETIC"
+	if physicalBinding(aliased, wwn) {
+		t.Error("a WWN binding carried an alias")
+	}
+}
+
+func TestSerialDeviceRefusalsNameTheMachineAndEverySerialItsHostSelects(t *testing.T) {
+	host := Host{Name: "ceph-2", Machine: "node-2", Physical: true, Devices: []Device{{Path: "/dev/disk/by-id/wwn-0x5000000000000001", WWN: "0x5000000000000001"},
+		{Path: "/dev/disk/by-serial/SER-2", Serial: "SER-2", SizeBytes: 1 << 40}, {Path: "/dev/disk/by-serial/SER-3", Serial: "SER-3", SizeBytes: 1 << 40}}}
+	refusals := serialDeviceRefusals(host)
+	refusedWith(t, refusals["device-serial-absent"], "lifecycle.unsupported", "Ceph host ceph-2 of Machine node-2 presents no whole disk whose serial number is one its OSD services select by serial (SER-2, SER-3)",
+		"compare each selected serial number with the disk's sysfs serial attribute or VPD page 0x80 on Machine node-2, and its exact size with the sizeBytes of its eraseOnRemoval target")
+	refusedWith(t, refusals["device-serial-ambiguous"], "lifecycle.unsupported", "Ceph host ceph-2 of Machine node-2 presents more than one whole disk with a serial number its OSD services select (SER-2, SER-3), such as two paths of one multipath disk, two namespaces of one NVMe controller or a cloned serial",
+		"select that disk by its /dev/disk/by-id/wwn-0x path, or detach the duplicate path; Bootwright never chooses between disks that share a serial number")
+	refusedWith(t, refusals["device-serial-mismatch"], "lifecycle.unsupported", "the disk with a serial number that Ceph host ceph-2 of Machine node-2 selects (SER-2, SER-3) is not a fixed, writable sd or nvme disk of the size its eraseOnRemoval target declares",
+		"correct that target's sizeBytes on Machine node-2 to the disk's exact capacity, as blockdev --getsize64 reports it, or select another disk")
+	refusedWith(t, refusals["device-alias"], "lifecycle.unsupported", "the disk with a serial number that Ceph host ceph-2 of Machine node-2 selects (SER-2, SER-3) has no stable /dev/disk/by-id link to give cephadm",
+		"select that disk by its /dev/disk/by-id/wwn-0x path if it has one")
+	host.Devices = host.Devices[:1]
+	if len(serialDeviceRefusals(host)) != 0 {
+		t.Fatal("a host without serial selections names serial refusals")
+	}
+}

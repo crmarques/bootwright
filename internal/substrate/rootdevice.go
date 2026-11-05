@@ -1,6 +1,7 @@
 package substrate
 
 import (
+	"regexp"
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -63,3 +64,26 @@ func RootDevicePath(machine api.Object) string {
 }
 
 func MachineRootDeviceHints(machine api.Object) RootDeviceHints { return rootDeviceHints(machine) }
+
+const SerialDevicePrefix = "/dev/disk/by-serial/"
+
+var serialDevicePath = regexp.MustCompile(`^/dev/disk/by-serial/([A-Za-z0-9._:+-]{1,128})$`)
+
+func SerialDevicePath(path string) (string, bool) {
+	match := serialDevicePath.FindStringSubmatch(path)
+	if match == nil {
+		return "", false
+	}
+	return match[1], true
+}
+
+func SerialEraseTarget(machine api.Object, serial string) (size int64, byDevice bool, found bool) {
+	for _, target := range machine.Spec().Get("hardware", "eraseOnRemoval", "targets").Items() {
+		if target.Get("serialNumber").Text() != serial {
+			continue
+		}
+		size, _ = target.Get("sizeBytes").Int64()
+		return size, target.Has("deviceName"), true
+	}
+	return 0, false, false
+}

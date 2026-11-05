@@ -352,8 +352,11 @@ checks:
   because the topology names it ([substrate arm](machines.md#substrate-arm));
 - native placement resolves to owned Machines and service counts fit finite
   candidate sets, with consistent site and label bindings;
-- OSD selectors are bounded and internally consistent and exclude the
-  Machine's root device from explicit data, DB, and WAL paths;
+- OSD selectors are bounded and internally consistent, exclude the Machine's
+  root device, by path, WWN or serial number, from explicit data, DB, and WAL
+  paths, and admit a `/dev/disk/by-serial/<serialNumber>` path only on a
+  Bootwright-installed bare-metal Machine whose `hardware.eraseOnRemoval`
+  declares that serial without `deviceName`;
 - policies, pools, filesystems, gateways, NFS exports, SMB resources, and
   consumers reference the same cluster under each kind's management-mode constraints and
   use compatible pool roles and protection modes;

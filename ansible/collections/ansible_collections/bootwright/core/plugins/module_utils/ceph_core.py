@@ -25,7 +25,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
     ceph_native_resources, ceph_native_observe, ceph_native_units, ceph_native_object, ceph_native_worker, ceph_package_sources, ceph_package_worker,
     ceph_packages, ceph_registry_discovery, ceph_smb_native, ceph_replication_native, ceph_ssh_policy, ceph_tunnel,
     ceph_tunnel_staging, ceph_tunnel_custody, native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
-    physical_machine_identity, ceph_export_native, ceph_export_dns, remote_command, transport_faults,
+    physical_machine_identity, physical_erase_process, physical_erase_worker, ceph_export_native, ceph_export_dns, remote_command, transport_faults,
 )
 
 # Every id the shipped specialization registry declares; a worker answer or a record naming any other id is refused.
@@ -567,7 +567,8 @@ class Transport:
                    ceph_native_resources, ceph_native_stretch, ceph_native_nfs, ceph_native_nvmeof, ceph_native_observability,
                    ceph_native_units, ceph_native_object, ceph_smb_native,
                    ceph_replication_native, ceph_export_dns, ceph_export_native,
-                   ceph_host_route_probe, ceph_pull_broker, physical_machine_identity, ceph_host_runtime)
+                   ceph_host_route_probe, ceph_pull_broker, physical_machine_identity, physical_erase_process, physical_erase_worker,
+                   ceph_host_runtime)
         sources = {module.__name__.rsplit(".", 1)[-1]: inspect.getsource(module) for module in modules}
         ceph_native.require(tuple(sources) == ceph_native_worker.MODULES, "transport")
         return sources
@@ -1534,7 +1535,7 @@ def dashboard_phase(request, operation, request_digest, bootstrap, transport, ob
 
 def host_request(value):
     """A frozen host block request: its cluster's host scope and one of its hosts."""
-    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "pulls", "version"} and value["version"] == "ceph-host-v11")
+    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "pulls", "version"} and value["version"] == "ceph-host-v12")
     cluster = ceph_native.validate_scope(value["cluster"])
     ceph_native.require("packages" in cluster)
     ceph_native.require(sum(host["name"] == value["host"] for host in cluster["hosts"]) == 1)
@@ -1595,7 +1596,8 @@ def host_evidence(value, request_digest, request=None):
     ceph_native.require(isinstance(value["devices"], list) and len(value["devices"]) <= 128, "evidence")
     for device in value["devices"]:
         ceph_native.require(isinstance(device, dict) and set(device) in ({"path", "serial", "deviceID"},
-                            {"path", "serial", "deviceID", "wwn", "kernelPath", "sizeBytes", "rotational"}), "evidence")
+                            {"path", "serial", "deviceID", "wwn", "kernelPath", "sizeBytes", "rotational"},
+                            {"path", "serial", "deviceID", "wwn", "kernelPath", "sizeBytes", "rotational", "alias"}), "evidence")
         ceph_native.require(all(isinstance(device[key], str) for key in ("path", "serial", "deviceID"))
                             and ceph_host_runtime.DEVICE_ID.fullmatch(device["deviceID"]) is not None, "evidence")
         if "wwn" in device:
@@ -1608,7 +1610,8 @@ def host_evidence(value, request_digest, request=None):
                             and value["image"] == cluster["image"], "evidence")
         host = next(item for item in cluster["hosts"] if item["name"] == request["host"])
         ceph_native.require(("fips" in value) == (ceph_host_runtime.observes_fips(cluster, host) and not value["removed"]), "evidence")
-    ceph_native.require(len(ceph_native.canonical(value)) <= 16000, "evidence")
+    # Fifteen serial selections, each with its longest serial, device ID, observed WWN and alias, fit below Go's 24 KiB decoder.
+    ceph_native.require(len(ceph_native.canonical(value)) <= 24000, "evidence")
     return value
 
 

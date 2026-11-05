@@ -106,7 +106,7 @@ func (a *admission) selector(selector api.Value, field string, data bool) {
 
 func rootDevice(machine api.Object, device string) bool {
 	hints := substrate.MachineRootDeviceHints(machine)
-	if hints.DeviceName != "" && device == hints.DeviceName {
+	if hints.DeviceName != "" && device == hints.DeviceName || hints.SerialNumber != "" && device == substrate.SerialDevicePrefix+hints.SerialNumber {
 		return true
 	}
 	wwn := strings.ToLower(hints.WWN)

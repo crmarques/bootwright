@@ -14,13 +14,14 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 const HostImplementation = "storage-ceph-host-v1"
-const HostVersion = "ceph-host-v11"
+const HostVersion = "ceph-host-v12"
 const HostEvidenceVersion = "ceph-host-evidence-v4"
 const SharedLabel = "system_u:object_r:container_file_t:s0"
-const maxHostEvidence = 16384
+const maxHostEvidence = 24576
 
 type ClusterScope struct {
 	AnsiblePackageVersion    string                       `json:"ansiblePackageVersion"`
@@ -125,6 +126,7 @@ func HostBlockID(cluster, machineName string) string {
 }
 
 type HostDevice struct {
+	Alias      string `json:"alias,omitempty"`
 	DeviceID   string `json:"deviceID"`
 	KernelPath string `json:"kernelPath,omitempty"`
 	Path       string `json:"path"`
@@ -206,8 +208,7 @@ func (e HostEvidence) prepared(r HostRequest) bool {
 	}
 	for i, device := range host.Devices {
 		if host.Physical {
-			observed := e.Devices[i]
-			if observed.Path != device.Path || observed.WWN != device.WWN || !physicalSerial.MatchString(observed.Serial) || observed.SizeBytes <= 0 || !validDeviceID(observed.DeviceID) || !physicalKernelPath.MatchString(observed.KernelPath) {
+			if !physicalBinding(e.Devices[i], device) {
 				return false
 			}
 			continue
@@ -217,6 +218,17 @@ func (e HostEvidence) prepared(r HostRequest) bool {
 		}
 	}
 	return true
+}
+
+func physicalBinding(observed HostDevice, device Device) bool {
+	if observed.Path != device.Path || !physicalSerial.MatchString(observed.Serial) || observed.SizeBytes <= 0 || !validDeviceID(observed.DeviceID) || !physicalKernelPath.MatchString(observed.KernelPath) {
+		return false
+	}
+	if _, serial := substrate.SerialDevicePath(device.Path); !serial {
+		return observed.WWN == device.WWN && observed.Alias == ""
+	}
+	return observed.Serial == device.Serial && observed.SizeBytes == device.SizeBytes && device.WWN == "" &&
+		(observed.WWN == "" || physicalObservedWWN.MatchString(observed.WWN)) && physicalAlias.MatchString(observed.Alias)
 }
 
 func hostEffect(e HostEvidence, r HostRequest) reconciliation.EffectState {
@@ -411,6 +423,29 @@ func hostRefusals() map[string]error {
 	return out
 }
 
+func serialDeviceRefusals(host Host) map[string]error {
+	serials := []string{}
+	for _, device := range host.Devices {
+		if serial, ok := substrate.SerialDevicePath(device.Path); ok && host.Physical {
+			serials = append(serials, serial)
+		}
+	}
+	if len(serials) == 0 {
+		return nil
+	}
+	selected, of := strings.Join(serials, ", "), "Ceph host "+host.Name+" of Machine "+host.Machine
+	return map[string]error{
+		"device-serial-absent": failure("lifecycle.unsupported", of+" presents no whole disk whose serial number is one its OSD services select by serial ("+selected+")",
+			"compare each selected serial number with the disk's sysfs serial attribute or VPD page 0x80 on Machine "+host.Machine+", and its exact size with the sizeBytes of its eraseOnRemoval target"),
+		"device-serial-ambiguous": failure("lifecycle.unsupported", of+" presents more than one whole disk with a serial number its OSD services select ("+selected+"), such as two paths of one multipath disk, two namespaces of one NVMe controller or a cloned serial",
+			"select that disk by its /dev/disk/by-id/wwn-0x path, or detach the duplicate path; Bootwright never chooses between disks that share a serial number"),
+		"device-serial-mismatch": failure("lifecycle.unsupported", "the disk with a serial number that "+of+" selects ("+selected+") is not a fixed, writable sd or nvme disk of the size its eraseOnRemoval target declares",
+			"correct that target's sizeBytes on Machine "+host.Machine+" to the disk's exact capacity, as blockdev --getsize64 reports it, or select another disk"),
+		"device-alias": failure("lifecycle.unsupported", "the disk with a serial number that "+of+" selects ("+selected+") has no stable /dev/disk/by-id link to give cephadm",
+			"select that disk by its /dev/disk/by-id/wwn-0x path if it has one"),
+	}
+}
+
 func packageRefusals() map[string]error {
 	return map[string]error{
 		"packages":            failure("lifecycle.unknown", "the Ceph host package preparation refused its request, source or result", "the adapter detail names the refusing step; check that the declared hosted RHEL DVD tree and the IBM Ceph repository serve the authored package selection to the host, then apply again"),
@@ -489,10 +524,12 @@ func (c HostCapability) run(ctx context.Context, e lifecycle.Execution, operatio
 	}
 	defer cleanup()
 	refusals := hostRefusals()
-	if host, _ := r.target(); host.Provided {
+	host, _ := r.target()
+	if host.Provided {
 		refusals["fips-not-enabled"] = fipsNotEnabled(host.Machine)
 		refusals["transport"] = providedTransport(host)
 	}
+	maps.Copy(refusals, serialDeviceRefusals(host))
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: HostImplementation, Operation: operation, Variable: "bootwright_ceph_host", Canonical: canonical,
 		Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Cluster.Controller}, Materials: files, Refusals: refusals, NativeErrors: true, Deadline: hostDeadline(operation)}))
 }

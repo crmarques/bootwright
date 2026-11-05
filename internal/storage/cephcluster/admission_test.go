@@ -482,3 +482,49 @@ func TestOSDRootExclusionMatchesADeclaredWWN(t *testing.T) {
 		}
 	}
 }
+
+func TestASerialOSDPathNamesOnlyADiskItsInstalledBareMetalMachineDeclaresWithoutDeviceName(t *testing.T) {
+	provider := object(api.InfraProvider, "rack", m("baremetal", m()))
+	targets := []api.Value{m("serialNumber", "ROOT-1", "sizeBytes", 4096*1024), m("serialNumber", "SER-1", "sizeBytes", 1<<40),
+		m("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4", "wwn", "0x5000c500a1b2c3d4", "serialNumber", "SER-WWN", "sizeBytes", 1<<40)}
+	machine := object(api.Machine, "machine-1", m("substrate", m("providerRef", "rack", "baremetal", m("rootDevice", m("serialNumber", "ROOT-1", "sizeBytes", 4096*1024))),
+		"os", m("provided", false, "installProfileRef", "rhel"), "hardware", m("eraseOnRemoval", m("method", "logicalOverwrite", "targets", targets))))
+	catalog := api.NewCatalog([]api.Object{provider, machine})
+	if serial, size, reason, _ := SerialSelection(catalog, machine, "/dev/disk/by-serial/SER-1"); serial != "SER-1" || size != 1<<40 || reason != "" {
+		t.Fatalf("serial selection %q %d %q", serial, size, reason)
+	}
+	if serial, _, reason, _ := SerialSelection(catalog, machine, "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"); serial != "" || reason != "" {
+		t.Fatal("a WWN path read as a serial selection")
+	}
+	undeclared := "declare the disk in spec.hardware.eraseOnRemoval.targets of Machine machine-1 with its serialNumber and sizeBytes and no deviceName, or select it by that target's deviceName"
+	provided := machine.WithSpec(machine.Spec().WithPath(api.BoolValue(true), "os", "provided"))
+	for _, test := range []struct {
+		name, path     string
+		machine        api.Object
+		reason, remedy string
+	}{
+		{"not installed", "/dev/disk/by-serial/SER-1", provided, "a /dev/disk/by-serial/ path names a disk that a Bootwright-installed bare-metal Machine declares by serial number, and Machine machine-1 is not one", "select a device path that exists on this host"},
+		{"grammar", "/dev/disk/by-serial/SER/1", machine, "a /dev/disk/by-serial/ path carries a serial number of 1 to 128 ASCII letters, digits and ._:+- characters", "select this disk by its /dev/disk/by-id/wwn-0x path"},
+		{"undeclared", "/dev/disk/by-serial/SER-2", machine, "the serial number SER-2 that this OSD selection names is no eraseOnRemoval target of Machine machine-1 declared without deviceName, which would give its exact size", undeclared},
+		{"by deviceName", "/dev/disk/by-serial/SER-WWN", machine, "the serial number SER-WWN that this OSD selection names is no eraseOnRemoval target of Machine machine-1 declared without deviceName, which would give its exact size", undeclared},
+		{"root", "/dev/disk/by-serial/ROOT-1", machine, "explicit OSD allocation cannot use the Machine root device", "remove the Machine root device from the OSD selector and select a dedicated data device"},
+	} {
+		if _, _, reason, remedy := SerialSelection(catalog, test.machine, test.path); reason != test.reason || remedy != test.remedy {
+			t.Errorf("%s: %q %q", test.name, reason, remedy)
+		}
+	}
+	if !rootDevice(machine, "/dev/disk/by-serial/ROOT-1") || rootDevice(machine, "/dev/disk/by-serial/SER-1") {
+		t.Fatal("the root disk declared by serial number is misread")
+	}
+	fixture := fixtureCatalog()
+	cluster := find(t, fixture, api.CephCluster, "storage")
+	services := cluster.Spec().Get("services").Items()
+	services[2] = services[2].WithPath(m("paths", api.StringList("/dev/disk/by-serial/SER-1")), "spec", "data_devices")
+	mutated := cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(services...), "services"))
+	for _, issue := range Validate(mutated, replace(fixture, mutated)) {
+		if issue.Field == "$.spec.services[2].spec.data_devices" && issue.Code == "api.invariant" && issue.Remediation == "select a device path that exists on this host" {
+			return
+		}
+	}
+	t.Fatal("a serial OSD path on a provided Machine was admitted")
+}
