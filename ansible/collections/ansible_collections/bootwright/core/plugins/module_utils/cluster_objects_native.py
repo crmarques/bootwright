@@ -11,6 +11,8 @@ from ansible_collections.bootwright.core.plugins.module_utils import bounded_pro
 from ansible_collections.bootwright.core.plugins.module_utils.cluster_objects_model import OWNER
 
 MAX_NATIVE_OUTPUT = 16 << 20
+# oc refuses an object of a type the server does not serve yet, which no object can have.
+UNSERVED_TYPE = re.compile(r'error: the server doesn\'t have a resource type "[A-Za-z][A-Za-z0-9]*"')
 
 # Kubernetes Go templates have no JSON encoder. This closed recursive template
 # emits only the subtrees selected below, with strings escaped by printf.
@@ -124,7 +126,9 @@ def get(params):
     if listing:
         template = JSON_TEMPLATE + '{"items":[{{range $i,$v := .items}}{{if $i}},{{end}}{{with $v}}' + template[len(JSON_TEMPLATE):] + '{{end}}{{end}}]}'
     argv += ["-o", "go-template=" + template]
-    code, output, ignored_error = run(params["oc"], params["kubeconfig"], argv, params["deadline"])
+    code, output, error = run(params["oc"], params["kubeconfig"], argv, params["deadline"])
+    if code and not listing and UNSERVED_TYPE.fullmatch(error.strip()):
+        return {"answered": True, "object": None}
     if code:
         return {"answered": False}
     if not output.strip():

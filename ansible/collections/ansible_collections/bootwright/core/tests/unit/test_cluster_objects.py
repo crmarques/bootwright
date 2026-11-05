@@ -176,6 +176,17 @@ def test_lagging_condition_and_failure():
     assert model.condition(check, live)[3]
 
 
+@pytest.mark.parametrize("stderr,answer", [
+    ('error: the server doesn\'t have a resource type "NMState"\n', {"answered": True, "object": None}),
+    ("error: the server doesn't have a resource type \"NMState\"\nerror: another\n", {"answered": False}),
+    ("Unable to connect to the server: EOF\n", {"answered": False})])
+def test_an_unserved_type_reads_as_absent_and_no_other_refusal_does(tmp_path, stderr, answer):
+    oc = ScriptedOC(tmp_path, [{"stderr": stderr, "code": 1}])
+    obj = {"apiVersion": "nmstate.io/v1", "kind": "NMState", "name": "nmstate", "namespace": "", "namespaced": False,
+           "body": {"apiVersion": "nmstate.io/v1", "kind": "NMState", "metadata": {"name": "nmstate"}}}
+    assert native.get(dict(oc.base, object=obj, fields=[])) == answer
+
+
 def test_first_apply_accepts_the_null_receipts_of_empty_evidence(tmp_path, object_request):
     object_request["receipts"] = None
     oc = ScriptedOC(tmp_path, [response(), response(owned(object_request))])
