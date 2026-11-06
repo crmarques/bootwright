@@ -446,3 +446,20 @@ func TestAPhysicalKickstartPartitionsOnlyTheDiskItsPreProved(t *testing.T) {
 		}
 	}
 }
+
+func TestThePhysicalTargetProofConsumesTheWholeMACInventory(t *testing.T) {
+	declared := []installerNIC{{"eno1", "52:54:00:9a:1b:01", "e1000e", ""}, {"eno2", "52:54:00:9a:1b:02", "e1000e", ""}}
+	host := installerHost{nics: declared, root: "/dev/sda", mocks: `
+printf() {
+ if builtin [ "$1" = '%s\n' ] && builtin [ "$2" = $'52:54:00:9a:1b:01\n52:54:00:9a:1b:02' ]; then
+  local inventory='52:54:00:9a:1b:01'
+  for iteration in {1..17}; do inventory+=$'\n'"$inventory"; done
+  builtin printf '%s\n' "$inventory" '52:54:00:9a:1b:02'
+ else builtin printf "$@"; fi
+}
+`}
+	output, err := runTargetProof(t, physicalInstallation(), host)
+	if err != nil {
+		t.Fatalf("complete split-write MAC inventory was refused: %v\n%s", err, output)
+	}
+}

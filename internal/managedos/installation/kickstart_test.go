@@ -241,7 +241,7 @@ func TestAPhysicalInstallationProvesItsTargetBeforeClearingAnyDisk(t *testing.T)
 		}
 	}
 	for _, address := range physicalInstallation().ExpectedMACs {
-		if !strings.Contains(rendered, "grep -Fqx '"+address+"'") {
+		if !strings.Contains(rendered, "grep -Fx '"+address+"' >/dev/null") {
 			t.Fatalf("the proof does not require %s", address)
 		}
 	}
@@ -306,11 +306,11 @@ bootwright_mac="${bootwright_nic}/address"
 if [ -r "${bootwright_nic}/bonding_slave/perm_hwaddr" ]; then bootwright_mac="${bootwright_nic}/bonding_slave/perm_hwaddr"; fi
 tr 'A-Z' 'a-z' < "${bootwright_mac}" || exit 1
 done | sort -u)
-if ! printf '%s\n' "${bootwright_observed}" | grep -Fqx '52:54:00:9a:1b:01'; then
+if ! printf '%s\n' "${bootwright_observed}" | grep -Fx '52:54:00:9a:1b:01' >/dev/null; then
 echo 'Bootwright: this machine does not report 52:54:00:9a:1b:01, which its declaration requires; refusing before any disk is touched.' >&2
 exit 1
 fi
-if ! printf '%s\n' "${bootwright_observed}" | grep -Fqx '52:54:00:9a:1b:02'; then
+if ! printf '%s\n' "${bootwright_observed}" | grep -Fx '52:54:00:9a:1b:02' >/dev/null; then
 echo 'Bootwright: this machine does not report 52:54:00:9a:1b:02, which its declaration requires; refusing before any disk is touched.' >&2
 exit 1
 fi

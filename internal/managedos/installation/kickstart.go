@@ -721,7 +721,7 @@ func targetProofLines(input Installation) []string {
 	for _, address := range input.ExpectedMACs {
 		excluded = append(excluded, "-e '"+address+"'")
 		lines = append(lines,
-			`if ! printf '%s\n' "${bootwright_observed}" | grep -Fqx '`+address+`'; then`,
+			`if ! printf '%s\n' "${bootwright_observed}" | grep -Fx '`+address+`' >/dev/null; then`,
 			`echo 'Bootwright: this machine does not report `+address+
 				`, which its declaration requires; refusing before any disk is touched.' >&2`,
 			"exit 1",
