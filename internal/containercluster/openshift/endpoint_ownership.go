@@ -38,6 +38,20 @@ func addressClaims(catalog api.Catalog) []addressClaim {
 			for i, entry := range spec.Get("network", "addresses").Items() {
 				claim(holder, fmt.Sprintf("spec.network.addresses[%d].address", i), entry.Get("address").Text())
 			}
+			claimNextHops(holder, "spec.network.inline.nmstate", spec.Get("network", "inline", "nmstate"), claim)
+			claimNextHops(holder, "spec.network.overrides", spec.Get("network", "overrides"), claim)
+		case api.NetworkConfig:
+			claimNextHops(holder, "spec.nmstate", spec.Get("nmstate"), claim)
+		case api.CephCluster:
+			for i, service := range spec.Get("services").Items() {
+				if slices.Contains([]string{"ingress", "nfs", "mgmt-gateway"}, service.Get("service_type").Text()) {
+					claim(holder, fmt.Sprintf("spec.services[%d].spec.virtual_ip", i), service.Get("spec", "virtual_ip").Text())
+				}
+			}
+		case api.CephSMBResource:
+			for i, entry := range spec.Get("native", "public_addrs").Items() {
+				claim(holder, fmt.Sprintf("spec.native.public_addrs[%d].address", i), entry.Get("address").Text())
+			}
 		case api.InfraProvider:
 			for _, held := range substrate.AddressClaims(holder) {
 				claim(holder, held.Path, held.Address)
@@ -71,6 +85,14 @@ func addressClaims(catalog api.Catalog) []addressClaim {
 		return strings.Compare(a.Path, b.Path)
 	})
 	return claims
+}
+
+func claimNextHops(holder api.Object, path string, native api.Value, claim func(api.Object, string, string)) {
+	for i, route := range native.Get("routes", "config").Items() {
+		if route.Get("state").Text() != "absent" {
+			claim(holder, fmt.Sprintf("%s.routes.config[%d].next-hop-address", path, i), route.Get("next-hop-address").Text())
+		}
+	}
 }
 
 func endpointCollisions(cluster api.Object, catalog api.Catalog, slot string, endpoint api.Value, address netip.Addr) []api.Issue {

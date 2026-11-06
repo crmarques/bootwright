@@ -458,6 +458,10 @@ configuration is `subscription` (`source` defaults to `redhat-operators`),
 Each pool belongs to one network: either a consumed machine network of the
 bound cluster or, with `l2.interface`, the one subnet that holds the static
 address every node carries on that interface.
+Without `l2.interface` every node of the cluster announces the pool, so each
+node whose Machine declares an interface address has one whose prefix overlaps
+the pool's network; with it, the subnet rule above already places every
+announcer there.
 
 The named interface is never a node's default-route interface or `br-ex`,
 because OVN-Kubernetes builds `br-ex` from the install interface. It is never
@@ -478,8 +482,11 @@ A pool includes none of these addresses:
 - an endpoint address;
 - a node address;
 - the next hop of a node's route;
-- an address another declared object holds, including a CephCluster ingress,
-  NFS or management-gateway service's `virtual_ip` (with or without a prefix);
+- an address another declared object holds, which the
+  [endpoint claims](openshift-clusters.md#endpoints) list, a CephCluster
+  ingress, NFS or management-gateway service's `virtual_ip` (with or without a
+  prefix), an SMB public address and another Machine's or NetworkConfig's
+  route next hop included;
 - the IPv4 network or broadcast address of its subnet.
 
 A pool also overlaps no other pool, no cluster or service network, and no
@@ -658,6 +665,7 @@ its own indexed field:
 | Reversed or mixed range | `api.value` | as above | `range <entry> of pool <pool> ends before it starts or mixes address families` | `write the range as <first>-<last> of one family, first not after last` |
 | Wrong family | `api.invariant` | as above | `address <entry> of pool <pool> is not of the <family> family of OpenShiftCluster/<cluster>` | `use <family> addresses for the pools of <cluster>` |
 | Outside every machine network | `api.invariant` | as above | `address <entry> of pool <pool> lies outside every machine network of OpenShiftCluster/<cluster>` | `use addresses inside <cidrs>, or name the interface whose subnet holds them under l2.interface` |
+| Announcer off the network | `api.invariant` | `$.spec.packages.metallb.pools[<i>].addresses[<j>]` | `node <machine> of OpenShiftCluster/<cluster> has no address in <network>, the network of pool <pool>, so it cannot answer for the pool on layer 2` | `assign Machine/<machine> an address in <network>, or name the interface whose subnet holds the pool under l2.interface` |
 | Pool spans networks | `api.invariant` | `$.spec.packages.metallb.pools[<i>].addresses` | `pool <pool> spans <network> and <network>` | `split the pool so that each pool lies inside one network` |
 | Interface missing on a node | `api.invariant` | `$.spec.packages.metallb.pools[<i>].l2.interface` | `interface <interface> of pool <pool> is not declared on node <machine> of OpenShiftCluster/<cluster>` | `declare <interface> on every node of <cluster>, or omit l2.interface` |
 | Interface without an address | `api.invariant` | as above | `interface <interface> of pool <pool> carries no <family> address on node <machine>` | `assign <declared> an address in the pool's subnet on every node through network.addresses`, where `<declared>` is the interface, or the uplink of a bridge that carries its uplink's addresses |

@@ -28,7 +28,7 @@ func TestMgmtGatewayVirtualIPNeedsKeepaliveIngress(t *testing.T) {
 	requirePairAdmits(t, graphIssues(t, gatewayPair("192.0.2.50", "192.0.2.50")))
 	requireOnly(t, graphIssues(t, gatewayPair("192.0.2.50", "192.0.2.50")[:1]), gatewayVIP, "api.invariant", "a management gateway virtual_ip works only through a keepalive-only ingress that fronts the gateway", "declare an ingress service with spec.backend_service: mgmt-gateway, spec.keepalive_only: true and the same spec.virtual_ip")
 	requireOnly(t, graphIssues(t, gatewayPair("", "192.0.2.50")), ingressVIP, "api.invariant", "a management gateway ingress carries the gateway's virtual_ip, and the gateway declares none", "set the management gateway's spec.virtual_ip to this ingress's address, or remove this ingress")
-	catalog := bindingCatalog()
+	catalog := withIPv6Hosts(bindingCatalog())
 	cluster := find(t, catalog, api.CephCluster, "storage")
 	catalog = replace(catalog, cluster.WithSpec(cluster.Spec().WithPath(api.StringList("192.0.2.0/24", "2001:db8::/64"), "networks", "publicCIDRs")))
 	dual, all := withGraph(t, catalog, gatewayPair("2001:db8::50", "2001:DB8:0::50"))

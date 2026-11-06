@@ -113,6 +113,7 @@ func (a *admission) ingressRecord(service api.Value, field string, placed []api.
 	if len(placed) < 2 {
 		a.issue("api.invariant", field+".placement", "an ingress service needs at least two eligible hosts for failover", "select at least two declared storage hosts in the ingress placement")
 	}
+	a.ingressAdjacency(service, field, placed)
 }
 
 func (a *admission) ingressPorts(spec api.Value, field string, nfs bool) {

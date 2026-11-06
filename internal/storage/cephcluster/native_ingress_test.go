@@ -222,7 +222,7 @@ func TestVIPMustBeFreeAndInsidePublicCIDR(t *testing.T) {
 }
 
 func TestIngressVIPsCompareParsedAddresses(t *testing.T) {
-	catalog := bindingCatalog()
+	catalog := withIPv6Hosts(bindingCatalog())
 	storage := find(t, catalog, api.CephCluster, "storage")
 	dual := storage.WithSpec(storage.Spec().WithPath(api.StringList("192.0.2.0/24", "2001:db8::/64"), "networks", "publicCIDRs"))
 	catalog = replace(catalog, dual)

@@ -237,6 +237,22 @@ func checkPoolConflicts(pool api.MetalLBPool, f addons.ClusterFacts, field, entr
 	}
 }
 
+func checkPoolAnnouncers(pool api.MetalLBPool, f addons.ClusterFacts, field string, network netip.Prefix, add poolIssue) {
+	for _, node := range f.NodeNetworks {
+		addressed, inside := false, false
+		for _, nic := range node.Interfaces {
+			for _, a := range nic.Addresses {
+				addressed = true
+				inside = inside || a.Masked().Overlaps(network)
+			}
+		}
+		if addressed && !inside {
+			add("api.invariant", field, fmt.Sprintf("node %s of OpenShiftCluster/%s has no address in %s, the network of pool %s, so it cannot answer for the pool on layer 2", node.Machine, f.Name, network, pool.Name),
+				fmt.Sprintf("assign Machine/%s an address in %s, or name the interface whose subnet holds the pool under l2.interface", node.Machine, network))
+		}
+	}
+}
+
 func admitPoolEntries(pool api.MetalLBPool, f addons.ClusterFacts, base string, networks []netip.Prefix, previous []interval, add poolIssue) []interval {
 	var poolNetwork netip.Prefix
 	for ai, entry := range pool.Addresses {
@@ -285,6 +301,9 @@ func admitPoolEntries(pool api.MetalLBPool, f addons.ClusterFacts, base string, 
 		} else {
 			if poolNetwork.IsValid() && poolNetwork != network {
 				add("api.invariant", base+".addresses", fmt.Sprintf("pool %s spans %s and %s", pool.Name, poolNetwork, network), "split the pool so that each pool lies inside one network")
+			}
+			if poolNetwork != network && (pool.L2 == nil || pool.L2.Interface == "") {
+				checkPoolAnnouncers(pool, f, field, network, add)
 			}
 			poolNetwork = network
 			if network.Addr().Is4() {

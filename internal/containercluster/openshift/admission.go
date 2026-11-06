@@ -307,6 +307,8 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	}
 	issues = add(issues, validateEndpoints(o, c)...)
 	issues = add(issues, validateNetworks(o, c)...)
+	issues = add(issues, validateOverlayOverlaps(o, c)...)
+	issues = add(issues, validateVIPAdjacency(o, c)...)
 	issues = add(issues, ValidateNetworkIntent(o, c)...)
 	return add(issues, inertDeclarations(s)...)
 }
@@ -533,6 +535,11 @@ func endpointAddress(o api.Object, endpoint api.Value, c api.Catalog, path strin
 	return endpoint.Get("address"), source, nil
 }
 
+func installerHoldsVIPs(o api.Object) bool {
+	platform := Platform(o.Spec())
+	return o.Spec().Get("nodes").Len() > 1 && (platform == "baremetal" || platform == "vsphere")
+}
+
 func validateEndpoints(o api.Object, c api.Catalog) []api.Issue {
 	issues := []api.Issue{}
 	if !o.Spec().Has("install", "endpoints", "api", "address") {
@@ -540,8 +547,7 @@ func validateEndpoints(o api.Object, c api.Catalog) []api.Issue {
 	}
 	networks, _ := machineNetworks(o, c)
 	nodes := o.Spec().Get("nodes").Items()
-	platform := Platform(o.Spec())
-	vip := len(nodes) > 1 && (platform == "baremetal" || platform == "vsphere")
+	vip := installerHoldsVIPs(o)
 	owned := 0
 	for _, slot := range endpointSlots {
 		if sourceType(o.Spec().Get("install", "endpoints", slot)) == "installer" {

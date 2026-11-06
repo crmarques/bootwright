@@ -60,11 +60,6 @@ func TestCephRefusalTableMatchesUnsupported(t *testing.T) {
 			},
 			"empty release": set("", "release"),
 		}},
-		"A replication network that a Ceph host has no address inside": {edits: map[string]func(api.Value) api.Value{
-			"no host address inside": func(spec api.Value) api.Value {
-				return spec.WithPath(api.StringList("198.51.100.0/24"), "networks", "clusterCIDRs")
-			},
-		}, values: map[string]string{"<host>": "node-1", "<machine>": "node-1", "<cidrs>": "198.51.100.0/24"}},
 		"A native service whose auxiliary image is not selected": {edits: map[string]func(api.Value) api.Value{
 			"prometheus service": func(spec api.Value) api.Value {
 				services := append(spec.Get("services").Items(), requestMap("service_type", "prometheus", "placement", requestMap("label", "mon", "count", 1)))

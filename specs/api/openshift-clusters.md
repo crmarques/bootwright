@@ -248,6 +248,14 @@ release. `api-int` resolves the `api` address, and the `api` and
 selected machine-network CIDRs. VIPs do not collide with node install IPs, and
 endpoint/network address families are consistent.
 
+**Every node that can hold an installer VIP is on its subnet.** The
+installer's keepalived moves a VIP only among nodes on its layer-2 network, so
+on a multi-node `baremetal` or `vsphere` platform every `controlPlane` node,
+which can hold the `api` VIP, and every node, which can hold the `ingress`
+VIP, declares an interface assignment whose prefix contains that VIP. A node
+whose Machine declares no interface assignment is not judged. Each refusal is
+an `api.invariant` at the slot's address, naming the node and its Machine.
+
 
 **Endpoint addresses are the cluster's own.** An effective endpoint address
 equals no effective endpoint address of another selected OpenShiftCluster, no
@@ -256,7 +264,11 @@ IP address a Machine declares other than the node a single-node cluster's
 no bind or endpoint address of a managed DNSServer, NTPServer, Proxy,
 ArtifactServer or Registry, no emulated BMC's bind address, and no
 LoadBalancer bind address other than the one its own `loadBalancer` source
-selects; two clusters never select one LoadBalancer bind address. A wildcard
+selects, no `virtual_ip` of a CephCluster `ingress`, `nfs` or `mgmt-gateway`
+service, no CephSMBResource `native.public_addrs[].address`, and no route
+`next-hop-address` a NetworkConfig, a Machine's inline NMState or its
+`network.overrides` declares; two clusters never select one LoadBalancer bind
+address. A wildcard
 bind claims no address here. Within one cluster `api-int` may equal `api`, and
 on platform `none` slots may share one external or load-balancer address. Each
 refusal is an `api.invariant` at the slot's address, or at its source when the
@@ -380,6 +392,11 @@ membership and order while effective output canonicalizes CIDR text:
 
 Every cluster-network `cidr` is valid and its required `hostPrefix` is larger
 than the CIDR prefix and no larger than `32` or `128`. Service CIDRs are valid.
+No cluster-network `cidr` and no service CIDR overlaps the prefix of an
+interface assignment a node's Machine declares or a secondary network's
+`ipam.subnets` entry, because traffic to that subnet would stay inside the
+cluster; each refusal is an `api.invariant` at the overlay entry, naming the
+subnet and its holder.
 The consumed `NetworkConfig.spec.machineNetwork` values, cluster networks, service
 networks, node install addresses, and endpoint addresses form one supported
 address family; dual-stack or mixed-family input is rejected by this contract.

@@ -455,7 +455,24 @@ checks:
   client addresses refuses
   ([NFS modes](../ceph-native-api.md#rgw-ingress-and-nfs-records));
 - every MON host's address, from `cephadm.addressRef` or else the Machine's
-  `access.ssh.addressRef`, lies inside one of `networks.publicCIDRs`; and
+  `access.ssh.addressRef`, lies inside one of `networks.publicCIDRs`;
+- every `networks.publicCIDRs` and `networks.clusterCIDRs` entry contains an
+  IP address, contact or interface assignment, that a Machine the topology
+  names declares in `network.addresses`, refused at the entry: addresses, not
+  a NetworkConfig `machineNetwork`, because a provided host such as a stretch
+  tiebreaker may select none;
+- with `networks.clusterCIDRs` declared, every topology node's Machine other
+  than the stretch tiebreaker, which holds no OSD and so never uses the
+  cluster network, declares an IP address inside one of them, a Machine whose
+  addresses are assigned at runtime included, refused at the node's
+  `machineRef` as `Ceph host <host> (Machine <machine>) has no address inside
+  the replication networks <cidrs>`;
+- every eligible host of an ingress service's placement whose Machine declares
+  a prefixed address has one whose prefix contains the ingress `virtual_ip`,
+  or, with `virtual_interface_networks`, one inside those networks, because
+  keepalived moves the virtual IP only among hosts on its layer-2 network; MON
+  and OSD hosts, stretch sites included, talk over routed IP and need no
+  shared subnet; and
 - a `topology.stretch` block declares a `failureDomain` that is a native
   default CRUSH bucket type above `host` (`chassis`, `rack`, `row`, `pdu`,
   `pod`, `room`, `datacenter`, `zone` or `region`), exactly two `dataSites`,

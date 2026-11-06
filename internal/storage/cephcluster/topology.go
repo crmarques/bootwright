@@ -173,6 +173,7 @@ func (a *admission) topology(ceph api.Value) {
 		a.location(ceph, node, field)
 	}
 	a.monNetworks(ceph)
+	a.networkCoverage(ceph)
 	a.uniqueValues(fqdns, "$.spec.topology.nodes", "registered storage hostnames must be unique")
 	a.uniqueValues(names, "$.spec.topology.nodes", "storage node names must be unique")
 	a.uniqueValues(machines, "$.spec.topology.nodes", "one Machine cannot register as multiple storage nodes")

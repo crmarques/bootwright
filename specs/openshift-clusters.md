@@ -226,7 +226,8 @@ nodes with nodes of another arm refuses.
 Platform. Each arm's derivation, and the attachment rule of a KubeVirt cluster
 that authors `baremetal`, are in the
 [platform union](api/openshift-clusters.md#platform-union-and-derivation). The
-installer's keepalived holds the VIPs on the nodes' shared layer 2, which a
+installer's keepalived holds the VIPs on the nodes' shared layer 2
+([endpoints](api/openshift-clusters.md#endpoints)), which a
 `Localnet` network with `ipam.mode: Disabled` permits by filtering by MAC alone
 (4.22); a bridge NetworkAttachmentDefinition needs `macspoofchk` off.
 

@@ -40,6 +40,7 @@ func TestPoolAddressRefusalTwins(t *testing.T) {
 func TestPoolSpanningAndOverlapTwins(t *testing.T) {
 	f := facts()
 	f.MachineNetworks = append(f.MachineNetworks, netip.MustParsePrefix("198.51.100.0/24"))
+	f.NodeNetworks[0].Interfaces = append(f.NodeNetworks[0].Interfaces, addons.NodeInterface{Name: "eth1", Addresses: []netip.Prefix{netip.MustParsePrefix("198.51.100.10/24")}})
 	for _, test := range []struct {
 		name                 string
 		bad, good            []api.Value
@@ -60,5 +61,22 @@ func TestPoolSpanningAndOverlapTwins(t *testing.T) {
 			}
 			t.Fatalf("missing refusal: %+v", issues)
 		})
+	}
+}
+
+// Without l2.interface every node announces the pool, so each needs an
+// address on the pool's network.
+func TestEveryPoolAnnouncerIsOnThePoolNetwork(t *testing.T) {
+	f := facts()
+	f.MachineNetworks = append(f.MachineNetworks, netip.MustParsePrefix("198.51.100.0/24"))
+	f.NodeNetworks = append(f.NodeNetworks, addons.NodeNetwork{Machine: "other", Interfaces: []addons.NodeInterface{{Name: "eth0", Addresses: []netip.Prefix{netip.MustParsePrefix("198.51.100.20/24")}}}})
+	issues := admitPools(addons.Instance{Config: config(pool("services", "192.0.2.80-192.0.2.90"))}, f)
+	want := "node other of OpenShiftCluster/cluster has no address in 192.0.2.0/24, the network of pool services, so it cannot answer for the pool on layer 2"
+	if len(issues) != 1 || issues[0].Code != "api.invariant" || issues[0].Field != ".pools[0].addresses[0]" || issues[0].Message != want || issues[0].Remediation == "" {
+		t.Fatalf("issues: %+v", issues)
+	}
+	f.NodeNetworks[1].Interfaces[0].Addresses = append(f.NodeNetworks[1].Interfaces[0].Addresses, netip.MustParsePrefix("192.0.2.20/24"))
+	if issues := admitPools(addons.Instance{Config: config(pool("services", "192.0.2.80-192.0.2.90"))}, f); len(issues) != 0 {
+		t.Fatalf("an announcer on the pool network refused: %+v", issues)
 	}
 }
