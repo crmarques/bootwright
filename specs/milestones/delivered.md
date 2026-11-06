@@ -12144,3 +12144,26 @@ independent review approved; its later items are parked as
 
 **Verification:** each regression failed before its fix; `make check` and
 `make race` passed on the commit.
+
+### X310 — The lab-kubevirt runbook and the KubeVirt specs
+
+[B731](m3.md#b731)'s in-tree part is delivered: the runbook beside the
+lab-kubevirt example names the host's and controller's prerequisites, the
+order of the checks that confirm the arm's unverified inferences, the destroy
+and the B951 drill; B731 stays on the M3 page awaiting that run. **Items:**
+B1157, completed in-tree (2026-11-06). **Kind:** enabling. **Owners:**
+Container cluster and Substrate.
+
+- B1157: the KubeVirt passages of the specifications state what the code
+  does, and each unmet rule names its open item: the eight-node KubeVirt
+  bound, the first claim property set's `ReadWriteMany`, the hosted-attachment
+  refusal-table row, the qualification gates, the add-on pages' `nmstate`
+  dependency and B906 question, and Not yet met lines for B905, B906, B907,
+  B909, B925, B926 and B927.
+
+**Delivery commit:** 34ade5c09. The example READMEs and the operator guide
+state the prerequisites the provider proof enforces since
+[X309](#x309--the-kubevirt-arm-ready-for-its-first-live-run).
+
+**Verification:** `make docs-check`, the refusal-table test and `make check`
+passed on the commit.
