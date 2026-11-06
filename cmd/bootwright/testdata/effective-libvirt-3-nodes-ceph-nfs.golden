@@ -543,6 +543,8 @@ spec:
     protocols:
       - 4
     pseudo: /docs
+    sectype:
+      - sys
     security_label: true
     squash: root_squash
     transports:

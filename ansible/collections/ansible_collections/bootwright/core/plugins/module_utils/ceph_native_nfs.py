@@ -43,8 +43,8 @@ EXPORT_APPLY_PHASES = ("nfs_export",)
 EXPORT_PHASES = frozenset(EXPORT_APPLY_PHASES)
 EXPORT_MEMBERS = frozenset(("filesystem", "group", "name", "native", "service", "subvolume"))
 EXPORT_OPTIONAL = frozenset(("objectUser", "subvolumePath"))
-NATIVE_REQUIRED = frozenset(("access_type", "clients", "fsal", "protocols", "pseudo", "security_label", "squash", "transports"))
-NATIVE_OPTIONAL = frozenset(("path", "sectype"))
+NATIVE_REQUIRED = frozenset(("access_type", "clients", "fsal", "protocols", "pseudo", "security_label", "sectype", "squash", "transports"))
+NATIVE_OPTIONAL = frozenset(("path",))
 CLIENT_MEMBERS = frozenset(("access_type", "addresses", "squash"))
 ACCESS = ("RW", "RO", "NONE")
 # The squash tokens the NFS manager admits (src/pybind/mgr/nfs/ganesha_conf.py:28-54), in admission's order.
@@ -270,7 +270,7 @@ def validate_native(native, filesystem, user=None):
     require(isinstance(native["access_type"], str) and native["access_type"] in ACCESS)
     require(isinstance(native["squash"], str) and native["squash"] in SQUASH and type(native["security_label"]) is bool)
     require(canonical(native["protocols"]) == b"[4]" and canonical(native["transports"]) == b'["TCP"]')
-    require("sectype" not in native or canonical(native["sectype"]) == b'["sys"]')
+    require(canonical(native["sectype"]) == b'["sys"]')
     fsal = native["fsal"]
     validate_clients(native["clients"])
     if user is not None:

@@ -223,7 +223,7 @@ var unitSpecMembers = map[string][]string{
 
 func unitDocumentOf(cluster api.Object, svc api.Value, spec func(api.Value) any) (json.RawMessage, error) {
 	name := cephcluster.NativeServiceName(svc)
-	if svc.Has("placement", "count_per_host") && !(svc.Get("service_type").Text() == "nvmeof" && svc.Get("placement", "count_per_host").Equal(api.IntegerValue("1"))) {
+	if svc.Has("placement", "count_per_host") && !(slices.Contains([]string{"nvmeof", "rgw"}, svc.Get("service_type").Text()) && svc.Get("placement", "count_per_host").Equal(api.IntegerValue("1"))) {
 		return nil, failure("lifecycle.unsupported", "the native service "+name+" places more than one daemon of a type per host, which Bootwright does not realize",
 			"omit placement.count_per_host on "+name+" in spec.services")
 	}
@@ -445,7 +445,7 @@ func unitLeaf(serviceType, path string) (monitoringLeaf, bool) {
 func unitBinding(cluster api.Object, binding api.Value) bool {
 	svc, found := cephcluster.NativeService(cluster, binding.Get("serviceRef").Text())
 	t := svc.Get("service_type").Text()
-	if !found || !slices.Contains([]string{"grafana", "snmp-gateway", "mgmt-gateway", "oauth2-proxy"}, t) || binding.Get("secrets").Len() == 0 {
+	if !found || !slices.Contains([]string{"grafana", "snmp-gateway", "mgmt-gateway", "oauth2-proxy", "nvmeof"}, t) || binding.Get("secrets").Len() == 0 {
 		return false
 	}
 	for _, secret := range binding.Get("secrets").Items() {
@@ -457,7 +457,7 @@ func unitBinding(cluster api.Object, binding api.Value) bool {
 }
 
 func unrealizedBinding(ref string) error {
-	return failure("lifecycle.unsupported", "Bootwright does not realize the service binding of "+ref+"; it realizes only the TLS bindings of an rgw service that a CephObjectGateway binds and of the ingress that fronts it, the TLS binding of the management gateway, the credential, TLS and CA bundle bindings of its oauth2-proxy, and the credential bindings of the grafana and snmp-gateway services",
+	return failure("lifecycle.unsupported", "Bootwright does not realize the service binding of "+ref+"; it realizes only the TLS bindings of an rgw service that a CephObjectGateway binds and of the ingress that fronts it, the TLS binding of the management gateway, the credential, TLS and CA bundle bindings of its oauth2-proxy, the credential bindings of the grafana and snmp-gateway services, and the five mTLS bindings of nvmeof",
 		"remove the spec.serviceBindings entry for "+ref)
 }
 

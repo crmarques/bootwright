@@ -27,6 +27,7 @@ func (a *admission) cluster() {
 	a.packageRepositoryTrust(ceph)
 	a.clusterAccess(ceph)
 	a.topology(ceph)
+	a.enrollmentAddresses(ceph)
 	a.clusterServices(ceph)
 	a.sharedServiceIdentities(a.object)
 }
@@ -124,6 +125,13 @@ func (a *admission) clusterAccess(ceph api.Value) {
 				break
 			}
 		}
+		for _, machine := range a.catalog.OfKind(api.Machine) {
+			if textOf(machine.Spec(), "os", "install", "hostKeyRef") == key {
+				a.invalid("$.spec.cephadm.clusterSSH.keyRef", "cluster SSH key must differ from Machine host keys", "set spec.cephadm.clusterSSH.keyRef to a dedicated Secret distinct from every Machine host key")
+				break
+			}
+		}
+
 		for _, cluster := range a.catalog.OfKind(api.CephCluster) {
 			if cluster.Name() != a.object.Name() && textOf(cluster.Spec(), "cephadm", "clusterSSH", "keyRef") == key {
 				a.invalid("$.spec.cephadm.clusterSSH.keyRef", "each storage cluster requires a distinct cluster SSH key", "set spec.cephadm.clusterSSH.keyRef to a Secret unused by other CephClusters")

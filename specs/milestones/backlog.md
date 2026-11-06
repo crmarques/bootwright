@@ -6995,10 +6995,11 @@ B122 is retired into B1135, which owns its OUT-01 reporting remainder.
 Session clauses, pending the owner's review: physical agent installations
 require a supported stable WWN root hint; kernel device names refuse at
 admission. KubeVirt completion proves root readiness and the frozen machine
-shape. NFS export security defaults to `sys` when omitted. Admitted Ceph
-values must reach their specified native realization, or refuse at admission
-with an object, reason and remedy where the implementation has no supported
-realization; specifications and the admitted-but-unrealized table agree.
+shape. NFS export security defaults to `sys` when omitted. Ceph shapes covered
+here reach their native realization or refuse explicitly before effects with
+an object, reason and remedy. Unsupported credential, protection and enrollment
+shapes refuse at admission; native placement decorators use the documented
+shared planning refusal recommended by CPN-02. Owning specifications agree.
 A healthy exact-pinned operator reports a pending manual upgrade without
 approving it or prescribing cluster destruction. Context-free rendering uses
 the invoking account. CLI-04 retains the security owner's sudo-entry guard,

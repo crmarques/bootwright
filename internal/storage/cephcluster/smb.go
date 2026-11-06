@@ -467,7 +467,7 @@ func (a *admission) smbShareGraph(cluster api.Object, spec, native api.Value) {
 	}
 	if filesystem, subvolume, ok := a.smbShareBacking(cluster, spec, native); ok {
 		a.smbProtocolExclusion(cluster, filesystem, subvolume)
-		a.smbSubvolumeEarmark(cluster, subvolume, native)
+		a.smbSubvolumeEarmark(cluster, filesystem, subvolume, native)
 	}
 }
 
@@ -563,13 +563,21 @@ func (a *admission) smbProtocolExclusion(cluster api.Object, filesystem, subvolu
 	}
 }
 
-func (a *admission) smbSubvolumeEarmark(cluster api.Object, subvolume string, native api.Value) {
+func (a *admission) smbSubvolumeEarmark(cluster api.Object, filesystem, subvolume string, native api.Value) {
+	field, backing := "$.spec.subvolumeRef", "this subvolume"
 	if subvolume == "" {
-		return
+		field, backing = "$.spec.filesystemRef", "this filesystem's data"
 	}
 	for _, peer := range a.smbPeers(cluster, api.SMBShare) {
-		if textOf(peer.Spec(), "subvolumeRef") == subvolume && !peer.Spec().Has("filesystemRef") && textOf(peer.Spec(), "native", "cluster_id") != textOf(native, "cluster_id") {
-			a.issue("api.invariant", "$.spec.subvolumeRef", "CephSMBResource "+peer.Name()+" shares this subvolume from another SMB cluster", "bind each SMB cluster's shares to its own CephSubvolume")
+		if textOf(peer.Spec(), "native", "cluster_id") == textOf(native, "cluster_id") {
+			continue
+		}
+		other, otherFilesystem := textOf(peer.Spec(), "subvolumeRef"), textOf(peer.Spec(), "filesystemRef")
+		if target, ok := a.catalog.Find(api.CephSubvolume, other); otherFilesystem == "" && ok {
+			otherFilesystem = textOf(target.Spec(), "filesystemRef")
+		}
+		if otherFilesystem == filesystem && (subvolume == "" || other == "" || subvolume == other) {
+			a.issue("api.invariant", field, "CephSMBResource "+peer.Name()+" shares "+backing+" from another SMB cluster", "bind each SMB cluster's shares to its own CephSubvolume")
 			return
 		}
 	}

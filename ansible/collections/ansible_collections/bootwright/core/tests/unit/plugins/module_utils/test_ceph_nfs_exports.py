@@ -40,7 +40,7 @@ APPLY = ("nfs", "export", "apply", "shares", "-i", "-")
 
 def native():
     return {"access_type": "RW", "clients": [{"access_type": "RW", "addresses": ["198.51.100.0/24"], "squash": "root_squash"}],
-            "fsal": {"cmount_path": "/", "fs_name": "files", "name": "CEPH"}, "protocols": [4], "pseudo": "/docs", "security_label": True,
+            "fsal": {"cmount_path": "/", "fs_name": "files", "name": "CEPH"}, "protocols": [4], "pseudo": "/docs", "security_label": True, "sectype": ["sys"],
             "squash": "root_squash", "transports": ["TCP"]}
 
 
@@ -596,3 +596,10 @@ def test_export_refused_by_its_unchanged_manager_is_declared_once(tmp_path):
     monitor = Monitor(request, failure=b"Error EINVAL: Failed to apply export: path /volumes/csi/docs does not exist")
     refused(monitor, markers, "nfs-export-apply")
     assert monitor.mutations == [APPLY]
+
+
+def test_frozen_export_requires_explicit_sys_security():
+    request = export_request()
+    request["nfsExport"]["native"].pop("sectype", None)
+    with pytest.raises(ceph_native.Refusal):
+        ceph_native.validate(request)

@@ -416,3 +416,31 @@ def test_the_removal_phases_are_fixed_and_only_the_observation_is_read_only():
     assert {"tiebreaker_observe", "tiebreaker_remove"} <= ceph_native.CORE_PHASES
     assert "tiebreaker_observe" in ceph_native.CORE_READ_ONLY_PHASES and "tiebreaker_remove" not in ceph_native.CORE_READ_ONLY_PHASES
     assert {"tiebreaker-foreign", "tiebreaker-unreachable", "not-removed"} <= set(ceph_core.CLUSTER_REASONS)
+
+
+def test_concurrent_authorized_keys_edit_is_preserved_before_rename(tiebreaker, monkeypatch):
+    native = removal(tiebreaker)
+    directory = tiebreaker.path("home/operator/.ssh")
+    path = os.path.join(directory, "authorized_keys")
+    with open(path, "rb") as handle:
+        original = handle.read()
+    concurrent = original + b"# concurrent operator edit\n"
+    real_stat = os.stat
+    reached = []
+
+    def changed(name, *args, **kwargs):
+        if name == "authorized_keys" and any(item.startswith(".bootwright-") for item in os.listdir(directory)):
+            with open(path, "wb") as handle:
+                handle.write(concurrent)
+            reached.append(name)
+        return real_stat(name, *args, **kwargs)
+
+    monkeypatch.setattr(os, "stat", changed)
+    with pytest.raises(ceph_native.Refusal, match="^tiebreaker-foreign$"):
+        native.remove()
+    assert reached == ["authorized_keys"]
+    with open(path, "rb") as handle:
+        assert handle.read() == concurrent
+    assert not any(item.startswith(".bootwright-") for item in os.listdir(directory))
+    assert stretch.REMOVAL_ATTEMPT in tiebreaker.markers.records
+    assert stretch.REMOVAL_COMPLETE not in tiebreaker.markers.records and not tiebreaker.commands

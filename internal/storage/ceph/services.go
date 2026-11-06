@@ -42,11 +42,6 @@ func projectServices(r *Request, cluster api.Object) error {
 				return failure("lifecycle.unsupported", "a native service option has not been qualified for core execution", "use only service_type, service_id, placement and the supported spec")
 			}
 		}
-		for _, h := range svc.Get("placement", "hosts").Items() {
-			if h.Type() != api.String || strings.ContainsAny(h.Text(), ":=") {
-				return failure("lifecycle.unsupported", "decorated native host placement requires additional network or daemon identity handling", "use bare native hostnames or a label for the core profile")
-			}
-		}
 		if svc.Has("extra_container_args") || svc.Has("extra_entrypoint_args") || svc.Has("custom_configs") || svc.Has("config") || svc.Get("unmanaged").Bool() {
 			return failure("lifecycle.unsupported", "core services cannot carry unqualified additional effects", "remove the unqualified service options")
 		}
@@ -114,6 +109,11 @@ const maxCoreServices = 128
 var delegatedFamilies = []string{"rgw", "ingress", "nfs", "nvmeof"}
 
 func serviceHosts(cluster api.Object, svc api.Value) ([]string, error) {
+	for _, host := range svc.Get("placement", "hosts").Items() {
+		if strings.ContainsAny(host.Text(), ":=") || host.Get("network").Text() != "" || host.Get("name").Text() != "" {
+			return nil, failure("lifecycle.unsupported", "native service "+cephcluster.NativeServiceName(svc)+" placement.hosts carries an unrealized network or daemon name", "use bare native hostnames or a label in spec.services placement.hosts")
+		}
+	}
 	names, issues := cephcluster.ResolveServicePlacement(cluster, svc)
 	if len(issues) != 0 {
 		return nil, failure("api.invariant", "native service placement could not be resolved", "correct the service placement")

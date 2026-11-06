@@ -175,8 +175,9 @@ def test_the_device_tree_requests_the_column_util_linux_draws_its_tree_in():
     assert [node["path"] for node in flat] == ["/dev/sda", "/dev/mapper/ceph--vg-osd--block--a"] and "children" not in flat[0]
 
 
+@pytest.mark.parametrize("prepare", [False, True])
 @pytest.mark.parametrize("damage", [None, "encryption", "tpm", "mapping", "token", "db-link", "foreign", "extra", "retained"])
-def test_completed_variant_proof_observes_native_crypto_and_auxiliary_identity(core_request, damage):
+def test_completed_variant_proof_observes_native_crypto_and_auxiliary_identity(core_request, monkeypatch, damage, prepare):
     variants(core_request)
     native, unused = fixtures.worker(core_request, {})
     native.markers.records["osd-device-intent.json"] = native.osd_device_scope()
@@ -214,15 +215,25 @@ def test_completed_variant_proof_observes_native_crypto_and_auxiliary_identity(c
             return util_linux(argv, disks)
         if argv[0] == "/usr/sbin/lvs":
             return {"report": [{"lv": rows}]}
+        if argv[:3] == ["/usr/sbin/wipefs", "--no-act", "--json"]:
+            return {"signatures": [{"type": "LVM2_member"}]}
         assert argv[:2] == ["/usr/sbin/cryptsetup", "luksDump"]
         return b"Tokens:\n  0: systemd-tpm2\nDigests:\n" if damage != "token" else b"Tokens:\nDigests:\n"
 
     native.command = command
+    aliases = {"/dev/disk/by-id/virtio-" + d["serial"]: d["path"] for d in host["devices"]}
+    monkeypatch.setattr(ceph_native.os.path, "realpath", lambda value: aliases.get(value, value))
+    if prepare and damage != "retained":
+        native.markers.records[native.osd_identity_marker("/dev/vdb")] = {
+            "path": "/dev/vdb", "id": 0, "uuid": "6da65e47-8789-4a1c-88e8-3bbd195719a1", "lvUUID": "volume-block"}
+    action = native.osd_prepare if prepare else native.prove_completed_osd_variants
     if damage is None:
-        native.prove_completed_osd_variants()
+        result = action()
+        if prepare:
+            assert result == {"changed": False}
     else:
         with pytest.raises(ceph_native.Refusal):
-            native.prove_completed_osd_variants()
+            action()
     assert native.markers.writes == []
     assert all("--dump-master-key" not in argv and "--dump-volume-key" not in argv for argv in calls)
 

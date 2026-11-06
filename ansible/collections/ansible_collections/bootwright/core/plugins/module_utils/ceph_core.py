@@ -921,6 +921,8 @@ def apply_tunnel_cluster(request, bootstrap, transport, state, preparations):
     else:
         ceph_native.require(stages[bootstrap["name"]] == "complete"
                             and all(stages[host["name"]] == "prepared" for host in request["hosts"] if host != bootstrap), "partial-cluster")
+    if any(host.get("physical") for host in request["hosts"]):
+        device_identities(request, transport, concurrent=True)
     host_round(transport, request["hosts"], "devices")
     changed = False
     private = transport.bootstrap_material()
@@ -975,6 +977,7 @@ def device_identities(request, transport, *, concurrent=False):
     for host, value in zip(request["hosts"], values):
         ceph_native.require(isinstance(value, dict) and set(value) == {"devices"}, "device-identity")
         result.extend(ceph_host_runtime.rows(request, host["name"], value["devices"]))
+    ceph_host_runtime.distinct_devices(result)
     return result
 
 
@@ -1066,6 +1069,34 @@ def admit_selectors(request, operation, outputs, retirement, reading):
                         and request["action"] == "cluster" and not outputs, "request")
 
 
+def apply_native_cluster(request, bootstrap, transport, before):
+    changed = False
+    # Devices precede ownership; an existing native default path
+    # retains its original partial-cluster refusal.
+    ceph_native.require(not before["exists"], "partial-cluster")
+    devices = device_identities(request, transport) if any(host.get("physical") for host in request["hosts"]) else None
+    for host in request["hosts"]:
+        transport.call(host, "devices")
+    for host in request["hosts"]:
+        changed = transport.call(host, "claim")["changed"] or changed
+    private = transport.bootstrap_material()
+    for host in request["hosts"]:
+        authorization = {name: private[name] for name in ("clusterPublicKey", "registryJSON")}
+        changed = transport.call(host, "authorize", authorization)["changed"] or changed
+    ssh_material = {name: private[name] for name in ("clusterPrivateKey", "clusterPublicKey", "knownHosts")}
+    changed = transport.call(bootstrap, "bootstrap", ssh_material)["changed"] or changed
+    changed = transport.call(bootstrap, "enroll")["changed"] or changed
+    changed = transport.call(bootstrap, "license")["changed"] or changed
+    for host in request["hosts"]:
+        transport.call(host, "devices")
+    if devices is not None:
+        devices = device_identities(request, transport)
+        changed = transport.call(bootstrap, "services", devices=devices)["changed"] or changed
+    else:
+        changed = transport.call(bootstrap, "services")["changed"] or changed
+    return changed
+
+
 def execute(request, operation, request_digest, transport, outputs=None, *, now=time.monotonic, pause=time.sleep, connect=tls_certificate,
             retirement=None, reading=None):
     """Keep read-only observation distinct from any preparation or mutation; only an observation no operation records reads unrecorded."""
@@ -1118,24 +1149,7 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
                     if "stretch" in request:
                         changed = activate_stretch(request, request_digest, bootstrap, transport, now, pause) or changed
                 else:
-                    # Devices precede ownership; an existing native default path
-                    # retains its original partial-cluster refusal.
-                    ceph_native.require(not before["exists"], "partial-cluster")
-                    for host in request["hosts"]:
-                        transport.call(host, "devices")
-                    for host in request["hosts"]:
-                        changed = transport.call(host, "claim")["changed"] or changed
-                    private = transport.bootstrap_material()
-                    for host in request["hosts"]:
-                        authorization = {name: private[name] for name in ("clusterPublicKey", "registryJSON")}
-                        changed = transport.call(host, "authorize", authorization)["changed"] or changed
-                    ssh_material = {name: private[name] for name in ("clusterPrivateKey", "clusterPublicKey", "knownHosts")}
-                    changed = transport.call(bootstrap, "bootstrap", ssh_material)["changed"] or changed
-                    changed = transport.call(bootstrap, "enroll")["changed"] or changed
-                    changed = transport.call(bootstrap, "license")["changed"] or changed
-                    for host in request["hosts"]:
-                        transport.call(host, "devices")
-                    changed = transport.call(bootstrap, "services")["changed"] or changed
+                    changed = apply_native_cluster(request, bootstrap, transport, before) or changed
             elif request["action"] in ("pool", "policy", "rbd", "subvolume", "settings"):
                 changed = transport.call(bootstrap, request["action"])["changed"] or changed
             elif request["action"] == "filesystem":

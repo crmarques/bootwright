@@ -1080,7 +1080,7 @@ def route_cases(value):
 @contextlib.contextmanager
 def staged(directory, synthetic, uid, gid):
     """Retain the synthetic bytes outside the read-only mounted children."""
-    request = {"version": "ceph-core-v41", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
+    request = {"version": "ceph-core-v42", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
                "clusterSSHTransport": "verifiedTunnel", "clusterSSHUser": probe.USER,
                "hosts": [{"name": probe.HOST, "address": probe.ADDRESS, "port": probe.OUTER_PORT}]}
     known = ("[" + probe.ADDRESS + "]:" + str(probe.OUTER_PORT) + " " + synthetic["keys"]["outer"]["public"] + "\n").encode()
@@ -1278,6 +1278,21 @@ def rows(request, host, values):
     result = [row(value, request, host) for value in values]
     require([value["path"] for value in result] == [device["path"] for device in wanted[0]["devices"]], "device-identity")
     return result
+
+
+def distinct_devices(values):
+    """A shared physical disk never gains two hosts' OSD authorizations."""
+    wwns, serials = {}, {}
+    for value in values:
+        if "sizeBytes" not in value:
+            continue
+        host = value["host"]
+        wwn, serial = value["wwn"], (value["serial"], value["sizeBytes"])
+        require(not wwn or wwn not in wwns or wwns[wwn] == host, "device-identity")
+        require(serial not in serials or serials[serial] == host, "device-identity")
+        if wwn:
+            wwns[wwn] = host
+        serials[serial] = host
 
 
 def retained_devices(request, host, durable, image_id=None):

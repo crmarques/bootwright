@@ -18,7 +18,7 @@ import (
 )
 
 const ConsumerImplementation = "ceph-export-v1"
-const ConsumerVersion = "ceph-export-request-v3"
+const ConsumerVersion = "ceph-export-request-v4"
 const ConsumerEvidenceVersion = "ceph-export-evidence-v2"
 const ConsumerOutput = "external-details"
 
@@ -278,12 +278,9 @@ func (c ConsumerCapability) runExport(ctx context.Context, e lifecycle.Execution
 	if operation == "apply" {
 		deadline = 1200 * time.Second
 	}
-	refusals := adapterRefusals()
+	refusals := consumerRefusals()
 	if r.Gateway != nil {
 		refusals["gateway-dns"] = failure("lifecycle.unknown", "object gateway FQDN "+r.Gateway.FQDN+" does not resolve to its declared terminating addresses", "correct DNS resolution on the bootstrap host before continuing")
-	}
-	for _, reason := range []string{"export-foreign-principal", "export-key-type", "export-prerequisite", "export-identity"} {
-		refusals[reason] = failure("lifecycle.unknown", "Ceph consumer refused: "+reason, "inspect the consumer prerequisites and its owned identities before continuing")
 	}
 	result, err := c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: ConsumerImplementation, Operation: operation, Variable: "bootwright_ceph_export", Canonical: canonical, Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Controller}, Materials: files, Outputs: []lifecycle.OutputFile{{Name: ConsumerOutput, Variable: "externalDetails"}}, Refusals: refusals, NativeErrors: true, Deadline: deadline}))
 	return result, r, err

@@ -59,14 +59,23 @@ func (a *admission) nfsExportIntrinsic() {
 	native = a.withoutRefusedExportMembers(native)
 	a.nativeShape(native, api.StorageNFSExportNativeSchema(), "$.spec.native", a.partial)
 	a.nfsExportPaths(native)
+	if native.Has("protocols") && native.Get("protocols").Len() == 0 {
+		a.issue("api.invariant", "$.spec.native.protocols", "an explicit protocols list must contain NFSv4", nfsExportV4Remedy)
+	}
+	if native.Has("transports") && native.Get("transports").Len() == 0 {
+		a.issue("api.invariant", "$.spec.native.transports", "an explicit transports list must contain TCP", "set spec.native.transports: [TCP]")
+	}
 	if slices.ContainsFunc(native.Get("protocols").Items(), func(item api.Value) bool { return item.Type() == api.Integer && item.Text() == "3" }) {
 		a.issue("api.invariant", "$.spec.native.protocols", nfsExportV3, nfsExportV4Remedy)
 	}
 	if contains(native.Get("transports"), "UDP") {
 		a.issue("api.invariant", "$.spec.native.transports", "UDP is an incompatible transport for NFSv4 exports", "set spec.native.transports: [TCP]")
 	}
+	if native.Has("sectype") && native.Get("sectype").Len() == 0 {
+		a.issue("api.invariant", "$.spec.native.sectype", "an explicit security type list must contain sys", "set spec.native.sectype: [sys]")
+	}
 	if slices.ContainsFunc(native.Get("sectype").Strings(), func(token string) bool { return strings.HasPrefix(token, "krb5") }) {
-		a.issue("api.invariant", "$.spec.native.sectype", "Kerberos is not supported by Bootwright yet", "set spec.native.sectype: [sys] or omit spec.native.sectype")
+		a.issue("api.invariant", "$.spec.native.sectype", "Kerberos is not supported by Bootwright yet", "set spec.native.sectype: [sys]")
 	}
 	a.nfsExportFSAL(native)
 	a.nfsExportClients(native.Get("clients"))

@@ -500,3 +500,59 @@ def test_service_readiness_retry_clips_and_destroy_never_mutates(nvme_unit_reque
     with pytest.raises(ceph_native.Refusal, match="client-quiescence-unqualified"):
         ceph_core.execute_unit(nvme_unit_request, "destroy", "d" * 64, Transport(), nvme_unit_request["hosts"][0], now=lambda: clock[0], pause=pause)
     assert calls == [840]
+
+
+@pytest.mark.parametrize("observe", [False, True])
+def test_foreign_subsystem_refuses_before_shape_or_effect(world, observe):
+    native, state, unused_service, unused_image, unused_gateways = world
+    state["subsystems"] = [{"nqn": native.request["nvmeof"]["nqn"], "serial_number": "foreign"}]
+    before = copy.deepcopy(native.markers.records)
+    with pytest.raises(ceph_native.Refusal, match="^nvmeof-foreign$"):
+        if observe:
+            native.observe_resource({}, True)
+        else:
+            native.nvmeof()
+    assert not state["effects"] and native.markers.records == before
+
+
+@pytest.mark.parametrize("missing", [None, *nvmeof.TLS_FIELDS])
+def test_auth_service_splices_all_five_leaves_only_into_apply_stream(nvme_unit_request, monkeypatch, missing):
+    import json
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_units as units
+    unit = nvme_unit_request["service"]
+    unit["documents"][0]["spec"] = {"pool": "config", "group": "group", "port": 5500, "enable_auth": True}
+    unit["bindings"] = [{"serviceRef": "nvmeof.config.group", "path": "/spec/" + field, "secretRef": "tls"} for field in sorted(nvmeof.TLS_FIELDS)]
+    native = units.UnitWorker(nvme_unit_request, "node-1", markers=fixtures.Markers())
+    certificate = "-----BEGIN CERTIFICATE-----\nc3ludGhldGlj\n-----END CERTIFICATE-----\n"
+    key = "-----BEGIN PRIVATE KEY-----\nc3ludGhldGlj\n-----END PRIVATE KEY-----\n"
+    material = {"nvmeof_" + field: key if field.endswith("key") else certificate for field in nvmeof.TLS_FIELDS}
+    if missing:
+        del material["nvmeof_" + missing]
+        with pytest.raises(ceph_native.Refusal, match="^material$"):
+            units.material(nvme_unit_request, "unit", material)
+        assert not native.markers.writes
+        return
+    native.bound = units.material(nvme_unit_request, "unit", material)
+    native.owned_pool = lambda pool: None
+    monkeypatch.setattr(nvmeof, "qualify_commands", lambda worker: None)
+    native.manager_modules = lambda: ["dashboard"]
+    native.image_settings = lambda: (None, {native.image_key("nvmeof"): "image"})
+    native.normalized_services = lambda groups, **options: groups
+    native.recovery_scope = lambda: {"owner": nvme_unit_request["owner"], "fsid": nvme_unit_request["fsid"]}
+    stored, streams = {}, []
+    native.ceph = lambda *args: {"fsid": nvme_unit_request["fsid"]}
+    native.unit_specs = lambda: copy.deepcopy(stored)
+    native.manager_retry = lambda call, *args: call(*args)
+
+    def apply(call, *args, **options):
+        assert args == ("orch", "apply", "-i", "-")
+        streams.append(options["data"])
+        stored["nvmeof.config.group"] = json.loads(options["data"])
+
+    native.manager_declare = apply
+    assert native.unit() == {"changed": True}
+    assert native.unit() == {"changed": False} and len(streams) == 1
+    sent = json.loads(streams[0])["spec"]
+    assert sent["enable_auth"] is True
+    assert all(sent[field] == material["nvmeof_" + field] for field in nvmeof.TLS_FIELDS)
+    assert "c3ludGhldGlj" not in repr(native.markers.records)

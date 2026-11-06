@@ -420,7 +420,7 @@ func TestPartialDefaultsCheckOnlyProvableContradictions(t *testing.T) {
 	}
 	pool := object(api.CephPool, "partial", m("compression", m("minBlobSize", 20, "maxBlobSize", 10)))
 	requireIssue(t, ValidatePartial(pool, api.Catalog{}), "$.spec.compression")
-	pool = pool.WithSpec(m("compression", m("minBlobSize", 20), "replicated", m("size", 1)))
+	pool = pool.WithSpec(m("compression", m("minBlobSize", 20), "replicated", m("size", 2)))
 	if issues := ValidatePartial(pool, api.Catalog{}); len(issues) != 0 {
 		t.Fatal("partial defaults required a missing field or assumed inherited protection", issues)
 	}

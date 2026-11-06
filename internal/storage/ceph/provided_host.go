@@ -52,7 +52,7 @@ func bindProvidedHost(r *Request, c api.Catalog, m api.Object, node api.Value, t
 			return err
 		}
 		if address != ssh.Address {
-			return failure("lifecycle.unsupported", "separate orchestration and fleet addresses are not yet modeled", "use the same declared management address until separate host enrollment addresses are implemented")
+			return failure("lifecycle.unsupported", "spec.cephadm.addressRef resolves separately from provided Machine "+m.Name()+" fleet SSH", "select an addressRef resolving to the Machine access.ssh.addressRef address; separate orchestration addresses are not implemented")
 		}
 	}
 	r.Hosts = append(r.Hosts, Host{Name: name, Machine: m.Name(), Address: ssh.Address, User: ssh.User, Port: ssh.Port, Devices: []Device{}, Labels: node.Get("labels").Strings(),

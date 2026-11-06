@@ -253,8 +253,8 @@ func TestNFSExportFrozenDefaultsAndBindingFSName(t *testing.T) {
 			t.Fatalf("frozen default %v = %#v", want.path, native.Get(want.path...))
 		}
 	}
-	if native.Has("sectype") {
-		t.Fatal("normalization froze sectype")
+	if !native.Get("sectype").Equal(api.StringList("sys")) {
+		t.Fatal("normalization did not freeze sys security")
 	}
 	if again, _ := Normalize(export, catalog); !again.Spec().Equal(export.Spec()) {
 		t.Fatal("export normalization is not idempotent")
@@ -293,7 +293,7 @@ func TestNFSExportFrozenDefaultsAndBindingFSName(t *testing.T) {
 func TestNFSExportRefusesKerberos(t *testing.T) {
 	catalog := nfsExportCatalog(t)
 	export, changed := nfsExportWith(t, catalog, nativeEdit(api.StringList("krb5p"), "sectype"))
-	exactIssue(t, Validate(export, changed), "api.invariant", "$.spec.native.sectype", "Kerberos is not supported by Bootwright yet", "set spec.native.sectype: [sys] or omit spec.native.sectype")
+	exactIssue(t, Validate(export, changed), "api.invariant", "$.spec.native.sectype", "Kerberos is not supported by Bootwright yet", "set spec.native.sectype: [sys]")
 	export, changed = nfsExportWith(t, catalog, nativeEdit(api.StringList("sys"), "sectype"))
 	requireAdmits(t, export, changed)
 	export, changed = nfsExportWith(t, catalog, nativeEdit(api.StringList("none"), "sectype"))
@@ -351,4 +351,19 @@ func TestNFSExportOfAnObjectUserRefusesASecondGateway(t *testing.T) {
 	foreign := object(api.CephCluster, "other", find(t, catalog, api.CephCluster, "storage").Spec())
 	catalog = replace(replace(catalog, foreign), secondGateway("clusterRef", "other"))
 	requireAdmits(t, export, catalog)
+}
+
+func TestNFSExportExplicitEmptyProtocolAndTransportRefuse(t *testing.T) {
+	for _, member := range []string{"protocols", "transports", "sectype"} {
+		t.Run(member, func(t *testing.T) {
+			catalog := nfsExportCatalog(t)
+			export, changed := nfsExportWith(t, catalog, nativeEdit(api.ListValue(), member))
+			for _, issues := range [][]api.Issue{Validate(export, changed), ValidatePartial(export, changed)} {
+				found := issuesAt(issues, "$.spec.native."+member)
+				if len(found) != 1 || found[0].Code != "api.invariant" || found[0].Remediation == "" {
+					t.Fatalf("empty %s accepted: %#v", member, issues)
+				}
+			}
+		})
+	}
 }

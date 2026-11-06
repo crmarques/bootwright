@@ -448,6 +448,11 @@ func (c Capability) prepare(ctx context.Context, e lifecycle.Execution) (Request
 		return Request{}, err
 	}
 	r.Image = image
+	if r.Action == "cluster" {
+		if err := proveDistinctHostDevices(e, r); err != nil {
+			return Request{}, err
+		}
+	}
 	if r.Auxiliary, err = ProvedAuxiliaryImages(proofs, r.Cluster, r.Auxiliary); err != nil {
 		return Request{}, err
 	}
@@ -515,7 +520,7 @@ func (c Capability) mutate(ctx context.Context, e lifecycle.Execution, operation
 	if err != nil {
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
-	effect, err := EvaluateEvidence(result.Evidence, r, e.Block.RequestDigest, operation == "destroy")
+	effect, err := evaluateExecutionEvidence(result.Evidence, r, e, operation == "destroy")
 	if err != nil || effect != reconciliation.EffectCompleted {
 		lifecycle.ClearProduced(result.Produced)
 		return lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}, failure("lifecycle.unknown", "Ceph did not prove the requested postcondition", "")
@@ -556,7 +561,7 @@ func (c Capability) observe(ctx context.Context, e lifecycle.Execution, removal 
 	if err != nil {
 		return unknown, err
 	}
-	effect, err := EvaluateEvidence(result.Evidence, r, e.Block.RequestDigest, removal)
+	effect, err := evaluateExecutionEvidence(result.Evidence, r, e, removal)
 	if err != nil {
 		lifecycle.ClearProduced(result.Produced)
 		return unknown, err

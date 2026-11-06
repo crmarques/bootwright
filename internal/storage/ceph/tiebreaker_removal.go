@@ -64,7 +64,7 @@ func decodeTiebreakerEvidence(data []byte, r Request, host Host, digest string) 
 }
 
 func tiebreakerForeign(h Host, fsid string) error {
-	return failure("lifecycle.unknown", "the provided stretch tiebreaker Machine/"+h.Machine+" does not prove that it holds only this cluster's footprint, so this attempt changed nothing on it: its owner marker under /var/lib/bootwright/ceph/"+fsid+
+	return failure("lifecycle.unknown", "the provided stretch tiebreaker Machine/"+h.Machine+" does not prove that it holds only this cluster's footprint; earlier owned removal steps may already have completed: its owner marker under /var/lib/bootwright/ceph/"+fsid+
 		" names another cluster, or is missing while that directory holds a record or the host holds this FSID's layout, its cluster-key line or its sshd drop-in, or it holds another FSID's directory under /var/lib/ceph, a daemon other than its own MON and crash collector, or a cluster-key line or registry credential other than the ones this cluster recorded",
 		"inspect Machine/"+h.Machine+" as the native error names; remove what another tool placed there outside Bootwright, then destroy again; Bootwright never removes what it cannot prove its own, and a tiebreaker decommissioned or reinstalled since the cluster was created has no exit yet (B938)")
 }

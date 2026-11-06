@@ -95,7 +95,7 @@ BUCKET_PHASES = frozenset(BUCKET_APPLY_PHASES)
 BUCKET_MEMBERS = frozenset(("backend", "certificateRef", "endpoint", "gateway", "name", "owner", "policy", "port", "realm", "zone", "zoneGroup"))
 MAX_BUCKETS = 65536
 MAX_POLICY = 65536
-MAX_BUCKET_NAME = 44
+MAX_BUCKET_NAME = 63
 # encoding/json escapes these beyond the quote, backslash and control characters that json.dumps escapes too.
 GO_ESCAPES = {"<": "\\u003c", ">": "\\u003e", "&": "\\u0026", "\u2028": "\\u2028", "\u2029": "\\u2029"}
 MAX_RESPONSE = MAX_POLICY + 1

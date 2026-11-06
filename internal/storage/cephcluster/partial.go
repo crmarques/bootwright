@@ -37,6 +37,9 @@ func (a *admission) intrinsic() {
 	}
 	switch a.object.Kind() {
 	case api.CephPlacementPolicy, api.CephPool:
+		if spec.Get("replicated", "size").Equal(api.IntegerValue("1")) || spec.Get("replicated", "minSize").Equal(api.IntegerValue("1")) {
+			a.invalid("$.spec.replicated", "non-zero replica size and minSize must be at least two", "set spec.replicated.size and minSize to at least 2, or omit them to inherit defaults")
+		}
 		a.orderedPositive(spec.Get("replicated"), "size", "minSize", "$.spec.replicated")
 		if spec.Has("placementPolicyRef") && (positive(spec.Get("replicated", "size")) || positive(spec.Get("replicated", "minSize"))) {
 			a.invalid("$.spec.replicated", "placement policy owns non-zero replicated protection values", "remove non-zero spec.replicated values or remove spec.placementPolicyRef to author protection here")

@@ -2981,6 +2981,8 @@ spec:
     protocols:
       - 4
     pseudo: /acceptance
+    sectype:
+      - sys
     security_label: true
     squash: no_root_squash
     transports:

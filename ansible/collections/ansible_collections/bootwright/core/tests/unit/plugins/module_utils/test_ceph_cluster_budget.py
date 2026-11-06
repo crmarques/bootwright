@@ -345,13 +345,14 @@ def test_osd_preparation_round_is_one_call_per_physical_host_whatever_its_disks(
     physical_disks(core_request, disks)
     ceph_native.validate(core_request)
     hosts = core_request["hosts"]
-    counts, lock, submitted = Counter(), threading.Lock(), []
+    counts, lock, submitted, calls = Counter(), threading.Lock(), [], []
     barrier = threading.Barrier(count)
 
     class Transport(core.ReadinessTransport):
         def call(self, host, phase, private=None, **kwargs):
             with lock:
                 counts[phase] += 1
+                calls.append((host["name"], phase))
             if phase == "osd_prepare":
                 barrier.wait(timeout=5)
             if phase == "prerequisites":
@@ -377,7 +378,12 @@ def test_osd_preparation_round_is_one_call_per_physical_host_whatever_its_disks(
     transport = Transport(core_request, clock, ready_after=1)
     monkeypatch.setattr(ceph_native, "supported_transport", lambda request: True)
     ceph_core.execute(core_request, "apply", "d" * 64, transport, {"dashboard": str(tmp_path / "dashboard")}, now=clock.now, pause=clock.pause)
-    assert counts["osd_prepare"] == counts["host_devices"] == count and counts["devices"] == 2 * count and counts["services"] == 1
+    assert counts["osd_prepare"] == count and counts["host_devices"] == 2 * count
+    assert counts["devices"] == 2 * count and counts["services"] == 1
+    assert Counter(host for host, phase in calls if phase == "osd_prepare") == Counter(host["name"] for host in hosts)
+    identity_reads = [index for index, (unused_host, phase) in enumerate(calls) if phase == "host_devices"]
+    assert max(identity_reads[:count]) < next(index for index, (unused_host, phase) in enumerate(calls) if phase == "devices")
+    assert max(identity_reads) < next(index for index, (unused_host, phase) in enumerate(calls) if phase == "osd_prepare")
     assert 10 + 5 + counts["enroll"] + counts["services"] == 16 + count
     assert [(row["host"], row["path"]) for row in submitted] == [(host["name"], device["path"]) for host in hosts for device in host["devices"]]
     assert len(submitted) == count * disks

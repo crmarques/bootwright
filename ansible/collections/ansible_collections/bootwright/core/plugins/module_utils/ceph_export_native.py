@@ -21,10 +21,14 @@ import urllib.parse
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_resources, ceph_export_dns
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import Custody, Refusal, canonical, require, unique_object
 
-VERSION = "ceph-export-request-v3"
+VERSION = "ceph-export-request-v4"
 EVIDENCE_VERSION = "ceph-export-evidence-v2"
 PHASES = ("export_apply", "export_observe")
-REASONS = ("gateway-dns", "export-foreign-principal", "export-key-type", "export-prerequisite", "export-identity")
+REASONS = ("gateway-dns", "export-foreign-principal", "export-key-type", "export-key-type-aes", "export-key-type-aes256k",
+           "export-prerequisite", "export-identity", "export-prerequisite-pool-identity", "export-prerequisite-rbd-application",
+           "export-prerequisite-filesystem", "export-prerequisite-csi-group", "export-prerequisite-prometheus",
+           "export-prerequisite-monitor-leader", "export-prerequisite-monitor-v2", "export-prerequisite-monitoring-address",
+           "export-prerequisite-realm", "export-prerequisite-zonegroup", "export-prerequisite-zone", "export-prerequisite-gateway-query")
 RGW_CAPS = {"buckets": "*", "users": "*", "usage": "read", "metadata": "read", "zone": "read", "info": "read"}
 
 
@@ -52,7 +56,7 @@ def validate(request):
     require(isinstance(request, dict) and set(request) in (required, required | {"gateway"}))
     require(request["version"] == VERSION and request["keyType"] in ("aes", "aes256k"))
     require(all(ceph_native.named(request[key]) for key in ("cluster", "controller", "filesystem", "name", "pool", "defaultDataPool")))
-    require(len(request["name"]) <= 51 and isinstance(request["machines"], list) and request["machines"] == sorted(set(request["machines"])))
+    require(len(request["name"]) <= 63 and isinstance(request["machines"], list) and request["machines"] == sorted(set(request["machines"])))
     require(set(request["principals"]) == {"health", "rbd-node", "rbd-prov", "fs-node", "fs-prov"})
     require(all(isinstance(caps, dict) and caps and set(caps) <= {"mon", "mgr", "osd", "mds"}
                 and all(isinstance(cap, str) and 0 < len(cap) < 2048 and "\n" not in cap and '"' not in cap for cap in caps.values())
@@ -134,7 +138,7 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
                 "--rgw-realm", gateway["realm"], "--rgw-zonegroup", gateway["zoneGroup"], "--rgw-zone", gateway["zone"]]
         with self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext():
             code, output = self.run(argv, timeout=60)
-        require(code == 0, "export-prerequisite")
+        require(code == 0, "export-prerequisite-gateway-query")
         try:
             return json.loads(output, object_pairs_hook=unique_object)
         except (ValueError, UnicodeError):
@@ -144,49 +148,51 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
         require(self.markers.owned() and self.ceph("fsid") == {"fsid": self.request["fsid"]}, "export-identity")
         self.verify_tool()
         pool = self.export["pool"]
-        require(self.markers.read("pool-" + pool + ".json") is not None, "export-prerequisite")
+        require(self.markers.read("pool-" + pool + ".json") is not None, "export-prerequisite-pool-identity")
         pool_id = self.markers.read("pool-id-" + pool + ".json")
-        require(isinstance(pool_id, dict) and set(pool_id) == {"id"}, "export-prerequisite")
+        require(isinstance(pool_id, dict) and set(pool_id) == {"id"}, "export-prerequisite-pool-identity")
         pools = self.ceph("osd", "pool", "ls", "detail")
         selected = [entry for entry in pools if entry.get("pool_name") == pool]
-        require(len(selected) == 1 and self.pool_id(selected[0]) == pool_id["id"]
-                and "rbd" in selected[0].get("application_metadata", {}), "export-prerequisite")
+        require(len(selected) == 1 and self.pool_id(selected[0]) == pool_id["id"], "export-prerequisite-pool-identity")
+        require("rbd" in selected[0].get("application_metadata", {}), "export-prerequisite-rbd-application")
         filesystem = self.export["filesystem"]
-        require(self.markers.read("filesystem-" + filesystem + ".json") is not None, "export-prerequisite")
+        require(self.markers.read("filesystem-" + filesystem + ".json") is not None, "export-prerequisite-filesystem")
         filesystems = self.fs_dump()["filesystems"]
         selected_fs = [entry for entry in filesystems if entry["mdsmap"]["fs_name"] == filesystem]
-        require(len(selected_fs) == 1 and self.markers.read("filesystem-id." + filesystem + ".json") == {"id": selected_fs[0]["id"]}, "export-prerequisite")
+        require(len(selected_fs) == 1
+                and self.markers.read("filesystem-id." + filesystem + ".json") == {"id": selected_fs[0]["id"]}, "export-prerequisite-filesystem")
         groups = self.manager_retry(self.ceph, "fs", "subvolumegroup", "ls", filesystem)
-        require(isinstance(groups, list) and any(group.get("name") == "csi" for group in groups), "export-prerequisite")
+        require(isinstance(groups, list) and any(group.get("name") == "csi" for group in groups), "export-prerequisite-csi-group")
         monmap = self.ceph("mon", "dump")
         allowed = monmap.get("auth_allowed_ciphers")
         require(isinstance(allowed, list) and bool(allowed), "export-key-type")
         require(all(isinstance(entry, dict) and set(entry) == {"name", "value"}
                     and (entry["name"], entry["value"]) in (("aes", 1), ("aes256k", 2)) for entry in allowed), "export-key-type")
-        require(any(entry["name"] == self.export["keyType"] for entry in allowed), "export-key-type")
+        require(any(entry["name"] == self.export["keyType"] for entry in allowed), "export-key-type-" + allowed[0]["name"])
         services = self.ceph("mgr", "services")
         endpoint = services.get("prometheus")
-        require(isinstance(endpoint, str) and bool(endpoint), "export-prerequisite")
+        require(isinstance(endpoint, str) and bool(endpoint), "export-prerequisite-prometheus")
         parsed = urllib.parse.urlsplit(endpoint)
-        require(parsed.scheme in ("http", "https") and parsed.hostname and parsed.port, "export-prerequisite")
+        require(parsed.scheme in ("http", "https") and parsed.hostname and parsed.port, "export-prerequisite-prometheus")
         quorum = self.ceph("quorum_status")
         leader = quorum.get("quorum_leader_name")
-        require(leader in self.export["monitors"], "export-prerequisite")
+        require(leader in self.export["monitors"], "export-prerequisite-monitor-leader")
         address = self.export["monitors"][leader]
         monitors = quorum.get("monmap", {}).get("mons", [])
         selected = [mon for mon in monitors if mon.get("name") == leader]
-        require(len(selected) == 1, "export-prerequisite")
+        require(len(selected) == 1, "export-prerequisite-monitor-leader")
         native = selected[0].get("public_addrs", {}).get("addrvec", [])
         require(any(entry.get("type") == "v2" and entry.get("addr", "").split("/")[0] ==
-                    ("[" + address + "]" if ":" in address else address) + ":3300" for entry in native), "export-prerequisite")
-        require(parsed.hostname in self.export["monitoringHosts"] and parsed.port == self.export["monitoringPort"], "export-prerequisite")
+                    ("[" + address + "]" if ":" in address else address) + ":3300" for entry in native), "export-prerequisite-monitor-v2")
+        require(parsed.hostname in self.export["monitoringHosts"] and parsed.port == self.export["monitoringPort"], "export-prerequisite-monitoring-address")
         gateway = self.export.get("gateway")
         if gateway:
             ceph_export_dns.prove_gateway(gateway["fqdn"], gateway["addresses"], runner=self.run)
             for entity, key in (("realm", "realm"), ("zonegroup", "zoneGroup"), ("zone", "zone")):
                 result = self.rgw(entity, "get")
                 require(isinstance(result, dict) and result.get("name") == gateway[key]
-                        and self.markers.read("gateway-" + gateway["name"] + "-" + entity + "-id.json") == {"id": result.get("id")}, "export-prerequisite")
+                        and self.markers.read("gateway-" + gateway["name"] + "-" + entity + "-id.json") == {"id": result.get("id")},
+                        "export-prerequisite-" + entity)
         return {"leader": leader, "address": address, "monitors": leader + "=" + ("[" + address + "]" if ":" in address else address) + ":3300",
                 "monitoringEndpoint": ",".join(self.export["monitoringHosts"]), "monitoringPort": str(self.export["monitoringPort"])}
 

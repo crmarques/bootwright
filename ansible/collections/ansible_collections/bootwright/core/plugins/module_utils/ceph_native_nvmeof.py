@@ -213,12 +213,13 @@ class NVMeOFWorker(ceph_native_resources.ResourceWorker):
         return {"owner": self.request["owner"], "fsid": self.request["fsid"], "request": self.request["nvmeof"],
                 "identity": self.nvme_identity(), "images": self.prove_nvme_images(), "gateways": self.prove_nvme_gateways()}
 
-    def nvme_snapshot(self, scope):
+    def nvme_snapshot(self, scope, *, owned=True):
         frozen, identity = scope["request"], scope["identity"]
         unused, subsystems = self.nvme_rows("subsystem", "subsystems")
         require(len(subsystems) <= 1, "nvmeof-identity")
         if not subsystems:
             return None
+        require(owned, "nvmeof-foreign")
         subsystem = subsystems[0]
         require(subsystem.get("nqn") == frozen["nqn"] and subsystem.get("serial_number") == identity["serial"]
                 and subsystem.get("enable_ha") is True and subsystem.get("allow_any_host") is False
@@ -271,8 +272,7 @@ class NVMeOFWorker(ceph_native_resources.ResourceWorker):
         attempt, complete = self.markers.read(attempt_name), self.markers.read(complete_name)
         require(attempt is None or attempt == scope, "ownership")
         require(complete is None or complete == scope and attempt == scope, "ownership")
-        snapshot = self.nvme_snapshot(scope)
-        require(snapshot is None or attempt == scope, "nvmeof-foreign")
+        snapshot = self.nvme_snapshot(scope, owned=attempt == scope)
         if complete is not None:
             require(self.nvme_complete(scope, snapshot), "nvmeof-identity")
             return {"changed": False}
@@ -354,8 +354,7 @@ class NVMeOFWorker(ceph_native_resources.ResourceWorker):
         attempt, complete = self.markers.read(attempt_name), self.markers.read(complete_name)
         require(attempt is None or attempt == scope, "ownership")
         require(complete is None or complete == scope and attempt == scope, "ownership")
-        snapshot = self.nvme_snapshot(scope)
-        require(snapshot is None or attempt == scope, "nvmeof-foreign")
+        snapshot = self.nvme_snapshot(scope, owned=attempt == scope)
         require(complete is None or self.nvme_complete(scope, snapshot), "nvmeof-identity")
         evidence["owned"], evidence["exists"] = attempt is not None, snapshot is not None
         evidence["resource"] = {"id": scope["identity"]["serial"] if snapshot is not None else "", "path": ""}

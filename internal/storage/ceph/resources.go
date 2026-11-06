@@ -38,7 +38,10 @@ func policyRequest(c api.Catalog, policy api.Object, contextName string) (Reques
 	if err != nil {
 		return Request{}, err
 	}
-	defaultSize, _ := cephcluster.DefaultReplicas(cluster)
+	defaultSize, defaultMinimum := cephcluster.DefaultReplicas(cluster)
+	if size, minimum := positiveOr(s.Get("replicated", "size"), defaultSize), positiveOr(s.Get("replicated", "minSize"), defaultMinimum); size < 2 || minimum < 2 || minimum > size {
+		return Request{}, failure("api.invariant", "placement policy spec.replicated requires at least two replicas and minSize between two and size", "set spec.replicated.size and minSize to at least 2, with minSize no greater than size")
+	}
 	r.Action = "policy"
 	r.Policy = &Policy{DeviceClass: s.Get("crushDeviceClass").Text(), FailureDomain: "host", Name: policy.Name(), Root: "default", Rule: rule, Size: int(positiveOr(s.Get("replicated", "size"), defaultSize))}
 	return r, nil
@@ -216,7 +219,8 @@ func placementOf(c api.Catalog, pool api.Object) (rule, class string, width, pgs
 		}
 	}
 	if width == 0 {
-		width = 3
+		cluster, _ := c.Find(api.CephCluster, s.Get("clusterRef").Text())
+		width, _ = cephcluster.DefaultReplicas(cluster)
 	}
 	return rule, class, width, pgs, true
 }

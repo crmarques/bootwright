@@ -34,7 +34,7 @@ EXPORT_USER = {"gateway": "objects", "name": "app-writer", "realm": "objects", "
 
 def native():
     return {"access_type": "RW", "clients": [{"access_type": "RW", "addresses": ["198.51.100.0/24"], "squash": "root_squash"}],
-            "fsal": {"name": "RGW", "user_id": "app-writer"}, "path": "/", "protocols": [4], "pseudo": "/buckets", "security_label": True,
+            "fsal": {"name": "RGW", "user_id": "app-writer"}, "path": "/", "protocols": [4], "pseudo": "/buckets", "security_label": True, "sectype": ["sys"],
             "squash": "root_squash", "transports": ["TCP"]}
 
 

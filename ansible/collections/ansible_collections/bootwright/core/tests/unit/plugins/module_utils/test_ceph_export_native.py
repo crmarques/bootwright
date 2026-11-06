@@ -275,7 +275,9 @@ def test_missing_or_foreign_prerequisites_refuse_before_writes(monkeypatch, faul
         responses[("quorum_status",)]["quorum_leader_name"] = "foreign"
     else:
         responses[("mgr", "services")] = {"prometheus": "http://192.0.2.99:9283/"}
-    with pytest.raises(ceph_native.Refusal, match="export-prerequisite"):
+    reasons = {"pool-incarnation": "pool-identity", "missing-csi": "csi-group", "missing-monitoring": "prometheus",
+               "foreign-monitor": "monitor-leader", "foreign-manager": "monitoring-address"}
+    with pytest.raises(ceph_native.Refusal, match="^export-prerequisite-" + reasons[fault] + "$"):
         native.prerequisites()
     assert not native.markers.writes
 
@@ -347,3 +349,25 @@ def test_failed_rgw_create_retains_no_rgw_material(monkeypatch):
         native.execute(True, {})
     assert not any("export-rgw" in key for key in native.retained)
     assert "export-consumer-complete.json" not in native.markers.records
+
+
+@pytest.mark.parametrize("length", [51, 52, 63, 64])
+def test_consumer_preserves_the_one_name_bound(length):
+    value = request()
+    value["name"] = "c" * length
+    value["principals"] = export.caps_for(value)
+    if length == 64:
+        with pytest.raises(ceph_native.Refusal):
+            export.validate(value)
+    else:
+        assert export.validate(value)["name"] == "c" * length
+
+
+@pytest.mark.parametrize("allowed", ["aes", "aes256k"])
+def test_disallowed_key_names_the_proved_allowed_type(monkeypatch, allowed):
+    native, responses = prerequisite_worker(monkeypatch)
+    native.export["keyType"] = "aes256k" if allowed == "aes" else "aes"
+    responses[("mon", "dump")] = {"auth_allowed_ciphers": [{"name": allowed, "value": 1 if allowed == "aes" else 2}]}
+    with pytest.raises(ceph_native.Refusal, match="^export-key-type-" + allowed + "$"):
+        native.prerequisites()
+    assert not native.markers.writes

@@ -145,25 +145,8 @@ entry. The enrolling stage continues enrollment and services while every other
 host has no daemons (`ceph_core.py` `apply_tunnel_cluster`; `ceph_native.py`
 `preparation_state`); once a non-bootstrap host carries a daemon, a cluster
 that is not ready refuses `partial-cluster` (parked B659).
-Candidate daemon inventory uses bounded direct filesystem, systemd and Podman
-inspection instead of `cephadm ls`, whose inspected logging initialization can
-create shared native files. It holds and re-proves protected directory and
-metadata bindings, checks the exact original FSID, unit and immutable image,
-and projects only existing public daemon fields. The admitted daemon
-directory types are those of the daemon-type table below: MON, MGR, OSD, MDS
-and ceph-exporter, and the delegated types, crash among them. Beside the daemon
-directories, the cluster directory may hold only cephadm's cache binary, its
-`config`, `crash` and `removed` directories and the root-owned `selinux`
-directory it makes for OSD and ceph-volume containers on an SELinux host. A
-daemon of the exact FSID that cephadm has not yet written unit files for, whose
-systemd instance is not yet installed, or whose removed-on-exit container does
-not exist is reported not running rather than refused, and while its forking
-unit is still starting or stopping its container may run or not. Foreign layouts,
-replacement paths, contradictory state, a container without proved unit files
-and failed reads refuse. RPM verification disables
-verification scripts. These source and boundary proofs do not establish the
-complete native touch closure or qualify actual guest/runtime observations;
-that evidence remains [B79](milestones/m2.md#b79).
+Candidate daemon inventory follows the [host directory ownership](#host-directory-ownership)
+proofs; native runtime qualification remains [B79](milestones/m2.md#b79).
 
 These are approved target requirements. Admission uses the
 verifiedTunnel path and authored artifact selection of the [storage API](api/ceph.md): the image digest is
@@ -306,12 +289,8 @@ admitted only when their
 `service_name` equals their type, that service is listed and their host is
 among its hosts; like the other delegated daemons they are never counted
 toward readiness or compared with the Ceph image. `ceph-exporter` keeps its
-row: it runs the Ceph image on any frozen request host. In the host layout, a
-listed monitoring singleton's daemon directory is admitted on a host of its
-entry and, as cephadm makes it, may be owned by the user of its own image; it
-is still a directory that is not a link and that neither group nor others may
-write, re-proved unchanged after use. Its `unit.meta` and `unit.image` keep the
-root-or-Ceph-user owner rule, and no other daemon type gains this.
+row: it runs the Ceph image on any frozen request host. Listed auxiliary singletons’ host directories follow the
+[image-user ownership rules](#host-directory-ownership).
 
 The `rbd-mirror` service runs in its own service-unit block. The core request
 lists it in `delegated` by its singleton service name `rbd-mirror` with its
@@ -686,6 +665,40 @@ that Bootwright applies on every host through its crash unit (above), so an
 authored one would be its second owner (D160, OD25). Tracing (`jaeger-*`, `elasticsearch`),
 `node-proxy`, `agent` and `container` are not realized.
 
+## Host directory ownership
+
+Candidate daemon inventory uses bounded direct filesystem, systemd and Podman
+inspection instead of `cephadm ls`, whose inspected logging initialization can
+create shared native files. It holds and re-proves protected directory and
+metadata bindings, checks the exact original FSID, unit and immutable image,
+and projects only existing public daemon fields. The admitted daemon
+directory types follow the [daemon-type table](#service-identity-and-references): MON, MGR, OSD, MDS
+and ceph-exporter, and the delegated types, crash among them. Beside the daemon
+directories, the cluster directory may hold only cephadm's cache binary, its
+`config`, `crash` and `removed` directories and the root-owned `selinux`
+directory it makes for OSD and ceph-volume containers on an SELinux host.
+The FSID directory may also belong to the user of one of its existing
+auxiliary-image singleton daemon directories. A holder without such a
+directory refuses; while a declared singleton is being created, an unresolved
+holder triggers bounded re-observation, never acceptance. The directory must
+remain non-link, closed to group/other writes and unchanged in device, inode
+and mode across use. A daemon of the exact FSID that cephadm has not yet written unit files for, whose
+systemd instance is not yet installed, or whose removed-on-exit container does
+not exist is reported not running rather than refused, and while its forking
+unit is still starting or stopping its container may run or not. Foreign layouts,
+replacement paths, contradictory state, a container without proved unit files
+and failed reads refuse. RPM verification disables
+verification scripts. These source and boundary proofs do not establish the
+complete native touch closure or qualify actual guest/runtime observations;
+that evidence remains [B79](milestones/m2.md#b79).
+
+In the host layout, a
+listed monitoring singleton's, `mgmt-gateway`'s or `oauth2-proxy`'s daemon directory is admitted on a host of its
+entry and, as cephadm makes it, may be owned by the user of its own image; it
+is still a directory that is not a link and that neither group nor others may
+write, re-proved unchanged after use. Its `unit.meta` and `unit.image` keep the
+root-or-Ceph-user owner rule, and no other daemon type gains this.
+
 ## Hosts, placement and CRUSH
 
 Topology nodes retain `name`, `machineRef`, optional `fqdn`, `site` and
@@ -728,9 +741,9 @@ label beginning with `_` refuses at admission.
 
 Placement preserves the provider's qualified native grammar, including
 `hosts`, `label`, `host_pattern`, `count` and `count_per_host`. Explicit host
-tokens resolve to declared registered hostnames. When a native host token
-also carries a network/address or daemon identifier, that data must agree
-with the proved host/network and the selected service. Pattern matching uses
+tokens resolve to declared registered hostnames. Executed service placements
+refuse tokens carrying a network/address or daemon-name decorator because
+those decorations have no realized frozen representation. Pattern matching uses
 the registered native hostname, not an unrelated Machine display name.
 As in cephadm, `count_per_host` requires `hosts`, `label` or `host_pattern`,
 and cannot combine with host tokens that carry a network or daemon name.

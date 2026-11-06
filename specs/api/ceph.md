@@ -63,7 +63,7 @@ on the already selected Machine.
 | `peerClusterRef` | `CephCluster` |
 | `peerPoolRef` | `CephPool` |
 | `cephadm.bootstrap.nodeRef` | nested owner-local: a `name` in the same cluster's `spec.topology.nodes` that the MON service places on |
-| `cephadm.addressRef`, `cephadm.bootstrap.addressRef` | nested on a Machine: an address name on the Machine of every topology node, or of the bootstrap node; the bootstrap value defaults to `cephadm.addressRef`, else the Machine's `access.ssh.addressRef` |
+| `cephadm.addressRef`, `cephadm.bootstrap.addressRef` | nested on a Machine: an address name on the Machine of every topology node, or of the bootstrap node; the bootstrap value defaults to `cephadm.addressRef`, else the Machine's `access.ssh.addressRef`; validation requires the resolved address to equal that fleet SSH address |
 | `stretch.tiebreaker.node` | nested owner-local: a `name` in `topology.nodes` |
 | `machineRef` | `Machine` |
 | entitlement refs | `Entitlement` |
@@ -120,12 +120,14 @@ and refuses at planning without them
 `spec.serviceBindings` entry is left to the gateway block only for an RGW
 service a CephObjectGateway binds and for the ingress that fronts it, and
 the credential bindings of a grafana or snmp-gateway service to the monitoring
-unit, and the TLS binding of the management gateway to its unit; any other
-entry refuses at planning. An RGW document must be bound by a CephObjectGateway of the same
+unit, and the TLS binding of the management gateway to its unit. The nvmeof unit
+realizes `/spec/root_ca_cert`, `/spec/server_cert`, `/spec/server_key`,
+`/spec/client_cert` and `/spec/client_key`; each certificate/key pair binds one
+`tlsCertificate` Secret as effect material. Other entries refuse at planning. An RGW document must be bound by a CephObjectGateway of the same
 cluster whose `spec.serviceRef` names it; an unbound one refuses at its
 `service_id`, because cephadm would deploy it before its realm, zone group and
 zone exist. `spec.mgrModules` admits `cephadm` and
-`rbd_support`; `nfs` and `prometheus` refuse as derived from a declared NFS or
+`rbd_support` as already enabled modules; `nfs` and `prometheus` refuse as derived from a declared NFS or
 prometheus service (D159 clause 9), and `smb` refuses as derived from a
 declared CephSMBResource cluster; `mirroring` refuses because Bootwright
 does not realize CephFS snapshot mirroring; every other module refuses until
@@ -425,7 +427,7 @@ checks:
   control characters that does not begin with `-`
   ([field record](../ceph-resources.md#cephobjectuser-field-record));
 - each object bucket binds a same-cluster CephObjectGateway and a
-  same-cluster CephObjectUser of that gateway, its name has 3 to 44
+  same-cluster CephObjectUser of that gateway, its name has 3 to 63
   characters, and its policy, when declared, has a `Version` string and a
   non-empty `Statement`
   ([field record](../ceph-resources.md#cephobjectbucket-field-record));

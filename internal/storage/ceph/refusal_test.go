@@ -149,7 +149,7 @@ func TestADirtyOSDDiskRefusesByItsOwnNameAndLeavesTheAttemptFailed(t *testing.T)
 	e := withMaterial(executionFor(t, r), r)
 	generic := diagnostics.Of(adapterRefusals()["remote-refusal"])[0]
 	messages := map[string]string{
-		"device-not-empty": "an OSD disk on a Ceph host holds a partition table, filesystem, LVM or other signature that this operation did not write",
+		"device-not-empty": "an OSD disk on a Ceph host holds a partition table, filesystem, LVM or other signature whose owned allocation this operation cannot prove",
 		"foreign-osd":      "an OSD disk on a Ceph host, or the Ceph cluster itself, holds a Ceph OSD of another cluster or one this operation did not create",
 	}
 	for reason, message := range messages {

@@ -148,7 +148,7 @@ func automationFormats() map[string]automationFormat {
 	host, core := persistedBy(ceph.HostImplementation), persistedBy(ceph.Implementation)
 	formats := map[string]automationFormat{
 		"addon-instance-request-v4":  {class: formatMirrored},
-		"ceph-export-request-v3":     {class: formatMirrored},
+		"ceph-export-request-v4":     {class: formatMirrored},
 		"ceph-export-evidence-v2":    {class: formatMirrored},
 		"cluster-network-request-v2": {class: formatMirrored},
 		"cluster-objects-v2":         {class: formatMirrored},
@@ -211,9 +211,11 @@ func automationFormats() map[string]automationFormat {
 		"bootwright-contained-public-label-probe-v1": transient("the bytes the label probe writes in its own scratch and reads back"),
 		"ceph-packages-v2":                           transient("the guest package transaction policy ceph_packages.transaction_request builds and the shared resolver reads within one run"),
 
+		"export-prerequisite-monitor-v2": transient("the MON v2 prerequisite refusal token, read from the result channel within one adapter run"),
+
 		"ceph-host-v13":                {class: formatMirrored},
 		"ceph-host-evidence-v4":        {class: formatMirrored},
-		"ceph-core-v41":                {class: formatMirrored},
+		"ceph-core-v42":                {class: formatMirrored},
 		"ceph-core-evidence-v14":       {class: formatMirrored},
 		"ceph-tiebreaker-evidence-v1":  {class: formatMirrored},
 		"ceph-packages-v3":             {class: formatMirrored},

@@ -333,13 +333,13 @@ func sshPolicyRefusals() map[string]error {
 	}
 }
 
-const osdDiskRemedy = "the adapter detail names the code site that refused, not the disk; run wipefs --no-act <disk> on each declared OSD disk of the Ceph hosts to see what it holds; " +
+const osdDiskRemedy = "preserve any disk that may hold this cluster's data, DB or WAL; an unproved allocation must not be cleared to force continuation; the adapter detail names the code site that refused, not the disk; run wipefs --no-act <disk> on each declared OSD disk of the Ceph hosts to see what it holds; " +
 	"if it is a disk of a Ceph cluster you destroyed or abandoned, declare it in its Machine's spec.hardware.clearOnInstall and install that Machine again, " +
 	"or clear it yourself on the host after confirming it is that disk, then apply again; Bootwright never clears a disk it cannot prove its own"
 
 func osdDeviceRefusals() map[string]error {
 	return map[string]error{
-		"device-not-empty": failure("lifecycle.unsupported", "an OSD disk on a Ceph host holds a partition table, filesystem, LVM or other signature that this operation did not write", osdDiskRemedy),
+		"device-not-empty": failure("lifecycle.unsupported", "an OSD disk on a Ceph host holds a partition table, filesystem, LVM or other signature whose owned allocation this operation cannot prove", osdDiskRemedy),
 		"foreign-osd": failure("lifecycle.unsupported", "an OSD disk on a Ceph host, or the Ceph cluster itself, holds a Ceph OSD of another cluster or one this operation did not create", osdDiskRemedy+"; for an OSD the cluster runs, find it with ceph osd metadata and remove it outside Bootwright; "+
 			"a never-booted OSD that an interrupted OSD creation left is purged by the next apply when this operation cleared its disk, "+
 			"otherwise purge it with ceph osd purge-new osd.<id> --yes-i-really-mean-it after ceph osd dump shows it never booted (down, up_from 0, state exists and new)"),

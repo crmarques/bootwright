@@ -575,10 +575,10 @@ def test_request_admits_the_policy_text_the_planner_freezes(policy):
     assert ceph_native.validate(bucket_request(policy=policy))
 
 
-def test_request_admits_a_bucket_name_of_at_most_44_characters():
-    assert ceph_native.validate(bucket_request(name="b" * 44))
+def test_request_admits_a_bucket_name_of_at_most_63_characters():
+    assert ceph_native.validate(bucket_request(name="b" * 63))
     with pytest.raises(ceph_native.Refusal, match="^request$"):
-        ceph_native.validate(bucket_request(name="b" * 45))
+        ceph_native.validate(bucket_request(name="b" * 64))
 
 
 def test_dispatch_lends_a_tls_bucket_only_its_certificate(ready, monkeypatch):

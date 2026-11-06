@@ -625,7 +625,7 @@ def package_url(value):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v41")
+    require(request["version"] == "ceph-core-v42")
     if "security" in request:
         security = request["security"]
         require(isinstance(security, dict) and set(security) == {"fips", "cephxKeyType"})
@@ -1813,9 +1813,10 @@ class Worker:
             self.prove_completed_osd_variants(physical)
         return {"name": self.host["name"], "owned": owned, "exists": exists}
 
-    def prove_completed_osd_variants(self, physical=None):
-        services = [s for s in self.request["services"] if s["service_type"] == "osd" and self.host["name"] in s["placement"]["hosts"]
-                    and any(s["spec"].get(k) for k in ("encrypted", "tpm2", "db_devices", "wal_devices"))]
+    def prove_completed_osd_variants(self, physical=None, services=None):
+        services = services if services is not None else [
+            s for s in self.request["services"] if s["service_type"] == "osd" and self.host["name"] in s["placement"]["hosts"]
+            and any(s["spec"].get(k) for k in ("encrypted", "tpm2", "db_devices", "wal_devices"))]
         if not services:
             return
         require(self.markers.owned() and self.markers.read("osd-device-intent.json") == self.osd_device_scope(), "ownership")
@@ -2438,7 +2439,9 @@ class Worker:
             signatures = self.command(["/usr/sbin/wipefs", "--no-act", "--json", actual])
             require(isinstance(signatures, dict) and isinstance(signatures.get("signatures"), list), "device-not-empty")
             if item.get("children") or item.get("fstype") or any(item.get("mountpoints") or []) or signatures["signatures"]:
-                require(device["path"] not in auxiliary_device_paths(self.request, self.host["name"]), "device-not-empty")
+                if device["path"] in auxiliary_device_paths(self.request, self.host["name"]):
+                    self.completed_auxiliary(device["path"], item, signatures["signatures"], physical)
+                    continue
                 found = self.owned_osd_device(actual, item, signatures["signatures"], device, alias)
                 (self.osd_clears if "record" in found else self.observed_device_ids).append(found)
                 if "record" in found:
@@ -2455,6 +2458,16 @@ class Worker:
                 # A completed clear names its orphan even after the OSD service created the disk's OSD again.
                 self.osd_orphans.append(done["osdUUID"])
         return {"devices": len(self.host["devices"])}
+
+    def completed_auxiliary(self, path, item, signatures, physical):
+        require(self.markers.owned() and self.markers.read("osd-device-intent.json") == self.osd_device_scope(), "device-not-empty")
+        require(item.get("fstype") in (None, "", "LVM2_member") and not any(item.get("mountpoints") or [])
+                and item.get("children") and all(child.get("type") == "lvm" for child in item["children"])
+                and all(isinstance(value, dict) and value.get("type") == "LVM2_member" for value in signatures), "device-not-empty")
+        services = [s for s in self.request["services"] if s["service_type"] == "osd" and self.host["name"] in s["placement"]["hosts"]
+                    and any(path in s["spec"].get(field, {}).get("paths", []) for field in ("db_devices", "wal_devices"))]
+        require(len(services) == 1, "device-not-empty")
+        self.prove_completed_osd_variants(physical, services)
 
     def zapped_before(self, actual, pending, observed):
         """Whether a clear whose completion was never recorded zapped the disk before the OSD service created a complete OSD on it
@@ -3570,6 +3583,7 @@ class Worker:
         return None if record is None else self.identity_rows(record)
 
     def identity_rows(self, record):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime
         wanted = [(host["name"], device) for host in self.request["hosts"] for device in host["devices"]]
         require(isinstance(record, dict) and set(record) == {"version", "fsid", "devices"}, "device-identity")
         require(record["version"] == DEVICE_IDENTITIES_VERSION and record["fsid"] == self.request["fsid"], "device-identity")
@@ -3577,10 +3591,10 @@ class Worker:
         require(isinstance(rows, list) and len(rows) == len(wanted), "device-identity")
         result = {}
         for value, (host, device) in zip(rows, wanted):
-            from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime
             ceph_host_runtime.row(value, self.request, host)
             require(value["path"] == device["path"], "device-identity")
             result[(host, device["path"])] = value["deviceID"]
+        ceph_host_runtime.distinct_devices(rows)
         return result
 
     def service_specs(self, limit=None):
@@ -3744,9 +3758,10 @@ class Worker:
         require(self.ceph("fsid") == {"fsid": self.request["fsid"]}, "ownership")
         self.prove_registry()
         self.provider_registry_absent()
+        if self.request["clusterSSHTransport"] == "verifiedTunnel" or any(host.get("physical") for host in self.request["hosts"]):
+            require(self.device_identities(devices) is not None, "device-identity")
         purged = self.purge_orphan_osds(orphans or [])
         if self.request["clusterSSHTransport"] == "verifiedTunnel":
-            require(self.device_identities(devices) is not None, "device-identity")
             self.manager_retry(self.verify_tunnel_configuration)
         self.config_database()
         groups = self.normalized_services([self.service_spec(value) for value in self.request["services"]])

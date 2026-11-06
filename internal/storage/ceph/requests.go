@@ -16,7 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v41"
+const Version = "ceph-core-v42"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -368,7 +368,7 @@ func baseRequest(c api.Catalog, cluster api.Object, contextName string) (Request
 		return Request{}, failure(issue.Code, issue.Message, issue.Remediation)
 	}
 	r.Config = config
-	if spec.Get("mgrModules").Len() != 0 || spec.Get("cephadm", "bootstrap", "singleHostDefaults").Bool() {
+	if spec.Get("cephadm", "bootstrap", "singleHostDefaults").Bool() {
 		return Request{}, failure("lifecycle.unsupported", "the core adapter does not yet realize additional cluster configuration", "use only the qualified core MON/MGR/OSD profile")
 	}
 	for _, binding := range spec.Get("serviceBindings").Items() {
@@ -473,7 +473,7 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 					return err
 				}
 				if r.MonIP != ssh.Address {
-					return failure("lifecycle.unsupported", "a separate bootstrap address is not yet modeled", "select the same declared management address for bootstrap")
+					return failure("lifecycle.unsupported", "CephCluster "+cluster.Name()+" spec.cephadm.bootstrap.addressRef (or inherited spec.cephadm.addressRef) resolves separately from Machine "+m.Name()+" fleet SSH", "select an addressRef resolving to the Machine access.ssh.addressRef address; separate bootstrap enrollment addresses are not implemented")
 				}
 			}
 		} else if addressRef != "" {
@@ -482,7 +482,7 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 				return err
 			}
 			if address != ssh.Address {
-				return failure("lifecycle.unsupported", "separate orchestration and fleet addresses are not yet modeled", "use the same declared management address until separate host enrollment addresses are implemented")
+				return failure("lifecycle.unsupported", "CephCluster "+cluster.Name()+" spec.cephadm.addressRef resolves separately from Machine "+m.Name()+" fleet SSH", "select an addressRef resolving to the Machine access.ssh.addressRef address; separate orchestration addresses are not implemented")
 			}
 		}
 	}

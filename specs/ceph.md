@@ -298,7 +298,10 @@ The complete dependency DAG precedes effects. Storage declares dependencies
 through API identities, following the
 [lifecycle port contract](architecture.md#lifecycle-ports), and freezes bounded
 blocks, native inputs, target identities, impacts, authorization and exclusive
-resources. Readiness is a proved block postcondition, never an ordering hint.
+resources. Readiness is a proved block postcondition, never an ordering hint. Admission
+requires each host’s resolved enrollment address, including the bootstrap
+address, to equal its fleet SSH address; separate native enrollment addresses
+have no qualified implementation.
 
 The graph includes the following dependencies where the desired graph needs
 them; the [reference edges](state-reconciliation.md#reference-edges) catalog
@@ -1141,9 +1144,11 @@ The bounded core profile accepts explicit `data_devices.paths`, optional
 OSD per data device. All selected paths are distinct within a drive group and
 across services on a host; dynamic selectors, slots and sizes remain
 unsupported. TPM2 requires encryption and a declared TPM profile. Omitted
-options retain native BlueStore defaults. Any nonempty or partial DB/WAL
-device refuses before submission; [B1084](milestones/m2.md#b1084) owns
-recovery. Read-only host readiness separately proves completed data/DB/WAL
+options retain native BlueStore defaults. A nonempty DB/WAL device is reused
+only when the retained intent and complete native OSD/LV relationships prove
+its entire allocation belongs to this operation. Partial or foreign DB/WAL
+allocations refuse before submission; [B1084](milestones/m2.md#b1084) owns
+partial recovery. Read-only host readiness also proves completed data/DB/WAL
 allocations by OSD identity and LV UUID relationships. Encryption requires
 matching native `ceph.encrypted` and `ceph.with_tpm` tags and an active LUKS
 mapper for the exact LV; TPM2 also requires a `systemd-tpm2` token in the
@@ -1197,8 +1202,11 @@ with reason
 `CephCluster <cluster> selects <disks> disks on physical Ceph host <host>, past the 15 that its Machine's eraseOnRemoval policy can cover beside the root disk within its 16 targets`
 and remedy
 `select at most 15 distinct disks for host <host> across the data_devices, db_devices and wal_devices paths of the OSD services of CephCluster <cluster>`.
-Shared WWNs or serial numbers across hosts, partitions and multipath targets
-refuse at any count. The request records WWN intent without inventing a serial
+Shared WWN or serial selectors across hosts, partitions and multipath targets
+refuse at admission at any count. Before OSD preparation or service submission, the
+coordinator compares every host’s bound observed WWN and serial/size pair,
+including disks selected through different forms. The native service worker
+rechecks that aggregate before any service effect. The request records WWN intent without inventing a serial
 or capacity, or a serial selection's serial and size from its Machine.
 A fresh installation of a managed physical host can clear declared OSD disks
 that a destroyed or abandoned cluster left, through its Machine's
@@ -1222,7 +1230,7 @@ reader is shared with the offline erase worker. See the
 [Linux bond-slave attribute](https://github.com/torvalds/linux/blob/v6.12/drivers/net/bonding/bond_sysfs_slave.c)
 and [its original-address capture](https://github.com/torvalds/linux/blob/v6.12/drivers/net/bonding/bond_main.c).
 
-Host preparation records each disk's observed serial, size, rotational status,
+Host preparation records each disk's observed WWN, serial, size, rotational status,
 kernel path, stable alias for a serial selection, and native image SDK
 identity. It compares lsblk and udev WWNs and
 device numbers, rejects read-only/removable disks and ambiguous aliases, and

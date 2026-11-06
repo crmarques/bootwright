@@ -271,8 +271,8 @@ whose `clusterRef` names one refuses at validation and at plan
 The replicated-pool shape `{size, minSize}` is shared by placement policies and
 pools. Both members are optional non-negative integers. Zero and omission mean
 that the applicable cluster, policy, or native default selects the value; a
-non-zero value is positive. Validation resolves those effective values first
-and requires effective `minSize` not to exceed effective `size`, including when
+non-zero value below two refuses at admission. Validation resolves effective
+values first and requires effective `minSize` not to exceed effective `size`, including when
 only one member is authored.
 
 On a pool, `replicated` and `erasure` are the protection arms: exactly one is
@@ -720,8 +720,8 @@ before any effect:
   forced; erasure-coded `cephfsData` pools attach as additional data pools;
 - an MDS service that places fewer daemons than `activeCount +
   max(standbyCountWanted, standbyReplay ? activeCount : 0)`, where the
-  placed daemons are its resolved hosts times `count_per_host`, capped by
-  `count`;
+  placed daemons are its resolved hosts, capped by `count`; MDS
+  `count_per_host` above one refuses at admission;
 - a metadata or data pool that another CephFilesystem of the same cluster
   already uses; a cluster admits several filesystems, each with its own pools
   and its own MDS service;
@@ -985,7 +985,7 @@ and keeps cephadm's snake_case spelling. Its members are closed:
 | `security_label` | Boolean. | `true`. |
 | `protocols` | Required in complete input and exactly `[4]`; NFSv3 refuses. | None: an omitted list would serve NFSv3 and NFSv4, so omission refuses. |
 | `transports` | `[TCP]`; UDP refuses as an incompatible transport for NFSv4. | `[TCP]`. |
-| `sectype` | `[sys]` when present; Kerberos (`krb5`, `krb5i`, `krb5p`) refuses and native `none` is not a supported option. | None. |
+| `sectype` | Exactly `[sys]`; Kerberos (`krb5`, `krb5i`, `krb5p`) refuses and native `none` is not a supported option. | `[sys]`. |
 | `fsal.name` | Required: `CEPH` with a filesystem or subvolume binding, `RGW` with `objectUserRef`; any other pairing refuses. | None. |
 | `fsal.fs_name` | `CEPH` only: name of the bound filesystem; an authored value must agree with the binding. | The bound filesystem. |
 | `fsal.cmount_path` | `CEPH` only: clean absolute path that is `/`, equal to `path`, or an ancestor directory of `path`. | `/`. |
@@ -998,8 +998,8 @@ exact spelling above, although native accepts any case. A client address is
 unique within the export after canonicalization, because NFS-Ganesha applies
 the first client block that matches and a repeat would be a silent no-op.
 Normalization freezes the defaults into effective state, keeps authored
-values and is idempotent; `protocols`, `sectype` and a subvolume
-binding's `path` are never added.
+values and is idempotent; `protocols` and a subvolume binding's `path` are
+never added. Explicit empty `protocols`, `transports` or `sectype` lists refuse.
 
 Refused members name the field, the reason and the next step: `export_id`
 (the NFS manager generates the export ID, which Bootwright records),
@@ -1169,8 +1169,8 @@ Cross-object rules, each refusal naming the other object by its
   backing.
 - NFS and SMB never expose one backing: a share refuses unless every NFS
   export of its filesystem and the share bind distinct CephSubvolumes; two
-  SMB clusters never share one subvolume. Admission cannot see resolved
-  subvolume paths, so a filesystem-wide export or share on either side
+  SMB clusters require distinct subvolumes of a shared filesystem. Admission
+  cannot see resolved subvolume paths, so a filesystem-wide export or share on either side
   refuses with the other on the same filesystem. The refusal names the
   CephNFSExport, or the share of the other SMB cluster, whose subvolume
   earmark `smb.cluster.<cluster_id>` the manager would refuse at apply.

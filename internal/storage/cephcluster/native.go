@@ -453,6 +453,9 @@ func (a *admission) nativeServices(ceph api.Value, partial bool) {
 			}
 		}
 		a.nativeShape(a.withoutRefusedMembers(service.Get("spec"), typeName, field+".spec"), shape, field+".spec", partial)
+		if typeName == "mds" && numeric(service.Get("placement", "count_per_host")).Cmp(big.NewInt(1)) > 0 {
+			a.invalid(field+".placement.count_per_host", "MDS places at most one daemon per host", "omit placement.count_per_host or set it to 1")
+		}
 		placed := a.nativePlacement(a.object, service.Get("placement"), field+".placement", partial)
 		a.nativeFamily(service, typeName, field, placed, partial)
 		if typeName == "osd" {
