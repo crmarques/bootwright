@@ -58,7 +58,11 @@ func ValidateNetworkIntent(o api.Object, c api.Catalog) []api.Issue {
 			issue.Field = fmt.Sprintf("$.spec.nodes[%d].machineRef", nodeIndex)
 			issues = append(issues, issue)
 		}
-		install := defaultRouteInterface(native, familyBits)
+		address, _ := machine.InstallAddress(bound, c)
+		install := address.Get("interface").Text()
+		if install == "" {
+			install = defaultRouteInterface(native, familyBits)
+		}
 		if hasMTU {
 			limit := interfaceMTU(native, install) - 100
 			if mtu > limit {

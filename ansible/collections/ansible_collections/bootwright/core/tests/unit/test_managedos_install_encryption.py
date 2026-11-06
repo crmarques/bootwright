@@ -257,7 +257,7 @@ def test_recovery_material_tasks_are_no_log():
             continue
         guarded += 1
         assert task.get("no_log") is True, task.get("name")
-    assert guarded == 3
+    assert guarded == 4
     guard = flattened("private_recovery.yml")[-1]
     assert FAIL in guard and "no_log" not in guard
 
@@ -358,3 +358,20 @@ def test_a_virtual_private_insert_skips_the_verified_fetch_read_back():
                            managedos_install_anaconda_media_trust={"trust": "defaultCA"},
                            bootwright_run_scratch="/var/tmp/bootwright-run-scratch-1-1")
         assert arguments["private"] is expected
+
+
+def test_private_material_is_protected_before_publication():
+    staged = flattened("private.yml")
+    stage = next(task[FILE] for task in staged if task.get(FILE, {}).get("path", "").endswith("/.stage"))
+    assert stage["mode"] == "0700" and stage["owner"] == stage["group"] == "root"
+    for name in ("private.yml", "private_recovery.yml"):
+        tasks = LOADER.load_from_file(str(ROLE / "tasks" / name))
+        copies = [task[COPY] for task in tasks if COPY in task]
+        assert copies
+        for task in copies:
+            assert "/.stage/" in task["dest"]
+            assert task["mode"] == "0640" and task["owner"] == task["group"] == "root"
+        commands = [(i, task["ansible.builtin.command"]["argv"]) for i, task in enumerate(tasks) if "ansible.builtin.command" in task]
+        labels = [i for i, argv in commands if argv[0] == "/usr/bin/chcon" and "/.stage/" in argv[-1]]
+        publications = [i for i, argv in commands if argv[0] == "/usr/bin/mv" and "--no-target-directory" in argv]
+        assert labels and publications and max(labels) < min(publications)

@@ -197,7 +197,7 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 	if message := r.diffToolRefusal(command, path); message != "" {
 		return r.failure(command, path, "cli.usage", message, 2, selectedJSON(command))
 	}
-	if path == "" || path == "completion" || (path == "render" && stringValue(command.Flags(), "input-dir") == "" && stringValue(command.Flags(), "output-dir") == "") {
+	if path == "" || path == "completion" || renderHelp(path, command.Flags()) {
 		if err := r.writeSelectedHelp(command); err != nil {
 			return 1
 		}

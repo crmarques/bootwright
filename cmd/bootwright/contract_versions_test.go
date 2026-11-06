@@ -224,24 +224,24 @@ func automationFormats() map[string]automationFormat {
 		"ceph-replication-v2":          {class: formatMirrored},
 		"ceph-replication-evidence-v1": {class: formatMirrored},
 		// The request versions each role refuses unless its request names.
-		"substrate-host-libvirt-v6":  {class: formatMirrored},
-		"machine-libvirt-v8":         {class: formatMirrored},
-		"machine-baremetal-v2":       {class: formatMirrored},
+		"substrate-host-libvirt-v7":  {class: formatMirrored},
+		"machine-libvirt-v9":         {class: formatMirrored},
+		"machine-baremetal-v3":       {class: formatMirrored},
 		"substrate-host-kubevirt-v2": {class: formatMirrored},
-		"machine-kubevirt-v2":        {class: formatMirrored},
+		"machine-kubevirt-v3":        {class: formatMirrored},
 		// The lend a hosted KubeVirt provider's runs take their access from:
 		// its request and evidence, which the host and machine digests pin.
 		"substrate-access-kubevirt-v1":          {class: formatMirrored},
 		"substrate-access-kubevirt-evidence-v1": {class: formatMirrored},
 		"os-package-tree-v1":                    {class: formatMirrored},
-		"os-install-anaconda-v24":               {class: formatMirrored},
-		"physical-erase-v9":                     {class: formatMirrored},
+		"os-install-anaconda-v25":               {class: formatMirrored},
+		"physical-erase-v10":                    {class: formatMirrored},
 		"os-host-firewall-v1":                   {class: formatMirrored},
 		"os-host-firewall-evidence-v1":          {class: formatMirrored},
 		"cluster-media-agent-v9":                {class: formatMirrored},
-		"cluster-install-agent-v12":             {class: formatMirrored},
-		"artifact-server-nginx-v2":              {class: formatMirrored},
-		"managed-service-v4":                    {class: formatMirrored},
+		"cluster-install-agent-v13":             {class: formatMirrored},
+		"artifact-server-nginx-v3":              {class: formatMirrored},
+		"managed-service-v5":                    {class: formatMirrored},
 		// Power is no plan block: each run binds its request to the power
 		// content digest these implementations feed, and nothing is retained.
 		"machine-power-v4":      {class: formatMirrored},
@@ -465,7 +465,7 @@ func TestEveryStoreFormatIsClassified(t *testing.T) {
 		}
 	}
 	for literal, want := range map[string]string{
-		prerequisites.SetupStateFormat:     "bootwright.setup-state-v1",
+		prerequisites.SetupStateFormat:     "bootwright.setup-state-v2",
 		runtimelock.Format:                 "bootwright.controller.runtime-lock-v1",
 		prerequisites.RuntimeFormat:        "bootwright.controller.runtime-v1",
 		prerequisites.RuntimeClosureFormat: "bootwright.controller.execution-closure-v2",

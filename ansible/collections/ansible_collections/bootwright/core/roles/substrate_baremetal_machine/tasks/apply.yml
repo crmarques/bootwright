@@ -7,7 +7,7 @@
 - name: Validate the frozen machine request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_physical_request.version == 'machine-baremetal-v2'
+      - bootwright_substrate_physical_request.version == 'machine-baremetal-v3'
       - bootwright_substrate_physical_request.controller.endpoint is search('/redfish/v1/Systems/')
       - bootwright_substrate_physical_request.hardware | length > 0
       - bootwright_substrate_physical_digest is match('[0-9a-f]{64}')
@@ -35,6 +35,13 @@
     ca_data: '{{ substrate_baremetal_machine_ca_data }}'
   register: substrate_baremetal_machine_observed
   failed_when: false
+  no_log: true
+
+- name: Report an unanswered physical proof
+  bootwright.core.substrate_physical_protocol:
+    phase: refused
+    reason: target-unanswered
+  when: substrate_baremetal_machine_observed.unanswered | default(false) | bool
   no_log: true
 
 # ansible-core keeps nothing of a failure under no_log but that it failed, so

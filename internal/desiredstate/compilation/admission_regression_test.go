@@ -297,3 +297,54 @@ func TestClusterKindsOfOneNameRefuseNamingEachOther(t *testing.T) {
 		t.Fatalf("colliding cluster roots = %q, want each naming the other", named)
 	}
 }
+
+func TestEmptyReplicatedArmSuppressesErasureDefaults(t *testing.T) {
+	for _, arm := range []string{"", "  replicated: {}\n", "  replicated: {size: 0, minSize: 0}\n"} {
+		input := sources(environmentYAML + `  defaults:
+    CephPool:
+      erasure: {dataChunks: 2, codingChunks: 1}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: CephPool
+metadata: {name: pool}
+spec:
+  clusterRef: storage
+` + arm + "---\napiVersion: bootwright.io/v1alpha1\nkind: CephCluster\nmetadata: {name: storage}\nspec: {management: external}\n")
+		state, _, err := compilation.NewCompiler(yamlstream.Parser{}, nil).Compile(context.Background(), input)
+		if err != nil {
+			t.Fatal(diagnostics.Of(err))
+		}
+		pool, _ := state.Effective().Find(api.CephPool, "pool")
+		if pool.Spec().Has("replicated") != (arm != "") || pool.Spec().Has("erasure") != (arm == "") {
+			t.Fatalf("authored arm %q selected wrong protection: %v", arm, pool.Spec())
+		}
+	}
+}
+
+func TestHTTPArtifactServerSuppressesInheritedTLS(t *testing.T) {
+	input := sources(environmentYAML + `  defaults:
+    ArtifactServer:
+      tls: {secretRef: serving}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ArtifactServer
+metadata: {name: artifacts}
+spec:
+  management: managed
+  machineRef: controller
+  listeners: [{name: http, protocol: http, port: 8080}]
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata: {name: serving}
+spec: {type: tlsCertificate}
+`)
+	state, _, err := compilation.NewCompiler(yamlstream.Parser{}, nil).Compile(context.Background(), input)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	server, _ := state.Effective().Find(api.ArtifactServer, "artifacts")
+	if server.Spec().Has("tls") {
+		t.Fatal("HTTP-only server inherited TLS")
+	}
+}

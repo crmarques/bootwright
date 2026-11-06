@@ -2,7 +2,7 @@
 - name: Validate the frozen managed service request
   ansible.builtin.assert:
     that:
-      - bootwright_managed_service_request.version == 'managed-service-v4'
+      - bootwright_managed_service_request.version == 'managed-service-v5'
       - bootwright_managed_service_request.implementation in infra_managed_service_implementations
       - bootwright_managed_service_request.unit is string
       - bootwright_managed_service_request.contentRoot.startswith('/var/lib/bootwright-services/')
@@ -254,6 +254,14 @@
       - '{{ infra_managed_service_configuration_path }}'
     readiness: true
   register: infra_managed_service_after
+
+- name: Report the classified readiness refusal
+  bootwright.core.infra_service_protocol:
+    phase: refused
+    reason: '{{ infra_managed_service_after.failures[0].reason }}'
+    port: '{{ infra_managed_service_after.failures[0].port }}'
+  when: infra_managed_service_after.failures | length > 0
+  no_log: true
 
 - name: Refuse an unproved address
   ansible.builtin.assert:

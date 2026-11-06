@@ -321,6 +321,14 @@ func (t *transaction) Delete(ctx context.Context, requested contexts.Record) err
 			return err
 		}
 	}
+	if record.Mode == contexts.Initializing {
+		if err := t.collectInitializationStages(ctx, record.Name); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return initializationDamage(record.Name, err)
+		}
+	}
 	dir, err := t.contextDirectory(ctx, record.Name)
 	absent := errors.Is(err, syscall.ENOENT)
 	switch {
@@ -401,7 +409,16 @@ func (t *transaction) abandonLostDirectory(ctx context.Context, record contexts.
 func (t *transaction) removeContextDirectory(ctx context.Context, record contexts.Record, dir *directory) error {
 	if record.Mode == contexts.Ready || record.Mode == contexts.Initializing {
 		if record.DirectoryInode == 0 {
-			return state("initializing directory identity is not attributable")
+			if record.Mode != contexts.Initializing {
+				return state("context directory identity is missing")
+			}
+			if err := verifyReservation(ctx, dir, record.Name); err != nil {
+				return initializationDamage(record.Name, err)
+			}
+			if err := t.store.syncDirectory(ctx, t.container); err != nil {
+				return err
+			}
+			record.DirectoryDevice, record.DirectoryInode = uint64(dir.identity.Dev), dir.identity.Ino
 		}
 		if record.Mode == contexts.Ready {
 			if _, held := t.leases[record.Name]; !held {

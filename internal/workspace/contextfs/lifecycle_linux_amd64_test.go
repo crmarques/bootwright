@@ -9,7 +9,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -330,9 +332,7 @@ func TestInitializationInterruptionReservesExactIdentity(t *testing.T) {
 				}
 				return err
 			})
-			if point == "after-context-directory" {
-				expectState(t, err)
-			} else if err != nil {
+			if err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -457,5 +457,114 @@ func TestEagerSecretInitializationNeedsNoDesiredInput(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(store.options.Root, "contexts", "empty")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("permanent delete retained context key material")
+	}
+}
+
+func TestInterruptedInitializationCanBePurgedBeforeIdentityPublication(t *testing.T) {
+	for _, point := range []string{"after-context-directory", "after-context-publish"} {
+		t.Run(point, func(t *testing.T) {
+			store, _ := fixture(t)
+			ctx := context.Background()
+			store.fail = func(name string) error {
+				if name == point {
+					return errors.New("interrupted init")
+				}
+				return nil
+			}
+			err := store.Transact(ctx, true, nil, func(tx contexts.Transaction) error {
+				_, err := tx.Reserve(ctx, "pending", "", contexts.DefaultConfiguration("pending").Canonical())
+				return err
+			})
+			if err == nil {
+				t.Fatal("init did not interrupt")
+			}
+			store.fail = nil
+			err = store.TransactDeletion(ctx, "pending", func(tx contexts.Transaction) error {
+				for _, record := range tx.Registry().Contexts {
+					if record.Name == "pending" {
+						return tx.Delete(ctx, record)
+					}
+				}
+				return errors.New("pending name lost")
+			})
+			if err != nil {
+				t.Fatal(diagnostics.Of(err))
+			}
+			registry, err := store.View(ctx)
+			if err != nil || len(registry.Contexts) != 0 {
+				t.Fatalf("purge left registry %+v: %v", registry, err)
+			}
+		})
+	}
+}
+
+func TestInitializingRecoveryNeverAdoptsAForeignFinalDirectoryOrStage(t *testing.T) {
+	for _, shape := range []string{"empty-final", "foreign-stage", "public-stage", "linked-reservation"} {
+		for _, purge := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/purge-%t", shape, purge), func(t *testing.T) {
+				store, _ := fixture(t)
+				ctx := context.Background()
+				store.fail = func(point string) error {
+					if point == "after-context-reservation" {
+						return errors.New("interrupted before mkdir")
+					}
+					return nil
+				}
+				_ = store.Transact(ctx, true, nil, func(tx contexts.Transaction) error {
+					_, err := tx.Reserve(ctx, "pending", "", contexts.DefaultConfiguration("pending").Canonical())
+					return err
+				})
+				store.fail = nil
+				parent := filepath.Join(store.options.Root, "contexts")
+				if err := os.MkdirAll(parent, 0700); err != nil {
+					t.Fatal(err)
+				}
+				entry := filepath.Join(parent, "pending")
+				if shape != "empty-final" {
+					entry = filepath.Join(parent, initializationStagePrefix("pending")+strings.Repeat("a", 32))
+				}
+				if err := os.Mkdir(entry, 0700); err != nil {
+					t.Fatal(err)
+				}
+				switch shape {
+				case "foreign-stage":
+					if err := os.WriteFile(filepath.Join(entry, "foreign"), []byte("preserve"), 0600); err != nil {
+						t.Fatal(err)
+					}
+				case "public-stage":
+					if err := os.Chmod(entry, 0755); err != nil {
+						t.Fatal(err)
+					}
+				case "linked-reservation":
+					state := filepath.Join(entry, "state")
+					if err := os.Mkdir(state, 0700); err != nil {
+						t.Fatal(err)
+					}
+					reservation := filepath.Join(state, "reservation.json")
+					if err := os.WriteFile(reservation, []byte("partial"), 0600); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Link(reservation, filepath.Join(t.TempDir(), "held")); err != nil {
+						t.Fatal(err)
+					}
+				}
+				before := snapshotRootEntries(t, store.options.Root)
+				var err error
+				if purge {
+					err = store.TransactDeletion(ctx, "pending", func(tx contexts.Transaction) error { return tx.Delete(ctx, tx.Registry().Contexts[0]) })
+				} else {
+					err = store.Transact(ctx, false, nil, func(tx contexts.Transaction) error {
+						_, err := tx.Reserve(ctx, "pending", "", contexts.DefaultConfiguration("pending").Canonical())
+						return err
+					})
+				}
+				if err == nil {
+					t.Fatal("foreign initialization content admitted")
+				}
+				if !reflect.DeepEqual(before, snapshotRootEntries(t, store.options.Root)) {
+					t.Fatal("refusal changed foreign content")
+				}
+			})
+		}
 	}
 }

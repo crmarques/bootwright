@@ -184,7 +184,7 @@ func (s Service) apply(ctx context.Context, tx SetupTransaction, current *inspec
 	}
 	state := tx.View().State
 	previous := state.Receipt
-	id, run, err := tx.OpenRun(ctx)
+	id, run, err := setupOutput(ctx, tx)
 	if err != nil {
 		return err
 	}
@@ -195,7 +195,15 @@ func (s Service) apply(ctx context.Context, tx SetupTransaction, current *inspec
 	}
 	steps := current.steps()
 	state.Format = SetupStateFormat
-	state.Pending = &PendingSetup{ID: id, PlanDigest: current.planDigest(s.ports.Lock), Actions: slices.Clone(steps), StartedAt: s.now()}
+	requested := slices.Clone(current.requested())
+	started := s.now()
+	if state.Pending != nil {
+		id, started = state.Pending.ID, state.Pending.StartedAt
+		requested = append(requested, state.Pending.Requested...)
+	}
+	slices.Sort(requested)
+	requested = slices.Compact(requested)
+	state.Pending = &PendingSetup{ID: id, PlanDigest: current.planDigest(s.ports.Lock), Actions: slices.Clone(steps), StartedAt: started, Requested: requested}
 	current.report.Progress = make([]ActionProgress, len(steps))
 	for index, step := range steps {
 		current.report.Progress[index] = ActionProgress{ID: step, Phase: "planned"}
@@ -222,7 +230,7 @@ func (s Service) apply(ctx context.Context, tx SetupTransaction, current *inspec
 		if err != nil {
 			current.report.Progress[index] = ActionProgress{ID: step, Phase: "observed", Outcome: "failed"}
 			progress("failed")
-			if !slices.Contains(steps[:index+1], packagesStep) {
+			if len(state.Pending.Requested) == 0 && !slices.Contains(steps[:index+1], packagesStep) {
 				state.Pending = nil
 				if recordErr := tx.Record(ctx, state); recordErr != nil {
 					return errors.Join(err, recordErr)
@@ -286,9 +294,28 @@ func (s Service) recordReceipt(ctx context.Context, tx SetupTransaction, current
 	if current.python != "" {
 		requirements = append(requirements, current.python)
 	}
+	if previous != nil {
+		for _, item := range previous.Packages {
+			if item.InstalledBy != PresentBeforeBootwright {
+				requirements = append(requirements, item.Requirement)
+			}
+		}
+	}
+	if state.Pending != nil {
+		requirements = append(requirements, state.Pending.Requested...)
+	}
+	slices.Sort(requirements)
+	requirements = slices.Compact(requirements)
 	present, err := s.ports.Packages.Present(ctx, requirements)
 	if err != nil {
 		return err
+	}
+	if state.Pending != nil {
+		for _, item := range present {
+			if slices.Contains(state.Pending.Requested, item.Requirement) {
+				installed = append(installed, item)
+			}
+		}
 	}
 	packages := make([]ReceiptPackage, 0, len(present))
 	for _, evidence := range present {
@@ -331,10 +358,46 @@ func receiptPackage(evidence HostPackageEvidence, id string, installed []HostPac
 		item.InstalledBy = id
 	} else if previous != nil {
 		for _, recorded := range previous.Packages {
-			if recorded.Requirement == evidence.Requirement && recorded.Provider == evidence.Package {
+			if recorded.Requirement == evidence.Requirement && sameProviderName(recorded.Provider, evidence.Package) {
 				item.InstalledBy = recorded.InstalledBy
 			}
 		}
 	}
 	return item
+}
+
+func sameProviderName(left, right string) bool {
+	if left == right {
+		return true
+	}
+	a, ok := providerName(left)
+	b, other := providerName(right)
+	return ok && other && a == b
+}
+
+type discardedSetupRun struct{}
+
+func (discardedSetupRun) Write(data []byte) (int, error) { return len(data), nil }
+func (discardedSetupRun) Close() error                   { return nil }
+func (discardedSetupRun) Location() string               { return "" }
+
+func setupOutput(ctx context.Context, tx SetupTransaction) (string, SetupRun, error) {
+	id, run, err := tx.OpenRun(ctx)
+	if err == nil && run != nil {
+		return id, run, nil
+	}
+	if errors.Is(err, ErrUnsafeSetupRun) {
+		return "", nil, err
+	}
+	if run != nil {
+		_ = run.Close()
+	}
+	if err := ctx.Err(); err != nil {
+		return "", nil, err
+	}
+	id, err = tx.NewSetupID(ctx)
+	if err != nil {
+		return "", nil, err
+	}
+	return id, discardedSetupRun{}, nil
 }

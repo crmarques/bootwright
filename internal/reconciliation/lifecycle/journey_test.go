@@ -4659,3 +4659,39 @@ func TestARemovalLocatesItsRuntimeOnce(t *testing.T) {
 		t.Fatalf("observed %v and destroyed %v", h.capability.observes, h.capability.destroys)
 	}
 }
+
+func TestApplyResultsDescribeDurableAttemptsAndOutcomes(t *testing.T) {
+	h := newHarness(t, "alpha")
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}, {Outcome: reconciliation.OutcomeChanged}}
+	_, _ = h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Blocks) != 1 || result.Blocks[0].Attempts != 2 || result.Blocks[0].Outcome != "changed" {
+		t.Fatalf("blocks = %+v", result.Blocks)
+	}
+	settled, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settled.Blocks[0].Attempts != 2 || settled.Blocks[0].Outcome != "changed" {
+		t.Fatalf("settled blocks = %+v", settled.Blocks)
+	}
+}
+
+func TestUnknownApplyResultNamesItsRecovery(t *testing.T) {
+	h := newHarness(t, "alpha")
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeUnknown}}
+	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
+	if err == nil {
+		t.Fatal("unknown apply succeeded")
+	}
+	if result == nil || len(result.Blocks) != 1 {
+		t.Fatalf("result = %+v", result)
+	}
+	block := result.Blocks[0]
+	if block.Attempts != 1 || block.Outcome != "unknown" || block.Unresolved == nil || block.Unresolved.Reason == "" || block.Unresolved.Remedy == "" {
+		t.Fatalf("block = %+v", block)
+	}
+}

@@ -456,35 +456,33 @@ blocks. Only Secrets interprets it: the engine keeps
 [produced material](secrets.md#produced-material) in custody through it.
 
 Init validates supplied configuration/input before effects, records its
-initializing name, and creates the final named directory directly. It
+initializing name, and prepares and publishes its directory as below. It
 creates default state, empty revision storage and the configured local keyring
 through a transaction-scoped Secrets capability. Only after all required data
 is durable may it publish ready. Secret initialization never reacquires the
 store lock or needs an already-published input revision. No Secret values are
 automatically generated.
 
-Interrupted initialization keeps its name reserved. Explicit init retry may
-resume only that exact attributable pending name and configuration, using
-the keyring's authenticated initialization recovery; its input, if any, is
-supplied again and may come from any directory, and the resumed context
-records the directory its retry admitted. Unverifiable partial
-state refuses; never adopt an unrelated directory. A filesystem create and
-recording its identity are not one atomic operation, so not every interruption
-is automatically resumable. `bootwright context delete --name <name> --purge`
-discards an interrupted initialization, and every refusal over an initializing
-name names both exits: finishing it with `bootwright context init --name <name>`
-and its original Context file, or discarding it with that delete.
+Interrupted init reserves its name. Retry requires that exact pending name and
+configuration and authenticated keyring recovery; input is supplied again from
+any directory, which the resumed context records. Never adopt unrelated state.
+Prepare the directory at `contexts/.init-<name>-<random>`, with a durable matching
+reservation before no-replace rename to its final name. Exclusive init retry
+and purge collect at most 16 private stages for that name, containing only
+optional `state/reservation.json` within its record bound, including partial
+reservation bytes. Foreign shapes refuse untouched; reads never collect.
+Attribute an unrecorded final directory only by its valid matching reservation.
+Preserve an older unattributable final directory and name restoration or
+administrator isolation before retry or purge. Every initializing-name refusal
+names both exits: `bootwright context init --name <name>` with its original
+Context file, or `bootwright context delete --name <name> --purge` to discard it.
 
 Input update writes new immutable blobs/manifests exclusively, flushes files
 and containing directories, then atomically replaces and syncs the registry.
 The selected revision changes at that registry commit point. Readers observe
 a complete old or new input; interrupted unpublished revisions are never
-adopted by scanning. Small temporary files for atomic record replacement stay
-inside existing directories; they do not introduce a staging tree. A write
-that fails after creating its file removes exactly that file, unless its retry
-relies on what it leaves, as below; a controller bundle file is staged and
-renamed into place, and a failed or cancelled write removes its stage. A
-write, sync or create the kernel
+adopted by scanning. Atomic record stages stay beside their targets. A failed write removes its
+file unless retry relies on it, as below. A write, sync or create the kernel
 refuses for capacity (`ENOSPC`, `EDQUOT` or `EFBIG`) refuses as capacity,
 naming only the kernel's answer, never a path, and the remedy of freeing space
 or raising the quota on the filesystem that holds `/var/lib/bootwright`; any
@@ -507,10 +505,7 @@ Registry and controller record writers hold the exclusive root lock during
 publication; context `state/` writers hold the context's exclusive lease.
 Collection takes the corresponding lock, so no collected stage has a live
 writer: only a killed process,
-or a failure whose directory no longer verified, leaves one. Every command
-that opens a registry transaction (`context init`, `use`, `update` and
-`delete`, `controller install` creating its missing subtree, and the execution of
-`apply` and `destroy`) therefore first removes the root's registry stages and
+or a failure whose directory no longer verified, leaves one. Every registry transaction first removes the root's registry stages and
 the controller directory's stages and, when it takes the lease of a context whose directory identity the registry
 records, the stages in that context's `state/` directory and in its operation,
 run and trust areas; every secret mutation first removes the stages in its
@@ -519,7 +514,7 @@ a private regular file named as that directory's publication stage, on its
 device and within its record bound, is removed; anything else is left to the
 verification that already refuses it. An operation, run or trust area refuses
 a record or directory named as a stage, so collection never removes one.
-Reads never collect.
+Reads never collect. Shared inspection verifies up to 16 such stages without collecting them.
 
 The [secret store](secrets.md#local-keyring-v4)'s exclusive writes keep what
 they leave for its own recovery. Its replacement stages through the same

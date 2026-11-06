@@ -72,3 +72,14 @@ def test_a_registering_attempt_publishes_its_before_state_once():
     every = list(flattened(loaded("apply.yml")))
     registering = named(every, "Publish that this installation's marker is proved before it registers")
     assert "managedos_install_anaconda_prepared" in str(registering["when"])
+
+
+def test_fresh_install_proves_observed_marker_before_network_or_prepared():
+    tasks = list(flattened(loaded("apply.yml")))
+    read = tasks.index(named(tasks, "Read the installation the machine now holds, through its own channel"))
+    prove = tasks.index(named(tasks, "Prove the installed marker matches this frozen installation"))
+    verify = tasks.index(named(tasks, "Prove the installed machine answers on the exact key it reported"))
+    network = tasks.index(named(tasks, "Converge the installed machine to its declared network"))
+    assert read < prove < verify < network
+    check = tasks[prove]["ansible.builtin.assert"]["that"]
+    assert "managedos_install_anaconda_marker == bootwright_os_install_material.marker" in check

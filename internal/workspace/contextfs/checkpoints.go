@@ -10,6 +10,7 @@ type checkpoint string
 const (
 	checkpointAfterClientAreaDirectory      checkpoint = "after-client-area-directory"
 	checkpointAfterContextDirectory         checkpoint = "after-context-directory"
+	checkpointAfterContextPublish           checkpoint = "after-context-publish"
 	checkpointAfterContextReservation       checkpoint = "after-context-reservation"
 	checkpointAfterControllerBundleCreate   checkpoint = "after-controller-bundle-create"
 	checkpointAfterControllerDirectory      checkpoint = "after-controller-directory"
@@ -28,6 +29,7 @@ const (
 	checkpointBeforeClientAreaReservation   checkpoint = "before-client-area-reservation"
 	checkpointBeforeClientAreaSealing       checkpoint = "before-client-area-sealing"
 	checkpointBeforeContextReady            checkpoint = "before-context-ready"
+	checkpointBeforeContextPublish          checkpoint = "before-context-publish"
 	checkpointBeforeContextRmdir            checkpoint = "before-context-rmdir"
 	checkpointBeforeContextSubtree          checkpoint = "before-context-subtree"
 	checkpointBeforeContextUnlink           checkpoint = "before-context-unlink"

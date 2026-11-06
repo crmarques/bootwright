@@ -5,6 +5,7 @@ func checkpoints() []checkpoint {
 	return []checkpoint{
 		checkpointAfterClientAreaDirectory,
 		checkpointAfterContextDirectory,
+		checkpointAfterContextPublish,
 		checkpointAfterContextReservation,
 		checkpointAfterControllerBundleCreate,
 		checkpointAfterControllerDirectory,
@@ -22,6 +23,7 @@ func checkpoints() []checkpoint {
 		checkpointBeforeClientAreaAttribution,
 		checkpointBeforeClientAreaReservation,
 		checkpointBeforeClientAreaSealing,
+		checkpointBeforeContextPublish,
 		checkpointBeforeContextReady,
 		checkpointBeforeContextRmdir,
 		checkpointBeforeContextSubtree,

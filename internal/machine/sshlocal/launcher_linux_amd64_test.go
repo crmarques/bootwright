@@ -44,7 +44,8 @@ func launcher(t *testing.T, client string) Launcher {
 	t.Helper()
 	home := t.TempDir()
 	return Launcher{
-		Client: client, Home: func() (string, error) { return home, nil },
+		qualify: func(path string) (string, error) { return path, nil },
+		Client:  client, Home: func() (string, error) { return home, nil },
 		Owner: func() (int, error) { return os.Getuid(), nil }, Files: &directFiles{},
 		PolicyPath: "", Scratch: t.TempDir(),
 		Environ: func() []string {

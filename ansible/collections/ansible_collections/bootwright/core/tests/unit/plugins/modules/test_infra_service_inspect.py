@@ -129,3 +129,29 @@ def test_the_module_reports_a_listener_the_service_does_not_own(service, listene
     result = run({"request": request, "foreign": True}, capsys)
     assert result["foreign"] == ([{"transport": "tcp", "address": "127.0.0.1", "port": listener}] if foreign else [])
     assert "foreign" not in run({"request": request}, capsys)
+
+
+@pytest.mark.parametrize("failure,reason", [(socket.timeout(), "readiness-timeout"), (ConnectionRefusedError(), "listener-failed")])
+def test_readiness_classifies_timeout_and_refusal(monkeypatch, capsys, failure, reason):
+    monkeypatch.setattr(inspect, "observe", lambda *_: {"unit": "active"})
+    monkeypatch.setattr(inspect, "probe_targets", lambda _: ["192.0.2.1"])
+
+    def fail(*_arguments):
+        raise failure
+    monkeypatch.setattr(inspect, "answer_for", fail)
+    result = run({"request": {"port": 53}, "readiness": True, "attempts": 1}, capsys)
+    assert result["failures"] == [{"port": 53, "reason": reason}]
+    assert not result["answers"]
+
+
+def test_definite_readiness_failure_precedes_an_unanswered_address(monkeypatch, capsys):
+    monkeypatch.setattr(inspect, "observe", lambda *_: {"unit": "active"})
+    monkeypatch.setattr(inspect, "probe_targets", lambda _: ["192.0.2.1", "192.0.2.2"])
+
+    def fail(_request, address):
+        if address.endswith("1"):
+            raise socket.timeout()
+        raise ConnectionRefusedError()
+    monkeypatch.setattr(inspect, "answer_for", fail)
+    result = run({"request": {"port": 53}, "readiness": True, "attempts": 1}, capsys)
+    assert [failure["reason"] for failure in result["failures"]] == ["listener-failed", "readiness-timeout"]

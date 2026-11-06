@@ -84,6 +84,7 @@ type testImplementation struct {
 	needs               bool
 	initialized, opened int
 	last                *testSession
+	openErr             error
 }
 
 func (i *testImplementation) Backend() string {
@@ -116,6 +117,9 @@ func (i *testImplementation) Initialize(ctx context.Context, c Context, a Area, 
 }
 func (i *testImplementation) Open(_ context.Context, _ Context, _ Area, _ Selector, m SessionMaterial) (StoreSession, error) {
 	i.opened++
+	if i.openErr != nil {
+		return nil, i.openErr
+	}
 	return i.newSession(m)
 }
 func (i *testImplementation) newSession(m SessionMaterial) (StoreSession, error) {
@@ -450,4 +454,44 @@ func FuzzCanonicalStoreRecord(f *testing.F) {
 			}
 		}
 	})
+}
+
+func TestCorruptSelectorNamesRecoveryAndPurgeForReadsAndWrites(t *testing.T) {
+	a, w, _ := testAccess(testBackend("selected", false))
+	w.area.files[RecordPath] = []byte(`{"not":"authenticated metadata"}`)
+	for _, mutate := range []bool{false, true} {
+		callback := func(StoreSession, Selection) error { t.Fatal("corrupt store reached callback"); return nil }
+		var err error
+		if mutate {
+			err = a.Mutate(context.Background(), w.selected, callback)
+		} else {
+			err = a.View(context.Background(), w.selected, false, callback)
+		}
+		found := diagnostics.Of(err)
+		if len(found) != 1 || found[0].Code != "secret.store.corrupt" || !strings.Contains(found[0].Remediation, CorruptStoreExits(w.selected.Name)) || !strings.Contains(found[0].Remediation, "newer Bootwright build") {
+			t.Fatalf("corruption exits = %+v", found)
+		}
+	}
+}
+
+func TestBackendAuthenticationFailureNamesContextRecovery(t *testing.T) {
+	backend := testBackend("selected", false)
+	a, w, _ := testAccess(backend)
+	if err := a.Initialize(context.Background(), w.selected, "selected", func(StoreSession, Selection, bool) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	backend.openErr = Failure("store.corrupt", "metadata authentication failed")
+	for _, mutate := range []bool{false, true} {
+		callback := func(StoreSession, Selection) error { t.Fatal("unauthenticated store reached callback"); return nil }
+		var err error
+		if mutate {
+			err = a.Mutate(context.Background(), w.selected, callback)
+		} else {
+			err = a.View(context.Background(), w.selected, true, callback)
+		}
+		found := diagnostics.Of(err)
+		if len(found) != 1 || !strings.Contains(found[0].Remediation, CorruptStoreExits(w.selected.Name)) {
+			t.Fatalf("authentication failure = %+v", found)
+		}
+	}
 }

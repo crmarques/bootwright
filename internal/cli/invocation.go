@@ -53,6 +53,9 @@ func ClassifyInvocation(args []string) InvocationClass {
 	if path == "validate" && len(arrayValue(command.Flags(), "file")) != 0 {
 		return classification
 	}
+	if renderHelp(path, command.Flags()) || (path == "render" && stringValue(command.Flags(), "input-dir") != "") {
+		return classification
+	}
 	ambient := contextFreeAcquisition(path, command.Flags())
 	if path == "controller install" && (boolValue(command.Flags(), "dry-run") || boolValue(command.Flags(), "download-only")) {
 		classification.AmbientRoute = ambient
@@ -62,6 +65,10 @@ func ClassifyInvocation(args []string) InvocationClass {
 	classification.SecretStdin = secretStdin(path, command.Flags())
 	classification.URLStdin = path == "media add" && stringValue(command.Flags(), "from-url-file") == "-"
 	return classification
+}
+
+func renderHelp(path string, flags *pflag.FlagSet) bool {
+	return path == "render" && stringValue(flags, "input-dir") == "" && stringValue(flags, "output-dir") == ""
 }
 
 func secretStdin(path string, flags *pflag.FlagSet) string {

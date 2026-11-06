@@ -156,10 +156,10 @@ PHYSICAL = {
     FACTS["baremetal"]: "identity-mismatch",
 }
 
-UNANSWERED = dict(inspected(power="", serial="", uuid="", addresses=[]), msg="reading the system failed: HTTP 503")
+UNANSWERED = dict(inspected(power="", serial="", uuid="", addresses=[]), msg="reading the system failed: HTTP 503", unanswered=True)
 PROVED = {
     "the declared machine, off": (inspected(), None),
-    "a controller that did not answer": (UNANSWERED, ""),
+    "a controller that did not answer": (UNANSWERED, "target-unanswered"),
     "a declared address the machine does not report": (inspected(addresses=MACS[:1]), "hardware-mismatch"),
     "an inventory read only in part": (inspected(failures=["EthernetInterfaces/2"]), "hardware-mismatch"),
     "another system at the controller": (inspected(uuid="4c4c4544-0042-3510-8052-b4c04f4d4e32"), "identity-mismatch"),
@@ -194,7 +194,7 @@ def test_a_proof_of_a_machine_its_substrate_created_names_only_a_running_one(reg
 # (TestEachArmsPreBootEntryPointNamesExactlyTheseRefusals), and the protocol of
 # each consumer names exactly the union.
 def test_each_proof_names_each_refusal_once_and_clears_it_around_its_checks():
-    target = ["hardware-mismatch", "identity-mismatch", "machine-running", ""]
+    target = ["target-unanswered", "hardware-mismatch", "identity-mismatch", "machine-running", ""]
     firmware = ["firmware-setting-mismatch", "firmware-setting-not-applied", ""]
     assert named("baremetal") == [""] + target + firmware + target + ["tpm-absent", ""]
     assert named("libvirt") == ["", "machine-running", ""]

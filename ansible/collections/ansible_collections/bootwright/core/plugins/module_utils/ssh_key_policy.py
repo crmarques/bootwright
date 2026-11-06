@@ -69,7 +69,8 @@ def configuration(data):
         if not line:
             continue
         match = re.fullmatch(r"([A-Za-z]+)\s*(?:=\s*|\s+)([A-Za-z0-9@.,_+^*?!/ -]+)", line)
-        if match is None or match.group(1).lower() not in DIRECTIVES:
+        disabled_gssapi = match is not None and match.group(1).lower() == "gssapikeyexchange" and match.group(2).strip().lower() == "no"
+        if match is None or (match.group(1).lower() not in DIRECTIVES and not disabled_gssapi):
             raise PolicyError("the placement host SSH crypto policy has unsupported syntax or a non-crypto directive")
         lines.append(line)
     return "\n".join(lines) + ("\n" if lines else "")

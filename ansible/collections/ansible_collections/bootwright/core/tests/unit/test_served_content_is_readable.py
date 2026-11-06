@@ -158,6 +158,10 @@ def served_file_tasks():
                     continue
                 for arguments in instances(task[module], task.get("loop")):
                     destination = str(arguments.get("path", arguments.get("dest", "")))
+                    if (module == "ansible.builtin.file" and arguments.get("state") == "directory"
+                            and destination == "{{ managedos_install_anaconda_private_dir }}/.stage"):
+                        assert (arguments.get("owner"), arguments.get("group"), arguments.get("mode")) == ("root", "root", "0700")
+                        continue
                     if destination in staged or served(destination, names):
                         found.append((path.relative_to(ROLES).as_posix(), task.get("name", ""), module, arguments))
     return found

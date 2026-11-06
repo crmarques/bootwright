@@ -2,6 +2,7 @@ package artifactserver
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"time"
 
@@ -172,6 +173,9 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 		err = ValidateAbsence(result.Evidence, digest)
 	}
 	if err != nil {
+		if errors.Is(err, certificateMismatch) {
+			return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+		}
 		return unknown, err
 	}
 	outcome := reconciliation.OutcomeChanged
@@ -291,7 +295,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: Implementation, Operation: operation, Variable: variablePrefix,
 		Canonical: canonical, Placement: request.Placement, Materials: materials(request), Values: values,
-		Refusals: managedservice.ListenerRefusals(Kind, request.Identity.Service, request.BindAddress, listenerPorts(request)),
+		Refusals: managedservice.ReadinessRefusals(Kind, request.Identity.Service, request.BindAddress, listenerPorts(request)),
 	}))
 }
 

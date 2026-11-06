@@ -8,10 +8,10 @@ import (
 // The refusals a machine role's pre_boot entry point names when its proof of
 // the target fails, each left for the installation that composed it to name to
 // its own runner, which reports the installation's diagnostic for it instead
-// of the adapter's failure. A read the management controller did not answer
-// names none: the controller's own message, in the retained output, is its
-// reason.
+// of the adapter's failure. An unanswered system read keeps its cause and stays unknown.
 const (
+	// RefusalTargetUnanswered preserves an unknown physical target proof.
+	RefusalTargetUnanswered = "target-unanswered"
 	// RefusalHardwareMismatch is a physical machine whose complete hardware
 	// inventory is not the declared set, or that could not be read in full.
 	RefusalHardwareMismatch = "hardware-mismatch"
@@ -72,6 +72,7 @@ func PreBootRefusals(arm, contextName, continuation, machine, endpoint string) m
 		}
 	case ArmBaremetal:
 		return map[string]error{
+			RefusalTargetUnanswered: UnansweredTarget(machine, endpoint),
 			RefusalHardwareMismatch: refused("the machine answering at "+endpoint+" does not report exactly the hardware addresses "+identity+
 				" declares, or its inventory could not be read in full, so no media was inserted into it and it was not booted",
 				"once the machine reports the hardware "+identity+" declares in full, run "+next+"; to correct that declaration instead, "+destroy+
@@ -93,4 +94,14 @@ func PreBootRefusals(arm, contextName, continuation, machine, endpoint string) m
 		}
 	}
 	return nil
+}
+
+// UnansweredTarget never interprets an unavailable system read as different hardware.
+func UnansweredTarget(machine, endpoint string) error {
+	return &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
+		Severity: "error", Code: "lifecycle.unknown",
+		Message:     "the management controller at " + endpoint + " did not answer the system read for Machine/" + machine,
+		Remediation: "read the controller's cause in the attempt's retained output, restore access and repeat apply",
+		Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: machine},
+	}}}
 }

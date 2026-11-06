@@ -440,7 +440,7 @@ func TestAnApplyHandsTheRunnerItsForeignListenerRefusal(t *testing.T) {
 		t.Fatalf("adapter invocations = %d", len(recorder.requests))
 	}
 	refusals := recorder.requests[0].Refusals
-	if keys := slices.Sorted(maps.Keys(refusals)); !slices.Equal(keys, []string{"foreign-listener-8080", "foreign-listener-8443", "unassigned-bind-address-8080", "unassigned-bind-address-8443"}) {
+	if keys := slices.Sorted(maps.Keys(refusals)); !slices.Equal(keys, []string{"certificate-mismatch-8080", "certificate-mismatch-8443", "foreign-listener-8080", "foreign-listener-8443", "listener-failed-8080", "listener-failed-8443", "readiness-timeout-8080", "readiness-timeout-8443", "readiness-unproved-8080", "readiness-unproved-8443", "unassigned-bind-address-8080", "unassigned-bind-address-8443"}) {
 		t.Fatalf("the runner was handed refusals %v, want foreign and unassigned refusals per listener port", keys)
 	}
 	socket := managedservice.HostPort(request.BindAddress, 8443)
@@ -455,5 +455,52 @@ func TestAnApplyHandsTheRunnerItsForeignListenerRefusal(t *testing.T) {
 			reported[0].Object.Name != request.Identity.Service || !strings.Contains(reported[0].Message, socket) {
 			t.Fatalf("the refusal = %#v, want one naming %s on %s/%s", reported, socket, Kind, request.Identity.Service)
 		}
+	}
+}
+
+func TestCertificateMismatchIsDefiniteFailure(t *testing.T) {
+	material, _ := issue(t, validOptions())
+	call := execution(t, material)
+	request, err := DecodeRequest(call.Block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: presenceEvidence(request, call.Block.RequestDigest, strings.Repeat("b", 64))}}
+	result, err := New(runner, fixedClock{}).Apply(context.Background(), call)
+	if err == nil || result.Outcome != reconciliation.OutcomeFailed {
+		t.Fatalf("wrong certificate outcome: %v %v", result, err)
+	}
+}
+
+func TestUnansweredListenerIsUnknown(t *testing.T) {
+	material, _ := issue(t, validOptions())
+	call := execution(t, material)
+	recorder := &fakeRunner{err: errors.New("record")}
+	_, _ = New(recorder, fixedClock{}).Apply(context.Background(), call)
+	timeout := recorder.requests[0].Refusals["readiness-timeout-8443"]
+	if timeout == nil {
+		t.Fatal("timeout lacks a typed refusal")
+	}
+	result, err := New(&fakeRunner{err: timeout}, fixedClock{}).Apply(context.Background(), call)
+	if err == nil || result.Outcome != reconciliation.OutcomeUnknown {
+		t.Fatalf("timeout outcome: %v %v", result, err)
+	}
+}
+
+func TestMalformedCertificateProofRemainsUnknown(t *testing.T) {
+	for _, fingerprint := range []string{"", "invalid", strings.Repeat("A", 64)} {
+		t.Run(fingerprint, func(t *testing.T) {
+			material, _ := issue(t, validOptions())
+			call := execution(t, material)
+			request, err := DecodeRequest(call.Block.Request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: presenceEvidence(request, call.Block.RequestDigest, fingerprint)}}
+			result, err := New(runner, fixedClock{}).Apply(context.Background(), call)
+			if err == nil || result.Outcome != reconciliation.OutcomeUnknown {
+				t.Fatalf("unproved certificate outcome: %v %v", result, err)
+			}
+		})
 	}
 }

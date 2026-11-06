@@ -5,6 +5,7 @@ package contextfs
 import (
 	"encoding/json"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -46,6 +47,7 @@ func normalizedSetupState(value prerequisites.SetupState) prerequisites.SetupSta
 	if value.Pending != nil {
 		pending := *value.Pending
 		pending.Actions = nonNil(slices.Clone(pending.Actions))
+		pending.Requested = nonNil(slices.Clone(pending.Requested))
 		value.Pending = &pending
 	}
 	if value.Receipt != nil {
@@ -92,11 +94,19 @@ func validateSetupState(value prerequisites.SetupState) error {
 }
 
 func validatePendingSetup(pending prerequisites.PendingSetup) error {
-	if _, valid := setupRunNumber(pending.ID); !valid || !validControllerDigest(pending.PlanDigest) {
+	if !validSetupIdentity(pending.ID) || !validControllerDigest(pending.PlanDigest) {
 		return state("pending setup identity is invalid")
 	}
 	if pending.Actions == nil || len(pending.Actions) > maxSetupActions || !tokens(pending.Actions) {
 		return state("pending setup actions are invalid")
+	}
+	if pending.Requested == nil || len(pending.Requested) > maxSetupPackages || !slices.IsSorted(pending.Requested) {
+		return state("pending package requirements exceed their bound")
+	}
+	for _, requirement := range pending.Requested {
+		if !prerequisites.ValidHostRequirement(requirement) {
+			return state("pending package requirement is invalid")
+		}
 	}
 	started, err := time.Parse(time.RFC3339Nano, pending.StartedAt)
 	if err != nil || started.UTC().Format(time.RFC3339Nano) != pending.StartedAt {
@@ -118,7 +128,7 @@ func validateHostReceipt(receipt prerequisites.HostReceipt) error {
 		return state("setup receipt package count is invalid")
 	}
 	for _, item := range receipt.Packages {
-		_, run := setupRunNumber(item.InstalledBy)
+		run := validSetupIdentity(item.InstalledBy)
 		if !setupText(item.Requirement) || !setupText(item.Provider) || !setupText(item.Repository) || !run && item.InstalledBy != prerequisites.PresentBeforeBootwright {
 			return state("setup receipt package is invalid")
 		}
@@ -148,4 +158,12 @@ func setupText(value string) bool {
 		}
 	}
 	return true
+}
+
+func validSetupIdentity(id string) bool {
+	if _, ok := setupRunNumber(id); ok {
+		return true
+	}
+	token, ok := strings.CutPrefix(id, "setup-")
+	return ok && len(token) == 32 && strings.Trim(token, "0123456789abcdef") == ""
 }

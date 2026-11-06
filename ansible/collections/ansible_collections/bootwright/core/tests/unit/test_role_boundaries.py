@@ -586,6 +586,12 @@ def reporter(ordered, position):
         if (set(facts) == {"containercluster_install_agent_lifecycle_refusal"}
                 and facts["containercluster_install_agent_lifecycle_refusal"] in {"media-insert", "media-eject", "controller-read"}):
             continue
+        if (set(facts) == {"substrate_baremetal_machine_refusal"}
+                and facts["substrate_baremetal_machine_refusal"] == "target-unanswered"):
+            continue
+        if (action(other) == "bootwright.core.substrate_physical_protocol"
+                and arguments(other) == {"phase": "refused", "reason": "target-unanswered"}):
+            continue
         if phase(other) != "group":
             return None
     return None

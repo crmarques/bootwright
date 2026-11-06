@@ -55,7 +55,7 @@ def service(kind, slug, name, port, **fields):
         "placement": LOCAL,
         "port": port,
         "unit": "bootwright-%s-%s-%s" % (CONTEXT, slug, name),
-        "version": "managed-service-v4",
+        "version": "managed-service-v5",
     }
     request.update(fields)
     return request
@@ -72,7 +72,7 @@ ARTIFACT_SERVER = {
     "placement": LOCAL,
     "tls": {"fingerprint": DIGEST, "minVersion": "TLSv1.2", "secret": "media-serving"},
     "unit": "bootwright-%s-artifact-server-media" % CONTEXT,
-    "version": "artifact-server-nginx-v2",
+    "version": "artifact-server-nginx-v3",
 }
 
 NETWORK = {"address": "192.0.2.1/24", "bridge": "virbr-lab", "forward": "nat", "managed": True,
@@ -301,3 +301,11 @@ def test_the_dns_configuration_answers_every_declared_address_of_a_name():
     assert answers["dual-01.lab.example.test"] == {"192.0.2.12", "2001:db8::12"}
     assert answers["rhel-01.lab.example.test"] == {"192.0.2.11"}
     assert answers["apps.sno.lab.example.test"] == {"192.0.2.21", "192.0.2.22"}
+
+
+@pytest.mark.parametrize("address,flag", [("192.0.2.10", "-4"), ("2001:db8::10", "-6")])
+def test_chrony_opens_only_the_declared_address_family(address, flag):
+    variables = copy.deepcopy(SCOPES["infra_managed_service", "chrony.container.j2"])
+    variables["bootwright_managed_service_request"]["bindAddress"] = address
+    output = render("infra_managed_service", "chrony.container.j2", scope("infra_managed_service", variables))
+    assert "Exec=-d -x " + flag + " -f" in output

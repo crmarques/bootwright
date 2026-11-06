@@ -233,6 +233,12 @@ func TestTheNextRegistryTransactionCollectsRootRegistryStages(t *testing.T) {
 		run  func() error
 	}{
 		{"view", func() error { _, err := store.View(ctx); return err }},
+		{"inspect", func() error {
+			return store.Inspect(ctx, "", func(tx contexts.Transaction) error { _, err := tx.MutationState(ctx, checkpointContext); return err })
+		}},
+		{"scoped inspect", func() error {
+			return store.Inspect(ctx, checkpointContext, func(tx contexts.Transaction) error { _, err := tx.MutationState(ctx, checkpointContext); return err })
+		}},
 		{"lifecycle read", func() error {
 			return store.ReadLifecycle(ctx, checkpointContext, func(lifecycle.View) error { return nil })
 		}},
@@ -298,6 +304,12 @@ func TestReadsNeverCollectAStage(t *testing.T) {
 		run  func() error
 	}{
 		{"view", func() error { _, err := store.View(ctx); return err }},
+		{"inspect", func() error {
+			return store.Inspect(ctx, "", func(tx contexts.Transaction) error { _, err := tx.MutationState(ctx, checkpointContext); return err })
+		}},
+		{"scoped inspect", func() error {
+			return store.Inspect(ctx, checkpointContext, func(tx contexts.Transaction) error { _, err := tx.MutationState(ctx, checkpointContext); return err })
+		}},
 		{"lifecycle", func() error {
 			return store.ReadLifecycle(ctx, checkpointContext, func(lifecycle.View) error { return nil })
 		}},
@@ -627,5 +639,41 @@ func TestARefusedLeaseIsReleasedAndNeverHeld(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("the transaction failed: %#v", diagnostics.Of(err))
+	}
+}
+
+func TestInspectionRefusesUnsafePublicationStagesWithoutCollecting(t *testing.T) {
+	for _, shape := range []string{"public", "oversize", "linked", "too-many"} {
+		t.Run(shape, func(t *testing.T) {
+			store, _ := lifecycleFixture(t)
+			stage := filepath.Join(contextStatePath(store), plantedStageName(1, ".json"))
+			plantStage(t, stage, []byte("{}\n"))
+			switch shape {
+			case "public":
+				if err := os.Chmod(stage, 0644); err != nil {
+					t.Fatal(err)
+				}
+			case "oversize":
+				if err := os.Truncate(stage, maxRecord+1); err != nil {
+					t.Fatal(err)
+				}
+			case "linked":
+				if err := os.Link(stage, filepath.Join(t.TempDir(), "link")); err != nil {
+					t.Fatal(err)
+				}
+			case "too-many":
+				for i := 2; i <= maxContextStateStages+1; i++ {
+					plantStage(t, filepath.Join(contextStatePath(store), plantedStageName(i, ".json")), []byte("{}\n"))
+				}
+			}
+			ctx := context.Background()
+			err := store.Inspect(ctx, "", func(tx contexts.Transaction) error { _, err := tx.MutationState(ctx, checkpointContext); return err })
+			if err == nil {
+				t.Fatal("unsafe stage admitted")
+			}
+			if _, err := os.Lstat(stage); err != nil {
+				t.Fatalf("inspection removed stage: %v", err)
+			}
+		})
 	}
 }

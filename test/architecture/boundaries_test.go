@@ -36,6 +36,7 @@ func packageRoles() map[string]packageRole {
 		"internal/infrastructureservices":          domainRole,
 		"internal/diagnostics":                     technicalRole,
 		"internal/adapterprotocol":                 technicalRole,
+		"internal/nativeexec":                      technicalRole,
 		"internal/canonicaljson":                   technicalRole,
 		"internal/desiredstate/customplaybooks":    domainRole,
 		"internal/desiredstate/inputfs":            adapterRole,
@@ -48,6 +49,7 @@ func packageRoles() map[string]packageRole {
 		"internal/controller/hostlinux":            adapterRole,
 		"internal/controller/firewalllocal":        adapterRole,
 		"internal/controller/bundlelocal":          adapterRole,
+		"internal/acquisition":                     technicalRole,
 		"internal/controller/ansiblelocal":         adapterRole,
 		"internal/controller/runtimelock":          domainRole,
 		"internal/controller/hostdnf":              adapterRole,
@@ -482,7 +484,9 @@ func readOnlyAdapters() []string {
 // package lists exactly the capabilities it uses.
 func effectGrants() map[string][]string {
 	return map[string][]string{
-		everyPackage: {"net.ParseMAC", "net/netip", "net/url"},
+		everyPackage:                               {"net.ParseMAC", "net/netip", "net/url"},
+		"internal/nativeexec":                      {"os", "syscall"},
+		"internal/acquisition":                     {"net/http", "net.Conn", "net.DefaultResolver", "net.DNSError", "net.JoinHostPort", "net.SplitHostPort"},
 		"internal/containercluster/preflightlocal": {"io", "os/exec"},
 		"internal/controller/firewalllocal":        {"os/exec", "net.Interfaces"},
 		"internal/cli":                             {"fmt.Fprintf", "fmt.Fprintln", "github.com/spf13/cobra", "github.com/spf13/pflag", "io"},
@@ -510,9 +514,9 @@ func effectGrants() map[string][]string {
 			"golang.org/x/sys/unix.SchedGetaffinity", "golang.org/x/sys/unix.S_IFMT", "golang.org/x/sys/unix.S_IFREG",
 			"golang.org/x/sys/unix.Statfs_t", "golang.org/x/sys/unix.Stat_t", "io", "os.File", "os.IsNotExist", "os.NewFile",
 		},
-		"internal/controller/bundlelocal":  {"io", "net.DNSError", "net.Dialer", "net/http", "os", "syscall"},
+		"internal/controller/bundlelocal":  {"io", "net.Dialer", "net/http", "os", "syscall"},
 		"internal/controller/ansiblelocal": {"io", "os", "os/exec", "syscall"},
-		"internal/controller/hostdnf":      {"io", "os", "os/exec", "syscall"},
+		"internal/controller/hostdnf":      {"io", "os/exec", "syscall"},
 		"internal/controller/venvlocal":    {"io", "net.Dialer", "net/http", "os", "os/exec", "syscall"},
 		"internal/controller/stagelocal":   {"golang.org/x/sys/unix", "io", "os", "syscall"},
 		// The SSH session adapter runs the one pinned client as a child and

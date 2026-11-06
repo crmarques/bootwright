@@ -55,6 +55,7 @@ const (
 )
 
 type Suppression struct {
+	Match         func(value, fallback Value) bool
 	Field         string
 	Value         Value
 	FallbackValue Value

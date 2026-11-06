@@ -25,7 +25,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 }
 
 func runInteractive(ctx context.Context, args []string, stdout, stderr io.Writer) int {
-	return processBoundary().run(ctx, args, stdout, stderr)
+	return safeInvocation(args, stdout, stderr, func() int {
+		return processBoundary().run(ctx, args, stdout, stderr)
+	})
 }
 
 // privilegeBoundary is what an interactive invocation acquires from its
@@ -267,17 +269,19 @@ func runServices(ctx context.Context, args []string, stdout, stderr io.Writer, s
 	if len(hooks) > 0 {
 		hook = hooks[0]
 	}
-	return cli.New(cli.Config{
-		Out:                 stdout,
-		ErrOut:              stderr,
-		BuildInfo:           buildInformation(),
-		Services:            services,
-		Presentation:        hook.presentation,
-		ErrorColumns:        hook.errorColumns,
-		CompletionPaths:     completionPaths,
-		BeginOperation:      hook.begin,
-		FinishProgress:      hook.finish,
-		EncodeEffectiveYAML: encoding.YAML,
-		EncodeEffectiveJSON: encoding.JSON,
-	}).Run(ctx, args)
+	return safeInvocation(args, stdout, stderr, func() int {
+		return cli.New(cli.Config{
+			Out:                 stdout,
+			ErrOut:              stderr,
+			BuildInfo:           buildInformation(),
+			Services:            services,
+			Presentation:        hook.presentation,
+			ErrorColumns:        hook.errorColumns,
+			CompletionPaths:     completionPaths,
+			BeginOperation:      hook.begin,
+			FinishProgress:      hook.finish,
+			EncodeEffectiveYAML: encoding.YAML,
+			EncodeEffectiveJSON: encoding.JSON,
+		}).Run(ctx, args)
+	})
 }

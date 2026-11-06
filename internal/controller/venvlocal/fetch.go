@@ -12,10 +12,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/acquisition"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/controller/runtimelock"
@@ -147,6 +149,10 @@ func (a *Adapter) source(ctx context.Context, egress prerequisites.SetupEgress, 
 		if mirror.Set() {
 			address = mirror.Location(file.Filename)
 		}
+		if mirror.Set() {
+			endpoint, _ := url.Parse(address)
+			ctx = acquisition.PrivateAcquisitionEndpoint(ctx, endpoint)
+		}
 		return receive(ctx, client, address, file, destination)
 	}
 	if mirror.Set() {
@@ -163,9 +169,10 @@ func mirrored(inner wheelSource, mirror prerequisites.WheelMirror) wheelSource {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		var transport *acquisition.Failure
 		var scoped *prerequisites.ScopedFailure
 		switch {
-		case errors.As(err, &scoped) && scoped.Routable:
+		case errors.As(err, &transport), errors.As(err, &scoped) && scoped.Routable:
 			return err
 		case err != nil:
 			return mirrorFailure(file.Filename+" is not a readable file of its locked size in the mirror "+mirror.String(), mirror)
@@ -247,15 +254,23 @@ func receive(ctx context.Context, client *http.Client, address string, file runt
 	}
 	request.Header.Set("Accept-Encoding", "identity")
 	request.Header.Set("User-Agent", "Bootwright-Controller/1")
-	response, err := client.Do(request)
+	// Each concurrent fetch owns its redirect origin.
+	scoped := *client
+	scoped.CheckRedirect = func(next *http.Request, previous []*http.Request) error {
+		if len(previous) >= maxRedirect || !approvedURL(next.URL) || !sameOrigin(approved, next.URL) {
+			return acquisition.AcquisitionBoundaryFailure("the wheel request redirected outside its approved HTTPS origin")
+		}
+		if client.CheckRedirect != nil {
+			return client.CheckRedirect(next, previous)
+		}
+		return nil
+	}
+	response, err := scoped.Do(request)
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return &prerequisites.ScopedFailure{
-			Message:    file.Filename + " could not be fetched from " + request.URL.Hostname(),
-			Correction: "Restore this host's access to " + request.URL.Hostname(), Routable: true,
-		}
+		return wheelTransportFailure(file.Filename, address, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK || response.ContentLength > file.Size || response.Header.Get("Content-Encoding") != "" {
@@ -276,8 +291,7 @@ func approvedURL(address *url.URL) bool {
 		address.Opaque == "" && address.Fragment == "" && (address.Port() == "" || address.Port() == "443")
 }
 
-// wheelClient is the one client every fetch of a run shares: system trust,
-// the explicit route, HTTPS only and a bounded redirect chain.
+// wheelClient shares system trust and explicit routing across a run.
 func wheelClient(ctx context.Context, egress prerequisites.SetupEgress) (*http.Client, error) {
 	selector, err := controller.NewProxySelector(egress.HTTPProxy, egress.HTTPSProxy, egress.NoProxy)
 	if err != nil {
@@ -296,7 +310,7 @@ func wheelClient(ctx context.Context, egress prerequisites.SetupEgress) (*http.C
 		MaxResponseHeaderBytes: 64 << 10, DisableCompression: true, MaxIdleConnsPerHost: fetchers,
 	}
 	return &http.Client{
-		Transport: transport, Timeout: fetchTimeout,
+		Transport: acquisition.GuardAcquisitionTransport(transport, approvedURL), Timeout: fetchTimeout,
 		CheckRedirect: func(request *http.Request, previous []*http.Request) error {
 			if len(previous) >= maxRedirect || !approvedURL(request.URL) {
 				return errors.New("the wheel request redirected outside HTTPS or too many times")
@@ -304,4 +318,14 @@ func wheelClient(ctx context.Context, egress prerequisites.SetupEgress) (*http.C
 			return nil
 		},
 	}, nil
+}
+
+func sameOrigin(left, right *url.URL) bool {
+	return left.Scheme == right.Scheme && strings.EqualFold(left.Hostname(), right.Hostname()) && effectivePort(left) == effectivePort(right)
+}
+func effectivePort(address *url.URL) string {
+	if address.Port() != "" {
+		return address.Port()
+	}
+	return "443"
 }

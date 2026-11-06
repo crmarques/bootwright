@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 	"unicode/utf8"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -22,14 +21,6 @@ const (
 	// the area's own per-file limit, so the bound is this store's decision to
 	// truncate rather than a write the area refuses.
 	MaxAdapterOutputBytes = 4 << 20
-	// adapterOutputFlush bounds what a running adapter's output holds in
-	// memory.
-	adapterOutputFlush = 8 << 10
-	// adapterOutputInterval bounds how long output waits before it is on disk,
-	// which is what makes a run readable while it is still going. Publishing
-	// costs a walk of the whole operation subtree, so a burst of lines is
-	// coalesced into one write rather than paying that walk per line.
-	adapterOutputInterval = time.Second
 	maxLogDetail          = 512
 )
 
@@ -102,10 +93,9 @@ func AttemptLogPath(id, block string, attempt, resolution int) (string, error) {
 type AdapterOutput struct {
 	// ctx is held because io.Writer has none and the writes arrive on the
 	// adapter process's own goroutine. Close takes the live one instead.
-	ctx   context.Context
-	area  Area
-	clock func() time.Time
-	path  string
+	ctx  context.Context
+	area Area
+	path string
 	// store is set for an attempt's output, which shares its area with the
 	// operation records and so takes only the room outputRoom gives it.
 	store   *Store
@@ -115,7 +105,6 @@ type AdapterOutput struct {
 	// limit is what this output keeps in all: MaxAdapterOutputBytes, lowered
 	// to what it holds once its area reached the line ReservedBytes keeps.
 	limit     int
-	flushed   time.Time
 	truncated bool
 	closed    bool
 }
@@ -126,7 +115,7 @@ type AdapterOutput struct {
 // directory is an attempt's, and never takes the area into ReservedBytes; a
 // bounded run's lies in an area of its own, which holds no records.
 func (s *Store) OpenAdapterOutput(ctx context.Context, target string) *AdapterOutput {
-	output := &AdapterOutput{ctx: ctx, area: s.area, clock: s.clock, path: target, limit: MaxAdapterOutputBytes}
+	output := &AdapterOutput{ctx: ctx, area: s.area, path: target, limit: MaxAdapterOutputBytes}
 	if operation, _, _ := strings.Cut(target, "/"); reconciliation.ValidOperationID(operation) {
 		output.store = s
 	}
@@ -148,9 +137,7 @@ func (o *AdapterOutput) Write(value []byte) (int, error) {
 		value = value[:max(room, 0)]
 	}
 	o.pending = append(o.pending, value...)
-	if o.due() {
-		_ = o.flush(o.ctx)
-	}
+	_ = o.flush(o.ctx)
 	return size, nil
 }
 
@@ -180,24 +167,9 @@ func (o *AdapterOutput) Retained() (int, bool) {
 	return o.written, o.truncated
 }
 
-// due reports whether what is buffered has grown large enough, or waited long
-// enough, to be worth publishing. The first write is always due, so an operator
-// following the run sees it start rather than a file that stays absent.
-func (o *AdapterOutput) due() bool {
-	if len(o.pending) >= adapterOutputFlush {
-		return true
-	}
-	return o.clock != nil && !o.clock().Before(o.flushed.Add(adapterOutputInterval))
-}
-
 func (o *AdapterOutput) flush(ctx context.Context) error {
 	if len(o.pending) == 0 {
 		return nil
-	}
-	if o.clock != nil {
-		// Recorded even when the write fails, so a failing area is retried on
-		// the interval instead of on every line.
-		o.flushed = o.clock()
 	}
 	if o.store != nil {
 		taken, err := o.store.outputRoom(ctx, len(o.pending))

@@ -24,6 +24,8 @@ const (
 	actionPublish = "publish"
 	actionScratch = "scratch"
 	actionRemove  = "remove"
+	actionRender  = "render"
+	actionResolve = "resolve"
 )
 
 const (
@@ -44,6 +46,7 @@ type helperRequest struct {
 	Action    string               `json:"action"`
 	Directory string               `json:"directory"`
 	Files     []rendering.TreeFile `json:"files"`
+	Private   bool                 `json:"private,omitempty"`
 }
 
 type helperResponse struct {
@@ -118,7 +121,7 @@ func decodeResponse(action string, data []byte) (string, error) {
 		}
 		return "", refuse(message, remedy)
 	}
-	if (action == actionScratch && !scratchPath(response.Directory)) || (action == actionPublish && !absolutePath(response.Directory)) {
+	if (action == actionScratch && !scratchPath(response.Directory)) || ((action == actionPublish || action == actionRender || action == actionResolve) && !absolutePath(response.Directory)) {
 		return "", refuse("the invoking account's file helper returned no usable directory", "repeat the command, and report this if it persists")
 	}
 	return response.Directory, nil
@@ -126,6 +129,16 @@ func decodeResponse(action string, data []byte) (string, error) {
 
 func local(ctx context.Context, trees Trees, request helperRequest) (string, error) {
 	switch request.Action {
+	case actionResolve:
+		if !absolutePath(request.Directory) {
+			return "", refuse("the artifact path is not absolute", "pass an absolute path this account can reach")
+		}
+		return trees.Resolve(request.Directory)
+	case actionRender:
+		if !absolutePath(request.Directory) || len(request.Files) != 1 || request.Files[0].Path != rendering.EffectiveStateFile {
+			return "", refuse("the artifact publication request is invalid", "repeat the render command")
+		}
+		return trees.Publish(ctx, request.Directory, request.Files[0].Path, request.Files[0].Data, request.Private)
 	case actionPublish:
 		if !absolutePath(request.Directory) {
 			return "", refuse("the path "+request.Directory+" is not absolute", "pass a path this account can reach")

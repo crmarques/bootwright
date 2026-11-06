@@ -145,3 +145,9 @@ func fitDisplayRow(value string, width int) string {
 func presentationASCII(value string) string {
 	return strings.NewReplacer("·", "/", "→", "->", "←", "<-", "—", "-", "–", "-", "✓", "+", "○", "o", "…", "...").Replace(value)
 }
+
+func InternalErrorDiagnostic(reference string) diagnostics.Diagnostic {
+	return diagnostics.Diagnostic{Severity: "error", Code: "runtime.internal",
+		Message:     "an internal failure stopped this command; reference " + reference,
+		Remediation: "repeat the command; report a repeated failure with this reference"}
+}

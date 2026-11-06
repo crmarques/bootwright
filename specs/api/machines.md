@@ -353,8 +353,7 @@ Attachments, bindings, interface assignments, and an install-address selection
 require a configured network. Each refuses at its own field with the remedy to
 select a network configuration with `network.configRef` or `network.inline` or
 to remove the selection or the interface; an OS-ready Machine, which declares
-contacts only, is told to remove it. OS-ready Machines declare only contacts, not
-network configuration. The retired `network.config`,
+contacts only, is told to remove it. The retired `network.config`,
 `networkConfigRef`, `interfaceAddresses`, and top-level `spec.addresses`
 forms are rejected; they are not aliases.
 
@@ -363,12 +362,12 @@ defaults `attachmentRef` to that reference's name. The default is valid only
 when the provider exposes exactly one attachment and that name resolves;
 otherwise a libvirt Machine requires an explicit selection, while a bare-metal
 Machine, whose attachment configures nothing, needs none. An authored
-attachment always wins and always resolves on its provider. Inline
-configuration has no reference name from which to derive an attachment. A
-Machine attached to a managed libvirt network selects an install address inside
+attachment always wins and always resolves on its provider. A Machine attached to a managed libvirt network selects an install address inside
 that attachment's prefix, other than the bridge's host address and, for an IPv4
 prefix shorter than /31, its network and broadcast addresses; each refuses at
 `network.installAddressRef` naming the prefix and every reserved address.
+Per-interface attachments use the install address's interface,
+following VLAN parents and all bond ports to the attachments that carry it.
 
 A non-provided Machine of a libvirt provider selects a network configuration
 whose composed NMState, after its overrides, has at least one `ethernet`

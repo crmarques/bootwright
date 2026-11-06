@@ -112,7 +112,7 @@ func TestTheBoundaryGivesASessionItsOwnStatus(t *testing.T) {
 // an account or runs anything, whether or not its command needs root.
 func TestASudoStartedRootInvocationRefusesAForeignVariableFirst(t *testing.T) {
 	foreign := &diagnostics.Diagnostic{Severity: "error", Code: "runtime.privilege", Message: "this root invocation was given variable GODEBUG"}
-	for _, args := range [][]string{{"machine", "stop", "--name", "rhel-01"}, {"version"}} {
+	for _, args := range [][]string{{"machine", "stop", "--name", "rhel-01"}, {"version"}, {"--help"}, {"completion", "bash"}, {strings.Repeat("x", 16385)}} {
 		var elevated []privilege.Invocation
 		var stdout, stderr bytes.Buffer
 		boundary := boundaryUnderTest(errors.New("accounts were resolved"), privilege.Outcome{}, &elevated)

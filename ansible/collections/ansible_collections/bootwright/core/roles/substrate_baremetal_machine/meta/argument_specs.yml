@@ -38,7 +38,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [machine-baremetal-v2]
+            choices: [machine-baremetal-v3]
       bootwright_substrate_physical_digest:
         type: str
         required: true

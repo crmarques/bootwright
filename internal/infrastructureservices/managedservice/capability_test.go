@@ -743,8 +743,16 @@ func TestAnApplyHandsTheRunnerItsForeignListenerRefusal(t *testing.T) {
 	if _, err := NewCapability(testDefinition(), recorder).Apply(context.Background(), call); err == nil {
 		t.Fatal("a failed run was accepted")
 	}
-	if len(recorder.requests) != 1 || len(recorder.requests[0].Refusals) != 2 || recorder.requests[0].Refusals[reason] == nil || recorder.requests[0].Refusals["unassigned-bind-address-"+FormatPort(request.Port)] == nil {
+	if len(recorder.requests) != 1 || len(recorder.requests[0].Refusals) != 4 || recorder.requests[0].Refusals[reason] == nil || recorder.requests[0].Refusals["unassigned-bind-address-"+FormatPort(request.Port)] == nil {
 		t.Fatalf("the runner was handed refusals %v, want foreign and unassigned socket refusals", recorder.requests[0].Refusals)
+	}
+	timeout := recorder.requests[0].Refusals["readiness-timeout-"+FormatPort(request.Port)]
+	if timeout == nil {
+		t.Fatal("unanswered listener has no typed refusal")
+	}
+	timed, timeoutErr := NewCapability(testDefinition(), &scriptedRunner{err: timeout}).Apply(context.Background(), call)
+	if timeoutErr == nil || timed.Outcome != reconciliation.OutcomeUnknown {
+		t.Fatalf("timeout: %+v %v", timed, timeoutErr)
 	}
 	socket := HostPort(request.BindAddress, request.Port)
 	for _, refused := range []string{reason, "unassigned-bind-address-" + FormatPort(request.Port)} {

@@ -84,3 +84,17 @@ func TestAnUnboundedPolicyIsRefused(t *testing.T) {
 		t.Fatal("an unbounded policy was accepted")
 	}
 }
+
+func TestPolicyRetainsOnlyTheFixedGSSAPIDisablingForm(t *testing.T) {
+	for _, line := range []string{"GSSAPIKeyExchange no", "gssapikeyexchange=NO", "GssapiKeyExchange No # disabled"} {
+		data, err := cryptographicPolicy([]byte(line+"\n"), true)
+		if err != nil || !strings.Contains(strings.ToLower(string(data)), "gssapikeyexchange") {
+			t.Fatalf("%q: configuration %q, error %v", line, data, err)
+		}
+	}
+	for _, value := range []string{"yes", "NO yes", "sometimes", ""} {
+		if _, err := cryptographicPolicy([]byte("GSSAPIKeyExchange "+value), true); err == nil {
+			t.Errorf("unsafe GSSAPI value %q accepted", value)
+		}
+	}
+}

@@ -27,7 +27,7 @@ const (
 
 const (
 	hostRequestVersion    = "substrate-host-kubevirt-v2"
-	machineRequestVersion = "machine-kubevirt-v2"
+	machineRequestVersion = "machine-kubevirt-v3"
 	hostEvidenceVersion   = "substrate-host-kubevirt-evidence-v1"
 	machineEvidence       = "machine-kubevirt-evidence-v1"
 )

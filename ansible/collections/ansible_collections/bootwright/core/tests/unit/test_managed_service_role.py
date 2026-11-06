@@ -74,7 +74,7 @@ def test_the_argument_spec_keys_the_request_by_its_frozen_implementation():
     assert request["kind"]["choices"] == ["DNSServer", "NTPServer", "Proxy"]
     assert request["implementation"]["choices"] == sorted(implementations()) == [
         "dns-server-dnsmasq-v1", "ntp-server-chrony-v1", "proxy-squid-v1"]
-    assert request["version"]["choices"] == ["managed-service-v4"]
+    assert request["version"]["choices"] == ["managed-service-v5"]
 
 
 def test_each_implementation_selects_only_its_own_templates():
@@ -146,7 +146,7 @@ def validate_of(tasks):
 
 
 MANAGED = {
-    "version": "managed-service-v4",
+    "version": "managed-service-v5",
     "kind": "DNSServer",
     "implementation": "dns-server-dnsmasq-v1",
     "unit": "bootwright-lab-dns-resolver",
@@ -156,7 +156,7 @@ MANAGED = {
     "port": 53,
 }
 ARTIFACT = {
-    "version": "artifact-server-nginx-v2",
+    "version": "artifact-server-nginx-v3",
     "identity": {"context": "lab"},
     "contentRoot": "/var/lib/bootwright-services/lab/artifact-server/media",
 }
@@ -316,3 +316,19 @@ def test_a_refusal_no_diagnostic_names_is_never_published(protocol, arguments, p
         return
     assert result == {"changed": False}
     assert emitted == [{"phase": "refused", "reason": published}]
+
+
+@pytest.mark.parametrize("role,protocol", [
+    ("infra_managed_service", "infra_service_protocol"),
+    ("infra_artifact_server_nginx", "artifact_server_protocol"),
+])
+def test_readiness_refusal_precedes_stop_and_completion(role, protocol):
+    tasks = yaml.safe_load((ROLES / role / "tasks" / "apply.yml").read_text())
+    refusal = next(i for i, task in enumerate(tasks) if task.get("name") == "Report the classified readiness refusal")
+    stop = next(i for i, task in enumerate(tasks) if task.get("name", "").startswith("Refuse an unproved"))
+    completed = next(i for i, task in enumerate(tasks) if task.get("bootwright.core." + protocol, {}).get("phase") == "completed")
+    assert refusal < stop < completed
+    args = tasks[refusal]["bootwright.core." + protocol]
+    assert args["phase"] == "refused" and ".failures[0].reason" in args["reason"] and ".failures[0].port" in args["port"]
+    assert ".failures | length > 0" in tasks[refusal]["when"]
+    assert "ansible.builtin.assert" in tasks[stop]

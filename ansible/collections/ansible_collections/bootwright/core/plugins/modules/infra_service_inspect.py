@@ -55,6 +55,12 @@ EXAMPLES = r"""
 """
 
 RETURN = r"""
+failures:
+  description: Classified readiness refusals, definite failures before timeouts.
+  type: list
+  elements: dict
+  returned: always
+
 observation:
   description: The owned host resources and their observed state.
   returned: always
@@ -82,6 +88,7 @@ unproved:
   elements: str
 """
 
+import socket
 import time
 
 from ansible.module_utils.basic import AnsibleModule
@@ -147,22 +154,26 @@ def main():
     if not module.params["readiness"]:
         module.exit_json(**result)
         return
+    result["failures"] = []
     answers, unproved = [], []
     for address in probe_targets(request):
-        answer, last = None, None
+        answer, last, cause = None, None, "listener-failed"
         for remaining in range(attempts):
             try:
                 answer = answer_for(request, address)
                 break
             except (OSError, ValueError) as failure:
                 last = probe_failure(failure)
+                cause = "readiness-timeout" if isinstance(failure, socket.timeout) else "listener-failed"
                 if remaining + 1 < attempts:
                     time.sleep(RETRY_DELAY)
         if answer is None:
+            result["failures"].append({"port": int(request["port"]), "reason": cause})
             unproved.append("%s:%s (%s)" % (address, request["port"], last))
             continue
         answers.append({"address": address, "answer": answer, "port": int(request["port"])})
     result["answers"] = answers
+    result["failures"].sort(key=lambda failure: failure["reason"] == "readiness-timeout")
     result["unproved"] = unproved
     module.exit_json(**result)
 

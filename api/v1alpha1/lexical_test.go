@@ -237,7 +237,7 @@ func TestImageAndRegistryPathsFollowTheOCIGrammar(t *testing.T) {
 	for _, component := range refusedComponents {
 		refused = append(refused, "registry.example.test/"+component+":1", "registry.example.test/"+component+"@"+lexicalDigest)
 	}
-	lexicalRows(t, "image", admitted, append(refused, "registry.example.test/squid:latest"))
+	lexicalRows(t, "image", admitted, append(refused, "registry.example.test/squid:latest", "squid:6.10", "registry.example.test:5000", "squid@"+lexicalDigest))
 }
 
 // A download mirror is an HTTPS base URL the controller stage appends a

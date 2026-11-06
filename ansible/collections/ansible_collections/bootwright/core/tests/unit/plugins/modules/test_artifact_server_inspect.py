@@ -93,3 +93,40 @@ def test_an_unreadable_socket_table_fails_the_task(tmp_path, monkeypatch, capsys
     assert result["failed"] is True
     assert result["msg"] == "the host's socket tables could not be read: %s" % error.__name__
     assert "foreign" not in result
+
+
+@pytest.mark.parametrize("failure,reason", [(socket.timeout(), "readiness-timeout"), (ConnectionRefusedError(), "listener-failed")])
+def test_readiness_classifies_timeout_and_refusal(monkeypatch, capsys, failure, reason):
+    monkeypatch.setattr(inspect, "observe", lambda *_: {"unit": "active"})
+    monkeypatch.setattr(inspect, "probe_targets", lambda _: [{"name": "http", "address": "192.0.2.1", "port": 8080, "protocol": "http"}])
+
+    def fail(_target):
+        raise failure
+    monkeypatch.setattr(inspect, "probe", fail)
+    result = run({"request": {}, "readiness": True, "attempts": 1}, capsys)
+    assert result["failures"] == [{"port": 8080, "reason": reason}]
+    assert not result["listeners"]
+
+
+def test_readiness_certificate_mismatch_never_completes(monkeypatch, capsys):
+    target = {"name": "https", "address": "192.0.2.1", "port": 8443, "protocol": "https"}
+    monkeypatch.setattr(inspect, "observe", lambda *_: {"unit": "active"})
+    monkeypatch.setattr(inspect, "probe_targets", lambda _: [target])
+    monkeypatch.setattr(inspect, "probe", lambda _: dict(target, fingerprint="b" * 64, status="HTTP/1.1 200 OK"))
+    result = run({"request": {}, "readiness": True, "attempts": 1, "fingerprint": "a" * 64}, capsys)
+    assert result["failures"] == [{"port": 8443, "reason": "certificate-mismatch"}]
+    assert not result["listeners"]
+
+
+@pytest.mark.parametrize("fingerprint", [None, "", "invalid", "A" * 64])
+def test_missing_or_malformed_fingerprint_is_unknown(monkeypatch, capsys, fingerprint):
+    target = {"name": "https", "address": "192.0.2.1", "port": 8443, "protocol": "https"}
+    answer = dict(target, status="HTTP/1.1 200 OK")
+    if fingerprint is not None:
+        answer["fingerprint"] = fingerprint
+    monkeypatch.setattr(inspect, "observe", lambda *_: {"unit": "active"})
+    monkeypatch.setattr(inspect, "probe_targets", lambda _: [target])
+    monkeypatch.setattr(inspect, "probe", lambda _: answer)
+    result = run({"request": {}, "readiness": True, "attempts": 1, "fingerprint": "a" * 64}, capsys)
+    assert result["failures"] == [{"port": 8443, "reason": "readiness-unproved"}]
+    assert not result["listeners"]

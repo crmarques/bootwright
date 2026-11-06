@@ -218,10 +218,10 @@ func TestAdapterOutputStreamsWhileItRunsAndBoundsWhatItKeeps(t *testing.T) {
 	store, area := newStore(t)
 	target := "op-" + strings.Repeat("ab", 16) + "/logs/blocks/one/attempt-000001.output"
 	output := store.OpenAdapterOutput(ctx, target)
-	if n, err := output.Write([]byte(strings.Repeat("x", adapterOutputFlush))); n != adapterOutputFlush || err != nil {
+	if n, err := output.Write([]byte(strings.Repeat("x", (8 << 10)))); n != (8<<10) || err != nil {
 		t.Fatalf("write = %d (%v)", n, err)
 	}
-	if len(area.files[target]) != adapterOutputFlush {
+	if len(area.files[target]) != (8 << 10) {
 		t.Fatalf("a full buffer was not published: %d bytes", len(area.files[target]))
 	}
 	if n, err := output.Write([]byte("tail")); n != 4 || err != nil {
@@ -230,7 +230,7 @@ func TestAdapterOutputStreamsWhileItRunsAndBoundsWhatItKeeps(t *testing.T) {
 	if err := output.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if bytes, truncated := output.Retained(); bytes != adapterOutputFlush+4 || truncated {
+	if bytes, truncated := output.Retained(); bytes != (8<<10)+4 || truncated {
 		t.Fatalf("retained = %d bytes, truncated %v", bytes, truncated)
 	}
 	if !strings.HasSuffix(string(area.files[target]), "tail") {
@@ -246,7 +246,7 @@ func TestAdapterOutputTruncatesAndNeverFailsItsRun(t *testing.T) {
 	target := "op-" + strings.Repeat("ab", 16) + "/logs/blocks/one/attempt-000001.output"
 	output := store.OpenAdapterOutput(ctx, target)
 	area.fail["append "+target] = errors.New("no space")
-	if n, err := output.Write([]byte(strings.Repeat("x", adapterOutputFlush))); n != adapterOutputFlush || err != nil {
+	if n, err := output.Write([]byte(strings.Repeat("x", (8 << 10)))); n != (8<<10) || err != nil {
 		t.Fatalf("a failed retention reported a short write: %d (%v)", n, err)
 	}
 	delete(area.fail, "append "+target)
@@ -319,21 +319,13 @@ func TestAnAttemptsOutputNeverTakesTheReservedBytes(t *testing.T) {
 	}
 }
 
-// manualClock advances only when a test says so, so the flush cadence is
-// asserted rather than waited for.
-type manualClock struct{ moment time.Time }
-
-func (c *manualClock) now() time.Time { return c.moment }
-
 // Output has to reach disk while the run is still going, or the file an
-// operator was told to follow stays empty until the work is already over. The
-// first line is published at once and a burst behind it costs one write, not
-// one per line.
-func TestAdapterOutputPublishesTheFirstLineAndCoalescesABurst(t *testing.T) {
+// operator was told to follow stays empty until the work is already over.
+// Every write is published before the adapter can wedge without another write.
+func TestAdapterOutputPublishesEachWriteWithoutWaitingForAnother(t *testing.T) {
 	ctx := context.Background()
-	clock := &manualClock{moment: time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)}
 	area := newArea()
-	store := New(area, clock.now)
+	store := New(area, time.Now)
 	target := "op-" + strings.Repeat("ab", 16) + "/logs/blocks/one/attempt-000001.output"
 	output := store.OpenAdapterOutput(ctx, target)
 	if _, err := output.Write([]byte("TASK [boot the machine]\n")); err != nil {
@@ -347,15 +339,14 @@ func TestAdapterOutputPublishesTheFirstLineAndCoalescesABurst(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if area.appends != 1 {
-		t.Fatalf("a burst inside the interval cost %d writes, want 1", area.appends)
+	if !strings.HasSuffix(string(area.files[target]), "ok: [rhel-01]\n") {
+		t.Fatal("the final line is buffered until another write")
 	}
-	clock.moment = clock.moment.Add(adapterOutputInterval)
 	if _, err := output.Write([]byte("TASK [eject the media]\n")); err != nil {
 		t.Fatal(err)
 	}
-	if area.appends != 2 || !strings.HasSuffix(string(area.files[target]), "TASK [eject the media]\n") {
-		t.Fatalf("the interval did not publish what had accumulated: %d writes, %q", area.appends, area.files[target])
+	if !strings.HasSuffix(string(area.files[target]), "TASK [eject the media]\n") {
+		t.Fatalf("the final write was not published: %d writes, %q", area.appends, area.files[target])
 	}
 }
 

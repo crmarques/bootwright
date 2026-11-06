@@ -32,6 +32,10 @@ options:
     description: Whether to prove an explicit bind address is usable on this host; wildcards need no assigned address.
     type: bool
     default: false
+  fingerprint:
+    description: Bound serving certificate digest for apply readiness.
+    type: str
+    default: ""
   attempts:
     description: Bounded readiness retries before the listener is unproved.
     type: int
@@ -47,6 +51,12 @@ EXAMPLES = r"""
 """
 
 RETURN = r"""
+failures:
+  description: Classified readiness refusals, definite failures before timeouts.
+  type: list
+  elements: dict
+  returned: always
+
 observation:
   description: The owned host resources and their observed state.
   returned: always
@@ -74,6 +84,7 @@ unproved:
   elements: str
 """
 
+import socket
 import time
 
 from ansible.module_utils.basic import AnsibleModule
@@ -98,6 +109,7 @@ def main():
             "foreign": {"type": "bool", "default": False},
             "bind_address": {"type": "bool", "default": False},
             "attempts": {"type": "int", "default": 30},
+            "fingerprint": {"type": "str", "default": ""},
         },
         supports_check_mode=True,
     )
@@ -124,22 +136,32 @@ def main():
     if not module.params["readiness"]:
         module.exit_json(**result)
         return
+    result["failures"] = []
     listeners, unproved = [], []
     for target in probe_targets(request):
-        answer, last = None, None
+        answer, last, cause = None, None, "listener-failed"
         for remaining in range(attempts):
             try:
                 answer = probe(target)
                 break
             except (OSError, ValueError) as failure:
                 last = probe_failure(failure)
+                cause = "readiness-timeout" if isinstance(failure, socket.timeout) else "listener-failed"
                 if remaining + 1 < attempts:
                     time.sleep(RETRY_DELAY)
+        if answer is not None and target["protocol"] == "https" and module.params["fingerprint"]:
+            observed = answer.get("fingerprint")
+            if not isinstance(observed, str) or len(observed) != 64 or set(observed) - set("0123456789abcdef"):
+                answer, cause, last = None, "readiness-unproved", "certificate fingerprint was not proved"
+            elif observed != module.params["fingerprint"]:
+                answer, cause, last = None, "certificate-mismatch", "certificate differs from the bound fingerprint"
         if answer is None:
+            result["failures"].append({"port": target["port"], "reason": cause})
             unproved.append("%s %s:%d (%s)" % (target["name"], target["address"], target["port"], last))
             continue
         listeners.append(answer)
     result["listeners"] = listeners
+    result["failures"].sort(key=lambda failure: failure["reason"] in ("readiness-timeout", "readiness-unproved"))
     result["unproved"] = unproved
     module.exit_json(**result)
 

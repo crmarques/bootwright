@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/nativeexec"
 	"github.com/crmarques/bootwright/internal/trust"
 )
 
@@ -63,6 +64,7 @@ type deniedToRoot interface{ DeniedToRoot() bool }
 // this process never opens the operator's path itself. Scratch parents the
 // short-lived directory an observation records into.
 type Launcher struct {
+	qualify    func(string) (string, error)
 	Client     string
 	Home       func() (string, error)
 	Owner      func() (int, error)
@@ -401,12 +403,15 @@ func (l Launcher) executable() (string, error) {
 	if !filepath.IsAbs(client) {
 		return "", failure("the SSH client is not an absolute executable", "")
 	}
-	info, err := os.Stat(client)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
-		return "", failure("the pinned SSH client "+client+" is unavailable",
-			"install an OpenSSH client on this host")
+	qualify := nativeexec.Qualify
+	if l.qualify != nil {
+		qualify = l.qualify
 	}
-	return client, nil
+	qualified, err := qualify(client)
+	if err != nil {
+		return "", failure("the pinned SSH client "+client+" is not a qualified root-owned executable", "install an OpenSSH client in a root-owned system path")
+	}
+	return qualified, nil
 }
 
 func (l Launcher) policy() ([]byte, error) {

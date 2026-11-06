@@ -651,3 +651,74 @@ class UsagePassTests(unittest.TestCase):
         with patch.object(worker, "unused") as unused:
             worker.usage([Nodes("a", "a1"), Nodes("b")])
         unused.assert_called_once_with(["a", "a1", "b"])
+
+
+def isolation_runtime(tmp_path, damage):
+    """Execute the shipped isolation function against synthetic proc and native replies."""
+    import json
+    import sys
+    from pathlib import Path
+    from unittest.mock import Mock, patch
+    from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_boot as boot
+
+    with patch.dict(sys.modules, {"physical_erase_worker": worker, "physical_erase_process": process}):
+        namespace = {"__name__": "test_runtime"}
+        exec(compile(boot.RUNTIME, "erase-runtime", "exec"), namespace)
+    flags = ["bootwright.erase=1", "rd.live.ram=1", "rd.live.overlay.overlayfs=1", "inst.zram=0"]
+    if damage in flags:
+        flags.remove(damage)
+    (tmp_path / "cmdline").write_text(" ".join(flags))
+    proc = tmp_path / "42"
+    proc.mkdir()
+    command_line = (b"x" * 65537 if damage == "process-inventory" else
+                    b"python\0pyanaconda.modules.storage\0" if damage == "installer-process" else b"safe\0")
+    (proc / "cmdline").write_bytes(command_line)
+    namespace["Path"] = lambda value: tmp_path if value == "/proc" else tmp_path / "cmdline" if value == "/proc/cmdline" else Path(value)
+
+    def command(argv):
+        if argv[0] == "/usr/bin/findmnt":
+            if "--json" in argv:
+                return json.dumps({"filesystems": [{
+                    "fstype": "xfs" if damage == "ram-root" else "overlay",
+                    "options": "upperdir=/run/upper,workdir=/run/work",
+                }]})
+            return "xfs" if (damage == "ram-filesystem" and argv[-1] == "/run" or
+                             damage == "ram-upper" and argv[-1] == "/run/upper" or
+                             damage == "ram-work" and argv[-1] == "/run/work") else "tmpfs"
+        if "--property=LoadState" in argv:
+            return "masked" if damage == "installer-units" else "loaded"
+        if "--property=ActiveState" in argv:
+            return "active" if damage == "installer-running" else "inactive"
+        return ""
+
+    namespace["command"] = Mock(side_effect=command)
+    return namespace
+
+
+def test_actual_isolation_refusals_never_start_writer(tmp_path):
+    from unittest.mock import patch
+
+    cases = ["ram-filesystem", "ram-root", "ram-upper", "ram-work", "installer-units", "installer-running",
+             "process-inventory", "installer-process", "bootwright.erase=1", "rd.live.ram=1",
+             "rd.live.overlay.overlayfs=1", "inst.zram=0"]
+    for index, damage in enumerate(cases):
+        root = tmp_path / str(index)
+        root.mkdir()
+        namespace = isolation_runtime(root, damage)
+        expected = "boot-purpose" if "=" in damage else "ram-upper" if damage == "ram-work" else damage
+        with patch.object(process, "run", return_value=(0, b"")), patch.object(worker, "execute") as execute:
+            try:
+                namespace["run"]()
+            except worker.Refusal as error:
+                assert str(error) == expected
+            else:
+                raise AssertionError("isolation accepted " + damage)
+            execute.assert_not_called()
+
+
+def test_actual_isolation_accepts_only_a_ram_overlay_without_installer(tmp_path):
+    from unittest.mock import patch
+
+    namespace = isolation_runtime(tmp_path, "valid")
+    with patch.object(process, "run", return_value=(0, b"")):
+        namespace["isolate"]()

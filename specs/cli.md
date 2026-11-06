@@ -43,7 +43,13 @@ public closed-tree compatibility promise.
 
 ## Recognized but unavailable commands
 
-Every invocation follows this precedence:
+At the process boundary, the [sudo-entry environment guard](security.md#local-context-privilege)
+runs first for every root invocation started by qualified sudo, including
+help, version, completion and an over-bound argument vector. It can refuse
+`runtime.privilege` with exit 1 before command parsing; the command's
+no-effect guarantees below do not suppress this guard.
+
+Every invocation admitted by that boundary follows this precedence:
 
 1. enforce the raw-argument bounds below;
 2. resolve exact command and flag tokens and their syntactic values;
@@ -102,7 +108,8 @@ checks each argument's byte length before adding it to the aggregate, and then
 checks the new aggregate. A value equal to a maximum is valid; the next unit is
 not.
 
-A raw-bound violation always emits one source-free `cli.usage` diagnostic plus
+After the sudo-entry guard admits the process, a raw-bound violation always
+emits one source-free `cli.usage` diagnostic plus
 concise root help on standard error, emits nothing on standard output, and exits
 `2`. It never establishes a structured output mode, and neither `--help` nor argument order can
 bypass it. The diagnostic does not echo an argument or its contents. Rejection
@@ -490,8 +497,11 @@ With a path flag `render` writes `effective-state.yaml`, the canonical YAML
 reports `inputDir` (context-free only), `outputDir`, `effectiveStatePath` and
 the `objects` count. Context-free it reads `--input-dir`, a file or directory
 as `validate -f` does; context-backed it reads the selected context's input and
-requires `--sensitive`. A compile failure writes nothing. An absent output
-directory is created, mode `0755`, or `0700` with `--sensitive`, and may be a
+requires `--sensitive`. A compile failure writes nothing. Publication runs
+with the invoking account's credentials, including when a
+context-backed read needs root. Context-free `render --input-dir` does not
+elevate. An absent output directory is created and owned by the invoking
+account, mode `0755`, or `0700` with `--sensitive`, and may be a
 link to a directory. Every later step works through one held handle on that
 directory, never a path walked again: the file is published atomically, a
 synced temporary file created exclusively beside it and renamed, mode `0644`,

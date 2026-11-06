@@ -229,3 +229,24 @@ func TestAddressedAndCarriedUplinkAdmission(t *testing.T) {
 		})
 	}
 }
+
+func TestUnroutedInstallInterfaceStillConstrainsSecondaryNetworks(t *testing.T) {
+	cluster, catalog := uplinkLab([]api.Value{eth("eth0"), vlanOn("eth0.100", "eth0")}, []api.Value{assign("primary", "192.0.2.10/24", "eth0.100")})
+	for _, test := range []struct {
+		network api.Value
+		field   string
+	}{
+		{addressedNetwork("tenant", "br-tenant", "eth0.100", "bridge", ""), "uplink.interface"},
+		{addressedNetwork("tenant", "br-ex", "", "", "10"), "vlan"},
+	} {
+		o := NormalizeNetworkIntent(cluster.WithSpec(cluster.Spec().WithPath(list(test.network), "networking", "secondaryNetworks")))
+		issues := ValidateNetworkIntent(o, catalog)
+		found := false
+		for _, issue := range issues {
+			found = found || issue.Field == "$.spec.networking.secondaryNetworks[0]."+test.field
+		}
+		if !found {
+			t.Fatalf("missing %s refusal: %v", test.field, issues)
+		}
+	}
+}

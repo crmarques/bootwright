@@ -80,6 +80,16 @@ func (f forbiddenTrees) PublishTree(context.Context, string, []rendering.TreeFil
 	return "", nil
 }
 
+func (r *recordingTrees) Publish(_ context.Context, directory, name string, data []byte, private bool) (string, error) {
+	r.published, r.files = directory, []rendering.TreeFile{{Path: name, Data: data}}
+	return filepath.Join(directory, name), nil
+}
+
+func (f forbiddenTrees) Publish(context.Context, string, string, []byte, bool) (string, error) {
+	f.t.Fatal("root wrote an artifact the invoking account owns")
+	return "", nil
+}
+
 func sameAccount(home string) func(context.Context) (Account, error) {
 	return func(context.Context) (Account, error) {
 		return Account{UID: os.Geteuid(), GID: os.Getegid(), Home: home}, nil
@@ -266,6 +276,25 @@ func TestRootServingAnotherAccountWritesTheTreesThroughTheAccountHelper(t *testi
 	}
 }
 
+func TestRootServingAnotherAccountPublishesArtifactsOnlyThroughTheAccount(t *testing.T) {
+	helper := &accountHelper{t: t, reply: func(request helperRequest) helperResponse {
+		if request.Action != actionRender || !request.Private || len(request.Files) != 1 || request.Files[0].Path != rendering.EffectiveStateFile || string(request.Files[0].Data) != "effective\n" {
+			t.Fatalf("artifact request %#v", request)
+		}
+		return helperResponse{Directory: filepath.Join(request.Directory, rendering.EffectiveStateFile)}
+	}}
+	got, err := rootServing(t, helper).Publish(context.Background(), "/synthetic/artifacts", rendering.EffectiveStateFile, []byte("effective\n"), true)
+	if err != nil || got != "/synthetic/artifacts/effective-state.yaml" || len(helper.accounts) != 1 || helper.accounts[0].UID != synthetic.UID {
+		t.Fatalf("artifact %q, error %v, accounts %#v", got, err, helper.accounts)
+	}
+	helper.reply = func(helperRequest) helperResponse {
+		return helperResponse{Failed: true, Message: "directory is not owned by this account"}
+	}
+	if _, err := rootServing(t, helper).Publish(context.Background(), "/root-owned/artifacts", rendering.EffectiveStateFile, nil, true); refusalCode(t, err).Code != "render.publish" {
+		t.Fatalf("foreign directory error %v", err)
+	}
+}
+
 func TestRootServingAnotherAccountReportsTheHelpersRefusal(t *testing.T) {
 	for reply, want := range map[string]string{
 		"/srv/cmp is not empty, so nothing is written into it": "/srv/cmp is not empty, so nothing is written into it",
@@ -430,6 +459,10 @@ func TestTheTreeBoundIsTheSameWithAndWithoutTheAccountHelper(t *testing.T) {
 			t.Fatalf("the refusals differ: %v and %v", localErr, helperErr)
 		}
 	}
+}
+
+func (c *countingTrees) Publish(context.Context, string, string, []byte, bool) (string, error) {
+	panic("unexpected artifact publication")
 }
 
 type failingTrees struct{ countingTrees }

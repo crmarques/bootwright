@@ -138,7 +138,7 @@ interpreter path, NUL-separated. Setup builds it in a stage the
 1. `python<abi> -I -m venv --without-pip <stage>`, so the OS pip wheel is no
    dependency;
 2. each locked wheel of the ABI, and the pip wheel, is fetched into the wheel
-   cache over HTTPS with bounded redirects and at most 4 concurrent fetches,
+   cache over HTTPS with bounded same-origin redirects and at most 4 concurrent fetches,
    verified for size and SHA-256 before it is renamed into place; a cached
    wheel makes no request;
 3. the stage's own Python runs the cached pip wheel as
@@ -630,16 +630,12 @@ announcing its sources but before Go acknowledged any tool installed nothing
 and is failed; once a tool's acknowledgement may have been delivered, it is
 unknown.
 
-Read-only Go verification reconstructs installed target file inventories from
-approved retained sources. It streams each target source once and each
-published target member it proves, holding only their digests, so neither is
-ever held whole in memory; an area that cannot stream a file is refused rather
-than read whole. When it projects an `openshift-clients` source, it also reads
-`oc`'s release stamp as the member streams, as the adapter does, and refuses a
-source whose `oc` does not hold exactly one marker stamped with the frozen
-version and no unstamped one with the same release-stamp diagnostic. A tool
-area's readiness stays presence only and reads no bytes, so the stamp of a
-client already in a sealed area is not read again.
+The adapter alone proves the retained source and member digests and the `oc`
+release stamp before publication. Go verifies the published target inventory
+by presence as non-directory entries and retained-source size where known; it does not
+stream source archives or reread published member bytes. Subsequent readiness
+uses the same presence-only proof, so a client already in a sealed area has
+neither its digest nor its release stamp read again.
 
 Every other block of the plan runs the clients this stage installed, and
 locates each executable through this block alone, from what the block proved
@@ -764,7 +760,19 @@ installed, only where the bytes come from. A mirror is one of:
 - `https://<host>[/<base>]` on the default port, with no credentials, query or
   fragment, fetched over the same client as a lock URL: the system trust
   store, the admitted [route](#the-context-free-acquisition-route), HTTPS-only
-  redirects and a bounded chain.
+  redirects within the declared mirror origin and a bounded chain.
+
+Every wheel redirect stays on the initial lock URL's origin, or the explicitly
+selected mirror's origin. Each actual connection resolves its endpoint once,
+checks every answer, and dials only a checked IP address. Public lock origins
+and public tool-metadata origins admit public unicast destinations only. A
+declared HTTPS mirror or explicit proxy can use private unicast addresses;
+loopback or link-local access requires that exact IP literal in the declared
+mirror or proxy URL. A hostname cannot rebind into loopback or link-local
+space. Unspecified and multicast addresses are refused. When an explicit
+proxy is selected, this rule checks the connection to that proxy; upstream
+name resolution is delegated to the declared proxy. Neither ambient proxy
+configuration nor a redirect can widen this authority.
 
 Any other form, including `http`, a credential, a query or a relative
 directory, is a usage error naming the accepted forms. The mirror's base path
@@ -974,8 +982,9 @@ receipt. A receipt is no lifecycle operation ID, ownership of the host or
 GitOps readiness.
 
 **Intent before effect.** Before dnf or the runtime build runs, setup writes
-and synchronizes the pending intent: its run ID, plan digest, remaining
-actions and start time. Each finished action shortens that list, and the
+and synchronizes the pending intent: its setup ID, plan digest, remaining
+actions, start time and missing package requirements, as the
+[setup record](contexts/controller-record.md#the-setup-subtree) specifies. Each finished action shortens that list, and the
 receipt written last clears it. A setup that fails before any dnf transaction
 began, as a failed wheel fetch does, also clears it, because a runtime
 publishes only whole and nothing else changed, so the runtime a kept receipt

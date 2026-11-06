@@ -172,11 +172,12 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	services.ContainerPreflight = wireContainerPreflight(services.DesiredState, reconciler, deps)
 	clusters := clusterpreflight.Service{Graph: effectiveGraph{state: services.DesiredState}, Selection: currentSelection(deps.Selection), Container: services.ContainerPreflight, Storage: services.StoragePreflight}
 	services.ClustersPreflight = clusters
-	services.Artifacts = artifactrendering.Service{Compiler: services.DesiredState, Encode: encoding.YAML, Files: renderlocal.Files{}}
-	services.Comparison = comparisonlocal.Service{
+	comparison := comparisonlocal.Service{
 		Trees: renderlocal.Files{}, Account: deps.Comparison.Account, In: deps.Streams.In, Out: deps.Streams.Out, Err: deps.Streams.Err,
 		Terminal: deps.Comparison.Terminal, Language: deps.Comparison.Language,
 	}
+	services.Artifacts = artifactrendering.Service{Compiler: services.DesiredState, Encode: encoding.YAML, Files: comparison}
+	services.Comparison = comparison
 	services.EnvironmentPreflight = environmentpreflight.Service{Graph: effectiveGraph{state: services.DesiredState}, Selection: currentSelection(deps.Selection), Controller: services.Controller, Capacity: storagePreflight, Clusters: clusters}
 	return services
 }

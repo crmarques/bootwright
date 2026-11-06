@@ -108,7 +108,27 @@ func compose(invocation Invocation) *exec.Cmd {
 		"ANSIBLE_LOCAL_TEMP="+invocation.LocalTemp, "ANSIBLE_REMOTE_TEMP="+invocation.RemoteTemp,
 		"ANSIBLE_NOCOLOR=1", "ANSIBLE_FORCE_COLOR=0", "ANSIBLE_LOAD_CALLBACK_PLUGINS=0",
 		"TMPDIR="+invocation.Scratch, "PATH=/usr/bin:/usr/sbin")
+	command.Env = append(command.Env, pluginEnvironment(collection)...)
 	return command
+}
+
+func pluginEnvironment(collection string) []string {
+	paths := []struct{ variable, directory string }{
+		{"ACTION_PLUGINS", "action"}, {"BECOME_PLUGINS", "become"},
+		{"CACHE_PLUGINS", "cache"}, {"CALLBACK_PLUGINS", "callback"},
+		{"CLICONF_PLUGINS", "cliconf"}, {"CONNECTION_PLUGINS", "connection"},
+		{"DOC_FRAGMENT_PLUGINS", "doc_fragments"}, {"FILTER_PLUGINS", "filter"},
+		{"HTTPAPI_PLUGINS", "httpapi"}, {"INVENTORY_PLUGINS", "inventory"},
+		{"LOOKUP_PLUGINS", "lookup"}, {"NETCONF_PLUGINS", "netconf"},
+		{"STRATEGY_PLUGINS", "strategy"}, {"TERMINAL_PLUGINS", "terminal"},
+		{"TEST_PLUGINS", "test"}, {"VARS_PLUGINS", "vars"},
+		{"LIBRARY", "modules"}, {"MODULE_UTILS", "module_utils"},
+	}
+	environment := make([]string, 0, len(paths))
+	for _, path := range paths {
+		environment = append(environment, "ANSIBLE_"+path.variable+"="+filepath.Join(collection, "plugins", path.directory))
+	}
+	return environment
 }
 
 // start forks the adapter from a goroutine locked to its OS thread until the

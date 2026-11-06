@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v24'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v25'
       - bootwright_os_install_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_os_install_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - managedos_install_anaconda_work == '/var/lib/bootwright-install/'
@@ -554,6 +554,14 @@
 
     - name: Read the installation the machine now holds, through its own channel
       ansible.builtin.include_tasks: identity_until_answered.yml
+
+    - name: Prove the installed marker matches this frozen installation
+      ansible.builtin.assert:
+        that:
+          - managedos_install_anaconda_marker == bootwright_os_install_material.marker
+        fail_msg: the installed machine does not hold this installation's marker, so its network was not changed
+        quiet: true
+      no_log: true
 
     - name: Report that the installed machine answered
       bootwright.core.managedos_install_protocol:

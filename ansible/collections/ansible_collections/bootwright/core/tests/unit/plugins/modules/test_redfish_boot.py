@@ -1467,10 +1467,9 @@ def test_the_inspection_contract_is_kept(monkeypatch, shape):
 
     unreadable = SHAPES[shape]()
     unreadable.resources[unreadable.system] = (500, None, {})
-    observation = redfish_system_inspect.observe(connect(monkeypatch, unreadable))
-    assert [observation[key] for key in ("manufacturer", "model", "power", "serial", "uuid")] == [""] * 5
-    assert gets(unreadable)[:2] == [unreadable.system, unreadable.system + "/EthernetInterfaces"]
-    assert gets(unreadable).count(unreadable.system) == 1
+    with pytest.raises(redfish_control.ControllerError, match="500"):
+        redfish_system_inspect.observe(connect(monkeypatch, unreadable))
+    assert gets(unreadable) == [unreadable.system]
 
     refused = SHAPES[shape]()
     refused.resources[refused.system + "/EthernetInterfaces"] = {"Members": [
@@ -2139,3 +2138,10 @@ def test_hardware_inventory_over_bound_never_proves_a_partial_machine(monkeypatc
     assert "exceeds 64" in observation["failures"][0]
     assert len(gets(firmware)) == 2
     assert not writes(firmware)
+
+
+def test_unanswered_system_read_preserves_controller_cause(monkeypatch):
+    firmware = emulator()
+    firmware.resources[firmware.system] = (503, None, {})
+    with pytest.raises(redfish_control.ControllerError, match="503"):
+        redfish_system_inspect.observe(connect(monkeypatch, firmware))

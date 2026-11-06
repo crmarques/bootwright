@@ -19,6 +19,8 @@ per substrate arm, so a block resolves by kind and implementation together.
 
 ## Selection and refusal
 
+### Selection
+
 This contract realizes the libvirt, bare-metal and KubeVirt arms. The arm an
 `InfraProvider` declares is the selector: `libvirt` selects the implementation
 identities `substrate-host-libvirt-v1` and `machine-libvirt-v1`, `baremetal`
@@ -35,6 +37,8 @@ provider, and every non-provided Machine on one, refuses before operation
 registration with one diagnostic per unsupported object, which names the object, why it is refused (a Machine's
 names its provider) and the remedy, as the [refusal table](#refusal-table)
 states.
+
+### Implementations
 
 Which arm realizes a Machine is settled once, from the substrate its provider
 declares, and frozen into the realized target every consumer reads: the
@@ -72,7 +76,9 @@ managed services use: the controller arm when it is the Environment
 controller, otherwise the SSH arm with its bound identity and host key. The
 controller arm claims the [host reservations](infrastructure-services.md#host-reservations)
 below; the SSH arm is coordinated by the context lease alone, and its emulated
-BMC's socket is compared only with its own context's sockets on that host. A bare-metal
+BMC's socket is compared only with its own context's sockets on that host.
+Its BMC endpoint still holds a shared cross-context `bmc:` claim regardless of
+placement. A bare-metal
 provider has no host: its Machines are reached at the BMCs they
 declare, always from the controller Machine.
 
@@ -184,6 +190,10 @@ network whose definition differs from the frozen request is redefined, and
 restarted while it runs another one. Each managed network is started before it
 is set to autostart, so a start that fails leaves no definition that starts
 with the host.
+
+An ordinary main-table default route through gateways is neither a collision
+nor a shadow warning. Defaults in policy tables and on-link defaults still
+refuse when their address family overlaps the managed prefix.
 
 Before it defines a managed network, the apply reads the host's addresses,
 routes, IPv4 and IPv6, and link names. A link of the managed bridge's name that
@@ -1066,7 +1076,9 @@ of the same name in the provider's namespace, and for a
 NetworkAttachmentDefinition of type `bridge` that object, in the namespace
 admission gave it. A reread VirtualMachine whose frozen fields (CPU, memory,
 firmware, TPM, interfaces and their MACs, spread, root size and class) differ from the
-request refuses, because the arm never rewrites them. A vTPM's state claim is
+request refuses in both apply and observation, because the arm never rewrites
+them. Both paths prove the owned root DataVolume is `Succeeded` before
+reporting completion; a Pending or otherwise unfinished root never completes. A vTPM's state claim is
 placed on the host's VM state class, which this arm neither sets nor proves
 migratable ([B906](milestones/backlog.md#b906)).
 
@@ -1510,8 +1522,9 @@ lifecycle hands the attempt, `bootwright apply --context <context>` with every
 `--authorize` token its frozen plan consumes, and the plain apply when the
 attempt carries none; the apply after a destroy plans anew and names its own
 (`TestEachPreBootRefusalNamesTheMachineWhatWasRefusedAndTheRemedy`). A read the
-BMC did not answer names none, because the BMC's own message in
-the retained output is the reason.
+BMC did not answer names `target-unanswered` and remains unknown; the BMC's
+bounded, sanitized cause in the retained output is the reason, rather than a
+hardware mismatch.
 
 A Redfish client speaks to one endpoint and follows no redirect, uses no
 ambient proxy or credential, bounds every request and response, and treats a

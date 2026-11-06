@@ -107,3 +107,19 @@ def test_unknown_or_substituted_physical_hardware_refuses(tmp_path, damage):
         expected = list(reversed(MACS))
     with pytest.raises(ValueError, match="^" + identity.REFUSAL + "$"):
         identity.prove(UUID, expected, tmp_path)
+
+
+@pytest.mark.parametrize("driver", ["cdc_ether", "cdc_eem", "cdc_ncm", "rndis_host", "ixgbe"])
+def test_only_management_host_interface_drivers_are_excepted(tmp_path, driver):
+    directory = hardware(tmp_path)
+    port = directory / "usb0"
+    (port / "device").mkdir(parents=True)
+    (port / "address").write_text("02:00:00:00:00:ff\n")
+    target = tmp_path / "drivers" / driver
+    target.mkdir(parents=True)
+    (port / "device/driver").symlink_to(target)
+    if driver == "ixgbe":
+        with pytest.raises(ValueError, match=identity.REFUSAL):
+            identity.prove(UUID, MACS, tmp_path)
+    else:
+        identity.prove(UUID, MACS, tmp_path)

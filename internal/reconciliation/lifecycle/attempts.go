@@ -663,7 +663,10 @@ func (s Service) finish(ctx context.Context, tx Transaction, store OperationStor
 	} else if err := s.project(ctx, tx, operation.Verb, next); err != nil {
 		return result, err
 	}
-	result.Blocks = blockResults(plan, states)
+	result.Blocks, err = s.recordedBlockResults(ctx, store, current, plan, states, continuationCommand(tx.Identity().Name, current, plan, states))
+	if err != nil {
+		return result, err
+	}
 	logs, err := store.LogPaths(ctx, operation.ID, plan)
 	if err == nil {
 		result.Logs = logs
@@ -865,4 +868,39 @@ func adapterWarning(plan reconciliation.Plan, block reconciliation.Block, warnin
 		reported.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: warning.Object.Kind, Name: warning.Object.Name}
 	}
 	return reported, true
+}
+
+func (s Service) recordedBlockResults(ctx context.Context, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, command string) ([]BlockResult, error) {
+	blocks := blockResults(plan, states)
+	for i := range blocks {
+		record, err := store.Block(ctx, operation.ID, blocks[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		blocks[i].Attempts = record.Attempts
+		blocks[i].Outcome = blocks[i].State
+		if record.Attempts == 0 {
+			continue
+		}
+		attempt, err := store.Attempt(ctx, operation.ID, blocks[i].ID, record.Attempts)
+		if err != nil {
+			return nil, err
+		}
+		resolution, found, err := store.LastResolution(ctx, operation.ID, blocks[i].ID, record.Attempts)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			attempt = resolution
+		}
+		if attempt.Outcome != "" {
+			blocks[i].Outcome = string(attempt.Outcome)
+		} else {
+			blocks[i].Outcome = string(reconciliation.OutcomeUnknown)
+		}
+	}
+	if err := s.explainUnproved(ctx, store, operation, plan, blocks, command); err != nil {
+		return nil, err
+	}
+	return blocks, nil
 }

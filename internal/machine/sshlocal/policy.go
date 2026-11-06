@@ -76,6 +76,14 @@ func cryptographicPolicy(data []byte, present bool) ([]byte, error) {
 		}
 		keyword := strings.ToLower(directive(line))
 		switch {
+		case keyword == "gssapikeyexchange":
+			setting := strings.TrimSpace(strings.TrimPrefix(line, directive(line)))
+			setting = strings.TrimSpace(strings.TrimPrefix(setting, "="))
+			setting, _, _ = strings.Cut(setting, "#")
+			if !strings.EqualFold(strings.TrimSpace(setting), "no") {
+				return nil, failure("the host SSH crypto policy enables unsupported GSSAPI key exchange", "retain only GSSAPIKeyExchange no in "+PolicyPath)
+			}
+			lines = append(lines, line)
 		case cryptographicDirectives[keyword]:
 			lines = append(lines, line)
 		case unsafeDirectives[keyword]:

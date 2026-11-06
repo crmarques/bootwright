@@ -211,7 +211,11 @@ func (d *display) lifecycleOutcomes(blocks []lifecycle.BlockResult) {
 				r.line(displayIndent + styleAccent(escapeDisplayLine(lifecycleStageTitle(block.Stage)), r.options))
 				previousStage = block.Stage
 			}
-			r.styledParagraph(escapeDisplayLine(block.Description), "    "+styleState(blockStatusToken(block.State), r.options)+" ", "plain")
+			description := block.Description
+			if block.Outcome != "" {
+				description += " (" + block.Outcome + ")"
+			}
+			r.styledParagraph(escapeDisplayLine(description), "    "+styleState(blockStatusToken(block.State), r.options)+" ", "plain")
 		}
 	})
 }

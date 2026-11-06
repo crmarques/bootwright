@@ -1,6 +1,6 @@
 implementation: artifact-server-nginx-v1
-content-digest: d6b66734772bef4e6869a796e6e8ac4f82587dd9711b442b37f14bde1f21f70f
-request-version: artifact-server-nginx-v2
+content-digest: f3d0533f1b099ab01f890745ca21b094d7970f0ee1e5bcde5047e65229c3d5ff
+request-version: artifact-server-nginx-v3
 automation-formats: none
 mark-formats: none
 proof-ids: none

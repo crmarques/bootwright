@@ -152,7 +152,7 @@ func (p *hostPackages) Present(_ context.Context, requirements []string) ([]Host
 
 func provider(requirement string) string {
 	name := strings.NewReplacer("(abi) = ", "", " ", "").Replace(requirement)
-	return name + "-1.0-1.fc44.x86_64"
+	return name + "-0:1.0-1.fc44.x86_64"
 }
 
 func (p *hostPackages) Preview(_ context.Context, missing []string) (HostPackagePreview, error) {
@@ -258,10 +258,14 @@ func (p *osPython) WithPython(context.Context, Runtime, func(PythonLaunch) error
 }
 
 type memorySetup struct {
-	owner    *setupFixture
-	view     SetupView
-	refusal  error
-	recorded []SetupState
+	setupIDError  error
+	runError      error
+	runCloseError error
+	runID         string
+	owner         *setupFixture
+	view          SetupView
+	refusal       error
+	recorded      []SetupState
 	// published, held and pruned stand in for the runtimes directory and
 	// the wheel cache.
 	published []string
@@ -294,16 +298,22 @@ type memoryStage string
 
 func (s memoryStage) Path() string { return string(s) }
 
-type memoryRun struct{}
+type memoryRun struct{ closeError error }
 
 func (memoryRun) Write(data []byte) (int, error) { return len(data), nil }
 func (memoryRun) Location() string               { return "/var/lib/bootwright/setup/runs/setup-000043" }
-func (memoryRun) Close() error                   { return nil }
+func (r memoryRun) Close() error                 { return r.closeError }
 
 func (t memoryTransaction) View() SetupView { return t.m.view }
 
 func (t memoryTransaction) Record(_ context.Context, value SetupState) error {
 	t.m.owner.record("record")
+	if value.Pending != nil {
+		pending := *value.Pending
+		pending.Actions = slices.Clone(pending.Actions)
+		pending.Requested = slices.Clone(pending.Requested)
+		value.Pending = &pending
+	}
 	t.m.recorded = append(t.m.recorded, value)
 	t.m.view = SetupView{Exists: true, State: value}
 	return nil
@@ -316,8 +326,18 @@ func (t memoryTransaction) DiscardForeign(context.Context) error {
 	return nil
 }
 
+func (t memoryTransaction) NewSetupID(context.Context) (string, error) {
+	return "setup-" + strings.Repeat("a", 32), t.m.setupIDError
+}
+
 func (t memoryTransaction) OpenRun(context.Context) (string, SetupRun, error) {
-	return "setup-000043", memoryRun{}, nil
+	if t.m.runError != nil {
+		return "", nil, t.m.runError
+	}
+	if t.m.runID != "" {
+		return t.m.runID, memoryRun{closeError: t.m.runCloseError}, nil
+	}
+	return "setup-000043", memoryRun{closeError: t.m.runCloseError}, nil
 }
 
 func (t memoryTransaction) StageRuntime(context.Context) (RuntimeStage, error) {
@@ -454,7 +474,7 @@ func TestAnInterruptedSetupIsReinspectedAfterConfirmation(t *testing.T) {
 	if confirm < 0 || !slices.Contains(f.events[confirm:], "select") || !slices.Contains(f.events[confirm:], "missing") || f.count("build") != 1 {
 		t.Fatalf("the host was not inspected again after confirmation: %v", f.events)
 	}
-	if first := f.store.recorded[0]; first.Pending == nil || first.Pending.ID != "setup-000043" {
+	if first := f.store.recorded[0]; first.Pending == nil || first.Pending.ID != "setup-000042" {
 		t.Fatalf("the setup recorded %+v before its effects", first.Pending)
 	}
 	if final := f.store.view.State; final.Pending != nil || final.Receipt == nil || final.Runtimes.Current != f.python.runtime().Digest {

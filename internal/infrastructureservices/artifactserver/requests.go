@@ -8,7 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-const requestVersion = "artifact-server-nginx-v2"
+const requestVersion = "artifact-server-nginx-v3"
 
 // Request is the complete frozen intent for one managed artifact server. Its
 // fields are declared in the canonical key order the plan digest requires, and

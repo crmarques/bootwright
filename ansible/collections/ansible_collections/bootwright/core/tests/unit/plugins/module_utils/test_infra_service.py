@@ -209,20 +209,32 @@ class Stream:
     def recv(self, count):
         if count == 2:
             return struct.pack(">H", len(self.payload))
-        return self.payload
+        result, self.payload = self.payload[:count], self.payload[count:]
+        return result
 
 
-def resolver(monkeypatch, served):
+def resolver(monkeypatch, served, tcp_served=None):
     """A resolver answering the addresses served for each (name, type), over both transports."""
     def exchange(_address, _port, payload):
         name = ".".join(part.decode() for part in dns_labels(payload))
         kind = struct.unpack(">H", payload[-4:-2])[0]
         return reply(payload, kind, served.get((name, kind), []))
 
+    class ResolverStream(Stream):
+        def sendall(self, data):
+            payload = data[2:]
+            name = ".".join(part.decode() for part in dns_labels(payload))
+            kind = struct.unpack(">H", payload[-4:-2])[0]
+            answer = reply(payload, kind, (served if tcp_served is None else tcp_served).get((name, kind), []))
+            self.payload = struct.pack(">H", len(answer)) + answer
+
+        def recv(self, count):
+            result, self.payload = self.payload[:min(count, 1)], self.payload[min(count, 1):]
+            return result
+
     def connect(_endpoint, timeout):
         assert timeout == infra_service.PROBE_TIMEOUT
-        payload = dns_query("ceph-01.lab.example.test")
-        return Stream(reply(payload, 1, ["198.51.100.11"]))
+        return ResolverStream(b"")
 
     monkeypatch.setattr(infra_service, "dns_exchange", exchange)
     monkeypatch.setattr(infra_service.socket, "create_connection", connect)
@@ -259,3 +271,25 @@ def test_a_resolver_answering_only_one_of_two_addresses_is_not_proved(monkeypatc
     })
     with pytest.raises(ValueError, match="unanswered ceph-01.lab.example.test 198.51.100.11"):
         probe_dns("192.0.2.1", 53, RECORDS)
+
+
+def test_dns_tcp_proves_ipv6_only_first_record_and_each_address(monkeypatch):
+    records = [{"name": "a.example.test", "addresses": ["2001:db8::1"]}]
+    served = dns_expected(records)
+    resolver(monkeypatch, served)
+    assert probe_dns("::1", 53, records) == "answers=1"
+
+
+def test_dns_tcp_missing_declared_address_refuses(monkeypatch):
+    resolver(monkeypatch, dns_expected(RECORDS), {})
+    with pytest.raises(ValueError, match="unanswered"):
+        probe_dns("192.0.2.1", 53, RECORDS)
+
+
+def test_dns_tcp_slow_fragments_share_one_deadline(monkeypatch):
+    clock = iter([0, 2, 4, 6])
+    monkeypatch.setattr(infra_service.time, "monotonic", lambda: next(clock))
+    stream = Stream(b"x" * 100)
+    stream.recv = lambda count: b"x"
+    with pytest.raises(infra_service.socket.timeout, match="deadline"):
+        infra_service.dns_stream_read(stream, 100, 5)

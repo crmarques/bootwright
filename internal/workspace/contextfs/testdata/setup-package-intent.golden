@@ -1,0 +1,56 @@
+{
+  "format": "bootwright.setup-state-v2",
+  "pending": {
+    "requested": [
+      "podman",
+      "python3.14"
+    ],
+    "id": "setup-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "planDigest": "4444444444444444444444444444444444444444444444444444444444444444",
+    "actions": [
+      "runtime",
+      "receipt"
+    ],
+    "startedAt": "2026-10-14T09:00:00Z"
+  },
+  "receipt": {
+    "platform": {
+      "id": "fedora",
+      "versionId": "44",
+      "like": [],
+      "architecture": "x86_64",
+      "glibc": "2.43",
+      "tested": true
+    },
+    "lock": "1111111111111111111111111111111111111111111111111111111111111111",
+    "runtime": {
+      "digest": "2222222222222222222222222222222222222222222222222222222222222222",
+      "interpreter": "/usr/bin/python3.14",
+      "python": "3.14.8",
+      "abi": "cp314",
+      "ansibleCore": "2.21.6"
+    },
+    "closure": "3333333333333333333333333333333333333333333333333333333333333333",
+    "packages": [
+      {
+        "requirement": "podman",
+        "requiredBy": [
+          "controller"
+        ],
+        "provider": "podman-5:5.8.1-1.fc44.x86_64",
+        "repository": "updates",
+        "installedBy": "setup-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      {
+        "requirement": "openssh-clients",
+        "requiredBy": [],
+        "provider": "openssh-clients-10.2p1-1.fc44.x86_64",
+        "repository": "@System",
+        "installedBy": "present before bootwright"
+      }
+    ]
+  },
+  "runtimes": {
+    "current": "2222222222222222222222222222222222222222222222222222222222222222"
+  }
+}

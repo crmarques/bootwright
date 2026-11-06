@@ -1,6 +1,6 @@
 implementation: os-install-anaconda-v1
-content-digest: c7c88d5a77072722c74da7b5d5eebe1f9533a65374c97323ea201df1be996654
-request-version: os-install-anaconda-v24
+content-digest: 25a7e1f1cdba21c89b944713a92550f71e10060cc05ef5d045b53adf76354baa
+request-version: os-install-anaconda-v25
 automation-formats: none
 mark-formats: none
 proof-ids: .bootwright-tree-identity, /etc/bootwright/registration.json, /etc/bootwright/update.json

@@ -15,8 +15,8 @@ version_added: "0.1.0"
 description:
   - Reports the identity the controller gives this system, every hardware
     address it reports, and its power state.
-  - A system that cannot be read reports an empty identity and power state,
-    which prove nothing.
+  - A system that cannot be read reports its bounded controller error and
+    marks the observation unanswered.
   - A controller whose certificate the declared trust refuses fails the
     module rather than reporting an empty identity, and so does a trust bundle
     that cannot be loaded.
@@ -99,7 +99,8 @@ def main():
         observation = observe(client)
         tpm = usable_tpm(client.system()) if module.params.get("require_tpm", False) else False
     except redfish_control.ControllerError as failure:
-        module.fail_json(msg="the management controller could not be inspected: %s" % failure)
+        module.fail_json(msg="the management controller could not be inspected: %s" % failure,
+                         unanswered=not isinstance(failure, redfish_control.UnverifiedCertificate))
     else:
         module.exit_json(changed=False, observation=observation, tpm_usable=tpm)
 
@@ -116,19 +117,11 @@ def usable_tpm(system):
 def observe(client):
     """What the controller reports about this machine, without changing it.
 
-    The system is read once. One that cannot be read leaves the identity and
-    the power state empty, which proves nothing, and the interface inventory
-    then reports its own failures. A certificate the declared trust refuses is
-    raised rather than read as that, because it is a controller that must not
-    be believed. Virtual media is not looked for: the proof does not need it,
-    and an inspection makes no request it does not need.
+    The system is read once. An unanswered read preserves its bounded controller
+    error; an answered system missing identity remains a hardware mismatch.
+    Virtual media is not queried because this proof does not need it.
     """
-    try:
-        identity, power = client.identity(), client.power_state()
-    except redfish_control.UnverifiedCertificate:
-        raise
-    except redfish_control.ControllerError:
-        identity, power = dict.fromkeys(("UUID", "SerialNumber", "Manufacturer", "Model"), ""), ""
+    identity, power = client.identity(), client.power_state()
     addresses, failures = client.hardware_addresses()
     return {
         "addresses": addresses,

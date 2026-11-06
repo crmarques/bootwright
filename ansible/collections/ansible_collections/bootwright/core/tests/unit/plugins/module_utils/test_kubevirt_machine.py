@@ -146,7 +146,7 @@ def request(**extra):
         "interfaces": [{"macAddress": "52:54:00:25:10:e0", "name": "enp1s0", "network": "guest-l2"}],
         "kubeconfigRef": "host-kubeconfig", "mediaVolume": VM + "-media", "memoryMiB": 16384, "name": VM, "namespace": "guests",
         "placement": {"connection": "local", "machine": "controller"}, "provider": "lab-kubevirt", "rootVolume": VM + "-root",
-        "version": "machine-kubevirt-v2",
+        "version": "machine-kubevirt-v3",
     }
     value.update(extra)
     return value
@@ -503,3 +503,29 @@ def test_a_spread_changed_since_creation_is_a_frozen_difference():
     changed, evidence = arm.apply(host(api), request(spread="0a1b2c3d4e5f6a7b"), context())
     assert arm.frozen_difference(request(spread="0a1b2c3d4e5f6a7b"), context(), api.objects[VM_PATH]) == ""
     assert arm.frozen_difference(request(spread="ffffffffffffffff"), context(), api.objects[VM_PATH]) != ""
+
+
+@pytest.mark.parametrize("entry", ["apply", "observe"])
+def test_completion_requires_root_ready_and_frozen_shape(entry):
+    api = FakeAPI()
+    evidence = arm.apply(host(api), request(), context())[1]
+    pinned_context = context(evidence["receipts"])
+    root = api.objects[host(api).dv(request()["rootVolume"])]
+    root["status"]["phase"] = "Pending"
+    subject = host(api)
+    subject.wait = lambda read, predicate, seconds: read()
+    result = getattr(arm, entry)(subject, request(), pinned_context)
+    observed = result[1] if entry == "apply" else result
+    assert not observed["postcondition"]
+    root["status"]["phase"] = "Succeeded"
+    api.objects[VM_PATH]["spec"]["template"]["spec"]["domain"]["cpu"]["cores"] = 99
+    with pytest.raises(arm.Refused, match="frozen request"):
+        getattr(arm, entry)(subject, request(), pinned_context)
+
+
+def test_destroy_can_remove_its_uid_owned_machine_despite_frozen_drift():
+    api = FakeAPI()
+    evidence = arm.apply(host(api), request(), context())[1]
+    api.objects[VM_PATH]["spec"]["template"]["spec"]["domain"]["cpu"]["cores"] = 99
+    changed, removed = arm.destroy(host(api), request(), context(evidence["receipts"]))
+    assert changed and removed["absent"] and removed["postcondition"]

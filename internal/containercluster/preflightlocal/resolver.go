@@ -7,6 +7,8 @@ import (
 	"io"
 	"os/exec"
 	"time"
+
+	"github.com/crmarques/bootwright/internal/nativeexec"
 )
 
 type Resolver struct{}
@@ -23,7 +25,12 @@ func (Resolver) Read(ctx context.Context, argv []string) ([]byte, error) {
 	if len(argv) != 3 || argv[0] != "getent" || argv[1] != "ahosts" {
 		return nil, errors.New("unsupported resolver command")
 	}
-	command := exec.CommandContext(ctx, "/usr/bin/getent", argv[1:]...)
+	executable, err := nativeexec.Qualify("/usr/bin/getent")
+	if err != nil {
+		return nil, errors.New("the system executable is not root-owned below qualified directories")
+	}
+	command := exec.CommandContext(ctx, executable, argv[1:]...)
+	command.Dir = "/"
 	command.WaitDelay = time.Second
 	command.Env = []string{"PATH=/usr/bin:/bin", "LC_ALL=C"}
 	output := &capture{}

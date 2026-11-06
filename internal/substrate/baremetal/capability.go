@@ -246,6 +246,7 @@ func (c MachineCapability) run(ctx context.Context, execution lifecycle.Executio
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: Implementation, Operation: operation, Variable: machineVariable,
 		Canonical: canonical, Placement: request.Placement, Materials: materials,
+		Refusals: map[string]error{substrate.RefusalTargetUnanswered: substrate.UnansweredTarget(request.Identity.Object, request.Controller.Endpoint)},
 	}))
 }
 

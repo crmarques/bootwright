@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,7 +13,28 @@ import (
 
 	"github.com/crmarques/bootwright/internal/desiredstate/encoding"
 	"github.com/crmarques/bootwright/internal/desiredstate/inputfs"
+	"github.com/crmarques/bootwright/internal/nativeartifacts/comparisonlocal"
+	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
 )
+
+func TestComposedRenderRequiresTheInvokingAccountBeforePublication(t *testing.T) {
+	deps := testContextWiring(t, filepath.Join(t.TempDir(), "state"))
+	checked := 0
+	deps.Comparison.Account = func(context.Context) (comparisonlocal.Account, error) {
+		checked++
+		return comparisonlocal.Account{}, errors.New("unverified invoking account")
+	}
+	services := assembleServices(deps)
+	files := services.Artifacts.(artifactrendering.Service).Files
+	directory := filepath.Join(t.TempDir(), "artifacts")
+	_, err := files.Publish(context.Background(), directory, artifactrendering.EffectiveStateFile, []byte("effective"), true)
+	if err == nil || checked != 1 {
+		t.Fatalf("publication error %v, account checks %d", err, checked)
+	}
+	if _, err := os.Stat(directory); !os.IsNotExist(err) {
+		t.Fatalf("unverified account created output: %v", err)
+	}
+}
 
 func renderRun(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()

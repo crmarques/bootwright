@@ -34,13 +34,14 @@ A block that prints a few kilobytes therefore reached disk only when it ended.
   which implies `-E`, so every `PYTHON*` variable is ignored. Verified by hand —
   a line written before a four-second sleep appears immediately under `-u -I`
   and not at all under `-I`, with or without the variable set.
-- `AdapterOutput` publishes on a bounded delay (`adapterOutputInterval`) as well
-  as on its size threshold, and its first write is always published. It is not
-  published per line because `operationArea.Append` walks the whole operation
-  subtree through `capacity` on every call, so a line-at-a-time log would pay
-  that walk thousands of times.
-- The flush time is recorded even when the write fails, so an area that is
-  refusing writes is retried on the interval rather than on every line.
+- The later interval-based coalescer still required another write to notice
+  elapsed time, so a wedged adapter could leave its last line buffered. Audit
+  003 OUT-11 exposed that gap. `AdapterOutput` now publishes each write
+  synchronously, retaining the same byte bounds and best-effort failures. This
+  costs more append calls but has no timer or background writer to outlive the
+  held area. See [logs.go](../../internal/reconciliation/operationstore/logs.go)
+  and `TestAdapterOutputPublishesEachWriteWithoutWaitingForAnother` in
+  [logs_test.go](../../internal/reconciliation/operationstore/logs_test.go).
 
 ## How to apply
 

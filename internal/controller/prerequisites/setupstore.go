@@ -6,11 +6,13 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-const SetupStateFormat = "bootwright.setup-state-v1"
+const SetupStateFormat = "bootwright.setup-state-v2"
 
 const PresentBeforeBootwright = "present before bootwright"
 
 const setupStateRemedy = "run bootwright controller install"
+
+var ErrUnsafeSetupRun = errors.New("unsafe setup run state")
 
 var ErrRuntimeUnavailable = errors.New("the controller runtime is not prepared")
 
@@ -22,6 +24,7 @@ type SetupState struct {
 }
 
 type PendingSetup struct {
+	Requested  []string `json:"requested"`
 	ID         string   `json:"id"`
 	PlanDigest string   `json:"planDigest"`
 	Actions    []string `json:"actions"`

@@ -147,6 +147,14 @@ tree's DVD's for its `MachineInstallProfile`, since only that block reads it.
 
 ## Installation
 
+### Selection
+
+A Machine with `os.provided: false` and an install profile selects managed
+installation; the profile and frozen substrate determine its supported shape.
+
+### Implementations
+
+
 The block `os-install-<machine>` installs the operating system of one
 Bootwright-installed Machine and belongs to the `machines` stage. It requires
 the Machine's realization block — [virtual](substrates.md#machine-realization)
@@ -421,8 +429,9 @@ Machine whose profile selects `diskEncryption`, beside `recovery` while its
 installer runs ([Root-disk encryption](#root-disk-encryption)).
 Both image forms receive mode 0640 owned by root:root and the served root's
 label in the work area before atomic rename, independent of the process umask;
-the private identity and recovery files also receive that mode, ownership and
-label. An apply first
+the private identity and recovery files receive the same mode, ownership and
+label in a root-owned `0700` stage on the destination filesystem before atomic
+rename. An apply first
 clears whatever an earlier attempt left beneath `private/os/<machine>/`, whose
 token it does not know. A hosted package tree belongs to the
 [shared publication block](#shared-package-tree-publication), which this
@@ -522,14 +531,18 @@ that boot the installed system, the eject the verification repeats, and the
 disk selection and power-on of the network restart. The insert allowance includes eight certificate collection members, five
 other certificate requests and one 412 retry: fourteen bounded requests,
 seven additional minutes at the thirty-second request timeout. A
-physical target powers nothing off and is inspected where a virtual one's power
-is read, which stays within those bounds while the inspection reads at most six
-interfaces. A run that reaches its deadline is killed, and
+physical target uses the separate [physical bounds](substrates.md#adapter-boundary),
+including its complete hardware inventory and any declared firmware step; the
+virtual totals above do not bound physical installations. A run that reaches its deadline is killed, and
 the attempt becomes unknown and is resolved from the marker, as after a
 cancellation. The client's polls of the BMC, which it bounds with fixed
 counts, are not budgets: they are part of each call's bound. Nor is the single
 retry, one second later, of an observation's reachability check, which is part
 of the reads that hour allows for.
+
+Not yet met: a registering, updating or firmware-enforcing physical installation's
+deadline can exceed the runner's ceiling and is clamped below its frozen budgets;
+tracked as [B878](milestones/m1.md#b878).
 
 ### Completion
 
@@ -1286,7 +1299,9 @@ include. A TPM2-encrypted root's `%post` resolves the disk again by the same
 rule before it binds. There a port is an interface
 backed by a device, and one driven by a USB CDC or RNDIS Ethernet driver
 (`cdc_ether`, `cdc_eem`, `cdc_ncm` or `rndis_host`) is read as the management
-controller's host interface; a declaration with no MAC refuses. When the
+controller's host interface; the RAM erase worker and Ceph host runtime use
+the same driver exception and complete MAC-set predicate. A declaration with
+no MAC refuses. When the
 request froze a `wwn`, `serialNumber` or `sizeBytes`, the disk the path resolves
 to must also report it, the size from `blockdev --getsize64`, compared exactly,
 and the others read from the same sysfs sources under the same rules as the

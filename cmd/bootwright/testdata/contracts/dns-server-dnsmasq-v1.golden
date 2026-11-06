@@ -1,6 +1,6 @@
 implementation: dns-server-dnsmasq-v1
-content-digest: 0f997394e80156b8e7ba007678704f684d161ab76cd65a8eb03786d800957b13
-request-version: managed-service-v4
+content-digest: 415bc3951a9ef11deb918b27de581e25c5f3a52292ba814cd166fc1498b649af
+request-version: managed-service-v5
 automation-formats: none
 mark-formats: none
 proof-ids: none

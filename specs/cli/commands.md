@@ -278,13 +278,14 @@ GOOS, or GOARCH also renders as `unknown`, including in its corresponding target
 component. An absent dependency bundle renders as `none`.
 A present dependency bundle is its canonical content identity, exactly
 `sha256:` followed by 64 lowercase hexadecimal digits; a value that is empty or
-does not have that form renders as `none`. The command performs no environment
-lookup, filesystem access, process launch, network access, state or secret
-lookup, random generation, or other effect.
+does not have that form renders as `none`. After sudo-entry admission, the
+command performs no environment, filesystem, process, network, state, secret,
+random or other effect.
 
 ### Completion
 
-Completion generation and the private completion protocol derive solely from
+After sudo-entry admission, completion generation and the private completion
+protocol derive solely from
 the closed declarative command catalog, the bounded argument prefix, and — for a
 path-valued flag alone — the directory that prefix names. They perform no
 standard-input, environment, context, state, secret, process, network, random,

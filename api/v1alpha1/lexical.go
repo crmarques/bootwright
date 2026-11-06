@@ -360,11 +360,11 @@ func CanonicalImage(value string) string {
 
 func validImage(value string) bool {
 	if base, digest, found := strings.Cut(value, "@"); found {
-		return validRegistry(base) && strings.HasPrefix(strings.ToLower(digest), "sha256:") && digestPattern.MatchString(digest)
+		return strings.Contains(base, "/") && validRegistry(base) && strings.HasPrefix(strings.ToLower(digest), "sha256:") && digestPattern.MatchString(digest)
 	}
 	lastSlash := strings.LastIndex(value, "/")
 	colon := strings.LastIndex(value, ":")
-	if colon <= lastSlash || colon <= 0 {
+	if lastSlash < 0 || colon <= lastSlash || colon <= 0 {
 		return false
 	}
 	return validRegistry(value[:colon]) && value[colon+1:] != "latest" && imageTagPattern.MatchString(value[colon+1:])

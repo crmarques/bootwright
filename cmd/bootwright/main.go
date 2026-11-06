@@ -11,14 +11,18 @@ import (
 )
 
 func main() {
+	os.Exit(safeInvocation(os.Args[1:], os.Stdout, os.Stderr, processMain))
+}
+
+func processMain() int {
 	if handled, code := selectionfs.ServeHelper(context.Background(), os.Args[1:], os.Stdin, os.Stdout); handled {
-		os.Exit(code)
+		return code
 	}
 	if handled, code := invokerfs.ServeHelper(os.Args[1:]); handled {
-		os.Exit(code)
+		return code
 	}
 	if handled, code := comparisonlocal.ServeHelper(context.Background(), os.Args[1:], os.Stdin, os.Stdout, renderlocal.Files{}); handled {
-		os.Exit(code)
+		return code
 	}
-	os.Exit(runInteractive(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
+	return runInteractive(context.Background(), os.Args[1:], os.Stdout, os.Stderr)
 }

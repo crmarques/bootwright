@@ -447,7 +447,7 @@ func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, fo
 				}
 			}
 			if found && variant == substrate.ArmLibvirt {
-				issues = appendIssues(issues, validateManagedAttachmentContainment(o, prefix, provider)...)
+				issues = appendIssues(issues, validateManagedAttachmentContainment(o, prefix, provider, address.Get("interface").Text(), native)...)
 			}
 		}
 		if anacondaInstalled(o, c) && len(selectionIssues) == 0 {
@@ -525,8 +525,16 @@ func validateBMC(bmc api.Value, unresolvedProvider bool) []api.Issue {
 // guest's host address on the network Bootwright defines for a managed libvirt
 // attachment: inside its prefix, never the bridge's own host address and, for
 // an IPv4 prefix shorter than /31, never its network or broadcast address.
-func validateManagedAttachmentContainment(o api.Object, address netip.Prefix, provider api.Object) []api.Issue {
-	attachment, ok := namedValue(provider.Spec().Get("networkAttachments"), o.Spec().Get("network", "attachmentRef").Text())
+func validateManagedAttachmentContainment(o api.Object, address netip.Prefix, provider api.Object, installInterface string, native api.Value) []api.Issue {
+	var issues []api.Issue
+	for _, reference := range installAttachmentReferences(o, native, installInterface, map[string]bool{}) {
+		issues = appendIssues(issues, validateManagedAttachmentAddress(o, address, provider, reference)...)
+	}
+	return issues
+}
+
+func validateManagedAttachmentAddress(o api.Object, address netip.Prefix, provider api.Object, reference string) []api.Issue {
+	attachment, ok := namedValue(provider.Spec().Get("networkAttachments"), reference)
 	if !ok || attachment.Get("libvirt", "management").Text() != "managed" {
 		return nil
 	}
@@ -885,4 +893,28 @@ func providerBMCDefaults(bmc api.Value, provider api.Object) api.Value {
 		defaults = defaults.With("tls", defaults.Get("tls").Without("trustBundleRef"))
 	}
 	return defaults
+}
+
+func installAttachmentReferences(o api.Object, native api.Value, name string, visiting map[string]bool) []string {
+	if visiting[name] {
+		return nil
+	}
+	visiting[name] = true
+	defer delete(visiting, name)
+	iface, _ := namedValue(native.Get("interfaces"), name)
+	if parent := iface.Get("vlan", "base-iface").Text(); parent != "" {
+		return installAttachmentReferences(o, native, parent, visiting)
+	}
+	if ports := iface.Get("link-aggregation", "port").Strings(); len(ports) > 0 {
+		var references []string
+		for _, port := range ports {
+			references = append(references, installAttachmentReferences(o, native, port, visiting)...)
+		}
+		return references
+	}
+	if attachments := substrate.MachineInterfaceAttachments(o); attachments.Present() {
+		entry, _ := namedValueBy(attachments, "interface", name)
+		return []string{entry.Get("attachmentRef").Text()}
+	}
+	return []string{o.Spec().Get("network", "attachmentRef").Text()}
 }

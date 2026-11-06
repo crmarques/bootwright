@@ -47,6 +47,7 @@ func eachPreBootRefusal(t *testing.T, continuation string) {
 	for arm, want := range map[string]map[string][]diagnostics.Diagnostic{
 		ArmLibvirt: {RefusalMachineRunning: running},
 		ArmBaremetal: {
+			RefusalTargetUnanswered: diagnostics.Of(UnansweredTarget("metal-01", preBootEndpoint)),
 			RefusalHardwareMismatch: refusal("the machine answering at "+preBootEndpoint+" does not report exactly the hardware addresses Machine/metal-01 declares, "+
 				"or its inventory could not be read in full, so no media was inserted into it and it was not booted",
 				"once the machine reports the hardware Machine/metal-01 declares in full, run "+next+"; to correct that declaration instead, "+
@@ -153,4 +154,12 @@ func preBootTaskRefusals(t *testing.T, tasks string, list []map[string]any, fact
 		}
 	}
 	return named
+}
+
+func TestAnUnansweredPhysicalProofRemainsUnknown(t *testing.T) {
+	err := PreBootRefusals(ArmBaremetal, "lab", "", "metal-01", preBootEndpoint)["target-unanswered"]
+	found := diagnostics.Of(err)
+	if len(found) != 1 || found[0].Code != "lifecycle.unknown" {
+		t.Fatalf("unanswered proof = %+v", found)
+	}
 }

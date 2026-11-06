@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
@@ -844,5 +845,32 @@ func TestAnUnrenderedObjectNamesEveryImplementationItRead(t *testing.T) {
 	note := "observed present; artifact-image-v1, artifact-server-nginx-v1 render no field, so the fields shown are what apply " + operation + " applied"
 	if alpha.Real.State != "present" || alpha.Real.Source != "applied" || !slices.Contains(alpha.Real.Notes, note) {
 		t.Fatalf("alpha reads %+v", alpha.Real)
+	}
+}
+
+func TestObservationsHonorTheClusterThrottle(t *testing.T) {
+	f := newDiffHarness(t, "alpha", "bravo", "charlie", "delta", "echo", "foxtrot")
+	for i := range f.capability.definitions {
+		f.capability.definitions[i].Throttle = "cluster/shared"
+	}
+	f.apply(t)
+	f.service.capabilities = testResolver{capability: &projectingCapability{testCapability: f.capability, answers: map[string]scriptedObservation{}, paths: []ProjectedPath{{Kind: api.ArtifactServer, Path: "spec.image"}}}}
+	f.service.options.Concurrency = 8
+	f.service.options.Throttle = 2
+	var lock sync.Mutex
+	inFlight, widest := 0, 0
+	f.capability.observeHold = func(string) {
+		lock.Lock()
+		inFlight++
+		widest = max(widest, inFlight)
+		lock.Unlock()
+		time.Sleep(10 * time.Millisecond)
+		lock.Lock()
+		inFlight--
+		lock.Unlock()
+	}
+	f.observe(t)
+	if widest > 2 {
+		t.Fatalf("%d observations overlapped; throttle is 2", widest)
 	}
 }

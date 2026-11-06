@@ -63,6 +63,9 @@ def _addresses(root):
     for path in interfaces:
         if not (path / "device").exists():
             continue
+        driver = path / "device/driver"
+        if driver.is_symlink() and driver.resolve(strict=True).name in ("cdc_ether", "cdc_eem", "cdc_ncm", "rndis_host"):
+            continue
         if INTERFACE.fullmatch(path.name) is None:
             raise ValueError(REFUSAL)
         if (path / "bonding_slave").exists():

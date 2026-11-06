@@ -580,7 +580,7 @@ func (a *operationArea) WriteExclusive(ctx context.Context, target string, data 
 	if err := a.available(ctx, true); err != nil {
 		return err
 	}
-	if len(data) > maxOperationRecord {
+	if len(data) > operationRecordLimit(target) {
 		return state("lifecycle operation record exceeds its byte limit")
 	}
 	parts, err := operationPath(target, 1)
@@ -611,7 +611,7 @@ func (a *operationArea) Replace(ctx context.Context, target string, data, expect
 	if err := a.available(ctx, true); err != nil {
 		return err
 	}
-	if len(data) > maxOperationRecord {
+	if len(data) > operationRecordLimit(target) {
 		return state("lifecycle operation record exceeds its byte limit")
 	}
 	parts, err := operationPath(target, 1)
@@ -639,10 +639,10 @@ func (a *operationArea) Replace(ctx context.Context, target string, data, expect
 		return nil
 	}
 	_, err = a.store.publishStage(ctx, parent, name, data, stagedPublication{
-		subject: "lifecycle record", suffix: ".json", replace: true, bound: maxOperationRecord,
+		subject: "lifecycle record", suffix: ".json", replace: true, bound: operationRecordLimit(target),
 		renameFailure: "lifecycle record could not be atomically published",
 		prove: func(ctx context.Context) error {
-			current, _, err := readBoundedIdentity(ctx, parent, name, maxOperationRecord, false)
+			current, _, err := readBoundedIdentity(ctx, parent, name, operationRecordLimit(target), false)
 			if err != nil || !bytes.Equal(current, expected) {
 				return state("lifecycle record changed before publication")
 			}
@@ -884,4 +884,11 @@ func vanished(parent *directory, name string) bool {
 		entry.Close()
 	}
 	return errors.Is(err, syscall.ENOENT)
+}
+
+func operationRecordLimit(target string) int {
+	if path.Base(target) == "plan.json" && strings.Count(target, "/") == 1 {
+		return operationstore.MaxPlanBytes
+	}
+	return maxOperationRecord
 }

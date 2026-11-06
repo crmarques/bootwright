@@ -181,14 +181,16 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 		claim := prerequisites.HostReservation{
 			Context: input.Context.Name, Kind: "substrate-machine", Service: request.Identity.Object, Keys: request.ReservationKeys(),
 		}
+
 		if !request.Placement.Local() {
 			plan.SSHReservations = append(plan.SSHReservations, lifecycle.SSHReservation{
 				Machine: request.Placement.Machine, Address: request.Placement.Address, Port: request.Placement.Port,
 				KnownHostsRef: request.Placement.KnownHostsRef, Reservation: claim,
 			})
-			continue
+		} else {
+			plan.Reservations = append(plan.Reservations, claim)
 		}
-		plan.Reservations = append(plan.Reservations, claim, prerequisites.HostReservation{
+		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
 			Context: input.Context.Name, Kind: "substrate-machine-bmc", Service: request.Identity.Object,
 			Keys: request.SharedReservationKeys(), Shared: true,
 		})

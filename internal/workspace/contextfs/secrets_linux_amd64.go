@@ -306,11 +306,19 @@ func verifyContextLayout(ctx context.Context, dir *directory) error {
 			if name != "secrets" {
 				maximum := 1
 				if name == "state" {
-					maximum = maxContextStateEntries
+					maximum = maxContextStateEntries + maxContextStateStages
 				}
 				entries, listErr := directoryNames(child, maximum)
 				if listErr == nil {
+					stages := 0
 					for _, entry := range entries {
+						if name == "state" && stageName(entry, false) {
+							stat, err := listedEntry(child, entry)
+							stages++
+							if err == nil && stages <= maxContextStateStages && stat.Dev == child.identity.Dev && private(stat, syscall.S_IFREG, child.identity.Uid, child.identity.Gid) && stat.Size <= maxRecord {
+								continue
+							}
+						}
 						if name == "state" && !contextStateEntry(entry) || name == "desired-state" && entry != "revisions" {
 							listErr = state("context contains unsupported state; mutation is refused")
 							break

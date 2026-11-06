@@ -33,6 +33,16 @@ OPENSSH_DEFAULT = ("ssh-ed25519-cert-v01@openssh.com,ecdsa-sha2-nistp256-cert-v0
                    "rsa-sha2-512,rsa-sha2-256")
 FLEET = "ecdsa-sha2-nistp256,rsa-sha2-512,rsa-sha2-256"
 CONFIG = "Ciphers aes256-gcm@openssh.com\n"
+
+
+def test_controller_policy_accepts_generated_fips_disabling_directive():
+    result = ceph_ssh_policy.evaluate_controller_policy(
+        read=lambda: CONFIG + "GSSAPIKeyExchange no\n",
+        evaluate=lambda data: ssh_key_policy.effective_policy(data, native(FIPS)),
+    )
+    assert "GSSAPIKeyExchange no" in result["configuration"]
+
+
 HOSTS = [{"name": "node-1", "address": "192.0.2.1", "port": 22}, {"name": "node-2", "address": "192.0.2.2", "port": 22}]
 OK = b'{"ok":true,"result":{"changed":false}}'
 

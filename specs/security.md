@@ -599,7 +599,11 @@ pinned key's algorithms that the policy, as `ssh -G` evaluates it, admits, in
 pinned order. When it admits none for a host the request's known hosts pin,
 the block refuses `ssh-policy-host-excluded`, naming that host and its key
 type, before any host is contacted; a policy that cannot be read or evaluated
-refuses `ssh-policy-unavailable`. The contained cephadm tunnel's client runs
+refuses `ssh-policy-unavailable`. The controller, placement-host, direct-session
+and contained-tunnel reducers retain `GSSAPIKeyExchange no`, case-insensitively,
+and refuse every other value for that directive. The fixed disabling form is
+part of the crypto-only reduction, never permission for another SSH Boolean
+or connection directive. The contained cephadm tunnel's client runs
 inside the selected Ceph image and keeps that image's back end: its
 policy parser admits its algorithm directives and the additional fixed
 `GSSAPIKeyExchange no` form only, case-insensitively; every other value for

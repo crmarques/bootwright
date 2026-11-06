@@ -186,7 +186,7 @@ func (a *Access) open(ctx context.Context, selected Context, area Area, selector
 	}
 	session, err := implementation.Open(ctx, selected, area, selector, material)
 	if err != nil {
-		return err
+		return corruptStoreRemedy(err, selected.Name)
 	}
 	if session == nil {
 		return Failure("store.implementation", "implementation returned no store session")
@@ -219,7 +219,7 @@ func (a *Access) acquire(ctx context.Context, selected Context, implementation S
 func ReadSelector(ctx context.Context, area Area, contextName string) (Selector, bool, error) {
 	selector, exists, err := readSelectorRecord(ctx, area, contextName)
 	if err != nil || exists {
-		return selector, exists, err
+		return selector, exists, corruptStoreRemedy(err, contextName)
 	}
 	entries, err := area.Entries(ctx, "")
 	if err != nil {
@@ -265,4 +265,19 @@ func DecodeCanonical(data []byte, value any) error {
 		return errors.New("noncanonical private record")
 	}
 	return nil
+}
+
+func corruptStoreRemedy(err error, contextName string) error {
+	reported := diagnostics.Of(err)
+	changed := false
+	for i := range reported {
+		if reported[i].Code == "secret.store.corrupt" && reported[i].Remediation == "" {
+			reported[i].Remediation = "if a newer Bootwright build used this store, run that build first; otherwise " + CorruptStoreExits(contextName)
+			changed = true
+		}
+	}
+	if changed {
+		return &diagnostics.Failure{Diagnostics: reported}
+	}
+	return err
 }

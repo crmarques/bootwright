@@ -67,16 +67,22 @@ validated input as [implementation selection](#implementation-selection)
 states, and the rules general to the family, and every context outside it,
 name no implementation. The domain that owns each cluster kind publishes the
 kind's node membership, and composition binds it into Environment selection,
-admission, access and inspection and into compilation, which read no cluster
-field path; Environment inspection reads storage evidence through a neutral
+admission, access and inspection and into compilation, which read no native
+cluster field path (the shared authored management intent is described below);
+Environment inspection reads storage evidence through a neutral
 `StorageEvidence` port whose Ceph adapter composition binds. Kind facts are
 read from the schema registry, such as the kinds that exist only within one
 cluster, or held to the kind catalog by exhaustiveness tests, such as each
 kind's effect-bearing owner, its selection class and its normalization rank,
 and the CLI labels each planned action with its block's frozen description.
-An architecture test refuses a substrate arm, an implementation identity or a
-Ceph field path or host layout in `internal/reconciliation`,
-`internal/desiredstate`, `internal/environment` and `internal/cli`.
+The architecture guard refuses family kind names, substrate arms,
+implementation identities and Ceph-specific literals or host-layout tokens in
+`internal/reconciliation`, `internal/desiredstate`, `internal/environment`
+and `internal/cli`. It does not infer a field's family from a generic field
+path. The shared authored `management` choice is managed-versus-external
+intent: Environment access/inspection and lifecycle status may read it to
+route access and describe ownership, as infrastructure-service selection does.
+Native Ceph field paths and host mechanics remain with Storage.
 
 Security constrains every context and effect boundary; it is not a component to
 which other contexts delegate safety. Public API kinds are boundary contracts,

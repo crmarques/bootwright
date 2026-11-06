@@ -25,6 +25,7 @@ const (
 type Trees interface {
 	Resolve(string) (string, error)
 	PublishTree(ctx context.Context, directory string, files []rendering.TreeFile) (string, error)
+	Publish(ctx context.Context, directory, name string, data []byte, private bool) (string, error)
 }
 
 type Account struct {

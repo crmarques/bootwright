@@ -25,10 +25,19 @@
     mode: '0711'
   no_log: true
 
+- name: Create a protected stage on the publication filesystem
+  ansible.builtin.file:
+    path: '{{ managedos_install_anaconda_private_dir }}/.stage'
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  no_log: true
+
 - name: Publish the host key pair this installation delivers
   ansible.builtin.copy:
     src: '{{ item.source }}'
-    dest: '{{ managedos_install_anaconda_private_dir }}/{{ item.name }}'
+    dest: '{{ managedos_install_anaconda_private_dir }}/.stage/{{ item.name }}'
     remote_src: true
     owner: root
     group: root
@@ -52,3 +61,27 @@
       - '{{ managedos_install_anaconda_served_root }}'
       - '{{ managedos_install_anaconda_private_root }}'
   changed_when: true
+
+- name: Label the staged host key pair before publication
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/chcon
+      - --reference
+      - '{{ managedos_install_anaconda_served_root }}'
+      - '{{ managedos_install_anaconda_private_dir }}/.stage/{{ item }}'
+  loop: [identity, identity.pub]
+  when: "'identity' in managedos_install_anaconda_private_files"
+  changed_when: true
+  no_log: true
+
+- name: Atomically publish the protected host key pair
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/mv
+      - --no-target-directory
+      - '{{ managedos_install_anaconda_private_dir }}/.stage/{{ item }}'
+      - '{{ managedos_install_anaconda_private_dir }}/{{ item }}'
+  loop: [identity, identity.pub]
+  when: "'identity' in managedos_install_anaconda_private_files"
+  changed_when: true
+  no_log: true

@@ -1,12 +1,12 @@
 implementation: storage-ceph-host-v1
-content-digest: 42cd309d223c12f521abddd59ad65518e4a8b87bcc5ad752c1af565219b82798
+content-digest: b84263ed4991e624c35cd82af6d9d20178db032504716b65004327fc7b96205b
 request-version: ceph-host-v13
 automation-formats: bootwright.native-plan-v1, ceph-crypto-policy-v1, ceph-device-identities-v3, ceph-host-route-v3, ceph-package-artifacts-v1, ceph-package-complete-v1, ceph-package-decision-v1, ceph-physical-device-binding-v2, ceph-runtime-profile-v3
 mark-formats: none
 proof-ids: .bootwright-tree-identity, marker:-attempt-%d.json, marker:-pulled.json, marker:auth.json, marker:auxiliary-, marker:cache-directory-intent.json, marker:cache-directory.json, marker:cache-pending.json, marker:cache-ready.json, marker:complete.json, marker:decision.json, marker:device-identities.json, marker:physical-device-binding.json, marker:policy.json, marker:pull-attempt-%d.json, marker:pulled.json, marker:route.json, marker:runtime-profile.json, marker:scope.json, marker:synthetic.json, marker:verified.json
 fixed-places: /var/lib/bootwright/ceph-host, /var/lib/bootwright/ceph-packages
 effect-pins:
-  selected-packages-runtime-placement-pulls-profile-route-devices-v5
+  selected-packages-runtime-placement-pulls-profile-route-devices-v6
 request-identity:
   host
   cluster.cluster

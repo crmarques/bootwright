@@ -38,5 +38,5 @@
     "virtstoraged.service"
   ],
   "uri": "qemu:///system",
-  "version": "substrate-host-libvirt-v6"
+  "version": "substrate-host-libvirt-v7"
 }

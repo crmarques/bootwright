@@ -8,6 +8,18 @@ HOST = "rsa-sha2-512,ecdsa-sha2-nistp256"
 FLEET = "rsa-sha2-512,rsa-sha2-256,ecdsa-sha2-nistp256"
 
 
+@pytest.mark.parametrize("line", ["GSSAPIKeyExchange no", "gssapikeyexchange=NO", "GssapiKeyExchange No # disabled"])
+def test_generated_fips_disabling_directive_is_retained(line):
+    result = policy.effective_policy(line + "\nHostKeyAlgorithms " + HOST, native)
+    assert "gssapikeyexchange" in result["configuration"].lower()
+
+
+@pytest.mark.parametrize("value", ["yes", "NO yes", "sometimes", ""])
+def test_gssapi_enabling_or_unknown_values_never_start_a_process(value):
+    with pytest.raises(policy.PolicyError):
+        policy.effective_policy("GSSAPIKeyExchange " + value, lambda *_a, **_k: pytest.fail("unsafe policy ran"))
+
+
 def answer(code, text):
     return bounded_process.Result(code, text.encode(), b"")
 

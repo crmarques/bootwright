@@ -1,6 +1,6 @@
 implementation: machine-libvirt-v1
-content-digest: 23d3b1f1cca980ea32d2878bd6647620e907ac511e4c18bbfda8a78687bf2b88
-request-version: machine-libvirt-v8
+content-digest: b26d7763afb0d1e048d173bdb06f7405469392965e62dbdb2317a252c2596a3c
+request-version: machine-libvirt-v9
 automation-formats: https://bootwright.io/substrate/v1
 mark-formats: https://bootwright.io/substrate/v1
 proof-ids: none

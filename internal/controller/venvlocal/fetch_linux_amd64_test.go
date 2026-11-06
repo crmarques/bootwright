@@ -18,10 +18,6 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
-type roundTrip func(*http.Request) (*http.Response, error)
-
-func (f roundTrip) RoundTrip(request *http.Request) (*http.Response, error) { return f(request) }
-
 // publisher answers each locked URL with the bytes named by its filename,
 // counting requests and the most that were ever in flight together.
 type publisher struct {

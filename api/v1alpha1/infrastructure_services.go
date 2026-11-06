@@ -54,6 +54,21 @@ func infrastructureServiceSchema(kind Kind) *Shape {
 		{Field: "management", Value: StringValue("managed"), Fields: external},
 	}
 	if kind == ArtifactServer {
+		schema.Suppress = append(schema.Suppress, Suppression{Match: func(value, fallback Value) bool {
+			listeners := value.Get("listeners")
+			if !listeners.Present() {
+				listeners = fallback.Get("listeners")
+			}
+			if !listeners.Present() {
+				return false
+			}
+			for _, listener := range listeners.Items() {
+				if listener.Get("protocol").Text() == "https" {
+					return false
+				}
+			}
+			return true
+		}, Fields: []string{"tls"}})
 		for _, modes := range [][2]string{{"external", "managed"}, {"managed", "external"}} {
 			schema.Suppress = append(schema.Suppress, Suppression{Field: "management", Value: StringValue(modes[0]), FallbackValue: StringValue(modes[1]), Fields: []string{"endpoints"}})
 		}

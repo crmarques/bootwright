@@ -121,7 +121,7 @@ type directory struct {
 func statHandle(file *os.File) (syscall.Stat_t, error) {
 	var stat syscall.Stat_t
 	if err := syscall.Fstat(int(file.Fd()), &stat); err != nil {
-		return stat, state("state handle cannot be verified")
+		return stat, &ioFailure{failure: state("state handle cannot be verified")}
 	}
 	return stat, nil
 }
@@ -197,7 +197,11 @@ func openDirectory(parent *directory, name string) (*directory, error) {
 		return nil, err
 	}
 	stat, err := statHandle(file)
-	if err != nil || !private(stat, syscall.S_IFDIR, parent.identity.Uid, parent.identity.Gid) || stat.Dev != parent.identity.Dev {
+	if err != nil {
+		file.Close()
+		return nil, err
+	}
+	if !private(stat, syscall.S_IFDIR, parent.identity.Uid, parent.identity.Gid) || stat.Dev != parent.identity.Dev {
 		file.Close()
 		return nil, state("state directory type, owner, permissions or device is unsafe")
 	}
@@ -206,7 +210,10 @@ func openDirectory(parent *directory, name string) (*directory, error) {
 
 func (d *directory) verify() error {
 	stat, err := statHandle(d.file)
-	if err != nil || !private(stat, syscall.S_IFDIR, d.identity.Uid, d.identity.Gid) || !sameIdentity(d.identity, stat) {
+	if err != nil {
+		return err
+	}
+	if !private(stat, syscall.S_IFDIR, d.identity.Uid, d.identity.Gid) || !sameIdentity(d.identity, stat) {
 		return state("held state directory changed")
 	}
 	var reopened *os.File
@@ -219,11 +226,17 @@ func (d *directory) verify() error {
 		reopened, err = openRelative(d.parent, d.name, syscall.O_RDONLY|syscall.O_DIRECTORY, 0)
 	}
 	if err != nil {
-		return state("state directory location cannot be verified")
+		if errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ELOOP) || errors.Is(err, syscall.ENOTDIR) || errors.Is(err, syscall.EXDEV) {
+			return state("state directory location cannot be verified")
+		}
+		return err
 	}
 	defer reopened.Close()
 	current, err := statHandle(reopened)
-	if err != nil || !sameIdentity(d.identity, current) {
+	if err != nil {
+		return err
+	}
+	if !sameIdentity(d.identity, current) {
 		return state("state directory location was replaced")
 	}
 	return nil
@@ -262,7 +275,10 @@ func heldNames(dir *directory, maximum int) ([]string, error) {
 	}
 	defer file.Close()
 	identity, err := statHandle(file)
-	if err != nil || !sameIdentity(dir.identity, identity) {
+	if err != nil {
+		return nil, &listingFailure{listingUnreadable, err}
+	}
+	if !sameIdentity(dir.identity, identity) {
 		return nil, &listingFailure{listingReplaced, state("held state directory was replaced")}
 	}
 	names := make([]string, 0, min(maximum, 1024))

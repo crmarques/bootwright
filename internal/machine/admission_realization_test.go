@@ -126,14 +126,22 @@ func installOn(address string) api.Object {
 // prefix refuses it.
 func TestAnInstallAddressIsNeitherTheBridgeNorItsNetworkOrBroadcast(t *testing.T) {
 	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
+	lab[2] = lab[2].WithSpec(lab[2].Spec().With("machineNetwork", list(m("cidr", "192.0.2.0/24"), m("cidr", "198.51.100.0/24"))))
 	for address, message := range map[string]string{
-		"192.0.2.1/24":   "the install address is the managed bridge's own host address on InfraProvider/lab",
-		"192.0.2.0/32":   "the install address is the network address of the managed bridge's prefix on InfraProvider/lab",
-		"192.0.2.255/32": "the install address is the broadcast address of the managed bridge's prefix on InfraProvider/lab",
+		"198.51.100.10/24": "install address must lie inside the managed libvirt attachment's network",
+		"192.0.2.1/24":     "the install address is the managed bridge's own host address on InfraProvider/lab",
+		"192.0.2.0/32":     "the install address is the network address of the managed bridge's prefix on InfraProvider/lab",
+		"192.0.2.255/32":   "the install address is the broadcast address of the managed bridge's prefix on InfraProvider/lab",
 	} {
 		t.Run(address, func(t *testing.T) {
-			requireOneIssue(t, admission(installOn(address), lab...), api.Issue{Code: "api.invariant", Field: "$.spec.network.installAddressRef", Message: message,
-				Remediation: "assign Machine/guest an install address inside 192.0.2.0/24 other than 192.0.2.1, 192.0.2.0 and 192.0.2.255"})
+			for _, perInterface := range []bool{false, true} {
+				node := installOn(address)
+				if perInterface {
+					node = node.WithSpec(node.Spec().With("network", node.Spec().Get("network").Without("attachmentRef")).WithPath(list(m("interface", "enp1s0", "attachmentRef", "net")), "substrate", "libvirt", "interfaceAttachments"))
+				}
+				requireOneIssue(t, admission(node, lab...), api.Issue{Code: "api.invariant", Field: "$.spec.network.installAddressRef", Message: message,
+					Remediation: "assign Machine/guest an install address inside 192.0.2.0/24 other than 192.0.2.1, 192.0.2.0 and 192.0.2.255"})
+			}
 		})
 	}
 	if issues := admission(installOn("192.0.2.11/24"), lab...); len(issues) != 0 {
@@ -456,5 +464,24 @@ func TestAVirtualMachineBindsNoNICAndNamesAProviderProfile(t *testing.T) {
 	unknown = unknown.WithSpec(unknown.Spec().WithPath(api.StringValue("missing"), "substrate", "libvirt", "profileRef"))
 	if issues := validateSubstrate(unknown, provider, substrate.ArmLibvirt); len(issues) != 0 {
 		t.Fatalf("an unresolved profileRef, which the shared reference check reports, was refused again: %v", issues)
+	}
+}
+
+func TestInstallAttachmentContainmentFollowsVLANAndBondParents(t *testing.T) {
+	for _, network := range []struct {
+		iface      string
+		interfaces api.Value
+	}{
+		{"enp1s0.100", list(m("name", "enp1s0", "type", "ethernet"), m("name", "enp1s0.100", "type", "vlan", "vlan", m("base-iface", "enp1s0", "id", api.IntegerValue("100"))))},
+		{"bond0", list(m("name", "enp1s0", "type", "ethernet"), m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList("enp1s0"))))},
+	} {
+		node := installOn("192.0.2.1/24")
+		node = node.WithSpec(node.Spec().With("network", node.Spec().Get("network").Without("attachmentRef").With("addresses", list(m("name", "ip", "address", "192.0.2.1/24", "interface", network.iface)))).WithPath(list(m("interface", "enp1s0", "attachmentRef", "net")), "substrate", "libvirt", "interfaceAttachments"))
+		issues := admission(node, libvirtLab(network.interfaces)...)
+		if !slices.ContainsFunc(issues, func(issue api.Issue) bool {
+			return issue.Field == "$.spec.network.installAddressRef" && strings.Contains(issue.Message, "bridge's own host address")
+		}) {
+			t.Fatalf("%s containment = %v", network.iface, issues)
+		}
 	}
 }

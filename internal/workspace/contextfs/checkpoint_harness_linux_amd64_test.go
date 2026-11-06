@@ -494,7 +494,7 @@ func checkpointStaleEntries(root string, mode checkpointMode, retried bool) ([]s
 			return err
 		}
 		name := entry.Name()
-		if !strings.HasPrefix(name, "pending-") && !strings.HasPrefix(name, "staging-") && name != "staging" {
+		if !strings.HasPrefix(name, ".init-") && !strings.HasPrefix(name, "pending-") && !strings.HasPrefix(name, "staging-") && name != "staging" {
 			return nil
 		}
 		relative, err := filepath.Rel(root, path)
@@ -507,6 +507,7 @@ func checkpointStaleEntries(root string, mode checkpointMode, retried bool) ([]s
 		switch {
 		case retried:
 			stale = append(stale, relative)
+		case len(parts) == 2 && parts[0] == "contexts" && strings.HasPrefix(name, ".init-"):
 		case len(parts) == 1 && relative == recovery:
 		case secrets && len(parts) == 5 && parts[3] == "identities":
 		case secrets && mode == checkpointKilled:
@@ -833,6 +834,7 @@ const checkpointContext = "example"
 func checkpointScenarios() []checkpointScenario {
 	return []checkpointScenario{
 		checkpointInitScenario(),
+		checkpointInitPurgeScenario(),
 		checkpointRecoveryScenario(),
 		checkpointUpdateScenario(),
 		checkpointDeleteScenario(),
@@ -872,12 +874,21 @@ func checkpointTraceShapes() map[string]map[checkpoint]int {
 	return map[string]map[checkpoint]int{
 		"init": {
 			checkpointCreateFile: 14, checkpointWriteFile: 14, checkpointSyncFile: 14,
-			checkpointSyncDirectory: 45, checkpointBeforeRegistryRename: 4,
+			checkpointSyncDirectory: 47, checkpointBeforeRegistryRename: 4,
 			checkpointAfterRegistryRename: 4, checkpointAfterContextReservation: 1, checkpointMkdir: 10,
-			checkpointAfterContextDirectory: 1, checkpointBeforeSecretRename: 3,
+			checkpointAfterContextDirectory: 1, checkpointBeforeContextPublish: 1, checkpointAfterContextPublish: 1, checkpointBeforeSecretRename: 3,
 			checkpointAfterSecretRename: 3, checkpointBeforeSecretPrune: 1, checkpointSyncContextFile: 9,
 			checkpointBeforeSecretUnlink: 1, checkpointAfterSecretUnlink: 1,
 			checkpointBeforeContextReady: 1, checkpointBeforeContextSubtree: 8,
+		},
+		"init-purge": {
+			checkpointAfterContextDirectory: 1, checkpointAfterContextPublish: 1, checkpointAfterContextReservation: 1,
+			checkpointAfterRegistryRename: 5, checkpointAfterSecretRename: 3, checkpointAfterSecretUnlink: 1,
+			checkpointBeforeContextPublish: 1, checkpointBeforeContextReady: 1, checkpointBeforeContextRmdir: 1,
+			checkpointBeforeContextSubtree: 24, checkpointBeforeContextUnlink: 16, checkpointBeforeRegistryRename: 5,
+			checkpointBeforeSecretPrune: 1, checkpointBeforeSecretRename: 3, checkpointBeforeSecretUnlink: 1,
+			checkpointCreateFile: 15, checkpointMkdir: 10, checkpointSyncContextFile: 9,
+			checkpointSyncDirectory: 66, checkpointSyncFile: 15, checkpointWriteFile: 15,
 		},
 		"init-recovery": {
 			checkpointSyncInitialRegistryFile: 1, checkpointBeforeInitialRegistryRecovery: 1,
@@ -2547,19 +2558,56 @@ func checkpointLedger() map[string]string {
 		"controller-record/cancelled/sync-file#2":                  "specs/contexts/controller-record.md#descriptor",
 		"controller-record/refused/write-file#2":                   "specs/contexts/controller-record.md#descriptor",
 		"controller-record/cancelled/write-file#2":                 "specs/contexts/controller-record.md#descriptor",
-		"init/refused/after-context-directory#1":                   "specs/contexts.md#storage-locking-and-publication",
-		"init/cancelled/after-context-directory#1":                 "specs/contexts.md#storage-locking-and-publication",
-		"init/killed/after-context-directory#1":                    "specs/contexts.md#storage-locking-and-publication",
-		"init/refused/create-file#3":                               "specs/contexts.md#storage-locking-and-publication",
-		"init/cancelled/create-file#3":                             "specs/contexts.md#storage-locking-and-publication",
-		"init/refused/mkdir#3":                                     "specs/contexts.md#storage-locking-and-publication",
-		"init/cancelled/mkdir#3":                                   "specs/contexts.md#storage-locking-and-publication",
-		"init/refused/sync-directory#6":                            "specs/contexts.md#storage-locking-and-publication",
-		"init/cancelled/sync-directory#6":                          "specs/contexts.md#storage-locking-and-publication",
-		"init/refused/sync-directory#7":                            "specs/contexts.md#storage-locking-and-publication",
-		"init/cancelled/sync-directory#7":                          "specs/contexts.md#storage-locking-and-publication",
 		"init/killed/write-file#1":                                 "restore:specs/contexts.md#storage-locking-and-publication",
-		"init/refused/write-file#3":                                "specs/contexts.md#storage-locking-and-publication",
-		"init/cancelled/write-file#3":                              "specs/contexts.md#storage-locking-and-publication",
+	}
+}
+
+func checkpointInitPurgeScenario() checkpointScenario {
+	purge := func(_ *testing.T, ctx context.Context, store *Store) error {
+		return store.TransactDeletion(ctx, checkpointContext, func(tx contexts.Transaction) error {
+			for _, record := range tx.Registry().Contexts {
+				if record.Name != checkpointContext {
+					continue
+				}
+				if record.Mode == contexts.Ready {
+					if _, err := tx.MutationState(ctx, record.Name); err != nil {
+						return err
+					}
+				}
+				return tx.Delete(ctx, record)
+			}
+			return nil
+		})
+	}
+	return checkpointScenario{
+		name: "init-purge",
+		prepare: func(t *testing.T) *Store {
+			store, _ := fixture(t)
+			if err := store.Transact(context.Background(), true, nil, func(contexts.Transaction) error { return nil }); err != nil {
+				t.Fatal(err)
+			}
+			return store
+		},
+		operate: func(t *testing.T, ctx context.Context, store *Store) error {
+			if err := checkpointInitialize(ctx, store); err != nil {
+				return err
+			}
+			return purge(t, ctx, store)
+		},
+		retry: purge,
+		settled: func(_ *testing.T, ctx context.Context, store *Store) error {
+			registry, err := store.View(ctx)
+			if err != nil {
+				return err
+			}
+			if len(registry.Contexts) != 0 {
+				return errors.New("purge retained the initializing name")
+			}
+			return nil
+		},
+		reads: func(_ *testing.T, ctx context.Context, store *Store) error { _, err := store.View(ctx); return err },
+		mutate: func(_ *testing.T, ctx context.Context, store *Store) error {
+			return store.Transact(ctx, false, nil, func(contexts.Transaction) error { return nil })
+		},
 	}
 }

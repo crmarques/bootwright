@@ -1,6 +1,7 @@
 package artifactserver
 
 import (
+	"errors"
 	"slices"
 	"strings"
 
@@ -19,6 +20,8 @@ type Evidence struct {
 	Request       string             `json:"request"`
 	Unit          string             `json:"unit"`
 }
+
+var certificateMismatch = errors.New("artifact-server certificate mismatch")
 
 type ListenerEvidence struct {
 	Address     string `json:"address"`
@@ -142,8 +145,11 @@ func ValidatePresence(data []byte, request Request, digest, fingerprint string) 
 		if !strings.HasPrefix(listener.Status, "HTTP/1.") {
 			return refusal("lifecycle.state", "an artifact-server listener did not answer with an HTTP status line", "")
 		}
+		if target.Protocol == "https" && (len(listener.Fingerprint) != 64 || strings.Trim(listener.Fingerprint, "0123456789abcdef") != "") {
+			return refusal("lifecycle.state", "an artifact-server listener supplied no usable certificate fingerprint", "")
+		}
 		if target.Protocol == "https" && listener.Fingerprint != fingerprint {
-			return refusal("lifecycle.state", "an artifact-server listener presented a different certificate than the operation bound", "")
+			return errors.Join(certificateMismatch, refusal("lifecycle.state", "an artifact-server listener presented a different certificate than the operation bound", ""))
 		}
 		if target.Protocol == "http" && listener.Fingerprint != "" {
 			return refusal("lifecycle.state", "an HTTP artifact-server listener reported a certificate", "")

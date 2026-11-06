@@ -14,7 +14,7 @@ ContainerName={{ bootwright_managed_service_request.unit }}
 Network=host
 User=0
 Entrypoint=/usr/sbin/chronyd
-Exec=-d -x -f /etc/chrony/chrony.conf
+Exec=-d -x {{ '-6' if ':' in bootwright_managed_service_request.bindAddress else '-4' }} -f /etc/chrony/chrony.conf
 Volume={{ infra_managed_service_config_dir }}/chrony.conf:/etc/chrony/chrony.conf:ro,Z
 
 [Service]

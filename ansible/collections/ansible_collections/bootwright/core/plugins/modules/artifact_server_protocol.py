@@ -30,7 +30,9 @@ options:
         which the runner reports as the server's own diagnostic for the port it
         names. C(foreign-listener) identifies a socket another daemon holds;
         C(unassigned-bind-address) identifies an explicit address the host
-        cannot use. Both are checked before effects.
+        cannot use. Both are checked before effects. Readiness also names C(readiness-timeout)
+        or C(listener-failed); an unusable certificate proof is C(readiness-unproved),
+        and a valid unequal fingerprint is C(certificate-mismatch).
     type: str
     required: false
   port:

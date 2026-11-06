@@ -402,13 +402,25 @@ func (t *setupTransaction) claimRuntimes() ([]*os.File, error) {
 	return held, nil
 }
 
+func (t *setupTransaction) NewSetupID(ctx context.Context) (string, error) {
+	if err := t.owned(ctx); err != nil {
+		return "", err
+	}
+	return t.store.candidate("setup-")
+}
+
 func (t *setupTransaction) OpenRun(ctx context.Context) (string, prerequisites.SetupRun, error) {
 	if err := t.owned(ctx); err != nil {
 		return "", nil, err
 	}
-	runs, err := t.store.ensureDirectory(ctx, t.dir, setupRunsName)
-	if err != nil {
-		return "", nil, unsafeSetupRun(storeEntry(t.dir, setupRunsName), "it cannot be opened as a private directory")
+	runs, err := openDirectory(t.dir, setupRunsName)
+	if errors.Is(err, syscall.ENOENT) {
+		runs, err = t.store.ensureDirectory(ctx, t.dir, setupRunsName)
+		if err != nil {
+			return "", nil, setupRunAccessError(storeEntry(t.dir, setupRunsName), err)
+		}
+	} else if err != nil {
+		return "", nil, setupRunAccessError(storeEntry(t.dir, setupRunsName), err)
 	}
 	defer runs.file.Close()
 	return t.store.nextSetupRun(ctx, runs)

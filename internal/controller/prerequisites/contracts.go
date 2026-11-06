@@ -166,6 +166,7 @@ type SetupTransaction interface {
 	Record(ctx context.Context, value SetupState) error
 	DiscardForeign(ctx context.Context) error
 	OpenRun(ctx context.Context) (string, SetupRun, error)
+	NewSetupID(ctx context.Context) (string, error)
 	Runtimes(ctx context.Context) ([]string, error)
 	WheelPath(ctx context.Context, sha256, filename string) (string, error)
 	PruneWheels(ctx context.Context, keep []string) (int, error)

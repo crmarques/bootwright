@@ -1,6 +1,6 @@
 implementation: proxy-squid-v1
-content-digest: c2118bb0e06acbda094170f4d4ee281d0bdab8724191818ca36266730001a8ed
-request-version: managed-service-v4
+content-digest: 38aacea4f907dcaea6f1d589d3d4734b3929e8db74766d494338bee77b5d3028
+request-version: managed-service-v5
 automation-formats: none
 mark-formats: none
 proof-ids: none

@@ -10,6 +10,7 @@ import ipaddress
 import os
 import socket
 import struct
+import time
 
 from ansible_collections.bootwright.core.plugins.module_utils import host_sockets
 
@@ -236,28 +237,46 @@ def dns_exchange(address, port, payload):
         datagram.close()
 
 
+def dns_stream_read(stream, count, deadline):
+    data = bytearray()
+    while len(data) < count:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise socket.timeout("DNS TCP readiness deadline")
+        stream.settimeout(remaining)
+        part = stream.recv(count - len(data))
+        if not part:
+            raise ValueError("truncated DNS answer")
+        data.extend(part)
+    return bytes(data)
+
+
+def dns_tcp_exchange(address, port, payload):
+    deadline = time.monotonic() + PROBE_TIMEOUT
+    with socket.create_connection((address, port), timeout=PROBE_TIMEOUT) as stream:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise socket.timeout("DNS TCP readiness deadline")
+        stream.settimeout(remaining)
+        stream.sendall(struct.pack(">H", len(payload)) + payload)
+        length = struct.unpack(">H", dns_stream_read(stream, 2, deadline))[0]
+        return dns_stream_read(stream, length, deadline)
+
+
 def probe_dns(address, port, records):
-    """Prove a resolver answers every declared address of every record, and answers over both transports."""
+    """Prove every declared address over both transports."""
     if not records:
         raise ValueError("records")
-    missing = []
-    verified = 0
-    for (name, kind), declared in sorted(dns_expected(records).items()):
-        payload = dns_query(name, kind)
-        answered = set(dns_addresses(payload, dns_exchange(address, port, payload), kind))
-        verified += len(declared & answered)
-        missing.extend("%s %s" % (name, value) for value in sorted(declared - answered))
-    if missing:
-        raise ValueError("unanswered " + ", ".join(missing))
-    payload = dns_query(records[0]["name"])
-    with socket.create_connection((address, port), timeout=PROBE_TIMEOUT) as stream:
-        stream.settimeout(PROBE_TIMEOUT)
-        stream.sendall(struct.pack(">H", len(payload)) + payload)
-        length = struct.unpack(">H", stream.recv(2))[0]
-        streamed = dns_answers(payload, stream.recv(min(length, 512)))
-    if streamed < 1:
-        raise ValueError("answers")
-    return "answers=%d" % verified
+    expected = dns_expected(records)
+    for exchange in (dns_exchange, dns_tcp_exchange):
+        missing = []
+        for (name, kind), declared in sorted(expected.items()):
+            payload = dns_query(name, kind)
+            answered = set(dns_addresses(payload, exchange(address, port, payload), kind))
+            missing.extend("%s %s" % (name, value) for value in sorted(declared - answered))
+        if missing:
+            raise ValueError("unanswered " + ", ".join(missing))
+    return "answers=%d" % sum(len(values) for values in expected.values())
 
 
 def probe_ntp(address, port):

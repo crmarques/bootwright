@@ -190,6 +190,7 @@ CAPABILITY = adapter_protocol.Capability(
     "the physical machine result could not be published",
     completion,
     passthrough=(UnprovableIdentity,),
+    refusals=("target-unanswered",),
 )
 
 

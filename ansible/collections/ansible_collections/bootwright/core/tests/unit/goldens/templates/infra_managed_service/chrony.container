@@ -9,7 +9,7 @@ ContainerName=bootwright-lab-rhel-ntp-server-chrony-time
 Network=host
 User=0
 Entrypoint=/usr/sbin/chronyd
-Exec=-d -x -f /etc/chrony/chrony.conf
+Exec=-d -x -4 -f /etc/chrony/chrony.conf
 Volume=/var/lib/bootwright-services/lab-rhel/ntp-server-chrony/time/config/chrony.conf:/etc/chrony/chrony.conf:ro,Z
 
 [Service]

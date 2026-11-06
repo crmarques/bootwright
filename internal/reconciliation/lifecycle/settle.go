@@ -36,7 +36,18 @@ func (s Service) finishSettled(ctx context.Context, name string, decided operati
 	if finalized {
 		recovered = RecoveredFinalization
 	}
-	return settled(identity, decided, recovered), nil
+	result := settled(identity, decided, recovered)
+	if decided.operation.ID != "" && len(decided.plan.Blocks) != 0 {
+		err := s.workspace.ReadLifecycle(ctx, name, func(view View) error {
+			var err error
+			result.Blocks, err = s.recordedBlockResults(ctx, s.store(view), decided.operation, decided.plan, decided.states, "")
+			return err
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
 }
 
 // settled reports the verb whose work durable state already proves. It touches

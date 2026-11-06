@@ -14,7 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-const EraseImplementation = "physical-erase-v9"
+const EraseImplementation = "physical-erase-v10"
 const eraseVariable = "bootwright_physical_erase"
 
 const (
@@ -51,7 +51,7 @@ func EraseBlockID(machine string) string {
 }
 
 func EraseContentDigest() string {
-	digest := sha256.Sum256([]byte(EraseImplementation + ":descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v2"))
+	digest := sha256.Sum256([]byte(EraseImplementation + ":descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v3"))
 	return hex.EncodeToString(digest[:])
 }
 

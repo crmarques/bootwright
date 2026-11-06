@@ -6,13 +6,15 @@ package architecture_test
 func commentLineCeilings() map[string]int {
 	return map[string]int{
 		"ansible": 14, "api/v1alpha1": 53, "cmd/bootwright": 208,
+		"internal/nativeexec":      0,
+		"internal/acquisition":     9,
 		"internal/adapterprotocol": 132, "internal/addons": 7, "internal/addons/catalog": 0, "internal/addons/clusterobjects": 0, "internal/addons/clusterobjects/driver": 0, "internal/addons/instance": 0,
 		"internal/addons/packages": 2, "internal/containercluster/networking": 2,
 		"internal/addons/preflight": 0, "internal/availability": 0, "internal/canonicaljson": 27,
 		"internal/cli": 450, "internal/containercluster": 0, "internal/containercluster/openshift": 21, "internal/containercluster/access": 24,
 		"internal/containercluster/agentinstall": 467, "internal/containercluster/installation": 0,
 		"internal/containercluster/preflight": 0, "internal/containercluster/preflightlocal": 0, "internal/substrate/capacity": 0, "internal/controller": 125,
-		"internal/controller/ansiblelocal": 91, "internal/controller/bundlelocal": 30,
+		"internal/controller/ansiblelocal": 91, "internal/controller/bundlelocal": 23,
 		"internal/controller/clients": 134, "internal/controller/hostdnf": 1, "internal/controller/firewall": 0,
 		"internal/controller/firewalllocal": 0,
 		"internal/controller/hostlinux":     24,

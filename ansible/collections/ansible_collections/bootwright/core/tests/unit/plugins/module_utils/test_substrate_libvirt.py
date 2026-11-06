@@ -868,7 +868,7 @@ ROUTES4 = (
     ' {"type": "local", "dst": "192.0.2.10", "dev": "eth0", "table": "local"},'
     ' {"dst": "192.168.122.0/24", "dev": "virbr0"}]'
 )
-ROUTES6 = '[{"dst": "fe80::/64", "dev": "eth0"}, {"dst": "default", "dev": "eth0"}]'
+ROUTES6 = '[{"dst": "fe80::/64", "dev": "eth0"}, {"dst": "default", "gateway": "fe80::1", "dev": "eth0"}]'
 
 
 def host_answers(**replaced):
@@ -887,7 +887,7 @@ def managed(address, bridge="virbr-lab"):
 
 def test_a_managed_network_clear_of_every_host_link_and_route_collides_with_nothing():
     assert collisions(host_answers(), managed("198.51.100.1/24"), set()) == ([], True)
-    # A default route overlaps every prefix and collides with none.
+    # An ordinary main-table gateway default is not a collision.
     assert collisions(host_answers(), managed("2001:db8::1/64"), set()) == ([], True)
 
 
@@ -1020,3 +1020,11 @@ def test_a_host_that_does_not_answer_for_its_links_or_routes_proves_nothing():
     # An external attachment alone needs no read.
     external = [{"name": "external", "bridge": "br0", "managed": False}]
     assert collisions(runner_for({}), external, set()) == ([], True)
+
+
+def test_policy_and_on_link_defaults_collide_but_main_gateway_defaults_do_not():
+    for destination in ("default", "0.0.0.0/0"):
+        for extra, count in ((", \"gateway\": \"192.0.2.1\"", 0), (", \"gateway\": \"192.0.2.1\", \"table\": \"220\"", 1), ("", 1)):
+            route = '{"dst": "%s", "dev": "tun0"%s}' % (destination, extra)
+            found, shadows = conflicts(routes_with(route), "10.1.0.1/24")
+            assert len(found) == count and shadows == []

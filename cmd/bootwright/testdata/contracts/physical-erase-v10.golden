@@ -1,12 +1,12 @@
-implementation: physical-erase-v9
-content-digest: 0ad98f4de447c70da9b12ece4afc2f5e6190845cf36a48a95d6b4c5533713c82
-request-version: physical-erase-v9
+implementation: physical-erase-v10
+content-digest: ae3ab6afea6505edf328d2267ab48e1386e5dcf4de10bcffdd9a18f68d0a0aa0
+request-version: physical-erase-v10
 automation-formats: none
 mark-formats: none
 proof-ids: bootwright.erase=1
 fixed-places: /var/lib/bootwright-erase
 effect-pins:
-  descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v2
+  descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v3
 request-identity:
   install.identity.context
   install.identity.object

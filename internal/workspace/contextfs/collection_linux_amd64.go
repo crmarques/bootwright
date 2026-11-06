@@ -7,6 +7,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -150,7 +151,11 @@ func (s *Store) collectContextStages(ctx context.Context, dir *directory, subtre
 		if err != nil {
 			continue
 		}
-		err = s.collectStages(ctx, area, maxOperationEntries, maxOperationRecord, true, 0)
+		bound := int64(maxOperationRecord)
+		if name == "operations" {
+			bound = operationstore.MaxPlanBytes
+		}
+		err = s.collectStages(ctx, area, maxOperationEntries, bound, true, 0)
 		area.file.Close()
 		if err != nil {
 			return err

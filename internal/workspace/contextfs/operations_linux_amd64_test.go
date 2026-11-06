@@ -390,3 +390,31 @@ func TestTheOperationAreaKeepsTheReservedBytesForTheLastRemoval(t *testing.T) {
 		t.Fatal(causeText(err))
 	}
 }
+
+func TestOperationPlanUsesItsOwnRecordBound(t *testing.T) {
+	ctx := context.Background()
+	store, _ := lifecycleFixture(t)
+	err := checkpointMutateLifecycle(ctx, store, func(tx lifecycle.Transaction) error {
+		area := tx.Operations()
+		if err := area.EnsureDirectory(ctx, "op-1"); err != nil {
+			return err
+		}
+		data := []byte(strings.Repeat("x", maxOperationRecord+1))
+		if err := area.WriteExclusive(ctx, "op-1/plan.json", data); err != nil {
+			return err
+		}
+		if err := area.WriteExclusive(ctx, "op-1/record.json", data); err == nil {
+			t.Fatal("ordinary record exceeded its bound")
+		}
+		if err := area.Replace(ctx, "op-1/plan.json", append(data, 'x'), data); err != nil {
+			return err
+		}
+		if err := area.Replace(ctx, "op-1/plan.json", make([]byte, operationstore.MaxPlanBytes+1), nil); err == nil {
+			t.Fatal("plan exceeded its bound")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

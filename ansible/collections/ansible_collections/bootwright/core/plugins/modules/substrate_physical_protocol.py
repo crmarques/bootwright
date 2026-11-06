@@ -12,6 +12,10 @@ description:
     inherited result channel the invoking Bootwright process reads.
   - The frozen Go request and that channel own authorization and evidence.
 options:
+  reason:
+    description: The named unanswered-target refusal emitted before stopping a proof.
+    type: str
+    required: false
   phase:
     description: The operation phase being published.
     type: str

@@ -385,7 +385,7 @@ def pinned(host, context):
     return live
 
 
-def read_machine(host, request, context, receipts):
+def read_machine(host, request, context, receipts, *, prove_shape=False):
     """One observation of the VirtualMachine and everything it owns; Unanswered leaves answered false."""
     evidence = base_evidence(host.client.server)
     vm = request["name"]
@@ -397,6 +397,8 @@ def read_machine(host, request, context, receipts):
         if state == "foreign":
             evidence["foreign"] = True
         elif state == "own":
+            if prove_shape:
+                prove_frozen(request, context, live)
             evidence["owned"], evidence["virtualMachine"] = True, vm
             keep(receipts, "VirtualMachine", vm, live, "mark-recovered")
             owners.add(uid(live))
@@ -411,6 +413,8 @@ def read_machine(host, request, context, receipts):
             if mine:
                 keep(receipts, "DataVolume", volume, held, "owner-referenced")
                 owners.add(uid(held))
+            if volume == request["rootVolume"]:
+                evidence["postcondition"] = bool(mine and (held.get("status") or {}).get("phase") == "Succeeded")
             evidence["volumes"].append({"kind": "DataVolume", "name": volume, "present": bool(mine)})
         evidence["volumes"].extend(claims(host, owners))
         evidence["answered"] = True
@@ -436,6 +440,13 @@ def claims(host, owners):
     raise Unanswered()
 
 
+def prove_frozen(request, context, live):
+    drift = frozen_difference(request, context, live)
+    if drift:
+        raise Refused("VirtualMachine %s/%s differs from its frozen request at %s, which this arm never rewrites; destroy and apply again"
+                      % (request["namespace"], request["name"], drift))
+
+
 def settled(evidence, request):
     """Fill absent and postcondition for an observation that answered."""
     present = [v for v in evidence["volumes"] if v["present"]]
@@ -443,12 +454,12 @@ def settled(evidence, request):
         evidence["absent"], evidence["postcondition"] = True, True
     elif evidence["answered"] and evidence["owned"] and not evidence["foreign"]:
         root = any(v["kind"] == "DataVolume" and v["name"] == request["rootVolume"] and v["present"] for v in evidence["volumes"])
-        evidence["postcondition"] = root and receipt_for(evidence["receipts"], "VirtualMachine", request["name"]) is not None
+        evidence["postcondition"] = evidence["postcondition"] and root and receipt_for(evidence["receipts"], "VirtualMachine", request["name"]) is not None
     return evidence
 
 
 def observe(host, request, context):
-    return settled(read_machine(host, request, context, [dict(r) for r in context["pinned"]["receipts"]]), request)
+    return settled(read_machine(host, request, context, [dict(r) for r in context["pinned"]["receipts"]], prove_shape=True), request)
 
 
 def apply(host, request, context):
@@ -479,13 +490,10 @@ def apply(host, request, context):
         if receipt_for(receipts, "VirtualMachine", vm) is None:
             receipts.append({"basis": "mark-recovered", "kind": "VirtualMachine", "name": vm, "uid": uid(live)})
             changed = True
-    drift = frozen_difference(request, context, live)
-    if drift:
-        raise Refused("VirtualMachine %s/%s differs from its frozen request at %s, which this arm never rewrites; destroy and apply again"
-                      % (request["namespace"], vm, drift))
+    prove_frozen(request, context, live)
     host.wait(lambda: host.client.get(host.dv(request["rootVolume"])),
               lambda held: held is not None and ((held.get("status") or {}).get("phase") == "Succeeded"), VOLUME_SECONDS)
-    evidence = settled(read_machine(host, request, dict(context, pinned=dict(context["pinned"], receipts=receipts)), receipts), request)
+    evidence = settled(read_machine(host, request, dict(context, pinned=dict(context["pinned"], receipts=receipts)), receipts, prove_shape=True), request)
     return changed, evidence
 
 

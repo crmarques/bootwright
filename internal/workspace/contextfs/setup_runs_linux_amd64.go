@@ -4,6 +4,7 @@ package contextfs
 
 import (
 	"context"
+	"errors"
 	"os"
 	"slices"
 	"strconv"
@@ -41,7 +42,7 @@ func setupRunName(number int) string {
 }
 
 func unsafeSetupRun(path, reason string) error {
-	return state("controller setup run entry is not this store's own: " + path + ": " + reason)
+	return errors.Join(prerequisites.ErrUnsafeSetupRun, state("controller setup run entry is not this store's own: "+path+": "+reason))
 }
 
 // verifySetupRuns admits a runs container only as this store creates it: at
@@ -51,7 +52,7 @@ func unsafeSetupRun(path, reason string) error {
 func verifySetupRuns(ctx context.Context, runs *directory) ([]int, error) {
 	names, err := directoryNames(runs, maxSetupRuns)
 	if err != nil {
-		return nil, unsafeSetupRun(heldEntry(runs), "it holds more than "+strconv.Itoa(maxSetupRuns)+" runs or cannot be listed")
+		return nil, setupRunAccessError(heldEntry(runs), err)
 	}
 	numbers := make([]int, 0, len(names))
 	for _, name := range names {
@@ -64,7 +65,7 @@ func verifySetupRuns(ctx context.Context, runs *directory) ([]int, error) {
 		}
 		run, err := openDirectory(runs, name)
 		if err != nil {
-			return nil, unsafeSetupRun(storeEntry(runs, name), "it is not a private directory")
+			return nil, setupRunAccessError(storeEntry(runs, name), err)
 		}
 		_, _, err = setupRunOutput(run)
 		run.file.Close()
@@ -80,7 +81,7 @@ func verifySetupRuns(ctx context.Context, runs *directory) ([]int, error) {
 func setupRunOutput(run *directory) (syscall.Stat_t, bool, error) {
 	names, err := directoryNames(run, 1)
 	if err != nil {
-		return syscall.Stat_t{}, false, unsafeSetupRun(heldEntry(run), "it holds more than its own output")
+		return syscall.Stat_t{}, false, setupRunAccessError(heldEntry(run), err)
 	}
 	if len(names) == 0 {
 		return syscall.Stat_t{}, false, nil
@@ -91,11 +92,14 @@ func setupRunOutput(run *directory) (syscall.Stat_t, bool, error) {
 	}
 	file, err := openRelative(run, setupRunOutputName, pathHandle, 0)
 	if err != nil {
-		return syscall.Stat_t{}, false, unsafeSetupRun(path, "it cannot be opened without following a link")
+		return syscall.Stat_t{}, false, setupRunAccessError(path, err)
 	}
 	stat, err := statHandle(file)
 	file.Close()
-	if err != nil || !private(stat, syscall.S_IFREG, run.identity.Uid, run.identity.Gid) || stat.Dev != run.identity.Dev || stat.Size > maxSetupRunOutput {
+	if err != nil {
+		return syscall.Stat_t{}, false, setupRunAccessError(path, err)
+	}
+	if !private(stat, syscall.S_IFREG, run.identity.Uid, run.identity.Gid) || stat.Dev != run.identity.Dev || stat.Size > maxSetupRunOutput {
 		return syscall.Stat_t{}, false, unsafeSetupRun(path, "it is not a private regular file within its bound")
 	}
 	return stat, true, nil
@@ -128,7 +132,7 @@ func (s *Store) nextSetupRun(ctx context.Context, runs *directory) (string, prer
 func (s *Store) removeSetupRun(ctx context.Context, runs *directory, name string) error {
 	run, err := openDirectory(runs, name)
 	if err != nil {
-		return unsafeSetupRun(storeEntry(runs, name), "it is not a private directory")
+		return setupRunAccessError(storeEntry(runs, name), err)
 	}
 	identity := run.identity
 	output, present, err := setupRunOutput(run)
@@ -137,12 +141,31 @@ func (s *Store) removeSetupRun(ctx context.Context, runs *directory, name string
 	}
 	run.file.Close()
 	if err != nil {
-		return err
+		return setupRunAccessError(storeEntry(runs, name), err)
 	}
 	if err := unlinkVerified(runs, name, identity, true); err != nil {
+		return setupRunAccessError(storeEntry(runs, name), err)
+	}
+	if err := s.syncDirectory(ctx, runs); err != nil {
+		return setupRunAccessError(heldEntry(runs), err)
+	}
+	return nil
+}
+
+func setupRunAccessError(path string, err error) error {
+	var errno syscall.Errno
+	var ioErr *ioFailure
+	var listing *listingFailure
+	if errors.As(err, &listing) && listing.kind == listingUnreadable {
 		return err
 	}
-	return s.syncDirectory(ctx, runs)
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.As(err, &ioErr) {
+		return err
+	}
+	if errors.As(err, &errno) && errno != syscall.EEXIST && errno != syscall.ELOOP && errno != syscall.ENOTDIR && errno != syscall.EXDEV {
+		return err
+	}
+	return unsafeSetupRun(path, "private entry identity could not be proved")
 }
 
 // createSetupRun makes both names durable before the run is handed out, so the
@@ -150,18 +173,30 @@ func (s *Store) removeSetupRun(ctx context.Context, runs *directory, name string
 func (s *Store) createSetupRun(ctx context.Context, runs *directory, name string) (prerequisites.SetupRun, error) {
 	run, err := s.newDirectory(ctx, runs, name)
 	if err != nil {
-		return nil, unsafeSetupRun(storeEntry(runs, name), "it could not be created exclusively")
+		return nil, setupRunAccessError(storeEntry(runs, name), err)
 	}
 	defer run.file.Close()
+	if err := s.checkpoint(ctx, checkpointCreateFile); err != nil {
+		return nil, err
+	}
 	file, err := openRelative(run, setupRunOutputName, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, 0600)
 	if err != nil {
-		return nil, unsafeSetupRun(storeEntry(run, setupRunOutputName), "it could not be created exclusively")
+		return nil, setupRunAccessError(storeEntry(run, setupRunOutputName), err)
 	}
 	created, err := statHandle(file)
-	if err != nil || !private(created, syscall.S_IFREG, run.identity.Uid, run.identity.Gid) || created.Mode&0777 != 0600 || s.syncDirectory(ctx, run) != nil {
+	if err != nil {
+		file.Close()
+		return nil, setupRunAccessError(storeEntry(run, setupRunOutputName), err)
+	}
+	if !private(created, syscall.S_IFREG, run.identity.Uid, run.identity.Gid) || created.Mode&0777 != 0600 {
 		file.Close()
 		discardCreated(run, setupRunOutputName, created)
 		return nil, unsafeSetupRun(storeEntry(run, setupRunOutputName), "it could not be made durable as a private file")
+	}
+	if err := s.syncDirectory(ctx, run); err != nil {
+		file.Close()
+		discardCreated(run, setupRunOutputName, created)
+		return nil, setupRunAccessError(storeEntry(run, setupRunOutputName), err)
 	}
 	return &setupRun{file: file, location: run.path}, nil
 }

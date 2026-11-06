@@ -381,8 +381,8 @@ def host_routes(runner):
     """Every IPv4 and IPv6 route of every table, the host's own addresses included.
 
     The local table holds a route for each address the host carries, so one
-    listing covers addresses and routes alike. A default route overlaps every
-    prefix and collides with none, so it is left out. Each route is its prefix,
+    listing covers addresses and routes alike. Only a main-table default through
+    gateways is exempt from collision and shadow checks. Each route is its prefix,
     the devices of its hops and its gateways. The gateways are empty unless
     the route is in the main table and every hop names one: a route of another
     table, which a policy rule such as a VPN's may consult before main, or a
@@ -398,18 +398,19 @@ def host_routes(runner):
             for item in json.loads(output or "[]"):
                 destination = str(item.get("dst") or "")
                 if destination in ("", "default"):
-                    continue
+                    destination = "0.0.0.0/0" if width == 32 else "::/0"
                 if "/" not in destination:
                     destination += "/" + str(width)
                 prefix = ipaddress.ip_network(destination, strict=False)
-                if prefix.prefixlen:
-                    hops = item.get("nexthops") or [item]
-                    if not isinstance(hops, list) or not all(isinstance(hop, dict) for hop in hops):
-                        return None
-                    devices = tuple(str(hop.get("dev") or "") for hop in hops)
-                    gateways = tuple(str(hop.get("gateway") or "") for hop in hops)
-                    main = str(item.get("table") or "main") == "main"
-                    routes.append((prefix, devices, ",".join(gateways) if main and all(gateways) else ""))
+                hops = item.get("nexthops") or [item]
+                if not isinstance(hops, list) or not all(isinstance(hop, dict) for hop in hops):
+                    return None
+                devices = tuple(str(hop.get("dev") or "") for hop in hops)
+                gateways = tuple(str(hop.get("gateway") or "") for hop in hops)
+                main = str(item.get("table") or "main") in ("main", "254")
+                if prefix.prefixlen == 0 and main and all(gateways):
+                    continue
+                routes.append((prefix, devices, ",".join(gateways) if main and all(gateways) else ""))
         except (ValueError, TypeError, AttributeError):
             return None
     return routes

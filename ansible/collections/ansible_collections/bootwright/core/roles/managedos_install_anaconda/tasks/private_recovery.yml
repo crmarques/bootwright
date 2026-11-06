@@ -9,7 +9,7 @@
 - name: Publish the recovery passphrase only this machine may read
   ansible.builtin.copy:
     src: '{{ bootwright_os_install_material.recoveryPassphrase }}'
-    dest: '{{ managedos_install_anaconda_private_dir }}/recovery'
+    dest: '{{ managedos_install_anaconda_private_dir }}/.stage/recovery'
     remote_src: true
     owner: root
     group: root
@@ -22,6 +22,16 @@
       - /usr/bin/chcon
       - --reference
       - '{{ managedos_install_anaconda_served_root }}'
+      - '{{ managedos_install_anaconda_private_dir }}/.stage/recovery'
+  changed_when: true
+  no_log: true
+
+- name: Atomically publish the protected recovery passphrase
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/mv
+      - --no-target-directory
+      - '{{ managedos_install_anaconda_private_dir }}/.stage/recovery'
       - '{{ managedos_install_anaconda_private_dir }}/recovery'
   changed_when: true
   no_log: true

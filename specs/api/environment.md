@@ -292,18 +292,17 @@ Defaults obey these rules in order:
    `Secret.source` are whole values. Copy them only when absent; never append
    records, patch native payloads, or combine different key/source material.
    A valid explicit empty collection or source block wins completely.
-6. An authored discriminator or populated arm selects the
-   variant, using that union's own arm-population rules. An explicitly unset
-   value-shape arm, such as an empty or all-zero
-   [replicated pool block](../ceph-resources.md#replicated-protection), does not select
-   a variant.
+6. An authored discriminator or present arm selects the variant under the
+   [union rules](../api.md#public-authoring-grammar). An empty or all-zero
+   [replicated pool block](../ceph-resources.md#replicated-protection) selects
+   replicated protection; it does not inherit an erasure arm.
    Defaults never introduce an alternative arm or change that selection.
    Compatible ordinary records within the selected arm may inherit missing
    fields. Without an authored selection, defaults may select one variant.
    Applied defaults must produce a valid complete union; inactive default arms
    are not applied to a differently selected variant.
    The same protection applies to schema-declared forbidden branches controlled
-   by an explicit mode or feature choice: HTTP suppresses inherited TLS,
+   by an explicit mode or feature choice: an HTTP-only ArtifactServer listener set suppresses inherited TLS,
    disabled authentication suppresses inherited OAuth configuration, and
    external management suppresses inherited managed service and Ceph configuration.
    This does not remove authored forbidden fields or repair arbitrary failed

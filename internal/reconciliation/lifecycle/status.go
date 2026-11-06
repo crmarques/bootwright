@@ -248,11 +248,8 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, *api.Cat
 	if err != nil {
 		logs = nil
 	}
-	blocks := blockResults(plan, states)
-	for index := range blocks {
-		blocks[index].Attempts = attempts[blocks[index].ID]
-	}
-	if err := s.explainUnproved(ctx, store, operation, plan, blocks, continuationCommand(view.Identity().Name, operation, plan, states)); err != nil {
+	blocks, err := s.recordedBlockResults(ctx, store, operation, plan, states, continuationCommand(view.Identity().Name, operation, plan, states))
+	if err != nil {
 		return nil, nil, err
 	}
 	summary, err := s.lifecycleSummary(ctx, store, operation, plan, states, blocks, logs)

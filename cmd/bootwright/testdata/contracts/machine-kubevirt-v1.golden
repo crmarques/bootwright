@@ -1,6 +1,6 @@
 implementation: machine-kubevirt-v1
-content-digest: bbe152305086ad712b6e58445ed2b2f8c5d7c26ae8292ce8793c630b74426199
-request-version: machine-kubevirt-v2
+content-digest: a38afed60c7a0e8326181e84e4a7f297f1799442273c7130f2a8ac4f27a4f98c
+request-version: machine-kubevirt-v3
 automation-formats: none
 mark-formats: bootwright.io/context, bootwright.io/machine, bootwright.io/owner, bootwright.substrate.kubevirt.owner-v1
 proof-ids: bootwright.io/media-identity

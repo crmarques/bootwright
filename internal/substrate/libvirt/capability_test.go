@@ -77,8 +77,8 @@ func TestMachinePlanRequiresItsProviderByObject(t *testing.T) {
 	}
 }
 
-// A Machine on a provider reached over SSH publishes no controller
-// reservation, but its emulated BMC's socket is claimed on that provider's
+// A Machine on a provider reached over SSH claims its BMC endpoint shared
+// across contexts, and its emulated BMC's socket on that provider's
 // host Machine and the SSH address and port it is reached at, so its own
 // context compares it with that host's other sockets.
 func TestAMachineOnAnSSHHostClaimsItsBMCSocketThere(t *testing.T) {
@@ -93,8 +93,8 @@ func TestAMachineOnAnSSHHostClaimsItsBMCSocketThere(t *testing.T) {
 	if err != nil || len(plan.Definitions) != 1 {
 		t.Fatalf("plan = %+v (%v)", plan, err)
 	}
-	if len(plan.Reservations) != 0 {
-		t.Fatalf("a Machine on an SSH host published controller reservations: %+v", plan.Reservations)
+	if len(plan.Reservations) != 1 || !plan.Reservations[0].Shared || !slices.Contains(plan.Reservations[0].Keys, "bmc:192.0.2.5:8000/7b9ec716-85d4-8e28-84d3-f0d571d55f15") {
+		t.Fatalf("a Machine on an SSH host must claim its shared BMC endpoint: %+v", plan.Reservations)
 	}
 	if len(plan.SSHReservations) != 1 || plan.SSHReservations[0].Machine != "hypervisor" ||
 		plan.SSHReservations[0].Address != "192.0.2.5" || plan.SSHReservations[0].Port != 22 ||

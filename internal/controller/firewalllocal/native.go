@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/crmarques/bootwright/internal/nativeexec"
 )
 
 type capture struct{ bytes.Buffer }
@@ -21,7 +23,12 @@ func (c *capture) Write(data []byte) (int, error) {
 }
 
 func command(ctx context.Context, args []string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "/usr/bin/firewall-cmd", args...)
+	executable, err := nativeexec.Qualify("/usr/bin/firewall-cmd")
+	if err != nil {
+		return nil, errors.New("the system executable is not root-owned below qualified directories")
+	}
+	cmd := exec.CommandContext(ctx, executable, args...)
+	cmd.Dir = "/"
 	cmd.Env = []string{"PATH=/usr/bin:/bin", "LC_ALL=C"}
 	cmd.WaitDelay = time.Second
 	output, failures := &capture{}, &capture{}

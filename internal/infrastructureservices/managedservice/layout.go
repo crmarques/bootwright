@@ -79,3 +79,31 @@ func ReservationKeys(unit, contentRoot string, sockets []string) []string {
 	slices.Sort(keys)
 	return slices.Compact(keys)
 }
+
+// ReadinessRefusals preserves uncertainty only for a silent listener.
+func ReadinessRefusals(kind, service, bindAddress string, ports []int) map[string]error {
+	refusals := ListenerRefusals(kind, service, bindAddress, ports)
+	for _, port := range ports {
+		reasons := []string{"readiness-timeout", "listener-failed"}
+		if kind == string(api.ArtifactServer) {
+			reasons = append(reasons, "certificate-mismatch", "readiness-unproved")
+		}
+		for _, reason := range reasons {
+			code := "lifecycle.state"
+			message := "the listener refused or returned an invalid readiness answer"
+			if reason == "readiness-timeout" {
+				code = "lifecycle.unknown"
+				message = "the listener did not answer within its bounded readiness window"
+			}
+			if reason == "readiness-unproved" {
+				code = "lifecycle.unknown"
+				message = "the listener supplied no usable readiness evidence"
+			}
+			if reason == "certificate-mismatch" {
+				message = "the listener presented a different certificate than the operation bound"
+			}
+			refusals[reason+"-"+FormatPort(port)] = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: code, Message: message + " on " + HostPort(bindAddress, port), Remediation: "restore the declared service listener and retry the operation", Object: &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: service}}}}
+		}
+	}
+	return refusals
+}

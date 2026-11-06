@@ -18,6 +18,11 @@
   failed_when: false
   no_log: true
 
+- name: Name an unanswered target proof without claiming a hardware mismatch
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_refusal: target-unanswered
+  when: substrate_baremetal_machine_target.unanswered | default(false) | bool
+
 # ansible-core keeps nothing of a failure under no_log but that it failed, so
 # the controller's own refusal is reported here, where no credential is.
 - name: Stop at a read the management controller did not answer

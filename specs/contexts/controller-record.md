@@ -243,15 +243,24 @@ never wait for it and refuse a held lock as busy; a launch's
 [cache-only rebuild](../controller.md#the-controller-runtime) waits for it,
 polling so that cancellation ends the wait.
 
-`state.json` is the canonical `bootwright.setup-state-v1` record, at most
-256 KiB. Its `pending` member, `{id, planDigest, actions, startedAt}`, is
+`state.json` is the canonical record whose version is `prerequisites.SetupStateFormat`
+(in `internal/controller/prerequisites/setupstore.go`), at most 256 KiB. Its
+`pending` member, `{id, planDigest, actions, startedAt, requested}`, is
 written and synchronized before setup's first effect and cleared with the
 receipt it writes last. The `receipt` holds the platform (`id`, `versionId`,
 `like`, `architecture`, `glibc`, `tested`), the lock digest, the runtime
 (`digest`, `interpreter`, `python`, `abi`, `ansibleCore`), the closure digest
 and the packages, each with its requirement, what requires it, the provider's
 NEVRA, its repository and `installedBy`, a setup run ID or
-`present before bootwright`. `runtimes` names the current and the previous
+`present before bootwright`. `requested` freezes the requirements absent before
+this setup's package transaction. A resumed setup retains that intent and its
+original ID until it writes the receipt, attributing newly present requested
+providers to that ID. A subsequent setup carries forward every still-installed
+provider attributed to an earlier setup, including its Python interpreter,
+matching the requirement and package name across NEVRA updates. If no log run
+can be retained, the durable setup ID instead uses `setup-` followed by a
+random 32-digit hexadecimal token; it names no log directory.
+`runtimes` names the current and the previous
 runtime digest. A record that cannot be read, or that carries another format,
 is another build's: a launch refuses `controller.state`, "the controller setup
 record was written by another Bootwright build", and one that finds `pending`

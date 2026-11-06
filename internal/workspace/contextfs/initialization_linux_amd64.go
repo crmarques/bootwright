@@ -32,13 +32,19 @@ func (t *transaction) Reserve(ctx context.Context, name, environment string, con
 	}
 	dir, err := t.openContextReservation(ctx, record, fresh)
 	if err != nil {
-		return contexts.Record{}, err
+		if ctx.Err() != nil {
+			return contexts.Record{}, ctx.Err()
+		}
+		return contexts.Record{}, initializationDamage(name, err)
 	}
 	defer dir.file.Close()
 	if err := verifyContextLayout(ctx, dir); err != nil {
 		return contexts.Record{}, err
 	}
 	if record.DirectoryInode == 0 {
+		if err := t.store.syncDirectory(ctx, t.container); err != nil {
+			return contexts.Record{}, err
+		}
 		record.DirectoryDevice = uint64(dir.identity.Dev)
 		record.DirectoryInode = dir.identity.Ino
 		registry := cloneRegistry(t.registry)
@@ -97,6 +103,9 @@ func (t *transaction) openContextReservation(ctx context.Context, record context
 		}
 		t.container = container
 	}
+	if err := t.collectInitializationStages(ctx, record.Name); err != nil {
+		return nil, err
+	}
 	dir, err := openDirectory(t.container, record.Name)
 	if errors.Is(err, syscall.ENOENT) && record.DirectoryInode == 0 {
 		return t.createContextDirectory(ctx, record.Name)
@@ -120,7 +129,11 @@ func (t *transaction) openContextReservation(ctx context.Context, record context
 }
 
 func (t *transaction) createContextDirectory(ctx context.Context, name string) (*directory, error) {
-	dir, err := t.store.newDirectory(ctx, t.container, name)
+	stageName, err := t.store.candidate(initializationStagePrefix(name))
+	if err != nil {
+		return nil, err
+	}
+	dir, err := t.store.newDirectory(ctx, t.container, stageName)
 	if err != nil {
 		return nil, err
 	}
@@ -140,6 +153,35 @@ func (t *transaction) createContextDirectory(ctx context.Context, name string) (
 	if makeErr != nil {
 		dir.file.Close()
 		return nil, makeErr
+	}
+	if err := t.store.checkpoint(ctx, checkpointBeforeContextPublish); err != nil {
+		dir.file.Close()
+		return nil, err
+	}
+	if err := dir.verify(); err != nil {
+		dir.file.Close()
+		return nil, err
+	}
+	identity := dir.identity
+	if err := renameNoReplaceAt(t.container, stageName, name); err != nil {
+		dir.file.Close()
+		return nil, err
+	}
+	dir.file.Close()
+	if err := t.store.checkpoint(ctx, checkpointAfterContextPublish); err != nil {
+		return nil, err
+	}
+	dir, err = openDirectory(t.container, name)
+	if err != nil {
+		return nil, err
+	}
+	if !sameIdentity(identity, dir.identity) {
+		dir.file.Close()
+		return nil, state("initializing context directory changed during publication")
+	}
+	if err := t.store.syncDirectory(ctx, t.container); err != nil {
+		dir.file.Close()
+		return nil, err
 	}
 	return dir, nil
 }

@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/crmarques/bootwright/internal/nativeexec"
 )
 
 func (Resolver) Resolve(ctx context.Context) (Account, error) {
@@ -88,34 +90,10 @@ func QualifiedSudo() (string, error) {
 	return qualifiedSystemExecutable("/usr/bin/sudo")
 }
 
-// qualifiedSystemExecutable resolves path to an executable regular file root
-// owns below directories root owns, none of them writable by a group or other
-// account, so no account but root could have replaced what runs.
 func qualifiedSystemExecutable(path string) (string, error) {
-	path, err := filepath.EvalSymlinks(path)
+	qualified, err := nativeexec.Qualify(path)
 	if err != nil {
 		return "", errAccount
 	}
-	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0022 != 0 || info.Mode().Perm()&0111 == 0 {
-		return "", errAccount
-	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || stat.Uid != 0 {
-		return "", errAccount
-	}
-	for parent := filepath.Dir(path); ; parent = filepath.Dir(parent) {
-		info, err := os.Lstat(parent)
-		if err != nil || !info.IsDir() || info.Mode().Perm()&0022 != 0 {
-			return "", errAccount
-		}
-		stat, ok := info.Sys().(*syscall.Stat_t)
-		if !ok || stat.Uid != 0 {
-			return "", errAccount
-		}
-		if parent == "/" {
-			break
-		}
-	}
-	return path, nil
+	return qualified, nil
 }

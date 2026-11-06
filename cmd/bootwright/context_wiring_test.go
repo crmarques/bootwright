@@ -9,6 +9,7 @@ import (
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/nativeartifacts/comparisonlocal"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	secretmaterial "github.com/crmarques/bootwright/internal/secrets/material"
 	"github.com/crmarques/bootwright/internal/workspace/contextfs"
@@ -27,6 +28,9 @@ func testContextWiring(t *testing.T, root string) serviceDependencies {
 		Controller: controllerDependencies{Firewall: &firewallProbe{status: "open"}},
 		Selection:  selectionfs.New(selectionfs.Options{UID: os.Getuid(), GID: os.Getgid(), Home: home}),
 		Operator:   testMaterialOperator{home: home},
+		Comparison: comparisonDependencies{Account: func(context.Context) (comparisonlocal.Account, error) {
+			return comparisonlocal.Account{UID: os.Geteuid(), GID: os.Getegid(), Home: home}, nil
+		}},
 	}
 }
 

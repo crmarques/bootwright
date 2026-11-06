@@ -6,9 +6,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -20,6 +18,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/nativeexec"
 )
 
 const (
@@ -521,27 +520,5 @@ func execute(ctx context.Context, c command, stdout, stderr io.Writer) (int, err
 }
 
 func qualifiedSystemExecutable(path string) (string, error) {
-	path, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		return "", err
-	}
-	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0022 != 0 || info.Mode().Perm()&0111 == 0 {
-		return "", errors.New("unqualified executable")
-	}
-	if stat, ok := info.Sys().(*syscall.Stat_t); !ok || stat.Uid != 0 {
-		return "", errors.New("unqualified executable")
-	}
-	for parent := filepath.Dir(path); ; parent = filepath.Dir(parent) {
-		info, err := os.Lstat(parent)
-		if err != nil || !info.IsDir() || info.Mode().Perm()&0022 != 0 {
-			return "", errors.New("unqualified executable")
-		}
-		if stat, ok := info.Sys().(*syscall.Stat_t); !ok || stat.Uid != 0 {
-			return "", errors.New("unqualified executable")
-		}
-		if parent == "/" {
-			return path, nil
-		}
-	}
+	return nativeexec.Qualify(path)
 }

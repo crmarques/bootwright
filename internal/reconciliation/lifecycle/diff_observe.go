@@ -135,19 +135,41 @@ func (s Service) inspectAll(ctx context.Context, view RunView, store recordReade
 		s.reportObservation(ctx, ProgressEvent{Status: "running", Completed: len(readings), Declared: len(blocks)})
 	}
 	slots := make(chan struct{}, s.Concurrency())
+	throttles := map[string]chan struct{}{}
 	for _, block := range blocks {
 		switch {
 		case slices.Contains(read.rebuilt, block.ID):
 			settle(block, rebuiltReading(read, block))
 			continue
-		case !acquire(ctx, slots):
+		}
+		var throttle chan struct{}
+		if block.Throttle != "" {
+			throttle = throttles[block.Throttle]
+			if throttle == nil {
+				throttle = make(chan struct{}, s.Throttle())
+				throttles[block.Throttle] = throttle
+			}
+			if !acquire(ctx, throttle) {
+				settle(block, blockReading{state: sideUnknown, reason: "the observation was canceled", remedy: repeatObserved(read.context.Name)})
+				continue
+			}
+		}
+		if !acquire(ctx, slots) {
+			if throttle != nil {
+				<-throttle
+			}
 			settle(block, blockReading{state: sideUnknown, reason: "the observation was canceled", remedy: repeatObserved(read.context.Name)})
 			continue
 		}
 		running.Add(1)
 		go func() {
 			defer running.Done()
-			defer func() { <-slots }()
+			defer func() {
+				<-slots
+				if throttle != nil {
+					<-throttle
+				}
+			}()
 			settle(block, s.inspect(ctx, view, store, approved, read, block, material))
 		}()
 	}
