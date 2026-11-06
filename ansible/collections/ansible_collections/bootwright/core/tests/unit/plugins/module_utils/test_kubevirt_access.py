@@ -52,6 +52,14 @@ def test_the_lent_kubeconfig_carries_the_host_server_and_authority_and_the_token
     assert "minted-token" not in json.dumps(evidence) and json.loads(data)["users"][0]["user"] == {"token": "minted-token"}
 
 
+def test_a_long_installation_run_is_lent_a_token_outliving_it():
+    # An eight-hour run plus the ten-minute minimum: no fixed ceiling bounds the run (B926).
+    api = Host()
+    ignored_data, evidence = access.mint(admin(api), request(expirationSeconds=8 * 3600 + 600))
+    assert evidence["postcondition"] and evidence["expirationSeconds"] == 8 * 3600 + 600
+    assert api.requests[0][3]["spec"] == {"expirationSeconds": 8 * 3600 + 600}
+
+
 def test_a_shorter_granted_lifetime_proves_no_lend():
     ignored_data, evidence = access.mint(admin(Host(granted=900)), request())
     assert not evidence["postcondition"] and evidence["expirationSeconds"] == 900

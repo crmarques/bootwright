@@ -520,14 +520,14 @@ rollback time and 30 seconds, 330 seconds, one hour for the rest of
 the media work and each read's own time, and the
 [bound](substrates.md#identity-and-power-operations) of every call an apply
 makes to the machine's BMC, 1 hour 17 minutes 20 seconds, which is 4 hours
-50 minutes 50 seconds for these budgets and within the runner's ceiling. A
+50 minutes 50 seconds for these budgets, within `MaxDeadline`. A
 registering request adds 15 minutes for its
 [registration](#registration), 5 hours 5 minutes 50 seconds for these budgets,
 and a request updating `withinRelease` adds 45 minutes for its
 [update](#update-within-release) and the bound of its reboot's disk boot, 6
 minutes on a virtual Machine: 5 hours 41 minutes 50 seconds without a
-registration and 5 hours 56 minutes 50 seconds with one, within the 6-hour
-ceiling. Those
+registration and 5 hours 56 minutes 50 seconds with one, within
+`MaxDeadline`. Those
 calls are the pre-boot power read, the insert, the power-off, boot selection
 and power-on that boot the installer, the eject, disk selection and power-on
 that boot the installed system, the eject the verification repeats, and the
@@ -543,9 +543,10 @@ counts, are not budgets: they are part of each call's bound. Nor is the single
 retry, one second later, of an observation's reachability check, which is part
 of the reads that hour allows for.
 
-Not yet met: a registering, updating or firmware-enforcing physical installation's
-deadline can exceed the runner's ceiling and is clamped below its frozen budgets;
-tracked as [B878](milestones/m1.md#b878).
+A physical installation whose deadline passes `MaxDeadline` runs to it.
+
+Not yet met: the update's reboot return does not count each attempt's
+10-second SSH connect timeout; tracked as [B878](milestones/m1.md#b878).
 
 ### Completion
 

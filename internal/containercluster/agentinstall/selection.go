@@ -138,9 +138,6 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 	if spec.Get("nodes").Len() > 1 && !multiNodePlatform(openshift.Platform(spec)) {
 		return "this executable installs no multi-node cluster on the declared platform", ""
 	}
-	if reason, remediation := pastTheCeiling(catalog, cluster); reason != "" {
-		return reason, remediation
-	}
 	controllerMachine, _ := lifecycle.ControllerMachine(catalog) // Placement refuses an absent controller.
 	server, serverHost, served := mediaServer(catalog, cluster)
 
@@ -197,34 +194,6 @@ func nodeTargetRefusal(catalog api.Catalog, bound api.Object, err error) (reason
 		return refused[0].Message, refused[0].Remediation
 	}
 	return "a declared node's realized target does not derive", ""
-}
-
-// pastTheCeiling says why a cluster's installation could not finish within the
-// deadline its runs are held to, or nothing when it can. The deadline grows with
-// rounds of nodes the installation boots, reads and releases, and the runner cuts
-// every run short at its ceiling rather than honoring a longer one, so a
-// cluster too large for it refuses here instead of being killed mid-install.
-func pastTheCeiling(catalog api.Catalog, cluster api.Object) (reason, remediation string) {
-	nodes := cluster.Spec().Get("nodes").Len()
-	arms, enforced := clusterArms(catalog, cluster), enforcedArms(catalog, cluster)
-	deadline := installDeadline(installBudgets(nodes, enforced, arms...), nodes)
-	if deadline <= lifecycle.MaxDeadline {
-		return "", ""
-	}
-	return "installing " + strconv.Itoa(nodes) + " nodes needs a run deadline of " + deadline.String() +
-			", past the " + lifecycle.MaxDeadline.String() + " every adapter run is held to",
-		"declare at most " + strconv.Itoa(largestCluster(enforced, arms...)) + " nodes on " + cluster.Identity()
-}
-
-// largestCluster is the most nodes whose installation deadline fits within the
-// ceiling. The plan bounds the declared Machine set at 512.
-func largestCluster(enforced []string, arms ...string) int {
-	for nodes := 512; nodes > 0; nodes-- {
-		if installDeadline(installBudgets(nodes, enforced, arms...), nodes) <= lifecycle.MaxDeadline {
-			return nodes
-		}
-	}
-	return 0
 }
 
 // mediaServer is the artifact server the cluster's boot image is published

@@ -31,10 +31,13 @@ type documentedBound struct {
 // bound's own. The function passes the constant itself, or a call to a
 // function of that source which returns the constant for a request that states
 // no deadline of its own. A ceiling is instead what that function clamps a
-// stated deadline to with min, so no request's deadline passes it.
+// stated deadline to with min, so no request's deadline passes it. A budget
+// bound is what some families hold their own fixed budgets to, and the runner
+// never clamps to it: no expression that function returns names it.
 type application struct {
 	runner, source string
 	ceiling        bool
+	budget         bool
 }
 
 func documentedBounds() []documentedBound {
@@ -82,7 +85,7 @@ func documentedBounds() []documentedBound {
 		{contexts, "| Bytes in one lifecycle attempt log | %s |", "internal/reconciliation/operationstore/logs.go", "AttemptLogBytes", nil, true},
 		{contexts, "fresh apply needs %s of them free", operations, "ReservedBytes", nil, true},
 		{contexts, "| One lifecycle adapter invocation whose request states no deadline | %s |", lifecycleRun, "invocationTimeout", &application{runner: "execute"}, false},
-		{contexts, "| The longest deadline a lifecycle adapter request may state | %s |", lifecycleRequest, "MaxDeadline", &application{runner: "execute", source: lifecycleRun, ceiling: true}, false},
+		{contexts, "| The longest deadline a fixed-budget lifecycle request may state | %s |", lifecycleRequest, "MaxDeadline", &application{runner: "execute", source: lifecycleRun, budget: true}, false},
 		{contexts, "| One controller Ansible run: the base of a controller-stage tool publication | %s |", setupRun, "runTimeout", &application{runner: "runProcess"}, false},
 		{contexts, "| The longest deadline a controller-stage client installation may run under | %s |", setupRun, "clientStageCeiling", &application{runner: "runProcess", ceiling: true}, false},
 		{"specs/openshift-clusters.md", "whose `minSizeGigabytes` exceeds %s", "internal/containercluster/agentinstall/selection.go", "maxInstallerRootDeviceGigabytes", nil, false},
@@ -158,7 +161,7 @@ func appliedDeadline(t *testing.T, root string, bound documentedBound, declared 
 	}
 	runner := bound.applied.runner
 	deadline := runnerDeadline(t, syntax, source, runner)
-	if !bound.applied.ceiling && types.ExprString(deadline) == name {
+	if !bound.applied.ceiling && !bound.applied.budget && types.ExprString(deadline) == name {
 		return ""
 	}
 	var function *ast.Ident
@@ -167,6 +170,14 @@ func appliedDeadline(t *testing.T, root string, bound documentedBound, declared 
 	}
 	if function == nil {
 		return fmt.Sprintf("%s in %s passes %s to context.WithTimeout, want %s or a call to a function of that source applying it", runner, source, types.ExprString(deadline), name)
+	}
+	if bound.applied.budget {
+		for _, returned := range returnedExpressions(t, syntax, source, function.Name) {
+			if strings.Contains(types.ExprString(returned), name) {
+				return fmt.Sprintf("%s in %s returns %s for the deadline %s passes to context.WithTimeout, but no runner clamps to %s", function.Name, source, types.ExprString(returned), runner, name)
+			}
+		}
+		return ""
 	}
 	for _, returned := range returnedExpressions(t, syntax, source, function.Name) {
 		if !bound.applied.ceiling && types.ExprString(returned) == name {
@@ -188,7 +199,7 @@ func appliedDeadline(t *testing.T, root string, bound documentedBound, declared 
 
 // deadlineProof is the test each capability that states its run's deadline
 // declares in its own package: the deadline covers every budget its frozen
-// request carries and stays within the ceiling the runner holds it to.
+// request carries, since the runner honors the deadline a request states.
 const deadlineProof = "TestEveryCapabilityDeadlineCoversItsFrozenBudgets"
 
 // A capability states its run's deadline through the Deadline of the

@@ -16,7 +16,6 @@ import (
 
 	"github.com/crmarques/bootwright/ansible"
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
@@ -98,8 +97,9 @@ func installRunDeadline(t *testing.T, request InstallRequest, operation string) 
 // Every run of both cluster blocks is bounded by a deadline derived from the
 // budgets its frozen request carries. It covers every phase those budgets
 // bound with room for the work around them, so the runner never kills a block
-// still inside one of its phases, and it stays within the ceiling the runner
-// holds every request to, so the runner never cuts it short.
+// still inside one of its phases. The media block's fixed budget stays within
+// the ceiling fixed budgets are held to; the installation's grows with its
+// nodes and is bounded by no ceiling, so its runs state exactly its request's.
 func TestEveryCapabilityDeadlineCoversItsFrozenBudgets(t *testing.T) {
 	for name, catalog := range map[string]api.Catalog{
 		"lab-sno": singleNodeCatalog(), "compact": compactCatalog(), "external": externalCatalog(),
@@ -124,9 +124,9 @@ func TestEveryCapabilityDeadlineCoversItsFrozenBudgets(t *testing.T) {
 				t.Errorf("%s media %s runs under %s, which must exceed the %s build budget and stay within the %s ceiling",
 					name, operation, deadline, build, lifecycle.MaxDeadline)
 			}
-			if deadline := installRunDeadline(t, install, operation); deadline <= phases || deadline > lifecycle.MaxDeadline {
-				t.Errorf("%s install %s runs under %s, which must exceed the %s its phases are budgeted and stay within the %s ceiling",
-					name, operation, deadline, phases, lifecycle.MaxDeadline)
+			if deadline := installRunDeadline(t, install, operation); deadline <= phases || deadline != install.Deadline() {
+				t.Errorf("%s install %s runs under %s, which must exceed the %s its phases are budgeted and be the %s its request states",
+					name, operation, deadline, phases, install.Deadline())
 			}
 		}
 	}
@@ -415,7 +415,6 @@ func TestTheNodeMarginIsTheBoundOfEveryControllerCallTheRoleMakesForANode(t *tes
 }
 
 // The boot budget and deadline grow only when a new four-node round starts.
-// Twenty-eight emulated nodes fit; the next round refuses before registration.
 func TestTheBootBudgetAndTheDeadlineGrowWithTheNodes(t *testing.T) {
 	for _, test := range []struct {
 		nodes    int
@@ -426,6 +425,7 @@ func TestTheBootBudgetAndTheDeadlineGrowWithTheNodes(t *testing.T) {
 		{4, 900, 3*time.Hour + 56*time.Minute},
 		{5, 1200, 4*time.Hour + 12*time.Minute},
 		{28, 4200, 5*time.Hour + 57*time.Minute},
+		{29, 4800, 6*time.Hour + 18*time.Minute},
 	} {
 		_, install, _ := onlyRequests(t, largeCatalog(test.nodes))
 		if len(install.Nodes) != test.nodes || install.Budgets.BootSeconds != test.boot {
@@ -435,17 +435,6 @@ func TestTheBootBudgetAndTheDeadlineGrowWithTheNodes(t *testing.T) {
 		if got := install.Deadline(); got != test.deadline {
 			t.Errorf("a cluster of %d nodes installs under %s, want %s", test.nodes, got, test.deadline)
 		}
-	}
-	_, _, _, err := Requests(largeCatalog(29), "controller", testContext)
-	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" {
-		t.Fatalf("a cluster of 29 nodes refuses with %#v", reported)
-	}
-	if want := "installing 29 nodes needs a run deadline of 6h18m0s, past the 6h0m0s every adapter run is held to"; reported[0].Message != want {
-		t.Errorf("refusal = %q, want %q", reported[0].Message, want)
-	}
-	if want := "declare at most 28 nodes on OpenShiftCluster/ocp"; reported[0].Remediation != want {
-		t.Errorf("remediation = %q, want %q", reported[0].Remediation, want)
 	}
 }
 
@@ -467,52 +456,54 @@ func largeCatalog(count int) api.Catalog {
 		), nodes...)))
 }
 
-// Each round adds to the installation's deadline, and the runner cuts every run
-// short at its ceiling rather than honoring a longer deadline. The largest
-// cluster whose deadline fits is planned, and one node more refuses before
-// registration, naming the deadline, the ceiling and how many nodes fit,
-// rather than being killed part way through its installation.
-func TestAClusterWhoseDeadlinePassesTheCeilingRefusesBeforeRegistration(t *testing.T) {
-	// The count is bounded, so a deadline that stops growing with its nodes
-	// fails here rather than holding the suite until go test's own timeout.
-	const most = 1000
-	deadlineOf := func(nodes int) time.Duration { return installDeadline(installBudgets(nodes, nil), nodes) }
-	largest := 0
-	for ; largest < most && deadlineOf(largest+1) <= lifecycle.MaxDeadline; largest++ {
-		if deadlineOf(largest+1) < deadlineOf(largest) {
-			t.Fatalf("a cluster of %d nodes has a deadline of %s, no longer than one of %d nodes: each node must add to it",
-				largest+1, deadlineOf(largest+1), largest)
+// largePhysicalCatalog is a cluster of count physical nodes on the one
+// bare-metal provider.
+func largePhysicalCatalog(count int) api.Catalog {
+	objects := append(base(), metalProvider())
+	var nodes []api.Value
+	for index := range count {
+		machine := fmt.Sprintf("metal-%02d", index+1)
+		objects = append(objects, server(machine, fmt.Sprintf("198.51.100.%d/24", 100+index), fmt.Sprintf("aa:bb:cc:dd:ee:%02x", index+1)))
+		nodes = append(nodes, node(fmt.Sprintf("master-%d", index), "controlPlane", machine,
+			fmt.Sprintf("master-%d.metal.lab.example.test", index)))
+	}
+	return api.NewCatalog(append(objects, cluster("metal",
+		installSelection(
+			endpoints("198.51.100.20", "198.51.100.20", "198.51.100.21", "external"),
+			field("platform", api.MapValue(field("baremetal", api.MapValue()))),
+		), nodes...)))
+}
+
+// A cluster's size is bounded by no deadline (D235 (3)): each round of nodes
+// adds to its installation's deadline, and a cluster whose deadline passes the
+// ceiling the fixed-budget families keep plans on every arm, its request
+// stating exactly the deadline its rounds derive, which its run is handed.
+func TestAClusterOfAnySizePlansUnderTheDeadlineItsRoundsDerive(t *testing.T) {
+	for name, test := range map[string]struct {
+		catalog api.Catalog
+		nodes   int
+		arm     string
+	}{
+		"emulated": {largeCatalog(29), 29, substrate.ArmLibvirt},
+		"kubevirt": {kubevirtCatalog(3, 6, true), 9, substrate.ArmKubeVirt},
+		"physical": {largePhysicalCatalog(33), 33, substrate.ArmBaremetal},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if refused := Refusals(test.catalog); len(refused) != 0 {
+				t.Fatalf("a cluster of %d nodes refuses: %+v", test.nodes, refused)
+			}
+			_, install, _ := onlyRequests(t, test.catalog)
+			want := installDeadline(installBudgets(test.nodes, nil, test.arm), test.nodes)
+			if len(install.Nodes) != test.nodes || install.Deadline() != want || want <= lifecycle.MaxDeadline {
+				t.Fatalf("a cluster of %d nodes states %s for %d nodes, want %s past %s",
+					test.nodes, install.Deadline(), len(install.Nodes), want, lifecycle.MaxDeadline)
+			}
+		})
+	}
+	_, install, _ := onlyRequests(t, largeCatalog(29))
+	for _, operation := range runs {
+		if got := installRunDeadline(t, install, operation); got != install.Deadline() {
+			t.Errorf("install %s of 29 nodes runs under %s, want the %s its request states", operation, got, install.Deadline())
 		}
-	}
-	if largest == most {
-		t.Fatalf("%d nodes still fit within the %s ceiling: each node must add its margin to the deadline", most, lifecycle.MaxDeadline)
-	}
-	if largest < 3 {
-		t.Fatalf("only %d nodes fit within the ceiling, fewer than the compact cluster declares", largest)
-	}
-	_, install, _ := onlyRequests(t, largeCatalog(largest))
-	if deadline := install.Deadline(); deadline > lifecycle.MaxDeadline {
-		t.Fatalf("a cluster of %d nodes was planned with a deadline of %s, past the %s ceiling", largest, deadline, lifecycle.MaxDeadline)
-	}
-	refused := largeCatalog(largest + 1)
-	if unsupported := lifecycle.Identities(Refusals(refused)); len(unsupported) != 1 || unsupported[0] != "OpenShiftCluster/ocp" {
-		t.Fatalf("unsupported = %v, want the cluster whose deadline passes the ceiling", unsupported)
-	}
-	_, _, _, err := Requests(refused, "controller", testContext)
-	if err == nil {
-		t.Fatalf("a cluster of %d nodes was planned past the ceiling", largest+1)
-	}
-	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" {
-		t.Fatalf("refusal = %#v", reported)
-	}
-	deadline := deadlineOf(largest + 1)
-	for _, want := range []string{fmt.Sprint(largest + 1), deadline.String(), lifecycle.MaxDeadline.String()} {
-		if !strings.Contains(reported[0].Message, want) {
-			t.Errorf("refusal %q does not name %s", reported[0].Message, want)
-		}
-	}
-	if want := fmt.Sprintf("declare at most %d nodes on OpenShiftCluster/ocp", largest); reported[0].Remediation != want {
-		t.Errorf("remediation = %q, want %q", reported[0].Remediation, want)
 	}
 }

@@ -139,6 +139,11 @@ func TestAPhysicalUpdateAddsItsBoundAndThePhysicalDiskBoot(t *testing.T) {
 	if got := request.Deadline() - unchanged.Deadline(); got != updateBound+bounds.BootDisk {
 		t.Fatalf("a physical update adds %s, want %s", got, updateBound+bounds.BootDisk)
 	}
+	// The registering, updating physical shape states more than six hours,
+	// which the runner honors rather than cutting at a ceiling (B878).
+	if want := 7*time.Hour + 5*time.Minute + 50*time.Second; request.Deadline() != want || want <= lifecycle.MaxDeadline {
+		t.Fatalf("a registering physical update installs under %s, want %s past %s", request.Deadline(), want, lifecycle.MaxDeadline)
+	}
 }
 
 func TestApplyNamesEveryUpdateRefusalWithItsDetail(t *testing.T) {

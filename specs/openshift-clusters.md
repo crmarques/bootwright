@@ -121,7 +121,6 @@ every selected `OpenShiftCluster`, and both belong to the
 | An endpoint prefix length | `spec.install.endpoints.<slot>.prefixLength` | `no agent installer input consumes endpoint <slot>'s prefixLength` | `remove spec.install.endpoints.<slot>.prefixLength from <cluster>` |
 | Endpoint interface networks | a non-empty `spec.install.endpoints.<slot>.interfaceNetworks` | `no agent installer input consumes endpoint <slot>'s interfaceNetworks` | `remove spec.install.endpoints.<slot>.interfaceNetworks from <cluster>, or leave it empty` |
 | Several nodes on another platform | `spec.install.platform.vsphere` or `external` with more than one of `spec.nodes` | `this executable installs no multi-node cluster on the declared platform` | `correct <cluster>` |
-| More nodes than the run ceiling fits | more than 28 emulated `spec.nodes`, whose installation [deadline](#installation) passes the 6-hour ceiling | `installing <nodes> nodes needs a run deadline of <deadline>, past the 6h0m0s every adapter run is held to` | `declare at most 28 nodes on <cluster>` |
 | A node with an install profile | `spec.os.installProfileRef` on a node's Machine | `a declared node selects an install profile, so two installations would write its disk` | `remove spec.os.installProfileRef from <machine> or drop it from <cluster>` |
 | A node on an unrealized substrate | a node's Machine whose provider declares a substrate this executable does not realize | `a declared node is on a substrate this executable does not realize` | `correct <cluster>` |
 | A node whose emulated BMC port does not allocate | a virtual node whose provider's `spec.libvirt.bmcEmulation.port` plus the node's position among that provider's Machines is past 65535 | `node <node> (<machine>): the Machine's emulated BMC port does not allocate` | `correct spec.libvirt.bmcEmulation.port on <provider>` |
@@ -165,23 +164,24 @@ through the same client a physical BMC uses
 
 ### Cluster size
 
-A cluster's size is bounded by its installation [deadline](#installation)
-alone. Its nodes' per-node work runs at a fan-out frozen per provider kind, four
-nodes at a time behind emulated BMCs and sixteen behind physical ones,
-and a cluster takes the smallest fan-out among its nodes. With the budgets
-below a cluster fits the 6-hour ceiling with up to 28 nodes behind emulated
-BMCs, and with `16 × floor(9,000 / (1,800 + m))` physical nodes, where
-`m` is the physical round margin, at least 32 while `m` is at most 45 minutes,
-and with up to 8 nodes on KubeVirt Machines, whose arm publishes a 2,400-second
-boot allowance and a 1,020-second round margin for four nodes a round.
-Each round that boots a node whose Machine declares `enforce`
+A cluster's size is bounded by no deadline
+([D235](milestones/backlog.md#d235) (3)): a cluster of any node count its
+providers support plans, and its installation [deadline](#installation) is
+derived from that count and its arms' published bounds. Its nodes' per-node
+work runs at a fan-out frozen per provider kind, four nodes at a time behind
+emulated BMCs and on KubeVirt Machines and sixteen behind physical ones, and a
+cluster takes the smallest fan-out among its nodes. Each round adds its arm's
+boot allowance to the boot budget and its round margin to the deadline: 600
+seconds and 11 minutes behind emulated BMCs, the physical arm's 30-minute
+allowance and its margin, and the KubeVirt arm's 2,400 seconds and 1,020
+seconds. Each round that boots a node whose Machine declares `enforce`
 [firmware](substrates.md#physical-firmware) adds that arm's firmware bound to
-the boot budget, at most one per round, so fewer such nodes fit.
-A larger cluster refuses before registration, naming its deadline and how many
-nodes fit.
-
-Not yet met: a cluster of more than eight KubeVirt Machines refuses under the
-arm's published bounds; tracked as [B926](milestones/m3.md#b926).
+the boot budget, at most one per round. The runner holds the installation's
+run to exactly the deadline its request states, which no shared ceiling cuts
+short, so a 29-node emulated cluster installs under 6 hours 18 minutes and a
+9-node KubeVirt cluster under 6 hours 21 minutes. The plan's
+[Machine bound](contexts.md#storage-locking-and-publication) and the per-arm
+call bounds still apply.
 
 The agent installer starts installing only when every declared host has
 registered and passed its validations, so one node that never comes up holds
@@ -822,10 +822,10 @@ in each of the two state reads, and the eject and the disk selection that
 release its media, 11 minutes behind an emulated BMC; a physical
 BMC's margin is the one [B67](milestones/m3.md#b67) derives. Those
 bounds count the requests of a call's polls as answered at once. The waits do
-not grow with the nodes, which join concurrently. A cluster whose installation
-deadline would pass the runner's 6-hour ceiling refuses before registration,
-naming that deadline and how many nodes fit, rather than being cut short part
-way through its installation; [cluster size](#cluster-size) states the bound.
+not grow with the nodes, which join concurrently. The runner holds every run of
+the installation to exactly this deadline, however many rounds it counts, and
+cuts none short at a shared ceiling; [cluster size](#cluster-size) states how
+it grows.
 
 **The access it produces.** The installer writes the cluster administrator
 kubeconfig and the initial administrator password into the work area when it

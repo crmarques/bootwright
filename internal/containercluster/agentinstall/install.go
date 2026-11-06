@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -485,16 +486,23 @@ func (c InstallCapability) lendHosted(ctx context.Context, execution *lifecycle.
 			material.Clear()
 		}
 	}
+	hosts := map[string]bool{}
+	for _, node := range request.Nodes {
+		if node.Controller.HostCluster != "" {
+			hosts[hostedKey(node.Controller)] = true
+		}
+	}
 	for _, node := range request.Nodes {
 		key := hostedKey(node.Controller)
 		if node.Controller.HostCluster == "" || names[key] != "" {
 			continue
 		}
+		later := time.Duration(len(hosts)-len(names)-1) * substrate.KubeVirtLendBound
 		if c.access == nil {
 			release()
 			return nil, func() {}, refusal("lifecycle.state", "the lender of host cluster "+node.Controller.HostCluster+"'s access is not configured", "")
 		}
-		material, err := c.access.LendHostAccess(ctx, *execution, node.Controller.HostCluster, substrate.KubeVirtNamespace(node.Controller.Endpoint), request.Placement, request.Deadline())
+		material, err := c.access.LendHostAccess(ctx, *execution, node.Controller.HostCluster, substrate.KubeVirtNamespace(node.Controller.Endpoint), request.Placement, request.Deadline()+later)
 		if err != nil {
 			release()
 			return nil, func() {}, err

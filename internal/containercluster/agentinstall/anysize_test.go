@@ -131,11 +131,8 @@ func TestPhysicalRoundBudgetsAndMixedKinds(t *testing.T) {
 	if mixed.FanOut != 4 || mixed.BootSeconds != 3600 || mixed.RoundMarginSeconds != 2520 {
 		t.Fatalf("mixed kinds: %+v", mixed)
 	}
-	if largestCluster(nil, substrate.ArmBaremetal) != 32 {
-		t.Fatal("physical ceiling changed")
-	}
-	refused := installBudgets(29, nil, substrate.ArmLibvirt)
-	if refused.BootSeconds != 4800 || int(installDeadline(refused, 29).Seconds()) != 22680 {
-		t.Fatalf("first refused emulated size: %+v", refused)
+	emulated := installBudgets(29, nil, substrate.ArmLibvirt)
+	if emulated.BootSeconds != 4800 || int(installDeadline(emulated, 29).Seconds()) != 22680 {
+		t.Fatalf("29 emulated nodes: %+v", emulated)
 	}
 }

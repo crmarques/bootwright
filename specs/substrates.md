@@ -984,7 +984,9 @@ request `substrate-access-kubevirt-v1`, borrows that kubeconfig as the
 [produced input](state-reconciliation.md#produced-material-custody) of the
 host's installation block, posts one `TokenRequest` for the ServiceAccount
 `bootwright-kubevirt` of the provider's namespace with an `expirationSeconds`
-of the consuming run's deadline plus 600 seconds (600 at least), and leaves,
+of the consuming run's deadline plus 600 seconds (600 at least) under no
+fixed cap, so a cluster installation's lend outlives its derived deadline
+however many nodes it counts, and leaves,
 as its one output, a kubeconfig of the same server and authority carrying
 that token alone, which is lent to that one run as its kubeconfig and cleared
 when it returns. A granted `spec.expirationSeconds` shorter than requested

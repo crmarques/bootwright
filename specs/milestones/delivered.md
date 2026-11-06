@@ -812,9 +812,9 @@ Topology admission accepts only the control-plane counts the release's agent
 installer accepts (F14, D9). A silent hypervisor is never read as a stopped
 machine (S6b, quiescence).
 
-**Guard tests:** `TestARunIsBoundedByItsRequestsDeadlineUpToTheCeiling`,
+**Guard tests:** `TestARunIsBoundedByItsRequestsDeadline`,
 `TestEveryCapabilityDeadlineCoversItsFrozenBudgets`,
-`TestAClusterWhoseDeadlinePassesTheCeilingRefusesBeforeRegistration`,
+`TestAClusterOfAnySizePlansUnderTheDeadlineItsRoundsDerive`,
 `TestTopologyAdmitsOnlyTheControlPlaneCountsItsReleaseAccepts`,
 `TestEveryExampleReleaseHasATopologyRow`,
 `TestMachineEvidenceWithoutAnAnswerDecodesAsSilent`, and the collection tests

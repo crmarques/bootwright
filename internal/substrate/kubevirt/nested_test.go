@@ -256,8 +256,11 @@ func TestEachHostedRunIsLentAFreshTokenAndNeverTheSecret(t *testing.T) {
 	}
 }
 
-func TestExpiryCoversTheRunAndStaysWithinTheAPIServersBounds(t *testing.T) {
-	for deadline, want := range map[time.Duration]int64{0: 600, 20 * time.Minute: 1800, 7 * time.Hour: maxLendExpiresIn} {
+// A lent token outlives the run it is lent to by the minimum the API server
+// admits, however long that run is: an installation's deadline grows with its
+// nodes and no ceiling bounds it (B926).
+func TestExpiryCoversTheRunAndTheAPIServersMinimum(t *testing.T) {
+	for deadline, want := range map[time.Duration]int64{0: 600, 20 * time.Minute: 1800, 8 * time.Hour: 8*3600 + 600} {
 		if got := expiresIn(deadline); got != want {
 			t.Fatalf("expiresIn(%s) = %d, want %d", deadline, got, want)
 		}

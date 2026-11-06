@@ -138,9 +138,8 @@ func TestOnlyEnforcedNodesAddTheirImpactAndBootShare(t *testing.T) {
 				t.Errorf("the deadline grew by %s with round margin %d, want %s with %d",
 					request.Deadline()-absent.Deadline(), request.Budgets.RoundMarginSeconds, test.grown, absent.Budgets.RoundMarginSeconds)
 			}
-			cluster, _ := catalog.Find(api.OpenShiftCluster, "metal")
-			if reason, _ := pastTheCeiling(catalog, cluster); reason != "" {
-				t.Errorf("a three-node cluster refused its ceiling: %s", reason)
+			if refused := Refusals(catalog); len(refused) != 0 {
+				t.Errorf("a three-node cluster refused: %+v", refused)
 			}
 		})
 	}
@@ -166,7 +165,8 @@ func TestTheFirmwareBootShareGrowsWithTheRoundsEnforcedNodesCanFill(t *testing.T
 	if emulated := installBudgets(4, []string{substrate.ArmLibvirt}, substrate.ArmLibvirt); emulated != installBudgets(4, nil, substrate.ArmLibvirt) {
 		t.Errorf("an emulated arm grew its boot budget by a firmware bound it does not publish: %+v", emulated)
 	}
-	if largestCluster(slices.Repeat([]string{substrate.ArmBaremetal}, 32), substrate.ArmBaremetal) >= largestCluster(nil, substrate.ArmBaremetal) {
-		t.Error("enforced firmware did not shrink the largest cluster the ceiling admits")
+	enforced := installBudgets(32, slices.Repeat([]string{substrate.ArmBaremetal}, 32), substrate.ArmBaremetal)
+	if installDeadline(enforced, 32) <= installDeadline(installBudgets(32, nil, substrate.ArmBaremetal), 32) {
+		t.Error("enforced firmware did not lengthen the installation's deadline")
 	}
 }

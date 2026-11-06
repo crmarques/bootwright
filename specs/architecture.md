@@ -1040,7 +1040,7 @@ plus each tool source's
 2 hours, and a closure with tools past that ceiling is refused before Ansible
 starts. A lifecycle run's is the one its request states, which its capability
 derives from the wait budgets that request froze plus a margin for the rest of
-the run, held to a ceiling of 6 hours; a request that states none keeps 2
+the run, honored unclamped; a request that states none keeps 2
 hours, and the
 [bounds table](contexts.md#storage-locking-and-publication) names each
 constant. A descendant still holding the channel after the adapter exits is

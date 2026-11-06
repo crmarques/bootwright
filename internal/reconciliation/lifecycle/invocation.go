@@ -100,8 +100,8 @@ type RunRequest struct {
 	Refusals     map[string]error
 	NativeErrors bool
 	// Deadline bounds the run: the capability derives it from the waits its
-	// frozen request budgets, and the runner holds it to MaxDeadline. Zero
-	// keeps the runner's default.
+	// frozen request budgets, and the runner honors it as stated. Zero keeps
+	// the runner's default.
 	Deadline   time.Duration
 	ReadOnly   bool
 	Unrecorded bool
@@ -116,14 +116,13 @@ const UnrecordedMaterialRefusal = "an invocation no operation records may take o
 
 func Recorded(e Execution) bool { return e.Attempt != 0 || e.Resolution != 0 }
 
-// MaxDeadline is the longest any adapter run may take, whatever deadline its
-// request states. A capability that states one derives it from the budgets its
-// request froze, and its own tests hold what it derives to this ceiling; a
-// cluster installation's deadline grows with its nodes, and selection refuses
-// one that would pass this ceiling rather than letting it be clamped. An
-// operation runs one block at a time, so this is also the longest one block
-// holds back the rest of its operation; a budget that needs more is one to
-// shorten, not a reason to raise this.
+// MaxDeadline is the longest deadline the families that hold their own budgets
+// to it may derive: add-on instances, cluster networking and Ceph refuse a
+// request past it. The runner honors whatever deadline a request states and
+// clamps none to this, so a cluster or managed-OS installation, whose deadline
+// grows with its nodes or its physical steps, is bounded by its own derivation
+// alone. A budget held here that needs more is one to shorten, not a reason to
+// raise this.
 const MaxDeadline = 6 * time.Hour
 
 type RunResult struct {

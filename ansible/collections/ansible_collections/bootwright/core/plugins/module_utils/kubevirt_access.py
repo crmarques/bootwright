@@ -18,7 +18,6 @@ from ansible_collections.bootwright.core.plugins.module_utils.kubevirt_api impor
 
 VERSION = "substrate-access-kubevirt-v1"
 MIN_SECONDS = 600
-MAX_SECONDS = 6 * 3600 + 600
 
 
 def token_request(seconds):
@@ -34,7 +33,7 @@ def mint(client, request):
     if request.get("version") != VERSION:
         raise Refused("the KubeVirt host access request is not one this build reads")
     seconds = request.get("expirationSeconds")
-    if not isinstance(seconds, int) or isinstance(seconds, bool) or not MIN_SECONDS <= seconds <= MAX_SECONDS:
+    if not isinstance(seconds, int) or isinstance(seconds, bool) or seconds < MIN_SECONDS:
         raise Refused("the KubeVirt host access request names no admitted token lifetime")
     namespace, account = request["namespace"], request["serviceAccount"]
     status, body = client.request("POST", path("", "v1", "serviceaccounts", namespace, account, "token"), token_request(seconds))

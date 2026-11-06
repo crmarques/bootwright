@@ -547,8 +547,9 @@ the provider waits for and again in every block and port entry point
 because each would let the host connection run or trust something the
 declaration does not name. A host cluster the context builds is reached the
 same way, through a kubeconfig the arm's lend mints for each run, carrying
-only a short-lived token of the ServiceAccount its `kubevirt` instance owns in
-the provider's namespace; the host installation's administrator kubeconfig
+only a token of the ServiceAccount its `kubevirt` instance owns in the
+provider's namespace, requested for that run's deadline plus ten minutes; the
+host installation's administrator kubeconfig
 reaches that lend alone
 ([KubeVirt machine realization](substrates.md#kubevirt-machine-realization)).
 Its CDI upload proxy is verified against the

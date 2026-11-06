@@ -315,14 +315,14 @@ func (r Runner) execute(ctx context.Context, job, scratch string, lock *os.File,
 }
 
 // runDeadline is how long one run may take: the deadline its request states,
-// which the capability derived from the waits that request froze, held to the
-// ceiling every request shares; or the default for a request that states none.
-// A fixed deadline cut short a block whose budgets alone outlast it.
+// which the capability derived from the waits that request froze; or the
+// default for a request that states none. A fixed deadline or a shared ceiling
+// cut short a block whose budgets alone outlast it.
 func runDeadline(requested time.Duration) time.Duration {
 	if requested <= 0 {
 		return invocationTimeout
 	}
-	return min(requested, lifecycle.MaxDeadline)
+	return requested
 }
 
 // lifecycleJudge is the lifecycle runner's reading of the protocol: what the

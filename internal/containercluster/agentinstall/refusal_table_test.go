@@ -115,8 +115,6 @@ func TestOpenShiftClusterRefusalTableMatchesUnsupported(t *testing.T) {
 		"Endpoint interface networks":                     endpointCase("api", "interfaceNetworks", api.StringList("198.51.100.0/24"), ""),
 
 		"Several nodes on another platform": {multiNode, "OpenShiftCluster/ocp", map[string]string{"<cluster>": "OpenShiftCluster/ocp"}},
-		"More nodes than the run ceiling fits": {largeCatalog(29), "OpenShiftCluster/ocp",
-			map[string]string{"<cluster>": "OpenShiftCluster/ocp", "<nodes>": "29", "<deadline>": "6h18m0s"}},
 		"A node with an install profile":    {onSNO(installed), "OpenShiftCluster/sno", onNode},
 		"A node on an unrealized substrate": {onSNO(unrealized, vsphere), "OpenShiftCluster/sno", onSNOCluster},
 		"A node whose emulated BMC port does not allocate": {

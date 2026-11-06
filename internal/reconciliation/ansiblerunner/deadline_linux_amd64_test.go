@@ -16,11 +16,12 @@ import (
 
 // A run is bounded by the deadline its request states, which its capability
 // derived from the waits that request froze. A deadline shorter than the
-// default ends a run that is still going. One longer than the default holds, up
-// to the ceiling every request shares, and a request that states none keeps the
-// default. A fixed two-hour deadline killed an installation whose budgets alone
-// outlast it.
-func TestARunIsBoundedByItsRequestsDeadlineUpToTheCeiling(t *testing.T) {
+// default ends a run that is still going. One longer than the default holds,
+// past six hours too, since no ceiling is shared by every request, and a
+// request that states none keeps the default. A fixed two-hour deadline killed
+// an installation whose budgets alone outlast it, and a six-hour ceiling one
+// whose nodes need more rounds (B926).
+func TestARunIsBoundedByItsRequestsDeadline(t *testing.T) {
 	t.Run("a shorter deadline ends the run", func(t *testing.T) {
 		runner := Runner{
 			stager: newDirStager(t),
@@ -48,7 +49,7 @@ func TestARunIsBoundedByItsRequestsDeadlineUpToTheCeiling(t *testing.T) {
 	}{
 		{"none keeps the default", 0, invocationTimeout},
 		{"a longer deadline holds", invocationTimeout + time.Hour, invocationTimeout + time.Hour},
-		{"a deadline past the ceiling is held to it", lifecycle.MaxDeadline + time.Hour, lifecycle.MaxDeadline},
+		{"an eight-hour deadline holds", 8 * time.Hour, 8 * time.Hour},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			// The adapter reports one group and then waits on its authorization

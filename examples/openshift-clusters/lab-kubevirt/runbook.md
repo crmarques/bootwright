@@ -101,7 +101,7 @@ Record, in this order:
    `cdrom`, then from disk after installation, with no boot selection made.
 6. For each node: push, instance start, boot, bootstrap wait, install wait and
    release durations, and the total at a fan-out of 4. These correct the arm's
-   published bounds ([B926](../../../specs/milestones/m3.md#b926)).
+   published bounds ([B731](../../../specs/milestones/m3.md#b731)).
 7. The installer VIPs held on the attachment on the host's release; a VM
    reaching its own host node and another; the host's and the cluster's
    keepalived on one layer 2.

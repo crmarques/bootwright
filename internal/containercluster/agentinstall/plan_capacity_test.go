@@ -14,8 +14,8 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 )
 
-// This tests the state envelope independently of the provider's run ceiling:
-// forty-eight physical nodes need more rounds than today's call budgets allow.
+// This tests the state envelope of a forty-eight-node physical cluster, whose
+// installation deadline its rounds derive under no ceiling.
 func TestFortyEightPhysicalNodesFitThePlanStateEnvelope(t *testing.T) {
 	objects := append(base(), metalProvider())
 	nodes := make([]api.Value, 0, 48)

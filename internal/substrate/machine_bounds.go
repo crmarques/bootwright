@@ -55,6 +55,7 @@ const (
 	KubeVirtNodeMargin       = 2*KubeVirtStateReadBound + KubeVirtMediaEjectBound + KubeVirtBootBound
 	KubeVirtBootAllowance    = 40 * time.Minute
 	KubeVirtFanout           = 4
+	KubeVirtLendBound        = 3 * time.Minute
 )
 
 // MachineBoundsFor refuses arms that have no qualified machine port.

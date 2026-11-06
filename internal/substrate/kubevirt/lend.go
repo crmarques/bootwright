@@ -13,18 +13,17 @@ import (
 )
 
 const (
-	lendOperation    = "lend"
-	lendVersion      = "substrate-access-kubevirt-v1"
-	lendEvidence     = "substrate-access-kubevirt-evidence-v1"
-	lendVariable     = "bootwright_substrate_kubevirt_lend"
-	lendOutput       = "kubeconfig"
-	lendDeadline     = 3 * time.Minute
-	lendMinimum      = 10 * time.Minute
-	adminKubeconfig  = "produced:host-kubeconfig"
-	lentKubeconfig   = "lent:host-kubeconfig"
-	clusterKind      = "OpenShiftCluster"
-	clusterOutput    = "kubeconfig"
-	maxLendExpiresIn = int64(lifecycle.MaxDeadline/time.Second) + int64(lendMinimum/time.Second)
+	lendOperation   = "lend"
+	lendVersion     = "substrate-access-kubevirt-v1"
+	lendEvidence    = "substrate-access-kubevirt-evidence-v1"
+	lendVariable    = "bootwright_substrate_kubevirt_lend"
+	lendOutput      = "kubeconfig"
+	lendDeadline    = substrate.KubeVirtLendBound
+	lendMinimum     = 10 * time.Minute
+	adminKubeconfig = "produced:host-kubeconfig"
+	lentKubeconfig  = "lent:host-kubeconfig"
+	clusterKind     = "OpenShiftCluster"
+	clusterOutput   = "kubeconfig"
 )
 
 type LendRequest struct {
@@ -115,8 +114,7 @@ func validateLend(result lifecycle.RunResult, request LendRequest, digest string
 }
 
 func expiresIn(deadline time.Duration) int64 {
-	seconds := int64((max(deadline, 0) + lendMinimum) / time.Second)
-	return min(max(seconds, int64(lendMinimum/time.Second)), maxLendExpiresIn)
+	return int64((max(deadline, 0) + lendMinimum) / time.Second)
 }
 
 func lentAccess(ctx context.Context, lender HostAccess, execution *lifecycle.Execution, hostCluster, kubeconfigRef, namespace string, placement machineref.Placement, deadline time.Duration) ([]lifecycle.MaterialFile, func(), error) {

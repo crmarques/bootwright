@@ -23,14 +23,16 @@ import (
 
 // kubevirtProvider names an external OpenShift Virtualization host through
 // its kubeconfig, as lab-kubevirt does.
-func kubevirtProvider() api.Object {
-	return api.NewObject(api.InfraProvider, "lab-kubevirt", api.Value{}, api.MapValue(
-		field("kubevirt", api.MapValue(text("kubeconfigRef", "host-kubeconfig"), text("namespace", "bootwright-guests"),
+func kubevirtProvider() api.Object { return kubevirtProviderIn("lab-kubevirt", "bootwright-guests") }
+
+func kubevirtProviderIn(name, namespace string) api.Object {
+	return api.NewObject(api.InfraProvider, name, api.Value{}, api.MapValue(
+		field("kubevirt", api.MapValue(text("kubeconfigRef", "host-kubeconfig"), text("namespace", namespace),
 			text("storageClassRef", "guest-block-storage"), field("machineProfiles", api.ListValue(api.MapValue(
 				text("name", "kubevirt"), number("cpu", "8"), number("memoryMiB", "16384"), number("diskGiB", "120")))))),
 		field("networkAttachments", api.ListValue(api.MapValue(text("name", "lab-guests"), field("kubevirt", api.MapValue(
 			field("networkRef", api.MapValue(text("apiGroup", "k8s.cni.cncf.io"), text("kind", "NetworkAttachmentDefinition"),
-				text("namespace", "bootwright-guests"), text("name", "guest-l2")))))))),
+				text("namespace", namespace), text("name", "guest-l2")))))))),
 	))
 }
 
@@ -156,22 +158,13 @@ func TestKubeVirtRequestsMatchTheirGoldens(t *testing.T) {
 }
 
 // The boot budget and the node margin follow the KubeVirt arm's published
-// bounds, so the ceiling refusal names the node count those bounds derive.
+// bounds, so the deadline grows with the rounds those bounds derive.
 func TestKubeVirtBudgetsFollowTheArmsBounds(t *testing.T) {
 	_, install, _ := onlyRequests(t, kubevirtCatalog(3, 2, true))
 	bounds, _ := substrate.MachineBoundsFor(substrate.ArmKubeVirt)
 	if install.Budgets.FanOut != bounds.Fanout || install.Budgets.RoundMarginSeconds != int(bounds.NodeMargin.Seconds()) ||
 		install.Budgets.BootSeconds != 2*int(bounds.BootAllowance.Seconds()) {
 		t.Fatalf("budgets %+v, bounds %+v", install.Budgets, bounds)
-	}
-	fits := largestCluster(nil, substrate.ArmKubeVirt)
-	if refused := Refusals(kubevirtCatalog(fits, 0, true)); len(refused) != 0 {
-		t.Fatalf("%d nodes refuse: %+v", fits, refused)
-	}
-	refused := Refusals(kubevirtCatalog(fits-2, 3, true))
-	if len(refused) != 1 || !strings.Contains(refused[0].Reason, fmt.Sprintf("installing %d nodes", fits+1)) ||
-		refused[0].Remediation != fmt.Sprintf("declare at most %d nodes on OpenShiftCluster/kubevirt", fits) {
-		t.Fatalf("past the bound: %+v", refused)
 	}
 }
 
@@ -307,16 +300,84 @@ func (r *recordedLends) LendHostAccess(_ context.Context, _ lifecycle.Execution,
 	return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("minted")}), nil
 }
 
-func hostedCatalog() api.Catalog {
+func hostedCatalog() api.Catalog { return hostedCatalogOf(3, 0) }
+
+// hostedCatalogOf is a hosted cluster of masters and workers whose nodes are
+// spread, one after another, over the providers of the lab-kubevirt provider's
+// namespace and each extra namespace, every one hosted by the same cluster.
+func hostedCatalogOf(masters, workers int, extra ...string) api.Catalog {
+	hosted := func(object api.Object) api.Object {
+		return api.NewObject(api.InfraProvider, object.Name(), api.Value{}, object.Spec().With("kubevirt",
+			object.Spec().Get("kubevirt").Without("kubeconfigRef").With("hostClusterRef", api.StringValue("host"))))
+	}
+	providers := []string{"lab-kubevirt"}
 	var objects []api.Object
-	for _, object := range kubevirtCatalog(3, 0, false).Objects() {
-		if object.Kind() == api.InfraProvider {
-			object = api.NewObject(api.InfraProvider, object.Name(), api.Value{}, object.Spec().With("kubevirt",
-				object.Spec().Get("kubevirt").Without("kubeconfigRef").With("hostClusterRef", api.StringValue("host"))))
+	for index, namespace := range extra {
+		providers = append(providers, fmt.Sprintf("lab-kubevirt-%d", index))
+		objects = append(objects, hosted(kubevirtProviderIn(providers[index+1], namespace)))
+	}
+	machines := 0
+	for _, object := range kubevirtCatalog(masters, workers, false).Objects() {
+		switch object.Kind() {
+		case api.InfraProvider:
+			object = hosted(object)
+		case api.Machine:
+			object = object.WithSpec(object.Spec().WithPath(api.StringValue(providers[machines%len(providers)]), "substrate", "providerRef"))
+			machines++
 		}
 		objects = append(objects, object)
 	}
 	return api.NewCatalog(objects)
+}
+
+// lendsOf records the lends the installation of catalog asks for, in order.
+func lendsOf(t *testing.T, catalog api.Catalog) (InstallRequest, []string) {
+	t.Helper()
+	_, requests, _, err := Requests(catalog, "controller", testContext)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	lends := &recordedLends{}
+	execution := lifecycle.Execution{Material: map[string]secrets.Material{}}
+	_, release, err := NewInstall(nil).WithHostAccess(lends).lendHosted(context.Background(), &execution, requests[0])
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	release()
+	return requests[0], lends.lends
+}
+
+// The lend gives each token the run's whole deadline, which grows with the
+// nodes under no ceiling, so a nine-node cluster's token outlives six hours.
+func TestEachLendCoversTheInstallationsWholeDeadline(t *testing.T) {
+	for _, nodes := range []int{3, 9} {
+		request, lends := lendsOf(t, hostedCatalogOf(3, nodes-3))
+		if want := []string{"host/bootwright-guests/" + request.Deadline().String()}; !slices.Equal(lends, want) {
+			t.Fatalf("%d nodes lend %v, want %v", nodes, lends, want)
+		}
+		if past := request.Deadline() > lifecycle.MaxDeadline; past != (nodes == 9) {
+			t.Fatalf("%d nodes install under %s", nodes, request.Deadline())
+		}
+	}
+}
+
+// The run's deadline starts once every lend has returned, and each lend may
+// take its own bound, so a token minted early covers the lends after it too:
+// otherwise four namespaces' lends would spend the token's ten-minute margin.
+func TestAnEarlierLendCoversTheLendsAfterIt(t *testing.T) {
+	request, lends := lendsOf(t, hostedCatalogOf(3, 2, "guests-b", "guests-c", "guests-d"))
+	namespaces := []string{"bootwright-guests", "guests-b", "guests-c", "guests-d"}
+	if len(lends) != len(namespaces) {
+		t.Fatalf("lends %v", lends)
+	}
+	for index, lend := range lends {
+		parts := strings.Split(lend, "/")
+		want := request.Deadline() + time.Duration(len(lends)-1-index)*substrate.KubeVirtLendBound
+		if !slices.Contains(namespaces, parts[1]) || parts[2] != want.String() {
+			t.Fatalf("lend %d of %v, want %s", index, lends, want)
+		}
+		namespaces = slices.DeleteFunc(namespaces, func(namespace string) bool { return namespace == parts[1] })
+	}
 }
 
 // The nodes of a provider a cluster of this context hosts are reached through
@@ -352,7 +413,7 @@ func TestAHostedClustersNodesAreLentOneMintedTokenPerHostNamespace(t *testing.T)
 		if err != nil {
 			t.Fatalf("%s: %v", operation, diagnostics.Of(err))
 		}
-		if len(lends.lends) != 1 || !strings.HasPrefix(lends.lends[0], "host/bootwright-guests/") {
+		if len(lends.lends) != 1 || lends.lends[0] != "host/bootwright-guests/"+request.Deadline().String() {
 			t.Fatalf("%s: lends %v", operation, lends.lends)
 		}
 		users := 0
