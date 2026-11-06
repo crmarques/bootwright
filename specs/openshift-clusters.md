@@ -24,12 +24,11 @@ port for, before any media is inserted.
 
 ## Selection and refusal
 
-Two blocks are planned for every selected `OpenShiftCluster`, and both belong
-to the [`clusters` stage](state-reconciliation.md#stages-and-the-pause-boundary).
+### Selection
 
 **Supported shape.** An OpenShift cluster declaring an exact
 `distribution.release.version`, installed by the `agent` method in `connected`
-mode through direct access, whose nodes are all virtual Machines on a realized
+mode through direct access, whose nodes are Machines on a realized
 substrate with `os.provided: false` and no install profile. A single-node
 cluster resolves its three endpoint slots from that node; a multi-node cluster
 resolves them from authored or load-balancer addresses. Every other declaration
@@ -40,11 +39,16 @@ multi-node cluster on `baremetal`, on `none` or with no declared platform is
 accepted. A node whose realized target is physical installs through its
 management controller under the trust its Machine declares, with the
 [private delivery](#boot-media) rules below.
+At [Machine admission](api/machines.md#os-lifecycle-and-substrate-invariants),
+a physical agent node requires `substrate.baremetal.rootDevice.wwn` as `0x`
+followed by 16 or 32 lowercase hexadecimal digits and no
+`hardware.rootDevice.deviceName`. The agent has no exact-size selector, so
+serial number and size alone are not supported here.
 
 A virtual node whose provider host is not the Machine the selected artifact
 server is placed on boots under a verified fetch of the private
 [boot image](#boot-media) instead of its emulated BMC's unverified one. The placement, install-profile and physical-node refusals
-and the two root-device refusals name the bound Machine in the remediation the
+and the root-device refusals name the bound Machine in the remediation the
 refusal carries, because it is what the operator changes. A node whose
 [realized target](substrates.md#selection-and-refusal) does not derive, other
 than on an unrealized substrate, refuses with the substrate's own reason and
@@ -79,9 +83,7 @@ the [platform union](api/openshift-clusters.md#platform-union-and-derivation)
 states.
 
 
-### Refusal table
-
-Each row is one refusal of both blocks' capabilities, and
+Each [refusal-table](#refusal-table) row is one refusal of both blocks' capabilities, and
 `TestOpenShiftClusterRefusalTableMatchesUnsupported` holds their `Unsupported`
 to it. Its reason and remedy are the diagnostic's message and remediation, in
 which `<cluster>` is the refused cluster, `<machine>` the Machine of the node
@@ -91,6 +93,16 @@ artifact server and its placement Machine. The four endpoint rows name the
 first refused endpoint `<slot>` in `api`, `api-int`, `ingress` order and its
 native `<port>`, are checked only once no other row refuses the cluster, and
 their diagnostic carries the refused field's path.
+
+### Implementations
+
+The [agent capability identities](../internal/containercluster/agentinstall/catalog.go)
+realize media creation and cluster installation. Two blocks are planned for
+every selected `OpenShiftCluster`, and both belong to the
+[`clusters` stage](state-reconciliation.md#stages-and-the-pause-boundary).
+
+### Refusal table
+
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
@@ -117,7 +129,8 @@ their diagnostic carries the refused field's path.
 | A physical node with an HTTP BMC | a physical node's BMC uses HTTP | `a physical node's private boot image requires an HTTPS management controller` | `set spec.substrate.baremetal.bmc.address on <machine> to an HTTPS ComputerSystem endpoint` |
 | A physical node with unverified BMC TLS | a physical node disables BMC TLS verification | `a physical node's private boot image requires a BMC connection that verifies its certificate` | `enable spec.substrate.baremetal.bmc.tls.verify on <machine> and declare its trust bundle when needed` |
 | A physical node with unverified media TLS | a physical node selects disableVerification | `a physical node's private boot image requires virtual-media TLS verification` | `set spec.substrate.baremetal.bmc.virtualMedia.tls.trust on <machine> to importCertificate or established` |
-| A root device the installer cannot name | a node's `spec.hardware.rootDevice.deviceName` other than `/dev/<name>` or `/dev/disk/by-path/<name>` | `the agent installer names a root device only as /dev/<name> or /dev/disk/by-path/<name>` | `set spec.hardware.rootDevice.deviceName on <machine> to such a path` |
+| A physical node without a stable root selector | a physical node lacks a supported WWN or declares `hardware.rootDevice.deviceName` | `a physical agent installation requires a stable WWN root hint and no deviceName` | `set spec.substrate.baremetal.rootDevice.wwn on <machine> to 0x followed by 16 or 32 lowercase hexadecimal digits and remove spec.hardware.rootDevice.deviceName` |
+| A root device the installer cannot name | a virtual node's `spec.hardware.rootDevice.deviceName` other than `/dev/<name>` or `/dev/disk/by-path/<name>` | `the agent installer names a root device only as /dev/<name> or /dev/disk/by-path/<name>` | `set spec.hardware.rootDevice.deviceName on <machine> to such a path` |
 | A root device size the frozen input cannot carry | a node whose `minSizeGigabytes` exceeds 9007199254740991, the largest integer the frozen input carries exactly, at `spec.hardware.rootDevice` or `spec.substrate.baremetal.rootDevice` on its Machine | `a node's minSizeGigabytes is larger than the frozen installer input carries exactly` | `declare spec.hardware.rootDevice.minSizeGigabytes on <machine> as at most 9007199254740991` |
 
 A row lifts with the code of the item that delivers what it refuses, and the
@@ -670,10 +683,11 @@ reserved path is never hidden. The sweep reports only how many links it
 removed, kept and refused, and a refusal names those counts to the operator.
 Observation never retires a link.
 The token appears in no request, evidence, progress output or log. A fetching
-node presents this cluster's own image when the scheme and host of the image its
-BMC reports are the media block's publication's, and its path names a
-file beneath `private/clusters/<cluster>/` that is the same file, by device and
-inode, as the media block's published image; any other image is foreign. The
+node owns an image only when its scheme and host match the publication and
+its path beneath `private/clusters/<cluster>/` names the published file by
+device and inode. A missing echoed port is tolerated; an explicit port must
+equal the publication's effective port (its scheme's default when omitted).
+The
 block writes only beneath the media block's reserved path, and that block's
 inverse, which a removal orders after this one, removes whatever is left there.
 
@@ -1032,6 +1046,10 @@ and its projection renders the observed `spec.nodes[].labels` and
 `spec.nodes[].taints`
 ([observable fields](state-reconciliation.md#observable-fields-by-implementation)),
 so a label or taint removed or changed afterwards is reported, never repaired.
+Taints compare in the [canonical form](state-reconciliation.md#comparing-desired-and-real-state): sorted
+by key and effect, keeping the first occurrence for each pair on both sides.
+A changed value or effect, an absent taint, and another effect on an authored
+key remain differences.
 
 ## Preflight
 

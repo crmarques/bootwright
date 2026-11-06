@@ -56,7 +56,9 @@ func openShiftClusterSchema() *Shape {
 		field("diskEncryption", record(required("unlock", record(required("tpm2", record()))), field("roles", set(enumeration("controlPlane", "worker", "infra"))))),
 	)
 	taint := record(required("key", nonempty()), field("value", text()), required("effect", enumeration("NoSchedule", "PreferNoSchedule", "NoExecute")))
-	node := record(required("name", name()), field("fqdn", dns()), required("role", enumeration("controlPlane", "worker", "infra")), required("machineRef", ref(Machine)), field("labels", stringsMap()), field("taints", array(taint)))
+	taints := array(taint)
+	taints.ComparisonKeys = []string{"key", "effect"}
+	node := record(required("name", name()), field("fqdn", dns()), required("role", enumeration("controlPlane", "worker", "infra")), required("machineRef", ref(Machine)), field("labels", stringsMap()), field("taints", taints))
 	distribution := record(defaulted("type", enumeration("openshift", "okd"), StringValue("openshift")), required("release", record(field("version", nonempty()), field("channel", nonempty()), field("image", image()))))
 	distribution.Suppress = []Suppression{{Field: "type", Value: StringValue("okd"), Fields: []string{"release.channel"}}}
 	return record(

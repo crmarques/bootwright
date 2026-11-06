@@ -112,7 +112,7 @@ func overlay(authored, effective, observed api.Value, shape *api.Shape, keep, ne
 	switch {
 	case !observed.Present():
 		return authored
-	case canonical(realized(effective, observed, shape, keep, nested), shape).Equal(effective):
+	case canonical(realized(effective, observed, shape, keep, nested), shape).Equal(canonical(effective, shape)):
 		return authored
 	case observed.Type() == api.Mapping && structured(shape):
 		var fields []api.FieldValue

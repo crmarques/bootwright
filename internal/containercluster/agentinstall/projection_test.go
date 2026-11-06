@@ -645,10 +645,8 @@ func hostHints(t *testing.T, media MediaRequest) map[string]any {
 
 // Every root-device hint a node declares reaches the agent configuration under
 // its admitted name and with its declared type, a size of zero and a disk that
-// is not rotational included. Only a bare-metal Machine is admitted with every
-// hint, and selection refuses a physical cluster today, so its configuration is
-// projected directly beneath that refusal. A node that selects its disk by wwn
-// alone keeps that selection rather than rendering none.
+// is not rotational included. A physical node carries its stable WWN and
+// supported predicates, never a kernel or by-path name.
 func TestEveryDeclaredRootDeviceHintReachesTheAgentConfig(t *testing.T) {
 	catalog := physicalHintsCatalog()
 	declared, _ := catalog.Find(api.OpenShiftCluster, "metal")
@@ -662,11 +660,11 @@ func TestEveryDeclaredRootDeviceHintReachesTheAgentConfig(t *testing.T) {
 	}
 	want := map[string]any{
 		"master-0": map[string]any{
-			"deviceName": "/dev/disk/by-path/pci-0000:00:04.0", "hctl": "1:0:0:0", "model": "1e3", "vendor": "0o17",
+			"hctl": "1:0:0:0", "model": "1e3", "vendor": "0o17",
 			"serialNumber": "0987654321", "wwn": "0x5000c500a1b2c3d4", "minSizeGigabytes": int64(0), "rotational": false,
 		},
 		"master-1": map[string]any{"wwn": "0x5000c500a1b2c3d5"},
-		"master-2": map[string]any{"deviceName": "/dev/sda"},
+		"master-2": map[string]any{"wwn": "0x5000c500a1b2c3d4"},
 	}
 	if got := hostHints(t, MediaRequest{AgentConfig: config}); !reflect.DeepEqual(got, want) {
 		t.Fatalf("hints =\n%#v\nwant\n%#v", got, want)

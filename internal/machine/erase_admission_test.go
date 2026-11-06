@@ -10,6 +10,7 @@ import (
 
 func TestEraseAdmissionRetainsOmissionAndRequiresExplicitRootIdentity(t *testing.T) {
 	machine, _ := fixture()
+	machine = rootDeclared(machine, "/dev/sda", api.MapValue())
 	machine = machine.WithSpec(machine.Spec().WithPath(api.StringValue("rhel"), "os", "installProfileRef"))
 	machine = machine.WithSpec(machine.Spec().WithPath(api.BoolValue(true), "substrate", "baremetal", "bmc", "tls", "verify").WithPath(api.StringValue("established"), "substrate", "baremetal", "bmc", "virtualMedia", "tls", "trust"))
 	if issues := validateErase(machine, substrate.ArmBaremetal); len(issues) != 0 {
@@ -48,6 +49,7 @@ func TestEraseAdmissionRetainsOmissionAndRequiresExplicitRootIdentity(t *testing
 
 func TestEraseAdmissionBoundsOnlyLogicalOverwriteTargetsTo896GiB(t *testing.T) {
 	machine, _ := fixture()
+	machine = rootDeclared(machine, "/dev/sda", api.MapValue())
 	machine = machine.WithSpec(machine.Spec().WithPath(api.StringValue("rhel"), "os", "installProfileRef"))
 	machine = machine.WithSpec(machine.Spec().WithPath(api.BoolValue(true), "substrate", "baremetal", "bmc", "tls", "verify").WithPath(api.StringValue("established"), "substrate", "baremetal", "bmc", "virtualMedia", "tls", "trust"))
 	root := m("deviceName", "/dev/sda", "wwn", "naa.root", "serialNumber", "ROOT").With("sizeBytes", api.IntegerValue("8192"))
@@ -89,6 +91,7 @@ func TestEraseAdmissionBoundsOnlyLogicalOverwriteTargetsTo896GiB(t *testing.T) {
 // root target whose size is not the declared root size includes nothing.
 func TestEraseAdmissionIncludesARootDeclaredBySerialNumberAndSize(t *testing.T) {
 	machine, _ := fixture()
+	machine = rootDeclared(machine, "/dev/sda", api.MapValue())
 	spec := machine.Spec().WithPath(api.StringValue("rhel"), "os", "installProfileRef").
 		WithPath(api.BoolValue(true), "substrate", "baremetal", "bmc", "tls", "verify").
 		WithPath(api.StringValue("established"), "substrate", "baremetal", "bmc", "virtualMedia", "tls", "trust").
@@ -129,6 +132,7 @@ func TestEraseAdmissionIncludesARootDeclaredBySerialNumberAndSize(t *testing.T) 
 // of that size.
 func TestEraseAdmissionComparesTheDeclaredRootSize(t *testing.T) {
 	machine, _ := fixture()
+	machine = rootDeclared(machine, "/dev/sda", api.MapValue())
 	spec := machine.Spec().WithPath(api.StringValue("rhel"), "os", "installProfileRef").
 		WithPath(api.BoolValue(true), "substrate", "baremetal", "bmc", "tls", "verify").
 		WithPath(api.StringValue("established"), "substrate", "baremetal", "bmc", "virtualMedia", "tls", "trust").

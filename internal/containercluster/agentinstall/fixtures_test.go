@@ -131,6 +131,7 @@ func guest(name, address string) api.Object {
 func server(name, address, mac string) api.Object {
 	return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(
 		field("substrate", api.MapValue(text("providerRef", "floor"), field("baremetal", api.MapValue(
+			field("rootDevice", api.MapValue(text("wwn", "0x5000c500a1b2c3d4"))),
 			field("bmc", api.MapValue(
 				text("address", "https://"+name+"-bmc.lab.example.test/redfish/v1/Systems/1"),
 				text("credentialsRef", "metal-bmc"),
@@ -141,7 +142,6 @@ func server(name, address, mac string) api.Object {
 		field("hardware", api.MapValue(
 			field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")))),
 			field("boot", api.MapValue(text("nicRef", "enp1s0"))),
-			field("rootDevice", api.MapValue(text("deviceName", "/dev/sda"))),
 		)),
 		field("network", api.MapValue(
 			text("configRef", "lab-guests"), text("installAddressRef", "ip"),
@@ -259,10 +259,9 @@ func virtualHints() []api.FieldValue {
 }
 
 // everyHint is every root-device hint admission accepts on a bare-metal
-// Machine: the virtual hints, and the WWN, SCSI address and serial number a
-// created disk carries none of.
+// Machine: the non-path hints, WWN, SCSI address and serial number.
 func everyHint() []api.FieldValue {
-	return append(virtualHints(),
+	return append(virtualHints()[1:],
 		text("hctl", "1:0:0:0"), text("serialNumber", "0987654321"), text("wwn", "0x5000c500a1b2c3d4"))
 }
 
@@ -357,8 +356,7 @@ func physicalCatalog() api.Catalog {
 }
 
 // physicalHintsCatalog is the physical topology whose first node declares
-// every hint, whose second selects its disk by wwn alone and whose third names
-// its device.
+// every supported physical hint and whose other nodes select by WWN alone.
 func physicalHintsCatalog() api.Catalog {
 	objects := physicalCatalog().Objects()
 	for index, object := range objects {

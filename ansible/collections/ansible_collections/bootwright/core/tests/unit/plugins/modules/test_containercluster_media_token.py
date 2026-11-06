@@ -414,3 +414,33 @@ def test_the_sweep_task_fails_on_an_unprovable_entry_and_reports_only_counts(tmp
     assert result['failed'] and (result['removed'], result['kept'], result['refused']) == (1, 1, 1)
     assert all(url.split('/')[-2] not in output for url in [kept, stale, source])
     assert not (reserved(tmp_path) / stale.split('/')[-2]).exists()
+
+
+@pytest.mark.parametrize('host', ['192.0.2.1', '[2001:db8::1]'])
+def test_inspection_accepts_omitted_echo_port_but_no_other_ownership_relaxation(tmp_path, host):
+    request, source = published(tmp_path)
+    request['publicationRoot']['url'] = request['publicationRoot']['url'].replace('192.0.2.1', host + ':8443')
+    source = source.replace('192.0.2.1', host + ':8443')
+    inserted = token.operate(request, source, '', 'publish')['url']
+    assert token.operate(request, source, inserted.replace(':8443', ''), 'inspect')['own']
+    for foreign in [inserted.replace(':8443', ':9443'), inserted.replace(':8443', ':443'), inserted.replace(':8443', ':0'),
+                    inserted.replace(host, '192.0.2.99'), inserted.replace('/private/', '/other/'),
+                    inserted + '?key=value', inserted + '#fragment']:
+        assert not token.operate(request, source, foreign, 'inspect')['own']
+
+
+@pytest.mark.parametrize('scheme, port', [('https', 443), ('http', 80)])
+def test_echo_explicit_port_must_match_the_publication_effective_port(tmp_path, scheme, port):
+    request, source = published(tmp_path)
+    request['publicationRoot']['url'] = request['publicationRoot']['url'].replace('https:', scheme + ':')
+    source = source.replace('https:', scheme + ':')
+    inserted = token.operate(request, source, '', 'publish')['url']
+    assert token.operate(request, source, inserted.replace('192.0.2.1', '192.0.2.1:%d' % port), 'inspect')['own']
+    assert not token.operate(request, source, inserted.replace('192.0.2.1', '192.0.2.1:0'), 'inspect')['own']
+
+
+def test_only_the_controller_echo_can_omit_a_nondefault_port(tmp_path):
+    request, source = published(tmp_path)
+    request['publicationRoot']['url'] = request['publicationRoot']['url'].replace('192.0.2.1', '192.0.2.1:8443')
+    with pytest.raises(ValueError, match='published source is unavailable'):
+        token.operate(request, source, source, 'inspect')

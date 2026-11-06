@@ -114,16 +114,21 @@ from ansible_collections.bootwright.core.plugins.module_utils.containercluster_p
 )
 
 
-def relative(base, image):
+def relative(base, image, echoed=False):
     try:
-        return relative_url(base, image)
+        return relative_url(base, image, echoed)
     except ValueError:
         return None
 
 
-def relative_url(base, image):
+def relative_url(base, image, echoed=False):
     origin, target = urlsplit(base), urlsplit(image)
-    if (origin.scheme.lower(), origin.hostname, origin.port or 443) != (target.scheme.lower(), target.hostname, target.port or 443):
+    if (origin.scheme.lower(), origin.hostname) != (target.scheme.lower(), target.hostname):
+        return None
+    default_port = 443 if origin.scheme.lower() == "https" else 80
+    origin_port = origin.port if origin.port is not None else default_port
+    target_port = target.port if target.port is not None else default_port
+    if (not echoed or target.port is not None) and target_port != origin_port:
         return None
     if target.query or target.fragment or target.username or target.password:
         return None
@@ -219,7 +224,7 @@ def operate(request, source, image, operation, presented=()):
         expected = source_identity(root, source_token, publication['path'])
         if operation == 'sweep':
             return sweep(root, expected, presented)
-        token = relative(publication['url'], image)
+        token = relative(publication['url'], image, echoed=True)
         own = False
         if token:
             try:

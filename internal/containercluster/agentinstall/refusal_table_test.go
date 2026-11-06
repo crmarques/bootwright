@@ -132,7 +132,8 @@ func TestOpenShiftClusterRefusalTableMatchesUnsupported(t *testing.T) {
 		"A physical node with unverified media TLS": {physicalWithController(func(v api.Value) api.Value {
 			return v.WithPath(api.StringValue("disableVerification"), "virtualMedia", "tls", "trust")
 		}), "OpenShiftCluster/metal", map[string]string{"<machine>": "Machine/metal-01"}},
-		"A root device the installer cannot name": {singleNodeWith(text("deviceName", "/dev/mapper/root")), "OpenShiftCluster/sno", onNode},
+		"A physical node without a stable root selector": {physicalWithRoot(text("deviceName", "/dev/sda")), "OpenShiftCluster/metal", map[string]string{"<machine>": "Machine/metal-01"}},
+		"A root device the installer cannot name":        {singleNodeWith(text("deviceName", "/dev/mapper/root")), "OpenShiftCluster/sno", onNode},
 		"A root device size the frozen input cannot carry": {
 			singleNodeWith(text("deviceName", "/dev/vda"), number("minSizeGigabytes", "9007199254740992")), "OpenShiftCluster/sno", onNode,
 		},

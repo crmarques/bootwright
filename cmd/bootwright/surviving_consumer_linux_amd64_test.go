@@ -26,6 +26,8 @@ spec:
   substrate:
     providerRef: lab-metal
     baremetal:
+      rootDevice:
+        wwn: "0x500000000000f201"
       bmc:
         address: https://bmc-01.example.test/redfish/v1/Systems/1
       nics:
@@ -46,8 +48,6 @@ spec:
   hardware:
     nics:
       - name: enp1s0
-    rootDevice:
-      deviceName: /dev/sda
 `
 
 const metalProvider = `apiVersion: bootwright.io/v1alpha1

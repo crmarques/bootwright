@@ -632,10 +632,15 @@ func validateBaremetal(o api.Object) []api.Issue {
 		issues = appendIssues(issues, invariant("$."+substrate.BMCPath, "bare-metal installation requires a BMC", "declare "+substrate.BMCPath+", or inherit it from the provider's spec.baremetal.defaults.bmc"))
 	}
 	// A physical machine offers no channel to read back what it holds, so the
-	// key it will answer with is declared here and delivered by the
-	// installation rather than discovered afterwards.
+	// installation delivers its declared host key rather than discovering it.
 	if installed(o) && !s.Has("os", "install", "hostKeyRef") {
 		issues = appendIssues(issues, invariant("$.spec.os.install.hostKeyRef", "bare-metal installation requires the SSH host key it delivers", "set spec.os.install.hostKeyRef to the sshKeyPair Secret whose pair the installation delivers as the host key"))
+	}
+	if !installed(o) {
+		if reason, remedy := AgentRootDeviceRefusal(o); reason != "" {
+			issues = appendIssues(issues, invariant("$.spec.substrate.baremetal.rootDevice", reason, remedy))
+		}
+		return issues
 	}
 	physical := s.Get("substrate", substrate.ArmBaremetal, "rootDevice")
 	bySerial := installed(o) && physical.Has("serialNumber") && physical.Has("sizeBytes")
@@ -644,6 +649,19 @@ func validateBaremetal(o api.Object) []api.Issue {
 			"set spec.hardware.rootDevice.deviceName, spec.substrate.baremetal.rootDevice.wwn, or on a Bootwright-installed Machine spec.substrate.baremetal.rootDevice.serialNumber and sizeBytes"))
 	}
 	return issues
+}
+
+// AgentRootDeviceRefusal requires the durable selector the agent can carry.
+func AgentRootDeviceRefusal(o api.Object) (string, string) {
+	if substrate.MachineArm(o) != substrate.ArmBaremetal {
+		return "", ""
+	}
+	hints := substrate.MachineRootDeviceHints(o)
+	if hints.DeviceName != "" || !clearDevicePath.MatchString("/dev/disk/by-id/wwn-"+hints.WWN) {
+		return "a physical agent installation requires a stable WWN root hint and no deviceName",
+			"set spec.substrate.baremetal.rootDevice.wwn on " + o.Identity() + " to 0x followed by 16 or 32 lowercase hexadecimal digits and remove spec.hardware.rootDevice.deviceName"
+	}
+	return "", ""
 }
 
 func validateHardware(o api.Object, c api.Catalog, variant string) []api.Issue {

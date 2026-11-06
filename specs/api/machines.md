@@ -248,9 +248,9 @@ provider.
 
 A bare-metal non-provided machine has at least one NIC; every NIC has a MAC in
 `substrate.baremetal.nics`; `substrate.baremetal.bmc` address and credentials
-are present; and `hardware.rootDevice.deviceName` or
-`substrate.baremetal.rootDevice.wwn` is present, or, on a Bootwright-installed
-Machine, that `rootDevice`'s `serialNumber` with `sizeBytes`. Its BMC address, like every
+are present. The [cluster agent](../openshift-clusters.md#selection) requires
+a stable WWN; a Bootwright-installed Machine uses the
+[physical selectors](../managed-os.md#physical-installation). Its BMC address, like every
 authored one, selects one exact `/redfish/v1/Systems/<id>` ComputerSystem in
 the [one spelling](#bmc-and-root-device-shape) the realized target sends. These
 declarations identify an install target but do not authorize a destructive
@@ -639,12 +639,10 @@ and when it is not a multiple of 4096.
 only from ASCII letters, digits, `.`, `_`, `-`, `/`, `:` and `+`, so
 whitespace, control characters, quotes, other shell metacharacters and `.` or
 `..` segments are refused, because the path reaches installer directives and
-shell words verbatim. `minSizeGigabytes` is non-negative. For a bare-metal
-install, `hardware.rootDevice.deviceName` or `substrate.baremetal.rootDevice.wwn`
-is mandatory, or, on a Bootwright-installed Machine, `serialNumber` with
-`sizeBytes`; a Bootwright-installed Machine narrows `deviceName` to its by-id
-form below; predicate-only hints are not an adequate destructive target
-selector. Which hints an installation carries,
+shell words verbatim. `minSizeGigabytes` is non-negative. Bare-metal root
+selectors follow the [OS lifecycle invariant](#os-lifecycle-and-substrate-invariants);
+predicate-only hints are not an adequate destructive target selector.
+Which hints an installation carries,
 and which it refuses, is the rule of the consumer that installs the Machine:
 [managed OS](../managed-os.md#installation) or the
 [cluster installer](../openshift-clusters.md#selection-and-refusal).

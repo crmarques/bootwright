@@ -171,3 +171,35 @@ func TestAFreeMapIsClaimedAndComparedWhole(t *testing.T) {
 		t.Fatalf("conflicts = %v", conflicts)
 	}
 }
+
+func TestTaintComparisonCanonicalizesOnlyItsKeyAndEffect(t *testing.T) {
+	taint := func(key, effect, value string) api.Value {
+		return api.MapValue(field("key", api.StringValue(key)), field("effect", api.StringValue(effect)), field("value", api.StringValue(value)))
+	}
+	a, b := taint("a.test/key", "NoSchedule", "one"), taint("b.test/key", "NoExecute", "two")
+	shape := childShape(elementShape(childShape(api.Schema(api.OpenShiftCluster), "nodes")), "taints")
+	desired := api.ListValue(b, a, a, taint("a.test/key", "NoSchedule", "ignored"))
+	for _, test := range []struct {
+		name     string
+		observed api.Value
+		same     bool
+	}{
+		{"healthy sorted", api.ListValue(a, b), true}, {"healthy repeated", api.ListValue(b, a, a), true},
+		{"changed value", api.ListValue(taint("a.test/key", "NoSchedule", "other"), b), false},
+		{"changed effect", api.ListValue(taint("a.test/key", "NoExecute", "one"), b), false},
+		{"extra effect", api.ListValue(a, b, taint("a.test/key", "NoExecute", "one")), false},
+		{"missing", api.ListValue(b), false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result := overlay(desired, desired, test.observed, shape, false, false)
+			if result.Equal(desired) != test.same {
+				t.Fatalf("same=%v want %v", result.Equal(desired), test.same)
+			}
+		})
+	}
+	ordinary := &api.Shape{Type: api.Sequence, Element: &api.Shape{Type: api.String}}
+	values := api.ListValue(api.StringValue("b"), api.StringValue("a"), api.StringValue("a"))
+	if !canonical(values, ordinary).Equal(values) {
+		t.Fatal("ordinary list order or repeats changed")
+	}
+}

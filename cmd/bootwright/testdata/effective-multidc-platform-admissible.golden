@@ -224,12 +224,12 @@ spec:
           macAddress: 02:00:00:00:00:18
         - nicRef: eth2
           macAddress: 02:00:00:00:00:19
+      rootDevice:
+        wwn: "0x500000000000f101"
   hardware:
     nics:
       - name: eth0
       - name: eth2
-    rootDevice:
-      deviceName: /dev/sda
   os:
     provided: false
   network:
@@ -278,12 +278,12 @@ spec:
           macAddress: 02:00:00:00:00:1a
         - nicRef: eth2
           macAddress: 02:00:00:00:00:1b
+      rootDevice:
+        wwn: "0x500000000000f102"
   hardware:
     nics:
       - name: eth0
       - name: eth2
-    rootDevice:
-      deviceName: /dev/sda
   os:
     provided: false
   network:
@@ -332,12 +332,12 @@ spec:
           macAddress: 02:00:00:00:00:1c
         - nicRef: eth2
           macAddress: 02:00:00:00:00:1d
+      rootDevice:
+        wwn: "0x500000000000f103"
   hardware:
     nics:
       - name: eth0
       - name: eth2
-    rootDevice:
-      deviceName: /dev/sda
   os:
     provided: false
   network:
@@ -386,12 +386,12 @@ spec:
           macAddress: 02:00:00:00:00:1e
         - nicRef: eth2
           macAddress: 02:00:00:00:00:1f
+      rootDevice:
+        wwn: "0x500000000000f104"
   hardware:
     nics:
       - name: eth0
       - name: eth2
-    rootDevice:
-      deviceName: /dev/sda
   os:
     provided: false
   network:
@@ -440,12 +440,12 @@ spec:
           macAddress: 02:00:00:00:00:20
         - nicRef: eth2
           macAddress: 02:00:00:00:00:21
+      rootDevice:
+        wwn: "0x500000000000f105"
   hardware:
     nics:
       - name: eth0
       - name: eth2
-    rootDevice:
-      deviceName: /dev/sda
   os:
     provided: false
   network:
@@ -494,12 +494,12 @@ spec:
           macAddress: 02:00:00:00:00:22
         - nicRef: eth2
           macAddress: 02:00:00:00:00:23
+      rootDevice:
+        wwn: "0x500000000000f106"
   hardware:
     nics:
       - name: eth0
       - name: eth2
-    rootDevice:
-      deviceName: /dev/sda
   os:
     provided: false
   network:

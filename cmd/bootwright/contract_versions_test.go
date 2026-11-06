@@ -238,8 +238,8 @@ func automationFormats() map[string]automationFormat {
 		"physical-erase-v10":                    {class: formatMirrored},
 		"os-host-firewall-v1":                   {class: formatMirrored},
 		"os-host-firewall-evidence-v1":          {class: formatMirrored},
-		"cluster-media-agent-v9":                {class: formatMirrored},
-		"cluster-install-agent-v13":             {class: formatMirrored},
+		"cluster-media-agent-v10":               {class: formatMirrored},
+		"cluster-install-agent-v14":             {class: formatMirrored},
 		"artifact-server-nginx-v3":              {class: formatMirrored},
 		"managed-service-v5":                    {class: formatMirrored},
 		// Power is no plan block: each run binds its request to the power

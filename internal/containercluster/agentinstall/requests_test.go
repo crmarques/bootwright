@@ -239,3 +239,21 @@ func TestAnEarlierInstallRequestWithARemovedFieldRefusesByItsVersion(t *testing.
 	_, err := DecodeInstallRequest(withARemovedField(t, install.Canonical))
 	expectVersionRefusal(t, err, "cluster install", "cluster-install-agent-v2")
 }
+
+func TestEarlierPhysicalSelectionAndMediaOwnershipContractsRefuse(t *testing.T) {
+	media, install, _ := onlyRequests(t, singleNodeCatalog())
+	media.Version = "cluster-media-agent-v9"
+	encoded, err := media.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = DecodeMediaRequest(encoded)
+	expectVersionRefusal(t, err, "cluster media", media.Version)
+	install.Version = "cluster-install-agent-v13"
+	encoded, err = install.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = DecodeInstallRequest(encoded)
+	expectVersionRefusal(t, err, "cluster install", install.Version)
+}

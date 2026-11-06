@@ -68,9 +68,25 @@ func canonical(value api.Value, shape *api.Shape) api.Value {
 				return strings.Compare(first.Get(key).Text(), second.Get(key).Text())
 			})
 		}
+		if shape != nil && len(shape.ComparisonKeys) != 0 {
+			items = comparisonItems(items, shape.ComparisonKeys)
+		}
 		return api.ListValue(items...)
 	}
 	return value
+}
+
+func comparisonItems(items []api.Value, keys []string) []api.Value {
+	compare := func(first, second api.Value) int {
+		for _, key := range keys {
+			if order := strings.Compare(first.Get(key).Text(), second.Get(key).Text()); order != 0 {
+				return order
+			}
+		}
+		return 0
+	}
+	slices.SortStableFunc(items, compare)
+	return slices.CompactFunc(items, func(first, second api.Value) bool { return compare(first, second) == 0 })
 }
 
 func canonicalObject(object api.Object) *api.Object {

@@ -47,7 +47,7 @@ func (i *placingInstaller) Run(_ context.Context, run lifecycle.RunRequest) (lif
 	}
 	seen := agentinstall.NodePlacement{Name: "sno-01", Labels: map[string]string{}, Taints: []agentinstall.Taint{}}
 	if i.placed {
-		seen.Taints = []agentinstall.Taint{{Effect: "NoSchedule", Key: placedTaint}}
+		seen.Taints = []agentinstall.Taint{{Effect: "NoExecute", Key: placedTaint}, {Effect: "NoSchedule", Key: placedTaint}}
 		if !i.drifted {
 			seen.Labels[placedLabel] = "a"
 		}
@@ -77,7 +77,7 @@ func (i *placingInstaller) took() []string {
 func placedRequest() agentinstall.InstallRequest {
 	request := installedRequest()
 	request.Nodes[0].Labels = map[string]string{placedLabel: "a"}
-	request.Nodes[0].Taints = []agentinstall.Taint{{Effect: "NoSchedule", Key: placedTaint}}
+	request.Nodes[0].Taints = []agentinstall.Taint{{Effect: "NoExecute", Key: placedTaint}, {Effect: "NoSchedule", Key: placedTaint}}
 	return request
 }
 
@@ -87,7 +87,10 @@ func placedDeclaration() api.Object {
 	return api.NewObject(api.OpenShiftCluster, installedCluster, api.Value{}, api.MapValue(field("nodes", api.ListValue(api.MapValue(
 		text("name", "sno-01"), text("role", "controlPlane"), text("machineRef", "sno-01"),
 		field("labels", api.MapValue(text(placedLabel, "a"))),
-		field("taints", api.ListValue(api.MapValue(text("key", placedTaint), text("effect", "NoSchedule")))),
+		field("taints", api.ListValue(
+			api.MapValue(text("key", placedTaint), text("effect", "NoSchedule")),
+			api.MapValue(text("key", placedTaint), text("effect", "NoExecute")),
+			api.MapValue(text("key", placedTaint), text("effect", "NoSchedule")))),
 	)))))
 }
 
@@ -136,6 +139,12 @@ func TestNodePlacementContinuesByReadingAndDriftIsReportedNotRepaired(t *testing
 	if calls := adapter.took(); len(calls) != 2 {
 		t.Fatalf("the settled apply reached the cluster: %v", calls)
 	}
+	journey.Declaring(placedDeclaration())
+	healthy := observedObject(t, journey, api.OpenShiftCluster, installedCluster)
+	if healthy.Real.Object == nil || healthy.Desired == nil ||
+		!healthy.Real.Object.Spec().Get("nodes").Items()[0].Get("taints").Equal(healthy.Desired.Spec().Get("nodes").Items()[0].Get("taints")) {
+		t.Fatalf("healthy unsorted repeated taints differ: %+v", healthy)
+	}
 	adapter.drifted = true
 	journey.Declaring(placedDeclaration())
 	cluster := observedObject(t, journey, api.OpenShiftCluster, installedCluster)
@@ -150,7 +159,7 @@ func TestNodePlacementContinuesByReadingAndDriftIsReportedNotRepaired(t *testing
 	if !slices.ContainsFunc(cluster.Real.Notes, func(note string) bool { return strings.Contains(note, "lacks label "+placedLabel) }) {
 		t.Fatalf("notes = %v", cluster.Real.Notes)
 	}
-	if calls := adapter.took(); !slices.Equal(calls, []string{"apply", "observe", "observe"}) || adapter.unrecordedObservations != 1 {
+	if calls := adapter.took(); !slices.Equal(calls, []string{"apply", "observe", "observe", "observe"}) || adapter.unrecordedObservations != 2 {
 		t.Fatalf("diff --observe ran %v (%d outside an operation)", calls, adapter.unrecordedObservations)
 	}
 	if !adapter.drifted {

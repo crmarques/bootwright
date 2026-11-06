@@ -37,6 +37,8 @@ type Shape struct {
 	AllowEmpty    bool
 	Suppress      []Suppression
 	Permits       []Permission
+
+	ComparisonKeys []string
 }
 
 type Permission struct {

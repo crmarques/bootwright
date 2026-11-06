@@ -427,6 +427,9 @@ const maxInstallerRootDeviceGigabytes = 1<<53 - 1
 // refuses instead, naming the bound Machine, because that is what an operator
 // changes; the rule on deviceName is the installer's own for agent hosts.
 func installerRootDeviceHints(bound api.Object, hints substrate.RootDeviceHints) (rendered map[string]any, reason, remediation string) {
+	if reason, remedy := machine.AgentRootDeviceRefusal(bound); reason != "" {
+		return nil, reason, remedy
+	}
 	if len(hints.Names()) == 0 {
 		return nil, "", ""
 	}

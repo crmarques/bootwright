@@ -53,11 +53,11 @@ spec:
       nics:
         - nicRef: eno1
           macAddress: 52:54:00:9a:1b:01
+      rootDevice:
+        wwn: "0x500000000000f001"
   hardware:
     nics:
       - name: eno1
-    rootDevice:
-      deviceName: /dev/sda
   os:
     provided: false
   network:
@@ -96,11 +96,11 @@ spec:
       nics:
         - nicRef: eno1
           macAddress: 52:54:00:9a:1b:02
+      rootDevice:
+        wwn: "0x500000000000f002"
   hardware:
     nics:
       - name: eno1
-    rootDevice:
-      deviceName: /dev/sda
   os:
     provided: false
   network:
@@ -139,11 +139,11 @@ spec:
       nics:
         - nicRef: eno1
           macAddress: 52:54:00:9a:1b:03
+      rootDevice:
+        wwn: "0x500000000000f003"
   hardware:
     nics:
       - name: eno1
-    rootDevice:
-      deviceName: /dev/sda
   os:
     provided: false
   network:
@@ -182,11 +182,11 @@ spec:
       nics:
         - nicRef: eno1
           macAddress: 52:54:00:9a:1b:04
+      rootDevice:
+        wwn: "0x500000000000f004"
   hardware:
     nics:
       - name: eno1
-    rootDevice:
-      deviceName: /dev/sda
   os:
     provided: false
   network:
@@ -225,11 +225,11 @@ spec:
       nics:
         - nicRef: eno1
           macAddress: 52:54:00:9a:1b:05
+      rootDevice:
+        wwn: "0x500000000000f005"
   hardware:
     nics:
       - name: eno1
-    rootDevice:
-      deviceName: /dev/sda
   os:
     provided: false
   network:

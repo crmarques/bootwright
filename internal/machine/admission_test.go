@@ -32,7 +32,7 @@ func list(v ...api.Value) api.Value { return api.ListValue(v...) }
 func fixture() (api.Object, api.Catalog) {
 	provider := object(api.InfraProvider, "metal", m("baremetal", m("defaults", m("bmc", m("credentialsRef", "bmc", "tls", m("verify", false), "virtualMedia", m("tls", m("trust", "established"))))), "networkAttachments", list(m("name", "net", "baremetal", m()))))
 	network := object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")), "routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-interface", "eth0"))))))
-	machine := object(api.Machine, "node", m("substrate", m("providerRef", "metal", "baremetal", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1"), "nics", list(m("nicRef", "eth0", "macAddress", "02-00-00-00-00-01")))), "os", m("provided", false), "hardware", m("nics", list(m("name", "eth0")), "rootDevice", m("deviceName", "/dev/sda")), "network", m("configRef", "net", "addresses", list(m("name", "primary", "address", "192.0.2.11/24", "interface", "eth0")))))
+	machine := object(api.Machine, "node", m("substrate", m("providerRef", "metal", "baremetal", m("rootDevice", m("wwn", "0x5000c500a1b2c3d4"), "bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1"), "nics", list(m("nicRef", "eth0", "macAddress", "02-00-00-00-00-01")))), "os", m("provided", false), "hardware", m("nics", list(m("name", "eth0"))), "network", m("configRef", "net", "addresses", list(m("name", "primary", "address", "192.0.2.11/24", "interface", "eth0")))))
 	env := object(api.Environment, "env", m("domains", m("base", "example.test")))
 	return machine, api.NewCatalog([]api.Object{machine, network, provider, env})
 }
@@ -344,12 +344,12 @@ func TestARootDeviceHintFollowsItsArm(t *testing.T) {
 			if issues := Validate(machine, catalog); !slices.Contains(issues, want) {
 				t.Fatalf("a libvirt Machine's %s hint gave %v", hint.Name, issues)
 			}
-			if machine, catalog := withRootDevice(server, physical, admitted, declared, api.Value{}); len(Validate(machine, catalog)) != 0 {
+			if machine, catalog := withRootDevice(server, physical, admitted.Without("deviceName"), declared.Default("wwn", api.StringValue("0x5000c500a1b2c3d4")), api.Value{}); len(Validate(machine, catalog)) != 0 {
 				t.Fatalf("a bare-metal Machine's %s hint was refused: %v", hint.Name, Validate(machine, catalog))
 			}
 		})
 	}
-	if machine, catalog := withRootDevice(server, physical, admitted, every, api.Value{}); len(Validate(machine, catalog)) != 0 {
+	if machine, catalog := withRootDevice(server, physical, admitted.Without("deviceName"), every, api.Value{}); len(Validate(machine, catalog)) != 0 {
 		t.Fatalf("a bare-metal Machine's hints were refused: %v", Validate(machine, catalog))
 	}
 }
@@ -358,6 +358,7 @@ func TestARootDeviceHintFollowsItsArm(t *testing.T) {
 // Machine, which is the only lifecycle that delivers its own host key.
 func installedFixture() (api.Object, api.Catalog) {
 	machine, catalog := fixture()
+	machine = rootDeclared(machine, "/dev/sda", api.MapValue())
 	spec := machine.Spec()
 	install := spec.Get("os", "install").With("hostKeyRef", api.StringValue("node-host-key"))
 	spec = spec.With("os", spec.Get("os").
@@ -733,5 +734,35 @@ func TestASelectingSerialNumberIsDeclaredByNoOtherMachine(t *testing.T) {
 	clear := byPath.WithSpec(byPath.Spec().WithPath(m("targets", list(m("serialNumber", "SYNTHETIC-SHARED-01").With("sizeBytes", api.IntegerValue("8192")))), "hardware", "clearOnInstall"))
 	if issues := validateSelectingSerials(clear, replaced(catalog, clear, other)); len(issues) != 1 || issues[0].Field != "$.spec.hardware.clearOnInstall.targets[0].serialNumber" {
 		t.Fatalf("issues = %+v", issues)
+	}
+}
+
+func TestPhysicalAgentRootRequiresAStableWWN(t *testing.T) {
+	original, catalog := fixture()
+	original, normalization := Normalize(original, catalog)
+	if len(normalization) != 0 {
+		t.Fatal(normalization)
+	}
+	for _, test := range []struct {
+		name, device, wwn string
+		allowed           bool
+	}{
+		{"kernel name", "/dev/sda", "", false}, {"by path", "/dev/disk/by-path/pci-0000:00:01.0", "", false},
+		{"missing WWN", "", "", false}, {"invalid WWN", "", "disk-one", false},
+		{"uppercase WWN", "", "0X5000C500A1B2C3D4", false}, {"stable WWN", "", "0x5000c500a1b2c3d4", true},
+		{"extended WWN", "", "0x5000c500a1b2c3d45000c500a1b2c3d4", true},
+		{"unstable name beside WWN", "/dev/sda", "0x5000c500a1b2c3d4", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			physical := m()
+			if test.wwn != "" {
+				physical = m("wwn", test.wwn)
+			}
+			candidate := rootDeclared(original, test.device, physical)
+			issues := Validate(candidate, replaced(catalog, candidate))
+			if (len(issues) == 0) != test.allowed {
+				t.Fatalf("root selector allowed=%v: %+v", test.allowed, issues)
+			}
+		})
 	}
 }

@@ -30,7 +30,7 @@
     "path": "/var/lib/bootwright-clusters/lab/kubevirt/agent.iso",
     "url": ""
   },
-  "imageIdentity": "9e23ca17849da208324778cdc262cad1f7c501f41e10e8e3bc092930171db02b",
+  "imageIdentity": "c4ccea6f5be1f31bea188741952a0cb22cfdda9827b6b7c4804261aa3343f685",
   "nodes": [
     {
       "address": "198.51.100.31",
@@ -119,7 +119,7 @@
     "kind": "openshift-install",
     "version": "4.21.15"
   },
-  "version": "cluster-install-agent-v13",
+  "version": "cluster-install-agent-v14",
   "vips": [],
   "workRoot": "/var/lib/bootwright-clusters/lab/kubevirt"
 }

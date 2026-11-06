@@ -57,3 +57,26 @@ func TestPhysicalInstallRequestGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func physicalWithRoot(hints ...api.FieldValue) api.Catalog {
+	objects := physicalCatalog().Objects()
+	for index, object := range objects {
+		if object.Kind() == api.Machine && object.Name() == "metal-01" {
+			objects[index] = withHints(object, hints...)
+		}
+	}
+	return api.NewCatalog(objects)
+}
+
+func TestPhysicalAgentRootRefusesBeforeRenderingInstallerInputs(t *testing.T) {
+	for _, device := range []string{"/dev/sda", "/dev/disk/by-path/pci-0000:00:04.0"} {
+		catalog := physicalWithRoot(text("deviceName", device))
+		refusals := Refusals(catalog)
+		if len(refusals) != 1 || !strings.Contains(refusals[0].Reason, "stable WWN") || !strings.Contains(refusals[0].Remediation, "Machine/metal-01") {
+			t.Fatalf("unsafe root refusal = %+v", refusals)
+		}
+		if _, _, _, err := Requests(catalog, "controller", testContext); err == nil {
+			t.Fatal("unsafe physical root produced installer requests")
+		}
+	}
+}
