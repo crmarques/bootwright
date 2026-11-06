@@ -12338,3 +12338,35 @@ complete-host removal authority and hosts with no OSDs. Generic online removal
 remains closed. Protected Bootwright recovery/custody records and restrictive
 SSH policy remain on the retained OS; cleanup is not filesystem sanitization.
 Physical retirement and recovery on real hosts remain unrun operator gates.
+
+### X321 — Standalone network admission fixes
+
+**Items:** B1195 to B1201, completed in-tree (2026-11-06), under
+[D240](backlog.md#d240), the first slice of the networking API program, with
+no schema move. A Machine's attachment defaults to its provider's sole
+attachment; the agent projection names interfaces from the NIC binding and
+carries the realized MAC; OVN and secondary-network MTU bounds read the
+effective MTU through VLAN and bond parents. Admission now refuses a split
+bond (ports or `controller`), an install gateway outside its prefix (IPv6
+link-local exempt), a prefixed contact, an unbound NIC named like a bound
+interface, Ceph CIDRs no topology Machine address covers, cluster or service
+networks overlapping node or secondary subnets, VIP holders and MetalLB
+announcers off the VIP's or pool's subnet, and endpoints colliding with Ceph,
+SMB or installer-VIP next-hop claims; Ceph cluster-CIDR coverage moved from
+plan to admission. The specs name NIC, interface, vNIC, bond member and
+listener port, the NMState subset lists every key admission reads, the
+examples drop identity bindings, and the multidc example declares its hub
+networks as typed secondary networks, so its hosted KubeVirt providers plan.
+
+**Commits:** 56f2d4e5e (B1196), 1139f1c9f (B1197), 74fd497e5 (B1195),
+18cc7aac6 (B1198), ae2715abc (B1199), 0ba3d267f (B1200), 230e27dac (B1201)
+and a6728dc29 (the independent safety review's eight findings), with this
+record. `make check` and `make race` passed on the lanes and again on the
+final tree; the independent review found no blocker, and its should-fix
+findings are in a6728dc29. Every private input set (input-chart renders of
+each environment, gitignored examples and e2e inputs) validates with the
+same findings before and after. No live run or push occurred.
+
+On libvirt and KubeVirt an authored NMState `mac-address` is still admitted
+and overridden by the realized MAC, as before; X323 makes the vNIC MAC a
+hardware fact and refuses it there (B1203).
