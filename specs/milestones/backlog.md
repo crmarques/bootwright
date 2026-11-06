@@ -27,7 +27,7 @@ Alias cell.
 | [B103](#b103) | C14; B836 split from it on 2026-10-26 | safety | Workspace and Secrets | Explicit complete-store restore | No milestone needs backup and restore |
 | [B104](#b104) | C15; B337 split from it on 2026-10-05 (D85) | safety | Secrets | Bounded lifetime allocation for secret reservations | D85: after B337 only applies and new versions consume the budget; waits on B103 |
 | [B105](#b105) | C19 | product | Secrets | One more secret-store implementation | `local-keyring` meets the current scope |
-| [B106](#b106) | M4 (day-2 surface) | product | Container cluster | The day-2 surface a completed cluster exposes | A product non-goal |
+| [B106](#b106) | M4 (day-2 surface); B1184 split out on 2026-11-06 (D235) | product | Container cluster | The day-2 surface a completed cluster exposes | A product non-goal |
 | [B107](#b107) | new, 2026-09-28 | product | Add-ons and Storage | Data Foundation over an external Ceph cluster | M4 integrates a managed Ceph cluster (D19, D128) |
 | [B161](#b161) | new, 2026-09-30 (X28) | enabling | Architecture | The walk guard follows every write | Parked under the 2026-09-30 triage rule: test tooling |
 | [B162](#b162) | new, 2026-09-30 (X28) | enabling | Architecture | The diagnostic registry follows every call shape | Parked under the 2026-09-30 triage rule: test tooling |
@@ -261,11 +261,9 @@ Alias cell.
 | [B867](#b867) | new, 2026-10-27 (lane R review) | safety | Storage | The Ceph incarnation rule is confirmed on a live cluster | The monitor map's creation time was chosen without a live run |
 | [B881](#b881) | new, 2026-10-28 (X190 review) | safety | State reconciliation, with Substrate | A cancelled or deadline-ended firmware power cycle still forces its machine off | The adapter supervisor kills the worker with no grace; a grace changes every adapter's termination |
 | [B882](#b882) | new, 2026-10-28 (owner request: the e2e stretch case); narrowed 2026-10-29 | product | Storage, with Machine and Managed OS | A provided-OS Machine as a Ceph data, manager or gateway host | Planning admits a provided Machine only as the stretch tiebreaker (D204) |
-| [B905](#b905) | new, 2026-10-28 (D197) | product | Substrate and Managed OS | A Bootwright-installed operating system on a KubeVirt Machine | B87 realizes installer-provisioned Machines; an installation needs an identity channel and seeds the arm does not define |
 | [B906](#b906) | new, 2026-10-28 (D197) | product | Substrate, with Add-ons | A KubeVirt profile's persistent vTPM state is proved migratable on a declared state class | The current target declares no vTPM; the state class is host-wide and set on HyperConverged |
 | [B907](#b907) | new, 2026-10-28 (D197) | product | Substrate | KubeVirt Machines boot with EFI Secure Boot | Whether the agent image boots under KubeVirt Secure Boot is unverified |
 | [B909](#b909) | new, 2026-10-28 (D197) | product | Substrate | KubeVirt interfaces on a namespaced UserDefinedNetwork | The arm realizes Localnet ClusterUserDefinedNetwork and bridge NetworkAttachmentDefinition attachments; no profile needs a UDN |
-| [B925](#b925) | new, 2026-10-28 (D201) | safety | Substrate and Container cluster | A released KubeVirt node's image claim is ejected live where the host enables declarative hotplug | The eject leaves the claim until the node next stops, which security records; live removal is an optional specialization no profile needs yet |
 | [B927](#b927) | new, 2026-10-28 (D201) | product | Container cluster and Substrate | An installer VIP on a KubeVirt attachment is proved free before a fresh boot | The pre-boot ARP probe reaches only a managed libvirt bridge on the controller; a KubeVirt attachment is reported unprobed and the operator proves its VIPs free |
 | [B965](#b965) | new, 2026-10-29 (X220) | enabling | Specification maintenance | The ten section-budget exceptions and the leaf-budget exceptions of the spec pages are split into leaves within budget | The split is large documentation work with no consumer; the docs gate holds each ceiling falling in the meantime |
 | [B966](#b966) | new, 2026-10-29 (X220) | enabling | Ansible collection | The role and plugin naming misfits are renamed to the pattern | The rename moves the automation digest, so it rides a build and setup; the allowance in `test_collection_names.py` only shrinks in the meantime |
@@ -284,7 +282,6 @@ Alias cell.
 | [B1124](#b1124) | new, 2026-11-04 (D231) | product | Container cluster | A node with addresses on several secondary networks under `ipForwarding: Global` forwards no traffic between them | `MachineConfig` has no typed source ([B719](m3.md#b719)); the case's clients carry no route through the node |
 | [B1165](#b1165) | new, 2026-11-05 (D234) | product | State reconciliation, with Substrate | An additive apply that adds KubeVirt providers, Machines and clusters to a completed apply | Q144; it needs per-namespace access blocks and a proof request without the MAC set |
 | [B1166](#b1166) | new, 2026-11-05 (D234) | product | Substrate and Managed OS | A KubeVirt Machine whose root is cloned from an image and seeded by cloud-init | An alternative to B905 the owner has not chosen (Q148) |
-| [B1167](#b1167) | new, 2026-11-05 (D234) | product | Container cluster | OpenShift clusters as hosted control planes on a KubeVirt host | A separate request family and prerequisites; Q145 |
 | [B1168](#b1168) | new, 2026-11-05 (D234) | product | Add-ons | Typed `HyperConverged` fields: boot-image import, live-migration limits and network, workload placement | No profile needs them yet; locations follow the observed CRD, never a CSV (D163) |
 | [B1169](#b1169) | new, 2026-11-05 (D234) | safety | Substrate and Secrets | A minted host token bound to a per-run object, revoked when the run ends | D202 accepts the lifetime bound as the only revocation |
 | [B1170](#b1170) | new, 2026-11-05 (D234) | safety | Secrets and State reconciliation | A rebind of the host installation's administrator kubeconfig after rotation | Nothing rotates it today |
@@ -448,7 +445,9 @@ so the two options the 2026-10-26 audit raised (F01-02) wait here: an explicit
 relinquish verb that records an ownership release for GitOps to adopt, which
 amends the handoff sentence that ownership is never transferred, or a named
 post-handoff owner for a class of owned object, such as an approved InstallPlan.
-Either needs an owner decision. **Exit evidence:** set by that change.
+Either needs an owner decision. On 2026-11-06 [D235](#d235) (8) split the
+observation of an owner-approved operator upgrade out as
+[B1184](m4.md#b1184). **Exit evidence:** set by that change.
 
 ### B107
 
@@ -2846,17 +2845,6 @@ removal that leaves the operating system. **Outcome:** a provided-OS Machine
 carries OSDs in a managed cluster. **Exit evidence:** planning and host-trust
 tests and an owner-run apply and destroy.
 
-### B905
-
-**Owner:** Substrate and Managed OS. **Kind:** product. **Requires:**
-[B87](m1.md#b87). **Definition:** Needs definition: the identity channel a
-Bootwright-installed Machine on KubeVirt proves itself through (a delivered
-host key or the guest agent), its install seeds and the managed-OS boot path
-over the pushed port. Today a KubeVirt Machine naming an install profile
-refuses before registration ([selection](../substrates.md#selection-and-refusal)).
-**Outcome:** a RHEL Machine installed on a KubeVirt provider. **Exit
-evidence:** request goldens, refusal tests and an owner-run installation.
-
 ### B906
 
 **Owner:** Substrate, with Add-ons. **Kind:** product. **Requires:**
@@ -2890,19 +2878,6 @@ the arm refuses an attachment of any kind but a ClusterUserDefinedNetwork or a
 NetworkAttachmentDefinition before registration. **Outcome:** a KubeVirt
 interface on a UDN. **Exit evidence:** selection and proof tests and a live
 attachment.
-
-### B925
-
-**Owner:** Substrate and Container cluster. **Kind:** safety. **Requires:**
-[B88](m3.md#b88). **Definition:** Needs definition: [Q20](m3.md#m3a-open-decisions)
-option (b). Where the host's HyperConverged enables `declarativeHotplugVolumes`,
-as the provider proof would read it, the eject also unplugs the media volume
-from the running instance, so the claim holding the image, which embeds the
-pull secret, is released without waiting for the next stop; a specialization
-keyed on that observed gate, never on a release label (D163). Today the claim
-stays until the instance next stops ([security](../security.md#network-remote-systems-and-privilege)).
-**Outcome:** a released node holds no image claim. **Exit evidence:** proof and
-eject tests over a fake host with and without the gate, and a live eject.
 
 ### B927
 
@@ -3227,11 +3202,7 @@ cannot reach the other network.
 
 ### B1166
 
-**Owner:** Substrate and Managed OS. **Kind:** product. **Requires:** [B87](m1.md#b87). **Definition:** Needs definition: [Q148](m3.md#m3a-open-decisions) option (d), the image-based alternative to [B905](#b905); the owner has not chosen between them. **Outcome:** A KubeVirt Machine whose root is cloned from an image and seeded by cloud-init. **Exit evidence:** Request goldens, refusal tests and an owner-run installation.
-
-### B1167
-
-**Owner:** Container cluster. **Kind:** product. **Requires:** [B88](m3.md#b88). **Definition:** Needs definition: [Q145](m3.md#m3a-open-decisions) option (c). Hosted control planes are a separate request family with their own prerequisites. **Outcome:** An OpenShift cluster as a hosted control plane on a KubeVirt host. **Exit evidence:** Request goldens, refusal tests and an owner-run installation.
+**Owner:** Substrate and Managed OS. **Kind:** product. **Requires:** [B87](m1.md#b87). **Definition:** Needs definition: [Q148](m3.md#m3a-open-decisions) option (d), the image-based alternative to [B905](m1.md#b905); the owner has not chosen between them. **Outcome:** A KubeVirt Machine whose root is cloned from an image and seeded by cloud-init. **Exit evidence:** Request goldens, refusal tests and an owner-run installation.
 
 ### B1168
 
@@ -5702,7 +5673,7 @@ DataVolume through the Kubernetes API and `virtctl image-upload --no-create`
 through the CDI upload proxy, behind the substrate port; the Redfish facade
 stays parked as [B745](#b745).
 (2) Question 1: installer-provisioned Machines only; a Bootwright-installed
-operating system on KubeVirt is [B905](#b905) and keeps refusing before
+operating system on KubeVirt is [B905](m1.md#b905) and keeps refusing before
 registration.
 (3) Question 2: the VirtualMachine is `<machine>-<8 hex digits>`, the Machine
 name cut to 48 bytes and the digits the head of the SHA-256 of the context and
@@ -5759,7 +5730,7 @@ namespace UID; every machine block compares the live UID with that apply
 record and with its own, and a mismatch refuses. Each VirtualMachine claims
 `kubevirt-vm:<server>/<namespace>/<name>` once its block proves it (B816's
 remainder).
-(13) New items: [B905](#b905), [B906](#b906), [B907](#b907),
+(13) New items: [B905](m1.md#b905), [B906](#b906), [B907](#b907),
 [B908](m3.md#b908) (peer VM placement), [B909](#b909) (UserDefinedNetwork
 attachments, refused by the arm until then) and [B910](m3.md#b910), the live power read's
 pin; the port's own cluster and UID pin, which the slice's review found
@@ -5966,7 +5937,7 @@ upload DataVolume by UID; the claim that held the image stays bound until the
 node's VirtualMachine next stops, no node is restarted to release it, and
 [security](../security.md#network-remote-systems-and-privilege) records the
 exposure. Option (b), a live eject keyed on the observed declarative hotplug
-gate, is [B925](#b925).
+gate, is [B925](m3.md#b925).
 (3) The installation lends each node's controller credential by the parts the
 arm's `ControllerCredential` fact names: for KubeVirt the kubeconfig's value
 alone as the port's `user` file, with no password or trust-bundle material,
@@ -7100,3 +7071,85 @@ and one declared directly is of CNI type `bridge`; its `macspoofchk` and MTU
 are recorded. Another shape refuses.
 (6) The answers to Q139 to Q152 stay with the owner; each recommendation is the
 plan's, and nothing they gate starts before an answer.
+
+### D235
+
+**owner** (2026-11-06; the clauses marked as the session's are pending the
+owner's review): the owner answered the open decisions D234 recorded in
+[M3a's open decisions](m3.md#m3a-open-decisions), choosing among the options
+the session put to them. Each answer is quoted.
+
+(1) Q139, "Skip the libvirt runs": for M3e's operator gates
+([B731](m3.md#b731), [B1158](m3.md#b1158)) and the physical host run they start
+from ([B730](m3.md#b730) on the owner's host), M2's Requires and the accepted
+rows of B61 and B66 are waived; the physical host is accepted first, then
+lab-kubevirt runs against it. Session clause: B67's emulated rehearsal, the
+libvirt run B730 requires, falls under the same waiver. Promotion and M3
+completion keep every Requires.
+
+(2) Q140, "Clusters can have as many nodes as the operator wants and software
+providers supports", confirmed as "Yes, any shape": B730's profile names no
+fixed node count. Its run on the owner's compact host makes the bonded VLAN
+install interface and a secondary network required rows, then installs the
+`nmstate` and `kubevirt` packages, which accepts [B883](m4.md#b883) there
+(Q141, amending D193 (3)). Q141's other parts, B732's run and
+[B1159](m3.md#b1159), stay open.
+
+(3) Q146, the same words, then "Derive, never cap": an OpenShift
+installation's run deadline is derived from its node count and its arms'
+published bounds with no fixed ceiling, so a cluster of any size plans and its
+run is held to that derived deadline. [B926](m3.md#b926) is redefined by this
+clause and X313 implements it. Session clauses: host access the KubeVirt arm
+lends to such a run lives as long as that run; the owner's words name clusters
+in general, so the Ceph host bound follows the same rule as
+[B1183](m2.md#b1183), split from B79 and not implemented by this decision.
+
+(4) Q142, "fdf on managed Ceph": the first live KubeVirt runs use the `fdf`
+package in external mode against a Ceph cluster the same context manages.
+
+(5) Q144, "One context": a host cluster, its Ceph cluster and the clusters and
+Machines it hosts are declared in one context on day 1 and staged; a later
+hosted change destroys the host and, with `fdf`, the Ceph cluster. B1165 stays
+parked.
+
+(6) Q145, "Bootwright must support both cases"; asked which two, the owner
+stated no preference. Session clause, the reading pending the owner's review:
+both agent-installed shapes on KubeVirt nodes stay supported (authored
+`baremetal` with installer VIPs, and derived `none` with an operator load
+balancer), and hosted control planes become planned scope:
+[B1167](m3.md#b1167) moves to M3e, Needs definition.
+
+(7) Q148, "Fetch key from controller": a Bootwright-installed RHEL Machine on
+KubeVirt proves its installation by the delivered host key its Kickstart
+fetches once from the controller's private tokenized publication, as on bare
+metal, from an installer image pushed through the upload proxy.
+[B905](m1.md#b905) moves to M1 with that definition; its implementation follows
+B731's run.
+
+(8) Q150 option (a), "z-stream reads complete": after the owner approves an
+operator upgrade outside Bootwright, an observation reads an installed CSV
+that the owned Subscription's own replacement chain reached from its
+`startingCSV` as complete, with that CSV as evidence, for every package
+installed through a Manual Subscription. Bootwright approves nothing and
+transfers no ownership. It splits from B106 as [B1184](m4.md#b1184), which
+X314 implements.
+
+(9) Q151, "Pinned upstream virtctl": every controller, FIPS or disconnected
+included, runs the upstream `virtctl` release the operator pins. B1177 stays
+parked.
+
+(10) Q152, "Live eject before prod": before the owner-shaped production
+acceptance (B1159), a long-lived cluster's node releases its installer image
+claim at once where the host's HyperConverged enables
+`declarativeHotplugVolumes`. [B925](m3.md#b925) moves to M3e. Session clause:
+KubeVirt ejects a cdrom volume live only when that volume is hotpluggable, so
+B925 stays Needs definition until B731's run shows whether the firmware boots
+the agent image from such a volume.
+
+(11) Not accepted, so still open: Q143 (ReadWriteOnce storage), Q147
+(placement) and Q149 (data disks).
+
+(12) The answers authorize, out of sequence and for implementation only, X313
+(M3, B926) and X314 (M4, B1184), both active at once; they are the waiver of
+M2's and M3c's Requires for implementing them, as D234 was for its slices.
+Promotion, operator gates and milestone completion keep every Requires.

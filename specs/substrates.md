@@ -69,7 +69,7 @@ Not yet met: a vSphere provider and its Machines refuse before registration;
 tracked as [B99](milestones/m1.md#b99).
 
 Not yet met: a Bootwright-installed Machine on KubeVirt refuses before
-registration; tracked as [B905](milestones/backlog.md#b905).
+registration; tracked as [B905](milestones/m1.md#b905).
 
 The libvirt provider host is the Machine `spec.libvirt.machineRef` names. It
 must be OS-ready and reachable through one of the

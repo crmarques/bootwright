@@ -175,7 +175,7 @@ closed on an arm it has no port for, as the
 [adapter boundary](#adapter-boundary) states.
 
 Not yet met: a Bootwright-installed Machine on KubeVirt refuses before
-registration; tracked as [B905](milestones/backlog.md#b905).
+registration; tracked as [B905](milestones/m1.md#b905).
 
 ### Supported shape
 
