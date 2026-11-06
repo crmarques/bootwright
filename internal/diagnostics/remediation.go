@@ -83,6 +83,7 @@ var defaultRemediations = map[string]string{
 
 	"trust.identity":     "review the SSH identity the message names and enroll it with bootwright machine trust --context <context>",
 	"access.unavailable": "provide the access metadata or credential the message names and repeat the command",
+	"access.copy":        "inspect the named destination, correct the paths and receiving-account permissions, then retry; completed files remain",
 	"access.target":      "name exactly one authorized target and repeat the command",
 	"access.handoff":     "correct the access descriptor the message names and repeat the command",
 	"access.credential":  "reveal the Machine's password credential and repeat the command",

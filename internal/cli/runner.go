@@ -89,7 +89,7 @@ func newCommandTree(r *Runner) (*cobra.Command, error) {
 		parent.Short, parent.Long = spec.short, spec.long
 		parent.Example = helpExample(spec.path)
 		parent.Annotations = map[string]string{"bootwright.command": spec.path}
-		if spec.payload {
+		if spec.payload || spec.operands != "" {
 			parent.Annotations["bootwright.payload"] = "true"
 		}
 		contextFree, sshFlags := inheritedFlagScope(spec.path)
@@ -107,15 +107,19 @@ func newCommandTree(r *Runner) (*cobra.Command, error) {
 			}
 			parent.Long = strings.TrimSuffix(parent.Long, ".") + ". This command is recognized but not implemented."
 		}
-		if spec.payload {
-			parent.Use += " <command>..."
+		if spec.payload || spec.operands != "" {
+			if spec.operands != "" {
+				parent.Use += " " + spec.operands
+			} else {
+				parent.Use += " <command>..."
+			}
 		}
 		if spec.path == "help" {
 			parent.Use += " [command ...]"
 			root.SetHelpCommand(parent)
 		}
 		registerFlags(parent.Flags(), spec.flags)
-		if spec.payload {
+		if spec.payload || spec.operands != "" {
 			parent.Flags().SetInterspersed(false)
 		}
 		parent.RunE = func(*cobra.Command, []string) error { return nil }
@@ -241,6 +245,9 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 	}
 	result, err := r.config.Services.invoke(ctx, path, command.Flags(), command.Flags().Args())
 	defer result.clearSensitive()
+	if handled, status := r.writeCopyOutcome(ctx, command, path, result, err); handled {
+		return status
+	}
 	logs := result.createdLogs()
 	if r.config.FinishProgress != nil {
 		r.config.FinishProgress()

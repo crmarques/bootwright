@@ -12220,3 +12220,22 @@ from upstream source; the live check is the B883 and B761 operator gates.
 
 **Verification:** each regression failed before its fix; `make check` passed on
 the commit.
+
+### X315 — Machine file copies
+
+**Item:** [B1189](m1.md#b1189), completed in-tree (2026-11-06); retained on M1
+for owner-run acceptance. **Kind:** product, with safety-class privilege and
+filesystem boundaries. **Owners:** Machine and CLI. **Authorization:**
+[D236](backlog.md#d236).
+
+The [copy contract](../cli/machine-copy.md) and its
+[filesystem boundary](../security.md#explicit-file-copy-safety) are implemented.
+The fixed Python worker shares the pinned SSH path; the local instance runs as
+the invoking account. No lifecycle request, evidence or content digest moves.
+
+**Delivery commit:** the `feat(machine): copy files and directories over pinned
+SSH` commit carrying this record. Its body records the exact verification
+commands and outcomes. The independent safety review approved the final
+implementation and independently passed the focused worker and access suites.
+The [operator runbook](../../e2e/lab-3-nodes-ceph/runbook.md#machine-file-copy-acceptance-b1189)
+is unrun; no real-machine operation or push was performed.

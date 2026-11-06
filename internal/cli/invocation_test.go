@@ -168,6 +168,8 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"destroy", nil, ignoresRoute},
 		{"machine list", nil, ignoresRoute},
 		{"machine info", nil, ignoresRoute},
+		{"machine cp", []string{"--name", "demo", "local:source", "remote:destination"}, ignoresRoute},
+		{"machine cp", []string{"--name", "demo", "--overwrite", "--output", "json", "remote:source", "local:destination"}, ignoresRoute},
 		{"machine rsh", []string{"--name", "demo"}, ignoresRoute},
 		{"machine exec", []string{"--name", "demo", "--", "uname"}, ignoresRoute},
 		{"machine start", []string{"--name", "demo"}, ignoresRoute},

@@ -75,6 +75,7 @@ type serviceDependencies struct {
 	SessionConfirmer machineaccess.Confirmer
 	Streams          machineaccess.Streams
 	Terminal         func() (bool, error)
+	CopyAccount      func(context.Context) (machineaccess.CopyAccount, error)
 	Home             func() (string, error)
 	Owner            func() (int, error)
 	Files            operatorFiles
@@ -114,6 +115,7 @@ func localServiceDependencies(process processDependencies) (serviceDependencies,
 		SessionConfirmer: process.SessionConfirmer,
 		Streams:          process.Streams,
 		Terminal:         process.Terminal,
+		CopyAccount:      account.copyAccount,
 		Home:             account.home,
 		Owner:            account.uid,
 		Files:            files,
@@ -159,10 +161,11 @@ func assembleServices(deps serviceDependencies) cli.Services {
 		State: services.DesiredState, Lifecycle: reconciler, Trust: deps.Trust,
 		Confirmer: deps.Confirmer, Session: deps.SessionConfirmer, Reporter: deps.Reporter,
 		Selection: deps.Selection, Streams: deps.Streams, Terminal: deps.Terminal,
-		Home: deps.Home, Owner: deps.Owner, Files: deps.Files, Stager: deps.Controller.Stager,
+		CopyAccount: deps.CopyAccount, Home: deps.Home, Owner: deps.Owner, Files: deps.Files, Stager: deps.Controller.Stager,
 		Custody: secrets.binder,
 	})
 	services.MachineInventory, services.MachineAccess = machine.MachineInventory, machine.MachineAccess
+	services.MachineCopy = machine.MachineCopy
 	services.EnvironmentAccess = machine.EnvironmentAccess
 	services.MachinePower, services.MachineTrust = machine.MachinePower, machine.MachineTrust
 	services.ClusterAccess = wireClusterAccess(services.DesiredState, secrets.binder, deps.Selection)

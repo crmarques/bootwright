@@ -21,6 +21,7 @@ type Services struct {
 	StorageArtifacts      StorageArtifactService
 	MachineInventory      MachineInventoryService
 	MachineAccess         MachineAccessService
+	MachineCopy           MachineCopyService
 	MachinePower          MachinePowerService
 	MachineTrust          MachineTrustService
 	ClusterAccess         ClusterAccessService

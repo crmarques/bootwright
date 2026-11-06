@@ -17,7 +17,7 @@ var (
 		"preflight clusters": allSSHFlags, "preflight container-cluster": allSSHFlags,
 		"preflight storage-cluster": allSSHFlags, "preflight add-ons": allSSHFlags, "preflight all": allSSHFlags,
 		"apply": allSSHFlags, "destroy": allSSHFlags,
-		"machine rsh": accountSSHFlags, "machine exec": accountSSHFlags,
+		"machine rsh": accountSSHFlags, "machine exec": accountSSHFlags, "machine cp": accountSSHFlags,
 		"cluster rsh": accountSSHFlags, "cluster exec": accountSSHFlags,
 	}
 )

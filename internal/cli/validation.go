@@ -10,6 +10,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/spf13/cobra"
@@ -27,7 +28,11 @@ func validateInvocation(command *cobra.Command, path string) string {
 			break
 		}
 	}
-	if hasPayload(command) {
+	if path == "machine cp" {
+		if _, _, err := machine.ParseCopyPaths(flags.Args()); err != nil {
+			return err.Error()
+		}
+	} else if hasPayload(command) {
 		if len(flags.Args()) == 0 || flags.Args()[0] == "" {
 			return "a non-empty command argument vector is required"
 		}
@@ -166,7 +171,7 @@ func validateMachineNames(flags *pflag.FlagSet, path string) string {
 func validateCommandFlags(command *cobra.Command, path string) string {
 	flags := command.Flags()
 	switch path {
-	case "machine rsh", "machine exec", "machine start", "machine stop", "machine restart":
+	case "machine cp", "machine rsh", "machine exec", "machine start", "machine stop", "machine restart":
 		if message := validateMachineNames(flags, path); message != "" {
 			return message
 		}

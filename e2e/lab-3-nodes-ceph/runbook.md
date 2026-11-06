@@ -712,6 +712,52 @@ fi
 Require an explicit authorization refusal; an unrelated connection error does
 not prove host authorization.
 
+### Machine file copy acceptance (B1189)
+
+Use two disposable, SSH-ready Machines in a prepared context. Run as the ordinary
+invoking account with the current build. Replace `rhel-01,rhel-02` with
+their declared names. Both Machines need Linux, procfs and `/usr/bin/python3` (3.9 or newer).
+Resolve host trust explicitly before a noninteractive or structured invocation.
+
+1. Create an invoking-account-owned temporary source directory with a regular
+   text file, a binary file, an empty file, an executable and a nested directory.
+   Use a unique destination beneath a private directory writable by the resolved
+   SSH account on each Machine.
+2. Upload the source to both Machines:
+
+   ```sh
+   ./bin/bootwright machine cp --context "$CONTEXT" --name rhel-01,rhel-02 local:./copy-source remote:copy-acceptance/
+   ```
+
+   Verify bytes and ordinary permissions on each Machine through `machine exec`.
+   Repeat without overwrite and verify refusal preserves existing bytes. Repeat
+   with `--overwrite` and verify success.
+3. Download into a new collection directory:
+
+   ```sh
+   ./bin/bootwright machine cp --context "$CONTEXT" --name rhel-01,rhel-02 --output json remote:copy-acceptance local:./copy-collected/
+   ```
+
+   Verify exactly one JSON document and an empty stderr, with both Machine rows.
+   Check `copy-collected/<machine>/copy-acceptance/` for each Machine. Files must
+   belong to the invoking account, including when Bootwright elevates for state.
+4. Download one file from one Machine to an explicitly named local file. Verify
+   that no Machine wrapper is added. Exercise an existing destination directory
+   and a new destination ending in `/` as separate cases.
+5. Add a source symlink and verify preflight refusal creates no destination
+   payload. Try an unknown Machine, same-side operands, a missing parent and a
+   file/directory conflict. Remove the source symlink before continuing.
+6. Copy a large file and interrupt during streaming. Verify an executed partial
+   result and exit 130, complete previously published files, and no partially
+   published file. Check private staging cleanup. Repeat with one Machine's
+   connection interrupted and verify the other completes and the exit is 1.
+7. Repeat a structured copy with YAML. Check mode bits, binary contents, escaped
+   unusual filenames and per-Machine result order. Confirm no file contents or
+   credentials appear in output or retained operation logs.
+
+The owner records acceptance and removes only these explicitly named test
+artifacts. No fixture or unit result substitutes for this live acceptance.
+
 ## 5. Run the acceptance drills
 
 Run the file and object drills when those services are enabled. The one-host

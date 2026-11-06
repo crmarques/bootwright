@@ -714,6 +714,39 @@ cannot cross the process boundary. The session is a waited child whose streams
 and exit status are the operator's; it publishes no operation, ownership,
 evidence or retained output.
 
+### Explicit file copy safety
+
+[Machine copies](cli/machine-copy.md) extend direct SSH access with one
+fixed file worker. Its code is shipped by the binary, never selected by payload,
+and its protocol carries only bounded metadata and explicit file bytes. Python
+runs isolated with bytecode writes disabled. The local worker runs with the
+verified invoking UID, GID and supplementary groups and no ambient environment;
+root never opens local payload paths. Its absolute interpreter is qualified
+before launch. The remote worker uses the resolved login without escalation.
+
+Filesystem walks open each ancestor without following links, and source objects
+are first held through path-only descriptors and proved regular or directory
+before a read open. Source identity and stability are checked on read handles.
+Destination writes use held parent descriptors. A private, exclusive mode-0700
+staging directory holds a mode-0600 file until the stable source read completes;
+publication uses the held private-directory descriptor. Destination parents
+must be owned by root or the receiving account;
+shared writable parents must also be sticky. Other owners and writable shared
+parents without the sticky bit refuse. This protects staging names from
+another UID.
+Cleanup never removes a replacement staging container. Root and the receiving
+account themselves are trusted principals, as for the direct-session boundary.
+
+Explicit copied payloads are an exception to internal private-file final modes:
+ordinary source permissions are retained, with special bits stripped. Newly
+created directories remain private until completion. Existing directories are
+not chmodded. Overwrite replaces a regular destination name by rename, never
+opens it for truncation or follows its link; no-overwrite publishes without
+replacing an existing name. No file content, key or raw worker output enters
+logs, diagnostics or lifecycle evidence. A lost publication acknowledgement is
+unknown, never a proven refusal. Cancellation joins every local worker and SSH
+child; cleanup is best effort after uncatchable process or connection loss.
+
 ## Cryptography and supply chain
 
 Use maintained standard cryptographic libraries and constructions; do not

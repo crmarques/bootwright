@@ -5,6 +5,9 @@
     bootwright machine [flags]
 
   Commands
+  ○ Command | cp
+      PURPOSE  Copy files or directories to or from machines
+
   ○ Command | exec
       PURPOSE  Run a command over SSH as the Machine's resolved identity; confirm or refuse an
                unproved host key and return the client's exit status

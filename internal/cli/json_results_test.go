@@ -51,6 +51,7 @@ var cliResults = []reflect.Type{
 	reflect.TypeFor[setupPlanResult](),
 	reflect.TypeFor[machineListPresentation](),
 	reflect.TypeFor[machinePowerPresentation](),
+	reflect.TypeFor[machineCopyPresentation](),
 	reflect.TypeFor[mediaListPresentation](),
 	reflect.TypeFor[clusterListPresentation](),
 	reflect.TypeFor[clusterInfoPresentation](),

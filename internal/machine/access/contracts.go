@@ -80,3 +80,13 @@ type Streams struct {
 func failure(code, message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
 }
+
+type PreparedCopy interface {
+	Destination() string
+	Run(context.Context) (CopyProgress, error)
+	Close() error
+}
+
+type Copier interface {
+	Prepare(context.Context, machine.Session, CopyRequest, bool) (PreparedCopy, error)
+}

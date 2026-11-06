@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "machine cp",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "lab",
+    "source": "remote:/logs",
+    "machines": [
+      {
+        "machine": "guest",
+        "destination": "/collection/guest/logs",
+        "status": "copied",
+        "files": 2,
+        "bytes": 123
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

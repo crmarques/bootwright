@@ -1000,6 +1000,10 @@ another elevator is, with the remedy of writing the trees with `--output-dir`
 and running the program on them. `--tool` needs a
 terminal and the text output, and conflicts with `--output-dir`.
 
+## Machine file copies
+
+File transfer follows [Machine file copies](cli/machine-copy.md).
+
 ## Resource inspection and explicit access
 
 List and info commands derive their result from validated desired state,

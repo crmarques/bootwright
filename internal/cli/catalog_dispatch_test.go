@@ -36,7 +36,7 @@ func TestCommandModesComeFromTheCatalog(t *testing.T) {
 		"media add": true, "media list": true, "media delete": true,
 		"controller install": true, "controller rebind": true, "controller uninstall": true, "preflight controller": true, "preflight storage-cluster": true, "preflight container-cluster": true, "preflight clusters": true, "preflight infra": true, "render": true, "preflight all": true,
 		"plan": true, "status": true, "diff": true, "apply": true, "destroy": true,
-		"machine list": true, "machine info": true, "machine rsh": true, "machine exec": true,
+		"machine cp": true, "machine list": true, "machine info": true, "machine rsh": true, "machine exec": true,
 		"cluster rsh": true, "cluster exec": true, "cluster list": true, "cluster info": true,
 		"machine start": true, "machine stop": true, "machine restart": true, "machine trust": true,
 		"cluster kubeconfig": true, "cluster keyring": true,

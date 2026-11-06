@@ -10,10 +10,10 @@ and the `--ssh-*` flags are accepted only by the commands whose use case reads
 them; any other command refuses them as flags it does not accept. The
 context-free commands, which refuse `--context`, are `controller install`, `controller
 rebind`, `controller uninstall`, `context` (every subcommand), `media` (every subcommand), `add-ons` (every subcommand), `help`, `completion`, `version` and `schema`; only `apply`, `destroy`,
-`machine rsh`, `machine exec`, `cluster rsh`, `cluster exec` and every
+`machine rsh`, `machine exec`, `machine cp`, `cluster rsh`, `cluster exec` and every
 `preflight` check but `preflight controller` and `preflight infra` accept
 `--ssh-*`; `machine rsh`,
-`machine exec`, `cluster rsh` and `cluster exec` accept only `--ssh-id-file`
+`machine exec`, `machine cp`, `cluster rsh` and `cluster exec` accept only `--ssh-id-file`
 and `--ssh-user`, refuse the other two, and omit them from help and
 completion. A command resolves a taken global value only when its use case
 consumes it. An unused value grants no authority, performs no discovery or
@@ -144,6 +144,7 @@ and answer `cli.not-implemented`; their contracts are intent, tracked as
 | `bootwright machine info` | `--name <list>` default all; an unknown name refuses | selected machine placement, contact, addresses, and recorded lifecycle evidence | read local inventory only; no host or power contact |
 | `bootwright machine rsh` | required `--name <machine>` | an interactive SSH session on the exact Machine as its resolved identity; the client's exit status is the result | read state, open the session's credential for its duration, read or record host trust, run one pinned SSH client |
 | `bootwright machine exec` | required `--name <list>` and `<command>...` | the exact argument vector runs on the Machine, or on every listed Machine concurrently, at most the lifecycle bound at a time, with [each line prefixed by its Machine](../cli.md#machine-ssh-sessions); the remote command's exit status is the result, the highest of them for several | same |
+| `bootwright machine cp` | required `--name <list>` and two operands `local:<path> remote:<path>` or the reverse; `--overwrite` false | per-Machine copy outcomes and confirmed file/byte counts; structured output supported | run one pinned SSH client and a fixed file worker; explicit local or remote payload writes under the receiving account; no lifecycle state |
 | `bootwright machine trust` | `--name <list>` default all; `--replace <list>` default none, each member `<machine>` or `<machine>=SHA256:<fingerprint>`; `--expect <machine>=SHA256:<fingerprint>[,...]` default none; `--dry-run` false; `--yes` false | exact host-key trust plan, and the recorded result unless dry-run | bounded SSH host-key observation of the selected Machines; context trust-store write unless dry-run |
 | `bootwright machine start` | required `--name <list>` | the power state each Machine's management controller proved once the operation settled | bounded power operation through that management controller, one concurrent [batch](../cli.md#machine-power-operations) for several Machines |
 | `bootwright machine stop` | required `--name <list>`; `--force` false; `--yes` false | same, after the operating system is asked to shut down | same |
@@ -199,7 +200,7 @@ Not yet met: `cluster oc` and `cluster kubectl` hand off nothing and sessions on
 an OpenShiftCluster do not open; tracked as
 [B101](../milestones/backlog.md#b101).
 
-### Help content
+## Help content
 
 Every available command's help carries at least one example and names the
 values of each enum flag, and the refusal of an enum value lists them. A command

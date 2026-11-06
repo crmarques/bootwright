@@ -296,6 +296,10 @@ func (s machineAccessSpy) Exec(ctx context.Context, request machineaccess.ExecRe
 	return s.record.result.session, s.record.called(ctx, "machine exec", request)
 }
 
+func (s machineAccessSpy) Copy(ctx context.Context, request machineaccess.CopyRequest) (*machineaccess.CopyResult, error) {
+	return s.record.result.copy, s.record.called(ctx, "machine cp", request)
+}
+
 type machinePowerSpy struct{ record *dispatchRecord }
 
 func (s machinePowerSpy) Start(ctx context.Context, request power.PowerRequest) (*power.Results, error) {
@@ -352,6 +356,7 @@ func dispatchSpies(record *dispatchRecord) Services {
 		StorageArtifacts:      storageArtifactsSpy{record},
 		MachineInventory:      machineInventorySpy{record},
 		MachineAccess:         machineAccessSpy{record},
+		MachineCopy:           machineAccessSpy{record},
 		MachinePower:          machinePowerSpy{record},
 		MachineTrust:          machineTrustSpy{record},
 		ClusterAccess:         clusterAccessSpy{record},
@@ -376,7 +381,7 @@ func dispatchFlags() *pflag.FlagSet {
 	for _, name := range []string{
 		"yes", "purge", "allow-orphans", "short", "renew", "checksums", "dry-run",
 		"trust-on-first-use", "sensitive", "secrets", "power-status",
-		"ssh-ask-sudo-password", "ssh-user-for-provisioned", "observe", "download-only", "origins",
+		"ssh-ask-sudo-password", "ssh-user-for-provisioned", "observe", "download-only", "origins", "overwrite",
 	} {
 		flags.Bool(name, true, "")
 	}

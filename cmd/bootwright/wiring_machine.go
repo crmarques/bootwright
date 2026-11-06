@@ -36,20 +36,21 @@ import (
 // about it, the host keys it trusts, and the bounded execution boundaries a
 // power operation and an SSH session each cross.
 type machineDependencies struct {
-	State     inventory.EffectiveState
-	Lifecycle lifecycle.Service
-	Trust     trustStore
-	Confirmer power.Confirmer
-	Session   machineaccess.Confirmer
-	Reporter  power.Reporter
-	Selection contexts.SelectionStore
-	Streams   machineaccess.Streams
-	Terminal  func() (bool, error)
-	Home      func() (string, error)
-	Owner     func() (int, error)
-	Files     operatorFiles
-	Stager    prerequisites.AutomationStager
-	Custody   hostCustody
+	State       inventory.EffectiveState
+	Lifecycle   lifecycle.Service
+	Trust       trustStore
+	Confirmer   power.Confirmer
+	Session     machineaccess.Confirmer
+	Reporter    power.Reporter
+	Selection   contexts.SelectionStore
+	Streams     machineaccess.Streams
+	Terminal    func() (bool, error)
+	CopyAccount func(context.Context) (machineaccess.CopyAccount, error)
+	Home        func() (string, error)
+	Owner       func() (int, error)
+	Files       operatorFiles
+	Stager      prerequisites.AutomationStager
+	Custody     hostCustody
 }
 
 // wireMachine binds Machine inspection, explicit access and power. Inspection
@@ -66,6 +67,7 @@ func wireMachine(deps machineDependencies) cli.Services {
 		deps.Lifecycle, runner, runner.BeginInvocation, deps.Confirmer, deps.Reporter, selection).
 		WithHostAccess(hostedAccess{lender: kubevirt.NewLender(runner), custody: deps.Custody})
 	sessions := machineaccess.New(deps.State, selection, machineaccess.Options{
+		Copier: sshlocal.Copier{SSH: client, Account: deps.CopyAccount},
 		Lender: deps.Lifecycle, Ownership: evidence, Evidence: machineHostKeys{reconciler: deps.Lifecycle},
 		Trust: deps.Trust, Observer: client, Confirmer: deps.Session, Launcher: client,
 		Streams: deps.Streams, Terminal: deps.Terminal,
@@ -73,6 +75,7 @@ func wireMachine(deps machineDependencies) cli.Services {
 	return cli.Services{
 		MachineInventory:  inventory.New(deps.State, evidence, powered, selection),
 		MachineAccess:     sessions,
+		MachineCopy:       sessions,
 		EnvironmentAccess: clusterSessions(deps.State, sessions, selection),
 		MachinePower:      powered,
 		MachineTrust:      enrollment.New(deps.State, deps.Trust, selection, trustOptions(deps, client)),

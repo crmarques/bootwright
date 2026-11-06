@@ -3,11 +3,12 @@ package cli
 import "strings"
 
 type commandSpec struct {
-	path    string
-	short   string
-	long    string
-	flags   []flagSpec
-	payload bool
+	path     string
+	short    string
+	long     string
+	flags    []flagSpec
+	payload  bool
+	operands string
 	// implemented marks a command whose application use case is available.
 	// available also marks commands that need the privileged context store.
 	implemented bool

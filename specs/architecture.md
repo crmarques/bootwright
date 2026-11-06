@@ -171,7 +171,9 @@ Each is deliberate and bounded; another like it is a defect.
   client an explicit session and a host-key observation cross, is a Go-owned
   remote access path outside the
   [Go and Ansible boundary](#go-and-ansible-responsibility-boundary), bound only
-  to `machine/access` and `trust/enrollment`.
+  to `machine/access` and `trust/enrollment`. Explicit file copying uses its
+  fixed descriptor-relative Python worker through that same pinned session,
+  and a credential-dropped local instance for invoking-account file I/O.
   [Direct SSH sessions](security.md#direct-ssh-sessions) owns its security rules.
 - **Composition translation.** Composition decodes what a package reads from
   another it may not import. In `cmd/bootwright/wiring_machine.go`,

@@ -57,7 +57,7 @@ func (s Service) several(ctx context.Context, contextName string, names []string
 	if err != nil {
 		return nil, err
 	}
-	members, err := s.members(ctx, effective.Effective, selected, names, options)
+	members, err := s.members(ctx, effective.Effective, selected, names, options, "exec")
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (s Service) conclude(contextName string, members []member, outcomes []outco
 }
 
 func (s Service) members(ctx context.Context, catalog api.Catalog, contextName string, names []string,
-	options machine.SSHOptions) ([]member, error) {
+	options machine.SSHOptions, operation string) ([]member, error) {
 	names = slices.Sorted(slices.Values(names))
 	var unknown []string
 	for _, name := range names {
@@ -140,10 +140,14 @@ func (s Service) members(ctx context.Context, catalog api.Catalog, contextName s
 			return nil, err
 		}
 		if identity.Kind == machine.IdentityPassword {
+			remediation := "run bootwright machine exec --context " + contextName + " --name " + resolved.name + " -- <command> on it alone"
+			if operation == "cp" {
+				remediation = "copy this Machine alone from an interactive terminal with bootwright machine cp --context " + contextName + " --name " + resolved.name + " <source> <destination>"
+			}
 			return nil, failure("access.unavailable",
 				resolved.object.Identity()+" authenticates with a password the client asks for on the terminal, "+
 					"which concurrent sessions cannot share",
-				"run bootwright machine exec --context "+contextName+" --name "+resolved.name+" -- <command> on it alone")
+				remediation)
 		}
 		members = append(members, member{target: resolved, identity: identity, privateKeyRef: privateKeyRef})
 	}

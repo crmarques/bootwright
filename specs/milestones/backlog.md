@@ -7200,3 +7200,17 @@ the agent image from such a volume.
 (M3, B926) and X314 (M4, B1184), both active at once; they are the waiver of
 M2's and M3c's Requires for implementing them, as D234 was for its slices.
 Promotion, operator gates and milestone completion keep every Requires.
+
+### D236
+
+**owner** (2026-11-06): the owner requested `machine cp` for files and directories
+in both directions with comma-separated Machine selection and per-Machine local
+download directories, reviewed the proposed requirements, impacts and UX, then
+said "proceed implementation". This authorizes X315 (M1, B1189), out of sequence
+for implementation. Session clauses, pending the owner's review: the
+[copy contract](../cli/machine-copy.md), including no-overwrite by default,
+explicit overwrite, private staging and structured partial results. The transport
+proof selects a fixed descriptor-relative Python worker over the pinned SSH
+session because ordinary SFTP path operations cannot prove the required nofollow
+boundary against concurrent substitution. Real-machine acceptance remains the
+owner's; no push or real-machine effect is authorized by this decision.

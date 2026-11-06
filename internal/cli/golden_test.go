@@ -1092,6 +1092,8 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-machine-list", args: "machine list --power-status", record: func(r *dispatchRecord) { r.result.machines = machines(true) }},
 		{golden: "cli-machine-list-json", args: "machine list --power-status --output json", record: func(r *dispatchRecord) { r.result.machines = machines(true) }},
 		{golden: "cli-machine-list-short", args: "machine list --short", record: func(r *dispatchRecord) { r.result.machines = machines(false) }},
+		{golden: "cli-machine-cp", args: "machine cp --name guest remote:/logs local:./collected", record: func(r *dispatchRecord) { r.result.copy = copyRecordedResult() }},
+		{golden: "cli-machine-cp-json", args: "machine cp --name guest --output json remote:/logs local:./collected", record: func(r *dispatchRecord) { r.result.copy = copyRecordedResult() }},
 		{golden: "cli-machine-start", args: "machine start --name rhel-01", record: func(r *dispatchRecord) { r.result.power = powered("start", "on", "off", true) }},
 		{golden: "cli-machine-start-json", args: "machine start --name rhel-01 --output json", record: func(r *dispatchRecord) { r.result.power = powered("start", "on", "off", true) }},
 		{golden: "cli-machine-stop", args: "machine stop --name rhel-01 --yes", record: func(r *dispatchRecord) { r.result.power = powered("stop", "off", "off", false) }},
@@ -1327,7 +1329,7 @@ func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 		"add-ons list", "add-ons info",
 		"validate", "preflight storage-cluster", "preflight clusters", "preflight infra", "preflight all", "render", "render effective", "status", "diff",
 		"secret check", "secret list", "secret info", "secret encryption status", "machine trust", "controller install",
-		"machine list", "machine info", "machine start", "machine stop", "machine restart", "media list", "cluster list", "cluster info",
+		"machine cp", "machine list", "machine info", "machine start", "machine stop", "machine restart", "media list", "cluster list", "cluster info",
 	}
 	implemented := map[string]bool{}
 	for _, spec := range commandCatalog() {

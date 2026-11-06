@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/crmarques/bootwright/internal/controller/privilege"
+	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/nativeartifacts/comparisonlocal"
 	"github.com/crmarques/bootwright/internal/secrets/material"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -118,4 +119,12 @@ func (a invokingAccount) FileIdentity(ctx context.Context) (material.FileIdentit
 		return material.FileIdentity{}, contexts.StateError("invoking account cannot be verified")
 	}
 	return material.FileIdentity{UID: account.UID, Home: account.Home}, nil
+}
+
+func (a invokingAccount) copyAccount(ctx context.Context) (machineaccess.CopyAccount, error) {
+	account, err := a.resolver.Resolve(ctx)
+	if err != nil {
+		return machineaccess.CopyAccount{}, errors.New("invoking account cannot be verified")
+	}
+	return machineaccess.CopyAccount{UID: account.UID, GID: account.GID, Groups: append([]uint32(nil), account.Groups...)}, nil
 }

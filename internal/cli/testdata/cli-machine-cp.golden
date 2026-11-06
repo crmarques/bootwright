@@ -1,0 +1,4 @@
+  ✓ Copy completed
+
+  MACHINE   STATUS   FILES   BYTES   DESTINATION
+  guest     copied   2       123     /collection/guest/logs

@@ -21,6 +21,7 @@ output.
 | Access handoff | one bounded, escaped descriptor followed by one LF | ordered diagnostics only | `0` or `1` |
 | [SSH session](../cli.md#machine-ssh-sessions) | the remote process's own bytes | Bootwright diagnostics and the host-key confirmation before the connection, then the remote process's own bytes | the SSH client's exit status, even after an interrupt; `255` for a Bootwright refusal before the session opens |
 | [Several SSH sessions](../cli.md#machine-ssh-sessions) | each session's standard output as whole lines prefixed `<machine>: ` | Bootwright diagnostics and the host-key confirmations before any connection, then each session's standard error as whole lines prefixed the same way, then one `access.exit` warning for each nonzero status | the highest status any session returned, even after an interrupt; `255` for a Bootwright refusal before any session opens |
+| [Machine file copy](../cli/machine-copy.md) | per-Machine outcomes, including an executed partial result; one document in structured mode | ordered human diagnostics; empty in structured mode | `0`, `1`, `2` or `130` |
 | Interrupt-driven cancellation | as required by the selected structured mode | as required by that mode | `130` |
 
 An operating-system interrupt reports `runtime.interrupted` and exits `130` for
@@ -55,6 +56,12 @@ return, DEL, or a C1 control (U+0080-U+009F); every YAML string value is
 double-quoted, and so is every mapping key that is not a letter followed by
 letters, digits, `_`, `.`, `-` or `/`, or that a YAML 1.1 reader would read as
 a boolean or null. A YAML string keeps every character the JSON string holds.
+
+The `machine cp` result holds `context`, `source` (the explicit operand spelling)
+and `machines`, an array ordered by Machine name. Each row holds `machine`,
+`destination` (the resolved destination object), `status`, `files` and `bytes`.
+All fields are required. Statuses and count semantics follow
+[Machine file copies](../cli/machine-copy.md).
 
 ## Human output
 
@@ -1069,6 +1076,7 @@ it to a variable.
 | `access.target` | Explicit access cannot resolve one exact authorized target. |
 | `access.handoff` | An explicit access descriptor cannot be safely resolved or encoded. |
 | `access.credential` | A Machine's SSH access names a password credential the operator reveals and types; written before the connection. |
+| `access.copy` | A Machine copy failed preflight, streaming or publication; names the Machine, closed cause and recovery action. A lost publication acknowledgement reports unknown. |
 | `access.exit` | One of several concurrent SSH sessions returned a nonzero status, or its client could not start (status `255`); a warning written after every session ended, naming the Machine and the status. |
 | `cluster.not-applicable` | A cluster command does not apply to the selected cluster's kind. |
 | `machine.power` | A power transition was refused before it ran, or its confirmation could not be answered. |

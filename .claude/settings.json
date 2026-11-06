@@ -38,6 +38,7 @@
       "Bash(*bootwright *machine trust*)",
       "Bash(*bootwright *machine rsh*)",
       "Bash(*bootwright *machine exec*)",
+      "Bash(*bootwright *machine cp*)",
       "Bash(*bootwright *cluster rsh*)",
       "Bash(*bootwright *cluster exec*)",
       "Bash(*bootwright *cluster kubeconfig*)",

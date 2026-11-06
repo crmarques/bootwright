@@ -17,6 +17,7 @@ import (
 // A nil capability is not a silent fallback: the resolution that needs it
 // refuses rather than reaching the Machine with less proof than it requires.
 type Options struct {
+	Copier    Copier
 	Lender    MaterialLender
 	Ownership Ownership
 	Evidence  Evidence

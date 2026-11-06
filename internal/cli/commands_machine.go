@@ -31,6 +31,7 @@ func machineCommands() []commandSpec {
 		}),
 		available(sessionCommand(commandSpec{path: "machine rsh", short: "Open an SSH session", flags: []flagSpec{nameFlag()}})),
 		available(machineExecCommand()),
+		machineCopyCommand(),
 		available(powerCommand("machine start", "Power machines on through their management controllers", false)),
 		available(powerCommand("machine stop", "Shut machines down through their management controllers", true)),
 		available(powerCommand("machine restart", "Restart machines through their management controllers", true)),
