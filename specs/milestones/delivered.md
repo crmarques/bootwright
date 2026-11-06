@@ -12003,3 +12003,43 @@ the full lifecycle and owning Go packages, media units and sanity passed.
 Independent safety review is clear. X306 records the combined focus, quick,
 full and race gates and their one skipped case. No physical or cluster
 operator acceptance is claimed.
+
+### X308 — Infrastructure audit fixes
+
+**Items:** B1145 (artifact part split from B248 on 2026-11-05) and B412
+(new, 2026-10-06, X42; moved from the backlog on 2026-11-05), completed
+in-tree (2026-11-05). **Kind:** safety. **Owner:** Infrastructure services.
+
+[D233](backlog.md#d233) delivers the already-tracked Medium findings INF-02
+and INF-08 from [audit 003](../../audits/003-code/report-final.md), completing
+all 70 confirmed or already-tracked High and Medium findings in this program.
+The dated audit remains unchanged.
+
+B1145 makes artifact completion prove that the container started after every
+file it consumes: its unit and nginx configuration, plus certificate and key
+only for HTTPS. Missing or stale proof cannot complete; honest stale presence
+is partial, contradictory completion refuses, and removal ignores freshness
+([readiness](../infrastructure-services.md#managed-artifact-serving)).
+B248's separate backward-clock restart defect remains parked.
+
+B412 derives the IPv6 wildcard for multiple IPv6-only endpoint addresses and
+refuses wildcard/IP-family mismatches at the endpoint field, including mapped
+IPv6 literals. The single-IP and DNS-name behavior, exact probes and existing
+reservation encoding are preserved ([bind defaults](../api/infrastructure-services.md)).
+No DNS lookup or additional listener is introduced.
+
+**Delivery commit:** b2d7f6855. Artifact requests move v3 to v4 with a
+matching evidence schema and content digest; v3 refuses by name with the
+matching-build remedy. Managed-service versions and the shared timestamp
+helper remain unchanged.
+
+**Verification:** stale/missing metadata, false completion and family-grid
+regressions failed before fixes. Full infrastructure Go suites, focused native
+observation/action/role/protocol tests, sanity, `make focus` and `make quick`
+passed. The final `make check`, `make race` and additional
+`./scripts/go test -race ./internal/infrastructureservices/...` passed. The
+complete Ansible result is 8,874 passed and one existing stale-directory-listing
+case skipped on the temporary filesystem; that case is unverified. Independent
+safety and admission reviews found no remaining requirement gaps. No live
+effects, hardware qualification, operator acceptance, push or release is
+claimed; existing operator gates remain open.

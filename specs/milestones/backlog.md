@@ -550,7 +550,7 @@ Widened by D183's answer to Q96 (a): every SSH-placed claim is published in the 
 
 ### B248
 
-Since X32 a managed-service apply whose host clock stepped back restarts on every attempt until the clock passes the file's time. The artifact-server observation part was split into [B1145](m1.md#b1145) on 2026-11-05 under D233. **Exit evidence:** an apply test for a backward clock. This separate defect remains parked.
+Since X32 a managed-service apply whose host clock stepped back restarts on every attempt until the clock passes the file's time. The artifact-server observation part was split into [B1145](delivered.md#x308--infrastructure-audit-fixes) on 2026-11-05 under D233. **Exit evidence:** an apply test for a backward clock. This separate defect remains parked.
 
 ### B256
 
