@@ -22,9 +22,19 @@ type BlockEvidence struct {
 	Evidence       json.RawMessage
 }
 
-// Evidence reads current-operation facts without probing or writing.
-// A missing record never proves that nothing was realized.
+// Evidence reads current-operation facts, AppliedEvidence the apply lineage a current removal
+// takes back, without probing or writing. A missing record never proves nothing was realized.
 func (s Service) Evidence(ctx context.Context, contextName, kind, object string) ([]BlockEvidence, error) {
+	return s.objectEvidence(ctx, contextName, kind, object, evidenceOwners)
+}
+
+func (s Service) AppliedEvidence(ctx context.Context, contextName, kind, object string) ([]BlockEvidence, error) {
+	return s.objectEvidence(ctx, contextName, kind, object, appliedOwners)
+}
+
+type ownersOf func(context.Context, recordReader, lineageMember) ([]lineageMember, error)
+
+func (s Service) objectEvidence(ctx context.Context, contextName, kind, object string, owners ownersOf) ([]BlockEvidence, error) {
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
@@ -50,11 +60,11 @@ func (s Service) Evidence(ctx context.Context, contextName, kind, object string)
 		if err != nil {
 			return err
 		}
-		owners, err := evidenceOwners(ctx, store, lineageMember{operation: operation, plan: plan})
+		held, err := owners(ctx, store, lineageMember{operation: operation, plan: plan})
 		if err != nil {
 			return err
 		}
-		for _, owner := range owners {
+		for _, owner := range held {
 			for _, block := range owner.plan.Blocks {
 				if block.Kind != kind || block.Object != object {
 					continue
@@ -80,6 +90,13 @@ func evidenceOwners(ctx context.Context, store recordReader, current lineageMemb
 		return []lineageMember{current}, nil
 	}
 	return lineageOf(ctx, store, current)
+}
+
+func appliedOwners(ctx context.Context, store recordReader, current lineageMember) ([]lineageMember, error) {
+	if current.operation.Verb == reconciliation.Apply {
+		return evidenceOwners(ctx, store, current)
+	}
+	return sourceLineage(ctx, store, current.operation.Source)
 }
 
 // provedDependencies reads direct dependencies in frozen plan order for apply.

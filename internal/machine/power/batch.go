@@ -18,6 +18,7 @@ import (
 type target struct {
 	frozen   Request
 	physical bool
+	removed  bool
 	pin      machine.HardwareIdentity
 	host     HostIdentity
 	expected []string
@@ -72,12 +73,15 @@ func (s Service) resolveOne(ctx context.Context, catalog api.Catalog, contextNam
 		return target{}, refusedOn(name, "Machine/"+name+" is the Environment's controller Machine, the host that runs Bootwright, so no power request may reach it",
 			"power the controller host from its own console or management controller, outside Bootwright")
 	}
-	frozen, physical, err := requestFor(catalog, contextName, name, request.Verb, request.Force, s.realized(ctx, contextName))
+	frozen, physical, removed, err := requestFor(catalog, contextName, name, request.Verb, request.Force, s.realized(ctx, contextName))
 	if err != nil {
 		return target{}, err
 	}
 	if err := refuseTemplateValues(contextName, command, frozen); err != nil {
 		return target{}, err
+	}
+	if removed {
+		return target{frozen: frozen, removed: true}, nil
 	}
 	if frozen.Controller.HostCluster != "" && s.access == nil {
 		kind := api.KindPhrase(api.CategoryKinds(api.ContainerClusterCategory), false)

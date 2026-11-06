@@ -991,7 +991,12 @@ is the arm's power bound plus two state reads and 300 s for the run itself
 reading runs and lends once per host namespace, and a lend that fails, or a
 run that ends unanswered, leaves that namespace's Machines `unknown`, never
 absent, without denying any other reading. Every verb, `--force` included, is held to the pin
-below.
+below. While a destroy is current, that pin is the one the apply it takes
+back recorded, so a Machine whose VirtualMachine it has not yet removed is
+still stopped, started and read through its port, as stopping every hosted
+Machine before the destroy needs, and one whose machine block it proved gone
+is [removed](#identity-and-power-operations)
+([D234](milestones/backlog.md#d234) (1)).
 
 **Provider proof.** The block `substrate-host-<provider>`, implementation
 `substrate-host-kubevirt-v1`, proves the host before any Machine of the
@@ -1112,7 +1117,8 @@ substrate's `ControllerCredential` fact names: an account's username and
 password for a Redfish arm, and for this one the kubeconfig's value alone, as
 the port's `user` file; `password` and `ca` stay empty. The port is pinned
 (the substrate's `PortPinned` fact): a consumer passes the identity the
-Machine's completed block recorded, the host's `kube-system` UID as
+Machine's completed block recorded, in the apply lineage behind the current
+operation, the host's `kube-system` UID as
 `pinned_uuid_base64` and the VirtualMachine's UID as `pinned_serial_base64`.
 Before any request that writes, every entry point re-reads both and refuses
 `identity-mismatch`, changing nothing, when either differs, when the
@@ -1343,7 +1349,16 @@ endpoint comes from is the only difference: a Machine that authors
 `substrate.baremetal.bmc` is reached at that address from the controller, and
 a Machine whose provider emulates a BMC is reached at its allocated port from
 the provider host, and only while the context owns the realization that BMC
-belongs to. On the KubeVirt and vSphere arms a power command goes through the
+belongs to. A pin is read from the apply behind the current operation: the
+current apply, or, while a destroy is current, the apply it takes back, whose
+record must be readable. A Machine its substrate created, on the libvirt or
+KubeVirt arm, is removed when the current destroy proved its realization block
+gone, or when that destroy replaces a failed one and no longer names a block
+its apply completed, since a replacement keeps only what is not proved gone: `machine stop`, `--force` included, reports it
+`off` and unchanged with no `previous`, lending, binding and running nothing;
+`machine start` and `machine restart` refuse `access.unavailable`, naming the
+removal, with the remedy to finish the destroy and apply again; and the
+reading omits it ([D234](milestones/backlog.md#d234) (1)). On the KubeVirt and vSphere arms a power command goes through the
 arm's `power` and `state_read` [entry points](#adapter-boundary), never a BMC.
 A Machine on a bare-metal provider is held to its
 [pin](#physical-machine-realization) first: the operation reads the identity

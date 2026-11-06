@@ -321,6 +321,89 @@ func TestEvidenceUnderAnAdditiveHeadIsReadFromEachBlocksOwner(t *testing.T) {
 	}
 }
 
+// While a removal of an additive lineage is current, the applied evidence of
+// each object is what the apply of that lineage that holds its block proved,
+// carrying that apply's frozen block, while the current-operation evidence
+// stays the removal's own.
+func TestAppliedEvidenceUnderACurrentLineageRemovalIsEachBlocksApply(t *testing.T) {
+	ctx := context.Background()
+	h, f := completedLineage(t)
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
+	if _, err := destroy(h); err == nil {
+		t.Fatal("the seeded removal failure did not fire")
+	}
+	for _, test := range []struct {
+		object string
+		plan   reconciliation.Plan
+	}{{"producer-a", f.rootPlan}, {"consumer", f.headPlan}} {
+		current, err := h.service.Evidence(ctx, testContextName, "ArtifactServer", test.object)
+		if err != nil || len(current) != 1 || current[0].Verb != reconciliation.Destroy {
+			t.Fatalf("the current evidence of %s = %+v (%v), want the removal's", test.object, current, err)
+		}
+		applied, err := h.service.AppliedEvidence(ctx, testContextName, "ArtifactServer", test.object)
+		want, _ := test.plan.Block(test.object)
+		if err != nil || len(applied) != 1 || applied[0].Verb != reconciliation.Apply || applied[0].State != reconciliation.BlockDone ||
+			applied[0].Block.RequestDigest != want.RequestDigest || string(applied[0].Block.Request) != string(want.Request) {
+			t.Fatalf("the applied evidence of %s = %+v (%v), want its apply's done block", test.object, applied, diagnostics.Of(err))
+		}
+	}
+	head, err := h.service.AppliedEvidence(ctx, testContextName, "ArtifactServer", "consumer")
+	if err != nil || string(head[0].Evidence) != `{"head":true}` {
+		t.Fatalf("the addition's applied evidence = %+v (%v)", head, err)
+	}
+}
+
+// A destroy that replaces a failed one carries only what that one left, so an
+// object the replaced destroy already took back has no evidence in the current
+// operation, while its applied evidence is still its apply's done block: that
+// absence is what tells a consumer the object was removed.
+func TestAppliedEvidenceUnderAReplacementDestroyIsTheApplysForWhatItNoLongerNames(t *testing.T) {
+	ctx := context.Background()
+	h, f := completedLineage(t)
+	h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeChanged}, {Outcome: reconciliation.OutcomeFailed}, {Outcome: reconciliation.OutcomeFailed}}
+	if _, err := destroy(h); err == nil {
+		t.Fatal("the seeded removal failure did not fire")
+	}
+	failed, _ := durableOperation(t, h)
+	if _, err := destroy(h); err == nil {
+		t.Fatal("the seeded replacement failure did not fire")
+	}
+	replacement, plan := currentRemoval(t, h)
+	if replacement.Replaces != failed.ID || replacement.Source != f.head.ID || !slices.Equal(blockIDs(plan), []string{"producer-a"}) {
+		t.Fatalf("the replacement = %+v over %v", replacement, blockIDs(plan))
+	}
+	if current, err := h.service.Evidence(ctx, testContextName, "ArtifactServer", "consumer"); err != nil || len(current) != 0 {
+		t.Fatalf("the replacement holds evidence of the removed object: %+v (%v)", current, err)
+	}
+	applied, err := h.service.AppliedEvidence(ctx, testContextName, "ArtifactServer", "consumer")
+	if err != nil || len(applied) != 1 || applied[0].Verb != reconciliation.Apply || applied[0].State != reconciliation.BlockDone || string(applied[0].Evidence) != `{"head":true}` {
+		t.Fatalf("the applied evidence under the replacement = %+v (%v)", applied, err)
+	}
+}
+
+// A removal whose source apply cannot be read refuses the applied evidence
+// rather than reading nothing, so no consumer acts unpinned on that reading.
+func TestAppliedEvidenceUnderARemovalWhoseApplyIsLostRefuses(t *testing.T) {
+	ctx := context.Background()
+	for _, root := range []bool{false, true} {
+		h, f := completedLineage(t)
+		h.capability.outcomes = []Result{{Outcome: reconciliation.OutcomeFailed}}
+		if _, err := destroy(h); err == nil {
+			t.Fatal("the seeded removal failure did not fire")
+		}
+		lost := f.head.ID
+		if root {
+			lost = f.root.ID
+		}
+		h.workspace.area.mutex.Lock()
+		delete(h.workspace.area.files, path.Join(lost, "operation.json"))
+		h.workspace.area.mutex.Unlock()
+		if applied, err := h.service.AppliedEvidence(ctx, testContextName, "ArtifactServer", "producer-a"); len(diagnostics.Of(err)) == 0 || applied != nil {
+			t.Fatalf("with %s lost the applied evidence = %+v (%v), want a refusal", lost, applied, err)
+		}
+	}
+}
+
 func TestADestroyNamingAnythingButAnApplyAsItsSourceRefuses(t *testing.T) {
 	ctx := context.Background()
 	_, f := completedLineage(t)

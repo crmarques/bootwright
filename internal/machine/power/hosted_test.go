@@ -288,7 +288,7 @@ func TestASurveyCarriesEachPinnedTargetsOwnIdentity(t *testing.T) {
 // The hosted power request and the pinned and hosted surveys are what the
 // adapter validates, so their exact bytes are pinned.
 func TestHostedPowerRequestsMatchTheirGoldens(t *testing.T) {
-	request, _, err := requestFor(kubevirtCatalog(), "lab", "node-0", Restart, false, realizedAs(kubevirtRealized().states))
+	request, _, _, err := requestFor(kubevirtCatalog(), "lab", "node-0", Restart, false, realizedAs(kubevirtRealized().states))
 	if err != nil {
 		t.Fatal(err)
 	}

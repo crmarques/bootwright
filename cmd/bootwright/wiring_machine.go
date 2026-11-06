@@ -162,15 +162,29 @@ func (o machineOwnership) Ownership(ctx context.Context, name string) (map[strin
 // provider. Its emulated controller or KubeVirt port is that block's effect,
 // so power asks it alone: the installation that follows it on the same
 // Machine, and the bare-metal claim of a physical one, create no controller.
-type machineRealization struct{ reconciler lifecycle.Service }
+type machineRealization struct {
+	reconciler interface {
+		evidenceReader
+		appliedEvidence
+	}
+}
 
 func (r machineRealization) Realization(ctx context.Context, contextName, name string) (machine.OwnershipState, bool, error) {
 	published, err := r.reconciler.Evidence(ctx, contextName, "Machine", name)
 	if err != nil {
 		return machine.OwnershipState{}, false, err
 	}
-	state, found := realizationOf(published)
-	return state, found, nil
+	if state, found := realizationOf(published); found {
+		return state, true, nil
+	}
+	applied, err := r.reconciler.AppliedEvidence(ctx, contextName, "Machine", name)
+	if err != nil {
+		return machine.OwnershipState{}, false, err
+	}
+	if state, found := realizationOf(applied); found && state.Verb == string(reconciliation.Apply) && state.State == string(reconciliation.BlockDone) {
+		return machine.OwnershipState{Verb: machine.VerbDestroy, State: machine.BlockDone}, true, nil
+	}
+	return machine.OwnershipState{}, false, nil
 }
 
 // realizationOf picks the libvirt or KubeVirt machine block the current plan
@@ -211,11 +225,15 @@ func (h machineHostKeys) HostKey(ctx context.Context, contextName, name string) 
 	return machine.HostKeyEvidence{}, false, nil
 }
 
-// machineIdentities reads the hardware identity one context's current apply
-// proved for a physical Machine. The bare-metal capability wrote that
-// evidence, so it decodes it here and decides what pins the Machine; a power
+// machineIdentities reads the identity a Machine's apply proved, the current one
+// or the one a current destroy takes back. The capability that wrote that
+// evidence decodes it here and decides what pins the Machine; a power
 // operation asks only for the answer.
-type machineIdentities struct{ reconciler lifecycle.Service }
+type machineIdentities struct{ reconciler appliedEvidence }
+
+type appliedEvidence interface {
+	AppliedEvidence(ctx context.Context, contextName, kind, object string) ([]lifecycle.BlockEvidence, error)
+}
 
 func (machineIdentities) ControllerHost(ctx context.Context) (power.HostIdentity, error) {
 	inspector := hostlinux.New()
@@ -231,7 +249,7 @@ func (machineIdentities) ControllerHost(ctx context.Context) (power.HostIdentity
 }
 
 func (i machineIdentities) ProvedIdentity(ctx context.Context, contextName, name string) (machine.HardwareIdentity, bool, error) {
-	published, err := i.reconciler.Evidence(ctx, contextName, baremetal.Kind, name)
+	published, err := i.reconciler.AppliedEvidence(ctx, contextName, baremetal.Kind, name)
 	if err != nil {
 		return machine.HardwareIdentity{}, false, err
 	}

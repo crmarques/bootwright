@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -83,6 +84,82 @@ func TestTheInstallationsReadTheBareMetalPinOfTheirOwnMachine(t *testing.T) {
 		done("metal-04", baremetal.Implementation, []byte(strings.Replace(string(proof), `"postcondition":true`, `"postcondition":false`, 1))),
 	}); err == nil {
 		t.Fatal("a proof that proves nothing was read as a pin")
+	}
+}
+
+// destroyCurrent answers the applied evidence of a context whose current
+// destroy has not yet taken a physical Machine back: the apply that destroy
+// takes back holds the proof.
+type destroyCurrent struct {
+	proof []byte
+	asked []string
+}
+
+func (d *destroyCurrent) AppliedEvidence(_ context.Context, contextName, kind, object string) ([]lifecycle.BlockEvidence, error) {
+	d.asked = append(d.asked, contextName+" "+kind+"/"+object)
+	return []lifecycle.BlockEvidence{{
+		Kind: kind, Object: object, Implementation: baremetal.Implementation,
+		Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: d.proof,
+	}}, nil
+}
+
+// A physical Machine's power pin is read from the apply lineage behind the
+// current operation, so while a destroy is current it is still the identity
+// that apply proved, never an unpinned request.
+func TestAPhysicalMachinesPowerPinIsTheApplysWhileADestroyIsCurrent(t *testing.T) {
+	reader := &destroyCurrent{proof: provedEvidence(t)}
+	identity, found, err := machineIdentities{reconciler: reader}.ProvedIdentity(context.Background(), "lab", "metal-01")
+	if err != nil || !found || identity != (machine.HardwareIdentity{UUID: "4c4c4544-0042-3510-8052-b4c04f4d4e31", Serial: "CZJ2440ABC"}) {
+		t.Fatalf("pin = %+v, %t (%v)", identity, found, err)
+	}
+	if len(reader.asked) != 1 || reader.asked[0] != "lab Machine/metal-01" {
+		t.Fatalf("asked %v", reader.asked)
+	}
+}
+
+// removalReader answers as a context whose current destroy names current
+// blocks of a Machine, and whose source apply lineage names applied ones.
+type removalReader struct {
+	current, applied []lifecycle.BlockEvidence
+	asked            []string
+}
+
+func (r *removalReader) Evidence(context.Context, string, string, string) ([]lifecycle.BlockEvidence, error) {
+	r.asked = append(r.asked, "current")
+	return r.current, nil
+}
+
+func (r *removalReader) AppliedEvidence(context.Context, string, string, string) ([]lifecycle.BlockEvidence, error) {
+	r.asked = append(r.asked, "applied")
+	return r.applied, nil
+}
+
+// A destroy that replaces a failed one names only the blocks that one left, so
+// a Machine whose realization block it no longer names while its apply
+// completed that block was removed by the destroy it replaced; one whose
+// current block stands is read from that block alone.
+func TestARealizationAReplacementDestroyNoLongerNamesIsRemoved(t *testing.T) {
+	block := func(verb reconciliation.Verb, state reconciliation.BlockState) lifecycle.BlockEvidence {
+		return lifecycle.BlockEvidence{Kind: "Machine", Object: "node-0", Implementation: kubevirt.MachineImplementation, Verb: verb, State: state}
+	}
+	removed := machine.OwnershipState{Verb: machine.VerbDestroy, State: machine.BlockDone}
+	for name, test := range map[string]struct {
+		reader *removalReader
+		want   machine.OwnershipState
+		found  bool
+		asked  []string
+	}{
+		"removed by the replaced destroy": {&removalReader{applied: []lifecycle.BlockEvidence{block(reconciliation.Apply, reconciliation.BlockDone)}}, removed, true, []string{"current", "applied"}},
+		"its removal pending":             {&removalReader{current: []lifecycle.BlockEvidence{block(reconciliation.Destroy, reconciliation.BlockPending)}}, machine.OwnershipState{Verb: machine.VerbDestroy, State: machine.BlockPending}, true, []string{"current"}},
+		"never realized by its apply":     {&removalReader{applied: []lifecycle.BlockEvidence{block(reconciliation.Apply, reconciliation.BlockFailed)}}, machine.OwnershipState{}, false, []string{"current", "applied"}},
+		"never planned":                   {&removalReader{}, machine.OwnershipState{}, false, []string{"current", "applied"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			state, found, err := machineRealization{reconciler: test.reader}.Realization(context.Background(), "lab", "node-0")
+			if err != nil || found != test.found || state != test.want || !slices.Equal(test.reader.asked, test.asked) {
+				t.Fatalf("realization = %+v, %t (%v) after %v", state, found, err, test.reader.asked)
+			}
+		})
 	}
 }
 

@@ -181,7 +181,7 @@ func TestPowerRequestsMatchTheirGoldens(t *testing.T) {
 		"request-power": goldenCatalog(nil), "request-power-bundle": goldenCatalog(bundled),
 	} {
 		t.Run(name, func(t *testing.T) {
-			request, _, err := requestFor(catalog, "lab", "metal", Stop, false, nil)
+			request, _, _, err := requestFor(catalog, "lab", "metal", Stop, false, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

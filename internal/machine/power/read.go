@@ -88,7 +88,7 @@ func readSurveysFor(catalog api.Catalog, contextName string, names []string, rea
 			continue
 		}
 		if !managed.Physical {
-			admitted, err := reachable(realized, object.Name())
+			admitted, _, err := reachable(realized, object.Name())
 			if err != nil {
 				return nil, err
 			}

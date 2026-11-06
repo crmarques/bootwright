@@ -87,7 +87,7 @@ func code(t *testing.T, err error) string {
 // An emulated controller is reached at its own allocated port, from the host
 // that runs it, and the request names the credential rather than any material.
 func TestAnEmulatedControllerIsReachedFromItsProviderHost(t *testing.T) {
-	request, physical, err := requestFor(catalog(), "lab", "guest", Stop, false, realized())
+	request, physical, _, err := requestFor(catalog(), "lab", "guest", Stop, false, realized())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestAnEmulatedControllerIsReachedFromItsProviderHost(t *testing.T) {
 // An authored controller belongs to the machine itself, so it is reached from
 // the controller host and needs no realization of its own.
 func TestAnAuthoredControllerIsReachedFromTheControllerHost(t *testing.T) {
-	request, physical, err := requestFor(catalog(), "lab", "metal", Start, false, nil)
+	request, physical, _, err := requestFor(catalog(), "lab", "metal", Start, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,8 @@ func TestAnAuthoredControllerIsReachedFromTheControllerHost(t *testing.T) {
 // on the provider, so power follows that block alone: the Machine's
 // installation may have failed, be unproved or still run, and the controller
 // still answers. It exists from the apply that completed the block until a
-// removal proves the block gone, so a guest a removal refuses can be stopped.
+// removal proves the block gone, so a guest a removal refuses can be stopped;
+// one the removal proved gone is removed, which a stop reads as off.
 func TestPowerFollowsTheMachineBlockNotTheInstallation(t *testing.T) {
 	for _, test := range []struct {
 		name     string
@@ -160,9 +161,24 @@ func TestPowerFollowsTheMachineBlockNotTheInstallation(t *testing.T) {
 				asked = append(asked, name)
 				return test.state, test.found, nil
 			}
-			_, _, err := requestFor(catalog(), "lab", "guest", Stop, false, realized)
+			_, _, removed, err := requestFor(catalog(), "lab", "guest", Stop, false, realized)
 			if strings.Join(asked, ",") != "guest" {
 				t.Fatalf("the realization was asked about %v", asked)
+			}
+			if removed != (test.name == "removed") {
+				t.Fatalf("removed = %t", removed)
+			}
+			if test.name == "removed" {
+				if err != nil {
+					t.Fatalf("the stop of a removed guest was refused: %v", err)
+				}
+				_, _, _, err := requestFor(catalog(), "lab", "guest", Start, false, realized)
+				reported := diagnostics.Of(err)
+				if len(reported) != 1 || reported[0].Code != "access.unavailable" ||
+					reported[0].Message != "the destroy current in this context removed the realization of Machine/guest, so there is nothing to start" {
+					t.Fatalf("the start of a removed guest = %+v", reported)
+				}
+				return
 			}
 			if test.admitted {
 				if err != nil {
@@ -179,12 +195,12 @@ func TestPowerFollowsTheMachineBlockNotTheInstallation(t *testing.T) {
 		})
 	}
 	unread := errors.New("the current operation cannot be read")
-	if _, _, err := requestFor(catalog(), "lab", "guest", Stop, false, func(string) (machine.OwnershipState, bool, error) {
+	if _, _, _, err := requestFor(catalog(), "lab", "guest", Stop, false, func(string) (machine.OwnershipState, bool, error) {
 		return machine.OwnershipState{}, false, unread
 	}); !errors.Is(err, unread) {
 		t.Fatalf("an unreadable realization reported %v", err)
 	}
-	if _, _, err := requestFor(catalog(), "lab", "metal", Stop, false, func(name string) (machine.OwnershipState, bool, error) {
+	if _, _, _, err := requestFor(catalog(), "lab", "metal", Stop, false, func(name string) (machine.OwnershipState, bool, error) {
 		t.Fatalf("a physical Machine asked about the realization of %s", name)
 		return machine.OwnershipState{}, false, nil
 	}); err != nil {
@@ -193,21 +209,21 @@ func TestPowerFollowsTheMachineBlockNotTheInstallation(t *testing.T) {
 }
 
 func TestAnUnresolvableTargetOrVerbRefuses(t *testing.T) {
-	_, _, err := requestFor(catalog(), "lab", "absent", Start, false, realized())
+	_, _, _, err := requestFor(catalog(), "lab", "absent", Start, false, realized())
 	if code(t, err) != "access.target" {
 		t.Fatalf("unknown Machine: %v", err)
 	}
 	if remedy := diagnostics.Of(err)[0].Remediation; remedy != "list the Machines this context selects with bootwright machine list --context lab" {
 		t.Fatalf("unknown Machine remedy = %q", remedy)
 	}
-	_, _, err = requestFor(catalog(), "lab", "controller", Start, false, realized())
+	_, _, _, err = requestFor(catalog(), "lab", "controller", Start, false, realized())
 	if code(t, err) != "access.unavailable" {
 		t.Fatalf("a Machine with no controller at all: %v", err)
 	}
 	if remedy := diagnostics.Of(err)[0].Remediation; remedy != "declare spec.substrate.baremetal.bmc on Machine/controller, or place it on a provider that emulates a management controller" {
 		t.Fatalf("a Machine with no controller remedy = %q", remedy)
 	}
-	if _, _, err := requestFor(catalog(), "lab", "guest", "suspend", false, realized()); code(t, err) != "lifecycle.state" {
+	if _, _, _, err := requestFor(catalog(), "lab", "guest", "suspend", false, realized()); code(t, err) != "lifecycle.state" {
 		t.Fatalf("unsupported verb: %v", err)
 	}
 }

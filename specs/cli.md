@@ -1586,15 +1586,16 @@ names them; tracked as [B545](milestones/backlog.md#b545).
 Resolution follows explicit access: an unknown or excluded name fails
 `access.target`, and a Machine this executable cannot reach a management
 controller for fails `access.unavailable`, both with exit `1`, empty standard
-output and no effect. A Machine whose management controller is emulated by its
-provider is reachable while the provider's machine block for it stands, because
-the management controller is one of that block's own effects: from the moment
-that block completed under the current apply, whatever the Machine's
-installation reached, until a removal proves the block gone. A Machine that
-authors its own management controller is reachable while that management
-controller answers, and a power command still refuses the controller Machine
-and the controller host's own identity, as stated below and in
-[Identity and power operations](substrates.md#identity-and-power-operations).
+output and no effect. A Machine whose provider emulates its management
+controller is reachable while the provider's machine block for it stands, that
+controller being one of the block's effects: from when the block
+completed under the current apply, whatever the installation reached, until a
+removal proves it gone. A stop of one the
+current destroy [removed](substrates.md#identity-and-power-operations) exits
+`0`, `off` and unchanged; a start or restart refuses `access.unavailable`
+naming the removal. A Machine that authors its own management controller is
+reachable while it answers, and a power command still refuses the controller
+Machine and the controller host's identity, as below.
 
 Stopping and restarting ask the
 [ordinary confirmation](#ordinary-confirmation), whose prompt names the
@@ -1623,7 +1624,7 @@ proves the stop before it starts, so an interrupted restart is never reported
 as settled.
 
 A physical Machine whose [pin](substrates.md#physical-machine-realization) the
-context's current apply recorded is held to it: a management controller
+apply behind the current operation recorded is held to it: a management controller
 reporting another identity refuses `lifecycle.state` with exit `1` before any power request. The
 adapter names that refusal to its runner before it fails, so the diagnostic's
 object is the Machine, its message names the management controller endpoint and
@@ -1635,7 +1636,7 @@ is what a management controller reported, so it is printed with every character 
 that its [evidence](substrates.md#physical-machine-realization) refuses as not
 printable, a format character such as a bidi override included, and then cut
 to 128 characters, the bound that evidence holds it to. A
-current-operation record or pin of that Machine that cannot be read refuses
+record or pin of that Machine that cannot be read refuses
 `lifecycle.state` before any confirmation or run.
 
 A power command never acts on the host that runs Bootwright. One naming the

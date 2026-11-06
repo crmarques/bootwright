@@ -272,6 +272,10 @@ func batchCommand(contextName, verb string, names []string, force bool) string {
 // execute runs one Machine; only a lone run names its log location.
 func (s Service) execute(ctx context.Context, name string, resolved target, position, total int) (*Result, error) {
 	frozen := resolved.frozen
+	if resolved.removed {
+		s.progress(ctx, powerStep(frozen, position, total), "unchanged", machine.PowerOff)
+		return &Result{Context: name, Machine: frozen.Identity.Object, Verb: frozen.Verb, Power: machine.PowerOff}, nil
+	}
 	canonical, err := frozen.Canonical()
 	if err != nil {
 		return nil, err

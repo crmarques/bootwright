@@ -21,27 +21,32 @@ type realizations func(name string) (machine.OwnershipState, bool, error)
 // learns which substrate answered. Whether the Machine is physical travels
 // beside the request rather than in it: it decides whether the operation holds
 // the Machine to a proved identity first, never what the adapter is asked.
-func requestFor(catalog api.Catalog, contextName, name, verb string, force bool, realized realizations) (Request, bool, error) {
+func requestFor(catalog api.Catalog, contextName, name, verb string, force bool, realized realizations) (Request, bool, bool, error) {
 	if !slices.Contains([]string{Start, Stop, Restart}, verb) {
-		return Request{}, false, failure("lifecycle.state", "unsupported power verb", "")
+		return Request{}, false, false, failure("lifecycle.state", "unsupported power verb", "")
 	}
 	if err := undeclared(catalog, contextName, []string{name}); err != nil {
-		return Request{}, false, err
+		return Request{}, false, false, err
 	}
 	object, _ := catalog.Find(api.Machine, name)
 	controllerMachine, err := lifecycle.ControllerMachine(catalog)
 	if err != nil {
-		return Request{}, false, err
+		return Request{}, false, false, err
 	}
-	arm, controller, placement, physical, err := controllerFor(catalog, object, contextName, controllerMachine, realized)
+	arm, controller, placement, physical, removed, err := controllerFor(catalog, object, contextName, controllerMachine, realized)
 	if err != nil {
-		return Request{}, false, err
+		return Request{}, false, false, err
+	}
+	if removed && verb != Stop {
+		return Request{}, false, false, failure("access.unavailable",
+			"the destroy current in this context removed the realization of "+object.Identity()+", so there is nothing to "+verb,
+			"finish the removal with bootwright destroy --context "+contextName+", then bootwright apply --context "+contextName+" realizes "+object.Identity()+" again")
 	}
 	return Request{
 		Arm: arm, Controller: controller, Force: force,
 		Identity:  Identity{Context: contextName, Object: object.Name()},
 		Placement: placement, Verb: verb, Version: Implementation,
-	}, physical, nil
+	}, physical, removed, nil
 }
 
 // undeclared refuses every name the context declares no Machine for at once.
@@ -67,24 +72,26 @@ func undeclared(catalog api.Catalog, contextName string, names []string) error {
 // substrate realizes is reached through the controller that realization
 // created, so it answers only while that realization stands; a physical
 // Machine's controller exists without Bootwright and is never asked about.
-func controllerFor(catalog api.Catalog, object api.Object, contextName, controllerMachine string, realized realizations) (string, Access, machine.Placement, bool, error) {
+func controllerFor(catalog api.Catalog, object api.Object, contextName, controllerMachine string, realized realizations) (string, Access, machine.Placement, bool, bool, error) {
 	target, err := managedTarget(catalog, object, contextName, controllerMachine)
 	if err != nil {
-		return "", Access{}, machine.Placement{}, false, err
+		return "", Access{}, machine.Placement{}, false, false, err
 	}
+	removed := false
 	if !target.Physical {
-		admitted, err := reachable(realized, object.Name())
+		var admitted bool
+		admitted, removed, err = reachable(realized, object.Name())
 		if err != nil {
-			return "", Access{}, machine.Placement{}, false, err
+			return "", Access{}, machine.Placement{}, false, false, err
 		}
-		if !admitted {
-			return "", Access{}, machine.Placement{}, false, failure("access.unavailable",
+		if !admitted && !removed {
+			return "", Access{}, machine.Placement{}, false, false, failure("access.unavailable",
 				"this Machine's emulated management controller is not realized",
 				"bootwright apply --context "+contextName+" realizes "+object.Identity()+" and its emulated BMC")
 		}
 	}
 	access, placement, physical, err := endpointFor(target, controllerMachine)
-	return target.Port, access, placement, physical, err
+	return target.Port, access, placement, physical, removed, err
 }
 
 // managedTarget resolves the realized target whose controller manages a
@@ -99,24 +106,24 @@ func managedTarget(catalog api.Catalog, object api.Object, contextName, controll
 }
 
 // reachable reports whether the block that realizes a Machine on its provider
-// stands, whatever the Machine's installation reached. An apply that completed
-// it created the controller, and a removal that has not proved it gone has not
-// yet taken the controller back, so a guest a removal refuses can be stopped.
-func reachable(realized realizations, name string) (bool, error) {
+// stands, whatever the Machine's installation reached, and whether a removal
+// proved it gone. An apply that completed it created the controller, and a removal
+// that has not proved it gone has not yet taken it back, so a guest it refuses can be stopped.
+func reachable(realized realizations, name string) (bool, bool, error) {
 	if realized == nil {
-		return false, nil
+		return false, false, nil
 	}
 	state, found, err := realized(name)
 	if err != nil || !found {
-		return false, err
+		return false, false, err
 	}
 	switch state.Verb {
 	case machine.VerbApply:
-		return state.State == machine.BlockDone, nil
+		return state.State == machine.BlockDone, false, nil
 	case machine.VerbDestroy:
-		return state.State != machine.BlockDone, nil
+		return state.State != machine.BlockDone, state.State == machine.BlockDone, nil
 	}
-	return false, nil
+	return false, false, nil
 }
 
 func endpointFor(target substrate.Target, controllerMachine string) (Access, machine.Placement, bool, error) {
