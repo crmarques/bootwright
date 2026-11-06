@@ -27,8 +27,8 @@ const (
 
 const (
 	hostRequestVersion    = "substrate-host-kubevirt-v2"
-	machineRequestVersion = "machine-kubevirt-v3"
-	hostEvidenceVersion   = "substrate-host-kubevirt-evidence-v1"
+	machineRequestVersion = "machine-kubevirt-v4"
+	hostEvidenceVersion   = "substrate-host-kubevirt-evidence-v2"
 	machineEvidence       = "machine-kubevirt-evidence-v1"
 )
 
@@ -66,7 +66,8 @@ func MachineBlockID(machine string) string { return reconciliation.BlockIdentity
 // VirtualMachine the arm creates.
 func HostContentDigest() string {
 	return contentDigest("bootwright.substrate.kubevirt.host-v1", HostImplementation, hostRequestVersion, hostEvidenceVersion,
-		"access-reviews", "root-class-rwx", "kube-system-uid", "ingress-ca", lendVersion, lendEvidence)
+		"access-reviews", "root-class-rwx", "kube-system-uid", "ingress-ca", lendVersion, lendEvidence,
+		"root-class-first-set", "schedulable-kvm-node", "attachment-kind", "cdi-and-kube-system-present", "one-default-class")
 }
 
 func MachineContentDigest() string {

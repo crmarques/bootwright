@@ -1002,18 +1002,40 @@ Virtualization is told from a wrong kubeconfig; the `kube-system` namespace's
 UID; the provider's namespace, which must exist; the CDI configuration's
 `status.uploadProxyURL`; ConfigMap `openshift-config-managed/default-ingress-cert`,
 the certificate authority the upload proxy is verified against; the root
-class, the provider's `storageClassRef` or else the class annotated
-`storageclass.kubevirt.io/is-default-virt-class: "true"` or else the cluster's
-default class, and its StorageProfile, whose `claimPropertySets` must be
-non-empty and offer `ReadWriteMany`, since the arm sets
-`evictionStrategy: LiveMigrate` and a root a host drain cannot migrate would
-block it (the refusal names the class); one SelfSubjectAccessReview per verb
-the arm uses on VirtualMachines, VirtualMachineInstances, DataVolumes,
+class and its StorageProfile; the node list; one SelfSubjectAccessReview per
+verb the arm uses on VirtualMachines, VirtualMachineInstances, DataVolumes,
 PersistentVolumeClaims and the `start` and `stop` subresources in the
 namespace; and each referenced attachment's NetworkAttachmentDefinition in
 its namespace, the derived one of a ClusterUserDefinedNetwork's name in the
-provider's namespace, with the ClusterUserDefinedNetwork's `NetworkCreated`
-condition true where the credential may read it. Where it may, it reads
+provider's namespace. The `kube-system` namespace and the CDI configuration
+must exist. The root class is the provider's `storageClassRef`, or else the
+one class annotated `storageclass.kubevirt.io/is-default-virt-class: "true"`,
+or else the one class annotated
+`storageclass.kubernetes.io/is-default-class: "true"`. Two or more classes
+carrying the annotation that decides refuse, naming each of them. While the
+root class's StorageProfile is absent or lists no `claimPropertySets`, the
+proof reads it again every 5 s for up to 120 s within its deadline, since CDI
+fills a new class's StorageProfile shortly after the class appears. The root
+DataVolume names no access or volume mode, so CDI applies the StorageProfile's
+first claim property set. That set must offer `ReadWriteMany`, since the arm
+sets `evictionStrategy: LiveMigrate` and a root a host drain cannot migrate
+would block it (the refusal names the class). The evidence records that set's
+access modes and volume mode. The node list is read in pages of 500, at most
+10 pages. At least one node must be labelled `kubevirt.io/schedulable: "true"`
+and allocate a positive `devices.kubevirt.io/kvm` quantity, and the evidence
+records how many do. Each attachment's definition is its `spec.config`, which
+must be a JSON object. A derived definition must be of CNI type
+`ovn-k8s-cni-overlay` with topology `localnet` and no `subnets`, since with
+IPAM enabled OVN enforces IP port security and assigns addresses the static
+install address ignores. A declared definition must be of CNI type `bridge`
+or `cnv-bridge`, the name OpenShift Virtualization ships it under, either as
+its config's `type` or as the first plugin of its `plugins` list.
+The evidence records each definition's CNI type, and its topology and MTU
+where the config declares them. It records a bridge's `macspoofchk` where the
+config declares it and refuses neither value, since whether its machines need
+installer VIPs is not known to the proof. A derived attachment's
+ClusterUserDefinedNetwork must exist, with its `NetworkCreated` condition true
+where the credential may read it. Where it may, it reads
 KubeMacPool's range and records the pinned MACs as inside, outside or unknown
 of it, refusing nothing. Its evidence records the server, the `kube-system`
 UID, the upload proxy and each answer. A check it cannot read is unknown and
@@ -1102,10 +1124,14 @@ through it.
 The live power read (`machine_power_read`) passes the same pin: each read
 target of a pinned port names the values that carry its own Machine's pin,
 so the read reports the power of a Machine whose block recorded one, and
-reads `unknown` for one that recorded none or whose pin the host refuses. The machine must be off, by a positive `NotFound` of its
-VirtualMachineInstance, before any media write. `media_insert` takes the
+reads `unknown` for one that recorded none or whose pin the host refuses. The machine must be off before any media write: its
+VirtualMachineInstance absent by a positive `NotFound` or in a final phase
+(`Succeeded` or `Failed`), which every entry point, the removal and the
+quiescence read as stopped. `media_insert` takes the
 image file as `image_path` and the controller's `virtctl` as `virtctl`; it
-creates the upload DataVolume `<vm>-media`, blank with `source.upload`, sized
+waits until no claim named `<vm>-media` remains from an earlier upload, then
+creates the upload DataVolume `<vm>-media`, blank with `source.upload`, on the
+storage class the VirtualMachine's root template names, sized
 to the image rounded up to the next GiB plus one, labelled with the media
 identity, waits until it is `UploadReady`, runs `virtctl image-upload dv
 <vm>-media --no-create` with the image file under what the boot budget has
@@ -1123,11 +1149,18 @@ made (an inference; re-verified by M3e's first run). `boot_media` starts the
 VirtualMachine through its `start` subresource and polls until its
 VirtualMachineInstance exists and runs. `media_eject` removes the volume from
 the VirtualMachine and deletes the upload DataVolume with its UID as
-precondition; the claim stays bound under `kubernetes.io/pvc-protection` until
+precondition and background propagation, waiting only for its absence; the claim stays bound under `kubernetes.io/pvc-protection` until
 the instance next stops, and the state read reports the media the
 VirtualMachine will present. `boot_disk` makes no request unless asked to power
-on. `power` starts through `start`, stops through `stop` and polls until the
-VirtualMachineInstance is absent, and restarts as a stop and a start; a stop
+on. `power` starts through `start` over an absent or final instance, and once
+more after a `stop` when the start has not replaced a final instance within
+60 seconds, so a start stays inside the power bound; stops a
+running instance through `stop` and polls until it is no longer running; and
+restarts as a stop and a start. A start whose instance does not run within the
+start bound is refused naming the instance's scheduling condition
+(`PodScheduled`, or a condition whose reason is `Unschedulable`) when that is
+not `True`, and otherwise the first condition of the instance, or of the
+VirtualMachine when no instance exists, that is not `True`; a stop
 the guest has not finished within the stop bound reports the machine still
 running, and `force` stops it with a zero grace period. `pre_boot` proves the
 VirtualMachine this context's and off, and, given `require_tpm`, that it
@@ -1140,14 +1173,21 @@ B731's phase durations to correct them: state read 120 s, power read 60 s,
 pre-boot 120 s, media insert 1800 s (a 1200 s upload and the DataVolume's
 readiness waits), media eject 420 s, power 720 s, media boot and disk boot
 360 s each, a per-node margin of 1020 s (two state reads, an eject and a disk boot), a boot allowance of 2400 s and a
-fan-out of 4 nodes, the uploads the upload proxy serves at once.
+fan-out of 4 nodes, the uploads the upload proxy serves at once. A read or access review the host answers
+with 429, 502, 503 or 504, or a connection it refuses or resets before answering,
+is retried at most twice, each retry waiting the answer's `Retry-After` up to
+10 s or else 1 s and then 2 s. A poll counts such a reading as not yet done,
+and one whose bound ends on it reports that failure, never an earlier reading.
+A request that timed out is never retried, and nothing that writes is.
 
-**Removal.** Removal requires the VirtualMachineInstance absent, which is its
+**Removal.** Removal requires the VirtualMachineInstance absent or final, which is its
 quiescence under the [removal gate](state-reconciliation.md#quiescence-before-removal);
 deletes the upload DataVolume and then the VirtualMachine, each with
 `preconditions.uid`; and proves the VirtualMachine, every DataVolume and every
 claim it owned, its persistent TPM state claim included, absent by a positive
-`NotFound` or a listing that answered without them. It consumes `data-loss`,
+`NotFound` or a listing that answered without them. The upload claim a live
+eject left, whose DataVolume is already gone, is read by its name `<vm>-media`
+and counted present while it exists. It consumes `data-loss`,
 because it deletes the disks. The namespace and every network object are the
 operator's, or the host's `kubevirt` instance's and its cluster network
 block's, and the arm never writes them. A host that cannot be read, refuses the

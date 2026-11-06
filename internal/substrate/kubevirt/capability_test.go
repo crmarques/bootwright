@@ -142,13 +142,22 @@ func provedHostEvidence(t *testing.T, block reconciliation.Block, uid string) li
 	request := hostRequest(t)
 	networks := []NetworkEvidence{}
 	for _, network := range request.Networks {
-		networks = append(networks, NetworkEvidence{Attachment: network.Attachment, Present: true})
+		networks = append(networks, provedNetwork(network))
 	}
 	evidence := encoded(t, HostEvidence{Failures: []string{}, KubeSystemUID: uid, MACPool: "outside", Networks: networks, Postcondition: true,
-		ReadWriteMany: true, Request: block.RequestDigest, Server: "https://api.host.example.test:6443", StorageClass: "guest-block",
+		ReadWriteMany: true, Request: block.RequestDigest, RootAccessModes: []string{"ReadWriteMany"}, RootVolumeMode: "Block",
+		SchedulableNodes: 3, Server: "https://api.host.example.test:6443", StorageClass: "guest-block",
 		UploadProxy: "https://cdi-uploadproxy.apps.host.example.test", Version: "v1.34.2"})
 	return lifecycle.BlockEvidence{Block: block, Kind: HostKind, Object: "lab-kubevirt", Implementation: HostImplementation,
 		Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: evidence}
+}
+
+func provedNetwork(network Network) NetworkEvidence {
+	if network.Derived != "" {
+		return NetworkEvidence{Attachment: network.Attachment, CNIType: "ovn-k8s-cni-overlay", MTU: 1500, Present: true, Topology: "localnet"}
+	}
+	spoofed := true
+	return NetworkEvidence{Attachment: network.Attachment, CNIType: "bridge", MACSpoofCheck: &spoofed, Present: true}
 }
 
 func machineFixture(t *testing.T, digest string, change func(*MachineEvidence)) []byte {
@@ -243,15 +252,18 @@ func TestTheMachineRunPinsTheProvedHostAndCarriesItsReceipts(t *testing.T) {
 	}
 }
 
-func TestQuiescenceIsTheInstanceAbsenceAHostAnswered(t *testing.T) {
+func TestQuiescenceIsAnAbsentOrFinalInstanceAHostAnswered(t *testing.T) {
 	block := machineBlock(t)
 	for name, test := range map[string]struct {
 		change func(*MachineEvidence)
 		state  string
 	}{
-		"absent instance":  {nil, lifecycle.Quiescent},
-		"running instance": {func(e *MachineEvidence) { e.Instance = "Running" }, lifecycle.Live},
-		"host unanswered":  {func(e *MachineEvidence) { e.Answered = false }, lifecycle.Unproved},
+		"absent instance":    {nil, lifecycle.Quiescent},
+		"running instance":   {func(e *MachineEvidence) { e.Instance = "Running" }, lifecycle.Live},
+		"pending instance":   {func(e *MachineEvidence) { e.Instance = "Pending" }, lifecycle.Live},
+		"succeeded instance": {func(e *MachineEvidence) { e.Instance = "Succeeded" }, lifecycle.Quiescent},
+		"failed instance":    {func(e *MachineEvidence) { e.Instance = "Failed" }, lifecycle.Quiescent},
+		"host unanswered":    {func(e *MachineEvidence) { e.Answered = false }, lifecycle.Unproved},
 	} {
 		run := &runner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: machineFixture(t, block.RequestDigest, test.change)}}
 		probe := lifecycle.Probe{ApplyOperation: "op-1", Context: testContext, Block: block,
@@ -301,10 +313,32 @@ func TestTheProofRefusesWhatItCouldNotProve(t *testing.T) {
 	if err := ValidateHostPresence(encoded(t, failing), request, block.RequestDigest); err == nil || !strings.Contains(diagnostics.Of(err)[0].Message, "ReadWriteMany") {
 		t.Fatalf("a failed check passed: %v", err)
 	}
+	shipped := evidence
+	shipped.Networks = slices.Clone(evidence.Networks)
+	shipped.Networks[0].CNIType = "cnv-bridge"
+	if err := ValidateHostPresence(encoded(t, shipped), request, block.RequestDigest); err != nil {
+		t.Fatalf("a cnv-bridge attachment was refused: %v", diagnostics.Of(err))
+	}
 	missing := evidence
 	missing.Networks = missing.Networks[:1]
 	if ValidateHostPresence(encoded(t, missing), request, block.RequestDigest) == nil {
 		t.Fatal("a proof missing a network passed")
+	}
+	for name, change := range map[string]func(*HostEvidence){
+		"no schedulable node":      func(e *HostEvidence) { e.SchedulableNodes = 0 },
+		"a single-node root":       func(e *HostEvidence) { e.RootAccessModes = []string{"ReadWriteOnce"} },
+		"a macvlan attachment":     func(e *HostEvidence) { e.Networks[0].CNIType = "macvlan" },
+		"a layer2 derived network": func(e *HostEvidence) { e.Networks[1].Topology = "layer2" },
+		"a bridge for a derived": func(e *HostEvidence) {
+			e.Networks[1] = NetworkEvidence{Attachment: "storage", CNIType: "bridge", Present: true}
+		},
+	} {
+		changed := evidence
+		changed.Networks = slices.Clone(evidence.Networks)
+		change(&changed)
+		if ValidateHostPresence(encoded(t, changed), request, block.RequestDigest) == nil {
+			t.Errorf("a proof with %s passed", name)
+		}
 	}
 	run := &runner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encoded(t, HostEvidence{Absent: true, Failures: []string{}, Networks: []NetworkEvidence{}, Postcondition: true, Request: block.RequestDigest})}}
 	if result, err := NewHost(run, nil).Destroy(context.Background(), lifecycle.Execution{Block: block}); err != nil || result.Outcome != reconciliation.OutcomeUnchanged ||

@@ -20,12 +20,18 @@ CA = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
 VM = arm.name("lab", "master-0")
 
 
+FINAL = ("Succeeded", "Failed")
+CLAIMS = "/api/v1/namespaces/guests/persistentvolumeclaims/"
+
+
 class FakeAPI:
-    """An in-memory host API: objects by path, KubeVirt's template DataVolume, and garbage collection."""
+    """An in-memory host API: objects by path, KubeVirt's template DataVolume, garbage collection, and the
+    pvc-protection that keeps a claim a running instance mounts until the instance stops."""
 
     def __init__(self):
         self.objects, self.requests, self.counter = {}, [], 0
         self.unanswered, self.lose_create_reply, self.status = set(), False, None
+        self.started, self.over_final, self.blocked = {"phase": "Running"}, "replace", set()
         self.put("/version", {"gitVersion": "v1.34.2"})
         self.put("/apis/subresources.kubevirt.io/v1/version", {"gitVersion": "v1.6.0"})
         self.put("/api/v1/namespaces/kube-system", self.meta("kube-system", uid="cluster-1"))
@@ -47,6 +53,7 @@ class FakeAPI:
             return self.status, b"{}"
         if path in self.unanswered or "*" in self.unanswered:
             raise kapi.Unanswered()
+        self.settle()
         body = json.loads(payload) if payload else None
         if method == "GET":
             if path.endswith("/persistentvolumeclaims"):
@@ -64,9 +71,7 @@ class FakeAPI:
         if method == "PATCH":
             return self.patch(path, body)
         if method == "PUT" and path.endswith("/start"):
-            vmi = path.replace("virtualmachines", "virtualmachineinstances").replace("/apis/subresources.kubevirt.io/", "/apis/kubevirt.io/")[:-len("/start")]
-            self.put(vmi, {"metadata": {"name": VM}, "status": {"phase": "Running"}})
-            return 202, b""
+            return self.start(path)
         if method == "PUT" and path.endswith("/stop"):
             vmi = path.replace("virtualmachines", "virtualmachineinstances").replace("/apis/subresources.kubevirt.io/", "/apis/kubevirt.io/")[:-len("/stop")]
             self.objects.pop(vmi, None)
@@ -89,7 +94,9 @@ class FakeAPI:
                 self.put(path.replace("kubevirt.io/v1", "cdi.kubevirt.io/v1beta1").replace("virtualmachines", "datavolumes") + "/" + dv["metadata"]["name"], dv)
                 self.claim(dv)
         if body["kind"] == "DataVolume":
-            created["status"] = {"phase": "UploadReady"}
+            defaults = (self.objects.get("/apis/storage.k8s.io/v1/storageclasses") or {}).get("items") or []
+            placed = body.get("spec", {}).get("storage", {}).get("storageClassName") or defaults
+            created["status"] = {"phase": "UploadReady" if placed else "Pending"}
             self.claim(created)
         if self.lose_create_reply:
             raise kapi.Unanswered()
@@ -97,8 +104,51 @@ class FakeAPI:
 
     def claim(self, dv):
         pvc = self.meta(dv["metadata"]["name"])
-        pvc["metadata"]["ownerReferences"] = [{"controller": True, "uid": dv["metadata"]["uid"]}]
+        pvc["metadata"]["ownerReferences"] = [{"controller": True, "kind": "DataVolume", "name": dv["metadata"]["name"], "uid": dv["metadata"]["uid"]}]
         self.put("/api/v1/namespaces/guests/persistentvolumeclaims/" + dv["metadata"]["name"], pvc)
+
+    def start(self, path):
+        """KubeVirt's start under runStrategy Manual: a new instance mounting the template's volumes; over a
+        final one, replace it (the default), refuse the request or leave it final."""
+        vm = path.replace("/apis/subresources.kubevirt.io/", "/apis/kubevirt.io/")[:-len("/start")]
+        vmi = vm.replace("virtualmachines", "virtualmachineinstances")
+        phase = ((self.objects.get(vmi) or {}).get("status") or {}).get("phase")
+        if phase in FINAL and self.over_final == "refuse":
+            return 500, b'{"reason":"InternalError"}'
+        if phase in FINAL and self.over_final == "ignore":
+            return 202, b""
+        if phase and phase not in FINAL:
+            return 409, b'{"reason":"Conflict"}'
+        if self.started is None:
+            return 202, b""
+        held = self.objects[vm]
+        self.put(vmi, {"metadata": {"name": VM, "uid": "vmi-started", "ownerReferences": [{"controller": True, "uid": held["metadata"]["uid"]}]},
+                       "spec": {"volumes": copy.deepcopy(held["spec"]["template"]["spec"].get("volumes", []))},
+                       "status": copy.deepcopy(self.started)})
+        return 202, b""
+
+    def mounted(self, claim):
+        """Whether an instance that is not final mounts this claim, so pvc-protection holds it."""
+        named = claim["metadata"]["name"]
+        for path, held in self.objects.items():
+            if "/virtualmachineinstances/" in path and (held.get("status") or {}).get("phase") not in FINAL:
+                for volume in (held.get("spec") or {}).get("volumes") or []:
+                    if named in ((volume.get("dataVolume") or {}).get("name"), (volume.get("persistentVolumeClaim") or {}).get("claimName")):
+                        return True
+        return False
+
+    def settle(self):
+        """Release every terminating claim no instance mounts, then every foreground owner with no dependents left."""
+        terminating = {path: held for path, held in self.objects.items() if (held.get("metadata") or {}).get("deletionTimestamp")}
+        for path, held in terminating.items():
+            if path.startswith(CLAIMS) and not self.mounted(held):
+                del self.objects[path]
+        for path, held in terminating.items():
+            owner = held["metadata"].get("uid")
+            if not path.startswith(CLAIMS) and not any(
+                    ref.get("uid") == owner for other in self.objects.values() for ref in (other.get("metadata") or {}).get("ownerReferences", [])):
+                del self.objects[path]
+                self.blocked.discard(owner)
 
     def delete(self, path, body):
         held = self.objects.get(path)
@@ -107,12 +157,19 @@ class FakeAPI:
         if body["preconditions"]["uid"] != held["metadata"]["uid"]:
             return 409, b'{"reason":"Conflict"}'
         self.collect(held["metadata"]["uid"])
+        if body.get("propagationPolicy") == "Foreground" and held["metadata"]["uid"] in self.blocked:
+            held["metadata"]["deletionTimestamp"] = LATER
+            return 200, b"{}"
         del self.objects[path]
         return 200, b"{}"
 
     def collect(self, uid):
         for path, held in list(self.objects.items()):
             if any(ref.get("uid") == uid for ref in held.get("metadata", {}).get("ownerReferences", [])):
+                if path.startswith(CLAIMS) and self.mounted(held):
+                    held["metadata"]["deletionTimestamp"] = LATER
+                    self.blocked.add(uid)
+                    continue
                 self.objects.pop(path, None)
                 self.collect(held["metadata"]["uid"])
 
@@ -146,7 +203,7 @@ def request(**extra):
         "interfaces": [{"macAddress": "52:54:00:25:10:e0", "name": "enp1s0", "network": "guest-l2"}],
         "kubeconfigRef": "host-kubeconfig", "mediaVolume": VM + "-media", "memoryMiB": 16384, "name": VM, "namespace": "guests",
         "placement": {"connection": "local", "machine": "controller"}, "provider": "lab-kubevirt", "rootVolume": VM + "-root",
-        "version": "machine-kubevirt-v3",
+        "version": "machine-kubevirt-v4",
     }
     value.update(extra)
     return value
@@ -350,7 +407,12 @@ def proved_host():
         {"metadata": {"name": "virt", "annotations": {arm.DEFAULT_VIRT: "true"}}}]})
     api.put("/apis/cdi.kubevirt.io/v1beta1/storageprofiles/virt", {"status": {"claimPropertySets": [
         {"accessModes": ["ReadWriteMany"], "volumeMode": "Block"}]}})
-    api.put("/apis/k8s.cni.cncf.io/v1/namespaces/guests/network-attachment-definitions/guest-l2", {"metadata": {"name": "guest-l2"}})
+    api.put("/apis/k8s.cni.cncf.io/v1/namespaces/guests/network-attachment-definitions/guest-l2", {"metadata": {"name": "guest-l2"},
+            "spec": {"config": json.dumps({"cniVersion": "0.3.1", "name": "guest-l2", "type": "bridge", "bridge": "br-guest"})}})
+    api.put("/api/v1/nodes", {"items": [{"metadata": {"name": "worker-0", "labels": {"kubevirt.io/schedulable": "true"}},
+                                         "status": {"allocatable": {"devices.kubevirt.io/kvm": "1k"}}},
+                                        {"metadata": {"name": "worker-1", "labels": {"kubevirt.io/schedulable": "true"}},
+                                         "status": {"allocatable": {"devices.kubevirt.io/kvm": "110"}}}], "metadata": {}})
     return api
 
 
@@ -359,7 +421,7 @@ def test_the_provider_proof_holds_only_when_every_check_reads():
     evidence = arm.proof(client(api), proof_request())
     assert evidence["postcondition"] and evidence["storageClass"] == "virt" and evidence["readWriteMany"]
     assert evidence["uploadProxy"] == "https://cdi-uploadproxy.apps.host.example.test" and evidence["kubeSystemUID"] == "cluster-1"
-    assert evidence["networks"] == [{"attachment": "lab-guests", "present": True}] and evidence["macPool"] == "unknown"
+    assert evidence["networks"] == [{"attachment": "lab-guests", "cniType": "bridge", "present": True}] and evidence["macPool"] == "unknown"
     rwo = proved_host()
     rwo.put("/apis/cdi.kubevirt.io/v1beta1/storageprofiles/virt", {"status": {"claimPropertySets": [{"accessModes": ["ReadWriteOnce"]}]}})
     assert re.search("offers no ReadWriteMany", arm.proof(client(rwo), proof_request())["failures"][0])
@@ -529,3 +591,142 @@ def test_destroy_can_remove_its_uid_owned_machine_despite_frozen_drift():
     api.objects[VM_PATH]["spec"]["template"]["spec"]["domain"]["cpu"]["cores"] = 99
     changed, removed = arm.destroy(host(api), request(), context(evidence["receipts"]))
     assert changed and removed["absent"] and removed["postcondition"]
+
+
+MEDIA_PATH = "/apis/cdi.kubevirt.io/v1beta1/namespaces/guests/datavolumes/" + VM + "-media"
+VMI_PATH = "/apis/kubevirt.io/v1/namespaces/guests/virtualmachineinstances/" + VM
+
+
+def puts(api):
+    return [p.rsplit("/", 1)[1] for m, p in api.requests if m == "PUT"]
+
+
+def test_a_live_eject_completes_while_the_node_runs_and_its_claim_waits_for_the_stop():
+    api = FakeAPI()
+    receipts = arm.apply(host(api), request(), context())[1]["receipts"]
+    machine = pinned(api)
+    arm.upload_volume(machine, VM, "digest-1", 1)
+    api.objects[MEDIA_PATH]["status"]["phase"] = "Succeeded"
+    arm.attach(machine, VM)
+    assert arm.change_power(machine, VM, "on")["power"] == "On"
+    arm.eject(machine, VM)
+    assert MEDIA_PATH not in api.objects and api.objects[CLAIMS + VM + "-media"]["metadata"]["deletionTimestamp"]
+    assert arm.state_read(machine, VM, "digest-1") == {"power": "On", "power_state": "on", "media": "", "media_state": "none"}
+    observed = arm.observe(host(api), request(), context(receipts))
+    assert observed["owned"] and not observed["foreign"] and observed["postcondition"]
+    assert arm.change_power(machine, VM, "off")["power"] == "Off"
+    api.requests.clear()
+    assert CLAIMS + VM + "-media" not in api.objects
+
+
+def test_removal_counts_the_claim_a_live_eject_left_until_it_is_gone():
+    api = FakeAPI()
+    receipts = arm.apply(host(api), request(), context())[1]["receipts"]
+    machine = pinned(api)
+    arm.upload_volume(machine, VM, "digest-1", 1)
+    api.objects[MEDIA_PATH]["status"]["phase"] = "Succeeded"
+    arm.attach(machine, VM)
+    arm.change_power(machine, VM, "on")
+    arm.eject(machine, VM)
+    claim = CLAIMS + VM + "-media"
+    api.objects[VMI_PATH]["status"]["phase"] = "Succeeded"
+    api.mounted = lambda held: held["metadata"]["name"] == VM + "-media"
+    changed, evidence = arm.destroy(host(api), request(), context(receipts))
+    assert changed and claim in api.objects and not evidence["absent"]
+    assert {"kind": "PersistentVolumeClaim", "name": VM + "-media", "present": True} in evidence["volumes"]
+    api.mounted = lambda held: False
+    changed, evidence = arm.destroy(host(api), request(), context(receipts))
+    assert evidence["absent"] and claim not in api.objects
+
+
+def test_a_foreground_delete_of_a_mounted_volume_waits_for_its_claim():
+    api = presented_machine()
+    arm.change_power(pinned(api), VM, "on")
+    held = api.objects[MEDIA_PATH]
+    assert arm.delete(host(api), MEDIA_PATH, held["metadata"]["uid"])
+    assert MEDIA_PATH in api.objects and api.objects[CLAIMS + VM + "-media"]["metadata"]["deletionTimestamp"]
+    api.objects.pop(VMI_PATH)
+    api.requests.clear()
+    api("GET", MEDIA_PATH, {}, b"")
+    assert MEDIA_PATH not in api.objects and CLAIMS + VM + "-media" not in api.objects
+
+
+def final_machine(phase):
+    api = FakeAPI()
+    receipts = arm.apply(host(api), request(), context())[1]["receipts"]
+    api.put(VMI_PATH, {"metadata": {"name": VM, "uid": "vmi-final", "ownerReferences": [{"controller": True, "uid": api.objects[VM_PATH]["metadata"]["uid"]}]},
+                       "spec": {"volumes": []}, "status": {"phase": phase}})
+    return api, receipts
+
+
+@pytest.mark.parametrize("phase", ["Succeeded", "Failed"])
+def test_an_instance_in_a_final_phase_is_a_stopped_machine(phase):
+    api, ignored_receipts = final_machine(phase)
+    assert arm.state_read(pinned(api), VM)["power"] == "Off"
+    assert arm.change_power(pinned(api), VM, "off")["power"] == "Off" and puts(api) == []
+    assert arm.pre_boot(pinned(api), VM)["power"] == "Off"
+    assert arm.upload_volume(pinned(api), VM, "digest-1", 1)[0] is False and MEDIA_PATH in api.objects
+    assert arm.change_power(pinned(api), VM, "on")["power"] == "On"
+    assert puts(api) == ["start"] and api.objects[VMI_PATH]["status"]["phase"] == "Running"
+    api, ignored_receipts = final_machine(phase)
+    assert arm.change_power(pinned(api), VM, "restart")["power"] == "On" and puts(api) == ["start"]
+
+
+@pytest.mark.parametrize("phase", ["Succeeded", "Failed"])
+def test_removal_deletes_a_machine_whose_instance_is_final(phase):
+    api, receipts = final_machine(phase)
+    changed, evidence = arm.destroy(host(api), request(), context(receipts))
+    assert changed and evidence["absent"] and evidence["postcondition"] and not evidence["instance"]
+    assert VM_PATH not in api.objects and VMI_PATH not in api.objects
+
+
+@pytest.mark.parametrize("answer", ["refuse", "ignore"])
+def test_a_start_a_final_instance_does_not_take_is_retried_once_after_a_stop(answer):
+    api, ignored_receipts = final_machine("Succeeded")
+    api.over_final = answer
+    assert arm.change_power(pinned(api), VM, "on")["power"] == "On"
+    assert puts(api) == ["start", "stop", "start"] and api.objects[VMI_PATH]["status"]["phase"] == "Running"
+
+
+def test_the_upload_volume_is_placed_on_the_root_class_of_a_host_with_no_default_class():
+    api = FakeAPI()
+    arm.apply(host(api), request(), context())
+    reuse, ignored_live = arm.upload_volume(pinned(api), VM, "digest-1", 1)
+    assert not reuse and api.objects[MEDIA_PATH]["spec"]["storage"]["storageClassName"] == "guest-block"
+    bare = FakeAPI()
+    arm.apply(host(bare), request(), context())
+    del bare.objects[VM_PATH]["spec"]["dataVolumeTemplates"][0]["spec"]["storage"]["storageClassName"]
+    with pytest.raises(kapi.Refused, match="names no storage class"):
+        arm.upload_volume(pinned(bare), VM, "digest-1", 1)
+    assert not [p for m, p in bare.requests if m == "POST" and p.endswith("/datavolumes")]
+
+
+def test_a_start_that_does_not_run_names_the_instances_scheduling_condition():
+    api = FakeAPI()
+    arm.apply(host(api), request(), context())
+    api.started = {"phase": "Pending", "conditions": [
+        {"type": "Ready", "status": "False", "reason": "GuestNotRunning"},
+        {"type": "PodScheduled", "status": "False", "reason": "Unschedulable", "message": "0/3 nodes are available: 3 Insufficient memory. " + "x" * 400}]}
+    with pytest.raises(kapi.Refused) as refused:
+        arm.change_power(pinned(api), VM, "on")
+    message = str(refused.value)
+    assert "did not run within" in message and "PodScheduled False (Unschedulable: 0/3 nodes are available: 3 Insufficient memory." in message
+    assert "x" * 200 not in message and "GuestNotRunning" not in message
+    absent = FakeAPI()
+    arm.apply(host(absent), request(), context())
+    absent.started = None
+    absent.objects[VM_PATH]["status"] = {"printableStatus": "ErrorUnschedulable", "conditions": [
+        {"type": "Failure", "status": "True"}, {"type": "Ready", "status": "False", "reason": "VMINotExists", "message": "VMI does not exist"}]}
+    expected = r"no VirtualMachineInstance; the VirtualMachine is ErrorUnschedulable: Ready False \(VMINotExists: VMI does not exist\)"
+    with pytest.raises(kapi.Refused, match=expected):
+        arm.change_power(pinned(absent), VM, "on")
+
+
+def test_an_upload_waits_for_the_claim_an_earlier_upload_left():
+    api = FakeAPI()
+    arm.apply(host(api), request(), context())
+    api.put(CLAIMS + VM + "-media", api.meta(VM + "-media"))
+    api.requests.clear()
+    with pytest.raises(kapi.Refused, match="PersistentVolumeClaim guests/" + VM + "-media of an earlier upload still exists"):
+        arm.upload_volume(pinned(api), VM, "digest-1", 1)
+    assert not [p for m, p in api.requests if m != "GET"]

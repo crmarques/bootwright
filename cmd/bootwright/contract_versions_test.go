@@ -230,7 +230,7 @@ func automationFormats() map[string]automationFormat {
 		"machine-libvirt-v9":         {class: formatMirrored},
 		"machine-baremetal-v3":       {class: formatMirrored},
 		"substrate-host-kubevirt-v2": {class: formatMirrored},
-		"machine-kubevirt-v3":        {class: formatMirrored},
+		"machine-kubevirt-v4":        {class: formatMirrored},
 		// The lend a hosted KubeVirt provider's runs take their access from:
 		// its request and evidence, which the host and machine digests pin.
 		"substrate-access-kubevirt-v1":          {class: formatMirrored},

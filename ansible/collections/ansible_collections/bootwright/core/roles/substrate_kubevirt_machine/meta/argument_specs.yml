@@ -61,7 +61,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [machine-kubevirt-v3]
+            choices: [machine-kubevirt-v4]
       bootwright_substrate_kubevirt_machine_material:
         type: dict
         required: true

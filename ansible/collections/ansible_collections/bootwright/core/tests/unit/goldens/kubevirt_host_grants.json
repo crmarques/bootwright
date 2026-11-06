@@ -1,0 +1,251 @@
+{
+  "bindings": [
+    {
+      "kind": "RoleBinding",
+      "namespace": "guests",
+      "role": "bootwright-kubevirt-machines",
+      "roleKind": "ClusterRole"
+    },
+    {
+      "kind": "ClusterRoleBinding",
+      "role": "bootwright-kubevirt-proof",
+      "roleKind": "ClusterRole"
+    },
+    {
+      "kind": "RoleBinding",
+      "namespace": "openshift-config-managed",
+      "role": "bootwright-kubevirt-proof",
+      "roleKind": "Role"
+    },
+    {
+      "kind": "RoleBinding",
+      "namespace": "openshift-cnv",
+      "role": "bootwright-kubevirt-proof",
+      "roleKind": "Role"
+    }
+  ],
+  "roles": [
+    {
+      "kind": "ClusterRole",
+      "name": "bootwright-kubevirt-machines",
+      "rules": [
+        {
+          "apiGroups": [
+            "kubevirt.io"
+          ],
+          "resources": [
+            "virtualmachines"
+          ],
+          "verbs": [
+            "create",
+            "delete",
+            "get",
+            "patch"
+          ]
+        },
+        {
+          "apiGroups": [
+            "kubevirt.io"
+          ],
+          "resources": [
+            "virtualmachineinstances"
+          ],
+          "verbs": [
+            "get"
+          ]
+        },
+        {
+          "apiGroups": [
+            "subresources.kubevirt.io"
+          ],
+          "resources": [
+            "virtualmachines/start"
+          ],
+          "verbs": [
+            "update"
+          ]
+        },
+        {
+          "apiGroups": [
+            "subresources.kubevirt.io"
+          ],
+          "resources": [
+            "virtualmachines/stop"
+          ],
+          "verbs": [
+            "update"
+          ]
+        },
+        {
+          "apiGroups": [
+            "cdi.kubevirt.io"
+          ],
+          "resources": [
+            "datavolumes"
+          ],
+          "verbs": [
+            "create",
+            "delete",
+            "get"
+          ]
+        },
+        {
+          "apiGroups": [
+            "upload.cdi.kubevirt.io"
+          ],
+          "resources": [
+            "uploadtokenrequests"
+          ],
+          "verbs": [
+            "create"
+          ]
+        },
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resources": [
+            "persistentvolumeclaims"
+          ],
+          "verbs": [
+            "get",
+            "list"
+          ]
+        },
+        {
+          "apiGroups": [
+            "k8s.cni.cncf.io"
+          ],
+          "resources": [
+            "network-attachment-definitions"
+          ],
+          "verbs": [
+            "get"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "ClusterRole",
+      "name": "bootwright-kubevirt-proof",
+      "rules": [
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resourceNames": [
+            "guests",
+            "kube-system"
+          ],
+          "resources": [
+            "namespaces"
+          ],
+          "verbs": [
+            "get"
+          ]
+        },
+        {
+          "apiGroups": [
+            "cdi.kubevirt.io"
+          ],
+          "resourceNames": [
+            "config"
+          ],
+          "resources": [
+            "cdiconfigs"
+          ],
+          "verbs": [
+            "get"
+          ]
+        },
+        {
+          "apiGroups": [
+            "cdi.kubevirt.io"
+          ],
+          "resources": [
+            "storageprofiles"
+          ],
+          "verbs": [
+            "get"
+          ]
+        },
+        {
+          "apiGroups": [
+            "storage.k8s.io"
+          ],
+          "resources": [
+            "storageclasses"
+          ],
+          "verbs": [
+            "get",
+            "list"
+          ]
+        },
+        {
+          "apiGroups": [
+            "k8s.ovn.org"
+          ],
+          "resources": [
+            "clusteruserdefinednetworks"
+          ],
+          "verbs": [
+            "get"
+          ]
+        },
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resources": [
+            "nodes"
+          ],
+          "verbs": [
+            "list"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "Role",
+      "name": "bootwright-kubevirt-proof",
+      "namespace": "openshift-config-managed",
+      "rules": [
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resourceNames": [
+            "default-ingress-cert"
+          ],
+          "resources": [
+            "configmaps"
+          ],
+          "verbs": [
+            "get"
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "Role",
+      "name": "bootwright-kubevirt-proof",
+      "namespace": "openshift-cnv",
+      "rules": [
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resourceNames": [
+            "kubemacpool-mac-range-config"
+          ],
+          "resources": [
+            "configmaps"
+          ],
+          "verbs": [
+            "get"
+          ]
+        }
+      ]
+    }
+  ]
+}

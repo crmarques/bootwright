@@ -387,10 +387,21 @@
               "verbs": [
                 "get"
               ]
+            },
+            {
+              "apiGroups": [
+                ""
+              ],
+              "resources": [
+                "nodes"
+              ],
+              "verbs": [
+                "list"
+              ]
             }
           ]
         },
-        "desiredDigest": "a2d10410b29db51927f90380d49862319da1bd638e20e802bd2cf316ac44edb4",
+        "desiredDigest": "bf9a6faa68df9743bfbec087b2a64479660b70562474ba524e62e6dd7998d3a5",
         "kind": "ClusterRole",
         "name": "bootwright-kubevirt-proof",
         "namespace": "",

@@ -7,29 +7,39 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-const maxEvidenceBytes = 64 << 10
+const (
+	maxEvidenceBytes = 64 << 10
+	localnetCNI      = "ovn-k8s-cni-overlay"
+)
 
 // HostEvidence is what one provider proof read: the server and cluster the
-// kubeconfig reached, the root class and upload proxy the Machines use, and
-// each check that failed or could not be read.
+// kubeconfig reached, the root class, upload proxy and nodes the Machines use,
+// and each check that failed or could not be read.
 type HostEvidence struct {
-	Absent        bool              `json:"absent"`
-	Failures      []string          `json:"failures"`
-	KubeSystemUID string            `json:"kubeSystemUID"`
-	MACPool       string            `json:"macPool"`
-	Networks      []NetworkEvidence `json:"networks"`
-	Postcondition bool              `json:"postcondition"`
-	ReadWriteMany bool              `json:"readWriteMany"`
-	Request       string            `json:"request"`
-	Server        string            `json:"server"`
-	StorageClass  string            `json:"storageClass"`
-	UploadProxy   string            `json:"uploadProxy"`
-	Version       string            `json:"version"`
+	Absent           bool              `json:"absent"`
+	Failures         []string          `json:"failures"`
+	KubeSystemUID    string            `json:"kubeSystemUID"`
+	MACPool          string            `json:"macPool"`
+	Networks         []NetworkEvidence `json:"networks"`
+	Postcondition    bool              `json:"postcondition"`
+	ReadWriteMany    bool              `json:"readWriteMany"`
+	Request          string            `json:"request"`
+	RootAccessModes  []string          `json:"rootAccessModes"`
+	RootVolumeMode   string            `json:"rootVolumeMode"`
+	SchedulableNodes int               `json:"schedulableNodes"`
+	Server           string            `json:"server"`
+	StorageClass     string            `json:"storageClass"`
+	UploadProxy      string            `json:"uploadProxy"`
+	Version          string            `json:"version"`
 }
 
 type NetworkEvidence struct {
-	Attachment string `json:"attachment"`
-	Present    bool   `json:"present"`
+	Attachment    string `json:"attachment"`
+	CNIType       string `json:"cniType"`
+	MACSpoofCheck *bool  `json:"macSpoofCheck,omitempty"`
+	MTU           int    `json:"mtu,omitempty"`
+	Present       bool   `json:"present"`
+	Topology      string `json:"topology,omitempty"`
 }
 
 // Receipt is one object this block owns: the UID its create reply returned or
@@ -71,8 +81,8 @@ type MachineEvidence struct {
 
 // ValidateHostPresence accepts a proof only when every check held: the host
 // answered as OpenShift Virtualization with a cluster identity, the root class
-// can be migrated, the upload proxy is published and every network is
-// present.
+// can be migrated, a node can run a VirtualMachine, the upload proxy is
+// published and every network is present and of the kind its reference names.
 func ValidateHostPresence(data []byte, request HostRequest, digest string) error {
 	evidence, err := decodeHostEvidence(data, digest)
 	if err != nil {
@@ -88,19 +98,28 @@ func ValidateHostPresence(data []byte, request HostRequest, digest string) error
 		return refusal("lifecycle.state", "the KubeVirt provider proof did not prove its postcondition", "")
 	case !origin(evidence.Server) || evidence.KubeSystemUID == "":
 		return refusal("lifecycle.state", "the KubeVirt provider proof names no server or cluster identity", "")
-	case evidence.StorageClass == "" || !evidence.ReadWriteMany:
+	case evidence.StorageClass == "" || !evidence.ReadWriteMany || !slices.Contains(evidence.RootAccessModes, "ReadWriteMany"):
 		return refusal("lifecycle.state", "the KubeVirt provider proof names no migratable root class", "")
+	case evidence.SchedulableNodes < 1:
+		return refusal("lifecycle.state", "the KubeVirt provider proof names no node schedulable for virtual machines", "")
 	case evidence.UploadProxy == "":
 		return refusal("lifecycle.state", "the KubeVirt provider proof names no upload proxy", "")
 	case len(evidence.Networks) != len(request.Networks):
 		return refusal("lifecycle.state", "the KubeVirt provider proof does not cover every network", "")
 	}
 	for index, network := range request.Networks {
-		if evidence.Networks[index].Attachment != network.Attachment || !evidence.Networks[index].Present {
+		if held := evidence.Networks[index]; held.Attachment != network.Attachment || !held.Present || !attachmentKind(network, held) {
 			return refusal("lifecycle.state", "the KubeVirt provider proof does not prove attachment "+network.Attachment, "")
 		}
 	}
 	return nil
+}
+
+func attachmentKind(network Network, held NetworkEvidence) bool {
+	if network.Derived != "" {
+		return held.CNIType == localnetCNI && held.Topology == "localnet"
+	}
+	return held.CNIType == "bridge" || held.CNIType == "cnv-bridge"
 }
 
 // ValidateHostAbsence accepts only the released proof: a removal that read

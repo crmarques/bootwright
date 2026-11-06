@@ -18,11 +18,19 @@ import os
 import shutil
 import ssl
 import tempfile
+import time
 from urllib.parse import quote, urlsplit
 
 MAX_KUBECONFIG = 65536
 MAX_RESPONSE = 4 * 1024 * 1024
 REQUEST_SECONDS = 30
+# An idempotent request the host answers with one of these statuses, or whose
+# connection it refuses or resets before answering, is sent again at most
+# RETRIES times, after one second, then two, or the answer's numeric
+# Retry-After seconds, none above RETRY_CAP_SECONDS.
+RETRIES = 2
+RETRY_CAP_SECONDS = 10
+TRANSIENT_STATUSES = frozenset((429, 502, 503, 504))
 # The members one accepted kubeconfig may carry, by level. A member outside
 # them, such as insecure-skip-tls-verify, proxy-url, tls-server-name, a file
 # reference, an exec or auth-provider entry, or a username and password, would
@@ -38,7 +46,16 @@ class Refused(ValueError):
 
 
 class Unanswered(Exception):
-    """The host did not answer: the connection failed, timed out or answered past its bound."""
+    """The host did not answer: the connection failed, timed out or answered past its bound.
+
+    transient marks a connection the host refused or broke before any answer,
+    which a later attempt may find answered; a timeout is not transient, because
+    it already spent the request's bound.
+    """
+
+    def __init__(self, transient=False):
+        super().__init__()
+        self.transient = transient
 
 
 def _named(entries, kind):
@@ -133,17 +150,42 @@ class Client:
     """One host cluster's API at exactly the server its kubeconfig names.
 
     transport, when given, replaces the HTTPS exchange with a callable taking
-    (method, path, headers, body) and returning (status, body bytes) or raising
-    Unanswered, so the rules above are tested over a fake API.
+    (method, path, headers, body) and returning (status, body bytes) or
+    (status, body bytes, Retry-After text), or raising Unanswered, so the rules
+    above are tested over a fake API. sleep waits between the attempts of a
+    retried request.
     """
 
-    def __init__(self, connection, scratch="", transport=None):
+    def __init__(self, connection, scratch="", transport=None, sleep=time.sleep):
         self.connection = connection
         self.server = connection["server"]
         self.scratch = scratch
         self.transport = transport
+        self.sleep = sleep
 
-    def request(self, method, resource, body=None, content_type="application/json", query=""):
+    def request(self, method, resource, body=None, content_type="application/json", query="", idempotent=False):
+        """One request's status and JSON body; only an idempotent one is retried when the host's answer is transient."""
+        for attempt in range(RETRIES + 1):
+            last = attempt == RETRIES or not idempotent
+            try:
+                status, parsed, retry_after = self._attempt(method, resource, body, content_type, query)
+            except Unanswered as error:
+                if last or not error.transient:
+                    raise
+                retry_after = None
+            else:
+                if last or status not in TRANSIENT_STATUSES:
+                    return status, parsed
+            self.sleep(self._delay(attempt, retry_after))
+
+    @staticmethod
+    def _delay(attempt, retry_after):
+        text = (retry_after or "").strip()
+        if text.isascii() and text.isdigit():
+            return min(int(text), RETRY_CAP_SECONDS)
+        return 1 << attempt
+
+    def _attempt(self, method, resource, body, content_type, query):
         headers = {"Accept": "application/json"}
         payload = None
         if body is not None:
@@ -152,20 +194,18 @@ class Client:
         if "token" in self.connection:
             headers["Authorization"] = "Bearer " + self.connection["token"]
         target = resource + ("?" + query if query else "")
-        if self.transport is not None:
-            status, data = self.transport(method, target, headers, payload)
-        else:
-            status, data = self._exchange(method, target, headers, payload)
+        answer = self.transport(method, target, headers, payload) if self.transport is not None else self._exchange(method, target, headers, payload)
+        status, data, retry_after = (answer + (None,))[:3]
         if len(data) > MAX_RESPONSE:
             raise Unanswered()
         if not data:
-            return status, None
+            return status, None, retry_after
         try:
-            return status, json.loads(data.decode("utf-8"))
+            return status, json.loads(data.decode("utf-8")), retry_after
         except (UnicodeError, ValueError):
             if 200 <= status < 300:
                 raise Unanswered() from None
-            return status, None
+            return status, None, retry_after
 
     def _context(self, directory):
         context = ssl.create_default_context(cadata=self.connection["ca"])
@@ -192,11 +232,11 @@ class Client:
                 connection.request(method, target, body=payload, headers=headers)
                 response = connection.getresponse()
                 data = response.read(MAX_RESPONSE + 1)
-                return response.status, data
+                return response.status, data, response.getheader("Retry-After")
             except ssl.SSLCertVerificationError:
                 raise Refused("the host's API server certificate is not verified by the kubeconfig's certificate authority") from None
-            except (OSError, http.client.HTTPException):
-                raise Unanswered() from None
+            except (OSError, http.client.HTTPException) as error:
+                raise Unanswered(transient=isinstance(error, ConnectionError)) from None
             finally:
                 connection.close()
         finally:
@@ -204,7 +244,7 @@ class Client:
 
     def get(self, resource, query=""):
         """The object at resource, None when the API answers 404, or Unanswered."""
-        status, body = self.request("GET", resource, query=query)
+        status, body = self.request("GET", resource, query=query, idempotent=True)
         if status == 404:
             return None
         if status == 200 and isinstance(body, dict):

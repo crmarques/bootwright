@@ -1298,11 +1298,16 @@ func contractKubeVirtHostPresence(t *testing.T, execution lifecycle.Execution) m
 	}
 	networks := []any{}
 	for _, network := range request.Networks {
-		networks = append(networks, map[string]any{"attachment": network.Attachment, "present": true})
+		held := map[string]any{"attachment": network.Attachment, "cniType": "bridge", "present": true}
+		if network.Derived != "" {
+			held["cniType"], held["topology"] = "ovn-k8s-cni-overlay", "localnet"
+		}
+		networks = append(networks, held)
 	}
 	return map[string]any{
 		"failures": []any{}, "kubeSystemUID": "6c1f2b8e-0000-4000-8000-000000000001", "macPool": "outside", "networks": networks,
-		"postcondition": true, "readWriteMany": true, "server": "https://api.host.example.test:6443", "storageClass": "guest-block-storage",
+		"postcondition": true, "readWriteMany": true, "rootAccessModes": []any{"ReadWriteMany"}, "rootVolumeMode": "Block", "schedulableNodes": 3,
+		"server": "https://api.host.example.test:6443", "storageClass": "guest-block-storage",
 		"uploadProxy": "https://cdi-uploadproxy.apps.host.example.test", "version": "v1.34.2",
 	}
 }

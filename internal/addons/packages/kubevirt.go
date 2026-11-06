@@ -38,6 +38,7 @@ var proofRules = []rule{
 	{"cdi.kubevirt.io", "storageprofiles", []string{"get"}},
 	{"storage.k8s.io", "storageclasses", []string{"get", "list"}},
 	{"k8s.ovn.org", "clusteruserdefinednetworks", []string{"get"}},
+	{"", "nodes", []string{"list"}},
 }
 
 type rule struct {

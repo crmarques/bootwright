@@ -641,8 +641,8 @@ func provedHost(records []lifecycle.BlockEvidence, provider string) (proof, erro
 }
 
 // Quiescent proves the VirtualMachine is not running: only an instance the
-// host reports absent is idle, and a host that does not answer leaves it
-// unproved, never stopped.
+// host reports absent or final is idle, and a host that does not answer
+// leaves it unproved, never stopped.
 func (c MachineCapability) Quiescent(ctx context.Context, probe lifecycle.Probe) (lifecycle.Quiescence, error) {
 	execution := probe.Execution()
 	request, err := c.prepare(ctx, execution)
@@ -658,14 +658,20 @@ func (c MachineCapability) Quiescent(ctx context.Context, probe lifecycle.Probe)
 	switch {
 	case err != nil || !evidence.Answered:
 		return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: "the host cluster did not answer for its VirtualMachineInstance", Stop: stop}, nil
-	case evidence.Instance != "":
+	case instanceRunning(evidence.Instance):
 		return lifecycle.Quiescence{State: lifecycle.Live, Reason: "its VirtualMachineInstance is " + evidence.Instance, Stop: stop}, nil
+	case evidence.Instance != "":
+		return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its VirtualMachineInstance is " + evidence.Instance}, nil
 	}
 	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its VirtualMachineInstance is absent"}, nil
 }
 
+func instanceRunning(phase string) bool {
+	return phase != "" && phase != "Succeeded" && phase != "Failed"
+}
+
 // ProbesQuiescence says a VirtualMachine's removal is gated on its instance
-// being absent, which only the host can show.
+// being absent or final, which only the host can show.
 func (MachineCapability) ProbesQuiescence() bool { return true }
 
 func (MachineCapability) RemovesHost(reconciliation.Block) bool { return true }

@@ -100,6 +100,21 @@ unverified until [B731](../../specs/milestones/m3.md#b731)'s run:
 - A persistent vTPM's state claim carries an owner reference to its
   VirtualMachine, so the removal proof finds it by that reference.
 - KubeMacPool admits a pinned `macAddress` outside its range.
+- Under `runStrategy: Manual`, a guest power-off or a failure leaves the
+  VirtualMachineInstance in phase `Succeeded` or `Failed` until the next
+  `start`, which replaces it; the arm reads such an instance as stopped and
+  stops it away once when a start leaves it in place.
+- A `Foreground` delete of a DataVolume waits for its claim, which
+  `kubernetes.io/pvc-protection` holds while a running instance mounts it, so a
+  live `media_eject` deletes the upload DataVolume with `Background` and its
+  claim goes when the instance stops.
+- CDI applies the StorageProfile's first claimPropertySet to a DataVolume that
+  names no access mode, so the proof judges the root by that set alone.
+- A NetworkAttachmentDefinition derived from a ClusterUserDefinedNetwork has a
+  config of CNI type `ovn-k8s-cni-overlay` and topology `localnet`, which
+  carries `subnets` only when the network enables IPAM.
+- CDI fills a new class's StorageProfile within the proof's 120 s wait, for
+  example right after the `fdf` package creates the class.
 
 ## Decision history
 

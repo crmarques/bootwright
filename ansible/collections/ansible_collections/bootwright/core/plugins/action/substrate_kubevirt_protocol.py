@@ -30,17 +30,38 @@ def items(values, shape):
     return [shape(value) for value in values]
 
 
+def count(value, limit=1 << 20):
+    if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= limit:
+        raise ValueError("bounded count")
+    return value
+
+
+def network(value):
+    published = {"attachment": text(value["attachment"], 63), "cniType": text(value.get("cniType"), 63), "present": bool(value["present"])}
+    if "topology" in value:
+        published["topology"] = text(value["topology"], 63)
+    if "mtu" in value:
+        published["mtu"] = count(value["mtu"])
+    if "macSpoofCheck" in value:
+        if not isinstance(value["macSpoofCheck"], bool):
+            raise ValueError("bounded flag")
+        published["macSpoofCheck"] = value["macSpoofCheck"]
+    return published
+
+
 def host(observation, digest):
     return {
         "absent": bool(observation.get("absent")),
         "failures": items(observation.get("failures") or [], lambda value: text(value, 512)),
         "kubeSystemUID": text(observation.get("kubeSystemUID")),
         "macPool": text(observation.get("macPool") or "unknown", 16),
-        "networks": items(observation.get("networks") or [], lambda value: {
-            "attachment": text(value["attachment"], 63), "present": bool(value["present"])}),
+        "networks": items(observation.get("networks") or [], network),
         "postcondition": bool(observation.get("postcondition")),
         "readWriteMany": bool(observation.get("readWriteMany")),
         "request": adapter_protocol.request_digest(digest),
+        "rootAccessModes": items(observation.get("rootAccessModes") or [], lambda value: text(value, 32)),
+        "rootVolumeMode": text(observation.get("rootVolumeMode"), 16),
+        "schedulableNodes": count(observation.get("schedulableNodes", 0)),
         "server": text(observation.get("server")),
         "storageClass": text(observation.get("storageClass"), 253),
         "uploadProxy": text(observation.get("uploadProxy")),

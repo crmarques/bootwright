@@ -28,7 +28,9 @@ func controller() api.Object {
 	))
 }
 
-func provider(profile ...api.FieldValue) api.Object {
+func provider(profile ...api.FieldValue) api.Object { return providerWithNAD("guests", profile...) }
+
+func providerWithNAD(namespace string, profile ...api.FieldValue) api.Object {
 	selected := api.MapValue(text("name", "node"), number("cpu", "8"), number("memoryMiB", "16384"), number("diskGiB", "120"))
 	for _, extra := range profile {
 		selected = selected.With(extra.Name, extra.Value)
@@ -38,7 +40,7 @@ func provider(profile ...api.FieldValue) api.Object {
 			text("storageClassRef", "guest-block"), field("machineProfiles", api.ListValue(selected)))),
 		field("networkAttachments", api.ListValue(
 			api.MapValue(text("name", "lab-guests"), field("kubevirt", api.MapValue(field("networkRef", api.MapValue(
-				text("apiGroup", "k8s.cni.cncf.io"), text("kind", "NetworkAttachmentDefinition"), text("name", "guest-l2"), text("namespace", "guests")))))),
+				text("apiGroup", "k8s.cni.cncf.io"), text("kind", "NetworkAttachmentDefinition"), text("name", "guest-l2"), text("namespace", namespace)))))),
 			api.MapValue(text("name", "storage"), field("kubevirt", api.MapValue(field("networkRef", api.MapValue(
 				text("apiGroup", "k8s.ovn.org"), text("kind", "ClusterUserDefinedNetwork"), text("name", "storage-net")))))),
 		)),

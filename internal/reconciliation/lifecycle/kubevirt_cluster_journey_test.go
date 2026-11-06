@@ -160,10 +160,15 @@ func (h *kubevirtHost) proof(run lifecycle.RunRequest) (lifecycle.RunResult, err
 	}
 	networks := []kubevirt.NetworkEvidence{}
 	for _, network := range request.Networks {
-		networks = append(networks, kubevirt.NetworkEvidence{Attachment: network.Attachment, Present: true})
+		held := kubevirt.NetworkEvidence{Attachment: network.Attachment, CNIType: "bridge", Present: true}
+		if network.Derived != "" {
+			held.CNIType, held.Topology = "ovn-k8s-cni-overlay", "localnet"
+		}
+		networks = append(networks, held)
 	}
 	return kubevirtResult("unchanged", kubevirt.HostEvidence{Failures: []string{}, KubeSystemUID: kubevirtHostUID, MACPool: "outside",
-		Networks: networks, Postcondition: true, ReadWriteMany: true, Request: run.Digest, Server: "https://api.host.example.test:6443",
+		Networks: networks, Postcondition: true, ReadWriteMany: true, Request: run.Digest, RootAccessModes: []string{"ReadWriteMany"},
+		RootVolumeMode: "Block", SchedulableNodes: 3, Server: "https://api.host.example.test:6443",
 		StorageClass: "guest-block-storage", UploadProxy: "https://cdi-uploadproxy.apps.host.example.test", Version: "v1.34.2"})
 }
 
@@ -256,7 +261,11 @@ func (h *kubevirtHost) install(run lifecycle.RunRequest) (lifecycle.RunResult, e
 					continue
 				}
 				h.inserts[node.Machine]++
-				h.uploaded[node.Machine], h.claims[node.Machine], h.running[node.Machine] = true, true, true
+				h.uploaded[node.Machine], h.claims[node.Machine] = true, true
+				if h.interrupted("push") {
+					return lifecycle.RunResult{}, errors.New("the attempt was interrupted after the upload started and before the node ran")
+				}
+				h.running[node.Machine] = true
 			}
 			if h.interrupted("boot") {
 				return lifecycle.RunResult{}, errors.New("the attempt was interrupted during the bootstrap wait")
@@ -401,21 +410,22 @@ func holdKubevirtSecrets(journey *lifecycle.CapabilityJourney) {
 
 // The KubeVirt cluster's journey: the provider proof and the Machines precede
 // the push; every entry point of every node is handed the identity its
-// Machine's block recorded; an apply interrupted during the bootstrap wait, or
-// after the release whose reply was lost, is continued without pushing a node
-// already running this cluster's image again; the release deletes each upload
+// Machine's block recorded; an apply interrupted after a node's upload started,
+// during the bootstrap wait, or after the release whose reply was lost, is
+// continued without pushing a node already running this cluster's image again,
+// and pushes the node whose upload was left unfinished once more; the release deletes each upload
 // DataVolume while its claim stays until the instance stops; and once the
 // operator stops the nodes the destroy proves every VirtualMachine,
 // DataVolume and claim absent.
 func TestAKubeVirtClusterIsPushedBootedReleasedContinuedAndDestroyed(t *testing.T) {
-	for _, interruption := range []string{"", "boot", "release", "eject"} {
+	for _, interruption := range []string{"", "push", "boot", "release", "eject"} {
 		t.Run("interrupted at "+interruption, func(t *testing.T) {
 			journey, host := kubevirtClusterJourney(t)
 			host.failAt = interruption
 			apply := lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}
 			holdKubevirtSecrets(journey)
 			_, err := journey.Service.Apply(context.Background(), apply)
-			if interruption == "boot" || interruption == "release" {
+			if interruption == "push" || interruption == "boot" || interruption == "release" {
 				if err == nil {
 					t.Fatal("an interrupted installation was recorded done")
 				}
@@ -438,8 +448,12 @@ func TestAKubeVirtClusterIsPushedBootedReleasedContinuedAndDestroyed(t *testing.
 				}
 			}
 			for _, name := range kubevirtNodes {
-				if host.inserts[name] != 1 {
-					t.Fatalf("%s was pushed %d times: %v", name, host.inserts[name], host.calls)
+				pushes := 1
+				if interruption == "push" && name == kubevirtNodes[0] {
+					pushes = 2
+				}
+				if host.inserts[name] != pushes {
+					t.Fatalf("%s was pushed %d times, want %d: %v", name, host.inserts[name], pushes, host.calls)
 				}
 				if host.uploaded[name] || !host.claims[name] || !host.running[name] {
 					t.Fatalf("%s after release: upload %t, claim %t, running %t", name, host.uploaded[name], host.claims[name], host.running[name])

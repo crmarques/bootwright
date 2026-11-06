@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 from datetime import datetime
 
-from ansible_collections.bootwright.core.plugins.module_utils.kubevirt_api import Answered, Refused, Unanswered, path
+from ansible_collections.bootwright.core.plugins.module_utils.kubevirt_api import TRANSIENT_STATUSES, Answered, Refused, Unanswered, path
 
 OWNER = "bootwright.io/owner"
 MEDIA = "bootwright.io/media-identity"
@@ -26,13 +27,23 @@ SPREAD = "bootwright.io/spread"
 BIND = "cdi.kubevirt.io/storage.bind.immediate.requested"
 DEFAULT_VIRT = "storageclass.kubevirt.io/is-default-virt-class"
 DEFAULT_CLASS = "storageclass.kubernetes.io/is-default-class"
+SCHEDULABLE = "kubevirt.io/schedulable"
+KVM = "devices.kubevirt.io/kvm"
+LOCALNET_CNI = "ovn-k8s-cni-overlay"
+BRIDGE_CNI = ("bridge", "cnv-bridge")
+QUANTITY = re.compile(r"([0-9]{1,15})(k|M|G|T|P|E|Ki|Mi|Gi|Ti|Pi|Ei)?")
 SKEW_SECONDS = 5
 POLL_SECONDS = 5
 POWER_SECONDS = 300
+REPLACE_SECONDS = 60
 VOLUME_SECONDS = 300
 MAX_CLAIM_PAGES = 10
+MAX_NODE_PAGES = 10
+PROFILE_SECONDS = 120
 MEDIA_VOLUME = "media"
 GIB = 1 << 30
+FINAL = ("Succeeded", "Failed")
+CONDITION_MESSAGE = 200
 
 
 def name(context, machine):
@@ -128,13 +139,32 @@ class Host:
         return self.deadline - self.clock()
 
     def wait(self, read, done, seconds):
-        """Poll read until done holds or the bound ends; the last reading either way."""
+        """Poll read until done holds or the bound ends; the last reading either way.
+
+        A read the host answers transiently (a refused or reset connection, or
+        HTTP 429, 502, 503 or 504) is not done and is polled again; when the bound
+        ends after one, that error is raised rather than a stale reading returned.
+        """
         end = min(self.deadline, self.clock() + seconds)
         while True:
-            value = read()
-            if done(value) or self.clock() + POLL_SECONDS > end:
+            try:
+                value, transient = read(), None
+            except (Unanswered, Answered) as error:
+                if not transient_error(error):
+                    raise
+                value, transient = None, error
+            if transient is None and done(value):
+                return value
+            if self.clock() + POLL_SECONDS > end:
+                if transient is not None:
+                    raise transient
                 return value
             self.sleep(POLL_SECONDS)
+
+
+def transient_error(error):
+    """Whether a host answer is one a later reading may find changed."""
+    return error.transient if isinstance(error, Unanswered) else error.status in TRANSIENT_STATUSES
 
 
 def answered_reason(error):
@@ -146,15 +176,16 @@ def answered_reason(error):
 
 # The provider proof.
 
-def proof(client, request, clock=time.time):
+def proof(client, request, clock=time.time, sleep=time.sleep):
     """Every check of the provider proof, in order; a check that cannot be read is a failure naming it."""
     evidence = {"failures": [], "kubeSystemUID": "", "macPool": "unknown", "networks": [], "postcondition": False,
-                "readWriteMany": False, "server": client.server, "storageClass": "", "uploadProxy": "", "version": ""}
+                "readWriteMany": False, "rootAccessModes": [], "rootVolumeMode": "", "schedulableNodes": 0,
+                "server": client.server, "storageClass": "", "uploadProxy": "", "version": ""}
     failures = evidence["failures"]
 
-    def read(resource, what):
+    def read(resource, what, query=""):
         try:
-            return client.get(resource)
+            return client.get(resource, query)
         except Unanswered:
             failures.append(what + " could not be read: the host did not answer")
         except Answered as error:
@@ -171,15 +202,19 @@ def proof(client, request, clock=time.time):
     kubevirt = read("/apis/subresources.kubevirt.io/v1/version", "the KubeVirt version")
     if kubevirt is None:
         failures.append("the host cluster runs no OpenShift Virtualization: /apis/subresources.kubevirt.io/v1/version is absent")
-    host = Host(client, request["namespace"], clock() + 600, clock)
+    host = Host(client, request["namespace"], clock() + 600, clock, sleep)
     system = read(path("", "v1", "namespaces", name="kube-system"), "the kube-system namespace")
-    if system:
+    if system is None:
+        failures.append("the kube-system namespace does not exist, so the host cluster has no identity to pin")
+    elif system:
         evidence["kubeSystemUID"] = uid(system)
     namespace = read(path("", "v1", "namespaces", name=request["namespace"]), "the namespace " + request["namespace"])
     if namespace is None:
         failures.append("the namespace %s does not exist; the operator creates it" % request["namespace"])
     config = read(path("cdi.kubevirt.io", "v1beta1", "cdiconfigs", name="config"), "the CDI configuration")
-    if config:
+    if config is None:
+        failures.append("the CDI configuration cdiconfigs/config does not exist, so the host publishes no upload proxy")
+    elif config:
         proxy = (config.get("status") or {}).get("uploadProxyURL") or ""
         if proxy:
             evidence["uploadProxy"] = proxy if "://" in proxy else "https://" + proxy
@@ -188,7 +223,8 @@ def proof(client, request, clock=time.time):
     ingress = read(path("", "v1", "configmaps", "openshift-config-managed", "default-ingress-cert"), "the ingress certificate authority")
     if ingress is None or (ingress and "-----BEGIN CERTIFICATE-----" not in ((ingress.get("data") or {}).get("ca-bundle.crt") or "")):
         failures.append("ConfigMap openshift-config-managed/default-ingress-cert publishes no ingress certificate authority")
-    root_class(read, request, evidence)
+    root_class(read, request, evidence, host)
+    evidence["schedulableNodes"] = schedulable_nodes(read, failures)
     for access in request["access"]:
         allowed(client, host, access, failures)
     for network in request["networks"]:
@@ -198,35 +234,94 @@ def proof(client, request, clock=time.time):
     return evidence
 
 
-def root_class(read, request, evidence):
+def root_class(read, request, evidence, host):
     failures = evidence["failures"]
-    chosen = request.get("storageClass") or ""
+    chosen = request.get("storageClass") or default_class(read, failures)
     if not chosen:
-        classes = read(path("storage.k8s.io", "v1", "storageclasses"), "the storage classes")
-        if not classes:
-            return
-        items = [item for item in classes.get("items") or [] if isinstance(item, dict)]
-        for annotation in (DEFAULT_VIRT, DEFAULT_CLASS):
-            named = [item["metadata"]["name"] for item in items if ((item.get("metadata") or {}).get("annotations") or {}).get(annotation) == "true"]
-            if named:
-                chosen = sorted(named)[0]
-                break
-        if not chosen:
-            failures.append("the host declares no default virtualization or default storage class; set spec.kubevirt.storageClassRef")
-            return
+        return
     evidence["storageClass"] = chosen
-    profile = read(path("cdi.kubevirt.io", "v1beta1", "storageprofiles", name=chosen), "the StorageProfile of " + chosen)
+    resource, what = path("cdi.kubevirt.io", "v1beta1", "storageprofiles", name=chosen), "the StorageProfile of " + chosen
+    profile = read(resource, what)
+    end = min(host.deadline, host.clock() + PROFILE_SECONDS)
+    # CDI fills a new class's StorageProfile shortly after the class appears.
+    while (profile is None or profile and not claim_sets(profile)) and host.clock() + POLL_SECONDS <= end:
+        host.sleep(POLL_SECONDS)
+        profile = read(resource, what)
     if profile is None:
         failures.append("the storage class %s has no StorageProfile" % chosen)
     if not profile:
         return
-    sets = (profile.get("status") or {}).get("claimPropertySets") or []
+    sets = claim_sets(profile)
     if not sets:
         failures.append("the StorageProfile of %s lists no claimPropertySets, so CDI cannot size a disk on it" % chosen)
         return
-    evidence["readWriteMany"] = any("ReadWriteMany" in (entry.get("accessModes") or []) for entry in sets if isinstance(entry, dict))
+    first = sets[0] if isinstance(sets[0], dict) else {}
+    modes = [mode for mode in first.get("accessModes") or [] if isinstance(mode, str)]
+    evidence["rootAccessModes"] = [mode[:32] for mode in modes[:8]]
+    evidence["rootVolumeMode"] = first["volumeMode"][:16] if isinstance(first.get("volumeMode"), str) else ""
+    evidence["readWriteMany"] = "ReadWriteMany" in modes
     if not evidence["readWriteMany"]:
-        failures.append("the storage class %s offers no ReadWriteMany claim, so a host drain cannot migrate a VirtualMachine on it" % chosen)
+        failures.append("the storage class %s offers no ReadWriteMany claim in the first claimPropertySet of its StorageProfile, "
+                        "which CDI applies to the root, so a host drain cannot migrate a VirtualMachine on it" % chosen)
+
+
+def default_class(read, failures):
+    """The one class the winning default annotation marks, or a failure naming every class it marks."""
+    classes = read(path("storage.k8s.io", "v1", "storageclasses"), "the storage classes")
+    if classes is None:
+        failures.append("the host serves no storage classes")
+    if not classes:
+        return ""
+    items = [item for item in classes.get("items") or [] if isinstance(item, dict)]
+    for annotation in (DEFAULT_VIRT, DEFAULT_CLASS):
+        named = sorted(str((item.get("metadata") or {}).get("name"))[:253] for item in items
+                       if ((item.get("metadata") or {}).get("annotations") or {}).get(annotation) == "true")
+        if len(named) == 1:
+            return named[0]
+        if named:
+            failures.append(("the host marks %d storage classes %s (%s); set spec.kubevirt.storageClassRef to the root class"
+                             % (len(named), annotation, ", ".join(named)))[:512])
+            return ""
+    failures.append("the host declares no default virtualization or default storage class; set spec.kubevirt.storageClassRef")
+    return ""
+
+
+def claim_sets(profile):
+    sets = (profile.get("status") or {}).get("claimPropertySets")
+    return sets if isinstance(sets, list) else []
+
+
+def schedulable_nodes(read, failures):
+    """How many nodes KubeVirt marks schedulable with KVM allocatable; a failure when none is or the list cannot be read."""
+    count, token = 0, ""
+    for ignored_page in range(MAX_NODE_PAGES):
+        listing = read(path("", "v1", "nodes"), "the nodes", "limit=500" + ("&continue=" + token if token else ""))
+        if listing is None:
+            failures.append("the nodes could not be read: the host serves no node list")
+        if not listing:
+            return 0
+        for item in listing.get("items") or []:
+            if isinstance(item, dict) and ((item.get("metadata") or {}).get("labels") or {}).get(SCHEDULABLE) == "true" and \
+                    quantity(((item.get("status") or {}).get("allocatable") or {}).get(KVM)) > 0:
+                count += 1
+        token = (listing.get("metadata") or {}).get("continue") or ""
+        if not token:
+            if not count:
+                failures.append("no node of the host is schedulable for virtual machines with KVM: none is labelled %s \"true\" "
+                                "with %s allocatable" % (SCHEDULABLE, KVM))
+            return count
+    failures.append("the nodes could not be read: the host lists more than %d pages of them" % MAX_NODE_PAGES)
+    return 0
+
+
+def quantity(value):
+    """A Kubernetes quantity's whole value, such as 1k for the 1000 KVM devices KubeVirt advertises; 0 for anything else."""
+    matched = QUANTITY.fullmatch(value) if isinstance(value, str) else None
+    if matched is None:
+        return 0
+    suffix = matched.group(2) or ""
+    scale = 1024 ** ("KMGTPE".index(suffix[0]) + 1) if suffix.endswith("i") else 1000 ** ("kMGTPE".index(suffix) + 1) if suffix else 1
+    return int(matched.group(1)) * scale
 
 
 def allowed(client, host, access, failures):
@@ -236,7 +331,7 @@ def allowed(client, host, access, failures):
                                               "verb": access["verb"]}}}
     label = "%s %s%s" % (access["verb"], access["resource"], "/" + access["subresource"] if access.get("subresource") else "")
     try:
-        status, body = client.request("POST", path("authorization.k8s.io", "v1", "selfsubjectaccessreviews"), review)
+        status, body = client.request("POST", path("authorization.k8s.io", "v1", "selfsubjectaccessreviews"), review, idempotent=True)
     except Unanswered:
         failures.append("the permission to %s could not be read: the host did not answer" % label)
         return
@@ -247,26 +342,97 @@ def allowed(client, host, access, failures):
 
 
 def network_present(read, network, failures, client):
-    attachment = {"attachment": network["attachment"], "present": False}
+    label, where = network["attachment"], "%s/%s" % (network["namespace"], network["name"])
+    attachment = {"attachment": label, "cniType": "", "present": False}
     definition = read(path("k8s.cni.cncf.io", "v1", "network-attachment-definitions", network["namespace"], network["name"]),
-                      "the NetworkAttachmentDefinition %s/%s" % (network["namespace"], network["name"]))
+                      "the NetworkAttachmentDefinition " + where)
     if definition is None:
-        failures.append("attachment %s: NetworkAttachmentDefinition %s/%s does not exist" % (network["attachment"], network["namespace"], network["name"]))
+        failures.append("attachment %s: NetworkAttachmentDefinition %s does not exist" % (label, where))
     if not definition:
         return attachment
-    if network.get("derived"):
-        try:
-            derived = client.get(path("k8s.ovn.org", "v1", "clusteruserdefinednetworks", name=network["derived"]))
-        except (Unanswered, Answered):
-            derived = None
-        conditions = ((derived or {}).get("status") or {}).get("conditions") or []
-        created = [c for c in conditions if isinstance(c, dict) and c.get("type") == "NetworkCreated"]
-        if created and created[0].get("status") != "True":
-            failures.append("attachment %s: ClusterUserDefinedNetwork %s reports NetworkCreated %s" % (
-                network["attachment"], network["derived"], str(created[0].get("status"))[:16]))
-            return attachment
+    try:
+        members = json.loads((definition.get("spec") or {}).get("config"))
+    except (TypeError, ValueError):
+        members = None
+    if not isinstance(members, dict):
+        failures.append("attachment %s: the spec.config of NetworkAttachmentDefinition %s is not a JSON object" % (label, where))
+        return attachment
+    record_kind(attachment, members)
+    refusal = kind_refusal(network, attachment, members, where)
+    if refusal:
+        failures.append("attachment %s: %s" % (label, refusal))
+        return attachment
+    if network.get("derived") and not network_created(client, network, failures):
+        return attachment
     attachment["present"] = True
     return attachment
+
+
+def printable(value, limit=63):
+    return "".join(char for char in value if char.isprintable())[:limit] if isinstance(value, str) else ""
+
+
+def first_plugin(members):
+    """A plugin list's first plugin, which a bridge definition chains others after; the config itself otherwise."""
+    plugins = members.get("plugins")
+    if "type" not in members and isinstance(plugins, list) and plugins and isinstance(plugins[0], dict):
+        return plugins[0]
+    return members
+
+
+def record_kind(attachment, members):
+    """The CNI type, topology, MTU and, for a bridge, MAC spoof checking a definition's config declares."""
+    members = first_plugin(members)
+    attachment["cniType"] = printable(members.get("type"))
+    if isinstance(members.get("topology"), str):
+        attachment["topology"] = printable(members["topology"])
+    mtu = members.get("mtu")
+    if isinstance(mtu, int) and not isinstance(mtu, bool) and 0 < mtu < 1 << 20:
+        attachment["mtu"] = mtu
+    if attachment["cniType"] in BRIDGE_CNI and isinstance(members.get("macspoofchk"), bool):
+        attachment["macSpoofCheck"] = members["macspoofchk"]
+
+
+def kind_refusal(network, attachment, members, where):
+    """Why a definition is neither a Localnet ClusterUserDefinedNetwork's nor a bridge; empty when it is the one its reference names."""
+    if network.get("derived"):
+        derived = network["derived"][:253]
+        if attachment["cniType"] != LOCALNET_CNI or attachment.get("topology") != "localnet":
+            return ("the NetworkAttachmentDefinition of ClusterUserDefinedNetwork %s is of CNI type %s and topology %s, not an OVN "
+                    "localnet overlay" % (derived, attachment["cniType"] or "none", attachment.get("topology") or "none"))
+        if "subnets" in members:
+            return ("the NetworkAttachmentDefinition of ClusterUserDefinedNetwork %s carries subnets, so its IPAM is enabled; the "
+                    "arm's VirtualMachines need IPAM disabled, since OVN would enforce IP port security on addresses it assigns" % derived)
+        return ""
+    if attachment["cniType"] not in BRIDGE_CNI:
+        return ("NetworkAttachmentDefinition %s is of CNI type %s; the arm attaches only to a Localnet ClusterUserDefinedNetwork or a "
+                "bridge NetworkAttachmentDefinition" % (where, attachment["cniType"] or "none"))
+    return ""
+
+
+def network_created(client, network, failures):
+    """Whether the ClusterUserDefinedNetwork reports its network created; one the credential may not read is not refused."""
+    label, derived = network["attachment"], network["derived"][:253]
+    try:
+        live = client.get(path("k8s.ovn.org", "v1", "clusteruserdefinednetworks", name=network["derived"]))
+    except Unanswered:
+        failures.append("attachment %s: ClusterUserDefinedNetwork %s could not be read: the host did not answer" % (label, derived))
+        return False
+    except Answered as error:
+        if error.status in (401, 403):
+            return True
+        failures.append("attachment %s: ClusterUserDefinedNetwork %s could not be read: %s" % (label, derived, answered_reason(error)))
+        return False
+    if live is None:
+        failures.append("attachment %s: ClusterUserDefinedNetwork %s does not exist" % (label, derived))
+        return False
+    conditions = (live.get("status") or {}).get("conditions") or []
+    created = [c for c in conditions if isinstance(c, dict) and c.get("type") == "NetworkCreated"]
+    if created and created[0].get("status") != "True":
+        failures.append("attachment %s: ClusterUserDefinedNetwork %s reports NetworkCreated %s" % (
+            label, derived, str(created[0].get("status"))[:16]))
+        return False
+    return True
 
 
 def mac_pool(client, macs):
@@ -416,12 +582,26 @@ def read_machine(host, request, context, receipts, *, prove_shape=False):
             if volume == request["rootVolume"]:
                 evidence["postcondition"] = bool(mine and (held.get("status") or {}).get("phase") == "Succeeded")
             evidence["volumes"].append({"kind": "DataVolume", "name": volume, "present": bool(mine)})
-        evidence["volumes"].extend(claims(host, owners))
+        held_claims = claims(host, owners)
+        if not any(v["name"] == request["mediaVolume"] for v in held_claims) and media_claim(host, request["mediaVolume"], vm):
+            held_claims = sorted(held_claims + [{"kind": "PersistentVolumeClaim", "name": request["mediaVolume"], "present": True}],
+                                 key=lambda v: v["name"])
+        evidence["volumes"].extend(held_claims)
         evidence["answered"] = True
     except Unanswered:
         evidence["answered"] = False
     evidence["receipts"] = sorted(receipts, key=lambda r: (r["kind"], r["name"]))
     return evidence
+
+
+def media_claim(host, volume, vm):
+    """Whether the upload claim a live eject left still exists: its DataVolume is gone, so no receipt holds the
+    owner's UID, and it is counted present by its owner's kind and name or by labels that derive the VirtualMachine."""
+    held = host.client.get(host.pvc(volume))
+    if held is None:
+        return False
+    references = (held.get("metadata") or {}).get("ownerReferences") or []
+    return derives(held, vm) or any(ref.get("kind") == "DataVolume" and ref.get("name") == volume for ref in references)
 
 
 def claims(host, owners):
@@ -506,7 +686,7 @@ def destroy(host, request, context):
     state = ownership("VirtualMachine", live, receipts, context)
     if state == "foreign":
         raise Refused("VirtualMachine %s/%s exists and is not this context's, so nothing was deleted" % (request["namespace"], vm))
-    if state == "own" and host.client.get(host.vmi(vm)) is not None:
+    if state == "own" and running(instance_phase(host, vm)):
         raise Refused("VirtualMachine %s/%s is running; stop it before its removal" % (request["namespace"], vm))
     # Record every DataVolume's UID before anything is deleted, so the claims
     # each one owns are still found by their owner reference once it is gone.
@@ -524,8 +704,8 @@ def destroy(host, request, context):
     return changed, evidence
 
 
-def delete(host, resource, object_uid):
-    options = {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": {"uid": object_uid}, "propagationPolicy": "Foreground"}
+def delete(host, resource, object_uid, propagation="Foreground"):
+    options = {"apiVersion": "v1", "kind": "DeleteOptions", "preconditions": {"uid": object_uid}, "propagationPolicy": propagation}
     status, body = host.client.request("DELETE", resource, options)
     if status in (200, 202):
         return True
@@ -582,13 +762,21 @@ def media_of(host, live, volume):
     return held
 
 
-def instance_phase(host, vm):
-    instance = host.client.get(host.vmi(vm))
+def phase_of(instance):
     return "" if instance is None else str((instance.get("status") or {}).get("phase") or "Pending")
 
 
+def instance_phase(host, vm):
+    return phase_of(host.client.get(host.vmi(vm)))
+
+
+def running(phase):
+    """Whether an instance in this phase runs: one absent or final under runStrategy Manual is stopped."""
+    return bool(phase) and phase not in FINAL
+
+
 def power_of(phase):
-    return "Off" if phase in ("", "Succeeded", "Failed") else "On"
+    return "On" if running(phase) else "Off"
 
 
 def presented(live):
@@ -626,7 +814,7 @@ def pre_boot(host, vm, require_tpm=False, expected=(), firmware=None):
         raise Refused("VirtualMachine %s/%s does not present the interfaces its realization derived" % (host.namespace, vm))
     if require_tpm and not (devices.get("tpm") or {}).get("persistent"):
         raise PortRefused("tpm-absent", "VirtualMachine %s/%s presents no persistent vTPM" % (host.namespace, vm))
-    if instance_phase(host, vm):
+    if running(instance_phase(host, vm)):
         raise PortRefused("machine-running", "this machine is running, and an installation erases its disk; stop it explicitly before installing over it")
     return {"power": "Off", "power_state": "off"}
 
@@ -634,27 +822,77 @@ def pre_boot(host, vm, require_tpm=False, expected=(), firmware=None):
 def change_power(host, vm, verb, force=False):
     """Start or stop through the subresource and poll the instance there; a stop the guest did not finish reports running."""
     port_vm(host, vm)
-    if verb in ("off", "restart"):
-        phase = instance_phase(host, vm)
-        if phase:
-            body = {"gracePeriod": 0} if force else {}
-            status, answer = host.client.request("PUT", host.subresource(vm, "stop"), body)
-            if status not in (200, 202, 409):
-                raise Answered(status, answer)
-            phase = host.wait(lambda: instance_phase(host, vm), lambda value: not value, POWER_SECONDS)
-            if phase:
-                raise Refused("VirtualMachine %s/%s is still running %d seconds after it was asked to stop; stop it with --force"
-                              % (host.namespace, vm, POWER_SECONDS))
+    if verb in ("off", "restart") and running(instance_phase(host, vm)):
+        stop(host, vm, force)
     if verb in ("on", "restart"):
-        if not instance_phase(host, vm):
-            status, answer = host.client.request("PUT", host.subresource(vm, "start"), {})
-            if status not in (200, 202, 409):
-                raise Answered(status, answer)
-        phase = host.wait(lambda: instance_phase(host, vm), lambda value: value == "Running", POWER_SECONDS)
+        phase = instance_phase(host, vm)
+        phase = start(host, vm, phase) if not running(phase) else host.wait(
+            lambda: instance_phase(host, vm), lambda value: value == "Running", POWER_SECONDS)
         if phase != "Running":
-            raise Refused("VirtualMachine %s/%s did not run within %d seconds of its start" % (host.namespace, vm, POWER_SECONDS))
+            raise Refused("VirtualMachine %s/%s did not run within %d seconds of its start%s" % (host.namespace, vm, POWER_SECONDS, diagnosis(host, vm)))
     phase = instance_phase(host, vm)
     return {"power": power_of(phase), "power_state": power_of(phase).lower()}
+
+
+def stop(host, vm, force):
+    status, answer = host.client.request("PUT", host.subresource(vm, "stop"), {"gracePeriod": 0} if force else {})
+    if status not in (200, 202, 409):
+        raise Answered(status, answer)
+    if running(host.wait(lambda: instance_phase(host, vm), lambda value: not running(value), POWER_SECONDS)):
+        raise Refused("VirtualMachine %s/%s is still running %d seconds after it was asked to stop; stop it with --force"
+                      % (host.namespace, vm, POWER_SECONDS))
+
+
+def start(host, vm, phase):
+    """Start over an absent or final instance, and the phase it reached; a final one the start has not replaced within
+    REPLACE_SECONDS is stopped away once, so the whole start stays inside the published power bound."""
+    final = uid(host.client.get(host.vmi(vm))) if phase in FINAL else ""
+    status, answer = host.client.request("PUT", host.subresource(vm, "start"), {})
+    if status not in (200, 202, 409) and phase not in FINAL:
+        raise Answered(status, answer)
+    if status in (200, 202, 409):
+        bound = POWER_SECONDS
+        if final:
+            current = host.wait(lambda: host.client.get(host.vmi(vm)),
+                                lambda live: live is None or uid(live) != final or phase_of(live) not in FINAL, REPLACE_SECONDS)
+            phase = "" if current is None or uid(current) != final else phase_of(current)
+            bound -= REPLACE_SECONDS
+        if phase not in FINAL:
+            phase = host.wait(lambda: instance_phase(host, vm), lambda value: value == "Running", bound)
+    if phase in FINAL:
+        status, answer = host.client.request("PUT", host.subresource(vm, "stop"), {})
+        if status not in (200, 202, 409):
+            raise Answered(status, answer)
+        if host.wait(lambda: instance_phase(host, vm), lambda value: not value, POWER_SECONDS):
+            raise Refused("VirtualMachineInstance %s/%s stayed %s and was not removed within %d seconds of its stop, so it was not started again"
+                          % (host.namespace, vm, phase, POWER_SECONDS))
+        status, answer = host.client.request("PUT", host.subresource(vm, "start"), {})
+        if status not in (200, 202, 409):
+            raise Answered(status, answer)
+        phase = host.wait(lambda: instance_phase(host, vm), lambda value: value == "Running", POWER_SECONDS)
+    return phase
+
+
+def diagnosis(host, vm):
+    """The first condition that is not True of the instance, or of the VirtualMachine when no instance exists."""
+    try:
+        instance = host.client.get(host.vmi(vm))
+        subject = instance if instance is not None else host.client.get(host.vm(vm))
+    except (Unanswered, Answered):
+        return ""
+    status = (subject or {}).get("status") or {}
+    if instance is not None:
+        said = "; its VirtualMachineInstance is " + phase_of(instance)[:32]
+    else:
+        said = "; it has no VirtualMachineInstance"
+        if status.get("printableStatus"):
+            said += "; the VirtualMachine is " + str(status["printableStatus"])[:64]
+    failing = [c for c in status.get("conditions") or [] if isinstance(c, dict) and c.get("status") != "True"]
+    scheduling = [c for c in failing if c.get("type") == "PodScheduled" or c.get("reason") == "Unschedulable"]
+    for condition in (scheduling or failing)[:1]:
+        said += ": %s %s (%s: %s)" % (str(condition.get("type"))[:64], str(condition.get("status"))[:16],
+                                      str(condition.get("reason") or "")[:64], str(condition.get("message") or "")[:CONDITION_MESSAGE])
+    return said
 
 
 def patch_vm(host, live, operations):
@@ -682,7 +920,7 @@ def eject(host, vm):
     if operations:
         patch_vm(host, live, operations)
     if held is not None:
-        delete(host, host.dv(volume), uid(held))
+        delete(host, host.dv(volume), uid(held), "Background")
         if host.wait(lambda: host.client.get(host.dv(volume)), lambda value: value is None, VOLUME_SECONDS) is not None:
             raise Refused("DataVolume %s/%s was not deleted within %d seconds" % (host.namespace, volume, VOLUME_SECONDS))
     return {}
@@ -691,8 +929,11 @@ def eject(host, vm):
 def upload_volume(host, vm, media_identity, size_bytes):
     """Create, or reuse, the upload DataVolume once the machine is off; (reuse, the DataVolume)."""
     live = port_vm(host, vm)
-    if instance_phase(host, vm):
+    if running(instance_phase(host, vm)):
         raise PortRefused("machine-running", "this machine is running; media is written only to a stopped machine")
+    root = ((((live.get("spec") or {}).get("dataVolumeTemplates") or [{}])[0].get("spec") or {}).get("storage") or {}).get("storageClassName")
+    if not isinstance(root, str) or not root:
+        raise Refused("VirtualMachine %s/%s names no storage class in its root template, so no upload DataVolume was created" % (host.namespace, vm))
     volume = vm + "-media"
     held = media_of(host, live, volume)
     if held is not None:
@@ -701,6 +942,9 @@ def upload_volume(host, vm, media_identity, size_bytes):
             return True, live
         eject(host, vm)
         live = port_vm(host, vm)
+    if host.wait(lambda: host.client.get(host.pvc(volume)), lambda value: value is None, VOLUME_SECONDS) is not None:
+        raise Refused("PersistentVolumeClaim %s/%s of an earlier upload still exists %d seconds on, so no upload DataVolume was created"
+                      % (host.namespace, volume, VOLUME_SECONDS))
     metadata = (live.get("metadata") or {}).get("labels") or {}
     body = {"apiVersion": "cdi.kubevirt.io/v1beta1", "kind": "DataVolume",
             "metadata": {"name": volume, "namespace": host.namespace,
@@ -708,7 +952,7 @@ def upload_volume(host, vm, media_identity, size_bytes):
                          "annotations": {MEDIA: media_identity, BIND: "true"},
                          "ownerReferences": [{"apiVersion": "kubevirt.io/v1", "kind": "VirtualMachine", "name": vm, "uid": uid(live)}]},
             "spec": {"source": {"upload": {}},
-                     "storage": {"resources": {"requests": {"storage": "%dGi" % (-(-size_bytes // GIB) + 1)}}}}}
+                     "storage": {"resources": {"requests": {"storage": "%dGi" % (-(-size_bytes // GIB) + 1)}}, "storageClassName": root}}}
     status, answer = host.client.request("POST", host.dv(), body)
     if status not in (200, 201):
         raise Answered(status, answer)

@@ -1,5 +1,5 @@
 implementation: substrate-host-kubevirt-v1
-content-digest: b46330eaa662ff5cfc31c9403557b8c38cef2dd3147212b18cfcdec34eaebc05
+content-digest: 99b8c7a637c408394d28c53b1a8a2088d3a8b25860c4cb822bdf028b42fcec58
 request-version: substrate-host-kubevirt-v2
 automation-formats: none
 mark-formats: none
@@ -12,6 +12,11 @@ effect-pins:
   ingress-ca
   substrate-access-kubevirt-v1
   substrate-access-kubevirt-evidence-v1
+  root-class-first-set
+  schedulable-kvm-node
+  attachment-kind
+  cdi-and-kube-system-present
+  one-default-class
 request-identity:
   identity.context
   identity.object
@@ -56,10 +61,17 @@ evidence-schema:
   macPool string
   networks []struct kubevirt.NetworkEvidence
   networks[].attachment string
+  networks[].cniType string
+  networks[].macSpoofCheck *bool omitempty
+  networks[].mtu int omitempty
   networks[].present bool
+  networks[].topology string omitempty
   postcondition bool
   readWriteMany bool
   request string
+  rootAccessModes []string
+  rootVolumeMode string
+  schedulableNodes int
   server string
   storageClass string
   uploadProxy string
