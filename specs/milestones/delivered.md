@@ -11928,3 +11928,78 @@ policies move to v2; the networking canonical observation contract is unchanged.
 The focused native-script/transport/retry regressions and independent review
 passed. X304 records the shared final full and race gates, including the one
 pre-existing skipped Ansible case. No operator acceptance is claimed.
+
+### X306 — Audit 003 Ceph remediation
+
+**Items:** B1140 and B1141, completed in-tree (2026-11-05). **Kind:** safety.
+**Owner:** Storage.
+
+[D233](backlog.md#d233) delivers 20 confirmed Medium findings from
+[audit 003](../../audits/003-code/report-final.md). The owning contracts are
+[Ceph](../ceph.md), [native input](../ceph-native-api.md),
+[resources](../ceph-resources.md) and the [API](../api/ceph.md).
+
+B1140 aligns admission, plans and native execution:
+
+- CEA-08 and CPC-01: all five authenticated NVMe-oF bindings reach protected
+  native apply material; admitted always-enabled manager modules plan.
+- CPL-06 and CPN-02: unsupported enrollment addresses refuse at admission;
+  decorated host placements refuse at their shared planning boundary.
+- CRA-01, CRA-02 and CRA-08: replica budgets use cluster defaults, protection
+  below two refuses, RGW permits one daemon per host and MDS refuses more.
+- CRB-01, CRB-02 and CRB-07: consumer and bucket names keep the 63-character
+  bound; explicit empty NFS protocol/transport lists refuse.
+- CRB-03 and CRB-06: consumer prerequisites and key types have specific safe
+  diagnostics; filesystem-wide SMB backing cannot overlap another SMB cluster.
+
+B1141 completes identity and recovery proof:
+
+- CEA-05 and CEA-10: key-separation refusals have positive/negative coverage,
+  including host keys; omitted NFS security freezes `sys`.
+- CPD-01: complete owned DB/WAL allocations reuse the existing full LV, OSD,
+  crypto and tag proof; partial recovery remains [B1084](m2.md#b1084).
+- CPD-03 and CPD-04: observed WWNs or serial/size pairs cannot overlap across
+  physical hosts before preparation or service effects; a bound management
+  gateway completes only on its selected leaf certificate.
+- CPR-01, CPR-02 and CPN-08: foreign NVMe ownership precedes shape checks,
+  concurrent authorized-key bytes survive the actual pre-rename race, and host
+  directory ownership documentation matches its bounded implementation.
+
+**Delivery commit:** 801a60535. Core requests move from v41 to v42 and
+consumer requests from v3 to v4; evidence v14 is unchanged. Contract fixtures
+and version mirrors move together; prior frozen versions refuse with a remedy
+and have no converter. The native transport prose moves to an on-demand host
+directory section, with its old size exception tightened.
+
+**Verification:** regressions reproduced the defects before correction; the
+full Ceph Go suites, 972 focused native tests, 28 budget tests, owned sanity,
+`make focus` and `make quick` passed. Integration `make check` and `make race`
+passed, as did additional race checks for `internal/storage/ceph/...`,
+`internal/storage/cephcluster/...`, `internal/containercluster/agentinstall/...`,
+`internal/machine/...` and `api/v1alpha1/...`. Independent parity and safety
+reviews found no remaining requirement gaps. The full Ansible unit result is
+8,859 passed and one existing stale-directory-listing case skipped on this
+temporary filesystem; that skipped case is unverified. No live Ceph, FIPS
+runtime, hardware or operator acceptance is claimed; existing gates remain.
+
+### X307 — Audit 003 cluster remediation
+
+**Items:** B1143, completed in-tree (2026-11-05). **Kind:** safety.
+**Owners:** Container cluster, Machine and Reconciliation.
+
+[D233](backlog.md#d233) delivers RCS-02, OCI-02 and OCN-01 from
+[audit 003](../../audits/003-code/report-final.md): physical agent roots require
+a supported stable WWN; media ownership tolerates an omitted echoed port while
+retaining explicit-port, origin, token and inode proofs; and desired/observed
+taints compare by key and effect with the first occurrence retained, preserving
+real value, effect and missing-taint drift ([cluster contract](../openshift-clusters.md),
+[comparison](../state-reconciliation.md#comparing-desired-and-real-state)).
+The public physical examples now use illustrative WWNs.
+
+**Delivery commit:** aea74b600. Media requests move v9 to v10 and install
+requests v13 to v14, with matching contract fixtures and old-version refusals.
+Unsafe-selector, echoed-port and taint-order regressions failed before fixes;
+the full lifecycle and owning Go packages, media units and sanity passed.
+Independent safety review is clear. X306 records the combined focus, quick,
+full and race gates and their one skipped case. No physical or cluster
+operator acceptance is claimed.

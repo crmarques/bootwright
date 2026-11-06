@@ -51,7 +51,7 @@ Alias cell.
 | [B243](#b243) | new, 2026-09-30 (X32) | safety | State reconciliation and Workspace | Room for a replacing removal and its records | Found after the M1 freeze (D48) |
 | [B245](#b245) | new, 2026-09-30 (X32) | enabling | Architecture, with each role's owner | Censored completions that name only fields | Found after the M1 freeze (D48) |
 | [B247](#b247) | new, 2026-09-30 (X32) | safety | Infrastructure services and Substrate | SSH host recognition and bridge readiness pairing | Found after the M1 freeze (D48); publishing SSH claims decided by D183 (Q96 a) and done with B816 |
-| [B248](#b248) | new, 2026-09-30 (X32) | defect | Infrastructure services | The artifact server compares its start with its files | Found after the M1 freeze (D48) |
+| [B248](#b248) | new, 2026-09-30 (X32); artifact part split into B1145 on 2026-11-05 (D233) | defect | Infrastructure services | A backward host clock does not force repeated managed-service restarts | Found after the M1 freeze (D48); separate clock defect stays parked |
 | [B256](#b256) | new, 2026-10-01 (X33) | enabling | Architecture | Line-limit texts for empty lists | Found after the M1 freeze (D48) |
 | [B258](#b258) | split from B206 on 2026-10-01 (D52) | enabling | State reconciliation | Pruning retained operations | D52 names the existing exits; pruning needs a retention rule for evidence and audit |
 | [B261](#b261) | new, 2026-10-01 (X34) | defect | Controller setup | A resumed carried-forward receipt reads its approved bytes | Found after the M1 freeze (D48) |
