@@ -332,9 +332,14 @@ manual approval, its CSV list is exactly the `startingCSV`, and every
 and `sourceNamespace`; the approval is
 one JSON patch that first tests the plan's `uid`, CSV list and approval mode,
 so the plan checked is the plan approved. A plan already approved that passes
-the same tests is accepted on continuation; any other plan fails the attempt
-naming its CSVs, and Bootwright never approves an upgrade plan. A Subscription
-reporting `ResolutionFailed` fails the attempt at once, naming its message; that
+the same tests is accepted on continuation. Before the pinned CSV is installed,
+any other plan fails the attempt naming its CSVs. Once the pinned CSV is
+installed, later plans are left untouched; a pending upgrade does not make a
+healthy pinned installation unknown or require removal. Bootwright never
+approves an upgrade plan. A Subscription reporting `ResolutionFailed` fails
+the attempt at once, naming its message, unless its pinned CSV is already
+installed and reports `Succeeded`; a newer upgrade's resolution failure does
+not invalidate that healthy pinned installation. That
 the condition is never transient on a Subscription of a ready catalog is an
 assumption, re-verified by [B1125](milestones/m4.md#b1125).
 
@@ -343,7 +348,8 @@ The operator is installed when the Subscription's installed CSV is the
 never compared, and a pending upgrade waits for the operator. The evidence
 records the approved plan, the installed CSV and its version, the catalog
 image and the bundle image the plan resolved, and any maximum OpenShift
-version the CSV declares, as evidence and never as a rule. An
+version the CSV declares through the `olm.maxOpenShiftVersion` property in
+its JSON `olm.properties` annotation, as evidence and never as a rule. An
 operator-managed package also records the catalog of each later plan it
 approves, from the plan's `bundleLookups`. Every native string recorded or
 diagnosed follows the bound of [Readiness](#readiness).

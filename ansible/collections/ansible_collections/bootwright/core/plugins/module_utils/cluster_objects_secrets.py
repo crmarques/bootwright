@@ -59,7 +59,7 @@ def read_private(params):
     if not output.strip():
         return None
     try:
-        return json.loads(output)
+        return native.unproject(json.loads(output))
     except ValueError:
         return False
 
@@ -82,7 +82,7 @@ def place(params):
             return {"accepted": False, "difference": differing}
         return {"accepted": True, "equal": True, "uid": live["metadata"]["uid"], "basis": model.basis(obj, live, params["context"])}
     argv = ["create", "--filename=-", "--namespace", obj["namespace"], "--field-manager", params["manager"], "-o", "name"]
-    code, ignored_output, ignored_error = native.run(params["oc"], params["kubeconfig"], argv, params["deadline"], json.dumps(body))
+    code, output, error = native.run(params["oc"], params["kubeconfig"], argv, params["deadline"], json.dumps(body))
     # A read after any create resolves a response lost after the API persisted it.
     live = read_private(params)
     if live and model.ownership(obj, live, params["context"]) == "own":
@@ -91,4 +91,7 @@ def place(params):
         if not differing and not labels and live.get("type") == body["type"]:
             basis = "created" if code == 0 else model.basis(obj, live, params["context"])
             return {"accepted": True, "equal": code != 0, "uid": live["metadata"]["uid"], "basis": basis}
-    return {"accepted": False, "unknown": live is False}
+    if live:
+        return {"accepted": False, "difference": "ownership" if model.ownership(obj, live, params["context"]) != "own" else "Secret fields"}
+    return {"accepted": False, "unknown": live is False,
+            "retryable": live is None and (code == 0 or native.transient_status(output, error))}

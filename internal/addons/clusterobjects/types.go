@@ -12,9 +12,9 @@ const (
 	OwnerAnnotation     = "bootwright.io/owner"
 	OwnerDomain         = "bootwright.cluster-objects.owner-v1"
 	ObjectDomain        = "bootwright.cluster-objects.object-v1"
-	ExactRule           = "exact-v1"
+	ExactRule           = "exact-v2"
 	OperatorManagedRule = "operator-managed-v1"
-	DependentExactRule  = "dependent-exact-v1"
+	DependentExactRule  = "dependent-exact-v2"
 	ClockSkew           = 5 * time.Second
 	MaxObjects          = 64
 	MaxChecks           = 32

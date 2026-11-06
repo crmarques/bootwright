@@ -14,16 +14,16 @@ MAX_NATIVE_OUTPUT = 16 << 20
 # oc refuses an object of a type the server does not serve yet, which no object can have.
 UNSERVED_TYPE = re.compile(r'error: the server doesn\'t have a resource type "[A-Za-z][A-Za-z0-9]*"')
 
-# Kubernetes Go templates have no JSON encoder. This closed recursive template
-# emits only the subtrees selected below, with strings escaped by printf.
+# Kubernetes templates lack JSON string escaping. A tagged JSON transport uses
+# hexadecimal UTF-8 for strings and keys, then decodes only the projected tree.
 JSON_TEMPLATE = ('{{define "json"}}{{$t := printf "%T" .}}'
-                 '{{if eq $t "map[string]interface {}"}}{ '
+                 '{{if eq $t "map[string]interface {}"}}["map",{ '
                  '{{$comma := false}}{{range $k,$v := .}}{{if $comma}},{{end}}{{$comma = true}}'
-                 '{{printf "%q" $k}}:{{template "json" $v}}{{end}}}'
-                 '{{else if eq $t "[]interface {}"}}[{{range $i,$v := .}}{{if $i}},{{end}}'
-                 '{{template "json" $v}}{{end}}]'
-                 '{{else if eq $t "string"}}{{printf "%q" .}}'
-                 '{{else if eq $t "<nil>"}}null{{else}}{{.}}{{end}}{{end}}')
+                 '"{{printf "%x" $k}}":{{template "json" $v}}{{end}}}]'
+                 '{{else if eq $t "[]interface {}"}}["list",[{{range $i,$v := .}}{{if $i}},{{end}}'
+                 '{{template "json" $v}}{{end}}]]'
+                 '{{else if eq $t "string"}}["string","{{printf "%x" .}}"]'
+                 '{{else if eq $t "<nil>"}}["value",null]{{else}}["value",{{.}}]{{end}}{{end}}')
 
 
 def resource(value, listing=False):
@@ -43,7 +43,7 @@ def projection(value, fields):
     tree = {"apiVersion": True, "kind": True, "metadata": metadata}
     for path in fields:
         if path == "metadata.annotations" and value["kind"] == "ClusterServiceVersion":
-            metadata["annotations"]["olm.maxOpenShiftVersion"] = True
+            metadata["annotations"]["olm.properties"] = True
             continue
         cursor = tree
         segments = path.split(".")
@@ -64,10 +64,10 @@ def projection(value, fields):
 def template_tree(tree, expression="."):
     parts = []
     for key, subtree in tree.items():
-        child = '(index %s %s)' % (expression, json.dumps(key))
-        rendered = '{{template "json" %s}}' % child if subtree is True else '{{with %s}}%s{{else}}{}{{end}}' % (child, template_tree(subtree))
-        parts.append(json.dumps(key) + ":" + rendered)
-    return "{" + ",".join(parts) + "}"
+        child = '(index %s %s)' % (expression, json.dumps(key, ensure_ascii=False))
+        rendered = '{{template "json" %s}}' % child if subtree is True else '{{with %s}}%s{{else}}["map",{}]{{end}}' % (child, template_tree(subtree))
+        parts.append(json.dumps(key.encode("utf-8").hex()) + ":" + rendered)
+    return '["map",{' + ",".join(parts) + "}]"
 
 
 def secret_keys():
@@ -101,9 +101,27 @@ def run(oc, kubeconfig, argv, deadline, body=None):
         return 1, "", ""
 
 
+def unproject(value):
+    if not isinstance(value, list):
+        return value
+    if len(value) != 2:
+        raise ValueError("invalid projection")
+    tag, payload = value
+    if tag == "string" and isinstance(payload, str):
+        return bytes.fromhex(payload).decode("utf-8")
+    if tag == "map" and isinstance(payload, dict):
+        return {bytes.fromhex(key).decode("utf-8"): unproject(item) for key, item in payload.items()}
+    if tag == "list" and isinstance(payload, list):
+        return [unproject(item) for item in payload]
+    if tag == "value" and (payload is None or type(payload) in (bool, int, float)):
+        return payload
+    raise ValueError("invalid projection")
+
+
 def decode(output, secret=False):
     decoder = json.JSONDecoder()
     value, end = decoder.raw_decode(output.strip())
+    value = unproject(value)
     if secret:
         remainder = output.strip()[end:].strip()
         value["dataKeys"], end = decoder.raw_decode(remainder)
@@ -135,6 +153,8 @@ def get(params):
         return {"answered": True, "object": None}
     try:
         value = json.loads(output) if listing else decode(output, obj["kind"] == "Secret")
+        if listing and isinstance(value, dict) and isinstance(value.get("items"), list):
+            value["items"] = [unproject(item) for item in value["items"]]
         if listing and (not isinstance(value, dict) or not isinstance(value.get("items"), list)):
             raise ValueError("invalid object listing")
     except (ValueError, TypeError):
@@ -155,19 +175,30 @@ def create(params):
         argv += ["--namespace", obj["namespace"]]
     code, output, error = run(params["oc"], params["kubeconfig"], argv, params["deadline"], json.dumps(body))
     if code:
-        reason = ""
-        for text in (output, error):
-            try:
-                status = json.loads(text)
-                if status.get("kind") == "Status":
-                    reason = status.get("reason", "")
-            except (ValueError, AttributeError):
-                pass
-        return {"accepted": False, "retryable": reason in ("InternalError", "ServiceUnavailable")}
+        return {"accepted": False, "retryable": transient_status(output, error)}
     try:
         return {"accepted": True, "object": decode(output)}
     except (ValueError, TypeError):
         return {"accepted": False, "retryable": False}
+
+
+def transient_status(output, error):
+    # oc prints the Status reason in this prefix; never infer it from the message.
+    reasons = []
+    for text in (output, error):
+        if len(text.encode("utf-8")) > MAX_NATIVE_OUTPUT:
+            return False
+        match = re.match(r"\AError from server \(([A-Za-z]+)\):(?: |$)", text)
+        if match:
+            reasons.append(match.group(1))
+            continue
+        try:
+            status = json.loads(text)
+            if isinstance(status, dict) and status.get("kind") == "Status":
+                reasons.append(status.get("reason", ""))
+        except ValueError:
+            pass
+    return bool(reasons) and all(reason in ("InternalError", "ServiceUnavailable") for reason in reasons)
 
 
 def approve(params):

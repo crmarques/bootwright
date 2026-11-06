@@ -474,7 +474,8 @@ A pool includes none of these addresses:
 - an endpoint address;
 - a node address;
 - the next hop of a node's route;
-- an address another declared object holds;
+- an address another declared object holds, including a CephCluster ingress,
+  NFS or management-gateway service's `virtual_ip` (with or without a prefix);
 - the IPv4 network or broadcast address of its subnet.
 
 A pool also overlaps no other pool, no cluster or service network, and no

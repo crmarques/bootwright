@@ -1,6 +1,7 @@
 """Ordered object execution with one deadline and read-only observation."""
 from __future__ import annotations
 
+import json
 import time
 
 from ansible_collections.bootwright.core.plugins.module_utils import cluster_objects_model as model
@@ -16,6 +17,24 @@ def fields(obj):
     selected = [key for key in selected if key != "metadata"]
     selected += ["metadata." + key for key in obj.get("body", {}).get("metadata", {})]
     return selected
+
+
+def maximum_openshift_version(csv):
+    raw = csv.get("metadata", {}).get("annotations", {}).get("olm.properties")
+    if raw is None:
+        return ""
+    try:
+        properties = json.loads(raw)
+    except (ValueError, TypeError):
+        return "invalid"
+    if not isinstance(properties, list) or any(not isinstance(prop, dict) for prop in properties):
+        return "invalid"
+    values = [prop.get("value") for prop in properties if prop.get("type") == "olm.maxOpenShiftVersion"]
+    if not values:
+        return ""
+    if len(values) != 1 or not isinstance(values[0], str) or not values[0]:
+        return "invalid"
+    return model.native(values[0], "version")
 
 
 class Refused(ValueError):
@@ -141,13 +160,19 @@ class Engine:
             return
         if own not in ("own", "absent"):
             raise Refused(model.label(obj) + " ownership " + own)
-        result = self.write("place", obj, {
-            "placement": placement, "materials": self.request.get("materials", {}),
-            "owner": model.mark(self.request["operation"], self.request["block"], obj),
-            "manager": "bootwright-" + model.mark(self.request["operation"], self.request["block"])[:32],
-            "context": {key: self.request[key] for key in ("operation", "block", "registered", "receipts")}})
-        if not result.get("accepted"):
-            raise Refused(model.label(obj) + " differs at " + result.get("difference", "unproved placement"))
+        while True:
+            result = self.write("place", obj, {
+                "placement": placement, "materials": self.request.get("materials", {}),
+                "owner": model.mark(self.request["operation"], self.request["block"], obj),
+                "manager": "bootwright-" + model.mark(self.request["operation"], self.request["block"])[:32],
+                "context": {key: self.request[key] for key in ("operation", "block", "registered", "receipts")}})
+            if result.get("accepted"):
+                break
+            if result.get("difference"):
+                raise Refused(model.label(obj) + " differs at " + result["difference"])
+            if not (result.get("unknown") or result.get("retryable")):
+                raise Refused(model.label(obj) + " unproved placement")
+            self.pause(model.label(obj) + " placement unknown")
         receipt = dict(model.ref(obj), uid=result["uid"], desiredDigest=obj["desiredDigest"],
                        disposition="unchanged" if result.get("equal") else "created",
                        basis=result.get("basis", "mark-recovered"))
@@ -256,7 +281,10 @@ class Engine:
                 raise Refused(model.label(obj) + " differs at spec")
             managed = not dependent and step["approval"] == "operatorManaged"
             installed = live.get("status", {}).get("installedCSV", "")
-            for condition in ([] if managed and installed == csv else live.get("status", {}).get("conditions") or []):
+            succeeded, last = (False, "pending")
+            if installed == csv:
+                succeeded, last = self.csv({"namespace": obj["namespace"], "subscription": obj["name"], "csv": csv}, observe)
+            for condition in ([] if succeeded or managed and installed == csv else live.get("status", {}).get("conditions") or []):
                 if condition.get("type") == "ResolutionFailed" and condition.get("status") == "True":
                     if observe:
                         self.unknown = True
@@ -267,9 +295,12 @@ class Engine:
                 approved = self.first_plan(obj, live, csv, observe) or approved
                 if installed == csv and approved is None:
                     approved = self.installed_plan(obj, live, csv)
+            elif installed == csv:
+                approved = self.installed_plan(obj, live, csv)
             else:
                 approved = self.plan(obj, live, csv, plan_name, observe) if plan_name else None
-            succeeded, last = self.csv({"namespace": obj["namespace"], "subscription": obj["name"], "csv": csv}, observe)
+            if installed != csv:
+                succeeded, last = self.csv({"namespace": obj["namespace"], "subscription": obj["name"], "csv": csv}, observe)
             if observe or succeeded:
                 self.not_ready = self.not_ready or not succeeded
                 fact = {"namespace": obj["namespace"], "subscription": obj["name"],
@@ -389,9 +420,9 @@ class Engine:
         plan = self.plan_readings.get((obj["namespace"], (approved or {}).get("name")), {})
         bundles = (plan.get("status", {}).get("bundleLookups") or [])
         image = bundles[0].get("path", "") if bundles else ""
-        maximum = csv.get("metadata", {}).get("annotations", {}).get("olm.maxOpenShiftVersion", "")
+        maximum = maximum_openshift_version(csv)
         return {"csvVersion": model.native(csv.get("spec", {}).get("version", "")),
-                "maxOpenShiftVersion": model.native(maximum, "version") if maximum else "",
+                "maxOpenShiftVersion": maximum,
                 "catalogImage": model.native(catalog.get("spec", {}).get("image", ""), "image") if catalog else "",
                 "bundleImage": model.native(image, "image") if image else ""}
 

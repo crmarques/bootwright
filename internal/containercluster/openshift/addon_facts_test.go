@@ -332,3 +332,31 @@ func TestMetalLBPoolNamesTheBridgeThatCarriesTheUplinkAddresses(t *testing.T) {
 		})
 	}
 }
+
+func TestMetalLBRefusesCephVirtualAddresses(t *testing.T) {
+	for _, service := range []string{"ingress", "nfs", "mgmt-gateway"} {
+		for _, raw := range []string{"192.0.2.130", "192.0.2.130/24"} {
+			t.Run(service+"/"+raw, func(t *testing.T) {
+				cluster, catalog := fixture("libvirt", 1, false)
+				cluster, _ = Normalize(cluster, catalog)
+				ceph := obj(api.CephCluster, "storage", m("services", list(m("service_type", service, "spec", m("virtual_ip", raw)))))
+				binding := obj(api.ClusterAddonBinding, "load-balancer", m("clusterRef", cluster.Name(), "packages", m("metallb", m("subscription", m("channel", "stable", "startingCSV", "metallb.v1"), "pools", list(m("name", "services", "addresses", api.StringList("192.0.2.128-192.0.2.135")))))))
+				registry := addonpackages.Builtin()
+				binding, _ = addons.NormalizePackages(binding, registry)
+				objects := append(catalog.Objects(), cluster, ceph, binding)
+				effective := api.NewCatalog(objects)
+				facts := AddonFacts(effective, cluster.Name())
+				issues := addons.ValidateWithRegistry(binding, effective, registry, facts)
+				if !slices.ContainsFunc(issues, func(issue api.Issue) bool {
+					return strings.Contains(issue.Message, "192.0.2.130, held by CephCluster/storage")
+				}) {
+					t.Fatalf("pool overlaps Ceph VIP without refusal: %+v", issues)
+				}
+				slices.Reverse(objects)
+				if got := AddonFacts(api.NewCatalog(objects), cluster.Name()); !reflect.DeepEqual(got, facts) {
+					t.Fatal("catalog order changed held addresses")
+				}
+			})
+		}
+	}
+}

@@ -58,6 +58,7 @@ func AddonFacts(catalog api.Catalog, name string) addons.ClusterFacts {
 		}
 		facts.Reserved = append(facts.Reserved, addons.AddressHolder{Addr: claim.Address, Holder: claim.Object.Identity()})
 	}
+	facts.Reserved = append(facts.Reserved, cephVirtualAddresses(catalog)...)
 	slices.SortFunc(facts.Reserved, func(a, b addons.AddressHolder) int {
 		if n := a.Addr.Compare(b.Addr); n != 0 {
 			return n
@@ -150,4 +151,29 @@ func nodeAddonNetwork(node api.Object, catalog api.Catalog, family string) addon
 	slices.SortFunc(result.NextHops, func(a, b netip.Addr) int { return a.Compare(b) })
 	result.NextHops = slices.Compact(result.NextHops)
 	return result
+}
+
+func cephVirtualAddresses(catalog api.Catalog) []addons.AddressHolder {
+	var held []addons.AddressHolder
+	for _, object := range catalog.Objects() {
+		if object.Kind() != api.CephCluster {
+			continue
+		}
+		for _, service := range object.Spec().Get("services").Items() {
+			switch service.Get("service_type").Text() {
+			case "ingress", "nfs", "mgmt-gateway":
+				raw := service.Get("spec", "virtual_ip").Text()
+				address, err := netip.ParseAddr(raw)
+				if err != nil {
+					prefix, prefixErr := netip.ParsePrefix(raw)
+					if prefixErr != nil {
+						continue
+					}
+					address = prefix.Addr()
+				}
+				held = append(held, addons.AddressHolder{Addr: address.Unmap(), Holder: object.Identity()})
+			}
+		}
+	}
+	return held
 }

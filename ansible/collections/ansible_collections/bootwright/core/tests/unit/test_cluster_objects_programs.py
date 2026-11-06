@@ -28,6 +28,10 @@ class Cluster:
         live = owned(self.request, obj)
         if obj['kind'] == 'Subscription':
             live['status'] = {'installedCSV': self.subscription['csv'], 'installPlanRef': {'name': 'install-plan'}}
+            if self.fault == 'extra-csv':
+                live['status'].pop('installedCSV')
+            elif self.fault == 'pending-extra-csv':
+                live['status']['currentCSV'] = 'unrequested.v1'
         return live
 
     def external(self, obj):
@@ -41,7 +45,7 @@ class Cluster:
             live = {'metadata': {'uid': 'plan-1', 'ownerReferences': [{'kind': 'Subscription', 'uid': 'uid-1'}]},
                     'spec': {'approval': 'Manual', 'approved': False, 'clusterServiceVersionNames': [sub['csv']]},
                     'status': {'bundleLookups': [{'catalogSourceRef': {'name': spec['source'], 'namespace': spec['sourceNamespace']}}]}}
-            if self.fault == 'extra-csv':
+            if self.fault in ('extra-csv', 'pending-extra-csv'):
                 live['spec']['clusterServiceVersionNames'].append('unrequested.v1')
         elif kind == 'CatalogSource':
             live['spec'] = {'image': 'registry.example/catalog:1'}
@@ -119,3 +123,14 @@ def test_full_program_failure_never_creates_downstream_objects(tmp_path, object_
         downstream |= {'NMState', 'MetalLB'}
         assert not any(action == 'approve' for action, ignored_kind, ignored_name in cluster.events)
     assert not any(action == 'create' and kind in downstream for action, kind, ignored_name in cluster.events)
+
+
+@pytest.mark.parametrize('name', ['nmstate', 'metallb'])
+def test_healthy_pin_with_mixed_pending_upgrade_never_approves(tmp_path, object_request, name):
+    request = program_request(object_request, name)
+    cluster = Cluster(tmp_path, request, 'pending-extra-csv')
+    result = Engine(request, cluster.read, cluster.write, clock=lambda: 0, sleep=lambda ignored_seconds: None).execute()
+    assert result['state']['postcondition']
+    assert result['state']['olm'][0]['upgradePending']
+    assert not any(action == 'approve' for action, ignored_kind, ignored_name in cluster.events)
+    assert all(call['argv'][3] in ('get', 'create') for call in cluster.oc.calls())
