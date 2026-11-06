@@ -300,6 +300,9 @@ Alias cell.
 | [B1186](#b1186) | new, 2026-11-06 (X314 review) | enabling | Add-ons and Container cluster | A test ties each Ansible role's quoted evidence version to its Go constant | X314 updated the literals by hand; every gate passed with them mismatched |
 | [B1187](#b1187) | new, 2026-11-06 (X313 review) | safety | Substrate | A lent KubeVirt host token is revoked when its run returns | The token is unbound and lives until it expires, now the run's deadline plus ten minutes, which the specs accept |
 | [B1188](#b1188) | new, 2026-11-06 (X313 review) | safety | Container cluster | An installation whose derived deadline passes the installer's own credential lifetimes is refused or reported | Unverified: bootstrap certificates last 24 h and agent tokens may expire; derived deadlines pass 24 h only past about 88 KubeVirt or 236 emulated nodes |
+| [B1207](#b1207) | new, 2026-11-06 (D240 (5)) | product | Substrate | Predictable guest interface names through libvirt `acpi index` and KubeVirt `acpiIndex` | Agent-path ethernet names are admitted with a warning (D240 (5)); no consumer needs fixed guest names yet |
+| [B1208](#b1208) | new, 2026-11-06 (D240 (10)) | product | Storage | A Ceph MON address chosen separately from the cephadm SSH address | `cephadm.addressRef` serves both today; separating them moves the CephCluster request (D240 (10)) |
+| [B1209](#b1209) | new, 2026-11-06 (D240 (13)) | enabling | Substrate | One lifecycle block per managed `Network` | The provider host block realizes managed Networks without a request change; a block of its own is needed only past 20 managed Networks per host or for a fabric arm (D240 (13)) |
 
 ### B82
 
@@ -3330,6 +3333,31 @@ whether a cluster whose derived deadline passes them refuses before
 registration naming that limit, as a provider limit rather than a Bootwright
 ceiling ([cluster size](../openshift-clusters.md#cluster-size)). **Outcome:**
 no installation spends its deadline on a cluster that can no longer finish.
+
+### B1207
+
+**Owner:** Substrate. **Kind:** product. **Requires:** X323.
+**Definition:** Candidate: emit libvirt `<acpi index='N'/>` and KubeVirt
+`interfaces[].acpiIndex` from each vNIC's position in `hardware.nics`, so a
+guest names its NICs `eno<N>` whatever the PCI order, and whether the agent
+path then pins declared names ([D240](#d240) (5)). **Outcome:** a guest
+interface name is known before the guest boots.
+
+### B1208
+
+**Owner:** Storage. **Kind:** product. **Requires:** none.
+**Definition:** Candidate: a MON address reference beside
+`cephadm.addressRef`, defaulting to it ([D240](#d240) (10)). **Outcome:** the
+cephadm SSH contact and the MON's public-network address are chosen
+separately.
+
+### B1209
+
+**Owner:** Substrate. **Kind:** enabling. **Requires:** X323.
+**Definition:** Candidate: a `network-<name>` block per managed `Network`,
+ordered after the Machines on it and before its host block on removal
+([D240](#d240) (13)). **Outcome:** a managed network is planned, applied and
+removed on its own, past the 20-per-host bound.
 **Exit evidence:** the recorded lifetimes and a planning test at the limit.
 
 ## Audit remediation (2026-10-26)
@@ -3636,6 +3664,8 @@ holding such a clause, the clauses pending and the work they enable.
   Machines on a host the context builds and the reading's pin (X206).
 - [D234](#d234): clauses (1) to (6), the KubeVirt provisioning program's
   in-tree slices X309 to X312 and its recorded owner questions Q139 to Q152.
+- [D240](#d240): clauses (1) to (14), the networking API program's slices
+  X321 to X324.
 
 ### D1
 
@@ -7263,3 +7293,46 @@ default OS target. Root omission on installed physical Machines derives
 `bootVolume: {}`. The supported automatic path follows the persistent boot
 order to an enabled local-disk option directly linked to an inventory Volume;
 unknown ordering or correlation refuses rather than choosing a leftover disk.
+
+### D240
+
+**session-pending** (2026-11-06, the owner's request; the clauses after the
+owner's words are taken by the session, pending the owner's review): after a
+review of the networking API found hardware facts (NICs, ports) mixed with
+operating-system facts (interfaces), the owner asked for networks as their own
+kind, "similar to os, that could be provisioned or managed": managed for
+libvirt, where Bootwright configures the network on the host, and provided for
+real environments until switches and routers are integrated. The owner then
+said "proceed with implementation; update examples, templates and values,
+even the gitignored ones". This opens X321 to X324 in M1, out of sequence, and
+the input-chart and gitignored-input migrations each slice needs. Taken by the
+session, pending the owner's review:
+
+1. A `Network` kind holds one L2 network: at most one VLAN, one subnet per
+   address family with an optional gateway, an MTU capacity and a site
+   scope. It is optional in X322 and required for every interface
+   assignment from X323.
+2. `InfraProvider.spec.networkAttachments` becomes `segments` in X323, with
+   retired-path refusals.
+3. Emitted KubeVirt interface names stay `nic<index>`.
+4. An omitted segment or network MTU capacity is 1500 on every substrate.
+5. On the agent path an ethernet name a MetalLB pool or a bridge mapping names
+   is admitted with a validate warning that it must be the kernel name;
+   predictable guest names through libvirt `acpi index` and KubeVirt
+   `acpiIndex` are a candidate item.
+6. vSphere MACs stay authored in the manual range.
+7. IPv6 networks are admitted from X322.
+8. The managed proxy and time-service client set becomes the networks that
+   hold any assignment of a retained Machine, reviewed under security-safety
+   in X323.
+9. One VLAN ID per network, assuming one 802.1Q domain per site.
+10. A Ceph MON address separate from the cephadm SSH address is a candidate
+    item.
+11. Ceph `networks.publicCIDRs`/`clusterCIDRs` and a secondary network's
+    `vlan`/`ipam.subnets` stay native fields, checked against the networks.
+12. The lifecycle is required boolean `spec.provided` with exactly one
+    realization arm, `spec.libvirt`, when it is `false`, mirroring
+    `Machine.spec.os.provided`.
+13. A managed Network is realized by its provider's host block, as a managed
+    attachment is today; a block per Network is a candidate item.
+14. `NetworkConfig` keeps its name beside `Network`.
