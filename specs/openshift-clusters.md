@@ -362,15 +362,21 @@ Every bond member carries its permanent hardware address with `identifier:
 mac-address`, because a bond member reports the bond's address while it runs;
 no bond or VLAN carries one. An `ethernet` interface with both families
 disabled is an addressless NIC the substrate realizes and the image lists like
-any other. Interface MTUs reach the installer as declared. A node whose network
-configuration holds an OVS or Linux bridge, an `ovn` or `ovs-db` section, or an
-interface named as OVN-Kubernetes reserves refuses, and so does a node whose
-install address is not on its default-route interface, because the installed
-node builds `br-ex` from that interface on every boot. Same-family default
-routes on distinct interfaces refuse regardless of metric or routing table;
-multiple routes on the same interface remain supported. The agent renames a
-logical interface name to the device's kernel name, so a node's `ethernet`
-names are its kernel names once it is installed.
+any other. Each host's `interfaces` entry names an interface by its
+operating-system name with the hardware address of the NIC bound to it, through
+the Machine's `network.interfaceBinding` (the identity when omitted), so a NIC
+label that differs from its interface name lists, and matches in the host's
+network configuration, under the interface name. Composition injects a bound
+NIC's address once; the projection adds an address only to an interface that
+composition left without one. Interface MTUs reach the installer as declared.
+A node whose network configuration holds an OVS or Linux bridge, an `ovn` or
+`ovs-db` section, or an interface named as OVN-Kubernetes reserves refuses, and
+so does a node whose install address is not on its default-route interface,
+because the installed node builds `br-ex` from that interface on every boot.
+Same-family default routes on distinct interfaces refuse regardless of metric
+or routing table; multiple routes on the same interface remain supported. The
+agent renames a logical interface name to the device's kernel name, so a node's
+`ethernet` names are its kernel names once it is installed.
 
 The name servers a node selects through its network's `dns` field become
 `dns-resolver.config.server` in that node's host record. Admission refuses a

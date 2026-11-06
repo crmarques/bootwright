@@ -271,6 +271,21 @@ func nodeInterfaces(node nodeProjection) []any {
 	return out
 }
 
+func installerInterfaces(presented []substrate.Interface, bindings []machine.InterfaceBinding) []substrate.Interface {
+	names := map[string]string{}
+	for _, binding := range bindings {
+		names[binding.NIC] = binding.Interface
+	}
+	out := make([]substrate.Interface, 0, len(presented))
+	for _, declared := range presented {
+		if name, bound := names[declared.Name]; bound {
+			declared.Name = name
+		}
+		out = append(out, declared)
+	}
+	return out
+}
+
 // networkConfig is the node's own network configuration as the installer
 // applies it: the composed NMState of its Machine, with each interface
 // carrying the hardware address the realized target reports and the resolvers
@@ -317,7 +332,9 @@ func networkConfig(catalog api.Catalog, node api.Object, interfaces []substrate.
 			name, _ := entry["name"].(string)
 			if entry["type"] == "ethernet" {
 				if address, found := addresses[name]; found {
-					entry["mac-address"] = address
+					if _, composed := entry["mac-address"]; !composed {
+						entry["mac-address"] = address
+					}
 					if members[name] {
 						entry["identifier"] = "mac-address"
 					}

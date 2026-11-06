@@ -474,7 +474,8 @@ func nodeProjections(catalog api.Catalog, cluster api.Object, contextName, contr
 		if err != nil {
 			return nil, err
 		}
-		network, err := networkConfig(catalog, bound, target.Interfaces, resolvers)
+		interfaces := installerInterfaces(target.Interfaces, machine.InterfaceBindings(bound, catalog))
+		network, err := networkConfig(catalog, bound, interfaces, resolvers)
 		if err != nil {
 			return nil, err
 		}
@@ -484,7 +485,7 @@ func nodeProjections(catalog api.Catalog, cluster api.Object, contextName, contr
 		}
 		needs.Machines = append(needs.Machines, bound.Name())
 		projections = append(projections, nodeProjection{
-			address: address, interfaces: target.Interfaces, machine: bound,
+			address: address, interfaces: interfaces, machine: bound,
 			name: node.Get("name").Text(), network: network, role: node.Get("role").Text(),
 			labels: nodeLabels(node), taints: nodeTaints(node),
 			rootDeviceHints: hints, target: target, requireTPM: encryptedRole(cluster, node.Get("role").Text()),
