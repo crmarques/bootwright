@@ -156,7 +156,7 @@ MANAGED = {
     "port": 53,
 }
 ARTIFACT = {
-    "version": "artifact-server-nginx-v3",
+    "version": "artifact-server-nginx-v4",
     "identity": {"context": "lab"},
     "contentRoot": "/var/lib/bootwright-services/lab/artifact-server/media",
 }

@@ -398,7 +398,11 @@ remedy to run `status --context <context>` and repeat the command it names
 (`TestMissingBoundServingMaterialNamesItsSecret`).
 `tls.minVersion` selects the exact protocol floor the server enforces.
 
-**Readiness.** Completion requires positive evidence for every listener: the
+**Readiness.** `startedAfterFiles` proves the container started no earlier than
+the unit, nginx configuration and, for HTTPS only, certificate and key were
+published. Missing or unreadable metadata proves no completion; an otherwise
+present service reports partial realization, and a contradictory completion
+claim refuses. Removal ignores freshness. Every listener also proves: the
 socket accepts a connection at the declared address and port; an HTTPS listener
 completes a handshake whose presented leaf certificate digest equals the bound
 certificate's; and the listener answers one bounded HTTP status line. A

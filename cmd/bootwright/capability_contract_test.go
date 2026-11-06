@@ -1462,7 +1462,7 @@ func contractArtifactServerPresence(t *testing.T, execution lifecycle.Execution)
 		listeners = append(listeners, listener)
 	}
 	return map[string]any{
-		"postcondition": true, "unit": "active", "container": request.Image, "contentRoot": true, "listeners": listeners,
+		"postcondition": true, "unit": "active", "container": request.Image, "contentRoot": true, "listeners": listeners, "startedAfterFiles": true,
 	}
 }
 

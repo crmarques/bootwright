@@ -47,7 +47,8 @@ def presence(request, observation, listeners, request_digest):
         "container": str(observation.get("container", "")),
         "contentRoot": bool(observation.get("contentRoot", False)),
         "listeners": [listener_evidence(entry) for entry in listeners],
-        "postcondition": observation.get("unit") == "active" and bool(observation.get("contentRoot")),
+        "postcondition": observation.get("unit") == "active" and bool(observation.get("contentRoot")) and bool(observation.get("startedAfterFiles")),
+        "startedAfterFiles": bool(observation.get("startedAfterFiles", False)),
         "request": adapter_protocol.request_digest(request_digest),
         "unit": str(observation.get("unit", "")),
     }
@@ -68,6 +69,8 @@ def unproved(observation):
     names = [] if observation.get("unit") == "active" else ["unit"]
     if not observation.get("contentRoot"):
         names.append("contentRoot")
+    if not observation.get("startedAfterFiles"):
+        names.append("startedAfterFiles")
     return names
 
 
@@ -80,6 +83,7 @@ def absence(observation, request_digest):
     )
     return {
         "absent": True,
+        "startedAfterFiles": False,
         "container": "",
         "contentRoot": False,
         "listeners": [],

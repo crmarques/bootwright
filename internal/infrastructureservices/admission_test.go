@@ -191,3 +191,62 @@ func TestArtifactEndpointDefaultsRequireTheirMode(t *testing.T) {
 		t.Fatalf("concrete object must be able to inherit its management mode: %v", issues)
 	}
 }
+
+func TestWildcardBindPreservesEndpointFamilies(t *testing.T) {
+	for _, kind := range []api.Kind{api.ArtifactServer, api.Proxy, api.DNSServer, api.NTPServer} {
+		for _, row := range []struct {
+			name, first, second, bind, want string
+			refuse                          bool
+		}{
+			{"sole v6", "2001:db8::1", "2001:db8::1", "", "2001:db8::1", false},
+			{"mapped default", "::ffff:192.0.2.1", "::ffff:192.0.2.2", "", "0.0.0.0", false},
+			{"mapped v6 bind", "::ffff:192.0.2.1", "::ffff:192.0.2.2", "::", "::", true},
+			{"v6 explicit", "2001:db8::1", "2001:db8::2", "::", "::", false},
+			{"v4 explicit", "192.0.2.1", "192.0.2.2", "0.0.0.0", "0.0.0.0", false},
+			{"v6 default", "2001:db8::1", "2001:db8::2", "", "::", false},
+			{"v4 default", "192.0.2.1", "192.0.2.2", "", "0.0.0.0", false},
+			{"mixed default", "192.0.2.1", "2001:db8::2", "", "0.0.0.0", true},
+			{"v4 bind v6 endpoint", "2001:db8::1", "2001:db8::2", "0.0.0.0", "0.0.0.0", true},
+			{"v6 bind v4 endpoint", "192.0.2.1", "192.0.2.2", "::", "::", true},
+		} {
+			t.Run(string(kind)+"/"+row.name, func(t *testing.T) {
+				host := obj(api.Machine, "host", m("network", m("addresses", list(m("name", "a", "address", row.first), m("name", "b", "address", row.second)))))
+				c := api.NewCatalog([]api.Object{host})
+				spec := m("management", "managed", "machineRef", "host", "endpoints", list(m("name", "a", "addressRef", "a", "listenerRef", "http"), m("name", "b", "addressRef", "b", "listenerRef", "http")))
+				if row.bind != "" {
+					spec = spec.With("bindAddress", api.StringValue(row.bind))
+				}
+				if kind == api.ArtifactServer {
+					spec = spec.With("listeners", list(m("name", "http", "protocol", "http", "port", api.IntegerValue("8080"))))
+				}
+				got, _ := Normalize(obj(kind, "server", spec), c)
+				if got.Spec().Get("bindAddress").Text() != row.want {
+					t.Fatalf("bind: %s", got.Spec().Get("bindAddress").Text())
+				}
+				issues := validatePlacement(kind, got.Spec(), host)
+				if (len(issues) > 0) != row.refuse {
+					t.Fatalf("issues: %v", issues)
+				}
+				for _, issue := range issues {
+					if !strings.Contains(issue.Field, "endpoints[") || issue.Code != "api.invariant" || !strings.Contains(issue.Message, row.want) || issue.Remediation == "" {
+						t.Fatalf("field: %v", issue)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestDerivationReadsAllEndpointsBeforeSelectingFamily(t *testing.T) {
+	host := obj(api.Machine, "host", m("network", m("addresses", list(m("name", "a", "address", "2001:db8::1"), m("name", "b", "address", "2001:db8::2"), m("name", "c", "address", "192.0.2.1"), m("name", "dns", "address", "host.example.test")))))
+	c := api.NewCatalog([]api.Object{host})
+	for _, refs := range [][]string{{"a", "b", "c"}, {"a", "b", "dns"}, {"dns"}, {}} {
+		endpoints := []api.Value{}
+		for _, ref := range refs {
+			endpoints = append(endpoints, m("name", ref, "addressRef", ref))
+		}
+		if got := derivedBind(m("machineRef", "host", "endpoints", api.ListValue(endpoints...)), c); got != "0.0.0.0" {
+			t.Fatalf("%v: %s", refs, got)
+		}
+	}
+}

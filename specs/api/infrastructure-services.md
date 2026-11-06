@@ -86,9 +86,9 @@ The four managed kinds use these deployment defaults:
 
 An omitted `bindAddress` of a managed service, `ArtifactServer` included, is
 derived: when every endpoint names one IP address on the placement Machine, the
-service binds that address; when it declares no endpoint, or its endpoints name
-several addresses or a DNS name, it binds the wildcard `0.0.0.0`. The examples
-author none. A wildcard binds every address, so it collides with any other
+service binds that address; several IPv6-only addresses derive `::`;
+no endpoints, DNS names or other address sets derive `0.0.0.0`.
+DNS names require no lookup. A wildcard reservation collides with any other
 listener on that port, such as another resolver on the host; the apply then
 refuses before starting the service and names the socket under
 [host reservations](../infrastructure-services.md#host-reservations). An
@@ -107,7 +107,9 @@ A DNSServer endpoint names an IP address on its Machine, because a resolver is
 configured by address. When `bindAddress` is not a wildcard (`0.0.0.0` or
 `::`), every endpoint whose address is an IP equals it, because nothing answers
 on another address; a DNS-name endpoint is not compared, since admission
-performs no lookup. A wildcard bind requires at least one endpoint, because
+performs no lookup. Every IP endpoint must match a wildcard's family: IPv4
+(including mapped IPv6 literals) for `0.0.0.0`, IPv6 for `::`. Mixed families
+refuse at the endpoint field. A wildcard requires an endpoint, because
 readiness probes the service through its endpoint addresses.
 A managed Proxy, DNSServer or NTPServer bound to a wildcard declares at most 61
 distinct endpoint addresses, its [host reservation's](../infrastructure-services.md#host-reservations)

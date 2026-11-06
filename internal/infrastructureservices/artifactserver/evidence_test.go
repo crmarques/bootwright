@@ -20,7 +20,7 @@ func fixtureRequest(t *testing.T) Request {
 
 func presenceEvidence(request Request, digest, fingerprint string) []byte {
 	evidence := Evidence{
-		Container: request.Image, ContentRoot: true, Postcondition: true, Request: digest, Unit: "active",
+		StartedAfterFiles: true, Container: request.Image, ContentRoot: true, Postcondition: true, Request: digest, Unit: "active",
 	}
 	for _, target := range request.ProbeTargets() {
 		listener := ListenerEvidence{
@@ -170,5 +170,31 @@ func TestPresenceRefusesAnUnprobedListener(t *testing.T) {
 				t.Fatalf("a present server readiness cannot prove was not partial: %v", err)
 			}
 		})
+	}
+}
+
+func TestArtifactFreshnessCannotBeClaimedWithoutEvidence(t *testing.T) {
+	r := fixtureRequest(t)
+	var evidence map[string]any
+	_ = json.Unmarshal(presenceEvidence(r, testDigest, testFingerprint), &evidence)
+	for _, missing := range []bool{true, false} {
+		evidence["startedAfterFiles"] = false
+		if missing {
+			delete(evidence, "startedAfterFiles")
+		}
+		for _, claimed := range []bool{false, true} {
+			evidence["postcondition"] = claimed
+			data, _ := json.Marshal(evidence)
+			if ValidatePresence(data, r, testDigest, testFingerprint) == nil {
+				t.Fatal("missing start proof accepted")
+			}
+			err := ValidatePartial(data, r, testDigest, testFingerprint)
+			if (err != nil) != claimed {
+				t.Fatalf("partial claimed=%v: %v", claimed, err)
+			}
+			if ValidateUnremoved(data, r, testDigest) != nil {
+				t.Fatal("start proof affected removal")
+			}
+		}
 	}
 }

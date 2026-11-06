@@ -1,6 +1,6 @@
 implementation: artifact-server-nginx-v1
-content-digest: f3d0533f1b099ab01f890745ca21b094d7970f0ee1e5bcde5047e65229c3d5ff
-request-version: artifact-server-nginx-v3
+content-digest: bb260378a06deeceddf7f55d3c4e6473678a58842896d85167d1307fcd8cc0c8
+request-version: artifact-server-nginx-v4
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -53,6 +53,7 @@ request-schema:
   unit string
   version string
 evidence-schema:
+  startedAfterFiles bool
   absent bool
   container string
   contentRoot bool

@@ -72,7 +72,7 @@ ARTIFACT_SERVER = {
     "placement": LOCAL,
     "tls": {"fingerprint": DIGEST, "minVersion": "TLSv1.2", "secret": "media-serving"},
     "unit": "bootwright-%s-artifact-server-media" % CONTEXT,
-    "version": "artifact-server-nginx-v3",
+    "version": "artifact-server-nginx-v4",
 }
 
 NETWORK = {"address": "192.0.2.1/24", "bridge": "virbr-lab", "forward": "nat", "managed": True,

@@ -33,3 +33,17 @@ func TestAnEarlierRequestWithARemovedFieldRefusesByItsVersion(t *testing.T) {
 		t.Fatalf("an earlier artifact server refused as %+v", reported)
 	}
 }
+
+func TestTheRequestWithoutArtifactStartProofRefusesByVersion(t *testing.T) {
+	r := fixtureRequest(t)
+	r.Version = "artifact-server-nginx-v3"
+	data, err := r.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = DecodeRequest(data)
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || reported[0].Message != "the frozen artifact-server request has an unsupported version: artifact-server-nginx-v3" || reported[0].Remediation != "destroy it with the build that applied it" {
+		t.Fatalf("refusal: %+v", reported)
+	}
+}

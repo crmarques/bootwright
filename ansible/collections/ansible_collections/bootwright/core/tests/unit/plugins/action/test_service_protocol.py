@@ -43,7 +43,7 @@ def test_a_running_service_proves_itself_without_naming_anything():
 
 
 def test_a_service_that_never_started_names_what_is_unproved():
-    assert artifact_server_protocol.unproved(GONE) == ["unit", "contentRoot"]
+    assert artifact_server_protocol.unproved(GONE) == ["unit", "contentRoot", "startedAfterFiles"]
     assert infra_service_protocol.unproved(GONE) == ["unit", "contentRoot", "startedAfterFiles"]
     for protocol in PROTOCOLS:
         assert protocol.unproved(dict(RUNNING, unit="failed")) == ["unit"]
@@ -111,3 +111,13 @@ def test_a_managed_service_hands_a_foreign_listener_refusal(monkeypatch):
     action._task = SimpleNamespace(args={"phase": "refused", "reason": "foreign-listener", "port": 53})
     assert action.run(task_vars={}) == {"changed": False}
     assert records == [({"phase": "refused", "reason": "foreign-listener-53"}, False)]
+
+
+def test_artifact_start_freshness_is_required_for_presence_but_not_removal():
+    for fresh in (False, None):
+        observation = dict(RUNNING, startedAfterFiles=fresh)
+        evidence = artifact_server_protocol.presence({}, observation, [], "1" * 64)
+        assert evidence["postcondition"] is False
+        assert evidence["startedAfterFiles"] is False
+        assert artifact_server_protocol.unproved(observation) == ["startedAfterFiles"]
+        assert artifact_server_protocol.absence(GONE, "1" * 64)["postcondition"] is True

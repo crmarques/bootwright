@@ -12,13 +12,14 @@ import (
 // strictly: an adapter cannot widen a postcondition, invent a listener or
 // report a certificate the operation did not bind.
 type Evidence struct {
-	Absent        bool               `json:"absent"`
-	Container     string             `json:"container"`
-	ContentRoot   bool               `json:"contentRoot"`
-	Listeners     []ListenerEvidence `json:"listeners"`
-	Postcondition bool               `json:"postcondition"`
-	Request       string             `json:"request"`
-	Unit          string             `json:"unit"`
+	StartedAfterFiles bool               `json:"startedAfterFiles"`
+	Absent            bool               `json:"absent"`
+	Container         string             `json:"container"`
+	ContentRoot       bool               `json:"contentRoot"`
+	Listeners         []ListenerEvidence `json:"listeners"`
+	Postcondition     bool               `json:"postcondition"`
+	Request           string             `json:"request"`
+	Unit              string             `json:"unit"`
 }
 
 var certificateMismatch = errors.New("artifact-server certificate mismatch")
@@ -106,7 +107,7 @@ func ValidatePresence(data []byte, request Request, digest, fingerprint string) 
 	if evidence.Request != digest {
 		return refusal("lifecycle.state", "the artifact-server evidence names another request", "")
 	}
-	if !evidence.Postcondition || evidence.Absent {
+	if !evidence.Postcondition || evidence.Absent || !evidence.StartedAfterFiles {
 		return refusal("lifecycle.state", "the artifact-server adapter did not prove its postcondition", "")
 	}
 	if evidence.Unit != "active" {
@@ -195,7 +196,7 @@ func ValidatePartial(data []byte, request Request, digest, fingerprint string) e
 	if evidence.Absent {
 		return refusal("lifecycle.state", "the artifact-server evidence proves a settled state, not a partial one", "")
 	}
-	if evidence.Postcondition && (evidence.Unit != "active" || !evidence.ContentRoot) {
+	if evidence.Postcondition && (evidence.Unit != "active" || !evidence.ContentRoot || !evidence.StartedAfterFiles) {
 		return refusal("lifecycle.state", "the artifact-server evidence claims a postcondition it does not report", "")
 	}
 	if evidence.Unit == "" && evidence.Container == "" && !evidence.ContentRoot {

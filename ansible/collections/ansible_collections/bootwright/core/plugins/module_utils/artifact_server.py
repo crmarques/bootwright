@@ -7,7 +7,7 @@ import os
 import socket
 import ssl
 
-from ansible_collections.bootwright.core.plugins.module_utils import host_sockets
+from ansible_collections.bootwright.core.plugins.module_utils import host_sockets, infra_service
 
 SYSTEMCTL = "/usr/bin/systemctl"
 PODMAN = "/usr/bin/podman"
@@ -150,7 +150,11 @@ def observe(runner, request):
     """Bounded read-only observation of everything this capability owns."""
     unit_path = "/etc/containers/systemd/" + request["unit"] + ".container"
     service = request["unit"] + ".service"
+    paths = [unit_path, request["contentRoot"] + "/config/nginx.conf"]
+    if any(listener["protocol"] == "https" for listener in request["listeners"]):
+        paths.extend(request["contentRoot"] + "/tls/" + name for name in ("server.crt", "server.key"))
     return {
+        "startedAfterFiles": infra_service.started_after(runner, request["unit"], paths),
         "unit": unit_state(runner, unit_path, service),
         "unitDigest": digest_file(unit_path),
         "container": container_image(runner, request["unit"]),

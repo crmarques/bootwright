@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -117,5 +118,32 @@ func TestIPv6ArtifactListenerImpactsAreBracketed(t *testing.T) {
 				t.Fatalf("removal listener impacts = %v", got)
 			}
 		})
+	}
+}
+
+func TestDerivedIPv6WildcardKeepsEveryProbeAndReservation(t *testing.T) {
+	host := controller().WithSpec(controller().Spec().WithPath(api.ListValue(
+		api.MapValue(text("name", "a"), text("address", "2001:db8::1")),
+		api.MapValue(text("name", "b"), text("address", "2001:db8::2")),
+	), "network", "addresses"))
+	server := artifactServer(field("listeners", api.ListValue(api.MapValue(text("name", "http"), text("protocol", "http"), number("port", "8080")))),
+		field("endpoints", api.ListValue(api.MapValue(text("name", "a"), text("listenerRef", "http"), text("addressRef", "a")), api.MapValue(text("name", "b"), text("listenerRef", "http"), text("addressRef", "b")))))
+	server = server.WithSpec(server.Spec().Without("bindAddress"))
+	server, _ = infrastructureservices.Normalize(server, catalogOf(host, server))
+	requests, err := Requests(catalogOf(host, server), "controller", testContext)
+	if err != nil || len(requests) != 1 {
+		t.Fatalf("requests: %v %v", requests, err)
+	}
+	r := requests[0]
+	if r.BindAddress != "::" || !slices.Equal(r.ProbeTargets(), []ProbeTarget{{Address: "2001:db8::1", Name: "http", Port: 8080, Protocol: "http"}, {Address: "2001:db8::2", Name: "http", Port: 8080, Protocol: "http"}}) {
+		t.Fatalf("request: %+v", r)
+	}
+	for _, key := range []string{"socket::::8080", "socket:2001:db8::1:8080", "socket:2001:db8::2:8080"} {
+		if !slices.Contains(r.reservationKeys(), key) {
+			t.Fatalf("missing %s: %v", key, r.reservationKeys())
+		}
+	}
+	if len(r.reservationKeys()) != 5 {
+		t.Fatalf("unexpected keys: %v", r.reservationKeys())
 	}
 }

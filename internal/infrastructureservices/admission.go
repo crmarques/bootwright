@@ -40,18 +40,26 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 // the wildcard (specs/api/infrastructure-services.md).
 func derivedBind(value api.Value, c api.Catalog) string {
 	machine, found := c.Find(api.Machine, value.Get("machineRef").Text())
-	bound := ""
+	bound, multiple, allIPv6 := "", false, true
 	for _, endpoint := range value.Get("endpoints").Items() {
 		address, err := netip.ParseAddr(machineAddress(machine, endpoint.Get("addressRef").Text()))
-		if !found || err != nil || bound != "" && bound != address.String() {
-			return "0.0.0.0"
+		if !found || err != nil {
+			multiple, allIPv6 = true, false
+			continue
+		}
+		allIPv6 = allIPv6 && address.Unmap().Is6()
+		if bound != "" && bound != address.String() {
+			multiple = true
 		}
 		bound = address.String()
 	}
-	if bound == "" {
-		return "0.0.0.0"
+	if bound != "" && !multiple {
+		return bound
 	}
-	return bound
+	if bound != "" && allIPv6 {
+		return "::"
+	}
+	return "0.0.0.0"
 }
 
 func normalizeServiceIPs(value api.Value) api.Value {
@@ -227,6 +235,10 @@ func validatePlacement(kind api.Kind, value api.Value, machine api.Object) []api
 		if kind == api.DNSServer && err != nil {
 			issues = add(issues, issue(field, "a DNSServer endpoint must name an IP address, because a resolver is configured by address; address "+ref+" of "+machine.Identity()+" is the name "+resolved,
 				"set addressRef to an IP address declared in spec.network.addresses of "+machine.Identity()))
+		}
+		if err == nil && wildcard(value.Get("bindAddress").Text()) && address.Unmap().Is4() != (value.Get("bindAddress").Text() == "0.0.0.0") {
+			issues = add(issues, issue(field, "endpoint "+endpoint.Get("name").Text()+" resolves to "+address.String()+", but spec.bindAddress "+value.Get("bindAddress").Text()+" listens on the other IP family",
+				"set spec.bindAddress and every IP endpoint to the same address family (0.0.0.0 for IPv4 or :: for IPv6)"))
 		}
 		if err == nil && bound && address != bind {
 			issues = add(issues, issue(field, "endpoint "+endpoint.Get("name").Text()+" resolves to "+address.String()+", but the service listens only on spec.bindAddress "+bind.String()+", so nothing answers there",
