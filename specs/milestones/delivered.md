@@ -11850,3 +11850,81 @@ environment networks through the node. The items whose operator gate was
 B755's, B757's or B729's row, such as [B735](m4.md#b735),
 [B84](m4.md#b84), [B727](m4.md#b727) and [B758](m4.md#b758), keep their
 status until the owner accepts them.
+
+### X304 — Audit 003 foundation remediation
+
+**Items:** B1132, B1133, B1134, B1135 (incorporates B122), B1136,
+B1137, B1138, B1139 and B1144, completed in-tree (2026-11-05).
+**Kind:** safety. **Owners:** CLI, Controller, Workspace, Reconciliation,
+Infrastructure services, Substrate, Machine and Managed OS.
+
+[D233](backlog.md#d233) delivers 38 confirmed High and Medium findings from
+[audit 003](../../audits/003-code/report-final.md), with the additional
+gate-blocking installer defect B1144. The original operator gates remain open.
+
+- B1132: CLI-01, CLI-02, CLI-04. Rendering publishes through the invoking
+  account; context-free rendering needs no elevation; the documented sudo
+  entry guard remains ([CLI](../cli.md)).
+- B1133: SEC-01, SEC-02, SEC-06, SEC-07, PRJ-03, CTS-01, CTS-02. Qualified
+  executables, fixed plugin paths, origin-bound acquisition, retained GSSAPI
+  policy and redacted panic diagnostics ([security](../security.md)).
+- B1134: CTX-01, CTX-02, CTH-01, CTH-02, OUT-10, SCR-01. Recoverable
+  initialization stages, durable requested-package intent and provenance,
+  optional operational logging and correct corruption exits
+  ([contexts](../contexts.md), [controller](../controller.md)).
+- B1135: OUT-01, OUT-11, RCC-06, RCD-07, ARC-01. Latest attempts and outcomes,
+  synchronous bounded log writes, 6 MiB plan records, per-cluster observation
+  throttles and a truthful architecture-guard description
+  ([reconciliation](../state-reconciliation.md), [output](../cli/output.md)).
+- B1136: ENV-06, ENV-08, API-01, MCH-01, OCA-05. Effective defaults and grammar,
+  managed-network containment and install-uplink discovery
+  ([API](../api.md)).
+- B1137: INF-01, INF-05, INF-07. Unknown listener timeouts, exact per-address
+  TCP DNS proof and family-limited chrony
+  ([infrastructure services](../infrastructure-services.md)).
+- B1138: RCS-01, RCS-05, SBP-11, SBV-01, SBV-11, SBV-15. Shared physical
+  identity proof, isolation refusals, route-collision rules, SSH BMC claims
+  and KubeVirt root/frozen-shape readiness ([substrates](../substrates.md)).
+- B1139: MOI-01, MOI-04, MOI-05. Installed-marker proof, private publication
+  on the destination filesystem and accurate bounded interface coverage
+  ([managed OS](../managed-os.md)).
+- B1144: full MAC inventory consumption avoids an early-reader SIGPIPE false
+  refusal while retaining exact membership. The bounded inventory regression
+  fails with the old generated installer.
+
+**Delivery commits:** b471d4027 (plan), 52f0e90a6 (foundation implementation),
+98a4e30a4 (B1144); the add-on commits are recorded in X305 below. Contract
+goldens and versions move together; setup state moves to v2. No old frozen
+operation conversion is claimed.
+
+**Verification:** defect probes, `make focus` and `make quick` passed after
+correcting the reported integration failures. Final `make check` passed,
+including the complete Ansible check, and `make race` passed. The additional
+`./scripts/go test -race` run passed for `internal/workspace/contextfs/...`,
+`internal/acquisition/...`, `internal/controller/venvlocal/...`,
+`internal/controller/prerequisites/...` and
+`internal/nativeartifacts/comparisonlocal/...`. Independent safety reviews
+found no remaining requirement gaps. The original extra-race command had one
+incorrect package path; the corrected complete command passed. The Ansible
+unit result includes one pre-existing stale-directory-listing case skipped
+on the temporary filesystem; that case is unverified, not passed. No live effects, FIPS runtime qualification, power-loss
+qualification or operator acceptance is claimed.
+
+### X305 — Audit 003 add-on remediation
+
+**Items:** B1142, completed in-tree (2026-11-05). **Kind:** safety.
+**Owner:** Add-ons.
+
+[D233](backlog.md#d233) delivers ADD-01, ADD-02, ADD-03, ADD-11, ADD-15, ADD-16
+and ADA-09 from [audit 003](../../audits/003-code/report-final.md): healthy
+exact/dependent operator pins tolerate later upgrade plans without writes;
+OLM properties use the specified representation; owned publication retries
+only classified transient answers; projection JSON preserves controls and
+Unicode; unsupported Secret types refuse before planning; and MetalLB excludes
+held Ceph virtual addresses ([add-ons](../add-ons.md)).
+
+**Delivery commits:** acb930490 and e0f31219f. Exact and dependent content
+policies move to v2; the networking canonical observation contract is unchanged.
+The focused native-script/transport/retry regressions and independent review
+passed. X304 records the shared final full and race gates, including the one
+pre-existing skipped Ansible case. No operator acceptance is claimed.

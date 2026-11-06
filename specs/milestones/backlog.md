@@ -98,7 +98,6 @@ Alias cell.
 | [B394](#b394) | new, 2026-10-06 (X41) | enabling | Each test's owner | Tests X41 left narrower than they read | Found in X41; parked under D48 (D116) |
 | [B395](#b395) | new, 2026-10-06 (X41) | enabling | Each spec's owner | Wording X41 left | Found in X41; parked under D48 (D116) |
 | [B396](#b396) | new, 2026-10-06 (X41) | enabling | Architecture | Knowledge lessons X41 left | Found in X41; parked under D48 (D116) |
-| [B412](#b412) | new, 2026-10-06 (X42) | defect | Infrastructure services | A wildcard bind serves its IP endpoints' family | Found in X42; parked under D48 (D116); IPv6 service endpoints are in no M1 journey |
 | [B413](#b413) | new, 2026-10-06 (X42) | enabling | Managed OS, with CLI | A media transfer shows its bytes and bounds its response headers | Found in X42; parked under D48 (D116); byte progress needs the owner to amend the output spec's rule 3 |
 | [B414](#b414) | new, 2026-10-06 (X42) | enabling | Controller setup | An unreadable FIPS flag is reported, not a stop | Found in X42; parked under D48 (D116) |
 | [B415](#b415) | new, 2026-10-06 (X42) | enabling | Managed OS, with Environment | One OS release rule for the rescue image and the install profile | Found in X42; parked under D48 (D116) |
@@ -537,7 +536,7 @@ Widened by D183's answer to Q96 (a): every SSH-placed claim is published in the 
 
 ### B248
 
-The artifact server's observation never compares the container's start with its configuration, unit or serving material, so an unknown resolution of an apply stopped before its restart can record it done while nginx serves an earlier configuration; and since X32 a managed-service apply whose host clock stepped back restarts on every attempt until the clock passes the file's time (found in X32). **Exit evidence:** observation and apply tests for both.
+Since X32 a managed-service apply whose host clock stepped back restarts on every attempt until the clock passes the file's time. The artifact-server observation part was split into [B1145](m1.md#b1145) on 2026-11-05 under D233. **Exit evidence:** an apply test for a backward clock. This separate defect remains parked.
 
 ### B256
 
@@ -727,10 +726,6 @@ Wording X41 left: the state-reconciliation spec's status contradictions still li
 ### B396
 
 Knowledge lessons X41 left: the concurrent-block-execution page quotes the old "up to 1 step at once" wording without marking it as history; the operation-store entry page says every write measures the whole subtree; no build page says that `make build` disables cgo while `scripts/go` keeps it, because `make race` needs it; and no page explains why a binding once refused during a bounded run (found in X41). **Exit evidence:** each page updated or written.
-
-### B412
-
-A wildcard bind of one family, such as `0.0.0.0` with an IPv6 endpoint, passes X42's endpoint rule but never answers on that endpoint (found in X42). **Exit evidence:** admission refusing an IP endpoint whose family the wildcard bind does not serve, naming the bind.
 
 ### B413
 
@@ -3436,7 +3431,7 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | B365 | 2026-10-20 | Folded under [D173](#d173) into [B771](#b771), which removes the `add-ons/_store` exception and its marker, so the hard-linked-marker disagreement leaves with them. |
 | B496 | 2026-11-03 | [D224](#d224): its remaining gate was the emulated bare-metal rehearsal; its in-tree delivery, the generated `issuerRef` CA-signed leaf of D175, stays on main. |
 | B1062 | 2026-11-03 | [D224](#d224): the emulated bare-metal rehearsal it would have planned was removed. |
-| B122 | 2026-11-05 | JSON results already exist; the remaining attempt/outcome reporting is folded into [B1135](m1.md#b1135) by D233. |
+| B122 | 2026-11-05 | JSON results already exist; the remaining attempt/outcome reporting is folded into [B1135](delivered.md#x304--audit-003-foundation-remediation) by D233. |
 
 ## Decisions
 
@@ -6913,10 +6908,14 @@ a replaced CSV is recorded as [B1130](m4.md#b1130), not implemented.
 **owner** (2026-11-05): after the executive summary of
 [audit 003](../../audits/003-code/report-final.md), the owner asked:
 "plan and implement the recommendations for high and medium findings".
-This authorizes all 68 High and Medium findings as X304 (M1, B1132 to
+This authorizes the 68 confirmed High and Medium findings as X304 (M1, B1132 to
 B1139; gate-blocking defect B1144 recorded separately), X305 (M4, B1142), X306 (M2, B1140 and B1141), and X307 (M3,
 B1143), out of sequence for implementation. Work starts with X304 and X305;
 X306 and X307 follow, keeping no more than two active slices in this program.
+The report also names tracked Medium findings INF-02 and INF-08. X308
+(M1, B1145 and B412) delivers those reported parts after an active slot opens;
+B1145 splits the artifact-server part of B248, whose separate backward-clock
+managed-service defect stays parked. This covers 70 High and Medium findings.
 The dated audit remains unchanged. Low findings and existing operator
 acceptance are outside this remediation unless inseparable from a listed fix.
 B122 is retired into B1135, which owns its OUT-01 reporting remainder.
