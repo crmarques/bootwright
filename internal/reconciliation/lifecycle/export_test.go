@@ -71,6 +71,24 @@ func NewBoundJourney(t *testing.T, bound []BoundCapability, plan CapabilityPlan)
 	return &CapabilityJourney{Service: h.service, harness: h}
 }
 
+// NewScriptedJourney is the engine over the journey double's one context,
+// planning exactly definitions and answering each block's apply with its
+// scripted result, so a journey reads back evidence a capability recorded.
+func NewScriptedJourney(t *testing.T, definitions []reconciliation.BlockDefinition, results map[string]Result) *CapabilityJourney {
+	t.Helper()
+	h := newPlannedHarness(t, definitions)
+	h.capability.outcomeFor = results
+	var bound []BoundCapability
+	for _, definition := range definitions {
+		binding := CapabilityBinding{Kind: definition.Kind, Implementation: definition.Implementation}
+		if !slices.ContainsFunc(bound, func(held BoundCapability) bool { return held.Binding == binding }) {
+			bound = append(bound, BoundCapability{Binding: binding, Capability: h.capability})
+		}
+	}
+	h.service.capabilities = sharedResolver{bound: bound, plan: CapabilityPlan{Definitions: definitions}}
+	return &CapabilityJourney{Service: h.service, harness: h}
+}
+
 // sharedResolver resolves each binding to its capability, the first binding's
 // alone contributing the fixed plan, so no block is planned twice.
 type sharedResolver struct {

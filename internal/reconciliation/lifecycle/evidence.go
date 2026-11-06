@@ -11,8 +11,8 @@ import (
 
 // BlockEvidence carries durable facts decoded only by the evidence-owning capability.
 type BlockEvidence struct {
-	// ApplyProved populates Block with the detached original request and digest,
-	// carrying references, never Secret material, for owner validation.
+	// Block is the frozen block with its request and digest, carrying
+	// references, never Secret material, for owner validation.
 	Block          reconciliation.Block
 	Kind           string
 	Object         string
@@ -63,6 +63,7 @@ func (s Service) Evidence(ctx context.Context, contextName, kind, object string)
 				if err != nil {
 					return err
 				}
+				evidence.Block = block
 				found = append(found, evidence)
 			}
 		}
