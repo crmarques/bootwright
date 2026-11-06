@@ -384,12 +384,12 @@ func TestAKubeVirtMachineAuthorsNoMAC(t *testing.T) {
 
 // A bare-metal attachment configures nothing, so a bare-metal Machine needs no
 // attachment selection; one it authors still names an attachment of its
-// provider. A libvirt Machine's attachment is its domain's network, so it
-// still selects one.
+// provider. A libvirt Machine's attachment is its domain's network, so with
+// two attachments to choose from it still selects one.
 func TestABaremetalMachineSelectsNoAttachment(t *testing.T) {
 	inline := guest(m("inline", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet"))))))
-	requireOneIssue(t, admission(inline, libvirtLab(list())...), api.Issue{Code: "api.invariant", Field: "$.spec.network.attachmentRef",
-		Message:     "provider-backed configured networks require an explicit attachment unless the unique matching default applies",
+	requireOneIssue(t, admission(inline, twoAttachmentLab(list())...), api.Issue{Code: "api.invariant", Field: "$.spec.network.attachmentRef",
+		Message:     "provider-backed configured networks require an explicit attachment unless their provider has exactly one",
 		Remediation: "set spec.network.attachmentRef on Machine/guest to an attachment of InfraProvider/lab"})
 	server, catalog := fixture()
 	objects := without(catalog, server)

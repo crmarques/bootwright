@@ -345,7 +345,7 @@ The retired `spec.capabilities` refuses with `api.field`.
 | --- | --- | --- | --- | --- |
 | `configRef` | string | union | — | Global `NetworkConfig`. |
 | `inline` | `NetworkConfig.spec` object | union | — | Inline one-off alternative with the same NMState, CIDR, and DNS selection constraints. |
-| `attachmentRef` | string | conditional | `configRef` name | Provider-local `networkAttachments[].name`; applies one attachment to every effective physical interface. Required with a configured network on a libvirt Machine unless the default applies; optional on bare metal, where it selects nothing. |
+| `attachmentRef` | string | conditional | sole provider attachment | Provider-local `networkAttachments[].name`; applies one attachment to every effective physical interface. Required with a configured network on a libvirt Machine unless the default applies; optional on bare metal, where it selects nothing. |
 | `installAddressRef` | string | when a consumer requires a static install IP | unique eligible address below | Machine-local `addresses[].name`; selects an interface-assigned IP inside a consumed machine network. |
 | `addresses` | array | no | `[]`, plus derived `fqdn` contact | Set keyed by `name`; exact entry shape below. |
 | `interfaceBinding` | array | conditional | exact NIC-name matches for bare-metal install | Set of `{nicRef, interfaceName}`; the field name is singular `interfaceBinding`. Bare-metal only: refused on a libvirt or KubeVirt Machine, whose provider derives its MACs. `interfaceName` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
@@ -362,11 +362,11 @@ contacts only, is told to remove it. The retired `network.config`,
 `networkConfigRef`, `interfaceAddresses`, and top-level `spec.addresses`
 forms are rejected; they are not aliases.
 
-On a provider-backed machine with `configRef`, absent attachment selection
-defaults `attachmentRef` to that reference's name. The default is valid only
-when the provider exposes exactly one attachment and that name resolves;
-otherwise a libvirt Machine requires an explicit selection, while a bare-metal
-Machine, whose attachment configures nothing, needs none. An authored
+On a provider-backed machine with a configured network and neither
+`attachmentRef` nor `interfaceAttachments`, `attachmentRef` defaults to the
+provider's sole attachment, whatever its name. Otherwise nothing defaults:
+a libvirt Machine requires an explicit selection, while a bare-metal Machine,
+whose attachment configures nothing, needs none. An authored
 attachment always wins and always resolves on its provider. A Machine attached to a managed libvirt network selects an install address inside
 that attachment's prefix, other than the bridge's host address and, for an IPv4
 prefix shorter than /31, its network and broadcast addresses; each refuses at

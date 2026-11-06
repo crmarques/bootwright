@@ -31,9 +31,9 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	}
 	network := normalizedContacts(o, c, s.Get("network"))
 	provider, found := Provider(o, c)
-	if found && network.Has("configRef") && !network.Has("attachmentRef") && !substrate.MachineInterfaceAttachments(o).Present() && provider.Spec().Get("networkAttachments").Len() == 1 {
-		if _, ok := namedValue(provider.Spec().Get("networkAttachments"), network.Get("configRef").Text()); ok {
-			network = network.With("attachmentRef", network.Get("configRef"))
+	if attachments := provider.Spec().Get("networkAttachments"); found && (network.Has("configRef") || network.Has("inline")) && !network.Has("attachmentRef") && !substrate.MachineInterfaceAttachments(o).Present() && attachments.Len() == 1 {
+		if name := attachments.Items()[0].Get("name"); name.Type() == api.String && name.Text() != "" {
+			network = network.With("attachmentRef", name)
 		}
 	}
 	if network.Present() {
@@ -735,7 +735,7 @@ func validateAttachments(o, provider api.Object, native api.Value) []api.Issue {
 	// one it authors still resolves below.
 	if variant != substrate.ArmBaremetal && !network.Has("attachmentRef") && !attachments.Present() {
 		issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.network.attachmentRef",
-			Message:     "provider-backed configured networks require an explicit attachment unless the unique matching default applies",
+			Message:     "provider-backed configured networks require an explicit attachment unless their provider has exactly one",
 			Remediation: "set spec.network.attachmentRef on " + o.Identity() + " to an attachment of " + provider.Identity()})
 	}
 	check := func(ref api.Value, path string) {
