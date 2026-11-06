@@ -59,14 +59,12 @@ func TestEveryNodeThatCanHoldAnInstallerVIPIsOnItsSubnet(t *testing.T) {
 	}
 }
 
-func TestAnEndpointEqualToACephSMBOrNextHopClaimRefuses(t *testing.T) {
+func TestAnEndpointEqualToACephOrSMBClaimRefuses(t *testing.T) {
 	o, c := fixture("libvirt", 3, false)
 	o, _ = Normalize(o, c)
 	for name, holder := range map[string]api.Object{
-		"CephCluster/storage":   obj(api.CephCluster, "storage", m("services", list(m("service_type", "ingress", "spec", m("virtual_ip", "192.0.2.2/24"))))),
-		"CephSMBResource/smb":   obj(api.CephSMBResource, "smb", m("native", m("public_addrs", list(m("address", "192.0.2.2/24"))))),
-		"NetworkConfig/routed":  obj(api.NetworkConfig, "routed", m("nmstate", m("routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-address", "192.0.2.2")))))),
-		"Machine/inline-router": obj(api.Machine, "inline-router", m("network", m("inline", m("nmstate", m("routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-address", "192.0.2.2")))))))),
+		"CephCluster/storage": obj(api.CephCluster, "storage", m("services", list(m("service_type", "ingress", "spec", m("virtual_ip", "192.0.2.2/24"))))),
+		"CephSMBResource/smb": obj(api.CephSMBResource, "smb", m("native", m("public_addrs", list(m("address", "192.0.2.2/24"))))),
 	} {
 		t.Run(name, func(t *testing.T) {
 			catalog := api.NewCatalog(append(c.Objects(), holder))

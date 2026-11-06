@@ -130,3 +130,23 @@ func TestAuthoredBaremetalRefusesExternalEndpoints(t *testing.T) {
 		}
 	}
 }
+
+// A route's next hop is an address some device outside the cluster answers:
+// it collides with a VIP the installer's holders must answer, but an external
+// or load-balanced endpoint may be served by the nodes' own gateway device.
+func TestARouteNextHopCollidesOnlyWithAnInstallerVIP(t *testing.T) {
+	cluster, catalog := fixture("libvirt", 3, false)
+	route := list(m("destination", "0.0.0.0/0", "next-hop-address", "192.0.2.2"))
+	c := api.NewCatalog(append(catalog.Objects(), obj(api.NetworkConfig, "routed", m("nmstate", m("routes", m("config", route)))),
+		obj(api.Machine, "inline-router", m("network", m("inline", m("nmstate", m("routes", m("config", route))))))))
+	issues := endpointCollisions(cluster, c, "api", m("address", "192.0.2.2"), netip.MustParseAddr("192.0.2.2"))
+	if len(issues) != 2 || !strings.Contains(issues[0].Message, "Machine/inline-router at spec.network.inline.nmstate.routes.config[0].next-hop-address") ||
+		!strings.Contains(issues[1].Message, "NetworkConfig/routed at spec.nmstate.routes.config[0].next-hop-address") {
+		t.Fatalf("an installer VIP equal to a next hop: %+v", issues)
+	}
+	for _, source := range []api.Value{m("type", "external"), m("type", "loadBalancer", "loadBalancerRef", "edge")} {
+		if issues := endpointCollisions(cluster, c, "api", m("address", "192.0.2.2", "source", source), netip.MustParseAddr("192.0.2.2")); len(issues) != 0 {
+			t.Fatalf("a %s endpoint on the gateway device was refused: %+v", source.Get("type").Text(), issues)
+		}
+	}
+}

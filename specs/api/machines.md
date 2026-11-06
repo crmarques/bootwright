@@ -369,8 +369,8 @@ A configured network selects exactly one of `configRef` and `inline`.
 `overrides` is forbidden with it. Contact-only Machines need neither form.
 Attachments, bindings, interface assignments, and an install-address selection
 require a configured network. Each refuses at its own field with the remedy to
-select a network configuration with `network.configRef` or `network.inline` or
-to remove the selection or the interface; an OS-ready Machine, which declares
+select one with `network.configRef` or `network.inline` or to remove the
+selection or interface; an OS-ready Machine, which declares
 contacts only, is told to remove it. The retired `network.config`,
 `networkConfigRef`, `interfaceAddresses`, and top-level `spec.addresses`
 forms are rejected, not aliased.
@@ -380,7 +380,7 @@ On a provider-backed machine with a configured network and neither
 provider's sole attachment, whatever its name. Otherwise nothing defaults:
 a libvirt Machine requires an explicit selection, while a bare-metal Machine,
 whose attachment configures nothing, needs none. An authored
-attachment always wins and always resolves on its provider. A Machine attached to a managed libvirt network selects an install address inside
+attachment always wins and resolves on its provider. A Machine attached to a managed libvirt network selects an install address inside
 that attachment's prefix, other than the bridge's host address and, for an IPv4
 prefix shorter than /31, its network and broadcast addresses; each refuses at
 `network.installAddressRef` naming the prefix and every reserved address.
@@ -421,8 +421,8 @@ validation. Secondary assignments may be outside `machineNetwork`; only
 installation candidates must lie inside a selected machine-network CIDR.
 The same install IP cannot be selected by another Machine.
 
-Static assignments have one owner: `network.addresses`. Native templates and
-overrides must not carry a second static-address declaration. Compose the
+Static assignments have one owner, `network.addresses`; native templates and
+overrides carry no second static-address declaration. Compose the
 native map first, then inject each assigned host IP and prefix into its
 interface's matching address family. The family must permit static
 configuration, not be disabled or request DHCP/autoconfiguration. Every static
@@ -434,21 +434,21 @@ An explicit `installAddressRef` must select an assigned IP inside a consumed
 `machineNetwork`. For a consumer requiring a static installation address with
 no authored selection, select the unique eligible address whose interface
 carries a default route for that address family; if there is none, select the
-sole eligible address. More than one candidate at either selection step is an
-error; address names and declaration order never break ties. DNS and contact-only
-entries are ineligible. A consumer requiring static addressing rejects a
+sole eligible address. More than one candidate at either step is an error;
+names and declaration order never break ties. DNS and contact-only entries are
+ineligible. A consumer requiring static addressing rejects a
 missing candidate; a DHCP-capable consumer does not acquire a fabricated
 static address.
 
 `network.interfaceBinding[]` entries have exactly `nicRef` and
-`interfaceName`. Both sides resolve locally, and neither a NIC nor an effective
-ethernet interface is bound more than once. A bare-metal non-provided machine
-binds every effective ethernet interface so the hardware MAC can be injected.
-When its list is omitted, each required ethernet interface must match exactly
-one hardware NIC by name; missing or ambiguous matches require an explicit
-list. An authored list replaces the inferred mapping and must be complete, an
-empty list only when no binding is required. Virtual
-Machines receive no inferred physical NIC bindings.
+`interfaceName`; both resolve locally, and no NIC or effective ethernet
+interface is bound twice. A bare-metal non-provided machine binds every
+effective ethernet interface so its hardware MAC can be injected. An omitted
+list matches each such interface to exactly one hardware NIC by name; a missing
+or ambiguous match needs an explicit list, which replaces the inferred mapping
+and is complete, empty only when no binding is required. An unbound NIC named
+as another NIC's `interfaceName` refuses at that binding, naming both NICs,
+since the installer would list the name twice; bind or rename it. Virtual Machines receive no inferred bindings.
 
 The reusable-template merge is deterministic:
 
@@ -467,8 +467,8 @@ network configuration at all, is rejected at `network.installAddressRef`,
 because the Kickstart carries one static IPv4 `network` line and DHCP
 installation is not supported. Without a network configuration there is no
 install interface yet, so that remedy first selects one with
-`network.configRef` or `network.inline`. That refusal is the only one at
-`network.installAddressRef`; the configured-network rule does not repeat it.
+`network.configRef` or `network.inline`. With no network configured, that
+refusal is the only one at `network.installAddressRef`.
 Its static installation interface is `ethernet`, `vlan`, or `bond`, installed
 as [managed OS](../managed-os.md#installation) projects it, with the refusals
 [its table](../managed-os.md#refusal-table) lists.
@@ -1001,15 +1001,15 @@ This subset is not a claim of full NMState or installer-schema compatibility.
 | `interfaces` | Array of interface mappings with unique, non-empty string `name` and explicit, non-empty string `type`; `name` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
 | `interfaces[].state` | Optional non-empty string; `absent` and `ignore` exclude the interface from assignment and binding. |
 | `interfaces[].mac-address` | Optional MAC address; normalize before comparison with a bound hardware NIC. |
-| `interfaces[].mtu` | Optional integer; on a libvirt or KubeVirt Machine it must not exceed the MTU of the attachment that carries the interface, found through `vlan.base-iface` and `link-aggregation.port`. |
+| `interfaces[].mtu` | Optional integer; on a libvirt or KubeVirt Machine it must not exceed the MTU of the attachment that carries the interface, found through VLAN parents and bond members. |
 | `interfaces[].vlan.base-iface` | Optional parent interface name; the interface takes the attachment of its parent. A VLAN install interface needs an available ethernet or bond parent. |
 | `interfaces[].vlan.id` | Optional integer; a VLAN install interface needs 1 to 4094 and an interface name that agrees with it ([managed OS](../managed-os.md#installation)). |
-| `interfaces[].link-aggregation.port` | Optional array of bond member interface names; the bond takes the attachments of its members. |
+| `interfaces[].link-aggregation.port` | Optional bond member names; with each ethernet whose `controller` names the bond, the members whose attachments it takes. |
 | `interfaces[].ipv4`, `interfaces[].ipv6` | Optional family mappings. |
 | `interfaces[].ipv4.enabled`, `interfaces[].ipv6.enabled` | Optional booleans; explicit `false` forbids static assignment. |
 | `interfaces[].ipv4.dhcp`, `interfaces[].ipv6.dhcp` | Optional booleans; explicit `true` forbids static assignment. |
 | `interfaces[].ipv6.autoconf` | Optional boolean; explicit `true` forbids static assignment. |
-| `interfaces[].ipv4.address`, `interfaces[].ipv6.address` | Arrays; every authored non-empty array is rejected because `network.addresses` owns static assignments. |
+| `interfaces[].ipv4.address`, `interfaces[].ipv6.address` | Arrays; a non-empty one is rejected because `network.addresses` owns static assignments. |
 | `routes.config` | Array of route mappings. |
 | `routes.config[].destination` | Optional CIDR; a valid zero-prefix destination denotes its family's default route. |
 | `routes.config[].next-hop-interface` | Optional Linux interface name, as for `interfaces[].name`, identifying the interface used for default-route selection. |
@@ -1052,14 +1052,14 @@ the subset interprets only the keys its table lists. Every other route and the o
 the line does not carry are applied after installation by
 [network convergence](../managed-os.md#network-convergence).
 
-The install gateway lies inside the install address's prefix. Admission reads
-the default route of the install address's family by the rule above, IPv4
-or IPv6, for every Machine with a selected install address; a gateway outside
-that prefix refuses `api.invariant` at the Machine's `network.installAddressRef`,
-naming the gateway, the install address with its prefix and the `NetworkConfig`
-or inline network the route comes from. A Machine with no such default route,
-or one without a `next-hop-address`, is untouched; an on-link route to a
-gateway outside the prefix is not admitted.
+The install gateway lies inside the install address's prefix. For every
+Machine with a selected install address, admission reads the default route of
+that address's family, IPv4 or IPv6, by the rule above; a gateway outside the
+prefix refuses `api.invariant` at `network.installAddressRef`, naming the
+gateway, the install address with its prefix and the `NetworkConfig` or inline
+network holding the route. No such route or `next-hop-address`, or an IPv6
+link-local gateway, on-link by definition, is untouched; an on-link route to
+another gateway outside the prefix is not admitted.
 
 The fully composed NMState map is internal compiler evidence. Canonical
 effective inspection preserves the normalized template, references, overrides,

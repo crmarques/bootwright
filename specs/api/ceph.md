@@ -457,12 +457,12 @@ checks:
 - every MON host's address, from `cephadm.addressRef` or else the Machine's
   `access.ssh.addressRef`, lies inside one of `networks.publicCIDRs`;
 - every `networks.publicCIDRs` and `networks.clusterCIDRs` entry contains an
-  IP address, contact or interface assignment, that a Machine the topology
-  names declares in `network.addresses`, refused at the entry: addresses, not
-  a NetworkConfig `machineNetwork`, because a provided host such as a stretch
-  tiebreaker may select none;
+  IP literal, contact or assignment, that a Machine the topology names
+  declares in `network.addresses`, refused at the entry; a DNS contact does not
+  count, nor does a NetworkConfig `machineNetwork`, which a provided host,
+  such as a stretch tiebreaker, may lack;
 - with `networks.clusterCIDRs` declared, every topology node's Machine other
-  than the stretch tiebreaker, which holds no OSD and so never uses the
+  than the stretch tiebreaker, which holds no OSD and never uses the
   cluster network, declares an IP address inside one of them, a Machine whose
   addresses are assigned at runtime included, refused at the node's
   `machineRef` as `Ceph host <host> (Machine <machine>) has no address inside
@@ -496,7 +496,7 @@ observes ([frozen release and trust](../ceph.md#frozen-release-and-trust));
 planning admits a provided Machine only as the stretch tiebreaker
 ([stretch topology](../ceph.md#stretch-topology)). The MON address proof
 covers each MON host whose address reference resolves to a declared IP
-literal; a DNS or runtime-assigned address is proved by cephadm's own
+literal; a DNS or runtime-assigned address is proved by cephadm's
 placement.
 
 These checks qualify desired intent only. Live capacity, device safety,

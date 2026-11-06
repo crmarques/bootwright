@@ -376,6 +376,14 @@ func resolveBindings(o api.Object, c api.Catalog, native api.Value) (api.Value, 
 		}
 		seenNIC[nicName], seenInterface[interfaceName] = true, true
 	}
+	for index, binding := range bindings.Items() {
+		nicName, interfaceName := binding.Get("nicRef").Text(), binding.Get("interfaceName").Text()
+		if _, named := namedValue(o.Spec().Get("hardware", "nics"), interfaceName); named && nicName != interfaceName && !seenNIC[interfaceName] {
+			issues = appendIssues(issues, invariant(fmt.Sprintf("$.spec.network.interfaceBinding[%d].interfaceName", index),
+				"hardware NIC "+interfaceName+" of "+o.Identity()+" is unbound but shares the name of interface "+interfaceName+" that NIC "+nicName+" binds, so the installer would list "+interfaceName+" twice with two addresses",
+				"bind NIC "+interfaceName+" in spec.network.interfaceBinding on "+o.Identity()+", or rename it in spec.hardware.nics"))
+		}
+	}
 	if required {
 		for _, iface := range interfaces {
 			if iface.Get("type").Text() == "ethernet" && !unavailableInterface(iface) && !seenInterface[iface.Get("name").Text()] {

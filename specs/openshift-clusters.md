@@ -367,9 +367,9 @@ any other. Each host's `interfaces` entry names an interface by its
 operating-system name with the hardware address of the NIC bound to it, through
 the Machine's `network.interfaceBinding` (the identity when omitted), so a NIC
 label that differs from its interface name lists, and matches in the host's
-network configuration, under the interface name. Composition injects a bound
-NIC's address once; the projection adds an address only to an interface that
-composition left without one. Interface MTUs reach the installer as declared.
+network configuration, under the interface name. Every listed `ethernet`
+interface carries the realized target's address, which is a bound NIC's own,
+over any authored one. Interface MTUs reach the installer as declared.
 A node whose network configuration holds an OVS or Linux bridge, an `ovn` or
 `ovs-db` section, or an interface named as OVN-Kubernetes reserves refuses, and
 so does a node whose install address is not on its default-route interface,

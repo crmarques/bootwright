@@ -332,9 +332,7 @@ func networkConfig(catalog api.Catalog, node api.Object, interfaces []substrate.
 			name, _ := entry["name"].(string)
 			if entry["type"] == "ethernet" {
 				if address, found := addresses[name]; found {
-					if _, composed := entry["mac-address"]; !composed {
-						entry["mac-address"] = address
-					}
+					entry["mac-address"] = address
 					if members[name] {
 						entry["identifier"] = "mac-address"
 					}

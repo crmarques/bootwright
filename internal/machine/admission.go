@@ -578,7 +578,7 @@ func validateManagedAttachmentAddress(o api.Object, address netip.Prefix, provid
 
 func validateInstallGateway(o api.Object, address api.Value, prefix netip.Prefix, native api.Value) []api.Issue {
 	gateway, ok := defaultGateway(native, prefix.Addr().Is4(), address.Get("interface").Text())
-	if !ok || prefix.Contains(gateway) {
+	if !ok || prefix.Contains(gateway) || gateway.IsLinkLocalUnicast() {
 		return nil
 	}
 	source := "spec.network.inline.nmstate"
@@ -993,7 +993,7 @@ func physicalLeaves(native api.Value, name string, visiting map[string]bool) []s
 	if parent := iface.Get("vlan", "base-iface").Text(); parent != "" {
 		return physicalLeaves(native, parent, visiting)
 	}
-	if ports := iface.Get("link-aggregation", "port").Strings(); len(ports) > 0 {
+	if ports := bondPorts(native, name); len(ports) > 0 {
 		var leaves []string
 		for _, port := range ports {
 			leaves = append(leaves, physicalLeaves(native, port, visiting)...)
@@ -1003,14 +1003,44 @@ func physicalLeaves(native api.Value, name string, visiting map[string]bool) []s
 	return []string{name}
 }
 
+func bondPorts(native api.Value, bond string) []string {
+	iface, _ := namedValue(native.Get("interfaces"), bond)
+	ports := slices.Clone(iface.Get("link-aggregation", "port").Strings())
+	for _, member := range native.Get("interfaces").Items() {
+		if name := member.Get("name").Text(); member.Get("controller").Text() == bond && name != bond && !slices.Contains(ports, name) {
+			ports = append(ports, name)
+		}
+	}
+	return ports
+}
+
+func nestsSplitBond(native api.Value, bond string, split map[string]bool, visiting map[string]bool) bool {
+	if visiting[bond] {
+		return false
+	}
+	visiting[bond] = true
+	for _, port := range bondPorts(native, bond) {
+		if split[port] || nestsSplitBond(native, port, split, visiting) {
+			return true
+		}
+	}
+	return false
+}
+
 func validateBondAttachments(o api.Object, native api.Value, attachmentsPath string) []api.Issue {
 	entries := substrate.MachineInterfaceAttachments(o).Items()
-	var issues []api.Issue
+	type splitBond struct {
+		name      string
+		placed    []string
+		differing int
+	}
+	var splits []splitBond
+	split := map[string]bool{}
 	for _, iface := range native.Get("interfaces").Items() {
-		if len(iface.Get("link-aggregation", "port").Strings()) == 0 || unavailableInterface(iface) {
+		bond := iface.Get("name").Text()
+		if len(bondPorts(native, bond)) == 0 || unavailableInterface(iface) {
 			continue
 		}
-		bond := iface.Get("name").Text()
 		var placed []string
 		first, differing := "", -1
 		for _, leaf := range physicalLeaves(native, bond, map[string]bool{}) {
@@ -1028,10 +1058,18 @@ func validateBondAttachments(o api.Object, native api.Value, attachmentsPath str
 			}
 		}
 		if differing >= 0 {
-			issues = appendIssues(issues, invariant(fmt.Sprintf("%s[%d].attachmentRef", attachmentsPath, differing),
-				"bond "+bond+" of "+o.Identity()+" has ports on different attachments ("+strings.Join(placed, ", ")+"), so a failover would move the host onto another network",
-				"attach every port of bond "+bond+" to one attachment in "+attachmentsPath[2:]+" on "+o.Identity()+", or remove the port on another attachment from the bond"))
+			splits = append(splits, splitBond{bond, placed, differing})
+			split[bond] = true
 		}
+	}
+	var issues []api.Issue
+	for _, s := range splits {
+		if nestsSplitBond(native, s.name, split, map[string]bool{}) {
+			continue
+		}
+		issues = appendIssues(issues, invariant(fmt.Sprintf("%s[%d].attachmentRef", attachmentsPath, s.differing),
+			"bond "+s.name+" of "+o.Identity()+" has ports on different attachments ("+strings.Join(s.placed, ", ")+"), so a failover would move the host onto another network",
+			"attach every port of bond "+s.name+" to one attachment in "+attachmentsPath[2:]+" on "+o.Identity()+", or remove the port on another attachment from the bond"))
 	}
 	return issues
 }

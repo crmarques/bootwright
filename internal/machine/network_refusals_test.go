@@ -2,6 +2,7 @@ package machine
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -108,9 +109,49 @@ func TestABondRefusesPortsOnDifferentAttachments(t *testing.T) {
 	}
 }
 
+// A bond's ports include those an ethernet interface names it the controller
+// of, and a split bond nested in another is reported once, at the inner bond.
+func TestABondSplitThroughControllerOrNestingRefusesOnce(t *testing.T) {
+	ethernet := func(name, controller string) api.Value {
+		if controller == "" {
+			return m("name", name, "type", "ethernet")
+		}
+		return m("name", name, "type", "ethernet", "controller", controller)
+	}
+	attached := func(interfaces api.Value, install string, attachments ...string) []api.Issue {
+		machine := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11/24", "interface", install))))
+		var entries []api.Value
+		for index, reference := range attachments {
+			entries = append(entries, m("interface", []string{"enp1s0", "enp2s0", "enp3s0"}[index], "attachmentRef", reference))
+		}
+		machine = machine.WithSpec(machine.Spec().WithPath(list(entries...), "substrate", "libvirt", "interfaceAttachments"))
+		return admission(machine, twoAttachmentLab(interfaces)...)
+	}
+	controlled := list(ethernet("enp1s0", "bond0"), ethernet("enp2s0", "bond0"), m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup")))
+	requireOneIssue(t, attached(controlled, "bond0", "net", "storage"), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.interfaceAttachments[1].attachmentRef",
+		Message:     "bond bond0 of Machine/guest has ports on different attachments (enp1s0 on net, enp2s0 on storage), so a failover would move the host onto another network",
+		Remediation: "attach every port of bond bond0 to one attachment in spec.substrate.libvirt.interfaceAttachments on Machine/guest, or remove the port on another attachment from the bond"})
+	if issues := attached(controlled, "bond0", "net", "net"); len(issues) != 0 {
+		t.Fatalf("a controller-declared bond on one attachment was refused: %v", issues)
+	}
+	nested := list(ethernet("enp1s0", ""), ethernet("enp2s0", ""), ethernet("enp3s0", ""),
+		m("name", "bond1", "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList("enp1s0", "enp2s0"))),
+		m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList("bond1", "enp3s0"))))
+	var refused []string
+	for _, issue := range attached(nested, "bond0", "net", "storage", "net") {
+		if strings.Contains(issue.Message, "has ports on different attachments") {
+			refused = append(refused, issue.Message)
+		}
+	}
+	if len(refused) != 1 || !strings.HasPrefix(refused[0], "bond bond1 of Machine/guest") {
+		t.Fatalf("a split nested bond was reported %d times: %v", len(refused), refused)
+	}
+}
+
 // The install gateway is the next hop of the install interface's default
 // route, so it lies inside the install address's prefix; a Machine with no
-// such route, or a route on another interface, is untouched.
+// such route, a route on another interface, or an IPv6 link-local next hop,
+// which is on-link by definition, is untouched.
 func TestAnInstallGatewayLiesInsideTheInstallPrefix(t *testing.T) {
 	node, catalog := fixture()
 	routed := func(route api.Value) []api.Issue {
@@ -137,6 +178,22 @@ func TestAnInstallGatewayLiesInsideTheInstallPrefix(t *testing.T) {
 			t.Fatalf("%s was refused: %v", name, issues)
 		}
 	}
+	v6 := node.WithSpec(node.Spec().WithPath(list(m("name", "primary", "address", "2001:db8::11/64", "interface", "eth0")), "network", "addresses"))
+	routedV6 := func(gateway string) []api.Issue {
+		objects := without(catalog, node)
+		for i, o := range objects {
+			if o.Kind() == api.NetworkConfig {
+				objects[i] = o.WithSpec(o.Spec().With("machineNetwork", list(m("cidr", "2001:db8::/64"))).WithPath(list(m("destination", "::/0", "next-hop-interface", "eth0", "next-hop-address", gateway)), "nmstate", "routes", "config"))
+			}
+		}
+		return admission(v6, objects...)
+	}
+	if issues := routedV6("fe80::1"); len(issues) != 0 {
+		t.Fatalf("an IPv6 link-local next hop, on-link by definition, was refused: %v", issues)
+	}
+	if issues := routedV6("2001:db8:1::1"); len(issues) != 1 || issues[0].Message != "install gateway 2001:db8:1::1, the next hop of the default route in NetworkConfig/net, lies outside install address primary 2001:db8::11/64 of Machine/node" {
+		t.Fatalf("an IPv6 gateway outside the prefix: %#v", issues)
+	}
 	inline := node.WithSpec(node.Spec().With("network", node.Spec().Get("network").Without("configRef").With("inline", m("machineNetwork", list(m("cidr", "192.0.2.0/24")),
 		"nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")), "routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-address", "198.51.100.1"))))))))
 	issues := admission(inline, without(catalog, node)...)
@@ -159,5 +216,23 @@ func TestAContactCarriesNoPrefix(t *testing.T) {
 		if issues := ready(address); len(issues) != 0 {
 			t.Fatalf("contact %s was refused: %v", address, issues)
 		}
+	}
+}
+
+// An unbound NIC named as another NIC's bound interface would put that
+// interface name in the installer's host list twice, with two addresses.
+func TestAnUnboundNICMayNotShareABoundInterfaceName(t *testing.T) {
+	node, catalog := fixture()
+	labelled := func(second string) api.Object {
+		return node.WithSpec(node.Spec().
+			WithPath(list(m("name", "nic-a"), m("name", second)), "hardware", "nics").
+			WithPath(list(m("nicRef", "nic-a", "macAddress", "02:00:00:00:00:01"), m("nicRef", second, "macAddress", "02:00:00:00:00:02")), "substrate", "baremetal", "nics").
+			WithPath(list(m("nicRef", "nic-a", "interfaceName", "eth0")), "network", "interfaceBinding"))
+	}
+	requireOneIssue(t, admission(labelled("eth0"), without(catalog, node)...), api.Issue{Code: "api.invariant", Field: "$.spec.network.interfaceBinding[0].interfaceName",
+		Message:     "hardware NIC eth0 of Machine/node is unbound but shares the name of interface eth0 that NIC nic-a binds, so the installer would list eth0 twice with two addresses",
+		Remediation: "bind NIC eth0 in spec.network.interfaceBinding on Machine/node, or rename it in spec.hardware.nics"})
+	if issues := admission(labelled("nic-b"), without(catalog, node)...); len(issues) != 0 {
+		t.Fatalf("an unbound NIC with its own name was refused: %v", issues)
 	}
 }

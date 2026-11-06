@@ -220,29 +220,29 @@ LoadBalancer and optional
 [bind-address ref](infrastructure-services.md#loadbalancer) resolve it.
 
 `node` is valid only for a one-node cluster and also forbids an authored
-address. Effective normalization resolves that node Machine's
+address. Normalization resolves that node Machine's
 `network.installAddressRef` using the [Machine selection rules](machines.md#network-configuration)
-and materializes the selected host IP without its prefix. Missing or ambiguous
-installation candidates are errors. Single-node clusters reject the
-default `installer` source for all three slots; `source.type: node` is the
-recommended form so one machine address is not repeated in three places, while
+and materializes the selected IP without its prefix. Missing or ambiguous
+candidates are errors. Single-node clusters reject the
+default `installer` source for all three slots; `source.type: node` is
+recommended, so one machine address is not repeated in three places;
 `external` with an `address` is also valid.
 
 A multi-node cluster whose effective platform is `none`, authored or derived
 for KubeVirt machines, also rejects the `installer` source for every slot, at
 its `source.type`: the installer receives no VIPs on that platform, so nothing
-in the cluster would answer the endpoint. An `external` or `loadBalancer`
+in the cluster would answer. An `external` or `loadBalancer`
 source is valid there.
 
 On a multi-node `baremetal` or `vsphere` platform the installer owns all three
-endpoint slots as virtual IPs its own VIP holders answer. Each takes the
+endpoint slots as virtual IPs its VIP holders answer. Each takes the
 `installer` source with an authored `address`; an `external` or `loadBalancer`
 source is refused at its `source.type`, because the 4.20 to 4.22 agent
 installers pass no load-balancer type to the service that installs the cluster,
 which deploys its VIP holders whatever the input says (the installer's
 development branch does pass one), and on `vsphere` the agent installer ignores
 `platform.vsphere.loadBalancer`; an external load balancer is declared with
-platform `none`, Bootwright's modelling choice rather than a claim about every
+platform `none`, a modelling choice, not a claim about every
 release. `api-int` resolves the `api` address, and the `api` and
 `ingress` addresses differ. API, internal API, ingress, and node IPs obey the
 selected machine-network CIDRs. VIPs do not collide with node install IPs, and
@@ -256,7 +256,6 @@ VIP, declares an interface assignment whose prefix contains that VIP. A node
 whose Machine declares no interface assignment is not judged. Each refusal is
 an `api.invariant` at the slot's address, naming the node and its Machine.
 
-
 **Endpoint addresses are the cluster's own.** An effective endpoint address
 equals no effective endpoint address of another selected OpenShiftCluster, no
 IP address a Machine declares other than the node a single-node cluster's
@@ -265,11 +264,11 @@ no bind or endpoint address of a managed DNSServer, NTPServer, Proxy,
 ArtifactServer or Registry, no emulated BMC's bind address, and no
 LoadBalancer bind address other than the one its own `loadBalancer` source
 selects, no `virtual_ip` of a CephCluster `ingress`, `nfs` or `mgmt-gateway`
-service, no CephSMBResource `native.public_addrs[].address`, and no route
-`next-hop-address` a NetworkConfig, a Machine's inline NMState or its
-`network.overrides` declares; two clusters never select one LoadBalancer bind
-address. A wildcard
-bind claims no address here. Within one cluster `api-int` may equal `api`, and
+service, no CephSMBResource `native.public_addrs[].address`, and, for an
+`installer` VIP, no route `next-hop-address` a NetworkConfig, a Machine's
+inline NMState or its `network.overrides` declares, since a gateway may also
+serve an endpoint outside the cluster; two clusters never select one
+LoadBalancer bind address. A wildcard bind claims none. Within one cluster `api-int` may equal `api`, and
 on platform `none` slots may share one external or load-balancer address. Each
 refusal is an `api.invariant` at the slot's address, or at its source when the
 address is resolved, naming the other holder. A managed libvirt network's
@@ -277,7 +276,6 @@ prefix belongs to one context through its exclusive reservation, so no other
 context's managed attachment shares an address in it; an external attachment
 claims no prefix, and on any other network Bootwright coordinates no address,
 as for node addresses.
-
 
 ## Credentials and certificates
 

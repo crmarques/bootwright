@@ -14,6 +14,7 @@ type addressClaim struct {
 	Object  api.Object
 	Path    string
 	Address netip.Addr
+	NextHop bool
 }
 
 func addressClaims(catalog api.Catalog) []addressClaim {
@@ -24,7 +25,7 @@ func addressClaims(catalog api.Catalog) []addressClaim {
 			address, err = prefix.Addr(), nil
 		}
 		if err == nil && !address.IsUnspecified() {
-			claims = append(claims, addressClaim{holder, path, address.Unmap()})
+			claims = append(claims, addressClaim{holder, path, address.Unmap(), strings.HasSuffix(path, ".next-hop-address")})
 		}
 	}
 	for _, holder := range catalog.Objects() {
@@ -103,7 +104,7 @@ func endpointCollisions(cluster api.Object, catalog api.Catalog, slot string, en
 		field = "$.spec.install.endpoints." + slot + ".source"
 	}
 	for _, claim := range addressClaims(catalog) {
-		if claim.Address != address.Unmap() || endpointOwnsClaim(cluster, catalog, endpoint, claim) {
+		if claim.Address != address.Unmap() || claim.NextHop && source != "installer" || endpointOwnsClaim(cluster, catalog, endpoint, claim) {
 			continue
 		}
 		issues = add(issues, invariantRemediation(field, fmt.Sprintf("endpoint address %s is already held by %s at %s", address, claim.Object.Identity(), claim.Path), "choose an endpoint address distinct from the other declared holder"))
