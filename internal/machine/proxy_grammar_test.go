@@ -40,7 +40,7 @@ spec:
   os: {provided: true}
   network:
     addresses:
-      - {name: ip, address: 192.0.2.10/24}
+      - {name: ip, address: 192.0.2.10}
   proxy:
     proxyRef: egress
     noProxy: ["bad entry!"]

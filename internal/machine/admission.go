@@ -405,6 +405,10 @@ func validateNetworkContacts(o api.Object, c api.Catalog, configured bool) []api
 			}
 			issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: path + ".interface", Message: "interface assignment requires a non-provided Machine with configured network", Remediation: remediation})
 		}
+		if _, err := netip.ParsePrefix(address.Get("address").Text()); err == nil && !address.Has("interface") {
+			issues = appendIssues(issues, invariant(path+".address", "contact "+address.Get("name").Text()+" of "+o.Identity()+" carries a prefix, but a contact names a host to reach and configures nothing",
+				"remove the prefix from "+path[2:]+".address on "+o.Identity()+", or assign the address to an interface with "+path[2:]+".interface"))
+		}
 		if address.Get("name").Text() == "fqdn" {
 			if address.Has("interface") || !api.ValidLexical("dns", address.Get("address").Text()) {
 				issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: path, Message: "fqdn must be an unassigned DNS contact",
@@ -459,6 +463,7 @@ func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, fo
 			if found && variant == substrate.ArmLibvirt {
 				issues = appendIssues(issues, validateManagedAttachmentContainment(o, prefix, provider, address.Get("interface").Text(), native)...)
 			}
+			issues = appendIssues(issues, validateInstallGateway(o, address, prefix, native)...)
 		}
 		if anacondaInstalled(o, c) && len(selectionIssues) == 0 {
 			issues = appendIssues(issues, validateAnacondaNetwork(address, native, configured)...)
@@ -537,7 +542,7 @@ func validateBMC(bmc api.Value, unresolvedProvider bool) []api.Issue {
 // an IPv4 prefix shorter than /31, never its network or broadcast address.
 func validateManagedAttachmentContainment(o api.Object, address netip.Prefix, provider api.Object, installInterface string, native api.Value) []api.Issue {
 	var issues []api.Issue
-	for _, reference := range installAttachmentReferences(o, native, installInterface, map[string]bool{}) {
+	for _, reference := range installAttachmentReferences(o, native, installInterface) {
 		issues = appendIssues(issues, validateManagedAttachmentAddress(o, address, provider, reference)...)
 	}
 	return issues
@@ -569,6 +574,38 @@ func validateManagedAttachmentAddress(o api.Object, address netip.Prefix, provid
 		return refuse("the install address is the " + end + " address of the managed bridge's prefix on " + provider.Identity())
 	}
 	return nil
+}
+
+func validateInstallGateway(o api.Object, address api.Value, prefix netip.Prefix, native api.Value) []api.Issue {
+	gateway, ok := defaultGateway(native, prefix.Addr().Is4(), address.Get("interface").Text())
+	if !ok || prefix.Contains(gateway) {
+		return nil
+	}
+	source := "spec.network.inline.nmstate"
+	if reference := o.Spec().Get("network", "configRef"); reference.Present() {
+		source = "NetworkConfig/" + reference.Text()
+		if o.Spec().Has("network", "overrides") {
+			source += " with spec.network.overrides"
+		}
+	}
+	name := address.Get("name").Text()
+	return []api.Issue{invariant("$.spec.network.installAddressRef",
+		"install gateway "+gateway.String()+", the next hop of the default route in "+source+", lies outside install address "+name+" "+prefix.String()+" of "+o.Identity(),
+		"set that default route's next-hop-address in "+source+" to a gateway inside "+prefix.Masked().String()+", or give install address "+name+" a prefix that contains "+gateway.String())}
+}
+
+func defaultGateway(native api.Value, ipv4 bool, iface string) (netip.Addr, bool) {
+	for _, route := range native.Get("routes", "config").Items() {
+		destination, err := netip.ParsePrefix(route.Get("destination").Text())
+		hop := route.Get("next-hop-interface")
+		if err != nil || destination.Bits() != 0 || destination.Addr().Is4() != ipv4 || route.Get("state").Text() == "absent" || hop.Present() && hop.Text() != iface {
+			continue
+		}
+		if gateway, err := netip.ParseAddr(route.Get("next-hop-address").Text()); err == nil && gateway.Is4() == ipv4 && gateway.Zone() == "" {
+			return gateway, true
+		}
+	}
+	return netip.Addr{}, false
 }
 
 // validateHostKey keeps a delivered host key to the one lifecycle that
@@ -769,6 +806,7 @@ func validateAttachments(o, provider api.Object, native api.Value) []api.Issue {
 				issues = appendIssues(issues, invariant(attachmentsPath, "per-interface attachments must cover every physical interface", "add a "+attachmentsPath[2:]+" entry for every available physical ethernet interface"))
 			}
 		}
+		issues = appendIssues(issues, validateBondAttachments(o, native, attachmentsPath)...)
 	}
 	if variant == substrate.ArmLibvirt {
 		issues = appendIssues(issues, validateLibvirtAttachmentMTUs(o, provider, native)...)
@@ -932,7 +970,20 @@ func providerBMCDefaults(bmc api.Value, provider api.Object) api.Value {
 	return defaults
 }
 
-func installAttachmentReferences(o api.Object, native api.Value, name string, visiting map[string]bool) []string {
+func installAttachmentReferences(o api.Object, native api.Value, name string) []string {
+	var references []string
+	for _, leaf := range physicalLeaves(native, name, map[string]bool{}) {
+		if attachments := substrate.MachineInterfaceAttachments(o); attachments.Present() {
+			entry, _ := namedValueBy(attachments, "interface", leaf)
+			references = append(references, entry.Get("attachmentRef").Text())
+		} else {
+			references = append(references, o.Spec().Get("network", "attachmentRef").Text())
+		}
+	}
+	return references
+}
+
+func physicalLeaves(native api.Value, name string, visiting map[string]bool) []string {
 	if visiting[name] {
 		return nil
 	}
@@ -940,20 +991,49 @@ func installAttachmentReferences(o api.Object, native api.Value, name string, vi
 	defer delete(visiting, name)
 	iface, _ := namedValue(native.Get("interfaces"), name)
 	if parent := iface.Get("vlan", "base-iface").Text(); parent != "" {
-		return installAttachmentReferences(o, native, parent, visiting)
+		return physicalLeaves(native, parent, visiting)
 	}
 	if ports := iface.Get("link-aggregation", "port").Strings(); len(ports) > 0 {
-		var references []string
+		var leaves []string
 		for _, port := range ports {
-			references = append(references, installAttachmentReferences(o, native, port, visiting)...)
+			leaves = append(leaves, physicalLeaves(native, port, visiting)...)
 		}
-		return references
+		return leaves
 	}
-	if attachments := substrate.MachineInterfaceAttachments(o); attachments.Present() {
-		entry, _ := namedValueBy(attachments, "interface", name)
-		return []string{entry.Get("attachmentRef").Text()}
+	return []string{name}
+}
+
+func validateBondAttachments(o api.Object, native api.Value, attachmentsPath string) []api.Issue {
+	entries := substrate.MachineInterfaceAttachments(o).Items()
+	var issues []api.Issue
+	for _, iface := range native.Get("interfaces").Items() {
+		if len(iface.Get("link-aggregation", "port").Strings()) == 0 || unavailableInterface(iface) {
+			continue
+		}
+		bond := iface.Get("name").Text()
+		var placed []string
+		first, differing := "", -1
+		for _, leaf := range physicalLeaves(native, bond, map[string]bool{}) {
+			for index, entry := range entries {
+				reference := entry.Get("attachmentRef").Text()
+				if entry.Get("interface").Text() != leaf || reference == "" {
+					continue
+				}
+				placed = append(placed, leaf+" on "+reference)
+				if first == "" {
+					first = reference
+				} else if reference != first && differing < 0 {
+					differing = index
+				}
+			}
+		}
+		if differing >= 0 {
+			issues = appendIssues(issues, invariant(fmt.Sprintf("%s[%d].attachmentRef", attachmentsPath, differing),
+				"bond "+bond+" of "+o.Identity()+" has ports on different attachments ("+strings.Join(placed, ", ")+"), so a failover would move the host onto another network",
+				"attach every port of bond "+bond+" to one attachment in "+attachmentsPath[2:]+" on "+o.Identity()+", or remove the port on another attachment from the bond"))
+		}
 	}
-	return []string{o.Spec().Get("network", "attachmentRef").Text()}
+	return issues
 }
 
 func validateVolumeRoot(o api.Object, variant string) []api.Issue {

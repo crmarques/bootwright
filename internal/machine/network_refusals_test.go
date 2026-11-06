@@ -90,3 +90,74 @@ func TestAMachineDefaultsToItsProvidersSoleAttachment(t *testing.T) {
 		Message:     "provider-backed configured networks require an explicit attachment unless their provider has exactly one",
 		Remediation: "set spec.network.attachmentRef on Machine/guest to an attachment of InfraProvider/lab"})
 }
+
+// A bond's ports share one attachment: ports on two would move the host onto
+// another network at the first failover.
+func TestABondRefusesPortsOnDifferentAttachments(t *testing.T) {
+	interfaces := list(m("name", "enp1s0", "type", "ethernet"), m("name", "enp2s0", "type", "ethernet"),
+		m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList("enp1s0", "enp2s0"))))
+	bonded := func(second string) api.Object {
+		machine := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11/24", "interface", "bond0"))))
+		return machine.WithSpec(machine.Spec().WithPath(list(m("interface", "enp1s0", "attachmentRef", "net"), m("interface", "enp2s0", "attachmentRef", second)), "substrate", "libvirt", "interfaceAttachments"))
+	}
+	requireOneIssue(t, admission(bonded("storage"), twoAttachmentLab(interfaces)...), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.interfaceAttachments[1].attachmentRef",
+		Message:     "bond bond0 of Machine/guest has ports on different attachments (enp1s0 on net, enp2s0 on storage), so a failover would move the host onto another network",
+		Remediation: "attach every port of bond bond0 to one attachment in spec.substrate.libvirt.interfaceAttachments on Machine/guest, or remove the port on another attachment from the bond"})
+	if issues := admission(bonded("net"), twoAttachmentLab(interfaces)...); len(issues) != 0 {
+		t.Fatalf("a bond on one attachment was refused: %v", issues)
+	}
+}
+
+// The install gateway is the next hop of the install interface's default
+// route, so it lies inside the install address's prefix; a Machine with no
+// such route, or a route on another interface, is untouched.
+func TestAnInstallGatewayLiesInsideTheInstallPrefix(t *testing.T) {
+	node, catalog := fixture()
+	routed := func(route api.Value) []api.Issue {
+		objects := without(catalog, node)
+		for i, o := range objects {
+			if o.Kind() == api.NetworkConfig {
+				objects[i] = o.WithSpec(o.Spec().WithPath(list(route), "nmstate", "routes", "config"))
+			}
+		}
+		return admission(node, objects...)
+	}
+	outside := api.Issue{Code: "api.invariant", Field: "$.spec.network.installAddressRef",
+		Message:     "install gateway 198.51.100.1, the next hop of the default route in NetworkConfig/net, lies outside install address primary 192.0.2.11/24 of Machine/node",
+		Remediation: "set that default route's next-hop-address in NetworkConfig/net to a gateway inside 192.0.2.0/24, or give install address primary a prefix that contains 198.51.100.1"}
+	requireOneIssue(t, routed(m("destination", "0.0.0.0/0", "next-hop-interface", "eth0", "next-hop-address", "198.51.100.1")), outside)
+	requireOneIssue(t, routed(m("destination", "0.0.0.0/0", "next-hop-address", "198.51.100.1")), outside)
+	for name, route := range map[string]api.Value{
+		"inside the prefix":    m("destination", "0.0.0.0/0", "next-hop-interface", "eth0", "next-hop-address", "192.0.2.1"),
+		"on another interface": m("destination", "0.0.0.0/0", "next-hop-interface", "eth1", "next-hop-address", "198.51.100.1"),
+		"an absent route":      m("destination", "0.0.0.0/0", "next-hop-interface", "eth0", "next-hop-address", "198.51.100.1", "state", "absent"),
+		"no default route":     m("destination", "198.51.100.0/24", "next-hop-interface", "eth0", "next-hop-address", "198.51.100.1"),
+	} {
+		if issues := routed(route); len(issues) != 0 {
+			t.Fatalf("%s was refused: %v", name, issues)
+		}
+	}
+	inline := node.WithSpec(node.Spec().With("network", node.Spec().Get("network").Without("configRef").With("inline", m("machineNetwork", list(m("cidr", "192.0.2.0/24")),
+		"nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")), "routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-address", "198.51.100.1"))))))))
+	issues := admission(inline, without(catalog, node)...)
+	if len(issues) != 1 || issues[0].Message != "install gateway 198.51.100.1, the next hop of the default route in spec.network.inline.nmstate, lies outside install address primary 192.0.2.11/24 of Machine/node" {
+		t.Fatalf("an inline network's gateway: %#v", issues)
+	}
+}
+
+// A contact names a host to reach and configures nothing, so it carries no
+// prefix.
+func TestAContactCarriesNoPrefix(t *testing.T) {
+	ready := func(address string) []api.Issue {
+		machine := object(api.Machine, "ready", m("os", m("provided", true), "network", m("addresses", list(m("name", "ssh", "address", address)))))
+		return admission(machine)
+	}
+	requireOneIssue(t, ready("192.0.2.10/24"), api.Issue{Code: "api.invariant", Field: "$.spec.network.addresses[0].address",
+		Message:     "contact ssh of Machine/ready carries a prefix, but a contact names a host to reach and configures nothing",
+		Remediation: "remove the prefix from spec.network.addresses[0].address on Machine/ready, or assign the address to an interface with spec.network.addresses[0].interface"})
+	for _, address := range []string{"192.0.2.10", "2001:db8::10", "host.example.test"} {
+		if issues := ready(address); len(issues) != 0 {
+			t.Fatalf("contact %s was refused: %v", address, issues)
+		}
+	}
+}

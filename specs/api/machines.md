@@ -192,6 +192,14 @@ entry declares none; a provider on an external host has no network in the graph
 and declares no bound. A managed network's one prefix may
 be IPv4 or IPv6.
 
+A bond's ports, followed through VLAN parents and nested bonds to their
+`ethernet` interfaces, reach one attachment: a Machine whose
+`interfaceAttachments` put two ports of one bond on different attachments
+refuses `api.invariant` at the first differing entry's `attachmentRef`, naming
+the bond and each port's attachment, because a failover would move the host
+onto another network. The remedy attaches every port to one attachment or
+removes the other port from the bond.
+
 An `external` attachment claims only the shared key `bridge-use:<name>`, never
 an exclusive reservation, so another context's managed attachment may define
 the same bridge. The removal of a managed network
@@ -399,8 +407,8 @@ never its network or broadcast address, and refuses with `api.value` at its
 `address`; a /31, a /32 and an IPv6 assignment reserve neither. Preserve host
 bits while canonicalizing IP/prefix spelling: `192.0.2.3/24` must not become
 `192.0.2.0/24`. Consumers of an address reference receive the host IP without
-its prefix, or the DNS name for a DNS contact. A contact never requests an
-interface change, even when it contains a prefix.
+its prefix, or the DNS name for a DNS contact. A contact configures nothing;
+a prefix on one refuses `api.invariant` at its `address`.
 
 There is at most one static assignment per interface and family. Duplicate
 names, repeated assigned IPs, and conflicting interface assignments fail
@@ -1037,6 +1045,15 @@ installation's renderer also reads `controller`, `link-aggregation.mode`,
 admission does not interpret them. Every other route and the other content
 the line does not carry are applied after installation by
 [network convergence](../managed-os.md#network-convergence).
+
+The install gateway lies inside the install address's prefix. Admission reads
+the default route of the install address's family by the rule above, IPv4
+or IPv6, for every Machine with a selected install address; a gateway outside
+that prefix refuses `api.invariant` at the Machine's `network.installAddressRef`,
+naming the gateway, the install address with its prefix and the `NetworkConfig`
+or inline network the route comes from. A Machine with no such default route,
+or one without a `next-hop-address`, is untouched; an on-link route to a
+gateway outside the prefix is not admitted.
 
 The fully composed NMState map is internal compiler evidence. Canonical
 effective inspection preserves the normalized template, references, overrides,
