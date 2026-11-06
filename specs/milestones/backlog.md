@@ -296,6 +296,7 @@ Alias cell.
 | [B1176](#b1176) | new, 2026-11-05 (D234) | product | Container cluster and Substrate | A preflight proving the controller reaches hosted nodes, the host API and the upload proxy | A runbook check covers the first runs |
 | [B1177](#b1177) | new, 2026-11-05 (D234) | safety | Controller | A second `virtctl` source: the host's build or an operator-declared digest | Q151 |
 | [B1178](#b1178) | new, 2026-11-05 (D234) | product | Add-ons and Storage | Data Foundation external against a Ceph cluster the context does not manage | Takes storage out of the host's lineage; Q144 |
+| [B1180](#b1180) | new, 2026-11-06 (X311 review) | product | Machine and State reconciliation | Power and access remedies that name the state a destroy leaves | The refusals fail safe; their remedies name an apply where a destroy is due |
 
 ### B82
 
@@ -3273,6 +3274,21 @@ cannot reach the other network.
 ### B1178
 
 **Owner:** Add-ons and Storage. **Kind:** product. **Requires:** [B85](m4.md#b85); [B731](m3.md#b731). **Definition:** Needs definition: [Q144](m3.md#m3a-open-decisions) and [Q142](m3.md#m3a-open-decisions) decide it. It takes storage out of the host's lineage. **Outcome:** Data Foundation external attaches to a Ceph cluster the context does not manage. **Exit evidence:** Package goldens and an owner-run attachment.
+
+### B1180
+
+**Owner:** Machine and State reconciliation. **Kind:** product. **Requires:**
+[B951](m1.md#b951). **Definition:** Specified. While a destroy is current: a
+stop of a VirtualMachine already gone under a removal block in state unknown
+refuses "apply the Machine first" where the remedy is to finish the destroy;
+a bare-metal Machine re-pointed at new hardware after a completed destroy
+refuses `identity-mismatch` without naming the apply that re-proves it; the
+identity refusal still says "the one this context's current apply proved";
+and `bootwright machine rsh` and `exec` find no host key, because the host-key
+read takes the current operation only. **Outcome:** each names the state and
+the command that clears it, and the host keys come from the apply the destroy
+takes back. **Exit evidence:** power and access tests for destroy blocks in
+states failed, running and unknown, and the remedy goldens.
 
 ## Audit remediation (2026-10-26)
 
@@ -7039,7 +7055,10 @@ Session clauses, pending the owner's review:
 (1) B951's definition: a power command or power reading of a KubeVirt Machine
 takes the Machine's pin from the apply lineage a current destroy takes back
 (the lineage's proved record), and a VirtualMachine the removal already
-deleted reads absent rather than refusing.
+deleted reads absent rather than refusing. On 2026-11-06 X311 applied it to
+every Machine its substrate created, libvirt included, and to a Machine a
+removal the current destroy replaces proved gone: a stop reports it off, and a
+start or restart refuses naming the removal.
 (2) A VirtualMachineInstance in a final phase (`Succeeded` or `Failed`) is a
 stopped machine for every entry point, the removal and quiescence; a start
 over it asks the `start` subresource.
