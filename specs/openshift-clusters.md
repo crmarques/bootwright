@@ -40,10 +40,25 @@ accepted. A node whose realized target is physical installs through its
 management controller under the trust its Machine declares, with the
 [private delivery](#boot-media) rules below.
 At [Machine admission](api/machines.md#os-lifecycle-and-substrate-invariants),
-a physical agent node requires `substrate.baremetal.rootDevice.wwn` as `0x`
-followed by 16 or 32 lowercase hexadecimal digits and no
-`hardware.rootDevice.deviceName`. The agent has no exact-size selector, so
-serial number and size alone are not supported here.
+a physical agent node requires a stable root selector and no
+`hardware.rootDevice.deviceName`: either `substrate.baremetal.rootDevice.wwn`
+as `0x` followed by 16 or 32 lowercase hexadecimal digits, or `serialNumber`
+and exact `sizeBytes`. A serial is 1 to 256 ASCII letters, digits or `._:+/=-`;
+capacity is 4096-aligned, from 4096 bytes to 64 TiB. Each declared selector
+must be valid. A serial selecting a root without a device path is declared by
+no other Machine, including its root, clear and erase targets.
+
+The installation freezes a serial-selected root's serial and capacity into its
+hardware proof. Immediately before media insertion, and again after a firmware
+change, the physical substrate reads this ComputerSystem's complete Storage
+inventory over the declared verified BMC connection. It requires exactly one
+whole Drive reporting the serial, and that Drive's exact `CapacityBytes` must
+match. It counts serial matches before comparing size, so a duplicate with a
+different size is also ambiguous. Missing, unreadable, paginated, oversized or
+ambiguous inventory refuses before media insertion. The native agent receives
+the exact serial hint; it has no exact-size field. The existing
+[controller-to-installer race](state-reconciliation.md#physical-disk-safety)
+and real-hardware qualification remain.
 
 A virtual node whose provider host is not the Machine the selected artifact
 server is placed on boots under a verified fetch of the private
@@ -128,7 +143,7 @@ every selected `OpenShiftCluster`, and both belong to the
 | A physical node with an HTTP BMC | a physical node's BMC uses HTTP | `a physical node's private boot image requires an HTTPS management controller` | `set spec.substrate.baremetal.bmc.address on <machine> to an HTTPS ComputerSystem endpoint` |
 | A physical node with unverified BMC TLS | a physical node disables BMC TLS verification | `a physical node's private boot image requires a BMC connection that verifies its certificate` | `enable spec.substrate.baremetal.bmc.tls.verify on <machine> and declare its trust bundle when needed` |
 | A physical node with unverified media TLS | a physical node selects disableVerification | `a physical node's private boot image requires virtual-media TLS verification` | `set spec.substrate.baremetal.bmc.virtualMedia.tls.trust on <machine> to importCertificate or established` |
-| A physical node without a stable root selector | a physical node lacks a supported WWN or declares `hardware.rootDevice.deviceName` | `a physical agent installation requires a stable WWN root hint and no deviceName` | `set spec.substrate.baremetal.rootDevice.wwn on <machine> to 0x followed by 16 or 32 lowercase hexadecimal digits and remove spec.hardware.rootDevice.deviceName` |
+| A physical node without a stable root selector | a physical node lacks a supported WWN or serial number with exact size, declares a malformed selector, or declares `hardware.rootDevice.deviceName` | `a physical agent installation requires a stable WWN or an exact serial-number and size root selector and no deviceName` | `set spec.substrate.baremetal.rootDevice on <machine> with a supported wwn, or serialNumber and exact sizeBytes; remove spec.hardware.rootDevice.deviceName` |
 | A root device the installer cannot name | a virtual node's `spec.hardware.rootDevice.deviceName` other than `/dev/<name>` or `/dev/disk/by-path/<name>` | `the agent installer names a root device only as /dev/<name> or /dev/disk/by-path/<name>` | `set spec.hardware.rootDevice.deviceName on <machine> to such a path` |
 | A root device size the frozen input cannot carry | a node whose `minSizeGigabytes` exceeds 9007199254740991, the largest integer the frozen input carries exactly, at `spec.hardware.rootDevice` or `spec.substrate.baremetal.rootDevice` on its Machine | `a node's minSizeGigabytes is larger than the frozen installer input carries exactly` | `declare spec.hardware.rootDevice.minSizeGigabytes on <machine> as at most 9007199254740991` |
 

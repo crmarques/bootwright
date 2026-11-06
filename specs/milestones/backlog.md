@@ -7226,3 +7226,20 @@ success-case budgets that allow process startup under the full unit run,
 retaining the command-success, shared-group, stderr and descendant-cleanup
 assertions and the separate short deadline-refusal cases. This authorizes
 only that test-data repair; its production execution contract stays as it is.
+
+### D238
+
+**owner** (2026-11-06): the owner authorized Bootwright changes needed to stop
+requiring a WWN where serial-number disk selection is supported, alongside the
+template-input updates. This opens X318 (M3, B1191), out of sequence for
+implementation, and replaces D233's WWN-only physical-agent root clause.
+The M2 and M3 operator prerequisites remain for acceptance and completion.
+
+Implementation clause, pending the owner's review: serial-selected agent roots
+freeze `serialNumber` and exact `sizeBytes`; the physical pre-boot port proves
+one matching whole Drive and its exact capacity from the system's complete
+read-only Storage inventory before media insertion. The native agent receives
+the exact serial hint. Its lack of an exact-size predicate and the existing
+controller-to-installer race remain explicit. Bootwright-installed RHEL and
+Ceph keep their existing proofs. Existing WWN selection, private media,
+hardware identity and pre-boot trust proofs are unchanged.

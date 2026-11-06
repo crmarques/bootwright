@@ -249,7 +249,7 @@ func TestEarlierPhysicalSelectionAndMediaOwnershipContractsRefuse(t *testing.T) 
 	}
 	_, err = DecodeMediaRequest(encoded)
 	expectVersionRefusal(t, err, "cluster media", media.Version)
-	install.Version = "cluster-install-agent-v13"
+	install.Version = "cluster-install-agent-v14"
 	encoded, err = install.Canonical()
 	if err != nil {
 		t.Fatal(err)

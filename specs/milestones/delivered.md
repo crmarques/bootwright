@@ -12272,3 +12272,29 @@ success test` commit carrying this record. Its body records exact verification
 commands and outcomes. The rebased `make check` passed, including the managed-host
 floor units and the serial collection run (9069 passed, one existing skip).
 The independent review approved the repair's bounds and retained assertions.
+
+### X318 — Physical agent roots by serial number and size
+
+Delivers [B1191](m3.md#b1191) in-tree, awaiting operator acceptance under
+[D238](backlog.md#d238). **Kind:** safety. **Owners:** Machine, Container cluster
+and Substrate. The [agent selector](../openshift-clusters.md#selection) accepts
+a root's exact serial number and capacity without a WWN. The physical pre-boot
+port proves exactly one matching whole Drive from the complete bounded
+ComputerSystem Storage inventory before media insertion, and repeats the proof
+after firmware changes. The native agent receives the exact serial hint;
+controller-to-installer disk replacement remains a residual race.
+
+The install request moves v14 to v15 and freezes a required selector kind and,
+for serial selection, the serial and exact capacity. A missing or malformed
+proof refuses; v14 is refused by version. Existing WWN selection and the
+managed-OS disk proofs are preserved. [B1192](m3.md#b1192) records the existing
+WWN path's separate live-drive proof gap.
+
+Regressions cover serial grammar, duplicate declarations, native hint and
+frozen-proof round trips, old-version refusal, absent or corrupted proofs,
+ambiguous serials even at different capacities, missing or malformed inventory,
+truncated counts and pagination, foreign references, module failure
+sanitization, and proof forwarding and ordering before media. The delivering
+commit records the gate commands and results. No real hardware was contacted
+and no operator acceptance is claimed. The downstream template-input chart
+uses per-master `rootDisk.serial` and exact `rootDisk.size` in its own change.

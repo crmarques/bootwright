@@ -27,6 +27,13 @@
       machine's substrate created it; remove the firmware declaration
     quiet: true
 
+- name: Refuse a physical disk proof on a virtual machine
+  ansible.builtin.assert:
+    that:
+      - (bootwright_machine_port.root_disk | default({})) | length == 0
+    fail_msg: a virtual machine has no physical root drive to prove; omit root_disk
+    quiet: true
+
 - name: Read the machine this installation is about to overwrite
   bootwright.core.redfish_system_read:
     endpoint: '{{ substrate_libvirt_machine_target_endpoint }}'

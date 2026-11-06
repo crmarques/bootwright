@@ -11,10 +11,12 @@ prerequisites to the consuming M3d run.
 
 - Machines `physical-01` to `physical-05` on the `lab-metal` bare-metal
   provider, each with a Redfish BMC address, a declared NIC (`eno1` and its
-  MAC) and a stable root-disk WWN in `substrate.baremetal.rootDevice.wwn`.
-  Every BMC name, MAC and WWN is synthetic; replace them with the real
-  identities and all physical NICs. A supported stable WWN selector is
-  mandatory for physical agent installations.
+  MAC) and a stable root-disk selector in `substrate.baremetal.rootDevice`.
+  `physical-01` uses `serialNumber` and exact `sizeBytes`; the other nodes demonstrate
+  `wwn`. Every BMC name, MAC and disk identity is synthetic; replace them
+  with verified identities and all physical NICs. Physical agent installs
+  require a supported WWN or an exact serial number and size, with no device path.
+  Serial selection also requires a complete BMC Storage inventory before boot.
 - Each server must meet the actual release's CPU, memory and disk
   requirements. The controller needs at least 4 vCPU, 16 GiB memory and 100 GiB
   free storage for tools and artifacts.

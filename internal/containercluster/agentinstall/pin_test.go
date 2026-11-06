@@ -50,6 +50,9 @@ func mixedRun(t *testing.T, operation string, capability InstallCapability) (map
 		{Machine: "metal-03", Name: "master-2", Physical: true, Substrate: "baremetal"},
 	}
 	for index := range request.Nodes {
+		if request.Nodes[index].Physical {
+			request.Nodes[index].Hardware = &Hardware{RootSelector: "wwn"}
+		}
 		bounds, ok := substrate.MachineBoundsFor(request.Nodes[index].Substrate)
 		if !ok {
 			t.Fatal("mixed fixture has an unrealized substrate")

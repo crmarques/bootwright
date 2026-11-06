@@ -115,6 +115,8 @@ argument_specs:
           # substrate applies no firmware settings.
           firmware:
             type: dict
+          root_disk:
+            type: dict
       substrate_libvirt_machine_target_endpoint:
         type: str
         required: true

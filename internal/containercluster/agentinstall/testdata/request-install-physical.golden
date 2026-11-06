@@ -50,7 +50,8 @@
             "macAddress": "aa:bb:cc:dd:ee:01",
             "name": "enp1s0"
           }
-        ]
+        ],
+        "rootSelector": "wwn"
       },
       "machine": "metal-01",
       "name": "master-0",
@@ -77,7 +78,8 @@
             "macAddress": "aa:bb:cc:dd:ee:02",
             "name": "enp1s0"
           }
-        ]
+        ],
+        "rootSelector": "wwn"
       },
       "machine": "metal-02",
       "name": "master-1",
@@ -104,7 +106,8 @@
             "macAddress": "aa:bb:cc:dd:ee:03",
             "name": "enp1s0"
           }
-        ]
+        ],
+        "rootSelector": "wwn"
       },
       "machine": "metal-03",
       "name": "master-2",
@@ -132,7 +135,7 @@
     "kind": "openshift-install",
     "version": "4.21.15"
   },
-  "version": "cluster-install-agent-v14",
+  "version": "cluster-install-agent-v15",
   "vips": [],
   "workRoot": "/var/lib/bootwright-clusters/lab/metal"
 }

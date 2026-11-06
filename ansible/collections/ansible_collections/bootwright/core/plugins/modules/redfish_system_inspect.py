@@ -52,6 +52,13 @@ options:
     description: Require a positive read of an enabled TPM 2.0 before installation.
     type: bool
     default: false
+  root_disk:
+    description:
+      - Optional dictionary containing serialNumber and sizeBytes for the one whole root drive to prove before agent boot.
+      - The serial must match exactly one drive and that drive's capacity must equal sizeBytes.
+      - Empty requests no disk proof.
+    type: dict
+    default: {}
 author:
   - Bootwright contributors (@crmarques)
 """
@@ -76,7 +83,7 @@ observation:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.bootwright.core.plugins.module_utils import redfish_control
+from ansible_collections.bootwright.core.plugins.module_utils import redfish_control, redfish_root_disk
 
 
 def main():
@@ -88,6 +95,7 @@ def main():
             "verify": {"type": "bool", "default": True},
             "ca_data": {"type": "str", "default": ""},
             "require_tpm": {"type": "bool", "default": False},
+            "root_disk": {"type": "dict", "default": {}},
         },
         supports_check_mode=True,
     )
@@ -97,7 +105,11 @@ def main():
             verify=bool(module.params["verify"]), ca_data=module.params["ca_data"] or "",
         )
         observation = observe(client)
+        if module.params.get("root_disk"):
+            redfish_root_disk.prove(client, module.params["root_disk"])
         tpm = usable_tpm(client.system()) if module.params.get("require_tpm", False) else False
+    except redfish_root_disk.Refused as failure:
+        module.fail_json(msg=str(failure), root_disk_refused=True, unanswered=False)
     except redfish_control.ControllerError as failure:
         module.fail_json(msg="the management controller could not be inspected: %s" % failure,
                          unanswered=not isinstance(failure, redfish_control.UnverifiedCertificate))

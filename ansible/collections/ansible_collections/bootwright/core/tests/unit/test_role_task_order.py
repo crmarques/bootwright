@@ -46,6 +46,27 @@ def test_every_role_has_task_files():
     assert task_files(), "no role task files were found to check"
 
 
+def test_agent_disk_proof_is_frozen_into_the_pre_media_substrate_proof():
+    def nested(tasks):
+        for task in tasks:
+            yield task
+            for section in ("block", "rescue", "always"):
+                yield from nested(task.get(section, []))
+
+    tasks = list(nested(load(ROLES / "containercluster_install_agent/tasks/boot.yml")))
+    before = next(index for index, task in enumerate(tasks)
+                  if task.get("ansible.builtin.include_role", {}).get("tasks_from") == "pre_boot")
+    insert = next(index for index, task in enumerate(tasks)
+                  if task.get("vars", {}).get("containercluster_install_agent_port_operation") == "media_insert")
+    assert before < insert
+    assert tasks[before]["vars"]["bootwright_machine_port"]["root_disk"] == "{{ containercluster_install_agent_node.hardware.rootDisk | default({}) }}"
+    proof = load(ROLES / "substrate_baremetal_machine/tasks/target_proof.yml")
+    read = next(task for task in proof if "bootwright.core.redfish_system_inspect" in task)
+    assert read["bootwright.core.redfish_system_inspect"]["root_disk"] == "{{ substrate_baremetal_machine_target_root_disk | default({}) }}"
+    refused = next(task for task in proof if task.get("when") == "substrate_baremetal_machine_target.root_disk_refused | default(false) | bool")
+    assert refused["ansible.builtin.set_fact"]["substrate_baremetal_machine_refusal"] == "hardware-mismatch"
+
+
 def test_no_task_reads_a_variable_a_later_task_registers():
     problems = []
     for path in task_files():

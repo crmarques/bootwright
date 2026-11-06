@@ -115,7 +115,16 @@ type BIOSAttribute struct {
 // Hardware is the complete set of NICs a physical node must report, in the
 // order its Machine declares them.
 type Hardware struct {
-	Interfaces []Interface `json:"interfaces"`
+	Interfaces   []Interface `json:"interfaces"`
+	RootDisk     *RootDisk   `json:"rootDisk,omitempty"`
+	RootSelector string      `json:"rootSelector"`
+}
+
+// RootDisk is the exact whole drive the controller must report uniquely before
+// inserting media. The native agent receives only the exact serial hint.
+type RootDisk struct {
+	SerialNumber string `json:"serialNumber"`
+	SizeBytes    int64  `json:"sizeBytes"`
 }
 
 // Interface is one NIC a physical node must report for it to be the machine
@@ -318,8 +327,26 @@ func DecodeInstallRequest(data []byte) (InstallRequest, error) {
 		if node.StateReadSeconds <= 0 || node.StateReadSeconds > 3600 || !slices.Contains([]string{"api", "emulated", "physical"}, node.ControllerKind) {
 			return InstallRequest{}, refusal("lifecycle.state", "the frozen installation node has no bounded controller kind", "plan the installation again")
 		}
+		if node.Physical && !validRootProof(node.Hardware) || !node.Physical && node.Hardware != nil || node.Physical != (node.ControllerKind == "physical") {
+			return InstallRequest{}, refusal("lifecycle.state", "the frozen physical installation node has no complete root selector proof", "plan the installation again")
+		}
 	}
 	return request, nil
+}
+
+func validRootProof(hardware *Hardware) bool {
+	if hardware == nil {
+		return false
+	}
+	switch hardware.RootSelector {
+	case "wwn":
+		return hardware.RootDisk == nil
+	case "serialAndSize":
+		disk := hardware.RootDisk
+		return disk != nil && machineref.ValidDiskSerial(disk.SerialNumber) && disk.SizeBytes >= 4096 && disk.SizeBytes <= 64<<40 && disk.SizeBytes%4096 == 0
+	default:
+		return false
+	}
 }
 
 // onTheController refuses a frozen placement other than the controller arm:

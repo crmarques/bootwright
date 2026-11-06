@@ -54,7 +54,8 @@ spec:
         - nicRef: eno1
           macAddress: 52:54:00:9a:1b:01
       rootDevice:
-        wwn: "0x500000000000f001"
+        serialNumber: EXAMPLE-PHYSICAL-01-ROOT
+        sizeBytes: 480103981056
   hardware:
     nics:
       - name: eno1

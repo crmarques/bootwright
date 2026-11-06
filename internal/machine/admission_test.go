@@ -680,8 +680,8 @@ func replaced(catalog api.Catalog, objects ...api.Object) api.Catalog {
 }
 
 // A Bootwright-installed bare-metal Machine may name its root disk by serial
-// number and exact size alone; a serial number without its size, a size on a
-// Machine Bootwright does not install and an unaligned size refuse.
+// number and exact size alone; a serial number without its size, a size on an
+// OS-ready Machine and an unaligned size refuse.
 func TestABaremetalRootDiskMayBeNamedBySerialNumberAndSize(t *testing.T) {
 	machine, catalog := installedFixture()
 	bySerial := m("serialNumber", "SYNTHETIC-ROOT-01").With("sizeBytes", api.IntegerValue("480103981056"))
@@ -701,7 +701,7 @@ func TestABaremetalRootDiskMayBeNamedBySerialNumberAndSize(t *testing.T) {
 	provisioned, provisionedCatalog := fixture()
 	provisioned = rootDeclared(provisioned, "/dev/sda", bySerial)
 	provided := provisioned.WithSpec(provisioned.Spec().WithPath(api.BoolValue(true), "os", "provided"))
-	for name, other := range map[string]api.Object{"installer-provisioned": provisioned, "OS-ready": provided} {
+	for name, other := range map[string]api.Object{"OS-ready": provided} {
 		issues := Validate(other, replaced(provisionedCatalog, other))
 		refused := false
 		for _, issue := range issues {
@@ -737,26 +737,43 @@ func TestASelectingSerialNumberIsDeclaredByNoOtherMachine(t *testing.T) {
 	}
 }
 
-func TestPhysicalAgentRootRequiresAStableWWN(t *testing.T) {
+func TestPhysicalAgentRootRequiresAStableSelector(t *testing.T) {
 	original, catalog := fixture()
 	original, normalization := Normalize(original, catalog)
 	if len(normalization) != 0 {
 		t.Fatal(normalization)
 	}
 	for _, test := range []struct {
-		name, device, wwn string
-		allowed           bool
+		name, device, wwn, serial, size string
+		allowed                         bool
 	}{
-		{"kernel name", "/dev/sda", "", false}, {"by path", "/dev/disk/by-path/pci-0000:00:01.0", "", false},
-		{"missing WWN", "", "", false}, {"invalid WWN", "", "disk-one", false},
-		{"uppercase WWN", "", "0X5000C500A1B2C3D4", false}, {"stable WWN", "", "0x5000c500a1b2c3d4", true},
-		{"extended WWN", "", "0x5000c500a1b2c3d45000c500a1b2c3d4", true},
-		{"unstable name beside WWN", "/dev/sda", "0x5000c500a1b2c3d4", false},
+		{"kernel name", "/dev/sda", "", "", "", false}, {"by path", "/dev/disk/by-path/pci-0000:00:01.0", "", "", "", false},
+		{"missing selector", "", "", "", "", false}, {"invalid WWN", "", "disk-one", "", "", false},
+		{"uppercase WWN", "", "0X5000C500A1B2C3D4", "", "", false}, {"stable WWN", "", "0x5000c500a1b2c3d4", "", "", true},
+		{"extended WWN", "", "0x5000c500a1b2c3d45000c500a1b2c3d4", "", "", true},
+		{"unstable name beside WWN", "/dev/sda", "0x5000c500a1b2c3d4", "", "", false},
+		{"serial and size", "", "", "SYNTHETIC-ROOT-01", "8192", true},
+		{"numeric serial", "", "", "0000123456", "8192", true},
+		{"serial and WWN", "", "0x5000c500a1b2c3d4", "SYNTHETIC-ROOT-01", "", true},
+		{"invalid WWN beside serial", "", "bad", "SYNTHETIC-ROOT-01", "", false},
+		{"invalid serial beside WWN", "", "0x5000c500a1b2c3d4", " space ", "", false},
+		{"unstable name beside serial", "/dev/sda", "", "SYNTHETIC-ROOT-01", "", false},
+		{"serial without size", "", "", "SYNTHETIC-ROOT-01", "", false},
+		{"unaligned size", "", "", "SYNTHETIC-ROOT-01", "8193", false},
+		{"long serial", "", "", strings.Repeat("a", 257), "", false},
+		{"whitespace in serial", "", "", "bad serial", "", false},
+		{"newline in serial", "", "", "bad\nserial", "", false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			physical := m()
 			if test.wwn != "" {
 				physical = m("wwn", test.wwn)
+			}
+			if test.serial != "" {
+				physical = physical.With("serialNumber", api.StringValue(test.serial))
+			}
+			if test.size != "" {
+				physical = physical.With("sizeBytes", api.IntegerValue(test.size))
 			}
 			candidate := rootDeclared(original, test.device, physical)
 			issues := Validate(candidate, replaced(catalog, candidate))
@@ -764,5 +781,22 @@ func TestPhysicalAgentRootRequiresAStableWWN(t *testing.T) {
 				t.Fatalf("root selector allowed=%v: %+v", test.allowed, issues)
 			}
 		})
+	}
+}
+
+func TestPhysicalAgentSerialAndSizeRejectsAmbiguousDeclarations(t *testing.T) {
+	original, catalog := fixture()
+	original, issues := Normalize(original, catalog)
+	if len(issues) != 0 {
+		t.Fatal(issues)
+	}
+	selected := rootDeclared(original, "", m("serialNumber", "SYNTHETIC-SHARED-AGENT").With("sizeBytes", api.IntegerValue("8192")))
+	other := rootDeclared(object(api.Machine, "other", m("os", m("provided", true))), "/dev/disk/by-id/wwn-0x5000000000000001", m("serialNumber", "SYNTHETIC-SHARED-AGENT"))
+	if issues := Validate(selected, replaced(catalog, selected, other)); len(issues) != 1 || issues[0].Field != "$.spec.substrate.baremetal.rootDevice.serialNumber" || !strings.Contains(issues[0].Remediation, "rootDevice.wwn") || strings.Contains(issues[0].Remediation, "/dev/") {
+		t.Fatalf("duplicate selecting serial = %+v", issues)
+	}
+	sized := rootDeclared(original, "", m("wwn", "0x5000000000000001").With("sizeBytes", api.IntegerValue("8192")))
+	if issues := Validate(sized, replaced(catalog, sized)); !mentions(issues, rootSizePath) {
+		t.Fatalf("unrealizable exact agent size = %+v", issues)
 	}
 }

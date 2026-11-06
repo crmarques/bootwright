@@ -14,9 +14,15 @@
       {{ lookup('ansible.builtin.file', substrate_baremetal_machine_target_ca)
          if substrate_baremetal_machine_target_ca | length > 0 else '' }}
     require_tpm: '{{ substrate_baremetal_machine_target_require_tpm | default(false) }}'
+    root_disk: '{{ substrate_baremetal_machine_target_root_disk | default({}) }}'
   register: substrate_baremetal_machine_target
   failed_when: false
   no_log: true
+
+- name: Retain a refused root disk proof as a hardware refusal
+  ansible.builtin.set_fact:
+    substrate_baremetal_machine_refusal: hardware-mismatch
+  when: substrate_baremetal_machine_target.root_disk_refused | default(false) | bool
 
 - name: Name an unanswered target proof without claiming a hardware mismatch
   ansible.builtin.set_fact:

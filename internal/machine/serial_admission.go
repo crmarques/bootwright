@@ -10,12 +10,16 @@ import (
 
 const rootSizePath = "$.spec.substrate.baremetal.rootDevice.sizeBytes"
 
+// ValidDiskSerial accepts the serial grammar the physical disk workers prove.
+func ValidDiskSerial(value string) bool { return clearSerial.MatchString(value) }
+
 func validateRootSize(o api.Object) []api.Issue {
 	size := substrate.MachineRootDeviceHints(o).SizeBytes
 	if size == "" {
 		return nil
 	}
-	if !installed(o) {
+	agentProof := !o.Spec().Get("os", "provided").Bool() && substrate.MachineRootDeviceHints(o).SerialNumber != ""
+	if !installed(o) && !agentProof {
 		return []api.Issue{invariant(rootSizePath, "sizeBytes is the exact capacity a Bootwright installation proves its root disk by, and nothing installs this Machine with Bootwright",
 			"remove spec.substrate.baremetal.rootDevice.sizeBytes")}
 	}
@@ -30,7 +34,8 @@ type selectingSerial struct{ field, serial string }
 
 func selectingSerials(o api.Object) []selectingSerial {
 	var selecting []selectingSerial
-	if hints := substrate.MachineRootDeviceHints(o); hints.DeviceName == "" && hints.SerialNumber != "" && hints.SizeBytes != "" {
+	hints := substrate.MachineRootDeviceHints(o)
+	if hints.DeviceName == "" && hints.SerialNumber != "" && hints.SizeBytes != "" {
 		selecting = append(selecting, selectingSerial{"$.spec.substrate.baremetal.rootDevice.serialNumber", hints.SerialNumber})
 	}
 	for _, policy := range []string{"eraseOnRemoval", "clearOnInstall"} {
@@ -71,8 +76,12 @@ func validateSelectingSerials(o api.Object, c api.Catalog) []api.Issue {
 		declared := declaredSerials(other)
 		for _, entry := range selecting {
 			if declared[entry.serial] {
+				remedy := "correct the serial number here or on " + other.Identity() + ", or select the disk by its /dev/disk/by-id/wwn-0x path"
+				if !installed(o) {
+					remedy = "correct the serial number here or on " + other.Identity() + ", or declare spec.substrate.baremetal.rootDevice.wwn as a stable WWN"
+				}
 				issues = append(issues, invariant(entry.field, "a disk selected by its serial number needs a serial number no other Machine declares, and "+other.Identity()+" declares "+entry.serial,
-					"correct the serial number here or on "+other.Identity()+", or select the disk by its /dev/disk/by-id/wwn-0x path"))
+					remedy))
 			}
 		}
 	}

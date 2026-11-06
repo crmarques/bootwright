@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -636,8 +637,7 @@ func validateBaremetal(o api.Object) []api.Issue {
 	if !substrate.MachineBMC(o).Present() {
 		issues = appendIssues(issues, invariant("$."+substrate.BMCPath, "bare-metal installation requires a BMC", "declare "+substrate.BMCPath+", or inherit it from the provider's spec.baremetal.defaults.bmc"))
 	}
-	// A physical machine offers no channel to read back what it holds, so the
-	// installation delivers its declared host key rather than discovering it.
+	// A physical installation delivers its declared host key.
 	if installed(o) && !s.Has("os", "install", "hostKeyRef") {
 		issues = appendIssues(issues, invariant("$.spec.os.install.hostKeyRef", "bare-metal installation requires the SSH host key it delivers", "set spec.os.install.hostKeyRef to the sshKeyPair Secret whose pair the installation delivers as the host key"))
 	}
@@ -662,9 +662,13 @@ func AgentRootDeviceRefusal(o api.Object) (string, string) {
 		return "", ""
 	}
 	hints := substrate.MachineRootDeviceHints(o)
-	if hints.DeviceName != "" || !clearDevicePath.MatchString("/dev/disk/by-id/wwn-"+hints.WWN) {
-		return "a physical agent installation requires a stable WWN root hint and no deviceName",
-			"set spec.substrate.baremetal.rootDevice.wwn on " + o.Identity() + " to 0x followed by 16 or 32 lowercase hexadecimal digits and remove spec.hardware.rootDevice.deviceName"
+	wwn := clearDevicePath.MatchString("/dev/disk/by-id/wwn-" + hints.WWN)
+	serial := clearSerial.MatchString(hints.SerialNumber)
+	size, err := strconv.ParseInt(hints.SizeBytes, 10, 64)
+	sized := err == nil && size >= 4096 && size <= MaxClearBytes && size%4096 == 0
+	if hints.DeviceName != "" || !wwn && !(serial && sized) || hints.WWN != "" && !wwn || hints.SerialNumber != "" && !serial || hints.SizeBytes != "" && !(serial && sized) {
+		return "a physical agent installation requires a stable WWN or an exact serial-number and size root selector and no deviceName",
+			"set spec.substrate.baremetal.rootDevice on " + o.Identity() + " with a supported wwn, or serialNumber and exact sizeBytes; remove spec.hardware.rootDevice.deviceName"
 	}
 	return "", ""
 }

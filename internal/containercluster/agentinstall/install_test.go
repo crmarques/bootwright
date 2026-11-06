@@ -266,6 +266,8 @@ func TestAbsentClientsRefuseBeforeBooting(t *testing.T) {
 func TestAnUnsafeFrozenPhysicalNodeRefusesOnlyItsApply(t *testing.T) {
 	execution, request := installExecution(t, singleNodeCatalog(), testDigest)
 	request.Nodes[0].Physical = true
+	request.Nodes[0].ControllerKind = "physical"
+	request.Nodes[0].Hardware = &Hardware{RootSelector: "wwn"}
 	request.Nodes[0].Controller.TLSVerify = false
 	canonical, err := request.Canonical()
 	if err != nil {

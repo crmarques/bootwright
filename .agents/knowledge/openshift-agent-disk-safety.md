@@ -7,6 +7,15 @@ Redfish ComputerSystem, its live MAC inventory, power state, and the authored
 root selector immediately before boot, but cannot prove inside the agent image
 that the same physical target and whole disk are about to be written.
 
+The native agent's `rootDeviceHints.serialNumber` is an exact-match predicate;
+`minSizeGigabytes` is only a lower bound, and the agent exposes no exact-byte
+capacity predicate ([OpenShift 4.21 agent-installer documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/4.21/pdf/installing_an_on-premise_cluster_with_the_agent-based_installer/OpenShift_Container_Platform-4.21-Installing_an_on-premise_cluster_with_the_Agent-based_Installer-en-US.pdf)).
+The [serial selector](../../specs/openshift-clusters.md#selection) therefore proves
+exact capacity through the complete controller Storage inventory before boot,
+while the native agent receives the exact serial hint. A second drive with the
+same serial refuses even when its capacity differs, because the agent would
+otherwise choose by discovery order.
+
 The resulting residual race, and the proofs and qualification every bare-metal
 apply needs because of it, are specified in
 [physical disk safety](../../specs/state-reconciliation.md#physical-disk-safety).

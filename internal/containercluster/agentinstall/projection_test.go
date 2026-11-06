@@ -159,7 +159,7 @@ func TestPhysicalNodesFreezeTheirDeclaredInterfacesInOrder(t *testing.T) {
 			}},
 		},
 	})
-	want := &Hardware{Interfaces: []Interface{
+	want := &Hardware{RootSelector: "wwn", Interfaces: []Interface{
 		{MACAddress: "aa:bb:cc:dd:ee:02", Name: "enp2s0"}, {MACAddress: "aa:bb:cc:dd:ee:01", Name: "enp1s0"},
 	}}
 	if len(frozen) != 2 || !reflect.DeepEqual(frozen[0].Hardware, want) {

@@ -1,6 +1,6 @@
 implementation: cluster-install-agent-v1
-content-digest: 7feb5f6c7c71194b6217e2595cf4918d2f128966e6cc7a65fee163200947210d
-request-version: cluster-install-agent-v14
+content-digest: de166ba34fdbfcdba6c21b539de9e0016be8ca5c969106b5d6e7f7cc5c2cab78
+request-version: cluster-install-agent-v15
 automation-formats: none
 mark-formats: none
 proof-ids: .bootwright-booted, /.bootwright-booted, bootwright/containercluster/identity/v2
@@ -67,6 +67,10 @@ request-schema:
   nodes[].hardware.interfaces []struct agentinstall.Interface
   nodes[].hardware.interfaces[].macAddress string
   nodes[].hardware.interfaces[].name string
+  nodes[].hardware.rootDisk *struct agentinstall.RootDisk omitempty
+  nodes[].hardware.rootDisk.serialNumber string
+  nodes[].hardware.rootDisk.sizeBytes int64
+  nodes[].hardware.rootSelector string
   nodes[].labels map[string]string omitempty
   nodes[].machine string
   nodes[].name string

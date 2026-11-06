@@ -254,9 +254,8 @@ provider.
 
 A bare-metal non-provided machine has at least one NIC; every NIC has a MAC in
 `substrate.baremetal.nics`; `substrate.baremetal.bmc` address and credentials
-are present. The [cluster agent](../openshift-clusters.md#selection) requires
-a stable WWN; a Bootwright-installed Machine uses the
-[physical selectors](../managed-os.md#physical-installation). Its BMC address, like every
+are present. Root selection follows the [cluster agent](../openshift-clusters.md#selection)
+or [managed OS](../managed-os.md#physical-installation). Its BMC address, like every
 authored one, selects one exact `/redfish/v1/Systems/<id>` ComputerSystem in
 the [one spelling](#bmc-and-root-device-shape) the realized target sends. These
 declarations identify an install target but do not authorize a destructive
@@ -308,7 +307,7 @@ substrate reads; NIC names and substrate-neutral root-device hints stay in
 | --- | --- | --- | --- |
 | `baremetal` | `bmc` | object | The management controller; exact shape [below](#bmc-and-root-device-shape). |
 | `baremetal` | `nics` | array | Set of `{nicRef, macAddress}` keyed by `nicRef`; `nicRef` names a `hardware.nics[].name`, at most one entry per NIC; `macAddress` is EUI-48. |
-| `baremetal` | `rootDevice` | object | Physical-disk hints `wwn`, `hctl` and `serialNumber`, each a non-empty string, and `sizeBytes`, the root disk's exact capacity, 4096-aligned up to 64 TiB, only on a Bootwright-installed Machine. |
+| `baremetal` | `rootDevice` | object | Physical-disk hints `wwn`, `hctl` and `serialNumber`, each a non-empty string, and `sizeBytes`, the root disk's exact capacity, 4096-aligned up to 64 TiB, proved by a Bootwright installation or the physical agent pre-boot serial proof. |
 | `baremetal` | `firmware` | object | Declared firmware settings; [shape](#firmware-block). |
 | `libvirt`, `kubevirt` | `profileRef` | string | Provider-local `machineProfiles[].name`. |
 | `libvirt`, `kubevirt` | `interfaceAttachments` | array | Set of `{interface, attachmentRef}` keyed by `interface`, as [network configuration](#network-configuration) states. |
@@ -638,8 +637,7 @@ without `installProfileRef`; `substrate.baremetal.rootDevice` admits `wwn`,
 `hctl`, `serialNumber` and `sizeBytes`, which only a physical disk carries, since
 the disks a virtual substrate creates carry no WWN, SCSI address or serial number
 ([substrates](../substrates.md#machine-realization)). `sizeBytes` refuses
-`api.invariant` at `$.spec.substrate.baremetal.rootDevice.sizeBytes` on a
-Machine Bootwright does not install, since only that installation compares it,
+`api.invariant` at `$.spec.substrate.baremetal.rootDevice.sizeBytes` without a Bootwright installation or a physical agent serial proof,
 and when it is not a multiple of 4096.
 `deviceName` is a device path: a clean absolute path beneath `/dev/` built
 only from ASCII letters, digits, `.`, `_`, `-`, `/`, `:` and `+`, so

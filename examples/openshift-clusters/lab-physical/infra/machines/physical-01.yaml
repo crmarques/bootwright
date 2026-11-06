@@ -9,7 +9,8 @@ spec:
 
     baremetal:
       rootDevice:
-        wwn: "0x500000000000f001"
+        serialNumber: "EXAMPLE-PHYSICAL-01-ROOT"
+        sizeBytes: 480103981056
 
       bmc:
         address: https://bmc-01.example.test/redfish/v1/Systems/1

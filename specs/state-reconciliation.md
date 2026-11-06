@@ -2436,7 +2436,7 @@ context claim, prove the exact management controller/System identity, prove
 the complete live MAC set matches the immutable `Machine`, select one whole
 root disk from the authored hint by a durable disk identity: a WWN path or
 serial number and exact size for a Bootwright-installed Machine, or the
-[supported stable WWN](openshift-clusters.md#selection) for an agent-installed
+[supported stable root selector](openshift-clusters.md#selection) for an agent-installed
 cluster node. The selector resolves to exactly one whole disk, never a kernel
 device name another boot may give another disk. The implementation must prove the
 machine is off, and consume `data-loss`. The live MAC set matches when the MACs

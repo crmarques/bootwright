@@ -1581,6 +1581,10 @@ any image is inserted. The TPM proof reads the system after any firmware step.
 
 The bare-metal entry points that reach the BMC also take the
 path of its trust-bundle material, empty when it declares none.
+The pre-boot port takes an optional `root_disk` proof with `serialNumber` and
+exact `sizeBytes` for an [agent-installed physical root](openshift-clusters.md#selection).
+The physical arm proves one matching whole Drive through the complete system
+Storage inventory before media insertion; virtual arms refuse a nonempty proof.
 
 The result channel belongs to the consumer, so `pre_boot` leaves the refusal
 its failed check makes in a fact of its own role, cleared before the proof and

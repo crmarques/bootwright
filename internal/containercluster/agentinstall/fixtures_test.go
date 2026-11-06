@@ -234,7 +234,7 @@ func withHints(machine api.Object, hints ...api.FieldValue) api.Object {
 	declared, physical := api.MapValue(), api.MapValue()
 	for _, hint := range hints {
 		switch hint.Name {
-		case "wwn", "hctl", "serialNumber":
+		case "wwn", "hctl", "serialNumber", "sizeBytes":
 			physical = physical.With(hint.Name, hint.Value)
 		default:
 			declared = declared.With(hint.Name, hint.Value)

@@ -147,7 +147,7 @@ def test_each_proof_reaches_the_nodes_own_controller_with_its_own_credential(tmp
         assert (rendered["user"], rendered["password"]) == (
             "/run/bootwright/bmc-user-metal-02", "/run/bootwright/bmc-password-metal-02"), arm
         assert set(rendered) == {"endpoint", "verify", "user", "password", "ca", "expected",
-                                 "pinned_uuid_base64", "pinned_serial_base64", "require_tpm", "firmware"}, arm
+                                 "pinned_uuid_base64", "pinned_serial_base64", "require_tpm", "firmware", "root_disk"}, arm
         assert rendered["ca"] == "/run/bootwright/bmc-ca-metal-02"
 
 
@@ -179,3 +179,11 @@ def test_each_physical_node_is_held_to_its_own_pin(tmp_path, index, uuid, serial
     arguments = task["vars"]["bootwright_machine_port"]
     assert scope.template(arguments["pinned_uuid_base64"]) == uuid
     assert scope.template(arguments["pinned_serial_base64"]) == serial
+
+
+def test_a_nodes_frozen_root_disk_proof_reaches_the_pre_boot_port(tmp_path):
+    task, _parents = proof("baremetal")
+    expected = task["vars"]["bootwright_machine_port"]["root_disk"]
+    disk = {"serialNumber": "SYNTHETIC-ROOT-01", "sizeBytes": 8192}
+    assert rendering(tmp_path, node(hardware={"interfaces": [], "rootDisk": disk})).template(expected) == disk
+    assert rendering(tmp_path, node()).template(expected) == {}

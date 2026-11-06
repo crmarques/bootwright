@@ -589,6 +589,10 @@ def reporter(ordered, position):
         if (set(facts) == {"substrate_baremetal_machine_refusal"}
                 and facts["substrate_baremetal_machine_refusal"] == "target-unanswered"):
             continue
+        if (set(facts) == {"substrate_baremetal_machine_refusal"}
+                and facts["substrate_baremetal_machine_refusal"] == "hardware-mismatch"
+                and other.get("when") == "substrate_baremetal_machine_target.root_disk_refused | default(false) | bool"):
+            continue
         if (action(other) == "bootwright.core.substrate_physical_protocol"
                 and arguments(other) == {"phase": "refused", "reason": "target-unanswered"}):
             continue
