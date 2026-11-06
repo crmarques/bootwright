@@ -12043,3 +12043,47 @@ case skipped on the temporary filesystem; that case is unverified. Independent
 safety and admission reviews found no remaining requirement gaps. No live
 effects, hardware qualification, operator acceptance, push or release is
 claimed; existing operator gates remain open.
+
+### X309 — The KubeVirt arm ready for its first live run
+
+[B1146](m1.md#b1146), [B1147](m1.md#b1147) and [B1150](m1.md#b1150) are
+implemented in-tree and stay on the M1 page awaiting the lab-kubevirt run.
+**Items:** B1148, B1149, B1151 and B1152, completed in-tree (2026-11-05).
+**Kind:** defect. **Owners:** Substrate, with Add-ons.
+
+[D234](backlog.md#d234) clauses (2) to (5) fix what a verified review found
+would stop or wedge the arm's first live run, following
+[KubeVirt machine realization](../substrates.md#kubevirt-machine-realization).
+
+- B1146: a live media eject deletes the upload DataVolume with background
+  propagation and waits only for its absence; removal keeps foreground
+  deletion and counts the upload claim a live eject left until it is gone.
+- B1147: an instance in phase `Succeeded` or `Failed` is a stopped machine for
+  power, pre-boot, media writes, removal and quiescence; a start over it falls
+  back to one stop and start when the final instance is not replaced within
+  60 s, inside the power bound.
+- B1148: the upload DataVolume takes the pinned VirtualMachine's root class,
+  and an upload waits for a claim an earlier upload left.
+- B1149: idempotent reads and access reviews are retried at most twice on
+  429, 502, 503, 504 and refused or reset connections; nothing that writes or
+  timed out is retried.
+- B1150: the provider proof refuses an absent CDI configuration or
+  `kube-system`, two default classes, a first claim property set without
+  `ReadWriteMany` and a host with no schedulable KVM node, waits for an
+  unfilled StorageProfile, and records what it read; the proof role gains
+  `list` on nodes. A start that never runs names its scheduling condition.
+- B1151: the proof reads each attachment's definition kind: a Localnet
+  overlay without IPAM, or a `bridge`/`cnv-bridge` CNI, directly or first in
+  a plugin list.
+- B1152: shared Go and Python request goldens, the proof's reads tied to its
+  roles, a loopback TLS test of the real client, proof denials, an
+  interrupted upload continued, and the VirtualMachine body's fields.
+
+**Delivery commit:** 5631a512c. The machine request moves to the next
+`machineRequestVersion` and the host evidence to the next
+`hostEvidenceVersion`, with five new host content-digest pins; pre-1.x, no
+converter. An independent review approved after two fixes, both included.
+
+**Verification:** each regression failed before its fix; `make check` and
+`make race` passed on the commit rebased onto 3a122b1ab. B731's run confirms
+the inferences the knowledge page records.
