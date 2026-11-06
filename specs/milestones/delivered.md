@@ -12257,3 +12257,18 @@ unit tests. The delivering commit records exact verification commands and
 results. No native Satellite registration was run; B877 retains its operator
 acceptance gate, including ordinary and composite view selection, activation
 key override, unavailable selection, replay and owned unregistration.
+
+### X317 — Native command fixture startup budget
+
+**Item:** B1190, completed in-tree (2026-11-06), authorized by
+[D237](backlog.md#d237). The positive native-command success fixture blocked
+[X316](#x316--satellite-content-view-selection)'s full gate under subprocess
+startup load. Only its nested success-case command, worker and caller budgets
+change; its assertions and separate short deadline-refusal cases stay active.
+Production behavior and effect identity are unchanged.
+
+**Delivery commit:** the `fix(ansible): allow startup in the native command
+success test` commit carrying this record. Its body records exact verification
+commands and outcomes. The rebased `make check` passed, including the managed-host
+floor units and the serial collection run (9069 passed, one existing skip).
+The independent review approved the repair's bounds and retained assertions.

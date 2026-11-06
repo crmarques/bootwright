@@ -121,11 +121,11 @@ def test_actual_shipped_command_works_inside_supervised_remote_group(tmp_path):
                "ceph_export_dns": '"""Fixed fixture."""\n', "ceph_export_native": '"""Fixed fixture."""\n',
                "ceph_native": inspect.getsource(ceph_native) +
                '\ndef dispatch(value):\n    code, output = bounded_command(' + repr(invocation) +
-               ', timeout=1)\n    return {"code": code, "session": COMMAND_SESSION}\n'}
-    payload = {"sources": sources, "payload": {}, "budget": 2}
-    result = subprocess.run([sys.executable, "-I", "-c", inspect.getsource(ceph_native_worker), "2"],
+               ', timeout=5)\n    return {"code": code, "session": COMMAND_SESSION}\n'}
+    payload = {"sources": sources, "payload": {}, "budget": 10}
+    result = subprocess.run([sys.executable, "-I", "-c", inspect.getsource(ceph_native_worker), "10"],
                             input=json.dumps(payload).encode(),
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=3, check=False)
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15, check=False)
     assert result.returncode == 0
     assert json.loads(result.stdout) == {"ok": True, "result": {"code": 0, "session": False}}
     assert result.stderr == b""

@@ -7214,3 +7214,15 @@ proof selects a fixed descriptor-relative Python worker over the pinned SSH
 session because ordinary SFTP path operations cannot prove the required nofollow
 boundary against concurrent substitution. Real-machine acceptance remains the
 owner's; no push or real-machine effect is authorized by this decision.
+
+### D237
+
+**delegated** (2026-11-06, under the owner's request for Satellite content
+selection and the [AGENTS.md](../../AGENTS.md) blocking-gate defect rule):
+[X317](delivered.md#x317--native-command-fixture-startup-budget) repairs B1190,
+the positive native-command fixture whose
+startup budget blocked X316's required gate. The session chooses nested
+success-case budgets that allow process startup under the full unit run,
+retaining the command-success, shared-group, stderr and descendant-cleanup
+assertions and the separate short deadline-refusal cases. This authorizes
+only that test-data repair; its production execution contract stays as it is.
