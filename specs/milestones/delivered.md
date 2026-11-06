@@ -12087,3 +12087,33 @@ converter. An independent review approved after two fixes, both included.
 **Verification:** each regression failed before its fix; `make check` and
 `make race` passed on the commit rebased onto 3a122b1ab. B731's run confirms
 the inferences the knowledge page records.
+
+### X311 — A power command reaches its Machine while a destroy is current
+
+[B951](m1.md#b951) is implemented in-tree and stays on the M1 page awaiting
+the lab-kubevirt run. **Items:** B1179, completed in-tree (2026-11-06).
+**Kind:** safety. **Owners:** Machine and State reconciliation.
+
+[D234](backlog.md#d234) clause (1) defines B951, following
+[identity and power operations](../substrates.md#identity-and-power-operations)
+and [machine power operations](../cli.md#machine-power-operations).
+
+- B1179: the lifecycle evidence read carries each block's frozen block, so a
+  KubeVirt power pin decodes its request through the wiring (every KubeVirt
+  power command refused as malformed before), and storage inspection reports
+  the Ceph host specializations it silently dropped.
+- B951: while a destroy is current, power commands and the power reading take
+  each Machine's pin from the apply lineage the destroy's source names, and
+  refuse when that record cannot be read. A Machine its substrate created
+  (libvirt or KubeVirt) whose realization the current destroy, or a removal
+  it replaces, proved gone stops as off without contacting the host, and a
+  start or restart refuses naming the removal. Bare metal takes the same pin.
+
+**Delivery commits:** 4b96d4312 (records), bb9381617 (B1179), 283187665
+(B951). No request or evidence version moves. An independent review approved
+after five fixes, all included; its remaining remedies are parked as
+[B1180](backlog.md#b1180).
+
+**Verification:** each regression failed before its fix, and two tests of facts
+that already held passed from the start; `make check` and `make race` passed
+on the final commit.
