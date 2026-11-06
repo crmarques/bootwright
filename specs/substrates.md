@@ -972,7 +972,7 @@ child stopped, the removal registers while the host runs, removes them
 through its API, releases the proof without reaching the host, and, when the
 host's own Machines probe quiescence, as libvirt's do, pauses before the
 first of them until the operator stops them, listed under `Stop after online
-cleanup`; repeating destroy then completes it ([B1160](milestones/m3.md#b1160)).
+cleanup`; repeating destroy then completes it.
 Edges that close a cycle, such as a host add-on ordered after
 its own child, refuse planning, naming the cycle's blocks in order. No arm block, port entry point or consumer is lent the host
 installation's administrator kubeconfig: before each run the substrate's

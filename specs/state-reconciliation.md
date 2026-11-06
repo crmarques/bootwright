@@ -2375,7 +2375,7 @@ online effect already durably completed. Unknown or failed online cleanup
 cannot admit Machine or substrate deletion.
 
 A KubeVirt Machine whose provider names `hostClusterRef` is such an online
-effect ([B1160](milestones/m3.md#b1160)): its VirtualMachine is reached only
+effect: its VirtualMachine is reached only
 through the API of a host cluster the same removal takes down, so it is
 removed while that host still answers, and the host's own Machines, whose
 inverse dependency closure contains it, are listed under `Stop after online

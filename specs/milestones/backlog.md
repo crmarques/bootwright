@@ -297,6 +297,8 @@ Alias cell.
 | [B1177](#b1177) | new, 2026-11-05 (D234) | safety | Controller | A second `virtctl` source: the host's build or an operator-declared digest | Q151 |
 | [B1178](#b1178) | new, 2026-11-05 (D234) | product | Add-ons and Storage | Data Foundation external against a Ceph cluster the context does not manage | Takes storage out of the host's lineage; Q144 |
 | [B1180](#b1180) | new, 2026-11-06 (X311 review) | product | Machine and State reconciliation | Power and access remedies that name the state a destroy leaves | The refusals fail safe; their remedies name an apply where a destroy is due |
+| [B1181](#b1181) | new, 2026-11-06 (X312 review) | product | State reconciliation and Substrate | A context with two levels of KubeVirt nesting destroys | No profile nests twice; the removal refuses safely today |
+| [B1182](#b1182) | new, 2026-11-06 (X312 review) | product | Substrate | Derived MAC addresses are unique across libvirt and KubeVirt Machines that share one network | The KubeVirt check covers the KubeVirt arm alone; no profile bridges both arms onto one network |
 
 ### B82
 
@@ -3289,6 +3291,28 @@ read takes the current operation only. **Outcome:** each names the state and
 the command that clears it, and the host keys come from the apply the destroy
 takes back. **Exit evidence:** power and access tests for destroy blocks in
 states failed, running and unknown, and the remedy goldens.
+
+### B1181
+
+**Owner:** State reconciliation and Substrate. **Kind:** product.
+**Requires:** [B1160](delivered.md#x312--nested-destroy-and-hosted-provider-refusals). **Definition:** Needs
+definition. A host cluster that itself runs on hosted KubeVirt Machines of the
+same context makes those middle Machines online removals that must be proved
+stopped before registration while the innermost Machines need them running,
+so the destroy refuses. **Outcome:** the removal orders each level's online
+cleanup before the level below it stops. **Exit evidence:** a lifecycle
+journey destroying a two-level nested context, and journeys for a host lost
+between the gate and the hosted removal and a hosted VM restarted between
+them.
+
+### B1182
+
+**Owner:** Substrate. **Kind:** product. **Requires:** [B1162](delivered.md#x312--nested-destroy-and-hosted-provider-refusals).
+**Definition:** Needs definition. libvirt and KubeVirt derive interface MAC
+addresses through one function, and a libvirt guest and a KubeVirt guest
+bridged onto one layer 2 network are not compared. **Outcome:** two Machines of
+either arm on one network never derive one address. **Exit evidence:** a
+planning refusal test across both arms.
 
 ## Audit remediation (2026-10-26)
 

@@ -12117,3 +12117,30 @@ after five fixes, all included; its remaining remedies are parked as
 **Verification:** each regression failed before its fix, and two tests of facts
 that already held passed from the start; `make check` and `make race` passed
 on the final commit.
+
+### X312 — Nested destroy and hosted-provider refusals
+
+**Items:** B1160, B1161 and B1162, completed in-tree (2026-11-06).
+**Kind:** safety. **Owners:** State reconciliation, Substrate and Add-ons.
+
+[D234](backlog.md#d234) authorizes them, following
+[quiescence before removal](../state-reconciliation.md#quiescence-before-removal)
+and [KubeVirt machine realization](../substrates.md#kubevirt-machine-realization).
+
+- B1160: a KubeVirt Machine on a host cluster the context builds is an
+  online removal, so a context whose host runs on libvirt destroys: the
+  hosted VirtualMachines are proved stopped and removed while the host
+  answers, then the host's Machines are proved stopped. The provider proof's
+  removal reads nothing and mints no token.
+- B1161: a hosted provider whose host's only `kubevirt` add-on is authored
+  refuses before registration.
+- B1162: admission refuses a hosted attachment to an IPAM network and a
+  KubeVirt guest MTU above its host network's; planning refuses two
+  interfaces that derive one MAC address.
+
+**Delivery commit:** cf9774638. No request or evidence version moves. An
+independent review approved; its later items are parked as
+[B1181](backlog.md#b1181) and [B1182](backlog.md#b1182).
+
+**Verification:** each regression failed before its fix; `make check` and
+`make race` passed on the commit.
