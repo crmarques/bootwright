@@ -1062,7 +1062,7 @@ runs one fixed worker as root through `sudo -n /usr/bin/python3 -I -c`; the
 worker starts the private register bus
 (`com.redhat.RHSM1.RegisterServer.Start`) and calls
 `RegisterWithActivationKeys` with the organization, the one activation key and
-empty options and connection options, never `subscription-manager register`,
+empty connection options, never `subscription-manager register`,
 `clean` or `--force`. With a Satellite, before it registers or adopts and on
 every apply, the worker writes the CA bundle to
 `/etc/rhsm/ca/bootwright-satellite.pem`, root:root 0644, staged and renamed
@@ -1075,8 +1075,10 @@ path holds no link or other non-regular file, and runs `subscription-manager con
 reaches that server, verified against `/etc/rhsm/ca/`, and repository URLs
 start at the content root, a foreign registration refusing first. It never installs
 `katello-ca-consumer`, fetches nothing over HTTP and never passes
-`--insecure`. Sources:
-[register.py](https://github.com/candlepin/subscription-manager/blob/main/src/rhsmlib/dbus/objects/register.py),
+`--insecure`.
+
+Explicit content selection follows [Satellite content selection](managed-os-satellite.md).
+Sources: [register.py](https://github.com/candlepin/subscription-manager/blob/main/src/rhsmlib/dbus/objects/register.py),
 [constants.py](https://github.com/candlepin/subscription-manager/blob/main/src/rhsmlib/dbus/constants.py)
 and [subscription-manager(8)](https://www.mankier.com/8/subscription-manager).
 
@@ -1184,12 +1186,10 @@ only: nothing persists it, and no next step names it except the authorization
 refusal of that invocation, whose command keeps it beside the tokens the plan
 requires, as [the command contract](cli/commands.md) states.
 
-**Bound.** The deadline of a registering request adds 15 minutes for the
-registration, the worker's whole session being bounded at 630 seconds, 750
-when it also sets the release for an
-[update within release](#update-within-release), whose bound allows the 120
-seconds more, each 60 seconds more with a Satellite for its configuration
-call, and its unregistration at 300 seconds.
+**Bound.** Registration adds 15 minutes to the request deadline. Its worker
+session is 630 seconds, plus 120 for release pinning, 60 for Satellite
+configuration and 60 for explicit content selection's identity proof.
+Unregistration is bounded at 300 seconds.
 
 ### Physical removal
 
@@ -1671,7 +1671,8 @@ worker is:
    Satellite does not offer, or a `release --list` that fails on a
    Satellite, is not a refusal: `subscription-manager release --unset` clears
    any release the activation key carries, such as 9.6 under a profile
-   declaring 9.8, and the activation key's content view is the pin; an
+   declaring 9.8, and the selected content view (explicit or inherited from the
+   activation key) is the pin; an
    unreachable Satellite fails that call and refuses as before.
 2. It proves that `VERSION_ID` in the installed system's `/etc/os-release`
    equals the release, else refuses `update-release-mismatch`.
@@ -1766,7 +1767,7 @@ Satellite's content view or the release variable. Configured repositories
 beside a Satellite expand `$releasever` to the major; an operator who needs
 the minor writes it literally in their `baseURL`. A content view that holds a
 newer minor makes the preview's `update-release-drift` stop the update, whose
-remedy is the activation key's content view or lifecycle environment. A
+remedy is the selected content view or lifecycle environment. A
 content-view filter that hides `redhat-release` while serving packages of a
 newer minor cannot be seen in the transaction; the `VERSION_ID` proofs are the
 remaining bound. Satellite custom-product repositories carry the GPG keys and
@@ -1783,7 +1784,7 @@ them.
 | `external` Entitlement | Only configured repositories count; with none the profile refuses. |
 | Disconnected, DVD or `hostedTree` only | No update source, so `none` is required. |
 | Satellite, release offered | The release is set, as on the hosted service, and the content view serves that minor; the evidence pin is `release`. |
-| Satellite, release not offered | The release is unset and the activation key's content view is the pin; the evidence pin is `contentView`. A newer minor in the view stops the update at `update-release-drift`. |
+| Satellite, release not offered | The release is unset and the selected content view (explicit or inherited from the activation key) is the pin; the evidence pin is `contentView`. A newer minor in the view stops the update at `update-release-drift`. |
 | Configured repositories beside a Satellite | No release variable is written, so `$releasever` expands to the major; a minor is written literally in `baseURL`. |
 | `templateClone` qcow2 | Refused today ([B99](milestones/m1.md#b99)); steps 2 to 6 read no installer media. |
 | Provided Machine | Out of scope: Bootwright installs no operating system on it. |

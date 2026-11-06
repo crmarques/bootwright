@@ -143,6 +143,12 @@ options:
   satellite_content_base_url:
     description: The HTTPS content root rhsm appends every repository path to; register only.
     type: str
+  satellite_content_view:
+    description: Label of a published ordinary or composite content view; register only, with a lifecycle environment.
+    type: str
+  satellite_lifecycle_environment:
+    description: Lifecycle environment label for the content view; register only, with a content view.
+    type: str
   satellite_ca_file:
     description: The lent CA bundle file that signs the Satellite's certificate; register only.
     type: path
@@ -230,6 +236,7 @@ from ansible_collections.bootwright.core.plugins.module_utils.canonical_json imp
 MAX_MATERIAL = 257
 MAX_TIMEOUT = 900
 MATERIAL = (("organization_file", "organization", "organization"), ("activation_key_file", "activationKey", "activation key"))
+SELECTION = ("satellite_content_view", "satellite_lifecycle_environment")
 SATELLITE = ("satellite_hostname", "satellite_content_base_url", "satellite_ca_file")
 MODULE_CAUSES = ("session", "timeout", "host-key", "exit", "answer")
 RESULT_KEYS = frozenset(("changed", "consumer", "owned", "release", "repositories", "state"))
@@ -252,11 +259,14 @@ def check_arguments(params):
         for option in (entry[0] for entry in MATERIAL):
             if params.get(option) is not None:
                 raise ArgumentError(option + " is accepted only for the register operation")
-        for option in ("enable", "disable", "release") + SATELLITE:
+        for option in ("enable", "disable", "release") + SATELLITE + SELECTION:
             if params.get(option):
                 raise ArgumentError(option + " is accepted only for the register operation")
     if len({bool(params.get(option)) for option in SATELLITE}) != 1:
         raise ArgumentError("satellite_hostname, satellite_content_base_url and satellite_ca_file are given together")
+    if any(params.get(option) is not None for option in SELECTION):
+        if not params.get("satellite_hostname") or not all(params.get(option) for option in SELECTION):
+            raise ArgumentError("satellite_content_view and satellite_lifecycle_environment require each other and a Satellite")
     if not isinstance(params["request"], str) or not worker.DIGEST.fullmatch(params["request"]):
         raise ArgumentError("request is not 64 lowercase hexadecimal characters")
     if type(params["timeout"]) is not int or not 1 <= params["timeout"] <= MAX_TIMEOUT:  # pylint: disable=unidiomatic-typecheck
@@ -307,6 +317,8 @@ def satellite_of(params):
         return None
     satellite = {"hostname": params["satellite_hostname"], "contentBaseURL": params["satellite_content_base_url"],
                  "caBundle": read_bundle(params["satellite_ca_file"])}
+    if params.get("satellite_content_view") is not None:
+        satellite.update(contentView=params["satellite_content_view"], lifecycleEnvironment=params["satellite_lifecycle_environment"])
     worker.satellite_of(satellite)
     return satellite
 
@@ -422,6 +434,8 @@ def main():
             "enable": {"type": "list", "elements": "str", "default": []},
             "disable": {"type": "list", "elements": "str", "default": []},
             "release": {"type": "str", "default": ""},
+            "satellite_content_view": {"type": "str"},
+            "satellite_lifecycle_environment": {"type": "str"},
             "satellite_hostname": {"type": "str"},
             "satellite_content_base_url": {"type": "str"},
             "satellite_ca_file": {"type": "path"},

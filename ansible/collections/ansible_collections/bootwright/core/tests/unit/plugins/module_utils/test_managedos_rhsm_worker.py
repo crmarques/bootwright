@@ -748,3 +748,82 @@ def test_a_release_list_that_fails_on_a_satellite_unsets_the_release(tmp_path, a
         "ok": False, "reason": "registration-unavailable", "cause": "service"}
     hosted = owned_setup(tmp_path / "hosted", capture=Capture(answer))
     assert hosted.call("register", release="9.8")[0] == {"ok": False, "reason": "registration-unavailable", "cause": "service"}
+
+
+@pytest.mark.parametrize("view", ["rhel9", "composite_rhel9_ceph", "a" * 255])
+def test_explicit_content_view_reaches_the_private_bus_and_replays_once(tmp_path, view):
+    identity = ("system identity: " + UNEW + "\nname: guest\norg name: org\norg ID: org\nenvironment name: Production/" + view + "\n").encode()
+    setup = Setup(tmp_path, capture=Capture((0, identity)))
+    selection = dict(SATELLITE, contentView=view, lifecycleEnvironment="Production")
+    assert setup.call("register", satellite=selection)[0]["result"]["state"] == "registered"
+    registration = setup.bus.registrations()[0]
+    assert registration[4] == {"environment_names": "Production/" + view}
+    assert registration[6] == {}  # Connection options carry no credentials or overrides.
+    assert setup.call("register", satellite=selection)[0]["result"]["state"] == "unchanged"
+    assert len(setup.bus.registrations()) == 1
+
+
+@pytest.mark.parametrize("selection", [
+    {"contentView": "rhel9"}, {"lifecycleEnvironment": "Production"},
+    *[{"contentView": bad, "lifecycleEnvironment": "Production"} for bad in ("", None, 1, "a/b", "a,b", "a b", "é", "a" * 256)],
+    {"contentView": "rhel9", "lifecycleEnvironment": "a/b"},
+])
+def test_invalid_content_selection_refuses_before_guest_reads_or_effects(tmp_path, selection):
+    setup = Setup(tmp_path)
+    assert setup.call("register", satellite=dict(SATELLITE, **selection))[0] == {"ok": False, "reason": "registration-input"}
+    assert setup.bus.calls == setup.run.calls == []
+    assert setup.record_bytes() is None
+
+
+def test_unsupported_content_selection_is_a_sanitized_registration_refusal(tmp_path):
+    error = DBusException(json.dumps({"exception": "ValidationError", "message": "Unknown arguments: environment_names " + KEY}))
+    setup = Setup(tmp_path, error=error)
+    answer, text = setup.call("register", satellite=dict(SATELLITE, contentView="rhel9", lifecycleEnvironment="Production"))
+    assert answer == {"ok": False, "reason": "registration-refused"}
+    assert KEY not in text
+    assert setup.run.calls == [config_call(setup)]
+
+
+class SelectionCapture(Capture):
+    """Native identity and release-list replies for selection-before-effects checks."""
+
+    def __call__(self, argv, timeout):
+        answer = super().__call__(argv, timeout)
+        return answer if argv[-1] == "identity" else (0, LISTED)
+
+
+@pytest.mark.parametrize("state", ["new", "pending", "owned"])
+@pytest.mark.parametrize("identity, reason", [
+    ((0, ("system identity: " + UNEW + "\nname: guest\norg name: org\norg ID: org\nenvironment name: Production/rhel9\n").encode()), ""),
+    ((0, ("system identity: " + UNEW + "\nname: guest\norg name: org\norg ID: org\nenvironment names: Production/rhel9\n").encode()), ""),
+    ((0, ("system identity: " + UNEW + "\nname: guest\norg name: org\norg ID: org\nenvironment name: Production/other\n").encode()), "registration-refused"),
+    ((0, ("system identity: " + UNEW + "\nname: guest\norg name: org\norg ID: org\n"
+          "environment names: Production/rhel9,Production/extra\n").encode()), "registration-refused"),
+    ((0, ("system identity: " + U2 + "\nname: guest\norg name: org\norg ID: org\nenvironment name: Production/rhel9\n").encode()), "registration-refused"),
+    ((0, ("system identity: " + UNEW + "\nname: guest\norg name: org\norg ID: org\n"
+          "environment name: Production/rhel9\nenvironment name: Production/rhel9\n").encode()), "registration-refused"),
+    ((0, b"environment name: Production/rhel9\n"), "registration-refused"),
+    ((0, ("system identity: " + UNEW + "\nname: guest\norg name: remote\nenvironment name: Production/rhel9\norg ID: org\n").encode()), "registration-refused"),
+    ((0, b""), "registration-refused"), ((0, b"environment name: None\n"), "registration-refused"),
+    ((1, b"native failure with secret " + KEY.encode()), "registration-unavailable"),
+    (None, "registration-unavailable"), ((0, b"x" * 65537), "registration-unavailable"),
+])
+def test_live_selection_is_proved_before_adoption_repositories_or_release(tmp_path, state, identity, reason):
+    setup = Setup(tmp_path, capture=SelectionCapture(identity))
+    if state != "new":
+        setup.with_cert(UNEW)
+        setup.with_record("" if state == "pending" else UNEW)
+    before = setup.record_bytes()
+    answer, text = setup.call("register", satellite=dict(SATELLITE, contentView="rhel9", lifecycleEnvironment="Production"),
+                              enable=["rhel-9-for-x86_64-baseos-rpms"], release="9.8")
+    assert setup.capture.calls[0] == ([SM, "identity"], worker.SELECTION_CEILING)
+    if reason:
+        assert answer["ok"] is False and answer["reason"] == reason
+        assert setup.run.calls == [config_call(setup)]
+        assert setup.record_bytes() == (canonical("") if state == "new" else before)
+    else:
+        assert answer["ok"] is True
+        assert setup.run.calls == [config_call(setup), ([SM, "release", "--set=9.8"], worker.RELEASE_CEILING),
+                                   ([SM, "repos", "--enable=rhel-9-for-x86_64-baseos-rpms"], worker.REPOSITORIES_CEILING)]
+        assert setup.record_bytes() == (before if state == "owned" else canonical(UNEW))
+    assert KEY not in text and "Production/" not in text

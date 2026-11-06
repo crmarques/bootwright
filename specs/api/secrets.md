@@ -197,7 +197,8 @@ An external RHSM arm may contain only `management: external`.
 `organizationRef`, `activationKeyRef`, `connectToInsights`, and `satellite`
 are rejected there.
 
-`satellite` contains `hostname`, `trustBundleRef`, then `contentBaseURL`.
+`satellite` contains `hostname`, `trustBundleRef`, `contentBaseURL`,
+`contentView`, then `lifecycleEnvironment`.
 `hostname` is required when the block is present, names the Satellite or a
 Capsule, and is a bare host with no scheme, path, whitespace, or surrounding
 whitespace. `trustBundleRef` names a `caBundle` Secret holding the CA that
@@ -208,6 +209,25 @@ root rhsm appends every repository path to (`rhsm.baseurl`); omission derives
 `https://<hostname>/pulp/content` during normalization, and on a `redhatRhel`
 Entitlement it is an `https` URL of at most 2048 printable ASCII characters
 with a host and no query, fragment or user information. Each refusal names its field and the change that admits it.
+
+`contentView` and `lifecycleEnvironment` are optional together. When present,
+each is a Satellite label of 1 to 255 ASCII letters, digits, underscores or
+hyphens, rather than a display name or numeric ID. `contentView` selects a
+published ordinary or composite content view; `lifecycleEnvironment` selects
+the environment containing its published version. Neither has a default.
+Omitting both uses the activation key's selection. Null, empty, invalid or
+unpaired values are refused; no name is trimmed or inferred. Environment kind
+defaults apply before the pair is validated.
+
+For example, within `spec.rhsm`:
+
+```yaml
+satellite:
+  hostname: satellite.example.test
+  trustBundleRef: satellite-ca
+  contentView: composite_rhel9_ceph
+  lifecycleEnvironment: Production
+```
 
 `management: managed` registers each Bootwright-installed virtual Machine whose
 install profile selects the Entitlement in `spec.subscription`, proving and

@@ -408,3 +408,10 @@ func TestMalformedRegistrationEvidenceIsRefused(t *testing.T) {
 		}
 	}
 }
+
+func selectedSatelliteEntitlement() api.Object {
+	entitlement := satelliteEntitlement()
+	rhsm := entitlement.Spec().Get("rhsm")
+	selection := rhsm.Get("satellite").With("contentView", api.StringValue("composite_rhel9_ceph")).With("lifecycleEnvironment", api.StringValue("Production"))
+	return entitlement.WithSpec(entitlement.Spec().With("rhsm", rhsm.With("satellite", selection)))
+}

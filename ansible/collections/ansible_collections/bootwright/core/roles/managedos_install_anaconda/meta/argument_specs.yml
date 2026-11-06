@@ -115,6 +115,12 @@ argument_specs:
                 type: dict
                 required: false
                 options:
+                  contentView:
+                    type: str
+                    required: false
+                  lifecycleEnvironment:
+                    type: str
+                    required: false
                   contentBaseURL:
                     type: str
                     required: true
@@ -156,7 +162,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [os-install-anaconda-v25]
+            choices: [os-install-anaconda-v26]
       bootwright_os_install_digest:
         type: str
         required: true

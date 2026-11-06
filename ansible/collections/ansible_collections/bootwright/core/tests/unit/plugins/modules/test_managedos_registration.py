@@ -326,3 +326,23 @@ def test_a_satellite_content_root_outside_the_grammar_is_refused(tmp_path):
     outcome = module.execute(satellite_params(paths, tmp_path, satellite_content_base_url="http://capsule.example.test/pulp"),
                              run=session(tmp_path, popen))
     assert outcome["reason"] == "registration-input" and popen.calls == []
+
+
+@pytest.mark.parametrize("view", ["rhel9", "composite_rhel9_ceph"])
+def test_content_selection_reaches_the_worker_payload(tmp_path, view):
+    paths = files(tmp_path)
+    popen = FakePopen(stdout=encoded(ANSWER))
+    value = satellite_params(paths, tmp_path, satellite_content_view=view, satellite_lifecycle_environment="Production")
+    assert module.execute(value, run=session(tmp_path, popen))["ok"] is True
+    selection = json.loads(popen.calls[0]["stdin"])["satellite"]
+    assert selection["contentView"] == view and selection["lifecycleEnvironment"] == "Production"
+
+
+@pytest.mark.parametrize("values", [
+    {"satellite_content_view": "rhel9"}, {"satellite_lifecycle_environment": "Production"},
+    {"satellite_content_view": "", "satellite_lifecycle_environment": "Production"},
+])
+def test_content_selection_requires_paired_labels(tmp_path, values):
+    paths = files(tmp_path)
+    with pytest.raises(module.ArgumentError, match="require each other and a Satellite"):
+        module.execute(satellite_params(paths, tmp_path, **values), run=session(tmp_path, FakePopen()))

@@ -64,6 +64,7 @@ REPOSITORIES_CEILING = 300
 UNREGISTER_CEILING = 300
 RELEASE_CEILING = 60
 CONFIG_CEILING = 60
+SELECTION_CEILING = 60
 MAX_RELEASES = 65536
 MAX_BUNDLE = 65536
 MAX_CERTIFICATES = 32
@@ -81,6 +82,8 @@ STATES = {"register": ("registered", "adopted", "unchanged"),
           "inspect": ("owned", "pending", "absent", "foreign")}
 OWNED_STATES = frozenset(("registered", "adopted", "unchanged", "owned"))
 RELEASE_PINS = ("", "set", "unset")
+SELECTION_KEYS = frozenset(("contentView", "lifecycleEnvironment"))
+SATELLITE_LABEL = re.compile(r"[A-Za-z0-9_-]{1,255}")
 SATELLITE_KEYS = frozenset(("hostname", "contentBaseURL", "caBundle"))
 KEYS = {"register": frozenset(("operation", "request", "organization", "activationKey", "enable", "disable", "release", "satellite")),
         "unregister": frozenset(("operation", "request")),
@@ -165,7 +168,7 @@ def satellite_of(value):
     """The validated Satellite, or None for the hosted service."""
     if value is None:
         return None
-    if not isinstance(value, dict) or set(value) != SATELLITE_KEYS:
+    if not isinstance(value, dict) or set(value) not in (SATELLITE_KEYS, SATELLITE_KEYS | SELECTION_KEYS):
         raise Refused("registration-input", detail="the Satellite is not valid")
     hostname, root = value["hostname"], value["contentBaseURL"]
     if not isinstance(hostname, str) or not HOSTNAME.fullmatch(hostname):
@@ -173,7 +176,10 @@ def satellite_of(value):
     if (not isinstance(root, str) or len(root) > MAX_CONTENT_ROOT or not CONTENT_ROOT.fullmatch(root)
             or not PRINTABLE.fullmatch(root)):
         raise Refused("registration-input", detail="the Satellite content root is not valid")
-    return {"hostname": hostname, "contentBaseURL": root, "caBundle": ca_bundle(value["caBundle"])}
+    for key in SELECTION_KEYS & set(value):
+        if not isinstance(value[key], str) or not SATELLITE_LABEL.fullmatch(value[key]):
+            raise Refused("registration-input", detail="the Satellite content selection label is not valid")
+    return dict(value, caBundle=ca_bundle(value["caBundle"]))
 
 
 def read_bounded(descriptor, limit):
@@ -489,29 +495,48 @@ class Guest:
         if code != 0:
             raise Refused("registration-unavailable", "tooling")
 
-    def register(self, organization, key, satellite=False):
-        """One RegisterWithActivationKeys call on the private bus with empty options; the consumer UUID."""
+    def register(self, organization, key, satellite=None):
+        """One private-bus registration, optionally selecting a Satellite content view environment by label."""
         dbus = self.bus()
+        options = {}
+        if satellite is not None and "contentView" in satellite:
+            environment = satellite["lifecycleEnvironment"] + "/" + satellite["contentView"]
+            options["environment_names"] = environment
         try:
             system = dbus.SystemBus()
             server = dbus.Interface(system.get_object(BUS_NAME, REGISTER_SERVER_PATH), REGISTER_SERVER_INTERFACE)
             address = server.Start("", timeout=REGISTER_CEILING)
         except dbus.exceptions.DBusException as error:
-            raise classify(error, satellite) from None
+            raise classify(error, satellite is not None) from None
         private = None
         try:
             private = dbus.connection.Connection(address)
             register = dbus.Interface(private.get_object(None, REGISTER_PATH, introspect=False), REGISTER_INTERFACE)
             reply = register.RegisterWithActivationKeys(
-                organization, dbus.Array([key], signature="s"), dbus.Dictionary({}, signature="sv"),
+                organization, dbus.Array([key], signature="s"), dbus.Dictionary(options, signature="sv"),
                 dbus.Dictionary({}, signature="sv"), "", timeout=REGISTER_CEILING)
         except dbus.exceptions.DBusException as error:
-            raise classify(error, satellite) from None
+            raise classify(error, satellite is not None) from None
         finally:
             if private is not None:
                 quietly(private.close)
             quietly(lambda: server.Stop("", timeout=REGISTER_CEILING))
         return consumer_of(reply)
+
+    def content_selection(self, satellite, consumer):
+        """Prove the live content selection before adopting or using this consumer; never return identity output."""
+        answer = self.capture([SUBSCRIPTION_MANAGER, "identity"], SELECTION_CEILING)
+        if answer is None or answer[0] != 0 or len(answer[1]) > MAX_RELEASES:
+            raise Refused("registration-unavailable", "service")
+        lines = answer[1].decode("utf-8", "replace").splitlines()
+        fields = [line.partition(": ") for line in lines]
+        keys = [field[0] for field in fields]
+        expected = satellite["lifecycleEnvironment"] + "/" + satellite["contentView"]
+        if (len(fields) != 5 or keys[:4] != ["system identity", "name", "org name", "org ID"]
+                or keys[4] not in ("environment name", "environment names")
+                or any(field[1] != ": " for field in fields)
+                or fields[0][2] != consumer or fields[4][2] != expected):
+            raise Refused("registration-refused")
 
     def repositories(self, enable, disable):
         """One subscription-manager repos call: every disable, then every enable, in order."""
@@ -562,16 +587,18 @@ def register_operation(guest, payload):
     if kind == "owned":
         state = "unchanged"
     elif kind == "pending":
-        guest.write(common, request)
         state = "adopted"
     else:
         guest.write("", request)
-        consumer = guest.register(payload["organization"], payload["activationKey"], satellite is not None)
+        consumer = guest.register(payload["organization"], payload["activationKey"], satellite)
         common = guest.certificate()[1]
         if common != consumer:
             raise Refused("transport")
-        guest.write(common, request)
         state = "registered"
+    if satellite is not None and "contentView" in satellite:
+        guest.content_selection(satellite, common)
+    if state != "unchanged":
+        guest.write(common, request)
     pinned = guest.release(payload["release"], satellite is not None) if payload["release"] else ""
     guest.repositories(enable, disable)
     return result(state != "unchanged" or trusted, common, state, enable, disable, pinned)

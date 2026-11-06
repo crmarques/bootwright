@@ -448,6 +448,9 @@ func ValidateRHSM(o api.Object, authored bool) []api.Issue {
 					"set spec.rhsm.organizationRef and spec.rhsm.activationKeyRef"))
 			}
 		}
+		if !authored && rhsm.Has("satellite") {
+			issues = add(issues, validateSatelliteSelection(o, rhsm.Get("satellite"))...)
+		}
 		if !authored && o.Spec().Get("type").Text() == "redhatRhel" && rhsm.Has("satellite") {
 			issues = add(issues, validateSatellite(o, rhsm.Get("satellite"))...)
 		}
@@ -588,4 +591,27 @@ func reference(field, message, remediation string) api.Issue {
 }
 func add(issues []api.Issue, more ...api.Issue) []api.Issue {
 	return append(issues, more[:min(len(more), 999-len(issues))]...)
+}
+
+var satelliteLabel = regexp.MustCompile(`^[A-Za-z0-9_-]{1,255}$`)
+
+func validateSatelliteSelection(o api.Object, satellite api.Value) []api.Issue {
+	var issues []api.Issue
+	for _, key := range []string{"contentView", "lifecycleEnvironment"} {
+		if satellite.Has(key) && !satelliteLabel.MatchString(satellite.Get(key).Text()) {
+			issues = add(issues, issue("$.spec.rhsm.satellite."+key,
+				"a Satellite content selection uses labels of 1 to 255 ASCII letters, digits, underscores or hyphens",
+				"set spec.rhsm.satellite."+key+" on "+o.Identity()+" to the Satellite label, rather than its display name"))
+		}
+		other := "contentView"
+		if key == other {
+			other = "lifecycleEnvironment"
+		}
+		if satellite.Has(key) && !satellite.Has(other) {
+			issues = add(issues, issue("$.spec.rhsm.satellite."+other,
+				"an explicit Satellite content view requires its lifecycle environment, and vice versa",
+				"set both spec.rhsm.satellite.contentView and spec.rhsm.satellite.lifecycleEnvironment on "+o.Identity()+", or omit both to use the activation key's selection"))
+		}
+	}
+	return issues
 }

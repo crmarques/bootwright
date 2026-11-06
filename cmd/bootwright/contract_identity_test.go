@@ -131,7 +131,7 @@ func contractRecipes() map[string]digestRecipe {
 			partVersion(installation.FirewallEvidenceVersion), partPin(installation.FirewallServiceRoot),
 			partPin("bootwright-host-firewall context=context block=os-firewall-machine apply=operation"), partPin("bootwright-context-publisher"),
 			partPin("e04c153c9c84d6a73bfb3f05e09e0e7b4f4104332ee1d318cc4b3021570dc1a5")),
-		installation.Implementation: digestOf(partDomain("bootwright.managedos.install-anaconda-v1"), partImplementation(installation.Implementation), partRequest("os-install-anaconda-v25"),
+		installation.Implementation: digestOf(partDomain("bootwright.managedos.install-anaconda-v1"), partImplementation(installation.Implementation), partRequest("os-install-anaconda-v26"),
 			partVersion("kickstart-anaconda-v19"), partPin("os"), partPin("private"), partPin("public"), partPin(installation.MarkerPath), partPin(installation.HostKeyPath),
 			partPin(installation.NetworkDocumentPath), partPin(installation.NetworkMarkerPath), partPin(strconv.Itoa(300)), partPin("lorax,xorriso"), partPin("proved-installation-disk-boot,replay-safe-unread-registration")),
 		agentinstall.MediaImplementation: digestOf(partDomain("bootwright.containercluster.media-agent-v1"), partImplementation(agentinstall.MediaImplementation), partRequest("cluster-media-agent-v10"),

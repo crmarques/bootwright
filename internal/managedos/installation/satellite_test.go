@@ -216,3 +216,32 @@ func spacedLines(certificate []byte) []byte {
 	lines[1] += "  \t"
 	return []byte(strings.Join(lines, "\n"))
 }
+
+func TestSatelliteContentSelectionIsFrozenIntoTheRegistrationIdentity(t *testing.T) {
+	inherited := pinnedRequest(t, labCatalog(updatingProfile(), satelliteEntitlement()))
+	selected := pinnedRequest(t, labCatalog(updatingProfile(), selectedSatelliteEntitlement()))
+	if selected.Registration.Satellite.ContentView != "composite_rhel9_ceph" || selected.Registration.Satellite.LifecycleEnvironment != "Production" {
+		t.Fatalf("selection was not frozen: %+v", selected.Registration.Satellite)
+	}
+	a, _ := inherited.Canonical()
+	b, _ := selected.Canonical()
+	if string(a) == string(b) {
+		t.Fatal("a changed content selection retained the registration identity")
+	}
+}
+
+func TestSatelliteSelectionRefusalsNameTheSelectionAndNativeSupport(t *testing.T) {
+	request := pinnedRequest(t, labCatalog(updatingProfile(), selectedSatelliteEntitlement()))
+	refusals := registrationRefusals(testContext, request)
+	for _, reason := range []string{"registration-input", "registration-refused"} {
+		diagnostic := diagnostics.Of(refusals[reason])[0]
+		for _, field := range []string{"spec.rhsm.satellite.contentView", "spec.rhsm.satellite.lifecycleEnvironment"} {
+			if !strings.Contains(diagnostic.Remediation, field) {
+				t.Fatalf("%s does not name %s: %+v", reason, field, diagnostic)
+			}
+		}
+	}
+	if !strings.Contains(diagnostics.Of(refusals["registration-refused"])[0].Remediation, "environment_names") {
+		t.Fatal("the refusal does not name the required native registration option")
+	}
+}

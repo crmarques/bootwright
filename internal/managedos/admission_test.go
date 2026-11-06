@@ -643,3 +643,27 @@ func TestASatelliteDeclaresItsCABundleAndAnHTTPSContentRoot(t *testing.T) {
 		t.Fatalf("the redhatCeph Entitlement changed: %v", issues)
 	}
 }
+
+func TestSatelliteContentSelectionUsesPairedLabels(t *testing.T) {
+	for _, view := range []string{"rhel9", "composite_rhel9_ceph", strings.Repeat("a", 255)} {
+		satellite := m("hostname", "satellite.example.test", "trustBundleRef", "satellite-ca", "contentView", view, "lifecycleEnvironment", "Production")
+		entitlement := obj(api.Entitlement, "rhel", m("type", "redhatRhel", "rhsm", m("organizationRef", "org", "activationKeyRef", "key", "satellite", satellite)))
+		if issues := ValidateRHSM(NormalizeRHSM(entitlement), false); len(issues) != 0 {
+			t.Fatalf("valid selection refused: %v", issues)
+		}
+		for _, key := range []string{"contentView", "lifecycleEnvironment"} {
+			for _, bad := range []string{"", "name with spaces", "a/b", "a,b", "é", "a\nb", strings.Repeat("a", 256)} {
+				invalid := entitlement.WithSpec(entitlement.Spec().With("rhsm", entitlement.Spec().Get("rhsm").With("satellite", satellite.With(key, api.StringValue(bad)))))
+				issues := ValidateRHSM(NormalizeRHSM(invalid), false)
+				if len(issues) != 1 || issues[0].Field != "$.spec.rhsm.satellite."+key || issues[0].Remediation == "" {
+					t.Fatalf("invalid %s accepted: %v", key, issues)
+				}
+			}
+			partial := m("hostname", "satellite.example.test", "trustBundleRef", "satellite-ca", key, view)
+			invalid := entitlement.WithSpec(entitlement.Spec().With("rhsm", entitlement.Spec().Get("rhsm").With("satellite", partial)))
+			if issues := ValidateRHSM(NormalizeRHSM(invalid), false); len(issues) != 1 || issues[0].Remediation == "" {
+				t.Fatalf("unpaired selection accepted: %v", issues)
+			}
+		}
+	}
+}

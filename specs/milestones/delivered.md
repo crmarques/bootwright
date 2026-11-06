@@ -12239,3 +12239,21 @@ commands and outcomes. The independent safety review approved the final
 implementation and independently passed the focused worker and access suites.
 The [operator runbook](../../e2e/lab-3-nodes-ceph/runbook.md#machine-file-copy-acceptance-b1189)
 is unrun; no real-machine operation or push was performed.
+
+### X316 — Satellite content view selection
+
+Explicitly requested by the owner on 2026-11-06; advances [B877](m1.md#b877).
+The [RHSM fields](../api/secrets.md#rhsm) select an ordinary or composite
+content view and lifecycle environment during managed RHEL registration, as
+[registration](../managed-os.md#registration) specifies. The API, frozen
+request, worker, diagnostics, example and contract fixtures carry the selection.
+The installation request version and its embedded physical-erase contract move;
+older frozen requests remain refused.
+
+In-tree evidence: `TestSatelliteContentSelectionUsesPairedLabels`,
+`TestSatelliteContentSelectionIsFrozenIntoTheRegistrationIdentity`, the
+installation request goldens and the RHSM worker/module content-selection
+unit tests. The delivering commit records exact verification commands and
+results. No native Satellite registration was run; B877 retains its operator
+acceptance gate, including ordinary and composite view selection, activation
+key override, unavailable selection, replay and owned unregistration.

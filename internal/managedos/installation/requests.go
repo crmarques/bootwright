@@ -231,9 +231,11 @@ type Registration struct {
 }
 
 type Satellite struct {
-	ContentBaseURL string `json:"contentBaseURL"`
-	Hostname       string `json:"hostname"`
-	TrustBundleRef string `json:"trustBundleRef"`
+	ContentBaseURL       string `json:"contentBaseURL"`
+	ContentView          string `json:"contentView,omitempty"`
+	Hostname             string `json:"hostname"`
+	LifecycleEnvironment string `json:"lifecycleEnvironment,omitempty"`
+	TrustBundleRef       string `json:"trustBundleRef"`
 }
 
 type Update struct {

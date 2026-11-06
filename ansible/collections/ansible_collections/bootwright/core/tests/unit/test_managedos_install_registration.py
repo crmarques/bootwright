@@ -543,3 +543,14 @@ def test_a_satellite_registration_lends_its_bundle_and_gains_its_configuration_t
         assert render(arguments["satellite_hostname"], **variables) == "satellite.example.test"
         assert render(arguments["satellite_content_base_url"], **variables) == "https://capsule.example.test/pulp/content"
         assert render(arguments["satellite_ca_file"], **variables) == "/run/material/rhsm-satellite-ca"
+
+
+@pytest.mark.parametrize("updating, timeout", [(False, 750), (True, 870)])
+def test_explicit_satellite_selection_lends_labels_and_has_time_for_its_proof(updating, timeout):
+    arguments = module("register.yml")[REGISTRATION]
+    variables = satellite_scope(updating)
+    variables["bootwright_os_install_request"]["registration"]["satellite"].update(
+        contentView="composite_rhel9_ceph", lifecycleEnvironment="Production")
+    assert render(arguments["satellite_content_view"], **variables) == "composite_rhel9_ceph"
+    assert render(arguments["satellite_lifecycle_environment"], **variables) == "Production"
+    assert int(render(arguments["timeout"], **variables)) == timeout

@@ -58,9 +58,11 @@ func registrationFor(catalog api.Catalog, profile api.Object) (*Registration, er
 	}
 	if satellite := rhsm.Get("satellite"); satellite.Present() {
 		registration.Satellite = &Satellite{
-			ContentBaseURL: satellite.Get("contentBaseURL").Text(),
-			Hostname:       satellite.Get("hostname").Text(),
-			TrustBundleRef: satellite.Get("trustBundleRef").Text(),
+			ContentBaseURL:       satellite.Get("contentBaseURL").Text(),
+			ContentView:          satellite.Get("contentView").Text(),
+			LifecycleEnvironment: satellite.Get("lifecycleEnvironment").Text(),
+			Hostname:             satellite.Get("hostname").Text(),
+			TrustBundleRef:       satellite.Get("trustBundleRef").Text(),
 		}
 		if registration.Satellite.Hostname == "" || registration.Satellite.ContentBaseURL == "" || registration.Satellite.TrustBundleRef == "" {
 			return nil, refusal("api.required", "a registration with a Satellite requires its hostname, content root and CA bundle",
@@ -215,10 +217,15 @@ func registrationRefusals(contextName string, request Request) map[string]error 
 	again := "then run bootwright apply --context " + contextName + " again"
 	refused := machineRefusal(request)
 	input := "the registration worker on " + machine + " refused the organization or activation key of " + entitlement + " as not one line of printable ASCII without whitespace"
+	selection := request.Registration.Satellite != nil && request.Registration.Satellite.ContentView != ""
 	inputRemedy := "replace " + organization + " or " + key + " with one line of 1 to 255 printable ASCII characters without whitespace, "
 	if satellite := request.Registration.Satellite; satellite != nil {
 		input += ", or the Satellite CA bundle or content root of " + entitlement
 		inputRemedy += "or Secret/" + satellite.TrustBundleRef + " with the PEM certificates of the CA that signs the certificate of " + satellite.Hostname + ", "
+	}
+	if selection {
+		input += ", or its content view or lifecycle environment labels"
+		inputRemedy += "or set spec.rhsm.satellite.contentView and spec.rhsm.satellite.lifecycleEnvironment to valid Satellite labels, "
 	}
 	refusals := map[string]error{
 		"registration-input": refused(input, inputRemedy+again),
@@ -233,6 +240,11 @@ func registrationRefusals(contextName string, request Request) map[string]error 
 		"registration-repositories": refused("the subscription service did not accept "+subscriptionReposField+" of "+profile+" on "+machine,
 			"correct the repository IDs in "+subscriptionReposField+" of "+profile+", then take this context back with bootwright destroy --context "+contextName+
 				" and run bootwright apply --context "+contextName+"; a repository edit is another installation"),
+	}
+	if selection {
+		refusals["registration-refused"] = refused("the Satellite did not accept or prove the registration of "+machine+" with the organization, activation key and content selection of "+entitlement,
+			"check the values of "+organization+" and "+key+", the published view and environment labels in spec.rhsm.satellite.contentView and spec.rhsm.satellite.lifecycleEnvironment of "+entitlement+
+				", and that the Machine's RHSM registration service supports environment_names, "+again)
 	}
 	if satellite := request.Registration.Satellite; satellite != nil {
 		bundle := "Secret/" + satellite.TrustBundleRef

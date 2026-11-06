@@ -9,7 +9,7 @@ func secretSchema() *Shape {
 }
 
 func entitlementSchema() *Shape {
-	rhsm := record(defaulted("management", enumeration("managed", "external"), StringValue("managed")), field("organizationRef", secret("opaque")), field("activationKeyRef", secret("opaque", "token")), field("connectToInsights", boolean()), field("satellite", record(required("hostname", lexical("host")), field("trustBundleRef", secret("caBundle")), field("contentBaseURL", url()))))
+	rhsm := record(defaulted("management", enumeration("managed", "external"), StringValue("managed")), field("organizationRef", secret("opaque")), field("activationKeyRef", secret("opaque", "token")), field("connectToInsights", boolean()), field("satellite", record(required("hostname", lexical("host")), field("trustBundleRef", secret("caBundle")), field("contentBaseURL", url()), field("contentView", nonempty()), field("lifecycleEnvironment", nonempty()))))
 	rhsm.Suppress = []Suppression{{Field: "management", Value: StringValue("external"), Fields: []string{"organizationRef", "activationKeyRef", "connectToInsights", "satellite"}}}
 	entitlement := record(required("type", enumeration("redhatRhel", "redhatCeph", "ibmStorageCeph")), field("rhsm", rhsm), field("registry", record(field("url", lexical("registry")), field("credentialsRef", secret("usernamePassword")), field("trustBundleRef", secret("caBundle")))), field("license", record(defaulted("accept", boolean(), BoolValue(false)))))
 	entitlement.Permits = []Permission{{Field: "type", Value: "redhatRhel", Arms: []string{"rhsm"}}, {Field: "type", Value: "redhatCeph", Arms: []string{"rhsm", "registry"}}, {Field: "type", Value: "ibmStorageCeph", Arms: []string{"registry", "license"}}}

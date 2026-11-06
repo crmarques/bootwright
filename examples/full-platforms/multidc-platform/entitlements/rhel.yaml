@@ -16,3 +16,5 @@ spec:
       hostname: subscription.example.com
       trustBundleRef: satellite-ca-bundle
       contentBaseURL: https://subscription.example.com/pulp/content
+      contentView: composite_rhel9_ceph
+      lifecycleEnvironment: Production

@@ -1,6 +1,6 @@
-implementation: physical-erase-v10
-content-digest: ae3ab6afea6505edf328d2267ab48e1386e5dcf4de10bcffdd9a18f68d0a0aa0
-request-version: physical-erase-v10
+implementation: physical-erase-v11
+content-digest: fc13841527a556079fa65c842324601c192bf4f004bf1349456f660350efb00b
+request-version: physical-erase-v11
 automation-formats: none
 mark-formats: none
 proof-ids: bootwright.erase=1
@@ -87,7 +87,9 @@ request-schema:
   install.registration.repositories.enable []string
   install.registration.satellite *struct installation.Satellite omitempty
   install.registration.satellite.contentBaseURL string
+  install.registration.satellite.contentView string omitempty
   install.registration.satellite.hostname string
+  install.registration.satellite.lifecycleEnvironment string omitempty
   install.registration.satellite.trustBundleRef string
   install.target struct installation.Target
   install.target.channel string
