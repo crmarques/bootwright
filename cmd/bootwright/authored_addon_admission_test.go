@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
 )
 
 const authoredAddon = `apiVersion: bootwright.io/v1alpha1
@@ -125,7 +127,7 @@ func TestAuthoredExecutableAddonSelectionAdmission(t *testing.T) {
 	t.Fatal(diagnostics.Of(err))
 }
 
-func TestAnAuthoredKubeVirtProviderGatesTheHostClusterLikeAPackage(t *testing.T) {
+func TestAnAuthoredKubeVirtProviderOrdersTheHostClusterButDoesNotOwnItsAccess(t *testing.T) {
 	document := strings.Replace(authoredAddon, "spec:\n  olm:", "spec:\n  provides: [kubevirt]\n  olm:", 1)
 	document = strings.Replace(document, "    catalogSource:", "    operatorGroup: {}\n    catalogSource:", 1)
 	sources := authoredAddonSources(t, document)
@@ -135,7 +137,48 @@ func TestAnAuthoredKubeVirtProviderGatesTheHostClusterLikeAPackage(t *testing.T)
 		t.Fatal(diagnostics.Of(err))
 	}
 	requires, provided := kubevirtHostRequirements(addonpackages.Builtin())(state.Effective(), "sno")
-	if !provided || len(requires) != 1 || requires[0] != (reconciliation.ObjectRef{Kind: instance.Kind, Object: "sno.widgets"}) {
+	if provided || len(requires) != 1 || requires[0] != (reconciliation.ObjectRef{Kind: instance.Kind, Object: "sno.widgets"}) {
 		t.Fatalf("%v %v", requires, provided)
+	}
+	if authored := kubevirtAuthoredProviders(addonpackages.Builtin())(state.Effective(), "sno"); !slices.Equal(authored, []string{"widgets"}) {
+		t.Fatalf("authored providers %v", authored)
+	}
+}
+
+func TestAnAuthoredKubeVirtAddOnIsNotAHostedProvidersAccessOwner(t *testing.T) {
+	registry := addonpackages.Builtin()
+	hostCapability := kubevirt.NewHost(nil, kubevirtHostRequirements(registry)).WithAuthoredProviders(kubevirtAuthoredProviders(registry))
+	kubevirtRefusals := func(sources desiredstate.Sources) []string {
+		state, _, err := wireCompiler().Compile(context.Background(), sources)
+		if err != nil {
+			t.Fatal(diagnostics.Of(err))
+		}
+		var reasons []string
+		for _, refused := range hostCapability.Unsupported(state) {
+			if strings.Contains(refused.Reason, "provides kubevirt") {
+				reasons = append(reasons, refused.Reason)
+			}
+		}
+		return reasons
+	}
+	if reasons := kubevirtRefusals(exampleDirectory(t, "lab-kubevirt-nested")); len(reasons) != 0 {
+		t.Fatalf("the built-in package was refused: %v", reasons)
+	}
+	sources := exampleDirectory(t, "lab-kubevirt-nested")
+	for index, file := range sources.Files {
+		if filepath.Base(file.Path()) == "binding.yaml" && filepath.Base(filepath.Dir(file.Path())) == "add-ons" {
+			bound := strings.Replace(string(file.Bytes()), "\n    kubevirt:\n      subscription:\n        channel: example-channel\n        startingCSV: kubevirt-hyperconverged-operator.v0.0.0\n", "\n  addonRefs: [widgets]\n", 1)
+			if bound == string(file.Bytes()) {
+				t.Fatal("the binding edit did not apply")
+			}
+			sources.Files[index] = desiredstate.NewSourceFile(file.Path(), []byte(bound))
+		}
+	}
+	document := strings.Replace(authoredAddon, "spec:\n  olm:", "spec:\n  provides: [kubevirt]\n  olm:", 1)
+	document = strings.Replace(document, "    catalogSource:", "    operatorGroup: {}\n    catalogSource:", 1)
+	sources.Files = append(sources.Files, desiredstate.NewSourceFile(filepath.Join(sources.Roots[0], "widgets.yaml"), []byte(document)))
+	reasons := kubevirtRefusals(sources)
+	if len(reasons) != 1 || !strings.Contains(reasons[0], "ClusterAddon/widgets that provides kubevirt does not") {
+		t.Fatalf("an authored provider was not refused by name: %v", reasons)
 	}
 }

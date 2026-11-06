@@ -183,7 +183,11 @@ verified, never changed ([product scope](../project.md#product-scope)).
 A libvirt attachment may declare integer `mtu` (576 to 65,536), the largest frame its network carries:
 a managed network is defined with it, and an external bridge is proved to carry
 it. A guest interface whose declared `mtu` exceeds its attachment's, or 1,500
-when the attachment declares none, refuses. A managed network's one prefix may
+when the attachment declares none, refuses. A KubeVirt Machine whose provider
+names `hostClusterRef` is bound the same way by the `mtu` of the host
+`secondaryNetworks[]` entry its interface's attachment names, 1,500 when that
+entry declares none; a provider on an external host has no network in the graph
+and declares no bound. A managed network's one prefix may
 be IPv4 or IPv6.
 
 An `external` attachment claims only the shared key `bridge-use:<name>`, never

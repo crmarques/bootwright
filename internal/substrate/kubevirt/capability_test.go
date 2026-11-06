@@ -342,7 +342,7 @@ func TestTheProofRefusesWhatItCouldNotProve(t *testing.T) {
 	}
 	run := &runner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encoded(t, HostEvidence{Absent: true, Failures: []string{}, Networks: []NetworkEvidence{}, Postcondition: true, Request: block.RequestDigest})}}
 	if result, err := NewHost(run, nil).Destroy(context.Background(), lifecycle.Execution{Block: block}); err != nil || result.Outcome != reconciliation.OutcomeUnchanged ||
-		len(run.requests[0].Materials) != 1 {
+		len(run.requests[0].Materials) != 0 {
 		t.Fatalf("destroy = %+v, %v", result, err)
 	}
 }

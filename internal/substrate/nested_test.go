@@ -119,3 +119,32 @@ func TestHostedAccessorsReadTheProvidersOwnShape(t *testing.T) {
 		}
 	}
 }
+
+func TestAHostedAttachmentRefusesAHostNetworkThatManagesAddresses(t *testing.T) {
+	managed := m("name", "storage", "ipam", m("mode", "Enabled"), "namespaceSelector", m("matchLabels", m("net", "storage")))
+	for name, test := range map[string]struct {
+		host   api.Object
+		refuse bool
+	}{
+		"ipam enabled":  {hostOf(selecting("machine", "tier", "hub"), managed), true},
+		"ipam disabled": {hostOf(selecting("machine", "tier", "hub"), managed.With("ipam", m("mode", "Disabled"))), false},
+		"ipam omitted":  {hostOf(selecting("machine", "tier", "hub"), selecting("storage", "net", "storage")), false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			provider := hostedOn("a", "guests", "machine", "storage")
+			catalog := api.NewCatalog([]api.Object{test.host, provider})
+			issues := Validate(provider, catalog)
+			if !test.refuse {
+				if len(issues) != 0 {
+					t.Fatalf("issues %+v", issues)
+				}
+				return
+			}
+			found := issuesAt(issues, "$.spec.networkAttachments[1].kubevirt.networkRef")
+			if len(issues) != 1 || len(found) != 1 || !strings.Contains(found[0].Message, "secondary network storage of OpenShiftCluster/host") ||
+				!strings.Contains(found[0].Remediation, "set ipam.mode to Disabled") {
+				t.Fatalf("issues %+v", issues)
+			}
+		})
+	}
+}

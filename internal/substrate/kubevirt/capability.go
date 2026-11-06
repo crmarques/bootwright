@@ -22,6 +22,7 @@ type HostCapability struct {
 	runner       Runner
 	lender       HostAccess
 	requirements HostRequirements
+	authored     AuthoredProviders
 }
 
 // MachineCapability realizes one VirtualMachine and its root disk on the
@@ -32,6 +33,13 @@ type MachineCapability struct {
 }
 
 type HostRequirements func(catalog api.Catalog, cluster string) ([]reconciliation.ObjectRef, bool)
+
+type AuthoredProviders func(catalog api.Catalog, cluster string) []string
+
+func (c HostCapability) WithAuthoredProviders(authored AuthoredProviders) HostCapability {
+	c.authored = authored
+	return c
+}
 
 func NewHost(runner Runner, requirements HostRequirements) HostCapability {
 	return HostCapability{runner: runner, lender: NewLender(runner), requirements: requirements}
@@ -173,8 +181,8 @@ func (c HostCapability) Apply(ctx context.Context, execution lifecycle.Execution
 	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
 }
 
-// Destroy publishes the proof released: it reads nothing on the host, because
-// the proof created nothing there to take back.
+// Destroy publishes the proof released: it reads nothing on the host and is
+// lent no access, because the proof created nothing there to take back.
 func (c HostCapability) Destroy(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
 	request, err := c.prepare(ctx, execution)
 	if err != nil {
@@ -262,12 +270,25 @@ func (c HostCapability) Unsupported(state *compilation.State) []lifecycle.Refusa
 			continue
 		}
 		if _, provided := c.hostFacts(catalog, cluster); !provided {
+			if authored := c.authoredProviders(catalog, cluster); len(authored) != 0 {
+				found = append(found, lifecycle.RefusalOf(provider,
+					"a KubeVirt provider hosted by OpenShiftCluster/"+cluster+" needs the built-in kubevirt package on that cluster, which alone renders the provider's namespace, service account and roles, and ClusterAddon/"+authored[0]+" that provides kubevirt does not",
+					"bind the kubevirt package to OpenShiftCluster/"+cluster+", or name the host through spec.kubevirt.kubeconfigRef on "+provider.Identity()))
+				continue
+			}
 			found = append(found, lifecycle.RefusalOf(provider,
 				"a KubeVirt provider hosted by OpenShiftCluster/"+cluster+" needs an add-on instance on that cluster that provides kubevirt, which owns the provider's namespace and access",
 				"bind the kubevirt package to OpenShiftCluster/"+cluster+", or name the host through spec.kubevirt.kubeconfigRef on "+provider.Identity()))
 		}
 	}
 	return lifecycle.SortRefusals(found)
+}
+
+func (c HostCapability) authoredProviders(catalog api.Catalog, cluster string) []string {
+	if c.authored == nil {
+		return nil
+	}
+	return c.authored(catalog, cluster)
 }
 
 func (c HostCapability) hostFacts(catalog api.Catalog, cluster string) ([]reconciliation.ObjectRef, bool) {
@@ -292,11 +313,15 @@ func (c HostCapability) prove(ctx context.Context, execution lifecycle.Execution
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	materials, release, err := lentAccess(ctx, c.lender, &execution, request.HostCluster, request.KubeconfigRef, request.Namespace, request.Placement, hostDeadline)
-	if err != nil {
-		return lifecycle.RunResult{}, err
+	var materials []lifecycle.MaterialFile
+	if operation != "destroy" {
+		lent, release, err := lentAccess(ctx, c.lender, &execution, request.HostCluster, request.KubeconfigRef, request.Namespace, request.Placement, hostDeadline)
+		if err != nil {
+			return lifecycle.RunResult{}, err
+		}
+		defer release()
+		materials = lent
 	}
-	defer release()
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: HostImplementation, Operation: operation, Variable: hostVariable,
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Deadline: hostDeadline,
@@ -657,7 +682,11 @@ func (c MachineCapability) Quiescent(ctx context.Context, probe lifecycle.Probe)
 	evidence, err := decodeMachineEvidence(result.Evidence, execution.Block.RequestDigest)
 	switch {
 	case err != nil || !evidence.Answered:
-		return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: "the host cluster did not answer for its VirtualMachineInstance", Stop: stop}, nil
+		reason := "the host cluster did not answer for its VirtualMachineInstance"
+		if request.HostCluster != "" {
+			reason = "its host cluster " + request.HostCluster + " did not answer for its VirtualMachineInstance; start the host's Machines so it answers, then repeat the destroy"
+		}
+		return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: reason, Stop: stop}, nil
 	case instanceRunning(evidence.Instance):
 		return lifecycle.Quiescence{State: lifecycle.Live, Reason: "its VirtualMachineInstance is " + evidence.Instance, Stop: stop}, nil
 	case evidence.Instance != "":
@@ -673,6 +702,11 @@ func instanceRunning(phase string) bool {
 // ProbesQuiescence says a VirtualMachine's removal is gated on its instance
 // being absent or final, which only the host can show.
 func (MachineCapability) ProbesQuiescence() bool { return true }
+
+func (MachineCapability) RequiresOnlineRemoval(block reconciliation.Block) bool {
+	request, err := DecodeMachineRequest(block.Request)
+	return err == nil && request.HostCluster != ""
+}
 
 func (MachineCapability) RemovesHost(reconciliation.Block) bool { return true }
 
@@ -747,6 +781,7 @@ func ClaimKey(server, namespace, name string) (string, bool) {
 
 var (
 	_ lifecycle.ProvingClaimer        = MachineCapability{}
+	_ lifecycle.OnlineRemoval         = MachineCapability{}
 	_ lifecycle.ProducedInputConsumer = MachineCapability{}
 	_ lifecycle.ProducedInputConsumer = HostCapability{}
 )

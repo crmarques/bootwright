@@ -119,6 +119,7 @@ func HostRequests(catalog api.Catalog, controllerMachine, contextName string) ([
 		return nil, err
 	}
 	var requests []HostRequest
+	owners := map[string]string{}
 	for _, provider := range providers(catalog) {
 		arm := provider.Spec().Get(substrate.ArmKubeVirt)
 		request := HostRequest{
@@ -147,6 +148,20 @@ func HostRequests(catalog api.Catalog, controllerMachine, contextName string) ([
 				return nil, err
 			}
 			for _, iface := range target.Interfaces {
+				owner := machine.Identity() + " interface " + iface.Name
+				if held, found := owners[iface.MACAddress]; found {
+					first, second := held, owner
+					if first > second {
+						first, second = second, first
+					}
+					remedy := "rename an interface of one of the two Machines, or rename that Machine"
+					if strings.HasPrefix(held, machine.Identity()+" interface ") {
+						remedy = "rename one of the two interfaces of " + machine.Identity()
+					}
+					return nil, refusal("lifecycle.unsupported", "a KubeVirt interface's MAC address is derived from the context, Machine and interface names, and "+first+" and "+second+" derive the same address, "+iface.MACAddress,
+						remedy)
+				}
+				owners[iface.MACAddress] = owner
 				request.MACAddresses = append(request.MACAddresses, iface.MACAddress)
 			}
 		}

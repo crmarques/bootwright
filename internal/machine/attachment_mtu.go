@@ -7,12 +7,37 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
+type mtuBound struct {
+	maximum      int64
+	note, remedy string
+}
+
 func validateLibvirtAttachmentMTUs(o, provider api.Object, native api.Value) []api.Issue {
+	return validateAttachmentMTUs(o, provider, native, func(attachment api.Value) mtuBound {
+		mtu, ok := substrate.AttachmentMTU(attachment)
+		if !ok {
+			mtu = 1500
+		}
+		return mtuBound{mtu, "", "declare an attachment mtu that carries it on " + provider.Identity()}
+	})
+}
+
+func validateKubeVirtAttachmentMTUs(o, provider, host api.Object, native api.Value) []api.Issue {
+	return validateAttachmentMTUs(o, provider, native, func(attachment api.Value) mtuBound {
+		name, mtu, ok := substrate.HostNetworkMTU(host, attachment)
+		if !ok {
+			return mtuBound{65536, "", ""}
+		}
+		return mtuBound{mtu, ", the MTU of secondary network " + name + " of " + host.Identity(), "declare an mtu that carries it on that secondary network"}
+	})
+}
+
+func validateAttachmentMTUs(o, provider api.Object, native api.Value, bound func(attachment api.Value) mtuBound) []api.Issue {
 	network := o.Spec().Get("network")
-	var limit func(string, map[string]bool) int64
-	limit = func(name string, visiting map[string]bool) int64 {
+	var limit func(string, map[string]bool) mtuBound
+	limit = func(name string, visiting map[string]bool) mtuBound {
 		if visiting[name] {
-			return 1500
+			return mtuBound{1500, "", ""}
 		}
 		visiting[name] = true
 		defer delete(visiting, name)
@@ -21,11 +46,13 @@ func validateLibvirtAttachmentMTUs(o, provider api.Object, native api.Value) []a
 			return limit(parent, visiting)
 		}
 		if ports := iface.Get("link-aggregation", "port").Strings(); len(ports) > 0 {
-			mtu := int64(65536)
+			narrowest := mtuBound{65536, "", ""}
 			for _, port := range ports {
-				mtu = min(mtu, limit(port, visiting))
+				if held := limit(port, visiting); held.maximum < narrowest.maximum {
+					narrowest = held
+				}
 			}
-			return mtu
+			return narrowest
 		}
 		reference := network.Get("attachmentRef").Text()
 		if attachments := substrate.MachineInterfaceAttachments(o); attachments.Present() {
@@ -34,20 +61,21 @@ func validateLibvirtAttachmentMTUs(o, provider api.Object, native api.Value) []a
 		}
 		attachment, found := namedValue(provider.Spec().Get("networkAttachments"), reference)
 		if reference != "" && !found {
-			return 65536
+			return mtuBound{65536, "", ""}
 		}
-		if mtu, ok := substrate.AttachmentMTU(attachment); ok {
-			return mtu
-		}
-		return 1500
+		return bound(attachment)
 	}
 	var issues []api.Issue
 	for _, iface := range native.Get("interfaces").Items() {
 		if mtu, ok := iface.Get("mtu").Int64(); ok && !unavailableInterface(iface) {
-			maximum := limit(iface.Get("name").Text(), map[string]bool{})
-			if mtu > maximum {
-				issues = append(issues, invariant("$.spec.network", fmt.Sprintf("interface %s declares MTU %d above its attachment MTU %d", iface.Get("name").Text(), mtu, maximum),
-					"lower the interface mtu in the network configuration or declare an attachment mtu that carries it on "+provider.Identity()))
+			held := limit(iface.Get("name").Text(), map[string]bool{})
+			if mtu > held.maximum {
+				remedy := held.remedy
+				if remedy == "" {
+					remedy = "declare an attachment mtu that carries it on " + provider.Identity()
+				}
+				issues = append(issues, invariant("$.spec.network", fmt.Sprintf("interface %s declares MTU %d above its attachment MTU %d%s", iface.Get("name").Text(), mtu, held.maximum, held.note),
+					"lower the interface mtu in the network configuration or "+remedy))
 			}
 		}
 	}

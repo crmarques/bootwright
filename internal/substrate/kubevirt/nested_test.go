@@ -130,6 +130,29 @@ func TestAHostedProviderRefusesAHostWithoutKubeVirtAndANetworkItDoesNotDeclare(t
 	}
 }
 
+func TestAHostedProviderRefusesAHostWhoseKubeVirtAddOnIsAuthored(t *testing.T) {
+	state := compilation.NewState(nestedCatalog(), nestedCatalog(), nil)
+	authored := func(_ api.Catalog, cluster string) []string {
+		if cluster != "host" {
+			t.Fatalf("asked about %q", cluster)
+		}
+		return []string{"widgets"}
+	}
+	unserved := func(api.Catalog, string) ([]reconciliation.ObjectRef, bool) { return nil, false }
+	refused := NewHost(nil, unserved).WithAuthoredProviders(authored).Unsupported(state)
+	if len(refused) != 1 || refused[0].Name != "lab-kubevirt" || !strings.Contains(refused[0].Reason, "ClusterAddon/widgets that provides kubevirt does not") ||
+		!strings.Contains(refused[0].Reason, "built-in kubevirt package") || !strings.Contains(refused[0].Remediation, "bind the kubevirt package to OpenShiftCluster/host") {
+		t.Fatalf("an authored kubevirt add-on: %+v", refused)
+	}
+	if refused := NewHost(nil, hosting).WithAuthoredProviders(authored).Unsupported(state); len(refused) != 0 {
+		t.Fatalf("a built-in kubevirt package beside an authored one was refused: %+v", refused)
+	}
+	external := labCatalog()
+	if refused := NewHost(nil, unserved).WithAuthoredProviders(authored).Unsupported(compilation.NewState(external, external, nil)); len(refused) != 0 {
+		t.Fatalf("an external host was refused: %+v", refused)
+	}
+}
+
 func TestTheNodesOfOneRoleShareASpreadAndOtherRolesDoNot(t *testing.T) {
 	catalog := api.NewCatalog(append(nestedCatalog().Objects(), node("master-1"), node("master-2"), childCluster("controlPlane", "controlPlane", "worker")))
 	requests, err := MachineRequests(catalog, "controller", testContext)
@@ -238,5 +261,36 @@ func TestExpiryCoversTheRunAndStaysWithinTheAPIServersBounds(t *testing.T) {
 		if got := expiresIn(deadline); got != want {
 			t.Fatalf("expiresIn(%s) = %d, want %d", deadline, got, want)
 		}
+	}
+}
+
+func TestTheProofsRemovalReadsNothingAndMintsNoToken(t *testing.T) {
+	hosted, _ := HostRequests(nestedCatalog(), "controller", testContext)
+	for name, block := range map[string]reconciliation.Block{"hosted": nestedBlock(t, hosted[0]), "external": hostBlock(t)} {
+		var lent []secrets.Material
+		released := encoded(t, HostEvidence{Absent: true, Failures: []string{}, Networks: []NetworkEvidence{}, Postcondition: true, Request: block.RequestDigest})
+		run := &runner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: released}}
+		execution := lendExecution(&lent)
+		execution.Block = block
+		result, err := NewHost(run, hosting).Destroy(context.Background(), execution)
+		if err != nil || result.Outcome != reconciliation.OutcomeUnchanged || string(result.Evidence) != string(released) {
+			t.Fatalf("%s: destroy = %+v, %v", name, result, err)
+		}
+		if len(lent) != 0 || len(run.requests) != 1 || run.requests[0].Operation != "destroy" || len(run.requests[0].Materials) != 0 || len(run.requests[0].Material) != 0 {
+			t.Fatalf("%s: the removal borrowed %d kubeconfigs and ran %+v", name, len(lent), run.requests)
+		}
+	}
+}
+
+func TestOnlyAHostedVirtualMachineIsRemovedWhileItsHostAnswers(t *testing.T) {
+	hosted, err := MachineRequests(nestedCatalog(), "controller", testContext)
+	if err != nil || len(hosted) != 1 {
+		t.Fatal(hosted, err)
+	}
+	if !NewMachine(nil).RequiresOnlineRemoval(nestedBlock(t, hosted[0])) {
+		t.Fatal("a VirtualMachine on a host this context builds is not an online removal")
+	}
+	if NewMachine(nil).RequiresOnlineRemoval(machineBlock(t)) {
+		t.Fatal("a VirtualMachine on an external host defers its host's Machines")
 	}
 }

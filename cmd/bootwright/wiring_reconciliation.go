@@ -213,7 +213,7 @@ func kubevirtHostRequirements(registry addons.Registry) kubevirt.HostRequirement
 			if member.Instance.Cluster != cluster {
 				continue
 			}
-			provided = provided || slices.Contains(member.Package.Provides, "kubevirt")
+			provided = provided || (slices.Contains(member.Package.Provides, "kubevirt") && member.Package.Descriptor == "")
 			if !member.Package.Last {
 				requires = append(requires, reconciliation.ObjectRef{Kind: instance.Kind, Object: cluster + "." + member.Package.Name})
 			}
@@ -222,6 +222,20 @@ func kubevirtHostRequirements(registry addons.Registry) kubevirt.HostRequirement
 			requires = append(requires, reconciliation.ObjectRef{Kind: networking.Kind, Object: cluster})
 		}
 		return requires, provided
+	}
+}
+
+func kubevirtAuthoredProviders(registry addons.Registry) kubevirt.AuthoredProviders {
+	return func(catalog api.Catalog, cluster string) []string {
+		selected, _ := addons.Instances(catalog, registry)
+		var authored []string
+		for _, member := range selected {
+			if member.Instance.Cluster == cluster && member.Package.Descriptor != "" && slices.Contains(member.Package.Provides, "kubevirt") {
+				authored = append(authored, member.Package.Name)
+			}
+		}
+		slices.Sort(authored)
+		return authored
 	}
 }
 
@@ -253,7 +267,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		capability: kubevirt.NewMachine(runner),
 	}, {
 		kind: kubevirt.HostKind, implementation: kubevirt.HostImplementation, family: "substrate-host",
-		capability: kubevirt.NewHost(runner, kubevirtHostRequirements(packages.Builtin())),
+		capability: kubevirt.NewHost(runner, kubevirtHostRequirements(packages.Builtin())).WithAuthoredProviders(kubevirtAuthoredProviders(packages.Builtin())),
 	}, {
 		kind: installation.TreeKind, implementation: installation.TreeImplementation, family: "os-package-tree",
 		capability: installation.NewTree(runner).WithMedia(records),

@@ -132,7 +132,11 @@ func (h *kubevirtHost) Run(_ context.Context, run lifecycle.RunRequest) (lifecyc
 	if run.Operation == "lend" {
 		return h.lend(run)
 	}
-	if h.nested && run.Implementation != agentinstall.MediaImplementation {
+	if h.nested && run.Implementation == kubevirt.HostImplementation && run.Operation == "destroy" {
+		if len(run.Materials) != 0 || len(run.Material) != 0 {
+			h.lendRefused = append(h.lendRefused, "the proof's removal was lent access")
+		}
+	} else if h.nested && run.Implementation != agentinstall.MediaImplementation {
 		if err := h.mintedFor(run); err != nil {
 			h.lendRefused = append(h.lendRefused, err.Error())
 			return lifecycle.RunResult{}, err

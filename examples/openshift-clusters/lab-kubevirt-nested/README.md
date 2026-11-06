@@ -26,9 +26,11 @@ no accepted run.
 - The storage class `nested-guest-storage`, whose StorageProfile offers
   `ReadWriteMany`, is an operator prerequisite on the host: no package of this
   profile provides one.
-- Stop the child Machines `child-01`, `child-02` and `child-03` before
-  destroy. Their power operations use a token minted from the host's custodied
-  access; destroy then removes the child before the host.
+- Stop the child Machines `child-01`, `child-02` and `child-03`, and leave
+  the host running, before destroy. Their power operations use a token minted
+  from the host's custodied access. Destroy removes the child through the
+  running host, then pauses naming `host-01` to `host-03` under `Stop after
+  online cleanup`; stop them and repeat destroy to remove the host.
 - Replace `example-channel` and the `*.v0.0.0` CSVs in `add-ons/binding.yaml`
   with what the selected release's catalog serves; passing validation does not
   prove those versions exist. All names and addresses are fixtures.

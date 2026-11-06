@@ -2374,6 +2374,21 @@ Machines, repeating destroy continues the same removal. It never repeats an
 online effect already durably completed. Unknown or failed online cleanup
 cannot admit Machine or substrate deletion.
 
+A KubeVirt Machine whose provider names `hostClusterRef` is such an online
+effect ([B1160](milestones/m3.md#b1160)): its VirtualMachine is reached only
+through the API of a host cluster the same removal takes down, so it is
+removed while that host still answers, and the host's own Machines, whose
+inverse dependency closure contains it, are listed under `Stop after online
+cleanup`. Its own stop proof is not deferred: the removal proves its
+VirtualMachineInstance absent or final through the host's API before
+registration, or after the pre-stop inverses when a pre-stop block precedes
+it, and its inverse revalidates the instance immediately before deleting the
+VirtualMachine, reading an instance already absent as absent. Its provider
+proof's removal reads nothing and lends no access, so it mints no token and
+needs no running host. A host on Machines that probe no quiescence, such as
+bare metal, defers no Machine, and a provider naming an external host through
+`kubeconfigRef` is no online effect.
+
 A `PreStopRemoval` capability opts a block into the pre-stop phase of a
 removal. It does so only for an inverse that touches its own Machine's guest
 and its own published content and that no other block's inverse or retirement

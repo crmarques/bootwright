@@ -106,6 +106,7 @@ Its reason and remedy are the diagnostic's message and remediation, in which
 | --- | --- | --- | --- |
 | A provider on an unrealized substrate | an `InfraProvider` whose arm is `vsphere` | `this executable realizes no provider on the substrate it declares` | `remove <provider> and the Machines it hosts from the selected Environment, or declare them on a baremetal, kubevirt or libvirt provider` |
 | A KubeVirt provider on a host without OpenShift Virtualization | a KubeVirt provider's `spec.kubevirt.hostClusterRef` naming a cluster on which no add-on instance provides `kubevirt` | `a KubeVirt provider hosted by <cluster> needs an add-on instance on that cluster that provides kubevirt, which owns the provider's namespace and access` | `bind the kubevirt package to <cluster>, or name the host through spec.kubevirt.kubeconfigRef on <provider>` |
+| A KubeVirt provider on a host whose kubevirt add-on is authored | a KubeVirt provider's `spec.kubevirt.hostClusterRef` naming a cluster on which only an authored `ClusterAddon` that declares `provides: [kubevirt]` provides `kubevirt` | `a KubeVirt provider hosted by <cluster> needs the built-in kubevirt package on that cluster, which alone renders the provider's namespace, service account and roles, and <addon> that provides kubevirt does not` | `bind the kubevirt package to <cluster>, or name the host through spec.kubevirt.kubeconfigRef on <provider>` |
 | A Machine on an unrealized substrate | a Machine with `os.provided: false` whose `spec.substrate.providerRef` names such a provider | `its provider <provider> is on a substrate this executable does not realize` | `host <machine> on a baremetal, kubevirt or libvirt provider, declare its operating system provided, or remove it from the selected Environment` |
 | A Bootwright-installed Machine on KubeVirt | a Machine on a KubeVirt provider that names `spec.os.installProfileRef` | `a KubeVirt Machine is realized for an installer that supplies its operating system, and this one names an install profile` | `remove spec.os.installProfileRef from <machine>, or host it on a baremetal or libvirt provider` |
 | A KubeVirt profile without a size | a non-provided Machine on a KubeVirt provider whose profile's `cpu`, `memoryMiB` or `diskGiB` is `0` | `a KubeVirt machine is created with the CPU count, memory and root disk its profile declares, and its profile <profile> declares one as zero` | `set cpu, memoryMiB and diskGiB above zero on profile <profile> of <provider>` |
@@ -945,16 +946,34 @@ namespace, ServiceAccount and access are then the host's
 Namespace per hosted provider namespace, labelled with the union of the
 `namespaceSelector.matchLabels` of the host secondary networks the providers'
 attachments name; admission refuses two such networks that give one key two
-values, naming both, and more than 16 hosted namespaces on one host, and
+values, naming both, more than 16 hosted namespaces on one host, and an
+attachment that names a host network with `ipam.mode: Enabled`, because OVN
+would enforce IP port security on the addresses it assigns while the install
+address is static (a VirtualMachine attaches to a network whose IP address
+management is `Disabled`, the default); admission also refuses a guest
+interface whose NMState `mtu` exceeds the `mtu` of the host network its
+attachment names (1500 when the network declares none), as it does a libvirt
+guest ([machine profiles and network attachments](api/machines.md#machine-profiles-and-network-attachments)),
+only for a provider naming `hostClusterRef`, since an external host's network
+is not in the graph; and
 planning refuses an attachment that names no `ClusterUserDefinedNetwork` among
 the host's `secondaryNetworks`, and a host on which no add-on instance
-provides `kubevirt` ([refusal table](#refusal-table)). The provider proof
+provides `kubevirt`, or on which only an authored `ClusterAddon` that declares
+`provides: [kubevirt]` does, because only the built-in package renders the
+Namespace, ServiceAccount and roles ([refusal table](#refusal-table)). The provider proof
 requires the host's installation, every add-on instance on it but a
 [last package's](add-ons.md#built-in-packages-and-selection) and its
 [cluster network block](openshift-clusters.md#post-installation-network-configuration)
 when it declares secondary networks; each Machine block requires the proof,
 and a removal inverts these edges, so the child's Machines leave before the
-host's blocks; edges that close a cycle, such as a host add-on ordered after
+host's blocks. The child's VirtualMachines are the removal's
+[online effects](state-reconciliation.md#quiescence-before-removal): with the
+child stopped, the removal registers while the host runs, removes them
+through its API, releases the proof without reaching the host, and, when the
+host's own Machines probe quiescence, as libvirt's do, pauses before the
+first of them until the operator stops them, listed under `Stop after online
+cleanup`; repeating destroy then completes it ([B1160](milestones/m3.md#b1160)).
+Edges that close a cycle, such as a host add-on ordered after
 its own child, refuse planning, naming the cycle's blocks in order. No arm block, port entry point or consumer is lent the host
 installation's administrator kubeconfig: before each run the substrate's
 lend, implementation `substrate-host-kubevirt-v1` operation `lend` with
@@ -968,7 +987,8 @@ that token alone, which is lent to that one run as its kubeconfig and cleared
 when it returns. A granted `spec.expirationSeconds` shorter than requested
 refuses, so no run outlives its access. The token is never evidence,
 custody, a record or a log, and every continuation, observation, probe and
-removal mints again; the evidence (`substrate-access-kubevirt-evidence-v1`)
+removal that reaches the host mints again, the proof's removal reaching
+nothing; the evidence (`substrate-access-kubevirt-evidence-v1`)
 names the server and the granted lifetime. A host the lend cannot reach leaves
 the block unknown, never absent, as every unanswered host does.
 
@@ -1001,7 +1021,8 @@ is [removed](#identity-and-power-operations)
 **Provider proof.** The block `substrate-host-<provider>`, implementation
 `substrate-host-kubevirt-v1`, proves the host before any Machine of the
 provider is touched; each Machine's block requires it. It changes nothing and
-its removal reads nothing. In order it reads `/version`, then
+its removal reads nothing and is lent no access: its run publishes the
+released proof, so it mints no token and needs no running host. In order it reads `/version`, then
 `/apis/subresources.kubevirt.io/v1/version`, so a host without OpenShift
 Virtualization is told from a wrong kubeconfig; the `kube-system` namespace's
 UID; the provider's namespace, which must exist; the CDI configuration's
@@ -1097,7 +1118,11 @@ NMState `ethernet` interface becomes one interface with the `bridge` binding
 and a pinned `macAddress`, libvirt's derivation from the context, Machine and
 interface names with QEMU's locally administered prefix `52:54:00`, never
 authored (the KubeVirt [substrate arm](api/machines.md#substrate-arm) has no
-MAC field), on the network its attachment's `networkRef` names: for a
+MAC field; planning refuses, naming both Machines and the address, two
+interfaces of the selected graph that derive one address, with the remedy to
+rename an interface of one Machine or that Machine, because the derivation hashes
+the context name and no admission rule can see it; libvirt Machines derive
+through the same function and have no such refusal), on the network its attachment's `networkRef` names: for a
 `Localnet` ClusterUserDefinedNetwork the derived NetworkAttachmentDefinition
 of the same name in the provider's namespace, and for a
 NetworkAttachmentDefinition of type `bridge` that object, in the namespace

@@ -427,6 +427,11 @@ func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, fo
 	if found && configured {
 		issues = appendIssues(issues, validateAttachments(o, provider, native)...)
 	}
+	if found && configured && variant == substrate.ArmKubeVirt {
+		if host, hosted := substrate.HostClusterObject(c, provider); hosted {
+			issues = appendIssues(issues, validateKubeVirtAttachmentMTUs(o, provider, host, native)...)
+		}
+	}
 	if found && variant == substrate.ArmLibvirt && len(compositionIssues) == 0 {
 		issues = appendIssues(issues, validateDomainInterfaces(o, c, native, configured)...)
 	}

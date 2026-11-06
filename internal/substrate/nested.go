@@ -80,6 +80,22 @@ func HostNetworkNamed(host api.Object, attachment api.Value) bool {
 	return ok
 }
 
+func HostClusterObject(catalog api.Catalog, provider api.Object) (api.Object, bool) {
+	return catalog.Find(api.OpenShiftCluster, HostCluster(provider))
+}
+
+func HostNetworkMTU(host api.Object, attachment api.Value) (string, int64, bool) {
+	network, ok := hostNetwork(host, attachment)
+	if !ok {
+		return "", 0, false
+	}
+	mtu, declared := network.Get("mtu").Int64()
+	if !declared {
+		mtu = 1500
+	}
+	return network.Get("name").Text(), mtu, true
+}
+
 func hostNetwork(host api.Object, attachment api.Value) (api.Value, bool) {
 	ref := attachment.Get(ArmKubeVirt, "networkRef")
 	if ref.Get("apiGroup").Text() != "k8s.ovn.org" || ref.Get("kind").Text() != "ClusterUserDefinedNetwork" {
@@ -103,6 +119,15 @@ func validateHostedProvider(o api.Object, c api.Catalog) []api.Issue {
 	for _, namespace := range namespaces {
 		if namespace.Name == name && namespace.Conflict != "" {
 			issues = add(issues, issue("$.spec.kubevirt.namespace", "namespace "+name+" cannot carry the selector of every secondary network its providers attach to: "+namespace.Conflict))
+		}
+	}
+	for index, attachment := range o.Spec().Get("networkAttachments").Items() {
+		if network, ok := hostNetwork(host, attachment); ok && network.Get("ipam", "mode").Text() == "Enabled" {
+			name := network.Get("name").Text()
+			path := fmt.Sprintf("$.spec.networkAttachments[%d].kubevirt.networkRef", index)
+			issues = add(issues, api.Issue{Code: "api.invariant", Field: path,
+				Message:     "a VirtualMachine attaches only to a host network that leaves IP address management to the guest, and secondary network " + name + " of " + host.Identity() + " sets ipam.mode Enabled, so its OVN port security would enforce the addresses it assigns and not the static install address",
+				Remediation: "set ipam.mode to Disabled on secondary network " + name + " of " + host.Identity() + ", or attach " + o.Identity() + " to a network that does"})
 		}
 	}
 	if len(namespaces) > MaxHostedNamespaces {
