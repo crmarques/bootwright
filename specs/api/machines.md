@@ -286,6 +286,12 @@ public half is authorized. Each collision is refused on the Machine, naming
 the Secret and the other object. An installer-provisioned or provided machine
 declares none, having no Bootwright-performed installation to deliver it.
 
+A NIC is one MAC-bearing port or function as Redfish EthernetInterfaces reports
+it, declared even when uncabled. Adapters, PCI slots, link speed, SR-IOV VFs (an
+add-on's concern) and a boot NIC are not modeled. A NIC name is Machine-local
+and need not be an OS interface name; `network.interfaceBinding` joins them when
+they differ.
+
 NIC names and canonical MACs are unique in a machine, and authored MACs are
 unique across the complete graph. Effective normalization writes MACs as
 lowercase colon-separated EUI-48 values.
@@ -297,11 +303,10 @@ realizes the Machine's management controller as its emulated BMC
 ([substrates](../substrates.md#machine-realization),
 [KubeVirt machine realization](../substrates.md#kubevirt-machine-realization)).
 Such a Machine's NIC names stay admitted, and it takes no part in the
-graph-wide MAC uniqueness check. `network.interfaceBinding` exists to inject a
-physical NIC's MAC into the installed OS; a virtual Machine receives no
-inferred bindings and no binding feeds its derived MAC, so an authored
-`network.interfaceBinding` on a libvirt or KubeVirt Machine refuses with
-`api.invariant` at its path.
+graph-wide MAC uniqueness check. `network.interfaceBinding` injects a physical
+NIC's MAC into the installed OS and no binding feeds a derived MAC, so an
+authored one on a libvirt or KubeVirt Machine refuses with `api.invariant` at
+its path.
 
 ### Substrate arm
 
@@ -352,15 +357,15 @@ The retired `spec.capabilities` refuses with `api.field`.
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `configRef` | string | union | — | Global `NetworkConfig`. |
-| `inline` | `NetworkConfig.spec` object | union | — | Inline one-off alternative with the same NMState, CIDR, and DNS selection constraints. |
-| `attachmentRef` | string | conditional | sole provider attachment | Provider-local `networkAttachments[].name`; applies one attachment to every effective physical interface. Required with a configured network on a libvirt Machine unless the default applies; optional on bare metal, where it selects nothing. |
+| `inline` | `NetworkConfig.spec` object | union | — | One-off alternative with the same NMState, CIDR, and DNS selection constraints. |
+| `attachmentRef` | string | conditional | sole provider attachment | Provider-local `networkAttachments[].name`; applies one attachment to every effective ethernet interface. Required with a configured network on a libvirt Machine unless the default applies; optional on bare metal, where it selects nothing. |
 | `installAddressRef` | string | when a consumer requires a static install IP | unique eligible address below | Machine-local `addresses[].name`; selects an interface-assigned IP inside a consumed machine network. |
 | `addresses` | array | no | `[]`, plus derived `fqdn` contact | Set keyed by `name`; exact entry shape below. |
-| `interfaceBinding` | array | conditional | exact NIC-name matches for bare-metal install | Set of `{nicRef, interfaceName}`; the field name is singular `interfaceBinding`. Bare-metal only: refused on a libvirt or KubeVirt Machine, whose provider derives its MACs. `interfaceName` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
+| `interfaceBinding` | array | conditional | exact NIC-name matches for bare-metal install | Set of `{nicRef, interfaceName}`. Bare-metal only: refused on a libvirt or KubeVirt Machine, whose provider derives its MACs. `interfaceName` is a Linux interface name, as in the [subset](#nmstate-composition-subset). |
 | `overrides` | arbitrary map | no | `{}` | Valid only with `configRef`; merged into the selected native NMState template. |
 
 A configured network selects exactly one of `configRef` and `inline`.
-`inline` has precisely the [NetworkConfig spec](#networkconfig) shape;
+`inline` has the [NetworkConfig spec](#networkconfig) shape;
 `overrides` is forbidden with it. Contact-only Machines need neither form.
 Attachments, bindings, interface assignments, and an install-address selection
 require a configured network. Each refuses at its own field with the remedy to
@@ -368,7 +373,7 @@ select a network configuration with `network.configRef` or `network.inline` or
 to remove the selection or the interface; an OS-ready Machine, which declares
 contacts only, is told to remove it. The retired `network.config`,
 `networkConfigRef`, `interfaceAddresses`, and top-level `spec.addresses`
-forms are rejected; they are not aliases.
+forms are rejected, not aliased.
 
 On a provider-backed machine with a configured network and neither
 `attachmentRef` nor `interfaceAttachments`, `attachmentRef` defaults to the
@@ -379,13 +384,13 @@ attachment always wins and always resolves on its provider. A Machine attached t
 that attachment's prefix, other than the bridge's host address and, for an IPv4
 prefix shorter than /31, its network and broadcast addresses; each refuses at
 `network.installAddressRef` naming the prefix and every reserved address.
-Per-interface attachments use the install address's interface,
-following VLAN parents and all bond ports to the attachments that carry it.
+Per-interface attachments use the install address's interface, following
+[VLAN parents and bond members](#nmstate-composition-subset).
 
 A non-provided Machine of a libvirt provider selects a network configuration
 whose composed NMState, after its overrides, has at least one `ethernet`
 interface whose `state` is neither `absent` nor `ignore`, because its domain
-attaches one interface per such interface. One that selects no configuration
+attaches one vNIC per such ethernet interface. One that selects no configuration
 refuses at `network`, and one whose configuration presents none at
 `network.configRef` or `network.inline.nmstate`. A Bootwright-installed
 Anaconda Machine that selects no configuration refuses only at
@@ -397,9 +402,9 @@ Anaconda Machine that selects no configuration refuses only at
 | --- | --- | --- | --- |
 | `name` | string | yes | Non-empty Machine-local name, unique across contacts and assignments. |
 | `address` | string | yes | DNS contact, unzoned IP contact, or host IP with a prefix; an assignment requires the prefix. |
-| `interface` | string | no | Static assignment to an interface in the effective NMState map; omission declares only a contact. A Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
+| `interface` | string | no | Static assignment to an interface in the effective NMState map; omission declares only a contact. A Linux interface name, as in the [subset](#nmstate-composition-subset). |
 
-An assigned interface may be physical or logical, including a VLAN, bond, or
+An assigned interface may be an ethernet or a logical interface, including a VLAN, bond, or
 OVS internal interface. DNS names cannot be assigned. IPv4 prefixes are
 `1..32`, IPv6 prefixes `1..128`; the IP determines the family. An IPv4
 assignment with a prefix shorter than /31 is a host address of its prefix,
@@ -422,7 +427,6 @@ native map first, then inject each assigned host IP and prefix into its
 interface's matching address family. The family must permit static
 configuration, not be disabled or request DHCP/autoconfiguration. Every static
 IP in the resulting NMState map must have exactly one declared assignment.
-These constraints apply equally to reusable and inline configurations.
 The interpreted fields and omitted-family behavior are fixed by the
 [NMState composition subset](#nmstate-composition-subset).
 
@@ -438,15 +442,15 @@ static address.
 
 `network.interfaceBinding[]` entries have exactly `nicRef` and
 `interfaceName`. Both sides resolve locally, and neither a NIC nor an effective
-physical interface is bound more than once. A bare-metal non-provided machine
-binds every effective physical interface so the hardware MAC can be injected.
-When its list is omitted, each required physical interface must match exactly
+ethernet interface is bound more than once. A bare-metal non-provided machine
+binds every effective ethernet interface so the hardware MAC can be injected.
+When its list is omitted, each required ethernet interface must match exactly
 one hardware NIC by name; missing or ambiguous matches require an explicit
-list. An authored list replaces the complete inferred mapping and must be
-complete, including an empty list only when no binding is required. Virtual
+list. An authored list replaces the inferred mapping and must be complete, an
+empty list only when no binding is required. Virtual
 Machines receive no inferred physical NIC bindings.
 
-The effective reusable-template merge is deterministic:
+The reusable-template merge is deterministic:
 
 - maps deep-merge and the override wins on scalar or type conflict;
 - lists whose entries all have a non-empty `name` merge by name, updating base
@@ -464,8 +468,7 @@ because the Kickstart carries one static IPv4 `network` line and DHCP
 installation is not supported. Without a network configuration there is no
 install interface yet, so that remedy first selects one with
 `network.configRef` or `network.inline`. That refusal is the only one at
-`network.installAddressRef`: the rule that network selections require a
-configured network does not repeat it.
+`network.installAddressRef`; the configured-network rule does not repeat it.
 Its static installation interface is `ethernet`, `vlan`, or `bond`, installed
 as [managed OS](../managed-os.md#installation) projects it, with the refusals
 [its table](../managed-os.md#refusal-table) lists.
@@ -491,8 +494,7 @@ default therefore fails for a fleet containing downstream-installer Machines.
 Use install-profile defaults to share Bootwright OS installation proxy policy
 without adding a proxy field to those downstream Machines.
 
-Machine and install-profile choices receive no derived `noProxy` entries: the
-entries are the authored ones, unlike
+Machine and install-profile choices receive no derived `noProxy` entries, unlike
 [container installation](../openshift-clusters.md#installation-features), which
 states its derived set. A Machine choice carries controller acquisition and
 installed-system repository traffic, and the installation's own artifact
@@ -990,7 +992,7 @@ network configuration.
 ### NMState composition subset
 
 Admission interprets only the native fields needed to prove Machine address,
-installation and NIC-binding invariants. The containing native maps remain
+installation, NIC-binding and attachment-MTU invariants. The containing native maps remain
 open under the [native scalar rules](../api.md#native-and-implementation-shaped-fields).
 This subset is not a claim of full NMState or installer-schema compatibility.
 
@@ -999,6 +1001,10 @@ This subset is not a claim of full NMState or installer-schema compatibility.
 | `interfaces` | Array of interface mappings with unique, non-empty string `name` and explicit, non-empty string `type`; `name` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
 | `interfaces[].state` | Optional non-empty string; `absent` and `ignore` exclude the interface from assignment and binding. |
 | `interfaces[].mac-address` | Optional MAC address; normalize before comparison with a bound hardware NIC. |
+| `interfaces[].mtu` | Optional integer; on a libvirt or KubeVirt Machine it must not exceed the MTU of the attachment that carries the interface, found through `vlan.base-iface` and `link-aggregation.port`. |
+| `interfaces[].vlan.base-iface` | Optional parent interface name; the interface takes the attachment of its parent. A VLAN install interface needs an available ethernet or bond parent. |
+| `interfaces[].vlan.id` | Optional integer; a VLAN install interface needs 1 to 4094 and an interface name that agrees with it ([managed OS](../managed-os.md#installation)). |
+| `interfaces[].link-aggregation.port` | Optional array of bond member interface names; the bond takes the attachments of its members. |
 | `interfaces[].ipv4`, `interfaces[].ipv6` | Optional family mappings. |
 | `interfaces[].ipv4.enabled`, `interfaces[].ipv6.enabled` | Optional booleans; explicit `false` forbids static assignment. |
 | `interfaces[].ipv4.dhcp`, `interfaces[].ipv6.dhcp` | Optional booleans; explicit `true` forbids static assignment. |
@@ -1015,8 +1021,8 @@ cannot hide an authored static-address declaration. Complete template/inline
 and composed interfaces require explicit types; a partial override may omit
 the type of an existing interface, but a new interface must supply it.
 Validate the composed subset again before injecting assignments and hardware
-MACs. Only `type: ethernet` is a physical
-interface for NIC binding. An assignment or binding to a missing, absent or
+MACs. Only a `type: ethernet` interface
+binds to a NIC. An assignment or binding to a missing, absent or
 ignored interface fails. A template/override MAC that disagrees with its bound
 hardware NIC fails; it is never silently overwritten.
 
@@ -1032,7 +1038,7 @@ interface. Route metrics do not resolve ambiguity. The existing
 eligible address or refuses; declaration order provides no fallback.
 
 Realization and installation read the same composed map, without the injected
-addresses and MACs: a libvirt domain attaches one interface per composed
+addresses and MACs: a libvirt domain attaches one vNIC per composed
 `ethernet` interface whose `state` is neither `absent` nor `ignore`. The
 gateway a managed-OS installation carries is the install interface's default
 route: the `next-hop-address` of the first composed route that is not `absent`,
@@ -1042,7 +1048,7 @@ installation's renderer also reads `controller`, `link-aggregation.mode`,
 `link-aggregation.port`, `link-aggregation.options`, `vlan.base-iface`,
 `vlan.id` and `vlan.protocol` of the install interface and its bond, and
 `dns-resolver.config.server` ([managed OS](../managed-os.md#installation));
-admission does not interpret them. Every other route and the other content
+the subset interprets only the keys its table lists. Every other route and the other content
 the line does not carry are applied after installation by
 [network convergence](../managed-os.md#network-convergence).
 

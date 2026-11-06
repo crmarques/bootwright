@@ -1300,7 +1300,7 @@ every declared clear does it write `ignoredisk --only-use=<name>` and
 gave the disk, to `/tmp/bootwright-disk.ks`, which the storage section includes
 as an encrypted root's `autopart` is included, so a failed `%pre` leaves no
 include. A TPM2-encrypted root's `%post` resolves the disk again by the same
-rule before it binds. There a port is an interface
+rule before it binds. There the NICs counted are the OS interfaces
 backed by a device, and one driven by a USB CDC or RNDIS Ethernet driver
 (`cdc_ether`, `cdc_eem`, `cdc_ncm` or `rndis_host`) is read as the management
 controller's host interface; the RAM erase worker and Ceph host runtime use

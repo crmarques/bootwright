@@ -56,13 +56,6 @@ spec:
         address: 198.51.100.25/25
         interface: ceph-public
 
-    interfaceBinding:
-      - nicRef: eth0
-        interfaceName: eth0
-
-      - nicRef: eth2
-        interfaceName: eth2
-
     overrides: {}
 
   hardware:
