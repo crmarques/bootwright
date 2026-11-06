@@ -12,6 +12,10 @@ def olm_ref(kind, namespace, name):
             "namespace": namespace, "name": name, "namespaced": True}
 
 
+PLAN_FIELDS = ["spec", "metadata.ownerReferences", "status.bundleLookups"]
+CSV_FIELDS = ["status.phase", "spec.version", "spec.replaces", "metadata.annotations"]
+
+
 def fields(obj):
     selected = list(obj.get("body", {}))
     selected = [key for key in selected if key != "metadata"]
@@ -53,6 +57,7 @@ class Engine:
         self.not_ready = False
         self.plan_readings = {}
         self.csv_readings = {}
+        self.chains = {}
         self.snapshot = None
         self.projections = {}
 
@@ -210,11 +215,13 @@ class Engine:
             return False, "absent" if live is None else "unknown"
         expected = value.get("csv") or live.get("spec", {}).get("startingCSV")
         installed = live.get("status", {}).get("installedCSV")
+        if installed and self.chains.get((value["namespace"], value["subscription"])) == installed:
+            expected = installed
         if installed != expected or model.native(installed, "name") == "invalid":
             if observe and installed:
                 self.unknown = True
             return False, model.native(installed or "pending", "name")
-        csv = self.probe(olm_ref("ClusterServiceVersion", value["namespace"], installed), ["status.phase", "spec.version", "metadata.annotations"])
+        csv = self.probe(olm_ref("ClusterServiceVersion", value["namespace"], installed), CSV_FIELDS)
         if csv:
             self.csv_readings[(value["namespace"], installed)] = csv
         return bool(csv and csv.get("status", {}).get("phase") == "Succeeded"), "Succeeded" if csv else "pending"
@@ -282,8 +289,12 @@ class Engine:
             managed = not dependent and step["approval"] == "operatorManaged"
             installed = live.get("status", {}).get("installedCSV", "")
             succeeded, last = (False, "pending")
-            if installed == csv:
-                succeeded, last = self.csv({"namespace": obj["namespace"], "subscription": obj["name"], "csv": csv}, observe)
+            chain = self.chain(obj, live, csv, installed) if observe and installed and installed != csv else None
+            if installed == csv or chain:
+                succeeded, last = self.csv({"namespace": obj["namespace"], "subscription": obj["name"], "csv": installed}, observe)
+                if chain and not succeeded:
+                    self.unknown = True
+                    return
             for condition in ([] if succeeded or managed and installed == csv else live.get("status", {}).get("conditions") or []):
                 if condition.get("type") == "ResolutionFailed" and condition.get("status") == "True":
                     if observe:
@@ -291,7 +302,9 @@ class Engine:
                         return
                     raise Refused(model.label(obj) + " resolution failed: " + model.native(condition.get("message", "")))
             plan_name = (live.get("status", {}).get("installPlanRef") or {}).get("name", "")
-            if managed:
+            if chain:
+                approved = self.installed_plan(obj, live, csv)
+            elif managed:
                 approved = self.first_plan(obj, live, csv, observe) or approved
                 if installed == csv and approved is None:
                     approved = self.installed_plan(obj, live, csv)
@@ -299,16 +312,19 @@ class Engine:
                 approved = self.installed_plan(obj, live, csv)
             else:
                 approved = self.plan(obj, live, csv, plan_name, observe) if plan_name else None
-            if installed != csv:
+            if installed != csv and not chain:
                 succeeded, last = self.csv({"namespace": obj["namespace"], "subscription": obj["name"], "csv": csv}, observe)
             if observe or succeeded:
                 self.not_ready = self.not_ready or not succeeded
                 fact = {"namespace": obj["namespace"], "subscription": obj["name"],
-                        "installedCSV": model.native(installed, "name") if installed else "", "installPlan": approved or {}}
+                        "installedCSV": model.native(installed, "name") if installed else "", "installPlan": approved or {},
+                        "chain": [{"plan": link["plan"], "csv": link["csv"]} for link in chain or []]}
                 if dependent:
                     fact["uid"] = live["metadata"]["uid"]
+                    version = self.csv_readings.get((obj["namespace"], installed), {}).get("spec", {}).get("version", "")
+                    fact["csvVersion"] = model.native(version)
                 else:
-                    fact.update(self.olm_facts(obj, live, approved, installed))
+                    fact.update(self.olm_facts(obj, live, chain[-1] if chain else approved, installed))
                     fact["upgradePending"] = live.get("status", {}).get("currentCSV", installed) != installed
                     if managed:
                         fact.update(self.operator_facts(obj["namespace"]))
@@ -325,7 +341,7 @@ class Engine:
     def first_plan(self, obj, live, csv, observe):
         if live.get("status", {}).get("installedCSV") == csv:
             return None
-        plans = self.listed("InstallPlan", obj["namespace"], ["spec", "metadata.ownerReferences", "status.bundleLookups"])
+        plans = self.listed("InstallPlan", obj["namespace"], PLAN_FIELDS)
         if plans is None:
             return None
         candidate = None
@@ -352,7 +368,7 @@ class Engine:
     def installed_plan(self, obj, live, csv):
         # Later plans belong to the operator. Recover only initial install facts,
         # without approving or rejecting any current or subsequent plan.
-        plans = self.listed("InstallPlan", obj["namespace"], ["spec", "metadata.ownerReferences", "status.bundleLookups"])
+        plans = self.listed("InstallPlan", obj["namespace"], PLAN_FIELDS)
         for plan in plans or []:
             spec, meta = plan.get("spec", {}), plan.get("metadata", {})
             lookups = plan.get("status", {}).get("bundleLookups") or []
@@ -367,6 +383,48 @@ class Engine:
                     self.plan_readings[(obj["namespace"], name)] = plan
                     return {"name": name, "uid": meta["uid"], "csvs": [csv]}
         return None
+
+    def chain(self, obj, live, csv, installed):
+        # B1184: OLM records the replaced CSV as each upgrade's bundle lookup
+        # `replaces`; every plan must survive, Manual, approved and from the source.
+        root = self.installed_plan(obj, live, csv)
+        plans = self.listed("InstallPlan", obj["namespace"], PLAN_FIELDS)
+        head = self.probe(olm_ref("ClusterServiceVersion", obj["namespace"], installed), CSV_FIELDS)
+        if root is None or not plans or not head:
+            return None
+        catalog, uid = live.get("spec", {}), live["metadata"]["uid"]
+        source = {"name": catalog.get("source"), "namespace": catalog.get("sourceNamespace")}
+        links = {}
+        for plan in plans:
+            spec, meta = plan.get("spec", {}), plan.get("metadata", {})
+            lookups = plan.get("status", {}).get("bundleLookups") or []
+            if not (spec.get("approval") == "Manual" and spec.get("approved") is True and lookups
+                    and isinstance(spec.get("generation"), int) and not isinstance(spec.get("generation"), bool)
+                    and any(r.get("kind") == "Subscription" and r.get("uid") == uid for r in meta.get("ownerReferences") or [])
+                    and all({key: (lookup.get("catalogSourceRef") or {}).get(key) for key in source} == source for lookup in lookups)):
+                continue
+            for lookup in lookups:
+                if isinstance(lookup.get("identifier"), str) and lookup["identifier"] in (spec.get("clusterServiceVersionNames") or []):
+                    links.setdefault(lookup["identifier"], []).append((plan, lookup.get("replaces")))
+        pinned = self.plan_readings.get((obj["namespace"], root["name"]), {}).get("spec", {}).get("generation")
+        chain, current, generation = [], installed, None
+        while current != csv:
+            found = links.get(current) or []
+            if len(found) != 1 or len(chain) >= 15 or model.native(current, "name") != current:
+                return None
+            plan, previous = found[0]
+            name = model.native(plan["metadata"].get("name"), "name")
+            if name != plan["metadata"].get("name") or generation is not None and plan["spec"]["generation"] >= generation:
+                return None
+            if not chain and head.get("spec", {}).get("replaces") != previous:
+                return None
+            self.plan_readings[(obj["namespace"], name)] = plan
+            chain.insert(0, {"plan": name, "csv": current, "name": name})
+            current, generation = previous, plan["spec"]["generation"]
+        if not chain or not isinstance(pinned, int) or isinstance(pinned, bool) or pinned >= generation:
+            return None
+        self.chains[(obj["namespace"], obj["name"])] = installed
+        return [{"plan": root["name"], "csv": csv, "name": root["name"]}] + chain
 
     def operator_facts(self, namespace):
         plans = self.listed("InstallPlan", namespace, ["spec.clusterServiceVersionNames", "spec.approved"])

@@ -120,7 +120,7 @@ records what a custom-package lifecycle would add.
 | `subscription.name` | string | no | `subscription.package` | Kubernetes Subscription name. |
 | `subscription.package` | string | yes | — | OLM package. |
 | `subscription.channel` | string | yes | — | OLM channel. |
-| `subscription.startingCSV` | string | yes | — | The exact CSV installed, and the only CSV Bootwright approves. |
+| `subscription.startingCSV` | string | yes | — | The exact CSV installed first, and the only CSV Bootwright approves; a later CSV the owner approves reads complete only through the [replacement chain](../add-ons.md#observation-and-continuation). |
 | `subscription.source` | string | yes after normalization | `catalogSource.name` when shipped | CatalogSource name. |
 | `subscription.sourceNamespace` | string | yes after normalization | `openshift-marketplace` | CatalogSource namespace; `openshift-marketplace` when `catalogSource` is present. |
 | `customResources` | array of objects | no | `[]` | Ordered `{gate, resource}` entries. |
@@ -402,7 +402,7 @@ member:
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `channel` | string | yes | — | The OLM channel the operator selects; no default exists. |
-| `startingCSV` | string | yes | — | The exact CSV installed, and the only CSV Bootwright approves. |
+| `startingCSV` | string | yes | — | The exact CSV installed first, and the only CSV Bootwright approves; a later CSV the owner approves reads complete only through the [replacement chain](../add-ons.md#observation-and-continuation). |
 | `source` | string | no | the package's documented catalog, or `catalogSource.name` when present | CatalogSource name; equals `catalogSource.name` when that block is present. |
 | `sourceNamespace` | string | no | `openshift-marketplace` | CatalogSource namespace; `openshift-marketplace` when `catalogSource` is present. |
 | `catalogSource` | object | no | — | A CatalogSource Bootwright creates in `openshift-marketplace`. |
@@ -550,7 +550,7 @@ Red Hat Advanced Cluster Management for Kubernetes
 | `subscription` | object | yes | — | The [Subscription](#subscription) of the hub operator; `source` defaults to `redhat-operators`. |
 | `mce` | object | yes | — | The multicluster engine Subscription the hub operator creates. |
 | `mce.channel` | string | yes | — | The engine's OLM channel; no default exists. |
-| `mce.startingCSV` | string | yes | — | The exact engine CSV, and the only one Bootwright approves. |
+| `mce.startingCSV` | string | yes | — | The exact engine CSV installed first, and the only one Bootwright approves; a later CSV reads complete only through the [replacement chain](../add-ons.md#observation-and-continuation). |
 | `mce.source` | string | no | `subscription.source` | CatalogSource name. |
 | `mce.sourceNamespace` | string | no | `subscription.sourceNamespace` | CatalogSource namespace. |
 | `hub` | object | no | `{}` | Fields of the `MultiClusterHub`. |

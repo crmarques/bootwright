@@ -345,9 +345,12 @@ assumption, re-verified by [B1125](milestones/m4.md#b1125).
 
 The operator is installed when the Subscription's installed CSV is the
 `startingCSV` and that CSV reports `Succeeded`; the current CSV is reported,
-never compared, and a pending upgrade waits for the operator. The evidence
-records the approved plan, the installed CSV and its version, the catalog
-image and the bundle image the plan resolved, and any maximum OpenShift
+never compared, and a pending upgrade waits for the operator. An observation
+also reads as installed a later CSV the Subscription's own
+[replacement chain](#observation-and-continuation) reached. The evidence
+records the approved plan, the installed CSV and its version, any such chain,
+the catalog image and the bundle image the plan that installed the CSV
+resolved, and any maximum OpenShift
 version the CSV declares through the `olm.maxOpenShiftVersion` property in
 its JSON `olm.properties` annotation, as evidence and never as a rule. An
 operator-managed package also records the catalog of each later plan it
@@ -389,7 +392,7 @@ Bootwright did not create.
 
 | Check | Holds when |
 | --- | --- |
-| `csvSucceeded` | the Subscription's installed CSV is the expected one (the declared `startingCSV`, or the CSV the check names for a dependent Subscription) and reports `Succeeded` |
+| `csvSucceeded` | the Subscription's installed CSV is the expected one (the declared `startingCSV`, or the CSV the check names for a dependent Subscription), or in an observation a CSV the Subscription's [replacement chain](#observation-and-continuation) reached from it, and reports `Succeeded` |
 | `condition` | the object's condition of that type has that status and, when the condition or the object reports an observed generation, it is the object's current generation; a declared failure condition fails the check at once, naming the object, condition and reason |
 | `resourceExists` | the object is present; it need not be owned |
 | `statusPhase` | a named status field holds one of the declared values; any other value, an unknown one included, is not ready |
@@ -452,8 +455,9 @@ every check once: every object own and equal with every check holding is
 completion; every object absent is no effect; some own objects with the rest
 absent, not ready or not equal to its declared body is a partial realization; a
 foreign object, a failed read or an installed CSV other than the expected one
-is unknown, whose remedy is to destroy and apply again, except for an instance
-an [additive apply](state-reconciliation.md#additive-apply) added, whose remedy
+that no replacement chain reached (below) is unknown, whose remedy is to
+destroy and apply again, except for an instance an
+[additive apply](state-reconciliation.md#additive-apply) added, whose remedy
 is to remove or correct the object and repeat `apply`, which observes it again,
 because a `destroy` takes the whole lineage and its cluster back. An own
 object that differs from its declared body, as when Argo CD or an operator changes a
@@ -463,6 +467,45 @@ only by the apply attempt that finds it. A continuation never re-renders: it
 runs the frozen program, whose comparisons report what is done `unchanged`.
 `bootwright diff --observe` reads the same observation and reports the block's
 realization, never repairs it and shows no field values for an instance.
+
+After the owner approves an operator upgrade outside Bootwright, an
+observation reads the installed CSV as the expected one when the
+Subscription's own replacement chain reached it from that CSV
+([B1184](milestones/m4.md#b1184)). The rule holds for a package's
+Subscription under either approval policy, an authored add-on's, and a
+dependent Subscription against the CSV the configuration pins for it. Each
+link is proved from objects that survive, never assumed:
+
+- The Subscription is owned and equal to its declared body, or a dependent
+  meeting the dependent rules of [OLM installation](#olm-installation).
+- The expected CSV's plan passes that section's approval tests and is
+  approved.
+- For every later CSV of the chain exactly one InstallPlan carries the
+  Subscription's `uid` in its owner references, asks for manual approval, is
+  approved, lists the CSV, resolved every bundle lookup from the
+  Subscription's `source` and `sourceNamespace`, and names the previous CSV as
+  the `replaces` of the lookup whose `identifier` is the CSV.
+- The plans' `spec.generation` increases along the chain, the installed CSV's
+  `spec.replaces` names the previous CSV, and the installed CSV reports
+  `Succeeded`.
+
+OLM writes the replaced installed CSV as `replaces` whether the catalog reached
+the next CSV by `replaces`, `skips` or `olm.skipRange`, owns each plan by every
+Subscription of its namespace, deletes a replaced CSV once its successor
+succeeds and keeps five InstallPlans per namespace
+([knowledge](../.agents/knowledge/olm-v0-exact-install.md#reading-an-upgrade-chain)).
+A plan's approval names no approver, so on the operator-managed path the
+chain also covers the later plans the operator approves itself, including a
+plan that lists the package's CSV beside a dependent CSV, once the pinned CSV
+has been installed. Before the pinned CSV is ever installed no chain exists:
+the attempt's rules still refuse, an observation reads unknown, and
+[B1130](milestones/m4.md#b1130)'s case stands.
+A chain with a collected plan, two plans for one CSV, a link that fails any
+test, more than sixteen CSVs or an installed CSV not `Succeeded` therefore
+stays unknown. The evidence records the installed CSV, its version and the
+chain, each CSV from the expected one with the plan that installed it. The
+rule approves nothing and changes no object; an attempt keeps the rules of
+OLM installation, and a pending later upgrade is reported as there.
 
 ## Retirement
 
@@ -493,8 +536,9 @@ what the evidence lists. The listed objects stay as applied: a change to one is
 a destroy followed by a fresh apply
 ([lifecycle unit](state-reconciliation.md#lifecycle-unit),
 [D153](milestones/backlog.md#d153)), and approving an upgrade of
-an owned Subscription is outside Bootwright's scope
-([B106](milestones/backlog.md#b106)).
+an owned Subscription stays the owner's; an upgrade the owner approves reads
+complete by the [replacement chain rule](#observation-and-continuation)
+([B1184](milestones/m4.md#b1184)).
 [Project](project.md#lifecycle-and-handoff) defines the downstream day-2
 resources a GitOps source may control. The GitOps package may create one
 [bootstrap object](#the-gitops-bootstrap-object).

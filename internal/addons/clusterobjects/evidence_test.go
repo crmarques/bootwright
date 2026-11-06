@@ -72,6 +72,12 @@ func TestObservationTable(t *testing.T) {
 		{"foreign", Observation{Objects: []ObjectObservation{{Ownership: Foreign}}}, UnknownRealization},
 		{"read failed", Observation{Objects: []ObjectObservation{{Ownership: Unknown}}}, UnknownRealization},
 		{"wrong csv", Observation{Objects: []ObjectObservation{{Ownership: Own, Equal: true}}, CSVs: []CSVObservation{{ReadKnown: true, Installed: "other", Expected: "wanted"}}}, UnknownRealization},
+		{"reached chain", Observation{CSVs: []CSVObservation{{ReadKnown: true, Installed: "op.v3", Expected: "op.v1", Chain: chain("op.v1", "op.v2", "op.v3")}}}, Completed},
+		{"chain from another pin", Observation{CSVs: []CSVObservation{{ReadKnown: true, Installed: "op.v3", Expected: "op.v1", Chain: chain("op.v0", "op.v3")}}}, UnknownRealization},
+		{"chain short of the installed csv", Observation{CSVs: []CSVObservation{{ReadKnown: true, Installed: "op.v3", Expected: "op.v1", Chain: chain("op.v1", "op.v2")}}}, UnknownRealization},
+		{"chain repeating a csv", Observation{CSVs: []CSVObservation{{ReadKnown: true, Installed: "op.v3", Expected: "op.v1", Chain: chain("op.v1", "op.v3", "op.v1", "op.v3")}}}, UnknownRealization},
+		{"chain on the pinned csv", Observation{CSVs: []CSVObservation{{ReadKnown: true, Installed: "op.v1", Expected: "op.v1", Chain: chain("op.v1", "op.v1")}}}, UnknownRealization},
+		{"chain without its plan", Observation{CSVs: []CSVObservation{{ReadKnown: true, Installed: "op.v2", Expected: "op.v1", Chain: []ChainLink{{Plan: "install", CSV: "op.v1"}, {CSV: "op.v2"}}}}}, UnknownRealization},
 		{"all owned and dependent absent", Observation{Objects: []ObjectObservation{{Ownership: Absent}}, Dependents: []Ownership{Absent}}, Partial},
 		{"dependent absent", Observation{Objects: []ObjectObservation{{Ownership: Own, Equal: true}}, Dependents: []Ownership{Absent}}, Partial},
 	} {
@@ -80,6 +86,58 @@ func TestObservationTable(t *testing.T) {
 				t.Fatalf("got %s want %s", got, test.want)
 			}
 		})
+	}
+}
+
+func chain(csvs ...string) []ChainLink {
+	links := []ChainLink{}
+	for i, csv := range csvs {
+		links = append(links, ChainLink{Plan: "plan-" + strings.Repeat("a", i+1), CSV: csv})
+	}
+	return links
+}
+
+func TestEvidenceReadsAReachedChainComplete(t *testing.T) {
+	sub := Ref{APIVersion: "operators.coreos.com/v1alpha1", Kind: "Subscription", Namespace: "operators", Name: "operator", Namespaced: true}
+	p := Program{Steps: []Step{
+		{Subscribe: &Subscription{Object: ObjectEntry{Ref: sub, DesiredDigest: "digest"}, CSV: "op.v1"}},
+		{ApproveDependent: &DependentApproval{Namespace: "engine", Subscription: "engine", CSV: "engine.v1"}},
+	}}
+	e := Evidence{
+		Receipts:     []Receipt{{Ref: sub, UID: "uid", DesiredDigest: "digest", Disposition: "unchanged", Basis: UIDMatched}},
+		Observations: []ObjectObservation{{Ref: sub, Ownership: Own, Equal: true}},
+		OLM:          []OLMFacts{{Namespace: "operators", Subscription: "operator", InstalledCSV: "op.v2", Chain: chain("op.v1", "op.v2")}},
+		Dependents:   []DependentFacts{{Namespace: "engine", Subscription: "engine", UID: "engine-uid", InstalledCSV: "engine.v3", Chain: chain("engine.v1", "engine.v2", "engine.v3")}},
+	}
+	if got := EvaluateEvidence(p, e); got != Completed {
+		t.Fatal(got)
+	}
+	e.OLM[0].InstallPlan = InstallPlan{Name: "plan-a"}
+	if got := EvaluateEvidence(p, e); got != Completed {
+		t.Fatal("a chain from the recorded pinned plan:", got)
+	}
+	e.OLM[0].InstallPlan = InstallPlan{Name: "other-plan"}
+	if got := EvaluateEvidence(p, e); got != UnknownRealization {
+		t.Fatal("a chain from a plan other than the pinned one:", got)
+	}
+	e.OLM[0].InstallPlan = InstallPlan{}
+	for _, link := range []ChainLink{{Plan: "", CSV: "op.v2"}, {Plan: "plan-b", CSV: ""}, {Plan: "invalid", CSV: "op.v2"}, {Plan: "plan-b", CSV: "invalid"}} {
+		e.OLM[0].Chain = []ChainLink{{Plan: "plan-a", CSV: "op.v1"}, link}
+		if ValidateEvidence(e) == nil {
+			t.Fatalf("chain link %+v validated", link)
+		}
+		if got := EvaluateEvidence(p, e); got != UnknownRealization {
+			t.Fatalf("chain link %+v: %s", link, got)
+		}
+	}
+	e.OLM[0].Chain = chain("op.v1", "op.v2")
+	e.Dependents[0].Chain = chain("engine.v1", "engine.v2")
+	if got := EvaluateEvidence(p, e); got != UnknownRealization {
+		t.Fatal("a dependent chain short of its installed CSV:", got)
+	}
+	e.Dependents[0].Chain = nil
+	if got := EvaluateEvidence(p, e); got != UnknownRealization {
+		t.Fatal("a dependent CSV no chain reached:", got)
 	}
 }
 
@@ -126,10 +184,13 @@ func TestObservationTextBound(t *testing.T) {
 }
 
 func TestNativeEvidenceValuesAreBoundedAndGrammatical(t *testing.T) {
-	for _, olm := range []OLMFacts{{InstalledCSV: "csv\nsecret"}, {CatalogImage: "https://credentials@example.test/image"}, {MaxOpenShiftVersion: "future"}, {CSVVersion: strings.Repeat("x", 257)}, {InstallPlan: InstallPlan{UID: "uid\x00"}}} {
+	for _, olm := range []OLMFacts{{InstalledCSV: "csv\nsecret"}, {CatalogImage: "https://credentials@example.test/image"}, {MaxOpenShiftVersion: "future"}, {CSVVersion: strings.Repeat("x", 257)}, {InstallPlan: InstallPlan{UID: "uid\x00"}}, {Chain: []ChainLink{{Plan: "Plan", CSV: "op.v1"}}}, {Chain: []ChainLink{{Plan: "plan", CSV: "op\nv1"}}}, {Chain: make([]ChainLink, 17)}} {
 		if ValidateEvidence(Evidence{OLM: []OLMFacts{olm}}) == nil {
 			t.Fatal("unsafe evidence accepted")
 		}
+	}
+	if ValidateEvidence(Evidence{Dependents: []DependentFacts{{CSVVersion: "1.0\n"}}}) == nil || ValidateEvidence(Evidence{Dependents: []DependentFacts{{Chain: []ChainLink{{Plan: "plan", CSV: "bad name"}}}}}) == nil {
+		t.Fatal("unsafe dependent evidence accepted")
 	}
 	if err := ValidateEvidence(Evidence{OLM: []OLMFacts{{InstalledCSV: "invalid", CatalogImage: "invalid", MaxOpenShiftVersion: "invalid"}}}); err != nil {
 		t.Fatal(err)

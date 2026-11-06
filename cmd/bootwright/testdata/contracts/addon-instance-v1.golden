@@ -1,5 +1,5 @@
 implementation: addon-instance-v1
-content-digest: f71b750df86b3f0645f6b060c41e4f978549c7eacd6308af63407c9259bf9f1b
+content-digest: dbd144b7721b7941370d022ebe75c6480db8f647b89feb047814f43cdfe8016c
 request-version: addon-instance-request-v4
 automation-formats: none
 mark-formats: bootwright.cluster-objects.owner-v1, bootwright.io/owner
@@ -8,9 +8,9 @@ fixed-places: bootwright-
 effect-pins:
   bootwright.cluster-objects.owner-v1
   bootwright.cluster-objects.object-v1
-  exact-v2
-  operator-managed-v1
-  dependent-exact-v2
+  exact-v3
+  operator-managed-v2
+  dependent-exact-v3
 request-identity:
   cluster
   package
@@ -74,6 +74,9 @@ evidence-schema:
   olm[].csvs[].name string
   olm[].csvs[].version string
   olm[].csvs[].phase string
+  olm[].chain []struct clusterobjects.ChainLink omitempty
+  olm[].chain[].plan string
+  olm[].chain[].csv string
   dependents []struct clusterobjects.DependentFacts
   dependents[].namespace string
   dependents[].subscription string
@@ -83,6 +86,10 @@ evidence-schema:
   dependents[].installPlan.uid string
   dependents[].installPlan.csvs []string
   dependents[].installedCSV string
+  dependents[].csvVersion string
+  dependents[].chain []struct clusterobjects.ChainLink omitempty
+  dependents[].chain[].plan string
+  dependents[].chain[].csv string
   checks []struct clusterobjects.CheckResult
   checks[].unknown bool omitempty
   checks[].index int

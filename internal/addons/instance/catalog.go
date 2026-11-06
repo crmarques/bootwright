@@ -13,7 +13,7 @@ const (
 	Kind            = "ClusterAddonBinding"
 	Implementation  = "addon-instance-v1"
 	requestVersion  = "addon-instance-request-v4"
-	evidenceVersion = "addon-instance-evidence-v3"
+	evidenceVersion = "addon-instance-evidence-v4"
 )
 
 func BlockID(pkg, cluster string) string {

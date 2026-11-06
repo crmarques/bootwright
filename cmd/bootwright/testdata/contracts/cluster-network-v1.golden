@@ -1,5 +1,5 @@
 implementation: cluster-network-v1
-content-digest: ea8c5853ee8543fd9b85cc3ada3bac1ef2973802543e47b258357ca063041c43
+content-digest: f1ea991434bdcece3ee821647f7aabe44bdb6253b9e36e67bc9b4ba81006ec04
 request-version: cluster-network-request-v2
 automation-formats: none
 mark-formats: bootwright.cluster-objects.owner-v1, bootwright.io/owner
@@ -63,6 +63,9 @@ evidence-schema:
   olm[].csvs[].name string
   olm[].csvs[].version string
   olm[].csvs[].phase string
+  olm[].chain []struct clusterobjects.ChainLink omitempty
+  olm[].chain[].plan string
+  olm[].chain[].csv string
   dependents []struct clusterobjects.DependentFacts
   dependents[].namespace string
   dependents[].subscription string
@@ -72,6 +75,10 @@ evidence-schema:
   dependents[].installPlan.uid string
   dependents[].installPlan.csvs []string
   dependents[].installedCSV string
+  dependents[].csvVersion string
+  dependents[].chain []struct clusterobjects.ChainLink omitempty
+  dependents[].chain[].plan string
+  dependents[].chain[].csv string
   checks []struct clusterobjects.CheckResult
   checks[].unknown bool omitempty
   checks[].index int

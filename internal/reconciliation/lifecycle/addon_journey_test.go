@@ -61,7 +61,7 @@ func (a *addonAdapter) Run(_ context.Context, run lifecycle.RunRequest) (lifecyc
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	evidence := instance.Evidence{Version: "addon-instance-evidence-v3", Request: run.Digest, Postcondition: true, Evidence: co.Evidence{Receipts: []co.Receipt{}, Observations: []co.ObjectObservation{}, Checks: []co.CheckResult{}, OLM: []co.OLMFacts{}, Dependents: []co.DependentFacts{}}}
+	evidence := instance.Evidence{Version: "addon-instance-evidence-v4", Request: run.Digest, Postcondition: true, Evidence: co.Evidence{Receipts: []co.Receipt{}, Observations: []co.ObjectObservation{}, Checks: []co.CheckResult{}, OLM: []co.OLMFacts{}, Dependents: []co.DependentFacts{}}}
 	checks := len(program.Checks)
 	for _, step := range program.Steps {
 		checks += len(step.Wait)

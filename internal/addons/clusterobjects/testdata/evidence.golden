@@ -10,6 +10,17 @@
   ],
   "dependents": [
     {
+      "chain": [
+        {
+          "csv": "engine.v0.9.0",
+          "plan": "engine-install-0"
+        },
+        {
+          "csv": "engine.v1.0.0",
+          "plan": "engine-install"
+        }
+      ],
+      "csvVersion": "1.0.0",
       "installPlan": {
         "csvs": [
           "engine.v1.0.0"
@@ -38,6 +49,16 @@
     {
       "bundleImage": "registry.example.test/bundle:v1",
       "catalogImage": "registry.example.test/catalog:v1",
+      "chain": [
+        {
+          "csv": "operator.v0.9.0",
+          "plan": "install-0"
+        },
+        {
+          "csv": "operator.v1.0.0",
+          "plan": "install-1"
+        }
+      ],
       "csvVersion": "1.0.0",
       "csvs": [
         {

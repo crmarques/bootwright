@@ -95,6 +95,47 @@ that branch.
   do not support the group's targets fails with `UnsupportedOperatorGroup`
   (R1:C3, confirmed).
 
+## Reading an upgrade chain
+
+Read on 2026-11-06 from upstream operator-lifecycle-manager `master` at
+`04bd29a7bf3068835a0a41f82a25b881a86c1413`; OpenShift's downstream release
+branches were not read. The rule they inform is the
+[replacement chain](../../specs/add-ons.md#observation-and-continuation) of
+[B1184](../../specs/milestones/m4.md#b1184), implemented by `Engine.chain` in
+[the engine](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/cluster_objects_engine.py)
+and tested in
+[test_cluster_objects_chain.py](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_cluster_objects_chain.py).
+
+- With a CSV installed, the resolver takes candidates that `replaces` or
+  `skips` it or whose `olm.skipRange` covers its version, and sets each
+  candidate's `Replaces` to the installed CSV's name
+  (`pkg/controller/registry/resolver/resolver.go`, `getSubscriptionVariables`,
+  `c.Replaces = current.Name`). That value becomes the plan's
+  `status.bundleLookups[].replaces` beside `identifier` (the CSV) and
+  `catalogSourceRef` (`step_resolver.go`), and the CSV the plan creates gets it
+  as `spec.replaces` (`steps.go`, `csv.Spec.Replaces = replaces`). So the
+  on-cluster `replaces` always names the CSV actually replaced, whichever
+  catalog edge led there.
+- Bundle unpacking keeps the lookups in the plan's status and only removes
+  their `BundleLookupNotPersisted` condition (`catalog/operator.go`,
+  `unpackBundles`). A resolver entry that carries its bundle inline yields
+  steps and no lookup; the approval tests already require lookups, so such a
+  plan proves nothing.
+- Each plan gets a `spec.generation` one above the namespace's highest, and an
+  owner reference to every Subscription of the namespace, not only the one
+  that moved (`syncResolvingNamespace` passes the full list to
+  `createInstallPlan`). An owner reference therefore does not say which
+  Subscription a plan is for; the lookup's `identifier` and `replaces` do.
+- `gcInstallPlans` keeps `maxInstallPlanCount = 5` plans per namespace; each
+  sweep takes at most ten of the listed plans and deletes the lowest
+  generations among them. A pending plan and
+  other Subscriptions' plans count, so at most four upgrades survive behind
+  the pinned plan, and a chain whose link was collected cannot be proved.
+- A CSV that a newer CSV names as `spec.replaces` goes `Replacing`, then
+  `Deleting` once the newer one succeeds, then is deleted
+  (`olm/operator.go`, `isBeingReplaced`). Replaced CSVs never survive; the
+  plans are the only record of the chain.
+
 ## Catalogs and what moves them
 
 - The default sources `redhat-operators`, `certified-operators` and

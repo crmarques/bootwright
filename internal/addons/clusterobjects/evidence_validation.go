@@ -46,7 +46,7 @@ func ValidateEvidence(evidence Evidence) error {
 				return fail()
 			}
 		}
-		if !nativeName(olm.Namespace) || !nativeName(olm.Subscription) || !nativeName(olm.InstalledCSV) || !bounded(olm.CSVVersion) || !nativeImage(olm.CatalogImage) || !nativeImage(olm.BundleImage) || !validPlan(olm.InstallPlan) {
+		if !nativeName(olm.Namespace) || !nativeName(olm.Subscription) || !nativeName(olm.InstalledCSV) || !bounded(olm.CSVVersion) || !nativeImage(olm.CatalogImage) || !nativeImage(olm.BundleImage) || !validPlan(olm.InstallPlan) || !validChain(olm.Chain) {
 			return fail()
 		}
 		if olm.MaxOpenShiftVersion != "" && olm.MaxOpenShiftVersion != "invalid" && (!bounded(olm.MaxOpenShiftVersion) || !minorVersion.MatchString(olm.MaxOpenShiftVersion)) {
@@ -54,7 +54,7 @@ func ValidateEvidence(evidence Evidence) error {
 		}
 	}
 	for _, dependent := range evidence.Dependents {
-		if !nativeName(dependent.Namespace) || !nativeName(dependent.Subscription) || !nativeName(dependent.InstalledCSV) || !bounded(dependent.UID) || !validPlan(dependent.InstallPlan) {
+		if !nativeName(dependent.Namespace) || !nativeName(dependent.Subscription) || !nativeName(dependent.InstalledCSV) || !bounded(dependent.CSVVersion) || !bounded(dependent.UID) || !validPlan(dependent.InstallPlan) || !validChain(dependent.Chain) {
 			return fail()
 		}
 	}
@@ -64,6 +64,17 @@ func bounded(value string) bool    { return value == BoundedObservation(value) }
 func nativeName(value string) bool { return value == "" || bounded(value) && validName(value) }
 func nativeImage(value string) bool {
 	return value == "" || value == "invalid" || bounded(value) && api.ValidLexical("image", value)
+}
+func validChain(chain []ChainLink) bool {
+	if len(chain) > 16 {
+		return false
+	}
+	for _, link := range chain {
+		if link.Plan == "" || link.CSV == "" || link.Plan == "invalid" || link.CSV == "invalid" || !nativeName(link.Plan) || !nativeName(link.CSV) {
+			return false
+		}
+	}
+	return true
 }
 func validPlan(plan InstallPlan) bool {
 	if !nativeName(plan.Name) || !bounded(plan.UID) {

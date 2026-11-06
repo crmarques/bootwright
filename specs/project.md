@@ -80,9 +80,11 @@ resources are those that no owned-object evidence
 ([add-ons](add-ons.md#gitops-handoff-evidence)) lists. Handoff does not
 transfer, adopt or reclaim ownership, so an owned object stays as applied and
 a change to it is a destroy followed by a fresh apply
-([D153](milestones/backlog.md#d153)); upgrades and approvals of owned operator
-subscriptions stay outside Bootwright's scope
-([B106](milestones/backlog.md#b106)). An optional
+([D153](milestones/backlog.md#d153)); approving an upgrade of an owned
+operator subscription stays the owner's, and an upgrade the owner approves
+reads complete by the
+[replacement chain rule](add-ons.md#observation-and-continuation)
+([B1184](milestones/m4.md#b1184)). An optional
 [GitOps bootstrap object](add-ons.md#the-gitops-bootstrap-object) hands one
 cluster to GitOps earlier, once every other block of the `add-ons` stage that
 requires that cluster's installation block, its other add-on instances and

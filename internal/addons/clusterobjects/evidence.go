@@ -50,6 +50,12 @@ type OLMFacts struct {
 	BundleImage         string         `json:"bundleImage"`
 	Plans               []OperatorPlan `json:"plans,omitempty"`
 	CSVs                []OperatorCSV  `json:"csvs,omitempty"`
+	Chain               []ChainLink    `json:"chain,omitempty"`
+}
+
+type ChainLink struct {
+	Plan string `json:"plan"`
+	CSV  string `json:"csv"`
 }
 
 type OperatorPlan struct {
@@ -70,6 +76,8 @@ type DependentFacts struct {
 	UID          string      `json:"uid"`
 	InstallPlan  InstallPlan `json:"installPlan"`
 	InstalledCSV string      `json:"installedCSV"`
+	CSVVersion   string      `json:"csvVersion"`
+	Chain        []ChainLink `json:"chain,omitempty"`
 }
 
 type CheckResult struct {
@@ -161,6 +169,8 @@ const (
 type CSVObservation struct {
 	ReadKnown           bool
 	Installed, Expected string
+	Plan                string
+	Chain               []ChainLink
 }
 
 type Observation struct {
@@ -194,7 +204,7 @@ func EvaluateObservation(observation Observation) Realization {
 		}
 	}
 	for _, csv := range observation.CSVs {
-		if !csv.ReadKnown || (csv.Installed != "" && csv.Installed != csv.Expected) {
+		if !csv.ReadKnown || !reached(csv) {
 			return UnknownRealization
 		}
 		ready = ready && csv.Installed != ""
@@ -212,6 +222,23 @@ func EvaluateObservation(observation Observation) Realization {
 		return Completed
 	}
 	return Partial
+}
+
+func reached(csv CSVObservation) bool {
+	if csv.Installed == "" || csv.Installed == csv.Expected {
+		return len(csv.Chain) == 0
+	}
+	if len(csv.Chain) < 2 || len(csv.Chain) > 16 || csv.Chain[0].CSV != csv.Expected || csv.Chain[len(csv.Chain)-1].CSV != csv.Installed || csv.Plan != "" && csv.Chain[0].Plan != csv.Plan {
+		return false
+	}
+	seen := map[string]bool{}
+	for _, link := range csv.Chain {
+		if link.Plan == "" || link.CSV == "" || seen[link.CSV] || seen["plan/"+link.Plan] {
+			return false
+		}
+		seen[link.CSV], seen["plan/"+link.Plan] = true, true
+	}
+	return true
 }
 
 func BoundedObservation(value string) string {
@@ -295,7 +322,7 @@ func EvaluateEvidence(program Program, evidence Evidence) Realization {
 			return UnknownRealization
 		}
 		csvSeen[key] = true
-		observation.CSVs = append(observation.CSVs, CSVObservation{ReadKnown: true, Installed: olm.InstalledCSV, Expected: expected})
+		observation.CSVs = append(observation.CSVs, CSVObservation{ReadKnown: true, Installed: olm.InstalledCSV, Expected: expected, Plan: olm.InstallPlan.Name, Chain: olm.Chain})
 	}
 	for _, dependent := range evidence.Dependents {
 		key := dependent.Namespace + "/" + dependent.Subscription
@@ -308,7 +335,7 @@ func EvaluateEvidence(program Program, evidence Evidence) Realization {
 			state = Absent
 		}
 		observation.Dependents = append(observation.Dependents, state)
-		observation.CSVs = append(observation.CSVs, CSVObservation{ReadKnown: true, Installed: dependent.InstalledCSV, Expected: expectedCSVs[key]})
+		observation.CSVs = append(observation.CSVs, CSVObservation{ReadKnown: true, Installed: dependent.InstalledCSV, Expected: expectedCSVs[key], Plan: dependent.InstallPlan.Name, Chain: dependent.Chain})
 	}
 	if len(csvSeen) != len(expectedCSVs) {
 		return UnknownRealization
