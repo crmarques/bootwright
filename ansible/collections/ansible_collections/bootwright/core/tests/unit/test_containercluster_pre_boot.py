@@ -147,7 +147,7 @@ def test_each_proof_reaches_the_nodes_own_controller_with_its_own_credential(tmp
         assert (rendered["user"], rendered["password"]) == (
             "/run/bootwright/bmc-user-metal-02", "/run/bootwright/bmc-password-metal-02"), arm
         assert set(rendered) == {"endpoint", "verify", "user", "password", "ca", "expected",
-                                 "pinned_uuid_base64", "pinned_serial_base64", "require_tpm", "firmware", "root_disk"}, arm
+                                 "pinned_uuid_base64", "pinned_serial_base64", "require_tpm", "firmware", "root_disk", "root_volume"}, arm
         assert rendered["ca"] == "/run/bootwright/bmc-ca-metal-02"
 
 

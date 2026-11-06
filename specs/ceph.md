@@ -1074,7 +1074,7 @@ destroy that retires the cluster with its hosts
 ([removal](#removal-and-concurrency)), then a fresh apply, leave either
 refusal. On physical hosts the only retirement is the erase-backed
 [physical retirement](#devices-and-destructive-ownership), which needs each
-Machine's original erase policy to cover its root disk and every selected
+Machine's original erase policy to cover every selected
 data, DB and WAL disk. Without that policy an interrupted physical deployment
 has no forward or retirement exit today: only the orphan-acknowledged
 [context deletion](contexts.md#permanent-deletion) remains, and it abandons
@@ -1130,6 +1130,27 @@ evidence, a host block through its preparation evidence. Only the entries coded
 no refusal stays the generic adapter failure, failing the attempt.
 
 ## Devices and destructive ownership
+
+When the original policy retains the root, the Ceph host block first proves
+and removes only its original FSID's native daemon layout, own cluster-key
+entry and registry anchor, using the verified package cephadm without disk zap.
+A terminal retirement requires that native-absence receipt for every retained
+root, including hosts with no OSDs, plus verified erase receipts for every
+selected data, DB and WAL disk. Foreign state or an interrupted unproved
+cleanup refuses or remains partial. Generic online removal remains closed by
+the client-quiescence requirement.
+
+Protected Bootwright recovery/custody and retry journals and its restrictive
+SSH policy remain on the retained OS; native absence is not whole-filesystem
+cleanup or sanitization. Reinstallation overwrites the independently selected
+root, and explicit root erasure keeps its existing whole-disk semantics.
+
+Physical retirement requires explicit original erase authority for every
+selected data, DB and WAL disk. It does not require the root disk: an omitted
+root is retained. Machine removal erases only its frozen explicit targets; an
+OS reinstall still overwrites its independently selected root volume.
+The Machine's proved logical-volume NAA is excluded from OSD selection at the
+live disk-identity boundary, even when the authored root uses firmware discovery.
 
 An OSD declaration authorizes only a finite, proved device set on its bound
 Machines. Before provisioning, dynamic selectors, including `all`, resolve to

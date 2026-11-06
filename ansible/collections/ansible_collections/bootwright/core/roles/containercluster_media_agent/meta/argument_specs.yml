@@ -70,7 +70,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [cluster-media-agent-v10]
+            choices: [cluster-media-agent-v11]
           workRoot:
             type: str
             required: true

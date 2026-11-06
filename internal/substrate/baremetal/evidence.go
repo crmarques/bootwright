@@ -11,6 +11,7 @@ import (
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 const maxEvidenceBytes = 64 << 10
@@ -28,14 +29,15 @@ type Evidence struct {
 	// Addresses is the complete hardware inventory the controller reported. An
 	// inventory it could not read in full is reported as no inventory at all,
 	// because a partial one cannot prove this is the declared machine.
-	Addresses     []string `json:"addresses"`
-	Manufacturer  string   `json:"manufacturer"`
-	Model         string   `json:"model"`
-	Postcondition bool     `json:"postcondition"`
-	Power         string   `json:"power"`
-	Request       string   `json:"request"`
-	Serial        string   `json:"serial"`
-	UUID          string   `json:"uuid"`
+	Addresses     []string                   `json:"addresses"`
+	Manufacturer  string                     `json:"manufacturer"`
+	Model         string                     `json:"model"`
+	Postcondition bool                       `json:"postcondition"`
+	Power         string                     `json:"power"`
+	Request       string                     `json:"request"`
+	RootVolume    *substrate.RootVolumeProof `json:"rootVolume,omitempty"`
+	Serial        string                     `json:"serial"`
+	UUID          string                     `json:"uuid"`
 }
 
 // ValidatePresence accepts evidence only when it proves the exact machine the
@@ -66,6 +68,9 @@ func ValidatePresence(data []byte, request Request, digest string) error {
 	if len(request.Addresses()) == 0 {
 		return refusal("lifecycle.state", "the machine request declares no hardware address to prove it by", "")
 	}
+	if request.RootVolumeRef != nil && (evidence.RootVolume == nil || !request.RootVolumeRef.Matches(*evidence.RootVolume)) || request.RootVolumeRef == nil && evidence.RootVolume != nil {
+		return refusal("lifecycle.state", "the machine proof does not identify the requested logical root volume", "restore the original machine proof")
+	}
 	return nil
 }
 
@@ -81,7 +86,7 @@ func ValidateAbsence(data []byte, digest string) error {
 	if !evidence.Postcondition || !evidence.Absent {
 		return refusal("lifecycle.state", "the machine adapter did not prove its removal", "")
 	}
-	if len(evidence.Addresses) != 0 || evidence.UUID != "" || evidence.Serial != "" {
+	if evidence.RootVolume != nil || len(evidence.Addresses) != 0 || evidence.UUID != "" || evidence.Serial != "" {
 		return refusal("lifecycle.state", "a removal that retains the machine reports nothing about it", "")
 	}
 	return nil
@@ -133,6 +138,12 @@ func reportedIdentity(evidence Evidence) (machineref.HardwareIdentity, string) {
 		if strings.IndexFunc(field.value, notPrintable) >= 0 {
 			return machineref.HardwareIdentity{}, "a " + field.property + " holding a character that is not printable"
 		}
+	}
+	if evidence.RootVolume != nil {
+		if !evidence.RootVolume.Valid() {
+			return machineref.HardwareIdentity{}, "an invalid root-volume proof"
+		}
+		identity.RootVolume = *evidence.RootVolume
 	}
 	return identity, ""
 }

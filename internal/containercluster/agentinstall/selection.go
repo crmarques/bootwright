@@ -29,6 +29,7 @@ var unsupportedSelections = [][]string{
 type Requirements struct {
 	ArtifactServers []string
 	DNSServers      []string
+	VolumeMachines  []string
 	Machines        []string
 	NTPServers      []string
 	Proxies         []string
@@ -299,6 +300,12 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 		TrustBundleRefs: cluster.Spec().Get("install", "additionalTrustBundleRefs").Strings(),
 		Version:         mediaRequestVersion, WorkRoot: WorkRoot(contextName, name),
 	}
+	for _, node := range nodes {
+		if ref := node.target.RootDeviceHints.VolumeRef; ref != nil {
+			mediaRequest.RootVolumes = append(mediaRequest.RootVolumes, RootVolumeBinding{Machine: node.machine.Name(), Hostname: node.name, Ref: *ref})
+			needs.VolumeMachines = append(needs.VolumeMachines, node.machine.Name())
+		}
+	}
 	if err := projectMediaFeatures(catalog, cluster, controllerMachine, &mediaRequest, &needs); err != nil {
 		return empty(err)
 	}
@@ -398,6 +405,9 @@ const maxInstallerRootDeviceGigabytes = 1<<53 - 1
 func installerRootDeviceHints(bound api.Object, hints substrate.RootDeviceHints) (rendered map[string]any, reason, remediation string) {
 	if reason, remedy := machine.AgentRootDeviceRefusal(bound); reason != "" {
 		return nil, reason, remedy
+	}
+	if hints.VolumeRef != nil {
+		return nil, "", ""
 	}
 	if len(hints.Names()) == 0 {
 		return nil, "", ""
@@ -576,12 +586,15 @@ func frozenHardware(target substrate.Target) *Hardware {
 	if !target.Physical {
 		return nil
 	}
-	hardware := Hardware{Interfaces: make([]Interface, 0, len(target.Interfaces)), RootSelector: "wwn"}
+	hardware := Hardware{RootVolumeRef: target.RootDeviceHints.VolumeRef, Interfaces: make([]Interface, 0, len(target.Interfaces)), RootSelector: "wwn"}
 	if hints := target.RootDeviceHints; hints.SerialNumber != "" && hints.SizeBytes != "" {
 		// Selection already checked the exact capacity and its integer bounds.
 		size, _ := strconv.ParseInt(hints.SizeBytes, 10, 64)
 		hardware.RootDisk = &RootDisk{SerialNumber: hints.SerialNumber, SizeBytes: size}
 		hardware.RootSelector = "serialAndSize"
+	}
+	if hardware.RootVolumeRef != nil {
+		hardware.RootSelector = "volume"
 	}
 	for _, declared := range target.Interfaces {
 		hardware.Interfaces = append(hardware.Interfaces, Interface{MACAddress: declared.MACAddress, Name: declared.Name})

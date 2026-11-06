@@ -30,10 +30,10 @@ def _link(value):
     return reference
 
 
-def _members(client, reference):
+def _members(client, reference, allow_empty=False):
     body, _headers = client._read(reference, doing="reading the root disk inventory")
     members = body.get("Members")
-    if (not isinstance(members, list) or not 1 <= len(members) <= MAX_STORAGE
+    if (not isinstance(members, list) or not (0 if allow_empty else 1) <= len(members) <= MAX_STORAGE
             or "Members@odata.nextLink" in body or "@odata.nextLink" in body):
         raise Refused(REFUSAL)
     count = body.get("Members@odata.count", len(members))

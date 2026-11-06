@@ -1,0 +1,257 @@
+{
+  "agentConfig": {
+    "additionalNTPSources": [
+      "192.0.2.1"
+    ],
+    "apiVersion": "v1beta1",
+    "hosts": [
+      {
+        "hostname": "master-0",
+        "interfaces": [
+          {
+            "macAddress": "aa:bb:cc:dd:ee:01",
+            "name": "enp1s0"
+          }
+        ],
+        "networkConfig": {
+          "dns-resolver": {
+            "config": {
+              "server": [
+                "192.0.2.1"
+              ]
+            }
+          },
+          "interfaces": [
+            {
+              "ipv4": {
+                "address": [
+                  {
+                    "ip": "198.51.100.41",
+                    "prefix-length": 24
+                  }
+                ],
+                "dhcp": false,
+                "enabled": true
+              },
+              "ipv6": {
+                "enabled": false
+              },
+              "mac-address": "aa:bb:cc:dd:ee:01",
+              "name": "enp1s0",
+              "state": "up",
+              "type": "ethernet"
+            }
+          ],
+          "routes": {
+            "config": [
+              {
+                "destination": "0.0.0.0/0",
+                "next-hop-address": "198.51.100.1",
+                "next-hop-interface": "enp1s0",
+                "table-id": 254
+              }
+            ]
+          }
+        },
+        "role": "master"
+      },
+      {
+        "hostname": "master-1",
+        "interfaces": [
+          {
+            "macAddress": "aa:bb:cc:dd:ee:02",
+            "name": "enp1s0"
+          }
+        ],
+        "networkConfig": {
+          "dns-resolver": {
+            "config": {
+              "server": [
+                "192.0.2.1"
+              ]
+            }
+          },
+          "interfaces": [
+            {
+              "ipv4": {
+                "address": [
+                  {
+                    "ip": "198.51.100.42",
+                    "prefix-length": 24
+                  }
+                ],
+                "dhcp": false,
+                "enabled": true
+              },
+              "ipv6": {
+                "enabled": false
+              },
+              "mac-address": "aa:bb:cc:dd:ee:02",
+              "name": "enp1s0",
+              "state": "up",
+              "type": "ethernet"
+            }
+          ],
+          "routes": {
+            "config": [
+              {
+                "destination": "0.0.0.0/0",
+                "next-hop-address": "198.51.100.1",
+                "next-hop-interface": "enp1s0",
+                "table-id": 254
+              }
+            ]
+          }
+        },
+        "role": "master",
+        "rootDeviceHints": {
+          "wwn": "0x5000c500a1b2c3d4"
+        }
+      },
+      {
+        "hostname": "master-2",
+        "interfaces": [
+          {
+            "macAddress": "aa:bb:cc:dd:ee:03",
+            "name": "enp1s0"
+          }
+        ],
+        "networkConfig": {
+          "dns-resolver": {
+            "config": {
+              "server": [
+                "192.0.2.1"
+              ]
+            }
+          },
+          "interfaces": [
+            {
+              "ipv4": {
+                "address": [
+                  {
+                    "ip": "198.51.100.43",
+                    "prefix-length": 24
+                  }
+                ],
+                "dhcp": false,
+                "enabled": true
+              },
+              "ipv6": {
+                "enabled": false
+              },
+              "mac-address": "aa:bb:cc:dd:ee:03",
+              "name": "enp1s0",
+              "state": "up",
+              "type": "ethernet"
+            }
+          ],
+          "routes": {
+            "config": [
+              {
+                "destination": "0.0.0.0/0",
+                "next-hop-address": "198.51.100.1",
+                "next-hop-interface": "enp1s0",
+                "table-id": 254
+              }
+            ]
+          }
+        },
+        "role": "master",
+        "rootDeviceHints": {
+          "wwn": "0x5000c500a1b2c3d4"
+        }
+      }
+    ],
+    "kind": "AgentConfig",
+    "metadata": {
+      "name": "metal"
+    },
+    "rendezvousIP": "198.51.100.41"
+  },
+  "budgets": {
+    "buildSeconds": 1800
+  },
+  "deliveryKind": "fetch",
+  "identity": {
+    "block": "cluster-media-metal",
+    "cluster": "metal",
+    "context": "lab"
+  },
+  "image": {
+    "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/private/clusters/metal",
+    "url": "https://192.0.2.1:8443/private/clusters/metal"
+  },
+  "installConfig": {
+    "apiVersion": "v1",
+    "baseDomain": "lab.example.test",
+    "compute": [
+      {
+        "name": "worker",
+        "replicas": 0
+      }
+    ],
+    "controlPlane": {
+      "name": "master",
+      "replicas": 3
+    },
+    "metadata": {
+      "name": "metal"
+    },
+    "networking": {
+      "clusterNetwork": [
+        {
+          "cidr": "10.128.0.0/14",
+          "hostPrefix": 23
+        }
+      ],
+      "machineNetwork": [
+        {
+          "cidr": "198.51.100.0/24"
+        }
+      ],
+      "serviceNetwork": [
+        "172.30.0.0/16"
+      ]
+    },
+    "platform": {
+      "baremetal": {
+        "apiVIPs": [
+          "198.51.100.20"
+        ],
+        "ingressVIPs": [
+          "198.51.100.21"
+        ]
+      }
+    },
+    "pullSecret": "",
+    "sshKey": ""
+  },
+  "manifests": [],
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "pullSecretRef": "openshift-pull-secret",
+  "release": {
+    "distribution": "openshift",
+    "version": "4.21.15"
+  },
+  "rootVolumes": [
+    {
+      "hostname": "master-0",
+      "machine": "metal-01",
+      "ref": {
+        "firmware": true
+      }
+    }
+  ],
+  "sshKeyRef": "sno-cluster-admin-ssh-key",
+  "tlsCertificateRef": "artifact-server-tls",
+  "tool": {
+    "compatibility": "openshift",
+    "kind": "openshift-install",
+    "version": "4.21.15"
+  },
+  "version": "cluster-media-agent-v11",
+  "workRoot": "/var/lib/bootwright-clusters/lab/metal"
+}

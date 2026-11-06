@@ -91,7 +91,7 @@
     # surrogate-pair escapes, and this filter writes neither.
     - name: Write the agent configuration
       ansible.builtin.copy:
-        content: '{{ bootwright_cluster_media_request.agentConfig | bootwright.core.to_installer_yaml }}'
+        content: '{{ bootwright_cluster_media_material.agentConfigBase64 | b64decode | from_json | bootwright.core.to_installer_yaml }}'
         dest: '{{ containercluster_media_agent_work }}/agent-config.yaml'
         owner: root
         group: root
@@ -240,6 +240,7 @@
     content: >-
       {{ {'inputs': bootwright_cluster_media_digest,
           'incarnation': bootwright_cluster_media_material.incarnation,
+          'rootVolumes': bootwright_cluster_media_material.rootVolumesBase64 | b64decode | from_json,
           'installer': bootwright_cluster_media_request.release.version,
           'flow': 'cluster-manifests-image' if bootwright_cluster_media_request.diskEncryption is defined else 'image'} | to_json }}
     dest: '{{ containercluster_media_agent_receipt }}'

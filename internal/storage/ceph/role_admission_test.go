@@ -145,6 +145,9 @@ func requireNestedOptions(t *testing.T, path string, declared map[string]specNod
 		sent := map[string]bool{}
 		for child := range member.Fields() {
 			option, flags, _ := strings.Cut(child.Tag.Get("json"), ",")
+			if option == "-" {
+				continue
+			}
 			sent[option] = true
 			kind, elements := ansibleType(child.Type)
 			want := specOption{Type: kind, Elements: elements, Required: !strings.Contains(flags, "omitempty") && !nullable(child.Type)}

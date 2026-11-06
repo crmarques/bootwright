@@ -148,8 +148,8 @@ func TestPhysicalEraseRequiresExactRootAndDistinctWholeTargets(t *testing.T) {
 	}
 	bad := machine.Spec().Get("hardware", "eraseOnRemoval").With("targets", api.ListValue(api.MapValue(text("deviceName", "/dev/other"), text("wwn", "wwn-example"), text("serialNumber", "serial-example"), number("sizeBytes", "8192"))))
 	machine = api.NewObject(api.Machine, machine.Name(), api.Value{}, machine.Spec().With("hardware", machine.Spec().Get("hardware").With("eraseOnRemoval", bad)))
-	if _, err = eraseRequest(machine, request); err == nil {
-		t.Fatal("erase omitted the approved root target")
+	if dataOnly, err := eraseRequest(machine, request); err != nil || len(dataOnly.Targets) != 1 {
+		t.Fatalf("data-only erase failed: %v", err)
 	}
 }
 
@@ -435,14 +435,16 @@ func TestPhysicalEraseIncludesARootDeclaredBySerialNumberAndSize(t *testing.T) {
 	if err != nil || strings.Contains(string(canonical), `"deviceName":""`) || strings.Contains(string(canonical), `"wwn":""`) {
 		t.Fatalf("a serial target froze an empty path or WWN: %v %s", err, canonical)
 	}
+	if got, err := build(data); err != nil || len(got.Targets) != 1 {
+		t.Fatalf("data-only erase failed: %v", err)
+	}
 	for name, test := range map[string]struct {
 		targets []api.Value
 		message string
 	}{
 		"another root size": {[]api.Value{data, root("480103985152")}, "root target names another wwn, serialNumber or sizeBytes"},
-		"no root target":    {[]api.Value{data}, "requires the approved root disk"},
 		"the root serial by path": {[]api.Value{api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"), text("wwn", "0x5000c500a1b2c3d4"),
-			text("serialNumber", "ZC1A2B3C"), number("sizeBytes", "480103981056"))}, "requires the approved root disk"},
+			text("serialNumber", "ZC1A2B3C"), number("sizeBytes", "480103981056"))}, "uses the original serial-only selector"},
 		"a lone deviceName": {[]api.Value{root("480103981056"), data.Without("wwn")}, "by deviceName with its wwn, or by serialNumber and sizeBytes alone"},
 		"a lone wwn":        {[]api.Value{root("480103981056"), data.Without("deviceName")}, "by deviceName with its wwn, or by serialNumber and sizeBytes alone"},
 	} {

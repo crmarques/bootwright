@@ -1,6 +1,6 @@
-implementation: storage-ceph-physical-retirement-v2
-content-digest: 1b62f110925d53862d3b78e0a205891c9ec549a22ef7d0a621adfae046c97676
-request-version: storage-ceph-physical-retirement-v2
+implementation: storage-ceph-physical-retirement-v3
+content-digest: fc7f9d52a4dfb2647f526c229cba53dd78052ed47c8ddffe1d48a37da6d28330
+request-version: storage-ceph-physical-retirement-v3
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -33,6 +33,7 @@ request-schema:
   hosts[].eraseTargets[].wwn string omitempty
   hosts[].machine string
   hosts[].name string
+  hosts[].retainRoot bool omitempty
   version string
 evidence-schema:
   cluster string
@@ -41,6 +42,7 @@ evidence-schema:
   prepared bool
   receipts []struct ceph.PhysicalRetirementReceipt
   receipts[].block string omitempty
+  receipts[].cleanup string omitempty
   receipts[].digest string omitempty
   receipts[].machine string
   receipts[].request string omitempty

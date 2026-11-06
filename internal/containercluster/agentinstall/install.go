@@ -574,6 +574,9 @@ func (c InstallCapability) pinValues(execution lifecycle.Execution, operation st
 		if err != nil {
 			return nil, err
 		}
+		if node.Hardware != nil && node.Hardware.RootVolumeRef != nil && (!pinned || !node.Hardware.RootVolumeRef.Matches(pin.RootVolume)) {
+			return nil, refusal("lifecycle.state", "the existing root volume has no matching durable Machine proof", "apply the Machine stage before building and installing")
+		}
 		if pinned {
 			maps.Copy(values, pin.PinValues(nodeVariable(index)))
 		} else if pinnedPort && operation == "apply" {

@@ -37,12 +37,13 @@ type Interface struct {
 // There is nothing here to create: the request names what must be proved, and
 // the proof is the whole of what this block does.
 type Request struct {
-	Controller Controller           `json:"controller"`
-	Hardware   []Interface          `json:"hardware"`
-	Identity   Identity             `json:"identity"`
-	Placement  machineref.Placement `json:"placement"`
-	Provider   string               `json:"provider"`
-	Version    string               `json:"version"`
+	Controller    Controller           `json:"controller"`
+	Hardware      []Interface          `json:"hardware"`
+	Identity      Identity             `json:"identity"`
+	Placement     machineref.Placement `json:"placement"`
+	Provider      string               `json:"provider"`
+	RootVolumeRef *substrate.VolumeRef `json:"rootVolumeRef,omitempty"`
+	Version       string               `json:"version"`
 }
 
 // Canonical encodes the request exactly as the plan digest and the adapter both

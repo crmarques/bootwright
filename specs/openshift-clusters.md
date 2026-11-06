@@ -60,6 +60,13 @@ the exact serial hint; it has no exact-size field. The existing
 [controller-to-installer race](state-reconciliation.md#physical-disk-safety)
 and real-hardware qualification remain.
 
+A physical node may instead use a [logical-volume root](api/machines.md#bmc-and-root-device-shape).
+The media block waits for that Machine's proof and binds the native WWN hint
+and its retained media receipt to the proved volume. A replay or installation
+whose current proof differs from that receipt refuses before boot. The native
+agent has no exact-capacity predicate; the BMC comparison and the existing
+controller-to-installer race still require real-controller qualification.
+
 A virtual node whose provider host is not the Machine the selected artifact
 server is placed on boots under a verified fetch of the private
 [boot image](#boot-media) instead of its emulated BMC's unverified one. The placement, install-profile and physical-node refusals

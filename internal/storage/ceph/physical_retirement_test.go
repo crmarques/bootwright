@@ -55,6 +55,9 @@ func physicalRetirementFixtureFrom(t *testing.T, catalogOf func() (api.Catalog, 
 	if err != nil {
 		t.Fatal(err)
 	}
+	for i := range cluster.Hosts {
+		cluster.Hosts[i].RetainRoot = false
+	}
 	request := physicalRetirementRequest(catalog, cluster)
 	for i := range request.Hosts {
 		request.Hosts[i].EraseTargets = eraseTargetsOf(request.Hosts[i].Machine, request.Hosts[i].Devices)
@@ -511,5 +514,138 @@ func TestUnstartedSerialRetirementCarriesTheFrozenSerialIntent(t *testing.T) {
 	}
 	if err := proveErasedDevices([]Device{{Serial: "SER-2", SizeBytes: serialSize - 4096}}, binding); err == nil {
 		t.Fatal("unstarted serial intent admitted an erase receipt of another size")
+	}
+}
+
+// Retaining the root needs a native-absence receipt in addition to every disk erase.
+func TestRetainedRootRetirementRequiresNativeCleanupAndAllDiskReceipts(t *testing.T) {
+	capability, e, cluster, _ := physicalRetirementFixture(t)
+	policy, err := DecodePhysicalRetirementRequest(e.Block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range policy.Hosts {
+		policy.Hosts[i].RetainRoot = true
+	}
+	data, _ := policy.Canonical()
+	e.Block = retirementBlock(t, e.Block.ID, e.Block.Kind, e.Block.Object, e.Block.Implementation, data)
+	if _, err := capability.Destroy(context.Background(), e); err == nil {
+		t.Fatal("disk erasure alone claimed retained-root retirement")
+	}
+	for i, pair := range e.RemovalProved {
+		if pair.Applied.Implementation != HostImplementation {
+			continue
+		}
+		request, err := DecodeHostRequest(pair.Applied.Block.Request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for n := range request.Cluster.Hosts {
+			request.Cluster.Hosts[n].RetainRoot = true
+		}
+		raw, _ := request.canonical()
+		block := retirementBlock(t, pair.Applied.Block.ID, pair.Applied.Kind, pair.Applied.Object, pair.Applied.Implementation, raw)
+		bound := request
+		bound.Cluster.Owner = e.ApplyOperation
+		bound.Cluster.FSID = FSIDFor(e.ApplyOperation, cluster.Cluster)
+		proof, _ := json.Marshal(HostEvidence{Version: HostEvidenceVersion, Request: block.RequestDigest, Owner: bound.Cluster.Owner, FSID: bound.Cluster.FSID, Host: bound.Host, Image: bound.Cluster.Image, Removed: true, NativeRemoved: true, Devices: []HostDevice{}})
+		var applied HostEvidence
+		if err := json.Unmarshal(pair.Applied.Evidence, &applied); err != nil {
+			t.Fatal(err)
+		}
+		applied.Request = block.RequestDigest
+		appliedRaw, _ := json.Marshal(applied)
+		e.RemovalProved[i] = lifecycle.RemovalEvidence{Applied: retirementRecord(block, reconciliation.Apply, appliedRaw), Removed: retirementRecord(block, reconciliation.Destroy, proof)}
+	}
+	result, err := capability.Destroy(context.Background(), e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var proof PhysicalRetirementEvidence
+	if err := json.Unmarshal(result.Evidence, &proof); err != nil {
+		t.Fatal(err)
+	}
+	for _, receipt := range proof.Receipts {
+		if !hex64(receipt.Cleanup) || !hex64(receipt.Digest) {
+			t.Fatal("native cleanup or disk proof lost")
+		}
+	}
+	for i, pair := range e.RemovalProved {
+		if pair.Applied.Implementation == "fixture-erase" {
+			e.RemovalProved = append(e.RemovalProved[:i:i], e.RemovalProved[i+1:]...)
+			break
+		}
+	}
+	if _, err := capability.Destroy(context.Background(), e); err == nil {
+		t.Fatal("native cleanup alone claimed disk erasure")
+	}
+}
+
+func TestRetainedMonitorWithoutOSDsNeedsNativeReceiptInsteadOfRootErase(t *testing.T) {
+	catalogOf := func() (api.Catalog, api.Object) {
+		catalog, cluster := physicalCatalog()
+		services := cluster.Spec().Get("services").Items()
+		services = append(services[:2:2], services[3:]...)
+		cluster = cluster.WithSpec(cluster.Spec().WithPath(api.ListValue(services...), "services"))
+		objects := catalog.Objects()
+		for i, o := range objects {
+			if o.Kind() == api.CephCluster && o.Name() == cluster.Name() {
+				objects[i] = cluster
+			}
+		}
+		return api.NewCatalog(objects), cluster
+	}
+	capability, e, cluster, _ := physicalRetirementFixtureFrom(t, catalogOf)
+	policy, err := DecodePhysicalRetirementRequest(e.Block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(policy.Hosts[0].Devices) != 0 || len(policy.Hosts[0].EraseTargets) != 0 {
+		t.Fatal("monitor fixture owns an OSD")
+	}
+	policy.Hosts[0].RetainRoot = true
+	data, _ := policy.Canonical()
+	e.Block = retirementBlock(t, e.Block.ID, e.Block.Kind, e.Block.Object, e.Block.Implementation, data)
+	if _, err := capability.Destroy(context.Background(), e); err == nil {
+		t.Fatal("zero-OSD monitor skipped native cleanup proof")
+	}
+	for i, pair := range e.RemovalProved {
+		if pair.Applied.Implementation != HostImplementation {
+			continue
+		}
+		request, err := DecodeHostRequest(pair.Applied.Block.Request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		target, _ := request.target()
+		if target.Machine != policy.Hosts[0].Machine {
+			continue
+		}
+		for n := range request.Cluster.Hosts {
+			if request.Cluster.Hosts[n].Machine == target.Machine {
+				request.Cluster.Hosts[n].RetainRoot = true
+			}
+		}
+		raw, _ := request.canonical()
+		block := retirementBlock(t, pair.Applied.Block.ID, pair.Applied.Kind, pair.Applied.Object, pair.Applied.Implementation, raw)
+		native, _ := json.Marshal(HostEvidence{Version: HostEvidenceVersion, Request: block.RequestDigest, Host: request.Host, Owner: e.ApplyOperation, FSID: FSIDFor(e.ApplyOperation, cluster.Cluster), Image: request.Cluster.Image, Removed: true, NativeRemoved: true, Devices: []HostDevice{}})
+		var applied HostEvidence
+		if err := json.Unmarshal(pair.Applied.Evidence, &applied); err != nil {
+			t.Fatal(err)
+		}
+		applied.Request = block.RequestDigest
+		original, _ := json.Marshal(applied)
+		e.RemovalProved[i] = lifecycle.RemovalEvidence{Applied: retirementRecord(block, reconciliation.Apply, original), Removed: retirementRecord(block, reconciliation.Destroy, native)}
+	}
+	result, err := capability.Destroy(context.Background(), e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var terminal PhysicalRetirementEvidence
+	if err := json.Unmarshal(result.Evidence, &terminal); err != nil {
+		t.Fatal(err)
+	}
+	if !terminal.Retired || !hex64(terminal.Receipts[0].Cleanup) || terminal.Receipts[0].Digest != "" {
+		t.Fatal("monitor retirement lacks native-only receipt", terminal.Receipts[0])
 	}
 }

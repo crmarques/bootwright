@@ -122,14 +122,18 @@ def main():
     params = module.params
     try:
         request = ceph_core.host_request(params["request"])
-        transport = ceph_core.Transport(request["cluster"], params["material"], scope=True)
+        material = dict(params["material"])
+        removal = material.pop("removal", "false")
+        ceph_native.require(removal in ("true", "false") and (removal == "false" or params["operation"] == "observe"), "request")
+        transport = ceph_core.Transport(request["cluster"], material, scope=True)
         if params["operation"] == "apply":
             result = ceph_core.host_step(request, params["step"], params["digest"], transport, plan_digest=params["plan_digest"],
                                          applied=params["applied"], pull=params["pull"], seconds=params["seconds"])
         else:
             if params["step"] is not None or params["pull"] is not None:
                 raise ceph_native.Refusal("request")
-            result = ceph_core.execute_host(request, params["operation"], params["digest"], transport)
+            operation = "observe-remove" if params["operation"] == "observe" and removal == "true" else params["operation"]
+            result = ceph_core.execute_host(request, operation, params["digest"], transport)
     except Exception as error:
         reason, detail = ceph_core.refusal(error, ceph_core.HOST_REASONS)
         failure = {"reason": reason}

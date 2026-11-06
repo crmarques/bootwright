@@ -14,7 +14,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-const EraseImplementation = "physical-erase-v11"
+const EraseImplementation = "physical-erase-v12"
 const eraseVariable = "bootwright_physical_erase"
 
 const (
@@ -91,7 +91,6 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 	seen := [3]map[string]bool{{}, {}, {}}
 	root := machine.Spec().Get("hardware", "rootDevice", "deviceName").Text()
 	hardware := install.Target.Hardware
-	rootIncluded := false
 	for _, value := range policy.Get("targets").Items() {
 		size, err := strconv.ParseInt(value.Get("sizeBytes").Text(), 10, 64)
 		if err != nil {
@@ -123,6 +122,9 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 			}
 			seen[index][identity] = true
 		}
+		if root == "" && !bySerial && hardware != nil && hardware.SerialNumber != "" && target.SerialNumber == hardware.SerialNumber {
+			return request, refusal("api.invariant", "a serial-selected root erase target uses the original serial-only selector", "omit deviceName and wwn for this root target")
+		}
 		isRoot := root != "" && target.DeviceName == root ||
 			root == "" && bySerial && hardware != nil && hardware.SerialNumber != "" && target.SerialNumber == hardware.SerialNumber
 		if isRoot && hardware != nil &&
@@ -131,11 +133,10 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 			return request, refusal("api.invariant", "physical erase's root target names another wwn, serialNumber or sizeBytes than spec.substrate.baremetal.rootDevice declares for the same disk",
 				"make the root target of spec.hardware.eraseOnRemoval and spec.substrate.baremetal.rootDevice name the same wwn, serialNumber and sizeBytes")
 		}
-		rootIncluded = rootIncluded || isRoot && (root != "" || hardware.SizeBytes != 0)
 		request.Targets = append(request.Targets, target)
 	}
-	if !rootIncluded || len(request.Targets) > machineref.MaxEraseTargets {
-		return request, refusal("api.invariant", "physical erase requires the approved root disk among at most 16 explicit targets", "list the root disk and each data disk to erase")
+	if len(request.Targets) == 0 || len(request.Targets) > machineref.MaxEraseTargets {
+		return request, refusal("api.invariant", "physical erase requires 1 to 16 explicit whole-disk targets", "list each disk to erase; an omitted root disk is retained")
 	}
 	slices.SortFunc(request.Targets, eraseTargetOrder)
 	request.Install.Private = &Publication{Path: install.Private.Path + "-erase", URL: install.Private.URL + "-erase", CertificateRef: install.Private.CertificateRef}

@@ -1,6 +1,6 @@
-implementation: physical-erase-v11
-content-digest: fc13841527a556079fa65c842324601c192bf4f004bf1349456f660350efb00b
-request-version: physical-erase-v11
+implementation: physical-erase-v12
+content-digest: c843c9173df6d11121b66dd4a4187e82ceb809100f45e58db0d515e802e247a6
+request-version: physical-erase-v12
 automation-formats: none
 mark-formats: none
 proof-ids: bootwright.erase=1
@@ -125,6 +125,10 @@ request-schema:
   install.target.hardware.interfaces[].macAddress string
   install.target.hardware.interfaces[].name string
   install.target.hardware.rootDevice string omitempty
+  install.target.hardware.rootVolumeRef *struct substrate.VolumeRef omitempty
+  install.target.hardware.rootVolumeRef.firmware bool omitempty
+  install.target.hardware.rootVolumeRef.storageId string omitempty
+  install.target.hardware.rootVolumeRef.volumeId string omitempty
   install.target.hardware.serialNumber string omitempty
   install.target.hardware.sizeBytes int64 omitempty
   install.target.hardware.wwn string omitempty

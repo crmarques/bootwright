@@ -261,6 +261,10 @@ argument_specs:
                 required: true
               provided:
                 type: bool
+              retainRoot:
+                type: bool
+              rootWWN:
+                type: str
               rootSerial:
                 type: str
               sshKeyRef:
@@ -804,7 +808,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [ceph-core-v42]
+            choices: [ceph-core-v43]
       bootwright_ceph_digest:
         type: str
         required: true

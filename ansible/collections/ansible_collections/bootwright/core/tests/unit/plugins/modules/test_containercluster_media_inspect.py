@@ -98,3 +98,13 @@ def run(module, arguments, capsys):
     with patch_module_args(arguments), pytest.raises(SystemExit):
         module.main()
     return json.loads(capsys.readouterr().out)
+
+
+def test_receipt_reads_forty_volume_proofs_with_maximal_ids(tmp_path):
+    frozen = built(tmp_path)
+    roots = {"node-%02d" % i: {"storageId": "S" * 128, "volumeId": "V" * 128,
+                               "wwn": "0x" + "5" * 32, "sizeBytes": 64 << 40} for i in range(40)}
+    content = json.dumps({"inputs": DIGEST, "installer": RELEASE, "rootVolumes": roots})
+    assert 4096 < len(content) < inspect.MAX_RECEIPT
+    (pathlib.Path(frozen["workRoot"]) / inspect.RECEIPT).write_text(content)
+    assert inspect.observe(frozen)["inputs"] == DIGEST

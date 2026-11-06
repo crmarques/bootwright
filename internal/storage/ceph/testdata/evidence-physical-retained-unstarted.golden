@@ -17,7 +17,7 @@
       "retainedWithoutInstall": true
     }
   ],
-  "request": "50bf1a3d4418ddebad13fea70b6ccd1ec2169799f8501845f62469e45636a2d8",
+  "request": "5de875df749fcfa72b69c3c0a9d1355c40c77a32a5dfc40dadbe2438a53dbd07",
   "retired": true,
-  "version": "storage-ceph-physical-retirement-v2"
+  "version": "storage-ceph-physical-retirement-v3"
 }

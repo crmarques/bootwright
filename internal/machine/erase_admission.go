@@ -30,13 +30,14 @@ func validateErase(o api.Object, variant string) []api.Issue {
 	issues := []api.Issue{}
 	targets := policy.Get("targets").Items()
 	if len(targets) < 1 || len(targets) > MaxEraseTargets {
-		issues = append(issues, invariant(path+".targets", "physical erase requires 1 to 16 explicit whole disks", "list each disk once, including the root device"))
+		issues = append(issues, invariant(path+".targets", "physical erase requires 1 to 16 explicit whole disks", "list each disk to erase once; an omitted root disk is retained"))
 	}
-	root, hints, included := substrate.RootDevicePath(o), substrate.MachineRootDeviceHints(o), false
+	root, hints := substrate.RootDevicePath(o), substrate.MachineRootDeviceHints(o)
 	rootSize, _ := strconv.ParseInt(hints.SizeBytes, 10, 64)
 	seen := [3]map[string]bool{{}, {}, {}}
 	for index, target := range targets {
 		field := fmt.Sprintf("%s.targets[%d]", path, index)
+		duplicateSerial := seen[2][target.Get("serialNumber").Text()]
 		if target.Has("deviceName") != target.Has("wwn") {
 			issues = append(issues, invariant(field, "an erase target names its disk by deviceName with its wwn, or by serialNumber and sizeBytes alone", "declare both deviceName and wwn for this target, or neither"))
 		}
@@ -60,16 +61,31 @@ func validateErase(o api.Object, variant string) []api.Issue {
 		} else if method := target.Get("method").Text(); size > MaxLogicalOverwriteBytes && (method == "logicalOverwrite" || method == "" && policy.Get("method").Text() == "logicalOverwrite") {
 			issues = append(issues, invariant(field+".sizeBytes", "a logicalOverwrite target is at most 896 GiB, so its write and readback fit the four-hour erase deadline", "declare method metadataClear for this target, or a disk of at most 896 GiB"))
 		}
+		if duplicateSerial {
+			continue
+		}
 		sized := hints.SizeBytes == "" || err == nil && size == rootSize
-		if root != "" {
-			included = included || target.Get("deviceName").Text() == root && sized
-		} else if hints.SerialNumber != "" && hints.SizeBytes != "" {
-			included = included || !target.Has("deviceName") && target.Get("serialNumber").Text() == hints.SerialNumber && sized
+		if root == "" && hints.SerialNumber != "" && target.Get("serialNumber").Text() == hints.SerialNumber && target.Has("deviceName") {
+			issues = append(issues, invariant(field, "a serial-selected root erase target uses the original serial-only selector", "omit deviceName and wwn for this root target"))
+		}
+		isRoot := root != "" && target.Get("deviceName").Text() == root || root == "" && hints.SerialNumber != "" && target.Get("serialNumber").Text() == hints.SerialNumber
+		if isRoot && !sized {
+			issues = append(issues, invariant(field+".sizeBytes", "an explicit root erase target must match the root's exact capacity", "correct the root erase target capacity"))
 		}
 	}
-	if !included {
-		issues = append(issues, invariant(path+".targets", "erase targets must include the root disk, by hardware.rootDevice.deviceName or by the serialNumber and sizeBytes of spec.substrate.baremetal.rootDevice",
-			"list the root disk among the erase targets as its root-device declaration names it"))
-	}
+
 	return issues
+}
+
+func RootEraseSelected(o api.Object) bool {
+	root, hints := substrate.RootDevicePath(o), substrate.MachineRootDeviceHints(o)
+	for _, target := range o.Spec().Get("hardware", "eraseOnRemoval", "targets").Items() {
+		if root != "" && target.Get("deviceName").Text() == root {
+			return true
+		}
+		if hints.SerialNumber != "" && target.Get("serialNumber").Text() == hints.SerialNumber && target.Get("sizeBytes").Text() == hints.SizeBytes {
+			return true
+		}
+	}
+	return false
 }

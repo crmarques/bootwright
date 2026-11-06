@@ -81,9 +81,10 @@ SUBVOLUME_PATH = re.compile(r"/volumes/(?:_nogroup|[A-Za-z0-9][A-Za-z0-9_.-]{0,1
                             r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\Z")
 CORE_PHASES = frozenset(("prerequisites", "claim", "devices", "osd_prepare", "tunnel_preflight", "authorize", "bootstrap", "tunnel_configure", "tunnel_mount",
                          "cache", "enroll", "license", "services", "stretch_locate", "stretch_enable", "dashboard", "dashboard_read", "dashboard_present",
-                         "observe", "unrecorded_observe", "bootstrap_state", "host_state", "destroy", "tiebreaker_observe", "tiebreaker_remove"))
+                         "observe", "unrecorded_observe", "bootstrap_state", "host_state", "destroy", "tiebreaker_observe", "tiebreaker_remove",
+                         "physical_host_observe", "physical_host_remove"))
 CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "tunnel_preflight", "observe", "unrecorded_observe", "bootstrap_state", "host_state",
-                                   "dashboard_read", "dashboard_present", "tiebreaker_observe"))
+                                   "dashboard_read", "dashboard_present", "tiebreaker_observe", "physical_host_observe"))
 # The cluster observation of a read no operation records, such as `bootwright diff --observe`: the only phase that lists the cluster's
 # pools and reports an OSD no declared service places instead of refusing it foreign-osd.
 UNRECORDED_OBSERVE = "unrecorded_observe"
@@ -625,7 +626,7 @@ def package_url(value):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v42")
+    require(request["version"] == "ceph-core-v43")
     if "security" in request:
         security = request["security"]
         require(isinstance(security, dict) and set(security) == {"fips", "cephxKeyType"})
@@ -736,11 +737,11 @@ def validate_hosts(request):
     for host in hosts:
         require(isinstance(host, dict) and set(host) >= {"name", "machine", "address", "user", "port", "devices", "labels", "location", "sshKeyRef"})
         require(not set(host) - {"name", "machine", "address", "user", "port", "devices", "labels", "location", "sshKeyRef",
-                                 "hostKeyRef", "knownHosts", "knownHostsRef", "physical", "hardware", "provided", "rootSerial"})
+                                 "hostKeyRef", "knownHosts", "knownHostsRef", "physical", "hardware", "provided", "retainRoot", "rootSerial", "rootWWN"})
         provided = host.get("provided", False)
         require(type(provided) is bool and ("provided" not in host or provided))
         require(not provided or named(host.get("knownHostsRef")) and not host["devices"]
-                and not {"hostKeyRef", "knownHosts", "physical", "hardware", "rootSerial"} & set(host))
+                and not {"hostKeyRef", "knownHosts", "physical", "hardware", "retainRoot", "rootSerial", "rootWWN"} & set(host))
         require(provided or "knownHostsRef" not in host)
         require(all(named(host[k]) for k in ("name", "machine", "user")))
         require(named(host["sshKeyRef"]))
@@ -757,8 +758,10 @@ def validate_hosts(request):
         require(type(host["port"]) is int and 1 <= host["port"] <= 65535)
         require(isinstance(host["devices"], list) and len(host["devices"]) <= 128)
         physical = host.get("physical", False)
+        require("retainRoot" not in host or physical and host["retainRoot"] is True)
         require(type(physical) is bool and ("hardware" not in host or physical))
         # The Machine's declared root disk serial, which no selected disk may report.
+        require("rootWWN" not in host or physical and re.fullmatch(r"0x[0-9a-f]{16}(?:[0-9a-f]{16})?", host["rootWWN"]) is not None)
         require("rootSerial" not in host or physical and re.fullmatch(r"[A-Za-z0-9._:+/=-]{1,256}", host["rootSerial"]) is not None)
         if physical:
             hardware = host.get("hardware")
@@ -4455,6 +4458,20 @@ class Worker:
         raise Refusal("client-quiescence-unqualified")
 
 
+class PhysicalHostRemovalWorker(Worker):
+    """The frozen physical host scope; native removal stays FSID-bound."""
+
+    admit = staticmethod(validate_scope)
+
+    def physical_host_observe(self):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_stretch
+        return ceph_native_stretch.PhysicalHostRemoval(self).observe()
+
+    def physical_host_remove(self):
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_stretch
+        return ceph_native_stretch.PhysicalHostRemoval(self).remove()
+
+
 def dispatch(envelope):
     APPLIED.clear()
     from ansible_collections.bootwright.core.plugins.module_utils import ceph_replication_native
@@ -4501,7 +4518,8 @@ def dispatch(envelope):
     user = isinstance(request, dict) and request.get("action") == "object-user"
     bucket = isinstance(request, dict) and request.get("action") == "object-bucket"
     rgw = export and isinstance(request.get("nfsExport"), dict) and "objectUser" in request["nfsExport"]
-    kind = (ceph_native_nvmeof.NVMeOFWorker if nvmeof else ceph_native_object.ObjectWorker if gateway
+    kind = (PhysicalHostRemovalWorker if phase in ("physical_host_observe", "physical_host_remove")
+            else ceph_native_nvmeof.NVMeOFWorker if nvmeof else ceph_native_object.ObjectWorker if gateway
             else ceph_native_object.UserWorker if user else ceph_native_object.BucketWorker if bucket
             else ceph_native_units.UnitWorker if unit else ceph_native_object.ExportUserWorker if rgw else ceph_native_nfs.ExportWorker if export
             else ceph_native_resources.ResourceWorker if resource else Worker)

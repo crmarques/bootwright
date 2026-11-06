@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	retiredReason   = "retired with its hosts, which this removal proves stopped"
+	retiredReason   = "retired with its complete host removal and the proofs that removal requires"
 	survivingReason = "removing a Ceph cluster whose hosts outlive this destroy is not yet supported (B491)"
 	survivingRemedy = "remove the cluster in the same destroy as every Bootwright-owned virtual host Machine it runs on, which retires it with them; removing it while a host survives waits for B491"
 )

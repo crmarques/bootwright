@@ -78,6 +78,8 @@ def presence(arguments, request_digest):
         "serial": serial,
         "uuid": uuid,
     }
+    if "rootVolume" in observation:
+        evidence["rootVolume"] = observation["rootVolume"]
     expected = {bounded(address, 32) for address in (arguments.get("expected") or [])}
     evidence["postcondition"] = bool(
         expected

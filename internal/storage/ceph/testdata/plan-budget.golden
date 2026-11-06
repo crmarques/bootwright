@@ -17,49 +17,49 @@
       },
       {
         "apply": 9075,
-        "destroy": 120,
+        "destroy": 720,
         "id": "ceph-host-example-node-1",
         "implementation": "storage-ceph-host-v1",
         "observe": 720
       },
       {
         "apply": 9075,
-        "destroy": 120,
+        "destroy": 720,
         "id": "ceph-host-example-node-2",
         "implementation": "storage-ceph-host-v1",
         "observe": 720
       },
       {
         "apply": 9075,
-        "destroy": 120,
+        "destroy": 720,
         "id": "ceph-host-example-node-3",
         "implementation": "storage-ceph-host-v1",
         "observe": 720
       },
       {
         "apply": 9075,
-        "destroy": 120,
+        "destroy": 720,
         "id": "ceph-host-example-node-4",
         "implementation": "storage-ceph-host-v1",
         "observe": 720
       },
       {
         "apply": 9075,
-        "destroy": 120,
+        "destroy": 720,
         "id": "ceph-host-example-node-5",
         "implementation": "storage-ceph-host-v1",
         "observe": 720
       },
       {
         "apply": 9075,
-        "destroy": 120,
+        "destroy": 720,
         "id": "ceph-host-example-node-6",
         "implementation": "storage-ceph-host-v1",
         "observe": 720
       },
       {
         "apply": 9075,
-        "destroy": 120,
+        "destroy": 720,
         "id": "ceph-host-example-node-7",
         "implementation": "storage-ceph-host-v1",
         "observe": 720
@@ -110,77 +110,77 @@
       },
       {
         "apply": 9075,
-        "destroy": 120,
+        "destroy": 720,
         "id": "ceph-host-example-node-1",
         "implementation": "storage-ceph-host-v1",
         "observe": 720
       },
       {
         "apply": 9075,
-        "destroy": 120,
+        "destroy": 720,
         "id": "ceph-host-example-node-10",
         "implementation": "storage-ceph-host-v1",
         "observe": 720
       },
       {
         "apply": 9075,
-        "destroy": 120,
+        "destroy": 720,
         "id": "ceph-host-example-node-11",
         "implementation": "storage-ceph-host-v1",
         "observe": 720
       },
       {
         "apply": 9075,
-        "destroy": 120,
+        "destroy": 720,
         "id": "ceph-host-example-node-2",
         "implementation": "storage-ceph-host-v1",
         "observe": 720
       },
       {
         "apply": 9075,
-        "destroy": 120,
+        "destroy": 720,
         "id": "ceph-host-example-node-3",
         "implementation": "storage-ceph-host-v1",
         "observe": 720
       },
       {
         "apply": 9075,
-        "destroy": 120,
+        "destroy": 720,
         "id": "ceph-host-example-node-4",
         "implementation": "storage-ceph-host-v1",
         "observe": 720
       },
       {
         "apply": 9075,
-        "destroy": 120,
+        "destroy": 720,
         "id": "ceph-host-example-node-5",
         "implementation": "storage-ceph-host-v1",
         "observe": 720
       },
       {
         "apply": 9075,
-        "destroy": 120,
+        "destroy": 720,
         "id": "ceph-host-example-node-6",
         "implementation": "storage-ceph-host-v1",
         "observe": 720
       },
       {
         "apply": 9075,
-        "destroy": 120,
+        "destroy": 720,
         "id": "ceph-host-example-node-7",
         "implementation": "storage-ceph-host-v1",
         "observe": 720
       },
       {
         "apply": 9075,
-        "destroy": 120,
+        "destroy": 720,
         "id": "ceph-host-example-node-8",
         "implementation": "storage-ceph-host-v1",
         "observe": 720
       },
       {
         "apply": 9075,
-        "destroy": 120,
+        "destroy": 720,
         "id": "ceph-host-example-node-9",
         "implementation": "storage-ceph-host-v1",
         "observe": 720

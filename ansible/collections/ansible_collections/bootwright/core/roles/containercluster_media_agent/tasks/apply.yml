@@ -2,7 +2,7 @@
 - name: Validate the frozen boot-media request
   ansible.builtin.assert:
     that:
-      - bootwright_cluster_media_request.version == 'cluster-media-agent-v10'
+      - bootwright_cluster_media_request.version == 'cluster-media-agent-v11'
       - bootwright_cluster_media_request.deliveryKind in ['fetch', 'push']
       - >-
         (bootwright_cluster_media_request.deliveryKind == 'fetch'
@@ -73,6 +73,16 @@
     src: '{{ containercluster_media_agent_receipt }}'
   register: containercluster_media_agent_built
   failed_when: false
+
+- name: Refuse reuse of media built for another logical root volume
+  ansible.builtin.assert:
+    that:
+      - >-
+        (containercluster_media_agent_built.content | b64decode | from_json).rootVolumes | default({})
+        == bootwright_cluster_media_material.rootVolumesBase64 | b64decode | from_json
+    fail_msg: The logical root-volume proof changed since this image was built; destroy the cluster media before building it again.
+    quiet: true
+  when: containercluster_media_agent_built.content is defined
 
 # A context deleted with --allow-orphans leaves its work areas, and a context
 # recreated under the same name derives the same path, so the area is reused

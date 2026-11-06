@@ -213,9 +213,9 @@ func automationFormats() map[string]automationFormat {
 
 		"export-prerequisite-monitor-v2": transient("the MON v2 prerequisite refusal token, read from the result channel within one adapter run"),
 
-		"ceph-host-v13":                {class: formatMirrored},
-		"ceph-host-evidence-v4":        {class: formatMirrored},
-		"ceph-core-v42":                {class: formatMirrored},
+		"ceph-host-v14":                {class: formatMirrored},
+		"ceph-host-evidence-v5":        {class: formatMirrored},
+		"ceph-core-v43":                {class: formatMirrored},
 		"ceph-core-evidence-v14":       {class: formatMirrored},
 		"ceph-tiebreaker-evidence-v1":  {class: formatMirrored},
 		"ceph-packages-v3":             {class: formatMirrored},
@@ -228,7 +228,7 @@ func automationFormats() map[string]automationFormat {
 		// The request versions each role refuses unless its request names.
 		"substrate-host-libvirt-v7":  {class: formatMirrored},
 		"machine-libvirt-v9":         {class: formatMirrored},
-		"machine-baremetal-v3":       {class: formatMirrored},
+		"machine-baremetal-v4":       {class: formatMirrored},
 		"substrate-host-kubevirt-v2": {class: formatMirrored},
 		"machine-kubevirt-v4":        {class: formatMirrored},
 		// The lend a hosted KubeVirt provider's runs take their access from:
@@ -236,12 +236,12 @@ func automationFormats() map[string]automationFormat {
 		"substrate-access-kubevirt-v1":          {class: formatMirrored},
 		"substrate-access-kubevirt-evidence-v1": {class: formatMirrored},
 		"os-package-tree-v1":                    {class: formatMirrored},
-		"os-install-anaconda-v26":               {class: formatMirrored},
-		"physical-erase-v11":                    {class: formatMirrored},
+		"os-install-anaconda-v27":               {class: formatMirrored},
+		"physical-erase-v12":                    {class: formatMirrored},
 		"os-host-firewall-v1":                   {class: formatMirrored},
 		"os-host-firewall-evidence-v1":          {class: formatMirrored},
-		"cluster-media-agent-v10":               {class: formatMirrored},
-		"cluster-install-agent-v15":             {class: formatMirrored},
+		"cluster-media-agent-v11":               {class: formatMirrored},
+		"cluster-install-agent-v16":             {class: formatMirrored},
 		"artifact-server-nginx-v4":              {class: formatMirrored},
 		"managed-service-v5":                    {class: formatMirrored},
 		// Power is no plan block: each run binds its request to the power
@@ -395,6 +395,8 @@ func automationCapitalized() map[string]automationFormat {
 		"Bootwright-Controller/1":                           transient("the controller download's User-Agent"),
 		"_BOOTWRIGHT_SOURCE":                                transient("the attribute that carries a helper's source into the worker process within one call"),
 		"._BOOTWRIGHT_SOURCE":                               transient("the attribute that carries a helper's source into the worker process within one call"),
+		"@@BOOTWRIGHT_VOLUME_WWN@@":                         kickstart,
+		"@@BOOTWRIGHT_VOLUME_SIZE@@":                        kickstart,
 		"@@BOOTWRIGHT_MARKER@@":                             kickstart,
 		"@@BOOTWRIGHT_AUTHORIZED_KEY@@":                     kickstart,
 		"@@BOOTWRIGHT_PRIVATE_URL@@":                        kickstart,

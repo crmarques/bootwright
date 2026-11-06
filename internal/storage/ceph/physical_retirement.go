@@ -13,7 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const PhysicalRetirementImplementation = "storage-ceph-physical-retirement-v2"
+const PhysicalRetirementImplementation = "storage-ceph-physical-retirement-v3"
 
 type PhysicalEraseTarget struct {
 	Serial    string `json:"serial"`
@@ -26,6 +26,7 @@ type PhysicalRetirementHost struct {
 	EraseTargets []PhysicalEraseTarget `json:"eraseTargets"`
 	Machine      string                `json:"machine"`
 	Name         string                `json:"name"`
+	RetainRoot   bool                  `json:"retainRoot,omitempty"`
 }
 
 type PhysicalRetirementRequest struct {
@@ -154,7 +155,7 @@ func physicalRetirementRequest(catalog api.Catalog, cluster Request) PhysicalRet
 			continue
 		}
 		machine, _ := catalog.Find(api.Machine, host.Machine)
-		entry := PhysicalRetirementHost{Name: host.Name, Machine: host.Machine, Devices: slices.Clone(host.Devices), EraseTargets: []PhysicalEraseTarget{}}
+		entry := PhysicalRetirementHost{RetainRoot: host.RetainRoot, Name: host.Name, Machine: host.Machine, Devices: slices.Clone(host.Devices), EraseTargets: []PhysicalEraseTarget{}}
 		policy := machine.Spec().Get("hardware", "eraseOnRemoval")
 		if method := policy.Get("method").Text(); method == "logicalOverwrite" || method == "metadataClear" {
 			for _, target := range policy.Get("targets").Items() {
@@ -175,7 +176,7 @@ func physicalPolicyFailure() error {
 
 func (r PhysicalRetirementRequest) authorized() error {
 	for _, host := range r.Hosts {
-		if len(host.EraseTargets) == 0 {
+		if len(host.EraseTargets) == 0 && (len(host.Devices) != 0 || !host.RetainRoot) {
 			return physicalRemovalRefusal()
 		}
 		for _, device := range host.Devices {
@@ -186,7 +187,7 @@ func (r PhysicalRetirementRequest) authorized() error {
 				return target.Serial == device.Serial && target.SizeBytes == device.SizeBytes
 			})
 			if !covered {
-				return failure("lifecycle.unsupported", "physical Ceph retirement requires explicit erasure of every selected data, DB and WAL disk", "include the root disk and every selected Ceph disk, by its WWN or its serial number and size, in each Machine's original eraseOnRemoval policy")
+				return failure("lifecycle.unsupported", "physical Ceph retirement requires explicit erasure of every selected data, DB and WAL disk", "include every selected Ceph disk, by its WWN or its serial number and size, in each Machine's original eraseOnRemoval policy")
 			}
 		}
 	}

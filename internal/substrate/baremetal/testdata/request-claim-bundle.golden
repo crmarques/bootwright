@@ -25,5 +25,5 @@
     "machine": "controller"
   },
   "provider": "floor",
-  "version": "machine-baremetal-v3"
+  "version": "machine-baremetal-v4"
 }

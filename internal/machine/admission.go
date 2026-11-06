@@ -46,6 +46,9 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 		bmc = substrate.NormalizeBMCDefaults(bmc).Default("protocol", api.StringValue("redfish"))
 		s = s.WithPath(bmc, "substrate", substrate.ArmBaremetal, "bmc")
 	}
+	if found && substrate.RealizesPhysicalNICs(provider) && !s.Get("os", "provided").Bool() && len(substrate.MachineRootDeviceHints(o.WithSpec(s)).Names()) == 0 {
+		s = s.WithPath(api.MapValue(), "substrate", substrate.ArmBaremetal, "rootDevice", "bootVolume")
+	}
 	o = o.WithSpec(s)
 	if native, issues := ComposeNetwork(o, c); native.Present() && len(issues) == 0 {
 		if binding, issues := resolveBindings(o, c, native); binding.Present() && len(issues) == 0 {
@@ -284,6 +287,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	issues = appendIssues(issues, validateHardware(o, c, variant)...)
 	issues = appendIssues(issues, validateErase(o, variant)...)
 	issues = appendIssues(issues, validateClear(o, variant == substrate.ArmBaremetal)...)
+	issues = appendIssues(issues, validateVolumeRoot(o, variant)...)
 	issues = appendIssues(issues, validateRootSize(o)...)
 	issues = appendIssues(issues, validateSelectingSerials(o, c)...)
 	network := s.Get("network")
@@ -649,7 +653,7 @@ func validateBaremetal(o api.Object) []api.Issue {
 	}
 	physical := s.Get("substrate", substrate.ArmBaremetal, "rootDevice")
 	bySerial := installed(o) && physical.Has("serialNumber") && physical.Has("sizeBytes")
-	if !s.Has("hardware", "rootDevice", "deviceName") && !physical.Has("wwn") && !bySerial {
+	if !s.Has("hardware", "rootDevice", "deviceName") && !physical.Has("wwn") && !bySerial && !physical.Has("volumeRef") && !physical.Has("bootVolume") {
 		issues = appendIssues(issues, invariant("$.spec.hardware.rootDevice", "bare-metal installation requires deviceName, wwn, or on a Bootwright-installed Machine serialNumber with sizeBytes, as its target selector",
 			"set spec.hardware.rootDevice.deviceName, spec.substrate.baremetal.rootDevice.wwn, or on a Bootwright-installed Machine spec.substrate.baremetal.rootDevice.serialNumber and sizeBytes"))
 	}
@@ -662,6 +666,12 @@ func AgentRootDeviceRefusal(o api.Object) (string, string) {
 		return "", ""
 	}
 	hints := substrate.MachineRootDeviceHints(o)
+	if hints.VolumeRef != nil {
+		if hints.VolumeRef.Valid() && len(hints.Names()) == 1 {
+			return "", ""
+		}
+		return "a volumeRef selects the root alone and requires safe storageId and volumeId segments", "declare only spec.substrate.baremetal.rootDevice.volumeRef"
+	}
 	wwn := clearDevicePath.MatchString("/dev/disk/by-id/wwn-" + hints.WWN)
 	serial := clearSerial.MatchString(hints.SerialNumber)
 	size, err := strconv.ParseInt(hints.SizeBytes, 10, 64)
@@ -944,4 +954,22 @@ func installAttachmentReferences(o api.Object, native api.Value, name string, vi
 		return []string{entry.Get("attachmentRef").Text()}
 	}
 	return []string{o.Spec().Get("network", "attachmentRef").Text()}
+}
+
+func validateVolumeRoot(o api.Object, variant string) []api.Issue {
+	hints := substrate.MachineRootDeviceHints(o)
+	if o.Spec().Has("substrate", "baremetal", "rootDevice", "volumeRef") && o.Spec().Has("substrate", "baremetal", "rootDevice", "bootVolume") {
+		return []api.Issue{invariant("$.spec.substrate.baremetal.rootDevice", "bootVolume and volumeRef are mutually exclusive", "choose one root-volume selector")}
+	}
+	if hints.VolumeRef == nil {
+		return nil
+	}
+	const path = "$.spec.substrate.baremetal.rootDevice.volumeRef"
+	if variant != substrate.ArmBaremetal || o.Spec().Get("os", "provided").Bool() || !hints.VolumeRef.Valid() || len(hints.Names()) != 1 {
+		return []api.Issue{invariant(path, "volumeRef selects an installed physical root alone, using 1 to 128 ASCII letters, digits, underscores or hyphens for each ID", "declare volumeRef with storageId and volumeId and remove other root hints")}
+	}
+	if !substrate.MachineBMC(o).Get("tls", "verify").Bool() || !strings.HasPrefix(substrate.MachineBMC(o).Get("address").Text(), "https://") {
+		return []api.Issue{invariant(path, "logical-volume discovery requires verified BMC TLS", "enable BMC TLS verification")}
+	}
+	return nil
 }

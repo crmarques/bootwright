@@ -115,9 +115,10 @@ type BIOSAttribute struct {
 // Hardware is the complete set of NICs a physical node must report, in the
 // order its Machine declares them.
 type Hardware struct {
-	Interfaces   []Interface `json:"interfaces"`
-	RootDisk     *RootDisk   `json:"rootDisk,omitempty"`
-	RootSelector string      `json:"rootSelector"`
+	Interfaces    []Interface          `json:"interfaces"`
+	RootDisk      *RootDisk            `json:"rootDisk,omitempty"`
+	RootSelector  string               `json:"rootSelector"`
+	RootVolumeRef *substrate.VolumeRef `json:"rootVolumeRef,omitempty"`
 }
 
 // RootDisk is the exact whole drive the controller must report uniquely before
@@ -151,6 +152,13 @@ type InstallManifest struct {
 	Name       string         `json:"name"`
 }
 
+// RootVolumeBinding ties one dynamic installer hint to its Machine's durable proof.
+type RootVolumeBinding struct {
+	Hostname string              `json:"hostname"`
+	Machine  string              `json:"machine"`
+	Ref      substrate.VolumeRef `json:"ref"`
+}
+
 // MediaRequest freezes the installer inputs as data and names secret
 // declarations whose material is lent only at execution. Fetch delivery owns
 // a private publication; push delivery owns a file in the controller work area.
@@ -171,6 +179,7 @@ type MediaRequest struct {
 	PullSecretRef  string               `json:"pullSecretRef"`
 	RegistryMirror *RegistryMirror      `json:"registryMirror,omitempty"`
 	Release        Release              `json:"release"`
+	RootVolumes    []RootVolumeBinding  `json:"rootVolumes,omitempty"`
 	SSHKeyRef      string               `json:"sshKeyRef"`
 	// TLSCertificateRef names the selected server's serving certificate, which
 	// the fetch proving the publication verifies the listener against. Only its
@@ -340,10 +349,12 @@ func validRootProof(hardware *Hardware) bool {
 	}
 	switch hardware.RootSelector {
 	case "wwn":
-		return hardware.RootDisk == nil
+		return hardware.RootDisk == nil && hardware.RootVolumeRef == nil
+	case "volume":
+		return hardware.RootDisk == nil && hardware.RootVolumeRef != nil && hardware.RootVolumeRef.Valid()
 	case "serialAndSize":
 		disk := hardware.RootDisk
-		return disk != nil && machineref.ValidDiskSerial(disk.SerialNumber) && disk.SizeBytes >= 4096 && disk.SizeBytes <= 64<<40 && disk.SizeBytes%4096 == 0
+		return hardware.RootVolumeRef == nil && disk != nil && machineref.ValidDiskSerial(disk.SerialNumber) && disk.SizeBytes >= 4096 && disk.SizeBytes <= 64<<40 && disk.SizeBytes%4096 == 0
 	default:
 		return false
 	}

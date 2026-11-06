@@ -16,6 +16,7 @@ import (
 
 type PhysicalRetirementReceipt struct {
 	Block                  string `json:"block,omitempty"`
+	Cleanup                string `json:"cleanup,omitempty"`
 	Digest                 string `json:"digest,omitempty"`
 	Machine                string `json:"machine"`
 	Request                string `json:"request,omitempty"`
@@ -57,7 +58,7 @@ func policyEvidence(e lifecycle.Execution, r PhysicalRetirementRequest, receipts
 func policyHosts(r PhysicalRetirementRequest) []Host {
 	hosts := []Host{}
 	for _, host := range r.Hosts {
-		hosts = append(hosts, Host{Name: host.Name, Machine: host.Machine, Devices: slices.Clone(host.Devices), Physical: true})
+		hosts = append(hosts, Host{RetainRoot: host.RetainRoot, Name: host.Name, Machine: host.Machine, Devices: slices.Clone(host.Devices), Physical: true})
 	}
 	return hosts
 }
@@ -119,6 +120,17 @@ func (c PhysicalRetirementCapability) completed(ctx context.Context, e lifecycle
 		if err := (PhysicalRetirementRequest{Hosts: r.Hosts[index : index+1]}).authorized(); err != nil {
 			return nil, err
 		}
+		cleanup := ""
+		if host.RetainRoot {
+			cleanup, err = physicalHostCleanupProof(e, r.Cluster, host)
+			if err != nil {
+				return nil, err
+			}
+			if len(r.Hosts[index].EraseTargets) == 0 {
+				receipts = append(receipts, PhysicalRetirementReceipt{Machine: host.Machine, Cleanup: cleanup})
+				continue
+			}
+		}
 		devices, err := originalPhysicalDevices(e, r.Cluster, host)
 		if err != nil {
 			return nil, err
@@ -127,6 +139,7 @@ func (c PhysicalRetirementCapability) completed(ctx context.Context, e lifecycle
 		if err != nil {
 			return nil, err
 		}
+		receipt.Cleanup = cleanup
 		receipts = append(receipts, receipt)
 	}
 	return policyEvidence(e, r, receipts, true)
@@ -346,7 +359,7 @@ func authorizePhysicalRetirement(e lifecycle.Execution, r Request) error {
 			continue
 		}
 		at := slices.IndexFunc(physical, func(candidate Host) bool { return candidate.Machine == host.Machine })
-		if at < 0 || physical[at].Name != host.Name || !slices.Equal(physical[at].Devices, host.Devices) {
+		if at < 0 || physical[at].Name != host.Name || physical[at].RetainRoot != host.RetainRoot || !slices.Equal(physical[at].Devices, host.Devices) {
 			return physicalPolicyFailure()
 		}
 		physical = slices.Delete(physical, at, at+1)
@@ -368,4 +381,33 @@ func physicalHostRelease(e lifecycle.Execution, frozen HostRequest) (json.RawMes
 		return nil, err
 	}
 	return json.Marshal(retirementFor(request))
+}
+
+func physicalHostCleanupProof(e lifecycle.Execution, cluster string, host Host) (string, error) {
+	found := ""
+	for _, pair := range e.RemovalProved {
+		if pair.Applied.Implementation != HostImplementation || pair.Applied.Object != cluster {
+			continue
+		}
+		request, err := DecodeHostRequest(pair.Applied.Block.Request)
+		if err != nil {
+			return "", err
+		}
+		target, ok := request.target()
+		if !ok || target.Machine != host.Machine {
+			continue
+		}
+		proof, err := decodeHostEvidence(pair.Removed.Evidence, pair.Applied.Block.RequestDigest)
+		request.Cluster.Owner = e.ApplyOperation
+		request.Cluster.FSID = FSIDFor(e.ApplyOperation, cluster)
+		if pair.Applied.Kind != string(api.CephCluster) || request.Cluster.Cluster != cluster || target.Name != host.Name || !target.Physical || !target.RetainRoot || !slices.Equal(target.Devices, host.Devices) || found != "" || !matchingRemovalPair(pair) || err != nil || !proof.NativeRemoved || !retained(proof, request) {
+			return "", physicalPolicyFailure()
+		}
+		digest := sha256.Sum256(pair.Removed.Evidence)
+		found = hex.EncodeToString(digest[:])
+	}
+	if found == "" {
+		return "", failure("lifecycle.state", "retained-root physical retirement lacks a proved FSID host cleanup", "continue the original removal; disk erasure alone does not remove Ceph host state")
+	}
+	return found, nil
 }

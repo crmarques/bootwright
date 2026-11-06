@@ -320,7 +320,7 @@ func hostDeadline(operation string) time.Duration {
 	switch operation {
 	case "apply":
 		return time.Duration(hostPackagesCall+hostImagesBudget+hostCallSlack+hostLaterCalls*nativeCall+hostRoleMargin()) * time.Second
-	case "observe":
+	case "observe", "destroy":
 		return time.Duration(660+60) * time.Second
 	}
 	return 2 * time.Minute

@@ -2,7 +2,7 @@
 - name: Validate the frozen boot-media request
   ansible.builtin.assert:
     that:
-      - bootwright_cluster_media_request.version == 'cluster-media-agent-v10'
+      - bootwright_cluster_media_request.version == 'cluster-media-agent-v11'
       - bootwright_cluster_media_request.deliveryKind in ['fetch', 'push']
       - >-
         (bootwright_cluster_media_request.deliveryKind == 'fetch'

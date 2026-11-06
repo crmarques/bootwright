@@ -444,3 +444,43 @@ def test_concurrent_authorized_keys_edit_is_preserved_before_rename(tiebreaker, 
     assert not any(item.startswith(".bootwright-") for item in os.listdir(directory))
     assert stretch.REMOVAL_ATTEMPT in tiebreaker.markers.records
     assert stretch.REMOVAL_COMPLETE not in tiebreaker.markers.records and not tiebreaker.commands
+
+
+def physical_removal(host):
+    host.host.pop("provided", None)
+    host.host.pop("knownHostsRef", None)
+    host.host.update(physical=True, retainRoot=True)
+    host.markers.records["owner.json"] = ceph_native.marker_identity(host.request)
+    return stretch.PhysicalHostRemoval(host)
+
+
+def test_retained_physical_root_removes_owned_fsid_daemons_without_zapping(tiebreaker):
+    host = tiebreaker
+    os.makedirs(host.path("var/lib/ceph", FSID, "osd.7"))
+    os.makedirs(host.path("var/lib/ceph", FSID, "mgr.node-5.a"))
+    cleanup = physical_removal(host)
+    assert cleanup.observe()["removed"] is False
+    assert cleanup.remove() == {"changed": True, "removed": True, "attempted": True}
+    assert cleanup.observe()["removed"] is True
+    assert cleanup.remove()["changed"] is False
+    assert host.commands == [[host.tool, "rm-cluster", "--fsid", FSID, "--force"]]
+    assert "--zap-osds" not in host.commands[0]
+    assert open(host.path("home/operator/.ssh/authorized_keys"), encoding="utf-8").read() == OPERATOR_LINE + "\n"
+
+
+def test_retained_physical_root_never_removes_foreign_fsid(tiebreaker):
+    host = tiebreaker
+    os.makedirs(host.path("var/lib/ceph", OTHER_FSID))
+    with pytest.raises(ceph_native.Refusal, match="tiebreaker-foreign"):
+        physical_removal(host).remove()
+    assert not host.commands and stretch.REMOVAL_ATTEMPT not in host.markers.records
+
+
+def test_retained_root_recovers_a_lost_native_cleanup_reply(tiebreaker):
+    host = tiebreaker
+    host.lose = True
+    cleanup = physical_removal(host)
+    with pytest.raises(ceph_native.Refusal, match="native-unknown"):
+        cleanup.remove()
+    assert cleanup.observe()["removed"] is True
+    assert cleanup.remove()["changed"] is False and len(host.commands) == 1

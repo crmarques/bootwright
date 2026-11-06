@@ -698,10 +698,28 @@ func (c Capability) pinValues(execution lifecycle.Execution, request Request) (m
 			"the reader of Machine/"+request.Identity.Object+"'s pinned identity is not configured", "")
 	}
 	pin, pinned, err := c.identities.PinnedIdentity(request.Identity.Object, execution.Proved)
-	if err != nil || !pinned {
+	if err != nil {
 		return nil, err
 	}
-	return pin.PinValues(""), nil
+	if !pinned && (request.Target.Hardware == nil || request.Target.Hardware.RootVolumeRef == nil) {
+		return nil, nil
+	}
+	if hardware := request.Target.Hardware; hardware != nil && hardware.RootVolumeRef != nil {
+		if !pinned || !hardware.RootVolumeRef.Matches(pin.RootVolume) {
+			return nil, refusal("lifecycle.state", "the existing root volume has no matching durable Machine proof", "apply the Machine stage before installing")
+		}
+		for _, target := range hardware.ClearOnInstall {
+			if canonicalWWN(target.WWN) == canonicalWWN(pin.RootVolume.WWN) {
+				return nil, refusal("api.invariant", "a data clear target is the resolved logical root volume", "remove the root from clearOnInstall")
+			}
+		}
+	}
+	values := pin.PinValues("")
+	if pin.RootVolume.Valid() {
+		values["rootVolumeWWN"] = canonicalWWN(pin.RootVolume.WWN)
+		values["rootVolumeSize"] = strconv.FormatInt(pin.RootVolume.SizeBytes, 10)
+	}
+	return values, nil
 }
 
 // authorizedKey reads the public half of the bound fleet key. Only that half

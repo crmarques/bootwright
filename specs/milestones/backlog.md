@@ -7243,3 +7243,23 @@ the exact serial hint. Its lack of an exact-size predicate and the existing
 controller-to-installer race remain explicit. Bootwright-installed RHEL and
 Ceph keep their existing proofs. Existing WWN selection, private media,
 hardware identity and pre-boot trust proofs are unchanged.
+
+### D239
+
+**owner** (2026-11-06): the owner approved an existing logical-volume root
+selector, separate OSD cleanup and explicit root erasure, then corresponding
+input-chart updates. This opens X319 (M1, B1193) and X320 (M2, B1194) out of
+sequence for implementation; operator acceptance prerequisites remain.
+
+The existing-volume selector names one Storage resource and one Volume, never
+its member Drives. The first implementation correlates a unique NAA durable
+identifier with the installer's whole disk and records the exact logical
+capacity. Unsupported or ambiguous correlation refuses. Existing explicit
+selectors remain supported. Discovery runs through the existing verified BMC
+proof, never during planning; generated media remains bound to that proof.
+
+The owner subsequently requested the configured Redfish boot device as the
+default OS target. Root omission on installed physical Machines derives
+`bootVolume: {}`. The supported automatic path follows the persistent boot
+order to an enabled local-disk option directly linked to an inventory Volume;
+unknown ordering or correlation refuses rather than choosing a leftover disk.

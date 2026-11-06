@@ -1,0 +1,20 @@
+{
+  "absent": false,
+  "addresses": [
+    "aa:bb:cc:dd:ee:01",
+    "aa:bb:cc:dd:ee:02"
+  ],
+  "manufacturer": "",
+  "model": "",
+  "postcondition": true,
+  "power": "Off",
+  "request": "digest",
+  "rootVolume": {
+    "sizeBytes": 8192,
+    "storageId": "RAID",
+    "volumeId": "OS",
+    "wwn": "0x5000000000000042"
+  },
+  "serial": "",
+  "uuid": "uuid-1"
+}

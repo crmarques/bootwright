@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v26'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v27'
       - bootwright_os_install_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_os_install_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - managedos_install_anaconda_work == '/var/lib/bootwright-install/'
@@ -229,7 +229,9 @@
              | replace('@@BOOTWRIGHT_MARKER@@', bootwright_os_install_material.marker)
              | replace('@@BOOTWRIGHT_AUTHORIZED_KEY@@', bootwright_os_install_material.authorizedKey)
              | replace('@@BOOTWRIGHT_PRIVATE_URL@@', managedos_install_anaconda_private_url)
-             | replace('@@BOOTWRIGHT_ARTIFACT_CERTIFICATE@@', managedos_install_anaconda_certificate) }}
+             | replace('@@BOOTWRIGHT_ARTIFACT_CERTIFICATE@@', managedos_install_anaconda_certificate)
+             | replace('@@BOOTWRIGHT_VOLUME_WWN@@', bootwright_os_install_material.rootVolumeWWN | default(''))
+             | replace('@@BOOTWRIGHT_VOLUME_SIZE@@', bootwright_os_install_material.rootVolumeSize | default('')) }}
         path: '{{ managedos_install_anaconda_work }}/ks.cfg'
       changed_when: true
       no_log: true

@@ -15,6 +15,7 @@
          if substrate_baremetal_machine_target_ca | length > 0 else '' }}
     require_tpm: '{{ substrate_baremetal_machine_target_require_tpm | default(false) }}'
     root_disk: '{{ substrate_baremetal_machine_target_root_disk | default({}) }}'
+    volume_ref: '{{ substrate_baremetal_machine_target_root_volume.ref | default({}) }}'
   register: substrate_baremetal_machine_target
   failed_when: false
   no_log: true
@@ -44,6 +45,14 @@
 - name: Name the hardware check as the refusal this proof makes
   ansible.builtin.set_fact:
     substrate_baremetal_machine_refusal: hardware-mismatch
+
+- name: Refuse a logical root volume that changed since its durable proof
+  ansible.builtin.assert:
+    that:
+      - substrate_baremetal_machine_target.observation.rootVolume | default({}) == substrate_baremetal_machine_target_root_volume.proof
+    fail_msg: The existing logical root volume changed or cannot be correlated; no media was inserted.
+    quiet: true
+  when: substrate_baremetal_machine_target_root_volume | default({}) | length > 0
 
 - name: Refuse a machine that is not the one this Machine declares
   ansible.builtin.assert:

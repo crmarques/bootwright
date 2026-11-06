@@ -2,6 +2,7 @@ package agentinstall
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // MediaCapability builds and publishes the image one cluster's nodes boot. It
@@ -20,10 +22,17 @@ import (
 type MediaCapability struct {
 	runner        Runner
 	authorizedKey AuthorizedKey
+	identities    Identities
 }
 
 func NewMedia(runner Runner, authorizedKey AuthorizedKey) MediaCapability {
 	return MediaCapability{runner: runner, authorizedKey: authorizedKey}
+}
+
+// WithIdentities supplies the durable Machine proof used by logical-volume roots.
+func (c MediaCapability) WithIdentities(identities Identities) MediaCapability {
+	c.identities = identities
+	return c
 }
 
 const mediaVariablePrefix = "bootwright_cluster_media"
@@ -66,6 +75,9 @@ func mediaRequires(needs Requirements) []reconciliation.ObjectRef {
 	references := make([]reconciliation.ObjectRef, 0, len(needs.ArtifactServers))
 	for _, name := range needs.ArtifactServers {
 		references = append(references, reconciliation.ObjectRef{Kind: "ArtifactServer", Object: name})
+	}
+	for _, name := range needs.VolumeMachines {
+		references = append(references, reconciliation.ObjectRef{Kind: "Machine", Object: name, Family: substrate.MachineFamily})
 	}
 	for _, name := range needs.Proxies {
 		references = append(references, reconciliation.ObjectRef{Kind: "Proxy", Object: name})
@@ -302,6 +314,13 @@ func (c MediaCapability) runWithOutputs(ctx context.Context, execution lifecycle
 		return lifecycle.RunResult{}, err
 	}
 	values := map[string]string{"incarnation": execution.Incarnation}
+	if operation == "apply" {
+		resolved, err := c.volumeValues(execution, request)
+		if err != nil {
+			return lifecycle.RunResult{}, err
+		}
+		maps.Copy(values, resolved)
+	}
 	var materials []lifecycle.MaterialFile
 	if operation == "apply" {
 		installer, err := ToolPath(ctx, execution, request.Tool, request.Tool.Kind)

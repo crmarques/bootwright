@@ -111,6 +111,7 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 		installation.ExpectedMACs = SortedUnique(installation.ExpectedMACs)
 		installation.RootSerial, installation.RootWWN = request.Target.Hardware.SerialNumber, request.Target.Hardware.WWN
 		installation.RootSizeBytes = request.Target.Hardware.SizeBytes
+		installation.RootVolume = request.Target.Hardware.RootVolumeRef != nil
 		installation.ClearTargets = request.Target.Hardware.ClearOnInstall
 	}
 	return installation, nil

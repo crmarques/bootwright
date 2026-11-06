@@ -55,11 +55,12 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 			TLSVerify:      target.Controller.TLSVerify,
 			TrustBundleRef: target.Controller.TrustBundleRef,
 		},
-		Hardware:  hardware,
-		Identity:  Identity{Block: BlockID(name), Context: contextName, Object: name},
-		Placement: placement,
-		Provider:  target.Provider,
-		Version:   requestVersion,
+		Hardware:      hardware,
+		RootVolumeRef: target.RootDeviceHints.VolumeRef,
+		Identity:      Identity{Block: BlockID(name), Context: contextName, Object: name},
+		Placement:     placement,
+		Provider:      target.Provider,
+		Version:       requestVersion,
 	}, nil
 }
 

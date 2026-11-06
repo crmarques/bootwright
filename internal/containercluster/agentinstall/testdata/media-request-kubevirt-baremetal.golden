@@ -353,6 +353,6 @@
     "kind": "openshift-install",
     "version": "4.21.15"
   },
-  "version": "cluster-media-agent-v10",
+  "version": "cluster-media-agent-v11",
   "workRoot": "/var/lib/bootwright-clusters/lab/kubevirt"
 }

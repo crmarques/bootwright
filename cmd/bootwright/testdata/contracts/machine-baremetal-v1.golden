@@ -1,12 +1,12 @@
 implementation: machine-baremetal-v1
-content-digest: b01028b8482db469c14645bb495b321d0a51ba4bd982b138c29150b677f6a1d6
-request-version: machine-baremetal-v3
+content-digest: 880171915b86c72fe26032a3eea2b10daf0003538b819e65639f23715dede546
+request-version: machine-baremetal-v4
 automation-formats: none
 mark-formats: none
 proof-ids: none
 fixed-places: none
 effect-pins:
-  identity+exact-addresses+power+system-claim
+  identity+exact-addresses+power+system-claim+logical-volume
 request-identity:
   identity.context
   identity.object
@@ -36,6 +36,10 @@ request-schema:
   placement.privateKeyRef string omitempty
   placement.user string omitempty
   provider string
+  rootVolumeRef *struct substrate.VolumeRef omitempty
+  rootVolumeRef.firmware bool omitempty
+  rootVolumeRef.storageId string omitempty
+  rootVolumeRef.volumeId string omitempty
   version string
 evidence-schema:
   absent bool
@@ -45,5 +49,10 @@ evidence-schema:
   postcondition bool
   power string
   request string
+  rootVolume *struct substrate.RootVolumeProof omitempty
+  rootVolume.sizeBytes int64
+  rootVolume.storageId string
+  rootVolume.volumeId string
+  rootVolume.wwn string
   serial string
   uuid string

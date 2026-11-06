@@ -194,9 +194,9 @@
         }
       }
     ],
-    "version": "ceph-core-v42"
+    "version": "ceph-core-v43"
   },
   "host": "node-1",
   "pulls": [],
-  "version": "ceph-host-v13"
+  "version": "ceph-host-v14"
 }

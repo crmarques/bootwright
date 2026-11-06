@@ -17,7 +17,7 @@ const Implementation = "machine-baremetal-v1"
 // resolves by kind and implementation together.
 const Kind = "Machine"
 
-const requestVersion = "machine-baremetal-v3"
+const requestVersion = "machine-baremetal-v4"
 
 // BlockID names the block this capability contributes. A Machine has exactly
 // one provider, so the machine families of two substrates never collide.
@@ -30,7 +30,7 @@ func BlockID(machine string) string { return reconciliation.BlockIdentity("machi
 func ContentDigest() string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		"bootwright.substrate.baremetal.machine-v1", Implementation, requestVersion,
-		"identity+exact-addresses+power+system-claim",
+		"identity+exact-addresses+power+system-claim+logical-volume",
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }

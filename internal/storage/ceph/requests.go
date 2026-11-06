@@ -16,7 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v42"
+const Version = "ceph-core-v43"
 const Implementation = "storage-ceph-core-v3"
 
 type Device struct {
@@ -28,8 +28,9 @@ type Device struct {
 }
 
 type PhysicalIdentity struct {
-	MACs []string `json:"macs"`
-	UUID string   `json:"uuid"`
+	MACs    []string `json:"macs"`
+	UUID    string   `json:"uuid"`
+	RootWWN string   `json:"-"`
 }
 
 type Host struct {
@@ -46,7 +47,9 @@ type Host struct {
 	Physical      bool              `json:"physical,omitempty"`
 	Port          int               `json:"port"`
 	Provided      bool              `json:"provided,omitempty"`
+	RetainRoot    bool              `json:"retainRoot,omitempty"`
 	RootSerial    string            `json:"rootSerial,omitempty"`
+	RootWWN       string            `json:"rootWWN,omitempty"`
 	SSHKeyRef     string            `json:"sshKeyRef"`
 	User          string            `json:"user"`
 }
@@ -450,7 +453,12 @@ func bindHosts(r *Request, c api.Catalog, cluster api.Object, contextName string
 		h.Physical = substrate.RealizesPhysicalNICs(provider)
 		var err error
 		if h.Physical {
+			h.RetainRoot = !machine.RootEraseSelected(m)
 			h.RootSerial = substrate.MachineRootDeviceHints(m).SerialNumber
+			h.RootWWN = substrate.MachineRootDeviceHints(m).WWN
+			if path := substrate.RootDevicePath(m); strings.HasPrefix(path, "/dev/disk/by-id/wwn-0x") {
+				h.RootWWN = strings.TrimPrefix(path, "/dev/disk/by-id/wwn-")
+			}
 			h.Devices, err = physicalDevices(c, cluster, m, name)
 		} else {
 			h.Devices, err = virtualDevices(c, m, contextName)

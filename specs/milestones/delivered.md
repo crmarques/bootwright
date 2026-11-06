@@ -12298,3 +12298,43 @@ sanitization, and proof forwarding and ordering before media. The delivering
 commit records the gate commands and results. No real hardware was contacted
 and no operator acceptance is claimed. The downstream template-input chart
 uses per-master `rootDisk.serial` and exact `rootDisk.size` in its own change.
+
+### X319 — Existing logical root volumes
+
+Delivers [B1193](m1.md#b1193) in-tree under [D239](backlog.md#d239), awaiting
+operator acceptance. The [logical-volume selector](../api/machines.md#existing-logical-root-volumes)
+defaults an omitted physical root to the persistent Redfish boot volume, with
+an explicit existing-volume override. The Machine proof, installer inputs and
+media receipt bind the resolved NAA and exact capacity; incomplete inventory,
+ambiguous correlation, replay drift and pre-boot changes refuse.
+
+**Delivery commit:** the `feat(substrate): discover logical boot volumes and
+retain roots during Ceph retirement` commit carrying this record and X320.
+Its body records exact commands and results: `make focus`, `make check`,
+`make race` and race tests of the changed Machine, Substrate, Installation,
+Agent install and Ceph packages passed. The serial collection suite reported
+9139 passes and one existing skip; the skipped case is not qualification.
+The independent safety review found no remaining blockers. Initial sandbox
+runs could not bind test sockets; the final permitted offline runs passed.
+
+Real-controller boot-option mapping, installer correlation and media replay
+remain unrun operator gates. Discovery supports a directly linked Volume with
+an OS-correlatable NAA; it does not guess from display names, member Drives or
+unselected disks. The native agent's exact-capacity limitation and the existing
+controller-to-installer race remain. No live host effects or push occurred.
+
+### X320 — Physical retirement with a retained root
+
+Delivers [B1194](m2.md#b1194) in-tree under [D239](backlog.md#d239), awaiting
+operator acceptance, in the same delivery commit and gates as X319.
+[Explicit erase targets](../api/machines.md#physical-erase-policy) no longer require
+the root. [Ceph retirement](../ceph.md#devices-and-destructive-ownership)
+requires every selected data, DB and WAL disk's original erase authority and,
+when retaining the root, a matching FSID-scoped native cleanup receipt.
+
+Regressions cover root exclusion, native cleanup dispatch and deadline,
+foreign-state refusals, malformed and partial observations, lost replies,
+complete-host removal authority and hosts with no OSDs. Generic online removal
+remains closed. Protected Bootwright recovery/custody records and restrictive
+SSH policy remain on the retained OS; cleanup is not filesystem sanitization.
+Physical retirement and recovery on real hosts remain unrun operator gates.

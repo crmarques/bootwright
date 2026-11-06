@@ -633,7 +633,7 @@ server and refuses unless it does
 
 `hardware.rootDevice` admits only `deviceName`, `model`, `vendor`,
 `minSizeGigabytes` and boolean `rotational`, on every substrate and with or
-without `installProfileRef`; `substrate.baremetal.rootDevice` admits `wwn`,
+without `installProfileRef`; `substrate.baremetal.rootDevice` admits `bootVolume`, `volumeRef`, `wwn`,
 `hctl`, `serialNumber` and `sizeBytes`, which only a physical disk carries, since
 the disks a virtual substrate creates carry no WWN, SCSI address or serial number
 ([substrates](../substrates.md#machine-realization)). `sizeBytes` refuses
@@ -676,6 +676,34 @@ declared by no other Machine; a second declaration refuses `api.invariant` at
 its field, naming the other Machine, because two disks sharing a serial number
 cannot be told apart.
 
+### Existing logical root volumes
+
+An installed physical Machine with no root hints defaults to
+`substrate.baremetal.rootDevice.bootVolume: {}`. This selects the first enabled
+persistent local-disk firmware boot option through Redfish `BootOrder`, its
+`BootOptionReference` and a direct `RelatedItem` link to a Volume in this
+ComputerSystem's complete Storage inventory. Known non-disk options are
+skipped; an unknown or uncorrelatable earlier disk option refuses. Transient
+boot overrides, display names, `IsBootCapable`, a single available volume and
+member Drive serials select nothing.
+
+Alternatively `volumeRef: {storageId: <id>, volumeId: <id>}` positively selects
+one existing logical volume. Each ID is 1 to 128 ASCII letters, digits,
+underscores or hyphens. Both selectors require verified BMC TLS, select alone,
+and refuse on OS-ready Machines. No controller, array or member disk is
+created, reconfigured or erased by discovery. Unsupported or ambiguous
+correlation refuses with the remedy to declare `volumeRef` or a supported
+explicit disk identity.
+
+The Machine proof records the selected IDs, one unique nonzero NAA identifier
+and exact 4096-aligned capacity up to 64 TiB. A UUID alone is not an OS disk
+identity. Consumers require that durable proof before building media, bind
+reused media to it, and rediscover and compare it before media insertion and
+after firmware changes. Anaconda proves one fixed writable whole disk with
+that NAA and exact capacity before storage. The native agent selects its
+exact WWN; [physical agent proof](../openshift-clusters.md#selection-and-refusal)
+owns its remaining controller-to-installer race and capacity limitation.
+
 ### Firmware block
 
 `substrate.baremetal.firmware` is atomic and authored only on a Machine: no
@@ -711,13 +739,14 @@ on removal; omission retains its disks.
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `method` | string | yes | — | `logicalOverwrite` zeroes and reads back every byte; `metadataClear` only the regions that make a disk read as empty to native probes, which is not sanitization. |
-| `targets` | array | yes | — | 1 to 16 whole disks keyed by `serialNumber`, including the root disk. |
+| `targets` | array | yes | — | 1 to 16 whole disks keyed by `serialNumber`; only listed disks are erased. |
 | `targets[].deviceName`, `wwn` | string | together or neither | — | The disk's exact path and the live sysfs WWN it reports, distinct across targets; omitted, the worker selects the one whole disk reporting `serialNumber` and `sizeBytes`. |
 | `targets[].serialNumber` | string | yes | — | The disk's live sysfs serial number, distinct across targets. |
 | `targets[].sizeBytes` | integer | yes | — | Exact logical capacity, a multiple of 4096 up to 64 TiB, and at most 896 GiB for a `logicalOverwrite` target. |
 | `targets[].method` | string | no | the policy's `method` | The same choice, for this disk only. |
 
-The root target is the one whose `deviceName` is
+The root is retained unless an explicit target names it. When present,
+the root target is the one whose `deviceName` is
 `hardware.rootDevice.deviceName`, or, for a root declared by serial number, the
 target without `deviceName` whose `serialNumber` and `sizeBytes` are the root
 device's. A target naming only one of `deviceName` and `wwn` refuses

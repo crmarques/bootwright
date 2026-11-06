@@ -18,8 +18,8 @@ import (
 )
 
 const HostImplementation = "storage-ceph-host-v1"
-const HostVersion = "ceph-host-v13"
-const HostEvidenceVersion = "ceph-host-evidence-v4"
+const HostVersion = "ceph-host-v14"
+const HostEvidenceVersion = "ceph-host-evidence-v5"
 const SharedLabel = "system_u:object_r:container_file_t:s0"
 const maxHostEvidence = 24576
 
@@ -138,6 +138,7 @@ type HostDevice struct {
 
 type HostEvidence struct {
 	CephadmSHA256   string       `json:"cephadmSHA256"`
+	NativeRemoved   bool         `json:"nativeRemoved,omitempty"`
 	Devices         []HostDevice `json:"devices"`
 	FIPS            *HostFIPS    `json:"fips,omitempty"`
 	FSID            string       `json:"fsid"`
@@ -360,6 +361,10 @@ func (HostCapability) Removal(ctx context.Context, block reconciliation.Block) (
 		return lifecycle.Removal{}, err
 	}
 	description, impacts := hostDescription(reconciliation.Destroy, r.Cluster.Cluster, r.Host)
+	if host, _ := r.target(); host.RetainRoot {
+		description = "remove the owned Ceph FSID from " + host.Machine
+		impacts = append(impacts, "remove-owned-ceph-native-state "+host.Machine)
+	}
 	return lifecycle.Removal{Description: description, Impacts: impacts, Consumes: []string{}}, nil
 }
 
@@ -403,13 +408,16 @@ func provedFor(e lifecycle.Execution) []lifecycle.BlockEvidence {
 func hostRefusals() map[string]error {
 	out := map[string]error{"unsupported-release": unsupportedFailure(), "fips-policy": adapterRefusals()["fips-policy"], "fips-not-enabled": fipsNotEnabled(""), "stretch-intent": stretchRefusals()["stretch-intent"]}
 	for reason, message := range map[string]string{
-		"image-pull":      "the frozen Ceph image or an auxiliary image digest could not be pulled within its three bounded attempts",
-		"image-platform":  "a pulled image is not its frozen linux/amd64 digest",
-		"image-profile":   "the contained probe of the frozen Ceph image did not prove its runtime profile",
-		"route-probe":     "the native SSH class inside the frozen Ceph image did not prove the verified tunnel route",
-		"device-identity": "the Ceph host could not derive its devices' native identities through the image SDK",
-		"runtime-profile": "the Ceph host's retained runtime profile is missing or contradicts the image it holds",
-		"not-ready":       "the Ceph host preparation did not prove every phase",
+		"image-pull":               "the frozen Ceph image or an auxiliary image digest could not be pulled within its three bounded attempts",
+		"image-platform":           "a pulled image is not its frozen linux/amd64 digest",
+		"image-profile":            "the contained probe of the frozen Ceph image did not prove its runtime profile",
+		"route-probe":              "the native SSH class inside the frozen Ceph image did not prove the verified tunnel route",
+		"tiebreaker-foreign":       "the retained-root host contains foreign or unproved Ceph state",
+		"not-removed":              "the selected FSID host state remains after cleanup",
+		"native-option-undeclared": "the selected cephadm does not declare an option required for cleanup",
+		"device-identity":          "the Ceph host could not derive its devices' native identities through the image SDK",
+		"runtime-profile":          "the Ceph host's retained runtime profile is missing or contradicts the image it holds",
+		"not-ready":                "the Ceph host preparation did not prove every phase",
 	} {
 		out[reason] = failure("lifecycle.unknown", message, "inspect the attempt's adapter output, then apply again; host preparation resumes from its journal")
 	}
@@ -447,11 +455,15 @@ func serialDeviceRefusals(host Host) map[string]error {
 }
 
 func rootDeviceRefusals(host Host) map[string]error {
-	if !host.Physical || host.RootSerial == "" {
+	if !host.Physical || host.RootSerial == "" && host.RootWWN == "" {
 		return nil
 	}
+	identity := "serial number " + host.RootSerial
+	if host.RootSerial == "" {
+		identity = "WWN " + host.RootWWN
+	}
 	return map[string]error{
-		"device-root": failure("lifecycle.unsupported", "Ceph host "+host.Name+" of Machine "+host.Machine+" selects a data, DB or WAL disk that reports the serial number "+host.RootSerial+", which Machine "+host.Machine+" declares for its root disk",
+		"device-root": failure("lifecycle.unsupported", "Ceph host "+host.Name+" of Machine "+host.Machine+" selects a data, DB or WAL disk that reports the "+identity+", which Machine "+host.Machine+" declares for its root disk",
 			"select another disk for the OSD services on Machine "+host.Machine+"; the root disk, whatever path names it, is never an OSD, DB or WAL device"),
 	}
 }
@@ -514,7 +526,7 @@ func hostMaterial(e lifecycle.Execution, r HostRequest, operation string, reader
 	return e, files, cleanup, nil
 }
 
-func (c HostCapability) run(ctx context.Context, e lifecycle.Execution, operation string, r HostRequest) (lifecycle.RunResult, error) {
+func (c HostCapability) run(ctx context.Context, e lifecycle.Execution, operation string, r HostRequest, removal ...bool) (lifecycle.RunResult, error) {
 	if c.runner == nil {
 		return lifecycle.RunResult{}, failure("lifecycle.state", "the Ceph host adapter is not configured", "")
 	}
@@ -526,7 +538,8 @@ func (c HostCapability) run(ctx context.Context, e lifecycle.Execution, operatio
 		return lifecycle.RunResult{}, err
 	}
 	execution, files, cleanup := e, []lifecycle.MaterialFile(nil), func() {}
-	if operation != "destroy" {
+	hostForRemoval, _ := r.target()
+	if operation != "destroy" || hostForRemoval.RetainRoot {
 		execution, files, cleanup, err = hostMaterial(e, r, operation, c.proofs)
 		if err != nil {
 			return lifecycle.RunResult{}, err
@@ -541,8 +554,12 @@ func (c HostCapability) run(ctx context.Context, e lifecycle.Execution, operatio
 	}
 	maps.Copy(refusals, serialDeviceRefusals(host))
 	maps.Copy(refusals, rootDeviceRefusals(host))
+	values := map[string]string{}
+	if len(removal) != 0 && removal[0] {
+		values["removal"] = "true"
+	}
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: HostImplementation, Operation: operation, Variable: "bootwright_ceph_host", Canonical: canonical,
-		Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Cluster.Controller}, Materials: files, Refusals: refusals, NativeErrors: true, Deadline: hostDeadline(operation)}))
+		Placement: machine.Placement{Connection: machine.ConnectionLocal, Machine: r.Cluster.Controller}, Materials: files, Values: values, Refusals: refusals, NativeErrors: true, Deadline: hostDeadline(operation)}))
 }
 
 func (c HostCapability) Apply(ctx context.Context, e lifecycle.Execution) (lifecycle.Result, error) {
@@ -605,7 +622,11 @@ func (c HostCapability) Destroy(ctx context.Context, e lifecycle.Execution) (lif
 		if err != nil {
 			return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 		}
-		return lifecycle.Result{Outcome: reconciliation.OutcomeUnchanged, Evidence: evidence}, nil
+		host, _ := frozen.target()
+		if !host.RetainRoot {
+			return lifecycle.Result{Outcome: reconciliation.OutcomeUnchanged, Evidence: evidence}, nil
+		}
+		return c.cleanupPhysicalHost(ctx, e, false)
 	}
 	r, err := c.prepare(ctx, e)
 	if err != nil {
@@ -641,7 +662,22 @@ func (c HostCapability) ObserveRemoval(ctx context.Context, e lifecycle.Executio
 		if err != nil {
 			return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
 		}
-		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Outcome: reconciliation.OutcomeUnchanged, Evidence: evidence}, nil
+		host, _ := frozen.target()
+		if !host.RetainRoot {
+			return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Outcome: reconciliation.OutcomeUnchanged, Evidence: evidence}, nil
+		}
+		result, err := c.cleanupPhysicalHost(ctx, e, true)
+		if err != nil {
+			return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
+		}
+		proof, err := decodeHostEvidence(result.Evidence, e.Block.RequestDigest)
+		if err != nil {
+			return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
+		}
+		if !proof.NativeRemoved {
+			return lifecycle.Observation{Effect: reconciliation.EffectPartial, Evidence: result.Evidence}, nil
+		}
+		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Outcome: result.Outcome, Evidence: result.Evidence}, nil
 	}
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
 	r, err := c.prepare(ctx, e)
@@ -655,9 +691,22 @@ func (c HostCapability) ObserveRemoval(ctx context.Context, e lifecycle.Executio
 	return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: evidence}, nil
 }
 
-func (HostCapability) Quiescent(ctx context.Context, _ lifecycle.Probe) (lifecycle.Quiescence, error) {
+func (HostCapability) Quiescent(ctx context.Context, probe lifecycle.Probe) (lifecycle.Quiescence, error) {
 	if err := ctx.Err(); err != nil {
 		return lifecycle.Quiescence{State: lifecycle.Unproved}, err
+	}
+	if len(probe.Block.Request) != 0 {
+		r, err := DecodeHostRequest(probe.Block.Request)
+		if err != nil {
+			return lifecycle.Quiescence{State: lifecycle.Unproved}, err
+		}
+		target, _ := r.target()
+		if target.RetainRoot {
+			if !probe.RetiredWithHosts {
+				return lifecycle.Quiescence{State: lifecycle.Unproved, Reason: survivingReason, Remedy: survivingRemedy}, nil
+			}
+			return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "the complete physical host retirement authorizes FSID-scoped native cleanup and explicit disk erasure"}, nil
+		}
 	}
 	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "host packages and the pulled image are retained shared host state; releasing them changes nothing"}, nil
 }
@@ -711,4 +760,42 @@ func (c HostCapability) AccessCredentials(block reconciliation.Block) ([]string,
 		return nil, err
 	}
 	return []string{r.Cluster.RegistryRef}, nil
+}
+
+func (c HostCapability) cleanupPhysicalHost(ctx context.Context, e lifecycle.Execution, observe bool) (lifecycle.Result, error) {
+	r, err := c.prepare(ctx, e)
+	if err != nil {
+		return lifecycle.Result{}, err
+	}
+	operation := "destroy"
+	if observe {
+		operation = "observe"
+	}
+	result, err := c.run(ctx, e, operation, r, observe)
+	if err != nil {
+		return lifecycle.Result{}, err
+	}
+	evidence, err := decodeHostEvidence(result.Evidence, e.Block.RequestDigest)
+	if err != nil || !evidence.identifies(r) || evidence.NativeRemoved && !retained(evidence, r) || !observe && (!evidence.NativeRemoved || !retained(evidence, r)) {
+		return lifecycle.Result{}, failure("lifecycle.unknown", "the retained-root Ceph host cleanup did not prove native absence", "continue the original removal")
+	}
+	outcome := reconciliation.OutcomeUnchanged
+	if result.Outcome == "changed" {
+		outcome = reconciliation.OutcomeChanged
+	} else if result.Outcome != "unchanged" {
+		return lifecycle.Result{}, physicalPolicyFailure()
+	}
+	return lifecycle.Result{Outcome: outcome, Evidence: result.Evidence}, nil
+}
+
+func (HostCapability) HostMachines(block reconciliation.Block) ([]string, error) {
+	r, err := DecodeHostRequest(block.Request)
+	if err != nil {
+		return nil, err
+	}
+	host, _ := r.target()
+	if !host.RetainRoot {
+		return nil, nil
+	}
+	return installedMachines(Request{Hosts: r.Cluster.Hosts}), nil
 }

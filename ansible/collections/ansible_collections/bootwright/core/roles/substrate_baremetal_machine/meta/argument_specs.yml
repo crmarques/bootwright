@@ -38,7 +38,7 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [machine-baremetal-v3]
+            choices: [machine-baremetal-v4]
       bootwright_substrate_physical_digest:
         type: str
         required: true
@@ -94,11 +94,15 @@ argument_specs:
           # step whole; empty when it declares none.
           firmware:
             type: dict
+          root_volume:
+            type: dict
           root_disk:
             type: dict
       substrate_baremetal_machine_target_require_tpm:
         type: bool
       substrate_baremetal_machine_target_firmware:
+        type: dict
+      substrate_baremetal_machine_target_root_volume:
         type: dict
       substrate_baremetal_machine_target_root_disk:
         type: dict

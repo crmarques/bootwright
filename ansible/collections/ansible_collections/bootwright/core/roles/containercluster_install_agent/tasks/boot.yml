@@ -97,6 +97,10 @@
               require_tpm: '{{ containercluster_install_agent_node.requireTPM | default(false) }}'
               firmware: '{{ containercluster_install_agent_node.firmware | default({}) }}'
               root_disk: '{{ containercluster_install_agent_node.hardware.rootDisk | default({}) }}'
+              root_volume: >-
+                {{ {'ref': containercluster_install_agent_node.hardware.rootVolumeRef,
+                    'proof': bootwright_cluster_install_material['pinnedRootVolumeBase64Node' ~ containercluster_install_agent_index] | b64decode | from_json}
+                   if containercluster_install_agent_node.hardware.rootVolumeRef is defined else {} }}
               expected: "{{ containercluster_install_agent_node.hardware.interfaces | default([]) | map(attribute='macAddress') | list }}"
               pinned_uuid_base64: >-
                 {{ bootwright_cluster_install_material['pinnedUUIDBase64Node' ~ containercluster_install_agent_index] | default('') }}

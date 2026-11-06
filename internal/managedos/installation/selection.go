@@ -560,7 +560,7 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 	// fixed, so its derived interfaces are deliberately left out of what the
 	// installation freezes.
 	if derived.Physical {
-		hardware := Hardware{ClearOnInstall: clearTargetsFor(machine), RootDevice: derived.RootDeviceHints.DeviceName, SerialNumber: derived.RootDeviceHints.SerialNumber}
+		hardware := Hardware{RootVolumeRef: derived.RootDeviceHints.VolumeRef, ClearOnInstall: clearTargetsFor(machine), RootDevice: derived.RootDeviceHints.DeviceName, SerialNumber: derived.RootDeviceHints.SerialNumber}
 		if size := derived.RootDeviceHints.SizeBytes; size != "" {
 			parsed, err := strconv.ParseInt(size, 10, 64)
 			if err != nil {
@@ -600,7 +600,7 @@ func canonicalWWN(declared string) string {
 	return strings.TrimPrefix(strings.ToLower(declared), "0x")
 }
 
-var physicalRootIdentity = []string{"deviceName", "serialNumber", "sizeBytes", "wwn"}
+var physicalRootIdentity = []string{"deviceName", "serialNumber", "sizeBytes", "wwn", "volumeRef", "bootVolume"}
 
 func serialRoot(hints substrate.RootDeviceHints) bool {
 	return hints.DeviceName == "" && hints.SerialNumber != "" && hints.SizeBytes != ""
@@ -613,7 +613,7 @@ func refusedTarget(machine api.Object, target substrate.Target, private bool) (r
 	// A physical machine already holds whatever it holds, and a kernel name
 	// may name another disk on the next boot, so only a by-id WWN path does, or a serial and size.
 	// A wwn alone is not yet derived into a device the installer can name.
-	if target.Physical && !durableRootDevice(target.RootDeviceHints.DeviceName) && !serialRoot(target.RootDeviceHints) {
+	if target.Physical && !durableRootDevice(target.RootDeviceHints.DeviceName) && !serialRoot(target.RootDeviceHints) && target.RootDeviceHints.VolumeRef == nil {
 		return "a physical installation erases only a root disk named by its /dev/disk/by-id/wwn-0x path or by its serial number and exact size, and the Machine names neither",
 			"set spec.hardware.rootDevice.deviceName on " + machine.Identity() +
 				" to the disk's /dev/disk/by-id/wwn-0x path, 16 or 32 lowercase hexadecimal digits, or set spec.substrate.baremetal.rootDevice.serialNumber and sizeBytes on " + machine.Identity() +

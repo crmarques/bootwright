@@ -828,3 +828,25 @@ class TiebreakerRemoval:
         require(not any(self.footprint(authorization).values()), "not-removed")
         self.markers.write(REMOVAL_COMPLETE, self.record)
         return {"changed": True, "removed": True, "attempted": True}
+
+
+class PhysicalHostRemoval(TiebreakerRemoval):
+    """Remove one owned FSID from an explicitly retained-root physical host, without disk zap."""
+
+    def __init__(self, worker):
+        require(worker.host.get("physical") is True and worker.host.get("retainRoot") is True, "request")
+        self.worker = worker
+        self.request = worker.request
+        self.host = worker.host
+        self.markers = worker.markers
+        self.fsid = worker.request["fsid"]
+        self.record = {"version": REMOVAL_VERSION, "owner": self.request["owner"], "fsid": self.fsid, "host": self.host["name"]}
+
+    def daemons(self):
+        require(all(name == self.fsid for name in listing(DATA_ROOT)), "tiebreaker-foreign")
+        daemons = self.worker.daemons()
+        for daemon in daemons:
+            name = daemon.get("name")
+            require(daemon.get("style") == "cephadm:v1" and daemon.get("fsid") == self.fsid
+                    and isinstance(name, str) and re.fullmatch(r"[a-z][a-z0-9-]*\.[A-Za-z0-9_.-]{1,256}", name), "tiebreaker-foreign")
+        return sorted(daemon["name"] for daemon in daemons)

@@ -2,7 +2,7 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_cluster_install_request.version == 'cluster-install-agent-v15'
+      - bootwright_cluster_install_request.version == 'cluster-install-agent-v16'
       - bootwright_cluster_install_request.workRoot.startswith('/var/lib/bootwright-clusters/')
       - bootwright_cluster_install_digest is match('[0-9a-f]{64}')
     quiet: true
@@ -27,6 +27,30 @@
   loop_control:
     loop_var: containercluster_install_agent_node
     label: '{{ containercluster_install_agent_node.machine }}'
+
+- name: Read the media's logical root-volume binding
+  ansible.builtin.slurp:
+    src: '{{ bootwright_cluster_install_request.workRoot }}/bootwright-media.json'
+  register: containercluster_install_agent_volume_receipt
+  when: >-
+    bootwright_cluster_install_request.nodes
+    | selectattr('hardware', 'defined') | selectattr('hardware.rootVolumeRef', 'defined') | list | length > 0
+  no_log: true
+
+- name: Refuse media whose logical root volume differs from its Machine proof
+  ansible.builtin.assert:
+    that:
+      - >-
+        (containercluster_install_agent_volume_receipt.content | b64decode | from_json).rootVolumes[item.name]
+        == bootwright_cluster_install_material['pinnedRootVolumeBase64Node' ~ ansible_loop.index0] | b64decode | from_json
+    fail_msg: The boot image and Machine proof name different logical root volumes; rebuild the media before installing.
+    quiet: true
+  no_log: true
+  loop: '{{ bootwright_cluster_install_request.nodes }}'
+  loop_control:
+    extended: true
+    label: '{{ item.machine }}'
+  when: item.physical | default(false) and item.hardware.rootVolumeRef is defined
 
 - name: Report name resolution
   bootwright.core.containercluster_install_protocol:

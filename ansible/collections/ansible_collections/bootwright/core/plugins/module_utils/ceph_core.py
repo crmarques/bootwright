@@ -63,6 +63,7 @@ HOST_REASONS = (
     "material", "packages", "package-artifact", "package-drift", "package-journal", "package-license",
     "package-limit", "package-timeout", "package-platform", "package-host", "foreign-cluster", "native-command", "native-timeout", "native-output",
     "unknown", "transport", "remote-refusal", "adapter-exception", "ssh-policy-host-excluded", "ssh-policy-unavailable",
+    "tiebreaker-foreign", "not-removed", "native-option-undeclared",
 )
 CLUSTER_REASONS = (
     "fips-policy", "cephx-policy",
@@ -1550,7 +1551,7 @@ def dashboard_phase(request, operation, request_digest, bootstrap, transport, ob
 
 def host_request(value):
     """A frozen host block request: its cluster's host scope and one of its hosts."""
-    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "pulls", "version"} and value["version"] == "ceph-host-v13")
+    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "pulls", "version"} and value["version"] == "ceph-host-v14")
     cluster = ceph_native.validate_scope(value["cluster"])
     ceph_native.require("packages" in cluster)
     ceph_native.require(sum(host["name"] == value["host"] for host in cluster["hosts"]) == 1)
@@ -1597,7 +1598,8 @@ def host_evidence(value, request_digest, request=None):
     """The closed host block projection; no credential, path or vendor text."""
     fields = {"version", "request", "host", "owner", "fsid", "image", "ready", "removed", "imageID", "uid", "gid", "label", "policySHA256",
               "cephadmSHA256", "planDigest", "route", "devices"}
-    ceph_native.require(isinstance(value, dict) and fields <= set(value) <= fields | {"specializations", "fips"}, "evidence")
+    ceph_native.require(isinstance(value, dict) and fields <= set(value) <= fields | {"specializations", "fips", "nativeRemoved"}, "evidence")
+    ceph_native.require("nativeRemoved" not in value or value["nativeRemoved"] is True and value["removed"], "evidence")
     ceph_native.require("specializations" not in value or specialization_ids(value["specializations"]), "evidence")
     ceph_native.require("fips" not in value or ceph_native.fips_proved(value["fips"]), "evidence")
     ceph_native.require(value["version"] == ceph_host_runtime.EVIDENCE_VERSION and value["request"] == request_digest and ceph_native.digest(request_digest),
@@ -1695,8 +1697,18 @@ def execute_host(request, operation, request_digest, transport):
     """An observation or a release; an apply is its role's ordered host steps, composed here in the same order."""
     host_request(request)
     cluster = request["cluster"]
-    ceph_native.require(operation in ("apply", "observe", "destroy"))
+    ceph_native.require(operation in ("apply", "observe", "destroy", "observe-remove"))
     ceph_native.require(ceph_native.digest(request_digest))
+    host = next(item for item in cluster["hosts"] if item["name"] == request["host"])
+    if host.get("physical") and host.get("retainRoot") and operation in ("destroy", "observe-remove"):
+        phase = "physical_host_remove" if operation == "destroy" else "physical_host_observe"
+        result = transport.call(host, phase)
+        ceph_native.require(isinstance(result, dict) and type(result.get("removed")) is bool, "evidence")
+        ceph_native.require(operation != "destroy" or result["removed"], "not-removed")
+        observation = dict(released(request, request_digest), removed=result["removed"])
+        if result["removed"]:
+            observation["nativeRemoved"] = True
+        return {"changed": result.get("changed", False), "evidence": host_evidence(observation, request_digest, request)}
     if operation == "destroy":
         return {"changed": False, "evidence": host_evidence(released(request, request_digest), request_digest, request)}
     if operation == "apply":

@@ -40,7 +40,7 @@ def host_request(request_value):
          "certificateRef": "serving-tls"}
         for host in cluster["hosts"]]}
     cluster["auxiliary"] = [{"name": "haproxy", "image": host_fixtures.HAPROXY}, {"name": "keepalived", "image": host_fixtures.KEEPALIVED}]
-    return {"version": "ceph-host-v13", "cluster": cluster, "host": "node-2",
+    return {"version": "ceph-host-v14", "cluster": cluster, "host": "node-2",
             "pulls": [{"group": "pull-haproxy-keepalived", "names": ["haproxy", "keepalived"]}]}
 
 
@@ -578,3 +578,59 @@ def test_a_provided_host_never_bootstraps(tiebreaker_request):
     cluster["bootstrap"], cluster["monIP"] = "tie", "198.51.100.10"
     with pytest.raises(ceph_native.Refusal):
         ceph_core.host_request(tiebreaker_request)
+
+
+def test_retained_physical_host_dispatches_cleanup_and_readonly_removal(host_request):
+    request = copy.deepcopy(host_request)
+    target = next(host for host in request["cluster"]["hosts"] if host["name"] == request["host"])
+    target.update(
+        physical=True, retainRoot=True, devices=[],
+        hardware={"uuid": "11111111-1111-4111-8111-111111111111", "macs": ["02:00:00:00:00:01"]})
+
+    for service in request["cluster"]["services"]:
+        if service["service_type"] == "osd":
+            service["placement"]["hosts"] = [name for name in service["placement"]["hosts"] if name != request["host"]]
+            service["placement"].pop("count", None)
+
+    class CleanupTransport:
+        def __init__(self):
+            self.calls = []
+            self.removed = True
+
+        def call(self, host, phase):
+            self.calls.append((host["name"], phase))
+            return {"changed": phase == "physical_host_remove", "removed": self.removed, "attempted": True}
+
+    transport = CleanupTransport()
+    destroyed = ceph_core.execute_host(request, "destroy", DIGEST, transport)
+    assert destroyed["changed"] is True and destroyed["evidence"]["nativeRemoved"] is True
+    observed = ceph_core.execute_host(request, "observe-remove", DIGEST, transport)
+    assert observed["changed"] is False and observed["evidence"]["nativeRemoved"] is True
+    assert transport.calls == [(request["host"], "physical_host_remove"), (request["host"], "physical_host_observe")]
+    transport.removed = False
+    partial = ceph_core.execute_host(request, "observe-remove", DIGEST, transport)
+    assert partial["evidence"]["removed"] is False and "nativeRemoved" not in partial["evidence"]
+
+
+def test_host_module_strips_readonly_removal_selector_before_transport(host_request, monkeypatch):
+    reached = {}
+
+    class Module:
+        def __init__(self, **unused):
+            self.params = {"request": host_request, "operation": "observe", "step": None, "pull": None,
+                           "digest": DIGEST, "material": {"removal": "true"}}
+
+        def exit_json(self, **result):
+            reached["result"] = result
+
+        def fail_json(self, **failure):
+            raise AssertionError(failure)
+
+    def execute(request, operation, digest, transport):
+        assert transport.material == {} and operation == "observe-remove" and digest == DIGEST
+        return {"changed": False}
+
+    monkeypatch.setattr(ceph_host, "AnsibleModule", Module)
+    monkeypatch.setattr(ceph_core, "execute_host", execute)
+    ceph_host.main()
+    assert reached["result"] == {"changed": False}

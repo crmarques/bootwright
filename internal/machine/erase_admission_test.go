@@ -32,11 +32,10 @@ func TestEraseAdmissionRetainsOmissionAndRequiresExplicitRootIdentity(t *testing
 		t.Fatal("provided machine admitted erase")
 	}
 	for name, targets := range map[string]api.Value{
-		"missing root": list(target.With("deviceName", api.StringValue("/dev/sdb"))),
-		"duplicate":    list(target, target.With("deviceName", api.StringValue("/dev/sdb"))),
-		"unaligned":    list(target.With("sizeBytes", api.IntegerValue("8193"))),
-		"empty WWN":    list(target.With("wwn", api.StringValue(""))),
-		"non ASCII":    list(target.With("serialNumber", api.StringValue("é"))),
+		"duplicate": list(target, target.With("deviceName", api.StringValue("/dev/sdb"))),
+		"unaligned": list(target.With("sizeBytes", api.IntegerValue("8193"))),
+		"empty WWN": list(target.With("wwn", api.StringValue(""))),
+		"non ASCII": list(target.With("serialNumber", api.StringValue("é"))),
 	} {
 		t.Run(name, func(t *testing.T) {
 			changed := machine.WithSpec(machine.Spec().WithPath(targets, "hardware", "eraseOnRemoval", "targets"))
@@ -110,8 +109,8 @@ func TestEraseAdmissionIncludesARootDeclaredBySerialNumberAndSize(t *testing.T) 
 		targets []api.Value
 		field   string
 	}{
-		"another root size":           {[]api.Value{data, root.With("sizeBytes", api.IntegerValue("480103985152"))}, ".targets"},
-		"the root serial with a path": {[]api.Value{root.With("deviceName", api.StringValue("/dev/disk/by-id/wwn-0x5000000000000002")).With("wwn", api.StringValue("0x5000000000000002"))}, ".targets"},
+		"another root size":           {[]api.Value{data, root.With("sizeBytes", api.IntegerValue("480103985152"))}, ".targets[1].sizeBytes"},
+		"the root serial with a path": {[]api.Value{root.With("deviceName", api.StringValue("/dev/disk/by-id/wwn-0x5000000000000002")).With("wwn", api.StringValue("0x5000000000000002"))}, ".targets[0]"},
 		"a lone deviceName":           {[]api.Value{root, data.Without("wwn")}, ".targets[1]"},
 		"a lone wwn":                  {[]api.Value{root, data.Without("deviceName")}, ".targets[1]"},
 		"a repeated serial":           {[]api.Value{root, data.With("serialNumber", api.StringValue("SYNTHETIC-ROOT-01"))}, ".targets[1].serialNumber"},
@@ -123,9 +122,10 @@ func TestEraseAdmissionIncludesARootDeclaredBySerialNumberAndSize(t *testing.T) 
 			}
 		})
 	}
-	if issues := erase(data); len(issues) != 1 || issues[0].Message != "erase targets must include the root disk, by hardware.rootDevice.deviceName or by the serialNumber and sizeBytes of spec.substrate.baremetal.rootDevice" {
-		t.Fatalf("issues = %+v", issues)
+	if issues := erase(data); len(issues) != 0 {
+		t.Fatalf("OSD-only erasure refused: %+v", issues)
 	}
+
 }
 
 // A root disk declared by path and size is included only by its path's target

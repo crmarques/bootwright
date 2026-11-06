@@ -371,6 +371,7 @@ def test_each_machine_role_declares_exactly_the_port_beside_its_lifecycle(arm):
                 expected[BAREMETAL + "_target_require_tpm"] = ("bool", False, None)
                 expected[BAREMETAL + "_target_firmware"] = ("dict", False, None)
                 expected[BAREMETAL + "_target_root_disk"] = ("dict", False, None)
+                expected[BAREMETAL + "_target_root_volume"] = ("dict", False, None)
             assert found == expected, entry
         else:
             assert found == {"bootwright_machine_port": ("dict", True, None)}

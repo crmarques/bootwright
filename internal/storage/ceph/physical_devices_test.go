@@ -83,7 +83,7 @@ func TestPhysicalHostsPlanEverySelectedDiskUpToTheBound(t *testing.T) {
 }
 
 func TestPhysicalHostOneDiskPastTheBoundRefusesByTheErasePolicy(t *testing.T) {
-	reason := fmt.Sprintf("CephCluster example selects %d disks on physical Ceph host node-2, past the 15 that its Machine's eraseOnRemoval policy can cover beside the root disk within its 16 targets", maxPhysicalDevices+1)
+	reason := fmt.Sprintf("CephCluster example selects %d disks on physical Ceph host node-2, past the 15 permitted by physical install-time clearing (erase policies allow 16 targets)", maxPhysicalDevices+1)
 	const remedy = "select at most 15 distinct disks for host node-2 across the data_devices, db_devices and wal_devices paths of the OSD services of CephCluster example"
 	for name, catalogOf := range map[string]func(int, int) (api.Catalog, api.Object){"one service per disk": physicalCatalogOf, "one service per host": physicalCatalogPerHost} {
 		catalog, cluster := catalogOf(3, maxPhysicalDevices)

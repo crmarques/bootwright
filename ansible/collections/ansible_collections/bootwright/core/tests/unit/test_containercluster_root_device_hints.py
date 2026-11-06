@@ -19,6 +19,7 @@ tests/unit/plugins.
 
 from __future__ import annotations
 
+import base64
 import json
 import pathlib
 import re
@@ -78,7 +79,8 @@ def render(config):
     written = [task for task in walk([task for task in loaded if isinstance(task, dict)])
                if task.get("name") == "Write the agent configuration"]
     assert len(written) == 1, "build.yml has %d tasks writing the agent configuration" % len(written)
-    templar = Templar(loader=LOADER, variables={"bootwright_cluster_media_request": {"agentConfig": config}})
+    material = {"agentConfigBase64": base64.b64encode(json.dumps(config).encode()).decode()}
+    templar = Templar(loader=LOADER, variables={"bootwright_cluster_media_material": material})
     return templar.template(written[0]["ansible.builtin.copy"]["content"])
 
 

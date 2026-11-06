@@ -42,6 +42,8 @@ const (
 // so it is never frozen in the plan, and the certificate is the public half of
 // the artifact server's own, which the installer verifies the fetch against.
 const (
+	VolumeWWNToken   = "@@BOOTWRIGHT_VOLUME_WWN@@"
+	VolumeSizeToken  = "@@BOOTWRIGHT_VOLUME_SIZE@@"
 	PrivateURLToken  = "@@BOOTWRIGHT_PRIVATE_URL@@"
 	CertificateToken = "@@BOOTWRIGHT_ARTIFACT_CERTIFICATE@@"
 )
@@ -111,6 +113,7 @@ type Installation struct {
 	Prefix        int
 	Release       string
 	Repositories  []Repository
+	RootVolume    bool
 	RootDevice    string
 	RootSerial    string
 	RootSizeBytes int64
@@ -135,7 +138,7 @@ func RenderKickstart(input Installation) (string, error) {
 	}
 	// Only a disk its substrate created may be left for the installer to
 	// choose; a physical one is named by its by-id WWN path or serial and size.
-	if input.Physical && !durableRootDevice(input.RootDevice) && !serialRootInstallation(input) {
+	if input.Physical && !durableRootDevice(input.RootDevice) && !serialRootInstallation(input) && !input.RootVolume {
 		return "", refusal("lifecycle.state", "a physical installation names no root disk by its /dev/disk/by-id/wwn-0x path or by its serial number and size to erase",
 			"set spec.hardware.rootDevice.deviceName to the disk's /dev/disk/by-id/wwn-0x path, 16 or 32 lowercase hexadecimal digits, or set spec.substrate.baremetal.rootDevice.serialNumber and sizeBytes to the disk's serial number and exact capacity in bytes; a kernel name such as /dev/sda is refused, and a wwn-only selection is not yet supported")
 	}
@@ -145,6 +148,9 @@ func RenderKickstart(input Installation) (string, error) {
 		input.RootSerial != "" && !rootSerial.MatchString(input.RootSerial) {
 		return "", refusal("lifecycle.state", "the root disk WWN, serial number or size this installation freezes is not one its %pre can compare with the disk its deviceName names",
 			"plan the installation again with this release")
+	}
+	if input.RootVolume && (!input.Physical || input.RootDevice != "" || input.RootSerial != "" || input.RootWWN != "" || input.RootSizeBytes != 0) {
+		return "", refusal("lifecycle.state", "a logical-volume root selects the physical installation target alone", "plan the installation again")
 	}
 	if reason := refusedClearTargets(input); reason != "" {
 		return "", refusal("lifecycle.state", reason, "plan the installation again with this release")
@@ -156,6 +162,11 @@ func RenderKickstart(input Installation) (string, error) {
 	if _, known := guestHostKeys[input.HostKeyType]; input.Channel == substrate.ChannelGuestAgent && !known {
 		return "", refusal("lifecycle.state", "the guest-agent SSH host key type "+input.HostKeyType+" has no generated path",
 			"plan the installation again with this release")
+	}
+	if input.RootVolume {
+		input.RootWWN = "0x" + VolumeWWNToken
+		input.RootDevice = "/dev/disk/by-id/wwn-" + input.RootWWN
+		input.RootSizeBytes = 4096
 	}
 	network, err := networkLine(input)
 	if err != nil {
@@ -747,6 +758,11 @@ func targetProofLines(input Installation) []string {
 	} else {
 		lines = append(lines, `bootwright_root=$(readlink -f -- '`+input.RootDevice+`' || true)`)
 	}
+	if input.RootVolume {
+		lines = append(lines, identityFunctionLines()...)
+		lines = append(lines, volumeRootLines()...)
+		identity = true
+	}
 	lines = append(lines,
 		`if [ -z "${bootwright_root}" ] || [ ! -b "${bootwright_root}" ]; then`,
 		`echo 'Bootwright: `+subject+` is not a block device here; refusing before any disk is touched.' >&2`,
@@ -840,6 +856,9 @@ func rootIdentityLines(input Installation, subject string) []string {
 	}
 	if input.RootSizeBytes != 0 {
 		size := strconv.FormatInt(input.RootSizeBytes, 10)
+		if input.RootVolume {
+			size = VolumeSizeToken
+		}
 		lines = append(lines, `if ! bootwright_size=$(blockdev --getsize64 "${bootwright_root}"); then`)
 		lines = append(lines, refuse("reports no readable size")...)
 		lines = append(lines, `if [ "${bootwright_size}" != '`+size+`' ]; then`)
@@ -923,4 +942,20 @@ func SortedUnique(values []string) []string {
 	out := slices.Clone(values)
 	slices.Sort(out)
 	return slices.Compact(out)
+}
+
+func volumeRootLines() []string {
+	return []string{
+		`bootwright_volume_count=0`,
+		`for bootwright_entry in /sys/class/block/*; do`,
+		`if [ ! -e "${bootwright_entry}" ] || [ -e "${bootwright_entry}/partition" ] || [ "$(cat -- "${bootwright_entry}/hidden" 2>/dev/null)" = 1 ]; then continue; fi`,
+		`bootwright_id="${bootwright_entry}/device/wwid"`,
+		`if [ -e "${bootwright_entry}/wwid" ]; then bootwright_id="${bootwright_entry}/wwid"; fi`,
+		`if bootwright_id=$(bootwright_identity "${bootwright_id}" text 2>/dev/null) && [ "${bootwright_id}" = 'naa.` + VolumeWWNToken + `' ]; then bootwright_volume_count=$((bootwright_volume_count + 1)); fi`,
+		`done`,
+		`if [ "${bootwright_volume_count}" != 1 ] || [ "$(lsblk -ndo RO -- "${bootwright_root}")" != 0 ] || [ "$(lsblk -ndo RM -- "${bootwright_root}")" != 0 ]; then`,
+		`echo 'Bootwright: the root volume is ambiguous, read-only or removable; refusing before any disk is touched.' >&2`,
+		`exit 1`,
+		`fi`,
+	}
 }

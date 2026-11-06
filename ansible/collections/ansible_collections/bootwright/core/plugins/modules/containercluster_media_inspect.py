@@ -50,7 +50,7 @@ from ansible_collections.bootwright.core.plugins.module_utils.containercluster_p
 # served root, because it is this block's own evidence and not content.
 IMAGE = "agent.iso"
 RECEIPT = "bootwright-media.json"
-MAX_RECEIPT = 4096
+MAX_RECEIPT = 65536
 # MARKER is what the cluster's installation writes into the same work area
 # before it hands any node the image (containercluster_install_agent). From then
 # on the area holds the state those nodes install from and the only

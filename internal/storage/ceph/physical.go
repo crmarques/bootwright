@@ -24,7 +24,7 @@ var hardwareMAC = regexp.MustCompile(`^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$`)
 
 const (
 	maxEraseTargets    = machine.MaxEraseTargets
-	maxPhysicalDevices = maxEraseTargets - 1
+	maxPhysicalDevices = machine.MaxClearTargets
 )
 
 func physicalDevices(c api.Catalog, cluster, m api.Object, node string) ([]Device, error) {
@@ -73,7 +73,7 @@ func physicalDevices(c api.Catalog, cluster, m api.Object, node string) ([]Devic
 }
 
 func physicalDeviceBudgetFailure(cluster, node string, disks int) error {
-	return failure("lifecycle.unsupported", fmt.Sprintf("CephCluster %s selects %d disks on physical Ceph host %s, past the %d that its Machine's eraseOnRemoval policy can cover beside the root disk within its %d targets", cluster, disks, node, maxPhysicalDevices, maxEraseTargets),
+	return failure("lifecycle.unsupported", fmt.Sprintf("CephCluster %s selects %d disks on physical Ceph host %s, past the %d permitted by physical install-time clearing (erase policies allow %d targets)", cluster, disks, node, maxPhysicalDevices, maxEraseTargets),
 		fmt.Sprintf("select at most %d distinct disks for host %s across the data_devices, db_devices and wal_devices paths of the OSD services of CephCluster %s", maxPhysicalDevices, node, cluster))
 }
 
@@ -82,7 +82,7 @@ func physicalHosts(hosts []Host) bool {
 }
 
 func physicalRemovalRefusal() error {
-	return failure("lifecycle.unsupported", "physical Ceph retirement lacks original disk-erasure authority", "retain this context; automatic retirement requires the root disk and every selected data, DB and WAL disk in each Machine's original eraseOnRemoval policy")
+	return failure("lifecycle.unsupported", "physical Ceph retirement lacks original disk-erasure authority", "retain this context; automatic retirement requires every selected data, DB and WAL disk in each Machine's original eraseOnRemoval policy")
 }
 
 func bindPhysicalHosts(hosts []Host, e lifecycle.Execution, readers DependencyProofs) error {
@@ -123,6 +123,9 @@ func bindPhysicalHosts(hosts []Host, e lifecycle.Execution, readers DependencyPr
 			return failure("lifecycle.state", "physical Ceph host lacks original Machine presence evidence", "")
 		}
 		host.Hardware = found
+		if found.RootWWN != "" {
+			host.RootWWN = found.RootWWN
+		}
 	}
 	return nil
 }

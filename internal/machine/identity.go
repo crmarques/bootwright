@@ -1,14 +1,20 @@
 package machine
 
-import "encoding/base64"
+import (
+	"encoding/base64"
+	"encoding/json"
+
+	"github.com/crmarques/bootwright/internal/substrate"
+)
 
 // HardwareIdentity is what a physical Machine's management controller said the
 // machine is when the context's current apply proved it: the ComputerSystem
 // UUID and serial number. A value the proof recorded empty is not part of the
 // identity, so it is never compared.
 type HardwareIdentity struct {
-	UUID   string
-	Serial string
+	UUID       string
+	Serial     string
+	RootVolume substrate.RootVolumeProof
 }
 
 func (i HardwareIdentity) Present() bool { return i.UUID != "" || i.Serial != "" }
@@ -28,6 +34,10 @@ func (i HardwareIdentity) PinValues(suffix string) map[string]string {
 	}
 	if i.Serial != "" {
 		values["pinnedSerialBase64"+suffix] = base64.StdEncoding.EncodeToString([]byte(i.Serial))
+	}
+	if i.RootVolume.Valid() {
+		data, _ := json.Marshal(i.RootVolume)
+		values["pinnedRootVolumeBase64"+suffix] = base64.StdEncoding.EncodeToString(data)
 	}
 	return values
 }

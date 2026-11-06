@@ -283,7 +283,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		capability: libvirt.NewHost(runner),
 	}, {
 		kind: agentinstall.Kind, implementation: agentinstall.MediaImplementation, family: "cluster-media",
-		capability: agentinstall.NewMedia(runner, material.AuthorizedKey),
+		capability: agentinstall.NewMedia(runner, material.AuthorizedKey).WithIdentities(provedIdentities{}),
 	}, {
 		kind: agentinstall.Kind, implementation: agentinstall.InstallImplementation, family: "cluster-install",
 		capability: agentinstall.NewInstall(runner).WithIdentities(provedIdentities{}).WithHostAccess(kubevirt.NewLender(runner)),
@@ -436,7 +436,11 @@ func (cephDependencyProofs) PackageTree(proofs []lifecycle.BlockEvidence, profil
 
 func (cephDependencyProofs) PhysicalMachine(block reconciliation.Block, evidence []byte) (ceph.PhysicalIdentity, bool, error) {
 	value, recognized, err := baremetal.ProvedPresence(block, evidence)
-	return ceph.PhysicalIdentity{UUID: strings.ToLower(value.UUID), MACs: value.Addresses}, recognized, err
+	proof := ceph.PhysicalIdentity{UUID: strings.ToLower(value.UUID), MACs: value.Addresses}
+	if value.RootVolume != nil {
+		proof.RootWWN = value.RootVolume.WWN
+	}
+	return proof, recognized, err
 }
 
 func physicalCephEraseProof(applied reconciliation.Block, removed lifecycle.BlockEvidence, uuid string) (ceph.PhysicalErasure, bool, error) {

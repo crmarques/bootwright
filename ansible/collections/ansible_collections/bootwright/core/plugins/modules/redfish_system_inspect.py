@@ -52,6 +52,10 @@ options:
     description: Require a positive read of an enabled TPM 2.0 before installation.
     type: bool
     default: false
+  volume_ref:
+    description: Positive storageId and volumeId of an existing logical root volume to discover.
+    type: dict
+    default: {}
   root_disk:
     description:
       - Optional dictionary containing serialNumber and sizeBytes for the one whole root drive to prove before agent boot.
@@ -83,7 +87,7 @@ observation:
 """
 
 from ansible.module_utils.basic import AnsibleModule
-from ansible_collections.bootwright.core.plugins.module_utils import redfish_control, redfish_root_disk
+from ansible_collections.bootwright.core.plugins.module_utils import redfish_control, redfish_root_disk, redfish_root_volume
 
 
 def main():
@@ -96,6 +100,7 @@ def main():
             "ca_data": {"type": "str", "default": ""},
             "require_tpm": {"type": "bool", "default": False},
             "root_disk": {"type": "dict", "default": {}},
+            "volume_ref": {"type": "dict", "default": {}},
         },
         supports_check_mode=True,
     )
@@ -105,6 +110,10 @@ def main():
             verify=bool(module.params["verify"]), ca_data=module.params["ca_data"] or "",
         )
         observation = observe(client)
+        if module.params.get("volume_ref"):
+            if not module.params["verify"] or not module.params["endpoint"].startswith("https://"):
+                raise redfish_root_volume.Refused(redfish_root_volume.REFUSAL)
+            observation["rootVolume"] = redfish_root_volume.discover(client, module.params["volume_ref"])
         if module.params.get("root_disk"):
             redfish_root_disk.prove(client, module.params["root_disk"])
         tpm = usable_tpm(client.system()) if module.params.get("require_tpm", False) else False
