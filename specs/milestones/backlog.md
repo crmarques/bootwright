@@ -282,6 +282,20 @@ Alias cell.
 | [B1098](#b1098) | new, 2026-11-04 (X294's pre-run review) | product | Substrate and Security | One emulated BMC's credential cannot change another domain's virtual media on the same host | Upstream sushy-tools behavior; every domain on a lab host is the operator's own |
 | [B1099](#b1099) | new, 2026-11-04 (B1093) | enabling | Substrate | A remote libvirt host proves an existing allocation's reuse credit, and tolerates an absent runtime directory | Admission runs only while a Machine block starts, so the credit decides only a retried machine block |
 | [B1124](#b1124) | new, 2026-11-04 (D231) | product | Container cluster | A node with addresses on several secondary networks under `ipForwarding: Global` forwards no traffic between them | `MachineConfig` has no typed source ([B719](m3.md#b719)); the case's clients carry no route through the node |
+| [B1165](#b1165) | new, 2026-11-05 (D234) | product | State reconciliation, with Substrate | An additive apply that adds KubeVirt providers, Machines and clusters to a completed apply | Q144; it needs per-namespace access blocks and a proof request without the MAC set |
+| [B1166](#b1166) | new, 2026-11-05 (D234) | product | Substrate and Managed OS | A KubeVirt Machine whose root is cloned from an image and seeded by cloud-init | An alternative to B905 the owner has not chosen (Q148) |
+| [B1167](#b1167) | new, 2026-11-05 (D234) | product | Container cluster | OpenShift clusters as hosted control planes on a KubeVirt host | A separate request family and prerequisites; Q145 |
+| [B1168](#b1168) | new, 2026-11-05 (D234) | product | Add-ons | Typed `HyperConverged` fields: boot-image import, live-migration limits and network, workload placement | No profile needs them yet; locations follow the observed CRD, never a CSV (D163) |
+| [B1169](#b1169) | new, 2026-11-05 (D234) | safety | Substrate and Secrets | A minted host token bound to a per-run object, revoked when the run ends | D202 accepts the lifetime bound as the only revocation |
+| [B1170](#b1170) | new, 2026-11-05 (D234) | safety | Secrets and State reconciliation | A rebind of the host installation's administrator kubeconfig after rotation | Nothing rotates it today |
+| [B1171](#b1171) | new, 2026-11-05 (D234) | product | Substrate | Data disks on KubeVirt Machines with virtio serials and a mandatory root identity | Q149 |
+| [B1172](#b1172) | new, 2026-11-05 (D234) | product | Substrate | A rule for guest `vlan` and `bond` interfaces over KubeVirt ethernets | Awaits a live observation of what OVN carries |
+| [B1173](#b1173) | new, 2026-11-05 (D234) | product | Substrate | A required anti-affinity for the control-plane role on a host with enough nodes | Q147; a required rule can leave a member unscheduled |
+| [B1174](#b1174) | new, 2026-11-05 (D234) | enabling | State reconciliation | Observable fields of KubeVirt Machines in `diff --observe` | Presence and ownership suffice for the first runs |
+| [B1175](#b1175) | new, 2026-11-05 (D234) | defect | Container cluster | A FIPS cluster refuses an Ed25519 node SSH key at admission | It refuses at runtime today |
+| [B1176](#b1176) | new, 2026-11-05 (D234) | product | Container cluster and Substrate | A preflight proving the controller reaches hosted nodes, the host API and the upload proxy | A runbook check covers the first runs |
+| [B1177](#b1177) | new, 2026-11-05 (D234) | safety | Controller | A second `virtctl` source: the host's build or an operator-declared digest | Q151 |
+| [B1178](#b1178) | new, 2026-11-05 (D234) | product | Add-ons and Storage | Data Foundation external against a Ceph cluster the context does not manage | Takes storage out of the host's lineage; Q144 |
 
 ### B82
 
@@ -3204,6 +3218,62 @@ example through node firewall rules a typed `MachineConfig` source renders.
 **Exit evidence:** a run in which a client with a route through the node
 cannot reach the other network.
 
+### B1165
+
+**Owner:** State reconciliation, with Substrate. **Kind:** product. **Requires:** [B732](m3.md#b732). **Definition:** Needs definition: [Q144](m3.md#m3a-open-decisions) option (c). The apply that adds hosted members to a completed apply needs per-namespace access blocks and a proof request without the MAC set. **Outcome:** A completed apply gains KubeVirt providers, Machines and clusters without a destroy. **Exit evidence:** Planning and replay tests over a completed apply, and an owner-run additive apply.
+
+### B1166
+
+**Owner:** Substrate and Managed OS. **Kind:** product. **Requires:** [B87](m1.md#b87). **Definition:** Needs definition: [Q148](m3.md#m3a-open-decisions) option (d), the image-based alternative to [B905](#b905); the owner has not chosen between them. **Outcome:** A KubeVirt Machine whose root is cloned from an image and seeded by cloud-init. **Exit evidence:** Request goldens, refusal tests and an owner-run installation.
+
+### B1167
+
+**Owner:** Container cluster. **Kind:** product. **Requires:** [B88](m3.md#b88). **Definition:** Needs definition: [Q145](m3.md#m3a-open-decisions) option (c). Hosted control planes are a separate request family with their own prerequisites. **Outcome:** An OpenShift cluster as a hosted control plane on a KubeVirt host. **Exit evidence:** Request goldens, refusal tests and an owner-run installation.
+
+### B1168
+
+**Owner:** Add-ons. **Kind:** product. **Requires:** [B883](m4.md#b883). **Definition:** Needs definition: typed `HyperConverged` fields for boot-image import, live-migration limits and network, and workload placement. Their locations follow the observed CRD, never a CSV ([D163](#d163)). **Outcome:** The `kubevirt` package sets those fields from typed intent. **Exit evidence:** Package goldens and an owner-run observation of the rendered fields.
+
+### B1169
+
+**Owner:** Substrate and Secrets. **Kind:** safety. **Requires:** [B732](m3.md#b732). **Definition:** Needs definition: how a minted host token binds to a per-run object. [D202](#d202) accepts the lifetime bound as the only revocation today. **Outcome:** The token is revoked when its run ends. **Exit evidence:** Token tests for the bound object and the revocation, and an owner-run apply and destroy.
+
+### B1170
+
+**Owner:** Secrets and State reconciliation. **Kind:** safety. **Requires:** [B732](m3.md#b732). **Definition:** Needs definition: which command rebinds the host installation's administrator kubeconfig after a rotation. Nothing rotates it today. **Outcome:** A rotated administrator kubeconfig is rebound without a destroy. **Exit evidence:** Secrets and reconciliation tests over a rotated kubeconfig.
+
+### B1171
+
+**Owner:** Substrate. **Kind:** product. **Requires:** [B87](m1.md#b87). **Definition:** Needs definition: [Q149](m3.md#m3a-open-decisions) option (b), blank DataVolumes with virtio serials and a mandatory root identity. **Outcome:** A KubeVirt Machine carries data disks. **Exit evidence:** Request goldens, selection tests and an owner-run attachment.
+
+### B1172
+
+**Owner:** Substrate. **Kind:** product. **Requires:** [B87](m1.md#b87). **Definition:** Needs definition: a live observation of what OVN carries decides whether a guest `vlan` or `bond` over a KubeVirt ethernet is admitted. **Outcome:** A rule admits or refuses guest `vlan` and `bond` interfaces over KubeVirt ethernets. **Exit evidence:** Admission tests and the live observation.
+
+### B1173
+
+**Owner:** Substrate. **Kind:** product. **Requires:** [B88](m3.md#b88). **Definition:** Needs definition: [Q147](m3.md#m3a-open-decisions) option (b). A required rule can leave a member unscheduled. **Outcome:** The control-plane role is spread by a required anti-affinity on a host with enough nodes. **Exit evidence:** Request goldens, refusal tests and a drain drill.
+
+### B1174
+
+**Owner:** State reconciliation. **Kind:** enabling. **Requires:** [B1110](m1.md#b1110). **Definition:** Needs definition: which fields of a KubeVirt Machine `diff --observe` reads. Presence and ownership suffice for the first runs. **Outcome:** `diff --observe` shows the observable fields of KubeVirt Machines. **Exit evidence:** Observation tests over a fake host.
+
+### B1175
+
+**Owner:** Container cluster. **Kind:** defect. **Requires:** [B88](m3.md#b88). **Definition:** Specified: admission refuses an Ed25519 node SSH key under FIPS, as the runtime does today. **Outcome:** A FIPS cluster refuses an Ed25519 node SSH key at admission. **Exit evidence:** An admission test that fails before the fix.
+
+### B1176
+
+**Owner:** Container cluster and Substrate. **Kind:** product. **Requires:** [B88](m3.md#b88). **Definition:** Needs definition: what a preflight proves of the controller's reach to hosted nodes, the host API and the upload proxy. A runbook check covers the first runs. **Outcome:** A preflight names each unreachable endpoint before an apply. **Exit evidence:** Preflight tests over fake routes and an owner-run check.
+
+### B1177
+
+**Owner:** Controller. **Kind:** safety. **Requires:** [B1154](m1.md#b1154). **Definition:** Needs definition: [Q151](m3.md#m3a-open-decisions) options (b) and (c). **Outcome:** A second `virtctl` source, the host's build or an operator-declared digest for a mirrored file. **Exit evidence:** Tool-selection and digest tests, and an owner-run FIPS or disconnected controller.
+
+### B1178
+
+**Owner:** Add-ons and Storage. **Kind:** product. **Requires:** [B85](m4.md#b85); [B731](m3.md#b731). **Definition:** Needs definition: [Q144](m3.md#m3a-open-decisions) and [Q142](m3.md#m3a-open-decisions) decide it. It takes storage out of the host's lineage. **Outcome:** Data Foundation external attaches to a Ceph cluster the context does not manage. **Exit evidence:** Package goldens and an owner-run attachment.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/001-spec/report-final.md) ordered its
@@ -3506,6 +3576,8 @@ holding such a clause, the clauses pending and the work they enable.
   of a stretch cluster with a provided tiebreaker (X205).
 - [D207](#d207): clauses (1) to (10), power and the live reading of KubeVirt
   Machines on a host the context builds and the reading's pin (X206).
+- [D234](#d234): clauses (1) to (6), the KubeVirt provisioning program's
+  in-tree slices X309 to X312 and its recorded owner questions Q139 to Q152.
 
 ### D1
 
@@ -6940,3 +7012,47 @@ provider, authorize a live command, a push or a release, or close acceptance.
 proof, specification corrections for drift, a complete finding-to-item map,
 focused checks per work package, and final `make check`, independent safety
 review and `make race` on the integration tree.
+
+### D234
+
+**session-pending** (2026-11-05, the owner; the clauses after the owner's
+words are taken by the session, pending the owner's review): after a read-only review of how Bootwright provisions
+RHEL Machines and OpenShift clusters on OpenShift Virtualization, on a
+bare-metal host cluster the same context builds, and the implementation plan
+that followed it (kept outside this repository; it names no estate), the
+owner asked: "Proceed with plan implementation". This authorizes, out of
+sequence and for implementation only, the plan's in-tree work that needs no
+further owner answer and no live observation: X309 (M1, B1146 to B1152), X310
+(M3, B1157 and B731's in-tree runbook), X311 (M1, B951) and X312 (M3, B1160 to
+B1162), keeping no more than two of them active at once. The owner's request
+is the waiver of M2's and M3c's Requires for implementing these M3e slices,
+as D201 and D202 were for X130 and X131; promotion, operator gates and M3
+completion keep every Requires. It records the plan's other items as
+B1153 to B1156, B1158, B1159, B1163 and B1164 on their milestone pages and
+B1165 to B1178 as parked, and the plan's open owner questions as Q139 to
+Q152 in [M3a's open decisions](m3.md#m3a-open-decisions); none of them is
+implemented, and no operator gate is run, waived or accepted by this
+decision.
+
+Session clauses, pending the owner's review:
+(1) B951's definition: a power command or power reading of a KubeVirt Machine
+takes the Machine's pin from the apply lineage a current destroy takes back
+(the lineage's proved record), and a VirtualMachine the removal already
+deleted reads absent rather than refusing.
+(2) A VirtualMachineInstance in a final phase (`Succeeded` or `Failed`) is a
+stopped machine for every entry point, the removal and quiescence; a start
+over it asks the `start` subresource.
+(3) The upload DataVolume is created on the root class the provider proof
+proved, never on a default class.
+(4) The provider proof refuses a root class whose StorageProfile's first claim
+property set offers no `ReadWriteMany`, a host with no node labelled
+`kubevirt.io/schedulable=true` that allocates `devices.kubevirt.io/kvm`, two
+classes carrying the same default annotation when no `storageClassRef` names
+one, and a host answering without its CDI configuration or `kube-system`
+namespace; it waits a bounded time for a StorageProfile CDI has not filled.
+(5) The provider proof reads each attachment's definition: one a
+ClusterUserDefinedNetwork derives is an OVN `localnet` overlay without IPAM,
+and one declared directly is of CNI type `bridge`; its `macspoofchk` and MTU
+are recorded. Another shape refuses.
+(6) The answers to Q139 to Q152 stay with the owner; each recommendation is the
+plan's, and nothing they gate starts before an answer.

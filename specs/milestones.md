@@ -37,6 +37,8 @@ Slices with an item `in progress`.
 | X303 | M4d | D232 | in progress |
 | X306 | M2 | D233 | in progress |
 | X307 | M3 | D233 | in progress |
+| X309 | M1 | D234 | in progress |
+| X310 | M3 | D234 | in progress |
 
 ## Scope rules
 
@@ -120,8 +122,8 @@ Slices with an item `in progress`.
 - **Q\<n\>, OD\<n\>, owner question.** A row of an open-decision table
   (`ID | Question | Options | Recommendation | Blocks | Status`) whose Status
   is open or names the answering D; Q1 to Q118 and OD1 to OD31 stay fixed,
-  and a new Q takes the next number. Other numberings, such as the
-  2026-10-11 review's Q1 or an audit's finding IDs, are local to their record.
+  and a new Q takes the next number. Other numberings, such as an
+  audit's finding IDs, are local to their record.
 - **Alias.** Each item row keeps its pre-2026-09-28 IDs and its dated move and
   split notes; an old ID found nowhere else is in the backlog's
   Retired table.
@@ -130,8 +132,8 @@ Slices with an item `in progress`.
   (`ID | Alias | Kind | Owner | Outcome | Requires | Definition | Delivery`)
   and one `### B<n>` detail section per item holding its bounded outcome,
   exit evidence and any deferral reason. Kind is `product`, `safety`, `defect` or
-  `enabling`. A byte budget on the opening plus row-and-section routing is the
-  design that replaces per-page cards: page size sets no reading cost.
+  `enabling`. A byte budget on the opening plus row-and-section routing replaces
+  per-page cards.
 - A moved item keeps its ID, and its row and section move with a dated Alias
   note. A split keeps the ID on the part that stays and gives each part split
   out a new B whose Alias names its source and date (a split made by the
