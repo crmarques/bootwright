@@ -9,8 +9,8 @@ from ansible_collections.bootwright.core.plugins.module_utils import cluster_obj
 from ansible_collections.bootwright.core.plugins.module_utils import cluster_objects_native as native
 from ansible_collections.bootwright.core.plugins.module_utils import cluster_objects_secrets as secrets
 from ansible_collections.bootwright.core.plugins.module_utils.cluster_objects_engine import Engine, Refused
-from test_cluster_objects import ScriptedOC, owned, response
-from test_cluster_objects import object_request  # pylint: disable=unused-import
+from ansible_collections.bootwright.core.tests.unit.test_cluster_objects import ScriptedOC, owned, response
+from ansible_collections.bootwright.core.tests.unit.test_cluster_objects import object_request  # pylint: disable=unused-import
 
 
 @pytest.mark.parametrize("observe", [False, True])
