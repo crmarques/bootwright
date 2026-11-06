@@ -435,3 +435,38 @@ spec:
       hosts:
         - node-03.ceph-multidc-01.clusters.example.com
       count: 1
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddon
+metadata:
+  name: acc-addon
+
+spec:
+  olm:
+    namespace:
+      name: acceptance-operator
+
+    operatorGroup: {}
+
+    catalogSource:
+      name: acceptance-catalog
+      image: registry.example.test/acceptance-operator/catalog@sha256:1111111111111111111111111111111111111111111111111111111111111111
+      priority: -200
+
+    subscription:
+      package: acceptance-operator
+      channel: acceptance-channel
+      startingCSV: acceptance-operator.v0.0.0
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ClusterAddonProfile
+metadata:
+  name: acceptance-addon-profile
+
+spec:
+  profileRefs: []
+
+  addonRefs:
+    - acc-addon

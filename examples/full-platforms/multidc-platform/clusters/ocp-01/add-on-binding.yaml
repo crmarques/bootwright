@@ -6,8 +6,7 @@ metadata:
 spec:
   clusterRef: ocp-multidc-01
 
-  profileRefs:
-    - physical-cluster-addons
+  profileRefs: []
 
   addonRefs: []
 

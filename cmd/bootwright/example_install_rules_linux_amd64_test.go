@@ -5,6 +5,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 func TestTheReferenceExamplesInstallUnderTheNewRules(t *testing.T) {
@@ -36,4 +37,29 @@ func TestTheReferenceExamplesInstallUnderTheNewRules(t *testing.T) {
 			t.Fatalf("expected six incompatible generated keys, got %d", len(refused))
 		}
 	})
+}
+
+func TestTheMultidcKubeVirtProvidersPassTheRefusalsBeforeRegistration(t *testing.T) {
+	state, _ := compileAcceptance(t, admissibleExampleSources(t, false))
+	catalog := state.Effective()
+	providers := substrate.ProvidersOn(catalog, substrate.ArmKubeVirt)
+	if len(providers) != 2 {
+		t.Fatalf("the reference declares %d KubeVirt providers, want two", len(providers))
+	}
+	owned := map[string]bool{}
+	for _, provider := range providers {
+		owned[string(api.InfraProvider)+"/"+provider.Name()] = true
+		hosted := substrate.HostedMachines(catalog, provider.Name())
+		if len(hosted) == 0 {
+			t.Fatalf("%s hosts no Machine", provider.Identity())
+		}
+		for _, machine := range hosted {
+			owned[string(api.Machine)+"/"+machine.Name()] = true
+		}
+	}
+	for _, refusal := range productionUnsupported(t, state) {
+		if owned[refusal.Kind+"/"+refusal.Name] {
+			t.Errorf("%s/%s is refused before registration: %s", refusal.Kind, refusal.Name, refusal.Reason)
+		}
+	}
 }

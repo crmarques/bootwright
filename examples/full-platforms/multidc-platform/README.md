@@ -16,9 +16,12 @@ credential references, devices and topology are synthetic; consult the
   of 7 Machines whose witness holds MON placement without OSD devices. Start at
   [environment.yaml](environment.yaml); the four Data Foundation bindings select
   the built-in `fdf` package with separate managed CephConsumers. The two
-  physical clusters also select the built-in `nmstate` and `kubevirt` packages,
-  and the `virtual-cluster-network` manifest-set add-on that their profile
-  selects requires the `nmstate` capability the package provides.
+  physical clusters also select the built-in `nmstate` and `kubevirt` packages
+  and declare the hub virtual-cluster networks as typed
+  `spec.networking.secondaryNetworks`. The hosted KubeVirt providers attach to
+  those networks, the `nmstate` package provides the capability they require,
+  and the `kubevirt` instance owns and labels the providers' namespace, so no
+  authored add-on is needed.
 - Resolving those errors would not make it deployable: physical OpenShift,
   KubeVirt, security choices and add-on realization have further lifecycle limits.
 - Placeholders: the Ceph entitlement sets `license.accept: true` for authoring
@@ -33,8 +36,6 @@ The expected result is failure with explicit diagnostics for:
 - Manager-module intent.
 - Unqualified global Ceph options, including missing members of the currently
   qualified pool-default pair.
-- Agent-install bridge interfaces on the two physical OpenShiftClusters.
-- Unrealized-declaration warnings for the authored add-on profile selections.
 
 The exact set is pinned by `TestActualCLIRefusesFutureReferenceFeatures` in
 [admission acceptance tests](../../../cmd/bootwright/admission_acceptance_test.go).

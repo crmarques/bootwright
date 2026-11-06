@@ -79,6 +79,39 @@ spec:
     serviceNetwork:
       - 10.96.0.0/16
 
+    secondaryNetworks:
+      - name: multidc-virtual-cluster-machine
+        topology: Localnet
+
+        uplink:
+          bridge: br-ex
+
+        mtu: 1500
+
+        ipam:
+          mode: Disabled
+
+        namespaceSelector:
+          matchLabels:
+            bootwright.io/virtual-clusters: multidc
+
+      - name: multidc-virtual-cluster-ceph-public
+        topology: Localnet
+
+        uplink:
+          bridge: br-ceph-public
+          interface: bond0.200
+          hostAddresses: bridge
+
+        mtu: 1500
+
+        ipam:
+          mode: Disabled
+
+        namespaceSelector:
+          matchLabels:
+            bootwright.io/virtual-clusters: multidc
+
   nodes:
     - name: master-01
       role: controlPlane

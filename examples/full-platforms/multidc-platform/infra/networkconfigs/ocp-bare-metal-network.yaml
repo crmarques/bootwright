@@ -90,38 +90,6 @@ spec:
           id: 200
 
         ipv4:
-          enabled: false
-
-        ipv6:
-          enabled: false
-
-      - name: br-ceph-public
-        type: ovs-bridge
-        state: up
-        mtu: 1500
-
-        ipv4:
-          enabled: false
-
-        ipv6:
-          enabled: false
-
-        bridge:
-          allow-extra-patch-ports: true
-
-          options:
-            stp: false
-
-          port:
-            - name: bond0.200
-            - name: ceph-public
-
-      - name: ceph-public
-        type: ovs-interface
-        state: up
-        mtu: 1500
-
-        ipv4:
           enabled: true
           dhcp: false
 

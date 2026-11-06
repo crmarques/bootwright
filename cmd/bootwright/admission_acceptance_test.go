@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -127,11 +126,10 @@ func mustReplaceOnce(t *testing.T, path, body, old, replacement string) string {
 
 // admissibleExampleSources is the reference as admission accepts it today:
 // the Ceph sources and their FDF package consumers dropped (hubs retain an
-// NMState fixture), agent bridge networking projected onto its existing VLAN, a
-// non-stretch CephCluster with its policy and pool substituted from
-// testdata, external cluster endpoints projected onto platform none, and the
-// extras without the refused families. The public example is
-// untouched; its own refusals are pinned by referenceRefusals.
+// NMState fixture), a non-stretch CephCluster with its policy and pool
+// substituted from testdata, external cluster endpoints projected onto
+// platform none, and the extras without the refused families. The public
+// example is untouched; its own refusals are pinned by referenceRefusals.
 func admissibleExampleSources(t *testing.T, withExtras bool) desiredstate.Sources {
 	t.Helper()
 	sources := exampleSources(t)
@@ -147,26 +145,14 @@ func admissibleExampleSources(t *testing.T, withExtras bool) desiredstate.Source
 			continue
 		case strings.Contains(body, "kind: OpenShiftCluster\n") && strings.Contains(body, "    platform:\n      baremetal:\n"):
 			body = mustReplaceOnce(t, file.Path(), body, "    platform:\n      baremetal:\n        provisioningNetwork: disabled\n", "    platform:\n      none: {}\n")
-		case strings.Contains(file.Path(), "ocp-bare-metal-network.yaml"):
-			start := strings.Index(body, "\n      - name: br-ceph-public\n")
-			end := strings.Index(body, "\n    dns-resolver:\n")
-			if start < 0 || end < start {
-				t.Fatal("reference bridge fixture missing")
-			}
-			body = body[:start] + body[end:]
-			vlanStart := strings.Index(body, "      - name: bond0.200\n")
-			body = body[:vlanStart] + strings.Replace(body[vlanStart:], "enabled: false", "enabled: true", 1)
-		case strings.Contains(body, "kind: Machine\n") && strings.Contains(body, "configRef: ocp-bare-metal-network"):
-			body = strings.ReplaceAll(body, "interface: ceph-public", "interface: bond0.200")
 		case strings.Contains(body, "kind: ClusterAddonBinding\n"):
 			kept, _, found := strings.Cut(body, "    fdf:\n")
 			if !found {
 				t.Fatalf("%s: projection expects the fdf package", file.Path())
 			}
 			body = kept
-			if strings.Contains(body, "  profileRefs: []") {
-				head, _, _ := strings.Cut(body, "  packages:\n")
-				body = mustReplaceOnce(t, file.Path(), head, "  addonRefs: []", "  addonRefs:\n    - virtual-cluster-network") + "  packages:\n    nmstate:\n      subscription:\n        channel: example-channel\n        startingCSV: kubernetes-nmstate-operator.v0.0.0\n"
+			if strings.HasSuffix(body, "  packages:\n") {
+				body += "    nmstate:\n      subscription:\n        channel: example-channel\n        startingCSV: kubernetes-nmstate-operator.v0.0.0\n"
 			}
 		default:
 			files = append(files, file)
@@ -229,8 +215,8 @@ func requireObject(t *testing.T, catalog api.Catalog, kind api.Kind, name string
 // refuses those declarations explicitly rather than dropping them from input.
 func TestActualCLIRefusesFutureReferenceFeatures(t *testing.T) {
 	sources := exampleSources(t)
-	if len(sources.Files) != 101 {
-		t.Fatalf("reference discovery: got %d files, want 101", len(sources.Files))
+	if len(sources.Files) != 99 {
+		t.Fatalf("reference discovery: got %d files, want 99", len(sources.Files))
 	}
 	var out, errOut bytes.Buffer
 	code := run(context.Background(), []string{"validate", "-f", sources.Roots[0], "--output", "json"}, &out, &errOut)
@@ -262,12 +248,6 @@ func TestReferenceReadmeListsExactlyTheReferenceRefusals(t *testing.T) {
 		},
 		"Manager-module intent.": modules,
 		"Unqualified global Ceph options, including missing members of the currently qualified pool-default pair.": global,
-		"Agent-install bridge interfaces on the two physical OpenShiftClusters.": func(d diagnosticTuple) bool {
-			return d.kind == "OpenShiftCluster" && strings.HasPrefix(d.field, "$.spec.nodes[")
-		},
-		"Unrealized-declaration warnings for the authored add-on profile selections.": func(d diagnosticTuple) bool {
-			return d.code == "api.unrealized"
-		},
 	}
 	data, err := os.ReadFile(filepath.Join(examplePath(t, "multidc-platform"), "README.md"))
 	if err != nil {
@@ -343,14 +323,7 @@ func referenceRefusals() []diagnosticTuple {
 		{"api.required", storageClusterKind, multidcCluster, "$.spec.config.global.osd_pool_default_size"},
 		cluster("$.spec.mgrModules"),
 	}
-	for _, name := range []string{"ocp-multidc-01", "ocp-multidc-02"} {
-		for index := 0; index < 3; index++ {
-			for count := 0; count < 2; count++ {
-				result = append(result, diagnosticTuple{"api.invariant", "OpenShiftCluster", name, fmt.Sprintf("$.spec.nodes[%d].machineRef", index)})
-			}
-		}
-	}
-	return append(result, diagnosticTuple{"api.unrealized", "ClusterAddon", "virtual-cluster-network", "$.spec.manifestSet"})
+	return result
 }
 
 // expandedRefusals adds what the acceptance extras contribute to the
@@ -450,7 +423,7 @@ func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testi
 			t.Errorf("kind %s has no full-wiring positive admission coverage", kind)
 		}
 	}
-	if report.Counts != (compilation.Counts{FilesSeen: 89, ObjectsDecoded: 124}) {
+	if report.Counts != (compilation.Counts{FilesSeen: 87, ObjectsDecoded: 124}) {
 		t.Errorf("projection counts: %#v", report.Counts)
 	}
 	var warned []diagnostics.Diagnostic

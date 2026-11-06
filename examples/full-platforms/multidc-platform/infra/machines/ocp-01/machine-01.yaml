@@ -54,7 +54,7 @@ spec:
 
       - name: ceph-public
         address: 198.51.100.21/25
-        interface: ceph-public
+        interface: bond0.200
 
     overrides: {}
 

@@ -1967,6 +1967,7 @@ spec:
           base-iface: bond0
           id: 100
       - ipv4:
+          dhcp: false
           enabled: true
         ipv6:
           enabled: false
@@ -2585,6 +2586,29 @@ spec:
       - custom-ca-bundle
     additionalTrustBundlePolicy: Always
   networking:
+    secondaryNetworks:
+      - name: multidc-virtual-cluster-ceph-public
+        topology: Localnet
+        uplink:
+          bridge: br-ceph-public
+          interface: bond0.200
+          hostAddresses: bridge
+        mtu: 1500
+        ipam:
+          mode: Disabled
+        namespaceSelector:
+          matchLabels:
+            bootwright.io/virtual-clusters: multidc
+      - name: multidc-virtual-cluster-machine
+        topology: Localnet
+        uplink:
+          bridge: br-ex
+        mtu: 1500
+        ipam:
+          mode: Disabled
+        namespaceSelector:
+          matchLabels:
+            bootwright.io/virtual-clusters: multidc
     clusterNetwork:
       - cidr: 10.128.0.0/14
         hostPrefix: 23
@@ -2665,6 +2689,29 @@ spec:
       - custom-ca-bundle
     additionalTrustBundlePolicy: Always
   networking:
+    secondaryNetworks:
+      - name: multidc-virtual-cluster-ceph-public
+        topology: Localnet
+        uplink:
+          bridge: br-ceph-public
+          interface: bond0.200
+          hostAddresses: bridge
+        mtu: 1500
+        ipam:
+          mode: Disabled
+        namespaceSelector:
+          matchLabels:
+            bootwright.io/virtual-clusters: multidc
+      - name: multidc-virtual-cluster-machine
+        topology: Localnet
+        uplink:
+          bridge: br-ex
+        mtu: 1500
+        ipam:
+          mode: Disabled
+        namespaceSelector:
+          matchLabels:
+            bootwright.io/virtual-clusters: multidc
     clusterNetwork:
       - cidr: 10.128.0.0/14
         hostPrefix: 23
@@ -3047,56 +3094,43 @@ spec:
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddon
 metadata:
-  name: virtual-cluster-network
+  name: acc-addon
 spec:
-  provides: []
-  requires:
-    - nmstate
-  inputs: []
-  manifestSet:
-    manifests:
-      - path: manifests/virtual-cluster-network-namespace.yaml
-      - path: manifests/virtual-cluster-network-nncp.yaml
-      - path: manifests/virtual-cluster-machine-cudn.yaml
-      - path: manifests/virtual-cluster-ceph-public-cudn.yaml
+  olm:
+    namespace:
+      name: acceptance-operator
+      management: managed
+    operatorGroup:
+      name: acceptance-operator
+      targetNamespaces:
+        - acceptance-operator
+    catalogSource:
+      name: acceptance-catalog
+      image: registry.example.test/acceptance-operator/catalog@sha256:1111111111111111111111111111111111111111111111111111111111111111
+      priority: -200
+      securityContextConfig: restricted
+    subscription:
+      name: acceptance-operator
+      package: acceptance-operator
+      channel: acceptance-channel
+      startingCSV: acceptance-operator.v0.0.0
+      source: acceptance-catalog
+      sourceNamespace: openshift-marketplace
   readiness:
-    timeout: 5m
+    timeout: 30m
     checks:
-      - condition:
-          apiVersion: nmstate.io/v1
-          kind: NodeNetworkConfigurationPolicy
-          name: multidc-virtual-cluster-localnet
-          condition:
-            type: Available
-            status: "True"
-      - resourceExists:
-          apiVersion: k8s.ovn.org/v1
-          kind: ClusterUserDefinedNetwork
-          name: multidc-virtual-cluster-machine
-      - resourceExists:
-          apiVersion: k8s.cni.cncf.io/v1
-          kind: NetworkAttachmentDefinition
-          name: multidc-virtual-cluster-machine
-          namespace: bootwright-multidc-virtual-clusters
-      - resourceExists:
-          apiVersion: k8s.ovn.org/v1
-          kind: ClusterUserDefinedNetwork
-          name: multidc-virtual-cluster-ceph-public
-      - resourceExists:
-          apiVersion: k8s.cni.cncf.io/v1
-          kind: NetworkAttachmentDefinition
-          name: multidc-virtual-cluster-ceph-public
-          namespace: bootwright-multidc-virtual-clusters
-  steps: []
+      - csvSucceeded:
+          namespace: acceptance-operator
+          subscription: acceptance-operator
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonProfile
 metadata:
-  name: physical-cluster-addons
+  name: acceptance-addon-profile
 spec:
   profileRefs: []
   addonRefs:
-    - virtual-cluster-network
+    - acc-addon
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: ClusterAddonBinding
@@ -3105,8 +3139,7 @@ metadata:
 spec:
   clusterRef: hub-multidc-01
   profileRefs: []
-  addonRefs:
-    - virtual-cluster-network
+  addonRefs: []
   packages:
     nmstate:
       subscription:
@@ -3123,8 +3156,7 @@ metadata:
 spec:
   clusterRef: hub-multidc-02
   profileRefs: []
-  addonRefs:
-    - virtual-cluster-network
+  addonRefs: []
   packages:
     nmstate:
       subscription:
@@ -3140,8 +3172,7 @@ metadata:
   name: ocp-multidc-01-addons
 spec:
   clusterRef: ocp-multidc-01
-  profileRefs:
-    - physical-cluster-addons
+  profileRefs: []
   addonRefs: []
   packages:
     nmstate:
@@ -3165,8 +3196,7 @@ metadata:
   name: ocp-multidc-02-addons
 spec:
   clusterRef: ocp-multidc-02
-  profileRefs:
-    - physical-cluster-addons
+  profileRefs: []
   addonRefs: []
   packages:
     nmstate:
