@@ -31,9 +31,16 @@ and removes the cluster in-tree. The API validates the profile.
 - No ArtifactServer: the private ISO is intended for per-node CDI push to a
   verified HTTPS upload-proxy route, never with TLS verification disabled.
   Managed DNS and NTP run on the controller.
-- The host credential's RBAC must cover the
-  [KubeVirt realization contract](../../../specs/substrates.md#kubevirt-machine-realization);
-  the exact Role and request set stay part of B87 qualification.
+- The host credential covers the access reviews and cluster reads of the
+  [provider proof](../../../specs/substrates.md#kubevirt-machine-realization),
+  `list` on nodes among them. The storage class's StorageProfile offers
+  `ReadWriteMany` in its first claim property set, and at least one node is
+  schedulable for virtual machines with KVM.
+- The controller reaches the host API and the CDI upload proxy without an
+  ambient proxy, and pins `virtctl` through `spec.dependencyVersions`; its
+  release metadata comes from api.github.com.
 - Operator inputs: `host-kubeconfig`, `openshift-pull-secret`, the generated
-  `kubevirt-cluster-admin-ssh-key`, and host capacity, CDI, StorageProfile and
-  upload storage for the three guests. All names and addresses are fixtures.
+  `kubevirt-cluster-admin-ssh-key`, and host capacity for the three guests.
+  All names and addresses are fixtures. The
+  [lab-kubevirt runbook](../lab-kubevirt/runbook.md) lists every host
+  prerequisite.

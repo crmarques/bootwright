@@ -568,6 +568,9 @@ restarts no node to shorten that window; the operator's first `machine stop`
 of each node, or the cluster's removal, releases the claim, and the Machine's
 removal proves it absent.
 
+Not yet met: a released node's image claim is ejected live where the host
+enables declarative hotplug; tracked as [B925](milestones/backlog.md#b925).
+
 Not yet met: no vSphere connection exists; tracked as
 [B99](milestones/m1.md#b99).
 

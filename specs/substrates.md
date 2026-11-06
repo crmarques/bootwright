@@ -62,12 +62,14 @@ with `os.provided: false` and no install profile, as
 realized target names no management controller: it names the arm's own
 management API and access, an identity channel of none, the interfaces the
 realization derived, the delivery kind `push`, and the controller Machine as
-placement. A Bootwright-installed Machine on either arm keeps refusing until
-its arm defines an identity channel ([B905](milestones/backlog.md#b905) for
-KubeVirt).
+placement. A Bootwright-installed Machine on either arm refuses before
+registration, because the arm defines no identity channel for it.
 
 Not yet met: a vSphere provider and its Machines refuse before registration;
 tracked as [B99](milestones/m1.md#b99).
+
+Not yet met: a Bootwright-installed Machine on KubeVirt refuses before
+registration; tracked as [B905](milestones/backlog.md#b905).
 
 The libvirt provider host is the Machine `spec.libvirt.machineRef` names. It
 must be OS-ready and reachable through one of the
@@ -107,6 +109,7 @@ Its reason and remedy are the diagnostic's message and remediation, in which
 | A provider on an unrealized substrate | an `InfraProvider` whose arm is `vsphere` | `this executable realizes no provider on the substrate it declares` | `remove <provider> and the Machines it hosts from the selected Environment, or declare them on a baremetal, kubevirt or libvirt provider` |
 | A KubeVirt provider on a host without OpenShift Virtualization | a KubeVirt provider's `spec.kubevirt.hostClusterRef` naming a cluster on which no add-on instance provides `kubevirt` | `a KubeVirt provider hosted by <cluster> needs an add-on instance on that cluster that provides kubevirt, which owns the provider's namespace and access` | `bind the kubevirt package to <cluster>, or name the host through spec.kubevirt.kubeconfigRef on <provider>` |
 | A KubeVirt provider on a host whose kubevirt add-on is authored | a KubeVirt provider's `spec.kubevirt.hostClusterRef` naming a cluster on which only an authored `ClusterAddon` that declares `provides: [kubevirt]` provides `kubevirt` | `a KubeVirt provider hosted by <cluster> needs the built-in kubevirt package on that cluster, which alone renders the provider's namespace, service account and roles, and <addon> that provides kubevirt does not` | `bind the kubevirt package to <cluster>, or name the host through spec.kubevirt.kubeconfigRef on <provider>` |
+| A hosted KubeVirt provider's attachment on no host secondary network | an attachment of a KubeVirt provider with `spec.kubevirt.hostClusterRef` whose `networkRef` names no `ClusterUserDefinedNetwork` among the host's `spec.networking.secondaryNetworks` | `a KubeVirt provider hosted by <cluster> attaches only to that cluster's secondary networks, whose selectors label the namespace its kubevirt instance owns, and attachment <attachment> names another network` | `name a ClusterUserDefinedNetwork among spec.networking.secondaryNetworks of <cluster> in attachment <attachment> of <provider>` |
 | A Machine on an unrealized substrate | a Machine with `os.provided: false` whose `spec.substrate.providerRef` names such a provider | `its provider <provider> is on a substrate this executable does not realize` | `host <machine> on a baremetal, kubevirt or libvirt provider, declare its operating system provided, or remove it from the selected Environment` |
 | A Bootwright-installed Machine on KubeVirt | a Machine on a KubeVirt provider that names `spec.os.installProfileRef` | `a KubeVirt Machine is realized for an installer that supplies its operating system, and this one names an install profile` | `remove spec.os.installProfileRef from <machine>, or host it on a baremetal or libvirt provider` |
 | A KubeVirt profile without a size | a non-provided Machine on a KubeVirt provider whose profile's `cpu`, `memoryMiB` or `diskGiB` is `0` | `a KubeVirt machine is created with the CPU count, memory and root disk its profile declares, and its profile <profile> declares one as zero` | `set cpu, memoryMiB and diskGiB above zero on profile <profile> of <provider>` |
@@ -127,7 +130,7 @@ The vSphere arm is not realized and has no row.
 | --- | --- | --- | --- |
 | `libvirt` | emulated Redfish service (sushy-tools) | [B74](milestones/m1.md#b74), [B75](milestones/m1.md#b75), [B76](milestones/m1.md#b76), [B326](milestones/m1.md#b326), [B346](milestones/m1.md#b346), [B703](milestones/m1.md#b703) | 2026-09-17 (`lab-rhel`, observation); 2026-10-05 (B49, B72); 2026-10-15 (B19, B20, B270, B276, B277, B339); 2026-10-15 (concurrent installations, observation); 2026-10-16 (B476); 2026-10-16 (B466, B608); 2026-10-17 (B615, M2b); 2026-10-31 ([B77](../docs/acceptance.md#ledger), B876, B978, B979; bounded managed-OS) |
 | `baremetal` | physical Redfish BMC | [B70](milestones/m1.md#b70), [B73](milestones/m1.md#b73), [B78](milestones/m1.md#b78), [B305](milestones/m1.md#b305), [B319](milestones/m1.md#b319) | `unrun` |
-| `kubevirt` | the host cluster's Kubernetes API (OpenShift Virtualization) | [B87](milestones/m1.md#b87), [B731](milestones/m3.md#b731) | `unrun` |
+| `kubevirt` | the host cluster's Kubernetes API (OpenShift Virtualization) | [B731](milestones/m3.md#b731), [B732](milestones/m3.md#b732), [B883](milestones/m4.md#b883), [B88](milestones/m3.md#b88) | `unrun` |
 
 ## Provider host realization
 
@@ -1113,7 +1116,9 @@ class the proof read, naming neither access mode nor volume mode so the
 class's StorageProfile decides them, at the profile's `diskGiB`, blank, and
 annotated `cdi.kubevirt.io/storage.bind.immediate.requested: "true"` so a
 stopped machine's claim binds on a WaitForFirstConsumer class. The root disk
-is the first `virtio` disk, presented as `/dev/vda`, with `bootOrder: 1`. Each
+is the first `virtio` disk, presented as `/dev/vda`, with `bootOrder: 1`; the
+Machine presents no data disk ([profile fields](api/machines.md#machine-profiles-and-network-attachments)),
+so no Ceph OSD runs on one. Each
 NMState `ethernet` interface becomes one interface with the `bridge` binding
 and a pinned `macAddress`, libvirt's derivation from the context, Machine and
 interface names with QEMU's locally administered prefix `52:54:00`, never
@@ -1132,7 +1137,16 @@ request refuses in both apply and observation, because the arm never rewrites
 them. Both paths prove the owned root DataVolume is `Succeeded` before
 reporting completion; a Pending or otherwise unfinished root never completes. A vTPM's state claim is
 placed on the host's VM state class, which this arm neither sets nor proves
-migratable ([B906](milestones/backlog.md#b906)).
+migratable.
+
+Not yet met: the vTPM state class is neither set nor proved migratable;
+tracked as [B906](milestones/backlog.md#b906).
+
+Not yet met: KubeVirt Machines boot with `secureBoot: false`; tracked as
+[B907](milestones/backlog.md#b907).
+
+Not yet met: a KubeVirt interface on a namespaced `UserDefinedNetwork`
+refuses; tracked as [B909](milestones/backlog.md#b909).
 
 **Port.** The realized target names, as its management controller, the
 endpoint `kubevirt:<namespace>/<vm>` and the provider's `kubeconfigRef` as its

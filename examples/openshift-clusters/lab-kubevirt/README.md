@@ -34,8 +34,16 @@ profile; its live run on an external host is B731's operator gate.
   host's verified CDI upload proxy, never with TLS verification disabled. The
   claim that held it, which embeds the pull secret, stays until that guest
   next stops. Managed DNS and NTP run on the controller.
-- The host credential's RBAC must cover the
-  [KubeVirt realization contract](../../../specs/substrates.md#kubevirt-machine-realization).
+- The host credential covers the access reviews and cluster reads of the
+  [provider proof](../../../specs/substrates.md#kubevirt-machine-realization),
+  `list` on nodes among them. The storage class's StorageProfile offers
+  `ReadWriteMany` in its first claim property set, and at least one node is
+  schedulable for virtual machines with KVM.
+- The controller reaches the host API and the CDI upload proxy without an
+  ambient proxy, and pins `virtctl` through `spec.dependencyVersions`; its
+  release metadata comes from api.github.com.
 - Operator inputs: `host-kubeconfig`, `openshift-pull-secret`, the generated
-  `kubevirt-cluster-admin-ssh-key`, and host capacity, CDI, StorageProfile and
-  upload storage for the five guests. All names and addresses are fixtures.
+  `kubevirt-cluster-admin-ssh-key`, and host capacity for the five guests. All
+  names and addresses are fixtures.
+- The [runbook](runbook.md) is the operator gate: every prerequisite, the
+  checks it records and the destroy.

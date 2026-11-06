@@ -134,9 +134,10 @@ before registration by
 provider naming `kubeconfigRef` or `hostClusterRef` is realized for
 installer-provisioned Machines
 ([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization)).
-The field detail of both arms is recorded in
+The field detail of the vSphere arm is recorded in
 [refused machine arms](../deferred/machine-arms.md), which
-[B99](../milestones/m1.md#b99) revives for vSphere.
+[B99](../milestones/m1.md#b99) revives, and the KubeVirt arm's field reference
+is [its record](../deferred/machine-arms.md#kubevirt-arm).
 A Machine's per-interface attachments, `substrate.libvirt.interfaceAttachments`
 and `substrate.kubevirt.interfaceAttachments` ([substrate arm](#substrate-arm)),
 are read by libvirt and KubeVirt Machines.
@@ -169,7 +170,8 @@ changing media requires a new realization rather than modifying an owned disk.
 
 `networkAttachments[]` names are unique DNS labels. Each entry has required
 `name` and exactly one arm matching the provider's selected substrate; the
-`vsphere` and `kubevirt` arms are [refused](#refused-arms):
+`vsphere` arm is [refused](#refused-arms); the `kubevirt` arm is realized, and
+its fields are in [its reference](../deferred/machine-arms.md#kubevirt-arm):
 
 | Arm | Exact fields | Rule |
 | --- | --- | --- |

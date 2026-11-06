@@ -492,7 +492,8 @@ already provides is left as it is.
 Target clients are selected by the admitted graph: OpenShift/OKD clients
 (`oc`, `kubectl`) and installer match the selected release; Kubernetes
 consumers select Helm; referenced vSphere providers select `govc`;
-virtualization selects upstream `virtctl`. They resolve under the version
+a referenced KubeVirt provider, and an add-on or package providing `kubevirt`
+on a bound cluster, select upstream `virtctl`. They resolve under the version
 intent the Environment's [`dependencyVersions`](api/environment.md#dependency-versions)
 declares. OpenShift/OKD installer and clients remain tied to the target
 release. A cluster pinned to a release image still selects its clients from

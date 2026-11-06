@@ -428,7 +428,11 @@ Red Hat OpenShift Virtualization, providing `kubevirt`
 creates carries no configuration. The namespaces, ServiceAccounts and roles
 it owns for the KubeVirt providers its cluster hosts derive from those
 providers and the cluster's secondary networks, never from this
-configuration ([coverage](../add-on-coverage.md#kubevirt)).
+configuration ([coverage](../add-on-coverage.md#kubevirt)). A hosted
+provider's root class must offer `ReadWriteMany` in its StorageProfile's first
+claim property set, which
+the provider proof reads
+([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization)).
 
 ### Package metallb
 

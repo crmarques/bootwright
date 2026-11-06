@@ -34,7 +34,8 @@ on those pages gates its milestone ([scope rules](milestones.md#scope-rules)):
 - IBM Ceph storage ([M2](milestones/m2.md)); and
 - cluster-bound integrations through built-in add-ons, first MetalLB, IBM
   Fusion Data Foundation, Red Hat Advanced Cluster Management, Red Hat
-  OpenShift GitOps (Argo CD) and GitLab ([M4](milestones/m4.md)), then custom add-ons ([B90](milestones/m4.md#b90)).
+  OpenShift GitOps (Argo CD), GitLab, the Kubernetes NMState Operator and Red Hat
+  OpenShift Virtualization ([M4](milestones/m4.md)), then custom add-ons ([B90](milestones/m4.md#b90)).
 
 The **extension envelope** is what the design must not preclude and no
 milestone gates on: OKD clusters ([B748](milestones/backlog.md#b748)), the

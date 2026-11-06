@@ -11,6 +11,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
 	"github.com/crmarques/bootwright/internal/substrate/kubevirt"
@@ -58,6 +59,8 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 			map[string]string{"<provider>": "InfraProvider/kv", "<cluster>": "OpenShiftCluster/host"}},
 		"A KubeVirt provider on a host whose kubevirt add-on is authored": {catalogOf(controller(), kubevirtProvider("hostClusterRef", ""), authoredKubeVirtAddOn()), "InfraProvider/kv",
 			map[string]string{"<provider>": "InfraProvider/kv", "<cluster>": "OpenShiftCluster/host", "<addon>": "ClusterAddon/widgets"}},
+		"A hosted KubeVirt provider's attachment on no host secondary network": {catalogOf(controller(), api.NewObject(api.OpenShiftCluster, "host", api.Value{}, api.MapValue()), kubevirtProvider("hostClusterRef", "")),
+			"InfraProvider/kv", map[string]string{"<provider>": "InfraProvider/kv", "<cluster>": "OpenShiftCluster/host", "<attachment>": "lab-guests"}},
 		"A Bootwright-installed Machine on KubeVirt": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", ""),
 			kubevirtGuest(text("installProfileRef", "rhel-9-8"))), "Machine/node-01", map[string]string{"<machine>": "Machine/node-01"}},
 		"A KubeVirt profile without a size": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", "", number("cpu", "0")), kubevirtGuest()),
@@ -65,12 +68,18 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 		"A KubeVirt interface on an unrealized network kind": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", "UserDefinedNetwork"), kubevirtGuest()),
 			"Machine/node-01", map[string]string{"<machine>": "Machine/node-01", "<attachment>": "lab-guests"}},
 	}
-	authoredHost := kubevirt.NewHost(nil, nil).WithAuthoredProviders(func(catalog api.Catalog, _ string) []string {
-		if _, found := catalog.Find(api.ClusterAddon, "widgets"); found {
-			return []string{"widgets"}
+	authoredHost := func(catalog api.Catalog) kubevirt.HostCapability {
+		var requirements kubevirt.HostRequirements
+		if _, hosted := catalog.Find(api.OpenShiftCluster, "host"); hosted {
+			requirements = func(api.Catalog, string) ([]reconciliation.ObjectRef, bool) { return nil, true }
 		}
-		return nil
-	})
+		return kubevirt.NewHost(nil, requirements).WithAuthoredProviders(func(catalog api.Catalog, _ string) []string {
+			if _, found := catalog.Find(api.ClusterAddon, "widgets"); found {
+				return []string{"widgets"}
+			}
+			return nil
+		})
+	}
 	for _, row := range refusalTable(t) {
 		test, found := cases[row.name]
 		if !found {
@@ -82,7 +91,7 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 			kind, name, _ := strings.Cut(test.refused, "/")
 			want := []lifecycle.Refusal{{Kind: kind, Name: name, Reason: expand(row.reason, test.values), Remediation: expand(row.remedy, test.values)}}
 			state := compilation.NewState(test.catalog, test.catalog, nil)
-			got := slices.DeleteFunc(append(NewHost(nil).Unsupported(state), authoredHost.Unsupported(state)...),
+			got := slices.DeleteFunc(append(NewHost(nil).Unsupported(state), authoredHost(test.catalog).Unsupported(state)...),
 				func(refused lifecycle.Refusal) bool { return refused.Kind != kind || refused.Name != name })
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("the capability refuses %+v, the table %+v", got, want)

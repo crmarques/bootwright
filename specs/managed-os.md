@@ -174,6 +174,9 @@ hands the frozen arm to the substrate's machine port dispatcher, which fails
 closed on an arm it has no port for, as the
 [adapter boundary](#adapter-boundary) states.
 
+Not yet met: a Bootwright-installed Machine on KubeVirt refuses before
+registration; tracked as [B905](milestones/backlog.md#b905).
+
 ### Supported shape
 
 The profile's `anaconda` arm, with `packageSource` absent

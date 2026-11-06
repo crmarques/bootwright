@@ -107,8 +107,7 @@ of the release, and Bootwright registers neither (D163). The objects and the
 `HyperConverged` manifest are those of Red Hat's OpenShift Virtualization
 installation documentation, whose release, sections and open facts are in
 [knowledge](../.agents/knowledge/olm-v0-exact-install.md#openshift-virtualization).
-The `HyperConverged` object is the singleton the operator reconciles and
-carries no field: the documented manifest has an empty `spec`. Readiness is
+The `HyperConverged` object has an empty `spec`. Readiness is
 the CSV `Succeeded` and the `HyperConverged` `Available` `True` and `Degraded`
 `False`; until then a provider the cluster hosts stays pending behind the
 instance ([B732](milestones/m3.md#b732), [D202](milestones/backlog.md#d202)).
@@ -119,13 +118,14 @@ namespace and the proof's reads, narrowed by name except the node list, which
 a list cannot be narrowed to
 ([KubeVirt machine realization](substrates.md#kubevirt-machine-realization)).
 
+Hosted networks need `nmstate`; `kubevirt` requires none.
+
 Left out, each a deliberate boundary of this package:
 
 - `HyperConverged` `spec` fields, among them feature gates and
-  `vmStateStorageClass` for the persistent virtual TPM backend storage, whose
-  location differs between HyperConverged API versions. A field joins the
-  configuration with the item that needs it; persistent vTPM storage is
-  [B87](milestones/m1.md#b87)'s question 7.
+  `vmStateStorageClass`, whose location differs between HyperConverged API
+  versions; a field joins the configuration with the item that needs it, the
+  vTPM state class with [B906](milestones/backlog.md#b906).
 - HostPathProvisioner and any storage the virtual machines use.
 
 ### metallb
@@ -270,6 +270,8 @@ the instance's source namespaces, which Bootwright leaves unset. The operator's
 source must
 exclude every object the handoff evidence lists
 ([the GitOps bootstrap object](add-ons.md#the-gitops-bootstrap-object)).
+A hosted provider's proof does not wait for it, so its class and networks
+come from typed packages.
 
 ### certmgr
 

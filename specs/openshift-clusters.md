@@ -180,6 +180,9 @@ the boot budget, at most one per round, so fewer such nodes fit.
 A larger cluster refuses before registration, naming its deadline and how many
 nodes fit.
 
+Not yet met: a cluster of more than eight KubeVirt Machines refuses under the
+arm's published bounds; tracked as [B926](milestones/m3.md#b926).
+
 The agent installer starts installing only when every declared host has
 registered and passed its validations, so one node that never comes up holds
 the whole cluster: the boot fails naming a node whose image never reached the
@@ -215,7 +218,7 @@ for KubeVirt the provider's kubeconfig as the port's `user` file and no password
 or trust bundle, and for a node on a host this context builds the kubeconfig
 the [arm's lend](substrates.md#kubevirt-machine-realization) mints once per
 host namespace for the run's whole deadline; the request freezes that host as
-the node's `controller.hostCluster` (`cluster-install-agent-v12`) and names
+the node's `controller.hostCluster` (the request's `installRequestVersion` constant) and names
 the host installation's `kubeconfig` as its produced input, and a node whose arm's port is pinned (`PortPinned`) carries,
 under its position, the cluster and VirtualMachine identity its Machine's
 block recorded in the original apply, to every entry point every operation of
@@ -245,6 +248,9 @@ which the plan orders after it and gates on the instance being absent, proves
 the VirtualMachine, every DataVolume and every claim absent, so the cluster's
 removal composes the arm's removal proof. The pre-boot VIP probe reaches no
 KubeVirt attachment, so the evidence names those VIPs unprobed.
+
+Not yet met: an installer VIP on a KubeVirt attachment is not proved free
+before a fresh boot; tracked as [B927](milestones/backlog.md#b927).
 
 Not yet met: a node on a vSphere provider refuses as a node on an unrealized
 substrate, and a multi-node `vsphere` cluster refuses as several nodes on

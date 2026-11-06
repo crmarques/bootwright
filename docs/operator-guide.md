@@ -463,6 +463,7 @@ same sockets and the same guest bridge.
 | [lab-rhel](../e2e/lab-rhel/runbook.md#run) | One RHEL guest installed through an emulated Redfish BMC, machine list and power reads, exec/rsh sessions, drift observation, replay, restart and safe removal; extended acceptance checks are below | [B72](../specs/milestones/delivered.md#x38--the-real-host-run-of-2026-10-05) operator gate, accepted; M1's extended checks follow [D59](../specs/milestones/backlog.md#d59) |
 | [lab-sno](../e2e/lab-sno/runbook.md#2-render-and-initialize) | A single-node OpenShift cluster installed by the agent installer on one libvirt guest | [B61](../specs/milestones/m3.md#b61) operator gate |
 | [lab-baremetal](../examples/machines/lab-baremetal/README.md) | One physical Machine claimed, proved and installed through its own Redfish BMC, its installer image and host key published privately | [B73](../specs/milestones/m1.md#b73) real-hardware operator gate, not run |
+| [lab-kubevirt](../examples/openshift-clusters/lab-kubevirt/runbook.md) | A five-node OpenShift cluster on VirtualMachines of an existing OpenShift Virtualization host, its image pushed through the host's upload proxy | [B731](../specs/milestones/m3.md#b731) operator gate, not run |
 
 Run each block from the repository root, one line at a time, and keep the
 sequence exactly as run: the ledger records it. After each operation, `status`
@@ -538,6 +539,49 @@ M3 each need one besides their emulated rehearsal (decision D17). Today a physic
 installation is proved in-tree only until [B73](../specs/milestones/m1.md#b73)'s
 real-hardware operator gate runs, and a
 physical cluster node refuses until [B67](../specs/milestones/m3.md#b67).
+
+### KubeVirt providers
+
+A KubeVirt provider realizes Machines as VirtualMachines on an OpenShift
+Virtualization host ([KubeVirt machine realization](../specs/substrates.md#kubevirt-machine-realization)).
+The [lab-kubevirt runbook](../examples/openshift-clusters/lab-kubevirt/runbook.md)
+lists what a host must offer; in brief:
+
+- A storage class whose StorageProfile offers `ReadWriteMany` in its first
+  claim property set, and a node schedulable for virtual machines with KVM.
+  The provider proof refuses a host without them before any Machine exists.
+- An attachment the installer's VIPs can live on: a bridge
+  NetworkAttachmentDefinition with `macspoofchk` off, or a `Localnet`
+  ClusterUserDefinedNetwork without IPAM. The VIPs are not probed before
+  boot on a KubeVirt attachment ([B927](../specs/milestones/backlog.md#b927)),
+  so prove them free.
+- Capacity for the guests plus the virt-launcher overhead the coverage row
+  gives, and about two cores per host node for OpenShift Virtualization.
+- A `virtctl` pinned through `spec.dependencyVersions`, and a route from the
+  controller to the host's upload proxy without an ambient proxy.
+
+Stop every hosted Machine before a destroy: a removal refuses while a
+VirtualMachine runs. A power command or `machine list --power-status` works
+while a destroy is current: each KubeVirt Machine the destroy has not yet
+removed is reached through its port and held to the identity (the host's
+`kube-system` UID and the VirtualMachine's UID) that the apply the destroy
+takes back recorded ([B951](../specs/milestones/m1.md#b951)). A Machine whose
+VirtualMachine the destroy already removed reads absent: `machine stop` reports
+it `off` without contacting the host, and `machine start` and `machine restart`
+refuse until you finish the destroy and apply again. If the record of that
+apply cannot be read, the power command refuses rather than sending an
+unpinned request.
+
+A VirtualMachine deleted by hand is not repaired: every later command names
+it missing, and only a destroy of the operation clears it. After you approve
+an upgrade of an owned OpenShift Virtualization Subscription, observation reads
+the instance's installed CSV as other than the expected one, which is unknown
+with the remedy to destroy and apply again; approving it is outside
+Bootwright's scope ([observation](../specs/add-ons.md#observation-and-continuation),
+[B106](../specs/milestones/backlog.md#b106)). Before destroying a context that
+builds the host cluster, save the host's kubeconfig with
+`bootwright cluster kubeconfig`: the destroy drops it from custody while
+bare-metal hosts keep running.
 
 ## Add-ons
 
