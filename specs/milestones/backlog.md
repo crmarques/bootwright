@@ -296,6 +296,10 @@ Alias cell.
 | [B1180](#b1180) | new, 2026-11-06 (X311 review) | product | Machine and State reconciliation | Power and access remedies that name the state a destroy leaves | The refusals fail safe; their remedies name an apply where a destroy is due |
 | [B1181](#b1181) | new, 2026-11-06 (X312 review) | product | State reconciliation and Substrate | A context with two levels of KubeVirt nesting destroys | No profile nests twice; the removal refuses safely today |
 | [B1182](#b1182) | new, 2026-11-06 (X312 review) | product | Substrate | Derived MAC addresses are unique across libvirt and KubeVirt Machines that share one network | The KubeVirt check covers the KubeVirt arm alone; no profile bridges both arms onto one network |
+| [B1185](#b1185) | new, 2026-11-06 (X314 review) | product | Add-ons | A partial instance over an owner-upgraded operator continues through `apply` | D235 (8) authorized observation only; an attempt over a reached chain still refuses that its approval proof differs |
+| [B1186](#b1186) | new, 2026-11-06 (X314 review) | enabling | Add-ons and Container cluster | A test ties each Ansible role's quoted evidence version to its Go constant | X314 updated the literals by hand; every gate passed with them mismatched |
+| [B1187](#b1187) | new, 2026-11-06 (X313 review) | safety | Substrate | A lent KubeVirt host token is revoked when its run returns | The token is unbound and lives until it expires, now the run's deadline plus ten minutes, which the specs accept |
+| [B1188](#b1188) | new, 2026-11-06 (X313 review) | safety | Container cluster | An installation whose derived deadline passes the installer's own credential lifetimes is refused or reported | Unverified: bootstrap certificates last 24 h and agent tokens may expire; derived deadlines pass 24 h only past about 88 KubeVirt or 236 emulated nodes |
 
 ### B82
 
@@ -447,7 +451,7 @@ amends the handoff sentence that ownership is never transferred, or a named
 post-handoff owner for a class of owned object, such as an approved InstallPlan.
 Either needs an owner decision. On 2026-11-06 [D235](#d235) (8) split the
 observation of an owner-approved operator upgrade out as
-[B1184](m4.md#b1184). **Exit evidence:** set by that change.
+[B1184](delivered.md#x314--an-owner-approved-operator-upgrade-reads-complete). **Exit evidence:** set by that change.
 
 ### B107
 
@@ -3285,6 +3289,49 @@ bridged onto one layer 2 network are not compared. **Outcome:** two Machines of
 either arm on one network never derive one address. **Exit evidence:** a
 planning refusal test across both arms.
 
+### B1185
+
+**Owner:** Add-ons. **Kind:** product. **Requires:** [B83](m4.md#b83).
+**Definition:** Needs definition: whether an attempt adopts the
+[observation's replacement chain](../add-ons.md#observation-and-continuation)
+([D235](#d235) (8) covers observation only), which needs the owner's decision.
+Today an instance that is partial for another reason, such as a deleted
+custom resource, after the owner approved an upgrade of its exact
+Subscription cannot be continued by `apply`, whose attempt refuses that the
+approval proof differs; the remedy is a destroy and a fresh apply.
+**Outcome:** such an instance continues. **Exit evidence:** an attempt test
+over a reached chain.
+
+### B1186
+
+**Owner:** Add-ons and Container cluster. **Kind:** enabling. **Requires:**
+none. **Definition:** Needs definition. The add-on instance and cluster
+network roles quote `cluster_objects_evidence_version` literals that must
+equal the Go evidence version constants, and no test compares them.
+**Outcome:** a mismatch fails a gate. **Exit evidence:** that test, seen
+failing on a mismatched literal.
+
+### B1187
+
+**Owner:** Substrate. **Kind:** safety. **Requires:** none. **Definition:**
+Needs definition: bind each lent token to an object the lend creates and
+deletes when the run returns, such as a per-lend Secret named in the
+TokenRequest's `boundObjectRef`, so the host revokes it early
+([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization)).
+**Outcome:** a lent token stops working when its run ends. **Exit evidence:**
+lend tests and a live revocation check.
+
+### B1188
+
+**Owner:** Container cluster. **Kind:** safety. **Requires:** none.
+**Definition:** Needs definition: the installer's own credential and
+certificate lifetimes, read from the installer and assisted-service, and
+whether a cluster whose derived deadline passes them refuses before
+registration naming that limit, as a provider limit rather than a Bootwright
+ceiling ([cluster size](../openshift-clusters.md#cluster-size)). **Outcome:**
+no installation spends its deadline on a cluster that can no longer finish.
+**Exit evidence:** the recorded lifetimes and a planning test at the limit.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/001-spec/report-final.md) ordered its
@@ -5959,7 +6006,7 @@ its own, carrying that identity. The boot requires the image a regular file at
 the frozen path.
 (7) The node ceiling is [B714](m3.md#b714)'s derived bound over the KubeVirt
 arm's published bounds: eight nodes; a larger cluster refuses naming it. A
-nine-node hub waits for B731's measured bounds, [B926](m3.md#b926).
+nine-node hub waits for B731's measured bounds, [B926](delivered.md#x313--an-installation-deadline-with-no-fixed-ceiling).
 (8) Node placement ([D199](#d199)) composes unchanged: it is read and written
 through the installed cluster's API, whatever arm realized the nodes.
 (9) The cluster's removal composes the arm's: the install inverse ejects
@@ -7098,7 +7145,7 @@ install interface and a secondary network required rows, then installs the
 (3) Q146, the same words, then "Derive, never cap": an OpenShift
 installation's run deadline is derived from its node count and its arms'
 published bounds with no fixed ceiling, so a cluster of any size plans and its
-run is held to that derived deadline. [B926](m3.md#b926) is redefined by this
+run is held to that derived deadline. [B926](delivered.md#x313--an-installation-deadline-with-no-fixed-ceiling) is redefined by this
 clause and X313 implements it. Session clauses: host access the KubeVirt arm
 lends to such a run lives as long as that run; the owner's words name clusters
 in general, so the Ceph host bound follows the same rule as
@@ -7131,7 +7178,7 @@ operator upgrade outside Bootwright, an observation reads an installed CSV
 that the owned Subscription's own replacement chain reached from its
 `startingCSV` as complete, with that CSV as evidence, for every package
 installed through a Manual Subscription. Bootwright approves nothing and
-transfers no ownership. It splits from B106 as [B1184](m4.md#b1184), which
+transfers no ownership. It splits from B106 as [B1184](delivered.md#x314--an-owner-approved-operator-upgrade-reads-complete), which
 X314 implements.
 
 (9) Q151, "Pinned upstream virtctl": every controller, FIPS or disconnected

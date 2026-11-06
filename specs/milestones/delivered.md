@@ -12167,3 +12167,56 @@ state the prerequisites the provider proof enforces since
 
 **Verification:** `make docs-check`, the refusal-table test and `make check`
 passed on the commit.
+
+### X313 — An installation deadline with no fixed ceiling
+
+**Items:** B926, completed in-tree (2026-11-06). **Kind:** safety. **Owners:**
+Container cluster and Substrate, with Reconciliation.
+
+[D235](backlog.md#d235) (3) authorizes it, following
+[cluster size](../openshift-clusters.md#cluster-size) and
+[KubeVirt machine realization](../substrates.md#kubevirt-machine-realization).
+
+- An OpenShift cluster of any node count plans; its installation request
+  states the deadline its rounds derive, and the lifecycle runner honors a
+  request's stated deadline instead of cutting it at six hours. The
+  refusal of a cluster past the ceiling and its refusal-table row are gone.
+- `lifecycle.MaxDeadline` remains only the bound that families with fixed
+  budgets hold their own budgets to; Ceph's refusals are unchanged
+  ([B1183](m2.md#b1183)).
+- A KubeVirt host token lent to a run lives for the run's deadline plus ten
+  minutes, with no fixed cap, in Go and Python; a host granting less still
+  refuses.
+- A physical managed-OS installation whose deadline passes six hours now runs
+  to it, which delivers the clamp half of [B878](m1.md#b878).
+
+**Delivery commit:** 5b5d28877. No request or evidence version moves. An independent
+Opus review approved after fixes, all made in the slice; its other points are
+parked as [B1187](backlog.md#b1187) and [B1188](backlog.md#b1188).
+
+**Verification:** each regression failed before its fix; `make check` and
+`make race` passed on the commit.
+
+### X314 — An owner-approved operator upgrade reads complete
+
+**Items:** B1184, completed in-tree (2026-11-06). **Kind:** product.
+**Owners:** Add-ons.
+
+[D235](backlog.md#d235) (8) authorizes it, following
+[observation and continuation](../add-ons.md#observation-and-continuation).
+
+- An observation reads an installed CSV other than the pinned one as complete
+  when the owned Subscription's own replacement chain reached it, proved link
+  by link from surviving InstallPlans and the installed CSV, and records the
+  chain as evidence. What cannot be proved stays unknown, as before.
+- It covers exact, operator-managed and dependent Subscriptions; Bootwright
+  approves and writes nothing, and the attempt's rules are unchanged.
+
+**Delivery commit:** 1004e10d9. The add-on rule identities and the add-on instance and
+cluster network evidence versions move. An independent Opus review approved
+after fixes, all made in the slice; its other points are parked as
+[B1185](backlog.md#b1185) and [B1186](backlog.md#b1186). The OLM facts were read
+from upstream source; the live check is the B883 and B761 operator gates.
+
+**Verification:** each regression failed before its fix; `make check` passed on
+the commit.

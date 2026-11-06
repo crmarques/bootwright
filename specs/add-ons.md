@@ -470,8 +470,7 @@ realization, never repairs it and shows no field values for an instance.
 
 After the owner approves an operator upgrade outside Bootwright, an
 observation reads the installed CSV as the expected one when the
-Subscription's own replacement chain reached it from that CSV
-([B1184](milestones/m4.md#b1184)). The rule holds for a package's
+Subscription's own replacement chain reached it from that CSV. The rule holds for a package's
 Subscription under either approval policy, an authored add-on's, and a
 dependent Subscription against the CSV the configuration pins for it. Each
 link is proved from objects that survive, never assumed:
@@ -537,8 +536,7 @@ a destroy followed by a fresh apply
 ([lifecycle unit](state-reconciliation.md#lifecycle-unit),
 [D153](milestones/backlog.md#d153)), and approving an upgrade of
 an owned Subscription stays the owner's; an upgrade the owner approves reads
-complete by the [replacement chain rule](#observation-and-continuation)
-([B1184](milestones/m4.md#b1184)).
+complete by the [replacement chain rule](#observation-and-continuation).
 [Project](project.md#lifecycle-and-handoff) defines the downstream day-2
 resources a GitOps source may control. The GitOps package may create one
 [bootstrap object](#the-gitops-bootstrap-object).

@@ -101,7 +101,7 @@ Read on 2026-11-06 from upstream operator-lifecycle-manager `master` at
 `04bd29a7bf3068835a0a41f82a25b881a86c1413`; OpenShift's downstream release
 branches were not read. The rule they inform is the
 [replacement chain](../../specs/add-ons.md#observation-and-continuation) of
-[B1184](../../specs/milestones/m4.md#b1184), implemented by `Engine.chain` in
+[B1184](../../specs/milestones/delivered.md#x314--an-owner-approved-operator-upgrade-reads-complete), implemented by `Engine.chain` in
 [the engine](../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/cluster_objects_engine.py)
 and tested in
 [test_cluster_objects_chain.py](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_cluster_objects_chain.py).
