@@ -33,7 +33,6 @@ Alias cell.
 | [B162](#b162) | new, 2026-09-30 (X28) | enabling | Architecture | The diagnostic registry follows every call shape | Parked under the 2026-09-30 triage rule: test tooling |
 | [B163](#b163) | new, 2026-09-30 (X28) | enabling | Architecture | Test-loop wording and counts | Parked under the 2026-09-30 triage rule: tooling polish |
 | [B164](#b164) | new, 2026-09-30 (X28) | enabling | Architecture | Only the privilege supervisor subscribes to signals | Parked under the 2026-09-30 triage rule: test tooling |
-| [B122](#b122) | new, 2026-09-29 (X22); parked 2026-09-30 by D43 | enabling | CLI | JSON results for plan, apply and destroy | No milestone names a consumer yet (D43) |
 | [B166](#b166) | split from B45 on 2026-09-30 (D41) | safety | State reconciliation | Scoped removal | A state-contract candidate (D41) |
 | [B167](#b167) | split from B34 on 2026-09-30 (D28) | safety | Substrate and Controller | Frozen remote package transactions | The SSH-host install contract was narrowed instead (D28) |
 | [B171](#b171) | new, 2026-09-30 (X21) | enabling | State reconciliation and Secrets | Custody checks each held by its own test | Parked under the 2026-09-30 triage rule: test depth |
@@ -457,12 +456,6 @@ The Makefile's `quick` comment and the Go reference still describe `make quick` 
 ### B164
 
 Nothing checks that `os/signal` is granted to the privilege supervisor alone, although the spec calls its `Begin` the process's one signal subscription; and the composition-root signal test X28 kept repeats what the boundary tests refuse. **Exit evidence:** a grant check and one test.
-
-### B122
-
-JSON results for `plan`, `apply` and `destroy`, which X22 left out (decision
-X22-D1), carrying each block's attempts, which the operation result does not
-fill today. **Exit evidence:** JSON goldens for each command.
 
 ### B166
 
@@ -3443,6 +3436,7 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | B365 | 2026-10-20 | Folded under [D173](#d173) into [B771](#b771), which removes the `add-ons/_store` exception and its marker, so the hard-linked-marker disagreement leaves with them. |
 | B496 | 2026-11-03 | [D224](#d224): its remaining gate was the emulated bare-metal rehearsal; its in-tree delivery, the generated `issuerRef` CA-signed leaf of D175, stays on main. |
 | B1062 | 2026-11-03 | [D224](#d224): the emulated bare-metal rehearsal it would have planned was removed. |
+| B122 | 2026-11-05 | JSON results already exist; the remaining attempt/outcome reporting is folded into [B1135](m1.md#b1135) by D233. |
 
 ## Decisions
 
@@ -6913,3 +6907,37 @@ owner's review: the case declares no object gateway; it keeps the consumer's
 key type at `aes256k`, which the IBM Storage Ceph 9.9.x monitors require, and
 leaves the client question to [B628](m2.md#b628); and the fail-fast refusal of
 a replaced CSV is recorded as [B1130](m4.md#b1130), not implemented.
+
+### D233
+
+**owner** (2026-11-05): after the executive summary of
+[audit 003](../../audits/003-code/report-final.md), the owner asked:
+"plan and implement the recommendations for high and medium findings".
+This authorizes all 68 High and Medium findings as X304 (M1, B1132 to
+B1139; gate-blocking defect B1144 recorded separately), X305 (M4, B1142), X306 (M2, B1140 and B1141), and X307 (M3,
+B1143), out of sequence for implementation. Work starts with X304 and X305;
+X306 and X307 follow, keeping no more than two active slices in this program.
+The dated audit remains unchanged. Low findings and existing operator
+acceptance are outside this remediation unless inseparable from a listed fix.
+B122 is retired into B1135, which owns its OUT-01 reporting remainder.
+
+Session clauses, pending the owner's review: physical agent installations
+require a supported stable WWN root hint; kernel device names refuse at
+admission. KubeVirt completion proves root readiness and the frozen machine
+shape. NFS export security defaults to `sys` when omitted. Admitted Ceph
+values must reach their specified native realization, or refuse at admission
+with an object, reason and remedy where the implementation has no supported
+realization; specifications and the admitted-but-unrealized table agree.
+A healthy exact-pinned operator reports a pending manual upgrade without
+approving it or prescribing cluster destruction. Context-free rendering uses
+the invoking account. CLI-04 retains the security owner's sudo-entry guard,
+with an explicit exception in CLI precedence and information-command clauses.
+ARC-01 narrows the documented architecture guard to its actual family/kind,
+arm, identity and literal checks; shared authored management intent remains
+available to generic access/inspection/status. Implementation choices do not promote an unqualified
+provider, authorize a live command, a push or a release, or close acceptance.
+
+**Exit evidence:** one regression for each behavioral defect or missing
+proof, specification corrections for drift, a complete finding-to-item map,
+focused checks per work package, and final `make check`, independent safety
+review and `make race` on the integration tree.
