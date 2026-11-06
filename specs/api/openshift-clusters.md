@@ -356,6 +356,15 @@ implicit trust inherited from another consumer.
 | `ovnKubernetesConfig` | object | no | absent; `mtu`, `gatewayConfig.routingViaHost`, `gatewayConfig.ipForwarding` (`Restricted` or `Global`), each written into the install-time `Network` only when set. |
 | `secondaryNetworks` | array | no | `[]`; localnet secondary networks below. |
 
+`ovnKubernetesConfig.mtu` is at most 100 below, and a secondary network's `mtu`
+at most, the effective MTU of the interface it rides on every node: the install
+interface for OVN and for `br-ex`, otherwise the network's `uplink.interface`.
+An interface's effective MTU is its own `mtu`; when that is omitted, the
+effective MTU of its VLAN `base-iface`, or of the bond it is a port of or names
+as its `controller`, resolved recursively; otherwise 1500. So OVN `mtu: 8900`
+over a VLAN with no `mtu` on a bond of `mtu: 9000` is admitted, and a value
+above the bound refuses at `ovnKubernetesConfig.mtu` or the network's `mtu`.
+
 A cluster whose [MetalLB pool](addons.md#package-metallb) names an interface
 declares `gatewayConfig.routingViaHost: true` and `gatewayConfig.ipForwarding:
 Global`: forwarding on that interface is the cluster's install-time
@@ -388,7 +397,7 @@ physical network and of the attachment definition workloads select.
 | `uplink.interface` | string | with a new bridge | An `ethernet`, `bond` or `vlan` every node declares, other than its install interface: addressless, unless `uplink.hostAddresses` is `bridge`. |
 | `uplink.hostAddresses` | string | no | `none` (default): the uplink carries no node address. `bridge`: the static addresses each node declares on the uplink move onto the bridge, below. Only with a new bridge; the same on every network sharing that bridge. |
 | `vlan` | integer | no | Access VLAN `1..4094`; distinct among networks sharing an uplink. |
-| `mtu` | integer | no | `576..65536`, at least `1280` with an IPv6 subnet, at most the uplink interface's declared MTU. |
+| `mtu` | integer | no | `576..65536`, at least `1280` with an IPv6 subnet, at most the uplink interface's effective MTU. |
 | `ipam.mode` | string | no | `Disabled` (default) or `Enabled`. |
 | `ipam.subnets` | array of CIDRs | with `Enabled` | One or two, of different families. |
 | `ipam.excludeSubnets` | array of CIDRs | no | At most 25, inside `subnets`. |

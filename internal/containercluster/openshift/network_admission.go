@@ -155,16 +155,47 @@ func defaultRouteInterfaces(native api.Value, familyBits int) []string {
 	slices.Sort(interfaces)
 	return slices.Compact(interfaces)
 }
+
 func interfaceMTU(native api.Value, name string) int64 {
+	return effectiveInterfaceMTU(native, name, map[string]bool{})
+}
+
+func effectiveInterfaceMTU(native api.Value, name string, visiting map[string]bool) int64 {
+	if visiting[name] {
+		return 1500
+	}
+	visiting[name] = true
 	for _, nic := range native.Get("interfaces").Items() {
-		if nic.Get("name").Text() == name {
-			if n, ok := nic.Get("mtu").Int64(); ok {
-				return n
-			}
+		if nic.Get("name").Text() != name {
+			continue
 		}
+		if n, ok := nic.Get("mtu").Int64(); ok {
+			return n
+		}
+		if parent := nic.Get("vlan", "base-iface").Text(); parent != "" {
+			return effectiveInterfaceMTU(native, parent, visiting)
+		}
+	}
+	if controller := interfaceController(native, name); controller != "" {
+		return effectiveInterfaceMTU(native, controller, visiting)
 	}
 	return 1500
 }
+
+func interfaceController(native api.Value, name string) string {
+	for _, nic := range native.Get("interfaces").Items() {
+		if nic.Get("name").Text() == name && nic.Get("controller").Text() != "" {
+			return nic.Get("controller").Text()
+		}
+	}
+	for _, nic := range native.Get("interfaces").Items() {
+		if slices.Contains(nic.Get("link-aggregation", "port").Strings(), name) {
+			return nic.Get("name").Text()
+		}
+	}
+	return ""
+}
+
 func validateNetworkUplink(n api.Value, index int, bound api.Object, native api.Value, install string) []api.Issue {
 	issues := []api.Issue{}
 	base := fmt.Sprintf("$.spec.networking.secondaryNetworks[%d]", index)

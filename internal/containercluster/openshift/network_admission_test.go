@@ -1,6 +1,7 @@
 package openshift
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -247,6 +248,75 @@ func TestUnroutedInstallInterfaceStillConstrainsSecondaryNetworks(t *testing.T) 
 		}
 		if !found {
 			t.Fatalf("missing %s refusal: %v", test.field, issues)
+		}
+	}
+}
+
+func bondOf(name string, mtu int64, ports ...string) api.Value {
+	bond := m("name", name, "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList(ports...)))
+	if mtu != 0 {
+		bond = bond.With("mtu", api.IntegerValue(fmt.Sprint(mtu)))
+	}
+	return bond
+}
+
+func TestClusterMTUBoundsReadTheEffectiveMTUThroughVLANAndBondParents(t *testing.T) {
+	jumbo := func() ([]api.Value, []api.Value, []api.Value) {
+		return []api.Value{eth("eth0"), eth("eth1"), eth("eth2"), bondOf("bond0", 9000, "eth0", "eth1"), vlanOn("bond0.100", "bond0"), vlanOn("eth2.10", "eth2"), eth("eth3"), bondOf("bond1", 9000, "eth3"), vlanOn("bond1.20", "bond1")},
+			[]api.Value{assign("primary", "192.0.2.10/24", "bond0.100")}, []api.Value{installRoute("bond0.100")}
+	}
+	for _, test := range []struct {
+		name    string
+		ovn     int64
+		network api.Value
+		want    string
+	}{
+		{"OVN over a vlan on a jumbo bond", 8900, api.Value{}, ""},
+		{"OVN above the effective MTU minus 100", 8901, api.Value{}, "cluster MTU 8901 exceeds the default-route interface MTU minus 100 on Machine/node-0 (set the cluster MTU to at most 8900"},
+		{"secondary network at the effective MTU", 0, addressedNetwork("tenant", "br-ex", "", "", "").With("mtu", api.IntegerValue("9000")), ""},
+		{"secondary network above the effective MTU", 0, addressedNetwork("tenant", "br-ex", "", "", "").With("mtu", api.IntegerValue("9001")), "set mtu to at most 9000"},
+		{"secondary uplink vlan on a jumbo bond", 0, addressedNetwork("tenant", "br-tenant", "bond1.20", "", "").With("mtu", api.IntegerValue("9000")), ""},
+		{"secondary uplink vlan above a jumbo bond", 0, addressedNetwork("tenant", "br-tenant", "bond1.20", "", "").With("mtu", api.IntegerValue("9001")), "set mtu to at most 9000"},
+		{"secondary uplink vlan on a default ethernet", 0, addressedNetwork("tenant", "br-tenant", "eth2.10", "", "").With("mtu", api.IntegerValue("9000")), "set mtu to at most 1500"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			interfaces, addresses, routes := jumbo()
+			cluster, c := uplinkLab(interfaces, addresses, routes...)
+			if test.ovn != 0 {
+				cluster = cluster.WithSpec(cluster.Spec().WithPath(m("mtu", api.IntegerValue(fmt.Sprint(test.ovn))), "networking", "ovnKubernetesConfig"))
+			}
+			if test.network.Present() {
+				cluster = NormalizeNetworkIntent(cluster.WithSpec(cluster.Spec().WithPath(list(test.network), "networking", "secondaryNetworks")))
+			}
+			var texts []string
+			for _, issue := range ValidateNetworkIntent(cluster, c) {
+				texts = append(texts, issue.Message+" ("+issue.Remediation+")")
+			}
+			if test.want == "" {
+				if len(texts) != 0 {
+					t.Fatal(texts)
+				}
+				return
+			}
+			if len(texts) != 1 || !strings.Contains(texts[0], test.want) {
+				t.Fatalf("want %q, got %q", test.want, texts)
+			}
+		})
+	}
+}
+
+func TestEffectiveInterfaceMTUFollowsParentsAndStopsAtCycles(t *testing.T) {
+	native := m("interfaces", list(
+		eth("eth0"), eth("eth1").With("controller", api.StringValue("bond0")), bondOf("bond0", 9000, "eth1"),
+		vlanOn("bond0.100", "bond0").With("mtu", api.IntegerValue("8000")), vlanOn("bond0.200", "bond0"), vlanOn("bond0.200.5", "bond0.200"),
+		vlanOn("loop-a", "loop-b"), vlanOn("loop-b", "loop-a"), bondOf("bond9", 0, "eth9"), eth("eth9"),
+	))
+	for name, want := range map[string]int64{
+		"eth0": 1500, "eth1": 9000, "bond0": 9000, "bond0.100": 8000, "bond0.200": 9000, "bond0.200.5": 9000,
+		"loop-a": 1500, "bond9": 1500, "eth9": 1500, "absent": 1500,
+	} {
+		if got := interfaceMTU(native, name); got != want {
+			t.Errorf("interfaceMTU(%s) = %d, want %d", name, got, want)
 		}
 	}
 }
