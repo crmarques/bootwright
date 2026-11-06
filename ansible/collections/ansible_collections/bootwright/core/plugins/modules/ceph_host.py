@@ -19,14 +19,23 @@ options:
   operation:
     description: The fixed lifecycle operation.
     type: str
-    choices: [apply, observe, destroy]
+    choices:
+      - apply
+      - observe
+      - destroy
     required: true
   step:
     description:
       - One phase of an apply, run in this order by the role so each reports as its own progress group.
       - Only C(verify) returns evidence; an observation or a release names no step.
     type: str
-    choices: [packages, images, profile, route, devices, verify]
+    choices:
+      - packages
+      - images
+      - profile
+      - route
+      - devices
+      - verify
   pull:
     description:
       - The progress group of one C(images) step, C(pull-ceph-image) or one of the frozen request's C(pulls) batches, naming what it pulls.

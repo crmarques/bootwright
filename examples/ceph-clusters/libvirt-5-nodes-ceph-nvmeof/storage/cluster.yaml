@@ -61,7 +61,9 @@ spec:
     - service_type: mgr
 
       placement:
-        hosts: [rhel-01.lab.example.test, rhel-02.lab.example.test]
+        hosts:
+          - rhel-01.lab.example.test
+          - rhel-02.lab.example.test
 
     - service_type: osd
       service_id: data
@@ -119,8 +121,12 @@ spec:
       - name: rhel-04
         fqdn: rhel-04.lab.example.test
         machineRef: rhel-04
-        labels: [ceph-storage, nvme-gateway]
+        labels:
+          - ceph-storage
+          - nvme-gateway
       - name: rhel-05
         fqdn: rhel-05.lab.example.test
         machineRef: rhel-05
-        labels: [ceph-storage, nvme-gateway]
+        labels:
+          - ceph-storage
+          - nvme-gateway

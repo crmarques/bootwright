@@ -17,7 +17,10 @@ options:
   operation:
     description: Fixed lifecycle operation.
     type: str
-    choices: [apply, observe, destroy]
+    choices:
+      - apply
+      - observe
+      - destroy
     required: true
   request:
     description: Frozen image resolution request, with the auxiliary image set when the cluster selects one.

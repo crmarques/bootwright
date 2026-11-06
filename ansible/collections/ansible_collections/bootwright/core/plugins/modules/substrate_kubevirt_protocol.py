@@ -36,7 +36,10 @@ options:
     description: Whether the completion is a provider proof, a machine or a lend of host access.
     type: str
     required: false
-    choices: [host, machine, lend]
+    choices:
+      - host
+      - machine
+      - lend
   observation:
     description: What the operation read from the host cluster.
     type: dict

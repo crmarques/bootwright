@@ -19,7 +19,9 @@ options:
   state:
     description: Whether to install or remove the owned barrier.
     type: str
-    choices: [present, absent]
+    choices:
+      - present
+      - absent
     default: present
 author:
   - Bootwright contributors (@crmarques)

@@ -16,14 +16,41 @@ options:
     description: Shared protocol phase.
     type: str
     required: true
-    choices: [loaded, refused, completed]
+    choices:
+      - loaded
+      - refused
+      - completed
   reason:
     description: Fixed refusal the block's caller names, published only in place of completion.
     type: str
-    choices: [gateway-dns, export-foreign-principal, export-key-type, export-prerequisite, export-identity, request, artifact, ownership,
-      evidence, material, transport, remote-refusal, adapter-exception, native-command, native-timeout,
-      native-output, unknown, foreign-cluster, foreign-image, foreign-service, smb-identity, smb-result, smb-unavailable, smb-directory,
-      smb-module-disabled, ssh-policy-host-excluded, ssh-policy-unavailable]
+    choices:
+      - gateway-dns
+      - export-foreign-principal
+      - export-key-type
+      - export-prerequisite
+      - export-identity
+      - request
+      - artifact
+      - ownership
+      - evidence
+      - material
+      - transport
+      - remote-refusal
+      - adapter-exception
+      - native-command
+      - native-timeout
+      - native-output
+      - unknown
+      - foreign-cluster
+      - foreign-image
+      - foreign-service
+      - smb-identity
+      - smb-result
+      - smb-unavailable
+      - smb-directory
+      - smb-module-disabled
+      - ssh-policy-host-excluded
+      - ssh-policy-unavailable
   detail:
     description: Non-secret refusal cause, a refusal name or an exception type and code site.
     type: str
@@ -33,7 +60,9 @@ options:
   outcome:
     description: Completed native outcome.
     type: str
-    choices: [changed, unchanged]
+    choices:
+      - changed
+      - unchanged
   digest:
     description: Frozen lifecycle request digest.
     type: str

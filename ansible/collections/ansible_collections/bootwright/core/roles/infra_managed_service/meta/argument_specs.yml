@@ -36,7 +36,10 @@ argument_specs:
           implementation:
             type: str
             required: true
-            choices: [dns-server-dnsmasq-v1, ntp-server-chrony-v1, proxy-squid-v1]
+            choices:
+              - dns-server-dnsmasq-v1
+              - ntp-server-chrony-v1
+              - proxy-squid-v1
           ingressHosts:
             type: list
             elements: str
@@ -44,7 +47,10 @@ argument_specs:
           kind:
             type: str
             required: true
-            choices: [DNSServer, NTPServer, Proxy]
+            choices:
+              - DNSServer
+              - NTPServer
+              - Proxy
           placement:
             type: dict
             required: true
@@ -65,7 +71,8 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [managed-service-v5]
+            choices:
+              - managed-service-v5
       bootwright_managed_service_digest:
         type: str
         required: true

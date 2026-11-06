@@ -18,7 +18,10 @@
     # sent SIGTERM, and a kill after the grace reaches timeout's own process
     # group too, which a shell reports as 137 (128 + 9) and the command module,
     # reading the process's return code, as -9.
-    containercluster_media_agent_budget_spent_codes: [124, 137, -9]
+    containercluster_media_agent_budget_spent_codes:
+      - 124
+      - 137
+      - -9
   block:
     - name: Discard the installer work area a previous build left
       ansible.builtin.file:

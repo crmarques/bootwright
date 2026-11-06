@@ -102,7 +102,9 @@ Each selected YAML file may contain one or more documents. Syntactically empty
 documents are ignored; a document containing an explicit `null` is not empty.
 Every non-empty document must be a mapping with string keys and must decode to
 the common envelope and one registered kind. Operator-authored input may use
-block or flow collection style; block style is a repository-fixture convention,
+block or flow collection style; block style is the rule for the YAML this
+repository writes and generates
+([formatting](../.agents/skills/code-implementation/references/formatting.md#yaml)),
 not public grammar.
 
 Duplicate mapping keys, aliases, anchors, merge keys, custom tags, nulls,

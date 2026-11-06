@@ -32,7 +32,9 @@ argument_specs:
           deliveryKind:
             type: str
             required: true
-            choices: [fetch, push]
+            choices:
+              - fetch
+              - push
           imageIdentity:
             type: str
             required: false
@@ -75,7 +77,8 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [cluster-install-agent-v16]
+            choices:
+              - cluster-install-agent-v16
           workRoot:
             type: str
             required: true

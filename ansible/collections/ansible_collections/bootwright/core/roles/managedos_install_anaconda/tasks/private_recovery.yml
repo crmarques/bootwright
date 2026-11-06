@@ -46,7 +46,9 @@
     validate_certs: true
     use_proxy: false
     follow_redirects: none
-    status_code: [200, 206]
+    status_code:
+      - 200
+      - 206
     timeout: 30
   register: managedos_install_anaconda_recovery_fetch
   until: >-

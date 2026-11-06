@@ -112,7 +112,9 @@ spec:
       enabled: true
       prometheus:
         placement:
-          hosts: [host-a, host-b]
+          hosts:
+            - host-a
+            - host-b
         retentionTime: 14d
         retentionSize: 20GB
 ```
@@ -147,10 +149,12 @@ spec:
       osdDrivegroups:
         - serviceID: data
           placement:
-            hosts: [host-a]
+            hosts:
+              - host-a
           osd:
             dataDevices:
-              paths: [/dev/disk/by-id/example-data-a]
+              paths:
+                - /dev/disk/by-id/example-data-a
             encrypted: true
 ```
 
@@ -163,10 +167,12 @@ spec:
       - service_type: osd
         service_id: data
         placement:
-          hosts: [host-a]
+          hosts:
+            - host-a
         spec:
           data_devices:
-            paths: [/dev/disk/by-id/example-data-a]
+            paths:
+              - /dev/disk/by-id/example-data-a
           encrypted: true
 ```
 
@@ -272,7 +278,9 @@ spec:
   serviceID: files
 
   placement:
-    hosts: [host-a, host-b]
+    hosts:
+      - host-a
+      - host-b
 
   exports:
     - pseudo: /documents
@@ -280,7 +288,8 @@ spec:
       path: /
       accessType: RW
       squash: root_squash
-      clients: [192.0.2.0/24]
+      clients:
+        - 192.0.2.0/24
 ```
 
 Proposed individual export, with the NFS daemon declared through P1:
@@ -301,13 +310,16 @@ spec:
     pseudo: /documents
     access_type: RW
     squash: root_squash
-    protocols: [4]
-    transports: [TCP]
+    protocols:
+      - 4
+    transports:
+      - TCP
     fsal:
       name: CEPH
       cmount_path: /
     clients:
-      - addresses: [192.0.2.0/24]
+      - addresses:
+          - 192.0.2.0/24
         access_type: RO
         squash: root_squash
 ```

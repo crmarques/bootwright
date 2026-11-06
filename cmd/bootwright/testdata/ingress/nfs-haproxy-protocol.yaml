@@ -10,9 +10,12 @@ select:
     replace: "\n  entitlementRef:"
     with: "\n  images:\n    haproxy:\n      base: cp.icr.io/cp/synthetic/haproxy\n      version: synthetic-1\n    keepalived:\n      base: cp.icr.io/cp/synthetic/keepalived\n      version: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n\n  entitlementRef:"
 
-images: [haproxy, keepalived]
+images:
+  - haproxy
+  - keepalived
 
-planned: [ceph-service-ceph-lab-nfs-shares]
+planned:
+  - ceph-service-ceph-lab-nfs-shares
 
 expect:
   - kind: CephCluster

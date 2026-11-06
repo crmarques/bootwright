@@ -25,6 +25,7 @@ import urllib.error
 from urllib.parse import urlsplit
 
 import pytest
+import yaml
 
 from ansible_collections.bootwright.core.plugins.module_utils import redfish_control
 from ansible_collections.bootwright.core.plugins.module_utils import redfish_remote_ca
@@ -660,8 +661,7 @@ def test_the_boot_module_offers_no_read(monkeypatch):
     with pytest.raises(Built) as spec:
         redfish_boot.main()
     assert "read" not in spec.value.args[0]["argument_spec"]["operation"]["choices"]
-    documented = re.search(r"operation:.*?choices: \[([^\]]*)\]", redfish_boot.DOCUMENTATION, re.S).group(1)
-    assert "read" not in [choice.strip() for choice in documented.split(",")]
+    assert "read" not in yaml.safe_load(redfish_boot.DOCUMENTATION)["options"]["operation"]["choices"]
     firmware = emulator()
     with pytest.raises(ControllerError, match="read is not an operation this module drives"):
         run(monkeypatch, firmware, "read")

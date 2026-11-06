@@ -49,7 +49,10 @@ options:
     description: What the worker does.
     type: str
     required: true
-    choices: [apply, complete, inspect]
+    choices:
+      - apply
+      - complete
+      - inspect
   address:
     description: The installed machine's address.
     type: str
@@ -125,13 +128,31 @@ reason:
   description: The closed refusal reason.
   returned: when ok is false
   type: str
-  choices: [update-release-mismatch, update-release-drift, update-no-repository, update-foreign,
-            update-unavailable, update-failed, transport]
+  choices:
+    - update-release-mismatch
+    - update-release-drift
+    - update-no-repository
+    - update-foreign
+    - update-unavailable
+    - update-failed
+    - transport
 cause:
   description: The closed cause of update-unavailable, update-failed or a transport refusal.
   returned: when the reason has one
   type: str
-  choices: [metadata, download, resolution, transaction, timeout, history, tooling, session, host-key, exit, answer, unreachable]
+  choices:
+    - metadata
+    - download
+    - resolution
+    - transaction
+    - timeout
+    - history
+    - tooling
+    - session
+    - host-key
+    - exit
+    - answer
+    - unreachable
 detail:
   description: The version found, or C(<found>@<repository>), of a closed character set; or fixed text naming a refused session check.
   returned: for update-release-mismatch, update-release-drift and a refused session

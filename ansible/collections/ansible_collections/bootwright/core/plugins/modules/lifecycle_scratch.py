@@ -22,7 +22,11 @@ options:
     description: The role that owns the scratch files.
     type: str
     required: true
-    choices: [libvirt-host, libvirt-machine, managedos-firewall, managedos-install]
+    choices:
+      - libvirt-host
+      - libvirt-machine
+      - managedos-firewall
+      - managedos-install
   remove_root:
     description: Remove the empty root on a remote execution host; the local runner owns its root.
     type: bool
@@ -30,7 +34,9 @@ options:
   state:
     description: Whether the private role directory exists.
     type: str
-    choices: [present, absent]
+    choices:
+      - present
+      - absent
     default: present
 author:
   - Bootwright contributors (@crmarques)

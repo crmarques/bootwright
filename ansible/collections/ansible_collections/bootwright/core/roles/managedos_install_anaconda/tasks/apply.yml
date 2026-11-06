@@ -312,7 +312,9 @@
         validate_certs: true
         use_proxy: false
         follow_redirects: none
-        status_code: [200, 206]
+        status_code:
+          - 200
+          - 206
         timeout: 30
       register: managedos_install_anaconda_image_fetch
       until: >-
@@ -354,7 +356,9 @@
         validate_certs: true
         use_proxy: false
         follow_redirects: none
-        status_code: [200, 206]
+        status_code:
+          - 200
+          - 206
         timeout: 30
       loop: '{{ managedos_install_anaconda_private_files }}'
       register: managedos_install_anaconda_private_fetch
@@ -412,7 +416,9 @@
         validate_certs: true
         use_proxy: false
         follow_redirects: none
-        status_code: [200, 206]
+        status_code:
+          - 200
+          - 206
         timeout: 30
       register: managedos_install_anaconda_tree_fetch
       until: >-

@@ -69,7 +69,9 @@
       - --reference
       - '{{ managedos_install_anaconda_served_root }}'
       - '{{ managedos_install_anaconda_private_dir }}/.stage/{{ item }}'
-  loop: [identity, identity.pub]
+  loop:
+    - identity
+    - identity.pub
   when: "'identity' in managedos_install_anaconda_private_files"
   changed_when: true
   no_log: true
@@ -81,7 +83,9 @@
       - --no-target-directory
       - '{{ managedos_install_anaconda_private_dir }}/.stage/{{ item }}'
       - '{{ managedos_install_anaconda_private_dir }}/{{ item }}'
-  loop: [identity, identity.pub]
+  loop:
+    - identity
+    - identity.pub
   when: "'identity' in managedos_install_anaconda_private_files"
   changed_when: true
   no_log: true

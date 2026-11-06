@@ -9,7 +9,8 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [controller-prerequisites-v6]
+            choices:
+              - controller-prerequisites-v6
           identity:
             type: str
             required: true

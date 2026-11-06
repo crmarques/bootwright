@@ -51,7 +51,9 @@
     method: GET
     headers:
       Range: bytes=0-0
-    status_code: [200, 206]
+    status_code:
+      - 200
+      - 206
     validate_certs: true
     ca_path: '{{ bootwright_physical_erase_material.artifactCertificate }}'
     return_content: false

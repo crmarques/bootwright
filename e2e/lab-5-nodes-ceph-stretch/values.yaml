@@ -45,8 +45,12 @@ ports:
 
 # Three simulated sites: dc1 and dc2 hold the data hosts, dc3 the tiebreaker.
 sites:
-  dc1: [ceph-01, ceph-02]
-  dc2: [ceph-03, ceph-04]
+  dc1:
+    - ceph-01
+    - ceph-02
+  dc2:
+    - ceph-03
+    - ceph-04
   tiebreaker: dc3
 
 addresses:

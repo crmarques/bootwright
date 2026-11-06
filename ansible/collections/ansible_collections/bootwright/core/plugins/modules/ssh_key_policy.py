@@ -38,7 +38,10 @@ options:
       usage:
         description: Host authentication, fleet user authentication, or the host key an installation generates.
         type: str
-        choices: [host, fleet, generated]
+        choices:
+          - host
+          - fleet
+          - generated
         required: true
 author:
   - Bootwright contributors (@crmarques)

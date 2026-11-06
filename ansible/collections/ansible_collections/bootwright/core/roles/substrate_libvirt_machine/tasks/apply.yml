@@ -255,8 +255,11 @@
     content: "{{ lookup('ansible.builtin.file', item.source, rstrip=false) }}"
     path: '{{ substrate_libvirt_machine_state }}/{{ item.name }}'
   loop:
-    - {source: '{{ bootwright_substrate_machine_material.controllerCertificate }}', name: tls.crt}
-    - {source: '{{ bootwright_substrate_machine_material.controllerPrivateKey }}', name: tls.key}
+    - source: '{{ bootwright_substrate_machine_material.controllerCertificate }}'
+      name: tls.crt
+
+    - source: '{{ bootwright_substrate_machine_material.controllerPrivateKey }}'
+      name: tls.key
   register: substrate_libvirt_machine_tls
   no_log: true
   diff: false

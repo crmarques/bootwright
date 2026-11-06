@@ -28,7 +28,10 @@ options:
   mode:
     description: The destination's permission bits.
     type: str
-    choices: ['0600', '0640', '0644']
+    choices:
+      - '0600'
+      - '0640'
+      - '0644'
     default: '0600'
 author:
   - Bootwright contributors (@crmarques)

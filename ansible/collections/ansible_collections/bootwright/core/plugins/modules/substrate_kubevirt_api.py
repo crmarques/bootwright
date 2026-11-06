@@ -19,7 +19,18 @@ options:
     description: The block operation or machine port entry point.
     type: str
     required: true
-    choices: [proof, apply, observe, destroy, pre_boot, state_read, power, boot_media, boot_disk, media_insert, media_eject]
+    choices:
+      - proof
+      - apply
+      - observe
+      - destroy
+      - pre_boot
+      - state_read
+      - power
+      - boot_media
+      - boot_disk
+      - media_insert
+      - media_eject
   kubeconfig:
     description: The path of the lent kubeconfig file.
     type: path

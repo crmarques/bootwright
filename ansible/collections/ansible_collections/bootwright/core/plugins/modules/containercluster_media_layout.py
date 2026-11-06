@@ -31,7 +31,9 @@ options:
   operation:
     description: Whether the layout is proved before a publication or before a removal.
     type: str
-    choices: [publish, remove]
+    choices:
+      - publish
+      - remove
     required: true
 author:
   - Bootwright contributors (@crmarques)

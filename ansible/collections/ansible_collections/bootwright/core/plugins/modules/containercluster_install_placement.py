@@ -33,7 +33,9 @@ options:
   operation:
     description: Whether to read the placement or to place it.
     type: str
-    choices: [observe, place]
+    choices:
+      - observe
+      - place
     required: true
 author:
   - Bootwright contributors (@crmarques)

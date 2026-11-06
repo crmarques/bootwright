@@ -398,7 +398,10 @@ spec:
   containers:
     - name: canary
       image: registry.access.redhat.com/ubi9/ubi-minimal
-      command: ["sh", "-c", "echo bootwright > /data/canary && cat /data/canary && sleep 3600"]
+      command:
+        - sh
+        - -c
+        - echo bootwright > /data/canary && cat /data/canary && sleep 3600
       volumeMounts:
         - name: data
           mountPath: /data

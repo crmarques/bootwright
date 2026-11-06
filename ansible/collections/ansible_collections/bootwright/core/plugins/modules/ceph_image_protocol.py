@@ -15,11 +15,22 @@ options:
     description: Shared protocol phase.
     type: str
     required: true
-    choices: [loaded, refused, completed]
+    choices:
+      - loaded
+      - refused
+      - completed
   reason:
     description: Fixed resolution refusal name.
     type: str
-    choices: [request, artifact, material, discovery, timeout, unknown, adapter-exception, image-digest-mismatch]
+    choices:
+      - request
+      - artifact
+      - material
+      - discovery
+      - timeout
+      - unknown
+      - adapter-exception
+      - image-digest-mismatch
   detail:
     description: Non-secret refusal cause, a refusal name or an exception type and code site.
     type: str
@@ -32,7 +43,8 @@ options:
   outcome:
     description: A resolution changes nothing.
     type: str
-    choices: [unchanged]
+    choices:
+      - unchanged
   evidence:
     description: The resolved immutable reference or the resolution's absence.
     type: dict

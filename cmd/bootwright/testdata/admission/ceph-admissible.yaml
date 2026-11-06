@@ -279,10 +279,12 @@ spec:
 
   native:
     pseudo: /acceptance
-    protocols: [4]
+    protocols:
+      - 4
     fsal:
       name: CEPH
     clients:
-      - addresses: [192.0.2.123/24]
+      - addresses:
+          - 192.0.2.123/24
         access_type: RW
         squash: root_squash

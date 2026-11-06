@@ -137,7 +137,9 @@
                 validate_certs: true
                 use_proxy: false
                 follow_redirects: none
-                status_code: [200, 206]
+                status_code:
+                  - 200
+                  - 206
                 timeout: 30
               register: containercluster_install_agent_token_probe
               failed_when: false

@@ -57,14 +57,17 @@ spec:
         label: ceph-mon
     - service_type: mgr
       placement:
-        hosts: [rhel-01.lab.example.test, rhel-02.lab.example.test]
+        hosts:
+          - rhel-01.lab.example.test
+          - rhel-02.lab.example.test
     - service_type: osd
       service_id: ssd
       placement:
         label: ceph-storage
       spec:
         data_devices:
-          paths: [/dev/sda]
+          paths:
+            - /dev/sda
         encrypted: true
     - service_type: osd
       service_id: hdd
@@ -72,9 +75,11 @@ spec:
         label: ceph-storage
       spec:
         data_devices:
-          paths: [/dev/sdb]
+          paths:
+            - /dev/sdb
         db_devices:
-          paths: [/dev/sdc]
+          paths:
+            - /dev/sdc
         encrypted: true
         tpm2: true
 
@@ -85,24 +90,35 @@ spec:
       - name: rhel-01
         fqdn: rhel-01.lab.example.test
         machineRef: rhel-01
-        labels: [ceph-storage, ceph-mon]
+        labels:
+          - ceph-storage
+          - ceph-mon
       - name: rhel-02
         fqdn: rhel-02.lab.example.test
         machineRef: rhel-02
-        labels: [ceph-storage, ceph-mon]
+        labels:
+          - ceph-storage
+          - ceph-mon
       - name: rhel-03
         fqdn: rhel-03.lab.example.test
         machineRef: rhel-03
-        labels: [ceph-storage, ceph-mon]
+        labels:
+          - ceph-storage
+          - ceph-mon
       - name: rhel-04
         fqdn: rhel-04.lab.example.test
         machineRef: rhel-04
-        labels: [ceph-storage, ceph-mon]
+        labels:
+          - ceph-storage
+          - ceph-mon
       - name: rhel-05
         fqdn: rhel-05.lab.example.test
         machineRef: rhel-05
-        labels: [ceph-storage, ceph-mon]
+        labels:
+          - ceph-storage
+          - ceph-mon
       - name: rhel-06
         fqdn: rhel-06.lab.example.test
         machineRef: rhel-06
-        labels: [ceph-storage]
+        labels:
+          - ceph-storage

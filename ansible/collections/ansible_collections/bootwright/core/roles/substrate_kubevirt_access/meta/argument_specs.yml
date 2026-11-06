@@ -21,7 +21,8 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [substrate-access-kubevirt-v1]
+            choices:
+              - substrate-access-kubevirt-v1
       bootwright_substrate_kubevirt_lend_material:
         type: dict
         required: true

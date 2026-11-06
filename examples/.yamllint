@@ -4,6 +4,12 @@ rules:
   document-start: disable
   line-length: disable
 
+  braces:
+    forbid: non-empty
+
+  brackets:
+    forbid: non-empty
+
   indentation:
     spaces: 2
     indent-sequences: true

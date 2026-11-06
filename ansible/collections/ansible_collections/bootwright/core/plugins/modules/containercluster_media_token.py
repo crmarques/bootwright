@@ -54,7 +54,11 @@ options:
   operation:
     description: Publication, ownership observation, retirement after eject, or the sweep of every unpresented insert link.
     type: str
-    choices: [publish, inspect, remove, sweep]
+    choices:
+      - publish
+      - inspect
+      - remove
+      - sweep
     required: true
 author:
   - Bootwright contributors (@crmarques)

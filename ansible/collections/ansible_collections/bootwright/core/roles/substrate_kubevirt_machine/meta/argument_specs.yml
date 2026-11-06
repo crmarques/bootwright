@@ -61,7 +61,8 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [machine-kubevirt-v4]
+            choices:
+              - machine-kubevirt-v4
       bootwright_substrate_kubevirt_machine_material:
         type: dict
         required: true
@@ -230,7 +231,9 @@ argument_specs:
             type: bool
           expected_power:
             type: str
-            choices: ['On', 'Off']
+            choices:
+              - 'On'
+              - 'Off'
 
   media_insert:
     short_description: Upload an image into the stopped VirtualMachine's media volume and present it.
@@ -339,7 +342,10 @@ argument_specs:
           power:
             type: str
             required: true
-            choices: ['on', 'off', restart]
+            choices:
+              - 'on'
+              - 'off'
+              - restart
           force:
             type: bool
           attempts:

@@ -15,7 +15,8 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [cluster-objects-v2]
+            choices:
+              - cluster-objects-v2
             description: Shared program contract version.
           steps:
             type: list
@@ -69,7 +70,8 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [cluster-objects-v2]
+            choices:
+              - cluster-objects-v2
             description: Shared program contract version.
           steps:
             type: list

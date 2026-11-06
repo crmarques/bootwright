@@ -38,7 +38,8 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [machine-baremetal-v4]
+            choices:
+              - machine-baremetal-v4
       bootwright_substrate_physical_digest:
         type: str
         required: true
@@ -286,7 +287,9 @@ argument_specs:
             type: bool
           expected_power:
             type: str
-            choices: ['On', 'Off']
+            choices:
+              - 'On'
+              - 'Off'
           pinned_uuid_base64:
             type: str
           pinned_serial_base64:
@@ -326,7 +329,10 @@ argument_specs:
           trust:
             type: str
             required: true
-            choices: [established, importCertificate, disableVerification]
+            choices:
+              - established
+              - importCertificate
+              - disableVerification
           certificate:
             type: path
 
@@ -388,7 +394,10 @@ argument_specs:
           power:
             type: str
             required: true
-            choices: ['on', 'off', restart]
+            choices:
+              - 'on'
+              - 'off'
+              - restart
           force:
             type: bool
           attempts:

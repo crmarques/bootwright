@@ -16,7 +16,15 @@ options:
     description: Fixed lifecycle phase.
     type: str
     required: true
-    choices: [prepare, build, start, await, ack, stop-proof, finish, observe]
+    choices:
+      - prepare
+      - build
+      - start
+      - await
+      - ack
+      - stop-proof
+      - finish
+      - observe
   request:
     description: Frozen physical erase request.
     type: dict

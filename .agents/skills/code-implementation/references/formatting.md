@@ -37,9 +37,21 @@ contiguous. Use `goimports` only through a reviewed, pinned repository entrypoin
 
 Follow [YAML community best practices](https://www.yaml.info/learn/bestpractices.html):
 two spaces per indentation level, no tabs, and quotes where a plain value would
-have the wrong type. This repository chooses indented sequence markers, block
-mappings/sequences unless an empty or atomic flow value is clearer, and
+have the wrong type. This repository chooses indented sequence markers and
 lowercase `true`/`false`/`null`. Preserve deliberate string quotes and key order.
+
+Every non-empty mapping and sequence is written in block style, even a single
+item or a short list of scalars: `choices:` followed by `- a` lines, never
+`choices: [a]`. Flow style is written only for an empty mapping `{}` or an
+empty sequence `[]`, which block style cannot spell. The rule binds the YAML
+this repository generates as much as the YAML it authors: the effective-output
+encoder, Ansible `to_nice_yaml`, PyYAML `safe_dump` with
+`default_flow_style=False`, Helm and Jinja templates, and runbook heredocs all
+write block style, and a generated layout is corrected through its generator.
+`TestYAMLUsesBlockStyle` holds tracked YAML files, templates with their actions
+neutralized, YAML fences in Markdown and YAML goldens to it. The sibling input
+charts in `bootwright-template-inputs` follow the same rule under their own
+guidance.
 The examples [yamllint configuration](../../../../examples/.yamllint), using the
 [community rules](https://yamllint.readthedocs.io/en/stable/rules.html), checks
 indentation, duplicate keys, boolean spellings and whitespace. Long immutable
@@ -62,8 +74,8 @@ Blank-line grouping is the repository's readability convention:
   with one empty line, attached to the following document. Generic single
   documents do not require a leading marker; preserve owning format policy.
 - Choose literal or folded multiline scalars for their required value, not
-  appearance. Preserve multiline scalar and flow-collection content, plus
-  inline and trailing comment ownership. Scalar preservation overrides
+  appearance. Preserve multiline scalar content, plus inline and trailing
+  comment ownership. Scalar preservation overrides
   separator rules; never add cosmetic blank lines inside string content.
 
 For example, scalar identity and endpoint fields stay compact while structured

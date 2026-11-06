@@ -950,11 +950,13 @@ spec:
     pseudo: /documents
     access_type: RW
     squash: root_squash
-    protocols: [4]
+    protocols:
+      - 4
     fsal:
       name: CEPH
     clients:
-      - addresses: [192.0.2.0/24]
+      - addresses:
+          - 192.0.2.0/24
         access_type: RO
         squash: root_squash
 ```

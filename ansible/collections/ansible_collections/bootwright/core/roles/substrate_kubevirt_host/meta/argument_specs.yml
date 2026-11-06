@@ -42,7 +42,8 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [substrate-host-kubevirt-v2]
+            choices:
+              - substrate-host-kubevirt-v2
       bootwright_substrate_kubevirt_host_material:
         type: dict
         required: true

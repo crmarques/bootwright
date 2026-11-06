@@ -80,7 +80,10 @@ options:
     description: What the worker does.
     type: str
     required: true
-    choices: [register, unregister, inspect]
+    choices:
+      - register
+      - unregister
+      - inspect
   address:
     description: The installed machine's address.
     type: str
@@ -174,8 +177,10 @@ EXAMPLES = r"""
     request: "{{ request_digest }}"
     organization_file: "{{ material.organization }}"
     activation_key_file: "{{ material.activationKey }}"
-    disable: ["*"]
-    enable: [rhel-9-for-x86_64-baseos-rpms]
+    disable:
+      - "*"
+    enable:
+      - rhel-9-for-x86_64-baseos-rpms
 """
 
 RETURN = r"""
@@ -187,14 +192,30 @@ reason:
   description: The closed refusal reason.
   returned: when ok is false
   type: str
-  choices: [registration-foreign, registration-refused, registration-identity-collision, registration-input,
-            registration-unavailable, registration-repositories, update-release-unavailable, registration-trust,
-            registration-unreachable, transport]
+  choices:
+    - registration-foreign
+    - registration-refused
+    - registration-identity-collision
+    - registration-input
+    - registration-unavailable
+    - registration-repositories
+    - update-release-unavailable
+    - registration-trust
+    - registration-unreachable
+    - transport
 cause:
   description: The closed cause of registration-unavailable or of a transport refusal.
   returned: when the reason has one
   type: str
-  choices: [service, timeout, tooling, unregister, session, host-key, exit, answer]
+  choices:
+    - service
+    - timeout
+    - tooling
+    - unregister
+    - session
+    - host-key
+    - exit
+    - answer
 detail:
   description: Fixed text naming which input or session check refused; never a value.
   returned: for registration-input and a refused session

@@ -56,7 +56,8 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [machine-libvirt-v9]
+            choices:
+              - machine-libvirt-v9
       bootwright_substrate_machine_digest:
         type: str
         required: true
@@ -280,7 +281,9 @@ argument_specs:
             type: bool
           expected_power:
             type: str
-            choices: ['On', 'Off']
+            choices:
+              - 'On'
+              - 'Off'
           pinned_uuid_base64:
             type: str
           pinned_serial_base64:
@@ -320,7 +323,10 @@ argument_specs:
           trust:
             type: str
             required: true
-            choices: [established, importCertificate, disableVerification]
+            choices:
+              - established
+              - importCertificate
+              - disableVerification
           certificate:
             type: path
 
@@ -382,7 +388,10 @@ argument_specs:
           power:
             type: str
             required: true
-            choices: ['on', 'off', restart]
+            choices:
+              - 'on'
+              - 'off'
+              - restart
           force:
             type: bool
           attempts:

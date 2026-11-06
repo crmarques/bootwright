@@ -43,7 +43,10 @@ options:
     description: What the worker does.
     type: str
     required: true
-    choices: [apply, inspect, remove]
+    choices:
+      - apply
+      - inspect
+      - remove
   address:
     description: The installed machine's address.
     type: str
@@ -120,7 +123,9 @@ EXAMPLES = r"""
     mark: owner context=lab block=os-firewall-ceph-01 apply=op-0123
     services:
       - name: lab-ceph-ingress-rgw
-        networks: [192.0.2.60/32, 192.0.2.0/24]
+        networks:
+          - 192.0.2.60/32
+          - 192.0.2.0/24
         content: "<?xml version=\"1.0\" encoding=\"utf-8\"?>..."
 """
 
@@ -133,12 +138,28 @@ reason:
   description: The closed refusal reason.
   returned: when ok is false
   type: str
-  choices: [host-firewall-foreign, host-firewall-no-interface, host-firewall-inactive, host-firewall-failed, transport]
+  choices:
+    - host-firewall-foreign
+    - host-firewall-no-interface
+    - host-firewall-inactive
+    - host-firewall-failed
+    - transport
 cause:
   description: The closed cause of host-firewall-failed or a transport refusal.
   returned: when the reason has one
   type: str
-  choices: [tooling, reload, zone, write, address, timeout, session, host-key, exit, answer, unreachable]
+  choices:
+    - tooling
+    - reload
+    - zone
+    - write
+    - address
+    - timeout
+    - session
+    - host-key
+    - exit
+    - answer
+    - unreachable
 detail:
   description: The service name of a foreign or interfaceless service; or fixed text naming a refused session check.
   returned: for host-firewall-foreign, host-firewall-no-interface and a refused session

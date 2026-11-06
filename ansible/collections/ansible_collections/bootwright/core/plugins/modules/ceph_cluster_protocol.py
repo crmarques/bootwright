@@ -15,28 +15,132 @@ options:
     description: Shared protocol phase.
     type: str
     required: true
-    choices: [loaded, group, refused, completed]
+    choices:
+      - loaded
+      - group
+      - refused
+      - completed
   reason:
     description: Fixed refusal the block's caller names, published only in place of completion.
     type: str
-    choices: [unsupported-release, image-pull, image-platform, image-profile, route-probe, device-identity, runtime-profile, not-ready,
-      package-acquisition, package-resolution, package-signature, package-transaction, request, artifact, ownership, evidence, material, packages,
-      package-artifact, package-drift, package-journal, package-license, package-limit,
-      package-timeout, package-platform, package-host, foreign-cluster, native-command, native-timeout, native-output, unknown, transport,
-      remote-refusal, adapter-exception, cache-unproved, enrollment-budget, dashboard-identity, dashboard-drift, dashboard-policy,
-      dashboard-verify, pool-identity,
-      pool-drift, client-quiescence-unqualified, native-option-undeclared, call-home-unqualified, call-home-drift, config-drift, partial-cluster,
-      not-removed, cluster-unavailable, device, dashboard-manager, foreign-client, foreign-pool, foreign-profile, foreign-rule, crush-capacity, pg-budget,
-      foreign-rbd-image,
-      rbd-image-identity, foreign-filesystem, filesystem-identity, filesystem-multiple-disabled, foreign-subvolume-group, mds-coverage,
-      foreign-subvolume, subvolume-identity, foreign-image, nfs-module-disabled, nfs-pool-foreign, object-realm-foreign, object-zone-pools,
-      object-endpoint-certificate, object-user-foreign, object-user-identity, object-bucket-foreign, object-bucket-identity, object-bucket-s3,
-      nfs-export-foreign, nfs-export-apply, nfs-export-path-escape, nfs-export-realm-default, ingress-firewall, service-credential-foreign,
-      ssh-policy-host-excluded, ssh-policy-unavailable, tunnel-host-key-excluded, fips-policy, fips-not-enabled, cephx-policy,
-      nvmeof-native, nvmeof-identity, nvmeof-foreign, nvmeof-budget, sso-unverified, stretch-intent, stretch-interrupted,
-      stretch-location, stretch-weight, stretch-rule, stretch-foreign, stretch-pools, stretch-drift, tiebreaker-foreign,
-      tiebreaker-unreachable, device-not-empty, foreign-osd, osd-partial, osd-clear-failed, osd-clear-unproved,
-      osd-orphan-booted, osd-orphan-unproved, device-serial-absent, device-serial-ambiguous, device-serial-mismatch, device-alias, device-root]
+    choices:
+      - unsupported-release
+      - image-pull
+      - image-platform
+      - image-profile
+      - route-probe
+      - device-identity
+      - runtime-profile
+      - not-ready
+      - package-acquisition
+      - package-resolution
+      - package-signature
+      - package-transaction
+      - request
+      - artifact
+      - ownership
+      - evidence
+      - material
+      - packages
+      - package-artifact
+      - package-drift
+      - package-journal
+      - package-license
+      - package-limit
+      - package-timeout
+      - package-platform
+      - package-host
+      - foreign-cluster
+      - native-command
+      - native-timeout
+      - native-output
+      - unknown
+      - transport
+      - remote-refusal
+      - adapter-exception
+      - cache-unproved
+      - enrollment-budget
+      - dashboard-identity
+      - dashboard-drift
+      - dashboard-policy
+      - dashboard-verify
+      - pool-identity
+      - pool-drift
+      - client-quiescence-unqualified
+      - native-option-undeclared
+      - call-home-unqualified
+      - call-home-drift
+      - config-drift
+      - partial-cluster
+      - not-removed
+      - cluster-unavailable
+      - device
+      - dashboard-manager
+      - foreign-client
+      - foreign-pool
+      - foreign-profile
+      - foreign-rule
+      - crush-capacity
+      - pg-budget
+      - foreign-rbd-image
+      - rbd-image-identity
+      - foreign-filesystem
+      - filesystem-identity
+      - filesystem-multiple-disabled
+      - foreign-subvolume-group
+      - mds-coverage
+      - foreign-subvolume
+      - subvolume-identity
+      - foreign-image
+      - nfs-module-disabled
+      - nfs-pool-foreign
+      - object-realm-foreign
+      - object-zone-pools
+      - object-endpoint-certificate
+      - object-user-foreign
+      - object-user-identity
+      - object-bucket-foreign
+      - object-bucket-identity
+      - object-bucket-s3
+      - nfs-export-foreign
+      - nfs-export-apply
+      - nfs-export-path-escape
+      - nfs-export-realm-default
+      - ingress-firewall
+      - service-credential-foreign
+      - ssh-policy-host-excluded
+      - ssh-policy-unavailable
+      - tunnel-host-key-excluded
+      - fips-policy
+      - fips-not-enabled
+      - cephx-policy
+      - nvmeof-native
+      - nvmeof-identity
+      - nvmeof-foreign
+      - nvmeof-budget
+      - sso-unverified
+      - stretch-intent
+      - stretch-interrupted
+      - stretch-location
+      - stretch-weight
+      - stretch-rule
+      - stretch-foreign
+      - stretch-pools
+      - stretch-drift
+      - tiebreaker-foreign
+      - tiebreaker-unreachable
+      - device-not-empty
+      - foreign-osd
+      - osd-partial
+      - osd-clear-failed
+      - osd-clear-unproved
+      - osd-orphan-booted
+      - osd-orphan-unproved
+      - device-serial-absent
+      - device-serial-ambiguous
+      - device-serial-mismatch
+      - device-alias
+      - device-root
   detail:
     description: Non-secret refusal cause, a refusal name or an exception type and code site.
     type: str
@@ -49,11 +153,17 @@ options:
   status:
     description: Progress group status.
     type: str
-    choices: [running, ok, failed, skipped]
+    choices:
+      - running
+      - ok
+      - failed
+      - skipped
   outcome:
     description: Completed native outcome.
     type: str
-    choices: [changed, unchanged]
+    choices:
+      - changed
+      - unchanged
   digest:
     description: Frozen lifecycle request digest.
     type: str

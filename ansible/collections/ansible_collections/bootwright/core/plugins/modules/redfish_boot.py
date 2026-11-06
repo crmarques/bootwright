@@ -59,7 +59,13 @@ options:
     description: What to drive.
     type: str
     required: true
-    choices: [insert, eject, boot, power-on, power-off, shutdown]
+    choices:
+      - insert
+      - eject
+      - boot
+      - power-on
+      - power-off
+      - shutdown
   image:
     description: The media URL to insert.
     type: str
@@ -68,7 +74,9 @@ options:
     description: The one-time boot device a boot operation selects.
     type: str
     default: Cd
-    choices: [Cd, Hdd]
+    choices:
+      - Cd
+      - Hdd
   attempts:
     description: Bounded polls before the outcome is unproved.
     type: int
@@ -98,7 +106,10 @@ options:
       - C(disableVerification) turns VerifyCertificate off when it reads on.
     type: str
     default: established
-    choices: [established, importCertificate, disableVerification]
+    choices:
+      - established
+      - importCertificate
+      - disableVerification
   certificate:
     description:
       - The artifact server's PEM certificate chain. Device collections use the

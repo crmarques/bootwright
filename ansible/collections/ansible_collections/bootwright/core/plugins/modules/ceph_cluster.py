@@ -19,7 +19,10 @@ options:
   operation:
     description: The fixed lifecycle operation.
     type: str
-    choices: [apply, observe, destroy]
+    choices:
+      - apply
+      - observe
+      - destroy
     required: true
   digest:
     description: Digest of the frozen lifecycle request.

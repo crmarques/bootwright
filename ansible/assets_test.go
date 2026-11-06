@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 )
 
 // An empty value is not an empty list. ansible-core parses a bare "key =" as
@@ -169,30 +171,34 @@ func roleOwning(name string) (string, bool) {
 }
 
 func admittedVersions(specification string) []string {
-	var found []string
-	lines := strings.Split(specification, "\n")
-	for index, line := range lines {
-		if strings.TrimSpace(line) != "version:" {
-			continue
-		}
-		option := len(line) - len(strings.TrimLeft(line, " "))
-		for _, next := range lines[index+1:] {
-			trimmed := strings.TrimSpace(next)
-			if trimmed == "" {
-				continue
-			}
-			if len(next)-len(strings.TrimLeft(next, " ")) <= option {
-				break
-			}
-			if choices, ok := strings.CutPrefix(trimmed, "choices: ["); ok {
-				for _, choice := range strings.Split(strings.TrimSuffix(choices, "]"), ",") {
-					found = append(found, strings.TrimSpace(choice))
+	var document yaml.Node
+	if err := yaml.Unmarshal([]byte(specification), &document); err != nil {
+		return nil
+	}
+	found := versionChoices(&document, nil)
+	slices.Sort(found)
+	return slices.Compact(found)
+}
+
+func versionChoices(node *yaml.Node, found []string) []string {
+	if node.Kind == yaml.MappingNode {
+		for index := 0; index+1 < len(node.Content); index += 2 {
+			key, value := node.Content[index], node.Content[index+1]
+			if key.Value == "version" && value.Kind == yaml.MappingNode {
+				for option := 0; option+1 < len(value.Content); option += 2 {
+					if value.Content[option].Value == "choices" {
+						for _, choice := range value.Content[option+1].Content {
+							found = append(found, choice.Value)
+						}
+					}
 				}
 			}
 		}
 	}
-	slices.Sort(found)
-	return slices.Compact(found)
+	for _, child := range node.Content {
+		found = versionChoices(child, found)
+	}
+	return found
 }
 
 func assertedVersions(tasks string) []string {

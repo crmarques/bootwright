@@ -14,7 +14,10 @@ options:
     description: Result phase.
     type: str
     required: true
-    choices: [loaded, prepared, completed]
+    choices:
+      - loaded
+      - prepared
+      - completed
   digest:
     description: Frozen request digest.
     type: str
@@ -31,7 +34,9 @@ options:
   outcome:
     description: Reported mutation outcome.
     type: str
-    choices: [changed, unchanged]
+    choices:
+      - changed
+      - unchanged
 author:
   - Bootwright contributors (@crmarques)
 """

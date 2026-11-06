@@ -10,7 +10,8 @@ argument_specs:
           version:
             type: str
             required: true
-            choices: [physical-erase-v12]
+            choices:
+              - physical-erase-v12
           deadlineSeconds:
             type: int
             required: true
@@ -42,7 +43,9 @@ argument_specs:
               method:
                 type: str
                 required: true
-                choices: [logicalOverwrite, metadataClear]
+                choices:
+                  - logicalOverwrite
+                  - metadataClear
               serialNumber:
                 type: str
                 required: true

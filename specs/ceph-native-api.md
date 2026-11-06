@@ -77,7 +77,7 @@ package's hard links, as that back-end's target does. Every other native
 source refuses a link and is the only name of its inode. The guest policy,
 its reload and its include-closure proof remain required hygiene; the owner
 retained them under [D179](milestones/backlog.md#d179). Candidate alias
-resolution is deliberately closed pending the actual RHEL configuration
+resolution is deliberately closed pending the RHEL configuration
 qualification.
 
 The bundle manifest binds the validated cluster public key and hashes only
@@ -107,7 +107,7 @@ with the protected read-only mount, preserving its exact native metadata and
 ports. Enrollment follows current bundle, native config and mount proofs.
 Subsequent native MGR specifications retain the generated mount. Public
 [`cephadm deploy`](https://docs.ceph.com/en/tentacle/man/8/cephadm/#deploy)
-is documented but marked deprecated in the inspected IBM source; the initial
+is documented but deprecated in the inspected IBM source; the initial
 redeploy route still requires provider artifact qualification. Private native
 orchestrator interfaces are not substituted.
 
@@ -199,7 +199,8 @@ spec:
           label: storage
         spec:
           data_devices:
-            paths: [/dev/disk/by-id/example-data]
+            paths:
+              - /dev/disk/by-id/example-data
 ```
 
 Every selected host in this OSD example must prove that path's distinct,
@@ -812,7 +813,8 @@ spec:
     services:
       - service_type: grafana
         placement:
-          hosts: [host-a]
+          hosts:
+            - host-a
         spec:
           anonymous_access: false
 

@@ -7,7 +7,16 @@
 
 - name: Prove the virtual IPs are free before a fresh boot
   ansible.builtin.command:
-    argv: [/usr/sbin/arping, -D, -c, '3', -w, '3', -I, '{{ item.bridge }}', '{{ item.address }}']
+    argv:
+      - /usr/sbin/arping
+      - -D
+      - -c
+      - '3'
+      - -w
+      - '3'
+      - -I
+      - '{{ item.bridge }}'
+      - '{{ item.address }}'
     expand_argument_vars: false
   environment:
     LC_ALL: C
