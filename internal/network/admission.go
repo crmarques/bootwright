@@ -117,18 +117,25 @@ var unsharedRanges = []struct {
 	prefix netip.Prefix
 	reason string
 }{
-	{netip.MustParsePrefix("127.0.0.0/8"), "lies in the loopback range 127.0.0.0/8"},
-	{netip.MustParsePrefix("::1/128"), "is the loopback address ::1/128"},
-	{netip.MustParsePrefix("224.0.0.0/4"), "lies in the multicast range 224.0.0.0/4"},
-	{netip.MustParsePrefix("ff00::/8"), "lies in the multicast range ff00::/8"},
+	{netip.MustParsePrefix("127.0.0.0/8"), "overlaps the loopback range 127.0.0.0/8"},
+	{netip.MustParsePrefix("::1/128"), "overlaps the loopback address ::1/128"},
+	{netip.MustParsePrefix("224.0.0.0/4"), "overlaps the multicast range 224.0.0.0/4"},
+	{netip.MustParsePrefix("ff00::/8"), "overlaps the multicast range ff00::/8"},
 }
 
 func unsharedRange(prefix netip.Prefix) string {
-	if prefix.Bits() == 0 {
+	floor := 16
+	if prefix.Addr().Is4() {
+		floor = 8
+	}
+	switch {
+	case prefix.Bits() == 0:
 		return "has a zero-length prefix that spans every " + familyName(Family(prefix.Addr())) + " address"
+	case prefix.Bits() < floor:
+		return fmt.Sprintf("is a /%d, wider than the /%d that bounds one %s network", prefix.Bits(), floor, familyName(Family(prefix.Addr())))
 	}
 	for _, reserved := range unsharedRanges {
-		if reserved.prefix.Addr().Is4() == prefix.Addr().Is4() && reserved.prefix.Bits() <= prefix.Bits() && reserved.prefix.Contains(prefix.Addr()) {
+		if reserved.prefix.Addr().Is4() == prefix.Addr().Is4() && reserved.prefix.Overlaps(prefix) {
 			return reserved.reason
 		}
 	}

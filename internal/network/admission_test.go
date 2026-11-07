@@ -160,9 +160,13 @@ func TestANetworkNeverSpansEveryLoopbackOrMulticastAddress(t *testing.T) {
 		{"ipv4", "127.0.0.0/8", "loopback range 127.0.0.0/8"},
 		{"ipv4", "127.1.2.0/24", "loopback range 127.0.0.0/8"},
 		{"ipv6", "::1/128", "loopback address ::1/128"},
-		{"ipv4", "224.0.0.0/4", "multicast range 224.0.0.0/4"},
+		{"ipv4", "224.0.0.0/8", "multicast range 224.0.0.0/4"},
 		{"ipv4", "239.1.0.0/16", "multicast range 224.0.0.0/4"},
 		{"ipv6", "ff02::/16", "multicast range ff00::/8"},
+		{"ipv4", "128.0.0.0/1", "is a /1, wider than the /8 that bounds one IPv4 network"},
+		{"ipv4", "64.0.0.0/2", "is a /2, wider than the /8 that bounds one IPv4 network"},
+		{"ipv6", "4000::/2", "is a /2, wider than the /16 that bounds one IPv6 network"},
+		{"ipv6", "::/16", "loopback address ::1/128"},
 	} {
 		issues := validate(net("wide", m("provided", true, tc.family, m("cidr", tc.cidr))))
 		found := false
@@ -175,8 +179,9 @@ func TestANetworkNeverSpansEveryLoopbackOrMulticastAddress(t *testing.T) {
 			t.Errorf("%s: issues = %+v", tc.cidr, issues)
 		}
 	}
-	for _, cidr := range []string{"128.0.0.0/1", "126.0.0.0/8", "223.255.255.0/24", "240.0.0.0/4"} {
+	for _, cidr := range []string{"10.0.0.0/8", "126.0.0.0/8", "223.255.255.0/24", "240.0.0.0/8"} {
 		requireNone(t, validate(net("lan", m("provided", true, "ipv4", m("cidr", cidr)))))
 	}
 	requireNone(t, validate(net("lan", m("provided", true, "ipv6", m("cidr", "fe80::/64")))))
+	requireNone(t, validate(net("lan", m("provided", true, "ipv6", m("cidr", "2001::/16")))))
 }

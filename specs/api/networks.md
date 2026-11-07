@@ -51,8 +51,9 @@ Network ([D240](../milestones/backlog.md#d240) (13)).
 
 - `cidr` is an IP prefix of the block's family with no host bits set, else
   refused at the field naming its canonical spelling, never masked.
-  A zero-length, loopback (`127.0.0.0/8`, `::1/128`) or multicast
-  (`224.0.0.0/4`, `ff00::/8`) prefix is refused there (`api.value`).
+  A prefix wider than /8 (IPv4) or /16 (IPv6), or one overlapping loopback
+  (`127.0.0.0/8`, `::1`) or multicast (`224.0.0.0/4`, `ff00::/8`), is refused
+  there (`api.value`).
   Normalization writes the canonical text of an admitted prefix and gateway.
 - `gateway`, optional, is an IP of the block's family inside `cidr`. On IPv4
   below /31 it is neither the network nor the broadcast address. On IPv6 it is
