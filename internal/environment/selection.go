@@ -225,7 +225,7 @@ func (r *retention) hostClosure(catalog api.Catalog, machines []string) map[stri
 func isMachine(kind api.Kind) bool { return kind == api.Machine }
 
 func rootKinds() []api.Kind {
-	return []api.Kind{api.Environment, api.Entitlement, api.MachineImage, api.MachineInstallProfile, api.NetworkConfig, api.Proxy, api.DNSServer, api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer, api.CustomPlaybook, api.Secret}
+	return []api.Kind{api.Environment, api.Entitlement, api.MachineImage, api.MachineInstallProfile, api.Network, api.NetworkConfig, api.Proxy, api.DNSServer, api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer, api.CustomPlaybook, api.Secret}
 }
 
 func (r *retention) selectNamedRoots(env api.Object, field string, family api.Family, objects []api.Object) []SelectionIssue {

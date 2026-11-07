@@ -176,7 +176,7 @@ func (r *run) closeGraph() {
 // source order or on a peer's normalized state.
 func normalizationOrder() []api.Kind {
 	kinds := []api.Kind{
-		api.Environment, api.Entitlement, api.NetworkConfig, api.MachineImage,
+		api.Environment, api.Entitlement, api.Network, api.NetworkConfig, api.MachineImage,
 		api.MachineInstallProfile, api.InfraProvider, api.Machine, api.Proxy, api.DNSServer,
 		api.NTPServer, api.ArtifactServer, api.Registry, api.LoadBalancer, api.Secret,
 	}

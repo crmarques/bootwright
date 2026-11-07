@@ -62,6 +62,7 @@ proves each row warned and refused at `plan`.
 | ClusterAddon | `spec.steps` | none tracked |
 | CustomPlaybook | `spec.enabled: true` | [B102](milestones/backlog.md#b102) |
 | Entitlement | `spec.rhsm.connectToInsights: true` | none tracked |
+| Network | `spec.provided: false` | [B1204](milestones/m1.md#b1204) |
 | Environment | `spec.dependencyVersions.libvirt other than latest` | [B676](milestones/backlog.md#b676) |
 
 An install-profile row is refused on each Machine that selects the profile, and
@@ -499,6 +500,7 @@ table of its field page in the change that adds it, which
 | Environment | `Environment` | Environment | [environment](api/environment.md#kinds) |
 | Secrets and entitlements | `Secret`, `Entitlement` | Secrets owns `Secret` custody; Managed OS owns `redhatRhel` semantics; Storage owns `redhatCeph` and `ibmStorageCeph` semantics. | [secrets](api/secrets.md#kinds) |
 | Machines and networks | `Machine`, `NetworkConfig` | Machine | [machines](api/machines.md#kinds) |
+| Machines and networks | `Network` | Network | [networks](api/networks.md#kinds) |
 | Managed operating systems | `MachineImage`, `MachineInstallProfile` | Managed OS | [machines](api/machines.md#kinds) |
 | Substrates | `InfraProvider` | Substrate | [machines](api/machines.md#kinds) |
 | Infrastructure services | `Proxy`, `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer` | Infrastructure services | [infrastructure services](api/infrastructure-services.md#kinds) |
@@ -652,7 +654,7 @@ inspection output.
 Names, enums, reference names, versions, paths, and URLs satisfy their authored
 lexical rules and otherwise remain unchanged. MAC addresses normalize to
 lowercase colon notation. IPs normalize to compressed canonical text. Network
-CIDRs mask host bits; Machine interface-address IP/prefix values retain host
+CIDRs mask host bits (a `Network` object's CIDR refuses them); Machine interface-address IP/prefix values retain host
 bits and normalize the host and prefix separately. Digest algorithms and
 hexadecimal digests normalize to lowercase. Set-valued lists sort only where
 their owning schema says so; ordered lists retain authored order.
@@ -677,7 +679,7 @@ not hold is not marked defaulted; it keeps its own remediation.
 Canonical effective output:
 
 1. orders kinds as `Environment`, `Entitlement`, `Machine`, `MachineImage`,
-   `MachineInstallProfile`, `NetworkConfig`, `InfraProvider`, `Proxy`,
+   `MachineInstallProfile`, `Network`, `NetworkConfig`, `InfraProvider`, `Proxy`,
    `DNSServer`, `NTPServer`, `ArtifactServer`, `Registry`, `LoadBalancer`,
    `OpenShiftCluster`, `CephCluster`, `CephPlacementPolicy`,
    `CephPool`, `CephRBDImage`, `CephClient`, `CephFilesystem`,

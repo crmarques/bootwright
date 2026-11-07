@@ -15,6 +15,7 @@ const (
 	Machine               Kind = "Machine"
 	MachineImage          Kind = "MachineImage"
 	MachineInstallProfile Kind = "MachineInstallProfile"
+	Network               Kind = "Network"
 	NetworkConfig         Kind = "NetworkConfig"
 	InfraProvider         Kind = "InfraProvider"
 	Proxy                 Kind = "Proxy"
@@ -46,7 +47,7 @@ const (
 	Secret                Kind = "Secret"
 )
 
-var kindOrder = []Kind{Environment, Entitlement, Machine, MachineImage, MachineInstallProfile, NetworkConfig, InfraProvider, Proxy, DNSServer, NTPServer, ArtifactServer, Registry, LoadBalancer, OpenShiftCluster, CephCluster, CephPlacementPolicy, CephPool, CephRBDImage, CephClient, CephFilesystem, CephSubvolume, CephObjectGateway, CephObjectUser, CephObjectBucket, CephNFSExport, CephSMBResource, CephNVMeoFSubsystem, CephReplication, CephConsumer, ClusterAddon, ClusterAddonProfile, ClusterAddonBinding, CustomPlaybook, Secret}
+var kindOrder = []Kind{Environment, Entitlement, Machine, MachineImage, MachineInstallProfile, Network, NetworkConfig, InfraProvider, Proxy, DNSServer, NTPServer, ArtifactServer, Registry, LoadBalancer, OpenShiftCluster, CephCluster, CephPlacementPolicy, CephPool, CephRBDImage, CephClient, CephFilesystem, CephSubvolume, CephObjectGateway, CephObjectUser, CephObjectBucket, CephNFSExport, CephSMBResource, CephNVMeoFSubsystem, CephReplication, CephConsumer, ClusterAddon, ClusterAddonProfile, ClusterAddonBinding, CustomPlaybook, Secret}
 
 func Kinds() []Kind           { return slices.Clone(kindOrder) }
 func KindIndex(kind Kind) int { return slices.Index(kindOrder, kind) }

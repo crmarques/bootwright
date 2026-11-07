@@ -14,7 +14,7 @@ implemented or authorized.
 | Boundaries, package shapes, Go/Ansible split, dependencies, fitness checks | [architecture](architecture.md) |
 | Where a command's code lives | `internal/cli/catalog.go`, `cmd/bootwright/wiring_<domain>.go` and each package's `contracts.go` ([finding code](architecture.md#go-package-structure)) |
 | Desired-state grammar, compilation, defaults | [api](api.md); input discovery and ceilings: [input](api/input.md) |
-| One kind's fields | [environment](api/environment.md), [secrets](api/secrets.md), [machines](api/machines.md), [infrastructure services](api/infrastructure-services.md), [container clusters](api/openshift-clusters.md), [storage](api/ceph.md#kinds), [add-ons](api/addons.md), [custom playbooks](api/custom-playbooks.md) |
+| One kind's fields | [environment](api/environment.md), [secrets](api/secrets.md), [machines](api/machines.md), [networks](api/networks.md), [infrastructure services](api/infrastructure-services.md), [container clusters](api/openshift-clusters.md), [storage](api/ceph.md#kinds), [add-ons](api/addons.md), [custom playbooks](api/custom-playbooks.md) |
 | Copying files or directories to and from Machines | [machine file copies](cli/machine-copy.md) |
 | Command behavior and journeys | [cli](cli.md); flags: [commands](cli/commands.md); streams, JSON, diagnostics: [output](cli/output.md) |
 | Host prerequisites, install and uninstall, the controller stage | [controller](controller.md) |

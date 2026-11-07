@@ -12,7 +12,7 @@ import (
 // predicate (a managed infrastructure service by its own), or is listed here
 // as bearing none. A new kind fails until its domain decides.
 func TestEveryKindIsEffectBearingByExactlyOneDomainOrListedAsBearingNone(t *testing.T) {
-	none := []api.Kind{api.Environment, api.Entitlement, api.MachineImage, api.MachineInstallProfile, api.NetworkConfig,
+	none := []api.Kind{api.Environment, api.Entitlement, api.MachineImage, api.MachineInstallProfile, api.Network, api.NetworkConfig,
 		api.ClusterAddon, api.ClusterAddonProfile, api.Secret}
 	bearing := api.MapValue(
 		api.FieldValue{Name: "management", Value: api.StringValue("managed")},

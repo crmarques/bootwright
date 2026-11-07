@@ -24,6 +24,9 @@ func Variant(o api.Object) string {
 }
 
 func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
+	if o.Kind() == api.Network {
+		return normalizeNetworkArm(o), nil
+	}
 	if o.Kind() != api.InfraProvider {
 		return o, nil
 	}
@@ -176,6 +179,9 @@ func ValidateAuthored(o api.Object, _ api.Catalog) []api.Issue {
 func Validate(o api.Object, c api.Catalog) []api.Issue {
 	if o.Kind() == api.Machine {
 		return validateFirmware(o)
+	}
+	if o.Kind() == api.Network {
+		return validateNetworkArm(o, c)
 	}
 	if o.Kind() != api.InfraProvider {
 		return nil
