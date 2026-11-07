@@ -139,6 +139,9 @@ func admitPools(i addons.Instance, f addons.ClusterFacts) []api.Issue {
 		if held != "" && pool.L2 != nil && pool.L2.Interface != "" {
 			checkInterfaceReach(pool, f, field, held, add)
 		}
+		if pool.L2 != nil && pool.L2.Interface != "" {
+			issues = append(issues, kernelNameWarning(pool, f, field)...)
+		}
 	}
 	return issues
 }
@@ -151,6 +154,31 @@ func containingNetworks(f addons.ClusterFacts, r interval) []string {
 		}
 	}
 	return names
+}
+
+func kernelNameWarning(pool api.MetalLBPool, f addons.ClusterFacts, field string) []api.Issue {
+	for _, node := range f.NodeNetworks {
+		for _, nic := range node.Interfaces {
+			if nic.Name == pool.L2.Interface && nic.Type == "ethernet" {
+				return []api.Issue{{Code: "api.unverified", Field: field, Message: fmt.Sprintf("interface %s of pool %s is ethernet on node %s, which keeps its kernel name after the agent installation", nic.Name, pool.Name, node.Machine),
+					Remediation: fmt.Sprintf("use the kernel name node %s reports, or a bond, VLAN or bridge its NetworkConfig creates", node.Machine)}}
+			}
+		}
+	}
+	return nil
+}
+
+func servingNetworks(f addons.ClusterFacts) string {
+	var names []string
+	for _, n := range f.Networks {
+		if n.Prefix.Addr().Is4() == (f.Family == "ipv4") {
+			names = append(names, "Network/"+n.Name+" ("+n.Prefix.String()+")")
+		}
+	}
+	if len(names) == 0 {
+		return "declare a Network of the " + f.Family + " family that serves the sites of the nodes of OpenShiftCluster/" + f.Name + " and holds the pool"
+	}
+	return "use addresses inside one Network that serves the nodes' sites: " + strings.Join(names, ", ")
 }
 
 func checkInterfaceReach(pool api.MetalLBPool, f addons.ClusterFacts, field, held string, add poolIssue) {
@@ -262,21 +290,28 @@ func checkPoolConflicts(pool api.MetalLBPool, f addons.ClusterFacts, field, entr
 			add("api.invariant", field, fmt.Sprintf("address %s of pool %s includes %s, held by %s", entry, pool.Name, h.Addr, h.Holder), "exclude "+h.Addr.String()+" from the pool")
 		}
 	}
-	forbidden := []struct {
-		kind               string
+	type forbiddenGroup struct {
+		kind, secondary    string
 		prefixes, excluded []netip.Prefix
-	}{{"cluster network", f.ClusterNetworks, nil}, {"service network", f.ServiceNetworks, nil}}
+	}
+	forbidden := []forbiddenGroup{{kind: "cluster network", prefixes: f.ClusterNetworks}, {kind: "service network", prefixes: f.ServiceNetworks}}
 	for _, n := range f.SecondaryNetworks {
-		forbidden = append(forbidden, struct {
-			kind               string
-			prefixes, excluded []netip.Prefix
-		}{"secondary network " + n.Name, n.Subnets, n.Excluded})
+		forbidden = append(forbidden, forbiddenGroup{kind: "secondary network " + n.Name, secondary: n.Name, prefixes: n.Subnets, excluded: n.Excluded})
 	}
 	for _, group := range forbidden {
 		for _, n := range group.prefixes {
-			if uncovered(r, interval{first: n.Masked().Addr(), last: lastAddress(n)}, group.excluded) {
-				add("api.invariant", field, fmt.Sprintf("address %s of pool %s overlaps %s, the %s of OpenShiftCluster/%s", entry, pool.Name, n, group.kind, f.Name), "use addresses outside "+n.String())
+			if !uncovered(r, interval{first: n.Masked().Addr(), last: lastAddress(n)}, group.excluded) {
+				continue
 			}
+			remedy := "use addresses outside " + n.String()
+			if group.secondary != "" {
+				cidrs := entry
+				if !strings.Contains(entry, "/") {
+					cidrs = "CIDRs covering " + entry
+				}
+				remedy = fmt.Sprintf("add %s to ipam.excludeSubnets of secondary network %s, or move the pool to another Network", cidrs, group.secondary)
+			}
+			add("api.invariant", field, fmt.Sprintf("address %s of pool %s overlaps %s, the %s of OpenShiftCluster/%s", entry, pool.Name, n, group.kind, f.Name), remedy)
 		}
 	}
 	for _, other := range previous {
@@ -335,9 +370,9 @@ func admitPoolEntries(pool api.MetalLBPool, f addons.ClusterFacts, base string, 
 		}
 		switch holders := containingNetworks(f, r); {
 		case len(holders) == 0:
-			add("api.invariant", field, fmt.Sprintf("address %s of pool %s lies in no declared Network of OpenShiftCluster/%s", entry, pool.Name, f.Name), "use addresses inside a declared Network")
+			add("api.invariant", field, fmt.Sprintf("address %s of pool %s lies in no declared Network of OpenShiftCluster/%s", entry, pool.Name, f.Name), servingNetworks(f))
 		case len(holders) > 1:
-			add("api.invariant", field, fmt.Sprintf("address %s of pool %s lies in %s", entry, pool.Name, strings.Join(holders, " and ")), "narrow the pool to one Network, or scope those Networks to distinct sites")
+			add("api.invariant", field, fmt.Sprintf("address %s of pool %s lies in %s", entry, pool.Name, strings.Join(holders, " and ")), "narrow the pool to one of those Networks")
 		case held == "":
 			held = holders[0]
 		}

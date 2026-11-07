@@ -597,7 +597,7 @@ func validateEndpoints(o api.Object, c api.Catalog) []api.Issue {
 			issues = add(issues, invariantRemediation(path+".address", "an IPv4-compatible IPv6 endpoint address (::/96) prints differently in glibc; write the IPv4 address", "write "+path+".address as an IPv4 literal"))
 		}
 		if len(networks) > 0 && !contains(networks, address) {
-			issues = add(issues, invariantRemediation(path+".address", "endpoint IP must belong to a consumed machine network", "set "+path+".address to an IP in the Network that holds the install address of the bound Machines"))
+			issues = add(issues, invariantRemediation(path+".address", "endpoint IP must belong to a consumed machine network", "set "+path+".address to an IP in a machine network of the cluster, the Network holding the bound Machines' install addresses or one listed in spec.networking.machineNetworkRefs, or add the Network that holds it to spec.networking.machineNetworkRefs"))
 		}
 		issues = add(issues, endpointCollisions(o, c, slot, endpoint, address)...)
 		narrow := []netip.Prefix{}

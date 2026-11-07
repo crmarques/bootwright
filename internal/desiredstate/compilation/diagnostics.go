@@ -135,7 +135,7 @@ func (d *diagnosticSink) issue(record *objectRecord, issue api.Issue) bool {
 	if item.Code == "" {
 		item.Code = "api.invariant"
 	}
-	if issue.Code == "api.deferred" || issue.Code == "api.unrealized" || issue.Code == "api.selection" {
+	if issue.Code == "api.deferred" || issue.Code == "api.unrealized" || issue.Code == "api.selection" || issue.Code == "api.unverified" {
 		item.Severity = "warning"
 	}
 	if record != nil {

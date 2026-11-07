@@ -76,6 +76,7 @@ func ValidateNetworkIntent(o api.Object, c api.Catalog) []api.Issue {
 		}
 		for i, network := range o.Spec().Get("networking", "secondaryNetworks").Items() {
 			iface := BridgeInterface(node, network)
+			issues = append(issues, kernelNameWarning(network, i, iface, nodeIndex, node, native, reported)...)
 			for _, issue := range validateBridgeMapping(network, i, iface, bound, native, install) {
 				if at := overrideIndex(node, network); at >= 0 && issue.Field == fmt.Sprintf("$.spec.networking.secondaryNetworks[%d].bridgeMapping.interface", i) {
 					issue.Field = fmt.Sprintf("$.spec.nodes[%d].bridgeInterfaces[%d].interface", nodeIndex, at)
@@ -87,6 +88,20 @@ func ValidateNetworkIntent(o api.Object, c api.Catalog) []api.Issue {
 	}
 	issues = append(issues, validateSecondaryNetworks(o)...)
 	return append(issues, validatePodIPAMHosts(o, c, first)...)
+}
+
+func kernelNameWarning(n api.Value, index int, iface string, nodeIndex int, node, native api.Value, reported map[string]bool) []api.Issue {
+	field := fmt.Sprintf("$.spec.networking.secondaryNetworks[%d].bridgeMapping.interface", index)
+	if at := overrideIndex(node, n); at >= 0 {
+		field = fmt.Sprintf("$.spec.nodes[%d].bridgeInterfaces[%d].interface", nodeIndex, at)
+	}
+	if n.Get("bridgeMapping", "bridge").Text() == "br-ex" || interfaceType(native, iface) != "ethernet" || reported["unverified\x00"+field] {
+		return nil
+	}
+	reported["unverified\x00"+field] = true
+	name := node.Get("name").Text()
+	return []api.Issue{{Code: "api.unverified", Field: field, Message: fmt.Sprintf("bridge interface %s of secondary network %s is ethernet on node %s, which keeps its kernel name after the agent installation", iface, n.Get("name").Text(), name),
+		Remediation: fmt.Sprintf("use the kernel name node %s reports, or a bond, VLAN or bridge its NetworkConfig creates", name)}}
 }
 
 type heldAddress struct {

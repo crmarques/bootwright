@@ -8,7 +8,7 @@ import (
 )
 
 var warningOnlyDiagnosticCodes = []string{
-	"api.deferred", "api.unrealized", "access.exit", "access.unproved", "context.orphaned",
+	"api.deferred", "api.unrealized", "api.unverified", "access.exit", "access.unproved", "context.orphaned",
 	"controller.loader-preload", "controller.runtime-retention", "controller.untested-release",
 	"input.secrets-directory", "lifecycle.surviving-consumer", "storage.not-ready", "substrate.shadowed-route",
 }

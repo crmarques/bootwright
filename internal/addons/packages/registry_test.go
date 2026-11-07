@@ -298,3 +298,33 @@ func TestPoolInterfaceAndNetworkRefusalFields(t *testing.T) {
 		})
 	}
 }
+
+func TestPoolNetworkRefusalsNameAReachableRemedy(t *testing.T) {
+	for _, test := range []struct {
+		name            string
+		change          func(*addons.ClusterFacts)
+		message, remedy string
+	}{
+		{"secondary subnet", func(f *addons.ClusterFacts) {
+			f.SecondaryNetworks = []addons.SecondaryNetwork{{Name: "tenant", Subnets: []netip.Prefix{netip.MustParsePrefix("198.51.100.0/24")}}}
+		}, "the secondary network tenant", "add CIDRs covering 198.51.100.80-198.51.100.90 to ipam.excludeSubnets of secondary network tenant, or move the pool to another Network"},
+		{"no declared Network", func(f *addons.ClusterFacts) { f.Networks = f.Networks[:1] }, "lies in no declared Network", "use addresses inside one Network that serves the nodes' sites: Network/lan (192.0.2.0/24)"},
+		{"two Networks", func(f *addons.ClusterFacts) {
+			f.Networks = append(f.Networks, addons.NetworkFact{Name: "tenant-b", Prefix: netip.MustParsePrefix("198.51.100.0/25")})
+		}, "lies in Network/tenant and Network/tenant-b", "narrow the pool to one of those Networks"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f := facts()
+			f.Gateway = addons.OVNGateway{RoutingViaHost: true, IPForwarding: "Global"}
+			f.NodeNetworks[0].Interfaces = append(f.NodeNetworks[0].Interfaces, addons.NodeInterface{Name: "eth1", Addresses: []netip.Prefix{netip.MustParsePrefix("198.51.100.10/24")}, Networks: []string{"tenant"}})
+			p := pool("secondary", "198.51.100.80-198.51.100.90").With("l2", api.MapValue(api.FieldValue{Name: "interface", Value: api.StringValue("eth1")}))
+			test.change(&f)
+			issues := admitPools(addons.Instance{Config: config(p)}, f)
+			if !slices.ContainsFunc(issues, func(issue api.Issue) bool {
+				return strings.Contains(issue.Message, test.message) && issue.Remediation == test.remedy
+			}) {
+				t.Fatalf("%+v", issues)
+			}
+		})
+	}
+}

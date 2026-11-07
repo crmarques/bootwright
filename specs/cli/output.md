@@ -975,16 +975,14 @@ only the diagnostic code `runtime.tool`.
 Diagnostic codes are stable machine identifiers. Include an object identity
 only when its kind and name form a valid API identity; malformed names are
 reported through the source coordinates and `$.metadata.name` field without
-repeating unbounded authored text in every diagnostic. This table is the
-registry: it lists every code production code emits, from a function body or a
-package-level variable initializer, and nothing else
-(`TestDiagnosticCodesMatchOutputSpec`). That check follows a code through
-constants, variables, parameters and calls, a call through a variable bound to
-a function included. A variable holds every value written to it anywhere, the
-reading scope's own writes included, and a parameter also every argument it
-receives. With no type information, a method call resolves by name to every
-method it can select: an unexported one of its own package, or an exported one
-of any package. A write it follows that gives no single value (a tuple or
+repeating unbounded authored text. This table is the registry: it lists every
+code production code emits, from a function body or a package-level variable
+initializer, and nothing else (`TestDiagnosticCodesMatchOutputSpec`). That
+check follows a code through constants, variables, parameters and calls,
+function variables included. A variable holds every value written to it
+anywhere, and a parameter every argument it receives. A method call resolves
+by name to every method it can select: an unexported one of its package, or an
+exported one of any package. A write it follows that gives no single value (a tuple or
 compound assignment, a range clause, a taken address, a package variable
 declared without a value) fails the check, and so does a function storing its
 argument as a code that is used as a value other than by calling it or binding
@@ -1015,6 +1013,7 @@ it to a variable.
 | `api.selection` | Environment selection excludes an otherwise discovered authored object. |
 | `api.deferred` | Valid authored state declares inactive operational semantics. |
 | `api.unrealized` | A warning: valid authored state declares something this build admits but no capability realizes, so `plan` refuses it with `lifecycle.unsupported`; it names the path and the tracking item ([admitted but unrealized](../api.md#admitted-but-unrealized)). |
+| `api.unverified` | A warning: an admitted name only the node confirms, an agent-path `ethernet` one that must be its [kernel name](../openshift-clusters.md#node-networking). |
 | `cli.usage` | Arguments or flags do not match this contract. |
 | `cli.not-implemented` | The command is defined but its application use case is not available. |
 | `render.publish` | A rendered artifact could not be safely published: its directory or file is unusable, exists as a non-regular file, or overlaps the input. |
@@ -1081,7 +1080,7 @@ it to a variable.
 
 A command context that needs a narrower code adds its row with the code's
 first emission. A namespace alone is not a fallback code. New codes may be
-added, but the meaning of an existing code cannot change.
+added; an existing code keeps its meaning.
 
 Diagnostics are sorted by:
 
@@ -1094,9 +1093,9 @@ Diagnostics are sorted by:
 7. field path; and
 8. message.
 
-Within a sort key, unavailable values sort before available values. Diagnostics
-without a source follow sourced diagnostics and use the same remaining order.
-JSON and human modes use identical membership and order. Two diagnostics are
+Within a sort key, unavailable values sort first. Unsourced diagnostics follow
+sourced ones in the same remaining order. JSON and human modes share
+membership and order. Two diagnostics are
 duplicates only when every present or absent member is equal.
 
 ## Private operation logs

@@ -48,7 +48,7 @@ func TestAuthoredMachineNetworksContainEndpoints(t *testing.T) {
 	cluster = cluster.WithSpec(cluster.Spec().WithPath(api.StringValue("203.0.113.2"), "install", "endpoints", "api", "address"))
 	refused := func(o api.Object, c api.Catalog) bool {
 		return slices.ContainsFunc(validateEndpoints(o, c), func(issue api.Issue) bool {
-			return issue.Field == "$.spec.install.endpoints.api.address" && strings.Contains(issue.Message, "consumed machine network")
+			return issue.Field == "$.spec.install.endpoints.api.address" && strings.Contains(issue.Message, "consumed machine network") && strings.Contains(issue.Remediation, "or add the Network that holds it to spec.networking.machineNetworkRefs")
 		})
 	}
 	if !refused(cluster, c) {

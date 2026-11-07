@@ -433,7 +433,9 @@ tagged by a VLAN in the stack, which forbids `vlan`. Each subnet is its
 CIDR, and `excludeSubnets` covers each address held there: Machine
 assignments, gateway, managed host address, cluster endpoints. Refusals at
 `vlan`, `bridgeMapping`, the subnet or `excludeSubnets` name node, segment and
-Network, or address and holder. A node feeds one bridge from each interface.
+Network, or address and holder. A node feeds one bridge from each interface; an
+`ethernet` bridge interface warns `api.unverified`, as it must be the
+[kernel name](../openshift-clusters.md#node-networking).
 
 With `hostAddresses: bridge`, one VLAN carries node and workloads, as `br-ex`
 does for the machine network: after installation the

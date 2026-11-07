@@ -1,6 +1,7 @@
 package openshift
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -54,7 +55,7 @@ func TestASecondaryNetworkCarriesTheNetworkOfItsBridgeInterfaceSegment(t *testin
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			cluster, c := segmentedLab(test.network)
-			issues := ValidateNetworkIntent(cluster, c)
+			issues := validateIntent(cluster, c)
 			if test.field == "" {
 				if len(issues) != 0 {
 					t.Fatalf("%+v", issues)
@@ -75,19 +76,19 @@ func TestANodeOverridesTheBridgeInterfaceOfADedicatedBridge(t *testing.T) {
 		return cluster.WithSpec(cluster.Spec().With("nodes", list(nodes...)))
 	}
 	cluster, c := segmentedLab(addressedNetwork("tenant", "br-tenant", "eth0", "", ""))
-	if issues := ValidateNetworkIntent(overridden(cluster, m("networkRef", "tenant", "interface", "eth1")), c); len(issues) != 0 {
+	if issues := validateIntent(overridden(cluster, m("networkRef", "tenant", "interface", "eth1")), c); len(issues) != 0 {
 		t.Fatalf("an override of the install interface: %+v", issues)
 	}
 	if got := BridgeInterface(overridden(cluster, m("networkRef", "tenant", "interface", "eth1")).Spec().Get("nodes").Items()[0], cluster.Spec().Get("networking", "secondaryNetworks").Items()[0]); got != "eth1" {
 		t.Fatal(got)
 	}
 	cluster, c = segmentedLab(addressedNetwork("tenant", "br-ex", "", "", ""))
-	issues := ValidateNetworkIntent(overridden(cluster, m("networkRef", "tenant", "interface", "eth1")), c)
+	issues := validateIntent(overridden(cluster, m("networkRef", "tenant", "interface", "eth1")), c)
 	if len(issues) != 1 || issues[0].Field != "$.spec.nodes[0].bridgeInterfaces[0].networkRef" || !strings.Contains(issues[0].Message, "shares br-ex") {
 		t.Fatalf("an override of br-ex: %+v", issues)
 	}
 	cluster, c = segmentedLab(addressedNetwork("a", "br-tenant", "eth1", "", "200"), addressedNetwork("b", "br-tenant", "eth1", "", ""))
-	issues = ValidateNetworkIntent(overridden(cluster, m("networkRef", "a", "interface", "eth2.200")), c)
+	issues = validateIntent(overridden(cluster, m("networkRef", "a", "interface", "eth2.200")), c)
 	found := false
 	for _, issue := range issues {
 		found = found || issue.Field == "$.spec.nodes[0].bridgeInterfaces" && strings.Contains(issue.Message, "different bridge interfaces")
@@ -101,7 +102,7 @@ func TestAnOverriddenBridgeInterfaceIsRefusedAtItsNode(t *testing.T) {
 	cluster, c := segmentedLab(addressedNetwork("tenant", "br-tenant", "eth1", "", ""))
 	nodes := cluster.Spec().Get("nodes").Items()
 	nodes[0] = nodes[0].With("bridgeInterfaces", list(m("networkRef", "tenant", "interface", "eth0")))
-	issues := ValidateNetworkIntent(cluster.WithSpec(cluster.Spec().With("nodes", list(nodes...))), c)
+	issues := validateIntent(cluster.WithSpec(cluster.Spec().With("nodes", list(nodes...))), c)
 	if len(issues) != 2 || issues[1].Field != "$.spec.nodes[0].bridgeInterfaces[0].interface" || !strings.Contains(issues[1].Message, "the install interface") {
 		t.Fatalf("%+v", issues)
 	}
@@ -131,10 +132,10 @@ func overrideOn(cluster api.Object, node int, entries ...api.Value) api.Object {
 
 func TestAnOverrideCannotPutOneInterfaceInTwoBridges(t *testing.T) {
 	cluster, c := segmentedLab(addressedNetwork("a", "br-a", "eth1", "", ""), addressedNetwork("b", "br-b", "eth2.200", "", ""))
-	if issues := ValidateNetworkIntent(cluster, c); len(issues) != 0 {
+	if issues := validateIntent(cluster, c); len(issues) != 0 {
 		t.Fatalf("distinct interfaces: %+v", issues)
 	}
-	issues := ValidateNetworkIntent(overrideOn(cluster, 0, m("networkRef", "b", "interface", "eth1")), c)
+	issues := validateIntent(overrideOn(cluster, 0, m("networkRef", "b", "interface", "eth1")), c)
 	found := false
 	for _, issue := range issues {
 		found = found || issue.Field == "$.spec.nodes[0].bridgeInterfaces[0].interface" && strings.Contains(issue.Message, "node node-0 assigns interface eth1 to bridge br-a of secondary network a and to bridge br-b of secondary network b") && strings.Contains(issue.Remediation, "secondary network b on node node-0")
@@ -146,13 +147,32 @@ func TestAnOverrideCannotPutOneInterfaceInTwoBridges(t *testing.T) {
 
 func TestASecondaryNetworkReachesOneNetworkOnEveryNode(t *testing.T) {
 	cluster, c := segmentedNodes(2, addressedNetwork("tenant", "br-tenant", "eth1", "", ""))
-	if issues := ValidateNetworkIntent(cluster, c); len(issues) != 0 {
+	if issues := validateIntent(cluster, c); len(issues) != 0 {
 		t.Fatalf("one Network: %+v", issues)
 	}
-	issues := ValidateNetworkIntent(overrideOn(cluster, 1, m("networkRef", "tenant", "interface", "eth2.200")), c)
+	issues := validateIntent(overrideOn(cluster, 1, m("networkRef", "tenant", "interface", "eth2.200")), c)
 	if len(issues) != 1 || issues[0].Field != "$.spec.networking.secondaryNetworks[0].bridgeMapping" ||
 		!strings.Contains(issues[0].Message, "secondary network tenant reaches Network/lan on node node-0 through segment trunk (spec.segments[0] of InfraProvider/provider), and Network/tenant through interface eth2.200 of node node-1") ||
 		!strings.Contains(issues[0].Remediation, "segment that carries Network/lan, or override the bridge interface of node node-1 at spec.nodes[1].bridgeInterfaces") {
 		t.Fatalf("%+v", issues)
+	}
+}
+
+func validateIntent(o api.Object, c api.Catalog) []api.Issue {
+	return slices.DeleteFunc(ValidateNetworkIntent(o, c), func(issue api.Issue) bool { return issue.Code == "api.unverified" })
+}
+
+func TestAnEthernetBridgeInterfaceWarnsThatItMustBeTheKernelName(t *testing.T) {
+	cluster, c := segmentedNodes(2, addressedNetwork("a", "br-a", "eth1", "", ""), addressedNetwork("b", "br-b", "eth2.200", "", ""))
+	warnings := []api.Issue{}
+	for _, issue := range ValidateNetworkIntent(overrideOn(cluster, 1, m("networkRef", "b", "interface", "eth2")), c) {
+		if issue.Code == "api.unverified" {
+			warnings = append(warnings, issue)
+		}
+	}
+	if len(warnings) != 2 || warnings[0].Field != "$.spec.networking.secondaryNetworks[0].bridgeMapping.interface" || warnings[1].Field != "$.spec.nodes[1].bridgeInterfaces[0].interface" ||
+		!strings.Contains(warnings[0].Message, "bridge interface eth1 of secondary network a is ethernet on node node-0, which keeps its kernel name after the agent installation") ||
+		!strings.Contains(warnings[1].Remediation, "use the kernel name node node-1 reports, or a bond, VLAN or bridge its NetworkConfig creates") {
+		t.Fatalf("%+v", warnings)
 	}
 }

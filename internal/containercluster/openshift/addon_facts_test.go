@@ -215,7 +215,7 @@ func TestMetalLBInterfacePoolUsesDerivedGatewayFacts(t *testing.T) {
 		cluster = cluster.WithSpec(cluster.Spec().WithPath(api.StringValue(forwarding), "networking", "ovnKubernetesConfig", "gatewayConfig", "ipForwarding"))
 		effective := api.NewCatalog(append(slices.Clone(objects), cluster, binding))
 		issues := addons.ValidateWithRegistry(binding, effective, registry, AddonFacts(effective, cluster.Name()))
-		if forwarding == "Global" && len(issues) > 0 {
+		if forwarding == "Global" && (len(issues) != 1 || issues[0].Code != "api.unverified" || !strings.Contains(issues[0].Message, "interface eth1 of pool services is ethernet on node node-0, which keeps its kernel name")) {
 			t.Fatal(issues)
 		}
 		if forwarding == "Restricted" && !slices.ContainsFunc(issues, func(issue api.Issue) bool {
