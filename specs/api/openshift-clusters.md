@@ -361,46 +361,46 @@ implicit trust inherited from another consumer.
 | Field | Type | Required | Default |
 | --- | --- | --- | --- |
 | `networkType` | string | no | Installer default when absent. |
+| `machineNetworkRefs` | set of Network references | no | The machine networks below. |
 | `clusterNetwork` | array of `{cidr, hostPrefix}` | normalized | Family-dependent default below. |
 | `serviceNetwork` | array of CIDR strings | normalized | Family-dependent default below. |
 | `ovnKubernetesConfig` | object | no | absent; `mtu`, `gatewayConfig.routingViaHost`, `gatewayConfig.ipForwarding` (`Restricted` or `Global`), each written into the install-time `Network` only when set. |
 | `secondaryNetworks` | array | no | `[]`; localnet secondary networks below. |
 
-`ovnKubernetesConfig.mtu` is at most 100 below, and a secondary network's `mtu`
-at most, the effective MTU of the interface it rides on every node: the install
-interface for OVN and for `br-ex`, otherwise the network's `uplink.interface`.
-An interface's effective MTU is its own `mtu`; when that is omitted, the
-effective MTU of its VLAN `base-iface`, or of the bond it is a port of or names
-as its `controller`, resolved recursively; otherwise 1500. So OVN `mtu: 8900`
-over a VLAN with no `mtu` on a bond of `mtu: 9000` is admitted, and a value
-above the bound refuses at `ovnKubernetesConfig.mtu` or the network's `mtu`.
+`ovnKubernetesConfig.mtu` plus 100, and a secondary network's `mtu`, are at
+most the effective MTU of the interface each rides on every node: the install
+interface for OVN and `br-ex`, else the network's `uplink.interface`. An
+interface's effective MTU is its `mtu`, else that of its VLAN `base-iface` or
+of the bond it is a port of, recursively, else 1500; so OVN `mtu: 8900` over an
+MTU-less VLAN on a bond of `mtu: 9000` is admitted. A value above refuses at
+that `mtu`.
 
 A cluster whose [MetalLB pool](addons.md#package-metallb) names an interface
-declares `gatewayConfig.routingViaHost: true` and `gatewayConfig.ipForwarding:
-Global`: forwarding on that interface is the cluster's install-time
-declaration, never an add-on's change.
+declares `gatewayConfig.routingViaHost: true` and `ipForwarding: Global`, an
+install-time declaration no add-on changes.
 
-A cluster's machine networks are the CIDRs of the
-[Networks](networks.md) holding its nodes' install addresses, in node order and
-deduplicated; `install-config` `networking.machineNetwork` carries them. The
-two lists default independently. An authored non-empty list retains its
-membership and order while effective output canonicalizes CIDR text:
+A cluster's machine networks are the CIDRs, in the install addresses' family,
+of the `machineNetworkRefs` [Networks](networks.md) in order, else of those
+holding its nodes' install addresses, in node order and deduplicated.
+`install-config` `networking.machineNetwork` and `noProxy` carry them; endpoint,
+family and MetalLB checks read them. An authored list names every node's
+install Network, refused at `machineNetworkRefs` naming the one missing, and
+may add others, such as a routed worker subnet. The overlay lists default
+independently; an authored non-empty one keeps its order, CIDR text
+canonicalized:
 
 | Consumed machine networks | `clusterNetwork` default | `serviceNetwork` default |
 | --- | --- | --- |
 | IPv4 or unresolved/mixed evidence | `[{cidr: 10.128.0.0/14, hostPrefix: 23}]` | `[172.30.0.0/16]` |
 | IPv6-only | `[{cidr: fd01::/48, hostPrefix: 64}]` | `[fd02::/112]` |
 
-Every cluster-network `cidr` is valid and its required `hostPrefix` is larger
-than the CIDR prefix and no larger than `32` or `128`. Service CIDRs are valid.
-No cluster-network `cidr` and no service CIDR overlaps the prefix of an
-interface assignment a node's Machine declares or a secondary network's
-`ipam.subnets` entry, because traffic to that subnet would stay inside the
-cluster; each refusal is an `api.invariant` at the overlay entry, naming the
-subnet and its holder.
-The consumed machine networks, cluster networks, service
-networks, node install addresses, and endpoint addresses form one supported
-address family; dual-stack or mixed-family input is rejected by this contract.
+Every cluster-network `cidr` is valid, with a `hostPrefix` above its prefix
+length and at most `32` or `128`; service CIDRs are valid. No overlay CIDR
+overlaps a node's interface-assignment prefix or a secondary network's
+`ipam.subnets` entry, whose traffic would stay inside the cluster; each refusal
+is an `api.invariant` at the overlay entry naming the subnet and its holder.
+Machine, cluster and service networks, node install addresses and endpoint
+addresses share one address family; dual-stack or mixed input refuses.
 
 ### Secondary networks
 

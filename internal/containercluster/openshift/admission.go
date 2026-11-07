@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/network"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -306,6 +307,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		issues = add(issues, invariantRemediation("$.spec.install.additionalTrustBundlePolicy", "additionalTrustBundlePolicy requires additional trust bundles", "select at least one caBundle Secret in install.additionalTrustBundleRefs, or remove additionalTrustBundlePolicy"))
 	}
 	issues = add(issues, validateEndpoints(o, c)...)
+	issues = add(issues, validateMachineNetworkRefs(o, c)...)
 	issues = add(issues, validateNetworks(o, c)...)
 	issues = add(issues, validateOverlayOverlaps(o, c)...)
 	issues = add(issues, validateVIPAdjacency(o, c)...)
@@ -726,7 +728,54 @@ func providerTypes(o api.Object, c api.Catalog) ([]string, bool) {
 	return types, ready
 }
 func machineNetworks(o api.Object, c api.Catalog) ([]netip.Prefix, bool) {
+	held, complete := installNetworks(o, c)
 	out := []netip.Prefix{}
+	for _, entry := range held {
+		out = append(out, entry.Prefix)
+	}
+	refs := o.Spec().Get("networking", "machineNetworkRefs")
+	if !refs.Present() {
+		return out, complete
+	}
+	family := ""
+	if len(out) > 0 {
+		family = network.Family(out[0].Addr())
+	}
+	authored := []netip.Prefix{}
+	for _, name := range refs.Strings() {
+		declared, found := c.Find(api.Network, name)
+		if !found {
+			complete = false
+			continue
+		}
+		candidates := []string{family}
+		if family == "" {
+			candidates = []string{"ipv4", "ipv6"}
+		}
+		resolved := false
+		for _, candidate := range candidates {
+			if prefix, ok := network.Prefix(declared, candidate); ok && !resolved {
+				authored, resolved = append(authored, prefix), true
+			}
+		}
+		complete = complete && resolved
+	}
+	return authored, complete
+}
+
+func MachineNetworks(o api.Object, c api.Catalog) []netip.Prefix {
+	networks, _ := machineNetworks(o, c)
+	unique := []netip.Prefix{}
+	for _, prefix := range networks {
+		if !slices.Contains(unique, prefix) {
+			unique = append(unique, prefix)
+		}
+	}
+	return unique
+}
+
+func installNetworks(o api.Object, c api.Catalog) ([]network.Held, bool) {
+	out := []network.Held{}
 	complete := o.Spec().Get("nodes").Len() > 0
 	for _, node := range o.Spec().Get("nodes").Items() {
 		bound, ok := c.Find(api.Machine, node.Get("machineRef").Text())
@@ -740,10 +789,51 @@ func machineNetworks(o api.Object, c api.Catalog) ([]netip.Prefix, bool) {
 			complete = false
 			continue
 		}
-		out = append(out, held.Prefix)
+		out = append(out, held)
 	}
 	return out, complete
 }
+
+func validateMachineNetworkRefs(o api.Object, c api.Catalog) []api.Issue {
+	refs := o.Spec().Get("networking", "machineNetworkRefs")
+	if !refs.Present() {
+		return nil
+	}
+	issues := []api.Issue{}
+	held, _ := installNetworks(o, c)
+	reported := map[string]bool{}
+	for _, node := range o.Spec().Get("nodes").Items() {
+		bound, found := c.Find(api.Machine, node.Get("machineRef").Text())
+		if !found {
+			continue
+		}
+		address, problems := machine.InstallAddress(bound, c)
+		match, ok := machine.AssignedNetwork(bound, c, address)
+		name := match.Network.Name()
+		if len(problems) != 0 || !ok || reported[name] || slices.Contains(refs.Strings(), name) {
+			continue
+		}
+		reported[name] = true
+		issues = add(issues, invariantRemediation("$.spec.networking.machineNetworkRefs", fmt.Sprintf("machineNetworkRefs of %s omits %s, which holds the install address of node %s (%s)", o.Identity(), match.Network.Identity(), node.Get("name").Text(), bound.Identity()),
+			fmt.Sprintf("add %s to spec.networking.machineNetworkRefs of %s, or remove machineNetworkRefs to take the machine networks from the nodes' install addresses", name, o.Identity())))
+	}
+	family := ""
+	if len(held) > 0 {
+		family = network.Family(held[0].Prefix.Addr())
+	}
+	for i, name := range refs.Strings() {
+		declared, found := c.Find(api.Network, name)
+		if !found || family == "" {
+			continue
+		}
+		if _, ok := network.Prefix(declared, family); !ok {
+			issues = add(issues, invariantRemediation(fmt.Sprintf("$.spec.networking.machineNetworkRefs[%d]", i), fmt.Sprintf("%s declares no %s cidr, the address family of the install addresses of %s", declared.Identity(), family, o.Identity()),
+				fmt.Sprintf("declare spec.%s.cidr on %s, or remove %s from spec.networking.machineNetworkRefs", family, declared.Identity(), name)))
+		}
+	}
+	return issues
+}
+
 func networkFamily(networks []netip.Prefix) int {
 	family := 0
 	for _, prefix := range networks {
@@ -759,8 +849,8 @@ func networkFamily(networks []netip.Prefix) int {
 	return family
 }
 func contains(networks []netip.Prefix, address netip.Addr) bool {
-	for _, network := range networks {
-		if network.Contains(address) {
+	for _, prefix := range networks {
+		if prefix.Contains(address) {
 			return true
 		}
 	}

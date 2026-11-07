@@ -79,3 +79,26 @@ func TestBuildEgressUsesControllerChoice(t *testing.T) {
 	}
 	matchesGolden(t, "media-request-build-proxy", data)
 }
+
+func TestAuthoredMachineNetworksReachInstallConfigAndNoProxy(t *testing.T) {
+	objects := append(proxyCatalog(false).Objects(), api.NewObject(api.Network, "routed-workers", api.Value{}, api.MapValue(field("provided", api.BoolValue(true)), field("ipv4", api.MapValue(text("cidr", "203.0.113.0/24"))))))
+	lab := ""
+	for _, held := range api.NewCatalog(objects).OfKind(api.Network) {
+		if held.Spec().Get("ipv4", "cidr").Text() == "198.51.100.0/24" {
+			lab = held.Name()
+		}
+	}
+	for i, object := range objects {
+		if object.Kind() == api.OpenShiftCluster {
+			objects[i] = object.WithSpec(object.Spec().WithPath(api.StringList("routed-workers", lab), "networking", "machineNetworkRefs"))
+		}
+	}
+	media, _, _ := onlyRequests(t, api.NewCatalog(objects))
+	networking := encoded(t, media.InstallConfig["networking"])
+	if !strings.Contains(networking, `"machineNetwork":[{"cidr":"203.0.113.0/24"},{"cidr":"198.51.100.0/24"}]`) {
+		t.Fatal(networking)
+	}
+	if !strings.HasSuffix(media.InstallProxy.NoProxy, "2001:db8::1,203.0.113.0/24,198.51.100.0/24,.sno.lab.example.test") {
+		t.Fatal(media.InstallProxy.NoProxy)
+	}
+}

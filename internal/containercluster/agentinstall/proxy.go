@@ -75,6 +75,14 @@ func installationProxy(catalog api.Catalog, cluster api.Object) (*InstallProxy, 
 			entries = append(entries, cidr)
 		}
 	}
+	if authored, ok := authoredMachineNetworks(catalog, cluster); ok {
+		entries = entries[:len(choice.Get("noProxy").Strings())]
+		for _, cidr := range authored {
+			if !slices.Contains(entries, cidr) {
+				entries = append(entries, cidr)
+			}
+		}
+	}
 	entries = append(entries, "."+cluster.Name()+"."+environmentdomain.ContainerClusterDomain(catalog))
 	result.NoProxy = strings.Join(entries, ",")
 	return result, managed, nil

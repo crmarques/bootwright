@@ -623,6 +623,17 @@ func installNetwork(catalog api.Catalog, node api.Object) (string, error) {
 	return held.Prefix.String(), nil
 }
 
+func authoredMachineNetworks(catalog api.Catalog, cluster api.Object) ([]string, bool) {
+	if !cluster.Spec().Has("networking", "machineNetworkRefs") {
+		return nil, false
+	}
+	cidrs := []string{}
+	for _, prefix := range openshift.MachineNetworks(cluster, catalog) {
+		cidrs = append(cidrs, prefix.String())
+	}
+	return cidrs, true
+}
+
 // resolverAddresses derives the name servers a node resolves through, from its
 // own network configuration's selections, and records each managed one as a
 // requirement; an external one is used at its declared address.

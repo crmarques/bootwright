@@ -154,6 +154,12 @@ func clusterNetworking(catalog api.Catalog, cluster api.Object, nodes []nodeProj
 			machineNetworks = append(machineNetworks, map[string]any{"cidr": cidr})
 		}
 	}
+	if authored, ok := authoredMachineNetworks(catalog, cluster); ok {
+		machineNetworks = nil
+		for _, cidr := range authored {
+			machineNetworks = append(machineNetworks, map[string]any{"cidr": cidr})
+		}
+	}
 	if len(machineNetworks) == 0 {
 		return nil, refusalAt("api.required", "$.spec.nodes", "the cluster declares no node, so no Network holds its installation addresses",
 			"declare the nodes of "+cluster.Identity()+" in spec.nodes")
