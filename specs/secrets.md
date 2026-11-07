@@ -223,10 +223,7 @@ both use unpadded base64url. TLS/CA uses P-256, PKCS#8 PEM, X.509,
 random nonzero 128-bit serial, injected UTC-second clock and declared validity.
 A generated certificate starts 24 hours before its generation second, so a
 verifier whose clock trails accepts it, and ends `validityDays` after that
-second. A certificate an earlier build generated, starting at its generation
-second and ending `validityDays` later, stays current and is never re-minted;
-the validity window alone cannot tell such a certificate of `validityDays` N+1
-from one of N generated now, which the declaration fingerprint tells apart.
+second.
 Without `source.generated.issuerRef`, certificates are self-signed. With it,
 a TLS Secret names a generated `caBundle` (owner decision D175, 2026-10-22).
 Only TLS accepts the field, and a CA cannot have an issuer; cycles and external
@@ -270,8 +267,7 @@ generation and entropy. Do not import unrelated x/crypto packages.
 Bind/Reopen/Release operate on whole versions with opaque IDs. Bind pins the
 current keyring version of each declaration, and a store refuses a binding
 input that names no version it holds. Reopen reads only the versions a binding
-holds, including one an earlier build froze from the retired
-[file source](api/secrets.md#file-source), and never reads a source path.
+holds, and never reads a source path.
 Replacement/deletion/rotation preserve bound versions; release drops only its
 references.
 [State reconciliation](state-reconciliation.md#plan-and-execution) is the
@@ -338,17 +334,10 @@ presented at its current version only through the recorded
 which issues a new binding version; effect material and a trust anchor refuse
 it (`TestAHostRebindsNoTrustAnchor`).
 
-"A Secret declaration's fingerprint drops its provenance and covers type,
-source and parameters only, and a stored version whose fingerprint equals the
-legacy one stays current" (D71). The legacy fingerprint is the one earlier
-builds stored, which also covered the declaring file's path and document index;
-a binding of such a version carries the declaration in that encoding. So an
-identical import from another directory, or with its documents reordered,
-keeps current every version stored under this rule. A version stored before it
-matches only through its legacy fingerprint, so it stays current while its
-declaring file's path and document index are unchanged, and the first import
-from another directory or with its documents reordered stales it once; nothing
-is re-minted or rewritten at the upgrade. Changed declarations make retained
+A Secret declaration's fingerprint drops its provenance and covers type,
+source and parameters only (D71), so an identical import from another
+directory, or with its documents reordered, keeps current every stored
+version. Changed declarations make retained
 values stale/orphaned, never automatically import/generate/delete. Context deletion permanently removes the
 verified keyring under [permanent deletion](contexts.md#permanent-deletion),
 including an orphan-acknowledged deletion, which abandons the context's realized
@@ -487,14 +476,14 @@ or effects beyond the current command. Unsupported IDs refuse before session
 acquisition. The encrypted metadata contains `minReader`, `activeKey`, `keys`,
 `versions`, `current`, `bindings` and `produced`. `minReader` is the oldest
 reader version that can read it, written by every publication as the writing
-build's reader version (1 now) and absent from metadata earlier builds wrote; a
-reader checks it before decoding the rest, and metadata naming a newer reader
-refuses `secret.store.newer`, saying the store is intact and naming the newer
-build as its remedy, never a restore or purge
+build's `readerVersion`; a reader admits any value from 1 to its own
+`readerVersion` and checks it before
+decoding the rest, and metadata naming a newer reader refuses
+`secret.store.newer`, saying the store is intact and naming the newer build as
+its remedy, never a restore or purge
 (`TestMetadataForANewerReaderRefusesAsNewerNotCorrupt`). A member a newer build
-adds raises `minReader` rather than `formatVersion`. A build older than this
-guard reads metadata with a member it does not know as `secret.store.corrupt`;
-that store is intact too, and the remedy is the newer build
+adds raises `minReader` rather than `formatVersion`, so a build that does not
+know the member refuses by version, never as `secret.store.corrupt`
 ([version skew](../.agents/knowledge/keyring-reader-version-skew.md)).
 
 Each key record stores `id` and committed `seals`; presentation derives its
@@ -601,7 +590,7 @@ owns, then `bootwright context delete --name <name> --purge --allow-orphans`,
 which abandons them to be removed by hand, and create the context again.
 
 A `store.json` that names a backend this
-build's catalog lacks, `local-keyring-v3` included, refuses every access,
+build's catalog lacks refuses every access,
 `secret encryption init` included, with `secret.store.implementation` before
 any session, naming that backend and the remedy: destroy the context's effects
 with a Bootwright build that opens the store, or abandon them with
@@ -633,8 +622,7 @@ returns 1 with one diagnostic per Secret that is not available: missing as
 its validation gave. List rows: name/type/source/parts/state/nullable
 currentVersion/currentSequence/boundVersions; states current/stale/orphaned.
 `sequence` and `currentSequence` are the
-[per-secret ordinal](cli/output.md#json-output). A version an earlier build
-froze from a file source is never listed.
+[per-secret ordinal](cli/output.md#json-output).
 
 Encryption status fields: initialized/nullable implementation/nullable activeKey/
 keys/items. Implementation exposes type/component references/state, no paths or

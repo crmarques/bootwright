@@ -69,7 +69,7 @@ func FuzzCanonicalStoreSizePreflight(f *testing.F) {
 		for _, value := range []any{
 			[]string{first, second},
 			envelope{Purpose: first, Ciphertext: second},
-			secrets.Declaration{Origin: first, Generation: secrets.Generation{DNSNames: []string{first, second}}},
+			secrets.Declaration{Name: first, Generation: secrets.Generation{DNSNames: []string{first, second}}},
 			indexRecord{ActiveKey: first, Keys: []storedKey{{ID: second}}},
 		} {
 			encoded, err := json.Marshal(value)

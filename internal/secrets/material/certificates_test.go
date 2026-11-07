@@ -2,7 +2,6 @@ package material
 
 import (
 	"context"
-	"crypto"
 	cryptorand "crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -16,15 +15,6 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
-
-// earlierRule signs a generated certificate as an earlier build did: from the
-// generation second, not a day before it.
-type earlierRule struct{ standardCryptography }
-
-func (c earlierRule) CreateCertificate(template, parent *x509.Certificate, public crypto.PublicKey, private crypto.Signer) ([]byte, error) {
-	template.NotBefore = template.NotBefore.Add(certificateBackdate)
-	return c.standardCryptography.CreateCertificate(template, parent, public, private)
-}
 
 func generatedCertificate(t *testing.T, service *Service, declaration secrets.Declaration) (secrets.Material, *x509.Certificate) {
 	t.Helper()
@@ -43,7 +33,7 @@ func generatedCertificate(t *testing.T, service *Service, declaration secrets.De
 
 // A generated certificate starts 24 hours before its generation second, so a
 // verifier whose clock trails accepts it, and ends validityDays after that
-// second; one an earlier build started at that second stays current.
+// second.
 func TestGeneratedCertificatesStartADayEarlier(t *testing.T) {
 	generated := generationTime.UTC().Truncate(time.Second)
 	at := func(moment time.Time) Options {
@@ -74,17 +64,6 @@ func TestGeneratedCertificatesStartADayEarlier(t *testing.T) {
 		t.Fatalf("a one-day certificate refused within its day: %+v", diagnostics.Of(err))
 	}
 	assertFailureCode(t, New(nil, at(generated.Add(24*time.Hour+time.Second))).Validate(context.Background(), oneDay, short), "secret.input")
-
-	earlier := at(generated)
-	earlier.Cryptography = earlierRule{}
-	previous, certificate := generatedCertificate(t, New(nil, earlier), declaration)
-	defer previous.Clear()
-	if !certificate.NotBefore.Equal(generated) || !certificate.NotAfter.Equal(generated.AddDate(0, 0, 30)) {
-		t.Fatalf("the earlier rule's validity = %v to %v", certificate.NotBefore, certificate.NotAfter)
-	}
-	if err := New(nil, at(generated.Add(time.Hour))).Validate(context.Background(), declaration, previous); err != nil {
-		t.Fatalf("a certificate generated under the earlier rule is no longer current: %+v", diagnostics.Of(err))
-	}
 }
 
 func rsaCertificate(t *testing.T, bits int, authority bool) secrets.Material {

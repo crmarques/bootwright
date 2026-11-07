@@ -76,7 +76,7 @@ type boundedRun struct {
 // retireRuns removes the oldest runs no live run holds until fewer than
 // maxBoundedRuns remain, so the run about to open is among the newest the area
 // keeps. It syncs the area once, after every removal, because the first run
-// over an area an earlier build filled may remove thousands.
+// over an area an interrupted retention left full may remove thousands.
 func (s *Store) retireRuns(ctx context.Context, runs *directory) error {
 	candidates, err := listRuns(ctx, runs)
 	if err != nil {

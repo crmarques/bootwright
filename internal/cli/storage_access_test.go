@@ -50,7 +50,7 @@ func TestKeyringExactBytes(t *testing.T) {
 		keyringTargetRefusal,
 		diagnostics.NewFailureWithRemediation("cluster.not-applicable", "bootwright cluster keyring does not apply to edge, an OpenShiftCluster; it applies to managed CephClusters only", "", "bootwright cluster info --context lab lists the clusters this context selects and their kinds"),
 		diagnostics.NewFailureWithRemediation("access.unavailable", "this context holds no keyring for CephClient vm-disks of CephCluster storage", "", "bootwright apply --context lab --stage clusters"),
-		secretstore.Failure("store.implementation", "this context's secret store is local-keyring-v3, which this Bootwright build cannot open"),
+		secretstore.Failure("store.implementation", "this context's secret store is unknown-keyring, which this Bootwright build cannot open"),
 	} {
 		code, out, errOut, _ := runKeyring(nil, failure)
 		if code != 1 || out != "" || strings.Count(errOut, "  error  ") != 1 {

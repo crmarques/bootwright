@@ -375,7 +375,7 @@ func entryNames(ctx context.Context, area secretstore.Area, directory string) (m
 }
 
 func validateIndex(index indexRecord, selector secretstore.Selector) error {
-	if index.FormatVersion != formatVersion || index.MinReader < 0 || index.Algorithm != algorithm || index.Selector != selector || !validID(index.ActiveKey, "key-") || index.Keys == nil || index.Versions == nil || index.Current == nil || index.Bindings == nil || index.Produced == nil || len(index.Keys) == 0 || len(index.Versions) > secrets.MaxVersions || len(index.Bindings) > maxBindings || len(index.Produced) > secrets.MaxVersions {
+	if index.FormatVersion != formatVersion || index.MinReader < 1 || index.MinReader > readerVersion || index.Algorithm != algorithm || index.Selector != selector || !validID(index.ActiveKey, "key-") || index.Keys == nil || index.Versions == nil || index.Current == nil || index.Bindings == nil || index.Produced == nil || len(index.Keys) == 0 || len(index.Versions) > secrets.MaxVersions || len(index.Bindings) > maxBindings || len(index.Produced) > secrets.MaxVersions {
 		return errors.New("invalid index header")
 	}
 	keys := make(map[string]storedKey, len(index.Keys))
@@ -426,7 +426,7 @@ func validateIndex(index indexRecord, selector secretstore.Selector) error {
 	previous = ""
 	for _, current := range index.Current {
 		version, exists := versions[current.Version]
-		if !exists || !validName(current.Name) || current.Name <= previous || currentNames[current.Name] || version.Declaration.Name != current.Name || version.Declaration.Source == "file" || version.Declaration.Source == producedSource {
+		if !exists || !validName(current.Name) || current.Name <= previous || currentNames[current.Name] || version.Declaration.Name != current.Name || version.Declaration.Source == producedSource {
 			return errors.New("invalid current mapping")
 		}
 		currentNames[current.Name], referenced[current.Version] = true, true

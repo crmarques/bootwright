@@ -201,7 +201,7 @@ func TestAnUninstallRefusesBeforeAnyEffect(t *testing.T) {
 		"a foreign record":         {view: foreign, code: uninstallCode, message: "written by another Bootwright build"},
 		"a dependent package":      {view: installReceipt(), erase: failure(uninstallCode, "other installed packages require podman: cockpit-podman", ""), code: uninstallCode, message: "cockpit-podman"},
 		"an unreadable provider":   {view: receiptView(receipt("podman", "podman", "setup-000001")), code: uninstallCode, message: "cannot read"},
-		"a store this build skips": {view: installReceipt(), busy: failure("context.state", "registry version 5", ""), code: "context.state", message: "registry version 5"},
+		"a store this build skips": {view: installReceipt(), busy: failure("context.state", "registry version 99", ""), code: "context.state", message: "registry version 99"},
 	}
 	for name, test := range cases {
 		t.Run(name, func(t *testing.T) {

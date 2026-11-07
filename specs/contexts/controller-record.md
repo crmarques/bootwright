@@ -50,10 +50,7 @@ The private Controller record version is `3`. Its fields are `version`,
 encoded as compact JSON in schema order followed by LF. It holds nothing of a
 setup: the setup receipt, the pending intent and the runtimes live in the
 [setup subtree](#the-setup-subtree). Unknown fields, duplicate keys,
-noncanonical records and every other version refuse, among them a version 2
-record an earlier build wrote; a store that holds one also holds registry
-version 5, which [refuses first](../contexts.md#storage-locking-and-publication)
-with the fresh-install remedy. A record is proved canonical by re-encoding
+noncanonical records and every other version refuse. A record is proved canonical by re-encoding
 what was read and comparing it byte for byte, so a field added to any value
 this record contains must encode to nothing when it is unset. The host
 contains the confidential
@@ -80,27 +77,18 @@ unique key list, plus `objectKind`, the API kind of the object the claim
 reserves for, present on a claim whose capability kind does not name it (a
 `cluster-media` claim records its cluster family kind), which a
 [conflict diagnostic](../infrastructure-services.md#host-reservations) names
-the claim's object by. It is added under version 3 without a version move, as
-the releasing marker was (B839), so no controller needs a fresh install: a
-claim an earlier build published records none, still conflicts and is named
-by its capability kind and service, and its next apply records it
-(`TestAClaimIsNamedByTheAPIKindItRecords`,
-`TestAClaimRecordsItsAPIKindOverOneAnEarlierBuildHeld`); a value that is not
-an API kind name, an upper-case letter then at most 62 letters and digits,
-refuses the record, and an earlier build, whose decoder refuses a member it
-does not declare, refuses a record holding one. The member persists for the
-claim's life, so once an apply records a `cluster-media` claim no earlier
-build reads that host's controller record, for any context, until that claim
-is released; a claim whose capability kind already names its object (a
-`proxy` claim, say) holding the member refuses the record
-(`TestAVersion3RecordHoldsTheAPIKindAClaimReservesFor`). Each entry also holds
+the claim's object by. A claim that records none is named by its capability
+kind and service (`TestAClaimIsNamedByTheAPIKindItRecords`); a value that is
+not an API kind name, an upper-case letter then at most 62 letters and
+digits, refuses the record, and so does a claim whose capability kind already
+names its object (a `proxy` claim, say) holding the member
+(`TestARecordHoldsTheAPIKindAClaimReservesFor`). Each entry also holds
 a shared marker present only on a shared claim and a
 releasing marker present only on a claim whose removal re-proved its release
 before an effect (B839): it stays until the claim is released, by the
 completed removal or the holder's deletion, and while it stands a claim another context makes on a
 key that release guards refuses
-([host reservations](../infrastructure-services.md#host-reservations)); an
-earlier build refuses a record holding one as an unknown field. Entries are
+([host reservations](../infrastructure-services.md#host-reservations)). Entries are
 ordered by context name then kind then service. A claim a block places on
 an SSH host that is not the controller prefixes every key with
 `ssh/<address>:<port>/`, the SSH address as declared (an IP in canonical form,
@@ -109,20 +97,16 @@ connects to; the same claim's keys are published again prefixed by
 `sshkey/SHA256:<digest>/`, the host key its placement Machine pins, in
 unpadded URL-safe base64 ([host reservations](../infrastructure-services.md#host-reservations));
 keys with two qualifiers, or one and none, never conflict, and
-keys with one qualifier conflict by their class's relation. The host-key form
-was added under version 3 (D188) as the address form was. Version 3 holds
-keys with or without the qualifier, side by side in one record: the qualifier
-was added under version 3 (Q96) without a version move, because every earlier
-entry is a valid unqualified claim, so a record an earlier build wrote reads
-unchanged and each context publishes its SSH-qualified claims on its next
-apply. A record of any other version is not read, and no build converts one.
-A controller read and every context transaction refuse with `context.state`,
-"controller evidence version N is unsupported: this build reads version 3 only
-and converts none", and the same fresh-install remedy a registry version 5
-names ([contexts](../contexts.md#storage-locking-and-publication)): with a
-build that reads the record, destroy each environment and delete each context,
-then, as root, remove `/var/lib/bootwright` and `/var/lib/bootwright-staging`
-and run `bootwright controller install`. No command rebuilds the record alone: it is
+keys with one qualifier conflict by their class's relation. A record holds
+keys with or without the qualifier, side by side
+(`TestARecordHoldsUnqualifiedAndSSHQualifiedKeys`). A record of any other
+version is not read, and no build converts one. A controller read and every
+context transaction refuse with `context.state`, "controller evidence version
+N is unsupported: this build reads version M only and converts none", M being
+`ControllerRecordVersion`, and the fresh-install remedy: with a build that reads the
+record, destroy each environment and delete each context, then, as root,
+remove `/var/lib/bootwright` and `/var/lib/bootwright-staging` and run
+`bootwright controller install`. No command rebuilds the record alone: it is
 published by the first binding of an apply on a root that holds none, and a
 root holding one never gets a second. The fresh install also drops the host's
 contexts with their Secrets and its stored media, which `bootwright context init`
@@ -144,8 +128,7 @@ never hosted a service is unchanged.
 The state record is bounded to 4 MiB, with at most 4096 tool source
 identities, 4096 bindings and 256 reservations of at most 128 keys of 256 bytes
 each: a claim holds at most 64 keys, and an SSH-placed claim publishes each in
-both its address and its host-key form (D188); an earlier build, whose
-bound was 64, refuses a record holding more. The 4 MiB state bound is reached
+both its address and its host-key form (D188). The 4 MiB state bound is reached
 before 256 reservations of 128 maximal keys, and a publication past it
 refuses as an encoding-limit state error, writing nothing. Controller records allow nesting depth 16 and 32 fields per object;
 other durable records keep their own bounds. An apply whose reservations would

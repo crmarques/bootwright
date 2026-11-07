@@ -30,7 +30,7 @@ func (s Service) resolve(ctx context.Context, name string) (secretstore.Context,
 	}
 	state, _, err := s.compiler.Compile(ctx, snapshot.Inputs)
 	if err != nil {
-		return secretstore.Context{}, nil, secrets.NameFileSourceContext(err, snapshot.Context.Name, secrets.FileSourceRerun{Command: secrets.FileSourceUpdate})
+		return secretstore.Context{}, nil, err
 	}
 	if state == nil {
 		return secretstore.Context{}, nil, secretstore.Failure("declaration", "secret declarations could not be compiled")
@@ -40,11 +40,7 @@ func (s Service) resolve(ctx context.Context, name string) (secretstore.Context,
 		if object.Kind() != api.Secret {
 			continue
 		}
-		origin, ok := state.Origin(object.Identity())
-		if !ok {
-			return secretstore.Context{}, nil, secretstore.Failure("declaration", "secret declaration provenance is unavailable")
-		}
-		declarations = append(declarations, declarationOf(object, origin))
+		declarations = append(declarations, declarationOf(object))
 	}
 	slices.SortFunc(declarations, func(a, b secrets.Declaration) int {
 		if a.Name < b.Name {
@@ -58,12 +54,12 @@ func (s Service) resolve(ctx context.Context, name string) (secretstore.Context,
 	return snapshot.Context, declarations, nil
 }
 
-func declarationOf(object api.Object, origin diagnostics.SourceLocation) secrets.Declaration {
+func declarationOf(object api.Object) secrets.Declaration {
 	spec := object.Spec()
 	d := secrets.Declaration{Name: object.Name(), Type: spec.Get("type").Text(), Source: "contextStore"}
 	if g := spec.Get("source", "generated"); g.Present() {
 		d.Source = "generated"
-		d.Generation = secrets.Generation{IssuerRef: g.Get("issuerRef").Text(), Username: g.Get("username").Text(), CommonName: g.Get("commonName").Text(), DNSNames: g.Get("dnsNames").Strings(), IPAddresses: g.Get("ipAddresses").Strings(), KeyType: custodyKeyType(g.Get("keyType").Text()), Comment: g.Get("comment").Text()}
+		d.Generation = secrets.Generation{IssuerRef: g.Get("issuerRef").Text(), Username: g.Get("username").Text(), CommonName: g.Get("commonName").Text(), DNSNames: g.Get("dnsNames").Strings(), IPAddresses: g.Get("ipAddresses").Strings(), KeyType: g.Get("keyType").Text(), Comment: g.Get("comment").Text()}
 		validity, _ := g.Get("validityDays").Int64()
 		d.Generation.ValidityDays = int(validity)
 		entropy, ok := g.Get("bytes").Int64()
@@ -72,21 +68,8 @@ func declarationOf(object api.Object, origin diagnostics.SourceLocation) secrets
 		}
 		d.Generation.Bytes = int(entropy)
 	}
-	// Only non-secret declaration data enters these identity digests. The
-	// legacy one also covers where the declaration was read from, so a version
-	// an earlier build stored stays current while that place is unchanged.
-	legacy := d
-	legacy.Origin, legacy.Document = origin.Path, origin.Document
-	d.LegacyFingerprint, d.LegacyOrigin, d.LegacyDocument = fingerprint(legacy), origin.Path, origin.Document
 	d.Fingerprint = fingerprint(d)
 	return d
-}
-
-func custodyKeyType(keyType string) string {
-	if stored, ok := map[string]string{"ecdsaP256": "ecdsa-p256", "ecdsaP384": "ecdsa-p384", "ecdsaP521": "ecdsa-p521"}[keyType]; ok {
-		return stored
-	}
-	return keyType
 }
 
 func fingerprint(d secrets.Declaration) string {

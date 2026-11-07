@@ -33,8 +33,9 @@ reference resolves by `metadata.name` and must accept the declared type.
 ### Source union
 
 `spec.source` contains fields in the order `contextStore` then `generated`;
-the retired `file` arm is refused, never emitted. At most one arm may be
-present. An omitted source first receives any applicable Environment kind
+desired state names no path that a lifecycle operation reads after
+admission (the [copied-input rule](../project.md#design-priorities-and-non-goals)).
+At most one arm may be present. An omitted source first receives any applicable Environment kind
 default; if it remains omitted, it selects context storage and stays omitted canonically. An authored `source: {}` blocks
 Environment source inheritance and explicitly selects context storage;
 normalization emits `source: {contextStore: {}}` so internal effective-state
@@ -45,7 +46,6 @@ remains explicit.
 | Arm | Meaning |
 | --- | --- |
 | `contextStore: {}` | Material lives only in confidential per-context storage. This is the semantic default and is legal for every type. |
-| `file` | Retired: compilation refuses it, naming its [replacement](#file-source). |
 | `generated` | Material is minted from type-scoped parameters; legal only for `token`, `usernamePassword`, `tlsCertificate`, `caBundle`, and `sshKeyPair`. |
 
 Each Secret owns its source. Supplied material enters Bootwright storage only
@@ -59,51 +59,6 @@ compiler validates the declaration without accessing the confidential store
 or requiring an entry to exist. Store formats, encryption, key management and
 materialization belong to their separately qualified consumers; declaring this
 source does not implement them.
-
-### File source
-
-The `file` arm is retired under the
-[copied-input rule](../project.md#design-priorities-and-non-goals): desired
-state names no path that a lifecycle operation reads after admission.
-Compilation refuses `source.file` in every type's shape (`path`, `cert` with
-`key`, or `privateKey` with an optional `publicKey`), whether authored or
-supplied by an [Environment kind default](environment.md#kind-defaults), with
-`api.field`, before it opens any path. The refusal of an authored arm, at
-`$.spec.source.file`, names the Secret and its remedy: declare
-`source: {contextStore: {}}` and load the files with
-`bootwright secret set --name <n> --context <context>` followed by the file
-flags of the declared type in the
-[set table](../secrets.md#acquisition-and-commands), each as `<flag> <path>`,
-an optional one in brackets, after `--username <username>` for a
-`usernamePassword` Secret. A name that is not a valid object name prints as
-`<name>`. `<context>` is the context the invocation reads: the one `validate`
-names, or the selected one when `validate` reads no file; the one a `secret`
-command acts on; and the one `context init` or `context update` names. Since
-the input those two refuse reaches no context, their remedy first reruns that
-command, `bootwright context init` or `context update` `--name <context>
---input-dir <dir>`, after the declaration is fixed in the input, then names
-`secret set`; this holds for the kind-default remedy below too. A `secret`
-command acting on a context whose stored input still holds the arm names the
-same `context update` rerun, since the stored input must be corrected and
-re-imported before `secret set` can load files. A rerun of an
-invocation also given a Context configuration file keeps it, as `--name
-<context> -f <file> --input-dir <dir>`, so following the remedy never drops
-that configuration.
-`validate -f`, which reads no context, prints the `<context>` placeholder.
-
-A kind default that supplies the arm is refused twice. The Environment is
-refused at `$.spec.defaults.Secret.source.file`, with the remedy to replace the
-arm in that default with `source: {contextStore: {}}`, then run
-`bootwright secret set --name <name> --context <context>`, its `<context>`
-named as above, with the file flags
-of its type for each
-Secret that inherits it; when the default declares a type, the remedy names
-that type's file flags as above. Each Secret that inherits the arm is refused
-at `$.spec.source.file`, located at the default, with the remedy of every
-inherited field: override the field on that Secret or correct its Environment
-kind default. A version an earlier build froze from a file source
-stays in the binding that holds it
-([immutable binding](../secrets.md#immutable-binding-and-contexts)).
 
 ### Generated source
 

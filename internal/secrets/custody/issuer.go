@@ -43,7 +43,7 @@ func (s Service) generateOne(ctx context.Context, session secretstore.StoreSessi
 		}
 	}
 	version, exists := currentVersion(snapshot, issuer.Name)
-	if !exists || !issuer.Current(version.Declaration.Fingerprint) {
+	if !exists || version.Declaration.Fingerprint != issuer.Fingerprint {
 		return secrets.Material{}, secretstore.Failure("source", "TLS issuer has no current proved material")
 	}
 	material, err := session.Read(ctx, version.ID)

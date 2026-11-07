@@ -2,8 +2,6 @@ package custody
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/desiredstate/yamlstream"
@@ -414,92 +411,6 @@ func TestStoredDeclarationSummaryRetainsStalenessIdentity(t *testing.T) {
 	}
 }
 
-// legacyFingerprint is the digest an earlier build stored: the declaration's
-// canonical JSON with the path and document index it was read from.
-func legacyFingerprint(t *testing.T, d secrets.Declaration, path string, document int) string {
-	t.Helper()
-	d.Origin, d.Document, d.Fingerprint = path, document, ""
-	d.LegacyFingerprint, d.LegacyOrigin, d.LegacyDocument = "", "", 0
-	canonical, err := json.Marshal(d)
-	if err != nil {
-		t.Fatal(err)
-	}
-	digest := sha256.Sum256(canonical)
-	return hex.EncodeToString(digest[:])
-}
-
-// A version an earlier build stored under the fingerprint that covered its
-// declaring path and document stays current for every command while that place
-// is unchanged, and a version matching neither digest is stale (D71).
-func TestAVersionStoredUnderTheLegacyFingerprintStaysCurrent(t *testing.T) {
-	for _, stored := range []string{"legacy", "neither"} {
-		t.Run(stored, func(t *testing.T) {
-			service, access, material, _ := serviceFixture(t, declarationYAML("generated", "  source: {generated: {bytes: 32}}\n")+declarationYAML("stored", ""))
-			ctx := context.Background()
-			_, declarations, err := service.resolve(ctx, "")
-			if err != nil || len(declarations) != 2 {
-				t.Fatal(declarations, err)
-			}
-			session := access.session
-			for index, d := range declarations {
-				if d.Origin != "" || d.Document != 0 || d.LegacyOrigin != "/synthetic/environment.yaml" {
-					t.Fatalf("declaration %s carries its provenance in its fingerprint: %+v", d.Name, d)
-				}
-				fingerprint := legacyFingerprint(t, d, "/synthetic/environment.yaml", d.LegacyDocument)
-				if fingerprint != d.LegacyFingerprint || fingerprint == d.Fingerprint {
-					t.Fatalf("legacy fingerprint of %s = %s, want %s", d.Name, d.LegacyFingerprint, fingerprint)
-				}
-				if stored == "neither" {
-					fingerprint = legacyFingerprint(t, d, "/synthetic/moved.yaml", d.LegacyDocument)
-				}
-				id := fmt.Sprintf("version-legacy-%d", index)
-				session.materials[id] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("synthetic-value")})
-				session.snapshot.Versions = append(session.snapshot.Versions, secretstore.Version{ID: id, Declaration: secrets.VersionDeclaration{Name: d.Name, Type: d.Type, Source: d.Source, Fingerprint: fingerprint}, Parts: []secrets.Part{secrets.ValuePart}})
-				session.snapshot.Current = append(session.snapshot.Current, secretstore.Current{Name: d.Name, Version: id})
-			}
-			check, checkErr := service.Check(ctx, CheckRequest{})
-			list, listErr := service.List(ctx, ListRequest{})
-			if stored == "neither" {
-				if checkErr == nil || check == nil || check.Secrets[0].Status != "stale" || check.Secrets[1].Status != "stale" || listErr != nil || list.Secrets[0].State != "stale" {
-					t.Fatal("a version matching neither fingerprint read as current", check, checkErr, list, listErr)
-				}
-				if _, err := service.Bind(ctx, BindRequest{Names: []string{"generated", "stored"}}); err == nil || len(session.bound) != 0 {
-					t.Fatal("a stale version was bound")
-				}
-				return
-			}
-			if checkErr != nil || check.Secrets[0].Status != "available" || check.Secrets[1].Status != "available" {
-				t.Fatal("a version under the legacy fingerprint read as unavailable", check, checkErr)
-			}
-			if listErr != nil || len(list.Secrets) != 2 || list.Secrets[0].State != "current" || list.Secrets[1].State != "current" {
-				t.Fatal("a version under the legacy fingerprint listed as not current", list, listErr)
-			}
-			generated, err := service.Generate(ctx, GenerateRequest{})
-			if err != nil || generated.Changed != 0 || generated.Unchanged != 1 || material.generated != 0 {
-				t.Fatal("generate re-minted a version under the legacy fingerprint", generated, err)
-			}
-			shown, err := service.Show(ctx, ShowRequest{Name: "stored", Part: secrets.ValuePart})
-			if err != nil {
-				t.Fatal("show refused a version under the legacy fingerprint", err)
-			}
-			shown.Material.Clear()
-			if _, err := service.Bind(ctx, BindRequest{Names: []string{"generated", "stored"}}); err != nil || len(session.bound) != 2 {
-				t.Fatal("bind refused a version under the legacy fingerprint", err)
-			}
-			for _, input := range session.bound {
-				version, _ := currentVersion(session.snapshot, input.Declaration.Name)
-				if input.Declaration.Summary() != version.Declaration || input.Declaration.Origin != "/synthetic/environment.yaml" {
-					t.Fatalf("bind of %s carried a declaration its stored version was not written with: %+v", input.Declaration.Name, input.Declaration)
-				}
-			}
-			set, err := service.Set(ctx, SetRequest{Name: "stored", SkipConfirmation: true, Input: secrets.Input{ValueStdin: true}})
-			if err != nil || set.Unchanged != 1 || set.Changed != 0 {
-				t.Fatal("equal material replaced a version under the legacy fingerprint", set, err)
-			}
-		})
-	}
-}
-
 // Bind, check and show read only keyring versions for every source: the one
 // acquisition that opens an operator path is secret set's.
 func TestBindCheckAndShowReadOnlyKeyringVersions(t *testing.T) {
@@ -549,84 +460,6 @@ func TestBindCheckAndShowReadOnlyKeyringVersions(t *testing.T) {
 	result, err = s.Check(ctx, CheckRequest{})
 	if err == nil || result != nil {
 		t.Fatal("corrupt store produced trustworthy partial result")
-	}
-}
-
-// A declaration that still names the retired file source refuses every
-// command at compilation, with a remedy that re-imports the corrected input
-// into the command's context before secret set, before the store is opened or
-// a path is read.
-func TestAFileSourceRefusesEveryCommandBeforeTheStore(t *testing.T) {
-	operations := map[string]func(*Service) error{
-		"bind": func(s *Service) error {
-			_, err := s.Bind(context.Background(), BindRequest{Names: []string{"file"}})
-			return err
-		},
-		"check": func(s *Service) error {
-			_, err := s.Check(context.Background(), CheckRequest{})
-			return err
-		},
-		"show": func(s *Service) error {
-			_, err := s.Show(context.Background(), ShowRequest{Name: "file", Part: secrets.ValuePart})
-			return err
-		},
-		"set": func(s *Service) error {
-			_, err := s.Set(context.Background(), SetRequest{Name: "file", Input: secrets.Input{ValueFile: "value"}})
-			return err
-		},
-		"list": func(s *Service) error {
-			_, err := s.List(context.Background(), ListRequest{})
-			return err
-		},
-		"generate": func(s *Service) error {
-			_, err := s.Generate(context.Background(), GenerateRequest{Name: "file"})
-			return err
-		},
-		"delete": func(s *Service) error {
-			_, err := s.Delete(context.Background(), DeleteRequest{Name: "file"})
-			return err
-		},
-	}
-	for name, invoke := range operations {
-		t.Run(name, func(t *testing.T) {
-			service, access, material, _ := unresolvedFixture(declarationYAML("file", "  source: {file: {path: secrets/token}}\n"))
-			refused := false
-			for _, d := range diagnostics.Of(invoke(service)) {
-				refused = refused || d.Code == "api.field" && d.Field == "$.spec.source.file" && strings.Contains(d.Remediation, "in the input, rerun bootwright context update --name fixture --input-dir <dir>, then run bootwright secret set --name file --context fixture --value-file <path>") && !strings.Contains(d.Remediation, "<context>")
-			}
-			if !refused {
-				t.Fatal("the file source was not refused with its remedy")
-			}
-			if access.views != 0 || access.transactions != 0 || material.acquired != 0 || material.validated != 0 || access.session.reads != 0 {
-				t.Fatal("a refused declaration reached the store or its material")
-			}
-		})
-	}
-}
-
-// A removal reopens the binding its apply froze without compiling the desired
-// state, so a version an earlier build froze from a file source still reaches
-// it after compilation began refusing that source, and nothing is read from
-// the path it once named.
-func TestAVersionFrozenFromAFileStillReopens(t *testing.T) {
-	service, access, material, _ := unresolvedFixture(declarationYAML("file", "  source: {file: {path: secrets/token}}\n"))
-	frozen := secretstore.Version{ID: "version-file", Declaration: secrets.VersionDeclaration{Name: "file", Type: "token", Source: "file"}, Parts: []secrets.Part{secrets.ValuePart}}
-	access.session.snapshot.Bindings = []secretstore.Binding{{ID: "binding-earlier", Versions: []string{frozen.ID}}}
-	access.session.reopened = []secretstore.BoundMaterial{{Version: frozen, Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("frozen-token")})}}
-	bound, err := service.Reopen(context.Background(), BindingRequest{ContextName: "fixture", BindingID: "binding-earlier"})
-	if err != nil || len(bound) != 1 || bound[0].Version.ID != frozen.ID {
-		t.Fatal(bound, err)
-	}
-	value, _ := bound[0].Material.Part(secrets.ValuePart)
-	defer clear(value)
-	if string(value) != "frozen-token" {
-		t.Fatal("reopened material differs from the frozen version")
-	}
-	if compiled := service.compiler.(*countingCompiler).calls; compiled != 0 || material.acquired != 0 || material.validated != 0 {
-		t.Fatalf("reopen compiled %d times or acquired material", compiled)
-	}
-	if _, err := service.Bind(context.Background(), BindRequest{Names: []string{"file"}}); err == nil || len(access.session.bound) != 0 {
-		t.Fatal("a new binding of the file source was made")
 	}
 }
 
@@ -746,19 +579,5 @@ func TestReadinessNamesMissingAndStaleSecretsFromTheListingAlone(t *testing.T) {
 	a.failure = secretstore.Failure("store.corrupt", "tampered")
 	if rows, err := s.Readiness(ctx, ReadinessRequest{}); err == nil || rows != nil {
 		t.Fatal("a corrupt store produced a partial listing", rows, err)
-	}
-}
-
-func TestARenamedKeyTypeKeepsTheStoredFingerprint(t *testing.T) {
-	hostKey := func(keyType string) secrets.Declaration {
-		object := api.NewObject(api.Secret, "host-key", api.Value{}, api.MapValue(api.FieldValue{Name: "type", Value: api.StringValue("sshKeyPair")},
-			api.FieldValue{Name: "source", Value: api.MapValue(api.FieldValue{Name: "generated", Value: api.MapValue(api.FieldValue{Name: "keyType", Value: api.StringValue(keyType)})})}))
-		return declarationOf(object, diagnostics.SourceLocation{Path: "secrets.yaml"})
-	}
-	for renamed, stored := range map[string]string{"ecdsaP256": "ecdsa-p256", "ecdsaP384": "ecdsa-p384", "ecdsaP521": "ecdsa-p521", "ed25519": "ed25519"} {
-		declaration, earlier := hostKey(renamed), hostKey(stored)
-		if declaration.Generation.KeyType != stored || declaration.Fingerprint != earlier.Fingerprint || declaration.LegacyFingerprint != earlier.LegacyFingerprint {
-			t.Errorf("keyType %s is stored as %q with fingerprint %s, want %q and %s", renamed, declaration.Generation.KeyType, declaration.Fingerprint, stored, earlier.Fingerprint)
-		}
 	}
 }

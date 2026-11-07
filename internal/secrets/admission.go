@@ -1,7 +1,6 @@
 package secrets
 
 import (
-	"errors"
 	"net/netip"
 	"slices"
 	"strings"
@@ -9,7 +8,6 @@ import (
 	"unicode/utf8"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func Normalize(object api.Object, _ api.Catalog) (api.Object, []api.Issue) {
@@ -65,13 +63,13 @@ func DeriveCertificateNames(object api.Object, catalog api.Catalog, consumers ..
 }
 
 func ValidateAuthored(object api.Object, catalog api.Catalog) []api.Issue {
-	return validate(object, true, false)
+	return validate(object, true)
 }
 func ValidatePartial(object api.Object, catalog api.Catalog) []api.Issue {
-	return validate(object, true, true)
+	return validate(object, true)
 }
 func Validate(object api.Object, catalog api.Catalog) []api.Issue {
-	issues := validate(object, false, false)
+	issues := validate(object, false)
 	if ref := object.Spec().Get("source", "generated", "issuerRef").Text(); object.Kind() == api.Secret && ref != "" {
 		issuer, found := catalog.Find(api.Secret, ref)
 		if !found || issuer.Spec().Get("type").Text() != "caBundle" || !issuer.Spec().Has("source", "generated") || issuer.Spec().Has("source", "generated", "issuerRef") {
@@ -81,7 +79,7 @@ func Validate(object api.Object, catalog api.Catalog) []api.Issue {
 	return issues
 }
 
-func validate(object api.Object, partial, kindDefault bool) []api.Issue {
+func validate(object api.Object, partial bool) []api.Issue {
 	if object.Kind() != api.Secret {
 		return nil
 	}
@@ -92,11 +90,6 @@ func validate(object api.Object, partial, kindDefault bool) []api.Issue {
 	spec := object.Spec()
 	kind := spec.Get("type").Text()
 	source := spec.Get("source")
-	if source.Get("file").Present() {
-		issues = append(issues, api.Issue{Code: "api.field", Field: "$.spec.source.file",
-			Message:     "the Secret file source is retired: Secret material is read only from context custody, which bootwright secret set loads",
-			Remediation: fileSourceRemedy(object.Name(), kind, kindDefault)})
-	}
 	if kind == "" {
 		return issues
 	}
@@ -181,81 +174,4 @@ func SSHComment(value string) bool {
 	return utf8.ValidString(value) && !strings.ContainsAny(value, `"\`) && strings.IndexFunc(value, func(r rune) bool {
 		return unicode.IsControl(r) || r == '\u2028' || r == '\u2029'
 	}) < 0
-}
-
-// FileSourceContextPlaceholder is the context flag a retired file-source
-// remedy carries until the invocation that reports it names its context.
-const FileSourceContextPlaceholder = "--context <context>"
-
-const (
-	FileSourceInit   = "context init"
-	FileSourceUpdate = "context update"
-)
-
-type FileSourceRerun struct {
-	Command           string
-	ConfigurationFile bool
-}
-
-const (
-	fileSourceDeclare = "declare source: {contextStore: {}} and run "
-	fileSourceInherit = ", then for each Secret that inherits it run "
-)
-
-// NameFileSourceContext fills, in a copy of err, the context placeholder of
-// each retired file-source remedy with contextName, after admitting's rerun.
-func NameFileSourceContext(err error, contextName string, admitting FileSourceRerun) error {
-	var failure *diagnostics.Failure
-	if contextName == "" || !errors.As(err, &failure) || !slices.ContainsFunc(failure.Diagnostics, retiredFileSource) {
-		return err
-	}
-	rerun := ""
-	if admitting.Command == FileSourceInit || admitting.Command == FileSourceUpdate {
-		rerun = "rerun bootwright " + admitting.Command + " --name " + contextName
-		if admitting.ConfigurationFile {
-			rerun += " -f <file>"
-		}
-		rerun += " --input-dir <dir>"
-	}
-	named := &diagnostics.Failure{Diagnostics: slices.Clone(failure.Diagnostics), Usage: failure.Usage}
-	for index, d := range named.Diagnostics {
-		if retiredFileSource(d) {
-			remedy := strings.ReplaceAll(d.Remediation, FileSourceContextPlaceholder, "--context "+contextName)
-			if rerun != "" {
-				remedy = strings.Replace(remedy, fileSourceDeclare, "declare source: {contextStore: {}} in the input, "+rerun+", then run ", 1)
-				remedy = strings.Replace(remedy, fileSourceInherit, ", "+rerun+fileSourceInherit, 1)
-			}
-			named.Diagnostics[index].Remediation = remedy
-		}
-	}
-	return named
-}
-
-func retiredFileSource(d diagnostics.Diagnostic) bool {
-	return (d.Field == "$.spec.source.file" || d.Field == "$.spec.defaults.Secret.source.file") &&
-		strings.Contains(d.Remediation, FileSourceContextPlaceholder)
-}
-
-func fileSourceRemedy(name, kind string, kindDefault bool) string {
-	flags := setFileFlags(kind)
-	if kindDefault {
-		remedy := "replace source.file in the Environment's Secret kind default with source: {contextStore: {}}" + fileSourceInherit +
-			"bootwright secret set --name <name> --context <context> with the file flags of its type"
-		if flags != "" {
-			remedy += " (" + flags + " for " + kind + ")"
-		}
-		return remedy
-	}
-	if !api.ValidLexical("name", name) {
-		name = "<name>"
-	}
-	if flags == "" {
-		flags = "with the file flags of its type"
-	}
-	return fileSourceDeclare + "bootwright secret set --name " + name + " --context <context> " + flags
-}
-
-func setFileFlags(kind string) string {
-	shape, _ := shapeOf(kind)
-	return shape.flags
 }

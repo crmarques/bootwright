@@ -25,15 +25,16 @@ const toolSourcesRemedy = "no command of this build frees a retained tool source
 // controllerVersionRemedy is the fresh install of a store whose controller
 // record another version wrote. No command rebuilds the record alone, so the
 // whole root goes, and with it the contexts, their Secrets and the stored media.
-const controllerVersionRemedy = freshInstallRemediation + " That fresh install also drops this host's contexts with their Secrets and its stored media: " +
+const controllerVersionRemedy = "with a build that reads it, destroy each environment (bootwright destroy --context <name>) and delete each context " +
+	"(bootwright context delete --name <name> --purge); then, as root, remove /var/lib/bootwright and /var/lib/bootwright-staging and run bootwright controller install " +
+	"with this build. Never remove /var/lib/bootwright while services it manages run. That fresh install also drops this host's contexts with their Secrets and its stored media: " +
 	"recreate them from your input directories with bootwright context init and bootwright media add."
 
-// ControllerRecordVersion is the private shared-host evidence format. Version 3
+// ControllerRecordVersion is the private shared-host evidence format. It
 // holds host identity, bindings, tool sources and areas, and reservations,
-// whose keys an SSH-placed claim qualifies by its host's address and by its
-// pinned host key; both qualifiers were added under version 3 (Q96, D188),
-// since every earlier key is a valid unqualified claim.
-// The setup receipt lives in the setup subtree (D152).
+// whose keys an SSH-placed claim may qualify by its host's address and by its
+// pinned host key.
+// The setup receipt lives in the setup subtree.
 const ControllerRecordVersion = 3
 
 const (

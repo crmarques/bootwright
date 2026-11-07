@@ -278,11 +278,11 @@ func (s *Store) readyEvidence(ctx context.Context, dir *directory, name string) 
 	if err != nil {
 		return nil, err
 	}
-	_, err = s.retiredOperations(ctx, dir, name)
+	_, err = s.readOperationIndex(ctx, dir, name)
 	return evidence, err
 }
 
-func (s *Store) retiredOperations(ctx context.Context, dir *directory, name string) ([]byte, error) {
+func (s *Store) readOperationIndex(ctx context.Context, dir *directory, name string) ([]byte, error) {
 	active := true
 	defer func() { active = false }()
 	area := &operationArea{store: s, subtree: "operations", context: dir, name: name, active: func() bool { return active }, readOnly: true}
@@ -295,9 +295,6 @@ func (s *Store) retiredOperations(ctx context.Context, dir *directory, name stri
 	}
 	if !found {
 		return nil, nil
-	}
-	if err := operationstore.CheckIndex(data, name); err != nil {
-		return nil, errors.Join(contexts.ErrUnreadableEvidence, err)
 	}
 	return data, nil
 }

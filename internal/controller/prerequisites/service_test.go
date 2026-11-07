@@ -662,7 +662,7 @@ func TestADeclinedPlanChangesNothing(t *testing.T) {
 func TestAStoreTheSetupReadRefusesPreviewsNothing(t *testing.T) {
 	f := newSetupFixture(t)
 	f.python.ready = false
-	f.store.refusal = failure("context.state", "/var/lib/bootwright holds a store an earlier Bootwright build wrote (registry version 5)", "")
+	f.store.refusal = failure("context.state", "the state root holds state but no registry.json this build can read", "")
 	report, err := f.service.Setup(context.Background(), SetupRequest{})
 	if report != nil || codeOf(err) != "context.state" {
 		t.Fatalf("Setup = %+v, %v", report, err)

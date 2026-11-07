@@ -235,7 +235,7 @@ with keys of the same qualifier. Every such key is also published qualified
 by the host key that Machine's `access.ssh.knownHostsRef` pins (D188),
 `sshkey/SHA256:<digest>/<key>`, the SHA-256 digest of the key blob in
 unpadded URL-safe base64 (`ssh-keygen -l` shows it with `+` for `-` and `/`
-for `_`), an additive key form under controller record version 3. Two
+for `_`). Two
 contexts of one store targeting one SSH host therefore refuse each other's
 conflicting claims there, whether they reach it by one address or by two
 addresses, or a name and an address, that pin one host key; a diagnostic on

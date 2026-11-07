@@ -214,11 +214,11 @@ func TestAnUninstallInspectionRefusesWhatItMustNotRemove(t *testing.T) {
 	})
 	t.Run("another build's store", func(t *testing.T) {
 		store, base := installedStore(t)
-		if err := os.WriteFile(filepath.Join(base, "bootwright", "registry.json"), []byte(`{"version":5,"contexts":[]}`+"\n"), 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(base, "bootwright", "registry.json"), []byte(`{"version":99,"contexts":[]}`+"\n"), 0600); err != nil {
 			t.Fatal(err)
 		}
 		_, err := uninstallView(t, store)
-		uninstallDiagnostic(t, err, "context.state", "registry version 5")
+		uninstallDiagnostic(t, err, "context.state", "no registry.json this build can read")
 	})
 	t.Run("a staging directory of another type", func(t *testing.T) {
 		store, base := installedStore(t)

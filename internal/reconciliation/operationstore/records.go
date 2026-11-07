@@ -104,31 +104,6 @@ type Index struct {
 	Current string `json:"current"`
 }
 
-var ErrRetiredIndex = errors.New("lifecycle index names a retired Ceph qualification fixture")
-
-func RetiredIndexRemedy(name string) string {
-	return "dispose or clean up the fixture and destroy the context with the build that prepared it, then bootwright context delete --name " + name +
-		" --purge; only if that build is unavailable, bootwright context delete --name " + name +
-		" --purge --allow-orphans, which abandons its Machines, disks and reserved keyring bindings"
-}
-
-func RetiredIndexRefusal(name string) error {
-	return errors.Join(ErrRetiredIndex, diagnostics.NewFailureWithRemediation("lifecycle.state",
-		"context "+name+" holds the operation index of the retired Ceph qualification fixture, which this build cannot read", "",
-		RetiredIndexRemedy(name)))
-}
-
-func CheckIndex(data []byte, name string) error {
-	var probe struct {
-		Version       json.Number     `json:"version"`
-		Qualification json.RawMessage `json:"qualification"`
-	}
-	if json.Unmarshal(data, &probe) != nil || probe.Version != "2" && probe.Qualification == nil {
-		return nil
-	}
-	return RetiredIndexRefusal(name)
-}
-
 type Executable struct {
 	Version string `json:"version"`
 	Commit  string `json:"commit"`

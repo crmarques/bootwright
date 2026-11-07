@@ -21,9 +21,9 @@ import (
 
 const snoKubeconfig = "apiVersion: v1\nclusters:\n- cluster:\n    server: https://api.sno.lab.example.test:6443\n  name: sno\nkind: Config\n"
 
-// retiredRemedy is how every access to a keyring this build no longer opens
+// unopenedRemedy is how every access to a keyring this build does not open
 // tells the operator out.
-const retiredRemedy = "destroy this context's effects with a Bootwright build that opens this store, or abandon them with bootwright context delete --name <context> --purge --allow-orphans, then create the context again"
+const unopenedRemedy = "destroy this context's effects with a Bootwright build that opens this store, or abandon them with bootwright context delete --name <context> --purge --allow-orphans, then create the context again"
 
 // producedCustody is what the lifecycle and the reveal reach of the composed
 // custody service.
@@ -165,28 +165,28 @@ func TestClusterKubeconfigJourney(t *testing.T) {
 	singleDiagnostic(t, stderr, "access.unavailable")
 }
 
-// A keyring whose persisted identity this build's catalog lacks, the format
-// three one included, refuses every access with that identity and the way
-// out, through the resolver composition binds by default.
-func TestTheComposedStoreRefusesAV3Keyring(t *testing.T) {
+// A keyring whose persisted identity this build's catalog lacks refuses every
+// access with that identity and the way out, through the resolver composition
+// binds by default.
+func TestTheComposedStoreRefusesAnUnknownKeyring(t *testing.T) {
 	services, _, root := snoContext(t)
 	record := filepath.Join(root, "contexts", "lab-sno", "secrets", secretstore.RecordPath)
 	data, err := os.ReadFile(record)
 	if err != nil {
 		t.Fatal(err)
 	}
-	retired := bytes.Replace(data, []byte(`"local-keyring-v4"`), []byte(`"local-keyring-v3"`), 1)
-	if bytes.Equal(retired, data) {
+	unknown := bytes.Replace(data, []byte(`"local-keyring-v4"`), []byte(`"unknown-keyring"`), 1)
+	if bytes.Equal(unknown, data) {
 		t.Fatalf("the store record names no local-keyring-v4 backend: %s", data)
 	}
-	if err := os.WriteFile(record, retired, 0600); err != nil {
+	if err := os.WriteFile(record, unknown, 0600); err != nil {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{
 		{"secret", "list"}, {"secret", "encryption", "init"}, {"cluster", "kubeconfig", "--name", "sno"},
 	} {
 		out, stderr := contextRun(t, services, 1, args...)
-		if out != "" || !strings.Contains(stderr, "local-keyring-v3") || !strings.HasSuffix(humanContent(stderr), humanContent("\n    Next: "+retiredRemedy+"\n")) {
+		if out != "" || !strings.Contains(stderr, "unknown-keyring") || !strings.HasSuffix(humanContent(stderr), humanContent("\n    Next: "+unopenedRemedy+"\n")) {
 			t.Fatalf("%v wrote %q with %q", args, out, stderr)
 		}
 		singleDiagnostic(t, stderr, "secret.store.implementation")

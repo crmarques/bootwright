@@ -129,8 +129,8 @@ confidential too. An emulated BMC has the same behavior.
 
 `validate` and `render effective` read no Secret material under the
 [compiler boundary](api.md#compiler-boundary), and desired state names no
-Secret payload path: the [file source](api/secrets.md#file-source) is retired,
-so `secret set` is the only command that opens an operator's Secret file. A
+Secret payload path, so `secret set` is the only command that opens an
+operator's Secret file. A
 context-backed invocation may read only the metadata
 required to resolve the selected context and its immutable desired-state input
 view; it reads no lifecycle or confidential state.

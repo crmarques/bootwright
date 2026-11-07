@@ -49,7 +49,7 @@ func TestTheStateRootInspectionNamesARootThisBuildCannotUse(t *testing.T) {
 			writePrivate(t, store.options.Root, []byte("state\n"))
 		}, listable: true, observed: "a regular file owned by " + owner + " with mode 0600", status: "not-ready",
 			message: "the state root is a regular file owned by " + owner + " with mode 0600, but it must be a directory owned by " + owner + " with mode 0700", remediation: unsafeRootRemediation},
-		{name: "an earlier build's root", lay: func(t *testing.T, store *Store, _ desiredstate.Sources) {
+		{name: "a root holding unreadable state", lay: func(t *testing.T, store *Store, _ desiredstate.Sources) {
 			if err := os.MkdirAll(filepath.Join(store.options.Root, "contexts", "legacy"), 0700); err != nil {
 				t.Fatal(err)
 			}

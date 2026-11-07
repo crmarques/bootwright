@@ -3,7 +3,6 @@ package lifecycle
 import (
 	"cmp"
 	"context"
-	"errors"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -123,9 +122,6 @@ func (s Service) readDiff(ctx context.Context, view View, observed bool) (diffRe
 	var store recordReader = s.store(view)
 	read := diffRead{context: view.Identity()}
 	index, err := store.Index(ctx)
-	if errors.Is(err, operationstore.ErrRetiredIndex) {
-		return diffRead{}, operationstore.RetiredIndexRefusal(read.context.Name)
-	}
 	if err != nil {
 		return diffRead{}, err
 	}

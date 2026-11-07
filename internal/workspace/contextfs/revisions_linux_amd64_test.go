@@ -260,7 +260,7 @@ func TestInputCleanupRevalidatesSelectionAndEvidenceBeforeUnlink(t *testing.T) {
 	}
 }
 
-func TestInputUpdateReclaimsFullLegacyRevisionDirectory(t *testing.T) {
+func TestInputUpdateReclaimsFullRevisionDirectory(t *testing.T) {
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
 	for index := range maxRevisions - 1 {

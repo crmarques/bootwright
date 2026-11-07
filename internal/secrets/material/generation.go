@@ -198,7 +198,7 @@ func validateGeneratedSSH(declaration secrets.Declaration, privateKey, publicKey
 		keyType = "ed25519"
 	}
 	switch keyType {
-	case "ed25519", "rsa", "ecdsa-p256", "ecdsa-p384", "ecdsa-p521":
+	case "ed25519", "rsa", "ecdsaP256", "ecdsaP384", "ecdsaP521":
 	default:
 		return failure("source", "SSH key type is unsupported", "")
 	}
@@ -243,11 +243,11 @@ func generatedSSHKeyType(key crypto.PrivateKey) (string, bool) {
 		}
 		switch value.Curve.Params().Name {
 		case elliptic.P256().Params().Name:
-			return "ecdsa-p256", true
+			return "ecdsaP256", true
 		case elliptic.P384().Params().Name:
-			return "ecdsa-p384", true
+			return "ecdsaP384", true
 		case elliptic.P521().Params().Name:
-			return "ecdsa-p521", true
+			return "ecdsaP521", true
 		}
 	}
 	return "", false
@@ -345,11 +345,9 @@ func (s *Service) validateGeneratedCertificate(declaration secrets.Declaration, 
 const certificateBackdate = 24 * time.Hour
 
 // generatedValidity accepts the validity a generated certificate has: it ends
-// days after its generation second, and starts a day before it, or, when an
-// earlier build generated it, at that second.
+// days after its generation second, and starts a day before it.
 func generatedValidity(certificate *x509.Certificate, days int) bool {
-	return certificate.NotAfter.Equal(certificate.NotBefore.AddDate(0, 0, days)) ||
-		certificate.NotAfter.Equal(certificate.NotBefore.Add(certificateBackdate).AddDate(0, 0, days))
+	return certificate.NotAfter.Equal(certificate.NotBefore.Add(certificateBackdate).AddDate(0, 0, days))
 }
 
 func validGeneratedP256PrivateKey(key *ecdsa.PrivateKey) bool {
@@ -579,11 +577,11 @@ func (s *Service) generateSSH(ctx context.Context, keyType, comment string) ([]b
 		_, key, err = ed25519.GenerateKey(random)
 	case "rsa":
 		key, err = s.generateRSA(ctx, 3072, "SSH private key generation failed")
-	case "ecdsa-p256":
+	case "ecdsaP256":
 		key, err = s.generateECDSA(ctx, elliptic.P256(), "SSH private key generation failed")
-	case "ecdsa-p384":
+	case "ecdsaP384":
 		key, err = s.generateECDSA(ctx, elliptic.P384(), "SSH private key generation failed")
-	case "ecdsa-p521":
+	case "ecdsaP521":
 		key, err = s.generateECDSA(ctx, elliptic.P521(), "SSH private key generation failed")
 	default:
 		return nil, nil, failure("source", "SSH key type is unsupported", "")

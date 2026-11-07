@@ -160,7 +160,7 @@ func TestASecretMutationFirstCollectsTheContextsStages(t *testing.T) {
 	}
 }
 
-// An earlier build leaves at most maxControllerStages stages beside the receipt
+// A killed publication leaves at most maxControllerStages stages beside the receipt
 // and its bundles, the count at which every controller publication refuses;
 // the next command that opens a registry transaction removes all of them.
 func TestTheNextExclusiveCommandCollectsControllerStages(t *testing.T) {

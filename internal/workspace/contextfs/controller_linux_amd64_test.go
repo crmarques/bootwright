@@ -549,26 +549,25 @@ func TestTheControllerRecordV3HoldsNoReceipt(t *testing.T) {
 	}
 }
 
-// The SSH qualifier was added under version 3 (Q96), so a version 3 record an
-// earlier build wrote, every key unqualified, still reads, and one record holds
+// A record whose keys are all unqualified reads, and one record holds
 // unqualified and `ssh/<address>:<port>/` keys side by side, the same claim on
 // two hosts included, and reads back as written.
-func TestAVersion3RecordHoldsUnqualifiedAndSSHQualifiedKeys(t *testing.T) {
+func TestARecordHoldsUnqualifiedAndSSHQualifiedKeys(t *testing.T) {
 	golden, err := os.ReadFile(filepath.Join("testdata", "controller-record.golden"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var earlier bytes.Buffer
-	if err := json.Compact(&earlier, golden); err != nil {
+	var unqualified bytes.Buffer
+	if err := json.Compact(&unqualified, golden); err != nil {
 		t.Fatal(err)
 	}
-	earlier.WriteByte('\n')
-	if !bytes.Contains(earlier.Bytes(), []byte(`"version":3`)) || bytes.Contains(earlier.Bytes(), []byte(`"ssh/`)) {
-		t.Fatal("the fixture is not an unqualified version 3 record")
+	unqualified.WriteByte('\n')
+	if bytes.Contains(unqualified.Bytes(), []byte(`"ssh/`)) {
+		t.Fatal("the fixture holds a qualified key")
 	}
-	read, _, err := decodeControllerRecord(earlier.Bytes())
+	read, _, err := decodeControllerRecord(unqualified.Bytes())
 	if err != nil || len(read.Reservations) != 2 {
-		t.Fatalf("an unqualified version 3 record was refused: %#v", diagnostics.Of(err))
+		t.Fatalf("an unqualified record was refused: %#v", diagnostics.Of(err))
 	}
 	value := syntheticControllerState(t)
 	value.Reservations = []prerequisites.HostReservation{
@@ -589,11 +588,10 @@ func TestAVersion3RecordHoldsUnqualifiedAndSSHQualifiedKeys(t *testing.T) {
 	}
 }
 
-// A claim records the API kind of the object it reserves for as an additive
-// member under version 3 (B870, D186): a record that holds none reads as
-// before, one that holds a kind reads back as written, and a member that is
-// not an API kind name refuses.
-func TestAVersion3RecordHoldsTheAPIKindAClaimReservesFor(t *testing.T) {
+// A claim records the API kind of the object it reserves for (B870, D186): a
+// record that holds none reads, one that holds a kind reads back as written,
+// and a member that is not an API kind name refuses.
+func TestARecordHoldsTheAPIKindAClaimReservesFor(t *testing.T) {
 	value := syntheticControllerState(t)
 	value.Reservations = []prerequisites.HostReservation{
 		{Context: "lab", Kind: prerequisites.ClusterMediaReservation, Service: "sno", ObjectKind: "OpenShiftCluster", Keys: []string{"path:/var/lib/bootwright/media/sno"}},
@@ -659,9 +657,8 @@ func TestControllerDirectoryCreationInterruptionNeverAdoptsOrphan(t *testing.T) 
 
 // A store whose controller record another version wrote is not read or
 // converted, and no command rebuilds the record alone, so the refusal names the
-// one recovery that is safe: the fresh install the registry's cut-over names,
-// and what it costs, the contexts with their Secrets and the stored media. The
-// record is left as it was. Version 3 stays the one this build reads (Q96).
+// one recovery that is safe: the fresh install, and what it costs, the contexts
+// with their Secrets and the stored media. The record is left as it was.
 func TestAControllerRecordOfAnotherVersionNamesTheFreshInstall(t *testing.T) {
 	store, sources := fixture(t)
 	record := publish(t, store, "example", sources)
@@ -693,18 +690,6 @@ func TestAControllerRecordOfAnotherVersionNamesTheFreshInstall(t *testing.T) {
 		}
 		if after, err := os.ReadFile(path); err != nil || !bytes.Equal(after, earlier) {
 			t.Fatalf("the refused record was rewritten: %q %v", after, err)
-		}
-	}
-	for _, part := range []string{
-		"destroy each environment (bootwright destroy --context <name>)",
-		"delete each context (bootwright context delete --name <name> --purge)",
-		"remove /var/lib/bootwright and /var/lib/bootwright-staging and run bootwright controller install",
-		"Never remove /var/lib/bootwright while services it manages run.",
-		"drops this host's contexts with their Secrets and its stored media",
-		"bootwright context init and bootwright media add",
-	} {
-		if !strings.Contains(controllerVersionRemedy, part) {
-			t.Errorf("the remedy %q lacks %q", controllerVersionRemedy, part)
 		}
 	}
 }

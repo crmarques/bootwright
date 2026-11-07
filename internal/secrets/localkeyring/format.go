@@ -55,7 +55,7 @@ type indexRecord struct {
 	FormatVersion int                    `json:"-"`
 	Algorithm     string                 `json:"-"`
 	Selector      secretstore.Selector   `json:"-"`
-	MinReader     int                    `json:"minReader,omitempty"`
+	MinReader     int                    `json:"minReader"`
 	ActiveKey     string                 `json:"activeKey"`
 	Keys          []storedKey            `json:"keys"`
 	Versions      []storedVersion        `json:"versions"`
@@ -643,18 +643,15 @@ func declarationFingerprint(declaration secrets.Declaration) string {
 }
 
 func validateDeclaration(declaration secrets.Declaration) bool {
-	if !validName(declaration.Name) || !validFingerprint(declaration.Fingerprint) || declarationFingerprint(declaration) != declaration.Fingerprint || len(declaration.Origin) > 4096 || declaration.Document < 0 {
+	if !validName(declaration.Name) || !validFingerprint(declaration.Fingerprint) || declarationFingerprint(declaration) != declaration.Fingerprint {
 		return false
 	}
 	switch declaration.Source {
 	case "contextStore":
-		if !reflect.DeepEqual(declaration.Files, secrets.FileSource{}) || !reflect.DeepEqual(declaration.Generation, secrets.Generation{}) {
+		if !reflect.DeepEqual(declaration.Generation, secrets.Generation{}) {
 			return false
 		}
 	case "generated":
-		if !reflect.DeepEqual(declaration.Files, secrets.FileSource{}) {
-			return false
-		}
 	default:
 		return false
 	}
@@ -680,7 +677,7 @@ func validateMaterial(declaration secrets.Declaration, material secrets.Material
 }
 
 func validateVersionDeclaration(declaration secrets.VersionDeclaration) bool {
-	return validName(declaration.Name) && validFingerprint(declaration.Fingerprint) && (declaration.Source == "contextStore" || declaration.Source == "file" || declaration.Source == "generated" || declaration.Source == producedSource) && len(declaration.Parts()) > 0 && len(declaration.Parts()) <= 2
+	return validName(declaration.Name) && validFingerprint(declaration.Fingerprint) && (declaration.Source == "contextStore" || declaration.Source == "generated" || declaration.Source == producedSource) && len(declaration.Parts()) > 0 && len(declaration.Parts()) <= 2
 }
 
 // producedSource marks a version a lifecycle block captured. No Secret

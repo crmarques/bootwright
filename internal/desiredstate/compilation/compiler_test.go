@@ -90,39 +90,6 @@ func TestCompilerDefaultPrecedenceAndRecipientPaths(t *testing.T) {
 	}
 }
 
-// The file source is retired in every type's shape: compilation refuses it,
-// names the Secret, and names the context-storage declaration and the secret
-// set flags of that type that replace it.
-func TestCompilerRefusesTheRetiredFileSourceWithItsRemedy(t *testing.T) {
-	for _, test := range []struct{ kind, shape, flags string }{
-		{"opaque", "path: /nonexistent/opaque", "--value-file <path>"},
-		{"token", "path: secrets/token", "--value-file <path>"},
-		{"dockerConfigJson", "path: payload.json", "--value-file <path>"},
-		{"usernamePassword", "path: secrets/credentials.json", "--username <username> --password-file <path>"},
-		{"caBundle", "path: secrets/ca.pem", "--certificate-file <path>"},
-		{"tlsCertificate", "cert: secrets/tls.crt, key: secrets/tls.key", "--certificate-file <path> --private-key-file <path>"},
-		{"sshKeyPair", "privateKey: secrets/id", "--private-key-file <path> [--public-key-file <path>]"},
-		{"sshKeyPair", "privateKey: secrets/id, publicKey: secrets/id.pub", "--private-key-file <path> [--public-key-file <path>]"},
-	} {
-		t.Run(test.kind+"/"+test.shape, func(t *testing.T) {
-			content := environmentYAML + "---\napiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: material\nspec:\n  type: " + test.kind + "\n  source:\n    file: {" + test.shape + "}\n"
-			state, report, err := compiler().Compile(context.Background(), sources(content))
-			if state != nil || report != nil || err == nil {
-				t.Fatalf("a file source compiled: %#v %#v %v", state, report, err)
-			}
-			found := diagnostics.Of(err)
-			want := "declare source: {contextStore: {}} and run bootwright secret set --name material --context <context> " + test.flags
-			if len(found) != 1 {
-				t.Fatalf("diagnostics = %#v", found)
-			}
-			d := found[0]
-			if d.Code != "api.field" || d.Field != "$.spec.source.file" || !strings.Contains(d.Message, "file source is retired") || d.Remediation != want || d.Object == nil || d.Object.Kind != "Secret" || d.Object.Name != "material" {
-				t.Fatalf("refusal = %#v, want remedy %q", d, want)
-			}
-		})
-	}
-}
-
 func TestCompilerSelectsEveryDiscoveredFileAndHonoursCancellation(t *testing.T) {
 	input := sources(environmentYAML)
 	input.Files = append(input.Files, desiredstate.NewSourceFile("/synthetic/other.yaml", []byte("apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: other}\nspec: {type: token}\n")))

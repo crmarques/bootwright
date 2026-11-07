@@ -184,11 +184,9 @@ func TestValidateGeneratedCertificateAcceptsStillValidHistoricMaterial(t *testin
 			Type: "tlsCertificate", Source: "generated",
 			Generation: secrets.Generation{CommonName: "service.example", DNSNames: slices.Clone(declaration.Generation.DNSNames), IPAddresses: []string{"192.0.2.10"}, ValidityDays: 30},
 		},
-		// A 31-day declaration would match: an earlier build's 31-day
-		// certificate has this one's validity window.
 		{
 			Type: "tlsCertificate", Source: "generated",
-			Generation: secrets.Generation{CommonName: "service.example", DNSNames: slices.Clone(declaration.Generation.DNSNames), IPAddresses: slices.Clone(declaration.Generation.IPAddresses), ValidityDays: 32},
+			Generation: secrets.Generation{CommonName: "service.example", DNSNames: slices.Clone(declaration.Generation.DNSNames), IPAddresses: slices.Clone(declaration.Generation.IPAddresses), ValidityDays: 31},
 		},
 		{
 			Type: "caBundle", Source: "generated",
@@ -317,9 +315,9 @@ func TestGenerateSSHAlgorithmsAndComment(t *testing.T) {
 		{"", "ssh-ed25519 "},
 		{"ed25519", "ssh-ed25519 "},
 		{"rsa", "ssh-rsa "},
-		{"ecdsa-p256", "ecdsa-sha2-nistp256 "},
-		{"ecdsa-p384", "ecdsa-sha2-nistp384 "},
-		{"ecdsa-p521", "ecdsa-sha2-nistp521 "},
+		{"ecdsaP256", "ecdsa-sha2-nistp256 "},
+		{"ecdsaP384", "ecdsa-sha2-nistp384 "},
+		{"ecdsaP521", "ecdsa-sha2-nistp521 "},
 	}
 	for _, test := range tests {
 		name := test.keyType
@@ -397,7 +395,7 @@ func TestValidateGeneratedSSHRequiresDeclaredAlgorithmCommentAndCanonicalPublicB
 	defer clear(publicKey)
 
 	wrongAlgorithm := declaration
-	wrongAlgorithm.Generation.KeyType = "ecdsa-p256"
+	wrongAlgorithm.Generation.KeyType = "ecdsaP256"
 	wrongComment := declaration
 	wrongComment.Generation.Comment = "other-comment"
 	noncanonicalPublic := bytes.TrimSuffix(slices.Clone(publicKey), []byte{'\n'})
@@ -496,7 +494,7 @@ func TestGenerationCryptographyFailuresAreInjectableAndNonDisclosing(t *testing.
 		{
 			name: "ECDSA generation",
 			declaration: secrets.Declaration{
-				Type: "sshKeyPair", Source: "generated", Generation: secrets.Generation{KeyType: "ecdsa-p256"},
+				Type: "sshKeyPair", Source: "generated", Generation: secrets.Generation{KeyType: "ecdsaP256"},
 			},
 			cryptography: testCryptography{generateECDSA: func(elliptic.Curve) (*ecdsa.PrivateKey, error) { return nil, privateFailure }},
 		},

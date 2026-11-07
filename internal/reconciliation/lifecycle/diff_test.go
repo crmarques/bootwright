@@ -345,21 +345,6 @@ func TestDiffRefusesWhileAnOperationHoldsTheContext(t *testing.T) {
 	}
 }
 
-func retireIndex(f diffFixture) {
-	source := "op-" + strings.Repeat("ab", 16)
-	f.workspace.area.files["index.json"] = []byte(`{"version":2,"current":"` + source + `","qualification":{"id":"qual-` + strings.Repeat("cd", 16) + `","source":"` + source + `"}}` + "\n")
-}
-
-func TestDiffRefusesARetiredIndex(t *testing.T) {
-	f := newDiffHarness(t, "alpha")
-	retireIndex(f)
-	result, err := f.service.Diff(context.Background(), DiffRequest{ContextName: "lab"})
-	if reported := diagnostics.Of(err); result != nil || !errors.Is(err, operationstore.ErrRetiredIndex) || len(reported) != 1 ||
-		reported[0].Code != "lifecycle.state" || reported[0].Remediation != operationstore.RetiredIndexRemedy("lab") {
-		t.Fatalf("diff = %+v (%v)", result, err)
-	}
-}
-
 type countingHost struct {
 	HostIdentity
 	asked int
@@ -412,7 +397,6 @@ func TestDiffWritesNothing(t *testing.T) {
 			f.compiler.errs[digestOf(sources)] = diagnostics.NewFailure("api.value", "the value cannot be read", "")
 			f.update("rev-77777777777777777777777777777777", sources)
 		},
-		"a retired index": func(_ *testing.T, f diffFixture) { retireIndex(f) },
 	}
 	for name, prepare := range scenarios {
 		t.Run(name, func(t *testing.T) {

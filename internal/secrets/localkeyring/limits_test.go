@@ -159,6 +159,7 @@ func TestMaximumLogicalIndexRoundTrips(t *testing.T) {
 		FormatVersion: formatVersion,
 		Algorithm:     algorithm,
 		Selector:      selector,
+		MinReader:     readerVersion,
 		ActiveKey:     keyID,
 		Keys:          []storedKey{{ID: keyID, Seals: 1}},
 		Versions:      make([]storedVersion, 0, secrets.MaxVersions),

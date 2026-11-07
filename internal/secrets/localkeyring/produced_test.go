@@ -15,9 +15,8 @@ const (
 	producedName  = "kubeconfig"
 )
 
-func summary(name, kind, source, path string) secrets.VersionDeclaration {
-	declaration := secrets.Declaration{Name: name, Type: kind, Source: source, Origin: "/input/environment.yaml", Document: 1}
-	declaration.Files.Path = path
+func summary(name, kind, source string) secrets.VersionDeclaration {
+	declaration := secrets.Declaration{Name: name, Type: kind, Source: source}
 	declaration.Fingerprint = declarationFingerprint(declaration)
 	return declaration.Summary()
 }
@@ -34,8 +33,8 @@ func formatFourIndex() (indexRecord, secretstore.Selector) {
 		FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, MinReader: readerVersion, ActiveKey: fixedID("key-", 2),
 		Keys: []storedKey{{ID: fixedID("key-", 1), Seals: 4}, {ID: fixedID("key-", 2), Seals: 3}},
 		Versions: []storedVersion{
-			{ID: fixedID("ver-", 1), Sequence: 2, Declaration: summary("registry-token", "token", "contextStore", ""), Parts: part(1, 2, 24)},
-			{ID: fixedID("ver-", 2), Sequence: 1, Declaration: summary("pull-secret", "opaque", "file", "secrets/pull-secret"), Parts: part(2, 1, 12)},
+			{ID: fixedID("ver-", 1), Sequence: 2, Declaration: summary("registry-token", "token", "contextStore"), Parts: part(1, 2, 24)},
+			{ID: fixedID("ver-", 2), Sequence: 1, Declaration: summary("pull-secret", "opaque", "contextStore"), Parts: part(2, 1, 12)},
 			{ID: fixedID("ver-", 3), Sequence: 1, Declaration: producedDeclaration(producedBlock, producedName), Parts: part(3, 2, 2048)},
 		},
 		Current:  []secretstore.Current{{Name: "registry-token", Version: fixedID("ver-", 1)}},
@@ -151,30 +150,15 @@ func TestAProducedVersionTakesNoOrdinalFromASecretOfTheSameName(t *testing.T) {
 	if got := nextSequence(index, producedName); got != 1 {
 		t.Fatalf("a Secret named like a produced entry starts at %d", got)
 	}
-	index.Versions = append(index.Versions, storedVersion{ID: fixedID("ver-", 4), Sequence: 1, Declaration: summary(producedName, "opaque", "contextStore", "")})
+	index.Versions = append(index.Versions, storedVersion{ID: fixedID("ver-", 4), Sequence: 1, Declaration: summary(producedName, "opaque", "contextStore")})
 	if got := nextSequence(index, producedName); got != 2 {
 		t.Fatalf("that Secret's second version is %d", got)
 	}
 }
 
-// A store this build's catalog does not carry, the format three keyring
-// included, refuses before any session with its own identity and the way out.
-func TestTheCatalogRefusesTheV3Identity(t *testing.T) {
-	_, err := secretstore.NewCatalog(New()).Reopen("local-keyring-v3")
-	found := diagnostics.Of(err)
-	if len(found) != 1 || found[0].Code != "secret.store.implementation" || !strings.Contains(found[0].Message, "local-keyring-v3") ||
-		found[0].Remediation != "destroy this context's effects with a Bootwright build that opens this store, or abandon them with bootwright context delete --name <context> --purge --allow-orphans, then create the context again" {
-		t.Fatalf("the v3 identity was refused as %+v", found)
-	}
-	if implementation, err := secretstore.NewCatalog(New()).Reopen("local-keyring-v4"); err != nil || implementation == nil {
-		t.Fatalf("the v4 identity was refused: %v", err)
-	}
-}
-
 // Metadata a newer build wrote for newer readers refuses secret.store.newer,
 // saying the store is intact, before strict decoding would call it corrupt;
-// metadata that names no reader, as earlier builds wrote it, or this build's
-// reader still decodes.
+// metadata naming no reader, or one other than this build's, is invalid.
 func TestMetadataForANewerReaderRefusesAsNewerNotCorrupt(t *testing.T) {
 	index, selector := formatFourIndex()
 	current, err := encodeCanonical(index, indexMaximum)
@@ -184,17 +168,14 @@ func TestMetadataForANewerReaderRefusesAsNewerNotCorrupt(t *testing.T) {
 	if _, err := decodeIndexPlaintext(current); err != nil {
 		t.Fatalf("this build's metadata is refused: %v", err)
 	}
-	index.MinReader = 0
-	legacy, err := encodeCanonical(index, indexMaximum)
-	if err != nil || bytes.Contains(legacy, []byte("minReader")) {
-		t.Fatalf("metadata with no reader names one: %s (%v)", legacy, err)
+	if _, err := decodeIndexPlaintext(bytes.Replace(current, []byte(`"minReader":1,`), nil, 1)); err == nil {
+		t.Fatal("metadata naming no reader was admitted")
 	}
-	if decoded, err := decodeIndexPlaintext(legacy); err != nil || validateIndex(withHeader(decoded, selector), selector) != nil {
-		t.Fatalf("metadata an earlier build wrote is refused: %v", err)
-	}
-	negative, err := decodeIndexPlaintext(bytes.Replace(current, []byte(`"minReader":1,`), []byte(`"minReader":-1,`), 1))
-	if err != nil || negative.MinReader != -1 || validateIndex(withHeader(negative, selector), selector) == nil {
-		t.Fatalf("metadata naming a negative reader validated (%v)", err)
+	for _, reader := range []string{"0", "-1"} {
+		other, err := decodeIndexPlaintext(bytes.Replace(current, []byte(`"minReader":1,`), []byte(`"minReader":`+reader+`,`), 1))
+		if err != nil || validateIndex(withHeader(other, selector), selector) == nil {
+			t.Fatalf("metadata naming reader %s validated (%v)", reader, err)
+		}
 	}
 	newer := bytes.Replace(current, []byte(`"minReader":1,`), []byte(`"minReader":2,`), 1)
 	newer = bytes.Replace(newer, []byte(`"produced":[`), []byte(`"futureMember":true,"produced":[`), 1)

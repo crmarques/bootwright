@@ -347,15 +347,15 @@ func TestUninitializedEncryptionStatusHasStableEmptyShape(t *testing.T) {
 }
 
 func TestSecretMetadataResultsRejectUnsupportedShapes(t *testing.T) {
-	list := &custody.ListResult{Context: secretResultContext(), Secrets: []custody.ListRow{{Name: "hidden", Type: "token", Source: "file", Parts: []secrets.Part{secrets.ValuePart}, State: "current"}}}
+	list := &custody.ListResult{Context: secretResultContext(), Secrets: []custody.ListRow{{Name: "hidden", Type: "token", Source: "unsupported", Parts: []secrets.Part{secrets.ValuePart}, State: "current"}}}
 	record := &dispatchRecord{result: commandResult{secretList: list}}
 	code, out, errOut := runSecretResult([]string{"secret", "list", "--output", "json"}, record)
 	if code != 1 || strings.Contains(out, "hidden") || !strings.Contains(out, "runtime.internal") || errOut != "" {
-		t.Fatalf("file-backed list code=%d stdout=%q stderr=%q", code, out, errOut)
+		t.Fatalf("unsupported-source list code=%d stdout=%q stderr=%q", code, out, errOut)
 	}
 	for name, row := range map[string]custody.CheckRow{
-		"retired file source": {Name: "hidden", Type: "token", Source: "file", Parts: []secrets.Part{secrets.ValuePart}, Status: "available"},
-		"live-read status":    {Name: "hidden", Type: "token", Source: "contextStore", Parts: []secrets.Part{secrets.ValuePart}, Status: "unreadable"},
+		"an unsupported source": {Name: "hidden", Type: "token", Source: "unsupported", Parts: []secrets.Part{secrets.ValuePart}, Status: "available"},
+		"live-read status":      {Name: "hidden", Type: "token", Source: "contextStore", Parts: []secrets.Part{secrets.ValuePart}, Status: "unreadable"},
 	} {
 		check := &custody.CheckResult{Context: secretResultContext(), Secrets: []custody.CheckRow{row}}
 		record := &dispatchRecord{result: commandResult{secretCheck: check}}

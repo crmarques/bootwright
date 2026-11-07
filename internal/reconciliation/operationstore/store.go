@@ -91,9 +91,6 @@ func (s *Store) Index(ctx context.Context) (Index, error) {
 		s.remember(indexPath, nil)
 		return Index{Version: 1}, nil
 	}
-	if err := CheckIndex(data, "<ctx>"); err != nil {
-		return Index{}, err
-	}
 	var index Index
 	if err := decodeUnder(data, MaxIndexBytes, &index, s.running); err != nil {
 		return Index{}, err

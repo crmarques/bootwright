@@ -89,48 +89,14 @@ type Generation struct {
 	Bytes        int      `json:"bytes"`
 }
 
-// FileSource is always empty now that the file source is retired. It stays in
-// the Declaration encoding every stored version's fingerprint was computed over.
-type FileSource struct {
-	Path        string `json:"path"`
-	Certificate string `json:"certificate"`
-	PrivateKey  string `json:"privateKey"`
-	PublicKey   string `json:"publicKey"`
-}
-
-// Declaration is the non-secret identity of a declared Secret. Origin and
-// Document stay in the encoding only for the legacy fingerprint: a live
-// declaration leaves them empty, so its fingerprint covers type, source and
-// parameters alone. An earlier build's fingerprint also covered the declaring
-// file's path and document index; LegacyFingerprint is that digest, over
-// LegacyOrigin and LegacyDocument, and none of the three is encoded.
+// Declaration is the non-secret identity of a declared Secret: its type,
+// source and parameters, which its fingerprint covers.
 type Declaration struct {
-	Name              string     `json:"name"`
-	Type              string     `json:"type"`
-	Source            string     `json:"source"`
-	Files             FileSource `json:"files"`
-	Generation        Generation `json:"generation"`
-	Origin            string     `json:"origin"`
-	Document          int        `json:"document"`
-	Fingerprint       string     `json:"fingerprint"`
-	LegacyFingerprint string     `json:"-"`
-	LegacyOrigin      string     `json:"-"`
-	LegacyDocument    int        `json:"-"`
-}
-
-// Current reports whether a version stored under fingerprint is current for
-// this declaration: stored under its fingerprint, or under the legacy one.
-func (d Declaration) Current(fingerprint string) bool {
-	return fingerprint == d.Fingerprint || d.LegacyFingerprint != "" && fingerprint == d.LegacyFingerprint
-}
-
-// Stored is this declaration in the encoding a version stored under
-// fingerprint was written with, which a binding of that version carries.
-func (d Declaration) Stored(fingerprint string) Declaration {
-	if fingerprint != d.Fingerprint && d.LegacyFingerprint != "" && fingerprint == d.LegacyFingerprint {
-		d.Origin, d.Document, d.Fingerprint = d.LegacyOrigin, d.LegacyDocument, d.LegacyFingerprint
-	}
-	return d
+	Name        string     `json:"name"`
+	Type        string     `json:"type"`
+	Source      string     `json:"source"`
+	Generation  Generation `json:"generation"`
+	Fingerprint string     `json:"fingerprint"`
 }
 
 // VersionDeclaration identifies acquired material without retaining acquisition

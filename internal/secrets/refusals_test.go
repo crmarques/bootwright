@@ -55,8 +55,8 @@ func TestInputTableOwnsAllowedFieldsAndFileRemedies(t *testing.T) {
 			if got := AllowedInputFields(row.kind); got != row.allowed {
 				t.Fatalf("allowed fields = %b, want %b", got, row.allowed)
 			}
-			if got := setFileFlags(row.kind); got != row.file {
-				t.Fatalf("file flags = %q, want %q", got, row.file)
+			if shape, _ := shapeOf(row.kind); shape.flags != row.file {
+				t.Fatalf("file flags = %q, want %q", shape.flags, row.file)
 			}
 			for _, input := range row.valid {
 				if !ValidInput(row.kind, input) {

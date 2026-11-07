@@ -416,10 +416,10 @@ func TestAHeldListingRefusesASubstitutedDirectory(t *testing.T) {
 	}
 }
 
-// requireEarlierBuildRemedy requires the refusal of a root this build cannot
+// requireOtherBuildRemedy requires the refusal of a root this build cannot
 // read as its own: another build may run live environments from it, so it is
 // never to be moved aside while their services run.
-func requireEarlierBuildRemedy(t *testing.T, operation string, err error) {
+func requireOtherBuildRemedy(t *testing.T, operation string, err error) {
 	t.Helper()
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || reported[0].Code != "context.state" || reported[0].Message != missingRegistryMessage || reported[0].Remediation != storeRecoveryRemediation {
@@ -437,14 +437,11 @@ func requireEarlierBuildRemedy(t *testing.T, operation string, err error) {
 
 // A root that holds state another Bootwright build wrote reads as such, never
 // as damage to move aside, and every command leaves it as it is: one without a
-// registry, and one whose registry.json an earlier build wrote in the format
-// version 2, 3 or 4 that named contexts by an allocated identity.
-func TestAnEarlierBuildsRootRefusesWithTheLiveEnvironmentRemedy(t *testing.T) {
+// registry, and one whose registry.json is of another format version.
+func TestAnotherBuildsRootRefusesWithTheLiveEnvironmentRemedy(t *testing.T) {
 	for name, entries := range map[string]map[string]string{
-		"without a registry": {"contexts.yaml": "contexts: []\n", ".bootwright-managed-root": "managed\n"},
-		"registry version 2": {"registry.json": "{\"version\":2,\"idNamespace\":\"0123456789abcdef\",\"nextIdentity\":2,\"contexts\":[]}\n"},
-		"registry version 3": {"registry.json": "{\"version\":3,\"idNamespace\":\"0123456789abcdef\",\"nextIdentity\":2,\"contexts\":[]}\n"},
-		"registry version 4": {"registry.json": "{\"version\":4,\"idNamespace\":\"0123456789abcdef\",\"nextIdentity\":2,\"contexts\":[]}\n"},
+		"without a registry":       {"contexts.yaml": "contexts: []\n", ".bootwright-managed-root": "managed\n"},
+		"another registry version": {"registry.json": "{\"version\":99,\"contexts\":[]}\n"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			store, _ := fixture(t)
@@ -458,17 +455,17 @@ func TestAnEarlierBuildsRootRefusesWithTheLiveEnvironmentRemedy(t *testing.T) {
 			before := snapshotRootEntries(t, root)
 			ctx := context.Background()
 			_, err := store.View(ctx)
-			requireEarlierBuildRemedy(t, "view", err)
-			requireEarlierBuildRemedy(t, "controller read", store.ReadController(ctx, "", func(prerequisites.StorageView) error { return nil }))
-			requireEarlierBuildRemedy(t, "init", store.Transact(ctx, true, nil, func(contexts.Transaction) error {
-				t.Fatal("init reached an earlier build's root")
+			requireOtherBuildRemedy(t, "view", err)
+			requireOtherBuildRemedy(t, "controller read", store.ReadController(ctx, "", func(prerequisites.StorageView) error { return nil }))
+			requireOtherBuildRemedy(t, "init", store.Transact(ctx, true, nil, func(contexts.Transaction) error {
+				t.Fatal("init reached another build's root")
 				return nil
 			}))
-			requireEarlierBuildRemedy(t, "update", store.Transact(ctx, false, nil, func(contexts.Transaction) error {
-				t.Fatal("a registry transaction reached an earlier build's root")
+			requireOtherBuildRemedy(t, "update", store.Transact(ctx, false, nil, func(contexts.Transaction) error {
+				t.Fatal("a registry transaction reached another build's root")
 				return nil
 			}))
-			requireEarlierBuildRemedy(t, "media read", store.ReadMedia(ctx, func(media.View) error { return nil }))
+			requireOtherBuildRemedy(t, "media read", store.ReadMedia(ctx, func(media.View) error { return nil }))
 			if after := snapshotRootEntries(t, root); !reflect.DeepEqual(before, after) {
 				t.Fatalf("the refusals changed the root:\nbefore: %#v\nafter:  %#v", before, after)
 			}

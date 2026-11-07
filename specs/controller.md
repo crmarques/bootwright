@@ -306,7 +306,7 @@ SSH flags remain unconsumed.
 
 | Invocation | Required behavior |
 | --- | --- |
-| `bootwright controller install --dry-run` | Admit the host as setup does, select the interpreter and list by name the host package requirements setup would install, through unprivileged `rpm` presence queries and without a dnf preview. No setup record is read, so this stays below the privilege boundary. No network, Secret read, privilege escalation or write. Runtime readiness and the setup state are explicitly unverified. With `--output json`, which setup accepts only with `--dry-run`, the result also lists every locked wheel's ABI, file, URL and SHA-256. The `state-root` check reports, from an unprivileged look at the state root, an absent root, which setup creates, or a `root:root` `0700` directory on a local filesystem, whose contents setup verifies. A root of another type, owner or mode, one on an unqualified filesystem, and, when the root's owner runs the dry run, one holding state this build cannot read, such as an earlier build's, are not ready: the dry run reports the check beside the store's own refusal and remedy, and exits 1. The check reaches the root as the store opens it, every ancestor without following a link and on a qualified local filesystem. A root behind a symbolic link in its path is not ready, and the dry run reports the store's own refusal beside the check (`TestTheStateRootInspectionReachesTheRootAsTheStoreOpensIt`). |
+| `bootwright controller install --dry-run` | Admit the host as setup does, select the interpreter and list by name the host package requirements setup would install, through unprivileged `rpm` presence queries and without a dnf preview. No setup record is read, so this stays below the privilege boundary. No network, Secret read, privilege escalation or write. Runtime readiness and the setup state are explicitly unverified. With `--output json`, which setup accepts only with `--dry-run`, the result also lists every locked wheel's ABI, file, URL and SHA-256. The `state-root` check reports, from an unprivileged look at the state root, an absent root, which setup creates, or a `root:root` `0700` directory on a local filesystem, whose contents setup verifies. A root of another type, owner or mode, one on an unqualified filesystem, and, when the root's owner runs the dry run, one holding state this build cannot read, are not ready: the dry run reports the check beside the store's own refusal and remedy, and exits 1. The check reaches the root as the store opens it, every ancestor without following a link and on a qualified local filesystem. A root behind a symbolic link in its path is not ready, and the dry run reports the store's own refusal beside the check (`TestTheStateRootInspectionReachesTheRootAsTheStoreOpensIt`). |
 | `bootwright controller install --download-only --dest-dir <dir>` | Write the lock's files into `<dir>` as [Offline and mirrored wheels](#offline-and-mirrored-wheels) defines. It never elevates and admits no host: it reads no setup record, runs no `rpm` or `dnf` and changes nothing outside `<dir>`, so any connected host can run it. |
 | `bootwright controller install` | Elevate, then inspect read-only: admission, the installed host, FIPS mode, the untested release and loader preload (informational), the setup state, the interpreter and its runtime and the baseline package presence. A ready host prints the receipt table and `Nothing to do.`, with no network request, confirmation or write. Otherwise run the preview and present the plan, confirm, take `setup/lock`, inspect again and refuse a host that moved, record the pending intent, install with dnf, fetch, build, verify and publish the runtime, and write the receipt, which clears the pending intent. Publish no binding and touch no controller record. |
 | `bootwright preflight controller` | Read and verify the same host checks as setup with bounded local probes and no dnf preview, and report the host's FIPS mode and the missing package names. May use the verified privilege boundary for private metadata. |
@@ -370,9 +370,8 @@ or data the operator supplied. Like install it selects no context, refuses
 **Refusals before any effect.** Each refuses `controller.uninstall` with the
 remedy named, unless it names another code:
 
-- a store this build cannot read, such as an earlier build's, refuses with the
-  store's own refusal and remedy, because uninstall cannot prove it holds no
-  context;
+- a store this build cannot read refuses with the store's own refusal and
+  remedy, because uninstall cannot prove it holds no context;
 - a registry that names any context, active or reserved, refuses naming each
   one, with the remedy "destroy each environment
   (`bootwright destroy --context <name>`) and delete each context
@@ -1054,11 +1053,6 @@ handling decides what it leaves; the next setup reads presence again. The
 unprivileged sudo supervisor relays the operator's interrupt and waits for the
 elevated command with no deadline of its own, so a second operator signal is
 the only kill ([local privilege](cli.md#local-privilege-and-user-identity)).
-
-**The cut-over refusal.** A store a build before the setup v2 cut-over wrote
-refuses every access with the fresh-install refusal
-[contexts](contexts.md#storage-locking-and-publication) owns; setup's first
-read refuses so, before any dnf preview, plan or confirmation.
 
 An input update may change a context's controller prerequisite intent, which
 its next controller stage installs, but cannot silently change an established

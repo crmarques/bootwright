@@ -15,10 +15,10 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
-func TestGeneratedTLSAcceptsLegacyIssuerStartClamp(t *testing.T) {
+func TestGeneratedTLSClampsItsStartToTheIssuer(t *testing.T) {
 	now := time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC)
 	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	template := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "synthetic root"}, NotBefore: now.Add(-time.Hour), NotAfter: now.Add(-time.Hour).AddDate(0, 0, 10), BasicConstraintsValid: true, IsCA: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature}
+	template := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "synthetic root"}, NotBefore: now.Add(-time.Hour), NotAfter: now.Add(-time.Hour).Add(certificateBackdate).AddDate(0, 0, 10), BasicConstraintsValid: true, IsCA: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature}
 	der, _ := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	private, _ := x509.MarshalPKCS8PrivateKey(key)
 	ca := secrets.Declaration{Name: "root", Type: "caBundle", Source: "generated", Generation: secrets.Generation{CommonName: "synthetic root", ValidityDays: 10}}
@@ -32,6 +32,6 @@ func TestGeneratedTLSAcceptsLegacyIssuerStartClamp(t *testing.T) {
 	result, err := service.GenerateSigned(context.Background(), leaf, ca, root)
 	result.Clear()
 	if err != nil {
-		t.Fatal("valid legacy issuer cannot sign leaf", err)
+		t.Fatal("an issuer starting after the backdate cannot sign leaf", err)
 	}
 }

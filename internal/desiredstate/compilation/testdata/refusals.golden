@@ -12,7 +12,7 @@ typo key: api.field 6:3 [Secret/probe] ($.spec.typ) unknown field; spec permits 
 nested typo: api.field 8:5 [Environment/synthetic] ($.spec.domains.basee) unknown field; spec.domains permits base, machines, clusters, containerClusters, storageClusters; next: rename it to base
 non-identifier key: api.field 7:3 [Secret/probe] ($.spec) a field name that is not a schema identifier is not permitted here; next: remove the field
 kind defaults key: api.field 10:5 [Environment/synthetic] ($.spec.defaults.Machines) kind defaults name no registered kind; next: rename it to Machine
-two Secret source arms: api.invariant 7:11 [Secret/probe] ($.spec.source) set at most one of contextStore, file, generated; next: keep one of them and remove the others
+two Secret source arms: api.invariant 7:11 [Secret/probe] ($.spec.source) set at most one of contextStore, generated; next: keep one of them and remove the others
 Proxy implementation enum: api.value 7:19 [Proxy/probe] ($.spec.implementation) value is not one of the permitted choices: squid; next: use one of the permitted values
 Context document: api.kind 2:7 ($.kind) a Context is a standalone context configuration document, not desired state; next: keep it outside the input directory and pass it to context init or context update with -f
 unknown Environment field: api.field 9:3 [Environment/synthetic] ($.spec.machineAccess) unknown field; spec permits domains, sites, containerClusters, storageClusters, remoteMachinesAccessKey, defaults, downloads, dependencyVersions, controller, lifecycle; next: remove it or use a permitted field

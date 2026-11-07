@@ -21,7 +21,7 @@ import (
 func boundedRunName(number int) string { return fmt.Sprintf("run-%032x", number) }
 
 // runsRoot is where this store keeps one context's bounded runs. A test plants
-// runs there as earlier runs, or an earlier build, left them.
+// runs there as earlier runs left them.
 func runsRoot(t *testing.T, store *Store, name string) string {
 	t.Helper()
 	root := filepath.Join(store.options.Root, "contexts", name, "state", "runs")
@@ -102,10 +102,9 @@ func TestABoundedRunKeepsTheNewestRuns(t *testing.T) {
 	}
 }
 
-// An area an earlier build filled to its entry bound with power runs no
-// longer stops the next one: it opens, keeps its output and leaves only the
-// newest runs.
-func TestBoundedRunsKeepWorkingPastTheOldEntryWall(t *testing.T) {
+// An area filled to its entry bound with power runs does not stop the next
+// one: it opens, keeps its output and leaves only the newest runs.
+func TestBoundedRunsKeepWorkingPastTheEntryBound(t *testing.T) {
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	root := runsRoot(t, store, "example")

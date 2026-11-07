@@ -65,7 +65,7 @@ func TestIndexWithAnUnnumberedVersionIsRefused(t *testing.T) {
 	declaration.Fingerprint = declarationFingerprint(declaration)
 	version := storedVersion{ID: fixedID("ver-", 1), Declaration: declaration.Summary(), Parts: []storedPart{{Part: secrets.ValuePart, BlobID: fixedID("blob-", 1), KeyID: fixedID("key-", 1), Generation: selector.Generation, Size: 1}}}
 	index := indexRecord{
-		FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, ActiveKey: fixedID("key-", 1),
+		FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, MinReader: readerVersion, ActiveKey: fixedID("key-", 1),
 		Keys:     []storedKey{{ID: fixedID("key-", 1)}},
 		Versions: []storedVersion{version},
 		Current:  []secretstore.Current{{Name: "token", Version: version.ID}}, Bindings: []secretstore.Binding{}, Produced: []secretstore.Produced{},

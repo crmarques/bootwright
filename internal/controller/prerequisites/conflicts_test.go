@@ -102,20 +102,16 @@ func TestAConflictRemedyNamesTheFieldThatChoosesTheKey(t *testing.T) {
 }
 
 // A claim names the object it reserves for by the API kind it records (B870),
-// so a cluster-media claim needs no family kind in this package; one an
-// earlier build held without that kind still conflicts, named by its claim
-// kind.
+// so a cluster-media claim needs no family kind in this package; a claim of a
+// kind naming no object and recording none is named by its claim kind.
 func TestAClaimIsNamedByTheAPIKindItRecords(t *testing.T) {
 	recorded := HostReservation{Context: "alpha", Kind: ClusterMediaReservation, Service: "a", ObjectKind: "OpenShiftCluster", Keys: []string{"path:/var/lib/bootwright/media/a"}}
-	earlier := recorded
-	earlier.ObjectKind = ""
 	wanted := HostReservation{Context: "lab", Kind: ClusterMediaReservation, Service: "b", ObjectKind: "OpenShiftCluster", Keys: []string{"path:/var/lib/bootwright/media/a"}}
 	for name, test := range map[string]struct {
 		held   HostReservation
 		holder string
 	}{
-		"a recorded kind":             {recorded, "OpenShiftCluster/a"},
-		"a claim of an earlier build": {earlier, "cluster-media a"},
+		"a recorded kind": {recorded, "OpenShiftCluster/a"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			conflicts := Conflicts([]HostReservation{test.held}, []HostReservation{wanted})

@@ -213,7 +213,7 @@ func TestAnIncompleteContextRefuses(t *testing.T) {
 	if !errors.Is(err, incomplete) || len(reader.reads) != 0 {
 		t.Fatalf("an incomplete context: %v after %d custody reads", err, len(reader.reads))
 	}
-	refused := secretstore.Failure("store.implementation", "this context's secret store is local-keyring-v3, which this Bootwright build cannot open")
+	refused := secretstore.Failure("store.implementation", "this context's secret store is unknown-keyring, which this Bootwright build cannot open")
 	_, err = New(&effectiveState{objects: graph()}, &custodyReader{failure: refused}, locate, current("lab")).Kubeconfig(context.Background(), KubeconfigRequest{Name: "sno"})
 	if !errors.Is(err, refused) {
 		t.Fatalf("an identity refusal became %v", err)

@@ -16,7 +16,6 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
 
@@ -242,7 +241,7 @@ func (s Service) Init(ctx context.Context, request InitRequest) (*AdmissionResul
 	if request.InputDirectory != "" {
 		sources, environment, _, report, err = s.admit(ctx, request.InputDirectory)
 		if err != nil {
-			return nil, secrets.NameFileSourceContext(err, request.Name, secrets.FileSourceRerun{Command: secrets.FileSourceInit, ConfigurationFile: request.ConfigurationFile != ""})
+			return nil, err
 		}
 	}
 	var result *AdmissionResult
@@ -422,7 +421,7 @@ func (s Service) admitUpdate(ctx context.Context, request UpdateRequest) (admitt
 	if request.InputDirectory != "" {
 		admitted.sources, admitted.environment, admitted.controller, admitted.report, err = s.admit(ctx, request.InputDirectory)
 		if err != nil {
-			return admittedUpdate{}, secrets.NameFileSourceContext(err, request.Name, secrets.FileSourceRerun{Command: secrets.FileSourceUpdate, ConfigurationFile: request.ConfigurationFile != ""})
+			return admittedUpdate{}, err
 		}
 	}
 	return admitted, nil

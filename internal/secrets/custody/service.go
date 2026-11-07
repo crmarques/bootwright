@@ -164,7 +164,7 @@ func (s Service) setFromStdin(ctx context.Context, selected secretstore.Context,
 // store writes acquired material as the Secret's new current version, unless
 // its current version holds equal material for this declaration.
 func store(ctx context.Context, session secretstore.StoreSession, d secrets.Declaration, previous secretstore.Version, exists bool, material secrets.Material, result *MutationResult) error {
-	if exists && d.Current(previous.Declaration.Fingerprint) {
+	if exists && previous.Declaration.Fingerprint == d.Fingerprint {
 		old, err := session.Read(ctx, previous.ID)
 		if err != nil {
 			return err
@@ -236,7 +236,7 @@ func (s Service) Generate(ctx context.Context, request GenerateRequest) (*Mutati
 				continue
 			}
 			previous, exists := currentVersion(snapshot, d.Name)
-			if exists && d.Current(previous.Declaration.Fingerprint) && !(request.Renew && (request.Name == "" || request.Name == d.Name)) {
+			if exists && previous.Declaration.Fingerprint == d.Fingerprint && !(request.Renew && (request.Name == "" || request.Name == d.Name)) {
 				result.UnchangedNames = append(result.UnchangedNames, d.Name)
 				continue
 			}
@@ -378,9 +378,7 @@ func (s Service) List(ctx context.Context, request ListRequest) (*ListResult, er
 			d := v.Declaration
 			// Produced material belongs to the lifecycle block that captured
 			// it, never to a Secret declaration, so no secret command lists it.
-			// A version an earlier build froze from the retired file source
-			// belongs only to the binding that still holds it.
-			if d.Source == "file" || d.Source == "produced" {
+			if d.Source == "produced" {
 				continue
 			}
 			current, exists := currentVersion(snapshot, d.Name)
@@ -400,7 +398,7 @@ func (s Service) List(ctx context.Context, request ListRequest) (*ListResult, er
 				row.Type, row.Source, row.Parts = d.Type, d.Source, slices.Clone(v.Parts)
 				if declared, found := lookupDeclaration(declarations, d.Name); found {
 					row.State = "current"
-					if !declared.Current(d.Fingerprint) {
+					if declared.Fingerprint != d.Fingerprint {
 						row.State = "stale"
 					}
 				}
@@ -452,7 +450,7 @@ func (s Service) Show(ctx context.Context, request ShowRequest) (*RevealResult, 
 		if !exists {
 			return missingMaterial(selected.Name, d)
 		}
-		if !d.Current(v.Declaration.Fingerprint) {
+		if v.Declaration.Fingerprint != d.Fingerprint {
 			return staleMaterial(selected.Name, d)
 		}
 		material, err = session.Read(ctx, v.ID)
@@ -612,7 +610,7 @@ func presence(contextName string, snapshot secretstore.Snapshot, d secrets.Decla
 	}
 	id := version.ID
 	row.Version, row.Sequence = &id, version.Sequence
-	if !d.Current(version.Declaration.Fingerprint) {
+	if version.Declaration.Fingerprint != d.Fingerprint {
 		row.Status = "stale"
 		return row, version, staleMaterial(contextName, d)
 	}

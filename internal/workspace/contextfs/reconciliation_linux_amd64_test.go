@@ -366,33 +366,6 @@ func TestReservationsRefuseAnotherContextsKeys(t *testing.T) {
 	}
 }
 
-// A claim an earlier build published records no API kind; the next claim of
-// it records one (B870), since a claim that differs only in its kind is not
-// held exactly.
-func TestAClaimRecordsItsAPIKindOverOneAnEarlierBuildHeld(t *testing.T) {
-	ctx := context.Background()
-	store, record := lifecycleFixture(t)
-	reserveFixture(t, store, record)
-	earlier := prerequisites.HostReservation{Context: record.Name, Kind: prerequisites.ClusterMediaReservation, Service: "sno", Keys: []string{"path:/var/lib/bootwright/media/sno"}}
-	if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error { return tx.Reserve(ctx, []prerequisites.HostReservation{earlier}) }); err != nil {
-		t.Fatal(err)
-	}
-	recorded := earlier
-	recorded.ObjectKind = "OpenShiftCluster"
-	if err := store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error { return tx.Claim(ctx, recorded) }); err != nil {
-		t.Fatal(err)
-	}
-	err := store.ReadController(ctx, "", func(view prerequisites.StorageView) error {
-		if !reflect.DeepEqual(view.State.Reservations, []prerequisites.HostReservation{recorded}) {
-			t.Fatalf("reservations = %+v", view.State.Reservations)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 // A wildcard bind holds its port on every address, so it and a socket at any
 // other address on that port refuse each other across contexts.
 func TestAWildcardSocketReservationRefusesEveryAddressAtItsPort(t *testing.T) {
@@ -1106,5 +1079,50 @@ func TestARecreatedDirectoryOnTheSameInodeIsAnotherIncarnation(t *testing.T) {
 	birth, err := birthOf(int(held.Fd()))
 	if err != nil {
 		t.Fatalf("a held directory reports birth %+v (%v)", birth, err)
+	}
+}
+
+func TestADamagedOperationIndexStillLetsTheAcknowledgedDeletionRemoveTheContext(t *testing.T) {
+	ctx := context.Background()
+	for form, damage := range map[string]func(*testing.T, string){
+		"oversized": func(t *testing.T, path string) {
+			if err := os.WriteFile(path, make([]byte, operationstore.MaxIndexBytes+1), 0600); err != nil {
+				t.Fatal(err)
+			}
+		},
+	} {
+		store, record := lifecycleFixture(t)
+		if err := store.MutateLifecycle(ctx, record.Name, func(tx lifecycle.Transaction) error {
+			return tx.Operations().WriteExclusive(ctx, "index.json", []byte(`{"version":1}`+"\n"))
+		}); err != nil {
+			t.Fatal(err)
+		}
+		directory := filepath.Join(store.options.Root, "contexts", record.Name)
+		var index string
+		if err := filepath.WalkDir(directory, func(path string, entry os.DirEntry, err error) error {
+			if err == nil && !entry.IsDir() && entry.Name() == "index.json" && filepath.Base(filepath.Dir(path)) == "operations" {
+				index = path
+			}
+			return err
+		}); err != nil || index == "" {
+			t.Fatalf("%s: the written index was not found (%v)", form, err)
+		}
+		damage(t, index)
+		var state error
+		if err := store.TransactDeletion(ctx, record.Name, func(tx contexts.Transaction) error {
+			_, state = tx.MutationState(ctx, record.Name)
+			if !errors.Is(state, contexts.ErrUnreadableEvidence) {
+				return state
+			}
+			return tx.Delete(ctx, record)
+		}); err != nil {
+			t.Fatalf("%s: the acknowledged deletion refused: %#v", form, diagnostics.Of(err))
+		}
+		if !errors.Is(state, contexts.ErrUnreadableEvidence) {
+			t.Fatalf("%s: the damaged index state = %v, want unreadable evidence", form, state)
+		}
+		if _, err := os.Stat(directory); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%s: the deleted context remains (%v)", form, err)
+		}
 	}
 }

@@ -111,8 +111,8 @@ func (t *transaction) Publish(ctx context.Context, name, environment string, sou
 		return "", err
 	}
 	if len(names) == maxRevisions {
-		// A legacy store or interrupted writer may have filled the revision
-		// bound. Establish its existing selection durably before reclaiming
+		// An interrupted collection may have left the revision bound full.
+		// Establish its existing selection durably before reclaiming
 		// unselected input; a failed sync must preserve every revision.
 		if err := t.syncIntent(ctx); err != nil {
 			return "", err

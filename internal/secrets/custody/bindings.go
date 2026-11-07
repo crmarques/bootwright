@@ -116,10 +116,10 @@ func (s Service) readCurrent(ctx context.Context, session secretstore.StoreSessi
 		switch {
 		case !exists:
 			refused = append(refused, diagnostics.Of(missingMaterial(contextName, d))...)
-		case !d.Current(v.Declaration.Fingerprint):
+		case v.Declaration.Fingerprint != d.Fingerprint:
 			refused = append(refused, diagnostics.Of(staleMaterial(contextName, d))...)
 		default:
-			selection = append(selection, current{declaration: d.Stored(v.Declaration.Fingerprint), version: v})
+			selection = append(selection, current{declaration: d, version: v})
 		}
 	}
 	if len(refused) > 0 {

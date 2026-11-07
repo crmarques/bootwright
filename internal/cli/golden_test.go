@@ -1192,7 +1192,7 @@ func TestClusterKubeconfigWritesExactlyItsBytesOrOneDiagnostic(t *testing.T) {
 		kubeconfigNotApplicable,
 		diagnostics.NewFailureWithRemediation("access.target", "the context lab selects no OpenShiftCluster named sno", "", "name an OpenShiftCluster this context selects"),
 		diagnostics.NewFailureWithRemediation("access.unavailable", "this context holds no administrator kubeconfig for OpenShiftCluster sno", "", "bootwright apply --context lab"),
-		secretstore.Failure("store.implementation", "this context's secret store is local-keyring-v3, which this Bootwright build cannot open"),
+		secretstore.Failure("store.implementation", "this context's secret store is unknown-keyring, which this Bootwright build cannot open"),
 	} {
 		code, out, errOut := run(nil, failure)
 		if code != 1 || out != "" || strings.Count(errOut, "  error  ") != 1 {

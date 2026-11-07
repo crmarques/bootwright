@@ -36,7 +36,7 @@ func commentLineCeilings() map[string]int {
 		"internal/reconciliation/ansiblerunner": 213, "internal/reconciliation/contextguard": 8,
 		"internal/reconciliation/lifecycle": 1790, "internal/reconciliation/lifecycle/workspacecontract": 20,
 		"internal/reconciliation/operationstore": 287, "internal/reconciliation/operationstore/areacontract": 12,
-		"internal/reconciliation/operationstore/areadouble": 16, "internal/secrets": 54,
+		"internal/reconciliation/operationstore/areadouble": 16, "internal/secrets": 39,
 		"internal/secrets/custody": 81, "internal/secrets/encryption": 11, "internal/secrets/localkeyring": 26,
 		"internal/secrets/material": 53, "internal/secrets/secretstore": 61,
 		"internal/secrets/secretstore/areacontract": 10, "internal/storage": 0, "internal/storage/cephcluster": 4, "internal/storage/ceph": 17, "internal/storage/preflight": 0,

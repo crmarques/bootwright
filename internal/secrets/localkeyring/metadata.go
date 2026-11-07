@@ -104,10 +104,10 @@ func readable(plaintext []byte) error {
 	var probe struct {
 		MinReader json.Number `json:"minReader"`
 	}
-	if json.Unmarshal(plaintext, &probe) != nil || probe.MinReader == "" {
+	if json.Unmarshal(plaintext, &probe) != nil {
 		return nil
 	}
-	if reader, err := probe.MinReader.Int64(); err == nil && reader <= readerVersion {
+	if reader, err := probe.MinReader.Int64(); err != nil || reader <= readerVersion {
 		return nil
 	}
 	return diagnostics.NewFailureWithRemediation("secret.store.newer",

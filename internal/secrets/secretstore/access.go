@@ -144,7 +144,7 @@ func (a *Access) initializeArea(ctx context.Context, selected Context, implement
 		return err
 	}
 	if exists && selector.Backend != implementation.Backend() {
-		// A backend this build no longer carries refuses with its own identity
+		// A backend this build does not carry refuses with its own identity
 		// and the way out, as every other access to that store does.
 		if _, err := a.resolver.Reopen(selector.Backend); err != nil {
 			return err

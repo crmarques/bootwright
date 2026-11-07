@@ -146,7 +146,7 @@ func identityArtifacts(ctx context.Context, area secretstore.Area, selector secr
 			return nil, 0, areaFailure(ctx, "store.corrupt", "secret identity reservation is missing or unsafe", err)
 		}
 		var identity identityRecord
-		if decodeCanonical(data, selectorMaximum, 16, &identity) != nil || (identity.FormatVersion != formatVersion && identity.FormatVersion != 1) || identity.Context != selector.Context || identity.ID != name {
+		if decodeCanonical(data, selectorMaximum, 16, &identity) != nil || identity.FormatVersion != formatVersion || identity.Context != selector.Context || identity.ID != name {
 			return nil, 0, secretstore.Failure("store.corrupt", "secret identity reservation is invalid")
 		}
 		delete(reserved, name)

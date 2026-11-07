@@ -234,19 +234,9 @@ Controller [descriptor](contexts/controller-record.md#descriptor) is an
 optional trailing member that a host's first binding adds; setup never adds it.
 The 4096-name bound applies to active or reserved contexts, not past creations.
 
-A `registry.json` of version 5, which every build before the setup v2
-cut-over wrote, refuses every access with `context.state`, "/var/lib/bootwright
-holds a store an earlier Bootwright build wrote (registry version 5), which
-this build does not read or convert", and the fresh-install remedy: "with a
-build that reads it, destroy each environment (bootwright destroy --context
-<name>) and delete each context (bootwright context delete --name <name>
---purge); then, as root, remove /var/lib/bootwright and
-/var/lib/bootwright-staging and run bootwright controller install with this build. Never remove /var/lib/bootwright while
-services it manages run." ([D152](milestones/backlog.md#d152),
-`TestARegistryVersion5StoreNamesTheFreshInstallRemedy`). Nothing in that store
-is rewritten. A `registry.json` of any other format version, such as the
-versions 2, 3 and 4 earlier builds wrote, is refused rather than converted, as
-state this build cannot read, with the earlier-build guidance below. There is
+A `registry.json` of any other format version than `RegistryVersion` is
+refused rather than converted, as state this build cannot read, with the
+other-build guidance below, and nothing in that store is rewritten. There is
 no fallback from corrupt state to older metadata.
 
 The production root is `/var/lib/bootwright`. Its Controller subtree follows
@@ -325,12 +315,11 @@ directories and never follows a link, and the repair: replace that path with a
 directory, such as the one a link there names or a mount of that storage, then
 repeat the command (`TestAStateRootBehindALinkNamesTheAncestorAndItsExit`).
 
-A host whose `/var/lib/bootwright` holds a store an earlier Bootwright build
+A host whose `/var/lib/bootwright` holds a store another Bootwright build
 created is not a supported controller for this build until that build's
 environments are retired and its root archived. This build refuses that root
-and never adopts or converts it. A version 5 registry it names by the version
-it read, with the fresh-install remedy above; any other root it refuses by
-what it lacks rather than by recognizing another build's files. The refusal says that another Bootwright build may
+and never adopts or converts it, by what it lacks rather than by recognizing
+another build's files. The refusal says that another Bootwright build may
 manage live environments there, to run this build on another controller host
 or to retire that build's environments before archiving its root, and that the
 root is never moved aside while that build's services run.
@@ -692,7 +681,7 @@ one replaced at its name still refuses
 (`TestARunGoneWhileTheRunsAreaIsMeasuredIsAbsent`). The area's retention keeps
 the runs it holds within its byte bound and far below its entry bound, so
 `machine` power commands keep working however many ran before
-(`TestBoundedRunsKeepWorkingPastTheOldEntryWall`).
+(`TestBoundedRunsKeepWorkingPastTheEntryBound`).
 
 No command prunes the operations a context retains, so a refusal at the
 retained-operation bound names the exits that exist, from what a `destroy`
@@ -729,7 +718,7 @@ with a no-replace rename, verifies the result, and syncs the root before
 proceeding. Inspection never performs this recovery; it directs the user to
 repeat context init with the original options. Every other missing-registry
 shape is left unchanged and refuses as state this build did not publish, with
-the earlier-build guidance [above](#storage-locking-and-publication): another
+the other-build guidance [above](#storage-locking-and-publication): another
 Bootwright build may manage live environments from that root, so this build
 runs on another controller host or that build's environments are retired
 before its root is archived, and the root is never moved aside while that
@@ -743,7 +732,7 @@ directory once setup has created it, whose content the root admission never read
 and verified private, bounded `pending-<32 lowercase hexadecimal digits>.json`
 files left by an interrupted registry replacement; reads ignore them, nothing
 adopts them, and the next command that opens a registry transaction removes
-them. Any other entry refuses with the same earlier-build and whole-store
+them. Any other entry refuses with the same other-build and whole-store
 guidance, whether or not the registry holds contexts. Bounds never authorize evidence
 deletion to make room.
 

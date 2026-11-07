@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"maps"
 	"slices"
 	"strconv"
@@ -56,9 +55,6 @@ func (s Service) withPhases(decided operationPlan, err error) operationPlan {
 func (s Service) decideFrom(ctx context.Context, view View, verb reconciliation.Verb, selection reconciliation.Selection) (operationPlan, reconciliation.Verb, error) {
 	store := s.store(view)
 	index, err := store.Index(ctx)
-	if errors.Is(err, operationstore.ErrRetiredIndex) {
-		return operationPlan{}, verb, operationstore.RetiredIndexRefusal(view.Identity().Name)
-	}
 	if err != nil {
 		return operationPlan{}, verb, err
 	}

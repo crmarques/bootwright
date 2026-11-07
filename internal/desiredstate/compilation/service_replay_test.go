@@ -75,30 +75,26 @@ spec: {}
 		t.Fatal("effective result exposed mutable catalog storage")
 	}
 
-	// A retired file source an Environment default supplies is refused for
-	// each recipient, at the default that supplied it, naming the command
-	// that loads context custody and the default to correct.
+	// A field an Environment default supplies is refused at the default that
+	// supplied it, with the default's own source position.
 	badEnvironment := strings.Replace(environment, "generated:\n          bytes: 48", "file:\n          path: ../secrets/material", 1)
 	input.Files[0] = desiredstate.NewSourceFile(input.Files[0].Path(), []byte(badEnvironment+controllerYAML))
 	service = compilation.New(nil, compiler(), frozenContextInputs{input})
 	failed, err := service.RenderEffective(context.Background(), compilation.EffectiveRequest{})
 	if failed != nil || err == nil {
-		t.Fatal("an inherited file source compiled")
+		t.Fatal("an inherited unknown field compiled")
 	}
 	found := false
 	for _, diagnostic := range diagnostics.Of(err) {
-		if diagnostic.Code == "api.field" && diagnostic.Field == "$.spec.source.file" {
+		if diagnostic.Code == "api.field" && diagnostic.Field == "$.spec.defaults.Secret.source.file" {
 			found = true
-			line := strings.Count(badEnvironment[:strings.Index(badEnvironment, "          path:")], "\n") + 1
-			if diagnostic.Source == nil || diagnostic.Source.Path != input.Files[0].Path() || diagnostic.Source.Line != line || !strings.Contains(diagnostic.Message, "Environment defaults") {
+			line := strings.Count(badEnvironment[:strings.Index(badEnvironment, "        file:")], "\n") + 1
+			if diagnostic.Source == nil || diagnostic.Source.Path != input.Files[0].Path() || diagnostic.Source.Line != line {
 				t.Fatal("inherited diagnostic lost original field provenance", diagnostic)
-			}
-			if !strings.Contains(diagnostic.Message, "bootwright secret set") || !strings.Contains(diagnostic.Remediation, "Environment kind default") {
-				t.Fatal("inherited refusal lost its remedy", diagnostic)
 			}
 		}
 	}
 	if !found {
-		t.Fatal("missing inherited file source refusal", diagnostics.Of(err))
+		t.Fatal("missing inherited unknown field refusal", diagnostics.Of(err))
 	}
 }

@@ -4486,8 +4486,6 @@ and the knowledge pages record podman's pull-local `--signature-policy`
 position and how inspection reads evidence without the frozen request.
 
 **Guard tests:** `TestOneExecutable` (`test/architecture`);
-`TestAnIndexTheRetiredQualificationFixtureWroteRefusesWithItsExit`,
-`TestAContextHoldingTheRetiredFixturesIndexRefusesAndIsDeletedOnlyAsUnreadable`,
 `TestADamagedOperationIndexStillLetsTheAcknowledgedDeletionRemoveTheContext`,
 `TestEvidenceTheStoreProvesUnreadableRefusesWithItsOwnExit` and
 `TestAnUpdateOverACompletedApplyWarnsAndTheNextApplyRefuses` for the retired
@@ -5768,8 +5766,7 @@ and `TestALoaderPreloadIsInformationalEverywhere`; `internal/controller/clients`
 `TestAMissingRuntimeRefusesNamingTheBuildsLock`,
 `TestARuntimeGoneAtLaunchRefusesWithSetup`, `TestAnOperationLocatesItsRuntimeOnce`
 and `TestARemovalLocatesItsRuntimeOnce`; `internal/workspace/contextfs`:
-`TestTheControllerRecordV3HoldsNoReceipt`,
-`TestARegistryVersion5StoreNamesTheFreshInstallRemedy` and
+`TestTheControllerRecordV3HoldsNoReceipt` and
 `TestTheFirstBindingRefusesBeforeSetupCompletes`; `cmd/bootwright`:
 `TestEveryStoreFormatIsClassified`,
 `TestComposedBaselineDryRunReadsNoSetupState` and the moved
@@ -6234,7 +6231,6 @@ twelve findings. **Decisions:** D152, pending the owner's review.
 6. *The cut-over remedy and the operator guide named `context delete --name
    <name>` without `--purge`* (minor), which every build refuses. The remedy,
    specs/contexts.md and the guide add `--purge`.
-   `TestARegistryVersion5StoreNamesTheFreshInstallRemedy`.
 7. *The `controller.runtime-retention` line was never written* (minor): it is
    raised after the presented plan. The report counts the warnings the plan
    carried and the result writes the rest.

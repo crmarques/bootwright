@@ -6,26 +6,16 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
-// earlierBuildGuidance is the remedy for a root this build cannot read as its
+// otherBuildGuidance is the remedy for a root this build cannot read as its
 // own. It never says to move the root aside: another build's services may be
 // running from it.
-const earlierBuildGuidance = "another Bootwright build may have created this root and may manage live environments there: " +
+const otherBuildGuidance = "another Bootwright build may have created this root and may manage live environments there: " +
 	"run this build on another controller host, or retire that build's environments before archiving its root, " +
 	"and never move it aside while its services run"
 
 const (
 	missingRegistryMessage   = "the state root holds state but no registry.json this build can read"
-	storeRecoveryRemediation = earlierBuildGuidance + "; a store this build created is restored whole from a matching backup"
-)
-
-// The setup v2 cut-over (D152) reads no store an earlier format wrote; the
-// remedy is a fresh install, never a conversion.
-const (
-	freshInstallMessage     = "/var/lib/bootwright holds a store an earlier Bootwright build wrote (registry version 5), which this build does not read or convert"
-	freshInstallRemediation = "with a build that reads it, destroy each environment (bootwright destroy --context <name>) and delete each context " +
-		"(bootwright context delete --name <name> --purge); then, as root, remove /var/lib/bootwright and /var/lib/bootwright-staging and run bootwright controller install " +
-		"with this build. Never remove /var/lib/bootwright while services it manages run."
-	cutOverRegistryVersion = 5
+	storeRecoveryRemediation = otherBuildGuidance + "; a store this build created is restored whole from a matching backup"
 )
 
 type registryRecord struct {
@@ -49,9 +39,6 @@ func decodeRegistry(data []byte, maximum int, target *contexts.Registry) error {
 	}
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return state("context registry is malformed")
-	}
-	if envelope.Version == cutOverRegistryVersion {
-		return contexts.StateErrorWithRemediation(freshInstallMessage, freshInstallRemediation)
 	}
 	if envelope.Version != contexts.RegistryVersion {
 		// Any other version is another build's state, never damage this build
