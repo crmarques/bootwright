@@ -109,5 +109,5 @@ func TestEveryCephCIDRIsADeclaredNetwork(t *testing.T) {
 		t.Fatalf("declared networks refused: %#v", issues)
 	}
 	requireOnlyIssue(t, issuesUnder(Validate(cluster, declare(cidrs[0])), "$.spec.networks"), "$.spec.networks.publicCIDRs[1]",
-		"the public CIDR "+cidrs[1]+" is the cidr of no declared Network")
+		"the public CIDR "+cidrs[1]+" of "+cluster.Identity()+" is the cidr of no declared Network")
 }

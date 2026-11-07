@@ -138,8 +138,8 @@ func (a *admission) declaredNetworks(ceph api.Value) {
 			if err != nil || slices.ContainsFunc(declared, func(held network.Held) bool { return held.Prefix == prefix }) {
 				continue
 			}
-			a.invalid(indexed("$.spec.networks."+entry.key, i), "the "+entry.role+" CIDR "+cidr+" is the cidr of no declared Network, so Bootwright cannot check which network carries it",
-				"set "+cidr+" in spec.networks."+entry.key+" to the spec.ipv4.cidr or spec.ipv6.cidr of the Network it names, or declare that Network")
+			a.invalid(indexed("$.spec.networks."+entry.key, i), "the "+entry.role+" CIDR "+cidr+" of "+a.object.Identity()+" is the cidr of no declared Network, so Bootwright cannot check which network carries it",
+				"set "+cidr+" in spec.networks."+entry.key+" of "+a.object.Identity()+" to the spec.ipv4.cidr or spec.ipv6.cidr of the Network it names, or declare that Network")
 		}
 	}
 }

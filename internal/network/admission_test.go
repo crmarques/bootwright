@@ -109,6 +109,15 @@ func TestAGatewayIsAHostAddressOfItsSubnet(t *testing.T) {
 		requireIssue(t, validate(net("n", m("provided", true, "ipv6", m("cidr", cidr, "gateway", gateway)))), "$.spec.ipv6.gateway", "reserved subnet anycast")
 	}
 	requireNone(t, validate(net("n", m("provided", true, "ipv6", m("cidr", "2001:db8::/64", "gateway", "2001:db8::ffff:ffff:ffff:ffff")))))
+	for cidr, gateway := range map[string]string{"2001:db8::/121": "2001:db8::7f", "2001:db8::80/121": "2001:db8::81", "2001:db8::100/121": "2001:db8::17e"} {
+		requireNone(t, validate(net("n", m("provided", true, "ipv6", m("cidr", cidr, "gateway", gateway)))))
+	}
+}
+
+func TestAnIPv6NetworkCarriesTheIPv6MinimumMTU(t *testing.T) {
+	requireIssue(t, validate(net("n", m("provided", true, "mtu", 1279, "ipv6", m("cidr", "2001:db8::/64")))), "$.spec.mtu", "below 1280, the minimum IPv6 link MTU")
+	requireNone(t, validate(net("n", m("provided", true, "mtu", 1280, "ipv6", m("cidr", "2001:db8::/64")))))
+	requireNone(t, validate(net("n", m("provided", true, "mtu", 576, "ipv4", m("cidr", "192.0.2.0/24")))))
 }
 
 func TestASiteResolvesInTheEnvironment(t *testing.T) {

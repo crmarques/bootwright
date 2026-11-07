@@ -112,6 +112,23 @@ func TestAnAuthoredClusterListKeepsStandaloneInstalledMachines(t *testing.T) {
 	}
 }
 
+// TestAManagedNetworkRetainsItsProviderClosure holds the Network row: a
+// Network with a libvirt arm keeps the InfraProvider it names and that
+// provider's host Machine, even when no selected Machine uses the provider.
+func TestAManagedNetworkRetainsItsProviderClosure(t *testing.T) {
+	objects := selectionFixture(selectionEnvironment("env", "containerClusters", []string{"c0"}),
+		selectionObject(api.Network, "lab", "provided", api.BoolValue(false), "libvirt", selectionValue("providerRef", "prov-lab", "bridge", "virbr-lab")),
+		selectionObject(api.InfraProvider, "prov-lab", "libvirt", selectionValue("machineRef", "lab-host")),
+		selectionObject(api.Machine, "lab-host"),
+	)
+	kept := selectionIdentities(environment.Select(api.NewCatalog(objects), nil, testClusterMembers).Catalog.Objects())
+	for _, identity := range []string{"Network/lab", "InfraProvider/prov-lab", "Machine/lab-host"} {
+		if !slices.Contains(kept, identity) {
+			t.Errorf("the managed Network lost %s: %v", identity, kept)
+		}
+	}
+}
+
 // TestSelectingANestedClusterRetainsItsHostCluster is the multidc shape B732
 // lifts: hub-multidc-01's nodes are KubeVirt VMs on a provider whose
 // hostClusterRef is ocp-multidc-01, so selecting the hub alone retains the

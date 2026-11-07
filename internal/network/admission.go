@@ -5,11 +5,14 @@ import (
 	"net/netip"
 	"slices"
 	"strconv"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
 var families = []string{"ipv4", "ipv6"}
+
+const minimumIPv6MTU = 1280
 
 func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 	if o.Kind() != api.Network {
@@ -41,6 +44,10 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	for _, family := range families {
 		issues = append(issues, validateSubnet(o, family)...)
 	}
+	if mtu, err := strconv.Atoi(spec.Get("mtu").Text()); err == nil && spec.Has("ipv6") && mtu < minimumIPv6MTU {
+		issues = append(issues, invariant("$.spec.mtu", "spec.mtu "+strconv.Itoa(mtu)+" of "+o.Identity()+" is below 1280, the minimum IPv6 link MTU (RFC 8200), and it declares spec.ipv6",
+			"set spec.mtu to at least 1280 on "+o.Identity()+", or remove spec.ipv6 from it"))
+	}
 	issues = append(issues, validateSites(o, c)...)
 	return append(issues, validateDomain(o, c)...)
 }
@@ -51,8 +58,9 @@ func validateLifecycle(o api.Object) []api.Issue {
 	if !provided.Present() {
 		return nil
 	}
-	var arms []string
+	var arms, remedies []string
 	for _, arm := range api.Schema(api.Network).Arms {
+		remedies = append(remedies, "spec."+arm)
 		if spec.Has(arm) {
 			arms = append(arms, arm)
 		}
@@ -67,7 +75,7 @@ func validateLifecycle(o api.Object) []api.Issue {
 	}
 	if len(arms) == 0 {
 		return []api.Issue{invariant("$.spec", o.Identity()+" is not provided, so something must realize it, and it names no realization arm",
-			"name the substrate that realizes it, spec.libvirt, or set spec.provided to true on "+o.Identity()+" for a network that exists outside Bootwright")}
+			"name the substrate that realizes it, "+strings.Join(remedies, " or ")+", or set spec.provided to true on "+o.Identity()+" for a network that exists outside Bootwright")}
 	}
 	return nil
 }
@@ -131,7 +139,7 @@ func reservedAnycast(prefix netip.Prefix, address netip.Addr) bool {
 	if prefix.Bits() == 64 {
 		return bytes[8] == 0xfd && bytes[9] == 0xff && bytes[10] == 0xff && bytes[11] == 0xff && bytes[12] == 0xff && bytes[13] == 0xff && bytes[14] == 0xff && bytes[15] >= 0x80
 	}
-	if prefix.Bits() > 121 {
+	if prefix.Bits() > 120 {
 		return false
 	}
 	last := lastAddress(prefix).As16()

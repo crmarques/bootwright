@@ -379,6 +379,8 @@ func (r *retention) retainDependencies(catalog api.Catalog, object api.Object) {
 	switch kind {
 	case api.Machine:
 		r.keep(api.InfraProvider, spec.Get("substrate", "providerRef").Text())
+	case api.Network:
+		retainReferences(spec, api.Schema(kind), func(referenced api.Kind) bool { return referenced == api.InfraProvider }, r.keep)
 	case api.InfraProvider:
 		retainReferences(spec, api.Schema(kind), func(referenced api.Kind) bool {
 			category, root := api.CategoryOf(referenced)

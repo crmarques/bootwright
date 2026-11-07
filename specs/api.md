@@ -331,8 +331,9 @@ either is unknown), the Machine [substrate arm](api/machines.md#substrate-arm),
 provider attachments, machine-install backends and package sources,
 authentication, proxy choices, `Secret.spec.source`,
 `OpenShiftCluster.spec.install.agent` and `spec.install.platform`,
-`CephCluster.spec.distribution`, the `CephPool` protection and the
-`CephConsumer` arms. An arm must satisfy its own required fields after
+`CephCluster.spec.distribution`, the `CephPool` protection, the
+`CephConsumer` arms and `Network.spec.libvirt` (beside its required boolean
+`spec.provided`). An arm must satisfy its own required fields after
 defaulting, and an inactive arm is refused. The owning field specifies whether
 an empty arm is a valid selection and whether omission is invalid or selects
 an arm: `Secret.spec.source` selects `contextStore`, `install.agent` selects

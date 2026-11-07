@@ -577,20 +577,25 @@ func validateManagedAttachmentAddress(o api.Object, address netip.Prefix, provid
 	return nil
 }
 
+func nmstateSource(o api.Object) string {
+	reference := o.Spec().Get("network", "configRef")
+	if !reference.Present() {
+		return "spec.network.inline.nmstate"
+	}
+	if o.Spec().Has("network", "overrides") {
+		return "NetworkConfig/" + reference.Text() + " with spec.network.overrides"
+	}
+	return "NetworkConfig/" + reference.Text()
+}
+
 func validateInstallGateway(o api.Object, c api.Catalog, address api.Value, prefix netip.Prefix, native api.Value) []api.Issue {
 	gateway, ok := defaultGateway(native, prefix.Addr().Is4(), address.Get("interface").Text())
 	if !ok {
 		return nil
 	}
+	source := nmstateSource(o)
 	if prefix.Contains(gateway) || gateway.IsLinkLocalUnicast() {
-		return validateNetworkGateway(o, c, prefix, gateway)
-	}
-	source := "spec.network.inline.nmstate"
-	if reference := o.Spec().Get("network", "configRef"); reference.Present() {
-		source = "NetworkConfig/" + reference.Text()
-		if o.Spec().Has("network", "overrides") {
-			source += " with spec.network.overrides"
-		}
+		return validateNetworkGateway(o, c, prefix, gateway, source)
 	}
 	name := address.Get("name").Text()
 	return []api.Issue{invariant("$.spec.network.installAddressRef",

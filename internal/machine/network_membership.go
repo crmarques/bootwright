@@ -114,7 +114,7 @@ func stackVLANs(native api.Value, name string, visiting map[string]bool) []int {
 	return ids
 }
 
-func validateNetworkGateway(o api.Object, c api.Catalog, prefix netip.Prefix, hop netip.Addr) []api.Issue {
+func validateNetworkGateway(o api.Object, c api.Catalog, prefix netip.Prefix, hop netip.Addr, source string) []api.Issue {
 	match, _, _ := assignmentNetwork(o, c, prefix.Addr())
 	if match.Network.Name() == "" || hop.IsLinkLocalUnicast() {
 		return nil
@@ -124,8 +124,8 @@ func validateNetworkGateway(o api.Object, c api.Catalog, prefix netip.Prefix, ho
 		return nil
 	}
 	return []api.Issue{invariant("$.spec.network.installAddressRef",
-		"install gateway "+hop.String()+", the next hop of the default route of "+o.Identity()+", is not gateway "+gateway.String()+" of its install network "+match.Network.Identity(),
-		"set that default route's next-hop-address to "+gateway.String()+", or correct spec."+network.Family(prefix.Addr())+".gateway of "+match.Network.Identity())}
+		"install gateway "+hop.String()+", the next hop of the default route in "+source+" of "+o.Identity()+", is not gateway "+gateway.String()+" of its install network "+match.Network.Identity(),
+		"set that default route's next-hop-address in "+source+" to "+gateway.String()+", or correct spec."+network.Family(prefix.Addr())+".gateway of "+match.Network.Identity())}
 }
 
 func heldNames(held []network.Held) string {

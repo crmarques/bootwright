@@ -118,7 +118,7 @@ func TestTheInstallRouteUsesItsNetworksGateway(t *testing.T) {
 	if issues := membershipIssues(t, machine, config, lan(m("ipv4", m("cidr", "192.0.2.0/24", "gateway", "192.0.2.1")))); issueAt(issues, "$.spec.network.installAddressRef", "gateway") {
 		t.Fatalf("the Network's own gateway is refused: %+v", issues)
 	}
-	if issues := membershipIssues(t, machine, config, lan(m("ipv4", m("cidr", "192.0.2.0/24", "gateway", "192.0.2.254")))); !issueAt(issues, "$.spec.network.installAddressRef", "is not gateway 192.0.2.254 of its install network Network/lan") {
+	if issues := membershipIssues(t, machine, config, lan(m("ipv4", m("cidr", "192.0.2.0/24", "gateway", "192.0.2.254")))); !issueAt(issues, "$.spec.network.installAddressRef", "the default route in NetworkConfig/net of ") || !issueAt(issues, "$.spec.network.installAddressRef", "is not gateway 192.0.2.254 of its install network Network/lan") {
 		t.Fatalf("issues = %+v", issues)
 	}
 }
