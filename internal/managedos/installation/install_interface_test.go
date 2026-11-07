@@ -225,7 +225,7 @@ func TestEveryEthernetInterfaceIsPinnedByItsMAC(t *testing.T) {
 	if !slices.Equal(request.InstallerArguments, want) {
 		t.Fatalf("installer arguments = %q, want %q", request.InstallerArguments, want)
 	}
-	metal := metalOn("enp1s0", hardwareNIC("enp1s0", "52:54:00:9A:1B:01"), hardwareNIC("nic-b", "52:54:00:9a:1b:0b"), hardwareNIC("enp2s0", "52:54:00:9a:1b:0c"))
+	metal := metalOn("enp1s0", hardwareNIC("enp1s0", "52:54:00:9A:1B:01"), hardwareNIC("nic-b", "52:54:00:9a:1b:0b"), hardwareNIC("nic-c", "52:54:00:9a:1b:0c"))
 	metal = metal.WithSpec(metal.Spec().WithPath(api.ListValue(
 		api.MapValue(text("interfaceName", "enp1s0"), text("nicRef", "enp1s0")),
 		api.MapValue(text("interfaceName", "enp2s0"), text("nicRef", "nic-b")),
