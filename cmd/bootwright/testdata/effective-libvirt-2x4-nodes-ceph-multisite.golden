@@ -546,24 +546,34 @@ kind: Network
 metadata:
   name: primary
 spec:
-  provided: true
-  description: The primary cluster network the primary managed attachment of lab-libvirt defines.
+  provided: false
+  description: The primary cluster network lab-libvirt defines on its host.
   mtu: 1500
   ipv4:
     cidr: 198.51.100.0/24
     gateway: 198.51.100.1
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: virbr-primary
+    forward: nat
+    hostAddress: 198.51.100.1
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Network
 metadata:
   name: secondary
 spec:
-  provided: true
-  description: The secondary cluster network the secondary managed attachment of lab-libvirt defines.
+  provided: false
+  description: The secondary cluster network lab-libvirt defines on its host.
   mtu: 1500
   ipv4:
     cidr: 192.0.2.0/24
     gateway: 192.0.2.1
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: virbr-secondary
+    forward: nat
+    hostAddress: 192.0.2.1
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig
@@ -682,19 +692,6 @@ spec:
         memoryMiB: 4096
         diskGiB: 40
         tpm: {}
-  networkAttachments:
-    - name: primary
-      libvirt:
-        bridge: virbr-primary
-        management: managed
-        address: 198.51.100.1/24
-        forward: nat
-    - name: secondary
-      libvirt:
-        bridge: virbr-secondary
-        management: managed
-        address: 192.0.2.1/24
-        forward: nat
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Proxy

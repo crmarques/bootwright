@@ -9,6 +9,9 @@ func (HostCapability) Claimed(catalog api.Catalog) []string {
 	var claimed []string
 	for _, provider := range substrate.ProvidersOn(catalog, substrate.ArmLibvirt) {
 		claimed = append(claimed, provider.Identity())
+		for _, managed := range substrate.ManagedNetworksOf(catalog, provider) {
+			claimed = append(claimed, managed.Identity())
+		}
 	}
 	return claimed
 }

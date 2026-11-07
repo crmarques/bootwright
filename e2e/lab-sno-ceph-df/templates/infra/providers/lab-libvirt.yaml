@@ -37,12 +37,3 @@ spec:
           - name: ceph-data-1
             sizeGiB: {{ .Values.cephNodes.osdDiskGiB }}
             media: ssd
-
-  networkAttachments:
-    - name: lab-guests
-
-      libvirt:
-        bridge: {{ .Values.host.bridge }}
-        management: managed
-        address: {{ .Values.host.gateway }}/{{ .Values.host.prefix }}
-        forward: nat

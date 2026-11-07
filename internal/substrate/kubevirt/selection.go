@@ -47,7 +47,7 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 					"a KubeVirt machine is created with the CPU count, memory and root disk its profile declares, and its profile "+name+" declares one as zero",
 					"set cpu, memoryMiB and diskGiB above zero on profile "+name+" of "+provider.Identity()))
 			}
-			for _, attachment := range unrealizedAttachments(provider, machine) {
+			for _, attachment := range unrealizedAttachments(catalog, provider, machine) {
 				found = append(found, lifecycle.RefusalOf(machine,
 					"a KubeVirt NIC attaches to a Localnet ClusterUserDefinedNetwork or a bridge NetworkAttachmentDefinition, and attachment "+attachment+" names another kind",
 					"select a ClusterUserDefinedNetwork or NetworkAttachmentDefinition attachment for every NIC of "+machine.Identity()))
@@ -89,10 +89,10 @@ func sized(profile api.Value) bool {
 	return true
 }
 
-func unrealizedAttachments(provider, machine api.Object) []string {
+func unrealizedAttachments(catalog api.Catalog, provider, machine api.Object) []string {
 	var refused []string
 	for _, nic := range substrate.MachineNICs(machine) {
-		reference := substrate.NICAttachment(provider, machine, nic)
+		reference := substrate.NICAttachment(catalog, provider, machine, nic)
 		attachment, found := findNamed(provider.Spec().Get("networkAttachments"), "name", reference)
 		if !found {
 			continue
@@ -233,7 +233,7 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, contro
 		request.TPM = &TPM{Persistent: substrate.PersistentTPM(profile)}
 	}
 	for _, iface := range target.Interfaces {
-		reference := substrate.NICAttachment(provider, machine, iface.Name)
+		reference := substrate.NICAttachment(catalog, provider, machine, iface.Name)
 		attachment, found := findNamed(provider.Spec().Get("networkAttachments"), "name", reference)
 		if !found {
 			return MachineRequest{}, refusal("api.reference", "NIC "+iface.Name+" of the Machine selects no attachment of its provider",

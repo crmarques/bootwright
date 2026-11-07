@@ -7,9 +7,6 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 	if o.Kind() != api.InfraProvider {
 		return issues
 	}
-	for _, attachment := range o.Spec().Get("networkAttachments").Items() {
-		issues = add(issues, validateLibvirtAttachment(attachment.Get("libvirt"), "$.spec.networkAttachments[].libvirt")...)
-	}
 	if variant := Variant(o); variant != "" {
 		for _, attachment := range o.Spec().Get("networkAttachments").Items() {
 			for _, arm := range []string{"baremetal", "libvirt", "vsphere", "kubevirt"} {

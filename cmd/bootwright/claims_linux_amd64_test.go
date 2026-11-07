@@ -16,6 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
+	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 )
 
 // TestEveryExampleObjectIsClaimedOncePerFamily plans every example through
@@ -128,6 +129,7 @@ func TestEveryExampleObjectIsClaimedOncePerFamily(t *testing.T) {
 var noBlockClaims = map[string]string{
 	baremetal.Implementation + " InfraProvider":      "a bare-metal provider is realized only through its Machines",
 	instance.Implementation + " ClusterAddonBinding": "add-on blocks are keyed by package and cluster",
+	libvirt.HostImplementation + " Network":          "a managed Network is defined by the host block of the provider it names (D240 (13))",
 }
 
 // substrateArm is the arm of the provider one Machine is placed on.

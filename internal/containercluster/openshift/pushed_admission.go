@@ -47,7 +47,7 @@ func validatePushedNodes(cluster api.Object, catalog api.Catalog) []api.Issue {
 		}
 		var references []string
 		for _, nic := range substrate.MachineNICs(bound) {
-			references = append(references, substrate.NICAttachment(provider, bound, nic))
+			references = append(references, substrate.NICAttachment(catalog, provider, bound, nic))
 		}
 		for _, name := range slices.Compact(references) {
 			if kind := substrate.AttachmentNetworkKind(provider, name); kind != "ClusterUserDefinedNetwork" && kind != "NetworkAttachmentDefinition" {

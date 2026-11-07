@@ -57,7 +57,7 @@ func TestHostRequestFreezesTheNetworksAndPoolItOwns(t *testing.T) {
 func TestAnExternalAttachmentFreezesNoManagedNetworkFields(t *testing.T) {
 	external := provider(field("networkAttachments", api.ListValue(api.MapValue(
 		text("name", "lab-guests"),
-		field("libvirt", api.MapValue(text("bridge", "br0"), text("management", "external"))),
+		field("libvirt", api.MapValue(text("bridge", "br0"))),
 	))))
 	requests, err := HostRequests(catalogOf(controller(), external, networkConfig()), "controller", testContext)
 	if err != nil || len(requests) != 1 {
@@ -89,7 +89,7 @@ func TestAManagedAttachmentWiresTheDomainToItsLibvirtNetwork(t *testing.T) {
 	}
 	external := provider(field("networkAttachments", api.ListValue(api.MapValue(
 		text("name", "lab-guests"),
-		field("libvirt", api.MapValue(text("bridge", "br0"), text("management", "external"))),
+		field("libvirt", api.MapValue(text("bridge", "br0"))),
 	))))
 	requests, err = MachineRequests(catalogOf(controller(), external, networkConfig(), guest("rhel-01")), "controller", testContext)
 	if err != nil || len(requests) == 0 {
@@ -267,11 +267,7 @@ func TestAnIPv6ControllerIsBracketedAndClaimsTheSharedSocketKey(t *testing.T) {
 func TestTwoContextsOverlappingManagedPrefixesConflict(t *testing.T) {
 	hostOf := func(contextName, bridge string) HostRequest {
 		t.Helper()
-		attached := provider(field("networkAttachments", api.ListValue(api.MapValue(
-			text("name", "lab-guests"),
-			field("libvirt", api.MapValue(text("bridge", bridge), text("management", "managed"), text("address", "198.51.100.1/24"), text("forward", "nat"))),
-		))))
-		requests, err := HostRequests(catalogOf(controller(), attached, networkConfig(), guest("rhel-01")), "controller", contextName)
+		requests, err := HostRequests(catalogOf(controller(), provider(), managedNetwork("lab-guests", bridge, "198.51.100.1/24"), networkConfig(), guest("rhel-01")), "controller", contextName)
 		if err != nil || len(requests) != 1 {
 			t.Fatalf("requests = %d (%v)", len(requests), err)
 		}

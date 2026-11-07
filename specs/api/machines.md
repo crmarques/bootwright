@@ -175,20 +175,20 @@ its fields are in [its reference](../deferred/machine-arms.md#kubevirt-arm):
 | Arm | Exact fields | Rule |
 | --- | --- | --- |
 | `baremetal` | none | Names a physical network a Machine may select; it configures nothing. VLAN and bond interfaces are declared in the Machine's NMState network; the attachment configures nothing for them. |
-| `libvirt` | required string `bridge`; optional string `management`; conditional string `address`; conditional string `forward`; optional integer `mtu` | `bridge` is 1 to 15 bytes of letters, digits, `_`, `.` or `-`, and neither `.` nor `..`; a `+` is refused because firewalld reads it as an interface wildcard and a managed network puts its bridge in zone `trusted` (`TestABridgeNameRefusesFirewalldsWildcard`). `management` is `managed` or `external` and defaults to `external`. `external` names an existing bridge and forbids `address` and `forward`. `managed` requires `address`, the host's IP with its prefix on a bridge Bootwright defines, and permits `forward`, `nat` or `none`, defaulting to `nat`; [substrates](../substrates.md#provider-host-realization) owns the network it defines. On one host, no two providers declare a managed attachment of one name, a bridge a managed attachment defines is named by no other attachment, of the same provider or another, and no two managed attachments, of one provider or two, declare overlapping prefixes, IPv4 or IPv6; each refuses at admission, naming both providers. A libvirt provider declares at most 20 managed attachments (its host reservation's key bound). |
+| `libvirt` | required string `bridge`; optional integer `mtu` | An existing bridge, proved present and never created. `bridge` is 1 to 15 bytes of letters, digits, `_`, `.` or `-`, and neither `.` nor `..`; a `+` is refused because firewalld reads it as an interface wildcard and a managed network puts its bridge in zone `trusted` (`TestABridgeNameRefusesFirewalldsWildcard`). A network Bootwright defines is a [managed `Network`](networks.md#libvirt-arm), which owns the host-wide rules and joins this list under its own name. |
 
-Only a managed libvirt attachment configures a network. A bare-metal
-attachment, an external bridge and the physical fabric behind them are named and
+Only a managed `Network` configures a network. A bare-metal
+attachment, a libvirt bridge and the physical fabric behind them are named and
 verified, never changed ([product scope](../project.md#product-scope)).
 
-A libvirt attachment may declare integer `mtu` (576 to 65,536), the largest frame its network carries:
-a managed network is defined with it, and an external bridge is proved to carry
-it. A guest interface whose declared `mtu` exceeds its attachment's, or 1,500
+A libvirt attachment may declare integer `mtu` (576 to 65,536), the largest
+frame its bridge is proved to carry; a managed Network's is its `spec.mtu`. A
+guest interface whose declared `mtu` exceeds its attachment's, or 1,500
 when the attachment declares none, refuses. A KubeVirt Machine whose provider
 names `hostClusterRef` is bound the same way by the `mtu` of the host
 `secondaryNetworks[]` entry its interface's attachment names, 1,500 when that
 entry declares none; a provider on an external host has no network in the graph
-and declares no bound. A managed network's one prefix may
+and declares no bound. A managed Network's prefix may
 be IPv4 or IPv6.
 
 A bond's ports, followed through VLAN parents and nested bonds to their
@@ -199,8 +199,8 @@ the bond and each port's attachment, because a failover would move the host
 onto another network. The remedy attaches every port to one attachment or
 removes the other port from the bond.
 
-An `external` attachment claims only the shared key `bridge-use:<name>`, never
-an exclusive reservation, so another context's managed attachment may define
+An attachment claims only the shared key `bridge-use:<name>`, never
+an exclusive reservation, so another context's managed Network may define
 the same bridge. The removal of a managed network
 therefore refuses while another context's attachment uses its bridge
 ([substrates](../substrates.md#provider-host-realization) owns the rule).
@@ -321,7 +321,7 @@ substrate reads; NIC names and substrate-neutral root-device hints stay in
 | `baremetal` | `rootDevice` | object | Physical-disk hints `wwn`, `hctl` and `serialNumber`, each a non-empty string, and `sizeBytes`, the root disk's exact capacity, 4096-aligned up to 64 TiB, proved by a Bootwright installation or the physical agent pre-boot serial proof. |
 | `baremetal` | `firmware` | object | Declared firmware settings; [shape](#firmware-block). |
 | `libvirt`, `kubevirt` | `profileRef` | string | Provider-local `machineProfiles[].name`. |
-| `libvirt`, `kubevirt` | `nics` | array | Set of `{nicRef, attachmentRef}` keyed by `nicRef`: `nicRef` names a `hardware.nics[].name`, `attachmentRef` a provider-local `networkAttachments[].name` with this arm. A NIC without an entry takes the provider's sole attachment, whatever its name; with two or more, every NIC needs its entry, else `api.invariant` at this field names the NIC. |
+| `libvirt`, `kubevirt` | `nics` | array | Set of `{nicRef, attachmentRef}` keyed by `nicRef`: `nicRef` names a `hardware.nics[].name`, `attachmentRef` a provider-local `networkAttachments[].name` with this arm or a managed Network naming the provider. A NIC without an entry takes the provider's sole one of these, whatever its name; with two or more, every NIC needs its entry, else `api.invariant` at this field names the NIC. |
 | `vsphere` | `profileRef` | string | Provider-local `machineProfiles[].name`. |
 | `vsphere` | `nics` | array | As on bare metal; each authored MAC lies in the manual assignment range `00:50:56:00:00:00` through `00:50:56:3f:ff:ff` ([refused machine arms](../deferred/machine-arms.md#machine-fields)). |
 

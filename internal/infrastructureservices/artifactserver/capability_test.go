@@ -97,9 +97,10 @@ func TestDestroyPlanUsesRemovalGroups(t *testing.T) {
 func TestAServerBoundToAManagedBridgeRequiresItsProvider(t *testing.T) {
 	provider := api.NewObject(api.InfraProvider, "lab-libvirt", api.Value{}, api.MapValue(
 		field("libvirt", api.MapValue(text("machineRef", "controller"), text("uri", "qemu:///system"))),
-		field("networkAttachments", api.ListValue(api.MapValue(text("name", "lab-guests"), field("libvirt", api.MapValue(
-			text("bridge", "virbr-lab"), text("management", "managed"), text("address", "198.51.100.1/24"),
-		))))),
+	))
+	network := api.NewObject(api.Network, "lab-guests", api.Value{}, api.MapValue(
+		field("provided", api.BoolValue(false)), field("ipv4", api.MapValue(text("cidr", "198.51.100.0/24"))),
+		field("libvirt", api.MapValue(text("providerRef", "lab-libvirt"), text("bridge", "virbr-lab"), text("hostAddress", "198.51.100.1"))),
 	))
 	addresses := controller().Spec().Get("network", "addresses").Items()
 	host := api.NewObject(api.Machine, "controller", api.Value{}, controller().Spec().With("network", api.MapValue(field("addresses", api.ListValue(append(addresses,
@@ -122,7 +123,7 @@ func TestAServerBoundToAManagedBridgeRequiresItsProvider(t *testing.T) {
 		"a wildcard whose endpoint is the bridge": {artifactServer(text("bindAddress", "0.0.0.0"), endpoints("guests")), requires},
 		"a wildcard with no endpoint on it":       {artifactServer(text("bindAddress", "0.0.0.0"), endpoints("ip")), nil},
 	} {
-		plan, err := capability.Plan(context.Background(), planInput(t, reconciliation.Apply, host, provider, test.server))
+		plan, err := capability.Plan(context.Background(), planInput(t, reconciliation.Apply, host, provider, network, test.server))
 		if err != nil || len(plan.Definitions) != 1 {
 			t.Fatalf("%s: plan = %+v (%v)", name, plan, err)
 		}

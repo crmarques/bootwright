@@ -55,7 +55,7 @@ nodes, the secondary networks of a cluster, and the managed infrastructure
 services. It only verifies, and never changes, the physical fabric (switches,
 VLAN trunking and routing), an external bridge, the host firewall's
 configuration beyond the trusted-zone membership of a managed network's bridge,
-and an external DHCP or DNS service; an external attachment still names its
+and an external DHCP or DNS service; a provider's attachment still names its
 existing bridge ([substrates](substrates.md#provider-host-realization)). DNS and
 artifact serving are each a managed service or an external endpoint, as the
 Environment selects.

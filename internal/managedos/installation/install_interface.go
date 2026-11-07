@@ -232,8 +232,8 @@ func vlanRefusal(catalog api.Catalog, machine api.Object, template, declared api
 		leaves = bond.Get("link-aggregation", "port").Strings()
 	}
 	for _, leaf := range leaves {
-		reference := substrate.NICAttachment(provider, machine, substrate.InterfaceNIC(machine, leaf))
-		attachment, attached := findNamed(provider.Spec().Get("networkAttachments"), "name", reference)
+		reference := substrate.NICAttachment(catalog, provider, machine, substrate.InterfaceNIC(machine, leaf))
+		attachment, attached := findNamed(substrate.Segments(catalog, provider), "name", reference)
 		if network, managed := substrate.ManagedAttachment(attachment); attached && managed {
 			return "a managed libvirt network gives its host an untagged address on " + network.Bridge +
 					", so the controller cannot reach the VLAN install address of " + identity,

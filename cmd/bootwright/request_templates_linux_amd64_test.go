@@ -169,8 +169,8 @@ func TestEveryProvenPathToARequestRefusesItsTemplateDelimiter(t *testing.T) {
 		},
 		{
 			name:   "the libvirt bridge",
-			edits:  []exampleEdit{{"infra/providers/lab-libvirt.yaml", "        bridge: virbr-lab\n", "        bridge: \"{%raw%}\"\n"}},
-			edited: []string{"InfraProvider/lab-libvirt"},
+			edits:  []exampleEdit{{"infra/networks/lab-guests.yaml", "    bridge: virbr-lab\n", "    bridge: \"{%raw%}\"\n"}},
+			edited: []string{"Network/lab-guests"},
 			want:   map[string]string{"InfraProvider/lab-libvirt": "networks[0].bridge", "Machine/rhel-01": "interfaces[0].bridge"},
 		},
 		{

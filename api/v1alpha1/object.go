@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"maps"
 	"slices"
+	"strings"
 )
 
 const APIVersion = "bootwright.io/v1alpha1"
@@ -119,6 +120,15 @@ func (c Catalog) WithUndecodable(identities map[string]bool) Catalog {
 
 func (c Catalog) Undecodable(kind Kind, name string) bool {
 	return c.undecodable[string(kind)+"/"+name]
+}
+
+func (c Catalog) UndecodableOfKind(kind Kind) bool {
+	for identity := range c.undecodable {
+		if strings.HasPrefix(identity, string(kind)+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 type Issue struct {

@@ -1,0 +1,16 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: lab-secondary
+
+spec:
+  provided: false
+  description: The network of the nested guests, which lab-libvirt defines on its host and the host cluster carries as the nested-guests Localnet secondary network.
+
+  ipv4:
+    cidr: 203.0.113.0/24
+    gateway: 203.0.113.1
+
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: virbr-secondary

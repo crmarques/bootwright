@@ -4,8 +4,14 @@ metadata:
   name: lab-secondary
 
 spec:
-  provided: true
-  description: The secondary network the lab-secondary managed attachment of lab-libvirt defines.
+  provided: false
+  description: The secondary network lab-libvirt defines on its host.
 
   ipv4:
     cidr: 203.0.113.0/24
+
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: virbr-secondary
+    forward: none
+    hostAddress: 203.0.113.1

@@ -14,7 +14,7 @@ acceptance is claimed, and the accepted [lab-sno](../lab-sno/) and
 - Every node has an active-backup `bond0` over two NICs on the machine
   network (`lab-guests`, NAT) carrying the install address, plus an addressless
   third NIC on a second managed network (`lab-secondary`, `forward: none`).
-- `infra/networks/` declares both networks as provided [`Network`](../../../specs/api/networks.md) objects.
+- `infra/networks/` declares both networks as [`Network`](../../../specs/api/networks.md) objects that `lab-libvirt` defines.
 - Host capacity: at least 56 logical CPUs, 112 GiB available memory and
   1240 GiB pool disk, plus media space; the authored reserve adds 4 CPUs,
   8 GiB and 40 GiB.

@@ -28,7 +28,6 @@ var unrealized = []Unrealized{
 	{Kind: ClusterAddon, Path: "$.spec.steps"},
 	{Kind: CustomPlaybook, Path: "$.spec.enabled", Value: "true", Item: "B102"},
 	{Kind: Entitlement, Path: "$.spec.rhsm.connectToInsights", Value: "true"},
-	{Kind: Network, Path: "$.spec.provided", Value: "false", Item: "B1204"},
 	{Kind: Environment, Path: "$.spec.dependencyVersions.libvirt", Except: "latest", Item: "B676"},
 }
 

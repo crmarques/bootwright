@@ -18,7 +18,7 @@ func TestEndpointOwnershipAcrossCatalog(t *testing.T) {
 	}{
 		{"cluster", obj(api.OpenShiftCluster, "other", m("install", m("endpoints", m("api", endpoint)))), "spec.install.endpoints.api.address"},
 		{"machine", obj(api.Machine, "other", m("network", m("addresses", list(m("address", "192.0.2.2/24"))))), "spec.network.addresses[0].address"},
-		{"network host", obj(api.InfraProvider, "other", m("networkAttachments", list(m("libvirt", m("management", "managed", "address", "192.0.2.2/24"))))), "spec.networkAttachments[0].libvirt.address"},
+		{"network host", managedNetwork("other", "lab", "192.0.2.2/24", "virbr-other"), "spec.libvirt.hostAddress"},
 		{"BMC", obj(api.InfraProvider, "other", m("libvirt", m("bmcEmulation", m("bindAddress", "192.0.2.2")))), "spec.libvirt.bmcEmulation.bindAddress"},
 		{"load balancer", obj(api.LoadBalancer, "other", m("bindAddresses", list(m("address", "192.0.2.2")))), "spec.bindAddresses[0].address"},
 	}

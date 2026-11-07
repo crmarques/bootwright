@@ -115,8 +115,8 @@ Its reason and remedy are the diagnostic's message and remediation, in which
 | A KubeVirt profile without a size | a non-provided Machine on a KubeVirt provider whose profile's `cpu`, `memoryMiB` or `diskGiB` is `0` | `a KubeVirt machine is created with the CPU count, memory and root disk its profile declares, and its profile <profile> declares one as zero` | `set cpu, memoryMiB and diskGiB above zero on profile <profile> of <provider>` |
 | A KubeVirt NIC on an unrealized network kind | a NIC of such a Machine whose attachment's `networkRef` is neither a `k8s.ovn.org` `ClusterUserDefinedNetwork` nor a `k8s.cni.cncf.io` `NetworkAttachmentDefinition` | `a KubeVirt NIC attaches to a Localnet ClusterUserDefinedNetwork or a bridge NetworkAttachmentDefinition, and attachment <attachment> names another kind` | `select a ClusterUserDefinedNetwork or NetworkAttachmentDefinition attachment for every NIC of <machine>` |
 | An emulated BMC no endpoint can name | a libvirt provider's `spec.libvirt.bmcEmulation.bindAddress` that is not one unicast host address | `an emulated BMC listens on one unicast address its Machines' BMC endpoints can name, and this provider's bindAddress is not one` | `set spec.libvirt.bmcEmulation.bindAddress on <provider> to one unicast host address` |
-| A provider with more managed attachments than its reservation holds | a libvirt provider with more than 20 `networkAttachments[]` entries of `management: managed` | `a libvirt provider's host reservation claims three keys for each managed attachment beside the two of its media pool and its firewall readiness unit, within the 64 keys one reservation holds, so it declares at most 20 managed attachments` | `declare at most 20 attachments with management: managed in spec.networkAttachments of <provider>, or make the others external` |
-| A provider using more external bridges than its use reservation holds | a libvirt provider whose `networkAttachments[]` entries of `management: external` name more than 64 distinct bridges | `a libvirt provider's bridge-use reservation claims one shared key for each bridge its external attachments use, within the 64 keys one reservation holds, so they use at most 64 bridges` | `name at most 64 distinct bridges in the external attachments of spec.networkAttachments of <provider>` |
+| A provider named by more managed Networks than its reservation holds | more than 20 managed `Network` objects whose `spec.libvirt.providerRef` names one libvirt provider | `a libvirt provider's host reservation claims three keys for each managed Network beside the two of its media pool and its firewall readiness unit, within the 64 keys one reservation holds, so at most 20 managed Networks name it` | `name <provider> in spec.libvirt.providerRef of at most 20 managed Networks, or make the others provided networks on existing bridges` |
+| A provider using more external bridges than its use reservation holds | a libvirt provider whose `networkAttachments[]` entries name more than 64 distinct bridges | `a libvirt provider's bridge-use reservation claims one shared key for each bridge its external attachments use, within the 64 keys one reservation holds, so they use at most 64 bridges` | `name at most 64 distinct bridges in the external attachments of spec.networkAttachments of <provider>` |
 
 ## Qualification
 
@@ -135,8 +135,8 @@ The vSphere arm is not realized and has no row.
 ## Provider host realization
 
 The block `substrate-host-<provider>` realizes the host's virtualization
-runtime, the networks the provider's attachments declare, and the pool its
-emulated BMCs stage virtual media in.
+runtime, the managed Networks that name the provider, the bridges its
+attachments name, and the pool its emulated BMCs stage virtual media in.
 
 **Hypervisor closure.** The runtime is the libvirt daemon with its QEMU/KVM
 emulator, `qemu-img`, `swtpm` for emulated TPMs, and the libvirt client. On the
@@ -150,7 +150,7 @@ not pinned, and no before-state is published or authorized, so this
 installation is not the frozen native transaction the controller stage makes.
 The libvirt driver daemons this provider's own resources
 live in — the hypervisor the `uri` answers on, the network driver that owns a
-managed attachment's bridge, and the storage driver that owns the media pool —
+managed Network's bridge, and the storage driver that owns the media pool —
 are each started and enabled to start with the host, because a network or pool
 set to autostart is only restored by the driver that owns it: a socket-activated
 driver leaves both absent until something asks for them, so a host that
@@ -164,31 +164,26 @@ as nothing defined, and the bridge of a network set to autostart appears only
 once its driver runs. A managed network or the pool whose driver still does not
 answer refuses before anything is defined.
 
-**Managed networks.** Each `networkAttachments[]` entry whose libvirt arm
-declares `management: managed` becomes one persistent libvirt network named
-`bootwright-<context>-<attachment>`, owning the declared `bridge`, which the
-definition writes as an XML-escaped attribute value, carrying the
-declared host address and prefix, forwarding as `forward` selects, with the
+**Managed networks.** Each [managed `Network`](api/networks.md#libvirt-arm)
+naming the provider becomes one persistent libvirt network named
+`bootwright-<context>-<network>`, owning its `bridge`, which the
+definition writes as an XML-escaped attribute value, carrying its
+`hostAddress` with its CIDR's prefix, forwarding as `forward` selects, with the
 built-in resolver and DHCP disabled so a managed `DNSServer` may bind the
 bridge address, placed in the host firewall's trusted zone through explicit
 `zone="trusted"` on the XML bridge so its guests reach the controller's managed
 services, and carrying ownership metadata naming the
-context and attachment. An `external` attachment is proved present as a bridge
+context and the Network (the XML attribute keeps the name `attachment`). An
+attachment is proved present as a bridge
 device, a `/sys/class/net/<name>/bridge` directory rather than any interface of
 that name, and is never defined, changed or removed; the fabric behind it is
-provided and only verified ([project](project.md#product-scope)). On one host, no two
-providers declare a managed attachment of one name, because the context names the one network it defines
-after it, and a bridge a managed attachment defines is named by no other
-attachment of that host, managed or external, of the same provider or another,
-because the bridge goes with the host block that defines it; and no two
-managed attachments on one host, of one provider or two, declare overlapping
-prefixes, IPv4 or IPv6, identical or nested, because the host routes each
-managed prefix to its own bridge (`TestOneHostNeverOverlapsTwoManagedPrefixes`).
-Admission refuses each, naming both providers
-([machines](api/machines.md#machine-profiles-and-network-attachments)). A
+provided and only verified ([project](project.md#product-scope)). The
+[host-wide rules](api/networks.md#libvirt-arm) give each bridge and each
+managed prefix of a host one owner
+(`TestOneHostNeverOverlapsTwoManagedPrefixes`). A
 network is this context's only when its ownership metadata names this context
-and the attachment's network. A same-named network with none, or naming another
-context or another attachment, is foreign and refuses, naming it, on apply and
+and the Network. A same-named network with none, or naming another
+context or another Network, is foreign and refuses, naming it, on apply and
 on destroy before any network or pool is defined, stopped or removed; an owned
 network whose definition differs from the frozen request is redefined, and
 restarted while it runs another one. Each managed network is started before it
@@ -204,7 +199,7 @@ routes, IPv4 and IPv6, and link names. A link of the managed bridge's name that
 no owned network of this context runs, or a route that no owned network of this
 context holds and that is identical to the managed prefix, nested inside it or
 broader than it and on-link (no gateway), refuses `lifecycle.state` before any
-network is defined, naming the link or the route and the attachment's `bridge`
+network is defined, naming the link or the route and the Network's `bridge`
 or address as the field to change. A route of the main table that is broader
 than the managed prefix and names a gateway on every hop, a VPN `/8` covering
 it for one, is admitted with a warning: the managed network's connected route
@@ -213,7 +208,7 @@ reached through the gateway. The apply reports each such route, as the host
 carried it before any network was defined, as a `substrate.shadowed-route`
 [adapter warning](architecture.md#the-adapter-result-protocol) of its completed
 result, which the run's diagnostics and `status` carry; it names the route, its
-gateway and device, the prefix and the attachment, and is no evidence and
+gateway and device, the prefix and the Network, and is no evidence and
 changes no outcome. The apply also writes each to the adapter's output before it
 defines anything, so one that does not complete, and so reports none, still
 shows it there. Such
@@ -225,8 +220,9 @@ network's bridge. A read the host does not answer proves nothing and refuses
 the same way, because libvirt's own collision checks are partial and come only
 once a network starts.
 
-A managed network carries the MTU its attachment declares and one IPv4 or IPv6
-prefix; a Machine's NICs attach, each in declared order, to the attachment its
+A managed network carries one IPv4 or IPv6 prefix, and its Network's `mtu`
+unless that is 1500, the MTU libvirt and the kernel already give; a Machine's
+NICs attach, each in declared order, to the attachment or managed Network its
 interface map names
 ([machines](api/machines.md#machine-profiles-and-network-attachments)).
 
@@ -312,21 +308,21 @@ Not yet met: the removal derives the quiescence of its networks and pool from
 this context's Machines and observes no domain on the host; tracked as
 [B567](milestones/backlog.md#b567).
 
-**Reservations.** `bridge:<name>` for every managed attachment, because a
+**Reservations.** `bridge:<name>` for every managed Network, because a
 bridge name is host-global; `prefix:<masked prefix>` for every managed
-attachment, because the host routes its prefix to that bridge;
+Network, because the host routes its prefix to that bridge;
 `libvirt-network:<name>` for every managed network; `libvirt-pool:<name>` for
 the pool and `path:` for its directory; and `unit:<name>` without the `.service`
 suffix for the provider's
 firewall readiness unit when it has managed networks
-(`TestHostReservationsClaimEveryManagedNetworkAndThePool`). A provider therefore
-declares at most 20 managed attachments: 20 × 3 attachment keys plus two pool
+(`TestHostReservationsClaimEveryManagedNetworkAndThePool`). At most 20 managed
+Networks therefore name the providers of one host: 20 × 3 network keys plus two pool
 keys and one readiness-unit key use 63 of the 64 keys one reservation
 holds ([controller record](contexts/controller-record.md#bounds)), and
-admission refuses more, naming the bound and `spec.networkAttachments`
-(`TestTheManagedAttachmentBoundKeepsTheHostReservationWithinItsKeys`).
+admission refuses more at each Network's `spec.libvirt.providerRef`
+(`TestTheManagedNetworkBoundKeepsTheHostReservationWithinItsKeys`).
 
-Each `external` attachment claims the shared key `bridge-use:<name>` for the
+Each attachment claims the shared key `bridge-use:<name>` for the
 bridge it attaches to, so a bridge another context defines is known to be in
 use. A removal that would release an exclusive `bridge:<name>` refuses
 `controller.conflict` while another context holds `bridge-use:<name>`, naming
@@ -336,7 +332,7 @@ before its effect on the provider that holds the bridge, so a context that
 claims the key after registration refuses that effect with nothing performed
 (`TestAClaimMadeAfterTheDestroyRegisteredRefusesTheRemovalsEffect`).
 These keys travel in a shared reservation of their own, which holds at most 64
-keys, so a provider's external attachments use at most 64 distinct bridges
+keys, so a provider's attachments use at most 64 distinct bridges
 (the refusal table's external-bridge row). A `bridge-use:` key an abandoned
 context held is released with that context's deletion (D38), so it strands a
 removal only while the using context exists.
@@ -407,7 +403,7 @@ nothing back.
 The block `machine-<machine>` realizes one Machine's virtual hardware together
 with its own management controller, and requires its provider host block. It
 also requires the host block of each other provider on the same host whose
-managed attachment's host address is the emulated BMC's `bindAddress`, because
+managed Network's host address is the emulated BMC's `bindAddress`, because
 that listener cannot open before the bridge exists, so its removal also runs
 before that bridge's.
 
@@ -445,8 +441,8 @@ Each interface carries the
 same derived address the realized target reports, so a consumer that must
 declare this Machine's hardware to an installer names exactly what the domain
 presents. An interface attaches to the
-libvirt network a managed attachment defines, and to the bridge alone for an
-external one, which the definition writes as an XML-escaped attribute value,
+libvirt network a managed Network defines, and to the bridge alone for an
+attachment, which the definition writes as an XML-escaped attribute value,
 so the hypervisor holds the dependency on a network this context owns and
 refuses to start a Machine whose network is down rather than starting
 it unreachable. Admission refuses a non-provided Machine that declares no NIC,

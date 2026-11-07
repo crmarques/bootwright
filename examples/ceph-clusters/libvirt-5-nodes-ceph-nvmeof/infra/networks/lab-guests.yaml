@@ -4,9 +4,13 @@ metadata:
   name: lab-guests
 
 spec:
-  provided: true
-  description: The guest network the lab-guests managed attachment of lab-libvirt defines.
+  provided: false
+  description: The guest network lab-libvirt defines on its host.
 
   ipv4:
     cidr: 198.51.100.0/24
     gateway: 198.51.100.1
+
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: virbr-lab

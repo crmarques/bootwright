@@ -24,7 +24,7 @@ func TestLibvirtNICAttachmentsBoundGuestMTU(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			machine := object(api.Machine, "node", m("substrate", m("providerRef", "hypervisor", "libvirt", m("nics", test.entries)), "hardware", m("nics", list(m("name", "eth0"), m("name", "eth1")))))
-			issues := validateAttachments(machine, provider, test.native)
+			issues := validateAttachments(api.NewCatalog([]api.Object{provider}), machine, provider, test.native)
 			if test.want == "" && len(issues) != 0 {
 				t.Fatal(issues)
 			}

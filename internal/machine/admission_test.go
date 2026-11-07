@@ -275,12 +275,14 @@ func TestNativeMergeDiagnosticsDoNotExposeMapKeys(t *testing.T) {
 
 func TestManagedLibvirtAttachmentContainsTheInstallAddress(t *testing.T) {
 	host := object(api.Machine, "host", m("os", m("provided", true)))
-	provider := object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", m("auth", m("credentialsRef", "bmc")), "machineProfiles", list(m("name", "small"))), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "virbr-lab", "management", "managed", "address", "192.0.2.1/24")))))
+	provider := object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", m("auth", m("credentialsRef", "bmc")), "machineProfiles", list(m("name", "small")))))
+	managed := managedNet("net", "lab", "192.0.2.0/24", "192.0.2.1")
+	other := object(api.Network, "other", m("provided", true, "ipv4", m("cidr", "198.51.100.0/24")))
 	network := object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.0/24"), m("cidr", "198.51.100.0/24")), "nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet")))))
 	env := object(api.Environment, "env", m("domains", m("base", "example.test")))
 	for address, valid := range map[string]bool{"192.0.2.11/24": true, "198.51.100.11/24": false} {
 		guest := object(api.Machine, "guest", m("substrate", m("providerRef", "lab", "libvirt", m("profileRef", "small")), "os", m("provided", false), "hardware", m("nics", list(m("name", "enp1s0"))), "network", m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", address, "interface", "enp1s0")))))
-		c := api.NewCatalog([]api.Object{guest, host, provider, network, env})
+		c := api.NewCatalog([]api.Object{guest, host, provider, network, env, managed, other})
 		guest, _ = Normalize(guest, c)
 		issues := Validate(guest, c)
 		if (len(issues) == 0) != valid {
@@ -319,11 +321,12 @@ func withRootDevice(machine api.Object, catalog api.Catalog, declared, physical 
 // every one of them, so bare metal keeps them all.
 func TestARootDeviceHintFollowsItsArm(t *testing.T) {
 	host := object(api.Machine, "host", m("os", m("provided", true)))
-	provider := object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", m("auth", m("credentialsRef", "bmc")), "machineProfiles", list(m("name", "small"))), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "virbr-lab", "management", "managed", "address", "192.0.2.1/24")))))
+	provider := object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", m("auth", m("credentialsRef", "bmc")), "machineProfiles", list(m("name", "small")))))
+	managed := managedNet("net", "lab", "192.0.2.0/24", "192.0.2.1")
 	network := object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet")))))
 	env := object(api.Environment, "env", m("domains", m("base", "example.test")))
 	guest := object(api.Machine, "guest", m("substrate", m("providerRef", "lab", "libvirt", m("profileRef", "small")), "os", m("provided", false), "hardware", m("nics", list(m("name", "enp1s0"))), "network", m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11/24", "interface", "enp1s0")))))
-	virtual := api.NewCatalog([]api.Object{guest, host, provider, network, env})
+	virtual := api.NewCatalog([]api.Object{guest, host, provider, network, env, managed})
 	server, physical := fixture()
 	admitted := api.MapValue(
 		api.FieldValue{Name: "deviceName", Value: api.StringValue("/dev/vda")}, api.FieldValue{Name: "minSizeGigabytes", Value: api.IntegerValue("0")},

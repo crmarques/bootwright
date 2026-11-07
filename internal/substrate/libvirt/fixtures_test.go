@@ -1,6 +1,8 @@
 package libvirt
 
 import (
+	"net/netip"
+
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
@@ -54,16 +56,7 @@ func provider(fields ...api.FieldValue) api.Object {
 			field("tpm", api.MapValue()),
 		))),
 	)
-	spec := api.MapValue(
-		field("libvirt", libvirtArm),
-		field("networkAttachments", api.ListValue(api.MapValue(
-			text("name", "lab-guests"),
-			field("libvirt", api.MapValue(
-				text("bridge", "virbr-lab"), text("management", "managed"),
-				text("address", "198.51.100.1/24"), text("forward", "nat"),
-			)),
-		))),
-	)
+	spec := api.MapValue(field("libvirt", libvirtArm))
 	for _, extra := range fields {
 		spec = spec.With(extra.Name, extra.Value)
 	}
@@ -105,7 +98,41 @@ func guest(name string, fields ...api.FieldValue) api.Object {
 	return api.NewObject(api.Machine, name, api.Value{}, spec)
 }
 
-func catalogOf(objects ...api.Object) api.Catalog { return api.NewCatalog(objects) }
+// managedNetwork is a Network lab-libvirt defines, its host address and
+// prefix written as one address.
+func managedNetwork(name, bridge, address string, fields ...api.FieldValue) api.Object {
+	prefix := netip.MustParsePrefix(address)
+	family := "ipv4"
+	if prefix.Addr().Is6() {
+		family = "ipv6"
+	}
+	spec := api.MapValue(field("provided", api.BoolValue(false)), number("mtu", "1500"),
+		field(family, api.MapValue(text("cidr", prefix.Masked().String()))),
+		field("libvirt", api.MapValue(text("providerRef", "lab-libvirt"), text("bridge", bridge), text("forward", "nat"), text("hostAddress", prefix.Addr().String()))))
+	for _, extra := range fields {
+		spec = spec.With(extra.Name, extra.Value)
+	}
+	return api.NewObject(api.Network, name, api.Value{}, spec)
+}
+
+func labNetwork() api.Object { return managedNetwork("lab-guests", "virbr-lab", "198.51.100.1/24") }
+
+// catalogOf adds the lab-guests managed Network a fixture provider's guests
+// attach to, unless the objects declare a Network or attach lab-guests to an
+// existing bridge themselves.
+func catalogOf(objects ...api.Object) api.Catalog {
+	for _, o := range objects {
+		if o.Kind() == api.Network {
+			return api.NewCatalog(objects)
+		}
+		for _, attachment := range o.Spec().Get("networkAttachments").Items() {
+			if attachment.Get("name").Text() == "lab-guests" {
+				return api.NewCatalog(objects)
+			}
+		}
+	}
+	return api.NewCatalog(append(objects, labNetwork()))
+}
 
 func labCatalog() api.Catalog {
 	return catalogOf(controller(), provider(), networkConfig(), guest("rhel-01"))

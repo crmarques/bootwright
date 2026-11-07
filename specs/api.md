@@ -62,7 +62,6 @@ proves each row warned and refused at `plan`.
 | ClusterAddon | `spec.steps` | none tracked |
 | CustomPlaybook | `spec.enabled: true` | [B102](milestones/backlog.md#b102) |
 | Entitlement | `spec.rhsm.connectToInsights: true` | none tracked |
-| Network | `spec.provided: false` | [B1204](milestones/m1.md#b1204) |
 | Environment | `spec.dependencyVersions.libvirt other than latest` | [B676](milestones/backlog.md#b676) |
 
 An install-profile row is refused on each Machine that selects the profile, and

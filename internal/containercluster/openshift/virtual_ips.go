@@ -29,10 +29,9 @@ func VirtualIPs(catalog api.Catalog, cluster api.Object, controller string) []Vi
 				if substrate.HostMachine(provider) != controller {
 					continue
 				}
-				for _, attachment := range provider.Spec().Get("networkAttachments").Items() {
-					network, managed := substrate.ManagedAttachment(attachment)
-					prefix, err := netip.ParsePrefix(network.Prefix)
-					if managed && err == nil && prefix.Contains(address) {
+				for _, managed := range substrate.ManagedNetworksOf(catalog, provider) {
+					network, _ := substrate.ManagedAttachment(substrate.ManagedSegment(managed))
+					if prefix, err := netip.ParsePrefix(network.Prefix); err == nil && prefix.Contains(address) {
 						ip.Bridge = network.Bridge
 					}
 				}

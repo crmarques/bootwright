@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -16,10 +15,7 @@ import (
 // bypasses it: the planned host and Machine requests still carry the bridge
 // the templates write, and the plan refuses both before any block registers.
 func TestAPlannedBridgeHoldingATemplateDelimiterRefusesBeforeRegistration(t *testing.T) {
-	attachment := provider().Spec().Get("networkAttachments").Items()[0]
-	attachment = attachment.With("libvirt", attachment.Get("libvirt").With("bridge", api.StringValue("{%raw%}")))
-	p := provider(field("networkAttachments", api.ListValue(attachment)))
-	catalog := catalogOf(controller(), p, networkConfig(), guest("rhel-01"))
+	catalog := catalogOf(controller(), provider(), managedNetwork("lab-guests", "{%raw%}", "198.51.100.1/24"), networkConfig(), guest("rhel-01"))
 	input := lifecycle.PlanInput{Verb: reconciliation.Apply, State: compilation.NewState(catalog, catalog, nil),
 		Controller: "controller", Context: lifecycle.ContextIdentity{Name: testContext}}
 	var definitions []reconciliation.BlockDefinition

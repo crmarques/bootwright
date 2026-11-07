@@ -12,6 +12,12 @@ type Scope struct {
 	Within  []string
 	Entries []string
 	Key     []string
+	Joined  *ScopeJoin
+}
+
+type ScopeJoin struct {
+	Kind  Kind
+	Field []string
 }
 
 type ScopeOwner struct {
@@ -52,12 +58,12 @@ func (s *Scope) Owners(object Object, record Value, catalog Catalog) ([]ScopeOwn
 		if len(s.Within) > 0 && !owner.Spec().Has(s.Within...) {
 			continue
 		}
-		scoped = append(scoped, ScopeOwner{Object: owner, Names: s.names(owner)})
+		scoped = append(scoped, ScopeOwner{Object: owner, Names: s.names(owner, catalog)})
 	}
 	return scoped, len(scoped) > 0
 }
 
-func (s *Scope) names(owner Object) []string {
+func (s *Scope) names(owner Object, catalog Catalog) []string {
 	key := s.Key
 	if len(key) == 0 {
 		key = []string{"name"}
@@ -71,6 +77,13 @@ func (s *Scope) names(owner Object) []string {
 			}
 		}
 		names = append(names, strings.Join(parts, "."))
+	}
+	if s.Joined != nil {
+		for _, joined := range catalog.OfKind(s.Joined.Kind) {
+			if joined.Spec().Get(s.Joined.Field...).Text() == owner.Name() {
+				names = append(names, joined.Name())
+			}
+		}
 	}
 	return names
 }

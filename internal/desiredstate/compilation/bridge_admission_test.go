@@ -3,6 +3,7 @@ package compilation_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -11,7 +12,7 @@ import (
 
 const libvirtProviderYAML = "\n---\napiVersion: bootwright.io/v1alpha1\nkind: InfraProvider\nmetadata: {name: lab-libvirt}\nspec:\n" +
 	"  libvirt:\n    machineRef: controller\n    uri: qemu:///system\n    bmcEmulation: {bindAddress: 192.0.2.1, certificateRef: bmc-tls, auth: {credentialsRef: bmc}}\n" +
-	"  networkAttachments:\n  - name: guests\n    libvirt: {bridge: %q, management: managed, address: 198.51.100.1/24, forward: nat}\n"
+	"  networkAttachments:\n  - name: guests\n    libvirt: {bridge: %q}\n"
 
 // firewalld reads a trailing `+` as an interface wildcard and a managed
 // network puts its bridge in zone trusted by name, so validate refuses a
@@ -34,5 +35,23 @@ func TestValidateRefusesAWildcardBridgeName(t *testing.T) {
 	_, _, err = regressionCompiler().Compile(context.Background(), sources(environmentYAML+fmt.Sprintf(libvirtProviderYAML, "virbr-lab")))
 	if refused := at(diagnostics.Of(err)); len(refused) != 0 {
 		t.Fatalf("a bridge named virbr-lab was refused: %#v", refused)
+	}
+}
+
+// A provider's libvirt attachment names an existing bridge and nothing else: a
+// managed network is a Network, so each field it held is an unknown field.
+func TestALibvirtAttachmentCarriesNoManagedNetworkFields(t *testing.T) {
+	provider := strings.Replace(fmt.Sprintf(libvirtProviderYAML, "virbr-lab"), "{bridge: \"virbr-lab\"}", "{bridge: virbr-lab, management: managed, address: 198.51.100.1/24, forward: nat}", 1)
+	state, report, err := regressionCompiler().Compile(context.Background(), sources(environmentYAML+provider))
+	refused := map[string]bool{}
+	for _, d := range requireCompilationFailure(t, state, report, err) {
+		if d.Code == "api.field" && d.Message == "unknown field; spec.networkAttachments[0].libvirt permits bridge, mtu" {
+			refused[d.Field] = true
+		}
+	}
+	for _, removed := range []string{"management", "address", "forward"} {
+		if !refused["$.spec.networkAttachments[0].libvirt."+removed] {
+			t.Errorf("an attachment's %s was not refused as an unknown field: %#v", removed, diagnostics.Of(err))
+		}
 	}
 }

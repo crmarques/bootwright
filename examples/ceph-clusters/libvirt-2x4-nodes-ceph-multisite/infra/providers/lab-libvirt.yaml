@@ -59,20 +59,3 @@ spec:
         memoryMiB: 4096
         diskGiB: 40
         tpm: {}
-
-  networkAttachments:
-    - name: primary
-
-      libvirt:
-        bridge: virbr-primary
-        management: managed
-        address: 198.51.100.1/24
-        forward: nat
-
-    - name: secondary
-
-      libvirt:
-        bridge: virbr-secondary
-        management: managed
-        address: 192.0.2.1/24
-        forward: nat

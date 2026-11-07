@@ -18,7 +18,7 @@ func TestAddonFactsShareEndpointOwnershipClaims(t *testing.T) {
 	cluster, _ = Normalize(cluster, catalog)
 	other := obj(api.Machine, "other", m("network", m("addresses", list(m("address", "192.0.2.90/24")))))
 	dns := obj(api.DNSServer, "dns", m("management", "managed", "bindAddress", "192.0.2.91"))
-	provider := obj(api.InfraProvider, "network-host", m("networkAttachments", list(m("libvirt", m("management", "managed", "address", "192.0.2.1/24")))))
+	provider := managedNetwork("network-host", "lab", "192.0.2.1/24", "virbr-host")
 	objects := append(catalog.Objects(), cluster, other, dns, provider)
 	facts := AddonFacts(api.NewCatalog(objects), cluster.Name())
 	if facts.Release != "4.21.15" || facts.Family != "ipv4" || len(facts.Nodes) != 3 || len(facts.NodeNetworks) != 3 {
@@ -31,7 +31,7 @@ func TestAddonFactsShareEndpointOwnershipClaims(t *testing.T) {
 	for _, holder := range facts.Reserved {
 		holders[holder.Holder] = true
 	}
-	for _, want := range []string{"Machine/other", "DNSServer/dns", "InfraProvider/network-host"} {
+	for _, want := range []string{"Machine/other", "DNSServer/dns", "Network/network-host"} {
 		if !holders[want] {
 			t.Fatalf("missing %s: %+v", want, facts.Reserved)
 		}

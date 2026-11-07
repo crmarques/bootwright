@@ -26,12 +26,3 @@ spec:
         memoryMiB: 16384
         diskGiB: 120
         tpm: {}
-
-  networkAttachments:
-    - name: lab-guests
-
-      libvirt:
-        bridge: virbr-lab
-        management: managed
-        address: 2001:db8:2::1/64
-        forward: none

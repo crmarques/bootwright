@@ -12,18 +12,18 @@ type mtuBound struct {
 	note, remedy string
 }
 
-func validateLibvirtAttachmentMTUs(o, provider api.Object, native api.Value) []api.Issue {
-	return validateAttachmentMTUs(o, provider, native, func(attachment api.Value) mtuBound {
+func validateLibvirtAttachmentMTUs(c api.Catalog, o, provider api.Object, native api.Value) []api.Issue {
+	return validateAttachmentMTUs(c, o, provider, native, func(attachment api.Value) mtuBound {
 		mtu, ok := substrate.AttachmentMTU(attachment)
 		if !ok {
 			mtu = 1500
 		}
-		return mtuBound{mtu, "", "declare an attachment mtu that carries it on " + provider.Identity()}
+		return mtuBound{mtu, "", "declare an attachment or managed Network mtu that carries it on " + provider.Identity()}
 	})
 }
 
-func validateKubeVirtAttachmentMTUs(o, provider, host api.Object, native api.Value) []api.Issue {
-	return validateAttachmentMTUs(o, provider, native, func(attachment api.Value) mtuBound {
+func validateKubeVirtAttachmentMTUs(c api.Catalog, o, provider, host api.Object, native api.Value) []api.Issue {
+	return validateAttachmentMTUs(c, o, provider, native, func(attachment api.Value) mtuBound {
 		name, mtu, ok := substrate.HostNetworkMTU(host, attachment)
 		if !ok {
 			return mtuBound{65536, "", ""}
@@ -32,7 +32,7 @@ func validateKubeVirtAttachmentMTUs(o, provider, host api.Object, native api.Val
 	})
 }
 
-func validateAttachmentMTUs(o, provider api.Object, native api.Value, bound func(attachment api.Value) mtuBound) []api.Issue {
+func validateAttachmentMTUs(c api.Catalog, o, provider api.Object, native api.Value, bound func(attachment api.Value) mtuBound) []api.Issue {
 	var limit func(string, map[string]bool) mtuBound
 	limit = func(name string, visiting map[string]bool) mtuBound {
 		if visiting[name] {
@@ -53,8 +53,8 @@ func validateAttachmentMTUs(o, provider api.Object, native api.Value, bound func
 			}
 			return narrowest
 		}
-		reference := substrate.NICAttachment(provider, o, substrate.InterfaceNIC(o, name))
-		attachment, found := namedValue(provider.Spec().Get("networkAttachments"), reference)
+		reference := substrate.NICAttachment(c, provider, o, substrate.InterfaceNIC(o, name))
+		attachment, found := namedValue(substrate.Segments(c, provider), reference)
 		if reference != "" && !found {
 			return mtuBound{65536, "", ""}
 		}

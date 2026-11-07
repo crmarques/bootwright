@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -218,15 +219,25 @@ func TestReservationKeysCoverTheUnitPathAndSocket(t *testing.T) {
 	}
 }
 
-func libvirtProvider(host, management, address string) api.Object {
-	attachment := api.MapValue(text("bridge", "virbr-lab"), text("management", management))
-	if address != "" {
-		attachment = attachment.With("address", api.StringValue(address))
-	}
-	return api.NewObject(api.InfraProvider, "lab-libvirt", api.Value{}, api.MapValue(
+// libvirtProvider is a provider on host with the bridge virbr-lab: an existing
+// one it only attaches to, or the bridge of a managed Network whose host
+// address and prefix are address.
+func libvirtProvider(host, management, address string) []api.Object {
+	provider := api.NewObject(api.InfraProvider, "lab-libvirt", api.Value{}, api.MapValue(
 		field("libvirt", api.MapValue(text("machineRef", host), text("uri", "qemu:///system"))),
-		field("networkAttachments", api.ListValue(api.MapValue(text("name", "lab-guests"), field("libvirt", attachment)))),
 	))
+	if management != "managed" {
+		return []api.Object{provider.WithSpec(provider.Spec().With("networkAttachments", api.ListValue(api.MapValue(text("name", "lab-guests"), field("libvirt", api.MapValue(text("bridge", "virbr-lab")))))))}
+	}
+	prefix := netip.MustParsePrefix(address)
+	family := "ipv4"
+	if prefix.Addr().Is6() {
+		family = "ipv6"
+	}
+	return []api.Object{provider, api.NewObject(api.Network, "lab-guests", api.Value{}, api.MapValue(
+		field("provided", api.BoolValue(false)), field(family, api.MapValue(text("cidr", prefix.Masked().String()))),
+		field("libvirt", api.MapValue(text("providerRef", "lab-libvirt"), text("bridge", "virbr-lab"), text("hostAddress", prefix.Addr().String()))),
+	))}
 }
 
 // A socket bound to a managed bridge's host address cannot open before the
@@ -248,7 +259,7 @@ func TestAServiceBoundToAManagedBridgeRequiresItsProvider(t *testing.T) {
 		api.MapValue(text("name", "guests-v6"), text("address", "fd00:5::1/64")),
 	)...)))))
 	for name, test := range map[string]struct {
-		provider       api.Object
+		provider       []api.Object
 		bind, endpoint string
 		requires       bool
 	}{
@@ -264,7 +275,7 @@ func TestAServiceBoundToAManagedBridgeRequiresItsProvider(t *testing.T) {
 		"an IPv6 network's address":                 {libvirtProvider("controller", "managed", "fd00:5::1/64"), "fd00:5::", "", false},
 	} {
 		t.Run(name, func(t *testing.T) {
-			catalog := catalogOf(host, test.provider, bound(test.bind, test.endpoint))
+			catalog := catalogOf(append([]api.Object{host, bound(test.bind, test.endpoint)}, test.provider...)...)
 			plan, err := NewCapability(testDefinition(), nil).Plan(context.Background(), lifecycle.PlanInput{
 				Verb: reconciliation.Apply, Controller: "controller",
 				Context: lifecycle.ContextIdentity{Name: testContext},

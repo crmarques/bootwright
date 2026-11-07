@@ -361,12 +361,17 @@ kind: Network
 metadata:
   name: lab-guests
 spec:
-  provided: true
-  description: The guest network the lab-guests managed attachment of lab-libvirt defines.
+  provided: false
+  description: The guest network lab-libvirt defines on its host.
   mtu: 1500
   ipv4:
     cidr: 198.51.100.0/24
     gateway: 198.51.100.1
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: virbr-lab
+    forward: nat
+    hostAddress: 198.51.100.1
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig
@@ -434,13 +439,6 @@ spec:
             sizeGiB: 80
             media: ssd
         tpm: {}
-  networkAttachments:
-    - name: lab-guests
-      libvirt:
-        bridge: virbr-lab
-        management: managed
-        address: 198.51.100.1/24
-        forward: nat
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Proxy

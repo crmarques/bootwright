@@ -94,10 +94,15 @@ func libvirtProvider() api.Object {
 				text("name", "sno"), number("cpu", "8"), number("memoryMiB", "16384"), number("diskGiB", "120"),
 			))),
 		)),
-		field("networkAttachments", api.ListValue(api.MapValue(
-			text("name", "lab-guests"),
-			field("libvirt", api.MapValue(text("bridge", "virbr-lab"), text("management", "managed"), text("address", "198.51.100.1/24"))),
-		))),
+	))
+}
+
+// labNetwork is the managed Network lab-libvirt defines for its guests.
+func labNetwork() api.Object {
+	return api.NewObject(api.Network, "lab-guests", api.Value{}, api.MapValue(
+		field("provided", api.BoolValue(false)), number("mtu", "1500"),
+		field("ipv4", api.MapValue(text("cidr", "198.51.100.0/24"))),
+		field("libvirt", api.MapValue(text("providerRef", "lab-libvirt"), text("bridge", "virbr-lab"), text("forward", "nat"), text("hostAddress", "198.51.100.1"))),
 	))
 }
 
@@ -196,7 +201,7 @@ func endpoints(api_, apiInt, ingress string, source string) api.FieldValue {
 func base() []api.Object {
 	return []api.Object{
 		environment(), controller(), artifactServer(), nameService(), timeService(),
-		networkConfiguration(), libvirtProvider(),
+		networkConfiguration(), libvirtProvider(), labNetwork(),
 	}
 }
 

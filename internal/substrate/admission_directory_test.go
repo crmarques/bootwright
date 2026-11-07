@@ -1,7 +1,6 @@
 package substrate
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -44,34 +43,5 @@ func TestALibvirtMachineCanShareItsProvidersName(t *testing.T) {
 				t.Fatalf("a Machine named lab %s was refused: %v", name, refused)
 			}
 		})
-	}
-}
-
-func TestALibvirtProviderDeclaresAtMostTwentyManagedAttachments(t *testing.T) {
-	const field = "$.spec.networkAttachments"
-	host := topologyHost("host")
-	attachments := func(managed int) []api.Value {
-		var found []api.Value
-		for index := range managed {
-			found = append(found, managedAttachment(fmt.Sprintf("net-%02d", index), fmt.Sprintf("br-%02d", index), fmt.Sprintf("10.%d.0.1/24", index)))
-		}
-		for index := range 3 {
-			found = append(found, externalAttachment(fmt.Sprintf("ext-%02d", index), fmt.Sprintf("ext-%02d", index)))
-		}
-		return found
-	}
-	validate := func(managed int) []api.Issue {
-		provider := topologyProvider("lab", "host", "8000", topologyProfile(), attachments(managed)...)
-		return issuesAt(Validate(provider, api.NewCatalog([]api.Object{provider, host})), field)
-	}
-	if refused := validate(MaxManagedAttachments); len(refused) != 0 {
-		t.Fatalf("%d managed attachments were refused: %v", MaxManagedAttachments, refused)
-	}
-	refused := validate(MaxManagedAttachments + 1)
-	want := api.Issue{Code: "api.value", Field: field,
-		Message:     "a libvirt provider declares at most 20 managed network attachments, because its host reservation claims three keys for each beside the two of its media pool, within the 64 keys one reservation holds; this one declares 21",
-		Remediation: "declare at most 20 attachments with management: managed in spec.networkAttachments of InfraProvider/lab, or make the others external"}
-	if len(refused) != 1 || refused[0] != want {
-		t.Fatalf("%d managed attachments: %v", MaxManagedAttachments+1, refused)
 	}
 }

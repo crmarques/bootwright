@@ -26,12 +26,3 @@ spec:
         memoryMiB: 24576
         diskGiB: 120
         tpm: {}
-
-  networkAttachments:
-    - name: lab-guests
-
-      libvirt:
-        bridge: virbr-lab
-        management: managed
-        address: 198.51.100.1/24
-        forward: nat

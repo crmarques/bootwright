@@ -4,9 +4,13 @@ metadata:
   name: primary
 
 spec:
-  provided: true
-  description: The primary cluster network the primary managed attachment of lab-libvirt defines.
+  provided: false
+  description: The primary cluster network lab-libvirt defines on its host.
 
   ipv4:
     cidr: 198.51.100.0/24
     gateway: 198.51.100.1
+
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: virbr-primary

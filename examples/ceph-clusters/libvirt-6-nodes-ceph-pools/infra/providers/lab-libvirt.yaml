@@ -69,12 +69,3 @@ spec:
           - name: hdd-db
             sizeGiB: 10
             media: ssd
-
-  networkAttachments:
-    - name: lab-guests
-
-      libvirt:
-        bridge: virbr-lab
-        management: managed
-        address: 198.51.100.1/24
-        forward: nat

@@ -9,7 +9,7 @@ are documentation examples.
 
 | Machine | Install interface | Attachment | Install address | Gateway | Guest-only VLAN 140 |
 | --- | --- | --- | --- | --- | --- |
-| `nv-bond` | `bond0` over `nic0` and `nic1` | `nv-lab`, managed, bridge `virbr-nv` | 198.51.100.11/26 | 198.51.100.1 | `bond0.140`, 203.0.113.11/24, MTU 1400 |
+| `nv-bond` | `bond0` over `nic0` and `nic1` | `nv-lab`, a managed Network, bridge `virbr-nv` | 198.51.100.11/26 | 198.51.100.1 | `bond0.140`, 203.0.113.11/24, MTU 1400 |
 | `nv-vlan` | `nic0.120` over `nic0` | `nv-trunk`, external, bridge `br-nv` | 198.51.100.71/26 | 198.51.100.65 | `nic0.140`, 203.0.113.12/24, MTU 1400 |
 | `nv-vlan-bond` | `bond0.130` over `bond0` over `nic0` and `nic1` | `nv-trunk` | 198.51.100.141/26 | 198.51.100.129 | `bond0.140`, 203.0.113.13/24, MTU 1400 |
 
@@ -18,12 +18,12 @@ are documentation examples.
 - Each Machine also routes 192.0.2.0/24 through its gateway and searches
   `lab.example.test`. Bond mode is `active-backup`, the only mode a libvirt
   Machine admits. The MTU is a Machine override; routes stay in the NetworkConfig.
-- `infra/networks/` declares four provided [`Network`](../../../specs/api/networks.md) objects, so each assignment, VLAN
+- `infra/networks/` declares four [`Network`](../../../specs/api/networks.md) objects, so each assignment, VLAN
   and install gateway is checked against them: `nv-lab` (untagged,
-  198.51.100.0/26), `nv-vlan` (VLAN 120, 198.51.100.64/26), `nv-vlan-bond`
+  198.51.100.0/26, which `lab-libvirt` defines), and the provided `nv-vlan` (VLAN 120, 198.51.100.64/26), `nv-vlan-bond`
   (VLAN 130, 198.51.100.128/26) and `nv-guest` (VLAN 140, 203.0.113.0/24).
   `nv-guest` is one Network although its guests reach it on two bridges, since
-  a Network does not name a bridge.
+  a provided Network does not name a bridge.
 - Every Machine converges to its declared network and power-cycles once
   ([network convergence](../../../specs/managed-os.md#network-convergence)).
 - Host capacity: 12 vCPUs, 24 GiB of guest memory and three 60 GiB disks beyond

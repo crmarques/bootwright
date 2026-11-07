@@ -15,14 +15,10 @@ import (
 )
 
 func externalAttachments(bridges ...string) api.FieldValue {
-	attachments := []api.Value{api.MapValue(
-		text("name", "lab-guests"),
-		field("libvirt", api.MapValue(text("bridge", "virbr-lab"), text("management", "managed"),
-			text("address", "198.51.100.1/24"), text("forward", "nat"))),
-	)}
+	attachments := []api.Value{}
 	for index, bridge := range bridges {
 		attachments = append(attachments, api.MapValue(text("name", fmt.Sprintf("edge-%02d", index)),
-			field("libvirt", api.MapValue(text("bridge", bridge), text("management", "external")))))
+			field("libvirt", api.MapValue(text("bridge", bridge)))))
 	}
 	return field("networkAttachments", api.ListValue(attachments...))
 }

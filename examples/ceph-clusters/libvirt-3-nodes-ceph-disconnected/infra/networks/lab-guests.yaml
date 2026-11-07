@@ -4,8 +4,14 @@ metadata:
   name: lab-guests
 
 spec:
-  provided: true
-  description: The isolated guest network the lab-guests managed attachment of lab-libvirt defines, without forwarding or a gateway.
+  provided: false
+  description: The isolated guest network lab-libvirt defines on its host, without forwarding or a gateway.
 
   ipv4:
     cidr: 198.51.100.0/24
+
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: virbr-lab
+    forward: none
+    hostAddress: 198.51.100.1

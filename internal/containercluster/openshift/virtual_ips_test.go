@@ -1,10 +1,21 @@
 package openshift
 
 import (
+	"net/netip"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
+
+func managedNetwork(name, provider, address, bridge string) api.Object {
+	prefix := netip.MustParsePrefix(address)
+	family := "ipv4"
+	if prefix.Addr().Is6() {
+		family = "ipv6"
+	}
+	return obj(api.Network, name, m("provided", false, family, m("cidr", prefix.Masked().String()),
+		"libvirt", m("providerRef", provider, "bridge", bridge, "hostAddress", prefix.Addr().String())))
+}
 
 func TestVirtualIPsOnlyProbeManagedIPv4NetworksOnController(t *testing.T) {
 	for _, tc := range []struct {
@@ -24,8 +35,12 @@ func TestVirtualIPsOnlyProbeManagedIPv4NetworksOnController(t *testing.T) {
 				cluster = cluster.WithSpec(cluster.Spec().WithPath(m("type", "installer"), "install", "endpoints", slot, "source"))
 			}
 			cluster, _ = Normalize(cluster, catalog)
-			provider := obj(api.InfraProvider, "network", m("libvirt", m("machineRef", tc.controller), "networkAttachments", list(m("libvirt", m("management", tc.management, "address", tc.address, "bridge", "br-test")))))
-			catalog = api.NewCatalog(append(catalog.Objects(), provider))
+			provider := obj(api.InfraProvider, "network", m("libvirt", m("machineRef", tc.controller), "networkAttachments", list(m("name", "uplink", "libvirt", m("bridge", "br-uplink")))))
+			objects := append(catalog.Objects(), provider)
+			if tc.management == "managed" {
+				objects = append(objects, managedNetwork("guests", "network", tc.address, "br-test"))
+			}
+			catalog = api.NewCatalog(objects)
 			ips := VirtualIPs(catalog, cluster, "host")
 			if len(ips) != 3 {
 				t.Fatalf("VIPs = %+v", ips)

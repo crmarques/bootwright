@@ -26,21 +26,11 @@ spec:
         memoryMiB: {{ .Values.guest.memoryMiB }}
         diskGiB: {{ .Values.guest.diskGiB }}
         tpm: {}
-
-  networkAttachments:
-    - name: nv-lab
-
-      libvirt:
-        bridge: {{ .Values.host.bridge }}
-        management: managed
-        address: {{ .Values.host.gateway }}/{{ .Values.host.prefix }}
-        forward: nat
-
 {{- if not .Values.single }}
 
+  networkAttachments:
     - name: nv-trunk
 
       libvirt:
         bridge: {{ .Values.externalBridge }}
-        management: external
 {{- end }}

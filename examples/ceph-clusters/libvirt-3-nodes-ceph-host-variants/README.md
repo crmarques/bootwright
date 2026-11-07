@@ -16,8 +16,8 @@ No live execution or operator acceptance is claimed.
   root and an 80 GiB SSD data disk. Total 12 vCPUs, 36 GiB RAM. Reserve 4 GiB
   controller memory. Public network `198.51.100.0/24`, cluster network
   `203.0.113.0/24`.
-- `infra/networks/` declares the public `lab-guests` and the VLAN 140
-  `ceph-cluster` as provided [`Network`](../../../specs/api/networks.md) objects, which the CephCluster's
+- `infra/networks/` declares the public `lab-guests`, which `lab-libvirt`
+  defines, and the provided VLAN 140 `ceph-cluster` as [`Network`](../../../specs/api/networks.md) objects, which the CephCluster's
   `publicCIDRs` and `clusterCIDRs` equal.
 - Both NICs share one attachment and bridge, so the bond proves neither
   physical isolation nor independent links.

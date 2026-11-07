@@ -60,16 +60,13 @@ func agentNodes() []api.Object {
 // probedVirtualIP is a multi-node bare-metal agent cluster whose IPv4 virtual
 // IPs sit on a managed network of a provider hosted on the controller.
 func probedVirtualIP() []api.Object {
-	attachment := api.MapValue(field("libvirt", api.MapValue(text("management", "managed"), text("address", "198.51.100.1/24"), text("bridge", "virbr-lab"))))
-	provider := api.NewObject(api.InfraProvider, "hosted", api.Value{}, api.MapValue(
-		field("libvirt", api.MapValue(text("machineRef", "controller"))),
-		field("networkAttachments", api.ListValue(attachment)),
-	))
+	provider := api.NewObject(api.InfraProvider, "hosted", api.Value{}, api.MapValue(field("libvirt", api.MapValue(text("machineRef", "controller")))))
+	network := api.NewObject(api.Network, "lab-guests", api.Value{}, api.MapValue().With("provided", api.BoolValue(false)).WithPath(api.StringValue("198.51.100.0/24"), "ipv4", "cidr").With("libvirt", api.MapValue().With("providerRef", api.StringValue("hosted")).With("bridge", api.StringValue("virbr-lab")).With("hostAddress", api.StringValue("198.51.100.1"))))
 	endpoints := api.MapValue()
 	for _, slot := range []string{"api", "api-int", "ingress"} {
 		endpoints = endpoints.With(slot, api.MapValue(text("address", "198.51.100.10"), field("source", api.MapValue(text("type", "installer")))))
 	}
-	return []api.Object{provider, api.NewObject(api.OpenShiftCluster, "hub", api.Value{}, api.MapValue(
+	return []api.Object{provider, network, api.NewObject(api.OpenShiftCluster, "hub", api.Value{}, api.MapValue(
 		field("distribution", openshiftDistribution()),
 		field("install", api.MapValue(field("agent", api.MapValue()), field("platform", api.MapValue(field("baremetal", api.MapValue()))), field("endpoints", endpoints))),
 		field("nodes", api.ListValue(api.MapValue(), api.MapValue(), api.MapValue())),

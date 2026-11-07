@@ -281,12 +281,17 @@ kind: Network
 metadata:
   name: nv-lab
 spec:
-  provided: true
-  description: The untagged network the nv-lab managed attachment of lab-libvirt defines.
+  provided: false
+  description: The untagged network lab-libvirt defines on its host.
   mtu: 1500
   ipv4:
     cidr: 198.51.100.0/26
     gateway: 198.51.100.1
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: virbr-nv
+    forward: nat
+    hostAddress: 198.51.100.1
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Network
@@ -549,16 +554,9 @@ spec:
         diskGiB: 60
         tpm: {}
   networkAttachments:
-    - name: nv-lab
-      libvirt:
-        bridge: virbr-nv
-        management: managed
-        address: 198.51.100.1/26
-        forward: nat
     - name: nv-trunk
       libvirt:
         bridge: br-nv
-        management: external
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Proxy

@@ -23,7 +23,7 @@ and all operator acceptance are unrun.
   separate bridges. They must be mutually routed through the provider host
   for MON and OSD traffic; libvirt NAT alone does not promise this. Verify
   routes before the clusters stage.
-- `infra/networks/` declares each as a provided [`Network`](../../../specs/api/networks.md) object, which the
+- `infra/networks/` declares each as a [`Network`](../../../specs/api/networks.md) object its provider defines, which the
   CephCluster of the same name lists as its public network.
 - The four-host example also needs the
   [B688](../../../specs/milestones/m2.md#b688) execution-budget work.

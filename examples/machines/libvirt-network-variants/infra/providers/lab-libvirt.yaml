@@ -28,16 +28,7 @@ spec:
         tpm: {}
 
   networkAttachments:
-    - name: nv-lab
-
-      libvirt:
-        bridge: virbr-nv
-        management: managed
-        address: 198.51.100.1/26
-        forward: nat
-
     - name: nv-trunk
 
       libvirt:
         bridge: br-nv
-        management: external

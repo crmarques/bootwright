@@ -48,10 +48,15 @@ func provider() api.Object {
 				text("name", "rhel"), number("cpu", "4"), number("memoryMiB", "8192"), number("diskGiB", "60"),
 			))),
 		)),
-		field("networkAttachments", api.ListValue(api.MapValue(
-			text("name", "lab-guests"),
-			field("libvirt", api.MapValue(text("bridge", "virbr-lab"), text("management", "managed"), text("address", "198.51.100.1/24"))),
-		))),
+	))
+}
+
+// labNetwork is the managed Network lab-libvirt defines for its guests.
+func labNetwork() api.Object {
+	return api.NewObject(api.Network, "lab-guests", api.Value{}, api.MapValue(
+		field("provided", api.BoolValue(false)), number("mtu", "1500"),
+		field("ipv4", api.MapValue(text("cidr", "198.51.100.0/24"))),
+		field("libvirt", api.MapValue(text("providerRef", "lab-libvirt"), text("bridge", "virbr-lab"), text("forward", "nat"), text("hostAddress", "198.51.100.1"))),
 	))
 }
 
@@ -238,7 +243,7 @@ func catalogOf(objects ...api.Object) api.Catalog { return api.NewCatalog(object
 
 func labCatalog(overrides ...api.Object) api.Catalog {
 	objects := []api.Object{
-		environment(), controller(), provider(), networkConfig(), artifactServer(),
+		environment(), controller(), provider(), labNetwork(), networkConfig(), artifactServer(),
 		service(api.DNSServer, "lab-dns", "53"), service(api.NTPServer, "lab-ntp", "123"),
 		bootImage(), installProfile(), guest(),
 	}
@@ -251,6 +256,13 @@ func labCatalog(overrides ...api.Object) api.Catalog {
 		}
 		if !replaced {
 			objects = append(objects, override)
+		}
+	}
+	for _, object := range objects {
+		for _, attachment := range object.Spec().Get("networkAttachments").Items() {
+			if attachment.Get("name").Text() == "lab-guests" {
+				objects = slices.DeleteFunc(objects, func(o api.Object) bool { return o.Identity() == "Network/lab-guests" })
+			}
 		}
 	}
 	return api.NewCatalog(withGuestNICs(objects))

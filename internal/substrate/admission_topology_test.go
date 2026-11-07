@@ -2,6 +2,7 @@ package substrate
 
 import (
 	"fmt"
+	"net/netip"
 	"os"
 	"strings"
 	"testing"
@@ -24,12 +25,18 @@ func topologyProvider(name, host, port string, profile api.Value, attachments ..
 	return obj(api.InfraProvider, name, m("libvirt", arm, "networkAttachments", list(attachments...)))
 }
 
-func managedAttachment(name, bridge, address string) api.Value {
-	return m("name", name, "libvirt", m("bridge", bridge, "management", "managed", "address", address, "forward", "nat"))
+func managedNetwork(name, provider, bridge, address string) api.Object {
+	prefix := netip.MustParsePrefix(address)
+	family := "ipv4"
+	if prefix.Addr().Is6() {
+		family = "ipv6"
+	}
+	return obj(api.Network, name, m("provided", false, "mtu", api.IntegerValue("1500"), family, m("cidr", prefix.Masked().String()),
+		"libvirt", m("providerRef", provider, "bridge", bridge, "forward", "nat", "hostAddress", prefix.Addr().String())))
 }
 
 func externalAttachment(name, bridge string) api.Value {
-	return m("name", name, "libvirt", m("bridge", bridge, "management", "external"))
+	return m("name", name, "libvirt", m("bridge", bridge))
 }
 
 func issuesAt(issues []api.Issue, field string) []api.Issue {
@@ -72,85 +79,75 @@ func TestLibvirtDataDisksAreAtMostSevenAndNeverRoot(t *testing.T) {
 	}
 }
 
-func TestOneHostNeverSharesAManagedAttachmentName(t *testing.T) {
-	const field = "$.spec.networkAttachments[0].name"
-	host, other := topologyHost("host"), topologyHost("other")
-	a := topologyProvider("a", "host", "8000", topologyProfile(), managedAttachment("guests", "virbr-a", "198.51.100.1/24"))
-	b := topologyProvider("b", "host", "8001", topologyProfile(), managedAttachment("guests", "virbr-b", "203.0.113.1/24"))
-	catalog := api.NewCatalog([]api.Object{a, b, host})
-	for _, pair := range [][2]api.Object{{a, b}, {b, a}} {
-		refused := issuesAt(Validate(pair[0], catalog), field)
-		if len(refused) != 1 || refused[0].Code != "api.invariant" ||
-			!strings.Contains(refused[0].Message, "managed attachment guests is also a managed attachment of "+pair[1].Identity()+" on host Machine/host") ||
-			!strings.Contains(refused[0].Remediation, pair[0].Identity()) || !strings.Contains(refused[0].Remediation, pair[1].Identity()) {
-			t.Fatalf("%s sharing a managed attachment name with %s: %v", pair[0].Identity(), pair[1].Identity(), refused)
-		}
+// A managed Network is a segment of its provider under its own name, so an
+// attachment of that provider with the same name refuses at the Network.
+func TestAManagedNetworkNameIsNoAttachmentOfItsProvider(t *testing.T) {
+	const field = "$.spec.libvirt.providerRef"
+	host := topologyHost("host")
+	a := topologyProvider("a", "host", "8000", topologyProfile(), externalAttachment("guests", "br-guests"))
+	b := topologyProvider("b", "host", "8001", topologyProfile())
+	guests := managedNetwork("guests", "a", "virbr-a", "198.51.100.1/24")
+	refused := issuesAt(Validate(guests, api.NewCatalog([]api.Object{a, b, host, guests})), field)
+	if len(refused) != 1 || refused[0].Code != "api.invariant" ||
+		!strings.Contains(refused[0].Message, "spec.networkAttachments[0] of InfraProvider/a is also named guests") ||
+		!strings.Contains(refused[0].Remediation, "InfraProvider/a") || !strings.Contains(refused[0].Remediation, "Network/guests") {
+		t.Fatalf("a managed Network named like its provider's attachment: %v", refused)
 	}
-	elsewhere := topologyProvider("c", "other", "8000", topologyProfile(), managedAttachment("guests", "virbr-c", "192.0.2.129/25"))
-	if issues := Validate(elsewhere, api.NewCatalog([]api.Object{a, elsewhere, host, other})); len(issues) != 0 {
-		t.Fatalf("a provider on another host was refused: %v", issues)
-	}
-	external := topologyProvider("d", "host", "8001", topologyProfile(), externalAttachment("guests", "virbr-d"))
-	catalog = api.NewCatalog([]api.Object{a, external, host})
-	for _, provider := range []api.Object{a, external} {
-		if issues := Validate(provider, catalog); len(issues) != 0 {
-			t.Fatalf("an external attachment sharing a managed name refused %s: %v", provider.Identity(), issues)
-		}
+	elsewhere := managedNetwork("guests", "b", "virbr-b", "198.51.100.1/24")
+	if issues := Validate(elsewhere, api.NewCatalog([]api.Object{a, b, host, elsewhere})); len(issues) != 0 {
+		t.Fatalf("an attachment of another provider sharing the name was refused: %v", issues)
 	}
 }
 
-func TestAManagedBridgeBelongsToOneAttachmentOnItsHost(t *testing.T) {
-	const field = "$.spec.networkAttachments[0].libvirt.bridge"
+func TestAManagedBridgeBelongsToOneNetworkOnItsHost(t *testing.T) {
+	const field = "$.spec.libvirt.bridge"
 	host, other := topologyHost("host"), topologyHost("other")
-	for name, peer := range map[string]api.Value{
-		"two managed attachments":              managedAttachment("storage", "virbr-x", "203.0.113.1/24"),
-		"a managed and an external attachment": externalAttachment("storage", "virbr-x"),
+	a := topologyProvider("a", "host", "8000", topologyProfile())
+	guests := managedNetwork("guests", "a", "virbr-x", "198.51.100.1/24")
+	for name, test := range map[string]struct {
+		peer  api.Object
+		label string
+		extra []api.Object
+	}{
+		"two managed Networks of two providers": {managedNetwork("storage", "b", "virbr-x", "203.0.113.1/24"), "Network/storage of InfraProvider/b", []api.Object{topologyProvider("b", "host", "8001", topologyProfile())}},
+		"two managed Networks of one provider":  {managedNetwork("storage", "a", "virbr-x", "203.0.113.1/24"), "Network/storage of InfraProvider/a", nil},
+		"a managed Network and an attachment":   {api.Object{}, "spec.networkAttachments[0] of InfraProvider/b", []api.Object{topologyProvider("b", "host", "8001", topologyProfile(), externalAttachment("storage", "virbr-x"))}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			a := topologyProvider("a", "host", "8000", topologyProfile(), managedAttachment("guests", "virbr-x", "198.51.100.1/24"))
-			b := topologyProvider("b", "host", "8001", topologyProfile(), peer)
-			catalog := api.NewCatalog([]api.Object{a, b, host})
-			for _, pair := range [][2]api.Object{{a, b}, {b, a}} {
-				refused := issuesAt(Validate(pair[0], catalog), field)
-				if len(refused) != 1 || refused[0].Code != "api.invariant" ||
-					!strings.Contains(refused[0].Message, "bridge virbr-x of networkAttachments[0] is also named by networkAttachments[0] of "+pair[1].Identity()+" on host Machine/host") ||
-					!strings.Contains(refused[0].Remediation, pair[0].Identity()) || !strings.Contains(refused[0].Remediation, pair[1].Identity()) {
-					t.Fatalf("%s sharing a bridge with %s: %v", pair[0].Identity(), pair[1].Identity(), refused)
-				}
+			objects := append([]api.Object{a, host, guests}, test.extra...)
+			if test.peer.Kind() != "" {
+				objects = append(objects, test.peer)
+			}
+			refused := issuesAt(Validate(guests, api.NewCatalog(objects)), field)
+			if len(refused) != 1 || refused[0].Code != "api.invariant" ||
+				refused[0].Message != "bridge virbr-x of Network/guests of InfraProvider/a is also named by "+test.label+" on host Machine/host; a bridge a managed Network defines belongs to that Network alone" ||
+				refused[0].Remediation != "give Network/guests or "+test.label+" its own bridge" {
+				t.Fatalf("Network/guests sharing a bridge with %s: %v", test.label, refused)
 			}
 		})
 	}
-	a := topologyProvider("a", "host", "8000", topologyProfile(), externalAttachment("guests", "virbr-x"))
-	b := topologyProvider("b", "host", "8001", topologyProfile(), externalAttachment("storage", "virbr-x"))
-	for _, provider := range []api.Object{a, b} {
-		if issues := Validate(provider, api.NewCatalog([]api.Object{a, b, host})); len(issues) != 0 {
-			t.Fatalf("two external attachments sharing a bridge refused %s: %v", provider.Identity(), issues)
-		}
+	b := topologyProvider("b", "host", "8001", topologyProfile(), externalAttachment("guests", "virbr-y"), externalAttachment("storage", "virbr-y"))
+	if issues := Validate(b, api.NewCatalog([]api.Object{b, host})); len(issues) != 0 {
+		t.Fatalf("two attachments sharing an existing bridge were refused: %v", issues)
 	}
-	both := topologyProvider("a", "host", "8000", topologyProfile(),
-		managedAttachment("guests", "virbr-x", "198.51.100.1/24"), managedAttachment("storage", "virbr-x", "203.0.113.1/24"))
-	refused := issuesAt(Validate(both, api.NewCatalog([]api.Object{both, host})), "$.spec.networkAttachments[1].libvirt.bridge")
-	if len(refused) != 1 || !strings.Contains(refused[0].Message, "bridge virbr-x of networkAttachments[1] is also named by networkAttachments[0] of InfraProvider/a") {
-		t.Fatalf("one provider defining one bridge twice: %v", refused)
-	}
-	managed := topologyProvider("a", "host", "8000", topologyProfile(), managedAttachment("guests", "virbr-x", "198.51.100.1/24"))
-	elsewhere := topologyProvider("c", "other", "8000", topologyProfile(), managedAttachment("storage", "virbr-x", "203.0.113.1/24"))
-	if issues := Validate(managed, api.NewCatalog([]api.Object{managed, elsewhere, host, other})); len(issues) != 0 {
+	c := topologyProvider("c", "other", "8000", topologyProfile())
+	elsewhere := managedNetwork("storage", "c", "virbr-x", "203.0.113.1/24")
+	if issues := Validate(guests, api.NewCatalog([]api.Object{a, c, guests, elsewhere, host, other})); len(issues) != 0 {
 		t.Fatalf("a bridge of the same name on another host was refused: %v", issues)
 	}
-	invalid := topologyProvider("a", "host", "8000", topologyProfile(),
-		managedAttachment("guests", `virbr"x`, "198.51.100.1/24"), managedAttachment("storage", `virbr"x`, "203.0.113.1/24"))
-	if issues := Validate(invalid, api.NewCatalog([]api.Object{invalid, host})); len(issues) != 0 {
+	invalid, peer := managedNetwork("guests", "a", `virbr"x`, "198.51.100.1/24"), managedNetwork("storage", "a", `virbr"x`, "203.0.113.1/24")
+	if issues := Validate(invalid, api.NewCatalog([]api.Object{a, invalid, peer, host})); len(issues) != 0 {
 		t.Fatalf("a bridge outside its grammar was compared beside the schema's refusal: %v", issues)
 	}
 }
 
 // The host routes each managed prefix to its own bridge, so two managed
-// attachments on one host, of one provider or two, whose prefixes overlap,
-// identical or nested, IPv4 or IPv6, are refused naming both providers.
+// Networks on one host, of one provider or two, whose prefixes overlap,
+// identical or nested, IPv4 or IPv6, are refused naming both.
 func TestOneHostNeverOverlapsTwoManagedPrefixes(t *testing.T) {
-	const field = "$.spec.networkAttachments[0].libvirt.address"
+	const field = "$.spec.libvirt.hostAddress"
 	host, other := topologyHost("host"), topologyHost("other")
+	a, b := topologyProvider("a", "host", "8000", topologyProfile()), topologyProvider("b", "host", "8001", topologyProfile())
 	for name, test := range map[string]struct {
 		own, peer         string
 		ownMask, peerMask string
@@ -161,50 +158,65 @@ func TestOneHostNeverOverlapsTwoManagedPrefixes(t *testing.T) {
 		"nested IPv6":    {"fd00:1::1/48", "fd00:1:0:5::1/64", "fd00:1::/48", "fd00:1:0:5::/64"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			a := topologyProvider("a", "host", "8000", topologyProfile(), managedAttachment("guests", "virbr-a", test.own))
-			b := topologyProvider("b", "host", "8001", topologyProfile(), managedAttachment("storage", "virbr-b", test.peer))
-			catalog := api.NewCatalog([]api.Object{a, b, host})
+			guests, storage := managedNetwork("guests", "a", "virbr-a", test.own), managedNetwork("storage", "b", "virbr-b", test.peer)
+			catalog := api.NewCatalog([]api.Object{a, b, host, guests, storage})
 			for _, pair := range []struct {
 				own, peer         api.Object
 				ownMask, peerMask string
-			}{{a, b, test.ownMask, test.peerMask}, {b, a, test.peerMask, test.ownMask}} {
+				ownBy, peerBy     string
+			}{{guests, storage, test.ownMask, test.peerMask, "a", "b"}, {storage, guests, test.peerMask, test.ownMask, "b", "a"}} {
 				issues := Validate(pair.own, catalog)
 				refused := issuesAt(issues, field)
-				message := fmt.Sprintf("managed prefix %s of networkAttachments[0] overlaps managed prefix %s of networkAttachments[0] of %s on host Machine/host, and the host routes each managed prefix to its own bridge",
-					pair.ownMask, pair.peerMask, pair.peer.Identity())
-				remediation := fmt.Sprintf("give spec.networkAttachments[0].libvirt.address of %s or spec.networkAttachments[0].libvirt.address of %s a prefix no other managed attachment on host Machine/host overlaps",
-					pair.own.Identity(), pair.peer.Identity())
+				message := fmt.Sprintf("managed prefix %s of %s of InfraProvider/%s overlaps managed prefix %s of %s of InfraProvider/%s on host Machine/host, and the host routes each managed prefix to its own bridge",
+					pair.ownMask, pair.own.Identity(), pair.ownBy, pair.peerMask, pair.peer.Identity(), pair.peerBy)
+				remediation := fmt.Sprintf("give %s or %s a subnet no other managed Network on host Machine/host overlaps", pair.own.Identity(), pair.peer.Identity())
 				if len(issues) != 1 || len(refused) != 1 || refused[0].Code != "api.invariant" || refused[0].Message != message || refused[0].Remediation != remediation {
 					t.Fatalf("%s beside %s: %v", pair.own.Identity(), pair.peer.Identity(), issues)
 				}
 			}
 		})
 	}
-	for name, peer := range map[string]struct {
-		attachment api.Value
-		host       string
+	for name, test := range map[string]struct {
+		peer api.Object
+		host string
 	}{
-		"disjoint IPv4":          {managedAttachment("storage", "virbr-b", "198.51.100.129/25"), "host"},
-		"IPv4 beside IPv6":       {managedAttachment("storage", "virbr-b", "fd00:1::1/64"), "host"},
-		"another host":           {managedAttachment("storage", "virbr-b", "198.51.100.2/25"), "other"},
-		"an external attachment": {externalAttachment("storage", "virbr-b"), "host"},
+		"disjoint IPv4":    {managedNetwork("storage", "b", "virbr-b", "198.51.100.129/25"), "host"},
+		"IPv4 beside IPv6": {managedNetwork("storage", "b", "virbr-b", "fd00:1::1/64"), "host"},
+		"another host":     {managedNetwork("storage", "b", "virbr-b", "198.51.100.2/25"), "other"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			a := topologyProvider("a", "host", "8000", topologyProfile(), managedAttachment("guests", "virbr-a", "198.51.100.1/25"))
-			b := topologyProvider("b", peer.host, "8001", topologyProfile(), peer.attachment)
-			for _, provider := range []api.Object{a, b} {
-				if issues := Validate(provider, api.NewCatalog([]api.Object{a, b, host, other})); len(issues) != 0 {
-					t.Fatalf("%s was refused: %v", provider.Identity(), issues)
+			provider := topologyProvider("b", test.host, "8001", topologyProfile())
+			guests := managedNetwork("guests", "a", "virbr-a", "198.51.100.1/25")
+			for _, network := range []api.Object{guests, test.peer} {
+				if issues := Validate(network, api.NewCatalog([]api.Object{a, provider, guests, test.peer, host, other})); len(issues) != 0 {
+					t.Fatalf("%s was refused: %v", network.Identity(), issues)
 				}
 			}
 		})
 	}
-	both := topologyProvider("a", "host", "8000", topologyProfile(),
-		managedAttachment("guests", "virbr-a", "198.51.100.1/24"), managedAttachment("storage", "virbr-b", "198.51.100.129/25"))
-	refused := issuesAt(Validate(both, api.NewCatalog([]api.Object{both, host})), "$.spec.networkAttachments[1].libvirt.address")
-	if len(refused) != 1 || !strings.HasPrefix(refused[0].Message,
-		"managed prefix 198.51.100.128/25 of networkAttachments[1] overlaps managed prefix 198.51.100.0/24 of networkAttachments[0] of InfraProvider/a on host Machine/host") {
-		t.Fatalf("one provider overlapping its own managed prefixes: %v", refused)
+}
+
+func TestOneHostHoldsAtMostTwentyManagedNetworks(t *testing.T) {
+	const field = "$.spec.libvirt.providerRef"
+	host := topologyHost("host")
+	validate := func(count int) []api.Issue {
+		objects := []api.Object{host, topologyProvider("a", "host", "8000", topologyProfile()), topologyProvider("b", "host", "8001", topologyProfile())}
+		for index := range count {
+			objects = append(objects, managedNetwork(fmt.Sprintf("net-%02d", index), []string{"a", "b"}[index%2], fmt.Sprintf("br-%02d", index), fmt.Sprintf("10.%d.0.1/24", index)))
+		}
+		catalog := api.NewCatalog(objects)
+		first, _ := catalog.Find(api.Network, "net-00")
+		return issuesAt(Validate(first, catalog), field)
+	}
+	if refused := validate(MaxManagedNetworks); len(refused) != 0 {
+		t.Fatalf("%d managed Networks were refused: %v", MaxManagedNetworks, refused)
+	}
+	refused := validate(MaxManagedNetworks + 1)
+	want := api.Issue{Code: "api.value", Field: field,
+		Message:     "at most 20 managed Networks name providers on one host, because a provider's host reservation claims three keys for each beside the two of its media pool, within the 64 keys one reservation holds; 21 name providers on host Machine/host, Network/net-00 among them",
+		Remediation: "declare at most 20 managed Networks on host Machine/host, or make the others provided networks on existing bridges"}
+	if len(refused) != 1 || refused[0] != want {
+		t.Fatalf("%d managed Networks: %v", MaxManagedNetworks+1, refused)
 	}
 }
 

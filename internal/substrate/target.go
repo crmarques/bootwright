@@ -497,13 +497,6 @@ func Unrealizable(catalog api.Catalog) []Unrealized {
 				Remediation: "host " + machine.Identity() + " on " + realized + ", declare its operating system provided, or remove it from the selected Environment"})
 		}
 	}
-	for _, managed := range catalog.OfKind(api.Network) {
-		if provided := managed.Spec().Get("provided"); provided.Present() && !provided.Bool() {
-			found = append(found, Unrealized{Object: managed,
-				Reason:      "this executable names and checks provided networks only, and realizes no network itself",
-				Remediation: "create the network outside Bootwright and set spec.provided to true on " + managed.Identity() + ", or remove it from the selected Environment"})
-		}
-	}
 	slices.SortFunc(found, func(x, y Unrealized) int { return strings.Compare(x.Object.Identity(), y.Object.Identity()) })
 	return found
 }

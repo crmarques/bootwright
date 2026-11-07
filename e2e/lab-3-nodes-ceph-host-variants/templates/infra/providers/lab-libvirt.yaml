@@ -33,11 +33,3 @@ spec:
             sizeGiB: {{ $.Values.guest.osdDiskGiB }}
             media: ssd
 {{ end }}
-  networkAttachments:
-    - name: lab-guests
-
-      libvirt:
-        bridge: {{ .Values.host.bridge }}
-        management: managed
-        address: {{ .Values.host.gateway }}/{{ .Values.host.prefix }}
-        forward: nat

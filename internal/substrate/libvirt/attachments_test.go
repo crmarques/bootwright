@@ -8,10 +8,7 @@ import (
 )
 
 func TestPerInterfaceLibvirtAttachmentsAndMTURequestGolden(t *testing.T) {
-	p := provider()
-	attachments := p.Spec().Get("networkAttachments").Items()
-	attachments = append(attachments, api.MapValue(text("name", "storage"), field("libvirt", api.MapValue(text("bridge", "br-storage"), text("management", "external"), number("mtu", "9000")))))
-	p = p.WithSpec(p.Spec().With("networkAttachments", api.ListValue(attachments...)))
+	p := provider(field("networkAttachments", api.ListValue(api.MapValue(text("name", "storage"), field("libvirt", api.MapValue(text("bridge", "br-storage"), number("mtu", "9000")))))))
 	n := networkConfig()
 	interfaces := n.Spec().Get("nmstate", "interfaces").Items()
 	interfaces = append(interfaces, api.MapValue(text("name", "enp2s0"), text("type", "ethernet"), text("state", "up")))
@@ -40,11 +37,7 @@ func TestPerInterfaceLibvirtAttachmentsAndMTURequestGolden(t *testing.T) {
 }
 
 func TestIPv6LibvirtNetworkMTURequestGolden(t *testing.T) {
-	p := provider()
-	attachment := p.Spec().Get("networkAttachments").Items()[0]
-	attachment = attachment.With("libvirt", attachment.Get("libvirt").With("address", api.StringValue("2001:db8:42::1/64")).With("mtu", api.IntegerValue("9000")))
-	p = p.WithSpec(p.Spec().With("networkAttachments", api.ListValue(attachment)))
-	requests, err := HostRequests(catalogOf(controller(), p), "controller", testContext)
+	requests, err := HostRequests(catalogOf(controller(), provider(), managedNetwork("lab-guests", "virbr-lab", "2001:db8:42::1/64", number("mtu", "9000"))), "controller", testContext)
 	if err != nil || len(requests) != 1 {
 		t.Fatalf("requests: %v %v", requests, err)
 	}

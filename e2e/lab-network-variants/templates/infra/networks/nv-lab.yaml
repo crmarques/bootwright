@@ -4,9 +4,13 @@ metadata:
   name: nv-lab
 
 spec:
-  provided: true
-  description: The untagged network the nv-lab managed attachment of lab-libvirt defines.
+  provided: false
+  description: The untagged network lab-libvirt defines on its host.
 
   ipv4:
     cidr: {{ .Values.host.cidr }}
     gateway: {{ .Values.host.gateway }}
+
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: {{ .Values.host.bridge }}

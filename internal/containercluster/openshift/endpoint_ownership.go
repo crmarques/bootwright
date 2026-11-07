@@ -53,7 +53,7 @@ func addressClaims(catalog api.Catalog) []addressClaim {
 			for i, entry := range spec.Get("native", "public_addrs").Items() {
 				claim(holder, fmt.Sprintf("spec.native.public_addrs[%d].address", i), entry.Get("address").Text())
 			}
-		case api.InfraProvider:
+		case api.InfraProvider, api.Network:
 			for _, held := range substrate.AddressClaims(holder) {
 				claim(holder, held.Path, held.Address)
 			}

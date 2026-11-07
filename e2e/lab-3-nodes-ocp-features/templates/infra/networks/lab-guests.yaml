@@ -5,8 +5,8 @@ metadata:
   name: lab-guests
 
 spec:
-  provided: true
-  description: The guest network the lab-guests attachment of lab-libvirt defines, NAT for IPv4 and isolated for IPv6.
+  provided: false
+  description: The guest network lab-libvirt defines on its host, NAT for IPv4 and isolated for IPv6.
 {{- if .Values.ipv6 }}
 
   ipv6:
@@ -18,3 +18,8 @@ spec:
     cidr: {{ $net.cidr }}
     gateway: {{ $net.gateway }}
 {{- end }}
+
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: {{ .Values.host.bridge }}
+    forward: {{ if .Values.ipv6 }}none{{ else }}nat{{ end }}

@@ -46,13 +46,13 @@ func nodeNetworkConfiguration() []api.Object {
 }
 
 func probedVirtualIPGraph() []api.Object {
-	attachment := api.MapValue().With("libvirt", api.MapValue().With("management", api.StringValue("managed")).With("address", api.StringValue("198.51.100.1/24")).With("bridge", api.StringValue("virbr-lab")))
-	provider := api.NewObject(api.InfraProvider, "hosted", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "libvirt", "machineRef").With("networkAttachments", api.ListValue(attachment)))
+	provider := api.NewObject(api.InfraProvider, "hosted", api.Value{}, api.MapValue().WithPath(api.StringValue("controller"), "libvirt", "machineRef"))
+	network := api.NewObject(api.Network, "lab-guests", api.Value{}, api.MapValue().With("provided", api.BoolValue(false)).WithPath(api.StringValue("198.51.100.0/24"), "ipv4", "cidr").With("libvirt", api.MapValue().With("providerRef", api.StringValue("hosted")).With("bridge", api.StringValue("virbr-lab")).With("hostAddress", api.StringValue("198.51.100.1"))))
 	spec := api.MapValue().WithPath(api.MapValue(), "install", "agent").WithPath(api.MapValue(), "install", "platform", "baremetal").With("nodes", api.ListValue(api.MapValue(), api.MapValue(), api.MapValue()))
 	for _, slot := range []string{"api", "api-int", "ingress"} {
 		spec = spec.WithPath(api.StringValue("198.51.100.10"), "install", "endpoints", slot, "address").WithPath(api.StringValue("installer"), "install", "endpoints", slot, "source", "type")
 	}
-	return agentClusterObjects(spec, provider)
+	return agentClusterObjects(spec, provider, network)
 }
 
 // A context whose graph selects the nmstate or iputils closure reports that

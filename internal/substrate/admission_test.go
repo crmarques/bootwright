@@ -31,7 +31,7 @@ func TestProviderVariantsAndNormalization(t *testing.T) {
 	domain := m("name", "zone-a", "server", "vcenter.example.test", "region", "region", "zone", "zone", "topology", m("datacenter", "dc", "computeCluster", "cluster", "datastore", "store", "networks", api.StringList("network")))
 	providers := map[string]api.Value{
 		"baremetal": m("baremetal", m("defaults", m("bmc", m("credentialsRef", "bmc")))),
-		"libvirt":   m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", bmc), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "virbr-lab", "management", "managed", "address", "192.0.2.1/24")))),
+		"libvirt":   m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", bmc), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "virbr-lab")))),
 		"vsphere":   m("vsphere", m("vcenters", list(m("server", "vcenter.example.test", "datacenters", api.StringList("dc"), "credentialsRef", "vcenter")), "failureDomains", list(domain), "isoStaging", m("folder", "media"), "machineProfiles", list(m("name", "small", "cpu", api.IntegerValue("2"), "memoryMiB", api.IntegerValue("4096"), "diskGiB", api.IntegerValue("20"))))),
 		"kubevirt":  m("kubevirt", m("kubeconfigRef", "host-access", "namespace", "workloads"), "networkAttachments", list(m("name", "net", "kubevirt", m("networkRef", m("kind", "UserDefinedNetwork", "name", "net"))))),
 	}
@@ -51,10 +51,6 @@ func TestProviderVariantsAndNormalization(t *testing.T) {
 				if !o.Spec().Get(variant, "defaults", "bmc", "tls", "verify").Bool() {
 					t.Fatal("TLS verification missing")
 				}
-			case "libvirt":
-				if o.Spec().Get("networkAttachments").Items()[0].Get("libvirt", "forward").Text() != "nat" {
-					t.Fatal("managed network forward default")
-				}
 			case "vsphere":
 				if o.Spec().Get(variant, "machineProfiles").Items()[0].Get("failureDomainRef").Text() != "zone-a" {
 					t.Fatal("sole failure domain")
@@ -70,12 +66,9 @@ func TestProviderVariantsAndNormalization(t *testing.T) {
 }
 func TestProviderContradictions(t *testing.T) {
 	cases := map[string]api.Value{
-		"managed without address": m("libvirt", m("bmcEmulation", m("port", api.IntegerValue("8000"))), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "br0", "management", "managed")))),
-		"external with address":   m("libvirt", m("bmcEmulation", m("port", api.IntegerValue("8000"))), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "br0", "address", "192.0.2.1/24")))),
-		"network address":         m("libvirt", m("bmcEmulation", m("port", api.IntegerValue("8000"))), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "br0", "management", "managed", "address", "192.0.2.0/24")))),
-		"wrong attachment":        m("baremetal", m(), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "br0")))),
-		"cluster namespace":       m("kubevirt", m("namespace", "workloads"), "networkAttachments", list(m("name", "net", "kubevirt", m("networkRef", m("name", "net", "kind", "ClusterUserDefinedNetwork", "apiGroup", "k8s.ovn.org", "namespace", "workloads"))))),
-		"unknown group":           m("kubevirt", m("namespace", "workloads"), "networkAttachments", list(m("name", "net", "kubevirt", m("networkRef", m("name", "net", "kind", "CustomNetwork"))))),
+		"wrong attachment":  m("baremetal", m(), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "br0")))),
+		"cluster namespace": m("kubevirt", m("namespace", "workloads"), "networkAttachments", list(m("name", "net", "kubevirt", m("networkRef", m("name", "net", "kind", "ClusterUserDefinedNetwork", "apiGroup", "k8s.ovn.org", "namespace", "workloads"))))),
+		"unknown group":     m("kubevirt", m("namespace", "workloads"), "networkAttachments", list(m("name", "net", "kubevirt", m("networkRef", m("name", "net", "kind", "CustomNetwork"))))),
 	}
 	for name, spec := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -29,10 +29,10 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 				"an emulated BMC listens on one unicast address its Machines' BMC endpoints can name, and this provider's bindAddress is not one",
 				"set spec.libvirt.bmcEmulation.bindAddress on "+provider.Identity()+" to one unicast host address"))
 		}
-		if substrate.ManagedAttachments(provider) > substrate.MaxManagedAttachments {
+		if len(substrate.ManagedNetworksOf(catalog, provider)) > substrate.MaxManagedNetworks {
 			found = append(found, lifecycle.RefusalOf(provider,
-				fmt.Sprintf("a libvirt provider's host reservation claims three keys for each managed attachment beside the two of its media pool and its firewall readiness unit, within the 64 keys one reservation holds, so it declares at most %d managed attachments", substrate.MaxManagedAttachments),
-				fmt.Sprintf("declare at most %d attachments with management: managed in spec.networkAttachments of %s, or make the others external", substrate.MaxManagedAttachments, provider.Identity())))
+				fmt.Sprintf("a libvirt provider's host reservation claims three keys for each managed Network beside the two of its media pool and its firewall readiness unit, within the 64 keys one reservation holds, so at most %d managed Networks name it", substrate.MaxManagedNetworks),
+				fmt.Sprintf("name %s in spec.libvirt.providerRef of at most %d managed Networks, or make the others provided networks on existing bridges", provider.Identity(), substrate.MaxManagedNetworks)))
 		}
 		if len(substrate.ExternalBridges(provider)) > substrate.MaxExternalBridges {
 			found = append(found, lifecycle.RefusalOf(provider,
@@ -69,7 +69,7 @@ func hostRequestFor(catalog api.Catalog, provider api.Object, controllerMachine,
 	if err != nil {
 		return HostRequest{}, err
 	}
-	networks, err := networksFor(provider, contextName)
+	networks, err := networksFor(catalog, provider, contextName)
 	if err != nil {
 		return HostRequest{}, err
 	}
@@ -101,35 +101,36 @@ func hostRequestFor(catalog api.Catalog, provider api.Object, controllerMachine,
 	}, nil
 }
 
-// networksFor derives one entry per declared attachment. A managed entry is
-// what this context defines; an external one names a bridge it only proves.
-func networksFor(provider api.Object, contextName string) ([]Network, error) {
+// networksFor derives one entry per segment: a managed Network naming the
+// provider is what this context defines; an attachment names an existing
+// bridge it only proves.
+func networksFor(catalog api.Catalog, provider api.Object, contextName string) ([]Network, error) {
 	networks := []Network{}
-	for _, attachment := range provider.Spec().Get("networkAttachments").Items() {
+	for _, attachment := range substrate.Segments(catalog, provider).Items() {
 		name := attachment.Get("name").Text()
 		arm := attachment.Get("libvirt")
 		if !arm.Present() {
 			return nil, refusal("lifecycle.state", "a libvirt provider attachment declares another substrate arm", "correct networkAttachments on the provider")
 		}
 		if !substrate.SafeSegment(name) {
-			return nil, refusal("lifecycle.state", "the attachment name is not a safe host identifier", "rename the "+name+" attachment")
+			return nil, refusal("lifecycle.state", "the attachment or Network name "+name+" is not a safe host identifier", "rename the "+name+" attachment or Network")
 		}
 		network := Network{Bridge: arm.Get("bridge").Text(), Name: substrate.NetworkName(contextName, name)}
 		if mtu, ok := arm.Get("mtu").Int64(); ok {
 			network.MTU = int(mtu)
 		}
 		if network.Bridge == "" {
-			return nil, refusal("api.required", "a libvirt attachment declares no bridge", "set networkAttachments[].libvirt.bridge")
+			return nil, refusal("api.required", "the "+name+" segment of "+provider.Identity()+" declares no bridge", "set spec.libvirt.bridge on Network/"+name+" or networkAttachments[].libvirt.bridge on "+provider.Identity())
 		}
-		if arm.Get("management").Text() != "managed" {
+		managed, isManaged := substrate.ManagedAttachment(attachment)
+		if !isManaged {
 			networks = append(networks, network)
 			continue
 		}
-		address := arm.Get("address").Text()
-		if _, err := netip.ParsePrefix(address); err != nil {
-			return nil, refusal("api.value", "a managed libvirt attachment declares no host address and prefix", "set networkAttachments[].libvirt.address")
+		if _, err := netip.ParsePrefix(managed.Prefix); err != nil {
+			return nil, refusal("api.value", "the managed Network/"+name+" has no host address inside its subnet", "set spec.libvirt.hostAddress or a gateway on Network/"+name)
 		}
-		network.Address, network.Forward, network.Managed = address, arm.Get("forward").Text(), true
+		network.Address, network.Forward, network.Managed = managed.Prefix, managed.Forward, true
 		networks = append(networks, network)
 	}
 	slices.SortFunc(networks, func(x, y Network) int { return strings.Compare(x.Name, y.Name) })
@@ -186,7 +187,7 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, placem
 	if err != nil {
 		return MachineRequest{}, err
 	}
-	interfaces, err := interfacesFor(provider, machine, contextName)
+	interfaces, err := interfacesFor(catalog, provider, machine, contextName)
 	if err != nil {
 		return MachineRequest{}, err
 	}
@@ -256,21 +257,21 @@ func disksFor(profile api.Value, identity, contextName, machine string) ([]Disk,
 	return disks, nil
 }
 
-func interfacesFor(provider, machine api.Object, contextName string) ([]Interface, error) {
+func interfacesFor(catalog api.Catalog, provider, machine api.Object, contextName string) ([]Interface, error) {
 	nics, err := substrate.VirtualInterfaces(contextName, machine)
 	if err != nil {
 		return nil, err
 	}
 	interfaces := make([]Interface, 0, len(nics))
 	for _, nic := range nics {
-		reference := substrate.NICAttachment(provider, machine, nic.Name)
-		attachment, found := findNamed(provider.Spec().Get("networkAttachments"), "name", reference)
+		reference := substrate.NICAttachment(catalog, provider, machine, nic.Name)
+		attachment, found := findNamed(substrate.Segments(catalog, provider), "name", reference)
 		if !found || !attachment.Has("libvirt") {
 			return nil, refusal("api.reference", "NIC "+nic.Name+" of the Machine selects no libvirt attachment of its provider", "add a spec.substrate.libvirt.nics entry for NIC "+nic.Name+" naming a libvirt attachment of "+provider.Identity()+" on "+machine.Identity())
 		}
 		arm := attachment.Get("libvirt")
 		defined := ""
-		if arm.Get("management").Text() == "managed" {
+		if _, managed := substrate.ManagedAttachment(attachment); managed {
 			defined = substrate.NetworkName(contextName, reference)
 		}
 		mtu, _ := arm.Get("mtu").Int64()

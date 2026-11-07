@@ -21,13 +21,13 @@ func MachineNICAttachments(machine api.Object) api.Value {
 	return api.Value{}
 }
 
-func NICAttachment(provider, machine api.Object, nic string) string {
+func NICAttachment(catalog api.Catalog, provider, machine api.Object, nic string) string {
 	for _, entry := range MachineNICAttachments(machine).Items() {
 		if entry.Get("nicRef").Text() == nic {
 			return entry.Get("attachmentRef").Text()
 		}
 	}
-	if attachments := provider.Spec().Get("networkAttachments"); attachments.Len() == 1 {
+	if attachments := Segments(catalog, provider); attachments.Len() == 1 {
 		return attachments.Items()[0].Get("name").Text()
 	}
 	return ""

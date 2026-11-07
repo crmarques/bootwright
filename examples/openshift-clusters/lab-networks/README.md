@@ -16,11 +16,10 @@ prerequisites to the consuming M3d run.
 - Each node has three NICs: `enp1s0` on the machine network, an addressless
   `enp2s0` localnet uplink on `lab-secondary`, and a statically addressed
   `enp3s0` on `lab-routed` (192.0.2.128/25).
-- `infra/networks/` names the three networks as provided
-  [`Network`](../../../specs/api/networks.md) objects, so every interface
-  assignment and the install gateway are checked against them. The provider's
-  managed attachments still define them; a managed `Network` stays unrealized
-  until [B1204](../../../specs/milestones/m1.md#b1204).
+- `infra/networks/` declares the three networks as
+  [`Network`](../../../specs/api/networks.md) objects that `lab-libvirt`
+  defines on the controller, so every interface assignment and the install
+  gateway are checked against them.
 - The cluster declares the `workloads` Localnet secondary network (bridge
   `br-workloads` on `enp2s0`, IPAM disabled, namespaces labelled
   `network.example.test/workloads: enabled`), `routingViaHost` and

@@ -135,22 +135,24 @@ func TestAnEmulatedBMCBoundToABridgeRequiresTheProviderThatCreatesIt(t *testing.
 		arm := provider().Spec().Get("libvirt")
 		return provider(field("libvirt", arm.With("bmcEmulation", arm.Get("bmcEmulation").With("bindAddress", api.StringValue(address)))))
 	}
-	other := func(host, management, address string) api.Object {
-		attachment := api.MapValue(text("bridge", "virbr-storage"), text("management", management))
-		if address != "" {
-			attachment = attachment.With("address", api.StringValue(address)).With("forward", api.StringValue("nat"))
+	other := func(host, management, address string) []api.Object {
+		storage := provider(field("libvirt", provider().Spec().Get("libvirt").With("machineRef", api.StringValue(host))))
+		if management == "external" {
+			storage = provider(field("libvirt", storage.Spec().Get("libvirt")),
+				field("networkAttachments", api.ListValue(api.MapValue(text("name", "storage"), field("libvirt", api.MapValue(text("bridge", "virbr-storage")))))))
 		}
-		spec := provider(
-			field("libvirt", provider().Spec().Get("libvirt").With("machineRef", api.StringValue(host))),
-			field("networkAttachments", api.ListValue(api.MapValue(text("name", "storage"), field("libvirt", attachment)))),
-		).Spec()
-		return api.NewObject(api.InfraProvider, "lab-storage", api.Value{}, spec)
+		objects := []api.Object{api.NewObject(api.InfraProvider, "lab-storage", api.Value{}, storage.Spec()), labNetwork()}
+		if address != "" {
+			network := managedNetwork("storage", "virbr-storage", address)
+			objects = append(objects, network.WithSpec(network.Spec().WithPath(api.StringValue("lab-storage"), "libvirt", "providerRef")))
+		}
+		return objects
 	}
 	own := reconciliation.ObjectRef{Kind: "InfraProvider", Object: "lab-libvirt"}
 	storage := reconciliation.ObjectRef{Kind: "InfraProvider", Object: "lab-storage"}
 	for name, test := range map[string]struct {
 		bind  string
-		other api.Object
+		other []api.Object
 		want  []reconciliation.ObjectRef
 	}{
 		"an address no bridge carries":              {"192.0.2.1", other("controller", "managed", "203.0.113.1/24"), []reconciliation.ObjectRef{own}},
@@ -161,7 +163,7 @@ func TestAnEmulatedBMCBoundToABridgeRequiresTheProviderThatCreatesIt(t *testing.
 		"another provider's external bridge":        {"203.0.113.1", other("controller", "external", ""), []reconciliation.ObjectRef{own}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			catalog := catalogOf(controller(), remoteHost(), bound(test.bind), test.other, networkConfig(), guest("rhel-01"))
+			catalog := catalogOf(append([]api.Object{controller(), remoteHost(), bound(test.bind), networkConfig(), guest("rhel-01")}, test.other...)...)
 			input := lifecycle.PlanInput{
 				Verb: reconciliation.Apply, State: compilation.NewState(catalog, catalog, nil),
 				Controller: "controller", Context: lifecycle.ContextIdentity{Name: testContext},

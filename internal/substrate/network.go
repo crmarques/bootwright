@@ -98,7 +98,7 @@ func DefaultGateway(template api.Value) string {
 }
 
 // BridgeProviders names, in canonical order, the libvirt providers hosted on
-// machine whose managed attachment carries address as its host address. That
+// machine that define a managed Network whose host address is address. That
 // address exists only once the provider's host block creates the bridge, so a
 // socket bound to it cannot open before then.
 func BridgeProviders(catalog api.Catalog, machine, address string) []string {
@@ -109,13 +109,11 @@ func BridgeProviders(catalog api.Catalog, machine, address string) []string {
 	bound = bound.WithZone("").Unmap()
 	var found []string
 	for _, provider := range ProvidersOn(catalog, ArmLibvirt) {
-		if provider.Spec().Get("libvirt", "machineRef").Text() != machine {
+		if HostMachine(provider) != machine {
 			continue
 		}
-		for _, attachment := range provider.Spec().Get("networkAttachments").Items() {
-			arm := attachment.Get("libvirt")
-			prefix, err := netip.ParsePrefix(arm.Get("address").Text())
-			if err == nil && arm.Get("management").Text() == "managed" && prefix.Addr().Unmap() == bound {
+		for _, managed := range ManagedNetworksOf(catalog, provider) {
+			if prefix, ok := HostAddress(managed); ok && prefix.Addr().Unmap() == bound {
 				found = append(found, provider.Name())
 				break
 			}

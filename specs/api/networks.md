@@ -31,7 +31,7 @@ Effective output emits the fields in this order, which is the schema's.
 | `spec.provided` | boolean | required | `true`: the network exists outside Bootwright, which names and checks it and never changes it. `false`: Bootwright realizes it through exactly one arm. |
 | `spec.description` | string | none | Inert. |
 | `spec.vlan` | integer 1 to 4094 | none | The 802.1Q VLAN ID the network is tagged with. Absent: the network is only carried untagged. |
-| `spec.mtu` | integer 576 to 65536 | `1500`, materialized | The largest frame the network allows: a capacity, never derived into an interface MTU nor emitted to a host. With `spec.ipv6`, below 1280 (RFC 8200) is refused. |
+| `spec.mtu` | integer 576 to 65536 | `1500`, materialized | The largest frame the network allows: a capacity, never derived into an interface MTU, and emitted only as a [managed network's](#libvirt-arm) MTU. With `spec.ipv6`, below 1280 (RFC 8200) is refused. |
 | `spec.sites` | non-empty set of site names | none: every site | Each name is a site of the selected Environment's `spec.sites`, refused `api.reference` otherwise. |
 | `spec.ipv4`, `spec.ipv6` | `{cidr, gateway}` | none | At least one is present. See [subnets](#subnets-and-gateways). |
 | `spec.libvirt` | presence arm | none | The one realization arm. See [the libvirt arm](#libvirt-arm). |
@@ -46,11 +46,8 @@ arm, because a provided network is realized by nothing; a Network that is not
 provided and names no arm is refused at `$.spec`, naming every arm as remedy.
 Both refusals are `api.invariant`.
 
-A Network with `provided: false` is
-[admitted but unrealized](../api.md#admitted-but-unrealized) until
-[B1204](../milestones/m1.md#b1204): `validate` warns `api.unrealized` at
-`$.spec.provided` and `plan` refuses it with `lifecycle.unsupported`, naming the
-Network and the remedy of providing it outside Bootwright.
+A Network with `provided: false` is realized by its arm; there is no block per
+Network ([D240](../milestones/backlog.md#d240) (13)).
 
 ### Subnets and gateways
 
@@ -85,10 +82,22 @@ network defined on a provider's host. Its fields, in emitted order:
 | `hostAddress` | IP | the IPv4 gateway, else the IPv6 gateway | The host's address on the bridge: a host address inside the CIDR of its family, under the rules a gateway follows. Required when the Network declares no gateway. |
 | `taggedNetworkRefs` | set of `Network` references | none | The VLAN networks guests may stack on this bridge. Each declares `vlan` and is not the Network itself. |
 
-Admission checks shape, references and every rule of the table above,
-`hostAddress` and `taggedNetworkRefs` included; the realization, and the
-host-wide rules between managed networks, arrive with
-[B1204](../milestones/m1.md#b1204).
+The host block of the provider `providerRef` names defines the network
+([provider host realization](../substrates.md#provider-host-realization)) as
+`bootwright-<context>-<name>` with `hostAddress` and its CIDR's prefix; its
+`mtu` is emitted only when it is not 1500. The Network is a segment of that
+provider under its own name: a Machine NIC's
+[`attachmentRef`](machines.md#machine-profiles-and-network-attachments) names
+it, and an attachment of that provider with the same name refuses at
+`providerRef`. `taggedNetworkRefs` realizes nothing: the bridge already carries
+guest VLAN tags.
+
+Between the managed Networks naming providers of one host, each refused
+`api.invariant` at the Network, naming both Networks and their providers: no
+other managed Network or provider attachment on that host names its `bridge`,
+and no other managed Network's prefix overlaps its own, IPv4 or IPv6. At most
+20 managed Networks name the providers of one host (`api.value`, the host
+reservation's bound).
 
 ## Cross-kind checks
 

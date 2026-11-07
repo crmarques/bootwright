@@ -54,7 +54,7 @@ func installingOn(iface string) api.Object {
 func externalProvider() api.Object {
 	lab := provider()
 	return lab.WithSpec(lab.Spec().With("networkAttachments", api.ListValue(api.MapValue(
-		text("name", "lab-guests"), field("libvirt", api.MapValue(text("bridge", "br-lab"), text("management", "external"))),
+		text("name", "lab-guests"), field("libvirt", api.MapValue(text("bridge", "br-lab"))),
 	))))
 }
 

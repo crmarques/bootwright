@@ -26,12 +26,3 @@ spec:
         cpu: {{ .Values.controller.cpu }}
         memoryMiB: {{ .Values.controller.memoryMiB }}
         diskGiB: {{ .Values.controller.diskGiB }}
-
-  networkAttachments:
-    - name: lab-guests
-
-      libvirt:
-        bridge: {{ .Values.host.bridge }}
-        management: managed
-        address: {{ .Values.host.gateway }}/{{ .Values.host.prefix }}
-        forward: nat

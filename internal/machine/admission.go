@@ -32,7 +32,7 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	network := normalizedContacts(o, c, s.Get("network"))
 	provider, found := Provider(o, c)
 	if arm := substrate.MachineArm(o); found && substrate.VirtualArm(arm) && s.Get("hardware", "nics").Len() > 0 {
-		if entries, ok := defaultedNICAttachments(o, provider); ok {
+		if entries, ok := defaultedNICAttachments(c, o, provider); ok {
 			s = s.WithPath(entries, "substrate", arm, "nics")
 		}
 	}
@@ -282,7 +282,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	armIssues := validateArm(o, provider, found, variant)
 	issues = appendIssues(issues, armIssues...)
 	if found && variant != "" && len(armIssues) == 0 {
-		issues = appendIssues(issues, validateSubstrate(o, provider, variant)...)
+		issues = appendIssues(issues, validateSubstrate(c, o, provider, variant)...)
 	}
 	issues = appendIssues(issues, validateHardware(o, c, variant)...)
 	issues = appendIssues(issues, validateErase(o, variant)...)
@@ -352,7 +352,7 @@ func validateArm(o, provider api.Object, found bool, variant string) []api.Issue
 	return nil
 }
 
-func validateSubstrate(o, provider api.Object, variant string) []api.Issue {
+func validateSubstrate(c api.Catalog, o, provider api.Object, variant string) []api.Issue {
 	var issues []api.Issue
 	s := o.Spec()
 	provided := s.Get("os", "provided")
@@ -364,7 +364,7 @@ func validateSubstrate(o, provider api.Object, variant string) []api.Issue {
 		}
 	}
 	if substrate.VirtualArm(variant) && provided.Present() && !provided.Bool() {
-		issues = appendIssues(issues, validateVirtualNICs(o, provider, variant)...)
+		issues = appendIssues(issues, validateVirtualNICs(c, o, provider, variant)...)
 	}
 	if variant == substrate.ArmBaremetal && provided.Present() && !provided.Bool() {
 		issues = appendIssues(issues, validateBaremetal(o)...)
@@ -430,11 +430,11 @@ func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, fo
 	native, compositionIssues := ComposeNetwork(o, c)
 	issues = appendIssues(issues, compositionIssues...)
 	if found && configured {
-		issues = appendIssues(issues, validateAttachments(o, provider, native)...)
+		issues = appendIssues(issues, validateAttachments(c, o, provider, native)...)
 	}
 	if found && configured && variant == substrate.ArmKubeVirt {
 		if host, hosted := substrate.HostClusterObject(c, provider); hosted {
-			issues = appendIssues(issues, validateKubeVirtAttachmentMTUs(o, provider, host, native)...)
+			issues = appendIssues(issues, validateKubeVirtAttachmentMTUs(c, o, provider, host, native)...)
 		}
 	}
 	if found && variant == substrate.ArmLibvirt && len(compositionIssues) == 0 {
@@ -457,7 +457,7 @@ func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, fo
 				}
 			}
 			if found && variant == substrate.ArmLibvirt {
-				issues = appendIssues(issues, validateManagedAttachmentContainment(o, prefix, provider, address.Get("interface").Text(), native)...)
+				issues = appendIssues(issues, validateManagedAttachmentContainment(c, o, prefix, provider, address.Get("interface").Text(), native)...)
 			}
 			issues = appendIssues(issues, validateInstallGateway(o, c, address, prefix, native)...)
 		}
@@ -527,23 +527,24 @@ func validateBMC(bmc api.Value, unresolvedProvider bool) []api.Issue {
 }
 
 // validateManagedAttachmentContainment requires the install address to be a
-// guest's host address on the network Bootwright defines for a managed libvirt
-// attachment: inside its prefix, never the bridge's own host address and, for
-// an IPv4 prefix shorter than /31, never its network or broadcast address.
-func validateManagedAttachmentContainment(o api.Object, address netip.Prefix, provider api.Object, installInterface string, native api.Value) []api.Issue {
+// guest's host address on a managed Network: inside its prefix, never the
+// bridge's own host address and, for an IPv4 prefix shorter than /31, never its
+// network or broadcast address.
+func validateManagedAttachmentContainment(c api.Catalog, o api.Object, address netip.Prefix, provider api.Object, installInterface string, native api.Value) []api.Issue {
 	var issues []api.Issue
-	for _, reference := range installAttachmentReferences(o, provider, native, installInterface) {
-		issues = appendIssues(issues, validateManagedAttachmentAddress(o, address, provider, reference)...)
+	for _, reference := range installAttachmentReferences(c, o, provider, native, installInterface) {
+		issues = appendIssues(issues, validateManagedAttachmentAddress(c, o, address, provider, reference)...)
 	}
 	return issues
 }
 
-func validateManagedAttachmentAddress(o api.Object, address netip.Prefix, provider api.Object, reference string) []api.Issue {
-	attachment, ok := namedValue(provider.Spec().Get("networkAttachments"), reference)
-	if !ok || attachment.Get("libvirt", "management").Text() != "managed" {
+func validateManagedAttachmentAddress(c api.Catalog, o api.Object, address netip.Prefix, provider api.Object, reference string) []api.Issue {
+	attachment, ok := namedValue(substrate.Segments(c, provider), reference)
+	network, isManaged := substrate.ManagedAttachment(attachment)
+	if !ok || !isManaged {
 		return nil
 	}
-	managed, err := netip.ParsePrefix(attachment.Get("libvirt", "address").Text())
+	managed, err := netip.ParsePrefix(network.Prefix)
 	if err != nil {
 		return nil
 	}
@@ -557,11 +558,11 @@ func validateManagedAttachmentAddress(o api.Object, address netip.Prefix, provid
 	}
 	switch end := reservedEnd(managed, address.Addr()); {
 	case !managed.Masked().Contains(address.Addr()):
-		return refuse("install address must lie inside the managed libvirt attachment's network")
+		return refuse("install address must lie inside managed Network/" + reference)
 	case address.Addr() == managed.Addr():
-		return refuse("the install address is the managed bridge's own host address on " + provider.Identity())
+		return refuse("the install address is the host address of managed Network/" + reference + " on " + provider.Identity())
 	case end != "":
-		return refuse("the install address is the " + end + " address of the managed bridge's prefix on " + provider.Identity())
+		return refuse("the install address is the " + end + " address of managed Network/" + reference + " on " + provider.Identity())
 	}
 	return nil
 }
@@ -757,7 +758,7 @@ func validateHardware(o api.Object, c api.Catalog, variant string) []api.Issue {
 	return issues
 }
 
-func validateAttachments(o, provider api.Object, native api.Value) []api.Issue {
+func validateAttachments(c api.Catalog, o, provider api.Object, native api.Value) []api.Issue {
 	variant := substrate.Variant(provider)
 	issues := []api.Issue{}
 	if substrate.VirtualArm(variant) {
@@ -765,13 +766,13 @@ func validateAttachments(o, provider api.Object, native api.Value) []api.Issue {
 		issues = appendIssues(issues, validateBondAttachments(o, native, "$.spec.substrate."+variant+".nics")...)
 	}
 	if variant == substrate.ArmLibvirt {
-		issues = appendIssues(issues, validateLibvirtAttachmentMTUs(o, provider, native)...)
+		issues = appendIssues(issues, validateLibvirtAttachmentMTUs(c, o, provider, native)...)
 	}
 	return issues
 }
 
-func defaultedNICAttachments(o, provider api.Object) (api.Value, bool) {
-	attachments := provider.Spec().Get("networkAttachments")
+func defaultedNICAttachments(c api.Catalog, o, provider api.Object) (api.Value, bool) {
+	attachments := substrate.Segments(c, provider)
 	entries := substrate.MachineNICAttachments(o)
 	if attachments.Len() != 1 {
 		return entries, false
@@ -796,13 +797,13 @@ func defaultedNICAttachments(o, provider api.Object) (api.Value, bool) {
 	return api.ListValue(values...), true
 }
 
-func validateVirtualNICs(o, provider api.Object, variant string) []api.Issue {
+func validateVirtualNICs(c api.Catalog, o, provider api.Object, variant string) []api.Issue {
 	nics := substrate.MachineNICs(o)
 	if len(nics) == 0 {
 		return []api.Issue{invariant("$.spec.hardware.nics", "a "+variant+" provider creates one vNIC per spec.hardware.nics entry, in order, and "+o.Identity()+" declares none",
 			"declare each vNIC of "+o.Identity()+" in spec.hardware.nics, in device order, such as one entry named enp1s0")}
 	}
-	attachments := provider.Spec().Get("networkAttachments")
+	attachments := substrate.Segments(c, provider)
 	path := "$.spec.substrate." + variant + ".nics"
 	issues := []api.Issue{}
 	for i, entry := range substrate.MachineNICAttachments(o).Items() {
@@ -812,7 +813,7 @@ func validateVirtualNICs(o, provider api.Object, variant string) []api.Issue {
 		}
 	}
 	for _, nic := range nics {
-		if substrate.NICAttachment(provider, o, nic) == "" {
+		if substrate.NICAttachment(c, provider, o, nic) == "" && !c.UndecodableOfKind(api.Network) {
 			issues = appendIssues(issues, invariant(path, fmt.Sprintf("NIC %s of %s selects no network attachment, and %s declares %d attachments, not exactly one that every NIC defaults to", nic, o.Identity(), provider.Identity(), attachments.Len()),
 				"add a "+path[2:]+" entry with nicRef "+nic+" and an attachmentRef naming an attachment of "+provider.Identity()+" on "+o.Identity()))
 		}
@@ -988,10 +989,10 @@ func providerBMCDefaults(bmc api.Value, provider api.Object) api.Value {
 	return defaults
 }
 
-func installAttachmentReferences(o, provider api.Object, native api.Value, name string) []string {
+func installAttachmentReferences(c api.Catalog, o, provider api.Object, native api.Value, name string) []string {
 	var references []string
 	for _, leaf := range physicalLeaves(native, name, map[string]bool{}) {
-		references = append(references, substrate.NICAttachment(provider, o, substrate.InterfaceNIC(o, leaf)))
+		references = append(references, substrate.NICAttachment(c, provider, o, substrate.InterfaceNIC(o, leaf)))
 	}
 	return references
 }

@@ -37,7 +37,9 @@ func TestFirewallBarrierSharesTheControllerUnitReservationNamespace(t *testing.T
 	guest := guest("alpha-firewalld-ready")
 	guest = api.NewObject(api.Machine, guest.Name(), api.Value{}, guest.Spec().With("substrate",
 		guest.Spec().Get("substrate").With("providerRef", api.StringValue(provider.Name()))))
-	catalog := catalogOf(controller(), provider, networkConfig(), guest)
+	network := labNetwork()
+	network = network.WithSpec(network.Spec().WithPath(api.StringValue(provider.Name()), "libvirt", "providerRef"))
+	catalog := catalogOf(controller(), provider, network, networkConfig(), guest)
 	hosts, err := HostRequests(catalog, "controller", testContext)
 	if err != nil || len(hosts) != 1 {
 		t.Fatalf("hosts = %v, %v", hosts, err)

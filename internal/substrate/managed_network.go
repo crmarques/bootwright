@@ -3,6 +3,8 @@ package substrate
 import (
 	"fmt"
 	"net/netip"
+	"slices"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/network"
@@ -52,6 +54,8 @@ func validateNetworkArm(o api.Object, c api.Catalog) []api.Issue {
 				Remediation: "set spec.libvirt.hostAddress on " + o.Identity() + " to a host address inside the network's cidr"})
 		}
 	}
+	issues = add(issues, validateSegmentName(o, c)...)
+	issues = add(issues, validateSharedHostNetworks(o, c)...)
 	for i, name := range arm.Get("taggedNetworkRefs").Strings() {
 		field := fmt.Sprintf("%s.taggedNetworkRefs[%d]", path, i)
 		tagged, found := c.Find(api.Network, name)
@@ -63,6 +67,166 @@ func validateNetworkArm(o api.Object, c api.Catalog) []api.Issue {
 			issues = add(issues, api.Issue{Code: "api.invariant", Field: field, Message: tagged.Identity() + " declares no vlan, so " + o.Identity() + " cannot carry it tagged",
 				Remediation: "set spec.vlan on " + tagged.Identity() + ", or remove it from spec.libvirt.taggedNetworkRefs of " + o.Identity()})
 		}
+	}
+	return issues
+}
+
+const defaultMTU = 1500
+
+func IsManagedNetwork(o api.Object) bool {
+	provided := o.Spec().Get("provided")
+	return o.Kind() == api.Network && provided.Present() && !provided.Bool() && o.Spec().Has(ArmLibvirt)
+}
+
+func ManagedNetworkProvider(o api.Object) string {
+	return o.Spec().Get(ArmLibvirt, "providerRef").Text()
+}
+
+func ManagedNetworksOf(c api.Catalog, provider api.Object) []api.Object {
+	var found []api.Object
+	for _, o := range c.OfKind(api.Network) {
+		if IsManagedNetwork(o) && ManagedNetworkProvider(o) == provider.Name() {
+			found = append(found, o)
+		}
+	}
+	slices.SortFunc(found, func(x, y api.Object) int { return strings.Compare(x.Name(), y.Name()) })
+	return found
+}
+
+func HostAddress(o api.Object) (netip.Prefix, bool) {
+	arm := o.Spec().Get(ArmLibvirt)
+	address, err := netip.ParseAddr(arm.Get("hostAddress").Text())
+	if !arm.Has("hostAddress") {
+		for _, family := range []string{"ipv4", "ipv6"} {
+			if gateway, ok := network.Gateway(o, family); ok {
+				address, err = gateway, nil
+				break
+			}
+		}
+	}
+	if err != nil {
+		return netip.Prefix{}, false
+	}
+	prefix, ok := network.Prefix(o, network.Family(address))
+	if !ok {
+		return netip.Prefix{}, false
+	}
+	return netip.PrefixFrom(address.WithZone(""), prefix.Bits()), true
+}
+
+func ManagedSegment(o api.Object) api.Value {
+	arm := o.Spec().Get(ArmLibvirt)
+	libvirt := api.MapValue(api.FieldValue{Name: "bridge", Value: arm.Get("bridge")})
+	if mtu, ok := o.Spec().Get("mtu").Int64(); ok && mtu != defaultMTU {
+		libvirt = libvirt.With("mtu", o.Spec().Get("mtu"))
+	}
+	forward := arm.Get("forward")
+	if !forward.Present() {
+		forward = api.StringValue("nat")
+	}
+	managed := api.MapValue(api.FieldValue{Name: "forward", Value: forward})
+	if address, ok := HostAddress(o); ok {
+		managed = managed.With("address", api.StringValue(address.String()))
+	}
+	return api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue(o.Name())}, api.FieldValue{Name: ArmLibvirt, Value: libvirt}, api.FieldValue{Name: "managed", Value: managed})
+}
+
+func Segments(c api.Catalog, provider api.Object) api.Value {
+	segments := provider.Spec().Get("networkAttachments").Items()
+	if Variant(provider) == ArmLibvirt {
+		for _, o := range ManagedNetworksOf(c, provider) {
+			segments = append(segments, ManagedSegment(o))
+		}
+	}
+	return api.ListValue(segments...)
+}
+
+func validateSegmentName(o api.Object, c api.Catalog) []api.Issue {
+	provider, found := c.Find(api.InfraProvider, ManagedNetworkProvider(o))
+	if !found || !IsManagedNetwork(o) {
+		return nil
+	}
+	for index, attachment := range provider.Spec().Get("networkAttachments").Items() {
+		if attachment.Get("name").Text() == o.Name() {
+			return []api.Issue{{Code: "api.invariant", Field: "$.spec.libvirt.providerRef",
+				Message:     fmt.Sprintf("%s is a segment of %s under its own name, and spec.networkAttachments[%d] of %s is also named %s, so a Machine NIC naming it would select two segments", o.Identity(), provider.Identity(), index, provider.Identity(), o.Name()),
+				Remediation: "rename spec.networkAttachments[" + fmt.Sprint(index) + "] of " + provider.Identity() + " or " + o.Identity() + ", with the attachmentRef of every Machine that selects it"}}
+		}
+	}
+	return nil
+}
+
+type hostSegment struct {
+	owner    api.Object
+	provider api.Object
+	index    int
+	bridge   string
+	prefix   netip.Prefix
+}
+
+func (s hostSegment) label() string {
+	if s.owner.Kind() == api.Network {
+		return s.owner.Identity() + " of " + s.provider.Identity()
+	}
+	return fmt.Sprintf("spec.networkAttachments[%d] of %s", s.index, s.provider.Identity())
+}
+
+func segmentsOnHost(c api.Catalog, host string) (managed, external []hostSegment) {
+	for _, provider := range ProvidersOn(c, ArmLibvirt) {
+		if HostMachine(provider) != host {
+			continue
+		}
+		for index, attachment := range provider.Spec().Get("networkAttachments").Items() {
+			if bridge := attachment.Get(ArmLibvirt, "bridge").Text(); api.ValidLexical("bridge", bridge) {
+				external = append(external, hostSegment{owner: provider, provider: provider, index: index, bridge: bridge})
+			}
+		}
+		for _, o := range ManagedNetworksOf(c, provider) {
+			segment := hostSegment{owner: o, provider: provider}
+			if bridge := o.Spec().Get(ArmLibvirt, "bridge").Text(); api.ValidLexical("bridge", bridge) {
+				segment.bridge = bridge
+			}
+			if address, ok := HostAddress(o); ok {
+				segment.prefix = address.Masked()
+			}
+			managed = append(managed, segment)
+		}
+	}
+	return managed, external
+}
+
+func validateSharedHostNetworks(o api.Object, c api.Catalog) []api.Issue {
+	provider, found := c.Find(api.InfraProvider, ManagedNetworkProvider(o))
+	host := HostMachine(provider)
+	if !found || !IsManagedNetwork(o) || Variant(provider) != ArmLibvirt || !api.ValidLexical("name", host) {
+		return nil
+	}
+	managed, external := segmentsOnHost(c, host)
+	index := slices.IndexFunc(managed, func(s hostSegment) bool { return s.owner.Identity() == o.Identity() })
+	if index < 0 {
+		return nil
+	}
+	own := managed[index]
+	issues := []api.Issue{}
+	for _, peer := range append(slices.Clone(managed), external...) {
+		if peer.owner.Identity() == o.Identity() {
+			continue
+		}
+		if own.bridge != "" && own.bridge == peer.bridge {
+			issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.bridge",
+				Message:     fmt.Sprintf("bridge %s of %s is also named by %s on host Machine/%s; a bridge a managed Network defines belongs to that Network alone", own.bridge, own.label(), peer.label(), host),
+				Remediation: fmt.Sprintf("give %s or %s its own bridge", o.Identity(), peer.label())})
+		}
+		if peer.owner.Kind() == api.Network && own.prefix.IsValid() && peer.prefix.IsValid() && own.prefix.Overlaps(peer.prefix) {
+			issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.hostAddress",
+				Message:     fmt.Sprintf("managed prefix %s of %s overlaps managed prefix %s of %s on host Machine/%s, and the host routes each managed prefix to its own bridge", own.prefix, own.label(), peer.prefix, peer.label(), host),
+				Remediation: fmt.Sprintf("give %s or %s a subnet no other managed Network on host Machine/%s overlaps", o.Identity(), peer.owner.Identity(), host)})
+		}
+	}
+	if len(managed) > MaxManagedNetworks {
+		issues = add(issues, api.Issue{Code: "api.value", Field: "$.spec.libvirt.providerRef",
+			Message:     fmt.Sprintf("at most %d managed Networks name providers on one host, because a provider's host reservation claims three keys for each beside the two of its media pool, within the 64 keys one reservation holds; %d name providers on host Machine/%s, %s among them", MaxManagedNetworks, len(managed), host, o.Identity()),
+			Remediation: fmt.Sprintf("declare at most %d managed Networks on host Machine/%s, or make the others provided networks on existing bridges", MaxManagedNetworks, host)})
 	}
 	return issues
 }

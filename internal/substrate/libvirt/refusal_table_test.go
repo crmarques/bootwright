@@ -51,7 +51,7 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 			map[string]string{"<provider>": "InfraProvider/vc", "<machine>": "Machine/node-01"}},
 		"An emulated BMC no endpoint can name": {catalogOf(controller(), wildcard), "InfraProvider/lab-libvirt",
 			map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},
-		"A provider with more managed attachments than its reservation holds": {catalogOf(controller(), provider(managedAttachments(substrate.MaxManagedAttachments+1))),
+		"A provider named by more managed Networks than its reservation holds": {catalogOf(managedNetworks(substrate.MaxManagedNetworks + 1)...),
 			"InfraProvider/lab-libvirt", map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},
 		"A provider using more external bridges than its use reservation holds": {catalogOf(controller(), provider(externalAttachments(manyBridges(substrate.MaxExternalBridges+1)...))),
 			"InfraProvider/lab-libvirt", map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},

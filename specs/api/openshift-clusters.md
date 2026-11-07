@@ -273,7 +273,7 @@ on platform `none` slots may share one external or load-balancer address. Each
 refusal is an `api.invariant` at the slot's address, or at its source when the
 address is resolved, naming the other holder. A managed libvirt network's
 prefix belongs to one context through its exclusive reservation, so no other
-context's managed attachment shares an address in it; an external attachment
+context's managed Network shares an address in it; a provider's attachment
 claims no prefix, and on any other network Bootwright coordinates no address,
 as for node addresses.
 

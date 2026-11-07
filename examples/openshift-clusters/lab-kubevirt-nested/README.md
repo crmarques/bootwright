@@ -20,9 +20,10 @@ no accepted run.
   `kubevirt` instance creates the provider namespace `bootwright-nested` with
   that label, its ServiceAccount and roles; no kubeconfig Secret is declared,
   because each run is lent a token minted for that ServiceAccount.
-- `infra/networks/` declares `lab-guests`, `nested-guests` (the 203.0.113.0/24
+- `infra/networks/` declares `lab-guests`, `lab-secondary` (the 203.0.113.0/24
   network above, which the child nodes use) and `lab-routed` (192.0.2.128/25)
-  as provided [`Network`](../../../specs/api/networks.md) objects.
+  as [`Network`](../../../specs/api/networks.md) objects that `lab-libvirt`
+  defines on the controller.
 - Child nodes `child-01` to `child-03` (203.0.113.21 to .23), each 4 vCPU,
   16 GiB and 120 GiB, on authored `baremetal` with installer VIPs 203.0.113.10
   and .11. The VMs of one role prefer distinct host nodes.

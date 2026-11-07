@@ -32,12 +32,3 @@ spec:
           - name: ceph-data
             sizeGiB: 80
             media: ssd
-
-  networkAttachments:
-    - name: lab-guests
-
-      libvirt:
-        bridge: virbr-lab
-        management: managed
-        address: 198.51.100.1/24
-        forward: nat

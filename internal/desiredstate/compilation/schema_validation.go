@@ -75,11 +75,18 @@ func validateNested(record *objectRecord, name string, scope *api.Scope, path st
 	if !nestedName(name) {
 		named, reference = " of the authored name", "it"
 	}
+	if scope.Joined != nil && catalog.Undecodable(scope.Joined.Kind, name) {
+		return
+	}
 	for _, owner := range owners {
+		joined := ""
+		if scope.Joined != nil {
+			joined = ", or a " + string(scope.Joined.Kind) + " whose spec." + strings.Join(scope.Joined.Field, ".") + " names " + owner.Object.Name()
+		}
 		switch matches := countOf(owner.Names, name); {
 		case matches == 0:
 			sink.issue(record, api.Issue{Code: "api.reference", Field: path, Message: "no " + scope.Noun + named + " is declared on " + owner.Object.Identity(),
-				Remediation: "correct the reference to name an entry of " + declared + " on " + owner.Object.Identity() + ", or declare " + reference + " there"})
+				Remediation: "correct the reference to name an entry of " + declared + " on " + owner.Object.Identity() + joined + ", or declare " + reference + " there"})
 		case matches > 1:
 			sink.issue(record, api.Issue{Code: "api.reference", Field: path, Message: "the" + named + " is ambiguous: it names " + strconv.Itoa(matches) + " entries of " + declared + " on " + owner.Object.Identity(),
 				Remediation: "give the entries of " + declared + " on " + owner.Object.Identity() + " distinct names"})

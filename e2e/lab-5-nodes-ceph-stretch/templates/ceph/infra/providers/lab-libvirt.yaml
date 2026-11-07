@@ -59,4 +59,3 @@ spec:
 
       libvirt:
         bridge: {{ .Values.host.bridge }}
-        management: external

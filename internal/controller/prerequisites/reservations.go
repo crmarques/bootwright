@@ -258,11 +258,11 @@ func conflictField(wanted HostReservation, class string) string {
 	case class == "socket" && wanted.Kind == "substrate-machine":
 		return ", or change spec.libvirt.bmcEmulation.bindAddress or spec.libvirt.bmcEmulation.port on the InfraProvider of " + object
 	case class == "bridge" && wanted.Kind == "substrate-host":
-		return ", or change spec.networkAttachments[].libvirt.bridge on " + object
+		return ", or change spec.libvirt.bridge on the managed Network that " + object + " defines"
 	case class == "bmc" && wanted.Kind == "substrate-physical":
 		return ", or change spec.substrate.baremetal.bmc.address on " + object
 	case class == "prefix" && wanted.Kind == "substrate-host":
-		return ", or change spec.networkAttachments[].libvirt.address on " + object
+		return ", or change spec.ipv4.cidr, spec.ipv6.cidr or spec.libvirt.hostAddress on the managed Network that " + object + " defines"
 	}
 	return ""
 }

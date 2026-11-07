@@ -69,17 +69,6 @@ func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 	}
 	spec = spec.With(variant, arm)
 	attachments := spec.Get("networkAttachments").Items()
-	if variant == "libvirt" {
-		for index, attachment := range attachments {
-			libvirt := attachment.Get("libvirt")
-			if libvirt.Get("management").Text() == "managed" && !libvirt.Has("forward") {
-				attachments[index] = attachment.WithPath(api.StringValue("nat"), "libvirt", "forward")
-			}
-		}
-		if spec.Has("networkAttachments") {
-			spec = spec.With("networkAttachments", api.ListValue(attachments...))
-		}
-	}
 	if variant == "kubevirt" {
 		for index, attachment := range attachments {
 			ref := attachment.Get("kubevirt", "networkRef")
@@ -216,8 +205,6 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 				break
 			}
 		}
-		issues = add(issues, validateSharedHostNetworks(o, c)...)
-		issues = add(issues, validateLibvirtHostFootprint(o, c)...)
 	}
 	if variant == "vsphere" {
 		domains := arm.Get("failureDomains").Items()
@@ -242,9 +229,6 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		path := fmt.Sprintf("$.spec.networkAttachments[%d]", index)
 		if !attachment.Has(variant) {
 			issues = add(issues, issue(path, "attachment arm must match its provider substrate"))
-		}
-		if variant == "libvirt" {
-			issues = add(issues, validateLibvirtAttachment(attachment.Get("libvirt"), path+".libvirt")...)
 		}
 		if variant == "vsphere" && arm.Get("failureDomains").Len() > 1 && !attachment.Get("vsphere").Has("distributedSwitch") {
 			issues = add(issues, issue(path+".vsphere.distributedSwitch", "multiple failure domains require an explicit distributed switch"))
@@ -377,151 +361,15 @@ func validateLibvirtDataDisks(o api.Object, arm api.Value) []api.Issue {
 	return issues
 }
 
-// hostAttachment is one libvirt network attachment of a provider on a host.
-type hostAttachment struct {
-	provider api.Object
-	index    int
-	name     string
-	bridge   string
-	managed  bool
-	prefix   netip.Prefix
-}
-
-// libvirtAttachments lists a provider's libvirt attachments, keeping each name
-// and bridge only when it passes its grammar, and a managed attachment's masked
-// prefix only when its address is a host address with its prefix, so an
-// invalid value yields its grammar refusal and nothing else.
-func libvirtAttachments(provider api.Object) []hostAttachment {
-	var found []hostAttachment
-	for index, attachment := range provider.Spec().Get("networkAttachments").Items() {
-		libvirt := attachment.Get("libvirt")
-		if !libvirt.Present() {
-			continue
-		}
-		entry := hostAttachment{provider: provider, index: index, managed: libvirt.Get("management").Text() == "managed"}
-		if name := attachment.Get("name").Text(); api.ValidLexical("name", name) {
-			entry.name = name
-		}
-		if bridge := libvirt.Get("bridge").Text(); api.ValidLexical("bridge", bridge) {
-			entry.bridge = bridge
-		}
-		if prefix, err := netip.ParsePrefix(libvirt.Get("address").Text()); entry.managed && err == nil && prefix.Bits() > 0 && prefix.Addr() != prefix.Masked().Addr() {
-			entry.prefix = prefix.Masked()
-		}
-		found = append(found, entry)
-	}
-	return found
-}
-
-// validateSharedHostNetworks refuses what two attachments on one host would
-// both claim: a managed attachment name another provider also manages, since
-// a context names the one network it defines after it, and a bridge a managed
-// attachment defines that another attachment also names, since a bridge name
-// is host-global and goes with the host block that defines it; and two managed
-// prefixes that overlap, of one provider or two, since the host routes each
-// managed prefix to its own bridge.
-func validateSharedHostNetworks(o api.Object, c api.Catalog) []api.Issue {
-	host := o.Spec().Get("libvirt", "machineRef").Text()
-	if !api.ValidLexical("name", host) {
-		return nil
-	}
-	attachments := libvirtAttachments(o)
-	onHost := slices.Clone(attachments)
-	for _, other := range c.OfKind(api.InfraProvider) {
-		if other.Identity() != o.Identity() && other.Spec().Get("libvirt").Present() && other.Spec().Get("libvirt", "machineRef").Text() == host {
-			onHost = append(onHost, libvirtAttachments(other)...)
-		}
-	}
-	issues := []api.Issue{}
-	for _, own := range attachments {
-		path := fmt.Sprintf("$.spec.networkAttachments[%d]", own.index)
-		for _, peer := range onHost {
-			sameProvider := peer.provider.Identity() == o.Identity()
-			if sameProvider && peer.index == own.index {
-				continue
-			}
-			if !sameProvider && own.managed && peer.managed && own.name != "" && own.name == peer.name {
-				issues = add(issues, api.Issue{Code: "api.invariant", Field: path + ".name",
-					Message: fmt.Sprintf("managed attachment %s is also a managed attachment of %s on host Machine/%s, and both would define the one libvirt network this context names after it",
-						own.name, peer.provider.Identity(), host),
-					Remediation: fmt.Sprintf("rename the attachment on %s or %s, with the attachmentRef of every Machine that selects it", o.Identity(), peer.provider.Identity())})
-			}
-			if (own.managed || peer.managed) && own.bridge != "" && own.bridge == peer.bridge {
-				issues = add(issues, api.Issue{Code: "api.invariant", Field: path + ".libvirt.bridge",
-					Message: fmt.Sprintf("bridge %s of networkAttachments[%d] is also named by networkAttachments[%d] of %s on host Machine/%s; a bridge a managed attachment defines belongs to that attachment alone",
-						own.bridge, own.index, peer.index, peer.provider.Identity(), host),
-					Remediation: fmt.Sprintf("give spec.networkAttachments[%d] of %s or spec.networkAttachments[%d] of %s its own bridge, or make both external",
-						own.index, o.Identity(), peer.index, peer.provider.Identity())})
-			}
-			if own.managed && peer.managed && own.prefix.IsValid() && peer.prefix.IsValid() && own.prefix.Overlaps(peer.prefix) {
-				issues = add(issues, api.Issue{Code: "api.invariant", Field: path + ".libvirt.address",
-					Message: fmt.Sprintf("managed prefix %s of networkAttachments[%d] overlaps managed prefix %s of networkAttachments[%d] of %s on host Machine/%s, and the host routes each managed prefix to its own bridge",
-						own.prefix, own.index, peer.prefix, peer.index, peer.provider.Identity(), host),
-					Remediation: fmt.Sprintf("give spec.networkAttachments[%d].libvirt.address of %s or spec.networkAttachments[%d].libvirt.address of %s a prefix no other managed attachment on host Machine/%s overlaps",
-						own.index, o.Identity(), peer.index, peer.provider.Identity(), host)})
-			}
-		}
-	}
-	return issues
-}
-
-// validateLibvirtHostFootprint bounds the provider's reservation keys.
-func validateLibvirtHostFootprint(o api.Object, _ api.Catalog) []api.Issue {
-	issues := []api.Issue{}
-	if count := ManagedAttachments(o); count > MaxManagedAttachments {
-		issues = add(issues, api.Issue{Code: "api.value", Field: "$.spec.networkAttachments",
-			Message:     fmt.Sprintf("a libvirt provider declares at most %d managed network attachments, because its host reservation claims three keys for each beside the two of its media pool, within the 64 keys one reservation holds; this one declares %d", MaxManagedAttachments, count),
-			Remediation: fmt.Sprintf("declare at most %d attachments with management: managed in spec.networkAttachments of %s, or make the others external", MaxManagedAttachments, o.Identity())})
-	}
-	return issues
-}
-
-// ManagedAttachments counts a libvirt provider's attachments of management:
-// managed; an attachment that declares none is external.
 func ExternalBridges(provider api.Object) []string {
 	var bridges []string
 	for _, attachment := range provider.Spec().Get("networkAttachments").Items() {
-		if bridge := attachment.Get("libvirt", "bridge").Text(); bridge != "" && attachment.Get("libvirt", "management").Text() != "managed" {
+		if bridge := attachment.Get("libvirt", "bridge").Text(); bridge != "" {
 			bridges = append(bridges, bridge)
 		}
 	}
 	slices.Sort(bridges)
 	return slices.Compact(bridges)
-}
-
-func ManagedAttachments(provider api.Object) int {
-	count := 0
-	for _, attachment := range provider.Spec().Get("networkAttachments").Items() {
-		if attachment.Get("libvirt", "management").Text() == "managed" {
-			count++
-		}
-	}
-	return count
-}
-
-func validateLibvirtAttachment(arm api.Value, path string) []api.Issue {
-	if !arm.Present() {
-		return nil
-	}
-	issues := []api.Issue{}
-	managed := arm.Get("management").Text() == "managed"
-	if managed && !arm.Has("address") {
-		issues = add(issues, issue(path+".address", "a managed libvirt network requires the host address and prefix"))
-	}
-	if !managed {
-		for _, key := range []string{"address", "forward"} {
-			if arm.Has(key) {
-				issues = add(issues, issue(path+"."+key, "an external libvirt bridge carries no managed network fields"))
-			}
-		}
-	}
-	if address := arm.Get("address"); address.Present() {
-		prefix, err := netip.ParsePrefix(address.Text())
-		if err != nil || prefix.Bits() == 0 || prefix.Addr() == prefix.Masked().Addr() {
-			issues = add(issues, issue(path+".address", "the managed network address must be a host IP with its prefix"))
-		}
-	}
-	return issues
 }
 
 func findNamed(values api.Value, key, name string) (api.Value, bool) {

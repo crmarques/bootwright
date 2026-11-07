@@ -2,7 +2,6 @@ package substrate
 
 import (
 	"slices"
-	"strconv"
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -69,14 +68,14 @@ func HostCluster(provider api.Object) string {
 	return provider.Spec().Get(ArmKubeVirt, "hostClusterRef").Text()
 }
 
-type ManagedNetwork struct{ Prefix, Bridge string }
+type ManagedNetwork struct{ Prefix, Bridge, Forward string }
 
 func ManagedAttachment(attachment api.Value) (ManagedNetwork, bool) {
-	arm := attachment.Get(ArmLibvirt)
-	if arm.Get("management").Text() != "managed" {
+	managed := attachment.Get("managed")
+	if !managed.Present() {
 		return ManagedNetwork{}, false
 	}
-	return ManagedNetwork{Prefix: arm.Get("address").Text(), Bridge: arm.Get("bridge").Text()}, true
+	return ManagedNetwork{Prefix: managed.Get("address").Text(), Bridge: attachment.Get(ArmLibvirt, "bridge").Text(), Forward: managed.Get("forward").Text()}, true
 }
 
 func AttachmentMTU(attachment api.Value) (int64, bool) {
@@ -85,15 +84,18 @@ func AttachmentMTU(attachment api.Value) (int64, bool) {
 
 type AddressClaim struct{ Path, Address string }
 
-func AddressClaims(provider api.Object) []AddressClaim {
-	var claims []AddressClaim
-	for index, entry := range provider.Spec().Get("networkAttachments").Items() {
-		if network, managed := ManagedAttachment(entry); managed {
-			claims = append(claims, AddressClaim{Path: "spec.networkAttachments[" + strconv.Itoa(index) + "]." + ArmLibvirt + ".address", Address: network.Prefix})
+func AddressClaims(o api.Object) []AddressClaim {
+	if IsManagedNetwork(o) {
+		if address, ok := HostAddress(o); ok {
+			return []AddressClaim{{Path: "spec." + ArmLibvirt + ".hostAddress", Address: address.Addr().String()}}
 		}
+		return nil
 	}
-	return append(claims, AddressClaim{Path: "spec." + ArmLibvirt + ".bmcEmulation.bindAddress",
-		Address: provider.Spec().Get(ArmLibvirt, "bmcEmulation", "bindAddress").Text()})
+	if o.Kind() != api.InfraProvider {
+		return nil
+	}
+	return []AddressClaim{{Path: "spec." + ArmLibvirt + ".bmcEmulation.bindAddress",
+		Address: o.Spec().Get(ArmLibvirt, "bmcEmulation", "bindAddress").Text()}}
 }
 
 func SelectedProfile(catalog api.Catalog, machine api.Object) (api.Object, api.Value, bool) {

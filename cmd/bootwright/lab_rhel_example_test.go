@@ -138,9 +138,9 @@ func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.
 	if libvirt.Get("machineRef").Text() != "controller" || libvirt.Get("bmcEmulation", "port").Text() != "8000" || libvirt.Get("bmcEmulation", "bindAddress").Text() != "127.0.0.1" {
 		t.Fatal("libvirt provider lost its emulated BMC defaults", provider.Spec())
 	}
-	attachment := provider.Spec().Get("networkAttachments").Items()[0].Get("libvirt")
-	if attachment.Get("management").Text() != "managed" || attachment.Get("address").Text() != "198.51.100.1/24" || attachment.Get("forward").Text() != "nat" {
-		t.Fatal("the managed attachment lost the network Bootwright defines", attachment)
+	network := requireObject(t, effective, api.Network, "lab-guests").Spec()
+	if network.Get("provided").Bool() || network.Get("libvirt", "providerRef").Text() != "lab-libvirt" || network.Get("libvirt", "hostAddress").Text() != "198.51.100.1" || network.Get("libvirt", "forward").Text() != "nat" {
+		t.Fatal("the managed Network lost the network Bootwright defines", network)
 	}
 	guest := requireObject(t, effective, api.Machine, "rhel-01")
 	if guest.Spec().Has("network", "attachmentRef") || !guest.Spec().Get("hardware", "nics").Equal(api.ListValue(api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue("enp1s0")}))) ||

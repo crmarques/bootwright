@@ -4,8 +4,14 @@ metadata:
   name: lab-routed
 
 spec:
-  provided: true
-  description: The routed network the lab-routed managed attachment of lab-libvirt defines.
+  provided: false
+  description: The routed network lab-libvirt defines on its host.
 
   ipv4:
     cidr: 192.0.2.128/25
+
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: virbr-routed
+    forward: none
+    hostAddress: 192.0.2.129

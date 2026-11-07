@@ -27,12 +27,3 @@ spec:
         memoryMiB: {{ .Values.size.arbiter.memoryMiB }}
         diskGiB: {{ .Values.size.arbiter.diskGiB }}
         tpm: {}
-
-  networkAttachments:
-    - name: lab-guests
-
-      libvirt:
-        bridge: {{ .Values.host.bridge }}
-        management: managed
-        address: {{ .Values.host.gateway }}/{{ .Values.host.prefix }}
-        forward: nat

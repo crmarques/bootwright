@@ -4,9 +4,13 @@ metadata:
   name: lab-guests
 
 spec:
-  provided: true
-  description: The NAT guest network the lab-guests managed attachment of lab-libvirt defines.
+  provided: false
+  description: The NAT guest network lab-libvirt defines on its host.
 
   ipv4:
     cidr: {{ .Values.host.cidr }}
     gateway: {{ .Values.host.gateway }}
+
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: {{ .Values.host.bridge }}

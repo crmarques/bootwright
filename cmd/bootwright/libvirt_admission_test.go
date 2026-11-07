@@ -14,7 +14,12 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-const labProvider = "infra/providers/lab-libvirt.yaml"
+const labProvider, labNetwork = "infra/providers/lab-libvirt.yaml", "infra/networks/lab-guests.yaml"
+
+// withUplink gives the lab provider an attachment to an existing bridge.
+func withUplink(name, bridge string) exampleEdit {
+	return exampleEdit{labProvider, "        tpm: {}\n", "        tpm: {}\n\n  networkAttachments:\n    - name: " + name + "\n      libvirt:\n        bridge: " + bridge + "\n"}
+}
 
 // extendedExample is editedExample with whole files added beside the edits.
 func extendedExample(t *testing.T, name string, files map[string]string, edits ...exampleEdit) desiredstate.Sources {
@@ -77,12 +82,12 @@ func withSizedDataDisks(size string, names ...string) exampleEdit {
 // own field.
 func TestLibvirtAdmissionRefusesWhatTheHostCannotRealize(t *testing.T) {
 	compileAcceptance(t, exampleDirectory(t, "lab-rhel"))
-	const provider, guest = "InfraProvider/lab-libvirt", "Machine/rhel-01"
+	const provider, guest, network = "InfraProvider/lab-libvirt", "Machine/rhel-01", "Network/lab-guests"
 	cases := map[string]struct {
 		edits                        []exampleEdit
 		code, object, field, message string
 	}{
-		"an attachment name outside the label grammar": {[]exampleEdit{{labProvider, "- name: lab-guests", "- name: Lab_Guests"}},
+		"an attachment name outside the label grammar": {[]exampleEdit{withUplink("Lab_Uplink", "br-uplink")},
 			"api.value", provider, "$.spec.networkAttachments[0].name", "value does not match the required name grammar"},
 		"a data disk name outside the label grammar": {[]exampleEdit{withDataDisks("Data_1")},
 			"api.value", provider, "$.spec.libvirt.machineProfiles[0].dataDisks[0].name", "value does not match the required name grammar"},
@@ -98,9 +103,11 @@ func TestLibvirtAdmissionRefusesWhatTheHostCannotRealize(t *testing.T) {
 			"api.value", provider, "$.spec.libvirt.machineProfiles[0].memoryMiB", "number must be between 0 and 16777216"},
 		"a data disk past its ceiling": {[]exampleEdit{withSizedDataDisks("70000", "data")},
 			"api.value", provider, "$.spec.libvirt.machineProfiles[0].dataDisks[0].sizeGiB", "number must be between 1 and 65536"},
-		"a bridge holding a quote": {[]exampleEdit{{labProvider, "bridge: virbr-lab", `bridge: 'virbr-lab"x'`}},
-			"api.value", provider, "$.spec.networkAttachments[0].libvirt.bridge", "value does not match the required bridge grammar"},
-		"a bridge longer than an interface name": {[]exampleEdit{{labProvider, "bridge: virbr-lab", "bridge: virbr-lab-guests1"}},
+		"a bridge holding a quote": {[]exampleEdit{{labNetwork, "bridge: virbr-lab", `bridge: 'virbr-lab"x'`}},
+			"api.value", network, "$.spec.libvirt.bridge", "value does not match the required bridge grammar"},
+		"a bridge longer than an interface name": {[]exampleEdit{{labNetwork, "bridge: virbr-lab", "bridge: virbr-lab-guests1"}},
+			"api.value", network, "$.spec.libvirt.bridge", "value does not match the required bridge grammar"},
+		"an attachment bridge holding a quote": {[]exampleEdit{withUplink("uplink", `'br-uplink"x'`)},
 			"api.value", provider, "$.spec.networkAttachments[0].libvirt.bridge", "value does not match the required bridge grammar"},
 		"an interface match holding a quote": {[]exampleEdit{{"infra/machines/rhel-01.yaml", "    installAddressRef: ip\n", "    installAddressRef: ip\n    interfaceMatches:\n      - interface: 'enp1s0\"x'\n        nicRef: enp1s0\n"}},
 			"api.value", guest, "$.spec.network.interfaceMatches[0].interface", "value does not match the required ifname grammar"},
@@ -113,22 +120,17 @@ func TestLibvirtAdmissionRefusesWhatTheHostCannotRealize(t *testing.T) {
 			}
 		})
 	}
-	t.Run("a managed attachment name on two providers of one host", func(t *testing.T) {
-		sources := extendedExample(t, "lab-rhel", secondLabProvider("    - name: lab-guests\n      libvirt:\n        bridge: virbr-labb\n        management: managed\n        address: 203.0.113.1/24\n"))
-		for object, peer := range map[string]string{provider: "InfraProvider/lab-libvirt-b", "InfraProvider/lab-libvirt-b": provider} {
-			refusal := requireRefusal(t, sources, "api.invariant", object, "$.spec.networkAttachments[0].name")
-			if !strings.Contains(refusal.Message, "managed attachment of "+peer+" on host Machine/controller") {
-				t.Fatalf("%s's refusal says %q", object, refusal.Message)
-			}
+	t.Run("a managed Network named like an attachment of its provider", func(t *testing.T) {
+		refusal := requireRefusal(t, editedExample(t, "lab-rhel", withUplink("lab-guests", "br-uplink")), "api.invariant", network, "$.spec.libvirt.providerRef")
+		if !strings.Contains(refusal.Message, "spec.networkAttachments[0] of "+provider+" is also named lab-guests") {
+			t.Fatalf("the refusal says %q", refusal.Message)
 		}
 	})
 	t.Run("a managed bridge another provider of its host names", func(t *testing.T) {
 		sources := extendedExample(t, "lab-rhel", secondLabProvider("    - name: storage\n      libvirt:\n        bridge: virbr-lab\n"))
-		for object, peer := range map[string]string{provider: "InfraProvider/lab-libvirt-b", "InfraProvider/lab-libvirt-b": provider} {
-			refusal := requireRefusal(t, sources, "api.invariant", object, "$.spec.networkAttachments[0].libvirt.bridge")
-			if !strings.Contains(refusal.Message, "networkAttachments[0] of "+peer+" on host Machine/controller") {
-				t.Fatalf("%s's refusal says %q", object, refusal.Message)
-			}
+		refusal := requireRefusal(t, sources, "api.invariant", network, "$.spec.libvirt.bridge")
+		if !strings.Contains(refusal.Message, "spec.networkAttachments[0] of InfraProvider/lab-libvirt-b on host Machine/controller") {
+			t.Fatalf("the refusal says %q", refusal.Message)
 		}
 	})
 	t.Run("an OS-ready Machine naming the provider claims no port", func(t *testing.T) {
