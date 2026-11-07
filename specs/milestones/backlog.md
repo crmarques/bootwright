@@ -303,6 +303,8 @@ Alias cell.
 | [B1207](#b1207) | new, 2026-11-06 (D240 (5)) | product | Substrate | Predictable guest interface names through libvirt `acpi index` and KubeVirt `acpiIndex` | Agent-path ethernet names are admitted with a warning (D240 (5)); no consumer needs fixed guest names yet |
 | [B1208](#b1208) | new, 2026-11-06 (D240 (10)) | product | Storage | A Ceph MON address chosen separately from the cephadm SSH address | `cephadm.addressRef` serves both today; separating them moves the CephCluster request (D240 (10)) |
 | [B1209](#b1209) | new, 2026-11-06 (D240 (13)) | enabling | Substrate | One lifecycle block per managed `Network` | The provider host block realizes managed Networks without a request change; a block of its own is needed only past 20 managed Networks per host or for a fabric arm (D240 (13)) |
+| [B1211](#b1211) | new, 2026-11-07 (X323) | product | Machine and Substrate | A NIC's segment derived from the Networks its stack carries | Explicit `segmentRef` with the sole-segment default covers every input; derivation only saves authoring on multi-segment providers |
+| [B1212](#b1212) | new, 2026-11-07 (X323 review) | product | Network | Several subnets of one family on one Network | One subnet per family and one untagged Network per segment (D240 (1)) refuse two subnets on one untagged L2 domain; no tracked input needs it since libvirt-6-nodes-ceph-pools moved to VLAN 140 |
 
 ### B82
 
@@ -3333,6 +3335,7 @@ whether a cluster whose derived deadline passes them refuses before
 registration naming that limit, as a provider limit rather than a Bootwright
 ceiling ([cluster size](../openshift-clusters.md#cluster-size)). **Outcome:**
 no installation spends its deadline on a cluster that can no longer finish.
+**Exit evidence:** the recorded lifetimes and a planning test at the limit.
 
 ### B1207
 
@@ -3358,7 +3361,25 @@ separately.
 ordered after the Machines on it and before its host block on removal
 ([D240](#d240) (13)). **Outcome:** a managed network is planned, applied and
 removed on its own, past the 20-per-host bound.
-**Exit evidence:** the recorded lifetimes and a planning test at the limit.
+
+### B1211
+
+**Owner:** Machine and Substrate. **Kind:** product. **Requires:** X323.
+**Definition:** Candidate: derive a NIC's segment by walking its stack up to
+the interface assignments it carries and matching the one segment whose
+untagged and tagged carriage fit, refusing zero or several matches; an
+authored `segmentRef` still wins ([Machine profiles and segments](../api/machines.md#machine-profiles-and-segments)).
+**Outcome:** a NIC on a multi-segment provider needs no `segmentRef` when its
+networks pick one segment.
+
+### B1212
+
+**Owner:** Network. **Kind:** product. **Requires:** owner decision.
+**Definition:** Candidate, needs an owner decision: whether a `Network` holds
+several subnets of one family on one L2 domain (multinetting), and how the
+assignment, gateway and client-set rules read them ([Network](../api/networks.md#network)).
+**Outcome:** an L2 domain that carries two subnets untagged is declared as it
+is built.
 
 ## Audit remediation (2026-10-26)
 
@@ -7314,8 +7335,8 @@ session, pending the owner's review:
    address family with an optional gateway, an MTU capacity and a site
    scope. It is optional in X322 and required for every interface
    assignment from X323.
-2. `InfraProvider.spec.networkAttachments` becomes `segments` in X323, with
-   retired-path refusals.
+2. `InfraProvider.spec.networkAttachments` becomes `segments` in X323; the
+   old path gets the closed decoder's refusal ([D241](#d241)).
 3. Emitted KubeVirt interface names stay `nic<index>`.
 4. An omitted segment or network MTU capacity is 1500 on every substrate.
 5. On the agent path an ethernet name a MetalLB pool or a bridge mapping names

@@ -12416,3 +12416,42 @@ independent review found the keyring reader guard made exact and the Secret
 metadata change unannounced, both fixed before integration. Gates: `make check`
 and `make race` passed on the rebased branch, plus `-race` over
 `internal/workspace` and `internal/secrets`; no live run or push occurred.
+
+### X323 — The host networking batch
+
+**Items:** B1203, B1204 and B1205, completed in-tree (2026-11-07), under
+[D240](backlog.md#d240) clauses (1)-(4), (8), (12) and (13), with
+[D241](backlog.md#d241): removed paths get the closed decoder's refusal.
+
+- B1203: [`hardware.nics`](../api/machines.md#machine) is the NIC list on every
+  substrate; libvirt and KubeVirt vNICs come from it in order with MACs derived
+  from the NIC name, and `interfaceMatches` replaces `interfaceBinding`.
+  `network.attachmentRef` and `interfaceAttachments` are gone, and an authored
+  `mac-address` on a virtual Machine refuses.
+- B1204: provider [segments](../api/machines.md#machine-profiles-and-segments)
+  replace `networkAttachments`, with untagged and tagged carriage and an MTU
+  capacity on every arm; a [managed Network](../api/networks.md#libvirt-arm)
+  is realized by its provider's host block, the host-wide rules hold between
+  Networks, and the VLAN carriage and capacity checks walk bonds, bridges and
+  OVS internal interfaces.
+- B1205: an interface assignment is a bare IP whose prefix comes from its
+  [Network](../api/networks.md#cross-kind-checks), Networks are required for
+  every assignment, `NetworkConfig.spec.machineNetwork` is gone, and the
+  installer machine network, `noProxy`, OpenShift node subnets and the managed
+  proxy and time-service [client set](../infrastructure-services.md) read the
+  Networks. A Network wider than /8 or /16, or overlapping loopback or
+  multicast, refuses.
+
+**Commits:** 38528336f (the NIC golden, recorded first), c7a5da2f2 (NICs),
+e80309c58 (managed Networks), 87d1da53e (segments), 7f41ed22f (bare-IP
+assignments), with four independent reviews fixed in 98fed0160, 6044625f3,
+f8abef84a, 723f728bf, 3d5c0c7d8 and 75e2618ae, and this record. The lane 3
+review found the one blocker: a `/0` Network opened the client set to the
+world; the set is now the install Networks plus each Machine address as a
+host. Every example's realization requests stay byte-identical except the
+installation requests of libvirt-6-nodes-ceph-pools, whose second subnet moved
+to VLAN 140, and three client sets that drop a Ceph cluster CIDR nobody
+installs on. The input charts follow in the template-input repository
+(0528b2cb8, ba85138, chart version 0.3.0); the gitignored inputs are migrated
+and validate as before. Gates: `make check` and `make race` passed on the
+integrated branch; no live run or push occurred.
