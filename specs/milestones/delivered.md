@@ -12360,9 +12360,10 @@ networks as typed secondary networks, so its hosted KubeVirt providers plan.
 
 **Commits:** 56f2d4e5e (B1196), 1139f1c9f (B1197), 74fd497e5 (B1195),
 18cc7aac6 (B1198), ae2715abc (B1199), 0ba3d267f (B1200), 230e27dac (B1201)
-and a6728dc29 (the independent safety review's eight findings), with this
-record. `make check` and `make race` passed on the lanes and again on the
-final tree; the independent review found no blocker, and its should-fix
+a6728dc29 (the independent safety review's eight findings) and 4aa2d3bbd (a
+managed-OS fixture that encoded the NIC name shadowing a6728dc29 refuses),
+with this record. `make check` and `make race` passed on the lanes and again
+on the final tree; the independent review found no blocker, and its should-fix
 findings are in a6728dc29. Every private input set (input-chart renders of
 each environment, gitignored examples and e2e inputs) validates with the
 same findings before and after. No live run or push occurred.
