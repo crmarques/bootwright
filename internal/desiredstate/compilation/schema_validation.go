@@ -34,10 +34,6 @@ func validateShape(record *objectRecord, value api.Value, shape *api.Shape, path
 
 func validateString(record *objectRecord, value api.Value, shape *api.Shape, path string, references bool, catalog api.Catalog, sink *diagnosticSink) {
 	if len(shape.Enums) > 0 && !slices.Contains(shape.Enums, value.Text()) {
-		if retired, ok := retiredValue(record, path, value.Text()); ok {
-			sink.issue(record, api.Issue{Code: "api.value", Field: path, Message: string(retired.Kind) + " " + strings.TrimPrefix(retired.Path, "$.spec.") + " value " + retired.Value + " is retired", Remediation: retired.Replacement})
-			return
-		}
 		remediation := "use one of the permitted values"
 		if at := slices.IndexFunc(shape.Enums, func(choice string) bool { return strings.EqualFold(choice, value.Text()) }); at >= 0 {
 			remediation = "use " + shape.Enums[at] + " (values are case-sensitive)"
@@ -114,18 +110,6 @@ func countOf(names []string, name string) int {
 		}
 	}
 	return count
-}
-
-func retiredValue(record *objectRecord, path, value string) (api.RetiredValue, bool) {
-	if record == nil {
-		return api.RetiredValue{}, false
-	}
-	kind := record.object.Kind()
-	if rest, ok := strings.CutPrefix(path, "$.spec.defaults."); ok && kind == api.Environment {
-		owner, tail, _ := strings.Cut(rest, ".")
-		kind, path = api.Kind(owner), "$.spec."+tail
-	}
-	return api.RetiredValueAt(kind, path, value)
 }
 
 func validateReference(record *objectRecord, name string, shape *api.Shape, path string, catalog api.Catalog, sink *diagnosticSink) {

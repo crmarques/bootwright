@@ -15,7 +15,6 @@ import (
 
 // Rules are pure, component-owned transformations and admission constraints.
 type Rules struct {
-	RetiredField         func(api.Kind, string) (api.Issue, bool)
 	Normalize            func(api.Object, api.Catalog) (api.Object, []api.Issue)
 	NormalizationOrigins func(api.Object, api.Object, api.Catalog) []api.FieldOrigin
 	ValidatePartial      func(api.Object, api.Catalog) []api.Issue

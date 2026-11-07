@@ -99,8 +99,7 @@ new field inherits an undocumented default from another resource.
 | `CephObjectGateway` | The realm, zone group and zone it creates (never with `--default`; only an export of one of its users makes them the defaults, under [CephNFSExport](#cephnfsexport)), its zone placement binding, its derived zone pools and its endpoint identity. | `spec.serviceRef` binds exactly one declared rgw service by full native identity; the gateway executes that service and the ingress whose `spec.backend_service` is it. It embeds no daemon placement, frontend, configuration or ingress specification. |
 | `CephConsumer` | Managed Data Foundation handoff with per-consumer principals and private external-cluster details. The external-details arm remains refused under parked [B107](milestones/backlog.md#b107). | It waits for the resources and access material it describes; it neither creates an add-on nor becomes a general native-command resource. |
 
-Their existing non-daemon fields remain unless an owning approved migration
-changes them. B474 records retired daemon helper paths explicitly. A
+Their non-daemon fields remain unless an owning approved change alters them. A
 filesystem's subvolume groups remain a set of named children; `group` references
 below resolve within that filesystem, so a separate group kind is unnecessary.
 Group layout must select an attached eligible data pool, not merely any pool
@@ -217,14 +216,11 @@ bindings ([native services](ceph-native-api.md)). A terminating service with
 TLS needs `spec.endpoint`: the certificate must name its FQDN, and readiness
 proves the served leaf by SHA-256 with that FQDN as SNI.
 
-Retired fields refuse at decode with their replacement: `spec.serviceID`
-becomes `spec.serviceRef`; `spec.placement` and `spec.frontendPort` become the
-bound rgw service's placement and `spec.rgw_frontend_port`;
-`spec.endpoint.dnsLabel` becomes `spec.endpoint.fqdn`; `spec.endpoint.scheme`,
-`.port`, `.tls` and `.ingresses` become an ingress service whose
-`spec.backend_service` is the bound rgw service, with its TLS bindings.
-`spec.config` is removed: per-service RGW configuration options have no
-qualified effect contract.
+The gateway's daemon placement and frontend port belong to the bound rgw
+service (`placement`, `spec.rgw_frontend_port`), its endpoint is the FQDN, and
+scheme, port and TLS belong to an ingress service whose `spec.backend_service`
+is the bound rgw service, with its TLS bindings. The gateway has no
+per-service RGW configuration options: they have no qualified effect contract.
 
 Admission refuses, before any effect: a `serviceRef` that resolves to no
 declared service, names a non-rgw service or is bound by another gateway; a
@@ -701,11 +697,9 @@ value; `mds.activeCount` is an integer from 1 to 256 (default 1),
 the scalar pool name or `{name, default}`; a sole entry normalizes to
 `default: true`, even when `false` was authored. A subvolume group's `uid` and
 `gid` are integers from 0 to 2147483647 and its `sizeBytes` from 1 to
-9223372036854775807; an omitted `sizeBytes` sets no quota. `mds.placement`
-and `mds.serviceSpec` are retired: each refuses `api.field` naming the
-CephCluster's `spec.services` entry with `service_type: mds` and
-`service_id` equal to the filesystem name as its replacement, also under
-`spec.defaults.CephFilesystem`. Admission refuses with `api.invariant`,
+9223372036854775807; an omitted `sizeBytes` sets no quota. MDS placement
+and service spec belong to the CephCluster's `spec.services` entry with
+`service_type: mds` and `service_id` equal to the filesystem name. Admission refuses with `api.invariant`,
 before any effect:
 
 - `metadata.name` starting with a digit, since its MDS `service_id` cannot;
@@ -1013,13 +1007,10 @@ carries as `fsal.user_id`),
 declaration carries no key) and `fsal.sec_label_xattr` (no qualified effect
 contract). No refusal echoes a member's value.
 
-Retired fields refuse at decode with their replacement: `spec.port` and
-`spec.placement` become the `spec.port` and placement of the nfs service
-`spec.serviceID` names; `spec.ingresses` becomes an ingress service whose
-`spec.backend_service` is that nfs service; `spec.exports` becomes one
-CephNFSExport per export entry, each binding `spec.filesystemRef` or
-`spec.subvolumeRef` and holding that entry's native export under
-`spec.native`.
+The port and placement belong to the nfs service `spec.serviceID` names, and
+ingress belongs to an ingress service whose `spec.backend_service` is that nfs
+service. Each export entry is one CephNFSExport binding `spec.filesystemRef` or
+`spec.subvolumeRef` and holding that entry's native export under `spec.native`.
 
 An export of an object user resolves that user through the cluster's
 default realm: the NFS manager reads the user's first S3 key with
@@ -1748,11 +1739,9 @@ qualified effect contract names and proves them. Foreign dependencies,
 unexplained identity changes and unbounded cascades refuse. Cluster teardown
 does not substitute for per-resource absence and ownership evidence.
 
-B474 and each consuming item must update schema, admission, effective state,
-diagnostics, documentation and migration examples together. The old combined
-NFS service/export shape and retired daemon helpers receive precise migration
-errors; files are not rewritten or silently interpreted through two competing
-models. The **Current** paragraph above states which kinds are realized.
+Each consuming item updates schema, admission, effective state, diagnostics,
+documentation and examples together; input is never silently interpreted through
+two competing models. The **Current** paragraph above states which kinds are realized.
 Provider-specific native leaves, type limits and unsupported combinations are
 closed promotion records, with tests for reference collision, foreign identity,
 secret non-disclosure, ambiguous create/remove, default handling and complete

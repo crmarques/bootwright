@@ -25,7 +25,7 @@ func TestEntitlementKindDefaultsSkipTheArmsATypeForbids(t *testing.T) {
 	compiler := compilation.NewCompiler(yamlstream.Parser{}, environmentSelection,
 		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, ValidatePartial: secrets.ValidatePartial, Validate: secrets.Validate},
 		compilation.Rules{Normalize: managedos.Normalize, ValidateAuthored: managedos.ValidateAuthored, ValidatePartial: managedos.ValidatePartial, Validate: managedos.Validate},
-		compilation.Rules{RetiredField: cephcluster.RetiredField, Normalize: cephcluster.Normalize, ValidateAuthored: cephcluster.ValidateAuthored, ValidatePartial: cephcluster.ValidatePartial, Validate: cephcluster.Validate})
+		compilation.Rules{Normalize: cephcluster.Normalize, ValidateAuthored: cephcluster.ValidateAuthored, ValidatePartial: cephcluster.ValidatePartial, Validate: cephcluster.Validate})
 	state, _, err := compiler.Compile(context.Background(), refusalSources(refusalRow{environment: environment, probe: declarations}))
 	if err != nil {
 		for _, d := range diagnostics.Of(err) {

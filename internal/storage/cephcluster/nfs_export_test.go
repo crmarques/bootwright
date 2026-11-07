@@ -206,25 +206,6 @@ func TestNFSExportClientEntryRequiresAllThree(t *testing.T) {
 	requireAdmits(t, normalized, replace(changed, normalized))
 }
 
-func TestNFSExportRetiredFields(t *testing.T) {
-	for field, replacement := range map[string]string{
-		"$.spec.port":      "spec.port of the nfs service that spec.serviceID names",
-		"$.spec.placement": "the placement of the nfs service that spec.serviceID names",
-		"$.spec.ingresses": "an ingress service in its CephCluster's spec.services whose spec.backend_service is the nfs service that spec.serviceID names",
-		"$.spec.exports":   "one CephNFSExport per export entry, each binding spec.filesystemRef or spec.subvolumeRef and holding that entry's native export under spec.native",
-	} {
-		issue, ok := RetiredField(api.CephNFSExport, field)
-		if !ok || issue.Code != "api.field" || issue.Field != field || issue.Remediation != "replace "+field+" with "+replacement {
-			t.Fatalf("retired %s: %#v", field, issue)
-		}
-	}
-	for _, field := range []string{"$.spec.serviceID", "$.spec.native", "$.spec.filesystemRef", "$.spec.subvolumeRef"} {
-		if _, ok := RetiredField(api.CephNFSExport, field); ok {
-			t.Fatalf("current field %s is retired", field)
-		}
-	}
-}
-
 func TestNFSExportServiceIDResolvesDeclaredNFSService(t *testing.T) {
 	_, catalog := withGraph(t, fixtureCatalog(), []api.Value{rgwService(m()).With("service_id", api.StringValue("files"))})
 	export := find(t, catalog, api.CephNFSExport, "nfs")

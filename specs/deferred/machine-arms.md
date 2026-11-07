@@ -44,9 +44,7 @@ domain exists; with one domain the reference is implicit.
 Node networking has one owner, the cluster's
 `spec.install.platform.vsphere.nodeNetworking`
 ([platform union](../api/openshift-clusters.md#platform-union-and-derivation)),
-so this arm carries no `nodeNetworking` field and no rule that requires it;
-the arm's former `spec.vsphere.nodeNetworking` is a
-[retired field](../api.md#retired-fields).
+so this arm carries no `nodeNetworking` field and no rule that requires it.
 
 ### KubeVirt arm
 

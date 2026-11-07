@@ -180,23 +180,6 @@ func TestControllerMachineProxyDiagnosticsKeepKindDefaultOrigin(t *testing.T) {
 	}
 }
 
-func TestRetiredControllerAndInstallProxyExplainMachineField(t *testing.T) {
-	for _, tc := range []struct{ name, environment, host, field string }{
-		{"controller proxy", strings.Replace(serviceEnvironment, "{machineRef: service-host}", "{machineRef: service-host, proxy: {direct: {}}}", 1), serviceHost, "$.spec.controller.proxy"},
-		{"controller proxy default", serviceEnvironment + "  defaults:\n    Environment:\n      controller:\n        proxy: {direct: {}}\n", serviceHost, "$.spec.defaults.Environment.controller.proxy"},
-		{"install proxy", serviceEnvironment, strings.Replace(serviceHost, "os: {provided: true}", "os: {provided: true, install: {proxy: {direct: {}}}}", 1), "$.spec.os.install.proxy"},
-		{"install proxy default", serviceEnvironment + "  defaults:\n    Machine:\n      os:\n        install:\n          proxy: {direct: {}}\n", serviceHost, "$.spec.defaults.Machine.os.install.proxy"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			diagnostic := trustFailure(t, controllerInputs(tc.environment, tc.host), "api.field", tc.field)
-			guidance := diagnostic.Message + " " + diagnostic.Remediation
-			if !strings.Contains(guidance, "Machine") || !strings.Contains(guidance, "proxy") {
-				t.Fatal("retired field lacks Machine proxy guidance", diagnostic)
-			}
-		})
-	}
-}
-
 func TestControllerAdmissionDoesNotProbeLocalMachine(t *testing.T) {
 	// The synthetic controller contact is deliberately unrelated to this runner.
 	// Admission must validate the declaration without resolving or probing it.

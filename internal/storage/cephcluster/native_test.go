@@ -169,12 +169,6 @@ func TestNativeNormalizationCanonicalizesSetsWithoutRewritingPayload(t *testing.
 	if NativeServiceName(m("service_type", "rgw", "service_id", "a.b")) != "rgw.a.b" {
 		t.Fatal("native dotted identity was split")
 	}
-	old := cluster.WithSpec(cluster.Spec().WithPath(m("enabled", true), "monitoring"))
-	issues = Validate(old, replace(catalog, old))
-	requireIssue(t, issues, "$.spec.monitoring")
-	if !strings.Contains(fmt.Sprint(issues), "$.spec.services") {
-		t.Fatal("retirement omitted the replacement path")
-	}
 }
 
 func TestEffectiveCapacityAndFilesystemLayoutsCannotBypassOwnership(t *testing.T) {
@@ -195,18 +189,6 @@ func TestEffectiveCapacityAndFilesystemLayoutsCannotBypassOwnership(t *testing.T
 	disagreeing := filesystem.WithSpec(filesystem.Spec().With("mdsServiceRef", api.StringValue("mds.other")))
 	if found := issuesAt(Validate(disagreeing, replace(catalog, disagreeing)), "$.spec.mdsServiceRef"); len(found) != 1 || found[0].Code != "api.invariant" {
 		t.Fatalf("disagreeing mdsServiceRef: %#v", found)
-	}
-}
-
-func TestWorkaroundsRetiredWithItsOwnRemedy(t *testing.T) {
-	issue, ok := RetiredField(api.CephCluster, "$.spec.cephadm.workarounds")
-	want := api.Issue{Code: "api.field", Field: "$.spec.cephadm.workarounds", Message: "the cephadm workaround list was retired; Bootwright realizes no cephadm workaround", Remediation: "remove workarounds from $.spec.cephadm"}
-	if !ok || issue != want {
-		t.Fatalf("retired workarounds: %#v", issue)
-	}
-	text := issue.Message + issue.Remediation
-	if strings.Contains(text, "native-service migration") || strings.Contains(text, "replace ") || strings.ContainsAny(text, "0123456789") {
-		t.Fatalf("retired workarounds reuse the helper retirement or name a release: %q", text)
 	}
 }
 

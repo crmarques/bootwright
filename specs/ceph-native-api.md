@@ -482,8 +482,8 @@ service: cephadm enables it itself when it deploys that service (D159 clause
 9), so `spec.mgrModules` refuses it at its entry, with or without the
 service. `mirroring` in `spec.mgrModules` refuses at its entry because it
 serves CephFS snapshot mirroring, which Bootwright does not realize.
-`cephadm.workarounds` is retired (D160, OD25): no workaround had
-a recorded effect, and the strict decoder refuses the field with that reason.
+Bootwright realizes no cephadm workaround (D160, OD25): the closed schema has no
+workaround list.
 
 ### NVMe-oF gateway record
 
@@ -722,9 +722,7 @@ a second site. The enrollment spec adds `root: default` beside it
 ([activation](ceph.md#stretch-topology)); B488's rehearsal qualifies the
 hierarchy it creates.
 
-`topology.roles`, per-node `devices`/`osd` and `topology.osdDrivegroups` are
-retired by this migration. Native service placement is the authority for
-daemon membership. Node labels retain their native meaning; a label named
+Native service placement is the authority for daemon membership. Node labels retain their native meaning; a label named
 after a daemon is not a second role declaration.
 Reserved labels with orchestration effects require explicit qualification;
 a label cannot silently disable owned scheduling or export administrative keys.
@@ -946,40 +944,33 @@ resource, field/binding path, unmet requirement and correction without echoing
 untrusted scalar values. `validate` remains pure; lifecycle support refusal
 does not masquerade as a successful deployment.
 
-## Migration and implementation sequence
+## Consumer promotion
 
-The migration stays in `bootwright.io/v1alpha1`; no alias version or dual
-authoring mode is introduced. Existing input is not silently reinterpreted.
-The B474 delivering change updates closed schema, aggregate admission,
-effective rendering, diagnostics, runnable examples and tests together, and
-rejects retired fields with their replacement path. Operator files are never
-rewritten automatically. Frozen non-storage operations keep their existing
-compatibility contract; this design promises no migration of runtime records.
+The native input lives in `bootwright.io/v1alpha1`; no alias version or dual
+authoring mode exists. Closed schema, aggregate admission, effective
+rendering, diagnostics, runnable examples and tests change together.
 
-| Current authoring | Target migration |
+| Concern | Native owner |
 | --- | --- |
-| `services[].serviceType`, `serviceID`, custom placement and inner `spec` | Full native ServiceSpec; `service_type`, `service_id` and native placement. |
-| `topology.roles` and role-derived placement | Explicit MON/MGR and other native services; retain host labels, Machine/site binding and verified topology. |
-| Node `devices`/`osd`, `osdDrivegroups` | Native OSD ServiceSpec/DriveGroupSpec, retaining proved data/DB/WAL allocations and encryption intent. |
-| `monitoring` helpers | Explicit native monitoring services; selected retention, networks and ports stay in native fields, passwords use bindings. Both old `enabled: true` and old omission that selected the native stack expand into visible qualified service entries; old `enabled: false` creates none. |
-| `mgmtGateway` and nested OAuth/ingress | Native management/OAuth/ingress services plus required endpoint/resource and Secret bindings. Ingress is optional where the provider permits direct service access. |
-| Filesystem MDS placement/service helpers | Retired: `spec.mds.placement` and `spec.mds.serviceSpec` refuse naming the CephCluster's `mds` service entry; rank and standby policy stay on the filesystem, bound by `spec.mdsServiceRef`. |
-| RGW service/ingress helpers | Logical object gateway/resource ownership remains; native RGW/ingress services own daemon config and placement. |
-| NFS service plus `exports[]` | Native NFS/ingress services and individually named CephNFSExport resources with native JSON projection. |
-| Global bare service-ID uniqueness | Uniqueness by qualified native service name and checked reference type. |
+| Daemon membership and placement | Explicit native `services[]` entries (`service_type`, `service_id`, native placement); node labels, Machine/site binding and verified topology stay under `topology`. |
+| OSD devices | Native OSD ServiceSpec/DriveGroupSpec, retaining proved data/DB/WAL allocations and encryption intent. |
+| Monitoring and management gateway | Native monitoring, management, OAuth and ingress services plus required endpoint/resource and Secret bindings; retention, networks and ports stay in native fields, passwords use bindings. Ingress is optional where the provider permits direct service access. |
+| Filesystem MDS | The CephCluster's `mds` service entry owns placement and service spec; rank and standby policy stay on the filesystem, bound by `spec.mdsServiceRef`. |
+| RGW | The logical object gateway keeps resource ownership; native RGW/ingress services own daemon config and placement. |
+| NFS | Native NFS/ingress services and individually named CephNFSExport resources with native JSON projection. |
+| Service identity | Uniqueness by qualified native service name and checked reference type. |
 
-B474 delivers the common migration and shared binding/admission machinery in
-X52. It does not wait for later service lifecycles to exist. B80 is the first
-core consumer; B81/B477 to B483/B489/B492 add their qualified resource/service
-fields, projections and effects without implementing another native-input
-path. An admitted family whose lifecycle is not delivered still refuses
-execution before registration. New resource kinds are registered with their
-owning schema change, not accepted as arbitrary generic objects in advance.
+Each consumer's common binding and admission machinery is shared; a family adds
+its qualified resource/service fields, projections and effects without
+implementing another native-input path. An admitted family whose lifecycle is
+not delivered still refuses execution before registration. New resource kinds
+are registered with their owning schema change, not accepted as arbitrary
+generic objects in advance.
 
 Before each consumer's promotion, freeze the applicable native schema,
 binding registry, default ledger, immutable dependencies, ownership and
 readiness/removal evidence. In-tree gates include native projection fixtures,
-equivalent-intent determinism, old-field remedies, wrong-cluster/service/Secret
+equivalent-intent determinism, wrong-cluster/service/Secret
 references, inline-secret refusal, field collision and no-effect tests.
 OSD tests additionally prove finite device authorization; HA acceptance proves
 rescheduling inside the owned candidate set. Operator qualification follows

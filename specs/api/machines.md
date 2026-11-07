@@ -106,8 +106,8 @@ position in the canonical name order of those Machines, so a provider realizing
 `n` Machines claims the range `port` through `port + n - 1`. An OS-ready
 Machine that names the provider is not realized and claims no port. The range
 ends at or below `65535`, and the ranges of providers on the same host do not
-overlap. The retired `vMediaPort` is rejected: the emulator fetches
-media from the artifact server and opens no second listener.
+overlap. The emulator fetches media from the artifact server and opens no
+second listener.
 [Substrates](../substrates.md#machine-realization) owns the management controller each
 Machine receives. A libvirt provider whose name a Machine realized on a libvirt
 provider also takes refuses at admission, because that Machine's disk directory
@@ -336,11 +336,7 @@ power reaches the Machine through the `bmc` it authors from the controller host
 `api.invariant` at the same path, naming the provider and its arm. The arm is
 omitted only where it would be empty: an OS-ready Machine of a virtual provider
 that names no profile, or an installer-provisioned or OS-ready bare-metal
-Machine that declares no BMC, MAC or physical hint. The retired
-`substrate.profileRef`, `hardware.management`, `hardware.nics[].macAddress`,
-`os.install.rootDeviceHints` and `network.interfaceAttachments` refuse with
-`api.field`, naming their replacements ([retired
-fields](../api.md#retired-fields)).
+Machine that declares no BMC, MAC or physical hint.
 
 Machine roles are not declared: a Machine is an OpenShift node because an
 `OpenShiftCluster` names it in `spec.nodes[].machineRef`, a Ceph node or the
@@ -348,7 +344,6 @@ arbiter because a `CephCluster` names it in its topology, a container-runtime
 host because it is the Environment's controller or a managed service's
 `machineRef`, and a libvirt host because an `InfraProvider`'s
 `libvirt.machineRef` names it ([controller](../controller.md#host-packages)).
-The retired `spec.capabilities` refuses with `api.field`.
 
 ### Network configuration
 
@@ -371,9 +366,7 @@ Attachments, bindings, interface assignments, and an install-address selection
 require a configured network. Each refuses at its own field with the remedy to
 select one with `network.configRef` or `network.inline` or to remove the
 selection or interface; an OS-ready Machine, which declares
-contacts only, is told to remove it. The retired `network.config`,
-`networkConfigRef`, `interfaceAddresses`, and top-level `spec.addresses`
-forms are rejected, not aliased.
+contacts only, is told to remove it.
 
 On a provider-backed machine with a configured network and neither
 `attachmentRef` nor `interfaceAttachments`, `attachmentRef` defaults to the
@@ -504,8 +497,7 @@ Provided-machine proxy intent does not request an OS proxy reconfiguration or
 change ambient process trust. Each executable consumer defines how
 it uses this Machine-owned egress choice. The controller is identified only
 by [Environment selection](environment.md#controller-machine), not by its proxy,
-Machine name or local access. The retired `Machine.spec.os.install.proxy` and
-`Environment.spec.controller.proxy` are rejected.
+Machine name or local access.
 
 ### Addresses and access
 
@@ -842,8 +834,7 @@ Every installation boots its installer through Redfish virtual media, so graph
 validation requires that complete endpoint whenever a Bootwright-installed
 Machine selects the profile, on any substrate.
 
-The optional package source is exact. `mirror` and `fromSubscription` are
-[retired](../api.md#retired-fields): a mirror's repositories belong to
+The optional package source is exact: a mirror's repositories belong to
 `customizations.repositories.configure`, and registration belongs to top-level
 `subscription`.
 
@@ -902,7 +893,7 @@ separate cluster proxy and NTP choices and does not inherit Machine fields.
 | `localization.keyboard` | string | no | `us` | Kickstart token. |
 | `localization.timezone` | string | no | `UTC` | Kickstart token. |
 | `localization.additionalLocales` | array of strings | no | `[]` | Unique Kickstart tokens. |
-| `ssh.passwordAuthentication` | boolean | no | `false` | `true` is refused: the installation sets no password, and the `bootwright` account is reached by the key of `remoteMachinesAccessKey` ([retired](../api.md#retired-fields): `ssh.initialPassword`). |
+| `ssh.passwordAuthentication` | boolean | no | `false` | `true` is refused: the installation sets no password, and the `bootwright` account is reached by the key of `remoteMachinesAccessKey`. |
 | `packages.install` | array of strings | no | `[]` | Unique entries, each a package name, glob or `@group`; no whitespace, quote or `#`, and no leading `%` or `-`. |
 | `packages.excludeDocs` | boolean | no | `false` | Exclude package documentation. |
 | `packages.installWeakDeps` | boolean | no | OS/package-manager default | Absence is distinct from `false`. |
@@ -973,9 +964,7 @@ an NMState template:
 | `spec.nmstate` | arbitrary map | yes | Native NMState desired-state template. |
 
 `nmstate` retains native spelling and topology; Bootwright adds no alternate
-interface vocabulary. It must not contain Bootwright `dns` or retired
-`nameResolutionRefs` keys. The retired top-level `nameResolutionRefs` and
-`template.networkConfig` wrapper are also rejected. The selected
+interface vocabulary. It must not contain Bootwright `dns` keys. The selected
 template is composed with machine overrides using the deterministic merge and
 address injection defined under
 [Machine network configuration](#network-configuration).

@@ -32,7 +32,7 @@ func regressionCompiler() compilation.Compiler {
 		compilation.Rules{Normalize: environment.Normalize, Validate: testEnvironmentValidate},
 		compilation.Rules{Normalize: infrastructureservices.Normalize, ValidateAuthored: infrastructureservices.ValidateAuthored, ValidatePartial: infrastructureservices.ValidatePartial, Validate: infrastructureservices.Validate},
 		compilation.Rules{Normalize: secrets.Normalize, ValidateAuthored: secrets.ValidateAuthored, ValidatePartial: secrets.ValidatePartial, Validate: secrets.Validate},
-		compilation.Rules{RetiredField: cephcluster.RetiredField, Normalize: cephcluster.Normalize, ValidateAuthored: cephcluster.ValidateAuthored, ValidatePartial: cephcluster.ValidatePartial, Validate: cephcluster.Validate},
+		compilation.Rules{Normalize: cephcluster.Normalize, ValidateAuthored: cephcluster.ValidateAuthored, ValidatePartial: cephcluster.ValidatePartial, Validate: cephcluster.Validate},
 		compilation.Rules{Normalize: substrate.Normalize, ValidateAuthored: substrate.ValidateAuthored, ValidatePartial: substrate.ValidatePartial, Validate: substrate.Validate})
 }
 
@@ -253,30 +253,6 @@ spec:
 	}
 	if !reflect.DeepEqual(report.ExcludedContainerClusters, []string{"dropped"}) || len(report.Advisories) != 0 || len(report.Diagnostics) != 1 || report.Diagnostics[0].Code != "api.selection" {
 		t.Fatalf("unexpected report: %#v", report)
-	}
-}
-
-func TestStorageRetirementGuidanceSurvivesStrictDecoding(t *testing.T) {
-	for _, row := range []struct{ name, body, field, replacement string }{
-		{"helper", "  monitoring: {enabled: true}\n", "$.spec.monitoring", "$.spec.services"},
-		{"node roles", "  topology:\n    nodes: [{name: node, machineRef: controller, roles: [mon]}]\n", "$.spec.topology.nodes[0].roles", "$.spec.services"},
-		{"drive group", "  topology:\n    osdDrivegroups: []\n", "$.spec.topology.osdDrivegroups", "$.spec.services[].spec.data_devices"},
-		{"service identity", "  services: [{serviceType: mon}]\n", "$.spec.services[0].serviceType", "$.spec.services[0].service_type"},
-	} {
-		t.Run(row.name, func(t *testing.T) {
-			input := sources(environmentYAML + "---\napiVersion: bootwright.io/v1alpha1\nkind: CephCluster\nmetadata: {name: storage}\nspec:\n" + row.body)
-			state, report, err := regressionCompiler().Compile(context.Background(), input)
-			sink := requireCompilationFailure(t, state, report, err)
-			if len(sink) != 1 || sink[0].Code != "api.field" || sink[0].Field != row.field || sink[0].Remediation != "replace "+row.field+" with "+row.replacement || !strings.Contains(sink[0].Message, "native-service migration") {
-				t.Fatalf("retirement lost exact replacement: %+v", sink)
-			}
-		})
-	}
-	input := sources(environmentYAML + "  defaults:\n    CephCluster:\n      mgmtGateway: {}\n")
-	state, report, err := regressionCompiler().Compile(context.Background(), input)
-	sink := requireCompilationFailure(t, state, report, err)
-	if len(sink) != 1 || sink[0].Field != "$.spec.defaults.CephCluster.mgmtGateway" || sink[0].Remediation != "replace $.spec.defaults.CephCluster.mgmtGateway with $.spec.defaults.CephCluster.services" {
-		t.Fatalf("retired default lost its owner: %+v", sink)
 	}
 }
 

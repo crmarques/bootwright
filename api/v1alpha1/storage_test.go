@@ -36,11 +36,6 @@ func TestStorageWireShapesAreClosedAndVariantsAreExplicit(t *testing.T) {
 			t.Fatalf("object gateway must require %s", bound)
 		}
 	}
-	for _, retired := range []string{"serviceID", "placement", "frontendPort", "config"} {
-		if _, ok := gateway.Field(retired); ok {
-			t.Fatalf("object gateway still admits retired field %s", retired)
-		}
-	}
 	endpoint, _ := gateway.Field("endpoint")
 	if len(endpoint.Shape.Fields) != 1 || endpoint.Shape.Fields[0].Name != "fqdn" {
 		t.Fatal("object gateway endpoint must carry only its FQDN")
@@ -153,11 +148,6 @@ func TestSMBResourceSchemaShape(t *testing.T) {
 
 func TestNativeCoreSchemaAndBindingsUseOneClosedAuthoringPath(t *testing.T) {
 	ceph := Field{Shape: Schema(CephCluster)}
-	for _, retired := range []string{"monitoring", "mgmtGateway"} {
-		if _, ok := ceph.Shape.Field(retired); ok {
-			t.Fatalf("retired daemon helper %s still admitted", retired)
-		}
-	}
 	services, ok := ceph.Shape.Field("services")
 	if !ok || services.Shape.MinLength != 1 || services.Shape.Element.Open {
 		t.Fatal("native service declarations must be non-empty and closed")
@@ -167,22 +157,10 @@ func TestNativeCoreSchemaAndBindingsUseOneClosedAuthoringPath(t *testing.T) {
 			t.Fatalf("missing native envelope field %s", native)
 		}
 	}
-	for _, retired := range []string{"serviceType", "serviceID"} {
-		if _, ok := services.Shape.Element.Field(retired); ok {
-			t.Fatalf("retired native alias %s still admitted", retired)
-		}
-	}
 	placement, _ := services.Shape.Element.Field("placement")
 	for _, native := range []string{"hosts", "label", "host_pattern", "count", "count_per_host"} {
 		if _, ok := placement.Shape.Field(native); !ok {
 			t.Fatalf("missing native placement %s", native)
-		}
-	}
-	topology, _ := ceph.Shape.Field("topology")
-	nodes, _ := topology.Shape.Field("nodes")
-	for _, retired := range []string{"roles", "devices", "osd"} {
-		if _, ok := nodes.Shape.Element.Field(retired); ok {
-			t.Fatalf("retired topology helper %s still admitted", retired)
 		}
 	}
 	bindings, _ := ceph.Shape.Field("serviceBindings")
@@ -292,11 +270,6 @@ func TestFilesystemSchemaBindsItsMDSServiceAndRetiresDaemonHelpers(t *testing.T)
 	if len(bounds) != 3 || bounds["activeCount"] != [2]string{"1", "256"} || bounds["standbyCountWanted"] != [2]string{"0", "2147483647"} {
 		t.Fatalf("mds fields = %v", bounds)
 	}
-	for _, retired := range []string{"placement", "serviceSpec"} {
-		if _, ok := mds.Shape.Field(retired); ok {
-			t.Fatalf("mds.%s must be retired", retired)
-		}
-	}
 	groups, _ := schema.Field("subvolumeGroups")
 	size, _ := groups.Shape.Element.Field("sizeBytes")
 	uid, _ := groups.Shape.Element.Field("uid")
@@ -383,11 +356,6 @@ func TestB479ServiceSchemasAreClosed(t *testing.T) {
 				t.Fatalf("%s.%s required = %v", serviceType, field.Name, field.Required)
 			}
 		}
-	}
-	ceph := Field{Shape: Schema(CephCluster)}
-	cephadm, _ := ceph.Shape.Field("cephadm")
-	if _, ok := cephadm.Shape.Field("workarounds"); ok {
-		t.Fatal("the retired cephadm workaround list is still admitted")
 	}
 }
 

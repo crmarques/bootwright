@@ -105,7 +105,6 @@ func TestB479MinimalDocumentsAdmit(t *testing.T) {
 
 func TestB479RefusalsNameTheirRemedy(t *testing.T) {
 	catalog := fixtureCatalog()
-	cluster := find(t, catalog, api.CephCluster, "storage")
 	modules := func(services ...api.Value) api.Object {
 		changed, _ := withServices(t, catalog, services...)
 		return changed.WithSpec(changed.Spec().WithPath(api.StringList("prometheus"), "mgrModules"))
@@ -137,7 +136,6 @@ func TestB479RefusalsNameTheirRemedy(t *testing.T) {
 		{"R15b node-proxy", "api.invariant", s3 + ".service_type", "Bootwright does not realize this native service type", "remove this service from spec.services", added(b479Service("node-proxy"))},
 		{"alertmanager cluster port", "api.invariant", s3 + ".spec.port", "cephadm reserves port 9094 for the Alertmanager cluster listener", "choose another spec.port", added(b479Service("alertmanager", "port", 9094))},
 		{"SNMP V3 engine", "api.invariant", s3 + ".spec.engine_id", "SNMP V3 notifications need an engine_id", "set spec.engine_id or use snmp_version V2c", added(b479Service("snmp-gateway", "snmp_version", "V3", "snmp_destination", "192.0.2.9:162"), b479Service("alertmanager"))},
-		{"R17", "api.field", "$.spec.cephadm.workarounds", "the cephadm workaround list was retired; Bootwright realizes no cephadm workaround", "remove workarounds from $.spec.cephadm", cluster.WithSpec(cluster.Spec().WithPath(api.StringList("mgmt-gateway-spec-dependency-recording"), "cephadm", "workarounds"))},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			found := issuesAt(Validate(row.object, replace(catalog, row.object)), row.field)

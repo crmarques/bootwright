@@ -123,12 +123,7 @@ func TestCompilerRefusesTheRetiredFileSourceWithItsRemedy(t *testing.T) {
 	}
 }
 
-func TestCompilerRetiresResourcesAndHonoursCancellation(t *testing.T) {
-	_, _, err := compiler().Compile(context.Background(), sources(environmentYAML+"  resources: [environment.yaml]\n"))
-	found := diagnostics.Of(err)
-	if len(found) != 1 || found[0].Code != "api.field" || found[0].Field != "$.spec.resources" || !strings.Contains(found[0].Remediation, "spec.containerClusters and spec.storageClusters are the only narrowing") {
-		t.Fatalf("an authored resources list = %#v, want the retired-field refusal naming the cluster lists", found)
-	}
+func TestCompilerSelectsEveryDiscoveredFileAndHonoursCancellation(t *testing.T) {
 	input := sources(environmentYAML)
 	input.Files = append(input.Files, desiredstate.NewSourceFile("/synthetic/other.yaml", []byte("apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata: {name: other}\nspec: {type: token}\n")))
 	state, report, err := compiler().Compile(context.Background(), input)
@@ -176,26 +171,4 @@ func TestASkippedSecretsDirectoryWarnsAndTheSecretRemedyNamesIt(t *testing.T) {
 	if named != 2 {
 		t.Fatalf("the unresolved Secret remedies name the directory %d times, want 2: %+v", named, diagnostics.Of(err))
 	}
-}
-
-// A retired kind named where a kind is expected, as a kind-defaults key or a
-// ClusterAddon input's resourceKind, is refused naming its replacement.
-func TestCompilerNamesTheReplacementOfARetiredKindInDefaultsAndInputs(t *testing.T) {
-	_, _, err := compiler().Compile(context.Background(), sources(environmentYAML+"  defaults:\n    ContainerCluster: {}\n"))
-	found := diagnostics.Of(err)
-	if len(found) != 1 || found[0].Field != "$.spec.defaults.ContainerCluster" || found[0].Message != "kind defaults name ContainerCluster, which is retired" ||
-		found[0].Remediation != "use OpenShiftCluster; OKD stays spec.distribution.type: okd" {
-		t.Fatalf("a retired kind-defaults key = %#v", found)
-	}
-	addon := "---\napiVersion: bootwright.io/v1alpha1\nkind: ClusterAddon\nmetadata: {name: addon}\nspec:\n  inputs:\n    - name: cluster\n      resourceKind: ContainerCluster\n"
-	_, _, err = compiler().Compile(context.Background(), sources(environmentYAML+addon))
-	for _, d := range diagnostics.Of(err) {
-		if d.Field == "$.spec.inputs[0].resourceKind" {
-			if !strings.Contains(d.Remediation, "use OpenShiftCluster") {
-				t.Fatalf("a retired resourceKind = %#v", d)
-			}
-			return
-		}
-	}
-	t.Fatalf("a retired resourceKind was not refused at its field: %#v", diagnostics.Of(err))
 }

@@ -38,7 +38,7 @@ func TestNativeServiceRefusalsPointAtTheAuthoredService(t *testing.T) {
 	}
 }
 
-func TestMultidcExampleMigratesWithoutLegacyFields(t *testing.T) {
+func TestMultidcExampleDeclaresItsReferenceFilesystem(t *testing.T) {
 	sources := exampleSources(t)
 	var out, errOut bytes.Buffer
 	run(context.Background(), []string{"validate", "-f", sources.Roots[0], "--output", "json"}, &out, &errOut)
@@ -57,9 +57,6 @@ func TestMultidcExampleMigratesWithoutLegacyFields(t *testing.T) {
 		switch {
 		case filepath.Base(file.Path()) == "odf-cephfs.yaml":
 			filesystems++
-			if _, mds, _ := strings.Cut(text, "\n  mds:\n"); strings.Contains(mds, "placement:") || strings.Contains(text, "mdsServiceRef") {
-				t.Fatalf("the reference filesystem keeps a legacy MDS field:\n%s", text)
-			}
 		case filepath.Base(filepath.Dir(file.Path())) == "ceph" && filepath.Base(file.Path()) == "cluster.yaml":
 			services = strings.Count(text, "- service_type: mds\n")
 			if strings.Count(text, "- service_type: mds\n      service_id: odf-cephfs\n") != 1 {

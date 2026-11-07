@@ -8994,8 +8994,7 @@ the deferred Ceph API page), the example directories follow, and `lab-kubevirt` 
 packages split into a neutral core and `openshift` or `cephcluster`. Every
 retired kind, field and value is data in `api/v1alpha1` that the unknown-field,
 unknown-kind and enum diagnostics read to name the replacement, also under
-`spec.defaults`, and [api.md](../api.md#retired-fields) holds its tables to that
-data.
+`spec.defaults`.
 
 **Shapes.** A cluster family registry maps the categories `containerCluster` and
 `storageCluster` to their kinds and child roles; selection, normalization
@@ -9483,9 +9482,9 @@ account, `persistent`). Their unrealized rows, plan refusals and code paths
 are gone. `installer.templateClone` stays admitted, warned `api.unrealized`
 and refused at plan, and its realization joins [B99](m1.md#b99).
 
-**Guard tests:** `TestRetiredInstallAndRetentionSpellingsRefuseWithTheirReplacement`
-and the refusals golden rows for each spelling, authored and under kind
-defaults; the delivering commit records the gates.
+**Guard tests:** the refusals golden rows for each spelling, authored and under
+kind defaults, since replaced by the generic unknown-field refusal; the
+delivering commit records the gates.
 
 ### X185 — Audit lane V1: replica defaults, class hosts and derived names
 

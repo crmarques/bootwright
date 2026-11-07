@@ -107,9 +107,6 @@ func TestPartialValidationIssuesAlsoRefuseTheCompleteObject(t *testing.T) {
 		{"native SMB generated service", appendService(m("service_type", "smb", "service_id", "files", "placement", m("label", "mgr")))},
 		{"native alertmanager webhook key", appendService(m("service_type", "alertmanager", "placement", m("label", "mgr"), "spec", m("user_data", m("webhook_urls", api.StringList("https://hooks.example.test/a")))))},
 		{"native prometheus retention", appendService(m("service_type", "prometheus", "placement", m("label", "mgr"), "spec", m("retention_time", "14days")))},
-		{"native retired workarounds", edit(api.CephCluster, "storage", func(s api.Value) api.Value {
-			return s.WithPath(api.StringList("mgmt-gateway-spec-dependency-recording"), "cephadm", "workarounds")
-		})},
 		{"native NFS binding", edit(api.CephCluster, "storage", func(s api.Value) api.Value {
 			s = s.WithPath(api.ListValue(append(s.Get("services").Items(), nfs)...), "services")
 			return s.WithPath(api.ListValue(m("serviceRef", "nfs.files", "secrets", api.ListValue(m("path", "/spec/ssl_cert", "secretRef", "a")))), "serviceBindings")

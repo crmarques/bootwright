@@ -517,7 +517,7 @@ var docsHistoryAllowances = map[string]historyAllowance{
 	"specs/api/addons.md":           {links: 1},
 	"specs/api/input.md":            {links: 1},
 	"specs/ceph-coverage.md":        {links: 8, ids: 1},
-	"specs/ceph-native-api.md":      {links: 2, ids: 2},
+	"specs/ceph-native-api.md":      {links: 2, ids: 1},
 	"specs/ceph.md":                 {links: 2},
 	"specs/index.md":                {links: 1},
 	"specs/openshift-coverage.md":   {links: 17, ids: 1},

@@ -85,8 +85,7 @@ retains its own domain.
 ## CephCluster
 
 A `CephCluster`'s settings sit directly under `spec`: the kind is the
-engine, so it has no `type` and no `ceph` block (both
-[retired](../api.md#retired-fields)). A managed cluster requires `release`,
+engine, so it has no `type` and no `ceph` block. A managed cluster requires `release`,
 `cephadm` (with `cephadm.bootstrap.nodeRef`), `topology` and nonempty
 `services`; an external one (`management: external`) declares none of the
 managed fields, each of which refuses at its path, and kind defaults never
@@ -131,9 +130,7 @@ zone exist. `spec.mgrModules` admits `cephadm` and
 prometheus service (D159 clause 9), and `smb` refuses as derived from a
 declared CephSMBResource cluster; `mirroring` refuses because Bootwright
 does not realize CephFS snapshot mirroring; every other module refuses until
-its service owner. Retired daemon helpers, topology roles/devices and drivegroup
-wrappers refuse with their replacement path, and the retired
-`cephadm.workarounds` list refuses with its reason. Machine bindings,
+its service owner. Machine bindings,
 hostnames, labels, sites and locations remain under topology. A declared
 `smb`, `iscsi` or `cephfs-mirror` service refuses at its `service_type`: SMB
 daemons are generated from a CephSMBResource, and Bootwright does not

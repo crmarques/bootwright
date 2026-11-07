@@ -1,4 +1,3 @@
-api/v1alpha1 TestRetiredTablesMatchTheData
 api/v1alpha1 TestCephKindsTableNamesEveryStorageFamilyKind
 api/v1alpha1 TestEveryKindHasItsCatalogRowOrderAndPageRow
 cmd/bootwright TestCephMatrixCombinationFixturesRefuse

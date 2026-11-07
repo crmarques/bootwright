@@ -104,8 +104,6 @@ func TestLibvirtAdmissionRefusesWhatTheHostCannotRealize(t *testing.T) {
 			"api.value", provider, "$.spec.networkAttachments[0].libvirt.bridge", "value does not match the required bridge grammar"},
 		"an attachment interface holding a quote": {[]exampleEdit{{"infra/machines/rhel-01.yaml", "      profileRef: rhel\n", "      profileRef: rhel\n      interfaceAttachments:\n        - interface: 'enp1s0\"x'\n          attachmentRef: lab-guests\n"}},
 			"api.value", guest, "$.spec.substrate.libvirt.interfaceAttachments[0].interface", "value does not match the required ifname grammar"},
-		"the retired certificate opt-out": {[]exampleEdit{{labProvider, "        credentialsRef: lab-bmc-credentials\n", "        credentialsRef: lab-bmc-credentials\n      disableCertificateVerification: false\n"}},
-			"api.field", provider, "$.spec.libvirt.bmcEmulation.disableCertificateVerification", ""},
 	}
 	for name, test := range cases {
 		t.Run(name, func(t *testing.T) {

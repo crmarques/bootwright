@@ -11,6 +11,8 @@ import (
 
 var catalogPageLink = regexp.MustCompile(`\]\((api/[a-z-]+\.md)#kinds\)`)
 
+var backticked = regexp.MustCompile("`([^`]+)`")
+
 func specSection(t *testing.T, file, heading, next string) string {
 	t.Helper()
 	data, err := os.ReadFile(path.Join("../../specs", file))

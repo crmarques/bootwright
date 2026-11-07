@@ -150,9 +150,7 @@ unused declared sites are valid and silent.
 
 The Environment's directory is the scope: every YAML file discovery acquires
 under [the API input rules](input.md#discovery) is selected, and the cluster
-lists below are the only narrowing. `spec.resources` is
-[retired](../api.md#retired-fields); an authored one refuses naming the
-cluster lists that replace it. For example, an Environment that installs
+lists below are the only narrowing. For example, an Environment that installs
 `ocp-01` and its storage while a second declared cluster waits authors:
 
 ```yaml
@@ -362,8 +360,7 @@ the artifact bytes.
 Secret source and custody declarations belong to
 [each Secret](secrets.md#source-union). `Environment` has no `secretStorage`
 setting. A default may supply an omitted Secret source, but cannot override an
-authored source or copy material, and a retired `file` source it supplies is
-[refused](secrets.md#file-source).
+authored source or copy material.
 
 ## Controller Machine
 
@@ -437,8 +434,7 @@ opening runtime state or moving execution. The
 [Controller contract](../controller.md) defines setup and verified host
 binding; [Architecture](../architecture.md#controller-host-and-local-services)
 owns local-effect boundaries. Registry policy, image pins and service
-connection facts stay with their owning consumers and service objects; the
-[retired fields](../api.md#retired-fields) name each replacement.
+connection facts stay with their owning consumers and service objects.
 
 Additional installation trust belongs to each
 [OpenShiftCluster](openshift-clusters.md#additional-installation-trust). Kind

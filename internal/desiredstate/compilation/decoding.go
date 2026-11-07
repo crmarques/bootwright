@@ -125,9 +125,6 @@ func stringScalar(node *desiredstate.Node) string {
 }
 
 func unregisteredKind(kind api.Kind) (string, string) {
-	if retired, ok := api.RetiredKindNamed(string(kind)); ok {
-		return retired.Name + " is retired", retired.Replacement
-	}
 	switch kind {
 	case "Context":
 		return "a Context is a standalone context configuration document, not desired state", "keep it outside the input directory and pass it to context init or context update with -f"
@@ -205,17 +202,6 @@ func nullNode(node *desiredstate.Node) bool {
 }
 
 func (d *decoder) typeMismatch(node *desiredstate.Node, expected *api.Shape, path string) {
-	if node.Kind == desiredstate.ScalarKind {
-		kind, ownerPath := api.Kind(nodeText(mappingNode(documentBody(d.document), "kind"))), path
-		if rest, ok := strings.CutPrefix(path, "$.spec.defaults."); ok && kind == api.Environment {
-			owner, tail, _ := strings.Cut(rest, ".")
-			kind, ownerPath = api.Kind(owner), "$.spec."+tail
-		}
-		if retired, ok := api.RetiredValueAt(kind, ownerPath, node.Value); ok {
-			d.fail(node, "api.value", path, string(retired.Kind)+" "+strings.TrimPrefix(retired.Path, "$.spec.")+" value "+retired.Value+" is retired", retired.Replacement)
-			return
-		}
-	}
 	found := typeName(scalarType(node))
 	switch node.Kind {
 	case desiredstate.MappingKind:
@@ -323,32 +309,6 @@ func (d *decoder) unknownField(key *desiredstate.Node, shape *api.Shape, path st
 		return
 	}
 	childPath := path + "." + key.Value
-	kind := api.Kind(nodeText(mappingNode(documentBody(d.document), "kind")))
-	ownerPath, defaultPrefix := childPath, ""
-	if kind == api.Environment && strings.HasPrefix(childPath, "$.spec.defaults.") {
-		rest := strings.TrimPrefix(childPath, "$.spec.defaults.")
-		if owner, tail, ok := strings.Cut(rest, "."); ok {
-			kind, ownerPath = api.Kind(owner), "$.spec."+tail
-			defaultPrefix = "$.spec.defaults." + owner
-		}
-	}
-	for _, rules := range d.rules {
-		if rules.RetiredField == nil {
-			continue
-		}
-		if issue, ok := rules.RetiredField(kind, ownerPath); ok {
-			remedy := issue.Remediation
-			if defaultPrefix != "" {
-				remedy = strings.ReplaceAll(remedy, "$.spec", defaultPrefix)
-			}
-			d.fail(key, "api.field", childPath, issue.Message, remedy)
-			return
-		}
-	}
-	if retired, ok := api.RetiredFieldAt(kind, ownerPath); ok {
-		d.fail(key, "api.field", childPath, string(retired.Kind)+" "+strings.TrimPrefix(retired.Path, "$.spec.")+" is retired", retired.Replacement)
-		return
-	}
 	names := make([]string, 0, len(shape.Fields))
 	for _, field := range shape.Fields {
 		names = append(names, field.Name)
@@ -365,10 +325,6 @@ func (d *decoder) unknownField(key *desiredstate.Node, shape *api.Shape, path st
 }
 
 func (d *decoder) unknownKindDefault(key *desiredstate.Node, path string) {
-	if retired, ok := api.RetiredKindNamed(key.Value); ok {
-		d.fail(key, "api.field", path+"."+key.Value, "kind defaults name "+retired.Name+", which is retired", retired.Replacement)
-		return
-	}
 	if !schemaIdentifier.MatchString(key.Value) {
 		d.fail(key, "api.field", path, "kind defaults name no registered kind", "use a registered kind name such as Machine")
 		return

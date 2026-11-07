@@ -343,7 +343,7 @@ Image acquisition uses the placement Machine's normalized
 a managed, authenticated or private-trust Proxy refuses before registration, as
 the [refusal table](#refusal-table) states.
 `retention` admits `persistent` alone: the server keeps its published content
-until destroy, and `installOnly` is [retired](api.md#retired-values).
+until destroy.
 
 **Owned host state.** The capability owns exactly one content root per service,
 one server configuration, one unit definition and, when any listener is HTTPS,

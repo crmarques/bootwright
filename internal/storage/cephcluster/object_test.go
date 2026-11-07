@@ -10,7 +10,6 @@ import (
 
 const (
 	gatewayEndpointRemedy = "set spec.endpoint.fqdn to a name no storage node or other gateway uses, or rename the CephObjectGateway"
-	gatewayIngressRemedy  = "an ingress service in its CephCluster's spec.services whose spec.backend_service is the rgw service that spec.serviceRef names, with /spec/ssl_cert and /spec/ssl_key bound in spec.serviceBindings"
 )
 
 func gatewayCatalog(t *testing.T, services ...api.Value) api.Catalog {
@@ -195,33 +194,6 @@ func TestGatewayDerivedPoolProtectionNeedsHosts(t *testing.T) {
 			continue
 		}
 		exactlyOne(t, issues, "$.spec.zone", fmt.Sprintf(message, row.size, row.hosts), row.remedy)
-	}
-}
-
-func TestGatewayRetiredFieldsNameReplacements(t *testing.T) {
-	for field, replacement := range map[string]string{
-		"$.spec.serviceID":          "spec.serviceRef naming the rgw.<service_id> entry of its CephCluster's spec.services",
-		"$.spec.placement":          "the placement of the rgw service that spec.serviceRef names",
-		"$.spec.frontendPort":       "spec.rgw_frontend_port of the rgw service that spec.serviceRef names",
-		"$.spec.endpoint.dnsLabel":  "$.spec.endpoint.fqdn, a full DNS name that defaults to <gateway>.<cluster>.<storage domain>",
-		"$.spec.endpoint.scheme":    gatewayIngressRemedy,
-		"$.spec.endpoint.port":      gatewayIngressRemedy,
-		"$.spec.endpoint.tls":       gatewayIngressRemedy,
-		"$.spec.endpoint.ingresses": gatewayIngressRemedy,
-	} {
-		issue, ok := RetiredField(api.CephObjectGateway, field)
-		if !ok || issue.Code != "api.field" || issue.Field != field || issue.Remediation != "replace "+field+" with "+replacement {
-			t.Fatalf("retired %s: %#v %v", field, issue, ok)
-		}
-	}
-	issue, ok := RetiredField(api.CephObjectGateway, "$.spec.config")
-	if !ok || issue.Code != "api.field" || issue.Remediation != "remove $.spec.config: per-service RGW configuration options have no qualified effect contract" {
-		t.Fatalf("removed config: %#v %v", issue, ok)
-	}
-	for _, field := range []string{"$.spec.realm", "$.spec.pools", "$.spec.endpoint.fqdn"} {
-		if issue, ok := RetiredField(api.CephObjectGateway, field); ok {
-			t.Fatalf("current field %s reported retired: %#v", field, issue)
-		}
 	}
 }
 

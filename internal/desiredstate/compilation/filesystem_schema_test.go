@@ -1,15 +1,9 @@
 package compilation_test
 
 import (
-	"context"
 	"slices"
 	"strings"
 	"testing"
-)
-
-const (
-	retiredMDSPlacement   = "an entry of its CephCluster's spec.services with service_type mds and service_id equal to this CephFilesystem's name, and set spec.mdsServiceRef to mds.<name>"
-	retiredMDSServiceSpec = "the native fields (networks, extra_container_args, extra_entrypoint_args) of its CephCluster's spec.services entry with service_type mds and service_id equal to this CephFilesystem's name"
 )
 
 func filesystemProbe(spec string) string {
@@ -26,27 +20,6 @@ func filesystemFindingsAt(t *testing.T, spec, field string) []string {
 		}
 	}
 	return found
-}
-
-func TestFilesystemRetiredMDSPlacementNamesReplacement(t *testing.T) {
-	for _, row := range []struct{ body, field, replacement string }{
-		{"  mds:\n    placement: {hosts: [node-1]}\n", "$.spec.mds.placement", retiredMDSPlacement},
-		{"  mds:\n    serviceSpec: {networks: [192.0.2.0/24]}\n", "$.spec.mds.serviceSpec", retiredMDSServiceSpec},
-	} {
-		input := sources(environmentYAML + "---\n" + filesystemProbe(row.body))
-		state, report, err := regressionCompiler().Compile(context.Background(), input)
-		sink := requireCompilationFailure(t, state, report, err)
-		if len(sink) != 1 || sink[0].Code != "api.field" || sink[0].Field != row.field || sink[0].Remediation != "replace "+row.field+" with "+row.replacement || !strings.Contains(sink[0].Message, "native-service migration") {
-			t.Fatalf("retired %s lost its replacement: %+v", row.field, sink)
-		}
-	}
-	input := sources(environmentYAML + "  defaults:\n    CephFilesystem:\n      mds:\n        placement: {count: 2}\n")
-	state, report, err := regressionCompiler().Compile(context.Background(), input)
-	sink := requireCompilationFailure(t, state, report, err)
-	const field = "$.spec.defaults.CephFilesystem.mds.placement"
-	if len(sink) != 1 || sink[0].Field != field || sink[0].Remediation != "replace "+field+" with "+retiredMDSPlacement {
-		t.Fatalf("retired default lost its owner: %+v", sink)
-	}
 }
 
 func TestActiveCountZeroRefuses(t *testing.T) {

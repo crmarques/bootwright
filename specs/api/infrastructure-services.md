@@ -150,7 +150,7 @@ A managed ArtifactServer accepts these fields after `management`:
 | --- | --- | --- | --- |
 | `machineRef` | string | yes | Global placement Machine. |
 | `bindAddress` | string | no | IP literal; derived as the [deployment defaults](#proxy-dns-ntp-and-registry-deployment) state. |
-| `retention` | string | no | `persistent`, the default and only value: published content is kept until destroy. `installOnly` is [retired](../api.md#retired-values). |
+| `retention` | string | no | `persistent`, the default and only value: published content is kept until destroy. |
 | `tls` | object | conditional | Required when any effective listener uses HTTPS; forbidden for HTTP-only listeners. |
 | `tls.secretRef` | string | with TLS | `tlsCertificate` Secret supplying certificate and key. A [generated](secrets.md#generated-source) Secret derives its `ipAddresses` and `dnsNames` from these HTTPS endpoints and the `machineRef` Machine's `fqdn`; an authored list names the address of every HTTPS endpoint, or that endpoint refuses at `$.spec.endpoints[i]` naming the Secret and the address. Effect material: the server serves it. |
 | `tls.minVersion` | string | no | `TLSv1.2` by default, or `TLSv1.3`. |
@@ -172,7 +172,7 @@ An external ArtifactServer instead requires non-empty `endpoints[]` with
 unique `name` and absolute HTTP(S) `url`. It forbids deployment, retention and
 TLS-serving configuration, and `spec.management: external` is refused at
 admission until a consumer reads one, because every consumer publishes into the
-server it selects. The retired `tls.certificateRef` is rejected.
+server it selects.
 
 An `artifactServerEndpoint` consumer has required scalar `serverRef` to an
 ArtifactServer followed by required scalar `endpointRef` to one of its

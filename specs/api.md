@@ -162,11 +162,9 @@ them equals the key ignoring case or, when none does, when exactly one of them
 is nearest to the key within at most two edits. Explicitly
 documented open native or implementation maps remain open only at those exact
 fields; their presence does not make a containing object extensible.
-Unsupported API versions, retired kinds, alternate spellings, aliases between
-schema generations, and translation fallbacks are rejected. A field, arm or
-kind the schema has removed is unknown like any other name; the
-[retired fields](#retired-fields) and [retired kinds](#retired-kinds) tables
-name the replacement of each retired path and kind.
+Unsupported API versions, unregistered kinds, alternate spellings, aliases
+between schema generations, and translation fallbacks are rejected. A field,
+arm or kind the schema has removed is unknown like any other name.
 
 Every refusal carries what the operator needs to correct it:
 
@@ -384,109 +382,6 @@ These rules govern every new kind, field, arm, enum value and reference.
   ordering tokens. The three are never synonyms.
 - A field with exactly one legal value enters `v1alpha1` only when a spec
   sentence names its consumer or the planned variant.
-
-### Retired fields
-
-| Kind | Retired path | Use instead |
-| --- | --- | --- |
-| Environment | `spec.controller.proxy` | The controller Machine's [proxy choice](api/machines.md#machine-proxy). |
-| Environment | `spec.proxy`, `spec.infraComponents`, `spec.registries`, `spec.componentImages`, `spec.trustedCAs` | The owning consumer or service object: registry policy, image pins and connection facts stay there, and installation trust belongs to each [OpenShiftCluster](api/openshift-clusters.md#additional-installation-trust). |
-| Environment | `spec.machineAccess` | `spec.remoteMachinesAccessKey.keyRef`. |
-| Environment | `spec.safety` | Nothing: lifecycle authorization is command intent, never desired state. |
-| Environment | `spec.resources` | Nothing: the Environment's directory is the scope, and `spec.containerClusters` and `spec.storageClusters` are the only [narrowing](api/environment.md#cluster-selection). |
-| Machine | `spec.os.install.proxy` | The Machine's [proxy choice](api/machines.md#machine-proxy). |
-| Machine | `spec.capabilities` | Nothing: node roles, the container runtime and the libvirt host follow from the objects that place the Machine ([substrate arm](api/machines.md#substrate-arm)). |
-| Machine | `spec.substrate.profileRef` | `spec.substrate.libvirt.profileRef`, `kubevirt.profileRef` or `vsphere.profileRef`, the provider's arm. |
-| Machine | `spec.hardware.management` | `spec.substrate.baremetal.bmc`. |
-| Machine | `spec.hardware.nics[].macAddress` | `spec.substrate.baremetal.nics[]` or `spec.substrate.vsphere.nics[]`, each naming its NIC with `nicRef`. |
-| Machine | `spec.os.install.rootDeviceHints` | `spec.hardware.rootDevice` for `deviceName`, `model`, `vendor`, `minSizeGigabytes` and `rotational`; `spec.substrate.baremetal.rootDevice` for `wwn`, `hctl` and `serialNumber`. |
-| Machine | `spec.network.interfaceAttachments` | `spec.substrate.libvirt.interfaceAttachments` or `spec.substrate.kubevirt.interfaceAttachments`. |
-| MachineInstallProfile | `spec.installer.anaconda.packageSource.mirror` | Nothing: omit `packageSource` to install from the boot media, or select `packageSource.hostedTree` ([installer arms](api/machines.md#installer-arms)); repositories the installed system uses stay in `spec.customizations.repositories.configure`. |
-| MachineInstallProfile | `spec.installer.anaconda.packageSource.fromSubscription` | `packageSource.hostedTree` or the boot media for the packages, and `spec.subscription.entitlementRef` to register the installed system after its marker is proved ([registration](managed-os.md#registration)). |
-| MachineInstallProfile | `spec.customizations.ssh.initialPassword` | Nothing: the installed system locks root and authorizes the public half of `spec.remoteMachinesAccessKey` on the `bootwright` account ([installation](managed-os.md#installation)). |
-| InfraProvider | `spec.libvirt.bmcEmulationDefaults` | `spec.libvirt.bmcEmulation`. |
-| InfraProvider | `spec.libvirt.bmcEmulation.enabled`, `spec.libvirt.bmcEmulation.protocol`, `spec.libvirt.bmcEmulation.emulator` | Nothing: the emulated BMC always runs, speaks Redfish and is sushy-tools. |
-| InfraProvider | `spec.vsphere.nodeNetworking` | The cluster's `spec.install.platform.vsphere.nodeNetworking` ([platform union](api/openshift-clusters.md#platform-union-and-derivation)). |
-| InfraProvider | `spec.baremetal.boot` | Nothing: a bare-metal Machine always boots its installer from Redfish virtual media. |
-| OpenShiftCluster | `spec.install.method` | Nothing: the agent installer is the [`install.agent` arm](api/openshift-clusters.md#install-selection), which defaults to `{}`. |
-| OpenShiftCluster | `spec.install.platform.type` | The platform's arm: `install.platform.baremetal`, `vsphere`, `none` or `external` ([platform union](api/openshift-clusters.md#platform-union-and-derivation)). |
-| CephCluster | `spec.type` | Nothing: the kind is the engine. |
-| CephCluster | `spec.ceph` | Its fields, directly under `spec` ([Ceph kinds](api/ceph.md#kinds)). |
-| CephCluster | `spec.cephadm.bootstrap.node` | `spec.cephadm.bootstrap.nodeRef`, naming a `spec.topology.nodes` entry. |
-| CephCluster | `spec.ibm`, `spec.community` | The [distribution arm](api/ceph.md): `spec.distribution.ibm` holds `callHome` and `packages`, and `spec.distribution.oss` holds `mirror` and `checksum`. |
-| CephPool | `spec.type` | The protection arm: `spec.replicated`, the default, or `spec.erasure`. |
-| CephConsumer | `spec.type` | Nothing: `spec.dataFoundation` or `spec.externalDetails` says what the consumer is. |
-| ClusterAddonBinding | `spec.packages.fdf.storageExportRef` | `spec.packages.fdf.cephConsumerRef`. |
-| ClusterAddonBinding | `spec.packages.gitops.bootstrap.credentials` | `spec.packages.gitops.bootstrap.credentialsRef`. |
-| ClusterAddon | `spec.inputs[].effects[].storageExportAttachment` | `cephConsumerAttachment`. |
-| ClusterAddon | `spec.olm.catalogSource.displayName`, `spec.olm.catalogSource.publisher` | Nothing: the CatalogSource Bootwright creates carries neither. |
-| ClusterAddon | `spec.olm.catalogSource.grpcPodConfig` | `spec.olm.catalogSource.securityContextConfig`, `legacy` or `restricted`. |
-| ClusterAddon | `spec.olm.customResources[].apiVersion`, `spec.olm.customResources[].kind` | Wrap the resource: each `customResources[]` entry is `{gate, resource}`, with `gate` the checks that must hold first and `resource` the custom resource ([OLM arm](api/addons.md#olm-arm)). |
-| ClusterAddon | `spec.olm.subscription.installPlanApproval` | Nothing: Bootwright subscribes with Manual approval and approves only `subscription.startingCSV` ([OLM arm](api/addons.md#olm-arm)). |
-
-The unknown-field diagnostic for a listed path, authored on the object or under
-its kind's `spec.defaults` entry, says it is retired and names its replacement
-as the remedy; a `[]` segment stands for every list index. The rows are data in
-`api/v1alpha1` (`RetiredFields`), and `TestRetiredTablesMatchTheData` holds
-this table and the next two to it. The native-service migration's retired Ceph
-fields stay described on their [owning page](ceph-native-api.md#migration-and-implementation-sequence), which names
-each replacement.
-
-### Retired values
-
-| Kind | Retired value | Use instead |
-| --- | --- | --- |
-| OpenShiftCluster | `spec.nodes[].role: master`, `spec.security.diskEncryption.roles[]: master` | `controlPlane`, which Bootwright renders as `master` for the installer. |
-| OpenShiftCluster | `spec.install.endpoints.api.source.type: openshift`, `spec.install.endpoints.api-int.source.type: openshift`, `spec.install.endpoints.ingress.source.type: openshift` | `installer`, still the default. |
-| CephCluster | `spec.distribution: oss`, `spec.distribution: redhat`, `spec.distribution: ibm` | The distribution arm: `distribution: {oss: {}}`, `{redhat: {}}` or `{ibm: {...}}`. |
-| ClusterAddon | `spec.inputs[].resourceKind: StorageCluster` | `CephCluster`. |
-| ClusterAddon | `spec.inputs[].resourceKind: StorageExport` | `CephConsumer`. |
-| Machine | `spec.substrate.baremetal.bmc.virtualMedia.tls.trust: disable-verification`, `spec.substrate.baremetal.bmc.virtualMedia.tls.trust: import-certificate` | `disableVerification` and `importCertificate`, respectively. |
-| InfraProvider | `spec.baremetal.defaults.bmc.virtualMedia.tls.trust: disable-verification`, `spec.baremetal.defaults.bmc.virtualMedia.tls.trust: import-certificate` | `disableVerification` and `importCertificate`, respectively. |
-| CephCluster | `spec.cephadm.clusterSSH.transport: verified-tunnel` | `verifiedTunnel`. |
-| ArtifactServer | `spec.retention: install-only`, `spec.retention: installOnly` | `persistent`, the only retention: a managed artifact server keeps its published content until destroy. |
-| CephClient | `spec.access: read-only`, `spec.access: read-write` | `readOnly` and `readWrite`, respectively. |
-| CephPool | `spec.role: cephfs-metadata`, `spec.role: cephfs-data` | `cephfsMetadata` and `cephfsData`, respectively. |
-| Entitlement | `spec.type: redhat-rhel`, `spec.type: redhat-ceph`, `spec.type: ibm-storage-ceph` | `redhatRhel`, `redhatCeph` and `ibmStorageCeph`, respectively. |
-| Secret | `spec.source.generated.keyType: ecdsa-p256`, `spec.source.generated.keyType: ecdsa-p384`, `spec.source.generated.keyType: ecdsa-p521` | `ecdsaP256`, `ecdsaP384` and `ecdsaP521`, respectively. |
-| CustomPlaybook | `spec.gates: add-ons` | `addOns`. |
-| CustomPlaybook | `spec.follows: add-ons` | `addOns`. |
-
-A listed value, authored on the object or under its kind's `spec.defaults`
-entry, refuses `api.value` saying it is retired and naming its replacement as
-the remedy; the rows are data in `api/v1alpha1` (`RetiredValues`).
-
-### Retired kinds
-
-| Retired kind | Use instead |
-| --- | --- |
-| `ContainerCluster` | `OpenShiftCluster`; OKD stays `spec.distribution.type: okd`. |
-| `StorageCluster` | `CephCluster`, with its fields directly under `spec` and no `type`. |
-| `StoragePlacementPolicy` | `CephPlacementPolicy`. |
-| `StoragePool` | `CephPool`. |
-| `StorageRBDImage` | `CephRBDImage`. |
-| `StorageClient` | `CephClient`. |
-| `StorageFilesystem` | `CephFilesystem`. |
-| `StorageSubvolume` | `CephSubvolume`. |
-| `StorageObjectGateway` | `CephObjectGateway`. |
-| `StorageObjectUser` | `CephObjectUser`. |
-| `StorageObjectBucket` | `CephObjectBucket`. |
-| `StorageNFSExport` | `CephNFSExport`. |
-| `StorageSMBResource` | `CephSMBResource`. |
-| `StorageNVMeoFSubsystem` | `CephNVMeoFSubsystem`. |
-| `StorageReplication` | `CephReplication`. |
-| `StorageExport` | `CephConsumer`, without `spec.type`. |
-| `InfraComponent` | The typed service object it described: Proxy, DNSServer, NTPServer, ArtifactServer, Registry or LoadBalancer, with `management` on its spec. |
-
-A document of a listed kind refuses `api.kind` naming its replacement as the
-remedy, and so does a listed kind named as an Environment `spec.defaults` key
-(`api.field`) or as a ClusterAddon `spec.inputs[].resourceKind` value
-(`api.value`, where a retired-value row above takes precedence); the rows are
-data in `api/v1alpha1` (`RetiredKinds`). An operation
-frozen with a retired kind, or a block record naming one, cannot be planned
-again by a build that no longer registers it, so its continuation refuses
-`lifecycle.state` naming the build that registered it
-([cross-build continuation](state-reconciliation.md#continuation-and-removal)).
 
 ## Kind catalog
 

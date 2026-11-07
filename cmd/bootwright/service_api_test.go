@@ -122,21 +122,6 @@ func TestServiceReferenceDiagnosticsPreserveProfileOrigins(t *testing.T) {
 	}
 }
 
-func TestRetiredInfrastructureInputExplainsReplacement(t *testing.T) {
-	for _, object := range []string{
-		"apiVersion: bootwright.io/v1alpha1\nkind: InfraComponent\nmetadata: {name: old}\nspec: {}\n",
-	} {
-		state, _, err := wireCompiler().Compile(context.Background(), serviceSources(serviceEnvironment, object))
-		if state != nil || err == nil {
-			t.Fatal("retired service kind was accepted")
-		}
-		diagnostics := diagnostics.Of(err)
-		if len(diagnostics) != 1 || diagnostics[0].Code != "api.kind" || !strings.Contains(diagnostics[0].Remediation, "ArtifactServer") || !strings.Contains(diagnostics[0].Remediation, "management") {
-			t.Fatalf("retired kind lacks replacement guidance: %#v", diagnostics)
-		}
-	}
-}
-
 func TestUnusedProxyDefaultsRejectLocalContradictionsWithoutResolvingReferences(t *testing.T) {
 	for _, owner := range []struct{ kind, prefix, field string }{
 		{"OpenShiftCluster", "      install:\n        ", "install.proxy"},

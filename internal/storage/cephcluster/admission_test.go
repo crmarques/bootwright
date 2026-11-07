@@ -443,7 +443,6 @@ func TestPartialDefaultsCheckOnlyProvableContradictions(t *testing.T) {
 }
 
 func TestDeferredScopeRefusalsNameTheDeliveringItem(t *testing.T) {
-	catalog := fixtureCatalog()
 	requireRemedy := func(issues []api.Issue, field, remediation string) {
 		t.Helper()
 		for _, issue := range issues {
@@ -457,9 +456,6 @@ func TestDeferredScopeRefusalsNameTheDeliveringItem(t *testing.T) {
 	external := object(api.CephCluster, "external", m("management", "external"))
 	export := object(api.CephConsumer, "external-export", m("clusterRef", "external", "externalDetails", m("fromSecretRef", "details")))
 	requireRemedy(Validate(export, api.NewCatalog([]api.Object{external, export})), "$.spec", "remove this CephConsumer from the input; parked item B107 delivers it")
-	cluster := find(t, catalog, api.CephCluster, "storage")
-	changed := cluster.WithSpec(cluster.Spec().WithPath(api.StringList("mgmt-gateway-spec-dependency-recording"), "cephadm", "workarounds"))
-	requireRemedy(Validate(changed, replace(catalog, changed)), "$.spec.cephadm.workarounds", "remove workarounds from $.spec.cephadm")
 }
 
 func coreServices() api.Value {

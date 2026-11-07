@@ -321,7 +321,7 @@ func TestErasureProfileNeedsKPlusMOSDHostsOfItsClass(t *testing.T) {
 	noIssues(t, admitted(clusterOf(t, 6, "ibm", data, fast("node-1", "node-2", "node-3", "node-4", "node-5", "node-6")), pool))
 }
 
-func TestErasureProfileOutsideTheFormerVendorTableIsAdmitted(t *testing.T) {
+func TestErasureProfilesOfAnyShapeAreAdmitted(t *testing.T) {
 	for _, test := range []struct{ hosts, k, m int }{{5, 3, 2}, {14, 8, 6}, {3, 2, 1}, {4, 3, 1}} {
 		noIssues(t, admitted(clusterOf(t, test.hosts, "ibm"), ecPool("ec", chunks(test.k, test.m))))
 	}

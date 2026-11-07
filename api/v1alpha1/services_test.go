@@ -25,25 +25,12 @@ func TestServiceKindsReplaceGenericCatalog(t *testing.T) {
 		}
 		checkStorageShape(t, schema)
 	}
-	for _, legacy := range []string{"infraComponents", "proxy", "registries", "componentImages"} {
-		if _, ok := Schema(Environment).Field(legacy); ok {
-			t.Fatalf("legacy Environment field %s remains accepted", legacy)
-		}
-	}
-	if _, ok := Schema(NetworkConfig).Field("nameResolutionRefs"); ok {
-		t.Fatal("legacy DNS catalog selections remain accepted")
-	}
 	// Every managed service runs as a container, so each of the six accepts an
 	// image pin and none of them selects an executable by naming one.
 	for _, kind := range []Kind{Proxy, DNSServer, NTPServer, ArtifactServer, Registry, LoadBalancer} {
 		if _, ok := Schema(kind).Field("image"); !ok {
 			t.Fatalf("%s accepts no container image", kind)
 		}
-	}
-	os, _ := Schema(Machine).Field("os")
-	install, _ := os.Shape.Field("install")
-	if _, ok := install.Shape.Field("proxy"); ok {
-		t.Fatal("retired Machine installation proxy remains accepted")
 	}
 }
 

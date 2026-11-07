@@ -452,8 +452,8 @@ the module is the declared service's derived effect. The gateway keeps the
 first certificate pair it stores, and a generated certificate's IP SAN is the
 bare `virtual_ip`, so one gateway owns one pair, and a bound pair travels in
 the first apply and is proved from the served leaf. certmgr does not renew
-user-provided certificates. The `cephadm.workarounds` list stays
-retired: the management gateway needed no provider-defect specialization.
+user-provided certificates. Bootwright realizes no cephadm
+workaround: the management gateway needed no provider-defect specialization.
 Acceptance rows record the tested coordinates as evidence, never as an
 allowlist. See [the lessons](../.agents/knowledge/ibm-ceph-monitoring.md).
 

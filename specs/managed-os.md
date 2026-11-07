@@ -188,8 +188,7 @@ profile an installed Machine selects names its `redfishVirtualMedia`
 endpoint, on every substrate, because the installer image is always booted
 through it. A profile selecting
 `templateClone` refuses before registration ([B99](milestones/m1.md#b99)).
-`packageSource.mirror`, `packageSource.fromSubscription` and
-`ssh.initialPassword` are [retired](api.md#retired-fields). A profile selecting `subscription` with a `managed` `redhatRhel`
+A profile selecting `subscription` with a `managed` `redhatRhel`
 Entitlement is admitted on virtual and physical Machines, as
 [Registration](#registration) states. FIPS and root-disk encryption are admitted on virtual
 and physical Machines under the key and disk boundaries in

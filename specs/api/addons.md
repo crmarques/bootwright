@@ -129,12 +129,8 @@ records what a custom-package lifecycle would add.
 
 An authored `subscription` and `catalogSource` follow the package
 [Subscription](#subscription) rules: Bootwright subscribes `Manual` and
-approves only `startingCSV`. `catalogSource.displayName`, `publisher`,
-`grpcPodConfig` and `subscription.installPlanApproval` are
-[retired](../api.md#retired-fields), as are the top-level `apiVersion` and `kind` of
-a `customResources` entry written as the resource itself instead of
-`{gate, resource}`. `catalogSource.name` is a DNS label, narrower than the DNS
-name it once accepted.
+approves only `startingCSV`. A `customResources` entry is `{gate, resource}`.
+`catalogSource.name` is a DNS label.
 
 Omitting `operatorGroup` requests no group. `operatorGroup: {}` requests the
 namespace-named group targeting that namespace. An explicit `targetNamespaces`

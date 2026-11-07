@@ -7,8 +7,7 @@ operator-supplied Ansible. The closed schema in
 rules and the reserved ordering graph that [B102](../milestones/backlog.md#b102) revives.
 [The compiler boundary](../api.md#compiler-boundary) applies to enabled and
 disabled objects alike: both are strictly decoded, normalized,
-reference-checked and rendered. The retired `run` and `onFailure` fields are
-unknown and rejected.
+reference-checked and rendered.
 
 A `CustomPlaybook` name follows the [one name rule](../api.md#object-names).
 

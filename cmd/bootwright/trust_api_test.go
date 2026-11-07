@@ -231,21 +231,6 @@ func TestClusterInstallTrustDiagnosticsKeepDefaultOrigins(t *testing.T) {
 	}
 }
 
-func TestRetiredEnvironmentTrustHasActionableReplacement(t *testing.T) {
-	for _, tc := range []struct{ name, extra, field string }{
-		{"Environment", "  trustedCAs: {caBundleRefs: [missing-ca]}\n", "$.spec.trustedCAs"},
-		{"Environment defaults", "  defaults:\n    Environment:\n      trustedCAs: {caBundleRefs: [missing-ca]}\n", "$.spec.defaults.Environment.trustedCAs"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			diagnostic := trustFailure(t, serviceSources(serviceEnvironment+tc.extra), "api.field", tc.field)
-			guidance := diagnostic.Message + " " + diagnostic.Remediation
-			if !strings.Contains(guidance, "retired") || !strings.Contains(guidance, "OpenShiftCluster") || !strings.Contains(guidance, "additionalTrustBundleRefs") {
-				t.Fatal("retired Environment trust lacks consumer-owned replacement guidance", guidance)
-			}
-		})
-	}
-}
-
 func TestUnusedClusterInstallTrustDefaultsValidateStructureOnly(t *testing.T) {
 	for _, tc := range []struct{ list, code, field string }{
 		{"[missing-ca]", "", ""},

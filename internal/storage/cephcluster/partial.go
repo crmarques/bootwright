@@ -65,7 +65,6 @@ func (a *admission) intrinsic() {
 			a.forbid(ceph, "$.spec", "entitlementRef", "packageVersion")
 			a.forbid(ceph.Get("cephadm", "ansible"), "$.spec.cephadm.ansible", "packageVersion")
 		}
-		a.retiredCluster(ceph)
 		a.nvmeofClusterIntrinsic(ceph)
 		if a.partial {
 			a.nativeServices(ceph, true)

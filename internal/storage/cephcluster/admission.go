@@ -126,9 +126,6 @@ func ValidateAuthored(object api.Object, catalog api.Catalog) []api.Issue {
 		return a.issues
 	}
 	a.lexicalValues()
-	if object.Kind() == api.CephCluster {
-		a.retiredCluster(object.Spec())
-	}
 	return a.issues
 }
 
