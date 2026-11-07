@@ -12455,3 +12455,31 @@ installs on. The input charts follow in the template-input repository
 (0528b2cb8, ba85138, chart version 0.3.0); the gitignored inputs are migrated
 and validate as before. Gates: `make check` and `make race` passed on the
 integrated branch; no live run or push occurred.
+
+### X324 — The cluster networking batch
+
+**Item:** B1206, completed in-tree (2026-11-07), under [D240](backlog.md#d240)
+clauses (5) and (11), with [D241](backlog.md#d241). An OpenShift cluster may
+name its machine networks (`machineNetworkRefs`, which must include every
+node's install Network); a secondary network's `uplink` is `bridgeMapping`,
+with per-node `bridgeInterfaces` for mixed hardware rendered into each node's
+policy ([secondary networks](../api/openshift-clusters.md#secondary-networks)).
+Native cluster fields stay and are checked against the Networks: every node's
+bridge interface reaches the one Network its secondary network carries, with
+matching `vlan` and `ipam.subnets`; enabled pod IPAM excludes every address
+held on that Network (Machine addresses, gateway, managed host address, cluster
+VIPs); MetalLB pools lie in one Network that their `l2.interface` reaches; Ceph
+public and cluster CIDRs are disjoint. An ethernet bridge or pool interface
+warns `api.unverified`: an agent installation keeps kernel names. NMState
+ports by MAC identifier wait for the owed live agent check.
+
+**Commits:** fd92eb126 (machine networks), d747fea3b (bridge mappings and
+carriage), 4a5db07d2 (MetalLB and Ceph), with the independent review's three
+major findings (one interface in two bridges, a secondary network reaching
+different Networks, pod IPAM over host addresses) and its minor ones fixed in
+55b76c672 and a8e4a04b7, and this record. Every example's requests stay
+byte-identical; the lab-sno-fips-controller e2e case's IPAM now spans its
+Network with exclusions. The input chart follows in the template-input
+repository (1657b2a, environment-ha 0.4.0); the gitignored inputs needed no
+change. Gates: `make check` and `make race` passed on the integrated branch;
+no live run or push occurred.
