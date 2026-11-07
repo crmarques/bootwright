@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/addons"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/network"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 func NormalizeNetworkIntent(o api.Object) api.Object {
@@ -47,6 +48,7 @@ func ValidateNetworkIntent(o api.Object, c api.Catalog) []api.Issue {
 		familyBits = networks[0].Addr().BitLen()
 	}
 	reported := map[string]bool{}
+	first := map[string]reachedNetwork{}
 	for nodeIndex, node := range o.Spec().Get("nodes").Items() {
 		issues = append(issues, validateBridgeInterfaces(o, nodeIndex, node)...)
 		bound, ok := c.Find(api.Machine, node.Get("machineRef").Text())
@@ -80,10 +82,104 @@ func ValidateNetworkIntent(o api.Object, c api.Catalog) []api.Issue {
 				}
 				issues = append(issues, issue)
 			}
-			issues = append(issues, validateSecondaryCarriage(network, i, iface, node, bound, c, native, install, reported)...)
+			issues = append(issues, validateSecondaryCarriage(network, i, iface, carriageNode{index: nodeIndex, value: node, bound: bound}, c, native, install, reported, first)...)
 		}
 	}
-	return append(issues, validateSecondaryNetworks(o)...)
+	issues = append(issues, validateSecondaryNetworks(o)...)
+	return append(issues, validatePodIPAMHosts(o, c, first)...)
+}
+
+type heldAddress struct {
+	address netip.Addr
+	holder  string
+}
+
+func validatePodIPAMHosts(o api.Object, c api.Catalog, first map[string]reachedNetwork) []api.Issue {
+	issues := []api.Issue{}
+	for i, n := range o.Spec().Get("networking", "secondaryNetworks").Items() {
+		if n.Get("ipam", "mode").Text() != "Enabled" {
+			continue
+		}
+		base := fmt.Sprintf("$.spec.networking.secondaryNetworks[%d]", i)
+		name := n.Get("name").Text()
+		excluded := []netip.Prefix{}
+		for _, raw := range n.Get("ipam", "excludeSubnets").Strings() {
+			if p, err := netip.ParsePrefix(raw); err == nil {
+				excluded = append(excluded, p.Masked())
+			}
+		}
+		for _, raw := range n.Get("ipam", "subnets").Strings() {
+			subnet, err := netip.ParsePrefix(raw)
+			if err != nil {
+				continue
+			}
+			subnet = subnet.Masked()
+			held, ok := ipamNetwork(c, first[name].network, subnet)
+			if !ok {
+				continue
+			}
+			for _, h := range networkHolders(o, c, held, network.Family(subnet.Addr())) {
+				if !subnet.Contains(h.address) || slices.ContainsFunc(excluded, func(p netip.Prefix) bool { return p.Contains(h.address) }) {
+					continue
+				}
+				issues = append(issues, invariantRemediation(base+".ipam.excludeSubnets", fmt.Sprintf("IPAM subnet %s of secondary network %s spans %s, so pods can take %s, held by %s", subnet, name, held.Identity(), h.address, h.holder),
+					fmt.Sprintf("add %s, or a range holding it, to ipam.excludeSubnets of secondary network %s", netip.PrefixFrom(h.address, h.address.BitLen()), name)))
+			}
+		}
+	}
+	return issues
+}
+
+func ipamNetwork(c api.Catalog, reached api.Object, subnet netip.Prefix) (api.Object, bool) {
+	family := network.Family(subnet.Addr())
+	if reached.Name() != "" {
+		cidr, ok := network.Prefix(reached, family)
+		return reached, ok && cidr == subnet
+	}
+	var match []api.Object
+	for _, candidate := range network.CIDRs(c) {
+		if candidate.Prefix == subnet {
+			match = append(match, candidate.Network)
+		}
+	}
+	if len(match) != 1 {
+		return api.Object{}, false
+	}
+	return match[0], true
+}
+
+func networkHolders(o api.Object, c api.Catalog, held api.Object, family string) []heldAddress {
+	nodes := map[string]string{}
+	for _, node := range o.Spec().Get("nodes").Items() {
+		nodes[node.Get("machineRef").Text()] = node.Get("name").Text()
+	}
+	holders := []heldAddress{}
+	add := func(raw, holder string) {
+		if a, err := netip.ParseAddr(raw); err == nil && network.Family(a) == family && !slices.ContainsFunc(holders, func(h heldAddress) bool { return h.address == a }) {
+			holders = append(holders, heldAddress{address: a, holder: holder})
+		}
+	}
+	if gateway, ok := network.Gateway(held, family); ok {
+		add(gateway.String(), "the gateway of "+held.Identity())
+	}
+	if host, ok := substrate.HostAddress(held); ok && substrate.IsManagedNetwork(held) {
+		add(host.Addr().String(), "the provider host's address on managed "+held.Identity())
+	}
+	for _, slot := range endpointSlots {
+		add(o.Spec().Get("install", "endpoints", slot, "address").Text(), "the "+slot+" endpoint of "+o.Identity())
+	}
+	for _, m := range c.OfKind(api.Machine) {
+		holder := m.Identity()
+		if node, ok := nodes[m.Name()]; ok {
+			holder = "node " + node + " (" + m.Identity() + ")"
+		}
+		for _, entry := range m.Spec().Get("network", "addresses").Items() {
+			if assigned, ok := machine.AssignedNetwork(m, c, entry); ok && assigned.Network.Name() == held.Name() {
+				add(entry.Get("address").Text(), holder)
+			}
+		}
+	}
+	return holders
 }
 
 func validateSecondaryNetworks(o api.Object) []api.Issue {
@@ -410,6 +506,31 @@ func validateBridgeInterfaces(o api.Object, nodeIndex int, node api.Value) []api
 		issues = append(issues, invariantRemediation(fmt.Sprintf("$.spec.nodes[%d].bridgeInterfaces[%d].networkRef", nodeIndex, i), fmt.Sprintf("node %s overrides the bridge interface of secondary network %s, which shares br-ex, the bridge OVN-Kubernetes builds on the install interface", node.Get("name").Text(), entry.Get("networkRef").Text()),
 			"remove the entry, or give "+entry.Get("networkRef").Text()+" a dedicated bridge and bridgeMapping.interface"))
 	}
+	owners := map[string]api.Value{}
+	for _, n := range networks {
+		bridge := n.Get("bridgeMapping", "bridge").Text()
+		iface := BridgeInterface(node, n)
+		if bridge == "br-ex" || iface == "" {
+			continue
+		}
+		other, ok := owners[iface]
+		if !ok {
+			owners[iface] = n
+			continue
+		}
+		if other.Get("bridgeMapping", "bridge").Text() == bridge {
+			continue
+		}
+		subject, at := n, overrideIndex(node, n)
+		if at < 0 {
+			subject, at = other, overrideIndex(node, other)
+		}
+		if at < 0 {
+			continue
+		}
+		issues = append(issues, invariantRemediation(fmt.Sprintf("$.spec.nodes[%d].bridgeInterfaces[%d].interface", nodeIndex, at), fmt.Sprintf("node %s assigns interface %s to bridge %s of secondary network %s and to bridge %s of secondary network %s", node.Get("name").Text(), iface, other.Get("bridgeMapping", "bridge").Text(), other.Get("name").Text(), bridge, n.Get("name").Text()),
+			fmt.Sprintf("set a bridge interface of its own for secondary network %s on node %s, or put both networks on one bridge", subject.Get("name").Text(), node.Get("name").Text())))
+	}
 	for _, bridge := range sharedBridges(networks) {
 		chosen := map[string]string{}
 		for _, n := range networks {
@@ -440,7 +561,19 @@ func sharedBridges(networks []api.Value) []string {
 	return shared
 }
 
-func validateSecondaryCarriage(n api.Value, index int, iface string, node api.Value, bound api.Object, c api.Catalog, native api.Value, install string, reported map[string]bool) []api.Issue {
+type reachedNetwork struct {
+	node, segment string
+	network       api.Object
+}
+
+type carriageNode struct {
+	index int
+	value api.Value
+	bound api.Object
+}
+
+func validateSecondaryCarriage(n api.Value, index int, iface string, at carriageNode, c api.Catalog, native api.Value, install string, reported map[string]bool, first map[string]reachedNetwork) []api.Issue {
+	node, bound := at.value, at.bound
 	base := fmt.Sprintf("$.spec.networking.secondaryNetworks[%d]", index)
 	name := n.Get("name").Text()
 	dedicated := n.Get("bridgeMapping", "bridge").Text() != "br-ex"
@@ -481,6 +614,16 @@ func validateSecondaryCarriage(n api.Value, index int, iface string, node api.Va
 			}
 			report(field+"\x00"+reach.Segment, field, fmt.Sprintf("secondary network %s reaches %s, which %s", name, path, carried), remedy)
 		default:
+			if earlier, ok := first[name]; !ok {
+				first[name] = reachedNetwork{node: node.Get("name").Text(), segment: reach.Segment, network: reach.Network}
+			} else if earlier.network.Name() != reach.Network.Name() {
+				field := base + ".bridgeMapping"
+				if n.Has("vlan") {
+					field = base + ".vlan"
+				}
+				report(field+"\x00split\x00"+reach.Network.Name(), field, fmt.Sprintf("secondary network %s reaches %s on node %s through %s, and %s through %s", name, earlier.network.Identity(), earlier.node, earlier.segment, reach.Network.Identity(), path),
+					fmt.Sprintf("carry one Network for secondary network %s on every node: move NIC %s of %s with segmentRef to a segment that carries %s, or override the bridge interface of node %s at spec.nodes[%d].bridgeInterfaces", name, reach.NIC, bound.Identity(), earlier.network.Identity(), node.Get("name").Text(), at.index))
+			}
 			secondarySubnets(n, base, name, path, reach.Network, report)
 		}
 	}

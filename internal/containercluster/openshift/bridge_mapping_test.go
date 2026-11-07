@@ -8,7 +8,11 @@ import (
 )
 
 func segmentedLab(networks ...api.Value) (api.Object, api.Catalog) {
-	cluster, c := fixture("libvirt", 1, false)
+	return segmentedNodes(1, networks...)
+}
+
+func segmentedNodes(count int, networks ...api.Value) (api.Object, api.Catalog) {
+	cluster, c := fixture("libvirt", count, false)
 	objects := []api.Object{}
 	for _, o := range c.Objects() {
 		switch {
@@ -28,6 +32,10 @@ func enabled(n api.Value, subnet string) api.Value {
 	return n.With("ipam", m("mode", "Enabled", "subnets", api.StringList(subnet)))
 }
 
+func excluding(n api.Value, subnets ...string) api.Value {
+	return n.With("ipam", n.Get("ipam").With("excludeSubnets", api.StringList(subnets...)))
+}
+
 func TestASecondaryNetworkCarriesTheNetworkOfItsBridgeInterfaceSegment(t *testing.T) {
 	const base = "$.spec.networking.secondaryNetworks[0]"
 	for _, test := range []struct {
@@ -35,7 +43,8 @@ func TestASecondaryNetworkCarriesTheNetworkOfItsBridgeInterfaceSegment(t *testin
 		network            api.Value
 		field, message, to string
 	}{
-		{"untagged on the trunk", enabled(addressedNetwork("tenant", "br-tenant", "eth1", "", ""), "192.0.2.0/24"), "", "", ""},
+		{"untagged on the trunk", excluding(enabled(addressedNetwork("tenant", "br-tenant", "eth1", "", ""), "192.0.2.0/24"), "192.0.2.10/32"), "", "", ""},
+		{"a node address left to pods", enabled(addressedNetwork("tenant", "br-tenant", "eth1", "", ""), "192.0.2.0/24"), base + ".ipam.excludeSubnets", "IPAM subnet 192.0.2.0/24 of secondary network tenant spans Network/lan, so pods can take 192.0.2.10, held by node node-0 (Machine/node-0)", "add 192.0.2.10/32, or a range holding it, to ipam.excludeSubnets"},
 		{"untagged subnet of another Network", enabled(addressedNetwork("tenant", "br-tenant", "eth1", "", ""), "203.0.113.0/24"), base + ".ipam.subnets[0]", "IPAM subnet 203.0.113.0/24 of secondary network tenant is not the ipv4 cidr of Network/lan, which it carries through interface eth1 of node node-0 (Machine/node-0), NIC eth1 on segment trunk", "192.0.2.0/24"},
 		{"tagged by vlan", enabled(addressedNetwork("tenant", "br-tenant", "eth1", "", "200"), "203.0.113.0/24"), "", "", ""},
 		{"a vlan the trunk does not carry", addressedNetwork("tenant", "br-tenant", "eth1", "", "300"), base + ".vlan", "carries no tagged Network with vlan 300", "taggedNetworkRefs"},
@@ -111,5 +120,39 @@ func TestAddonFactsNameTheNetworksEachInterfaceReaches(t *testing.T) {
 	}
 	if strings.Join(reached["eth0"], ",") != "lan" || strings.Join(reached["eth1"], ",") != "lan" || strings.Join(reached["eth2.200"], ",") != "tenant" {
 		t.Fatalf("reached = %v", reached)
+	}
+}
+
+func overrideOn(cluster api.Object, node int, entries ...api.Value) api.Object {
+	nodes := cluster.Spec().Get("nodes").Items()
+	nodes[node] = nodes[node].With("bridgeInterfaces", list(entries...))
+	return cluster.WithSpec(cluster.Spec().With("nodes", list(nodes...)))
+}
+
+func TestAnOverrideCannotPutOneInterfaceInTwoBridges(t *testing.T) {
+	cluster, c := segmentedLab(addressedNetwork("a", "br-a", "eth1", "", ""), addressedNetwork("b", "br-b", "eth2.200", "", ""))
+	if issues := ValidateNetworkIntent(cluster, c); len(issues) != 0 {
+		t.Fatalf("distinct interfaces: %+v", issues)
+	}
+	issues := ValidateNetworkIntent(overrideOn(cluster, 0, m("networkRef", "b", "interface", "eth1")), c)
+	found := false
+	for _, issue := range issues {
+		found = found || issue.Field == "$.spec.nodes[0].bridgeInterfaces[0].interface" && strings.Contains(issue.Message, "node node-0 assigns interface eth1 to bridge br-a of secondary network a and to bridge br-b of secondary network b") && strings.Contains(issue.Remediation, "secondary network b on node node-0")
+	}
+	if !found {
+		t.Fatalf("%+v", issues)
+	}
+}
+
+func TestASecondaryNetworkReachesOneNetworkOnEveryNode(t *testing.T) {
+	cluster, c := segmentedNodes(2, addressedNetwork("tenant", "br-tenant", "eth1", "", ""))
+	if issues := ValidateNetworkIntent(cluster, c); len(issues) != 0 {
+		t.Fatalf("one Network: %+v", issues)
+	}
+	issues := ValidateNetworkIntent(overrideOn(cluster, 1, m("networkRef", "tenant", "interface", "eth2.200")), c)
+	if len(issues) != 1 || issues[0].Field != "$.spec.networking.secondaryNetworks[0].bridgeMapping" ||
+		!strings.Contains(issues[0].Message, "secondary network tenant reaches Network/lan on node node-0 through segment trunk (spec.segments[0] of InfraProvider/provider), and Network/tenant through interface eth2.200 of node node-1") ||
+		!strings.Contains(issues[0].Remediation, "segment that carries Network/lan, or override the bridge interface of node node-1 at spec.nodes[1].bridgeInterfaces") {
+		t.Fatalf("%+v", issues)
 	}
 }

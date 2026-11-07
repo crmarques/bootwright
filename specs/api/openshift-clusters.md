@@ -412,43 +412,41 @@ attachment definition workloads select.
 | --- | --- | --- | --- |
 | `topology` | string | yes | `Localnet`. |
 | `bridgeMapping.bridge` | string | yes | `br-ex`, sharing the default bridge, or a new OVS bridge name: 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
-| `bridgeMapping.interface` | string | with a new bridge | The bridge interface: an `ethernet`, `bond` or `vlan` every node declares, not its install interface, addressless unless `hostAddresses` is `bridge`; a node's `bridgeInterfaces` entry overrides it. |
-| `bridgeMapping.hostAddresses` | string | no | `none` (default), or `bridge`: each node's static addresses on the bridge interface move onto the bridge. Only with a new bridge, alike on every network sharing it. |
+| `bridgeMapping.interface` | string | with a new bridge | The bridge interface: an `ethernet`, `bond` or `vlan` every node declares, not its install interface, addressless unless `hostAddresses` is `bridge`; a node's `bridgeInterfaces` overrides it. |
+| `bridgeMapping.hostAddresses` | string | no | `none` (default), or `bridge`: each node's static bridge-interface addresses move onto the bridge; only with a new bridge, alike on networks sharing it. |
 | `vlan` | integer | no | Access VLAN `1..4094`; distinct among networks sharing a bridge. |
 | `mtu` | integer | no | `576..65536`, at least `1280` with an IPv6 subnet, at most the bridge interface's effective MTU. |
 | `ipam.mode` | string | no | `Disabled` (default) or `Enabled`. |
 | `ipam.subnets` | array of CIDRs | with `Enabled` | One or two, of different families. |
 | `ipam.excludeSubnets` | array of CIDRs | no | At most 25, inside `subnets`. |
 | `ipam.lifecycle` | string | no | `Persistent`, with `Enabled` only. |
-| `namespaceSelector.matchLabels` | map | yes | Non-empty Kubernetes labels selecting the namespaces that receive the attachment definition. |
+| `namespaceSelector.matchLabels` | map | yes | Non-empty labels selecting the namespaces that get the attachment definition. |
 
 A secondary network needs a binding selecting a package or add-on providing
 `nmstate`.
 
-Native `vlan` and `ipam.subnets` are checked against the
-[Networks](networks.md#cross-kind-checks) (D240 (11)): on every node, the NICs
-under the bridge interface (for `br-ex`, the install one) sit on a
-segment carrying one Network, tagged `vlan` when set, else untagged, or tagged
-by a VLAN in the stack, which forbids `vlan`; each subnet equals its CIDR. A
-refusal, at `vlan`, `bridgeMapping` or the subnet, names the node, interface,
-segment and Network.
+Native `vlan` and `ipam.subnets` follow the
+[Networks](networks.md#cross-kind-checks) (D240 (11)): the NICs under each
+node's bridge interface (for `br-ex`, the install one) sit on segments carrying
+one Network, the same on every node, tagged `vlan` when set, else untagged, or
+tagged by a VLAN in the stack, which forbids `vlan`. Each subnet is its
+CIDR, and `excludeSubnets` covers each address held there: Machine
+assignments, gateway, managed host address, cluster endpoints. Refusals at
+`vlan`, `bridgeMapping`, the subnet or `excludeSubnets` name node, segment and
+Network, or address and holder. A node feeds one bridge from each interface.
 
-With `hostAddresses: bridge`, one VLAN carries the node and the workloads, as
-`br-ex` does for the machine network. The node declares its address on the
-bridge interface; after installation the
+With `hostAddresses: bridge`, one VLAN carries node and workloads, as `br-ex`
+does for the machine network: after installation the
 [cluster network block](../openshift-clusters.md#post-installation-network-configuration)
-moves it onto the bridge's own interface, named after the bridge, which a
-[MetalLB pool](addons.md#package-metallb) then names in `l2.interface` and an
-egress IP in its subnet leaves through. Admission refuses at
-`bridgeMapping.interface` a bridge interface a node addresses by DHCP or
-autoconf or names as a route's `next-hop-interface`; with `none`, an addressed
-one refuses there, naming `bridge` in its remedy.
+moves the node's address from the bridge interface onto the bridge's own
+interface, which a [MetalLB pool](addons.md#package-metallb) `l2.interface`
+names and egress IPs in its subnet use. A bridge interface addressed
+by DHCP or autoconf, or a route's `next-hop-interface`, refuses at
+`bridgeMapping.interface`, as does an addressed one under `none`.
 
-Two bridge interfaces refuse because their frames would not reach the network:
-a `vlan` on `br-ex` over a `vlan` install interface, whose tag would carry the
-access tag inside it, at `vlan`; and a `base-iface` of a `vlan` or a bond port
-the node declares, install interface included, which the bridge would take from
-the interface built on it, at `bridgeMapping.interface`.
+Frames would be lost, so `vlan` on `br-ex` over a `vlan` install
+interface refuses at `vlan`, and a bridge interface that is a declared `vlan`'s
+`base-iface` or a bond port refuses at `bridgeMapping.interface`.
 
 ## Security
 
