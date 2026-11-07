@@ -87,6 +87,14 @@ func validateNested(record *objectRecord, name string, scope *api.Scope, path st
 		case matches == 0:
 			sink.issue(record, api.Issue{Code: "api.reference", Field: path, Message: "no " + scope.Noun + named + " is declared on " + owner.Object.Identity(),
 				Remediation: "correct the reference to name an entry of " + declared + " on " + owner.Object.Identity() + joined + ", or declare " + reference + " there"})
+		case matches > 1 && joinedBy(scope, owner.Object, name, catalog):
+			entries := "an entry"
+			if matches > 2 {
+				entries = strconv.Itoa(matches-1) + " entries"
+			}
+			other := string(scope.Joined.Kind) + "/" + name
+			sink.issue(record, api.Issue{Code: "api.reference", Field: path, Message: "the" + named + " is ambiguous: it names " + entries + " of " + declared + " on " + owner.Object.Identity() + " and " + other + ", whose spec." + strings.Join(scope.Joined.Field, ".") + " names " + owner.Object.Name(),
+				Remediation: "rename the entry of " + declared + " on " + owner.Object.Identity() + " named " + name + ", or " + other + ", with every reference to it"})
 		case matches > 1:
 			sink.issue(record, api.Issue{Code: "api.reference", Field: path, Message: "the" + named + " is ambiguous: it names " + strconv.Itoa(matches) + " entries of " + declared + " on " + owner.Object.Identity(),
 				Remediation: "give the entries of " + declared + " on " + owner.Object.Identity() + " distinct names"})
@@ -95,6 +103,14 @@ func validateNested(record *objectRecord, name string, scope *api.Scope, path st
 		}
 		sink.nested = append(sink.nested, dependency)
 	}
+}
+
+func joinedBy(scope *api.Scope, owner api.Object, name string, catalog api.Catalog) bool {
+	if scope.Joined == nil {
+		return false
+	}
+	joined, found := catalog.Find(scope.Joined.Kind, name)
+	return found && joined.Spec().Get(scope.Joined.Field...).Text() == owner.Name()
 }
 
 func nestedName(name string) bool {

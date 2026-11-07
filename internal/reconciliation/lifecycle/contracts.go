@@ -404,6 +404,10 @@ type Discoverer interface {
 	Discovers() []api.Kind
 }
 
+type Carrier interface {
+	Carries(api.Catalog) map[string][]string
+}
+
 type NothingLive interface {
 	RecordProves(block reconciliation.Block, evidence json.RawMessage) bool
 }

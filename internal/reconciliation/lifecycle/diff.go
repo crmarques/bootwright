@@ -56,6 +56,7 @@ type diffRead struct {
 	sides         map[string]RealSide
 	patches       map[string][]holderPatch
 	unproven      map[api.Kind]bool
+	carriers      map[string][]string
 }
 
 type diffSide struct {
@@ -150,6 +151,8 @@ func (s Service) readDiff(ctx context.Context, view View, observed bool) (diffRe
 	if applied != nil {
 		read.markers.Applied = relativeFiles(frozen, frozen.Markers)
 	}
+	read.carriers = s.carriers(read.applied.effective, read.desired.effective)
+	read.realized = carriedRealizations(read.realized, read.carriers)
 	read.fresh, read.planReason = s.freshPlan(ctx, view, desired)
 	read.delta = reconciliation.Compare(read.owningPlan, read.fresh)
 	read.rebuilt = s.rebuiltBlocks(ctx, view, read.owning, read.owningPlan, frozen)
@@ -317,13 +320,97 @@ func (r diffRead) objectPlans() map[string]objectPlan {
 		for _, object := range r.delta.Objects() {
 			plans[object.Kind+"/"+object.Object] = objectPlan{change: string(object.Change), blocks: object.Blocks}
 		}
-		return plans
+		return carriedPlans(plans, r.carriers)
 	}
 	for _, block := range r.owningPlan.Blocks {
 		identity := block.Kind + "/" + block.Object
 		plans[identity] = objectPlan{blocks: append(plans[identity].blocks, block.ID)}
 	}
+	return carriedPlans(plans, r.carriers)
+}
+
+func (s Service) carriers(catalogs ...api.Catalog) map[string][]string {
+	carriers := map[string][]string{}
+	for _, bound := range s.capabilities.Bindings() {
+		capability, resolved := s.capabilities.Resolve(bound.Kind, bound.Implementation)
+		carrier, carries := capability.(Carrier)
+		if !resolved || !carries {
+			continue
+		}
+		for _, catalog := range catalogs {
+			for host, objects := range carrier.Carries(catalog) {
+				for _, object := range objects {
+					if !slices.Contains(carriers[object], host) {
+						carriers[object] = append(carriers[object], host)
+					}
+				}
+			}
+		}
+	}
+	for _, hosts := range carriers {
+		slices.Sort(hosts)
+	}
+	return carriers
+}
+
+func carriedRealizations(realized map[string]RealizationStatus, carriers map[string][]string) map[string]RealizationStatus {
+	for _, identity := range mapKeys(carriers) {
+		if _, own := realized[identity]; own {
+			continue
+		}
+		for _, host := range carriers[identity] {
+			status, named := realized[host]
+			if !named {
+				continue
+			}
+			if current, seen := realized[identity]; !seen || realizationRank(status) < realizationRank(current) {
+				realized[identity] = status
+			}
+		}
+	}
+	return realized
+}
+
+func realizationRank(status RealizationStatus) int {
+	switch status {
+	case RealizationUnknown:
+		return 0
+	case RealizationFailed:
+		return 1
+	case RealizationPending:
+		return 2
+	case RealizationDone:
+		return 3
+	}
+	return 0
+}
+
+func carriedPlans(plans map[string]objectPlan, carriers map[string][]string) map[string]objectPlan {
+	for _, identity := range mapKeys(carriers) {
+		if _, own := plans[identity]; own {
+			continue
+		}
+		for _, host := range carriers[identity] {
+			hosted, planned := plans[host]
+			if !planned {
+				continue
+			}
+			carried, seen := plans[identity]
+			if seen && carried.change != hosted.change {
+				carried.change = string(reconciliation.Changed)
+			} else {
+				carried.change = hosted.change
+			}
+			carried.blocks = append(carried.blocks, hosted.blocks...)
+			plans[identity] = carried
+		}
+	}
 	return plans
+}
+
+func (r diffRead) realizes(block reconciliation.Block, identity string) bool {
+	host := block.Kind + "/" + block.Object
+	return host == identity || slices.Contains(r.carriers[identity], host)
 }
 
 func joinObjects(read diffRead) []ObjectDiff {
@@ -424,7 +511,7 @@ func (r diffRead) partlyRemoved(identity string) bool {
 	removed, remaining := r.removalOf(identity)
 	return len(removed) != 0 && len(remaining) != 0 && !slices.ContainsFunc(r.plan.Blocks, func(block reconciliation.Block) bool {
 		state := r.states[block.ID]
-		return block.Kind+"/"+block.Object == identity && (unproved(state) || state == reconciliation.BlockFailed)
+		return r.realizes(block, identity) && (unproved(state) || state == reconciliation.BlockFailed)
 	})
 }
 
@@ -432,7 +519,7 @@ func (r diffRead) removalOf(identity string) ([]string, []string) {
 	var removed, remaining []string
 	for _, block := range r.plan.Blocks {
 		switch {
-		case block.Kind+"/"+block.Object != identity:
+		case !r.realizes(block, identity):
 		case r.states[block.ID] == reconciliation.BlockDone:
 			removed = append(removed, block.ID)
 		default:
@@ -445,7 +532,7 @@ func (r diffRead) removalOf(identity string) ([]string, []string) {
 func (r diffRead) blocksOf(identity string) []string {
 	var unsettled, named []string
 	for _, block := range r.plan.Blocks {
-		if block.Kind+"/"+block.Object != identity {
+		if !r.realizes(block, identity) {
 			continue
 		}
 		named = append(named, block.ID)
@@ -460,7 +547,7 @@ func (r diffRead) blocksOf(identity string) []string {
 		return named
 	}
 	for _, block := range r.owningPlan.Blocks {
-		if block.Kind+"/"+block.Object == identity {
+		if r.realizes(block, identity) {
 			named = append(named, block.ID)
 		}
 	}

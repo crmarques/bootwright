@@ -178,15 +178,21 @@ func validateDomain(o api.Object, c api.Catalog) []api.Issue {
 				"give "+o.Identity()+" or "+peer.Identity()+" another spec.vlan, or scope them to disjoint spec.sites"))
 		}
 		for _, family := range families {
-			mine, ok := Prefix(o, family)
-			theirs, found := Prefix(peer, family)
-			if ok && found && mine.Overlaps(theirs) {
+			mine, _ := Prefix(o, family)
+			theirs, _ := Prefix(peer, family)
+			if Overlapping(o, peer, family) {
 				issues = append(issues, invariant("$.spec."+family+".cidr", o.Identity()+" "+mine.String()+" overlaps "+peer.Identity()+" "+theirs.String()+" in a site they both reach, so an address would lie in both",
 					"give "+o.Identity()+" or "+peer.Identity()+" a spec."+family+".cidr the other does not overlap, or scope them to disjoint spec.sites"))
 			}
 		}
 	}
 	return issues
+}
+
+func Overlapping(a, b api.Object, family string) bool {
+	mine, ok := Prefix(a, family)
+	theirs, found := Prefix(b, family)
+	return ok && found && sitesOverlap(a, b) && mine.Overlaps(theirs)
 }
 
 func sitesOverlap(a, b api.Object) bool {

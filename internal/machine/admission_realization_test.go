@@ -1,6 +1,7 @@
 package machine
 
 import (
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -131,7 +132,7 @@ func TestAnInstallAddressIsNeitherTheBridgeNorItsNetworkOrBroadcast(t *testing.T
 	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
 	lab = append(lab, object(api.Network, "other", m("provided", true, "ipv4", m("cidr", "198.51.100.0/24"))))
 	for address, message := range map[string]string{
-		"198.51.100.10": "install address must lie inside managed Network/net",
+		"198.51.100.10": "install address must lie inside the realized prefix 192.0.2.0/24 of managed Network/net",
 		"192.0.2.1":     "the install address is the host address of managed Network/net on InfraProvider/lab",
 	} {
 		t.Run(address, func(t *testing.T) {
@@ -150,6 +151,22 @@ func TestAnInstallAddressIsNeitherTheBridgeNorItsNetworkOrBroadcast(t *testing.T
 	}
 	if issues := admission(installOn("192.0.2.11"), lab...); len(issues) != 0 {
 		t.Fatalf("a host address inside the bridge's prefix was refused: %v", issues)
+	}
+}
+
+// A dual-stack managed Network realizes the prefix of its host address alone,
+// so an install address of its other family is refused naming that prefix.
+func TestAnInstallAddressOutsideTheRealizedPrefixNamesIt(t *testing.T) {
+	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
+	net := lab[len(lab)-1]
+	lab[len(lab)-1] = net.WithSpec(net.Spec().With("ipv6", m("cidr", "2001:db8::/64")))
+	want := api.Issue{Code: "api.invariant", Field: "$.spec.network.installAddressRef",
+		Message:     "install address must lie inside the realized prefix 192.0.2.0/24 of managed Network/net",
+		Remediation: "assign Machine/guest an install address inside 192.0.2.0/24 other than 192.0.2.1, 192.0.2.0 and 192.0.2.255"}
+	catalog := api.NewCatalog(lab)
+	provider, _ := catalog.Find(api.InfraProvider, "lab")
+	if issues := validateManagedSegmentAddress(catalog, installOn("2001:db8::10/64"), netip.MustParsePrefix("2001:db8::10/64"), provider, "net"); !slices.Equal(issues, []api.Issue{want}) {
+		t.Fatalf("issues = %#v, want %#v", issues, want)
 	}
 }
 
@@ -402,8 +419,8 @@ func TestAKubeVirtMachineAuthorsNoMAC(t *testing.T) {
 func TestABaremetalMachineSelectsNoAttachment(t *testing.T) {
 	inline := guest(m("inline", m("nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet"))))))
 	requireOneIssue(t, admission(inline, twoSegmentLab(list())...), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.nics",
-		Message:     "NIC enp1s0 of Machine/guest selects no segment, and InfraProvider/lab declares 2 segments, not exactly one that every NIC defaults to",
-		Remediation: "add a spec.substrate.libvirt.nics entry with nicRef enp1s0 and a segmentRef naming a segment of InfraProvider/lab on Machine/guest"})
+		Message:     "NIC enp1s0 of Machine/guest selects no segment, and InfraProvider/lab offers 2 segments across spec.segments and the managed Networks whose spec.libvirt.providerRef names it, not exactly one that every NIC defaults to",
+		Remediation: "add a spec.substrate.libvirt.nics entry with nicRef enp1s0 and a segmentRef naming a spec.segments entry of InfraProvider/lab or a managed Network whose spec.libvirt.providerRef names lab on Machine/guest"})
 	server, catalog := fixture()
 	objects := without(catalog, server)
 	for i, existing := range objects {

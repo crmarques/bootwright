@@ -115,7 +115,6 @@ Its reason and remedy are the diagnostic's message and remediation, in which
 | A KubeVirt profile without a size | a non-provided Machine on a KubeVirt provider whose profile's `cpu`, `memoryMiB` or `diskGiB` is `0` | `a KubeVirt machine is created with the CPU count, memory and root disk its profile declares, and its profile <profile> declares one as zero` | `set cpu, memoryMiB and diskGiB above zero on profile <profile> of <provider>` |
 | A KubeVirt NIC on an unrealized network kind | a NIC of such a Machine whose segment's `networkRef` is neither a `k8s.ovn.org` `ClusterUserDefinedNetwork` nor a `k8s.cni.cncf.io` `NetworkAttachmentDefinition` | `a KubeVirt NIC attaches to a Localnet ClusterUserDefinedNetwork or a bridge NetworkAttachmentDefinition, and segment <segment> names another kind` | `select a ClusterUserDefinedNetwork or NetworkAttachmentDefinition segment for every NIC of <machine>` |
 | An emulated BMC no endpoint can name | a libvirt provider's `spec.libvirt.bmcEmulation.bindAddress` that is not one unicast host address | `an emulated BMC listens on one unicast address its Machines' BMC endpoints can name, and this provider's bindAddress is not one` | `set spec.libvirt.bmcEmulation.bindAddress on <provider> to one unicast host address` |
-| A provider named by more managed Networks than its reservation holds | more than 20 managed `Network` objects whose `spec.libvirt.providerRef` names one libvirt provider | `a libvirt provider's host reservation claims three keys for each managed Network beside the two of its media pool and its firewall readiness unit, within the 64 keys one reservation holds, so at most 20 managed Networks name it` | `name <provider> in spec.libvirt.providerRef of at most 20 managed Networks, or make the others provided networks on existing bridges` |
 | A provider using more existing bridges than its use reservation holds | a libvirt provider whose `segments[]` name more than 64 distinct bridges | `a libvirt provider's bridge-use reservation claims one shared key for each bridge its existing-bridge segments use, within the 64 keys one reservation holds, so they use at most 64 bridges` | `name at most 64 distinct bridges in spec.segments of <provider>` |
 
 ## Qualification
@@ -314,12 +313,13 @@ Network, because the host routes its prefix to that bridge;
 the pool and `path:` for its directory; and `unit:<name>` without the `.service`
 suffix for the provider's
 firewall readiness unit when it has managed networks
-(`TestHostReservationsClaimEveryManagedNetworkAndThePool`). At most 20 managed
-Networks therefore name the providers of one host: 20 × 3 network keys plus two pool
-keys and one readiness-unit key use 63 of the 64 keys one reservation
-holds ([controller record](contexts/controller-record.md#bounds)), and
-admission refuses more at each Network's `spec.libvirt.providerRef`
-(`TestTheManagedNetworkBoundKeepsTheHostReservationWithinItsKeys`).
+(`TestHostReservationsClaimEveryManagedNetworkAndThePool`). One host defines
+at most 20 managed Networks across its providers, a host-wide rule of the
+[Libvirt arm](api/networks.md#libvirt-arm), so a provider's reservation uses at
+most 63 of the 64 keys one reservation holds: 20 × 3 network keys, two pool
+keys and one readiness-unit key
+([controller record](contexts/controller-record.md#bounds),
+`TestTheManagedNetworkBoundKeepsTheHostReservationWithinItsKeys`).
 
 Each provider segment claims the shared key `bridge-use:<name>` for the
 bridge it names, so a bridge another context defines is known to be in

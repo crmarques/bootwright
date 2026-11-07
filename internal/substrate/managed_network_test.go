@@ -55,6 +55,26 @@ func TestAManagedNetworkArmIsRefusedWhereNoLibvirtHostDefinesIt(t *testing.T) {
 	requireArmIssue(t, issues, "$.spec.libvirt.taggedNetworkRefs[1]", "carried untagged on its own bridge")
 }
 
+// A managed Network's host address takes its bridge's one address of a /32 or
+// /128, so a single-address prefix leaves its guests none and is refused at the
+// cidr, while a provided Network of one address is not.
+func TestAManagedNetworkOfOneAddressIsRefused(t *testing.T) {
+	lab := obj(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host")))
+	for family, cidr := range map[string]string{"ipv4": "192.0.2.1/32", "ipv6": "2001:db8::1/128"} {
+		single := obj(api.Network, "lab", m("provided", false, family, m("cidr", cidr, "gateway", strings.TrimSuffix(strings.TrimSuffix(cidr, "/32"), "/128")), "libvirt", m("providerRef", "lab", "bridge", "virbr-lab")))
+		want := api.Issue{Code: "api.invariant", Field: "$.spec." + family + ".cidr",
+			Message:     "managed Network/lab spans the single address " + cidr + ", which the host's own address on its bridge takes, so no guest has an address on it",
+			Remediation: "widen spec." + family + ".cidr of Network/lab to a subnet that holds guest addresses beside the host's"}
+		if issues := networkArmIssues(single, lab); len(issues) != 1 || issues[0] != want {
+			t.Fatalf("%s: issues = %+v", cidr, issues)
+		}
+		provided := single.WithSpec(single.Spec().With("provided", api.BoolValue(true)))
+		if issues := networkArmIssues(provided, lab); len(issues) != 0 {
+			t.Fatalf("a provided Network of %s was refused: %+v", cidr, issues)
+		}
+	}
+}
+
 // A managed Network is a segment of the provider its arm names, under its own
 // name, carrying the host address with its subnet's prefix and its forward
 // mode; an MTU of 1500 is the default libvirt already gives and is not carried.

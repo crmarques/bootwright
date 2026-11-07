@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/network"
 )
 
 func topologyHost(name string) api.Object {
@@ -143,7 +144,9 @@ func TestAManagedBridgeBelongsToOneNetworkOnItsHost(t *testing.T) {
 
 // The host routes each managed prefix to its own bridge, so two managed
 // Networks on one host, of one provider or two, whose prefixes overlap,
-// identical or nested, IPv4 or IPv6, are refused naming both.
+// identical or nested, IPv4 or IPv6, are refused naming both. Two that reach a
+// common site are already refused by the Network CIDR rule, so only Networks of
+// disjoint sites read this refusal.
 func TestOneHostNeverOverlapsTwoManagedPrefixes(t *testing.T) {
 	const field = "$.spec.libvirt.hostAddress"
 	host, other := topologyHost("host"), topologyHost("other")
@@ -159,6 +162,20 @@ func TestOneHostNeverOverlapsTwoManagedPrefixes(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			guests, storage := managedNetwork("guests", "a", "virbr-a", test.own), managedNetwork("storage", "b", "virbr-b", test.peer)
+			family := "ipv4"
+			if strings.HasSuffix(name, "IPv6") {
+				family = "ipv6"
+			}
+			if !network.Overlapping(guests, storage, family) {
+				t.Fatalf("the Network CIDR rule does not refuse %s beside %s", guests.Identity(), storage.Identity())
+			}
+			for _, sited := range []api.Object{guests, storage} {
+				if issues := Validate(sited, api.NewCatalog([]api.Object{a, b, host, guests, storage})); len(issues) != 0 {
+					t.Fatalf("%s repeats the Network CIDR rule's refusal: %v", sited.Identity(), issues)
+				}
+			}
+			guests = guests.WithSpec(guests.Spec().With("sites", list(api.StringValue("east"))))
+			storage = storage.WithSpec(storage.Spec().With("sites", list(api.StringValue("west"))))
 			catalog := api.NewCatalog([]api.Object{a, b, host, guests, storage})
 			for _, pair := range []struct {
 				own, peer         api.Object
@@ -199,24 +216,29 @@ func TestOneHostNeverOverlapsTwoManagedPrefixes(t *testing.T) {
 func TestOneHostHoldsAtMostTwentyManagedNetworks(t *testing.T) {
 	const field = "$.spec.libvirt.providerRef"
 	host := topologyHost("host")
-	validate := func(count int) []api.Issue {
+	validate := func(count int) map[string][]api.Issue {
 		objects := []api.Object{host, topologyProvider("a", "host", "8000", topologyProfile()), topologyProvider("b", "host", "8001", topologyProfile())}
 		for index := range count {
 			objects = append(objects, managedNetwork(fmt.Sprintf("net-%02d", index), []string{"a", "b"}[index%2], fmt.Sprintf("br-%02d", index), fmt.Sprintf("10.%d.0.1/24", index)))
 		}
 		catalog := api.NewCatalog(objects)
-		first, _ := catalog.Find(api.Network, "net-00")
-		return issuesAt(Validate(first, catalog), field)
+		refused := map[string][]api.Issue{}
+		for _, network := range catalog.OfKind(api.Network) {
+			if issues := issuesAt(Validate(network, catalog), field); len(issues) != 0 {
+				refused[network.Name()] = issues
+			}
+		}
+		return refused
 	}
 	if refused := validate(MaxManagedNetworks); len(refused) != 0 {
 		t.Fatalf("%d managed Networks were refused: %v", MaxManagedNetworks, refused)
 	}
-	refused := validate(MaxManagedNetworks + 1)
+	refused := validate(MaxManagedNetworks + 2)
 	want := api.Issue{Code: "api.value", Field: field,
-		Message:     "at most 20 managed Networks name providers on one host, because a provider's host reservation claims three keys for each beside the two of its media pool, within the 64 keys one reservation holds; 21 name providers on host Machine/host, Network/net-00 among them",
-		Remediation: "declare at most 20 managed Networks on host Machine/host, or make the others provided networks on existing bridges"}
-	if len(refused) != 1 || refused[0] != want {
-		t.Fatalf("%d managed Networks: %v", MaxManagedNetworks+1, refused)
+		Message:     "one libvirt host defines at most 20 managed Networks across its providers, and 22 name providers on host Machine/host; over the bound: Network/net-20, Network/net-21",
+		Remediation: "make Network/net-20, Network/net-21 provided networks on existing bridges, or name a provider on another host in their spec.libvirt.providerRef"}
+	if len(refused) != 1 || len(refused["net-20"]) != 1 || refused["net-20"][0] != want {
+		t.Fatalf("%d managed Networks: %v", MaxManagedNetworks+2, refused)
 	}
 }
 

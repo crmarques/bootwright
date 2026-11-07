@@ -548,7 +548,7 @@ func validateManagedSegmentAddress(c api.Catalog, o api.Object, address netip.Pr
 	}
 	switch end := reservedEnd(managed, address.Addr()); {
 	case !managed.Masked().Contains(address.Addr()):
-		return refuse("install address must lie inside managed Network/" + reference)
+		return refuse("install address must lie inside the realized prefix " + managed.Masked().String() + " of managed Network/" + reference)
 	case address.Addr() == managed.Addr():
 		return refuse("the install address is the host address of managed Network/" + reference + " on " + provider.Identity())
 	case end != "":
@@ -820,10 +820,15 @@ func validateVirtualNICs(c api.Catalog, o, provider api.Object, variant string) 
 		}
 		return append(issues, invariant(path, o.Identity()+" cannot attach its vNICs: "+provider.Identity()+" declares no segment", remedy))
 	}
+	offered, named := "in spec.segments", "a spec.segments entry of "+provider.Identity()
+	if variant == substrate.ArmLibvirt {
+		offered = "across spec.segments and the managed Networks whose spec.libvirt.providerRef names it"
+		named += " or a managed Network whose spec.libvirt.providerRef names " + provider.Name()
+	}
 	for _, nic := range nics {
 		if substrate.NICSegment(c, provider, o, nic) == "" && !c.UndecodableOfKind(api.Network) {
-			issues = appendIssues(issues, invariant(path, fmt.Sprintf("NIC %s of %s selects no segment, and %s declares %d segments, not exactly one that every NIC defaults to", nic, o.Identity(), provider.Identity(), segments.Len()),
-				"add a "+path[2:]+" entry with nicRef "+nic+" and a segmentRef naming a segment of "+provider.Identity()+" on "+o.Identity()))
+			issues = appendIssues(issues, invariant(path, fmt.Sprintf("NIC %s of %s selects no segment, and %s offers %d segments %s, not exactly one that every NIC defaults to", nic, o.Identity(), provider.Identity(), segments.Len(), offered),
+				"add a "+path[2:]+" entry with nicRef "+nic+" and a segmentRef naming "+named+" on "+o.Identity()))
 		}
 	}
 	return issues

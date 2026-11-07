@@ -38,6 +38,13 @@ func validateNetworkArm(o api.Object, c api.Catalog) []api.Issue {
 			Message:     "the libvirt arm of " + o.Identity() + " names " + provider.Identity() + ", which is not a libvirt provider, so no libvirt host defines the network",
 			Remediation: "set spec.libvirt.providerRef on " + o.Identity() + " to an InfraProvider with a spec.libvirt arm"})
 	}
+	for _, family := range []string{"ipv4", "ipv6"} {
+		if prefix, ok := network.Prefix(o, family); ok && IsManagedNetwork(o) && prefix.IsSingleIP() {
+			issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.spec." + family + ".cidr",
+				Message:     fmt.Sprintf("managed %s spans the single address %s, which the host's own address on its bridge takes, so no guest has an address on it", o.Identity(), prefix),
+				Remediation: fmt.Sprintf("widen spec.%s.cidr of %s to a subnet that holds guest addresses beside the host's", family, o.Identity())})
+		}
+	}
 	if !arm.Has("hostAddress") {
 		issues = add(issues, api.Issue{Code: "api.invariant", Field: path + ".hostAddress",
 			Message:     o.Identity() + " declares no gateway, so the libvirt host's own address on the bridge has nothing to default to",
@@ -221,16 +228,22 @@ func validateSharedHostNetworks(o api.Object, c api.Catalog) []api.Issue {
 				Message:     fmt.Sprintf("bridge %s of %s is also named by %s on host Machine/%s; a bridge a managed Network defines belongs to that Network alone", own.bridge, own.label(), peer.label(), host),
 				Remediation: fmt.Sprintf("give %s or %s its own bridge", o.Identity(), peer.label())})
 		}
-		if peer.owner.Kind() == api.Network && own.prefix.IsValid() && peer.prefix.IsValid() && own.prefix.Overlaps(peer.prefix) {
+		if peer.owner.Kind() == api.Network && own.prefix.IsValid() && peer.prefix.IsValid() && own.prefix.Overlaps(peer.prefix) && !network.Overlapping(o, peer.owner, network.Family(own.prefix.Addr())) {
 			issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.hostAddress",
 				Message:     fmt.Sprintf("managed prefix %s of %s overlaps managed prefix %s of %s on host Machine/%s, and the host routes each managed prefix to its own bridge", own.prefix, own.label(), peer.prefix, peer.label(), host),
 				Remediation: fmt.Sprintf("give %s or %s a subnet no other managed Network on host Machine/%s overlaps", o.Identity(), peer.owner.Identity(), host)})
 		}
 	}
-	if len(managed) > MaxManagedNetworks {
+	names := make([]string, 0, len(managed))
+	for _, segment := range managed {
+		names = append(names, segment.owner.Identity())
+	}
+	slices.Sort(names)
+	if len(names) > MaxManagedNetworks && names[MaxManagedNetworks] == o.Identity() {
+		over := names[MaxManagedNetworks:]
 		issues = add(issues, api.Issue{Code: "api.value", Field: "$.spec.libvirt.providerRef",
-			Message:     fmt.Sprintf("at most %d managed Networks name providers on one host, because a provider's host reservation claims three keys for each beside the two of its media pool, within the 64 keys one reservation holds; %d name providers on host Machine/%s, %s among them", MaxManagedNetworks, len(managed), host, o.Identity()),
-			Remediation: fmt.Sprintf("declare at most %d managed Networks on host Machine/%s, or make the others provided networks on existing bridges", MaxManagedNetworks, host)})
+			Message:     fmt.Sprintf("one libvirt host defines at most %d managed Networks across its providers, and %d name providers on host Machine/%s; over the bound: %s", MaxManagedNetworks, len(managed), host, strings.Join(over, ", ")),
+			Remediation: fmt.Sprintf("make %s provided networks on existing bridges, or name a provider on another host in their spec.libvirt.providerRef", strings.Join(over, ", "))})
 	}
 	return issues
 }

@@ -475,3 +475,73 @@ func TestADoneObjectTheAppliedRevisionDoesNotDeclareReadsUnknown(t *testing.T) {
 		t.Fatalf("alpha reads %+v", alpha.Real)
 	}
 }
+
+type carryingCapability struct {
+	*testCapability
+}
+
+func (c carryingCapability) Claimed(catalog api.Catalog) []string {
+	return append(c.testCapability.Claimed(catalog), "Network/guests")
+}
+
+func (carryingCapability) Carries(api.Catalog) map[string][]string {
+	return map[string][]string{"ArtifactServer/bravo": {"Network/guests"}}
+}
+
+func carriedNetwork(mtu string) api.Object {
+	return api.NewObject(api.Network, "guests", api.Value{}, api.MapValue(
+		api.FieldValue{Name: "provided", Value: api.BoolValue(false)}, api.FieldValue{Name: "mtu", Value: api.IntegerValue(mtu)}))
+}
+
+func newCarryingHarness(t *testing.T) diffFixture {
+	t.Helper()
+	f := newDiffHarness(t, "alpha", "bravo")
+	f.capability.definitions[1].Dependencies = []string{"alpha"}
+	f.compiler.states[digestOf(f.workspace.inputs)] = diffState(append(servers("v1", "alpha", "bravo"), carriedNetwork("1500"))...)
+	f.service.capabilities = testResolver{capability: carryingCapability{f.capability}}
+	return f
+}
+
+// A managed Network has no block of its own: the host block of its provider
+// realizes it, so its row reads that block's realization, plan change and
+// blocks rather than the applied revision's declaration alone.
+func TestACarriedObjectReadsTheBlocksThatRealizeIt(t *testing.T) {
+	for name, failing := range map[string]string{"pending": "alpha", "failed": "bravo", "done": ""} {
+		t.Run(name, func(t *testing.T) {
+			f := newCarryingHarness(t)
+			if failing != "" {
+				f.capability.errorFor = map[string]error{failing: errors.New("the block failed")}
+			}
+			operation, err := f.service.Apply(context.Background(), ApplyRequest{ContextName: "lab", SkipConfirmation: true})
+			if (err != nil) != (failing != "") || operation == nil {
+				t.Fatalf("apply = %+v (%v)", operation, err)
+			}
+			guests := objectOf(t, f.diff(t), api.Network, "guests")
+			want := map[string]RealSide{
+				"pending": {Source: "applied", State: "absent", Reason: "apply " + operation.Receipt.Operation + " has not realized it"},
+				"failed":  {Source: "applied", State: "unknown", Reason: "its blocks read failed: bravo", Remedy: reviewStatus("lab")},
+			}[name]
+			if guests.Realization != RealizationStatus(name) || !slices.Equal(guests.Blocks, []string{"bravo"}) {
+				t.Fatalf("guests = %+v", guests)
+			}
+			if name == "done" {
+				if guests.Real.State != "present" || !sameObject(guests.Real.Object, guests.Desired) {
+					t.Fatalf("guests reads %+v", guests.Real)
+				}
+				return
+			}
+			if guests.Real.State != want.State || guests.Real.Reason != want.Reason || guests.Real.Remedy != want.Remedy || guests.Real.Object != nil {
+				t.Fatalf("guests reads %+v, want %+v", guests.Real, want)
+			}
+		})
+	}
+	f := newCarryingHarness(t)
+	f.apply(t)
+	changed := f.capability.definitions[1]
+	changed.Request = json.RawMessage(`{"mtu":9000,"name":"bravo"}`)
+	f.capability.definitions = []reconciliation.BlockDefinition{f.capability.definitions[0], changed}
+	f.publish("rev-44444444444444444444444444444444", "kind: Environment\nrevised: true\n", diffState(append(servers("v1", "alpha", "bravo"), carriedNetwork("9000"))...))
+	if guests := objectOf(t, f.diff(t), api.Network, "guests"); guests.Plan != "changed" || !slices.Equal(guests.Blocks, []string{"bravo"}) {
+		t.Fatalf("a changed carried Network reads %+v", guests)
+	}
+}

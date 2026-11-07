@@ -84,8 +84,8 @@ func TestEveryNICDefaultsToItsProvidersSoleSegment(t *testing.T) {
 	}
 	machine := guest(m("configRef", "net", "addresses", addresses))
 	requireOneIssue(t, admission(machine, twoSegmentLab(list(m("name", "enp1s0", "type", "ethernet")))...), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.nics",
-		Message:     "NIC enp1s0 of Machine/guest selects no segment, and InfraProvider/lab declares 2 segments, not exactly one that every NIC defaults to",
-		Remediation: "add a spec.substrate.libvirt.nics entry with nicRef enp1s0 and a segmentRef naming a segment of InfraProvider/lab on Machine/guest"})
+		Message:     "NIC enp1s0 of Machine/guest selects no segment, and InfraProvider/lab offers 2 segments across spec.segments and the managed Networks whose spec.libvirt.providerRef names it, not exactly one that every NIC defaults to",
+		Remediation: "add a spec.substrate.libvirt.nics entry with nicRef enp1s0 and a segmentRef naming a spec.segments entry of InfraProvider/lab or a managed Network whose spec.libvirt.providerRef names lab on Machine/guest"})
 	selected := machine.WithSpec(machine.Spec().WithPath(list(m("nicRef", "enp1s0", "segmentRef", "net")), "substrate", "libvirt", "nics"))
 	if issues := admission(selected, twoSegmentLab(list(m("name", "enp1s0", "type", "ethernet")))...); len(issues) != 0 {
 		t.Fatalf("a NIC naming one of two segments was refused: %v", issues)

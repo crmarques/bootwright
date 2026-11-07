@@ -29,11 +29,6 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 				"an emulated BMC listens on one unicast address its Machines' BMC endpoints can name, and this provider's bindAddress is not one",
 				"set spec.libvirt.bmcEmulation.bindAddress on "+provider.Identity()+" to one unicast host address"))
 		}
-		if len(substrate.ManagedNetworksOf(catalog, provider)) > substrate.MaxManagedNetworks {
-			found = append(found, lifecycle.RefusalOf(provider,
-				fmt.Sprintf("a libvirt provider's host reservation claims three keys for each managed Network beside the two of its media pool and its firewall readiness unit, within the 64 keys one reservation holds, so at most %d managed Networks name it", substrate.MaxManagedNetworks),
-				fmt.Sprintf("name %s in spec.libvirt.providerRef of at most %d managed Networks, or make the others provided networks on existing bridges", provider.Identity(), substrate.MaxManagedNetworks)))
-		}
 		if len(substrate.ExternalBridges(provider)) > substrate.MaxExternalBridges {
 			found = append(found, lifecycle.RefusalOf(provider,
 				fmt.Sprintf("a libvirt provider's bridge-use reservation claims one shared key for each bridge its existing-bridge segments use, within the 64 keys one reservation holds, so they use at most %d bridges", substrate.MaxExternalBridges),

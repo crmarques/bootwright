@@ -20,10 +20,6 @@ const ImagePrefix = "/var/lib/libvirt/images/bootwright"
 // MaxDataDisks is how many data disks a libvirt domain presents after its root.
 const MaxDataDisks = 7
 
-// MaxManagedNetworks bounds the managed Networks on one libvirt host. A
-// provider's host reservation claims a path and a pool key and, for each
-// managed Network, a bridge, a network and a prefix key, so 20 keeps it within
-// the 64 keys one reservation holds.
 const MaxManagedNetworks = 20
 
 const MaxExternalBridges = 64

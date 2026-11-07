@@ -95,9 +95,12 @@ guest VLAN tags.
 Between the managed Networks naming providers of one host, each refused
 `api.invariant` at the Network, naming both Networks and their providers: no
 other managed Network or provider segment on that host names its `bridge`,
-and no other managed Network's prefix overlaps its own, IPv4 or IPv6. At most
-20 managed Networks name the providers of one host (`api.value`, the host
-reservation's bound).
+and no other managed Network's prefix overlaps its own, IPv4 or IPv6, unless
+[one 802.1Q domain per site](#one-8021q-domain-per-site) already refuses the
+pair. One host defines at most 20 managed Networks, refused once (`api.value`)
+at the first by name past the bound, naming each Network over it. A managed
+Network's `cidr` is shorter than /32 or /128, so guests have an address beside
+the host's.
 
 ## Cross-kind checks
 

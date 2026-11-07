@@ -16,6 +16,16 @@ func (HostCapability) Claimed(catalog api.Catalog) []string {
 	return claimed
 }
 
+func (HostCapability) Carries(catalog api.Catalog) map[string][]string {
+	carried := map[string][]string{}
+	for _, provider := range substrate.ProvidersOn(catalog, substrate.ArmLibvirt) {
+		for _, managed := range substrate.ManagedNetworksOf(catalog, provider) {
+			carried[provider.Identity()] = append(carried[provider.Identity()], managed.Identity())
+		}
+	}
+	return carried
+}
+
 func (MachineCapability) Claimed(catalog api.Catalog) []string {
 	return substrate.HostedOn(catalog, substrate.ArmLibvirt)
 }

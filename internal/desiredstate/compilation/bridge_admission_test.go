@@ -56,3 +56,23 @@ func TestALibvirtSegmentArmCarriesOnlyItsBridge(t *testing.T) {
 		}
 	}
 }
+
+// A managed Network is a segment of its provider under its own name, so a
+// segment of that name makes a Machine's segmentRef ambiguous, and the refusal
+// names the Network beside the segment rather than two segments.
+func TestASegmentRefSharedByASegmentAndAManagedNetworkNamesBoth(t *testing.T) {
+	const field = "$.spec.substrate.libvirt.nics[0].segmentRef"
+	network := "\n---\napiVersion: bootwright.io/v1alpha1\nkind: Network\nmetadata: {name: guests}\nspec:\n  provided: false\n  ipv4: {cidr: 198.51.100.0/24, gateway: 198.51.100.1}\n  libvirt: {providerRef: lab-libvirt, bridge: virbr-guests}\n"
+	machine := "\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: guest}\nspec:\n  os: {provided: true}\n  hardware: {nics: [{name: enp1s0}]}\n  substrate: {providerRef: lab-libvirt, libvirt: {nics: [{nicRef: enp1s0, segmentRef: guests}]}}\n"
+	state, report, err := regressionCompiler().Compile(context.Background(), sources(environmentYAML+fmt.Sprintf(libvirtProviderYAML, "virbr-lab")+network+machine))
+	var refused []diagnostics.Diagnostic
+	for _, d := range requireCompilationFailure(t, state, report, err) {
+		if d.Field == field {
+			refused = append(refused, d)
+		}
+	}
+	if len(refused) != 1 || refused[0].Message != "the named guests is ambiguous: it names an entry of spec.segments on InfraProvider/lab-libvirt and Network/guests, whose spec.libvirt.providerRef names lab-libvirt" ||
+		refused[0].Remediation != "rename the entry of spec.segments on InfraProvider/lab-libvirt named guests, or Network/guests, with every reference to it" {
+		t.Fatalf("refusals at %s: %#v", field, refused)
+	}
+}
