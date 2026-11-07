@@ -12390,3 +12390,29 @@ occurred.
 
 The gitignored inputs declare their networks with X323, when a Network becomes
 required and managed attachments become managed Networks.
+
+### X325 — No backward compatibility and versions at 1
+
+**Item:** B1210, completed in-tree (2026-11-06), under [D241](backlog.md#d241).
+Code, tests and spec text that served only an earlier build, its stored state
+or an earlier input shape are gone: the retired-field, value and kind tables
+and their tailored refusals, the Secret `file` source, the legacy Secret
+fingerprint, the registry and setup cut-over refusals, the retired operation
+index, absent-member fallbacks in attempt and resolution records, re-checks of
+frozen installation requests against later rules, the legacy scratch prefix
+and dead `default()` fallbacks in the roles. Every internal store format,
+request, evidence, persisted automation format, digest pin and implementation
+identity version restarts at 1, and the [pre-1.0 policy](../project.md#design-priorities-and-non-goals)
+states the forward rule and the breaking-change announcement that
+`scripts/check-commits` enforces. The keyring keeps its oldest-reader guard so a
+later build reads today's keyrings.
+
+**Commits:** 696cf99e1 (policy, D241 and the commit rule), 3f20d577a (operator
+docs), 71c336d5e (lifecycle records and the scratch prefix), ca574e359 (retired
+API tables), 87cb83d99 (capability packages and roles), 8dc0d0afc (stores and
+Secrets), ce02e5251 (the version reset), with this record; the input charts
+restart at 0.1.0 in the template-input repository (ac5d177, dd15c2f). An
+independent review found the keyring reader guard made exact and the Secret
+metadata change unannounced, both fixed before integration. Gates: `make check`
+and `make race` passed on the rebased branch, plus `-race` over
+`internal/workspace` and `internal/secrets`; no live run or push occurred.
