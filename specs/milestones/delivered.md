@@ -12371,3 +12371,30 @@ same findings before and after. No live run or push occurred.
 On libvirt and KubeVirt an authored NMState `mac-address` is still admitted
 and overridden by the realized MAC, as before; X323 makes the vNIC MAC a
 hardware fact and refuses it there (B1203).
+
+### X322 — The Network kind
+
+**Item:** B1202, completed in-tree (2026-11-06), under [D240](backlog.md#d240)
+clauses (1), (7), (9), (12) and (14). The [`Network` kind](../api/networks.md)
+holds one L2 network: at most one VLAN, an IPv4 and an IPv6 subnet with
+optional gateways, an MTU capacity and a site scope, with a `provided` lifecycle
+beside one realization arm, `libvirt`. Provided networks are named and checked:
+once a graph declares a Network, every interface assignment lies in exactly
+one Network of its family and site with its prefix, a tagged interface stack
+carries the Network's VLAN, the install route uses the Network's gateway,
+OpenShift cluster and service networks overlap no Network, and Ceph public and
+cluster CIDRs equal Network CIDRs. `provided: false` is admitted but
+unrealized until X323 (B1204). Every tracked example and e2e case declares its
+networks, and the input charts render theirs.
+
+**Commits:** 351ee097d (the kind), 9c3e971ed (the cross-checks), 59ae1788b (the
+independent review's findings: a managed Network retains its provider in the
+selection, the RFC 2526 rule stops at /120, IPv6 networks keep a 1280 MTU
+floor, the Network bounded context), 8a3b2e8a4 (examples and e2e templates),
+with this record; the input charts follow in the template-input repository.
+The independent review found one blocker, fixed in 59ae1788b. Gates are in the
+delivery commits' bodies and the integration commit; no live run or push
+occurred.
+
+The gitignored inputs declare their networks with X323, when a Network becomes
+required and managed attachments become managed Networks.
