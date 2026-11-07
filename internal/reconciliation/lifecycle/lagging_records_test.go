@@ -20,10 +20,9 @@ import (
 
 // leaveFailedWithEveryBlockDone rewrites the context's completed apply as
 // failed, under a failed apply's evidence, beside blocks that are all done.
-// That is what a removal an executable before 4513e123 ran leaves once it
-// stopped after resolving the running block of a failed retry start: that
-// executable resolved the block before it recorded the apply in the state its
-// blocks gave it.
+// That is what a removal leaves once it stopped after resolving the running
+// block of a failed retry start, before the apply took the state its blocks
+// gave it.
 func leaveFailedWithEveryBlockDone(t *testing.T, h *harness) string {
 	t.Helper()
 	applied := currentOperation(t, h)

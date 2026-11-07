@@ -475,10 +475,7 @@ immutable frozen plan: every block with its
 description, dependencies, impacts, presentation groups, resolved
 implementation identity, content digest and canonical secret-free request.
 A block's dependencies, impacts, consumed authorizations and groups are always
-lists, `[]` when empty and never `null`; a plan an earlier build froze with
-`null` there is not a plan this executable could have produced, and it refuses
-with the remedy to destroy the context with the build that registered the
-operation. A block may carry `prerequisites`, an optional member: predecessor
+lists, `[]` when empty and never `null`. A block may carry `prerequisites`, an optional member: predecessor
 blocks it waits for, which scheduling never counts and the plan digest covers
 only when present; one beside a record naming no `predecessor` refuses
 `lifecycle.state`.
@@ -494,9 +491,8 @@ removal's reading first. Every attempt and
 resolution also names the build it ran under, `build`: the automation digest
 the executable embeds, which the run's staged extraction holds, the block's content
 digest, the executable's version and commit, and `modified` when its own stamp
-says so. It is an optional member, so a record an earlier build wrote has
-none, and a start that adopts an interrupted record names the build that
-adopts it. These records never
+says so. A start that adopts an interrupted record names the build that adopts
+it. These records never
 restate the request: the request an attempt or resolution acted on is its
 block's in `plan.json`, which the operation's plan digest names and nothing
 replaces. A running attempt may additionally publish one bounded `preparation`
@@ -519,14 +515,14 @@ neither moves the attempt's outcome or its block's state.
 [The output contract](cli/output.md#private-operation-logs) owns the `logs/`
 tree.
 
-`replaces`, `predecessor`, `prerequisites`, `failure`, `warnings`, `build` and `removal` are optional members: each was added without
-moving its record's version, because a record that omits one means what a
-record written before it meant. A member whose omission would mean anything
-else moves its record's version. An optional member is compatible one way only:
-a build from before it decodes records closed and refuses one that carries it
-as malformed or unsupported, so once a build that writes `build` has worked an
-operation, no earlier build can continue or remove it. Such a refusal of an
-attempt or resolution record names the build its own `build` member names,
+`replaces`, `predecessor`, `prerequisites`, `failure`, `warnings` and `removal`
+are optional members: adding one does not move its record's version, because a
+record that omits it means no such member. A member whose omission would mean
+anything else is required and moves its record's version. An optional member
+is compatible one way only: a build that does not know it decodes records
+closed and refuses one that carries it as malformed or unsupported, so that
+build cannot continue or remove an operation a build that writes the member has
+worked. Such a refusal of an attempt or resolution record names the build its own `build` member names,
 when exactly one member is spelled `build` in any case and it holds a valid
 build in its canonical encoding, with the remedy to continue or remove the
 operation with that build; when that build is the unmodified running
@@ -546,11 +542,8 @@ record. Every record and
 frozen request is encoded, read closed and proved canonical by one
 canonical-JSON implementation; each format keeps its own byte bound,
 pre-decode bounds, trailing line feed and failure words. An operation record
-is version 2, and a registration writes no other; any other version, the
-version 1 record a build before the execution closure was frozen wrote among
-them, refuses `lifecycle.state` as unsupported. A store that holds one is a
-version 5 store, which [refuses first](contexts.md#storage-locking-and-publication)
-with the fresh-install remedy. Every read of a frozen plan holds it to its
+is version 2, and a registration writes no other; any other version refuses
+`lifecycle.state` as unsupported. Every read of a frozen plan holds it to its
 operation's record, as the registration did: a
 `plan.json` whose digest or verb is not the one that record carries refuses
 `lifecycle.state`, however valid a plan it is, as does one beside no operation
@@ -1388,10 +1381,9 @@ also names the Python and
 `ansible-core` releases the operation needs and the ones this build's runtime holds. Each
 remedy restores what the operation registered under, and where a fresh removal
 may [supersede](#continuation-and-removal) the operation, it also offers that
-removal. Once a build that writes `build` has worked the operation, the build
-it registered under cannot read its records if it predates that member, so the
-way out is then the superseding removal under the build in hand, or the
-[deletion exit](#lifecycle-unit) where none may take its place. A fresh
+removal. Where the build it registered under cannot read the records a later
+build wrote, the way out is the superseding removal under the build in hand, or
+the [deletion exit](#lifecycle-unit) where none may take its place. A fresh
 verb always runs under the build and runtime in hand.
 
 A removal keeps the content digest its apply froze and compares none, so every

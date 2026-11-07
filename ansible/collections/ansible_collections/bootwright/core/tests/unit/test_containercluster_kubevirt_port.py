@@ -79,7 +79,7 @@ def scope(pushed=True, pinned=True):
     playbook = LOADER.load_from_file(str(ROLES.parent / "playbooks/containercluster/install_apply.yml"), trusted_as_template=True)
     variables.update(next(play for play in playbook if play["name"] == "Boot node rounds")["vars"])
     variables.update({"bootwright_cluster_install_material": material, "bootwright_cluster_install_request": request,
-                      "bootwright_node_index": 1, "bootwright_run_scratch": "/var/tmp/bootwright-run-scratch-1-1",
+                      "bootwright_node_index": 1, "bootwright_run_scratch": "/var/tmp/bootwright-scratch-1-1",
                       "bootwright_controller_host": "controller", "hostvars": {"controller": {}}})
     variables.update({"containercluster_install_agent_node": node, "containercluster_install_agent_index": 1})
     return variables
@@ -145,7 +145,7 @@ def test_a_fetching_node_is_handed_no_pin_and_no_pushed_input():
     variables = scope(pushed=False)
     insert = port("media_insert", variables)
     assert "image_path" not in insert and "virtctl" not in insert and "pinned_uuid_base64" not in insert
-    assert insert["image_url_file"] == "/var/tmp/bootwright-run-scratch-1-1/cluster-insert-1"
+    assert insert["image_url_file"] == "/var/tmp/bootwright-scratch-1-1/cluster-insert-1"
     valid("media_insert", insert, "substrate_libvirt_machine")
     assert port("state_read", variables) == {
         "endpoint": "http://192.0.2.1:8000/redfish/v1/Systems/1", "user": MATERIAL + "bmc-user",

@@ -60,7 +60,7 @@ class Host:
         self.image = root / "public" / "os" / machine / "install.iso"
         self.parent = root / "var" / "lib" / "bootwright-install"
         self.work = self.parent / "lab" / machine / "work"
-        self.scratch_root = root / "var" / "lib" / "bootwright-staging" / "runs" / ("bootwright-run-scratch-%d-1" % job)
+        self.scratch_root = root / "var" / "lib" / "bootwright-staging" / "runs" / ("bootwright-scratch-%d-1" % job)
         self.scratch_root.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.scratch_root.parent.chmod(0o700)
         self.scratch = self.scratch_root / "managedos-install"

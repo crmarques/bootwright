@@ -105,7 +105,7 @@ def scope(registering=True, **extra):
             "repositories": {"disable": ["*"], "enable": ["rhel-9-for-x86_64-baseos-rpms"]},
         }
     values.update({
-        "bootwright_run_scratch": "/var/tmp/bootwright-run-scratch-1-1",
+        "bootwright_run_scratch": "/var/tmp/bootwright-scratch-1-1",
         "bootwright_os_install_request": request,
         "bootwright_os_install_digest": DIGEST,
         "bootwright_os_install_material": {"fleetIdentity": "/run/material/fleet-id",
@@ -382,7 +382,7 @@ def test_destroy_session_uses_the_reduced_policy_config():
     assert not any(option in arguments for option in REGISTER_ONLY)
     assert not any(word in repr(task) for word in MATERIAL)
     scratch = render(trust_as_template("{{ managedos_install_anaconda_scratch }}"))
-    assert scratch.startswith("/var/tmp/bootwright-run-scratch-1-1/")
+    assert scratch.startswith("/var/tmp/bootwright-scratch-1-1/")
     assert render(arguments["ssh_config"]) == scratch + "/ssh_config"
     assert render(arguments["known_hosts"]) == scratch + "/known_hosts"
     assert render(arguments["request"]) == DIGEST and arguments["timeout"] == 330

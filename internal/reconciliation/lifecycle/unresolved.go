@@ -142,18 +142,13 @@ func (s Service) unresolvedOf(ctx context.Context, store OperationStore, operati
 		}
 		return Unresolved{Reason: "its observation could not run: " + failed.Message, Remedy: remedy}, nil
 	}
-	// A removal's record is read for the removal first, as its refusal read
-	// it; a record without the member as earlier builds read it.
+	// A removal's record is read for the removal first, as its refusal read it.
 	if resolution.Removal {
 		if explained := s.explainIn(ctx, store, operation, reconciliation.Destroy, block, resolution.Evidence); explained != unexplained {
 			return explained, nil
 		}
 	}
-	explained := s.explainIn(ctx, store, operation, operation.Verb, block, resolution.Evidence)
-	if explained == unexplained && !resolution.Removal && operation.Verb == reconciliation.Apply {
-		explained = s.explainIn(ctx, store, operation, reconciliation.Destroy, block, resolution.Evidence)
-	}
-	return explained, nil
+	return s.explainIn(ctx, store, operation, operation.Verb, block, resolution.Evidence), nil
 }
 
 // observationFailure is what a resolution records of an observation that could

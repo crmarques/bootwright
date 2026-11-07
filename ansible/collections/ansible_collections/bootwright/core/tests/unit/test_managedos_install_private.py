@@ -84,7 +84,7 @@ def scope(private=True, **extra):
     request.update({"private": dict(PRIVATE), "target": {"channel": "delivered-key", "physical": True}} if private
                    else {"image": dict(PUBLIC), "target": {"channel": "guest-agent", "physical": False}})
     values.update({
-        "bootwright_run_scratch": "/var/tmp/bootwright-run-scratch-1-1",
+        "bootwright_run_scratch": "/var/tmp/bootwright-scratch-1-1",
         "bootwright_os_install_request": request,
         "bootwright_os_install_material": {"artifactCertificate": "/run/material/artifact-ca"},
         "managedos_install_anaconda_token": {"stdout": TOKEN + "\n"},
@@ -160,7 +160,7 @@ def test_an_installer_image_is_readable_before_publication_under_a_restrictive_u
         destination = publication / "install.iso"
         request["image"]["path"] = str(destination)
     destination.parent.mkdir(parents=True)
-    variables = {"private": private, "bootwright_run_scratch": "/var/tmp/bootwright-run-scratch-1-1",
+    variables = {"private": private, "bootwright_run_scratch": "/var/tmp/bootwright-scratch-1-1",
                  "bootwright_os_install_request": request,
                  "managedos_install_anaconda_work": str(work)}
 
@@ -206,7 +206,7 @@ def test_every_task_naming_the_private_url_or_token_is_hidden_and_stays_private(
             assert render(task.get("no_log", False)) in (True, "True", "true"), "%s: %r is not hidden" % (name, task.get("name"))
             for target in write_targets(task):
                 written = render(target, item={"name": "identity", "source": "/run/material/host-key"})
-                if written == "/var/tmp/bootwright-run-scratch-1-1/managedos-media-url":
+                if written == "/var/tmp/bootwright-scratch-1-1/managedos-media-url":
                     assert task[COPY]["mode"] == "0600" and task["diff"] is False
                     assert task["delegate_to"] == "localhost"
                     continue
@@ -326,7 +326,7 @@ def test_the_insert_asks_for_the_verified_fetch_read_back_exactly_when_delivery_
     assert render(insert["vars"]["bootwright_machine_port"], bootwright_os_install_request=virtual,
                   managedos_install_anaconda_port_access={},
                   managedos_install_anaconda_media_trust={"trust": "defaultCA"})["private"] is False
-    assert arguments["image_url_file"] == "/var/tmp/bootwright-run-scratch-1-1/managedos-media-url"
+    assert arguments["image_url_file"] == "/var/tmp/bootwright-scratch-1-1/managedos-media-url"
 
 
 def test_observation_evidence_redacts_a_token_in_the_media_the_controller_reports():

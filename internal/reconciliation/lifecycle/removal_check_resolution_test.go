@@ -187,58 +187,6 @@ func TestAResolutionIsExplainedForTheVerbThatRecordedIt(t *testing.T) {
 	}
 }
 
-type destroyOnlyReader struct{ *testCapability }
-
-func (destroyOnlyReader) Unresolved(verb reconciliation.Verb, block reconciliation.Block, _ json.RawMessage) (Unresolved, bool) {
-	if verb != reconciliation.Destroy {
-		return Unresolved{}, false
-	}
-	return Unresolved{Reason: "the destroy reading cannot place " + block.ID, Remedy: "restore " + block.ID + " for destroy"}, true
-}
-
-// memberlessResolutions records every resolution without the removal member,
-// as a build from before it did.
-type memberlessResolutions struct{ OperationStore }
-
-func (s memberlessResolutions) StartResolution(ctx context.Context, id, block string, attempt int, build operationstore.Build, _ bool) (int, error) {
-	return s.OperationStore.StartResolution(ctx, id, block, attempt, build, false)
-}
-
-// A removal's resolution recorded without the removal member, as an earlier
-// build wrote it, is read in status as that build read it: for the apply, and
-// for the removal only when the apply reading explains nothing.
-func TestAResolutionWithoutTheRemovalMemberKeepsTheEarlierReading(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		reader func(*testCapability) Capability
-		want   Unresolved
-	}{
-		{"read for both verbs", func(c *testCapability) Capability { return bothVerbsReader{c} },
-			Unresolved{Reason: "the apply reading cannot place alpha", Remedy: "restore alpha for apply"}},
-		{"read for the removal alone", func(c *testCapability) Capability { return destroyOnlyReader{c} },
-			Unresolved{Reason: "the destroy reading cannot place alpha", Remedy: "restore alpha for destroy"}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			h := newHarness(t, "alpha")
-			h.service.capabilities = testResolver{capability: tc.reader(h.capability)}
-			unknownApply(t, h)
-			base := h.service.options.Operations
-			h.service.options.Operations = func(area operationstore.Area) OperationStore {
-				return memberlessResolutions{base(area)}
-			}
-			h.capability.observations = []Observation{{Effect: reconciliation.EffectUnknown}, {Effect: reconciliation.EffectUnknown}}
-			if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
-				t.Fatal("a removal that could not place its block reported success")
-			}
-			status, err := h.service.Status(context.Background(), StatusRequest{ContextName: testContextName})
-			if err != nil || status.Lifecycle == nil || len(status.Lifecycle.Blocks) != 1 || status.Lifecycle.Blocks[0].Unresolved == nil ||
-				*status.Lifecycle.Blocks[0].Unresolved != tc.want {
-				t.Fatalf("status = %+v (%v), want the block explained as %+v", status.Lifecycle, err, tc.want)
-			}
-		})
-	}
-}
-
 // A fresh destroy over an unknown apply whose own observation proves the
 // block completed resolves it done (D123), never asking the removal's check,
 // and the removal then takes the block back as any completed apply's.

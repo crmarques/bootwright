@@ -57,12 +57,12 @@ def test_observation_never_creates_or_removes_durable_install_work():
     paths = []
     for context, machine, job in [("lab", "first", "1"), ("lab", "second", "2"), ("other", "first", "3")]:
         templar = Templar(loader=LOADER, variables=dict(
-            defaults, bootwright_run_scratch="/var/tmp/bootwright-run-scratch-%s-1" % job,
+            defaults, bootwright_run_scratch="/var/tmp/bootwright-scratch-%s-1" % job,
             bootwright_os_install_request={"identity": {"context": context, "object": machine}}))
         work = templar.template(trust_as_template("{{ managedos_install_anaconda_work }}"))
         scratch = templar.template(trust_as_template("{{ managedos_install_anaconda_scratch }}"))
         assert work == "/var/lib/bootwright-install/%s/%s/work" % (context, machine)
-        assert scratch == "/var/tmp/bootwright-run-scratch-%s-1/managedos-install" % job
+        assert scratch == "/var/tmp/bootwright-scratch-%s-1/managedos-install" % job
         paths.append(work)
     assert len(set(paths)) == len(paths)
 

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"path"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -18,8 +17,7 @@ import (
 
 // An observation that could not run is recorded once, by the engine, on the
 // resolution record, so the refusal and a later status name the same failure.
-// An undiagnosed failure records none and keeps the general reason, and a
-// record an earlier build wrote without a failure reads as it always did.
+// An undiagnosed failure records none and keeps the general reason.
 func TestAnObservationThatCouldNotRunIsRecordedAndStatusNamesIt(t *testing.T) {
 	const block = "alpha"
 	unreachable := diagnostics.NewFailureWithRemediation("lifecycle.state",
@@ -66,20 +64,6 @@ func TestAnObservationThatCouldNotRunIsRecordedAndStatusNamesIt(t *testing.T) {
 		}
 		if got := blockUnresolved(t, h, block); got != unexplained {
 			t.Fatalf("status names %+v, want %+v", got, unexplained)
-		}
-	})
-	t.Run("a record an earlier build wrote", func(t *testing.T) {
-		h, _ := resolve(t, unreachable)
-		record := path.Join(firstOperation, "blocks", block, "attempt-000001-resolution-000001.json")
-		h.workspace.area.mutex.Lock()
-		earlier := regexp.MustCompile(`,"failure":\{[^{}]*\}`).ReplaceAll(h.workspace.area.files[record], nil)
-		h.workspace.area.files[record] = earlier
-		h.workspace.area.mutex.Unlock()
-		if recorded := settlingResolution(t, h, block).Failure; recorded != nil {
-			t.Fatalf("the rewritten record still carries %+v", recorded)
-		}
-		if got := blockUnresolved(t, h, block); got != unexplained {
-			t.Fatalf("status names %+v for a record without a failure", got)
 		}
 	})
 }

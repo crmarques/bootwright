@@ -85,7 +85,7 @@ def scope(updating=True, **extra):
     if updating:
         request["update"] = {"policy": "withinRelease", "release": "9.8"}
     values.update({
-        "bootwright_run_scratch": "/var/tmp/bootwright-run-scratch-1-1",
+        "bootwright_run_scratch": "/var/tmp/bootwright-scratch-1-1",
         "bootwright_os_install_request": request,
         "bootwright_os_install_digest": DIGEST,
         "bootwright_os_install_material": {"fleetIdentity": "/run/material/fleet-id", "marker": "m"},

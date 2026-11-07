@@ -15,10 +15,9 @@ def call(parent, job, scope="managedos-install", state="present"):
     return Path(scratch.manage(root, scope, state, str(parent), os.getuid(), remove_root=True))
 
 
-@pytest.mark.parametrize("prefix", ["bootwright-scratch-", "bootwright-run-scratch-"])
 @pytest.mark.parametrize("scope", sorted(scratch.SCOPES))
-def test_current_and_legacy_runner_names_create_and_clean_only_their_scope(tmp_path, prefix, scope):
-    root = tmp_path / (prefix + "4294967295-4294967295")
+def test_runner_names_create_and_clean_only_their_scope(tmp_path, scope):
+    root = tmp_path / "bootwright-scratch-4294967295-4294967295"
     other = next(name for name in sorted(scratch.SCOPES) if name != scope)
     directory = Path(scratch.manage(str(root), scope, "present", str(tmp_path), os.getuid(), remove_root=True))
     sibling = Path(scratch.manage(str(root), other, "present", str(tmp_path), os.getuid(), remove_root=True))

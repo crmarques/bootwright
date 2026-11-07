@@ -564,11 +564,9 @@ func refusedServices(services []ServiceSummary, refused []string) []ServiceSumma
 // removal has not started by what the nearest removal it replaces did to it,
 // or else by what the apply it removes proved. An object that apply owned and
 // the removal no longer names, wholly or in part, was taken back by an earlier
-// attempt, so it is pending again. A replacement an earlier build recorded
-// names no removal it replaces, so one naming fewer blocks than that apply
-// owned leaves the objects it has not started unknown, as does an object of a
-// completed removal whose block record does not read done. An object neither
-// names has no entry.
+// attempt, so it is pending again. An object of a completed removal whose
+// block record does not read done is unknown. An object neither names has no
+// entry.
 func realizations(ctx context.Context, store recordReader, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState) (map[string]RealizationStatus, error) {
 	if operation.Verb == reconciliation.Apply {
 		var err error
@@ -586,7 +584,6 @@ func realizations(ctx context.Context, store recordReader, operation operationst
 	}
 	var applied map[string][]reconciliation.BlockState
 	owned := map[string]int{}
-	ownedBlocks := 0
 	if operation.Source != "" {
 		removed, source, sourceStates, err := removedApply(ctx, store, operation.Source)
 		if err != nil {
@@ -598,14 +595,13 @@ func realizations(ctx context.Context, store recordReader, operation operationst
 			realized[block.Kind+"/"+block.Object] = RealizationPending
 			owned[block.Kind+"/"+block.Object]++
 		}
-		ownedBlocks = len(subset)
 	}
-	replaced, replacing, err := replacedRemovals(ctx, store, operation, len(frozen.Blocks) < ownedBlocks, ownedBlocks)
+	replaced, err := replacedRemovals(ctx, store, operation)
 	if err != nil {
 		return nil, err
 	}
 	for identity, blocks := range reached {
-		realized[identity] = removedStatus(blocks, applied[identity], owned[identity], replaced[identity], replacing)
+		realized[identity] = removedStatus(blocks, applied[identity], owned[identity], replaced[identity])
 		if operation.State == reconciliation.OperationDone && slices.ContainsFunc(blocks, notDone) {
 			realized[identity] = RealizationUnknown
 		}
@@ -615,35 +611,31 @@ func realizations(ctx context.Context, store recordReader, operation operationst
 
 // replacedRemovals walks the removals a removal replaces, nearest first, and
 // reports for each object what the nearest one that left it not all pending
-// did to it. It also reports whether an object none of them decides is
-// unknown: the earliest removal, which replaces none, may itself have replaced
-// an attempt an earlier build recorded, which shows as naming fewer blocks
-// than the apply owned. A removal that replaces none keeps the same reading
-// over its own plan, which fewer carries.
-func replacedRemovals(ctx context.Context, store recordReader, operation operationstore.Operation, fewer bool, owned int) (map[string]RealizationStatus, bool, error) {
+// did to it.
+func replacedRemovals(ctx context.Context, store recordReader, operation operationstore.Operation) (map[string]RealizationStatus, error) {
 	if operation.Replaces == "" {
-		return nil, fewer, nil
+		return nil, nil
 	}
 	decided := map[string]RealizationStatus{}
 	seen := map[string]bool{operation.ID: true}
 	for id := operation.Replaces; ; {
 		switch {
 		case seen[id]:
-			return nil, false, failure("lifecycle.state", "the removals this operation replaces name one another in a cycle", "restore the context store")
+			return nil, failure("lifecycle.state", "the removals this operation replaces name one another in a cycle", "restore the context store")
 		case len(seen) > operationstore.MaxOperations:
-			return nil, false, failure("lifecycle.state", "the removals this operation replaces exceed the operations a context retains", "restore the context store")
+			return nil, failure("lifecycle.state", "the removals this operation replaces exceed the operations a context retains", "restore the context store")
 		}
 		seen[id] = true
 		record, err := store.ReadOperation(ctx, id)
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
 		if record.Verb != reconciliation.Destroy {
-			return nil, false, failure("lifecycle.state", "the operation this removal replaces is no removal", "restore the context store")
+			return nil, failure("lifecycle.state", "the operation this removal replaces is no removal", "restore the context store")
 		}
 		_, plan, states, err := removedApply(ctx, store, id)
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
 		for identity, blocks := range reachedByObject(plan, states) {
 			if _, known := decided[identity]; !known {
@@ -653,7 +645,7 @@ func replacedRemovals(ctx context.Context, store recordReader, operation operati
 			}
 		}
 		if record.Replaces == "" {
-			return decided, len(plan.Blocks) < owned, nil
+			return decided, nil
 		}
 		id = record.Replaces
 	}
@@ -715,9 +707,8 @@ func appliedStatus(reached []reconciliation.BlockState) RealizationStatus {
 // Until its removal starts it reads what the nearest removal it replaces did
 // to it, then pending when the removed apply owns none of it or the removal
 // names fewer of its blocks than that apply owned, and otherwise what the
-// removed apply proved about it, unless the removal replaced an attempt whose
-// outcome for it no record keeps.
-func removedStatus(reached, applied []reconciliation.BlockState, owned int, replaced RealizationStatus, replacing bool) RealizationStatus {
+// removed apply proved about it.
+func removedStatus(reached, applied []reconciliation.BlockState, owned int, replaced RealizationStatus) RealizationStatus {
 	switch {
 	case slices.ContainsFunc(reached, unproved):
 		return RealizationUnknown
@@ -731,8 +722,6 @@ func removedStatus(reached, applied []reconciliation.BlockState, owned int, repl
 		return replaced
 	case len(applied) == 0, len(reached) < owned:
 		return RealizationPending
-	case replacing:
-		return RealizationUnknown
 	}
 	return appliedStatus(applied)
 }

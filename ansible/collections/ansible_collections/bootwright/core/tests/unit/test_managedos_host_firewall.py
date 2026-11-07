@@ -763,7 +763,7 @@ def variables(**extra):
     request = {"version": "os-host-firewall-v1", "address": "192.0.2.10", "user": "fleet", "fleetKeyRef": "fleet-key",
                "identity": {"block": "os-firewall-ceph-01", "context": "lab", "object": "ceph-01"},
                "placement": {"connection": "ssh"}, "services": [{"name": RGW}, {"name": NFS}]}
-    values = dict(DEFAULTS, bootwright_run_scratch="/var/tmp/bootwright-run-scratch-1-1", bootwright_os_firewall_request=request,
+    values = dict(DEFAULTS, bootwright_run_scratch="/var/tmp/bootwright-scratch-1-1", bootwright_os_firewall_request=request,
                   bootwright_os_firewall_digest=DIGEST,
                   bootwright_os_firewall_material={"fleetIdentity": "/run/material/fleet-id", "hostKey": "ssh-ed25519 AAAA",
                                                    "mark": MARK, "services": json.dumps(services)})
@@ -817,7 +817,7 @@ def test_scratch_is_prepared_first_and_removed_at_the_end(name):
     assert prepare[scratch] == {"root": "{{ bootwright_run_scratch }}", "scope": "managedos-firewall"}
     assert cleanup[scratch] == dict(prepare[scratch], state="absent", remove_root="{{ bootwright_os_firewall_request.placement.connection == 'ssh' }}")
     assert cleanup["when"] == prepare["register"] + " is succeeded"
-    assert render("{{ managedos_host_firewall_scratch }}") == "/var/tmp/bootwright-run-scratch-1-1/managedos-firewall"
+    assert render("{{ managedos_host_firewall_scratch }}") == "/var/tmp/bootwright-scratch-1-1/managedos-firewall"
 
 
 def test_the_observation_is_self_contained_inspects_literally_and_writes_only_beneath_the_scratch_directory():
@@ -831,7 +831,7 @@ def test_the_observation_is_self_contained_inspects_literally_and_writes_only_be
     assert len(writes) == 4
     for task in writes:
         body = task.get("ansible.builtin.copy") or task.get("ansible.builtin.file")
-        assert render(body["dest" if "dest" in body else "path"]).startswith("/var/tmp/bootwright-run-scratch-1-1/managedos-firewall/")
+        assert render(body["dest" if "dest" in body else "path"]).startswith("/var/tmp/bootwright-scratch-1-1/managedos-firewall/")
     assert {key for task in flattened(tasks("observe.yml")) for key in task if key.startswith("ansible.builtin.")} <= {
         "ansible.builtin.assert", "ansible.builtin.copy", "ansible.builtin.file", "ansible.builtin.set_fact", "ansible.builtin.fail"}
     complete = calls("observe.yml", "bootwright.core.managedos_firewall_protocol")[-1]["bootwright.core.managedos_firewall_protocol"]
@@ -860,7 +860,7 @@ def test_the_module_call_pins_the_frozen_connection_and_hands_it_only_the_mark_a
     arguments = task[key]
     assert set(arguments) == {"operation", "address", "user", "identity", "ssh_config", "known_hosts", "host_key_algorithms",
                               "policy_host_key_algorithms", "mark", "services", "timeout"}
-    scratch = "/var/tmp/bootwright-run-scratch-1-1/managedos-firewall"
+    scratch = "/var/tmp/bootwright-scratch-1-1/managedos-firewall"
     extra = {"managedos_host_firewall_operation": "apply", "managedos_host_firewall_observe_host_key_algorithms": "ssh-ed25519",
              "managedos_host_firewall_ssh_policy": {"hostKeyAlgorithms": "ssh-ed25519"},
              "managedos_host_firewall_observe_ssh_policy": {"hostKeyAlgorithms": "ssh-ed25519"},

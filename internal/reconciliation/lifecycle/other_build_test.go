@@ -311,10 +311,10 @@ func attemptBuilds(t *testing.T, h *harness, id, block string) []operationstore.
 	builds := []operationstore.Build{}
 	for number := 1; number <= record.Attempts; number++ {
 		attempt, err := recordsOf(h).Attempt(ctx, id, block, number)
-		if err != nil || attempt.Build == nil {
-			t.Fatalf("attempt %d of %s names no build (%v)", number, block, err)
+		if err != nil {
+			t.Fatalf("attempt %d of %s: %v", number, block, err)
 		}
-		builds = append(builds, *attempt.Build)
+		builds = append(builds, attempt.Build)
 	}
 	return builds
 }
@@ -335,10 +335,10 @@ func resolutionBuild(t *testing.T, h *harness, id, block string) operationstore.
 func resolutionBuildOf(t *testing.T, h *harness, id, block string, attempt int) operationstore.Build {
 	t.Helper()
 	resolution, found, err := recordsOf(h).LastResolution(context.Background(), id, block, attempt)
-	if err != nil || !found || resolution.Build == nil {
-		t.Fatalf("the resolution of %s names no build (%t, %v)", block, found, err)
+	if err != nil || !found {
+		t.Fatalf("the resolution of %s is missing (%t, %v)", block, found, err)
 	}
-	return *resolution.Build
+	return resolution.Build
 }
 
 // stoppedPair applies two blocks, each under its own content digest:

@@ -346,7 +346,6 @@ func automationIdentities() map[string]automationFormat {
 		"bootwright-host-probe-":                            scratch,
 		"bootwright-route-probe-":                           scratch,
 		"bootwright-scratch-":                               transient("the per-run scratch directory the runner creates and removes"),
-		"bootwright-run-scratch-":                           transient("the per-run scratch directory the runner creates and removes"),
 		"/run/bootwright-ceph-route":                        transient("the route probe's synthetic root, removed by the call that made it"),
 		"bootwright-route":                                  transient("the route probe's synthetic account, removed by the call that made it"),
 		"bootwright-probe":                                  transient("the host name of a probe container the same call removes"),

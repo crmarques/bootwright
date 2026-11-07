@@ -630,11 +630,8 @@ func TestAnUnknownOperationWhoseBlocksAreAllDoneIsFinalizedByItsOwnVerb(t *testi
 }
 
 // unknownApplyWithEveryBlockDone rewrites a completed apply of alpha as
-// unknown, under an unknown apply's evidence, beside alpha's done record. That
-// is what a removal an executable before D119 ran leaves once its resolution
-// proved alpha done by the apply's check and its record of what it proved
-// failed; a removal now resolves an apply's block by its own check, which
-// never proves it done.
+// unknown, under an unknown apply's evidence, beside alpha's done record, as a
+// record that lags behind its blocks leaves it.
 func unknownApplyWithEveryBlockDone(t *testing.T) *harness {
 	t.Helper()
 	h := newPlannedHarness(t, []reconciliation.BlockDefinition{destructive("alpha")})

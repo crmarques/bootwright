@@ -955,7 +955,7 @@ func (s *Store) StartAttempt(ctx context.Context, id, block string, build Build)
 		if err != nil {
 			return 0, err
 		}
-		if adopted.Build == nil || *adopted.Build != build {
+		if adopted.Build != build {
 			if err := s.adopt(ctx, target, adopted, build, existing); err != nil {
 				return 0, err
 			}
@@ -973,7 +973,7 @@ func (s *Store) StartAttempt(ctx context.Context, id, block string, build Build)
 		if err != nil {
 			return 0, err
 		}
-		attempt := Attempt{Version: 1, Block: block, Number: number, Phase: "running", Build: &build, Started: started, Updated: started}
+		attempt := Attempt{Version: 1, Block: block, Number: number, Phase: "running", Build: build, Started: started, Updated: started}
 		encoded, err := encode(attempt, MaxAttemptBytes)
 		if err != nil {
 			return 0, err
@@ -1038,7 +1038,7 @@ func (s *Store) adopt(ctx context.Context, target string, record Attempt, build 
 	if err != nil {
 		return err
 	}
-	record.Build, record.Updated = &build, updated
+	record.Build, record.Updated = build, updated
 	if err := validateAttempt(record); err != nil {
 		return err
 	}
@@ -1138,7 +1138,7 @@ func (s *Store) StartResolution(ctx context.Context, id, block string, attempt i
 	if err != nil {
 		return 0, err
 	}
-	record := Attempt{Version: 1, Block: block, Number: attempt, Resolution: next, Removal: removal, Phase: "running", Build: &build, Started: started, Updated: started}
+	record := Attempt{Version: 1, Block: block, Number: attempt, Resolution: next, Removal: removal, Phase: "running", Build: build, Started: started, Updated: started}
 	encoded, err := encode(record, MaxAttemptBytes)
 	if err != nil {
 		return 0, err

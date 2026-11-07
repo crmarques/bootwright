@@ -199,8 +199,8 @@ func TestAnAdapterStillRunningRefusesTheNextRun(t *testing.T) {
 	// A refused run still sweeps: a free stale job listed after the held one,
 	// with its secret file and scratch, and scratch whose job is gone.
 	plantJob(t, runner.jobParent, "bootwright-run-999999999")
-	plant(t, filepath.Join(runner.scratchParent, "bootwright-run-scratch-999999999-1"), map[string]string{"snapshot": "state"})
-	plant(t, filepath.Join(runner.scratchParent, "bootwright-run-scratch-999999998-1"), map[string]string{"snapshot": "state"})
+	plant(t, filepath.Join(runner.scratchParent, "bootwright-scratch-999999999-1"), map[string]string{"snapshot": "state"})
+	plant(t, filepath.Join(runner.scratchParent, "bootwright-scratch-999999998-1"), map[string]string{"snapshot": "state"})
 	adapter = completing
 	_, err = runner.Run(ctx, request)
 	lock := filepath.Join(job, lockName)
@@ -248,8 +248,8 @@ func TestAStaleRunDirectoryIsRemovedWithItsSecretFiles(t *testing.T) {
 	if err := os.Symlink(kept, filepath.Join(job, "local", "escape")); err != nil {
 		t.Fatal(err)
 	}
-	plant(t, filepath.Join(runner.scratchParent, "bootwright-run-scratch-4242-7"), map[string]string{"image/boot.iso": "image"})
-	plant(t, filepath.Join(runner.scratchParent, "bootwright-run-scratch-5151-9"), map[string]string{"snapshot": "state"})
+	plant(t, filepath.Join(runner.scratchParent, "bootwright-scratch-4242-7"), map[string]string{"image/boot.iso": "image"})
+	plant(t, filepath.Join(runner.scratchParent, "bootwright-scratch-5151-9"), map[string]string{"snapshot": "state"})
 	plant(t, filepath.Join(runner.scratchParent, "bootwright-scratch-4242-8"), map[string]string{"image/boot.iso": "image"})
 	plant(t, filepath.Join(runner.scratchParent, "bootwright-scratch-5151-10"), map[string]string{"snapshot": "state"})
 	var output bytes.Buffer
@@ -461,7 +461,7 @@ func TestTheSweepNeverFollowsALinkOrTouchesWhatIsNotItsOwn(t *testing.T) {
 	runner := sweepingRunner(t, completing)
 	plantJob(t, runner.jobParent, "decoy")
 	plant(t, filepath.Join(runner.scratchParent, "decoy"), map[string]string{"snapshot": "state"})
-	for _, link := range []string{filepath.Join(runner.jobParent, "bootwright-run-11"), filepath.Join(runner.scratchParent, "bootwright-run-scratch-12-1")} {
+	for _, link := range []string{filepath.Join(runner.jobParent, "bootwright-run-11"), filepath.Join(runner.scratchParent, "bootwright-scratch-12-1")} {
 		if err := os.Symlink("decoy", link); err != nil {
 			t.Fatal(err)
 		}

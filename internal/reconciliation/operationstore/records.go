@@ -226,7 +226,7 @@ type Attempt struct {
 	Preparation json.RawMessage            `json:"preparation,omitempty"`
 	Failure     *ObservationFailure        `json:"failure,omitempty"`
 	Warnings    []Warning                  `json:"warnings,omitempty"`
-	Build       *Build                     `json:"build,omitempty"`
+	Build       Build                      `json:"build"`
 	Started     string                     `json:"started"`
 	Updated     string                     `json:"updated"`
 }
@@ -444,10 +444,8 @@ func validateAttempt(record Attempt) error {
 	if !validWarnings(record) {
 		return recordError("lifecycle attempt warnings are invalid")
 	}
-	if record.Build != nil {
-		if err := validateBuild(*record.Build); err != nil {
-			return err
-		}
+	if err := validateBuild(record.Build); err != nil {
+		return err
 	}
 	return validateTimestamps(record.Started, record.Updated)
 }

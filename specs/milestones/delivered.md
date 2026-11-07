@@ -4781,9 +4781,8 @@ Ceph core golden carries the runtime-profile, device-identity and host-cache
 formats its workers read, and the Go request versions the roles check are
 classified as mirrored;
 `TestAnAttemptAndItsResolutionNameTheBuildTheyRanUnder`,
-`TestAnAdoptedStartNamesTheBuildThatAdoptsIt`,
-`TestAStartRefusesAnInvalidBuild` and
-`TestAnAttemptRecordWithoutABuildStaysReadable` in
+`TestAnAdoptedStartNamesTheBuildThatAdoptsIt` and
+`TestAStartRefusesAnInvalidBuild` in
 `internal/reconciliation/operationstore`, whose attempt and resolution goldens
 (`TestOperationRecordsMatchTheirGoldens`) gained `build`;
 `TestAnotherBuildRetriesAFailedBlockUnderItsOwnBuild`,
@@ -4792,11 +4791,9 @@ classified as mirrored;
 `TestAPreviewNamesNoOtherBuildWhereNoContinuationRunsUnderOne`,
 `TestAPreviewNamesNoOtherBuildWhenNoStepRunsUnderIt`,
 `TestStatusSaysWhetherAnotherBuildRegisteredTheOperation`,
-`TestARemovalUnderAnotherBuildNamesTheBuildThatRegisteredIt`,
+`TestARemovalUnderAnotherBuildNamesTheBuildThatRegisteredIt` and
 `TestACephClusterLeftUnknownContinuesUnderARebuiltBinary`, which replays the
-live case through the real Ceph capabilities, and
-`TestACephClusterContinuesOverRecordsAnEarlierBuildWrote`, which continues it
-over records that name no build, in
+live case through the real Ceph capabilities, in
 `internal/reconciliation/lifecycle`, with
 `TestAnotherBuildRefusesToContinueABlockItWouldFreezeDifferently` gaining two
 unknown-apply rows and

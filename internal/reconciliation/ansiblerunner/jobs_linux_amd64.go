@@ -217,13 +217,12 @@ func (r Runner) sweepLocked(contextName string) error {
 // another context or a live sibling says nothing. Other jobs name their work,
 // and advises ending processes only once the invocation that started it no
 // longer holds its holder lock, when what remains are descendants it left. A
-// job attributed to no context, as one an earlier build started, refuses every
-// context.
+// job its record cannot attribute to a context refuses every context.
 func (r Runner) heldRefusal(contextName, lock string, held holding) error {
 	record := held.record
 	switch {
 	case !held.attributed:
-		return failure("lifecycle.adapter-running", "an earlier lifecycle adapter still runs and holds its job lock",
+		return failure("lifecycle.adapter-running", "a lifecycle adapter of no known context still runs and holds its job lock",
 			"wait for it to end, or end the processes that hold "+lock+", then repeat the command")
 	case record.Context != contextName:
 		return nil
@@ -444,8 +443,8 @@ func lockShared(lock *os.File) (bool, error) {
 // remove removes a seized job with the scratch paired with it. The record,
 // holder and lock go last, so a job that cannot be emptied still fails the
 // next sweep closed rather than passing as one being created. The record goes
-// before the holder, so a held job with its record in place and no holder is
-// one an earlier build started.
+// before the holder, so a job being removed never shows a record beside a
+// missing holder.
 func (s *seizedJob) remove(scratch []string) error {
 	for _, other := range scratch {
 		if err := s.dirs.removeDirectory(s.dirs.scratch, other); err != nil {
@@ -727,9 +726,6 @@ func jobSuffix(name string) (string, bool) {
 
 func scratchJob(name string) (string, bool) {
 	rest, ok := strings.CutPrefix(name, scratchPrefix)
-	if !ok {
-		rest, ok = strings.CutPrefix(name, "bootwright-run-scratch-")
-	}
 	job, random, paired := strings.Cut(rest, "-")
 	return job, ok && paired && runSuffix(job) && runSuffix(random)
 }

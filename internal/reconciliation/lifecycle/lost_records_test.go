@@ -209,8 +209,8 @@ func failedRemovalWithEveryBlockDone(t *testing.T) (*harness, string) {
 // left running, as a kill before it recorded the failure leaves it; continues
 // it with a retry whose start lands and then reports a failure, which records
 // the removal running beside alpha's running record, as its block records give
-// it (F09-06); rewrites that record failed, the shape an earlier build left,
-// which the generic finalization rule must still read; and then supersedes it
+// it (F09-06); rewrites that record failed, which the generic finalization
+// rule must still read; and then supersedes it
 // with a removal whose resolution observes effect and lands alpha's record
 // reading alpha, killed there, before it recorded what that proved.
 func failedRemovalResolvedAs(t *testing.T, effect reconciliation.EffectState, alpha reconciliation.BlockState) (*harness, string) {
@@ -296,9 +296,8 @@ func TestAFailedRemovalWhoseBlocksAreAllDoneIsFinalizedByTheDestroy(t *testing.T
 // A continuation refuses records that contradict what its operation started
 // before it restores, raises or marks anything, and status names what it
 // refuses: a block that lost its record beside an attempt of it, which a start
-// would refuse only after the operation was marked running, including the
-// first start an executable before 83dcbebe left as an attempt beside no block
-// record.
+// would refuse only after the operation was marked running, including a first
+// start interrupted as an attempt beside no block record.
 func TestAContinuationOverContradictedRecordsRefusesBeforeItMarksItsOperation(t *testing.T) {
 	ctx := context.Background()
 	for name, test := range map[string]struct {
@@ -317,7 +316,7 @@ func TestAContinuationOverContradictedRecordsRefusesBeforeItMarksItsOperation(t 
 			},
 			verb: reconciliation.Apply, entry: lostRecord("charlie"), named: []string{lostRecord("charlie"), failedWithoutFailure},
 		},
-		"a running apply whose first start an earlier executable left beside no block record": {
+		"a running apply whose first start was interrupted beside no block record": {
 			arrange: func(t *testing.T, h *harness) string {
 				interrupted := false
 				h.workspace.area.landing = func(operation, target string, files map[string][]byte) error {

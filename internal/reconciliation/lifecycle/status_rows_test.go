@@ -344,9 +344,7 @@ func TestStatusRowsReadTheOperationsVerb(t *testing.T) {
 // attempt took part of back or failed on. One it names fewer blocks of than
 // the apply owned reads pending, and one it has not started reads what the
 // nearest removal it replaces did to it, or what the apply proved when none of
-// them touched it. A replacement an earlier build recorded names no removal it
-// replaces, so an object it has not started reads unknown when it names fewer
-// blocks than the apply owned.
+// them touched it.
 func TestStatusRowsAfterAReplacingRemoval(t *testing.T) {
 	failRemoval := func(t *testing.T, h *rowsHarness, outcomes ...reconciliation.Outcome) {
 		t.Helper()
@@ -427,27 +425,6 @@ func TestStatusRowsAfterAReplacingRemoval(t *testing.T) {
 			},
 			want: map[string]RealizationStatus{
 				"OpenShiftCluster/sno": RealizationFailed, "ArtifactServer/other": RealizationFailed, "ArtifactServer/artifacts": RealizationDone,
-			},
-		},
-		{
-			name:        "a replacement an earlier build recorded",
-			definitions: append(rowsDefinitions(), definition("other")),
-			arrange: func(t *testing.T, h *rowsHarness) {
-				twoAttempts(secondFailedMedia)(t, h)
-				ctx := context.Background()
-				store := operationstore.New(h.workspace.area, func() time.Time { return time.Unix(0, 0) })
-				current, _ := durableOperation(t, h.harness)
-				recorded, err := store.ReadOperation(ctx, current.ID)
-				if err != nil || recorded.Replaces == "" {
-					t.Fatalf("the replacement records it replaces %q (%v), want the failed removal", recorded.Replaces, err)
-				}
-				recorded.Replaces = ""
-				if err := store.UpdateOperation(ctx, recorded); err != nil {
-					t.Fatal(err)
-				}
-			},
-			want: map[string]RealizationStatus{
-				"OpenShiftCluster/sno": RealizationFailed, "ArtifactServer/other": RealizationUnknown, "ArtifactServer/artifacts": RealizationUnknown,
 			},
 		},
 	} {

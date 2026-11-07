@@ -182,8 +182,7 @@ func (s Service) verifyRemovalHost(ctx context.Context, view View) error {
 
 // recordedRefusal is the part of a continuation's re-proof that reads only
 // what the context and this executable record: the input the operation froze,
-// the closure an earlier build may have left unfrozen, and another build's proof
-// of the same blocks. status reads it without probing the host.
+// the closure it froze, and another build's proof of the same blocks. status reads it without probing the host.
 func (s Service) recordedRefusal(view View, operation operationstore.Operation, proof sameBlocksProof) error {
 	switch inputDrift(view, operation) {
 	case driftRevision:

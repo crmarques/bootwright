@@ -3,13 +3,10 @@ package lifecycle
 import (
 	"context"
 	"encoding/json"
-	"path"
 	"slices"
-	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/canonicaljson"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -260,50 +257,6 @@ func (j *CapabilityJourney) Records(t *testing.T, block string) []operationstore
 		}
 	}
 	return records
-}
-
-// Unstamp rewrites every attempt and resolution record of the current
-// operation without the build it names, as the canonical bytes a build from
-// before records named one wrote, and reports how many it rewrote.
-func (j *CapabilityJourney) Unstamp(t *testing.T) int {
-	t.Helper()
-	ctx := context.Background()
-	area, blocks := j.harness.workspace.area, path.Join(j.Operation(t).ID, "blocks")
-	directories, err := area.Entries(ctx, blocks)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rewritten := 0
-	for _, directory := range directories {
-		entries, err := area.Entries(ctx, path.Join(blocks, directory.Name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, entry := range entries {
-			if !strings.HasPrefix(entry.Name, "attempt-") || !strings.HasSuffix(entry.Name, ".json") {
-				continue
-			}
-			name := path.Join(blocks, directory.Name, entry.Name)
-			stamped, _, err := area.Read(ctx, name, operationstore.MaxAttemptBytes)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var record operationstore.Attempt
-			if err := json.Unmarshal(stamped, &record); err != nil {
-				t.Fatal(err)
-			}
-			record.Build = nil
-			unstamped, err := canonicaljson.Encode(record, canonicaljson.Line)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := area.Replace(ctx, name, unstamped, stamped); err != nil {
-				t.Fatal(err)
-			}
-			rewritten++
-		}
-	}
-	return rewritten
 }
 
 func (j *CapabilityJourney) Declaring(objects ...api.Object) {

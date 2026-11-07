@@ -319,8 +319,7 @@ beneath `/run`, which holds its lent material and never survives a reboot, and
 a scratch directory `bootwright-scratch-<n>-<m>` that carries its job's
 `<n>` beneath `/var/lib/bootwright-staging/runs`, where no other account can
 create a name. Its maximum path length leaves room for Ansible's local RPC
-Unix socket. Earlier `bootwright-run-scratch-<n>-<m>` names under that same
-parent retain the same job pairing and cleanup checks. The runner on the
+Unix socket. The runner on the
 controller and `lifecycle_scratch` on an SSH
 execution host create that parent, and the staging parent above it, when
 absent. A parent that is a link, owned by another account, or open to another
@@ -354,11 +353,10 @@ invocation left behind, does it name the lock and advise ending the processes
 that hold it. A held job of another context neither refuses nor goes, so
 bounded runs of two contexts proceed together. A held job whose record is
 unreadable or names no valid context, or that has no holder, refuses a run of
-every context, naming the held lock, until it ends: that is what a job a build
-before this rule started looks like across an upgrade
+every context, naming the held lock, until it ends
 (`TestTwoContextsRunsProceedTogether`,
 `TestASameContextRunRefusesNamingTheHeldJob`,
-`TestAJobAnEarlierBuildStartedRefusesEveryContext`). An invocation removes its
+`TestAHeldJobWithoutAnAttributableRecordRefusesEveryContext`). An invocation removes its
 own directories when it ends only if their lock is free; otherwise they stay,
 with the material in them, for the processes that still use them. Every run
 first removes each job on the host whose lock is free, whatever its context,

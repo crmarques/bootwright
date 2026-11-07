@@ -143,7 +143,7 @@ func TestASameContextRunRefusesNamingTheHeldJob(t *testing.T) {
 	}
 }
 
-// Another context's job never passes for one an earlier build started while
+// Another context's job never passes for one attributed to no context while
 // it is being claimed or removed: its record appears whole and only after its
 // holder, and it goes before its holder. Context alpha claims and releases
 // jobs as fast as it can while context beta sweeps, and no sweep refuses.
@@ -459,17 +459,11 @@ func TestAHeldJobSaysWhatItIsOnlyWhileItsLockIsStillHeld(t *testing.T) {
 	}
 }
 
-// A held job its record cannot attribute to a context and its holder, as one
-// an earlier build started, refuses a run of every context, naming its lock;
-// once nothing holds it, the next run removes it.
-func TestAJobAnEarlierBuildStartedRefusesEveryContext(t *testing.T) {
+// A held job its record cannot attribute to a context and its holder refuses a
+// run of every context, naming its lock; once nothing holds it, the next run
+// removes it.
+func TestAHeldJobWithoutAnAttributableRecordRefusesEveryContext(t *testing.T) {
 	for name, files := range map[string]map[string]string{
-		"a record naming no context and no holder": {
-			lockName: "", recordName: `{"implementation":"artifact-server-nginx-v1","operation":"apply","machine":"controller","requestDigest":"sha256:5f"}`,
-		},
-		"a record naming a context but no holder": {
-			lockName: "", recordName: `{"context":"beta","block":"","description":"","implementation":"artifact-server-nginx-v1","operation":"apply","machine":"controller","requestDigest":"sha256:5f"}`,
-		},
 		"an unreadable record": {lockName: "", holderName: "", recordName: "not a record"},
 		"a record with a field it does not know": {
 			lockName: "", holderName: "", recordName: `{"context":"beta","implementation":"artifact-server-nginx-v1","pid":7}`,
@@ -489,7 +483,7 @@ func TestAJobAnEarlierBuildStartedRefusesEveryContext(t *testing.T) {
 			release := holdLock(t, lock)
 			want := []diagnostics.Diagnostic{{
 				Severity: "error", Code: "lifecycle.adapter-running",
-				Message:     "an earlier lifecycle adapter still runs and holds its job lock",
+				Message:     "a lifecycle adapter of no known context still runs and holds its job lock",
 				Remediation: "wait for it to end, or end the processes that hold " + lock + ", then repeat the command",
 			}}
 			for _, contextName := range []string{"alpha", "beta"} {

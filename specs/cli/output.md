@@ -904,9 +904,7 @@ those blocks proved gone and the others not yet run reads `unknown`: nothing
 proves what the removal did to the object as a whole. An object whose removal
 has not started reads what the nearest removal it replaces did to it: `unknown` when that removal left a block of it
 unproved, `failed` when one failed, `pending` when one was proved gone; and
-otherwise what the apply proved. A replacement an earlier build recorded, which
-names no removal it replaces, reads `unknown` for such an object when it names
-fewer blocks than the apply owned, as before. An object that apply
+otherwise what the apply proved. An object that apply
 owned and the removal no longer names was released by an earlier attempt and
 reads `pending`. An object no operation names keeps what its declaration gives
 it: `unsupported` for the reasons above, else `pending`. Human `status`

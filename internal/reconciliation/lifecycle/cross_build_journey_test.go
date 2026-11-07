@@ -151,79 +151,6 @@ func TestACephClusterLeftUnknownContinuesUnderARebuiltBinary(t *testing.T) {
 	}
 }
 
-// The owner's live operation was registered by a build whose records name no
-// build. A rebuilt binary continues it over those records: it reads the
-// evidence they hold, leaves them as they were written, and names itself in
-// every record it adds.
-func TestACephClusterContinuesOverRecordsAnEarlierBuildWrote(t *testing.T) {
-	const cluster, pool, client = "ceph-cluster-example", "ceph-pool-volumes", "ceph-client-consumer"
-	ctx := context.Background()
-	automation := strings.Repeat("9", 64)
-	ranUnderRebuilt := operationstore.Build{AutomationDigest: automation, ContentDigest: ceph.ContentDigest(), Executable: operationstore.Executable{Version: "devel", Commit: "1234567"}}
-	continuation := lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, Stages: []string{string(reconciliation.StageClusters)}, SkipConfirmation: true}
-	runner := &scriptedFleet{fleetRunner: &fleetRunner{resolvedAt: "sha256:" + strings.Repeat("ab", 32)}, script: map[string]func(lifecycle.RunResult) lifecycle.RunResult{}}
-	journey := fleetEngine(t, &fleetMachines{}, runner)
-	runner.next(cluster+":apply", unknownOutcome)
-	if result, err := journey.Service.Apply(ctx, lifecycle.ApplyRequest{ContextName: lifecycle.JourneyContext, SkipConfirmation: true}); err == nil || result == nil || result.Receipt.State != string(reconciliation.OperationUnknown) {
-		t.Fatalf("the first apply = %+v (%v), want the cluster left unknown", result, err)
-	}
-	runner.took()
-	registered := journey.Operation(t)
-	preview, err := journey.Service.Plan(ctx, lifecycle.PlanRequest{ContextName: lifecycle.JourneyContext})
-	if err != nil {
-		t.Fatal(err)
-	}
-	earlier := map[string]int{}
-	for _, step := range preview.Steps {
-		if step.ID != pool && step.ID != client {
-			earlier[step.ID] = len(journey.Records(t, step.ID))
-		}
-	}
-	if rewritten := journey.Unstamp(t); rewritten == 0 || rewritten != sumOf(earlier) {
-		t.Fatalf("unstamped %d records, want every one of %v", rewritten, earlier)
-	}
-	if named := buildsOf(journey.Records(t, cluster)); !slices.Equal(named, []operationstore.Build{{}}) {
-		t.Fatalf("the cluster's unstamped records name %+v, want none", named)
-	}
-
-	journey.Rebuild(automation, lifecycle.Executable{Version: "devel", Commit: "1234567"})
-	runner.images = nil
-	holdFleetSecrets(journey)
-	result, err := journey.Service.Apply(ctx, continuation)
-	if err != nil || result.Receipt.Operation != registered.ID || result.Receipt.State != string(reconciliation.OperationDone) {
-		t.Fatalf("the continuation over buildless records = %+v, %+v (%v), want the same operation done", result, diagnostics.Of(err), err)
-	}
-	if hostRuns, imageRuns := runner.took(); !slices.Equal(hostRuns, []string{cluster + ":observe", pool + ":apply", client + ":apply"}) || len(imageRuns) != 0 {
-		t.Fatalf("the continuation ran host-contacting %v and controller-local image %v", hostRuns, imageRuns)
-	}
-	if image := "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9" + "@" + runner.resolvedAt; len(runner.images) == 0 || slices.ContainsFunc(runner.images, func(handed string) bool { return handed != image }) {
-		t.Fatalf("the Ceph runs were handed images %v, want each the %s the buildless image record holds", runner.images, image)
-	}
-	for block, count := range earlier {
-		named := buildsOf(journey.Records(t, block))
-		want := slices.Repeat([]operationstore.Build{{}}, count)
-		if block == cluster {
-			want = append(want, ranUnderRebuilt)
-		}
-		if !slices.Equal(named, want) {
-			t.Fatalf("the records of %s name %+v, want the %d an earlier build wrote unchanged and only the new ones under the rebuilt binary", block, named, count)
-		}
-	}
-	for _, block := range []string{pool, client} {
-		if named := buildsOf(journey.Records(t, block)); !slices.Equal(named, []operationstore.Build{ranUnderRebuilt}) {
-			t.Fatalf("the records of %s name %+v, want one attempt under the rebuilt binary", block, named)
-		}
-	}
-}
-
-func sumOf(counts map[string]int) int {
-	total := 0
-	for _, count := range counts {
-		total += count
-	}
-	return total
-}
-
 // stepsOf is the plan position, counted from one, of each block named.
 func stepsOf(preview *lifecycle.PlanResult, blocks ...string) []int {
 	positions := []int{}
@@ -233,16 +160,11 @@ func stepsOf(preview *lifecycle.PlanResult, blocks ...string) []int {
 	return positions
 }
 
-// buildsOf is the build each record names, in order; a record that names
-// none stands as the zero build.
+// buildsOf is the build each record names, in order.
 func buildsOf(records []operationstore.Attempt) []operationstore.Build {
 	builds := []operationstore.Build{}
 	for _, record := range records {
-		build := operationstore.Build{}
-		if record.Build != nil {
-			build = *record.Build
-		}
-		builds = append(builds, build)
+		builds = append(builds, record.Build)
 	}
 	return builds
 }

@@ -120,9 +120,8 @@ func unreadable(block reconciliation.Block, executable operationstore.Executable
 		removeWith(executable))
 }
 
-// removeWith names the executable that registered what is being removed. An
-// operation recorded before that identity existed names none, and the operator
-// is pointed at the record instead.
+// removeWith names the executable that registered what is being removed, or
+// the record itself when that executable carries no identity.
 func removeWith(executable operationstore.Executable) string {
 	return "remove it with " + registeredWith(executable)
 }

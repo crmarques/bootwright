@@ -706,7 +706,7 @@ func TestAnAttemptAndItsResolutionNameTheBuildTheyRanUnder(t *testing.T) {
 	named := func(when string, want Build) {
 		t.Helper()
 		record, err := New(store.area, fixedClock()).Attempt(ctx, operation.ID, "alpha", 1)
-		if err != nil || record.Build == nil || *record.Build != want {
+		if err != nil || record.Build != want {
 			t.Fatalf("%s the attempt names %+v (%v), want %+v", when, record.Build, err, want)
 		}
 	}
@@ -726,14 +726,14 @@ func TestAnAttemptAndItsResolutionNameTheBuildTheyRanUnder(t *testing.T) {
 		t.Fatal(err)
 	}
 	resolution, found, err := New(store.area, fixedClock()).LastResolution(ctx, operation.ID, "alpha", 1)
-	if err != nil || !found || resolution.Build == nil || *resolution.Build != other {
+	if err != nil || !found || resolution.Build != other {
 		t.Fatalf("the resolution names %+v (%v)", resolution.Build, err)
 	}
 	named("resolved,", testBuild)
 }
 
 // A start that adopts an interrupted one runs the attempt itself, so the
-// adopted record names the build that adopts it, whichever build or no build
+// adopted record names the build that adopts it, whichever build
 // the interrupted start named. A record that names it already is kept as it is.
 func TestAnAdoptedStartNamesTheBuildThatAdoptsIt(t *testing.T) {
 	ctx := context.Background()
@@ -741,7 +741,7 @@ func TestAnAdoptedStartNamesTheBuildThatAdoptsIt(t *testing.T) {
 	operation := testOperation(t, plan)
 	adopting := Build{AutomationDigest: strings.Repeat("4", 64), ContentDigest: testBuild.ContentDigest,
 		Executable: Executable{Version: "1.5.0", Commit: "0123abc"}}
-	for name, interrupted := range map[string]*Build{"under another build": &testBuild, "by an earlier build": nil} {
+	for name, interrupted := range map[string]Build{"under another build": testBuild} {
 		t.Run(name, func(t *testing.T) {
 			store, area := newStore(t)
 			if _, err := store.Index(ctx); err != nil {
@@ -765,7 +765,7 @@ func TestAnAdoptedStartNamesTheBuildThatAdoptsIt(t *testing.T) {
 				t.Fatalf("the adopting start = %d (%v)", number, diagnostics.Of(err))
 			}
 			record, err := New(area, fixedClock()).Attempt(ctx, operation.ID, "alpha", 1)
-			if err != nil || record.Build == nil || *record.Build != adopting || record.Phase != "running" || record.Started != "2026-09-11T12:00:00Z" || record.Updated == record.Started {
+			if err != nil || record.Build != adopting || record.Phase != "running" || record.Started != "2026-09-11T12:00:00Z" || record.Updated == record.Started {
 				t.Fatalf("the adopted start reads back as %+v (%v)", record, err)
 			}
 			adopted := slices.Clone(area.files[operation.ID+"/blocks/alpha/attempt-000001.json"])
@@ -834,15 +834,12 @@ func refusedAsRecord(err error) bool {
 	return len(reported) == 1 && reported[0].Code == "lifecycle.state"
 }
 
-// A record an earlier build wrote names no build, and stays readable.
-func TestAnAttemptRecordWithoutABuildStaysReadable(t *testing.T) {
+// An attempt record names the build that ran it; one that names none refuses.
+func TestAnAttemptRecordWithoutABuildRefuses(t *testing.T) {
 	data := []byte(`{"version":1,"block":"alpha","number":1,"resolution":0,"phase":"observed","outcome":"changed","effect":"completed","evidence":{"postcondition":true},"started":"2026-09-11T12:00:01Z","updated":"2026-09-11T12:00:02Z"}` + "\n")
 	var record Attempt
-	if err := decode(data, MaxAttemptBytes, &record); err != nil {
-		t.Fatalf("decoding: %v", diagnostics.Of(err))
-	}
-	if err := validateAttempt(record); err != nil || record.Build != nil {
-		t.Fatalf("the record reads back as %+v (%v)", record, err)
+	if err := decode(data, MaxAttemptBytes, &record); err == nil || !refusedAsRecord(err) {
+		t.Fatalf("the record decodes as %+v (%v), want a refusal", record, err)
 	}
 }
 

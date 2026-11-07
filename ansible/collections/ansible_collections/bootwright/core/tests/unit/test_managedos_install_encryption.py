@@ -117,7 +117,7 @@ def scope(shape="encrypting", **extra):
     request = {"identity": {"context": "lab", "object": "rhel-01"}, "tlsCertificateRef": "lab-artifacts-tls"}
     request.update({key: (dict(value) if isinstance(value, dict) else value) for key, value in SHAPES[shape].items()})
     values.update({
-        "bootwright_run_scratch": "/var/tmp/bootwright-run-scratch-1-1",
+        "bootwright_run_scratch": "/var/tmp/bootwright-scratch-1-1",
         "bootwright_os_install_request": request,
         "bootwright_os_install_material": {"artifactCertificate": "/run/material/artifact-ca",
                                            "recoveryPassphrase": "/run/material/recovery"},
@@ -356,7 +356,7 @@ def test_a_virtual_private_insert_skips_the_verified_fetch_read_back():
         arguments = render(insert["vars"]["bootwright_machine_port"], shape,
                            managedos_install_anaconda_port_access={},
                            managedos_install_anaconda_media_trust={"trust": "defaultCA"},
-                           bootwright_run_scratch="/var/tmp/bootwright-run-scratch-1-1")
+                           bootwright_run_scratch="/var/tmp/bootwright-scratch-1-1")
         assert arguments["private"] is expected
 
 

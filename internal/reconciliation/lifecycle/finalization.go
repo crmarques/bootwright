@@ -25,9 +25,9 @@ import (
 // removal superseding it records nothing of it before it resolves the running
 // block a failed retry start left, so one stopped after that resolution leaves
 // it failed beside done blocks. A failed apply whose blocks are all done lags
-// as well, as a removal an executable before 4513e123 stopped after resolving
-// the running block of a failed retry start left it, because that executable
-// did not first record the apply in the state its blocks gave it. A completed
+// as well, as a removal stopped after resolving the running block of a failed
+// retry start can leave it before the apply's record takes the state its blocks
+// give it. A completed
 // one is finalized under either verb, since only its own bookkeeping is left.
 // Records that hold a block that is not done prove no completion, so they are
 // never finalized. Anything else returns no mark and keeps its decision.
