@@ -165,7 +165,7 @@ func TestAnInstallAddressOutsideTheRealizedPrefixNamesIt(t *testing.T) {
 		Remediation: "assign Machine/guest an install address inside 192.0.2.0/24 other than 192.0.2.1, 192.0.2.0 and 192.0.2.255"}
 	catalog := api.NewCatalog(lab)
 	provider, _ := catalog.Find(api.InfraProvider, "lab")
-	if issues := validateManagedSegmentAddress(catalog, installOn("2001:db8::10/64"), netip.MustParsePrefix("2001:db8::10/64"), provider, "net"); !slices.Equal(issues, []api.Issue{want}) {
+	if issues := validateManagedSegmentAddress(catalog, installOn("2001:db8::10"), netip.MustParsePrefix("2001:db8::10/64"), provider, "net"); !slices.Equal(issues, []api.Issue{want}) {
 		t.Fatalf("issues = %#v, want %#v", issues, want)
 	}
 }

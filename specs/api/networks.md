@@ -116,19 +116,19 @@ none of them:
   node subnets read it. An assignment in no Network, only in Networks of
   other sites, or in several Networks is refused.
 - **VLAN agreement** (Machine, at `spec.network.addresses[].interface`): when
-  the assigned interface's composed NMState stack carries a VLAN, because the
-  interface is a VLAN or a bridge or bond port path down from it reaches one,
+  the assigned interface's composed NMState stack carries a VLAN, because it
+  is one or a bridge or bond port path down from it reaches one,
   every such `vlan.id` equals the Network's `vlan`, and a Network without
   `vlan` refuses a tagged stack.
 - **Carriage** (Machine, at the same field): each NIC under the assigned
   interface sits on a [segment](machines.md#machine-profiles-and-segments)
   that carries the Network tagged when a VLAN lies on the path to it, else
-  untagged; a stack whose NICs sit on two segments is left to the bond rule.
-  Every available VLAN interface stacked on a NIC tags the `vlan` of a Network
-  that NIC's segment carries tagged (at the network configuration). Each
-  refusal names the Machine, interface, NIC, segment and Network, and the
-  remedy adds the Network to the segment's carriage or moves the NIC with
-  `segmentRef`.
+  untagged, each segment of a bridge alike; a bond across segments is the bond
+  rule's. Every other available VLAN on a NIC tags the `vlan` of a Network
+  its segment carries tagged (at the network configuration). Each
+  refusal names the Machine, interface, NIC, segment and Network; the remedy
+  adds the Network to the segment's carriage, never tagged on KubeVirt or
+  vSphere, or moves the NIC.
 - **Capacity** (Machine, at `spec.network`): an interface's effective MTU does
   not exceed the `mtu` of a Network it holds an assignment on.
 - **Segment selection** (Machine, at its bare-metal or vSphere `nics` entry): on

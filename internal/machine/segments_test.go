@@ -93,7 +93,7 @@ func TestAnAssignmentsStackAgreesWithItsSegmentsCarriage(t *testing.T) {
 	machine, _ := fixture()
 	network := lan(m("ipv4", m("cidr", "192.0.2.0/24")))
 	issue, found := issueWith(membershipIssues(t, machine, network, metalProvider(m("name", "net", "baremetal", m()))), "$.spec.network.addresses[0].interface", "interface eth0 of Machine/node reaches Network/lan untagged on NIC eth0, and segment net (spec.segments[0] of InfraProvider/metal) carries no Network untagged")
-	if !found || issue.Remediation != "set spec.segments[0].untaggedNetworkRef of InfraProvider/metal to lan, or move NIC eth0 with its segmentRef on Machine/node to a segment that carries it" {
+	if !found || issue.Remediation != "set spec.segments[0].untaggedNetworkRef of InfraProvider/metal to lan, or set segmentRef on the spec.substrate.baremetal.nics entry of NIC eth0 on Machine/node to a segment that carries it" {
 		t.Fatalf("issue = %+v (found %v)", issue, found)
 	}
 	other := object(api.Network, "other", m("provided", true, "ipv4", m("cidr", "198.51.100.0/24")))
@@ -108,9 +108,8 @@ func TestAnAssignmentsStackAgreesWithItsSegmentsCarriage(t *testing.T) {
 	if !found || !strings.HasPrefix(issue.Remediation, "add lan to spec.segments[0].taggedNetworkRefs of InfraProvider/metal") {
 		t.Fatalf("issue = %+v (found %v)", issue, found)
 	}
-	issue, found = issueWith(issues, "$.spec.network.configRef", "VLAN interface eth0.200 of Machine/node tags VLAN 200 on NIC eth0, and segment net (spec.segments[0] of InfraProvider/metal) carries no tagged Network with that vlan")
-	if !found || !strings.HasPrefix(issue.Remediation, "add lan to spec.segments[0].taggedNetworkRefs of InfraProvider/metal") {
-		t.Fatalf("issue = %+v (found %v)", issue, found)
+	if issue, found := issueWith(issues, "$.spec.network.configRef", "VLAN interface eth0.200"); found {
+		t.Fatalf("a VLAN whose assignment's carriage is refused is refused again: %+v", issue)
 	}
 
 	unassigned, _ := fixture()
@@ -127,7 +126,94 @@ func TestAManagedSegmentCarriesOnlyItsOwnNetworkUntagged(t *testing.T) {
 	machine := guest(m("configRef", "net", "addresses", list(m("name", "ip", "address", "198.51.100.11", "interface", "enp1s0"))))
 	other := object(api.Network, "other", m("provided", true, "ipv4", m("cidr", "198.51.100.0/24")))
 	issue, found := issueWith(admission(machine, append(lab, other)...), "$.spec.network.addresses[0].interface", "reaches Network/other untagged on NIC enp1s0, and segment net (managed Network/net of InfraProvider/lab) carries Network/net untagged")
-	if !found || issue.Remediation != "move NIC enp1s0 with its segmentRef on Machine/guest to a segment that carries Network/other untagged" {
+	if !found || issue.Remediation != "add an entry {nicRef: enp1s0, segmentRef: <segment>} to spec.substrate.libvirt.nics of Machine/guest naming a segment that carries Network/other untagged" {
+		t.Fatalf("issue = %+v (found %v)", issue, found)
+	}
+}
+
+// An OVS internal interface has no ports of its own and is a port of its
+// bridge, so its stack continues through the bridge's other ports to their
+// NICs, untagged, since the subset admits no port VLAN settings.
+func TestAnOVSInternalInterfaceReachesTheNICsOfItsBridge(t *testing.T) {
+	ovs := func(mtu string) api.Object {
+		internal := m("name", "ovs0", "type", "ovs-interface")
+		if mtu != "" {
+			internal = internal.With("mtu", api.IntegerValue(mtu))
+		}
+		return object(api.NetworkConfig, "net", m("nmstate", m("interfaces", list(
+			m("name", "eth0", "type", "ethernet"),
+			m("name", "ovsbr", "type", "ovs-bridge", "bridge", m("port", list(m("name", "eth0"), m("name", "ovs0")))),
+			internal),
+			"routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-interface", "ovs0"))))))
+	}
+	machine, _ := fixture()
+	machine = withNetwork(machine, []string{"network", "addresses"}, list(m("name", "primary", "address", "192.0.2.11", "interface", "ovs0")))
+	tagged := lan(m("vlan", api.IntegerValue("200"), "ipv4", m("cidr", "192.0.2.0/24")))
+	other := object(api.Network, "other", m("provided", true, "ipv4", m("cidr", "198.51.100.0/24")))
+	carrying := metalProvider(m("name", "net", "untaggedNetworkRef", "other", "baremetal", m()))
+	if _, found := issueWith(membershipIssues(t, machine, ovs(""), tagged, other, carrying), "$.spec.network.addresses[0].interface",
+		"interface ovs0 of Machine/node reaches Network/lan untagged on NIC eth0, and segment net (spec.segments[0] of InfraProvider/metal) carries Network/other untagged"); !found {
+		t.Fatalf("an OVS internal interface was not followed to its bridge's NIC: %+v", membershipIssues(t, machine, ovs(""), tagged, other, carrying))
+	}
+	wide := lan(m("mtu", api.IntegerValue("9000"), "ipv4", m("cidr", "192.0.2.0/24")))
+	if _, found := issueWith(membershipIssues(t, machine, ovs("9000"), wide), "$.spec.network", "interface ovs0 of Machine/node has MTU 9000 above capacity 1500 of segment net (spec.segments[0] of InfraProvider/metal), which its NIC eth0 is on"); !found {
+		t.Fatalf("an OVS internal interface was not bounded by its bridge's segment: %+v", membershipIssues(t, machine, ovs("9000"), wide))
+	}
+}
+
+// A bridge whose ports sit on two segments reaches its Network through each of
+// them, so each segment must carry it; a bond across segments stays the bond
+// rule's refusal.
+func TestABridgeAcrossSegmentsNeedsEachToCarryItsNetwork(t *testing.T) {
+	two := metalProvider(m("name", "net", "untaggedNetworkRef", "lan", "baremetal", m()), m("name", "storage", "untaggedNetworkRef", "other", "baremetal", m()))
+	other := object(api.Network, "other", m("provided", true, "ipv4", m("cidr", "198.51.100.0/24")))
+	config := object(api.NetworkConfig, "net", m("nmstate", m("interfaces", list(
+		m("name", "eth0", "type", "ethernet"), m("name", "eth1", "type", "ethernet"),
+		m("name", "br0", "type", "linux-bridge", "bridge", m("port", list(m("name", "eth0"), m("name", "eth1")))))),
+		"routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-interface", "br0")))))
+	machine := withNetwork(twoNICMachine("storage"), []string{"network", "addresses"}, list(m("name", "primary", "address", "192.0.2.11", "interface", "br0")))
+	issues := membershipIssues(t, machine, two, other, config, lan(m("ipv4", m("cidr", "192.0.2.0/24"))))
+	issue, found := issueWith(issues, "$.spec.network.addresses[0].interface", "interface br0 of Machine/node reaches Network/lan untagged on NIC eth1, and segment storage (spec.segments[1] of InfraProvider/metal) carries Network/other untagged")
+	if !found || issue.Remediation != "set spec.segments[1].untaggedNetworkRef of InfraProvider/metal to lan, or move NIC eth1 with its segmentRef on Machine/node to a segment that carries it" {
+		t.Fatalf("issue = %+v (found %v) in %+v", issue, found, issues)
+	}
+	if _, found := issueWith(issues, "$.spec.network.addresses[0].interface", "on NIC eth0"); found {
+		t.Fatalf("the segment that carries the Network was refused: %+v", issues)
+	}
+}
+
+// A KubeVirt segment carries one network untagged and refuses tagged carriage,
+// so a VLAN stack on it is told to drop the VLAN or move the NIC, never to add
+// a tagged Network.
+func TestAFabricSegmentNeverOffersTaggedCarriage(t *testing.T) {
+	provider := object(api.InfraProvider, "kv", m("kubevirt", m("kubeconfigRef", "host", "namespace", "guests"), "segments", list(
+		m("name", "primary", "untaggedNetworkRef", "other", "kubevirt", m()), m("name", "storage", "untaggedNetworkRef", "lan", "kubevirt", m()))))
+	machine := object(api.Machine, "node", m("substrate", m("providerRef", "kv", "kubevirt", m("nics", list(m("nicRef", "eth0", "segmentRef", "primary")))), "hardware", m("nics", list(m("name", "eth0")))))
+	native := m("interfaces", list(m("name", "eth0", "type", "ethernet"), m("name", "eth0.200", "type", "vlan", "vlan", m("base-iface", "eth0", "id", api.IntegerValue("200")))))
+	tagged := lan(m("vlan", api.IntegerValue("200"), "ipv4", m("cidr", "192.0.2.0/24")))
+	issues := validateCarriage(machine, api.NewCatalog([]api.Object{machine, provider, tagged}), native, tagged, "eth0.200", "$.spec.network.addresses[0].interface")
+	want := "remove VLAN interface eth0.200 from the stack of interface eth0.200 on Machine/node, or move NIC eth0 with its segmentRef on Machine/node to a segment that has untaggedNetworkRef lan"
+	if len(issues) != 1 || issues[0].Remediation != want {
+		t.Fatalf("issues = %+v", issues)
+	}
+}
+
+// An interface without an mtu of its own runs at 1500, so above a smaller
+// capacity the step is to set one, and a bare-metal NIC without a nics entry is
+// told the entry it needs, macAddress included.
+func TestRemediesNameTheFieldsTheOperatorAdds(t *testing.T) {
+	machine, _ := fixture()
+	narrow := metalProvider(m("name", "net", "untaggedNetworkRef", "lan", "mtu", api.IntegerValue("1400"), "baremetal", m()))
+	issue, found := issueWith(membershipIssues(t, machine, narrow, lan(m("ipv4", m("cidr", "192.0.2.0/24")))), "$.spec.network", "interface eth0 of Machine/node has MTU 1500 above capacity 1400")
+	if !found || issue.Remediation != "set mtu on interface eth0 to at most 1400 in the network configuration of Machine/node, or raise spec.segments[0].mtu of InfraProvider/metal" {
+		t.Fatalf("issue = %+v (found %v)", issue, found)
+	}
+	two := metalProvider(m("name", "net", "untaggedNetworkRef", "lan", "baremetal", m()), m("name", "storage", "baremetal", m()))
+	cabled := twoNICConfig(m("name", "eth0", "type", "ethernet"), m("name", "eth1", "type", "ethernet"))
+	unlisted := twoNICMachine("")
+	unlisted = withNetwork(unlisted, []string{"substrate", "baremetal", "nics"}, list(unlisted.Spec().Get("substrate", "baremetal", "nics").Items()[0]))
+	issue, found = issueWith(membershipIssues(t, unlisted, two, lan(m("ipv4", m("cidr", "192.0.2.0/24"))), cabled), "$.spec.substrate.baremetal.nics", "NIC eth1 of Machine/node carries interface eth1")
+	if !found || issue.Remediation != "add an entry {nicRef: eth1, macAddress: <its MAC>, segmentRef: <segment>} to spec.substrate.baremetal.nics of Machine/node, with segmentRef one of net, storage" {
 		t.Fatalf("issue = %+v (found %v)", issue, found)
 	}
 }

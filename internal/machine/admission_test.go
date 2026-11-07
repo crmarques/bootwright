@@ -645,7 +645,7 @@ func TestAMachineKindDefaultCannotDeclareFirmware(t *testing.T) {
 
 func TestFirmwareOnALibvirtProviderRefusesAtTheArm(t *testing.T) {
 	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
-	attached := installOn("192.0.2.11/24")
+	attached := installOn("192.0.2.11")
 	arm := m("providerRef", "lab", "baremetal", m("bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1", "credentialsRef", "bmc"), "firmware", m("secureBoot", true)))
 	machine := attached.WithSpec(attached.Spec().With("substrate", arm))
 	mismatch := api.Issue{Code: "api.invariant", Field: "$.spec.substrate.baremetal",

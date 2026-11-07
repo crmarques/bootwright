@@ -41,7 +41,7 @@ func validateCarriage(o api.Object, c api.Catalog, segment api.Value, variant st
 	path := "$." + entry
 	name := segment.Get("name").Text()
 	untagged := SegmentUntagged(segment)
-	fabric := variant == ArmKubeVirt || variant == ArmVSphere
+	fabric := !TaggedCarriage(variant)
 	if fabric && untagged == "" {
 		issues = add(issues, api.Issue{Code: "api.required", Field: path + ".untaggedNetworkRef",
 			Message:     "a " + variant + " segment delivers exactly one network to each NIC on it, and segment " + name + " of " + o.Identity() + " names none",
@@ -109,6 +109,8 @@ func CapacityField(c api.Catalog, provider api.Object, name string) string {
 	}
 	return "spec.mtu of Network/" + name
 }
+
+func TaggedCarriage(arm string) bool { return arm != ArmKubeVirt && arm != ArmVSphere }
 
 func CarriageField(c api.Catalog, provider api.Object, name string, tagged bool) string {
 	for index, segment := range provider.Spec().Get("segments").Items() {

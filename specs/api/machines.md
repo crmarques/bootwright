@@ -971,9 +971,8 @@ address injection defined under
 
 DNS selections use the shared
 [server selection rules](infrastructure-services.md#dns-and-ntp-selection-lists).
-A selected network may consume at most one distinct managed DNSServer;
-multiple endpoint selections on the same service do not count as multiple
-managed servers. External servers do not count toward this limit. Omission
+A selected network consumes at most one distinct managed DNSServer, however
+many of its endpoints it selects; external servers do not count. Omission
 leaves native resolver configuration unchanged; an explicit empty list clears
 inherited Bootwright selections. The same rules apply to Machine inline
 network configuration.
@@ -993,7 +992,8 @@ This subset is not a claim of full NMState or installer-schema compatibility.
 | `interfaces[].mtu` | Optional integer; the effective MTU is [bounded by capacity](#machine-profiles-and-segments). |
 | `interfaces[].vlan.base-iface` | Optional parent interface name; the interface takes the segment of its parent. A VLAN install interface needs an available ethernet or bond parent. |
 | `interfaces[].vlan.id` | Optional integer; a VLAN install interface needs 1 to 4094 and an interface name that agrees with it ([managed OS](../managed-os.md#installation)). |
-| `interfaces[].link-aggregation.port` | Optional bond member names; with each ethernet whose `controller` names the bond, the members whose segments it takes. |
+| `interfaces[].link-aggregation.port`, `interfaces[].controller` | Bond members, and the bond or bridge an interface is a port of; a bond takes its members' segments. |
+| `interfaces[].bridge.port[].name` | Optional bridge port names; a bridge takes their segments, an `ovs-interface` without ports those of its bridge's other ports, untagged. |
 | `interfaces[].ipv4`, `interfaces[].ipv6` | Optional family mappings. |
 | `interfaces[].ipv4.enabled`, `interfaces[].ipv6.enabled` | Optional booleans; explicit `false` forbids static assignment. |
 | `interfaces[].ipv4.dhcp`, `interfaces[].ipv6.dhcp` | Optional booleans; explicit `true` forbids static assignment. |
@@ -1005,26 +1005,25 @@ This subset is not a claim of full NMState or installer-schema compatibility.
 | `routes.config[].next-hop-address` | Optional IP literal without a zone, of its destination's family. |
 | `routes.config[].state` | Optional non-empty string; `absent` excludes the route from default-route selection. |
 
-Validate templates and supplied override fields before merging so an override
-cannot hide an authored static-address declaration. Complete template/inline
-and composed interfaces require explicit types; a partial override may omit
-the type of an existing interface, but a new interface must supply it.
-Validate the composed subset again before injecting assignments and hardware
-MACs. Only a `type: ethernet` interface
+Templates and override fields are validated before merging, so an override
+cannot hide an authored static address, and the composed subset again before
+assignments and hardware MACs are injected. Template, inline and composed
+interfaces declare their type; a partial override may omit an existing
+interface's. Only a `type: ethernet` interface
 binds to a NIC. An assignment or binding to a missing, absent or
-ignored interface fails. A template/override MAC that disagrees with its bound
-hardware NIC fails; it is never silently overwritten.
+ignored interface fails, as does a template or override MAC that disagrees
+with its bound hardware NIC, never silently overwritten.
 
-An assignment with omitted family mode supplies static enabled behavior in the
-internal composed map. It may not override explicit disabled, DHCP or IPv6
-autoconfiguration choices. Family checks apply to the assigned IP's family.
+An assignment whose family mode is omitted makes it static and enabled in the
+composed map, never overriding an explicit disabled, DHCP or IPv6
+autoconfiguration choice. Family checks apply to the assigned IP's family.
 Each assignment must resolve to exactly one composed interface.
 
 A default-route candidate has a non-absent route, a zero-prefix destination of
 the assigned IP's family, and a `next-hop-interface` equal to that assignment's
-interface. Route metrics do not resolve ambiguity. The existing
-[installation-address selection](#network-configuration) then chooses a unique
-eligible address or refuses; declaration order provides no fallback.
+interface. The [installation-address selection](#network-configuration) then
+chooses a unique eligible address or refuses, by neither route metric nor
+declaration order.
 
 Installation reads the composed map without the injected addresses and MACs;
 a libvirt domain attaches one vNIC per `hardware.nics` entry, whatever the

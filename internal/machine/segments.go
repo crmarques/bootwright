@@ -43,13 +43,14 @@ func validateNICSegmentSelection(c api.Catalog, o, provider api.Object, native a
 			continue
 		}
 		field := "$.spec.substrate." + variant + ".nics"
+		remedy := "add an entry {nicRef: " + nic + ", macAddress: <its MAC>, segmentRef: <segment>} to spec.substrate." + variant + ".nics of " + o.Identity() + ", with segmentRef one of " + strings.Join(names, ", ")
 		for i, entry := range substrate.MachineNICSegments(o).Items() {
 			if entry.Get("nicRef").Text() == nic {
 				field = fmt.Sprintf("%s[%d]", field, i)
+				remedy = "set segmentRef on the spec.substrate." + variant + ".nics entry of NIC " + nic + " on " + o.Identity() + " to one of " + strings.Join(names, ", ")
 			}
 		}
-		issues = appendIssues(issues, invariant(field, "NIC "+nic+" of "+o.Identity()+" carries interface "+match.Get("interface").Text()+", and "+provider.Identity()+" declares segments "+strings.Join(names, ", ")+", so the NIC needs its segment",
-			"set segmentRef on the spec.substrate."+variant+".nics entry of NIC "+nic+" on "+o.Identity()+" to one of "+strings.Join(names, ", ")))
+		issues = appendIssues(issues, invariant(field, "NIC "+nic+" of "+o.Identity()+" carries interface "+match.Get("interface").Text()+", and "+provider.Identity()+" declares segments "+strings.Join(names, ", ")+", so the NIC needs its segment", remedy))
 	}
 	return issues
 }
@@ -107,7 +108,7 @@ func validateCapacities(c api.Catalog, o, provider api.Object, native api.Value)
 			seen[reference] = true
 			if capacity := substrate.SegmentMTU(segment); mtu > capacity {
 				issues = appendIssues(issues, invariant("$.spec.network", fmt.Sprintf("interface %s of %s has MTU %d above capacity %d of %s, which its NIC %s is on", name, o.Identity(), mtu, capacity, substrate.SegmentLabel(c, provider, reference), nic),
-					"lower the interface mtu in the network configuration of "+o.Identity()+", or raise "+substrate.CapacityField(c, provider, reference)))
+					mtuRemedy(o, name, source, capacity)+", or raise "+substrate.CapacityField(c, provider, reference)))
 			}
 		}
 	}
@@ -123,43 +124,83 @@ func validateCapacities(c api.Catalog, o, provider api.Object, native api.Value)
 		if !ok {
 			capacity = 1500
 		}
-		if mtu, _ := effectiveMTU(native, name, map[string]bool{}); mtu > capacity {
+		if mtu, source := effectiveMTU(native, name, map[string]bool{}); mtu > capacity {
 			issues = appendIssues(issues, invariant("$.spec.network", fmt.Sprintf("interface %s of %s has MTU %d above capacity %d of %s, on which it holds address %s", name, o.Identity(), mtu, capacity, match.Network.Identity(), address),
-				"lower the interface mtu in the network configuration of "+o.Identity()+", or raise spec.mtu of "+match.Network.Identity()))
+				mtuRemedy(o, name, source, capacity)+", or raise spec.mtu of "+match.Network.Identity()))
 		}
 	}
 	return issues
 }
 
+func mtuRemedy(o api.Object, name, source string, capacity int64) string {
+	if source == name {
+		return "lower the interface mtu in the network configuration of " + o.Identity()
+	}
+	return fmt.Sprintf("set mtu on interface %s to at most %d in the network configuration of %s", name, capacity, o.Identity())
+}
+
 type stackLeaf struct {
 	name   string
 	tagged bool
+	bond   string
+	path   []string
 }
 
 func stackLeaves(native api.Value, name string, tagged bool, visiting map[string]bool) []stackLeaf {
+	return walkStack(native, name, stackLeaf{tagged: tagged}, visiting)
+}
+
+func walkStack(native api.Value, name string, at stackLeaf, visiting map[string]bool) []stackLeaf {
 	if visiting[name] {
 		return nil
 	}
 	visiting[name] = true
 	defer delete(visiting, name)
+	at.path = append(slices.Clone(at.path), name)
 	iface, _ := namedValue(native.Get("interfaces"), name)
 	if parent := iface.Get("vlan", "base-iface").Text(); parent != "" {
-		return stackLeaves(native, parent, true, visiting)
+		at.tagged = true
+		return walkStack(native, parent, at, visiting)
 	}
+	if iface.Get("type").Text() == "bond" {
+		at.bond = name
+	}
+	ports := bridgeMembers(native, name)
+	if bridge := portOwner(native, name); len(ports) == 0 && iface.Get("type").Text() == "ovs-interface" && bridge != "" && !visiting[bridge] {
+		visiting[bridge] = true
+		defer delete(visiting, bridge)
+		at.path = append(at.path, bridge)
+		ports = slices.DeleteFunc(bridgeMembers(native, bridge), func(port string) bool { return port == name })
+	}
+	if len(ports) == 0 {
+		at.name = name
+		return []stackLeaf{at}
+	}
+	var leaves []stackLeaf
+	for _, port := range ports {
+		leaves = append(leaves, walkStack(native, port, at, visiting)...)
+	}
+	return leaves
+}
+
+func bridgeMembers(native api.Value, name string) []string {
+	iface, _ := namedValue(native.Get("interfaces"), name)
 	ports := bondPorts(native, name)
 	for _, port := range iface.Get("bridge", "port").Items() {
 		if member := port.Get("name").Text(); member != "" && !slices.Contains(ports, member) {
 			ports = append(ports, member)
 		}
 	}
-	if len(ports) == 0 {
-		return []stackLeaf{{name: name, tagged: tagged}}
+	return ports
+}
+
+func portOwner(native api.Value, name string) string {
+	for _, candidate := range native.Get("interfaces").Items() {
+		if owner := candidate.Get("name").Text(); owner != name && slices.Contains(bridgeMembers(native, owner), name) {
+			return owner
+		}
 	}
-	var leaves []stackLeaf
-	for _, port := range ports {
-		leaves = append(leaves, stackLeaves(native, port, tagged, visiting)...)
-	}
-	return leaves
+	return ""
 }
 
 func validateCarriage(o api.Object, c api.Catalog, native api.Value, owner api.Object, iface, path string) []api.Issue {
@@ -173,41 +214,45 @@ func validateCarriage(o api.Object, c api.Catalog, native api.Value, owner api.O
 		segment        api.Value
 	}
 	var leaves []placed
-	references := map[string]bool{}
+	bonds := map[string]map[string]bool{}
 	for _, leaf := range stackLeaves(native, iface, false, map[string]bool{}) {
 		nic := substrate.InterfaceNIC(o, leaf.name)
 		reference := substrate.NICSegment(c, provider, o, nic)
 		if segment, ok := substrate.NamedSegment(c, provider, reference); ok && slices.Contains(substrate.MachineNICs(o), nic) {
 			leaves = append(leaves, placed{leaf, nic, reference, segment})
-			references[reference] = true
+			if bonds[leaf.bond] == nil {
+				bonds[leaf.bond] = map[string]bool{}
+			}
+			bonds[leaf.bond][reference] = true
 		}
 	}
-	if len(references) > 1 {
-		return nil
-	}
+	variant := substrate.Variant(provider)
+	fabric := !substrate.TaggedCarriage(variant)
 	var issues []api.Issue
 	seen := map[string]bool{}
 	for _, leaf := range leaves {
 		nic, reference, segment := leaf.nic, leaf.reference, leaf.segment
-		if key := reference + "/" + strconv.FormatBool(leaf.tagged); !seen[key] {
-			seen[key] = true
-		} else {
+		key := reference + "/" + strconv.FormatBool(leaf.tagged)
+		if seen[key] || leaf.bond != "" && len(bonds[leaf.bond]) > 1 {
 			continue
 		}
+		seen[key] = true
 		label := substrate.SegmentLabel(c, provider, reference)
-		move := ", or move NIC " + nic + " with its segmentRef on " + o.Identity() + " to a segment that carries it"
 		switch untagged := substrate.SegmentUntagged(segment); {
 		case leaf.tagged && !substrate.SegmentCarriesTagged(segment, owner.Name()):
-			issues = appendIssues(issues, invariant(path, "interface "+iface+" of "+o.Identity()+" reaches "+owner.Identity()+" through a VLAN on NIC "+nic+", and "+label+" does not carry it tagged",
-				"add "+owner.Name()+" to "+substrate.CarriageField(c, provider, reference, true)+move))
+			remedy := "add " + owner.Name() + " to " + substrate.CarriageField(c, provider, reference, true) + ", or " + moveNIC(c, provider, o, nic, "carries it")
+			if fabric {
+				remedy = "remove VLAN interface " + stackVLAN(native, leaf.path) + " from the stack of interface " + iface + " on " + o.Identity() + ", or " + moveNIC(c, provider, o, nic, "has untaggedNetworkRef "+owner.Name())
+			}
+			issues = appendIssues(issues, invariant(path, "interface "+iface+" of "+o.Identity()+" reaches "+owner.Identity()+" through a VLAN on NIC "+nic+", and "+label+" does not carry it tagged", remedy))
 		case !leaf.tagged && untagged != owner.Name():
 			held := "carries no Network untagged"
 			if untagged != "" {
 				held = "carries Network/" + untagged + " untagged"
 			}
-			remedy := "move NIC " + nic + " with its segmentRef on " + o.Identity() + " to a segment that carries " + owner.Identity() + " untagged"
+			remedy := moveNIC(c, provider, o, nic, "carries "+owner.Identity()+" untagged")
 			if field := substrate.CarriageField(c, provider, reference, false); field != "" {
-				remedy = "set " + field + " to " + owner.Name() + move
+				remedy = "set " + field + " to " + owner.Name() + ", or " + moveNIC(c, provider, o, nic, "carries it")
 			}
 			issues = appendIssues(issues, invariant(path, "interface "+iface+" of "+o.Identity()+" reaches "+owner.Identity()+" untagged on NIC "+nic+", and "+label+" "+held, remedy))
 		}
@@ -215,19 +260,69 @@ func validateCarriage(o api.Object, c api.Catalog, native api.Value, owner api.O
 	return issues
 }
 
+func stackVLAN(native api.Value, path []string) string {
+	for _, member := range path {
+		if iface, _ := namedValue(native.Get("interfaces"), member); iface.Get("vlan", "base-iface").Text() != "" {
+			return member
+		}
+	}
+	return ""
+}
+
+func moveNIC(c api.Catalog, provider, o api.Object, nic, carries string) string {
+	variant := substrate.Variant(provider)
+	sole := substrate.Segments(c, provider).Len() == 1
+	for _, entry := range substrate.MachineNICSegments(o).Items() {
+		switch {
+		case entry.Get("nicRef").Text() != nic:
+		case entry.Has("segmentRef") && !sole:
+			return "move NIC " + nic + " with its segmentRef on " + o.Identity() + " to a segment that " + carries
+		case !entry.Has("segmentRef") || entry.Has("macAddress"):
+			return "set segmentRef on the spec.substrate." + variant + ".nics entry of NIC " + nic + " on " + o.Identity() + " to a segment that " + carries
+		}
+	}
+	entry := "{nicRef: " + nic + ", segmentRef: <segment>}"
+	if !substrate.VirtualArm(variant) {
+		entry = "{nicRef: " + nic + ", macAddress: <its MAC>, segmentRef: <segment>}"
+	}
+	return "add an entry " + entry + " to spec.substrate." + variant + ".nics of " + o.Identity() + " naming a segment that " + carries
+}
+
+func carriageChecked(o api.Object, c api.Catalog, native api.Value) map[string]bool {
+	checked := map[string]bool{}
+	for _, entry := range o.Spec().Get("network", "addresses").Items() {
+		name := entry.Get("interface").Text()
+		iface, declared := namedValue(native.Get("interfaces"), name)
+		if !declared || unavailableInterface(iface) {
+			continue
+		}
+		if _, assigned := AssignedNetwork(o, c, entry); !assigned {
+			continue
+		}
+		for _, leaf := range stackLeaves(native, name, false, map[string]bool{}) {
+			for _, member := range leaf.path {
+				checked[member] = true
+			}
+		}
+	}
+	return checked
+}
+
 func validateStackedVLANs(o api.Object, c api.Catalog, native api.Value) []api.Issue {
 	provider, found := Provider(o, c)
 	if !found {
 		return nil
 	}
+	variant := substrate.Variant(provider)
+	checked := carriageChecked(o, c, native)
 	var issues []api.Issue
 	for _, iface := range native.Get("interfaces").Items() {
 		id, ok := iface.Get("vlan", "id").Int64()
 		base := iface.Get("vlan", "base-iface").Text()
-		if !ok || base == "" || unavailableInterface(iface) {
+		name := iface.Get("name").Text()
+		if !ok || base == "" || unavailableInterface(iface) || checked[name] {
 			continue
 		}
-		name := iface.Get("name").Text()
 		seen := map[string]bool{}
 		for _, leaf := range stackLeaves(native, base, true, map[string]bool{}) {
 			nic := substrate.InterfaceNIC(o, leaf.name)
@@ -237,14 +332,17 @@ func validateStackedVLANs(o api.Object, c api.Catalog, native api.Value) []api.I
 				continue
 			}
 			seen[nic] = true
-			remedy := "add the Network of VLAN " + strconv.FormatInt(id, 10)
-			for _, candidate := range c.OfKind(api.Network) {
-				if vlan, tagged := network.VLAN(candidate); tagged && int64(vlan) == id && network.Serves(candidate, o.Spec().Get("placement", "site").Text()) {
-					remedy = "add " + candidate.Name()
+			remedy := "remove VLAN interface " + name + " from the network configuration of " + o.Identity() + ", or " + moveNIC(c, provider, o, nic, "carries its Network untagged")
+			if substrate.TaggedCarriage(variant) {
+				carried := "the Network of VLAN " + strconv.FormatInt(id, 10)
+				for _, candidate := range c.OfKind(api.Network) {
+					if vlan, tagged := network.VLAN(candidate); tagged && int64(vlan) == id && network.Serves(candidate, o.Spec().Get("placement", "site").Text()) {
+						carried = candidate.Name()
+					}
 				}
+				remedy = "add " + carried + " to " + substrate.CarriageField(c, provider, reference, true) + ", " + moveNIC(c, provider, o, nic, "carries it") + ", or correct vlan.id of " + name
 			}
-			issues = appendIssues(issues, invariant(configurationPath(o), "VLAN interface "+name+" of "+o.Identity()+" tags VLAN "+strconv.FormatInt(id, 10)+" on NIC "+nic+", and "+substrate.SegmentLabel(c, provider, reference)+" carries no tagged Network with that vlan",
-				remedy+" to "+substrate.CarriageField(c, provider, reference, true)+", move NIC "+nic+" with its segmentRef on "+o.Identity()+" to a segment that carries it, or correct vlan.id of "+name))
+			issues = appendIssues(issues, invariant(configurationPath(o), "VLAN interface "+name+" of "+o.Identity()+" tags VLAN "+strconv.FormatInt(id, 10)+" on NIC "+nic+", and "+substrate.SegmentLabel(c, provider, reference)+" carries no tagged Network with that vlan", remedy))
 		}
 	}
 	return issues
