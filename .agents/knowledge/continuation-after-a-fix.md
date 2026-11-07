@@ -2,18 +2,15 @@
 
 Observed 2026-10-13 in the owner's M2b Ceph run, where a destroy of the whole
 Ceph fleet followed an automation-only fix that the code did not require.
-Revised for setup v2 (X88): no execution bundle exists any more, so the
-automation never needs `controller install` to reach a run.
+No execution bundle exists, so the automation never needs
+`controller install` to reach a run.
 
 ## Symptom
 
 An apply left a step `failed` or `unknown`, the fix was to `ansible/` only, and
 the operator destroyed and rebuilt the whole context (35 minutes for the Ceph
 fleet) because the milestone status said a moved automation digest needs
-retirement. Builds before X88 also stopped the continuation at the first step
-with `controller.identity`, "the embedded automation does not match the
-approved execution bundle", unless `bootwright controller install` had projected the new
-automation first.
+retirement.
 
 ## Cause
 
@@ -28,7 +25,7 @@ reads the automation, so a fix confined to automation moves the automation
 digest and no content digest, request byte or version. Another build continues
 an operation exactly when it freezes the same blocks
 ([dependency safety](../../specs/state-reconciliation.md#dependency-safety-during-recovery),
-D142). Since X88 each invocation stages the running executable's embedded
+D142). Each invocation stages the running executable's embedded
 automation itself, and the execution closure (`execution-closure-v2`) is only
 the runtime lock digest and the interpreter ABI, so a rebuild that keeps the
 lock continues with no `controller install`.
@@ -45,9 +42,7 @@ lock continues with no `controller install`.
   closure differs refuses naming the build that registered it, and offers the
   removal when the operation can be superseded.
 - An unknown block is observed first. When the observation leaves it `failed`,
-  the same apply retries it and runs its dependents (D146, X82). Before X82 that
-  apply stopped and the next one retried it, so recovery took two applies; a
-  build from before X82 still behaves that way.
+  the same apply retries it and runs its dependents (D146, X82).
 - A new [version specialization](version-specializations.md) is an automation
   fix: its identity enters no intent or digest, so it continues a live
   operation at every step not yet attempted and at every step whose failure
@@ -60,12 +55,10 @@ lock continues with no `controller install`.
   `tunnel-config-complete-call_home_initialize.json` markers, the enroll-time
   `orch accept-license` and the persisted-acceptance readiness read) touched
   no Go file: its markers enter no intent, request or digest, so a build with
-  it continues an earlier build's live operation without a version move.
+  it continues another build's live operation without a version move.
 - An exhausted image pull continues too: each host preparation run makes up
   to three bounded pull attempts of its own, and the retained `pull-attempt-N`
-  records serve crash diagnosis and recovery only (B648, X102). A build from
-  before X102 refuses `image-pull` on every apply once a host's three retained
-  attempts are spent; the build with this fix continues that operation.
+  records serve crash diagnosis and recovery only (B648, X102).
 - A destroy is needed when the fix moves a version or a pin, which moves the
   content digest: the continuation then refuses naming the first block that
   differs. The contract guard in `cmd/bootwright` fails the build when a request
@@ -86,8 +79,3 @@ lock continues with no `controller install`.
   delivery moves the add-on and network evidence to v2 and their content
   digests with it. An old operation therefore keeps its original executable;
   this change is not an automation-only continuation fix.
-- After continuing an operation with a build that writes `build`, do not go
-  back to an earlier build for it: a build from before X74 decodes records
-  closed and refuses one that carries `build` as "lifecycle record is malformed
-  or unsupported", so it can neither continue nor remove the operation. The
-  removal under the build in hand is the way out (D145).

@@ -25,8 +25,7 @@ are documentation examples.
   `nv-guest` is one Network although its guests reach it on two bridges, since
   a Network does not name a bridge.
 - Every Machine converges to its declared network and power-cycles once
-  ([network convergence](../../../specs/managed-os.md#network-convergence)); this
-  needs a build that includes X55.
+  ([network convergence](../../../specs/managed-os.md#network-convergence)).
 - Host capacity: 12 vCPUs, 24 GiB of guest memory and three 60 GiB disks beyond
   the controller, services and media; the provider reserves 1 vCPU, 2 GiB and
   10 GiB. The managed `virbr-nv` network must not already exist.

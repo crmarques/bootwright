@@ -119,10 +119,10 @@ cluster and its pools, and the operator adds one `CephPool`.
    registers the union-plan apply.
 5. **Durable format.** The carried record is the first durable-format move:
    the operation store version rises, `FirstPassEntries` counts the carried
-   record, and the contract guard goldens move with them. An older build refuses an operation in the new format with its version
-   refusal. Before 1.0
-   [no earlier format is converted](../project.md#design-priorities-and-non-goals),
-   so there is no converter and no older reader.
+   record, and the contract guard goldens move with them. A build reads only
+   the version it writes and refuses another by name; another build continues an
+   operation only where re-planning gives the same blocks
+   ([dependency safety](../state-reconciliation.md#dependency-safety-during-recovery)).
 6. **Proof.** Before admitting, the slice may require `diff --observe` to read
    the pool's cluster blocks present on the host. Records alone never prove
    the cluster is still the one the frozen plan realized.

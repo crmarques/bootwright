@@ -2392,9 +2392,7 @@ retirement remains supported.
 `nvmeof-native` names unavailable/refused qualified native commands;
 `nvmeof-identity` names a changed backing, gateway, authorization or native
 identity; `nvmeof-foreign` names a subsystem without this attempt's intent.
-These are fixed, non-secret refusals with recovery guidance. Request formats
-move to `ceph-core-v32` and `ceph-host-v7`; old incomplete operations
-must be finished or destroyed with their original build.
+These are fixed, non-secret refusals with recovery guidance.
 
 ## RBD replication
 

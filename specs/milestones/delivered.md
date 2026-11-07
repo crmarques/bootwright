@@ -5854,7 +5854,7 @@ the dnf route and X90's offline preparation, and drops the execution
 foundation hold and the Fedora 43 examples; its destinations list drops the
 UBI and Fedora repositories, and the docs test reads the lock's wheel URLs.
 docs/development.md drops the deleted harnesses; docs/acceptance.md gains
-B555's [setup row template](../../docs/acceptance.md#setup-v2-fresh-install-row).
+B555's [setup row template](../../docs/acceptance.md#setup-fresh-install-row).
 The knowledge pages controller-runtime-isolation.md and
 controller-setup-resolution-cost.md are rewritten with the earlier design as
 dated history, native-root-reason-change.md is marked history, and

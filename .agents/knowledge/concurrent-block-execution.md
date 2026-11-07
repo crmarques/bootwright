@@ -111,8 +111,8 @@ order exactly; that is what keeps those goldens meaningful.
 `order()` now sorts by (wave, identity) instead of walking a lexicographic
 ready queue, so the numbered plan reads as the schedule. The order is inside
 `Plan.Digest()`, and `operationstore.ReadPlan` re-derives the plan and compares
-digests, so **an operation frozen by an earlier build refuses**. Live contexts
-must be destroyed with a pre-change binary first, exactly as for
+digests, so **a build whose order differs refuses an operation frozen by another
+build**. Destroy the context with the build that froze it first, exactly as for
 `content-digest-bump-strands-destroy`.
 
 `ScheduleOf` measures a frozen plan for `plan` output. Its first version only

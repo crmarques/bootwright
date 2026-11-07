@@ -4,7 +4,7 @@
 9.9.x lifecycle inputs; [B55](../milestones/m7.md#b55) later reuses that
 qualification for standalone native files. Until then this page holds only the
 shapes that no admitted kind owns: the shared lexical values of native service
-input and the nested shapes of the retired embedded-service kinds. Each
+input and the nested shapes of the embedded-service kinds. Each
 admitted kind's field record lives on the one page its row in the
 [kinds table](../api/ceph.md#kinds) links, and the closed schema in
 `api/v1alpha1/storage.go` is authoritative for field names, types and shapes.

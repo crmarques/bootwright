@@ -329,9 +329,7 @@ filesystem, refuses before any scratch is touched, naming the directory and
 its remedy: the runner with `lifecycle.state` before any job exists or the
 adapter runs, the module by failing its task
 (`TestAnUnsafeOrNoexecScratchParentRefusesBeforeTheRun`,
-`TestTheRunnerScratchesBeneathTheStagingParent`). Scratch directories an
-earlier build left beneath `/var/tmp` are no longer swept; the host's
-systemd-tmpfiles ages them out of `/var/tmp`, 30 days on Fedora and RHEL. Before it writes anything else into
+`TestTheRunnerScratchesBeneathTheStagingParent`). Before it writes anything else into
 the job, the runner takes an exclusive advisory lock on its `lock` file, then
 one on its `holder` file, which only the invocation holds: it is opened
 close-on-exec and never handed to the adapter. It then records beside them the
@@ -384,13 +382,10 @@ removing it too: a sweep that cannot take that lock leaves the job to the one
 removing it, and one that takes it after the job went finds the job's record
 gone and leaves it. A job a sweep is removing therefore never looks held, and
 neither refuses a run of its own context nor names the sweeping process as
-one to end; only a sweep of a build before this rule takes the lock
-exclusively, so across an upgrade a job it is removing refuses as a held one
-until it is gone (`TestAJobAnotherSweepIsRemovingRefusesNoRun`,
+one to end (`TestAJobAnotherSweepIsRemovingRefusesNoRun`,
 `TestARunBesideAnotherContextsSweepsNeverRefusesOverItsEndedJob`). A sweep
 likewise removes a scratch, with its job or once its job is gone, only while
-it holds the scratch directory's own lock exclusively, which a sweep of a
-build before this rule never takes, so two sweeps of this build never empty
+it holds the scratch directory's own lock exclusively, so two sweeps never empty
 one scratch together: one that cannot take that lock leaves the scratch to
 the sweep removing it, and one that takes it after the scratch went leaves it
 (`TestAnOrphanedScratchAnotherSweepIsRemovingRefusesNoRun`,

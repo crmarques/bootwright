@@ -35,7 +35,7 @@ the host's dnf owns every package, so setup only asks what is missing:
   ABI that leaves the lock adds one `python3.X` install and a new venv.
 
 D152's targets, which the owner's fresh-install run measures and records as
-[ledger rows](../../docs/acceptance.md#setup-v2-fresh-install-row) (B555):
+[ledger rows](../../docs/acceptance.md#setup-fresh-install-row) (B555):
 fresh setup within 60 s excluding dnf, the ready path and a same-lock build
 within 2 s, and a runtime of at most 60 MB and 3,000 files. None is measured
 on a host yet.

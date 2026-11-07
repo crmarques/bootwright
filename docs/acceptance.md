@@ -49,24 +49,24 @@ Every coverage page applies these two rules, links them and states only its
 additions.
 
 - **Versions.** When a slice moves a frozen request version, a row accepted on
-  an earlier build is repeated, and a context an earlier build applied is
-  destroyed with that build first.
+  another build is repeated, and a context another build applied is destroyed
+  with that build first.
 - **Evidence, not approval.** A run proves its profile on its release only. A
   release whose native mechanics differ gets its own row for the affected
   profile and a registered specialization; no row or specialization approves
   or refuses a release.
 
-## Setup v2 fresh-install row
+## Setup fresh-install row
 
 [B555](../specs/milestones/delivered.md#x93--the-owner-run-of-2026-10-14)'s owner gate is one row per host, a
-Fedora 44 controller and a RHEL 9 VM, run on a build that contains X90 after
-the [fresh install](operator-guide.md#a-host-an-earlier-bootwright-build-manages)
-removed the earlier store. It runs no example, so its log digest covers
+Fedora 44 controller and a RHEL 9 VM, run on a build that contains X90 on a
+host with no Bootwright store, prepared as the
+[operator guide](operator-guide.md#prepare-a-host) describes. It runs no example, so its log digest covers
 setup's runs (`/var/lib/bootwright/setup/runs`) and the controller stage's
 operation. Copy this template into the ledger and replace every `<...>`:
 
 ```text
-| <YYYY-MM-DD> | Commit <sha>; Source clean | <Fedora 44 or RHEL 9.x> amd64, <dnf4 or dnf5> | none: setup v2 fresh install (B555); controller stage of <context> | setup --dry-run; setup --yes (fresh); setup --yes (ready); setup --yes on <same-lock build commit>; apply --context <context> --stage controller; preflight controller | fresh setup <s> wall, <s> of it dnf (from run.output), target 60 s without dnf; ready <s>, target 2 s, "Nothing to do."; same-lock build <s>, target 2 s, "Nothing to do."; wheel cache <bytes>/<files> and runtime <bytes>/<files>, target 60 MB and 3,000 files; controller stage <s> with nothing missing; preflight controller <ready or not>; dnf preview captured <yes/no>, core-package note <yes/no>; Redfish TLS to <BMC> under DEFAULT <ok/refused> and FUTURE <ok/refused>; refusals: <none or each one> | <sha256> | observation, not acceptance |
+| <YYYY-MM-DD> | Commit <sha>; Source clean | <Fedora 44 or RHEL 9.x> amd64, <dnf4 or dnf5> | none: setup fresh install (B555); controller stage of <context> | setup --dry-run; setup --yes (fresh); setup --yes (ready); setup --yes on <same-lock build commit>; apply --context <context> --stage controller; preflight controller | fresh setup <s> wall, <s> of it dnf (from run.output), target 60 s without dnf; ready <s>, target 2 s, "Nothing to do."; same-lock build <s>, target 2 s, "Nothing to do."; wheel cache <bytes>/<files> and runtime <bytes>/<files>, target 60 MB and 3,000 files; controller stage <s> with nothing missing; preflight controller <ready or not>; dnf preview captured <yes/no>, core-package note <yes/no>; Redfish TLS to <BMC> under DEFAULT <ok/refused> and FUTURE <ok/refused>; refusals: <none or each one> | <sha256> | observation, not acceptance |
 ```
 
 Measure the bytes with

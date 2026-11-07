@@ -214,7 +214,7 @@ network, as [below](#lock-refresh-and-tested-hosts). A controller's host
 package installation and runtime build are covered by none of these; they are
 a manual `controller install` on a host missing something, as the
 [operator guide](operator-guide.md#prepare-a-host) describes, recorded as the
-[setup row](acceptance.md#setup-v2-fresh-install-row).
+[setup row](acceptance.md#setup-fresh-install-row).
 
 ### Built-in add-on packages
 

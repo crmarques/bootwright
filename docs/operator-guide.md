@@ -25,9 +25,7 @@ state under `/var/lib/bootwright`
 it, [a network home with root squash](#a-network-home-with-root-squash) where
 the executable must live,
 [a FIPS-mode controller](#a-fips-mode-controller) what its runtime claims and
-which SSH keys it can use, and
-[a host an earlier build manages](#a-host-an-earlier-bootwright-build-manages)
-how a host an earlier build prepared becomes a controller for this one.
+which SSH keys it can use.
 
 Prepare the host once, from the repository root:
 
@@ -289,49 +287,7 @@ A delivered `hostKeyRef` follows the same rule: declare it `rsa` or
 `ecdsaP256` and the installation installs it at its type's path and pins its
 type.
 
-### A host an earlier Bootwright build manages
-
-For a setup v2 host crossing X96's libvirt change, stop managed guests and
-destroy every live context using the build that applied it before switching
-to this build. The libvirt host request is now `substrate-host-libvirt-v5`
-with a new automation digest; an earlier frozen plan cannot continue across
-that boundary. Keep the original binary until its cleanup completes. This
-change alone needs no store deletion or fresh controller install. The
-following store-reset procedure applies to the earlier setup v2 cut-over.
-
-A host whose `/var/lib/bootwright` holds a store an earlier Bootwright build
-created is not a supported controller for this build until that build's
-environments are retired and its store removed. Store commands refuse there
-([contexts](../specs/contexts.md#storage-locking-and-publication)). Every build
-from before the setup v2 cut-over (X88) wrote registry version 5, which this
-build neither reads nor converts, so its first command, `controller install` included,
-refuses before any plan with the `context.state` refusal and fresh-install
-remedy that [contexts](../specs/contexts.md#storage-locking-and-publication)
-states. The way across is a fresh install, in this order:
-
-1. With the build that wrote the store, the one that applied or prepared each
-   context, destroy every environment and delete every context. Keep that
-   build until this is done: this one cannot read its records.
-
-   ```sh
-   bootwright context list
-   bootwright destroy --context <name>
-   bootwright context delete --name <name> --purge
-   ```
-
-2. Once nothing it manages runs any more, as root, remove both store roots:
-
-   ```sh
-   sudo rm -r /var/lib/bootwright /var/lib/bootwright-staging
-   ```
-
-3. With this build, prepare the host as [above](#prepare-a-host), from
-   `controller install --dry-run` on.
-
-Never remove or move that store aside while the services it manages run: a
-context deleted without its destroy leaves its guests, units and listeners
-behind with nothing that owns them. The
-real-hardware test runs this build on a separate RHEL controller, in a subnet
+The real-hardware test runs this build on a separate RHEL controller, in a subnet
 the BMC network reaches on the artifact ports
 ([D109](../specs/milestones/backlog.md#d109)).
 
@@ -629,9 +585,6 @@ lock changed needs one `controller install`, which builds its runtime; until the
 refuses with `controller.state`, "the controller runtime for this build (<identity>) is not
 prepared", and the remedy `run bootwright controller install`
 ([the controller runtime](../specs/controller.md#the-controller-runtime)).
-A build from before the setup v2 cut-over cannot read this build's store, and
-this build cannot read its store: crossing it is the
-[fresh install](#a-host-an-earlier-bootwright-build-manages).
 
 Before installing a new build, take stock of every context:
 `bootwright context list` names them and, under "Unfinished operations", each
@@ -684,38 +637,11 @@ retries it and goes on with the steps after it. A build that would freeze a step
 differently refuses the continuation and names that step; `bootwright destroy --context <context>`
 under that build takes back what the operation owns, and the next `apply` plans
 afresh. A build that changes a frozen request's version or the plan's shape can
-do neither, so destroy with the build that applied it before switching. Do not
-switch back either: a build from before X74 cannot read the attempt and
-resolution records a later build wrote, which name the build that ran them, so
-once such a build has worked an operation, the removal under the build in hand
-is the way out.
+do neither, so destroy with the build that applied it before switching.
 
-A build that changes the local keyring's format cannot open a keyring the
-earlier format wrote: every access to it, `secret encryption init` included,
-refuses with `secret.store.implementation`, naming the persisted format and
-the way out. A context created before X21 keeps a `local-keyring-v3` keyring,
-so destroy it with the build that applied it, before running `controller install` with
-this one, and then delete it with `bootwright context delete --name <context>
---purge` and create it again. An apply or destroy that binds no Secret meets
-the refusal only when it reaches the keyring, which can be after its effects.
-
-A build before X20 accepted an installer media name of 251 to 255 bytes, whose
-record name, the image name followed by `.json`, is longer than a file name
-may be. Its `media add` moved the image into place and then could not write
-the record. Every media command of a later build refuses such a name, so
-`media list` never shows the image and `media delete` cannot remove it. List
-any such image in the host's media directory:
-
-```sh
-sudo find /var/lib/bootwright/media -maxdepth 1 -type f -name '*.iso' -regextype posix-extended -regex '.*/[^/]{251,255}' -printf '%f\n'
-```
-
-Then remove each one it lists by hand, holding the store's lock, which
-refuses while another Bootwright command holds the store:
-
-```sh
-sudo flock --nonblock /var/lib/bootwright rm -- /var/lib/bootwright/media/<name>
-```
+A build that reads another local keyring format refuses every access to the
+keyring, `secret encryption init` included, with `secret.store.implementation`,
+naming the persisted format and the remedy.
 
 ## M1 closing validation
 
@@ -735,16 +661,14 @@ M1's closing operator gate, D59's extended lab-rhel journey, was accepted
 under D154 and D156 ([X98](../specs/milestones/delivered.md#x98--m1-owner-acceptance)).
 To repeat it, run the e2e [`lab-rhel`](../e2e/lab-rhel/runbook.md#run) case
 through its [destroy](../e2e/lab-rhel/runbook.md#destroy) on a clean committed
-build, then the extended checks below. A build at or after the setup v2 cut-over (X88)
-first needs the [fresh install](#a-host-an-earlier-bootwright-build-manages) on
-a host an earlier build prepared; the
-[milestone status](../specs/milestones.md#status) names any other retirement a
+build, then the extended checks below. The
+[milestone status](../specs/milestones.md#status) names any retirement a
 build requires, which a fix confined to automation never does. Use a
 disposable host missing at least one host package, so that setup or the
 controller stage installs it through the host's dnf after showing its preview,
 and with no runtime yet, so that setup builds one; an already-prepared host
 does not qualify that part of the gate. Record setup's timings, its plan and
-the receipt table in the [setup row](acceptance.md#setup-v2-fresh-install-row).
+the receipt table in the [setup row](acceptance.md#setup-fresh-install-row).
 Keep a local run record outside Git.
 
 X48 adds the three-node RHEL journey of the
