@@ -134,9 +134,34 @@ func admitPools(i addons.Instance, f addons.ClusterFacts) []api.Issue {
 		if pool.L2 != nil && pool.L2.Interface != "" {
 			networks = interfaceNetworks(pool, f, field, add)
 		}
-		previous = admitPoolEntries(pool, f, base, networks, previous, add)
+		var held string
+		previous, held = admitPoolEntries(pool, f, base, networks, previous, add)
+		if held != "" && pool.L2 != nil && pool.L2.Interface != "" {
+			checkInterfaceReach(pool, f, field, held, add)
+		}
 	}
 	return issues
+}
+
+func containingNetworks(f addons.ClusterFacts, r interval) []string {
+	var names []string
+	for _, n := range f.Networks {
+		if n.Prefix.Contains(r.first) && n.Prefix.Contains(r.last) {
+			names = append(names, "Network/"+n.Name)
+		}
+	}
+	return names
+}
+
+func checkInterfaceReach(pool api.MetalLBPool, f addons.ClusterFacts, field, held string, add poolIssue) {
+	for _, node := range f.NodeNetworks {
+		for _, nic := range node.Interfaces {
+			if nic.Name == pool.L2.Interface && !slices.Contains(nic.Networks, strings.TrimPrefix(held, "Network/")) {
+				add("api.invariant", field, fmt.Sprintf("interface %s of pool %s does not reach %s, which holds the pool, on node %s", nic.Name, pool.Name, held, node.Machine),
+					fmt.Sprintf("name an interface that reaches %s on every node", held))
+			}
+		}
+	}
 }
 
 func interfaceNetworks(pool api.MetalLBPool, f addons.ClusterFacts, field string, add poolIssue) []netip.Prefix {
@@ -281,8 +306,9 @@ func checkPoolAnnouncers(pool api.MetalLBPool, f addons.ClusterFacts, field stri
 	}
 }
 
-func admitPoolEntries(pool api.MetalLBPool, f addons.ClusterFacts, base string, networks []netip.Prefix, previous []interval, add poolIssue) []interval {
+func admitPoolEntries(pool api.MetalLBPool, f addons.ClusterFacts, base string, networks []netip.Prefix, previous []interval, add poolIssue) ([]interval, string) {
 	var poolNetwork netip.Prefix
+	held := ""
 	for ai, entry := range pool.Addresses {
 		field := fmt.Sprintf("%s.addresses[%d]", base, ai)
 		r, canonical, err := parseInterval(entry)
@@ -306,6 +332,14 @@ func admitPoolEntries(pool api.MetalLBPool, f addons.ClusterFacts, base string, 
 		if r.first.Is4() != (f.Family == "ipv4") {
 			add("api.invariant", field, fmt.Sprintf("address %s of pool %s is not of the %s family of OpenShiftCluster/%s", entry, pool.Name, f.Family, f.Name), fmt.Sprintf("use %s addresses for the pools of %s", f.Family, f.Name))
 			continue
+		}
+		switch holders := containingNetworks(f, r); {
+		case len(holders) == 0:
+			add("api.invariant", field, fmt.Sprintf("address %s of pool %s lies in no declared Network of OpenShiftCluster/%s", entry, pool.Name, f.Name), "use addresses inside a declared Network")
+		case len(holders) > 1:
+			add("api.invariant", field, fmt.Sprintf("address %s of pool %s lies in %s", entry, pool.Name, strings.Join(holders, " and ")), "narrow the pool to one Network, or scope those Networks to distinct sites")
+		case held == "":
+			held = holders[0]
 		}
 		var network netip.Prefix
 		for _, n := range networks {
@@ -345,5 +379,5 @@ func admitPoolEntries(pool api.MetalLBPool, f addons.ClusterFacts, base string, 
 		checkPoolConflicts(pool, f, field, entry, r, previous, add)
 		previous = append(previous, r)
 	}
-	return previous
+	return previous, held
 }

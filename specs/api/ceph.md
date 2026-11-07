@@ -446,14 +446,14 @@ checks:
 - every MON host's address, from `cephadm.addressRef` or else the Machine's
   `access.ssh.addressRef`, lies inside one of `networks.publicCIDRs`;
 - every `networks.publicCIDRs` and `networks.clusterCIDRs` entry contains an
-  IP literal, contact or assignment, that a Machine the topology names
-  declares in `network.addresses`, refused at the entry; a DNS contact does not
-  count, while an IP contact of a provided host, such as a stretch
-  tiebreaker, does;
-- with `networks.clusterCIDRs` declared, every topology node's Machine other
-  than the stretch tiebreaker, which holds no OSD and never uses the
-  cluster network, declares an IP address inside one of them, a Machine whose
-  addresses are assigned at runtime included, refused at the node's
+  IP, contact or assignment, a topology Machine declares in
+  `network.addresses` (an IP contact of a provided host, such as a stretch
+  tiebreaker, counts; a DNS contact does not), and no `clusterCIDRs` entry
+  overlaps a `publicCIDRs` one, each refused at the entry;
+- with `networks.clusterCIDRs` declared, every topology node's Machine but
+  the stretch tiebreaker, which holds no OSD, declares an IP address inside
+  one of them, a Machine whose addresses are assigned at runtime included,
+  refused at the node's
   `machineRef` as `Ceph host <host> (Machine <machine>) has no address inside
   the replication networks <cidrs>`;
 - every eligible host of an ingress service's placement whose Machine declares

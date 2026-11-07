@@ -31,7 +31,7 @@ func authoredPackageConfig(name string) api.Value {
 }
 
 func fixedPackageFacts() addons.ClusterFacts {
-	return addons.ClusterFacts{Name: "cluster", Release: "4.20", Family: "ipv4", MachineNetworks: []netip.Prefix{netip.MustParsePrefix("192.0.2.0/24")}, ClusterNetworks: []netip.Prefix{netip.MustParsePrefix("10.128.0.0/14")}, ServiceNetworks: []netip.Prefix{netip.MustParsePrefix("172.30.0.0/16")}, NodeNetworks: []addons.NodeNetwork{{Machine: "node", DefaultRouteInterface: "eth0", Interfaces: []addons.NodeInterface{{Name: "eth0", Addresses: []netip.Prefix{netip.MustParsePrefix("192.0.2.10/24")}}}, NextHops: []netip.Addr{netip.MustParseAddr("192.0.2.1")}}}}
+	return addons.ClusterFacts{Name: "cluster", Release: "4.20", Family: "ipv4", MachineNetworks: []netip.Prefix{netip.MustParsePrefix("192.0.2.0/24")}, Networks: []addons.NetworkFact{{Name: "lan", Prefix: netip.MustParsePrefix("192.0.2.0/24")}}, ClusterNetworks: []netip.Prefix{netip.MustParsePrefix("10.128.0.0/14")}, ServiceNetworks: []netip.Prefix{netip.MustParsePrefix("172.30.0.0/16")}, NodeNetworks: []addons.NodeNetwork{{Machine: "node", DefaultRouteInterface: "eth0", Interfaces: []addons.NodeInterface{{Name: "eth0", Addresses: []netip.Prefix{netip.MustParsePrefix("192.0.2.10/24")}, Networks: []string{"lan"}}}, NextHops: []netip.Addr{netip.MustParseAddr("192.0.2.1")}}}}
 }
 
 func TestBuiltinPackageRequestGoldens(t *testing.T) {

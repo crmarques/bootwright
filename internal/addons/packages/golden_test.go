@@ -190,9 +190,10 @@ func maximumPools() []api.Value {
 func TestMetalLBAdditionalRenderGoldens(t *testing.T) {
 	secondary := facts()
 	secondary.Gateway = addons.OVNGateway{RoutingViaHost: true, IPForwarding: "Global"}
-	secondary.NodeNetworks[0].Interfaces = append(secondary.NodeNetworks[0].Interfaces, addons.NodeInterface{Name: "eth1", Addresses: []netip.Prefix{netip.MustParsePrefix("198.51.100.10/24")}})
+	secondary.NodeNetworks[0].Interfaces = append(secondary.NodeNetworks[0].Interfaces, addons.NodeInterface{Name: "eth1", Addresses: []netip.Prefix{netip.MustParsePrefix("198.51.100.10/24")}, Networks: []string{"tenant"}})
 	maximum := facts()
 	maximum.MachineNetworks = []netip.Prefix{netip.MustParsePrefix("192.0.0.0/20")}
+	maximum.Networks = []addons.NetworkFact{{Name: "wide", Prefix: netip.MustParsePrefix("192.0.0.0/20")}}
 	for _, test := range []struct {
 		name          string
 		configuration api.Value

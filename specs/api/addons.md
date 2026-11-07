@@ -451,13 +451,12 @@ configuration is `subscription` (`source` defaults to `redhat-operators`),
 | `pools[].serviceAllocation.namespaceSelectors` | array | no | `[]` | At most 16 entries, each `{matchLabels}`: a non-empty map of Kubernetes labels a Service's namespace carries. |
 | `pools[].serviceAllocation.serviceSelectors` | array | no | `[]` | At most 16 entries, each `{matchLabels}`: a non-empty map of Kubernetes labels the Service carries. |
 
-Each pool belongs to one network: either a consumed machine network of the
-bound cluster or, with `l2.interface`, the one subnet that holds the static
-address every node carries on that interface.
-Without `l2.interface` every node of the cluster announces the pool, so each
-node whose Machine declares an interface address has one whose prefix overlaps
-the pool's network; with it, the subnet rule above already places every
-announcer there.
+Each pool lies in exactly one [Network](networks.md#cross-kind-checks) serving
+the nodes' sites: a [machine network](openshift-clusters.md#networking), or,
+with `l2.interface`, the subnet of the static address every node carries on
+that interface, which on every node reaches the pool's Network through its
+stack. Without `l2.interface` every node announces the pool, so each addressed
+node has an address in its Network.
 
 The named interface is never a node's default-route interface or `br-ex`,
 because OVN-Kubernetes builds `br-ex` from the install interface. It is never
@@ -656,29 +655,27 @@ its own indexed field:
 
 | Fault | Code | Field | Message | Remedy |
 | --- | --- | --- | --- | --- |
-| Non-canonical entry | `api.value` | `$.spec.packages.metallb.pools[<i>].addresses[<j>]` | `address <entry> of pool <pool> is not a canonical CIDR or <first>-<last> range` | `write it as <canonical>` |
-| Reversed or mixed range | `api.value` | as above | `range <entry> of pool <pool> ends before it starts or mixes address families` | `write the range as <first>-<last> of one family, first not after last` |
+| Non-canonical, reversed or mixed entry | `api.value` | `$.spec.packages.metallb.pools[<i>].addresses[<j>]` | `address <entry> of pool <pool> is not a canonical CIDR or <first>-<last> range`, or `range <entry> of pool <pool> ends before it starts or mixes address families` | `write it as <canonical>`, or `write the range as <first>-<last> of one family, first not after last` |
+| In no or several Networks | `api.invariant` | as above | `address <entry> of pool <pool> lies in no declared Network of OpenShiftCluster/<cluster>`, or `lies in Network/<a> and Network/<b>` | `use addresses inside a declared Network`, or `narrow the pool to one Network, or scope those Networks to distinct sites` |
 | Wrong family | `api.invariant` | as above | `address <entry> of pool <pool> is not of the <family> family of OpenShiftCluster/<cluster>` | `use <family> addresses for the pools of <cluster>` |
 | Outside every machine network | `api.invariant` | as above | `address <entry> of pool <pool> lies outside every machine network of OpenShiftCluster/<cluster>` | `use addresses inside <cidrs>, or name the interface whose subnet holds them under l2.interface` |
-| Announcer off the network | `api.invariant` | `$.spec.packages.metallb.pools[<i>].addresses[<j>]` | `node <machine> of OpenShiftCluster/<cluster> has no address in <network>, the network of pool <pool>, so it cannot answer for the pool on layer 2` | `assign Machine/<machine> an address in <network>, or name the interface whose subnet holds the pool under l2.interface` |
+| Announcer off the network | `api.invariant` | as above | `node <machine> of OpenShiftCluster/<cluster> has no address in <network>, the network of pool <pool>, so it cannot answer for the pool on layer 2` | `assign Machine/<machine> an address in <network>, or name the interface whose subnet holds the pool under l2.interface` |
+| Outside the interface subnet | `api.invariant` | as above | `address <entry> of pool <pool> lies outside <subnet>, the subnet of <interface>` | `use addresses inside <subnet>` |
 | Pool spans networks | `api.invariant` | `$.spec.packages.metallb.pools[<i>].addresses` | `pool <pool> spans <network> and <network>` | `split the pool so that each pool lies inside one network` |
 | Interface missing on a node | `api.invariant` | `$.spec.packages.metallb.pools[<i>].l2.interface` | `interface <interface> of pool <pool> is not declared on node <machine> of OpenShiftCluster/<cluster>` | `declare <interface> on every node of <cluster>, or omit l2.interface` |
-| Interface without an address | `api.invariant` | as above | `interface <interface> of pool <pool> carries no <family> address on node <machine>` | `assign <declared> an address in the pool's subnet on every node through network.addresses`, where `<declared>` is the interface, or the node's bridge interface of a bridge that carries its addresses |
+| Interface without an address | `api.invariant` | as above | `interface <interface> of pool <pool> carries no <family> address on node <machine>` | `assign <declared> an address in the pool's subnet on every node through network.addresses`, where `<declared>` is the interface, or the bridge interface of a bridge carrying its addresses |
 | Interface on several subnets | `api.invariant` | as above | `interface <interface> of pool <pool> is on <subnet> on node <machine> and on <subnet> on node <machine>` | `assign every node's <interface> address in one subnet` |
-| Outside the interface subnet | `api.invariant` | `$.spec.packages.metallb.pools[<i>].addresses[<j>]` | `address <entry> of pool <pool> lies outside <subnet>, the subnet of <interface>` | `use addresses inside <subnet>` |
-| Default-route interface | `api.invariant` | `$.spec.packages.metallb.pools[<i>].l2.interface` | `interface <interface> of pool <pool> is the default-route interface of node <machine> or br-ex` | `omit l2.interface to announce a pool on the machine network` |
-| Secondary-network bridge interface | `api.invariant` | as above | `interface <interface> of pool <pool> is the bridge interface of secondary network <network>, which carries no host address` | `name an interface that carries a node address, or omit l2.interface` |
-| Bridge interface of an addressed bridge | `api.invariant` | as above | `interface <interface> of pool <pool> is the bridge interface of secondary network <network>, whose bridge <bridge> carries its node addresses` | `set l2.interface to <bridge>` |
-| No host routing | `api.invariant` | as above | `pool <pool> announces on <interface>, which needs gatewayConfig.routingViaHost: true on OpenShiftCluster/<cluster>` | `set spec.networking.ovnKubernetesConfig.gatewayConfig.routingViaHost: true on <cluster>, or omit l2.interface` |
-| No forwarding | `api.invariant` | as above | `pool <pool> announces on <interface>, which needs gatewayConfig.ipForwarding: Global on OpenShiftCluster/<cluster>` | `set spec.networking.ovnKubernetesConfig.gatewayConfig.ipForwarding: Global on <cluster>, or omit l2.interface` |
+| Default-route interface | `api.invariant` | as above | `interface <interface> of pool <pool> is the default-route interface of node <machine> or br-ex` | `omit l2.interface to announce a pool on the machine network` |
+| Secondary-network bridge interface | `api.invariant` | as above | `interface <interface> of pool <pool> is the bridge interface of secondary network <network>`, then `, which carries no host address` or `, whose bridge <bridge> carries its node addresses` | `name an interface that carries a node address, or omit l2.interface`, or `set l2.interface to <bridge>` |
+| No host routing or forwarding | `api.invariant` | as above | `pool <pool> announces on <interface>, which needs gatewayConfig.<setting> on OpenShiftCluster/<cluster>`, `<setting>` `routingViaHost: true` or `ipForwarding: Global` | `set spec.networking.ovnKubernetesConfig.gatewayConfig.<setting> on <cluster>, or omit l2.interface` |
+| Interface off the pool's Network | `api.invariant` | as above | `interface <interface> of pool <pool> does not reach Network/<network>, which holds the pool, on node <machine>` | `name an interface that reaches Network/<network> on every node` |
 | Held address | `api.invariant` | `$.spec.packages.metallb.pools[<i>].addresses[<j>]` | `address <entry> of pool <pool> includes <address>, held by <holder>` | `exclude <address> from the pool` |
 | Network or broadcast address | `api.invariant` | as above | `address <entry> of pool <pool> includes <address>, the network or broadcast address of <subnet>` | `exclude <address> from the pool` |
 | Overlapping network | `api.invariant` | as above | `address <entry> of pool <pool> overlaps <cidr>, the <network kind> of OpenShiftCluster/<cluster>` | `use addresses outside <cidr>` |
 | Overlapping pools | `api.duplicate` | `$.spec.packages.metallb.pools[<i>].addresses[<j>]` of the later pool | `pool <pool> overlaps pool <other> at <address>` | `make the addresses of <pool> and <other> disjoint` |
 | Empty allocation | `api.invariant` | `$.spec.packages.metallb.pools[<i>].serviceAllocation` | `serviceAllocation of pool <pool> selects no Service` | `list namespaces, namespaceSelectors or serviceSelectors, or remove serviceAllocation` |
 | Allocation list too long | `api.value` | `$.spec.packages.metallb.pools[<i>].serviceAllocation.<list>` | `serviceAllocation of pool <pool> lists more than 16 <list>` | `list at most 16 <list>` |
-| Selector without labels | `api.value` | `$.spec.packages.metallb.pools[<i>].serviceAllocation.<list>[<j>].matchLabels` | `<list>[<j>] of pool <pool> matches on no label` | `supply at least one label` |
-| Invalid selector label | `api.value` | as above | `<list>[<j>] of pool <pool> has an invalid label key or value` | `use valid Kubernetes label keys and values` |
+| Empty or invalid selector | `api.value` | `$.spec.packages.metallb.pools[<i>].serviceAllocation.<list>[<j>].matchLabels` | `<list>[<j>] of pool <pool> matches on no label`, or `has an invalid label key or value` | `supply at least one label`, or `use valid Kubernetes label keys and values` |
 
 ## Normalization and canonical state
 

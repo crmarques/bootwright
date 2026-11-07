@@ -97,3 +97,19 @@ func TestAnOverriddenBridgeInterfaceIsRefusedAtItsNode(t *testing.T) {
 		t.Fatalf("%+v", issues)
 	}
 }
+
+func TestAddonFactsNameTheNetworksEachInterfaceReaches(t *testing.T) {
+	cluster, c := segmentedLab()
+	catalog := api.NewCatalog(append(c.Objects(), cluster))
+	facts := AddonFacts(catalog, cluster.Name())
+	if len(facts.Networks) != 2 || facts.Networks[0].Name != "lan" || facts.Networks[1].Name != "tenant" {
+		t.Fatalf("networks = %+v", facts.Networks)
+	}
+	reached := map[string][]string{}
+	for _, nic := range facts.NodeNetworks[0].Interfaces {
+		reached[nic.Name] = nic.Networks
+	}
+	if strings.Join(reached["eth0"], ",") != "lan" || strings.Join(reached["eth1"], ",") != "lan" || strings.Join(reached["eth2.200"], ",") != "tenant" {
+		t.Fatalf("reached = %v", reached)
+	}
+}

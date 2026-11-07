@@ -74,6 +74,7 @@ type ClusterFacts struct {
 	Nodes                                             []string
 	Family                                            string
 	MachineNetworks, ClusterNetworks, ServiceNetworks []netip.Prefix
+	Networks                                          []NetworkFact
 	Endpoints                                         []AddressHolder
 	NodeNetworks                                      []NodeNetwork
 	Reserved                                          []AddressHolder
@@ -111,6 +112,11 @@ type NodeNetwork struct {
 type NodeInterface struct {
 	Name, Type string
 	Addresses  []netip.Prefix
+	Networks   []string
+}
+type NetworkFact struct {
+	Name   string
+	Prefix netip.Prefix
 }
 type OVNGateway struct {
 	RoutingViaHost bool

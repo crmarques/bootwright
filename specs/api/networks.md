@@ -117,33 +117,30 @@ fabric carriage and Ceph networks:
   refuses a tagged stack.
 - **Carriage** (Machine, at the same field): each NIC under the assigned
   interface sits on a [segment](machines.md#machine-profiles-and-segments)
-  that carries the Network tagged when a VLAN lies on the path to it, else
-  untagged, each segment of a bridge alike; a bond across segments is the bond
-  rule's. Every other available VLAN on a NIC tags the `vlan` of a Network
-  its segment carries tagged (at the network configuration). Each
-  refusal names the Machine, interface, NIC, segment and Network; the remedy
-  adds the Network to the segment's carriage, never tagged on KubeVirt or
-  vSphere, or moves the NIC.
-- **Capacity** (Machine, at `spec.network`): an interface's effective MTU does
-  not exceed the `mtu` of a Network it holds an assignment on.
-- **Segment selection** (Machine, at its bare-metal or vSphere `nics` entry): on
-  a provider with two or more segments, a NIC an available ethernet interface
-  matches names its `segmentRef`.
+  carrying the Network tagged when a VLAN lies on the path, else untagged,
+  each segment of a bridge alike; a bond across segments is the bond rule's.
+  Every other available VLAN on a NIC tags the `vlan` of a Network its segment
+  carries tagged (at the network configuration). A refusal names the Machine,
+  interface, NIC, segment and Network, and adds the Network to the segment's
+  carriage, never tagged on KubeVirt or vSphere, or moves the NIC.
+- **Capacity** (Machine, at `spec.network`): an interface's effective MTU is at
+  most the `mtu` of each Network it holds an assignment on.
+- **Segment selection** (Machine, at its bare-metal or vSphere `nics` entry): a
+  NIC an available ethernet matches names its `segmentRef` among two or more.
 - **Fabric carriage** (InfraProvider, at `spec.segments[].untaggedNetworkRef`):
   a KubeVirt or vSphere segment carries one Network untagged.
-- **Install gateway** (Machine, at `spec.network.installAddressRef`): when the
-  install address's Network declares a gateway of that family, the next hop
-  of the install default route equals it, beside the rule that it lies inside
-  the install prefix. A link-local next hop is not compared.
+- **Install gateway** (Machine, at `spec.network.installAddressRef`): the
+  install default route's next hop, unless link-local, equals the gateway of
+  that family the install address's Network declares, beside lying inside the
+  install prefix.
 - **Cluster overlays** (OpenShiftCluster, at
   `spec.networking.clusterNetwork[].cidr` and `serviceNetwork[]`): no overlay
   overlaps a Network CIDR, beside the
   [node subnet overlaps](openshift-clusters.md#networking).
-- **Secondary networks** (OpenShiftCluster, at
-  `spec.networking.secondaryNetworks[]`): on every node the bridge
-  interface's NICs sit on a segment carrying one Network, which `vlan` selects
-  and each enabled `ipam.subnets` entry equals
-  ([secondary networks](openshift-clusters.md#secondary-networks)).
+- **Clusters**: [machine networks](openshift-clusters.md#networking),
+  [secondary networks](openshift-clusters.md#secondary-networks) and
+  [MetalLB pools](addons.md#package-metallb) each lie in and reach their
+  Networks as those pages say.
 - **Ceph networks** (CephCluster, at `spec.networks.publicCIDRs[]` and
-  `clusterCIDRs[]`): every entry equals the CIDR of a declared Network
-  ([D240](../milestones/backlog.md#d240) (11)).
+  `clusterCIDRs[]`): each entry equals a Network's CIDR, and no replication
+  entry overlaps a public one ([D240](../milestones/backlog.md#d240) (11)).

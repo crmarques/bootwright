@@ -20,7 +20,7 @@ func pool(name string, addresses ...string) api.Value {
 	return api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue(name)}, api.FieldValue{Name: "addresses", Value: api.StringList(addresses...)}, api.FieldValue{Name: "autoAssign", Value: api.BoolValue(true)})
 }
 func facts() addons.ClusterFacts {
-	return addons.ClusterFacts{Name: "cluster", Family: "ipv4", MachineNetworks: []netip.Prefix{netip.MustParsePrefix("192.0.2.0/24")}, ClusterNetworks: []netip.Prefix{netip.MustParsePrefix("10.128.0.0/14")}, ServiceNetworks: []netip.Prefix{netip.MustParsePrefix("172.30.0.0/16")}, NodeNetworks: []addons.NodeNetwork{{Machine: "node", DefaultRouteInterface: "eth0", Interfaces: []addons.NodeInterface{{Name: "eth0", Addresses: []netip.Prefix{netip.MustParsePrefix("192.0.2.10/24")}}}, NextHops: []netip.Addr{netip.MustParseAddr("192.0.2.1")}}}}
+	return addons.ClusterFacts{Name: "cluster", Family: "ipv4", MachineNetworks: []netip.Prefix{netip.MustParsePrefix("192.0.2.0/24")}, Networks: []addons.NetworkFact{{Name: "lan", Prefix: netip.MustParsePrefix("192.0.2.0/24")}, {Name: "tenant", Prefix: netip.MustParsePrefix("198.51.100.0/24")}}, ClusterNetworks: []netip.Prefix{netip.MustParsePrefix("10.128.0.0/14")}, ServiceNetworks: []netip.Prefix{netip.MustParsePrefix("172.30.0.0/16")}, NodeNetworks: []addons.NodeNetwork{{Machine: "node", DefaultRouteInterface: "eth0", Interfaces: []addons.NodeInterface{{Name: "eth0", Addresses: []netip.Prefix{netip.MustParsePrefix("192.0.2.10/24")}, Networks: []string{"lan"}}}, NextHops: []netip.Addr{netip.MustParseAddr("192.0.2.1")}}}}
 }
 func TestPoolAdmission(t *testing.T) {
 	for _, tt := range []struct {
@@ -63,7 +63,7 @@ func TestPoolAdmission(t *testing.T) {
 }
 func TestSecondaryInterfaceAdmissionAndReservedAddresses(t *testing.T) {
 	f := facts()
-	f.NodeNetworks[0].Interfaces = append(f.NodeNetworks[0].Interfaces, addons.NodeInterface{Name: "eth1", Addresses: []netip.Prefix{netip.MustParsePrefix("198.51.100.10/24")}})
+	f.NodeNetworks[0].Interfaces = append(f.NodeNetworks[0].Interfaces, addons.NodeInterface{Name: "eth1", Addresses: []netip.Prefix{netip.MustParsePrefix("198.51.100.10/24")}, Networks: []string{"tenant"}})
 	p := pool("secondary", "198.51.100.80-198.51.100.90").With("l2", api.MapValue(api.FieldValue{Name: "interface", Value: api.StringValue("eth1")}))
 	i := addons.Instance{Config: config(p)}
 	if len(admitPools(i, f)) != 2 {
@@ -208,7 +208,7 @@ func TestMetalLBReadyBeforePoolCreation(t *testing.T) {
 func TestAPoolMayUseTheExcludedAddressesOfASecondarySubnet(t *testing.T) {
 	f := facts()
 	f.Gateway = addons.OVNGateway{RoutingViaHost: true, IPForwarding: "Global"}
-	f.NodeNetworks[0].Interfaces = append(f.NodeNetworks[0].Interfaces, addons.NodeInterface{Name: "eth1", Addresses: []netip.Prefix{netip.MustParsePrefix("198.51.100.10/24")}})
+	f.NodeNetworks[0].Interfaces = append(f.NodeNetworks[0].Interfaces, addons.NodeInterface{Name: "eth1", Addresses: []netip.Prefix{netip.MustParsePrefix("198.51.100.10/24")}, Networks: []string{"tenant"}})
 	f.SecondaryNetworks = []addons.SecondaryNetwork{{Name: "tenant", Subnets: []netip.Prefix{netip.MustParsePrefix("198.51.100.0/24")}, Excluded: []netip.Prefix{netip.MustParsePrefix("198.51.100.10/32"), netip.MustParsePrefix("198.51.100.80/29"), netip.MustParsePrefix("198.51.100.88/30")}}}
 	p := pool("secondary", "198.51.100.80-198.51.100.90").With("l2", api.MapValue(api.FieldValue{Name: "interface", Value: api.StringValue("eth1")}))
 	if issues := admitPools(addons.Instance{Config: config(p)}, f); len(issues) != 0 {
@@ -220,7 +220,7 @@ func TestPoolInterfaceRequiresFactsForEveryNode(t *testing.T) {
 	f := facts()
 	f.Nodes = []string{"node", "missing"}
 	f.Gateway = addons.OVNGateway{RoutingViaHost: true, IPForwarding: "Global"}
-	f.NodeNetworks[0].Interfaces = append(f.NodeNetworks[0].Interfaces, addons.NodeInterface{Name: "eth1", Addresses: []netip.Prefix{netip.MustParsePrefix("198.51.100.10/24")}})
+	f.NodeNetworks[0].Interfaces = append(f.NodeNetworks[0].Interfaces, addons.NodeInterface{Name: "eth1", Addresses: []netip.Prefix{netip.MustParsePrefix("198.51.100.10/24")}, Networks: []string{"tenant"}})
 	p := pool("secondary", "198.51.100.80-198.51.100.90").With("l2", api.MapValue(api.FieldValue{Name: "interface", Value: api.StringValue("eth1")}))
 	issues := admitPools(addons.Instance{Config: config(p)}, f)
 	if len(issues) != 1 || issues[0].Field != ".pools[0].l2.interface" || !strings.Contains(issues[0].Message, "node missing") {
@@ -265,6 +265,13 @@ func TestPoolInterfaceAndNetworkRefusalFields(t *testing.T) {
 		{"secondary subnet", func(f *addons.ClusterFacts, _ *api.Value) {
 			f.SecondaryNetworks = []addons.SecondaryNetwork{{Name: "tenant", Subnets: []netip.Prefix{netip.MustParsePrefix("198.51.100.64/26")}}}
 		}, "the secondary network tenant", ".addresses[0]"},
+		{"no declared Network", func(f *addons.ClusterFacts, _ *api.Value) { f.Networks = f.Networks[:1] }, "lies in no declared Network of OpenShiftCluster/cluster", ".addresses[0]"},
+		{"two Networks", func(f *addons.ClusterFacts, _ *api.Value) {
+			f.Networks = append(f.Networks, addons.NetworkFact{Name: "tenant-b", Prefix: netip.MustParsePrefix("198.51.100.0/25")})
+		}, "lies in Network/tenant and Network/tenant-b", ".addresses[0]"},
+		{"interface off the pool Network", func(f *addons.ClusterFacts, _ *api.Value) {
+			f.NodeNetworks[0].Interfaces[1].Networks = []string{"other"}
+		}, "interface eth1 of pool secondary does not reach Network/tenant, which holds the pool, on node node", ".l2.interface"},
 		{"secondary subnet excluded in part", func(f *addons.ClusterFacts, _ *api.Value) {
 			f.SecondaryNetworks = []addons.SecondaryNetwork{{Name: "tenant", Subnets: []netip.Prefix{netip.MustParsePrefix("198.51.100.0/24")}, Excluded: []netip.Prefix{netip.MustParsePrefix("198.51.100.80/29"), netip.MustParsePrefix("198.51.100.88/31")}}}
 		}, "the secondary network tenant", ".addresses[0]"},
@@ -272,7 +279,7 @@ func TestPoolInterfaceAndNetworkRefusalFields(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			f := facts()
 			f.Gateway = addons.OVNGateway{RoutingViaHost: true, IPForwarding: "Global"}
-			f.NodeNetworks[0].Interfaces = append(f.NodeNetworks[0].Interfaces, addons.NodeInterface{Name: "eth1", Addresses: []netip.Prefix{netip.MustParsePrefix("198.51.100.10/24")}})
+			f.NodeNetworks[0].Interfaces = append(f.NodeNetworks[0].Interfaces, addons.NodeInterface{Name: "eth1", Addresses: []netip.Prefix{netip.MustParsePrefix("198.51.100.10/24")}, Networks: []string{"tenant"}})
 			p := pool("secondary", "198.51.100.80-198.51.100.90").With("l2", api.MapValue(api.FieldValue{Name: "interface", Value: api.StringValue("eth1")}))
 			if issues := admitPools(addons.Instance{Config: config(p)}, f); len(issues) != 0 {
 				t.Fatalf("passing twin: %+v", issues)

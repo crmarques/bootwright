@@ -8,6 +8,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/network"
 )
 
 func AddonFacts(catalog api.Catalog, name string) addons.ClusterFacts {
@@ -39,6 +40,7 @@ func AddonFacts(catalog api.Catalog, name string) addons.ClusterFacts {
 	}
 	facts.ClusterNetworks = uniquePrefixes(facts.ClusterNetworks)
 	facts.ServiceNetworks = uniquePrefixes(facts.ServiceNetworks)
+	facts.Networks = clusterNetworkFacts(cluster, catalog, facts.Family)
 	for _, node := range spec.Get("nodes").Items() {
 		name := node.Get("machineRef").Text()
 		facts.Nodes = append(facts.Nodes, name)
@@ -118,11 +120,27 @@ func moveToBridge(node addons.NodeNetwork, network addons.SecondaryNetwork) addo
 	for i, nic := range node.Interfaces {
 		if nic.Name == network.InterfaceOn(node.Machine) {
 			node.Interfaces[i].Addresses = nil
-			node.Interfaces = append(node.Interfaces, addons.NodeInterface{Name: network.Bridge, Type: "ovs-interface", Addresses: nic.Addresses})
+			node.Interfaces = append(node.Interfaces, addons.NodeInterface{Name: network.Bridge, Type: "ovs-interface", Addresses: nic.Addresses, Networks: nic.Networks})
 			break
 		}
 	}
 	return node
+}
+
+func clusterNetworkFacts(cluster api.Object, catalog api.Catalog, family string) []addons.NetworkFact {
+	sites := []string{}
+	for _, node := range cluster.Spec().Get("nodes").Items() {
+		if bound, found := catalog.Find(api.Machine, node.Get("machineRef").Text()); found {
+			sites = append(sites, bound.Spec().Get("placement", "site").Text())
+		}
+	}
+	facts := []addons.NetworkFact{}
+	for _, held := range network.CIDRs(catalog) {
+		if network.Family(held.Prefix.Addr()) == family && slices.ContainsFunc(sites, func(site string) bool { return network.Serves(held.Network, site) }) {
+			facts = append(facts, addons.NetworkFact{Name: held.Network.Name(), Prefix: held.Prefix})
+		}
+	}
+	return facts
 }
 
 func uniquePrefixes(prefixes []netip.Prefix) []netip.Prefix {
@@ -151,8 +169,18 @@ func nodeAddonNetwork(node api.Object, catalog api.Catalog, family string) addon
 				if p, ok := machine.AssignedPrefix(node, catalog, assignment); ok {
 					iface.Addresses = append(iface.Addresses, p)
 				}
+				if held, ok := machine.AssignedNetwork(node, catalog, assignment); ok {
+					iface.Networks = append(iface.Networks, held.Network.Name())
+				}
 			}
 		}
+		for _, reach := range machine.Reached(node, catalog, native, iface.Name, 0) {
+			if reach.Found() {
+				iface.Networks = append(iface.Networks, reach.Network.Name())
+			}
+		}
+		slices.Sort(iface.Networks)
+		iface.Networks = slices.Compact(iface.Networks)
 		result.Interfaces = append(result.Interfaces, iface)
 	}
 	for _, route := range native.Get("routes", "config").Items() {

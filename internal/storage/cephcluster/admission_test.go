@@ -403,8 +403,14 @@ func TestStretchConstrainsProtection(t *testing.T) {
 func TestVRRPNetworkOverlapAndNetworkReachability(t *testing.T) {
 	catalog := fixtureCatalog()
 	cluster := find(t, catalog, api.CephCluster, "storage")
-	cluster = cluster.WithSpec(cluster.Spec().WithPath(api.StringList("192.0.2.128/25"), "networks", "clusterCIDRs"))
-	requireIssue(t, Validate(cluster, replace(catalog, cluster)), "$.spec.networks")
+	cluster = cluster.WithSpec(cluster.Spec().WithPath(api.StringList("198.51.100.0/24", "192.0.2.128/25"), "networks", "clusterCIDRs"))
+	issues := Validate(cluster, replace(catalog, cluster))
+	for _, issue := range issues {
+		if issue.Field == "$.spec.networks.clusterCIDRs[1]" && strings.Contains(issue.Message, "the replication CIDR 192.0.2.128/25 of CephCluster/storage overlaps the public CIDR 192.0.2.0/24") && strings.Contains(issue.Remediation, "either public or replication") {
+			return
+		}
+	}
+	t.Fatalf("%#v", issues)
 }
 
 func TestStorageIssueBoundAndSafeDiagnosticText(t *testing.T) {

@@ -39,11 +39,16 @@ func DerivableManagerModules() []string {
 
 func (a *admission) clusterServices(ceph api.Value) {
 	public := a.prefixes(ceph.Get("networks", "publicCIDRs"), "$.spec.networks.publicCIDRs")
-	private := a.prefixes(ceph.Get("networks", "clusterCIDRs"), "$.spec.networks.clusterCIDRs")
-	for _, left := range public {
-		for _, right := range private {
-			if left.Overlaps(right) {
-				a.invalid("$.spec.networks", "public and replication networks must be disjoint", "change spec.networks so public and replication CIDRs do not overlap")
+	a.prefixes(ceph.Get("networks", "clusterCIDRs"), "$.spec.networks.clusterCIDRs")
+	for i, raw := range ceph.Get("networks", "clusterCIDRs").Strings() {
+		right, err := netip.ParsePrefix(raw)
+		if err != nil {
+			continue
+		}
+		for _, left := range public {
+			if left.Overlaps(right.Masked()) {
+				a.invalid(indexed("$.spec.networks.clusterCIDRs", i), "the replication CIDR "+raw+" of "+a.object.Identity()+" overlaps the public CIDR "+left.String()+", and Ceph keeps replication traffic off the public network only when the two are disjoint",
+					"remove "+raw+" from spec.networks.clusterCIDRs or "+left.String()+" from spec.networks.publicCIDRs, so each Network is either public or replication")
 			}
 		}
 	}
