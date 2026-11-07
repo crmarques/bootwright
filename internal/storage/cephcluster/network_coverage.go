@@ -7,11 +7,13 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/network"
 )
 
 var cidrRoles = []struct{ key, role string }{{"publicCIDRs", "public"}, {"clusterCIDRs", "replication"}}
 
 func (a *admission) networkCoverage(ceph api.Value) {
+	a.declaredNetworks(ceph)
 	nodes := ceph.Get("topology", "nodes").Items()
 	declared := []netip.Addr{}
 	for _, node := range nodes {
@@ -122,5 +124,22 @@ func adjacentTo(vip netip.Addr, interfaceNetworks []netip.Prefix) func(netip.Pre
 			return slices.ContainsFunc(interfaceNetworks, func(network netip.Prefix) bool { return network.Contains(prefix.Addr()) })
 		}
 		return prefix.Masked().Contains(vip)
+	}
+}
+
+func (a *admission) declaredNetworks(ceph api.Value) {
+	if !network.Declared(a.catalog) {
+		return
+	}
+	declared := network.CIDRs(a.catalog)
+	for _, entry := range cidrRoles {
+		for i, cidr := range ceph.Get("networks", entry.key).Strings() {
+			prefix, err := netip.ParsePrefix(cidr)
+			if err != nil || slices.ContainsFunc(declared, func(held network.Held) bool { return held.Prefix == prefix }) {
+				continue
+			}
+			a.invalid(indexed("$.spec.networks."+entry.key, i), "the "+entry.role+" CIDR "+cidr+" is the cidr of no declared Network, so Bootwright cannot check which network carries it",
+				"set "+cidr+" in spec.networks."+entry.key+" to the spec.ipv4.cidr or spec.ipv6.cidr of the Network it names, or declare that Network")
+		}
 	}
 }

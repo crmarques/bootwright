@@ -295,6 +295,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	issues = appendIssues(issues, validateNetworkContacts(o, c, configured)...)
 	issues = appendIssues(issues, validateDerivedContact(o, c)...)
 	issues = appendIssues(issues, validateInstallNetwork(o, c, provider, found, variant, configured)...)
+	issues = appendIssues(issues, validateNetworkMembership(o, c)...)
 	issues = appendIssues(issues, validateAccess(o, c)...)
 	issues = appendIssues(issues, validatePlacementHost(o, c)...)
 	issues = appendIssues(issues, validateHostKey(o, c)...)
@@ -463,7 +464,7 @@ func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, fo
 			if found && variant == substrate.ArmLibvirt {
 				issues = appendIssues(issues, validateManagedAttachmentContainment(o, prefix, provider, address.Get("interface").Text(), native)...)
 			}
-			issues = appendIssues(issues, validateInstallGateway(o, address, prefix, native)...)
+			issues = appendIssues(issues, validateInstallGateway(o, c, address, prefix, native)...)
 		}
 		if anacondaInstalled(o, c) && len(selectionIssues) == 0 {
 			issues = appendIssues(issues, validateAnacondaNetwork(address, native, configured)...)
@@ -576,10 +577,13 @@ func validateManagedAttachmentAddress(o api.Object, address netip.Prefix, provid
 	return nil
 }
 
-func validateInstallGateway(o api.Object, address api.Value, prefix netip.Prefix, native api.Value) []api.Issue {
+func validateInstallGateway(o api.Object, c api.Catalog, address api.Value, prefix netip.Prefix, native api.Value) []api.Issue {
 	gateway, ok := defaultGateway(native, prefix.Addr().Is4(), address.Get("interface").Text())
-	if !ok || prefix.Contains(gateway) || gateway.IsLinkLocalUnicast() {
+	if !ok {
 		return nil
+	}
+	if prefix.Contains(gateway) || gateway.IsLinkLocalUnicast() {
+		return validateNetworkGateway(o, c, prefix, gateway)
 	}
 	source := "spec.network.inline.nmstate"
 	if reference := o.Spec().Get("network", "configRef"); reference.Present() {

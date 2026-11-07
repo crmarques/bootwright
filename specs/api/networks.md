@@ -12,7 +12,9 @@ attach to. The examples keep one `Network` per file under `infra/networks/`.
 
 A `Network` name follows the [one name rule](../api.md#object-names). Every
 [cluster selection](environment.md#cluster-selection) retains every `Network`.
-`Network` is optional: a graph may declare none.
+`Network` is optional: a graph that declares none runs none of the checks
+below, and the [cross-kind checks](#cross-kind-checks) run as soon as it
+declares one.
 
 ## Kinds
 
@@ -87,3 +89,31 @@ Admission checks shape and references only; the realization, and the host-wide
 rules between managed networks, arrive with
 [B1204](../milestones/m1.md#b1204).
 
+## Cross-kind checks
+
+While the graph declares a Network, each kind below refuses, with
+`api.invariant` naming the object, the reason and the next step:
+
+- **Interface assignments** (Machine, at `spec.network.addresses[].address`):
+  every [interface assignment](machines.md#addresses-and-access) lies in
+  exactly one Network of its family, scoped to the Machine's `placement.site`
+  when it has one, and its prefix length equals that Network's. An assignment
+  in no Network, only in Networks of other sites, or in several Networks is
+  refused.
+- **VLAN agreement** (Machine, at `spec.network.addresses[].interface`): when
+  the assigned interface's composed NMState stack carries a VLAN, because the
+  interface is a VLAN or a bridge or bond port path down from it reaches one,
+  every such `vlan.id` equals the Network's `vlan`, and a Network without
+  `vlan` refuses a tagged stack. An untagged stack is not checked: an access
+  port or a native VLAN delivers the network untagged.
+- **Install gateway** (Machine, at `spec.network.installAddressRef`): when the
+  install address's Network declares a gateway of that family, the next hop
+  of the install default route equals it, beside the rule that it lies inside
+  the install prefix. A link-local next hop is not compared.
+- **Cluster overlays** (OpenShiftCluster, at
+  `spec.networking.clusterNetwork[].cidr` and `serviceNetwork[]`): no overlay
+  overlaps a Network CIDR, beside the
+  [node subnet overlaps](openshift-clusters.md#networking).
+- **Ceph networks** (CephCluster, at `spec.networks.publicCIDRs[]` and
+  `clusterCIDRs[]`): every entry equals the CIDR of a declared Network
+  ([D240](../milestones/backlog.md#d240) (11)).

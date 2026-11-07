@@ -74,3 +74,13 @@ func TestAnEndpointEqualToACephOrSMBClaimRefuses(t *testing.T) {
 		})
 	}
 }
+
+func TestClusterAndServiceNetworksOverlapNoDeclaredNetwork(t *testing.T) {
+	o, c := fixture("libvirt", 3, false)
+	o, _ = Normalize(o, c)
+	storage := api.NewObject(api.Network, "storage", api.MapValue(), m("provided", true, "ipv4", m("cidr", "10.130.0.0/16")))
+	issues := validateOverlayOverlaps(o, api.NewCatalog(append(c.Objects(), storage)))
+	if !hasIssue(issues, "$.spec.networking.clusterNetwork[0].cidr", "the cluster network 10.128.0.0/14 of OpenShiftCluster/cluster overlaps 10.130.0.0/16, the cidr of Network/storage") {
+		t.Fatal("a cluster network over a declared Network admitted", issues)
+	}
+}

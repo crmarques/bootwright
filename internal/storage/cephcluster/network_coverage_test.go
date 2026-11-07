@@ -91,3 +91,23 @@ func TestEveryIngressHostIsOnTheVirtualIPSubnet(t *testing.T) {
 		t.Fatalf("hosts inside virtual_interface_networks refused: %#v", found)
 	}
 }
+
+func TestEveryCephCIDRIsADeclaredNetwork(t *testing.T) {
+	cluster, catalog := stretchCatalog(t, nil)
+	cidrs := cluster.Spec().Get("networks", "publicCIDRs").Strings()
+	if len(cidrs) < 2 {
+		t.Fatalf("the fixture declares public CIDRs %v", cidrs)
+	}
+	declare := func(cidrs ...string) api.Catalog {
+		objects := catalog.Objects()
+		for i, cidr := range cidrs {
+			objects = append(objects, api.NewObject(api.Network, fmt.Sprintf("public-%d", i), api.MapValue(), m("provided", true, "ipv4", m("cidr", cidr))))
+		}
+		return api.NewCatalog(objects)
+	}
+	if issues := issuesUnder(Validate(cluster, declare(cidrs...)), "$.spec.networks"); len(issues) != 0 {
+		t.Fatalf("declared networks refused: %#v", issues)
+	}
+	requireOnlyIssue(t, issuesUnder(Validate(cluster, declare(cidrs[0])), "$.spec.networks"), "$.spec.networks.publicCIDRs[1]",
+		"the public CIDR "+cidrs[1]+" is the cidr of no declared Network")
+}

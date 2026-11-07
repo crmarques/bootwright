@@ -5,6 +5,7 @@ import (
 	"net/netip"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/network"
 )
 
 type heldSubnet struct {
@@ -31,12 +32,15 @@ func nodeSubnets(o api.Object, c api.Catalog) []heldSubnet {
 
 func validateOverlayOverlaps(o api.Object, c api.Catalog) []api.Issue {
 	held := nodeSubnets(o, c)
-	for _, network := range o.Spec().Get("networking", "secondaryNetworks").Items() {
-		for _, raw := range network.Get("ipam", "subnets").Strings() {
+	for _, secondary := range o.Spec().Get("networking", "secondaryNetworks").Items() {
+		for _, raw := range secondary.Get("ipam", "subnets").Strings() {
 			if prefix, err := netip.ParsePrefix(raw); err == nil {
-				held = append(held, heldSubnet{prefix.Masked(), "the IPAM subnet of secondary network " + network.Get("name").Text()})
+				held = append(held, heldSubnet{prefix.Masked(), "the IPAM subnet of secondary network " + secondary.Get("name").Text()})
 			}
 		}
+	}
+	for _, declared := range network.CIDRs(c) {
+		held = append(held, heldSubnet{declared.Prefix, "the cidr of " + declared.Network.Identity()})
 	}
 	var issues []api.Issue
 	check := func(field, kind, raw string) {
@@ -51,7 +55,7 @@ func validateOverlayOverlaps(o api.Object, c api.Catalog) []api.Issue {
 			}
 			reported[subnet.prefix] = true
 			issues = add(issues, invariantRemediation(field, fmt.Sprintf("the %s %s of %s overlaps %s, %s, so traffic to that subnet would stay inside the cluster", kind, overlay.Masked(), o.Identity(), subnet.prefix, subnet.holder),
-				fmt.Sprintf("choose a %s outside every node interface subnet and secondary-network IPAM subnet of %s", kind, o.Identity())))
+				fmt.Sprintf("choose a %s outside every declared Network and every node interface subnet and secondary-network IPAM subnet of %s", kind, o.Identity())))
 		}
 	}
 	for i, entry := range o.Spec().Get("networking", "clusterNetwork").Items() {
