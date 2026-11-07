@@ -479,7 +479,7 @@ func nodeProjections(catalog api.Catalog, cluster api.Object, contextName, contr
 		if err != nil {
 			return nil, err
 		}
-		if len(target.Interfaces) == 0 {
+		if len(interfaces) == 0 {
 			return nil, refusal("api.required", "a cluster node reports no interface for the installer to match it by",
 				"declare its hardware or its network interfaces on "+bound.Identity())
 		}

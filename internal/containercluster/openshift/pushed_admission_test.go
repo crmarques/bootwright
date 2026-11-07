@@ -38,6 +38,32 @@ func TestKubeVirtBaremetalAttachmentKinds(t *testing.T) {
 	}
 }
 
+func TestAKubeVirtAttachmentRefusesOncePerNodeWhateverTheNICOrder(t *testing.T) {
+	cluster, catalog := kubevirtAttachments("Other")
+	objects := catalog.Objects()
+	for index, object := range objects {
+		spec := object.Spec()
+		if object.Kind() == api.InfraProvider {
+			spec = spec.With("networkAttachments", list(
+				m("name", "bad", "kubevirt", m("networkRef", m("kind", "Other", "name", "bad"))),
+				m("name", "good", "kubevirt", m("networkRef", m("kind", "ClusterUserDefinedNetwork", "name", "good")))))
+		}
+		if object.Kind() == api.Machine && object.Name() == "node-0" {
+			spec = spec.WithPath(list(m("nicRef", "eth0", "attachmentRef", "bad"), m("nicRef", "eth1", "attachmentRef", "good"), m("nicRef", "eth2", "attachmentRef", "bad"), m("nicRef", "eth3", "attachmentRef", "bad")), "substrate", "kubevirt", "nics")
+		}
+		objects[index] = object.WithSpec(spec)
+	}
+	var first []api.Issue
+	for _, issue := range validatePushedNodes(cluster, api.NewCatalog(objects)) {
+		if issue.Field == "$.spec.nodes[0].machineRef" {
+			first = append(first, issue)
+		}
+	}
+	if len(first) != 1 {
+		t.Fatalf("issues at node 0 = %v, want one", first)
+	}
+}
+
 func TestKubeVirtClusterRefusesFetchSelectionAndMixedArms(t *testing.T) {
 	cluster, catalog := fixture("kubevirt", 3, false)
 	fetch := cluster.WithSpec(cluster.Spec().WithPath(m(), "install", "agent", "redfishVirtualMedia"))

@@ -2,9 +2,11 @@ package agentinstall
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -46,5 +48,17 @@ func TestBondVLANAndAddresslessProjectionGolden(t *testing.T) {
 			}
 			matchesGolden(t, "node-network-"+mode, data)
 		})
+	}
+}
+
+func TestHostInterfacesListOnlyTheNICsAnInterfaceMatches(t *testing.T) {
+	presented := []substrate.Interface{{Name: "vnic0", MACAddress: "02:00:00:00:00:01"}, {Name: "spare", MACAddress: "02:00:00:00:00:02"}, {Name: "enp2s0", MACAddress: "02:00:00:00:00:03"}}
+	matches := []machine.InterfaceMatch{{NIC: "vnic0", Interface: "enp1s0"}, {NIC: "enp2s0", Interface: "enp2s0"}}
+	want := []substrate.Interface{{Name: "enp1s0", MACAddress: "02:00:00:00:00:01"}, {Name: "enp2s0", MACAddress: "02:00:00:00:00:03"}}
+	if got := installerInterfaces(presented, matches); !slices.Equal(got, want) {
+		t.Fatalf("host interfaces = %v, want %v", got, want)
+	}
+	if got := installerInterfaces(presented, nil); len(got) != 0 {
+		t.Fatalf("host interfaces without a match = %v", got)
 	}
 }

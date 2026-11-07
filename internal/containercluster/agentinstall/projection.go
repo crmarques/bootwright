@@ -276,12 +276,12 @@ func installerInterfaces(presented []substrate.Interface, matches []machine.Inte
 	for _, match := range matches {
 		names[match.NIC] = match.Interface
 	}
-	out := make([]substrate.Interface, 0, len(presented))
+	out := make([]substrate.Interface, 0, len(matches))
 	for _, declared := range presented {
 		if name, matched := names[declared.Name]; matched {
 			declared.Name = name
+			out = append(out, declared)
 		}
-		out = append(out, declared)
 	}
 	return out
 }

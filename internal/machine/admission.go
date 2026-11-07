@@ -31,7 +31,7 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	}
 	network := normalizedContacts(o, c, s.Get("network"))
 	provider, found := Provider(o, c)
-	if arm := substrate.MachineArm(o); found && substrate.VirtualArm(arm) && s.Get("hardware", "nics").Len() > 0 {
+	if arm := substrate.MachineArm(o); found && substrate.VirtualArm(arm) && s.Get("hardware", "nics").Len() > 0 && !s.Get("os", "provided").Bool() {
 		if entries, ok := defaultedNICAttachments(c, o, provider); ok {
 			s = s.WithPath(entries, "substrate", arm, "nics")
 		}
@@ -806,11 +806,25 @@ func validateVirtualNICs(c api.Catalog, o, provider api.Object, variant string) 
 	attachments := substrate.Segments(c, provider)
 	path := "$.spec.substrate." + variant + ".nics"
 	issues := []api.Issue{}
+	for i, nic := range nics {
+		if !api.ValidLexical("ifname", nic) {
+			field := fmt.Sprintf("$.spec.hardware.nics[%d].name", i)
+			issues = appendIssues(issues, invariant(field, "NIC "+nic+" of "+o.Identity()+" is a "+variant+" vNIC the installer pins under its NIC name unless an interface matches it, and "+interfaceNameRule,
+				"rename NIC "+nic+" in spec.hardware.nics on "+o.Identity()+" to an interface name the guest may use, such as enp"+strconv.Itoa(i+1)+"s0, and update every nicRef that names it"))
+		}
+	}
 	for i, entry := range substrate.MachineNICAttachments(o).Items() {
 		if a, ok := namedValue(attachments, entry.Get("attachmentRef").Text()); ok && !a.Has(variant) {
 			field := fmt.Sprintf("%s[%d].attachmentRef", path, i)
 			issues = appendIssues(issues, reference(field, "attachment must name a matching arm on the selected provider", "set "+field[2:]+" to a networkAttachments entry of "+provider.Identity()+" that has its "+variant+" arm"))
 		}
+	}
+	if attachments.Len() == 0 && !c.UndecodableOfKind(api.Network) {
+		remedy := "declare an attachment with a " + variant + " arm in spec.networkAttachments of " + provider.Identity()
+		if variant == substrate.ArmLibvirt {
+			remedy += ", or a Network with spec.provided false whose spec." + variant + ".providerRef names " + provider.Name()
+		}
+		return append(issues, invariant(path, o.Identity()+" cannot attach its vNICs: "+provider.Identity()+" declares no network attachment", remedy))
 	}
 	for _, nic := range nics {
 		if substrate.NICAttachment(c, provider, o, nic) == "" && !c.UndecodableOfKind(api.Network) {
@@ -826,8 +840,12 @@ func validateVirtualMACs(o api.Object, native api.Value, variant string) []api.I
 	for _, iface := range native.Get("interfaces").Items() {
 		if iface.Get("type").Text() == "ethernet" && iface.Has("mac-address") {
 			name := iface.Get("name").Text()
-			issues = appendIssues(issues, invariant(configurationPath(o), "ethernet interface "+name+" of "+o.Identity()+" authors a mac-address, but a "+variant+" provider derives each vNIC's MAC from the context, Machine and NIC names",
-				"remove mac-address from interface "+name+" in the network configuration of "+o.Identity()+", and match the interface to its NIC with spec.network.interfaceMatches if their names differ"))
+			field, where := configurationPath(o), "in the network configuration of "+o.Identity()
+			if override, found := namedValue(o.Spec().Get("network", "overrides", "interfaces"), name); found && override.Has("mac-address") {
+				field, where = "$.spec.network.overrides", "in spec.network.overrides of "+o.Identity()
+			}
+			issues = appendIssues(issues, invariant(field, "ethernet interface "+name+" of "+o.Identity()+" authors a mac-address, but a "+variant+" provider derives each vNIC's MAC from the context, Machine and NIC names",
+				"remove mac-address from interface "+name+" "+where+", and match the interface to its NIC with spec.network.interfaceMatches if their names differ"))
 		}
 	}
 	return issues

@@ -219,7 +219,7 @@ func TestEveryEthernetInterfaceIsPinnedByItsMAC(t *testing.T) {
 		declaredInterface("enp3s0", "ethernet"), declaredInterface("enp4s0", "ethernet", text("state", "absent")))
 	request := requestOf(t, labCatalog(installingOn("bond0"), network), "rhel-01")
 	var want []string
-	for _, name := range []string{"enp1s0", "enp2s0", "enp3s0"} {
+	for _, name := range []string{"enp1s0", "enp2s0", "enp3s0", "enp4s0"} {
 		want = append(want, "ifname="+name+":"+substrate.InterfaceMAC(testContext, "rhel-01", name))
 	}
 	if !slices.Equal(request.InstallerArguments, want) {
@@ -233,6 +233,29 @@ func TestEveryEthernetInterfaceIsPinnedByItsMAC(t *testing.T) {
 	physical := requestOf(t, metalCatalog(metal, metalNetwork(declaredInterface("enp1s0", "ethernet"), declaredInterface("enp2s0", "ethernet"))), "metal-01")
 	if want := []string{"ifname=enp1s0:52:54:00:9a:1b:01", "ifname=enp2s0:52:54:00:9a:1b:0b"}; !slices.Equal(physical.InstallerArguments, want) {
 		t.Fatalf("physical installer arguments = %q, want %q", physical.InstallerArguments, want)
+	}
+}
+
+func TestAnUnmatchedVirtualNICIsPinnedUnderItsOwnName(t *testing.T) {
+	catalog := labCatalog(networkWith(declaredInterface("enp1s0", "ethernet")))
+	objects := catalog.Objects()
+	for index, object := range objects {
+		if object.Kind() == api.Machine && object.Name() == "rhel-01" {
+			objects[index] = object.WithSpec(object.Spec().WithPath(api.ListValue(api.MapValue(text("name", "enp1s0")), api.MapValue(text("name", "spare"))), "hardware", "nics"))
+		}
+	}
+	request := requestOf(t, api.NewCatalog(objects), "rhel-01")
+	want := []string{
+		"ifname=enp1s0:" + substrate.InterfaceMAC(testContext, "rhel-01", "enp1s0"),
+		"ifname=spare:" + substrate.InterfaceMAC(testContext, "rhel-01", "spare"),
+	}
+	if !slices.Equal(request.InstallerArguments, want) {
+		t.Fatalf("installer arguments = %q, want %q", request.InstallerArguments, want)
+	}
+	bare := metalOn("enp1s0", hardwareNIC("enp1s0", "52:54:00:9a:1b:01"), hardwareNIC("spare", "52:54:00:9a:1b:02"))
+	physical := requestOf(t, metalCatalog(bare, metalNetwork(declaredInterface("enp1s0", "ethernet"))), "metal-01")
+	if want := []string{"ifname=enp1s0:52:54:00:9a:1b:01"}; !slices.Equal(physical.InstallerArguments, want) {
+		t.Fatalf("a bare-metal unmatched NIC was pinned: %q", physical.InstallerArguments)
 	}
 }
 

@@ -351,16 +351,17 @@ kept as declared and the line carries no `--nameserver`.
 
 The installer's kernel command line pins every available composed `ethernet`
 interface name to its hardware address with dracut's `ifname=<name>:<mac>`, in
-composed order. The pins are frozen in the request as `installerArguments` and
-passed, joined by spaces, as the one `mkksiso --cmdline` value. Each address
-is that of the NIC the interface matches, its `spec.network.interfaceMatches`
-entry, else the NIC of its own name: on libvirt the MAC its realization gives
-that vNIC ([substrates](substrates.md#machine-realization)), on bare metal the
-NIC's `spec.substrate.baremetal.nics` `macAddress`, the set the `%pre` target
-proof also requires. Anaconda writes each pin to the
-installed system as `/etc/systemd/network/10-anaconda-ifname-<name>.link`, so
-the installer and the installed system use the declared names on both
-substrates. dracut reserves the kernel's `ethN` names, which therefore refuse.
+composed order; libvirt and KubeVirt also pin each unmatched vNIC under its NIC
+name. The pins are frozen in the request as `installerArguments`, passed joined
+by spaces as the one `mkksiso --cmdline` value. An interface's address is that
+of the NIC it matches (`spec.network.interfaceMatches`, else the NIC of its
+name): on libvirt its vNIC's realized MAC
+([substrates](substrates.md#machine-realization)), on bare metal, which pins
+matched NICs only, the NIC's `spec.substrate.baremetal.nics` `macAddress`, as
+the `%pre` target proof requires. Anaconda writes each pin to the installed
+system as `/etc/systemd/network/10-anaconda-ifname-<name>.link`, so both use the
+declared names. dracut reserves the kernel's `ethN` names, which therefore
+refuse.
 A profile enabling `fips` appends `fips=1` after the pins, once, so the
 installer and the installed system boot in [FIPS mode](#fips-mode).
 Sources:

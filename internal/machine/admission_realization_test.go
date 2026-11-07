@@ -488,3 +488,63 @@ func TestInstallAttachmentContainmentFollowsVLANAndBondParents(t *testing.T) {
 		}
 	}
 }
+
+// An OS-ready Machine of a one-attachment libvirt provider may declare its
+// hardware NICs: normalization defaults no arm nics entry for it, so the rule
+// that an OS-ready Machine declares contacts only has nothing to refuse.
+func TestAnOSReadyVirtualMachineMayDeclareHardwareNICs(t *testing.T) {
+	ready := object(api.Machine, "ready", m("substrate", m("providerRef", "lab", "libvirt", m()), "os", m("provided", true), "hardware", m("nics", list(m("name", "enp1s0")))))
+	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
+	if issues := admission(ready, lab...); len(issues) != 0 {
+		t.Fatalf("an OS-ready libvirt Machine with hardware NICs was refused: %v", issues)
+	}
+	normalized, _ := Normalize(ready, api.NewCatalog(append([]api.Object{ready}, lab...)))
+	if normalized.Spec().Has("substrate", "libvirt", "nics") {
+		t.Fatalf("an OS-ready Machine was given arm nics: %v", normalized.Spec().Get("substrate", "libvirt", "nics"))
+	}
+}
+
+// A non-provided libvirt or KubeVirt Machine's NIC name is the interface name
+// the installer pins when no interface matches the NIC, so it is one.
+func TestAVirtualMachineNICNameIsAnInterfaceName(t *testing.T) {
+	machine := installOn("192.0.2.11/24")
+	machine = machine.WithSpec(machine.Spec().WithPath(list(m("name", "enp1s0"), m("name", "uplink port")), "hardware", "nics"))
+	requireOneIssue(t, admission(machine, libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))...), api.Issue{Code: "api.invariant", Field: "$.spec.hardware.nics[1].name",
+		Message:     "NIC uplink port of Machine/guest is a libvirt vNIC the installer pins under its NIC name unless an interface matches it, and " + interfaceNameRule,
+		Remediation: "rename NIC uplink port in spec.hardware.nics on Machine/guest to an interface name the guest may use, such as enp2s0, and update every nicRef that names it"})
+	ready := object(api.Machine, "ready", m("substrate", m("providerRef", "lab", "libvirt", m()), "os", m("provided", true), "hardware", m("nics", list(m("name", "uplink port")))))
+	if issues := admission(ready, libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))...); len(issues) != 0 {
+		t.Fatalf("an OS-ready Machine's NIC name was refused: %v", issues)
+	}
+}
+
+// A provider with no network attachment cannot attach any vNIC, so the step
+// is to declare one on the provider, not to name an attachment that is absent.
+func TestAProviderWithoutAttachmentsIsToldToDeclareOne(t *testing.T) {
+	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
+	lab = slices.DeleteFunc(lab, func(o api.Object) bool { return o.Kind() == api.Network })
+	issues := admission(installOn("192.0.2.11/24"), lab...)
+	want := api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.nics",
+		Message:     "Machine/guest cannot attach its vNICs: InfraProvider/lab declares no network attachment",
+		Remediation: "declare an attachment with a libvirt arm in spec.networkAttachments of InfraProvider/lab, or a Network with spec.provided false whose spec.libvirt.providerRef names lab"}
+	if !slices.Contains(issues, want) {
+		t.Fatalf("issues = %#v, want %#v", issues, want)
+	}
+}
+
+// The D197 refusal points at the field that authors the mac-address: the
+// override that sets it, else the network configuration.
+func TestAVirtualMACRefusalPointsAtTheFieldThatAuthorsIt(t *testing.T) {
+	network := func(extra ...any) api.Value {
+		return m(append([]any{"configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11/24", "interface", "enp1s0"))}, extra...)...)
+	}
+	plain := list(m("name", "enp1s0", "type", "ethernet"))
+	override := m("interfaces", list(m("name", "enp1s0", "mac-address", "52:54:00:00:00:01")))
+	requireOneIssue(t, admission(guest(network("overrides", override)), libvirtLab(plain)...), api.Issue{Code: "api.invariant", Field: "$.spec.network.overrides",
+		Message:     "ethernet interface enp1s0 of Machine/guest authors a mac-address, but a libvirt provider derives each vNIC's MAC from the context, Machine and NIC names",
+		Remediation: "remove mac-address from interface enp1s0 in spec.network.overrides of Machine/guest, and match the interface to its NIC with spec.network.interfaceMatches if their names differ"})
+	authored := list(m("name", "enp1s0", "type", "ethernet", "mac-address", "52:54:00:00:00:01"))
+	requireOneIssue(t, admission(guest(network("overrides", m("interfaces", list(m("name", "enp1s0", "description", "uplink"))))), libvirtLab(authored)...), api.Issue{Code: "api.invariant", Field: "$.spec.network.configRef",
+		Message:     "ethernet interface enp1s0 of Machine/guest authors a mac-address, but a libvirt provider derives each vNIC's MAC from the context, Machine and NIC names",
+		Remediation: "remove mac-address from interface enp1s0 in the network configuration of Machine/guest, and match the interface to its NIC with spec.network.interfaceMatches if their names differ"})
+}

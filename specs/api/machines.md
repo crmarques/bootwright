@@ -290,7 +290,10 @@ A NIC is one MAC-bearing port or function as Redfish EthernetInterfaces reports
 it, declared even when uncabled. Adapters, PCI slots, link speed, SR-IOV VFs (an
 add-on's concern) and a boot NIC are not modeled. A NIC name is Machine-local
 and need not be an OS interface name; `network.interfaceMatches` joins them when
-they differ.
+they differ. On a non-provided libvirt or KubeVirt Machine the name is an
+interface name, as in the [subset](#nmstate-composition-subset), because the
+installer pins an unmatched vNIC under it; else `api.invariant` at
+`hardware.nics[].name`.
 
 NIC names and canonical MACs are unique in a machine, and authored MACs are
 unique across the complete graph. Effective normalization writes MACs as
@@ -428,13 +431,13 @@ ineligible. A consumer requiring static addressing rejects a
 missing candidate; a DHCP-capable consumer does not acquire a fabricated
 static address.
 
-On a Machine whose substrate realizes NICs, a bare-metal install or a
-non-provided libvirt or KubeVirt Machine, every available effective ethernet
-interface matches exactly one NIC: its `interfaceMatches` entry, else the NIC of
-its name. One matching none refuses at `network.interfaceMatches`, remedied by
-declaring the NIC or matching the interface; two matching one NIC refuse there
-too. An entry naming no available ethernet interface refuses at its
-`interface`. A NIC no interface matches stays unconfigured. A NIC matching no
+On every substrate an available effective ethernet interface matches one NIC:
+its `interfaceMatches` entry, else the NIC of its name. Two matching one NIC
+refuse at `network.interfaceMatches`, and an entry naming no available ethernet
+interface refuses at its `interface`. On a bare-metal install or a non-provided
+libvirt or KubeVirt Machine one matching none refuses at
+`network.interfaceMatches` too, remedied by declaring the NIC or matching the
+interface. A NIC no interface matches stays unconfigured. A NIC matching no
 interface but named as an interface another NIC carries refuses at that entry,
 naming both NICs, since the installer would list the name twice; match or
 rename it. Bare metal injects each matched NIC's MAC into the installed OS.

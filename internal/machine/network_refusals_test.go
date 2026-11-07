@@ -279,3 +279,21 @@ func TestAVirtualMachineAuthorsNoNMStateMAC(t *testing.T) {
 		Message:     "ethernet interface enp1s0 of Machine/guest authors a mac-address, but a libvirt provider derives each vNIC's MAC from the context, Machine and NIC names",
 		Remediation: "remove mac-address from interface enp1s0 in the network configuration of Machine/guest, and match the interface to its NIC with spec.network.interfaceMatches if their names differ"})
 }
+
+// A libvirt or KubeVirt installer pins every vNIC, an unmatched one under its
+// NIC name, so that name may not be a matched interface's.
+func TestAnUnmatchedVirtualNICMayNotTakeAPinnedInterfaceName(t *testing.T) {
+	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
+	nics := func(second string) api.Object {
+		machine := installOn("192.0.2.11/24")
+		spec := machine.Spec().WithPath(list(m("name", "vnic0"), m("name", second)), "hardware", "nics").
+			WithPath(list(m("interface", "enp1s0", "nicRef", "vnic0")), "network", "interfaceMatches")
+		return machine.WithSpec(spec)
+	}
+	requireOneIssue(t, admission(nics("enp1s0"), lab...), api.Issue{Code: "api.invariant", Field: "$.spec.network.interfaceMatches[0].nicRef",
+		Message:     "hardware NIC enp1s0 of Machine/guest matches no interface but shares the name of interface enp1s0, which NIC vnic0 carries, so the installer would list enp1s0 twice with two addresses",
+		Remediation: "match NIC enp1s0 to an interface in spec.network.interfaceMatches on Machine/guest, or rename it in spec.hardware.nics"})
+	if issues := admission(nics("spare"), lab...); len(issues) != 0 {
+		t.Fatalf("an unmatched vNIC with its own name was refused: %v", issues)
+	}
+}
