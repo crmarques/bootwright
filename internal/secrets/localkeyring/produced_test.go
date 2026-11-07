@@ -21,10 +21,10 @@ func summary(name, kind, source string) secrets.VersionDeclaration {
 	return declaration.Summary()
 }
 
-// formatFourIndex reaches every member format four holds: two keys, a current
+// fullIndex reaches every member the format holds: two keys, a current
 // version, a version only a binding holds and a produced entry, each version
 // sealed under one of those keys.
-func formatFourIndex() (indexRecord, secretstore.Selector) {
+func fullIndex() (indexRecord, secretstore.Selector) {
 	selector := secretstore.Selector{SelectorVersion: secretstore.RecordVersion, Context: "lab", Backend: New().Backend(), Generation: fixedID("gen-", 3)}
 	part := func(blob, key, size int) []storedPart {
 		return []storedPart{{Part: secrets.ValuePart, BlobID: fixedID("blob-", blob), KeyID: fixedID("key-", key), Generation: fixedID("gen-", 2), Size: size}}
@@ -53,16 +53,16 @@ func decodeIndex(t *testing.T, data []byte, selector secretstore.Selector) (inde
 	return index, validateIndex(index, selector)
 }
 
-func TestTheMetadataGoldenPinsFormatFour(t *testing.T) {
-	index, selector := formatFourIndex()
+func TestTheMetadataGoldenPinsTheFormat(t *testing.T) {
+	index, selector := fullIndex()
 	if err := validateIndex(index, selector); err != nil {
-		t.Fatalf("the format four fixture is refused: %v", err)
+		t.Fatalf("the full fixture is refused: %v", err)
 	}
 	data, err := encodeCanonical(index, indexMaximum)
 	if err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "metadata-v4", data, true)
+	matchesGolden(t, "metadata-v1", data, true)
 	decoded, err := decodeIndex(t, data, selector)
 	if err != nil {
 		t.Fatalf("the golden does not decode back into a valid index: %v", err)
@@ -123,14 +123,14 @@ func TestProducedVersionsAreRefusedOutsideTheirEntry(t *testing.T) {
 		{"absent", func(index *indexRecord) { index.Produced = nil }, "invalid index header"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			index, selector := formatFourIndex()
+			index, selector := fullIndex()
 			test.change(&index)
 			if err := validateIndex(index, selector); err == nil || err.Error() != test.want {
 				t.Fatalf("validateIndex = %v, want %s", err, test.want)
 			}
 		})
 	}
-	index, selector := formatFourIndex()
+	index, selector := fullIndex()
 	data, err := encodeCanonical(index, indexMaximum)
 	if err != nil {
 		t.Fatal(err)
@@ -146,7 +146,7 @@ func TestProducedVersionsAreRefusedOutsideTheirEntry(t *testing.T) {
 // A Secret's ordinals count its own versions only, so a produced version of the
 // same name neither takes nor shifts one.
 func TestAProducedVersionTakesNoOrdinalFromASecretOfTheSameName(t *testing.T) {
-	index, _ := formatFourIndex()
+	index, _ := fullIndex()
 	if got := nextSequence(index, producedName); got != 1 {
 		t.Fatalf("a Secret named like a produced entry starts at %d", got)
 	}
@@ -160,7 +160,7 @@ func TestAProducedVersionTakesNoOrdinalFromASecretOfTheSameName(t *testing.T) {
 // saying the store is intact, before strict decoding would call it corrupt;
 // metadata naming no reader, or one other than this build's, is invalid.
 func TestMetadataForANewerReaderRefusesAsNewerNotCorrupt(t *testing.T) {
-	index, selector := formatFourIndex()
+	index, selector := fullIndex()
 	current, err := encodeCanonical(index, indexMaximum)
 	if err != nil {
 		t.Fatal(err)

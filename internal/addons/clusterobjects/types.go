@@ -8,13 +8,13 @@ import (
 )
 
 const (
-	Version             = "cluster-objects-v2"
+	Version             = "cluster-objects-v1"
 	OwnerAnnotation     = "bootwright.io/owner"
 	OwnerDomain         = "bootwright.cluster-objects.owner-v1"
 	ObjectDomain        = "bootwright.cluster-objects.object-v1"
-	ExactRule           = "exact-v3"
-	OperatorManagedRule = "operator-managed-v2"
-	DependentExactRule  = "dependent-exact-v3"
+	ExactRule           = "exact-v1"
+	OperatorManagedRule = "operator-managed-v1"
+	DependentExactRule  = "dependent-exact-v1"
 	ClockSkew           = 5 * time.Second
 	MaxObjects          = 64
 	MaxChecks           = 32

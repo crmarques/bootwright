@@ -542,7 +542,7 @@ record. Every record and
 frozen request is encoded, read closed and proved canonical by one
 canonical-JSON implementation; each format keeps its own byte bound,
 pre-decode bounds, trailing line feed and failure words. An operation record
-is version 2, and a registration writes no other; any other version refuses
+is version `operationstore.OperationVersion`, and a registration writes no other; any other version refuses
 `lifecycle.state` as unsupported. Every read of a frozen plan holds it to its
 operation's record, as the registration did: a
 `plan.json` whose digest or verb is not the one that record carries refuses
@@ -1326,7 +1326,7 @@ An operation locates that runtime once, before it registers, and refuses
 receipt, records an interrupted setup or another build's format, or this host
 has published no runtime for the build's lock. A registration freezes the
 runtime's Python and Ansible *execution closure* in the operation record:
-`bootwright.controller.execution-closure-v2`, a SHA-256 over the runtime lock
+`prerequisites.RuntimeClosureFormat`, a SHA-256 over the runtime lock
 digest and the interpreter's ABI, with that ABI (`python`) and the lock's
 `ansible-core` release (`ansible`). The automation, the interpreter's path and
 full release and the host's native packages are no part of it, so any rebuild
@@ -2233,9 +2233,9 @@ projection claiming any other field is refused as above.
 | `machine-libvirt-v1` | `InfraProvider` | `spec.libvirt.machineProfiles[].name`, `[].diskGiB`, `[].dataDisks[].name`, `[].dataDisks[].sizeGiB`, `[].dataDisks[].media` | missing disks; a data disk attached by hand, also beside a profile that declares none |
 | `cluster-install-agent-v1` | `OpenShiftCluster` | `spec.nodes[].name`, `[].labels`, `[].taints` | declared labels and taints a node lacks |
 | `os-install-anaconda-v1` | `MachineInstallProfile` | `spec.os.version`, held by the `Machine` whose `spec.os.installProfileRef` names it | `ID` and `VERSION_ID` of `/etc/os-release`; the running kernel |
-| `storage-ceph-core-v3` | `CephPool` | `spec.replicated.size`, `spec.replicated.minSize`, `spec.application`, `spec.autoscale.mode`, `spec.quota.maxBytes`, `spec.quota.maxObjects` | a pool's own block |
-| `storage-ceph-core-v3` | `CephPool`, discovered | `spec.clusterRef`, `spec.nativeName` and the fields above | the cluster block's pools that no applied object declares or derives, each named `<cluster>-<pool>` when the applied revision declares several clusters |
-| `storage-ceph-core-v3` | `CephCluster` | `spec.services[]` of `service_type` `osd` | an OSD no declared OSD service explains, as one service per host; one it cannot place on a declared host and device, as a count in a note |
+| `storage-ceph-core-v1` | `CephPool` | `spec.replicated.size`, `spec.replicated.minSize`, `spec.application`, `spec.autoscale.mode`, `spec.quota.maxBytes`, `spec.quota.maxObjects` | a pool's own block |
+| `storage-ceph-core-v1` | `CephPool`, discovered | `spec.clusterRef`, `spec.nativeName` and the fields above | the cluster block's pools that no applied object declares or derives, each named `<cluster>-<pool>` when the applied revision declares several clusters |
+| `storage-ceph-core-v1` | `CephCluster` | `spec.services[]` of `service_type` `osd` | an OSD no declared OSD service explains, as one service per host; one it cannot place on a declared host and device, as a count in a note |
 
 ## Bootstrap completion and GitOps readiness
 

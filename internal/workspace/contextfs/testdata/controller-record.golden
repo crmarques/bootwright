@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 1,
   "host": {
     "provider": "linux-installed-v1",
     "machineID": "0123456789abcdef0123456789abcdef",

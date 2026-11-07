@@ -17,7 +17,7 @@ import (
 
 const (
 	storeType = "local-keyring"
-	storeID   = "local-v4"
+	storeID   = "local-v1"
 	custodyID = "local-keyfile-v1"
 )
 
@@ -38,7 +38,7 @@ func NewWithOptions(options Options) *Implementation {
 	return &Implementation{random: options.Random}
 }
 
-func (*Implementation) Backend() string { return "local-keyring-v4" }
+func (*Implementation) Backend() string { return "local-keyring-v1" }
 
 func (i *Implementation) Selection() secretstore.Selection {
 	return secretstore.Selection{

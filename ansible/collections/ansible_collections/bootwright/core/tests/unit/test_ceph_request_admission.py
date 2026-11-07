@@ -85,7 +85,7 @@ CORE = {
             "publicationPath": "/packages",
             "url": "https://192.0.2.9/packages",
         }],
-        "version": "ceph-packages-v3",
+        "version": "ceph-packages-v1",
     },
     "policy": {"deviceClass": "ssd", "failureDomain": "host", "name": "ssd-hosts", "root": "default", "rule": "ssd-hosts", "size": 2},
     "pool": {
@@ -124,7 +124,7 @@ CORE = {
     "services": [{"placement": {"count": 2, "hosts": ["node-1"]}, "service_type": "mgr"}],
     "settings": {"modules": ["nfs"]},
     "subvolume": {"filesystem": "files", "gid": 0, "group": "", "mode": "755", "name": "docs", "pool": "files-data", "sizeBytes": 0, "uid": 0},
-    "version": "ceph-core-v43",
+    "version": "ceph-core-v1",
 }
 
 IMAGE = {
@@ -139,11 +139,11 @@ IMAGE = {
     "registryTrustBundleRef": "registry-ca",
     "release": "9.9.1.2",
     "tag": "v9.9.1-25074",
-    "version": "ceph-image-v4",
+    "version": "ceph-image-v1",
 }
 
 HOST = {"cluster": {key: value for key, value in CORE.items() if key not in ("action", "delegated", "gateway", "service", "settings")},
-        "host": "node-1", "pulls": [], "version": "ceph-host-v14"}
+        "host": "node-1", "pulls": [], "version": "ceph-host-v1"}
 
 SMB = {
     "bindings": [],

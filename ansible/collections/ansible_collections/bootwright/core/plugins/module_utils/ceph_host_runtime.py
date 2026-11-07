@@ -37,12 +37,12 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 
 ROOT = "/var/lib/bootwright/ceph-host"
 PACKAGE_ROOT = "/var/lib/bootwright/ceph-packages"
-VERSION = "ceph-host-v14"
-PROFILE_VERSION = "ceph-runtime-profile-v3"
-ROUTE_VERSION = "ceph-host-route-v3"
-DEVICES_VERSION = "ceph-device-identities-v3"
-BINDING_VERSION = "ceph-physical-device-binding-v2"
-EVIDENCE_VERSION = "ceph-host-evidence-v5"
+VERSION = "ceph-host-v1"
+PROFILE_VERSION = "ceph-runtime-profile-v1"
+ROUTE_VERSION = "ceph-host-route-v1"
+DEVICES_VERSION = "ceph-device-identities-v1"
+BINDING_VERSION = "ceph-physical-device-binding-v1"
+EVIDENCE_VERSION = "ceph-host-evidence-v1"
 PROFILE = "runtime-profile.json"
 PAYLOAD = "cephadm-payload"
 ROUTE = "route.json"
@@ -1082,7 +1082,7 @@ def route_cases(value):
 @contextlib.contextmanager
 def staged(directory, synthetic, uid, gid):
     """Retain the synthetic bytes outside the read-only mounted children."""
-    request = {"version": "ceph-core-v43", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
+    request = {"version": "ceph-core-v1", "owner": "route-probe", "fsid": "11111111-1111-4111-8111-111111111111",
                "clusterSSHTransport": "verifiedTunnel", "clusterSSHUser": probe.USER,
                "hosts": [{"name": probe.HOST, "address": probe.ADDRESS, "port": probe.OUTER_PORT}]}
     known = ("[" + probe.ADDRESS + "]:" + str(probe.OUTER_PORT) + " " + synthetic["keys"]["outer"]["public"] + "\n").encode()

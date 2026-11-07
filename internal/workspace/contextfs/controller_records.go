@@ -35,7 +35,7 @@ const controllerVersionRemedy = "with a build that reads it, destroy each enviro
 // whose keys an SSH-placed claim may qualify by its host's address and by its
 // pinned host key.
 // The setup receipt lives in the setup subtree.
-const ControllerRecordVersion = 3
+const ControllerRecordVersion = 1
 
 const (
 	maxControllerState           = 4 << 20

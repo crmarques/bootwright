@@ -44,7 +44,7 @@ argument_specs:
             type: str
             required: true
             choices:
-              - substrate-host-libvirt-v7
+              - substrate-host-libvirt-v1
       bootwright_substrate_host_digest:
         type: str
         required: true

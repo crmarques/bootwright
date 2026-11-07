@@ -50,5 +50,5 @@
   "ready": true,
   "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "rgwUser": "",
-  "version": "ceph-export-evidence-v2"
+  "version": "ceph-export-evidence-v1"
 }

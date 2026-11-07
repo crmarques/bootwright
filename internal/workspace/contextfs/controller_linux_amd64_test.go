@@ -508,11 +508,11 @@ func TestControllerRecordCanonicalBoundsAndIntegrity(t *testing.T) {
 	}
 }
 
-// The v3 controller record holds host identity, bindings with the tool area
+// The controller record holds host identity, bindings with the tool area
 // each last published, tool sources and areas, and reservations, and nothing
 // of a setup: no receipt, retained resolution or execution bundle. A record
-// an earlier version wrote, or one carrying any of those, refuses.
-func TestTheControllerRecordV3HoldsNoReceipt(t *testing.T) {
+// of another version, or one carrying any of those, refuses.
+func TestTheControllerRecordHoldsNoReceipt(t *testing.T) {
 	encoded, err := encodeRecord(controllerRecord(syntheticControllerState(t), nil), maxControllerState)
 	if err != nil {
 		t.Fatal(err)
@@ -522,17 +522,17 @@ func TestTheControllerRecordV3HoldsNoReceipt(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := slices.Sorted(maps.Keys(members)); !slices.Equal(got, []string{"bindings", "host", "toolAreas", "toolSources", "version"}) {
-		t.Fatalf("the v3 record holds %v", got)
+		t.Fatalf("the record holds %v", got)
 	}
-	if string(members["version"]) != "3" || ControllerRecordVersion != 3 {
+	if string(members["version"]) != "1" || ControllerRecordVersion != 1 {
 		t.Fatalf("the record version is %s", members["version"])
 	}
 	area := func(mode string) string {
 		return `"toolAreas":[{"id":"` + clientClosure + `","mode":"` + mode + `","directoryDevice":1,"directoryInode":2}]`
 	}
 	for name, document := range map[string]string{
-		"version 2":                          strings.Replace(string(encoded), `"version":3`, `"version":2`, 1),
-		"version 4":                          strings.Replace(string(encoded), `"version":3`, `"version":4`, 1),
+		"version 0":                          strings.Replace(string(encoded), `"version":1`, `"version":0`, 1),
+		"version 2":                          strings.Replace(string(encoded), `"version":1`, `"version":2`, 1),
 		"a receipt":                          strings.Replace(string(encoded), `"toolAreas":[]`, `"receipt":{},"toolAreas":[]`, 1),
 		"retained resolutions":               strings.Replace(string(encoded), `"toolAreas":[]`, `"retainedDefinitions":[],"toolAreas":[]`, 1),
 		"retained setup sources":             strings.Replace(string(encoded), `"toolAreas":[]`, `"retainedSources":[],"toolAreas":[]`, 1),
@@ -583,7 +583,7 @@ func TestARecordHoldsUnqualifiedAndSSHQualifiedKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	decoded, _, err := decodeControllerRecord(encoded)
-	if err != nil || !reflect.DeepEqual(decoded, value) || !bytes.Contains(encoded, []byte(`"version":3`)) {
+	if err != nil || !reflect.DeepEqual(decoded, value) || !bytes.Contains(encoded, []byte(`"version":1`)) {
 		t.Fatalf("a record mixing unqualified and qualified keys read back as %+v (%#v)", decoded, diagnostics.Of(err))
 	}
 }
@@ -670,8 +670,8 @@ func TestAControllerRecordOfAnotherVersionNamesTheFreshInstall(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	for _, version := range []string{"2", "4"} {
-		earlier := bytes.Replace(current, []byte(`"version":3`), []byte(`"version":`+version), 1)
+	for _, version := range []string{"0", "2"} {
+		earlier := bytes.Replace(current, []byte(`"version":1`), []byte(`"version":`+version), 1)
 		if bytes.Equal(earlier, current) {
 			t.Fatal("the fixture did not change the record version")
 		}
@@ -683,7 +683,7 @@ func TestAControllerRecordOfAnotherVersionNamesTheFreshInstall(t *testing.T) {
 			"a transaction": func() error { return store.Transact(ctx, false, nil, func(contexts.Transaction) error { return nil }) },
 		} {
 			reported := diagnostics.Of(operation())
-			want := "controller evidence version " + version + " is unsupported: this build reads version 3 only and converts none"
+			want := "controller evidence version " + version + " is unsupported: this build reads version 1 only and converts none"
 			if len(reported) != 1 || reported[0].Code != "context.state" || reported[0].Message != want || reported[0].Remediation != controllerVersionRemedy {
 				t.Errorf("version %s, %s refused with %#v, want %q with the fresh install", version, name, reported, want)
 			}

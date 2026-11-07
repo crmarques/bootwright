@@ -35,7 +35,7 @@ from ansible_collections.bootwright.core.plugins.action import containercluster_
 ROLE = pathlib.Path(__file__).resolve().parents[4] / "roles" / "containercluster_install_agent"
 LOADER = DataLoader()
 DIGEST = "1" * 64
-IDENTITY = "d21b91799c1b2d06e949151732b30343fc42b122f785c10685fad98570b00a02"
+IDENTITY = "17edaacca4b95042edb9ca00270c5c837fd3db4b8c1f76174c9973e40e3ce7b7"
 RELEASE = "4.21.15"
 
 

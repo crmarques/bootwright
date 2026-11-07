@@ -28,5 +28,5 @@
     "storageId": "RAID",
     "volumeId": "OS"
   },
-  "version": "machine-baremetal-v4"
+  "version": "machine-baremetal-v1"
 }

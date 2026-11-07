@@ -20,7 +20,7 @@ const (
 
 // RegistryVersion is the durable context-registry format; a store of any other
 // version is refused, never converted.
-const RegistryVersion = 6
+const RegistryVersion = 1
 
 // Registry is an atomic context snapshot. A context's name is its identity, so
 // the registry holds no separate identifier and needs no allocation state.
@@ -132,7 +132,7 @@ type Presenter interface {
 
 // SelectionVersion is the per-user current-context record format. The record
 // holds only the selected name, which is the context's identity.
-const SelectionVersion = 2
+const SelectionVersion = 1
 
 type Selection struct {
 	Version int    `json:"version"`

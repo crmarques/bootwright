@@ -1,6 +1,6 @@
 implementation: machine-baremetal-v1
-content-digest: 880171915b86c72fe26032a3eea2b10daf0003538b819e65639f23715dede546
-request-version: machine-baremetal-v4
+content-digest: 01ba4ac7306857712a51e6d94114622517c2be6e752ef184f3f5a811749580fc
+request-version: machine-baremetal-v1
 automation-formats: none
 mark-formats: none
 proof-ids: none

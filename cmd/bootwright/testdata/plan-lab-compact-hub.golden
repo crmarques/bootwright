@@ -338,7 +338,7 @@
             "kind": "approveDependent"
           }
         ],
-        "version": "cluster-objects-v2"
+        "version": "cluster-objects-v1"
       },
       "secrets": [],
       "tool": {
@@ -346,7 +346,7 @@
         "kind": "openshift-clients",
         "version": "4.21.15"
       },
-      "version": "addon-instance-request-v4"
+      "version": "addon-instance-request-v1"
     }
   },
   {
@@ -582,7 +582,7 @@
             "kind": "create"
           }
         ],
-        "version": "cluster-objects-v2"
+        "version": "cluster-objects-v1"
       },
       "secrets": [
         "bootstrap-repository"
@@ -592,7 +592,7 @@
         "kind": "openshift-clients",
         "version": "4.21.15"
       },
-      "version": "addon-instance-request-v4"
+      "version": "addon-instance-request-v1"
     }
   }
 ]

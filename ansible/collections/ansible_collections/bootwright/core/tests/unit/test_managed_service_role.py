@@ -74,7 +74,7 @@ def test_the_argument_spec_keys_the_request_by_its_frozen_implementation():
     assert request["kind"]["choices"] == ["DNSServer", "NTPServer", "Proxy"]
     assert request["implementation"]["choices"] == sorted(implementations()) == [
         "dns-server-dnsmasq-v1", "ntp-server-chrony-v1", "proxy-squid-v1"]
-    assert request["version"]["choices"] == ["managed-service-v5"]
+    assert request["version"]["choices"] == ["managed-service-v1"]
 
 
 def test_each_implementation_selects_only_its_own_templates():
@@ -146,7 +146,7 @@ def validate_of(tasks):
 
 
 MANAGED = {
-    "version": "managed-service-v5",
+    "version": "managed-service-v1",
     "kind": "DNSServer",
     "implementation": "dns-server-dnsmasq-v1",
     "unit": "bootwright-lab-dns-resolver",
@@ -156,7 +156,7 @@ MANAGED = {
     "port": 53,
 }
 ARTIFACT = {
-    "version": "artifact-server-nginx-v4",
+    "version": "artifact-server-nginx-v1",
     "identity": {"context": "lab"},
     "contentRoot": "/var/lib/bootwright-services/lab/artifact-server/media",
 }

@@ -582,7 +582,8 @@ kind, release and source digest. Presence is read through `rpm` alone, so a
 host that already holds every package runs no dnf; only the reading after an
 install also asks `dnf repoquery --installed` for each provider's repository.
 
-The `controller-prerequisites-v6` Ansible adapter acquires target tools and
+The controller-prerequisites Ansible adapter (request version
+`ansiblelocal.requestVersion`) acquires target tools and
 nothing else. It receives one frozen request with the block's request digest
 as its identity, at least one exact tool source, an acquisition deadline in
 seconds for each tool source in order, the tool area it may publish into and
@@ -949,12 +950,12 @@ additional requirement, not a replacement for Bootwright coordination.
 
 **Setup subtree.** Setup keeps its pending intent, receipt, runtimes, wheel
 cache and runs in `/var/lib/bootwright/setup/`, independently versioned as
-`bootwright.setup-state-v1` and outside the registry; the
+`prerequisites.SetupStateFormat` and outside the registry; the
 [controller record](contexts/controller-record.md#the-setup-subtree) owns its
 layout and bounds.
 
 **Execution closure.** An operation freezes
-`bootwright.controller.execution-closure-v2`: SHA-256 over that name, the lock
+`prerequisites.RuntimeClosureFormat`: SHA-256 over that name, the lock
 digest and the ABI, with the ABI and `ansible-core` release a refusal names
 ([dependency safety](state-reconciliation.md#dependency-safety-during-recovery)).
 An OS Python z-stream update, an OS release upgrade that keeps the ABI, and any

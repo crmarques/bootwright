@@ -266,15 +266,7 @@ The three-node example selects `verifiedTunnel` explicitly; its protected
 mounts and staged bootstrap remain subject to
 [release qualification](../ceph-coverage.md#release-qualification).
 
-Core request v11 refuses continuation of v10 operations, image request v2 and
-package request v2 refuse continuation of older operations, and core
-evidence v3 and host request v2 refuse continuation of operations an
-earlier build made; finish or remove old contexts with their original
-applying build. The CephFS CephClient scopes move the core request again
-and the optional specializations evidence member moves the host evidence; a
-context or incomplete operation an earlier build planned is finished or
-destroyed with that build, while a core evidence record without the member
-still reads. A host preparation request carries only its cluster's
+A host preparation request carries only its cluster's
 scope, never the core request's resource action, pool, client or image,
 so a resource change never moves it.
 

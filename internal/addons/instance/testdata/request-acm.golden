@@ -181,7 +181,7 @@
         "kind": "approveDependent"
       }
     ],
-    "version": "cluster-objects-v2"
+    "version": "cluster-objects-v1"
   },
   "secrets": [],
   "tool": {
@@ -189,5 +189,5 @@
     "kind": "openshift-clients",
     "version": "4.20"
   },
-  "version": "addon-instance-request-v4"
+  "version": "addon-instance-request-v1"
 }

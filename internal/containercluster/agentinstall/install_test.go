@@ -96,7 +96,7 @@ func installExecution(t *testing.T, catalog api.Catalog, digest string) (lifecyc
 // state read records when an API answers but rejects that kubeconfig
 // (roles/containercluster_install_agent/tasks/state.yml).
 const (
-	anchorIdentity = "d21b91799c1b2d06e949151732b30343fc42b122f785c10685fad98570b00a02"
+	anchorIdentity = "17edaacca4b95042edb9ca00270c5c837fd3db4b8c1f76174c9973e40e3ce7b7"
 	foreignAnswer  = "foreign"
 )
 

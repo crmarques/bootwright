@@ -19,7 +19,7 @@ import (
 )
 
 const ImageImplementation = "storage-ceph-image-v1"
-const ImageVersion = "ceph-image-v4"
+const ImageVersion = "ceph-image-v1"
 const imageDeadline = 4 * time.Minute
 const maxImageEvidence = 16384
 
@@ -88,7 +88,7 @@ func validAuxiliary(r ImageRequest) bool {
 }
 
 func ImageContentDigest() string {
-	d := sha256.Sum256([]byte(ImageImplementation + "\x00" + ImageVersion + "\x00" + "selected-artifact-manifest-v2"))
+	d := sha256.Sum256([]byte(ImageImplementation + "\x00" + ImageVersion + "\x00" + "selected-artifact-manifest-v1"))
 	return hex.EncodeToString(d[:])
 }
 

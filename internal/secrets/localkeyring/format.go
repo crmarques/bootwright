@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	formatVersion       = 4
+	formatVersion       = 1
 	readerVersion       = 1
 	algorithm           = "AES-256-GCM"
 	selectorPath        = secretstore.RecordPath
@@ -529,12 +529,12 @@ func decodeBase64(value string, maximum int) ([]byte, error) {
 }
 
 func indexAAD(contextName string, selector secretstore.Selector, keyID string) []byte {
-	data, _ := json.Marshal(indexAdditionalData{Domain: "bootwright.secret.index.v4", FormatVersion: formatVersion, Algorithm: algorithm, Context: contextName, Selection: selector.Backend, Generation: selector.Generation, KeyID: keyID, BlobID: selector.Generation})
+	data, _ := json.Marshal(indexAdditionalData{Domain: "bootwright.secret.index.v1", FormatVersion: formatVersion, Algorithm: algorithm, Context: contextName, Selection: selector.Backend, Generation: selector.Generation, KeyID: keyID, BlobID: selector.Generation})
 	return data
 }
 
 func partAAD(contextName string, selection string, version storedVersion, part storedPart) []byte {
-	data, _ := json.Marshal(partAdditionalData{Domain: "bootwright.secret.part.v4", FormatVersion: formatVersion, Algorithm: algorithm, Context: contextName, Selection: selection, Generation: part.Generation, KeyID: part.KeyID, BlobID: part.BlobID, DeclarationFingerprint: version.Declaration.Fingerprint, Name: version.Declaration.Name, Type: version.Declaration.Type, Source: version.Declaration.Source, Version: version.ID, Part: part.Part})
+	data, _ := json.Marshal(partAdditionalData{Domain: "bootwright.secret.part.v1", FormatVersion: formatVersion, Algorithm: algorithm, Context: contextName, Selection: selection, Generation: part.Generation, KeyID: part.KeyID, BlobID: part.BlobID, DeclarationFingerprint: version.Declaration.Fingerprint, Name: version.Declaration.Name, Type: version.Declaration.Type, Source: version.Declaration.Source, Version: version.ID, Part: part.Part})
 	return data
 }
 
@@ -563,9 +563,9 @@ func decodeLedger(data []byte, contextName string, selection string, key []byte,
 
 func ledgerMAC(contextName string, selection string, key []byte, keyID string, seals uint64) string {
 	derive := hmac.New(sha256.New, key)
-	derive.Write([]byte("bootwright.secret.ledger.mac-key.v2"))
+	derive.Write([]byte("bootwright.secret.ledger.mac-key.v1"))
 	macKey := derive.Sum(nil)
-	data, _ := json.Marshal(ledgerAuthentication{Domain: "bootwright.secret.ledger.v4", FormatVersion: formatVersion, Algorithm: "HMAC-SHA256", Context: contextName, Selection: selection, KeyID: keyID, Seals: seals})
+	data, _ := json.Marshal(ledgerAuthentication{Domain: "bootwright.secret.ledger.v1", FormatVersion: formatVersion, Algorithm: "HMAC-SHA256", Context: contextName, Selection: selection, KeyID: keyID, Seals: seals})
 	mac := hmac.New(sha256.New, macKey)
 	mac.Write(data)
 	result := rawBase64.EncodeToString(mac.Sum(nil))
@@ -594,9 +594,9 @@ func verifyInitializationMAC(record initializationRecord, key []byte) bool {
 
 func initializationMAC(record initializationRecord, key []byte) string {
 	derive := hmac.New(sha256.New, key)
-	derive.Write([]byte("bootwright.secret.initialization.mac-key.v2"))
+	derive.Write([]byte("bootwright.secret.initialization.mac-key.v1"))
 	macKey := derive.Sum(nil)
-	data, _ := json.Marshal(initializationAuthentication{Domain: "bootwright.secret.initialization.v4", FormatVersion: record.FormatVersion, Context: record.Context, Selection: record.Selection, Attempts: record.Attempts, MACKeyID: record.MACKeyID})
+	data, _ := json.Marshal(initializationAuthentication{Domain: "bootwright.secret.initialization.v1", FormatVersion: record.FormatVersion, Context: record.Context, Selection: record.Selection, Attempts: record.Attempts, MACKeyID: record.MACKeyID})
 	mac := hmac.New(sha256.New, macKey)
 	mac.Write(data)
 	result := rawBase64.EncodeToString(mac.Sum(nil))
@@ -685,7 +685,7 @@ func validateVersionDeclaration(declaration secrets.VersionDeclaration) bool {
 const (
 	producedSource = "produced"
 	producedType   = "opaque"
-	producedDomain = "bootwright.secret.produced.v4"
+	producedDomain = "bootwright.secret.produced.v1"
 )
 
 type producedIdentity struct {

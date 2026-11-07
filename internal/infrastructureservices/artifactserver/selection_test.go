@@ -159,10 +159,9 @@ func TestSSHPlacementRequiresKeyAndHostKey(t *testing.T) {
 	}
 }
 
-// A request frozen while placements could still escalate is one this build no
-// longer reads: neither the version those builds wrote nor a placement naming
-// an escalation Secret decodes, so a removal names the executable that froze it.
-func TestARequestFrozenWhilePlacementsEscalatedRefuses(t *testing.T) {
+// Neither a request of another version nor a placement naming an escalation
+// Secret decodes, so a removal names the executable that froze it.
+func TestAnotherVersionOrAnEscalatingPlacementRefuses(t *testing.T) {
 	requests, err := Requests(catalogOf(controller(), artifactServer()), "controller", testContext)
 	if err != nil {
 		t.Fatal(err)
@@ -171,14 +170,14 @@ func TestARequestFrozenWhilePlacementsEscalatedRefuses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	earlier := strings.Replace(string(data), `"version":"`+requestVersion+`"`, `"version":"artifact-server-nginx-v1"`, 1)
+	earlier := strings.Replace(string(data), `"version":"`+requestVersion+`"`, `"version":"artifact-server-nginx-v0"`, 1)
 	local := `"placement":{"connection":"local","machine":"controller"}`
 	escalating := strings.Replace(string(data), local, `"placement":{"connection":"local","machine":"controller","sudoPasswordRef":"controller-sudo"}`, 1)
 	if earlier == string(data) || escalating == string(data) {
 		t.Fatalf("the frozen request does not carry this build's version and a local placement:\n%s", data)
 	}
 	if _, err := DecodeRequest([]byte(earlier)); err == nil {
-		t.Fatal("a request at the version builds that escalated froze decoded")
+		t.Fatal("a request of another version decoded")
 	}
 	if _, err := DecodeRequest([]byte(escalating)); err == nil {
 		t.Fatal("a placement naming an escalation Secret decoded")

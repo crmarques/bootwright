@@ -1,9 +1,9 @@
 implementation: cluster-install-agent-v1
-content-digest: d9ce6f31e0d9d023c2303ca218616063c0d3198ac72a3fbd98c1c8c0b552a32d
-request-version: cluster-install-agent-v16
+content-digest: 05d268ae6774d7db62c4c0510bb9c7a1ca03cc5c1311bc705615cc7bd172a2ba
+request-version: cluster-install-agent-v1
 automation-formats: none
 mark-formats: none
-proof-ids: .bootwright-booted, /.bootwright-booted, bootwright/containercluster/identity/v2
+proof-ids: .bootwright-booted, /.bootwright-booted, bootwright/containercluster/identity/v1
 fixed-places: .bootwright-kubeconfig, /.bootwright-kubeconfig, bootwright-, bootwright-cluster-install
 effect-pins:
   clusters

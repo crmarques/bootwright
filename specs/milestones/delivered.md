@@ -5766,7 +5766,7 @@ and `TestALoaderPreloadIsInformationalEverywhere`; `internal/controller/clients`
 `TestAMissingRuntimeRefusesNamingTheBuildsLock`,
 `TestARuntimeGoneAtLaunchRefusesWithSetup`, `TestAnOperationLocatesItsRuntimeOnce`
 and `TestARemovalLocatesItsRuntimeOnce`; `internal/workspace/contextfs`:
-`TestTheControllerRecordV3HoldsNoReceipt` and
+`TestTheControllerRecordHoldsNoReceipt` and
 `TestTheFirstBindingRefusesBeforeSetupCompletes`; `cmd/bootwright`:
 `TestEveryStoreFormatIsClassified`,
 `TestComposedBaselineDryRunReadsNoSetupState` and the moved

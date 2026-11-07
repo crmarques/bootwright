@@ -18,9 +18,9 @@ func TestStoreRecordClosedHeaderAndBackendPayload(t *testing.T) {
 		t.Fatal("store record did not preserve its header and opaque payload", err)
 	}
 	for name, invalid := range map[string][]byte{
-		"unknown":         bytes.Replace(data, []byte(`"version":3`), []byte(`"extra":1,"version":3`), 1),
-		"duplicate":       bytes.Replace(data, []byte(`"version":3`), []byte(`"version":3,"version":3`), 1),
-		"future":          bytes.Replace(data, []byte(`"version":3`), []byte(`"version":4`), 1),
+		"unknown":         bytes.Replace(data, []byte(`"version":1`), []byte(`"extra":1,"version":1`), 1),
+		"duplicate":       bytes.Replace(data, []byte(`"version":1`), []byte(`"version":1,"version":1`), 1),
+		"future":          bytes.Replace(data, []byte(`"version":1`), []byte(`"version":2`), 1),
 		"context":         bytes.Replace(data, []byte("probe"), []byte("other"), 1),
 		"backend":         bytes.Replace(data, []byte("fixture-v2"), []byte("../fixture"), 1),
 		"null-payload":    bytes.Replace(data, payload, []byte("null"), 1),

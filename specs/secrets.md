@@ -11,9 +11,9 @@ management without platform, entitlement or lifecycle effects.
 The standalone [Context configuration](contexts.md#context-configuration)
 selects `spec.secretStore.type`, defaulting to `local-keyring`. An immutable
 catalog injected at composition resolves exactly one implementation. Local
-keyring persists the immutable backend-format identity `local-keyring-v4`.
+keyring persists the immutable backend-format identity `local-keyring-v1`.
 The catalog maps that identity to the exact implementation and its public
-component status (`local-v4`, custody `local-keyfile-v1`). Interface/configuration
+component status (`local-v1`, custody `local-keyfile-v1`). Interface/configuration
 metadata belongs to the catalog and is not repeated in persisted records. Context creation initializes
 that implementation through a transaction-scoped Workspace area before ready
 publication, without requiring Environment input or generating Secret values.
@@ -441,7 +441,7 @@ An installer work area an earlier context of the same name left is neither
 rebuilt nor handed over, as its [build receipt](openshift-clusters.md#boot-media)
 records which context built it.
 
-## Local keyring v4
+## Local keyring
 
 The `secrets/` subtree is initialized during context creation, independently
 of the enclosing registry format. Empty or absent means uninitialized.
@@ -466,7 +466,8 @@ files, traversal, mount crossings and substitutions.
 | `identities/*.json` | Historical version/binding ID reservations. Retain them after logical deletion to prevent ID reuse. |
 | `init.json` | Temporary authenticated recovery evidence; remove after successful publication and cleanup. |
 
-The shared canonical `store.json` envelope contains `version` (3), `context`,
+The shared canonical `store.json` envelope contains `version`
+(`secretstore.RecordVersion`), `context`,
 `backend`, `generation`, then backend-owned `payload`. The context member is
 the owning [context's name, which is its identity](contexts.md#identity-and-selection). Local payload is closed
 JSON containing `keyId`, `nonce` and `ciphertext`. Its authenticated header
@@ -492,7 +493,7 @@ least one, a declaration summary (`name`, `type`, `source`, `fingerprint`), and
 parts (`part`, `blobId`, `keyId`, `generation`, `size`). A produced version's
 summary is `name` (its entry's), `type` `opaque`, `source` `produced` and a
 `fingerprint` that is the hexadecimal SHA-256 of the canonical JSON
-`{"domain":"bootwright.secret.produced.v4","block":…,"name":…}`; its
+`{"domain":"bootwright.secret.produced.v1","block":…,"name":…}`; its
 `sequence` is 1 and it holds one `value` part of one byte up to the part bound.
 `produced` is always present, `[]` when empty, and holds `block`, `name` and
 `version` entries, each with the optional member `unproved`, written only as

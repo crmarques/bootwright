@@ -1,7 +1,7 @@
 """Run the shipped controller playbook over the real runner protocol.
 
 This drives `playbooks/controller/setup.yml` and the `controller_prerequisites`
-role exactly as Go does: one frozen `controller-prerequisites-v6` request, the
+role exactly as Go does: one frozen `controller-prerequisites-v1` request, the
 result channel on descriptor 3 and the authorization channel on descriptor 4.
 The request selects one synthetic client whose source is already retained in a
 private temporary tool area, so the run acquires nothing over the network,
@@ -41,7 +41,7 @@ def run(area, area_root):
     """Run the playbook once and return the protocol records it wrote."""
     identity = os.stat(area_root)
     request = {
-        "version": "controller-prerequisites-v6",
+        "version": "controller-prerequisites-v1",
         "identity": IDENTITY,
         "publicationBundle": {
             "path": str(area_root),

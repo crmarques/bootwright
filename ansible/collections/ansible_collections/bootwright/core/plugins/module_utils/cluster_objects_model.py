@@ -7,7 +7,7 @@ import re
 from datetime import datetime
 from urllib.parse import urlsplit
 
-VERSION = "cluster-objects-v2"
+VERSION = "cluster-objects-v1"
 OWNER = "bootwright.io/owner"
 DOMAIN = "bootwright.cluster-objects.owner-v1"
 REF_KEYS = ("apiVersion", "kind", "namespace", "name", "namespaced")

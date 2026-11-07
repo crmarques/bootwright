@@ -154,7 +154,7 @@
     "kind": "openshift-install",
     "version": "4.21.15"
   },
-  "version": "cluster-install-agent-v16",
+  "version": "cluster-install-agent-v1",
   "vips": [],
   "workRoot": "/var/lib/bootwright-clusters/lab/metal"
 }

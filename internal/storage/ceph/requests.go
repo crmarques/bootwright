@@ -16,8 +16,8 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v43"
-const Implementation = "storage-ceph-core-v3"
+const Version = "ceph-core-v1"
+const Implementation = "storage-ceph-core-v1"
 
 type Device struct {
 	Path       string `json:"path"`

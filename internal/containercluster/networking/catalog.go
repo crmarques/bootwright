@@ -11,8 +11,8 @@ import (
 const (
 	Kind            = "OpenShiftClusterNetwork"
 	Implementation  = "cluster-network-v1"
-	requestVersion  = "cluster-network-request-v2"
-	evidenceVersion = "cluster-network-evidence-v4"
+	requestVersion  = "cluster-network-request-v1"
+	evidenceVersion = "cluster-network-evidence-v1"
 )
 
 func BlockID(cluster string) string { return reconciliation.BlockIdentity("cluster-network-", cluster) }

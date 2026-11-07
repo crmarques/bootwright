@@ -13,7 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const PhysicalRetirementImplementation = "storage-ceph-physical-retirement-v3"
+const PhysicalRetirementImplementation = "storage-ceph-physical-retirement-v1"
 
 type PhysicalEraseTarget struct {
 	Serial    string `json:"serial"`

@@ -18,8 +18,8 @@ import (
 )
 
 const ConsumerImplementation = "ceph-export-v1"
-const ConsumerVersion = "ceph-export-request-v4"
-const ConsumerEvidenceVersion = "ceph-export-evidence-v2"
+const ConsumerVersion = "ceph-export-request-v1"
+const ConsumerEvidenceVersion = "ceph-export-evidence-v1"
 const ConsumerOutput = "external-details"
 
 func ConsumerBlockID(name string) string { return reconciliation.BlockIdentity("ceph-consumer-", name) }

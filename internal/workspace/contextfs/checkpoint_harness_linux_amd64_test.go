@@ -476,7 +476,7 @@ func checkpointUsable(t *testing.T, ctx context.Context, scenario checkpointScen
 // recovery artifact, the root's only entry holding exactly the canonical empty
 // registry; what the secret store's exclusive writes keep under
 // secrets/identities/; after a kill, any stage beneath a context's secrets/,
-// which Local keyring v4 resolves; a media stage a pinned add retained beside
+// which Local keyring resolves; a media stage a pinned add retained beside
 // its record, which the repeated add publishes; and, after a kill, a stage
 // beneath a controller bundle area, which the area's next writer removes
 // (specs/contexts/controller-record.md, Bounds).
@@ -2239,7 +2239,7 @@ func checkpointSecretPublicationFixture(t *testing.T) *Store {
 }
 
 func checkpointSecretPublicationScenario() checkpointScenario {
-	// specs/secrets.md, Local keyring v4: a caller inspects before it
+	// specs/secrets.md, Local keyring: a caller inspects before it
 	// retries, so a visible committed replacement is not replayed.
 	put := func(_ *testing.T, ctx context.Context, store *Store) error {
 		_, value, err := checkpointSecretState(ctx, store)
@@ -2323,7 +2323,7 @@ func checkpointLentSecretScenario() checkpointScenario {
 func checkpointNote(root string) string { return filepath.Join(filepath.Dir(root), "checkpoint-note") }
 
 func checkpointSecretRotationScenario() checkpointScenario {
-	// specs/secrets.md, Local keyring v4: rotation re-encrypts under a new
+	// specs/secrets.md, Local keyring: rotation re-encrypts under a new
 	// key; a caller that still reads the original key rotates again.
 	rotate := func(_ *testing.T, ctx context.Context, store *Store) error {
 		original, err := os.ReadFile(checkpointNote(store.options.Root))
@@ -2375,7 +2375,7 @@ func checkpointSecretArea(ctx context.Context, store *Store, callback func(secre
 }
 
 func checkpointSecretCleanupScenario() checkpointScenario {
-	// specs/secrets.md, Local keyring v4: cleanup removes only artifacts it
+	// specs/secrets.md, Local keyring: cleanup removes only artifacts it
 	// observed as unreferenced, and a later cleanup resumes from what remains.
 	prune := func(_ *testing.T, ctx context.Context, store *Store) error {
 		return checkpointSecretArea(ctx, store, func(area secretstore.Area) error {
@@ -2434,7 +2434,7 @@ func checkpointSecretCleanupScenario() checkpointScenario {
 }
 
 func checkpointSecretInitializationScenario() checkpointScenario {
-	// specs/secrets.md, Local keyring v4: an interrupted initialization is
+	// specs/secrets.md, Local keyring: an interrupted initialization is
 	// resumed by repeating it, which recovers and synchronizes the key it
 	// attributes.
 	initialize := func(_ *testing.T, ctx context.Context, store *Store) error {

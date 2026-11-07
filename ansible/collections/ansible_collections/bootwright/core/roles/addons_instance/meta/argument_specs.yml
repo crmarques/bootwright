@@ -59,7 +59,7 @@ argument_specs:
             required: true
             description: Frozen version field.
             choices:
-              - addon-instance-request-v4
+              - addon-instance-request-v1
 
       bootwright_addon_instance_material:
         type: dict
@@ -131,7 +131,7 @@ argument_specs:
             required: true
             description: Frozen version field.
             choices:
-              - addon-instance-request-v4
+              - addon-instance-request-v1
 
       bootwright_addon_instance_material:
         type: dict

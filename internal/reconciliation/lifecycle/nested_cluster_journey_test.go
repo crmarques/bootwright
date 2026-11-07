@@ -192,7 +192,7 @@ func nestedPhysicalRequest(machine string, index int) baremetal.Request {
 		Controller: baremetal.Controller{CredentialsRef: "lab-bmc-credentials", Endpoint: fmt.Sprintf("https://192.0.2.%d/redfish/v1/Systems/1", 31+index), TLSVerify: true},
 		Hardware:   []baremetal.Interface{{MACAddress: fmt.Sprintf("52:54:00:00:31:%02x", index+1), Name: "eno1"}},
 		Identity:   baremetal.Identity{Block: "machine-" + machine, Context: lifecycle.JourneyContext, Object: machine},
-		Placement:  placement, Provider: "lab-metal", Version: "machine-baremetal-v4",
+		Placement:  placement, Provider: "lab-metal", Version: "machine-baremetal-v1",
 	}
 }
 

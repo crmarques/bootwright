@@ -43,13 +43,13 @@ func TestSupersededRegistryFormatsRefuseWithoutRewriting(t *testing.T) {
 }
 
 func TestRegistryCanonicalFields(t *testing.T) {
-	valid := []byte("{\"version\":6,\"contexts\":[]}\n")
+	valid := []byte("{\"version\":1,\"contexts\":[]}\n")
 	for _, data := range [][]byte{
 		bytes.Replace(valid, []byte("\"contexts\":[]"), []byte("\"contexts\":null"), 1),
-		bytes.Replace(valid, []byte("\"version\":6,"), nil, 1),
+		bytes.Replace(valid, []byte("\"version\":1,"), nil, 1),
 		bytes.Replace(valid, []byte("\"contexts\":[]"), []byte("\"identities\":[],\"contexts\":[]"), 1),
 		bytes.Replace(valid, []byte("\"contexts\":[]"), []byte("\"contexts\":[],\"nextIdentity\":1"), 1),
-		bytes.Replace(valid, []byte("\"version\":6"), []byte("\"version\":6,\"version\":6"), 1),
+		bytes.Replace(valid, []byte("\"version\":1"), []byte("\"version\":1,\"version\":1"), 1),
 	} {
 		var registry contexts.Registry
 		expectState(t, decodeRecord(data, maxRegistry, &registry))

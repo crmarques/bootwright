@@ -11,7 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-const EvidenceVersion = "ceph-core-evidence-v14"
+const EvidenceVersion = "ceph-core-evidence-v1"
 
 const DashboardPort = "8443"
 

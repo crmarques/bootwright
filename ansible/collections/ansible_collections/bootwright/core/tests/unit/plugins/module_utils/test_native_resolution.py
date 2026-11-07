@@ -219,7 +219,7 @@ class AuthoredNativeSelections(unittest.TestCase):
             self.assertEqual(seen, [("install", "nfs-ganesha-" + coordinate), ("subject", "nfs-ganesha-" + coordinate)])
 
     def test_each_selected_package_has_an_actual_native_root(self):
-        request = {"policy": "ceph-packages-v2", "requirements": {"cephPackages": True},
+        request = {"policy": "ceph-package-transaction-v1", "requirements": {"cephPackages": True},
                    "versions": {"ceph": "synthetic-ceph", "ansible": "synthetic-ansible", "nfsGanesha": "synthetic-nfs",
                                 "license": "latest", "inheritedPolicy": "latest"}}
         roots = native.selected_roots(request)
@@ -298,7 +298,7 @@ class WeakDependencySolve(unittest.TestCase):
         modules = {"dnf": dnf, "dnf.conf": dnf.conf, "dnf.subject": dnf.subject,
                    "rpm": SimpleNamespace(labelCompare=compare),
                    "hawkey": SimpleNamespace(chksum_name=lambda algorithm: "SHA256")}
-        request = {"policy": "ceph-packages-v2", "requirements": {"cephPackages": True}, "snapshot": "/snapshot",
+        request = {"policy": "ceph-package-transaction-v1", "requirements": {"cephPackages": True}, "snapshot": "/snapshot",
                    "platform": dict(os="rhel", release="9.8", architecture="amd64"),
                    "versions": {"ceph": "20.2.1-405.el9cp", "ansible": "5.0.3-1.el9cp", "license": "latest"},
                    "repositories": [dict(id=name, localPath="/repositories/" + name, baseURL="https://tree.example.test/" + name,

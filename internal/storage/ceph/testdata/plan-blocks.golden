@@ -7,7 +7,7 @@
     ],
     "exclusive": [],
     "id": "ceph-client-consumer",
-    "implementation": "storage-ceph-core-v3",
+    "implementation": "storage-ceph-core-v1",
     "stage": "clusters"
   },
   {
@@ -25,7 +25,7 @@
       "ceph/example"
     ],
     "id": "ceph-cluster-example",
-    "implementation": "storage-ceph-core-v3",
+    "implementation": "storage-ceph-core-v1",
     "stage": "clusters"
   },
   {
@@ -81,7 +81,7 @@
     ],
     "exclusive": [],
     "id": "ceph-pool-volumes",
-    "implementation": "storage-ceph-core-v3",
+    "implementation": "storage-ceph-core-v1",
     "stage": "clusters"
   },
   {
@@ -92,7 +92,7 @@
     ],
     "exclusive": [],
     "id": "ceph-rbd-disk",
-    "implementation": "storage-ceph-core-v3",
+    "implementation": "storage-ceph-core-v1",
     "stage": "clusters"
   },
   {
@@ -102,7 +102,7 @@
     ],
     "exclusive": [],
     "id": "ceph-service-example-crash",
-    "implementation": "storage-ceph-core-v3",
+    "implementation": "storage-ceph-core-v1",
     "stage": "clusters"
   }
 ]

@@ -14,7 +14,7 @@ from ansible_collections.bootwright.core.plugins.action.controller_protocol impo
 
 def frozen():
     return dict(
-        version="controller-prerequisites-v6",
+        version="controller-prerequisites-v1",
         identity="a" * 64,
         publicationBundle={},
         tools=[dict(source=dict(id="tool-oc")), dict(source=dict(id="tool-kubectl"))],

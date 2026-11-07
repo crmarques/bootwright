@@ -17,11 +17,10 @@ import (
 )
 
 // ReservationVersion and ManifestVersion identify each record independently of
-// the registry. Both dropped the allocated context identity that the context
-// name now carries.
+// the registry.
 const (
-	ReservationVersion = 3
-	ManifestVersion    = 3
+	ReservationVersion = 1
+	ManifestVersion    = 1
 )
 
 type reservation struct {

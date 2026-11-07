@@ -43,7 +43,7 @@ def frozen_request(request):
     if set(request) != required:
         raise ValueError("request")
     if (
-        request["version"] != "controller-prerequisites-v6"
+        request["version"] != "controller-prerequisites-v1"
         or re.fullmatch(r"[a-f0-9]{64}", request["identity"]) is None
     ):
         raise ValueError("request")

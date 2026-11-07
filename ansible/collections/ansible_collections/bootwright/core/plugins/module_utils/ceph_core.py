@@ -1551,7 +1551,7 @@ def dashboard_phase(request, operation, request_digest, bootstrap, transport, ob
 
 def host_request(value):
     """A frozen host block request: its cluster's host scope and one of its hosts."""
-    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "pulls", "version"} and value["version"] == "ceph-host-v14")
+    ceph_native.require(isinstance(value, dict) and set(value) == {"cluster", "host", "pulls", "version"} and value["version"] == "ceph-host-v1")
     cluster = ceph_native.validate_scope(value["cluster"])
     ceph_native.require("packages" in cluster)
     ceph_native.require(sum(host["name"] == value["host"] for host in cluster["hosts"]) == 1)

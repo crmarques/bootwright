@@ -110,7 +110,7 @@ def transaction_request(request):
                 "license": "latest", "inheritedPolicy": "latest"}
     if "nfsGaneshaPackageVersion" in request:
         versions["nfsGanesha"] = request["nfsGaneshaPackageVersion"]
-    return {"policy": "ceph-packages-v2", "platform": actual_platform(),
+    return {"policy": "ceph-package-transaction-v1", "platform": actual_platform(),
             "requirements": {"cephPackages": True}, "versions": versions}
 
 

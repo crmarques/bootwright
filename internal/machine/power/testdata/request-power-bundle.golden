@@ -16,5 +16,5 @@
     "machine": "controller"
   },
   "verb": "stop",
-  "version": "machine-power-v4"
+  "version": "machine-power-v1"
 }

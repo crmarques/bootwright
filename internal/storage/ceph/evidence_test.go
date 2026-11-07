@@ -180,7 +180,7 @@ func TestEvidenceV2BoundsTheDashboardAndMonitorAddresses(t *testing.T) {
 		t.Fatalf("an unreachable dashboard must stay a completed cluster: %v %v", effect, err)
 	}
 	for name, change := range map[string]func(*Evidence){
-		"v1":                       func(e *Evidence) { e.Version = "ceph-core-evidence-v1" },
+		"another version":          func(e *Evidence) { e.Version = "ceph-core-evidence-v2" },
 		"plain http":               func(e *Evidence) { e.Dashboard.URL = "http://node-1:8443/" },
 		"another port":             func(e *Evidence) { e.Dashboard.URL = "https://node-1:9443/" },
 		"credential in url":        func(e *Evidence) { e.Dashboard.URL = "https://admin:secret@node-1:8443/" },

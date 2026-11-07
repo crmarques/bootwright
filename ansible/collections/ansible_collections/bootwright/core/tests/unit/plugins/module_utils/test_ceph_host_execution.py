@@ -34,13 +34,13 @@ POOL = {"application": "rbd", "autoscale": {"bulk": False, "maxPGs": 0, "minPGs"
 def host_request(request_value):
     cluster = copy.deepcopy(request_value)
     del cluster["action"]
-    cluster["packages"] = {"version": "ceph-packages-v3", "licenseAccepted": True, "sources": [
+    cluster["packages"] = {"version": "ceph-packages-v1", "licenseAccepted": True, "sources": [
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "e" * 64, "mediaSize": 1024,
          "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"}
         for host in cluster["hosts"]]}
     cluster["auxiliary"] = [{"name": "haproxy", "image": host_fixtures.HAPROXY}, {"name": "keepalived", "image": host_fixtures.KEEPALIVED}]
-    return {"version": "ceph-host-v14", "cluster": cluster, "host": "node-2",
+    return {"version": "ceph-host-v1", "cluster": cluster, "host": "node-2",
             "pulls": [{"group": "pull-haproxy-keepalived", "names": ["haproxy", "keepalived"]}]}
 
 

@@ -206,7 +206,7 @@ PRIVATE_KEY = re.compile(rb"(?:[A-Z0-9]+ )?PRIVATE KEY\Z")
 # The identity's domain: a versioned prefix, so it never equals the digest of
 # the authority and client certificate the inspection named before S26, nor a
 # bare SHA-256 of the certificate.
-DOMAIN = b"bootwright/containercluster/identity/v2\x00"
+DOMAIN = b"bootwright/containercluster/identity/v1\x00"
 # What a restore did to the installer's own kubeconfig before a wait.
 RESTORED = "restored"
 REFUSED = "refused"

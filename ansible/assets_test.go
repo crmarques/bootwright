@@ -1,8 +1,6 @@
 package ansible
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"maps"
 	"slices"
 	"strings"
@@ -78,9 +76,7 @@ func TestAutomationDigestCoversEveryEmbeddedFile(t *testing.T) {
 }
 
 // Documentation runs nothing, so a build that changes only the README or the
-// CHANGELOG keeps the digest and with it the approved bundle. The narrowed
-// digest has its own domain version: no digest that covered documentation can
-// equal it.
+// CHANGELOG keeps the digest and with it the approved bundle.
 func TestDocumentationLeavesTheAutomationDigest(t *testing.T) {
 	_, documentation := split(Assets())
 	want := []string{
@@ -99,23 +95,6 @@ func TestDocumentationLeavesTheAutomationDigest(t *testing.T) {
 			t.Fatalf("changing %s moved the automation digest", name)
 		}
 	}
-	if digestUnderV1(Automation()) == baseline {
-		t.Fatal("the narrowed digest kept the domain version of the digest that covered documentation")
-	}
-}
-
-// digestUnderV1 is the digest as it was computed while it covered
-// documentation, kept here only to prove the two domains never collide.
-func digestUnderV1(files map[string][]byte) string {
-	digest := sha256.New()
-	digest.Write([]byte("bootwright.controller.automation-v1\x00"))
-	for _, name := range slices.Sorted(maps.Keys(files)) {
-		digest.Write([]byte(name))
-		digest.Write([]byte{0})
-		content := sha256.Sum256(files[name])
-		digest.Write(content[:])
-	}
-	return hex.EncodeToString(digest.Sum(nil))
 }
 
 // A role states the frozen request version it accepts twice: its argument spec

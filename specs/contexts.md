@@ -32,7 +32,7 @@ directories follow the selected revision. Runtime state remains separate from
 authored input. Context identity is not derived from a source directory.
 
 Current selection belongs to the invoking user in `~/.bootwright/context`, a
-bounded canonical JSON record containing `version: 2` and `name` (at most
+bounded canonical JSON record containing `version` (`contexts.SelectionVersion`) and `name` (at most
 4096 bytes). Its parent
 is user-owned `0700`; the regular file is user-owned `0600`. Resolve the account
 through the invocation identity, never `HOME`: an operator whose account comes
@@ -227,7 +227,7 @@ references or copy, inspect or expand the paths they name.
 
 ## Storage, locking and publication
 
-The registry writes private format version 6. Active records hold the name,
+The registry writes private format version `contexts.RegistryVersion`. Active records hold the name,
 initialization/deletion mode, selected revision and its Environment directory,
 configured secret-store type and reserved directory device/inode. The
 Controller [descriptor](contexts/controller-record.md#descriptor) is an
@@ -284,7 +284,7 @@ first binding; its setup subtree exists after a confirmed setup:
 | --- | --- |
 | `registry.json` | One atomic map of context names to their selected inputs and status, plus the Controller descriptor once a first binding publishes it. |
 | `media/` | Host-wide installer media under the [Managed OS media contract](managed-os.md#media-store): each image's exact bytes beside its canonical record, created by the first `media add`, shared read-only by every context and frozen through shared reservations rather than copied. An image is [acquired](#media-acquisition) into a private stage in this directory while no root lock is held, then published exclusively and atomically with its record; a pinned stage whose publication met another command's lock is kept beside its record for the command's repetition; deletion is guarded by the reservation record. |
-| `setup/` | Setup's own [subtree](contexts/controller-record.md#the-setup-subtree), independently versioned and outside the registry: its lock, its `bootwright.setup-state-v1` record with the pending intent and receipt, the published runtimes, the locked wheel cache and the newest setup runs. |
+| `setup/` | Setup's own [subtree](contexts/controller-record.md#the-setup-subtree), independently versioned and outside the registry: its lock, its `prerequisites.SetupStateFormat` record with the pending intent and receipt, the published runtimes, the locked wheel cache and the newest setup runs. |
 | `contexts/<name>/context.yaml` | Canonical immutable Context configuration; keeps the authored configuration contract separate from runtime metadata. |
 | `desired-state/revisions/<revision-id>/` | Immutable input snapshot, so publication and protected recovery can retain a complete selected revision. Collect unselected revisions only with disposal proof. |
 | `manifest.json` | Original input provenance, blob mapping, sizes and hashes needed to verify and replay the snapshot. |
@@ -294,7 +294,7 @@ first binding; its setup subtree exists after a confirmed setup:
 | `state/operations/` | [Reconciliation-owned operation records and logs](state-reconciliation.md#operation-records). Workspace supplies the held area and its publication primitives; it never interprets their content. |
 | `state/runs/` | Retained adapter output of [bounded runs](cli/output.md#bounded-run-output), in an area Workspace supplies and never interprets. The area keeps the newest runs the bounds table below states: before a run creates its directory, the oldest runs no live run holds are removed, each only while it holds nothing but its own `run.output`, and an entry not named as a run is neither counted nor removed. A run that cannot hold the directory it created removes it (`TestARunThatCannotOpenLeavesNoDirectory`). Runs are removed with the context. |
 | `state/trust/hosts.json` | The context-managed SSH host-key trust an [SSH session](cli.md#machine-ssh-sessions) proves a Machine against when it declares no `knownHostsRef` and Bootwright did not install it: one public-key record per Machine, and one key per address. Written only by `machine trust` and by an explicitly confirmed first use, published atomically against its exact prior content, and removed with the context. A write that takes over the endpoint of a Machine the context no longer declares, or that no longer uses the context's SSH trust, removes that Machine's record in the same write. It holds no confidential material. |
-| `secrets/` | Context-bound encrypted custody with its own independently versioned [storage contract](secrets.md#local-keyring-v4). |
+| `secrets/` | Context-bound encrypted custody with its own independently versioned [storage contract](secrets.md#local-keyring). |
 
 Every directory is owned by `root:root` with mode `0700`; every file is owned
 by `root:root` with mode `0600`, except the catalogued controller executables
@@ -335,13 +335,13 @@ Manifest integrity failures never fall back to external input.
 
 | Record | Required fields in canonical order |
 | --- | --- |
-| Registry | `version` (6), `contexts`, then `controller` once a first binding has published it |
+| Registry | `version` (`contexts.RegistryVersion`), `contexts`, then `controller` once a first binding has published it |
 | Context record | `name`, `environmentDirectory`, `revision`, `mode`, `secretStoreType`, `directoryDevice`, `directoryInode` |
-| Reservation | `version` (3), `name` |
-| Input manifest | `version` (3), `context`, `revision`, `inputDirectory`, `environmentDirectory`, `files` |
+| Reservation | `version` (`contextfs.ReservationVersion`), `name` |
+| Input manifest | `version` (`contextfs.ManifestVersion`), `context`, `revision`, `inputDirectory`, `environmentDirectory`, `files` |
 | Manifest file | `path`, `category` (`yaml` or `marker`), `size`, `sha256` |
-| User selection | `version` (2), `name` |
-| Media record | `version` (1), `name`, `size`, `sha256`, `source`, `added` |
+| User selection | `version` (`contexts.SelectionVersion`), `name` |
+| Media record | `version` (`managedos.MediaRecordVersion`), `name`, `size`, `sha256`, `source`, `added` |
 
 Collections are present arrays, including empty ones. Contexts sort by name
 and manifest entries by relative path. Empty input is encoded
@@ -505,12 +505,12 @@ verification that already refuses it. An operation, run or trust area refuses
 a record or directory named as a stage, so collection never removes one.
 Reads never collect. Shared inspection verifies up to 16 such stages without collecting them.
 
-The [secret store](secrets.md#local-keyring-v4)'s exclusive writes keep what
+The [secret store](secrets.md#local-keyring)'s exclusive writes keep what
 they leave for its own recovery. Its replacement stages through the same
 publication and removes its stage on any failure before the rename, keeping
 its exact read expectation, its publication phase and its not-committed,
 committed or uncertain outcome; what a killed write leaves follows
-[Local keyring v4](secrets.md#local-keyring-v4).
+[Local keyring](secrets.md#local-keyring).
 The context reservation write also keeps what it leaves: until the registry
 records the context directory's identity, the reservation alone lets an init
 retry attribute that directory and record the identity that deletion
@@ -819,7 +819,7 @@ abandoned; a claim beyond them refuses until another `media add` finishes or
 ## Format and restore boundary
 
 Under the [pre-1.0 format policy](project.md#design-priorities-and-non-goals),
-no stored format is converted. A registry, [secret store](secrets.md#local-keyring-v4),
+no stored format is converted. A registry, [secret store](secrets.md#local-keyring),
 [controller record](contexts/controller-record.md) or frozen request written in
 any other format is refused, not upgraded, and unsupported past and future
 formats refuse before effects. A format change states the refusal its

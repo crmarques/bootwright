@@ -1,6 +1,6 @@
 implementation: ntp-server-chrony-v1
-content-digest: d37be4bd1027b6a67868bd0eeb82ff8d679066a1327aee5fe6d37a5590e3d474
-request-version: managed-service-v5
+content-digest: 1ed0c6683b65f264d1259dd791fe060d0b555b1fcb522479f55feddf59a42718
+request-version: managed-service-v1
 automation-formats: none
 mark-formats: none
 proof-ids: none

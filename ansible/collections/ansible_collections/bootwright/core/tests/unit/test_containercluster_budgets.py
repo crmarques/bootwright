@@ -112,7 +112,7 @@ def kubeconfig(client=ADMIN):
 
 
 def anchor(client=ADMIN):
-    return hashlib.sha256(b"bootwright/containercluster/identity/v2\0" + client).hexdigest()
+    return hashlib.sha256(b"bootwright/containercluster/identity/v1\0" + client).hexdigest()
 
 
 def trusted(path):

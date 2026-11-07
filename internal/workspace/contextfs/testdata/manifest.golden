@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 1,
   "context": "lab",
   "revision": "rev-0123456789abcdef0123456789abcdef",
   "inputDirectory": "/home/operator/platform",

@@ -1427,7 +1427,7 @@ native identity and child-resource gaps before promotion.
 
 A placement policy and a pool each write their attempt record
 (`ceph-policy-attempt-v1` before `osd crush rule create-replicated`, and
-`ceph-pool-attempt-v2` for every pool, replicated or erasure-coded, before
+`ceph-pool-attempt-v1` for every pool, replicated or erasure-coded, before
 `osd pool create`) before the native create, and record the native rule or pool
 ID after it. An erasure-coded pool proves that no profile and no rule of its
 name exist before it writes its attempt record, and sets its profile without
@@ -2281,7 +2281,7 @@ and needs neither the bootstrap host nor MON quorum.
   tiebreaker is unknown, never absent, and refuses `tiebreaker-unreachable`
   before the retirement record.
 - **Evidence.** The cluster block's retirement record carries version
-  `ceph-core-retirement-v2`, and its `tiebreaker` member names the host and
+  `ceph.RetirementVersion`, and its `tiebreaker` member names the host and
   Machine it cleaned; a record of another version refuses by name (D142).
   Every other core block's record carries the version and no tiebreaker.
 
@@ -2397,7 +2397,7 @@ These are fixed, non-secret refusals with recovery guidance.
 ## RBD replication
 
 [CephReplication](ceph-resources.md#cephreplication) has its own
-`storage-ceph-replication-v2` implementation, `ceph-replication-v2` frozen
+`storage-ceph-replication-v1` implementation, `ceph.ReplicationVersion` frozen
 request and `ceph-replication-evidence-v1` observation. Its two runtime scopes
 come only from both clusters' original apply proofs. Scoped SSH keys and
 proved host keys reach the controller worker as private files; no ambient SSH

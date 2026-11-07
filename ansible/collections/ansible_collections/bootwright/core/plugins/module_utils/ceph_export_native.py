@@ -21,8 +21,8 @@ import urllib.parse
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_resources, ceph_export_dns
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import Custody, Refusal, canonical, require, unique_object
 
-VERSION = "ceph-export-request-v4"
-EVIDENCE_VERSION = "ceph-export-evidence-v2"
+VERSION = "ceph-export-request-v1"
+EVIDENCE_VERSION = "ceph-export-evidence-v1"
 PHASES = ("export_apply", "export_observe")
 REASONS = ("gateway-dns", "export-foreign-principal", "export-key-type", "export-key-type-aes", "export-key-type-aes256k",
            "export-prerequisite", "export-identity", "export-prerequisite-pool-identity", "export-prerequisite-rbd-application",

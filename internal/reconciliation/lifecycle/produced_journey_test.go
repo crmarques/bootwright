@@ -22,7 +22,7 @@ const (
 	installedCluster = "sno"
 	adminAccess      = "apiVersion: v1\nkind: Config\n# agent-install-admin-canary\n"
 	installedRelease = "4.21.15"
-	installIdentity  = "d21b91799c1b2d06e949151732b30343fc42b122f785c10685fad98570b00a02"
+	installIdentity  = "17edaacca4b95042edb9ca00270c5c837fd3db4b8c1f76174c9973e40e3ce7b7"
 )
 
 // installedRequest is the frozen request of one single-node agent
@@ -43,7 +43,7 @@ func installedRequest() agentinstall.InstallRequest {
 		Rendezvous:      "192.0.2.20", TLSCertificateRef: "artifact-server-tls", VIPs: []agentinstall.VIP{},
 		Release:  agentinstall.Release{Distribution: "openshift", Version: installedRelease},
 		Tool:     agentinstall.Tool{Compatibility: "openshift", Kind: "openshift-install", Version: installedRelease},
-		Version:  "cluster-install-agent-v16",
+		Version:  "cluster-install-agent-v1",
 		WorkRoot: "/var/lib/bootwright/work/lab/sno",
 	}
 }

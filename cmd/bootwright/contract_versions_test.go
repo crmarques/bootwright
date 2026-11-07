@@ -147,17 +147,17 @@ func validated(reason string) automationFormat {
 func automationFormats() map[string]automationFormat {
 	host, core := persistedBy(ceph.HostImplementation), persistedBy(ceph.Implementation)
 	formats := map[string]automationFormat{
-		"addon-instance-request-v4":  {class: formatMirrored},
-		"ceph-export-request-v4":     {class: formatMirrored},
-		"ceph-export-evidence-v2":    {class: formatMirrored},
-		"cluster-network-request-v2": {class: formatMirrored},
-		"cluster-objects-v2":         {class: formatMirrored},
+		"addon-instance-request-v1":  {class: formatMirrored},
+		"ceph-export-request-v1":     {class: formatMirrored},
+		"ceph-export-evidence-v1":    {class: formatMirrored},
+		"cluster-network-request-v1": {class: formatMirrored},
+		"cluster-objects-v1":         {class: formatMirrored},
 		// The host block writes them; the core block's workers read them back
 		// for the manager account, the cephadm cache and the OSD identities.
-		"ceph-runtime-profile-v3":         persistedBy(ceph.HostImplementation, ceph.Implementation),
-		"ceph-physical-device-binding-v2": persistedBy(ceph.HostImplementation, ceph.Implementation),
-		"ceph-device-identities-v3":       persistedBy(ceph.HostImplementation, ceph.Implementation),
-		"ceph-host-route-v3":              host,
+		"ceph-runtime-profile-v1":         persistedBy(ceph.HostImplementation, ceph.Implementation),
+		"ceph-physical-device-binding-v1": persistedBy(ceph.HostImplementation, ceph.Implementation),
+		"ceph-device-identities-v1":       persistedBy(ceph.HostImplementation, ceph.Implementation),
+		"ceph-host-route-v1":              host,
 		"ceph-package-decision-v1":        host,
 		"ceph-package-artifacts-v1":       host,
 		"ceph-package-complete-v1":        host,
@@ -165,7 +165,7 @@ func automationFormats() map[string]automationFormat {
 		// The resolved package plan the host's package decision record holds.
 		"bootwright.native-plan-v1": host,
 
-		"ceph-tunnel-v3":                    core,
+		"ceph-tunnel-v1":                    core,
 		"ceph-tunnel-custody-v1":            core,
 		"ceph-replication-custody-v1":       persistedBy(ceph.ReplicationImplementation),
 		"ceph-tunnel-relabel-v1":            core,
@@ -176,7 +176,7 @@ func automationFormats() map[string]automationFormat {
 		"ceph-registry-v1":                  core,
 		"ceph-native-teardown-v1":           core,
 		"ceph-tiebreaker-removal-v1":        core,
-		"ceph-pool-attempt-v2":              core,
+		"ceph-pool-attempt-v1":              core,
 		"ceph-policy-attempt-v1":            core,
 		"ceph-rbd-image-attempt-v1":         core,
 		"ceph-filesystem-attempt-v1":        core,
@@ -187,7 +187,7 @@ func automationFormats() map[string]automationFormat {
 		"ceph-dashboard-port-repair-v1":     core,
 		"ceph-dashboard-port-attempt-v1":    core,
 		"ceph-dashboard-user-v1":            core,
-		"ceph-cluster-device-identities-v3": core,
+		"ceph-cluster-device-identities-v1": core,
 		"ceph-osd-device-intent-v1":         core,
 		"ceph-osd-device-clear-v1":          core,
 		"ceph-service-inputs-v1":            core,
@@ -209,47 +209,47 @@ func automationFormats() map[string]automationFormat {
 		"bootwright-ceph-metadata-v1":                transient("the registry client's User-Agent"),
 		"bootwright-pull-broker-v1":                  transient("the pull broker's User-Agent"),
 		"bootwright-contained-public-label-probe-v1": transient("the bytes the label probe writes in its own scratch and reads back"),
-		"ceph-packages-v2":                           transient("the guest package transaction policy ceph_packages.transaction_request builds and the shared resolver reads within one run"),
+		"ceph-package-transaction-v1":                transient("the guest package transaction policy ceph_packages.transaction_request builds and the shared resolver reads within one run"),
 
 		"export-prerequisite-monitor-v2": transient("the MON v2 prerequisite refusal token, read from the result channel within one adapter run"),
 
-		"ceph-host-v14":                {class: formatMirrored},
-		"ceph-host-evidence-v5":        {class: formatMirrored},
-		"ceph-core-v43":                {class: formatMirrored},
-		"ceph-core-evidence-v14":       {class: formatMirrored},
+		"ceph-host-v1":                 {class: formatMirrored},
+		"ceph-host-evidence-v1":        {class: formatMirrored},
+		"ceph-core-v1":                 {class: formatMirrored},
+		"ceph-core-evidence-v1":        {class: formatMirrored},
 		"ceph-tiebreaker-evidence-v1":  {class: formatMirrored},
-		"ceph-packages-v3":             {class: formatMirrored},
-		"ceph-image-v4":                {class: formatMirrored},
+		"ceph-packages-v1":             {class: formatMirrored},
+		"ceph-image-v1":                {class: formatMirrored},
 		"ceph-smb-v1":                  {class: formatMirrored},
 		"ceph-smb-evidence-v1":         {class: formatMirrored},
 		"os-package-tree-evidence-v1":  {class: formatMirrored},
-		"ceph-replication-v2":          {class: formatMirrored},
+		"ceph-replication-v1":          {class: formatMirrored},
 		"ceph-replication-evidence-v1": {class: formatMirrored},
 		// The request versions each role refuses unless its request names.
-		"substrate-host-libvirt-v7":  {class: formatMirrored},
-		"machine-libvirt-v9":         {class: formatMirrored},
-		"machine-baremetal-v4":       {class: formatMirrored},
-		"substrate-host-kubevirt-v2": {class: formatMirrored},
-		"machine-kubevirt-v4":        {class: formatMirrored},
+		"substrate-host-libvirt-v1":  {class: formatMirrored},
+		"machine-libvirt-v1":         {class: formatMirrored},
+		"machine-baremetal-v1":       {class: formatMirrored},
+		"substrate-host-kubevirt-v1": {class: formatMirrored},
+		"machine-kubevirt-v1":        {class: formatMirrored},
 		// The lend a hosted KubeVirt provider's runs take their access from:
 		// its request and evidence, which the host and machine digests pin.
 		"substrate-access-kubevirt-v1":          {class: formatMirrored},
 		"substrate-access-kubevirt-evidence-v1": {class: formatMirrored},
 		"os-package-tree-v1":                    {class: formatMirrored},
-		"os-install-anaconda-v27":               {class: formatMirrored},
-		"physical-erase-v12":                    {class: formatMirrored},
+		"os-install-anaconda-v1":                {class: formatMirrored},
+		"physical-erase-v1":                     {class: formatMirrored},
 		"os-host-firewall-v1":                   {class: formatMirrored},
 		"os-host-firewall-evidence-v1":          {class: formatMirrored},
-		"cluster-media-agent-v11":               {class: formatMirrored},
-		"cluster-install-agent-v16":             {class: formatMirrored},
-		"artifact-server-nginx-v4":              {class: formatMirrored},
-		"managed-service-v5":                    {class: formatMirrored},
+		"cluster-media-agent-v1":                {class: formatMirrored},
+		"cluster-install-agent-v1":              {class: formatMirrored},
+		"artifact-server-nginx-v1":              {class: formatMirrored},
+		"managed-service-v1":                    {class: formatMirrored},
 		// Power is no plan block: each run binds its request to the power
 		// content digest these implementations feed, and nothing is retained.
-		"machine-power-v4":      {class: formatMirrored},
-		"machine-power-read-v4": {class: formatMirrored},
+		"machine-power-v1":      {class: formatMirrored},
+		"machine-power-read-v1": {class: formatMirrored},
 
-		"controller-prerequisites-v6": {class: formatController, reason: "the controller stage's request, which setup applies and no plan block retains"},
+		"controller-prerequisites-v1": {class: formatController, reason: "the controller stage's request, which setup applies and no plan block retains"},
 	}
 	for literal, format := range automationIdentities() {
 		if _, twice := formats[literal]; twice {
@@ -304,7 +304,7 @@ func automationIdentities() map[string]automationFormat {
 		"/bootwright-media.json":                  fixedBy(kindProof, "the receipt the published boot media carries", media),
 		".bootwright-booted":                      fixedBy(kindProof, "the marker the install leaves once its nodes booted the media", media, install),
 		"/.bootwright-booted":                     fixedBy(kindProof, "the marker the install leaves once its nodes booted the media", install),
-		"bootwright/containercluster/identity/v2": fixedBy(kindProof, "the domain the installed cluster's identity is derived under", install),
+		"bootwright/containercluster/identity/v1": fixedBy(kindProof, "the domain the installed cluster's identity is derived under", install),
 		".bootwright-kubeconfig":                  fixedBy(kindPlace, "the kept copy of the installer's kubeconfig in the work root", install),
 		"/.bootwright-kubeconfig":                 fixedBy(kindPlace, "the kept copy of the installer's kubeconfig in the work root", media, install),
 		"/etc/bootwright":                         fixedBy(kindPlace, "the guest directory of the registration and update records", anaconda),
@@ -468,10 +468,10 @@ func TestEveryStoreFormatIsClassified(t *testing.T) {
 		}
 	}
 	for literal, want := range map[string]string{
-		prerequisites.SetupStateFormat:     "bootwright.setup-state-v2",
+		prerequisites.SetupStateFormat:     "bootwright.setup-state-v1",
 		runtimelock.Format:                 "bootwright.controller.runtime-lock-v1",
 		prerequisites.RuntimeFormat:        "bootwright.controller.runtime-v1",
-		prerequisites.RuntimeClosureFormat: "bootwright.controller.execution-closure-v2",
+		prerequisites.RuntimeClosureFormat: "bootwright.controller.execution-closure-v1",
 	} {
 		if literal != want {
 			t.Errorf("the store format %q moved to %q: classify the new literal", want, literal)
@@ -568,7 +568,7 @@ func TestEveryAutomationVersionLiteralIsClassified(t *testing.T) {
 	for _, name := range unread {
 		t.Errorf("%s is embedded automation the scan does not read: read its extension in automationTexts, or make it collection documentation", name)
 	}
-	for _, sentinel := range []string{"ceph-tunnel-v3", "/var/lib/bootwright/ceph", "bootwright.io/owner", "/var/lib/bootwright-install", "bootwright-network-apply.service"} {
+	for _, sentinel := range []string{"ceph-tunnel-v1", "/var/lib/bootwright/ceph", "bootwright.io/owner", "/var/lib/bootwright-install", "bootwright-network-apply.service"} {
 		if _, ok := found[sentinel]; !ok {
 			t.Errorf("the scan no longer finds %q: the scan is broken, or the literal moved and another sentinel must replace it", sentinel)
 		}

@@ -23,7 +23,7 @@
       "request": "5ac7ce1021e3b279a7f67c50f3478d4a8b862c119900c812a94954eaa06906dd"
     }
   ],
-  "request": "be4f53ab87b3ca535066cc482af5e5f686c3ad01425969caa67ab8a4316044c8",
+  "request": "bb5de1a31aa46d91e53e4019069302696f562ad3080fe51f47c5b036ec20bb1e",
   "retired": true,
-  "version": "storage-ceph-physical-retirement-v3"
+  "version": "storage-ceph-physical-retirement-v1"
 }

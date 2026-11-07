@@ -33,7 +33,7 @@ unreadable to the new build, with no converter (pre-1.x rule).
   `secret.store.newer` ("the store is intact") instead of
   `secret.store.corrupt`.
 - `TestMetadataForANewerReaderRefusesAsNewerNotCorrupt` holds the guard;
-  `TestTheMetadataGoldenPinsFormatFour` pins the members.
+  `TestTheMetadataGoldenPinsTheFormat` pins the members.
 
 The required behavior is in [secrets.md](../../specs/secrets.md) (the encrypted
 metadata members).

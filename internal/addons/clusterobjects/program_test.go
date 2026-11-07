@@ -62,7 +62,7 @@ func TestProgramGolden(t *testing.T) {
 
 func TestProgramRefusesClosedAndDeferredArms(t *testing.T) {
 	tests := map[string]func(*Program){
-		"version":       func(p *Program) { p.Version = "cluster-objects-v1" },
+		"version":       func(p *Program) { p.Version = "cluster-objects-v2" },
 		"step":          func(p *Program) { p.Steps[0].Kind = "apply" },
 		"multiple arms": func(p *Program) { p.Steps[0].Wait = []Check{{ResourceExists: &p.Steps[0].Create.Ref}} },
 		"empty wait":    func(p *Program) { p.Steps = []Step{{Kind: "wait", Wait: []Check{}}} },

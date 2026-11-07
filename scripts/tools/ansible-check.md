@@ -97,7 +97,7 @@ into an isolated installroot. It is an operator-run harness rather than part of
 the unitary gate. Select it with `BOOTWRIGHT_ANSIBLE_NATIVE_TARGET=1` on RHEL 9.
 `controller_prerequisites` is the other operator-run harness: it runs the
 shipped `playbooks/controller/setup.yml` over the real runner protocol with one
-`controller-prerequisites-v6` request, whose single synthetic client is
+`controller-prerequisites-v1` request, whose single synthetic client is
 already retained in a private temporary tool area, then replays it. It needs
 no root and no network. Select it with
 `BOOTWRIGHT_ANSIBLE_CONTROLLER_TARGET=1`.

@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	RecordVersion = 3
+	RecordVersion = 1
 	RecordMaximum = 8 << 20
 	RecordPath    = "store.json"
 )

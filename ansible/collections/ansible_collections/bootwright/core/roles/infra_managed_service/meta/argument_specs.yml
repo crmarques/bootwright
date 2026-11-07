@@ -72,7 +72,7 @@ argument_specs:
             type: str
             required: true
             choices:
-              - managed-service-v5
+              - managed-service-v1
       bootwright_managed_service_digest:
         type: str
         required: true

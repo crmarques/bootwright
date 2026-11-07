@@ -110,8 +110,8 @@ func TestTheRequestCarriesEachToolsAcquisitionDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []toolAcquisition{{Source: "tool-openshift-clients", Seconds: 205}, {Source: "tool-kubectl", Seconds: 121}}
-	if request.Version != "controller-prerequisites-v6" || !slices.Equal(request.Acquisition, want) {
-		t.Fatalf("request = %s with acquisition %v, want controller-prerequisites-v6 with %v", request.Version, request.Acquisition, want)
+	if request.Version != "controller-prerequisites-v1" || !slices.Equal(request.Acquisition, want) {
+		t.Fatalf("request = %s with acquisition %v, want controller-prerequisites-v1 with %v", request.Version, request.Acquisition, want)
 	}
 	encoded, err := json.Marshal(request)
 	if err != nil || !strings.Contains(string(encoded), `"noProxy":[]`) || strings.Contains(string(encoded), `"packages"`) || strings.Contains(string(encoded), `"native"`) {

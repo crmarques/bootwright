@@ -39,7 +39,7 @@ def core_request():
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [h["name"] for h in hosts]
-    return {"controller": "controller", "version": "ceph-core-v43", "action": "cluster", "cluster": "example", "owner": "apply-123",
+    return {"controller": "controller", "version": "ceph-core-v1", "action": "cluster", "cluster": "example", "owner": "apply-123",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -147,7 +147,7 @@ def identities(core_request, form="{serial}"):
 
 
 def observation(core_request, ready=False):
-    return {"version": "ceph-core-evidence-v14", "request": "", "action": core_request["action"], "owner": core_request["owner"], "fsid": core_request["fsid"],
+    return {"version": "ceph-core-evidence-v1", "request": "", "action": core_request["action"], "owner": core_request["owner"], "fsid": core_request["fsid"],
             "owned": True, "exists": ready, "ready": ready, "removed": not ready, "partial": False, "health": "HEALTH_OK" if ready else "",
             "hosts": [h["name"] for h in core_request["hosts"]] if ready else [], "monitors": [], "monAddrs": [], "mgrActive": "", "mgrStandbys": [],
             "osds": [], "resource": {"id": "", "path": ""}, "client": "", "dashboard": dict(EMPTY_DASHBOARD),
@@ -360,12 +360,12 @@ class AppliedTransport:
 
 def host_block(core_request):
     cluster = {key: value for key, value in copy.deepcopy(core_request).items() if key != "action"}
-    cluster["packages"] = {"version": "ceph-packages-v3", "licenseAccepted": True, "sources": [
+    cluster["packages"] = {"version": "ceph-packages-v1", "licenseAccepted": True, "sources": [
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "e" * 64, "mediaSize": 1024,
          "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"} for host in cluster["hosts"]]}
-    request = {"version": "ceph-host-v14", "cluster": cluster, "host": "node-2", "pulls": []}
-    record = {"version": "ceph-host-evidence-v5", "host": "node-2", "owner": cluster["owner"], "fsid": cluster["fsid"], "image": cluster["image"],
+    request = {"version": "ceph-host-v1", "cluster": cluster, "host": "node-2", "pulls": []}
+    record = {"version": "ceph-host-evidence-v1", "host": "node-2", "owner": cluster["owner"], "fsid": cluster["fsid"], "image": cluster["image"],
               "ready": False, "removed": False, "imageID": "", "uid": 0, "gid": 0, "label": "", "policySHA256": "", "cephadmSHA256": "",
               "planDigest": "", "route": False, "devices": []}
     return request, record
@@ -740,7 +740,7 @@ def pool_worker(core_request, marks, pools, effects):
 
 
 def pool_attempt(core_request):
-    return {"version": "ceph-pool-attempt-v2", "owner": core_request["owner"], "fsid": core_request["fsid"], "pool": core_request["pool"]}
+    return {"version": "ceph-pool-attempt-v1", "owner": core_request["owner"], "fsid": core_request["fsid"], "pool": core_request["pool"]}
 
 
 def test_pool_creation_journals_its_attempt_before_the_create(core_request):
@@ -1081,7 +1081,7 @@ def test_memory_rendering_is_explicit_deterministic_and_never_changes_defaults(c
     for target in ("2147483648", "4294967296", "18446744073709551615"):
         core_request["config"] = memory_config(target)
         assert ceph_native.validate(core_request) is core_request
-    core_request["version"] = "ceph-core-v1"
+    core_request["version"] = "ceph-core-v2"
     with pytest.raises(ceph_native.Refusal, match="^request$"):
         ceph_native.validate(core_request)
 
@@ -1821,7 +1821,7 @@ class ReadinessTransport:
 
 
 def package_intent(core_request):
-    core_request["packages"] = {"version": "ceph-packages-v3", "licenseAccepted": True, "sources": [
+    core_request["packages"] = {"version": "ceph-packages-v1", "licenseAccepted": True, "sources": [
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "publicationPath": "/private/example/os-tree",
          "url": "https://192.0.2.10:8443/os/rhel/tree", "certificateRef": "serving-tls"}
         for host in core_request["hosts"]]}

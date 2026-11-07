@@ -75,7 +75,7 @@ type LockedFile struct {
 	SHA256   string `json:"sha256"`
 }
 
-const RuntimeClosureFormat = "bootwright.controller.execution-closure-v2"
+const RuntimeClosureFormat = "bootwright.controller.execution-closure-v1"
 
 func RuntimeClosureDigest(lockDigest, abi string) string {
 	sum := sha256.Sum256([]byte(RuntimeClosureFormat + "\x00" + lockDigest + "\x00" + abi))

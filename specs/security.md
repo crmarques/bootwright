@@ -14,7 +14,7 @@ and persisted state Bootwright did not write as untrusted. Bootwright's own
 state is trusted when it was published in the root-only store through held
 verified handles, under the
 [controller host's attacker model](#the-controller-hosts-attacker-model), and
-keyring state also when its MAC verifies ([local keyring](secrets.md#local-keyring-v4)).
+keyring state also when its MAC verifies ([local keyring](secrets.md#local-keyring)).
 Parse once into closed typed structures, normalize once, and pass only those
 values across ports. Unknown fields, duplicate meanings, implicit coercions,
 and adapter-invented defaults are errors. A strict JSON document ends with its
@@ -61,7 +61,7 @@ account) and writable by neither group nor others. A defence against root, such
 as byte digests of root-owned system libraries, is no boundary here and is not
 kept ([D152](milestones/backlog.md#d152)).
 
-Controller setup v2 widens the trusted set in four named ways, each stated
+Controller setup widens the trusted set in four named ways, each stated
 here once:
 
 - **W1, the OS interpreter.** The controller runtime runs on the host's own

@@ -76,7 +76,7 @@ func digestOf(files map[string][]byte) string {
 	}
 	slices.Sort(names)
 	digest := sha256.New()
-	digest.Write([]byte("bootwright.controller.automation-v2\x00"))
+	digest.Write([]byte("bootwright.controller.automation-v1\x00"))
 	for _, name := range names {
 		digest.Write([]byte(name))
 		digest.Write([]byte{0})

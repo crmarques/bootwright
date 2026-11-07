@@ -32,7 +32,7 @@ func New(stager prerequisites.AutomationStager) Installer {
 	return Installer{Stager: stager, runner: run}
 }
 
-const requestVersion = "controller-prerequisites-v6"
+const requestVersion = "controller-prerequisites-v1"
 
 // capabilityRequest is what the role acquires: target tools only. Host
 // packages are the stage's own, through the host's dnf.

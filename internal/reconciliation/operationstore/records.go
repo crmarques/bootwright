@@ -131,7 +131,7 @@ type Build struct {
 
 // OperationVersion is the operation record every registration writes and the
 // only one this build reads; each names the closure its effects ran in.
-const OperationVersion = 2
+const OperationVersion = 1
 
 // Closure is the controller runtime closure an operation registered with: its
 // identity over the runtime lock and interpreter ABI, and the ABI and

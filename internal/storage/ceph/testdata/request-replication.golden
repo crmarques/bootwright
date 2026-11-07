@@ -102,5 +102,5 @@
     "poolObject": "secondary-volumes",
     "providedMachines": []
   },
-  "version": "ceph-replication-v2"
+  "version": "ceph-replication-v1"
 }

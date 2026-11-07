@@ -18,8 +18,8 @@ import (
 )
 
 const HostImplementation = "storage-ceph-host-v1"
-const HostVersion = "ceph-host-v14"
-const HostEvidenceVersion = "ceph-host-evidence-v5"
+const HostVersion = "ceph-host-v1"
+const HostEvidenceVersion = "ceph-host-evidence-v1"
 const SharedLabel = "system_u:object_r:container_file_t:s0"
 const maxHostEvidence = 24576
 
@@ -117,7 +117,7 @@ func (r HostRequest) source() (int, bool) {
 }
 
 func HostContentDigest() string {
-	d := sha256.Sum256([]byte(HostImplementation + "\x00" + HostVersion + "\x00" + HostEvidenceVersion + "\x00" + "selected-packages-runtime-placement-pulls-profile-route-devices-v6"))
+	d := sha256.Sum256([]byte(HostImplementation + "\x00" + HostVersion + "\x00" + HostEvidenceVersion + "\x00" + "selected-packages-runtime-placement-pulls-profile-route-devices-v1"))
 	return hex.EncodeToString(d[:])
 }
 

@@ -115,7 +115,7 @@ def source_for(request, host):
     package = request.get("packages")
     ceph_native.require(isinstance(package, dict) and {"version", "licenseAccepted", "sources"} <= set(package)
                         <= {"version", "licenseAccepted", "sources", "packageRepositoryTrustBundleRef"}, "packages")
-    ceph_native.require(package["version"] == "ceph-packages-v3" and package["licenseAccepted"] is True, "packages")
+    ceph_native.require(package["version"] == "ceph-packages-v1" and package["licenseAccepted"] is True, "packages")
     ceph_native.require("packageRepositoryTrustBundleRef" not in package or ceph_native.named(package["packageRepositoryTrustBundleRef"]), "packages")
     sources = package["sources"]
     ceph_native.require(isinstance(sources, list) and len(sources) == len(request["hosts"]), "packages")

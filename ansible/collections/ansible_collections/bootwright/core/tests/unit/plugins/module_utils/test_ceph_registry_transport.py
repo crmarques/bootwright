@@ -23,7 +23,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import ceph_regist
 
 COLLECTION = pathlib.Path(__file__).resolve().parents[4]
 REQUEST = json.loads((COLLECTION / "tests" / "fixtures" / "ceph-image-call.golden").read_text())["request"]
-REQUEST["version"] = "ceph-image-v4"
+REQUEST["version"] = "ceph-image-v1"
 REGISTRY = REQUEST["registry"]
 NAMESPACE = REQUEST["base"].split("/", 1)[1]
 MANIFEST = "/v2/" + NAMESPACE + "/manifests/" + REQUEST["tag"]

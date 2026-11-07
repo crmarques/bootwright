@@ -309,9 +309,8 @@ func TestStoredRecordsMustBeCanonical(t *testing.T) {
 	}
 }
 
-// Only the current operation record version reads back: a version 1 record,
-// which a build before the setup v2 cut-over wrote with no closure, refuses as
-// every other pairing of version and closure does (D152's fresh install).
+// Only the current operation record version reads back, and only with its
+// closure: a record of another version, or one with no closure, refuses.
 func TestOnlyTheCurrentOperationRecordVersionReads(t *testing.T) {
 	ctx := context.Background()
 	plan := goldenPlan(t)
@@ -325,9 +324,8 @@ func TestOnlyTheCurrentOperationRecordVersionReads(t *testing.T) {
 	target := testOperation(t, plan).ID + "/operation.json"
 	current := testOperation(t, plan)
 	for name, mutate := range map[string]func(Operation) Operation{
-		"version 1 with no closure": func(o Operation) Operation { o.Version, o.Closure = 1, nil; return o },
-		"version 1 with a closure":  func(o Operation) Operation { o.Version = 1; return o },
-		"version 2 with no closure": func(o Operation) Operation { o.Closure = nil; return o },
+		"an earlier version": func(o Operation) Operation { o.Version = OperationVersion - 1; return o },
+		"no closure":         func(o Operation) Operation { o.Closure = nil; return o },
 		"an uppercase digest": func(o Operation) Operation {
 			o.Closure = &Closure{Digest: strings.Repeat("A", 64), Python: "3.14", Ansible: "2.21.4"}
 			return o

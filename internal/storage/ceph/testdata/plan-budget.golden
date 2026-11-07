@@ -5,14 +5,14 @@
         "apply": 11280,
         "destroy": 6000,
         "id": "ceph-client-consumer",
-        "implementation": "storage-ceph-core-v3",
+        "implementation": "storage-ceph-core-v1",
         "observe": 6000
       },
       {
         "apply": 18900,
         "destroy": 6000,
         "id": "ceph-cluster-example",
-        "implementation": "storage-ceph-core-v3",
+        "implementation": "storage-ceph-core-v1",
         "observe": 6660
       },
       {
@@ -72,21 +72,21 @@
         "apply": 11280,
         "destroy": 6000,
         "id": "ceph-policy-policy",
-        "implementation": "storage-ceph-core-v3",
+        "implementation": "storage-ceph-core-v1",
         "observe": 6000
       },
       {
         "apply": 11280,
         "destroy": 6000,
         "id": "ceph-pool-volumes",
-        "implementation": "storage-ceph-core-v3",
+        "implementation": "storage-ceph-core-v1",
         "observe": 6000
       },
       {
         "apply": 2280,
         "destroy": 1380,
         "id": "ceph-service-example-crash",
-        "implementation": "storage-ceph-core-v3",
+        "implementation": "storage-ceph-core-v1",
         "observe": 720
       }
     ],
@@ -98,14 +98,14 @@
         "apply": 16560,
         "destroy": 8640,
         "id": "ceph-client-consumer",
-        "implementation": "storage-ceph-core-v3",
+        "implementation": "storage-ceph-core-v1",
         "observe": 8640
       },
       {
         "apply": 21540,
         "destroy": 8640,
         "id": "ceph-cluster-example",
-        "implementation": "storage-ceph-core-v3",
+        "implementation": "storage-ceph-core-v1",
         "observe": 9300
       },
       {
@@ -193,21 +193,21 @@
         "apply": 16560,
         "destroy": 8640,
         "id": "ceph-policy-policy",
-        "implementation": "storage-ceph-core-v3",
+        "implementation": "storage-ceph-core-v1",
         "observe": 8640
       },
       {
         "apply": 16560,
         "destroy": 8640,
         "id": "ceph-pool-volumes",
-        "implementation": "storage-ceph-core-v3",
+        "implementation": "storage-ceph-core-v1",
         "observe": 8640
       },
       {
         "apply": 2280,
         "destroy": 1380,
         "id": "ceph-service-example-crash",
-        "implementation": "storage-ceph-core-v3",
+        "implementation": "storage-ceph-core-v1",
         "observe": 720
       }
     ],

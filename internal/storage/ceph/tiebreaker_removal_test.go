@@ -229,7 +229,7 @@ func TestARetirementRecordOfAnotherVersionRefusesByName(t *testing.T) {
 	other := retirementFor(r)
 	data, _ := json.Marshal(other)
 	_, err := EvaluateRetirement(data, r, true)
-	refusedWith(t, err, "lifecycle.state", "the Ceph retirement record carries no version, and this build reads only ceph-core-retirement-v2",
+	refusedWith(t, err, "lifecycle.state", "the Ceph retirement record carries no version, and this build reads only ceph-core-retirement-v1",
 		"continue this operation with the Bootwright build that recorded it")
 	stray := clusterRetirement(r)
 	stray.Tiebreaker.Removed = false

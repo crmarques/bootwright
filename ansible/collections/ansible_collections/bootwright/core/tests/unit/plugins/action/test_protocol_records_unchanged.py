@@ -84,7 +84,7 @@ ENDPOINT = "https://bmc.example.test/redfish/v1/Systems/1"
 POWER = {"machine": "node-a", "verb": "start", "power": "On", "previous": "Off", "changed": True}
 POWER_UNMET = dict(POWER, power="Off")
 POWER_MALFORMED = dict(POWER, verb="bounce")
-CONTROLLER_REQUEST = {"version": "controller-prerequisites-v6", "identity": DIGEST, "publicationBundle": "p",
+CONTROLLER_REQUEST = {"version": "controller-prerequisites-v1", "identity": DIGEST, "publicationBundle": "p",
                       "tools": [{"source": {"id": "tool-oc"}}], "acquisition": [{"source": "tool-oc", "seconds": 121}],
                       "egress": {}}
 CONTROLLER_PREPARATION = {"addedSources": ["tool-oc"]}

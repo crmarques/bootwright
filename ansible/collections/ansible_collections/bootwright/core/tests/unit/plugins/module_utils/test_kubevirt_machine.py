@@ -203,7 +203,7 @@ def request(**extra):
         "interfaces": [{"macAddress": "52:54:00:25:10:e0", "name": "enp1s0", "network": "guest-l2"}],
         "kubeconfigRef": "host-kubeconfig", "mediaVolume": VM + "-media", "memoryMiB": 16384, "name": VM, "namespace": "guests",
         "placement": {"connection": "local", "machine": "controller"}, "provider": "lab-kubevirt", "rootVolume": VM + "-root",
-        "version": "machine-kubevirt-v4",
+        "version": "machine-kubevirt-v1",
     }
     value.update(extra)
     return value

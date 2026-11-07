@@ -2,7 +2,7 @@
 - name: Validate the frozen managed service request
   ansible.builtin.assert:
     that:
-      - bootwright_managed_service_request.version == 'managed-service-v5'
+      - bootwright_managed_service_request.version == 'managed-service-v1'
       - bootwright_managed_service_request.implementation in infra_managed_service_implementations
       - bootwright_managed_service_request.unit is string
       - bootwright_managed_service_request.contentRoot.startswith('/var/lib/bootwright-services/')

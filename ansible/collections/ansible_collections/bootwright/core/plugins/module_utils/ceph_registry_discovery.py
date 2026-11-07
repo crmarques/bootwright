@@ -30,7 +30,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 )
 
 PLATFORM = "linux/amd64"
-VERSION = "ceph-image-v4"
+VERSION = "ceph-image-v1"
 OPERATIONS = ("apply", "observe", "destroy")
 REQUEST = ("base", "cluster", "controller", "image", "registry", "registryRef", "release", "tag", "version")
 # cephadm's container_image_<name> settings an auxiliary image may fill, in name order.

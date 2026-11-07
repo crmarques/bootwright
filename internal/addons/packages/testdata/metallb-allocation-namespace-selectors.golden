@@ -146,5 +146,5 @@
       "kind": "create"
     }
   ],
-  "version": "cluster-objects-v2"
+  "version": "cluster-objects-v1"
 }

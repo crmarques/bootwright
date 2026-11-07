@@ -24,7 +24,7 @@ type Options struct {
 	Now          func() time.Time
 }
 
-// Ports are what setup v2 owns: the setup subtree, the host's own dnf, the
+// Ports are what setup owns: the setup subtree, the host's own dnf, the
 // OS interpreter's runtime and the lock this build embeds.
 type Ports struct {
 	Setup    SetupStore

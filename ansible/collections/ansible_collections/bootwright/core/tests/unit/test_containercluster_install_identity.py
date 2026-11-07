@@ -41,7 +41,7 @@ ROUTER = pem("CERTIFICATE", "d2lsZGNhcmQ=") + pem("CERTIFICATE", "aW5ncmVzcy1vcG
 
 
 def anchor(client=CLIENT):
-    return hashlib.sha256(b"bootwright/containercluster/identity/v2\0" + client).hexdigest()
+    return hashlib.sha256(b"bootwright/containercluster/identity/v1\0" + client).hexdigest()
 
 
 def encoded(data):

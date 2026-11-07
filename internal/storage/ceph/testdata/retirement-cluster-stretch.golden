@@ -14,5 +14,5 @@
     "machine": "tie",
     "removed": true
   },
-  "version": "ceph-core-retirement-v2"
+  "version": "ceph-core-retirement-v1"
 }

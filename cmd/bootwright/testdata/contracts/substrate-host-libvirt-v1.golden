@@ -1,6 +1,6 @@
 implementation: substrate-host-libvirt-v1
-content-digest: 410f5b86ad3efee683be187d4914dd946ba90ef0dff0457a4d000ab92796e3f3
-request-version: substrate-host-libvirt-v7
+content-digest: bbd30ba5055a16fa7a5e468637445df1e11741e318806a24fbaef1a30a2a7da9
+request-version: substrate-host-libvirt-v1
 automation-formats: https://bootwright.io/substrate/v1
 mark-formats: Bootwright owned readiness barrier, Description=Bootwright managed network firewall, https://bootwright.io/substrate/v1
 proof-ids: none

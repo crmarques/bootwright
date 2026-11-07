@@ -42,7 +42,7 @@ def cluster_request():
               "user": "operator", "port": 22, "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}],
               "labels": [], "location": {}, "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    return {"controller": "controller", "version": "ceph-core-v43", "action": "cluster", "cluster": "example", "owner": "apply-example",
+    return {"controller": "controller", "version": "ceph-core-v1", "action": "cluster", "cluster": "example", "owner": "apply-example",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible",
@@ -305,7 +305,7 @@ def test_manager_runtime_fails_closed_until_host_preparation_writes_its_profile(
 
 @pytest.mark.parametrize("changes", [
     {"image": "cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:" + "b" * 64}, {"host": "node-2"}, {"uid": 0}, {"uid": True}, {"uid": "167"}, {"gid": 168},
-    {"label": ""}, {"label": "system_u:object_r:other_t:s0"}, {"policy": None}, {"policy": "Include /etc/foreign\n"}, {"version": "ceph-runtime-profile-v1"},
+    {"label": ""}, {"label": "system_u:object_r:other_t:s0"}, {"policy": None}, {"policy": "Include /etc/foreign\n"}, {"version": "ceph-runtime-profile-v2"},
     {"unproved": True}, {"cephadmSHA256": "f" * 64}, {"imageID": "f" * 64}, {"scope": {"host": "node-1"}},
 ])
 def test_a_contradicting_runtime_profile_refuses(profiled, changes):

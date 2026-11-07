@@ -26,7 +26,7 @@ digest and no content digest, request byte or version. Another build continues
 an operation exactly when it freezes the same blocks
 ([dependency safety](../../specs/state-reconciliation.md#dependency-safety-during-recovery),
 D142). Each invocation stages the running executable's embedded
-automation itself, and the execution closure (`execution-closure-v2`) is only
+automation itself, and the execution closure (`execution-closure-v1`) is only
 the runtime lock digest and the interpreter ABI, so a rebuild that keeps the
 lock continues with no `controller install`.
 

@@ -126,7 +126,7 @@ def snapshot_database(platform, scratch):
 
 
 def selected_roots(request):
-    if request.get("policy") != "ceph-packages-v2" or request["requirements"] != {"cephPackages": True}:
+    if request.get("policy") != "ceph-package-transaction-v1" or request["requirements"] != {"cephPackages": True}:
         raise ValueError("native root policy")
     versions = request["versions"]
     if (not isinstance(versions, dict) or not {"ceph", "ansible", "license"} <= set(versions)
@@ -192,7 +192,7 @@ def setup_dnf4(request, scratch, repositories=True, installroot=None):
     conf.assumeyes = False
     conf.substitutions["releasever"] = request["platform"]["release"]
     conf.substitutions["basearch"] = "x86_64"
-    if request.get("policy") == "ceph-packages-v2":
+    if request.get("policy") == "ceph-package-transaction-v1":
         selected_roots(request)
         # The disposable snapshot contains RPMDB only, while DVD AppStream
         # modular metadata requires the selected RHEL platform explicitly.
@@ -313,7 +313,7 @@ def assemble(request, before, roots, inbound, outbound, compare, solver_version)
             {"key": key, "requested": requested, "package": identity(package)}
         )
         root_names[record["name"]] = requested
-        if request.get("policy") == "ceph-packages-v2" and key in ("ceph", "ansible", "nfsGanesha"):
+        if request.get("policy") == "ceph-package-transaction-v1" and key in ("ceph", "ansible", "nfsGanesha"):
             explicit_ceph_roots.add(record["name"])
     before_names = {}
     for value in before:

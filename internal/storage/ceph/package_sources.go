@@ -11,7 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-const PackageVersion = "ceph-packages-v3"
+const PackageVersion = "ceph-packages-v1"
 
 type PackageSource struct {
 	CertificateRef  string `json:"certificateRef"`

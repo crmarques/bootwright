@@ -42,7 +42,7 @@ func (a *networkAdapter) Run(_ context.Context, run lifecycle.RunRequest) (lifec
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	evidence := driver.Evidence{Version: "cluster-network-evidence-v4", Request: run.Digest, Postcondition: !a.unready && !a.foreign}
+	evidence := driver.Evidence{Version: "cluster-network-evidence-v1", Request: run.Digest, Postcondition: !a.unready && !a.foreign}
 	checks := len(program.Checks)
 	for _, step := range program.Steps {
 		checks += len(step.Wait)
@@ -97,7 +97,7 @@ func networkJourney(t *testing.T) (*lifecycle.CapabilityJourney, *networkAdapter
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := networking.Request{Version: "cluster-network-request-v2", BudgetSeconds: 1800, Cluster: installedCluster, Placement: producerRequest.Placement, ProducedInputs: []lifecycle.ProducedInput{{Kind: "OpenShiftCluster", Object: installedCluster, Output: "kubeconfig"}}, Program: programData, Tool: networking.Tool{Kind: "openshift-clients", Compatibility: "openshift", Version: installedRelease}}
+	request := networking.Request{Version: "cluster-network-request-v1", BudgetSeconds: 1800, Cluster: installedCluster, Placement: producerRequest.Placement, ProducedInputs: []lifecycle.ProducedInput{{Kind: "OpenShiftCluster", Object: installedCluster, Output: "kubeconfig"}}, Program: programData, Tool: networking.Tool{Kind: "openshift-clients", Compatibility: "openshift", Version: installedRelease}}
 	data, err := request.Canonical()
 	if err != nil {
 		t.Fatal(err)

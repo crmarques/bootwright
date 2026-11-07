@@ -173,7 +173,7 @@ def observed(tmp_path, config=None, metadata=None):
 
 
 def anchor(client=CLIENT):
-    return hashlib.sha256(b"bootwright/containercluster/identity/v2\0" + client).hexdigest()
+    return hashlib.sha256(b"bootwright/containercluster/identity/v1\0" + client).hexdigest()
 
 
 def test_the_identity_is_the_client_certificate_the_image_build_wrote_and_needs_no_metadata(tmp_path):
@@ -181,7 +181,7 @@ def test_the_identity_is_the_client_certificate_the_image_build_wrote_and_needs_
     assert not (tmp_path / "work" / "metadata.json").exists()
     assert observation["identity"] == anchor()
     # The identity the Go capability fixtures carry (install_test.go).
-    assert anchor() == "d21b91799c1b2d06e949151732b30343fc42b122f785c10685fad98570b00a02"
+    assert anchor() == "17edaacca4b95042edb9ca00270c5c837fd3db4b8c1f76174c9973e40e3ce7b7"
     assert observation["kubeconfig"] is True
     assert observation["url"] == ""
 

@@ -221,7 +221,7 @@ func TestOnlyARegisteringInstallationOptsIntoPreStopRemoval(t *testing.T) {
 	if capability.RequiresPreStopRemoval(registeringBlock(t, pinnedRequest(t, labCatalog()))) {
 		t.Fatal("a non-registering installation opts into pre-stop removal")
 	}
-	if capability.RequiresPreStopRemoval(reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Request: []byte(`{"version":"os-install-anaconda-v1"}`)}}) {
+	if capability.RequiresPreStopRemoval(reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Request: []byte(`{"version":"os-install-anaconda-v0"}`)}}) {
 		t.Fatal("an undecodable request opts into pre-stop removal")
 	}
 }

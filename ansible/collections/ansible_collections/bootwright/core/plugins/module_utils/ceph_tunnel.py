@@ -88,7 +88,7 @@ def crypto_policy(value):
 
 def targets(request):
     """A native address selects exactly one original installation endpoint."""
-    require(isinstance(request, dict) and request.get("version") == "ceph-core-v43")
+    require(isinstance(request, dict) and request.get("version") == "ceph-core-v1")
     require(request.get("clusterSSHTransport") == "verifiedTunnel")
     require(named(request.get("owner")) and named(request.get("clusterSSHUser")))
     try:
@@ -298,7 +298,7 @@ def bundle(request, private_key, frozen_known_hosts, proxy_source, policy="", pu
     known = known_hosts(frozen_known_hosts, hosts)
     files = {"identity": private_key, "known_hosts": known,
              "outer_config": outer_configuration(policy, hosts, known), "native_config": native_configuration(hosts), "proxy.py": proxy_source}
-    manifest = {"version": "ceph-tunnel-v3", "owner": request["owner"], "fsid": request["fsid"],
+    manifest = {"version": "ceph-tunnel-v1", "owner": request["owner"], "fsid": request["fsid"],
                 "nativeUser": request["clusterSSHUser"], "hosts": hosts, "cryptoPolicy": policy,
                 "identityPublicKey": public_key(public),
                 "files": {name: hashlib.sha256(value).hexdigest() for name, value in files.items() if name != "identity"}}
@@ -316,8 +316,8 @@ def unique_object(pairs):
 
 def validate_manifest(value):
     require(isinstance(value, dict) and set(value) == {"version", "owner", "fsid", "nativeUser", "hosts", "cryptoPolicy", "identityPublicKey", "files"})
-    require(value["version"] == "ceph-tunnel-v3")
-    request = {"version": "ceph-core-v43", "clusterSSHTransport": "verifiedTunnel",
+    require(value["version"] == "ceph-tunnel-v1")
+    request = {"version": "ceph-core-v1", "clusterSSHTransport": "verifiedTunnel",
                "owner": value["owner"], "fsid": value["fsid"], "clusterSSHUser": value["nativeUser"], "hosts": value["hosts"]}
     require(targets(request) == value["hosts"])
     require(all(set(host) == {"name", "address", "port"} for host in value["hosts"]))

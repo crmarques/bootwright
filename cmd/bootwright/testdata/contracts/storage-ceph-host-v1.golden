@@ -1,12 +1,12 @@
 implementation: storage-ceph-host-v1
-content-digest: 35d28368f3a0e681d27a205afc09fdbdf813f89e6c29a68ec48f3ebcd46144a8
-request-version: ceph-host-v14
-automation-formats: bootwright.native-plan-v1, ceph-crypto-policy-v1, ceph-device-identities-v3, ceph-host-route-v3, ceph-package-artifacts-v1, ceph-package-complete-v1, ceph-package-decision-v1, ceph-physical-device-binding-v2, ceph-runtime-profile-v3
+content-digest: 6aaa03f1e510f8e730c0062f3a840311aaf77c3f0dfe0596446c8daa2e4bc60b
+request-version: ceph-host-v1
+automation-formats: bootwright.native-plan-v1, ceph-crypto-policy-v1, ceph-device-identities-v1, ceph-host-route-v1, ceph-package-artifacts-v1, ceph-package-complete-v1, ceph-package-decision-v1, ceph-physical-device-binding-v1, ceph-runtime-profile-v1
 mark-formats: none
 proof-ids: .bootwright-tree-identity, marker:-attempt-%d.json, marker:-pulled.json, marker:auth.json, marker:auxiliary-, marker:cache-directory-intent.json, marker:cache-directory.json, marker:cache-pending.json, marker:cache-ready.json, marker:complete.json, marker:decision.json, marker:device-identities.json, marker:physical-device-binding.json, marker:policy.json, marker:pull-attempt-%d.json, marker:pulled.json, marker:route.json, marker:runtime-profile.json, marker:scope.json, marker:synthetic.json, marker:verified.json
 fixed-places: /var/lib/bootwright/ceph-host, /var/lib/bootwright/ceph-packages
 effect-pins:
-  selected-packages-runtime-placement-pulls-profile-route-devices-v6
+  selected-packages-runtime-placement-pulls-profile-route-devices-v1
 request-identity:
   host
   cluster.cluster

@@ -8,5 +8,5 @@
   "registryTrustBundleRef": "registry-ca",
   "release": "9.9.1.2",
   "tag": "v9.9.1-25074",
-  "version": "ceph-image-v4"
+  "version": "ceph-image-v1"
 }

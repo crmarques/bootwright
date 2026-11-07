@@ -1,6 +1,6 @@
 implementation: substrate-host-kubevirt-v1
-content-digest: 99b8c7a637c408394d28c53b1a8a2088d3a8b25860c4cb822bdf028b42fcec58
-request-version: substrate-host-kubevirt-v2
+content-digest: 2ab42a38047ce4b10303a13df24f31f1956dc16f8c0d3f8c83153151d8a8df4b
+request-version: substrate-host-kubevirt-v1
 automation-formats: none
 mark-formats: none
 proof-ids: none

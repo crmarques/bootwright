@@ -17,7 +17,7 @@ const (
 	survivingRemedy = "remove the cluster in the same destroy as every Bootwright-owned virtual host Machine it runs on, which retires it with them; removing it while a host survives waits for B491"
 )
 
-const RetirementVersion = "ceph-core-retirement-v2"
+const RetirementVersion = "ceph-core-retirement-v1"
 
 type Retirement struct {
 	Action       string             `json:"action"`

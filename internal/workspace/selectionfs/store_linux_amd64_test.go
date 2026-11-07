@@ -172,15 +172,15 @@ func TestSelectionRejectsRecordSubstitutionAfterObservation(t *testing.T) {
 }
 
 func TestSelectionRejectsNoncanonicalRecords(t *testing.T) {
-	canonical := `{"version":2,"name":"test"}` + "\n"
+	canonical := `{"version":1,"name":"test"}` + "\n"
 	for _, data := range []string{
 		strings.TrimSuffix(canonical, "\n"),
 		"\n" + canonical,
 		canonical + " ",
-		strings.Replace(canonical, ":2", ": 2", 1),
+		strings.Replace(canonical, ":1", ": 1", 1),
 		strings.Replace(canonical, "test", `\u0074est`, 1),
-		`{"name":"test","version":2}` + "\n",
-		`{"version":2,"name":"test","id":"test"}` + "\n",
+		`{"name":"test","version":1}` + "\n",
+		`{"version":1,"name":"test","id":"test"}` + "\n",
 	} {
 		if _, err := decodeSelection([]byte(data)); err == nil {
 			t.Fatalf("noncanonical selection accepted: %q", data)
@@ -244,10 +244,9 @@ func TestSelectionReplacesUnreadableRecords(t *testing.T) {
 	}{
 		{"oversized", bytes.Repeat([]byte("x"), maximumRecord+1)},
 		{"malformed", []byte("{")},
-		{"unknown-field", []byte(`{"version":2,"name":"test","extra":true}` + "\n")},
-		{"duplicate-field", []byte(`{"version":2,"name":"other","name":"test"}` + "\n")},
-		{"noncanonical", []byte(`{"name":"test","version":2}` + "\n")},
-		{"retired-identity", []byte(`{"version":1,"name":"test","id":"ctx-45f86f63ecc2341c0000000000000003"}` + "\n")},
+		{"unknown-field", []byte(`{"version":1,"name":"test","extra":true}` + "\n")},
+		{"duplicate-field", []byte(`{"version":1,"name":"other","name":"test"}` + "\n")},
+		{"noncanonical", []byte(`{"name":"test","version":1}` + "\n")},
 		{"unsupported-version", []byte(`{"version":9,"name":"test"}` + "\n")},
 	} {
 		t.Run(test.kind, func(t *testing.T) {

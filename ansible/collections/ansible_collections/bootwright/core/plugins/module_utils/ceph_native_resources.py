@@ -28,7 +28,7 @@ ACTIONS = ("pool", "client", "policy", "rbd", "filesystem", "subvolume", "settin
 PHASES = frozenset(("pool", "client", "client_read", "policy", "rbd", "filesystem", "filesystem_ranks", "filesystem_groups", "subvolume", "settings"))
 READ_ONLY_PHASES = frozenset(("client_read", "filesystem_ranks"))
 
-POOL_ATTEMPT = "ceph-pool-attempt-v2"
+POOL_ATTEMPT = "ceph-pool-attempt-v1"
 POLICY_ATTEMPT = "ceph-policy-attempt-v1"
 RBD_ATTEMPT = "ceph-rbd-image-attempt-v1"
 FILESYSTEM_ATTEMPT = "ceph-filesystem-attempt-v1"

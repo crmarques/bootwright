@@ -17,7 +17,7 @@ const Implementation = "machine-baremetal-v1"
 // resolves by kind and implementation together.
 const Kind = "Machine"
 
-const requestVersion = "machine-baremetal-v4"
+const requestVersion = "machine-baremetal-v1"
 
 // BlockID names the block this capability contributes. A Machine has exactly
 // one provider, so the machine families of two substrates never collide.

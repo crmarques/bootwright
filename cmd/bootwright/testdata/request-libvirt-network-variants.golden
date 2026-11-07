@@ -45,7 +45,7 @@
         "virtstoraged.service"
       ],
       "uri": "qemu:///system",
-      "version": "substrate-host-libvirt-v7"
+      "version": "substrate-host-libvirt-v1"
     }
   ],
   "libvirtMachines": [
@@ -102,7 +102,7 @@
       "uri": "qemu:///system",
       "uuid": "aba29103-d1de-8981-82e0-9cff228257f9",
       "vcpu": 4,
-      "version": "machine-libvirt-v9"
+      "version": "machine-libvirt-v1"
     },
     {
       "controller": {
@@ -151,7 +151,7 @@
       "uri": "qemu:///system",
       "uuid": "99955efc-42ad-8162-a1fb-9cdabe3b8e57",
       "vcpu": 4,
-      "version": "machine-libvirt-v9"
+      "version": "machine-libvirt-v1"
     },
     {
       "controller": {
@@ -206,7 +206,7 @@
       "uri": "qemu:///system",
       "uuid": "f84ec133-de31-8b74-9989-e15275b6bca9",
       "vcpu": 4,
-      "version": "machine-libvirt-v9"
+      "version": "machine-libvirt-v1"
     }
   ],
   "installations": [
@@ -424,7 +424,7 @@
         "size": 13107200000
       },
       "user": "bootwright",
-      "version": "os-install-anaconda-v27"
+      "version": "os-install-anaconda-v1"
     },
     {
       "address": "198.51.100.71",
@@ -616,7 +616,7 @@
         "size": 13107200000
       },
       "user": "bootwright",
-      "version": "os-install-anaconda-v27"
+      "version": "os-install-anaconda-v1"
     },
     {
       "address": "198.51.100.141",
@@ -851,7 +851,7 @@
         "size": 13107200000
       },
       "user": "bootwright",
-      "version": "os-install-anaconda-v27"
+      "version": "os-install-anaconda-v1"
     }
   ]
 }

@@ -327,12 +327,12 @@
         "kind": "create"
       }
     ],
-    "version": "cluster-objects-v2"
+    "version": "cluster-objects-v1"
   },
   "tool": {
     "compatibility": "openshift",
     "kind": "openshift-clients",
     "version": "4.21.15"
   },
-  "version": "cluster-network-request-v2"
+  "version": "cluster-network-request-v1"
 }

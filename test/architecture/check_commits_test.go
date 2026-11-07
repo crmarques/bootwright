@@ -27,7 +27,7 @@ func TestCheckCommitsRequiresAContractLineWhereAContractCanMove(t *testing.T) {
 	ratchetGit(t, root, "add", "-A")
 	ratchetGit(t, root, "commit", "-q", "-m", "chore: start\n\nGates: none.")
 	role := "ansible/collections/ansible_collections/bootwright/core/roles/storage_ceph_core/tasks/destroy.yml"
-	golden := "cmd/bootwright/testdata/contracts/storage-ceph-core-v3.golden"
+	golden := "cmd/bootwright/testdata/contracts/storage-ceph-core-v1.golden"
 	format := "internal/workspace/contexts/contracts.go"
 	for _, step := range []struct {
 		name    string
@@ -40,12 +40,12 @@ func TestCheckCommitsRequiresAContractLineWhereAContractCanMove(t *testing.T) {
 			"touches automation or a capability package; add one body line 'Contract: unchanged'"},
 		{"a capability change unchanged", []string{"internal/storage/ceph/host.go"}, "fix(ceph): host\n\nGates: make focus passed.\n\nContract: unchanged", ""},
 		{"a plugin change with a malformed line", []string{"ansible/collections/ansible_collections/bootwright/core/plugins/modules/x.py"},
-			"fix(ceph): plugin\n\nGates: make focus passed.\n\nContract: storage-ceph-core-v3 storage-ceph-host-v1", "add one body line"},
-		{"a moved contract without its golden", []string{role}, "fix(ceph): role\n\nGates: make focus passed.\n\nContract: storage-ceph-core-v3",
-			"names storage-ceph-core-v3 in its Contract line but does not change " + golden},
-		{"a moved contract unannounced", []string{role, golden}, "fix(ceph): role\n\nGates: make focus passed.\n\nContract: storage-ceph-core-v3",
+			"fix(ceph): plugin\n\nGates: make focus passed.\n\nContract: storage-ceph-core-v1 storage-ceph-host-v1", "add one body line"},
+		{"a moved contract without its golden", []string{role}, "fix(ceph): role\n\nGates: make focus passed.\n\nContract: storage-ceph-core-v1",
+			"names storage-ceph-core-v1 in its Contract line but does not change " + golden},
+		{"a moved contract unannounced", []string{role, golden}, "fix(ceph): role\n\nGates: make focus passed.\n\nContract: storage-ceph-core-v1",
 			"mark the subject with '!' and add a 'BREAKING CHANGE: ' footer"},
-		{"a moved contract with its golden", []string{role, golden}, "fix(ceph)!: role\n\nGates: make focus passed.\n\nContract: storage-ceph-core-v3\n\nBREAKING CHANGE: an incomplete Ceph operation of an earlier build refuses; finish it with that build.", ""},
+		{"a moved contract with its golden", []string{role, golden}, "fix(ceph)!: role\n\nGates: make focus passed.\n\nContract: storage-ceph-core-v1\n\nBREAKING CHANGE: an incomplete Ceph operation of an earlier build refuses; finish it with that build.", ""},
 		{"a Contract line alone", []string{"internal/substrate/naming.go"}, "fix(substrate): naming\n\nContract: unchanged", "body is empty"},
 		{"a nested capability package", []string{"internal/addons/clusterobjects/driver/driver.go"}, "fix(addons): driver\n\nGates: make focus passed.",
 			"add one body line"},
@@ -53,7 +53,7 @@ func TestCheckCommitsRequiresAContractLineWhereAContractCanMove(t *testing.T) {
 			"fix(ansible): playbook\n\nGates: make focus passed.", "add one body line"},
 		{"a moved digest called unchanged", []string{role, golden}, "fix(ceph): role\n\nGates: make focus passed.\n\nContract: unchanged",
 			"says 'Contract: unchanged' but changes a content-digest line of a contract golden"},
-		{"a moved digest named", []string{role, golden}, "fix(ceph)!: role again\n\nGates: make focus passed.\n\nContract: storage-ceph-core-v3\n\nBREAKING CHANGE: an incomplete Ceph operation of an earlier build refuses; finish it with that build.", ""},
+		{"a moved digest named", []string{role, golden}, "fix(ceph)!: role again\n\nGates: make focus passed.\n\nContract: storage-ceph-core-v1\n\nBREAKING CHANGE: an incomplete Ceph operation of an earlier build refuses; finish it with that build.", ""},
 		{"a store format added", []string{"internal/workspace/contexts/contracts.go"}, "feat(contexts): registry\n\nGates: make focus passed.", ""},
 		{"a store format moved unannounced", []string{format}, "fix(contexts): registry\n\nGates: make focus passed.",
 			"moves a contract or a store format version"},

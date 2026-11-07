@@ -2,7 +2,7 @@
 - name: Validate the frozen controller request
   ansible.builtin.assert:
     that:
-      - bootwright_controller_request.version == 'controller-prerequisites-v6'
+      - bootwright_controller_request.version == 'controller-prerequisites-v1'
       - bootwright_controller_request.tools | length >= 1
       - bootwright_controller_request.tools | length <= 128
       - bootwright_controller_request.acquisition | length == bootwright_controller_request.tools | length

@@ -225,7 +225,7 @@ func cliGoldens() []cliGolden {
 	version := func(id string) *string { return &id }
 	selection := secretstore.Selection{
 		Type:       "local-keyring",
-		Store:      secretstore.ComponentRef{ID: "local-v4", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1},
+		Store:      secretstore.ComponentRef{ID: "local-v1", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1},
 		KeyCustody: secretstore.ComponentRef{ID: "local-keyfile-v1", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1},
 	}
 	deferred := diagnostic{
@@ -448,7 +448,7 @@ func cliGoldens() []cliGolden {
 			Initialized: true,
 			Implementation: &encryption.ImplementationStatus{
 				Type: "local-keyring", State: "ready",
-				Store:      encryption.ComponentStatus{ID: "local-v4", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1},
+				Store:      encryption.ComponentStatus{ID: "local-v1", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1},
 				KeyCustody: encryption.ComponentStatus{ID: "local-keyfile-v1", InterfaceVersion: 1, StateVersion: 1, ConfigVersion: 1},
 			},
 			ActiveKey: &key,

@@ -56,7 +56,7 @@ def dashboard(tmp_path, monkeypatch):
               "devices": [{"path": "/dev/vdb", "serial": "disk" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    request = {"controller": "controller", "version": "ceph-core-v43", "action": "cluster", "cluster": "example", "owner": "apply-example",
+    request = {"controller": "controller", "version": "ceph-core-v1", "action": "cluster", "cluster": "example", "owner": "apply-example",
                "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
                "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
                "release": "9.1", "ansiblePackageVersion": "3.2.0",
@@ -597,7 +597,7 @@ def test_observation_projects_monitor_addresses_and_dashboard_access_without_sec
 
 
 def cluster_evidence(request, **dashboard):
-    value = {"version": "ceph-core-evidence-v14", "request": "d" * 64, "action": "cluster", "owner": request["owner"], "fsid": request["fsid"],
+    value = {"version": "ceph-core-evidence-v1", "request": "d" * 64, "action": "cluster", "owner": request["owner"], "fsid": request["fsid"],
              "owned": True, "exists": True, "ready": True, "removed": False, "partial": False, "health": "HEALTH_OK",
              "hosts": [h["name"] for h in request["hosts"]], "monitors": ["node-1"], "monAddrs": [{"host": "node-1", "address": "192.0.2.1"}],
              "mgrActive": "node-1", "mgrStandbys": ["node-2"], "osds": [], "resource": {"id": "", "path": ""}, "client": "",
@@ -610,7 +610,7 @@ def cluster_evidence(request, **dashboard):
 @pytest.mark.parametrize("field,value", [("url", "http://node-1.example.test:8443/"), ("url", "https://node-1.example.test:9443/"),
                                          ("certificateSHA256", "A" * 64), ("certificateSHA256", 7), ("reachable", 1), ("password", "x"),
                                          ("monAddrs", [{"host": "node-1", "address": "node-1"}]), ("monAddrs", [{"host": "foreign", "address": "192.0.2.9"}]),
-                                         ("version", "ceph-core-evidence-v1")])
+                                         ("version", "ceph-core-evidence-v2")])
 def test_evidence_bounds_the_dashboard_and_monitor_projection(dashboard, field, value):
     good = cluster_evidence(dashboard.request)
     assert ceph_core.evidence(copy.deepcopy(good), "d" * 64, dashboard.request)["dashboard"]["url"] == URL

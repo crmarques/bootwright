@@ -175,9 +175,9 @@ func TestTheComposedStoreRefusesAnUnknownKeyring(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	unknown := bytes.Replace(data, []byte(`"local-keyring-v4"`), []byte(`"unknown-keyring"`), 1)
+	unknown := bytes.Replace(data, []byte(`"local-keyring-v1"`), []byte(`"unknown-keyring"`), 1)
 	if bytes.Equal(unknown, data) {
-		t.Fatalf("the store record names no local-keyring-v4 backend: %s", data)
+		t.Fatalf("the store record names no local-keyring-v1 backend: %s", data)
 	}
 	if err := os.WriteFile(record, unknown, 0600); err != nil {
 		t.Fatal(err)

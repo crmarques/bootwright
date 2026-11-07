@@ -6,7 +6,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-const SetupStateFormat = "bootwright.setup-state-v2"
+const SetupStateFormat = "bootwright.setup-state-v1"
 
 const PresentBeforeBootwright = "present before bootwright"
 

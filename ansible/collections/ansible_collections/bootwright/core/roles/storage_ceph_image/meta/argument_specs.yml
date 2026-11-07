@@ -39,7 +39,7 @@ argument_specs:
             type: str
             required: true
             choices:
-              - ceph-image-v4
+              - ceph-image-v1
       bootwright_ceph_image_digest:
         type: str
         required: true

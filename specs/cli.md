@@ -1123,7 +1123,7 @@ run in this order, each before the next:
 The target and its applicability are settled from the compiled graph before
 any custody read, so a name that selects nothing, or selects a CephCluster,
 reads no credential bytes. A store this build cannot open refuses with its own
-[`secret.store.*` diagnostic](secrets.md#local-keyring-v4). The discovery
+[`secret.store.*` diagnostic](secrets.md#local-keyring). The discovery
 action is `cluster info`. In default text mode, successful standard output is
 exactly the custodied bytes with no added LF, and standard error is empty, or, for a copy custody
 holds unproved, holds exactly one `access.unproved` warning naming the cluster and saying its
@@ -1455,7 +1455,7 @@ cluster or client. The checks run in this order, each before the next:
 The target, its applicability and the client's cluster are settled from the
 compiled graph before any custody read, so a refusal of the first seven kinds
 reads no credential bytes. A store this build cannot open refuses with its own
-[`secret.store.*` diagnostic](secrets.md#local-keyring-v4). In default text
+[`secret.store.*` diagnostic](secrets.md#local-keyring). In default text
 mode, successful standard output is exactly the native keyring form
 `[client.<client>]`, LF, a tab, `key = <key>` and one final LF, as
 `ceph auth get-or-create` prints it without its caps lines, and nothing else.

@@ -45,7 +45,7 @@ next binding, which publishes the record only when none is there.
 
 ## Record
 
-The private Controller record version is `3`. Its fields are `version`,
+The private Controller record version is `contextfs.ControllerRecordVersion`. Its fields are `version`,
 `host`, `bindings`, `toolSources`, `toolAreas` and optional `reservations`,
 encoded as compact JSON in schema order followed by LF. It holds nothing of a
 setup: the setup receipt, the pending intent and the runtimes live in the

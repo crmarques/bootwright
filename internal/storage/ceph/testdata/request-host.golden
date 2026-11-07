@@ -107,7 +107,7 @@
           "url": "https://192.0.2.10:8443/os/rhel/tree"
         }
       ],
-      "version": "ceph-packages-v3"
+      "version": "ceph-packages-v1"
     },
     "publicNetworks": [
       "192.0.2.0/24"
@@ -157,9 +157,9 @@
         }
       }
     ],
-    "version": "ceph-core-v43"
+    "version": "ceph-core-v1"
   },
   "host": "node-1",
   "pulls": [],
-  "version": "ceph-host-v14"
+  "version": "ceph-host-v1"
 }

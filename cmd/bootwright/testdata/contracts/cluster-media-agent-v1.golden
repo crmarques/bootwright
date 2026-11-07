@@ -1,6 +1,6 @@
 implementation: cluster-media-agent-v1
-content-digest: 19cc0ed396cd640a5ffa4938a47c3f7069a6bbbeeac100bfcc1a7dc03041c9c0
-request-version: cluster-media-agent-v11
+content-digest: 74c018b538267400348083a4f7fe7400602e976b0cf9a9d32fb5f63aa81c9b42
+request-version: cluster-media-agent-v1
 automation-formats: none
 mark-formats: none
 proof-ids: .bootwright-booted, /bootwright-media.json, bootwright-media.json

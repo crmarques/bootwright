@@ -232,7 +232,7 @@ Bodies are canonical JSON and never hold a `Secret` object, Secret bytes,
 The program is the one Kubernetes object port. A block that is not an add-on
 instance, such as the
 [cluster network block](openshift-clusters.md#post-installation-network-configuration),
-freezes the same program section, version `cluster-objects-v1`, in its own
+freezes the same program section, version `clusterobjects.Version`, in its own
 request and runs it through the same adapter. The section carries every
 approval policy and Secret placement source the built-in packages use, so a
 later package moves no program version.

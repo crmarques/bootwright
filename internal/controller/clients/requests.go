@@ -19,7 +19,7 @@ const (
 	Kind           = string(api.Environment)
 	Implementation = "controller-prerequisites"
 	BlockID        = "controller-prerequisites"
-	Version        = "controller-clients-v5"
+	Version        = "controller-clients-v1"
 )
 
 // ToolRequest is one declared client requirement, frozen in the plan before

@@ -1,6 +1,6 @@
 implementation: addon-instance-v1
-content-digest: dbd144b7721b7941370d022ebe75c6480db8f647b89feb047814f43cdfe8016c
-request-version: addon-instance-request-v4
+content-digest: 993b57e89d799b7d6b525517aa2dd88e8f31ece5cba2c1f1dcf19e590385f16c
+request-version: addon-instance-request-v1
 automation-formats: none
 mark-formats: bootwright.cluster-objects.owner-v1, bootwright.io/owner
 proof-ids: none
@@ -8,9 +8,9 @@ fixed-places: bootwright-
 effect-pins:
   bootwright.cluster-objects.owner-v1
   bootwright.cluster-objects.object-v1
-  exact-v3
-  operator-managed-v2
-  dependent-exact-v3
+  exact-v1
+  operator-managed-v1
+  dependent-exact-v1
 request-identity:
   cluster
   package

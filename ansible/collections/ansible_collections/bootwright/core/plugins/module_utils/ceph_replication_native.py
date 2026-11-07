@@ -11,7 +11,7 @@ import os
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_resources
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import canonical, named, require, unique_object
 
-VERSION = "ceph-replication-v2"
+VERSION = "ceph-replication-v1"
 PHASES = frozenset(("replication_prepare", "replication_token", "replication_import", "replication_image",
                     "replication_pool_observe", "replication_image_observe", "replication_commit"))
 # Mirror.cc logs decoded bootstrap tokens at debug_rbd=20. Override the inherited logging configuration for every call.

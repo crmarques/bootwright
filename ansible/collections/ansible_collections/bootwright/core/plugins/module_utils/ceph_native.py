@@ -59,7 +59,7 @@ MAX_REGISTRY = 65536
 # Artifact selection is authored; the adapter independently proves its SSH
 # route rather than treating a version identifier as transport trust.
 DEVICE_IDENTITIES = "device-identities.json"
-DEVICE_IDENTITIES_VERSION = "ceph-cluster-device-identities-v3"
+DEVICE_IDENTITIES_VERSION = "ceph-cluster-device-identities-v1"
 HOST_PHASES = frozenset(("images", "profile", "route", "device_identity", "host_devices", "host_observe", "fips_observe"))
 WORKER_DEADLINE = None
 
@@ -88,7 +88,7 @@ CORE_READ_ONLY_PHASES = frozenset(("prerequisites", "devices", "tunnel_preflight
 # The cluster observation of a read no operation records, such as `bootwright diff --observe`: the only phase that lists the cluster's
 # pools and reports an OSD no declared service places instead of refusing it foreign-osd.
 UNRECORDED_OBSERVE = "unrecorded_observe"
-EVIDENCE_VERSION = "ceph-core-evidence-v14"
+EVIDENCE_VERSION = "ceph-core-evidence-v1"
 # The specialization ids the last dispatched phase's worker applied; the remote wrapper reads it once per process.
 APPLIED = []
 DASHBOARD_USER = "admin"
@@ -626,7 +626,7 @@ def package_url(value):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v43")
+    require(request["version"] == "ceph-core-v1")
     if "security" in request:
         security = request["security"]
         require(isinstance(security, dict) and set(security) == {"fips", "cephxKeyType"})
@@ -672,7 +672,7 @@ def scope_checks(request):
     if package is not None:
         require(isinstance(package, dict) and {"version", "licenseAccepted", "sources"} <= set(package)
                 <= {"version", "licenseAccepted", "sources", "packageRepositoryTrustBundleRef"})
-        require(package["version"] == "ceph-packages-v3" and package["licenseAccepted"] is True)
+        require(package["version"] == "ceph-packages-v1" and package["licenseAccepted"] is True)
         require("packageRepositoryTrustBundleRef" not in package or named(package["packageRepositoryTrustBundleRef"]))
         require(isinstance(package["sources"], list) and len(package["sources"]) == len(hosts))
         names = []
