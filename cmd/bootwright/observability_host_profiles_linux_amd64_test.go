@@ -12,9 +12,9 @@ func TestObservabilityAndHostProfilesProductionPlans(t *testing.T) {
 	for _, name := range []string{"libvirt-4-nodes-ceph-observability", "libvirt-3-nodes-ceph-host-variants"} {
 		t.Run(name, func(t *testing.T) {
 			state, report := compileAcceptance(t, exampleDirectory(t, name))
-			wantCount := 28
+			wantCount := 30
 			if name == "libvirt-4-nodes-ceph-observability" {
-				wantCount = 32
+				wantCount = 33
 			}
 			if report.Counts.FilesSeen != wantCount || report.Counts.ObjectsDecoded != wantCount {
 				t.Fatalf("counts: %+v, want %d files and objects", report.Counts, wantCount)

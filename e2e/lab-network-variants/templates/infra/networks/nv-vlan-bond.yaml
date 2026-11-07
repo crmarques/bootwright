@@ -1,0 +1,15 @@
+{{- if not .Values.single }}
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: nv-vlan-bond
+
+spec:
+  provided: true
+  description: The VLAN carried on the nv-trunk bridge for the bond0 install interface.
+  vlan: {{ .Values.vlanBond.id }}
+
+  ipv4:
+    cidr: {{ .Values.vlanBond.cidr }}
+    gateway: {{ .Values.vlanBond.gateway }}
+{{- end }}

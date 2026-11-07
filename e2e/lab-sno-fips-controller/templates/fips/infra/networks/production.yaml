@@ -1,0 +1,16 @@
+{{- if .Values.environments.enabled }}
+{{- with .Values.environments.production }}
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: production
+
+spec:
+  provided: true
+  description: The production environment, a VLAN on the trunk bridge the case builds, with no gateway because the host routes nothing between the VLANs.
+  vlan: {{ .vlan }}
+
+  ipv4:
+    cidr: {{ .cidr }}
+{{- end }}
+{{- end }}

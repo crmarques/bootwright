@@ -29,7 +29,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 )
 
-const labExampleFiles = 15
+const labExampleFiles = 16
 
 func labExampleSources(t *testing.T) desiredstate.Sources {
 	t.Helper()
@@ -481,7 +481,7 @@ func labContextServices(t *testing.T) (cli.Services, string, *setupPorts) {
 func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 	services, input, ports := labContextServices(t)
 	out, _ := contextRun(t, services, 0, "context", "init", "--name", "lab-rhel", "--input-dir", input)
-	if !strings.Contains(out, "Files copied     15") || !strings.Contains(out, "Objects decoded  15") {
+	if !strings.Contains(out, "Files copied     16") || !strings.Contains(out, "Objects decoded  16") {
 		t.Fatal("context import did not admit the complete lab example", out)
 	}
 	if err := os.RemoveAll(input); err != nil {

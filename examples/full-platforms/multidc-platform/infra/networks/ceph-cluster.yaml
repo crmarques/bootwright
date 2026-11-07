@@ -1,0 +1,16 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: ceph-cluster
+
+spec:
+  provided: true
+  description: The unrouted Ceph cluster network of the storage hosts, VLAN 300.
+  vlan: 300
+
+  sites:
+    - site-a
+    - site-b
+
+  ipv4:
+    cidr: 203.0.113.0/24

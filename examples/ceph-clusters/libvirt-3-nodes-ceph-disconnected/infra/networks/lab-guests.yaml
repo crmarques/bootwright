@@ -1,0 +1,11 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: lab-guests
+
+spec:
+  provided: true
+  description: The isolated guest network the lab-guests managed attachment of lab-libvirt defines, without forwarding or a gateway.
+
+  ipv4:
+    cidr: 198.51.100.0/24

@@ -342,6 +342,29 @@ spec:
     rootLogin: keep
 ---
 apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: lab-guests
+spec:
+  provided: true
+  description: The guest network the lab-guests managed attachment of lab-libvirt defines.
+  mtu: 1500
+  ipv4:
+    cidr: 198.51.100.0/24
+    gateway: 198.51.100.1
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: lab-secondary
+spec:
+  provided: true
+  description: The secondary network the lab-secondary managed attachment of lab-libvirt defines.
+  mtu: 1500
+  ipv4:
+    cidr: 203.0.113.0/24
+---
+apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig
 metadata:
   name: lab-guests

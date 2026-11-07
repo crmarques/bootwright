@@ -23,7 +23,7 @@ func baremetalPlanBlocks(t *testing.T, verb reconciliation.Verb) []reconciliatio
 	return blocks
 }
 
-const baremetalExampleFiles = 15
+const baremetalExampleFiles = 16
 
 func baremetalInput(t *testing.T, verb reconciliation.Verb) lifecycle.PlanInput {
 	t.Helper()

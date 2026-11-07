@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: primary
+
+spec:
+  provided: true
+  description: The primary cluster network the primary managed attachment of lab-libvirt defines.
+
+  ipv4:
+    cidr: 198.51.100.0/24
+    gateway: 198.51.100.1

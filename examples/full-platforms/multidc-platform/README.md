@@ -22,6 +22,11 @@ credential references, devices and topology are synthetic; consult the
   those networks, the `nmstate` package provides the capability they require,
   and the `kubevirt` instance owns and labels the providers' namespace, so no
   authored add-on is needed.
+- `infra/networks/` declares four provided [`Network`](../../../specs/api/networks.md) objects scoped to the
+  sites that reach them: `machine` (VLAN 100, 192.0.2.0/24) and `ceph-public`
+  (VLAN 200, 198.51.100.0/25) at `site-a` and `site-b`, `ceph-cluster` (VLAN
+  300, 203.0.113.0/24), and `ceph-public-witness` (198.51.100.128/25) at
+  `site-c`. The CephCluster's public and cluster CIDRs equal them.
 - Resolving those errors would not make it deployable: physical OpenShift,
   KubeVirt, security choices and add-on realization have further lifecycle limits.
 - Placeholders: the Ceph entitlement sets `license.accept: true` for authoring

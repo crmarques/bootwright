@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: nv-lab
+
+spec:
+  provided: true
+  description: The untagged network the nv-lab managed attachment of lab-libvirt defines.
+
+  ipv4:
+    cidr: {{ .Values.host.cidr }}
+    gateway: {{ .Values.host.gateway }}

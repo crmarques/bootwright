@@ -1,0 +1,13 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: nv-vlan
+
+spec:
+  provided: true
+  description: VLAN 120, carried on the nv-trunk bridge for the nic0.120 install interface.
+  vlan: 120
+
+  ipv4:
+    cidr: 198.51.100.64/26
+    gateway: 198.51.100.65

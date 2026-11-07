@@ -1,0 +1,17 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: lab-guests
+
+spec:
+  provided: true
+  description: The guest network the arbiter context creates and this context attaches to, one subnet across the three sites.
+
+  sites:
+    - dc1
+    - dc2
+    - {{ .Values.sites.tiebreaker }}
+
+  ipv4:
+    cidr: {{ .Values.host.cidr }}
+    gateway: {{ .Values.host.gateway }}

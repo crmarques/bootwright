@@ -15,7 +15,7 @@ const servicesExample = "libvirt-6-nodes-ceph-services"
 func TestExampleServicesPlansAllProtocols(t *testing.T) {
 	sources := exampleDirectory(t, servicesExample)
 	state, report := compileAcceptance(t, sources)
-	if report.Counts.FilesSeen != 45 || report.Counts.ObjectsDecoded != 45 {
+	if report.Counts.FilesSeen != 46 || report.Counts.ObjectsDecoded != 46 {
 		t.Fatalf("counts: %+v", report.Counts)
 	}
 	budget := exampleBudget(t, profileDeclarations(t, sources))

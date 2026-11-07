@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: secondary
+
+spec:
+  provided: true
+  description: The secondary cluster network the secondary managed attachment of lab-libvirt defines.
+
+  ipv4:
+    cidr: 192.0.2.0/24
+    gateway: 192.0.2.1

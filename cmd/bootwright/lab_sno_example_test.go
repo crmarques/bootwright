@@ -23,7 +23,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-const snoExampleFiles = 15
+const snoExampleFiles = 16
 
 func snoExampleSources(t *testing.T) desiredstate.Sources {
 	t.Helper()

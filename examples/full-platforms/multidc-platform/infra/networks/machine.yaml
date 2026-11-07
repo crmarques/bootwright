@@ -1,0 +1,17 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: machine
+
+spec:
+  provided: true
+  description: The machine network of the edge and hub nodes, VLAN 100 on the bare-metal bond and the machine Localnet network of the hub virtual machines.
+  vlan: 100
+
+  sites:
+    - site-a
+    - site-b
+
+  ipv4:
+    cidr: 192.0.2.0/24
+    gateway: 192.0.2.252

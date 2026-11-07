@@ -9,7 +9,8 @@ fleet SSH key and records the installed host key for subsequent sessions.
 The input is split into [environment](environment.yaml),
 [services](infra/components), [Machines](infra/machines),
 [provider](infra/providers/lab-libvirt.yaml),
-[network](infra/networkconfigs/lab-guests.yaml), [OS profiles](infra/os) and
+[network configuration](infra/networkconfigs/lab-guests.yaml),
+[network](infra/networks/lab-guests.yaml), [OS profiles](infra/os) and
 [Secret descriptors](secret-descriptors). Descriptors contain no credentials;
 every Secret is generated locally in its context.
 

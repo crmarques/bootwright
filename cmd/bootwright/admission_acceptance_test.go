@@ -215,8 +215,8 @@ func requireObject(t *testing.T, catalog api.Catalog, kind api.Kind, name string
 // refuses those declarations explicitly rather than dropping them from input.
 func TestActualCLIRefusesFutureReferenceFeatures(t *testing.T) {
 	sources := exampleSources(t)
-	if len(sources.Files) != 99 {
-		t.Fatalf("reference discovery: got %d files, want 99", len(sources.Files))
+	if len(sources.Files) != 103 {
+		t.Fatalf("reference discovery: got %d files, want 103", len(sources.Files))
 	}
 	var out, errOut bytes.Buffer
 	code := run(context.Background(), []string{"validate", "-f", sources.Roots[0], "--output", "json"}, &out, &errOut)
@@ -425,7 +425,7 @@ func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testi
 			t.Errorf("kind %s has no full-wiring positive admission coverage", kind)
 		}
 	}
-	if report.Counts != (compilation.Counts{FilesSeen: 87, ObjectsDecoded: 124}) {
+	if report.Counts != (compilation.Counts{FilesSeen: 91, ObjectsDecoded: 128}) {
 		t.Errorf("projection counts: %#v", report.Counts)
 	}
 	var warned []diagnostics.Diagnostic

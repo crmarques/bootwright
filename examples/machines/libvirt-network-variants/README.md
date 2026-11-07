@@ -18,6 +18,12 @@ are documentation examples.
 - Each Machine also routes 192.0.2.0/24 through its gateway and searches
   `lab.example.test`. Bond mode is `active-backup`, the only mode a libvirt
   Machine admits. The MTU is a Machine override; routes stay in the NetworkConfig.
+- `infra/networks/` declares four provided [`Network`](../../../specs/api/networks.md) objects, so each assignment, VLAN
+  and install gateway is checked against them: `nv-lab` (untagged,
+  198.51.100.0/26), `nv-vlan` (VLAN 120, 198.51.100.64/26), `nv-vlan-bond`
+  (VLAN 130, 198.51.100.128/26) and `nv-guest` (VLAN 140, 203.0.113.0/24).
+  `nv-guest` is one Network although its guests reach it on two bridges, since
+  a Network does not name a bridge.
 - Every Machine converges to its declared network and power-cycles once
   ([network convergence](../../../specs/managed-os.md#network-convergence)); this
   needs a build that includes X55.

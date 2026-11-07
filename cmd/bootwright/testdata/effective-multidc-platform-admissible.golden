@@ -1754,6 +1754,66 @@ spec:
     policy: withinRelease
 ---
 apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: ceph-cluster
+spec:
+  provided: true
+  description: The unrouted Ceph cluster network of the storage hosts, VLAN 300.
+  vlan: 300
+  mtu: 1500
+  sites:
+    - site-a
+    - site-b
+  ipv4:
+    cidr: 203.0.113.0/24
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: ceph-public
+spec:
+  provided: true
+  description: The Ceph public network of sites a and b, VLAN 200, shared by the storage hosts, the edge nodes and the hub virtual machines.
+  vlan: 200
+  mtu: 1500
+  sites:
+    - site-a
+    - site-b
+  ipv4:
+    cidr: 198.51.100.0/25
+    gateway: 198.51.100.124
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: ceph-public-witness
+spec:
+  provided: true
+  description: The Ceph public network of the witness site.
+  mtu: 1500
+  sites:
+    - site-c
+  ipv4:
+    cidr: 198.51.100.128/25
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: machine
+spec:
+  provided: true
+  description: The machine network of the edge and hub nodes, VLAN 100 on the bare-metal bond and the machine Localnet network of the hub virtual machines.
+  vlan: 100
+  mtu: 1500
+  sites:
+    - site-a
+    - site-b
+  ipv4:
+    cidr: 192.0.2.0/24
+    gateway: 192.0.2.252
+---
+apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig
 metadata:
   name: ceph-network

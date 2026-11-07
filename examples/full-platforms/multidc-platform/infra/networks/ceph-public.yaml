@@ -1,0 +1,17 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: ceph-public
+
+spec:
+  provided: true
+  description: The Ceph public network of sites a and b, VLAN 200, shared by the storage hosts, the edge nodes and the hub virtual machines.
+  vlan: 200
+
+  sites:
+    - site-a
+    - site-b
+
+  ipv4:
+    cidr: 198.51.100.0/25
+    gateway: 198.51.100.124

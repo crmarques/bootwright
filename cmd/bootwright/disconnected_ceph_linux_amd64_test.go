@@ -16,7 +16,7 @@ import (
 func TestDisconnectedProfileFreezesItsEntireMirrorClosure(t *testing.T) {
 	sources := exampleDirectory(t, "libvirt-3-nodes-ceph-disconnected")
 	state, _ := compileAcceptance(t, sources)
-	if len(sources.Files) != 26 {
+	if len(sources.Files) != 27 {
 		t.Fatalf("files: %d", len(sources.Files))
 	}
 	if refused := productionUnsupported(t, state); len(refused) != 0 {

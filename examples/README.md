@@ -104,7 +104,10 @@ outcome, a short list of what is worth noting (topology, sizes, notable fields,
 qualification limits and required operator inputs such as media, Secrets and
 placeholder checksums), and, when an e2e case runs the scenario, one line
 naming that case. Procedures do not belong in an example README: they go in an
-[e2e case](../e2e/README.md) runbook, `e2e/<case>/runbook.md`. Follow the repository's
+[e2e case](../e2e/README.md) runbook, `e2e/<case>/runbook.md`. Declare each
+network the scenario uses as a [`Network`](../specs/api/networks.md) object, one
+file under `infra/networks/`, so the Machine, OpenShift and Ceph checks hold the
+example to it. Follow the repository's
 [YAML style](../.agents/skills/code-implementation/references/formatting.md#yaml),
 including one empty line between logical blocks. Co-located non-object YAML
 belongs under the

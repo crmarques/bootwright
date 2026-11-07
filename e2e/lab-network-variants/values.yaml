@@ -74,6 +74,7 @@ bond:
 converge:
   vlanId: 140
   prefix: 24
+  cidr: 203.0.113.0/24
   mtu: 1400
   extraRoute: 192.0.2.0/24
   bondAddress: 203.0.113.11

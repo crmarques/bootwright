@@ -248,6 +248,18 @@ spec:
         interfaceName: eno1
 ---
 apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: lab-metal
+spec:
+  provided: true
+  description: The network of the physical hosts, provided outside Bootwright.
+  mtu: 1500
+  ipv4:
+    cidr: 198.51.100.0/24
+    gateway: 198.51.100.1
+---
+apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig
 metadata:
   name: lab-metal

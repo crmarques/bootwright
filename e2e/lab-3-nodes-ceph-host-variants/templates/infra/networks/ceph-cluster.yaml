@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: ceph-cluster
+
+spec:
+  provided: true
+  description: The unrouted Ceph cluster network, a VLAN on the guests bond carried over the lab-guests bridge.
+  vlan: {{ .Values.clusterNetwork.vlan }}
+
+  ipv4:
+    cidr: {{ .Values.clusterNetwork.cidr }}

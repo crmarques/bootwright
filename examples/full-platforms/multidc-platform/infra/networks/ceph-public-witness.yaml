@@ -1,0 +1,14 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: ceph-public-witness
+
+spec:
+  provided: true
+  description: The Ceph public network of the witness site.
+
+  sites:
+    - site-c
+
+  ipv4:
+    cidr: 198.51.100.128/25

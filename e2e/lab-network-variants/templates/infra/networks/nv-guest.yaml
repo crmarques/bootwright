@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: nv-guest
+
+spec:
+  provided: true
+  description: The guest-only VLAN every guest stacks on its install interface, on whichever bridge it attaches to.
+  vlan: {{ .Values.converge.vlanId }}
+
+  ipv4:
+    cidr: {{ .Values.converge.cidr }}

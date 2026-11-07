@@ -107,6 +107,18 @@ spec:
         interface: enp1s0
 ---
 apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: lab-guests
+spec:
+  provided: true
+  description: The IPv6-only guest network the lab-guests managed attachment of lab-libvirt defines.
+  mtu: 1500
+  ipv6:
+    cidr: 2001:db8:2::/64
+    gateway: 2001:db8:2::1
+---
+apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig
 metadata:
   name: lab-guests

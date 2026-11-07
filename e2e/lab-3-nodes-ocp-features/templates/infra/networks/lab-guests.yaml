@@ -1,0 +1,20 @@
+{{- $net := ternary .Values.networks.ipv6 .Values.networks.ipv4 .Values.ipv6 }}
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: lab-guests
+
+spec:
+  provided: true
+  description: The guest network the lab-guests attachment of lab-libvirt defines, NAT for IPv4 and isolated for IPv6.
+{{- if .Values.ipv6 }}
+
+  ipv6:
+    cidr: {{ $net.cidr }}
+    gateway: {{ $net.gateway }}
+{{- else }}
+
+  ipv4:
+    cidr: {{ $net.cidr }}
+    gateway: {{ $net.gateway }}
+{{- end }}

@@ -234,6 +234,56 @@ spec:
     policy: none
 ---
 apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: nv-guest
+spec:
+  provided: true
+  description: The guest-only VLAN 140 every guest stacks on its install interface, on whichever bridge it attaches to.
+  vlan: 140
+  mtu: 1500
+  ipv4:
+    cidr: 203.0.113.0/24
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: nv-lab
+spec:
+  provided: true
+  description: The untagged network the nv-lab managed attachment of lab-libvirt defines.
+  mtu: 1500
+  ipv4:
+    cidr: 198.51.100.0/26
+    gateway: 198.51.100.1
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: nv-vlan
+spec:
+  provided: true
+  description: VLAN 120, carried on the nv-trunk bridge for the nic0.120 install interface.
+  vlan: 120
+  mtu: 1500
+  ipv4:
+    cidr: 198.51.100.64/26
+    gateway: 198.51.100.65
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: nv-vlan-bond
+spec:
+  provided: true
+  description: VLAN 130, carried on the nv-trunk bridge for the bond0.130 install interface.
+  vlan: 130
+  mtu: 1500
+  ipv4:
+    cidr: 198.51.100.128/26
+    gateway: 198.51.100.129
+---
+apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig
 metadata:
   name: nv-bond

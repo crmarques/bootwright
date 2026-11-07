@@ -1,0 +1,15 @@
+{{- if not .Values.single }}
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: nv-vlan
+
+spec:
+  provided: true
+  description: The VLAN carried on the nv-trunk bridge for the nic0 install interface.
+  vlan: {{ .Values.vlan.id }}
+
+  ipv4:
+    cidr: {{ .Values.vlan.cidr }}
+    gateway: {{ .Values.vlan.gateway }}
+{{- end }}

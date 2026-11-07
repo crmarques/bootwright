@@ -1,0 +1,12 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: lab-guests
+
+spec:
+  provided: true
+  description: The guest network the bootstrap context creates and this context attaches to.
+
+  ipv4:
+    cidr: {{ .Values.host.cidr }}
+    gateway: {{ .Values.host.gateway }}
