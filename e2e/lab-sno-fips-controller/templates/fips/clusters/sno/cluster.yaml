@@ -51,7 +51,7 @@ spec:
       - name: {{ $name }}
         topology: Localnet
 
-        uplink:
+        bridgeMapping:
           bridge: {{ $env.bridge }}
           interface: {{ $trunk }}.{{ $env.vlan }}
           hostAddresses: bridge
@@ -60,13 +60,14 @@ spec:
           mode: Enabled
 
           subnets:
-            - {{ $env.podSubnet }}
+            - {{ $env.cidr }}
 
-          # .1 is the host containers' unused gateway.
+          # .1 is the host containers' unused gateway; the pool is MetalLB's.
           excludeSubnets:
             - {{ $env.gatewayAddress }}/32
             - {{ $env.nodeAddress }}/32
             - {{ $env.appAddress }}/32
+            - {{ $env.pool }}
 
         namespaceSelector:
           matchLabels:

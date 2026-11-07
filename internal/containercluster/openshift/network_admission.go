@@ -9,6 +9,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/network"
 )
 
 func NormalizeNetworkIntent(o api.Object) api.Object {
@@ -45,7 +46,9 @@ func ValidateNetworkIntent(o api.Object, c api.Catalog) []api.Issue {
 	if len(networks) > 0 {
 		familyBits = networks[0].Addr().BitLen()
 	}
+	reported := map[string]bool{}
 	for nodeIndex, node := range o.Spec().Get("nodes").Items() {
+		issues = append(issues, validateBridgeInterfaces(o, nodeIndex, node)...)
 		bound, ok := c.Find(api.Machine, node.Get("machineRef").Text())
 		if !ok {
 			continue
@@ -70,11 +73,23 @@ func ValidateNetworkIntent(o api.Object, c api.Catalog) []api.Issue {
 			}
 		}
 		for i, network := range o.Spec().Get("networking", "secondaryNetworks").Items() {
-			issues = append(issues, validateNetworkUplink(network, i, bound, native, install)...)
+			iface := BridgeInterface(node, network)
+			for _, issue := range validateBridgeMapping(network, i, iface, bound, native, install) {
+				if at := overrideIndex(node, network); at >= 0 && issue.Field == fmt.Sprintf("$.spec.networking.secondaryNetworks[%d].bridgeMapping.interface", i) {
+					issue.Field = fmt.Sprintf("$.spec.nodes[%d].bridgeInterfaces[%d].interface", nodeIndex, at)
+				}
+				issues = append(issues, issue)
+			}
+			issues = append(issues, validateSecondaryCarriage(network, i, iface, node, bound, c, native, install, reported)...)
 		}
 	}
+	return append(issues, validateSecondaryNetworks(o)...)
+}
+
+func validateSecondaryNetworks(o api.Object) []api.Issue {
+	issues := []api.Issue{}
 	seen := map[string]string{}
-	uplinks := map[string]string{}
+	interfaces := map[string]string{}
 	bridges := map[string]string{}
 	placements := map[string]hostPlacement{}
 	for i, n := range o.Spec().Get("networking", "secondaryNetworks").Items() {
@@ -83,30 +98,30 @@ func ValidateNetworkIntent(o api.Object, c api.Catalog) []api.Issue {
 		if name == "physnet" || name == "exgwphysnet" {
 			issues = append(issues, invariantRemediation(base+".name", "secondary network "+name+" uses a reserved physical network name", "choose a name other than physnet or exgwphysnet"))
 		}
-		bridge := n.Get("uplink", "bridge").Text()
-		iface := n.Get("uplink", "interface").Text()
+		bridge := n.Get("bridgeMapping", "bridge").Text()
+		iface := n.Get("bridgeMapping", "interface").Text()
 		if !api.ValidLexical("ifname", bridge) || bridge != "br-ex" && reservedOVNInterface(bridge) {
-			issues = append(issues, invariantRemediation(base+".uplink.bridge", "secondary network "+name+" has an invalid or reserved bridge name", "use br-ex or a non-reserved Linux interface name of at most 15 characters"))
+			issues = append(issues, invariantRemediation(base+".bridgeMapping.bridge", "secondary network "+name+" has an invalid or reserved bridge name", "use br-ex or a non-reserved Linux interface name of at most 15 characters"))
 		}
 		if bridge == "br-ex" && iface != "" || bridge != "br-ex" && iface == "" {
-			issues = append(issues, invariantRemediation(base+".uplink", "secondary network "+name+" must select br-ex alone or a dedicated interface and bridge", "omit interface when bridge is br-ex, otherwise supply both interface and bridge"))
+			issues = append(issues, invariantRemediation(base+".bridgeMapping", "secondary network "+name+" must select br-ex alone or a dedicated interface and bridge", "omit interface when bridge is br-ex, otherwise supply both interface and bridge"))
 		}
 		if iface != "" {
-			if other, ok := uplinks[iface]; ok && other != bridge {
-				issues = append(issues, invariantRemediation(base+".uplink.bridge", "interface "+iface+" is assigned to multiple OVS bridges", "use one bridge name for every network sharing an interface"))
+			if other, ok := interfaces[iface]; ok && other != bridge {
+				issues = append(issues, invariantRemediation(base+".bridgeMapping.bridge", "interface "+iface+" is assigned to multiple OVS bridges", "use one bridge name for every network sharing an interface"))
 			}
-			uplinks[iface] = bridge
+			interfaces[iface] = bridge
 		}
 		if other, ok := bridges[bridge]; ok && other != iface {
-			issues = append(issues, invariantRemediation(base+".uplink.interface", "bridge "+bridge+" selects multiple uplink interfaces", "use one interface for every network sharing a bridge"))
+			issues = append(issues, invariantRemediation(base+".bridgeMapping.interface", "bridge "+bridge+" selects multiple bridge interfaces", "use one interface for every network sharing a bridge"))
 		}
 		bridges[bridge] = iface
-		placement := hostPlacement{network: name, bridge: n.Get("uplink", "hostAddresses").Text() == "bridge"}
+		placement := hostPlacement{network: name, bridge: n.Get("bridgeMapping", "hostAddresses").Text() == "bridge"}
 		if placement.bridge && bridge == "br-ex" {
-			issues = append(issues, invariantRemediation(base+".uplink.hostAddresses", "secondary network "+name+" asks br-ex to carry host addresses, which OVN-Kubernetes manages on the install interface", "use a dedicated bridge and uplink interface, or omit uplink.hostAddresses"))
+			issues = append(issues, invariantRemediation(base+".bridgeMapping.hostAddresses", "secondary network "+name+" asks br-ex to carry host addresses, which OVN-Kubernetes manages on the install interface", "use a dedicated bridge and interface, or omit bridgeMapping.hostAddresses"))
 		}
 		if other, ok := placements[bridge]; ok && other.bridge != placement.bridge {
-			issues = append(issues, invariantRemediation(base+".uplink.hostAddresses", "secondary networks "+other.network+" and "+name+" share bridge "+bridge+" but differ in uplink.hostAddresses", "set the same uplink.hostAddresses on every network sharing a bridge"))
+			issues = append(issues, invariantRemediation(base+".bridgeMapping.hostAddresses", "secondary networks "+other.network+" and "+name+" share bridge "+bridge+" but differ in bridgeMapping.hostAddresses", "set the same bridgeMapping.hostAddresses on every network sharing a bridge"))
 		}
 		placements[bridge] = placement
 		for _, label := range n.Get("namespaceSelector", "matchLabels").Fields() {
@@ -116,7 +131,7 @@ func ValidateNetworkIntent(o api.Object, c api.Catalog) []api.Issue {
 		}
 		key := bridge + "/" + n.Get("vlan").Text()
 		if other, ok := seen[key]; ok {
-			issues = append(issues, invariantRemediation(base+".vlan", "secondary networks "+other+" and "+name+" share an uplink VLAN", "use distinct VLANs on a shared uplink, with at most one untagged network"))
+			issues = append(issues, invariantRemediation(base+".vlan", "secondary networks "+other+" and "+name+" share a bridge VLAN", "use distinct VLANs on a shared bridge, with at most one untagged network"))
 		}
 		seen[key] = name
 		if n.Get("namespaceSelector", "matchLabels").Len() == 0 {
@@ -196,13 +211,12 @@ func interfaceController(native api.Value, name string) string {
 	return ""
 }
 
-func validateNetworkUplink(n api.Value, index int, bound api.Object, native api.Value, install string) []api.Issue {
+func validateBridgeMapping(n api.Value, index int, iface string, bound api.Object, native api.Value, install string) []api.Issue {
 	issues := []api.Issue{}
 	base := fmt.Sprintf("$.spec.networking.secondaryNetworks[%d]", index)
 	name := n.Get("name").Text()
-	iface := n.Get("uplink", "interface").Text()
-	bridge := n.Get("uplink", "bridge").Text()
-	onBridge := n.Get("uplink", "hostAddresses").Text() == "bridge"
+	bridge := n.Get("bridgeMapping", "bridge").Text()
+	onBridge := n.Get("bridgeMapping", "hostAddresses").Text() == "bridge"
 	mtuInterface := iface
 	if bridge == "br-ex" {
 		mtuInterface = install
@@ -217,7 +231,7 @@ func validateNetworkUplink(n api.Value, index int, bound api.Object, native api.
 			}
 			found = true
 			if !slices.Contains([]string{"ethernet", "bond", "vlan"}, nic.Get("type").Text()) || slices.Contains([]string{"absent", "ignore"}, nic.Get("state").Text()) {
-				issues = append(issues, invariantRemediation(base+".uplink.interface", "uplink "+iface+" is not an active ethernet, bond or vlan on Machine/"+bound.Name(), "choose an active ethernet, bond or vlan interface"))
+				issues = append(issues, invariantRemediation(base+".bridgeMapping.interface", "bridge interface "+iface+" is not an active ethernet, bond or vlan on Machine/"+bound.Name(), "choose an active ethernet, bond or vlan interface"))
 			}
 			static, dynamic := false, false
 			for _, family := range []string{"ipv4", "ipv6"} {
@@ -226,30 +240,30 @@ func validateNetworkUplink(n api.Value, index int, bound api.Object, native api.
 			}
 			switch {
 			case dynamic && onBridge:
-				issues = append(issues, invariantRemediation(base+".uplink.interface", "uplink "+iface+" of network "+name+" is addressed by DHCP or autoconf on Machine/"+bound.Name()+", which cannot move onto bridge "+bridge, "declare static addresses on "+iface+" in network.addresses, or choose an addressless interface and omit uplink.hostAddresses"))
+				issues = append(issues, invariantRemediation(base+".bridgeMapping.interface", "bridge interface "+iface+" of network "+name+" is addressed by DHCP or autoconf on Machine/"+bound.Name()+", which cannot move onto bridge "+bridge, "declare static addresses on "+iface+" in network.addresses, or choose an addressless interface and omit bridgeMapping.hostAddresses"))
 			case dynamic:
-				issues = append(issues, invariantRemediation(base+".uplink.interface", "uplink "+iface+" carries an address on Machine/"+bound.Name(), "choose an addressless interface"))
+				issues = append(issues, invariantRemediation(base+".bridgeMapping.interface", "bridge interface "+iface+" carries an address on Machine/"+bound.Name(), "choose an addressless interface"))
 			case static && !onBridge:
-				issues = append(issues, invariantRemediation(base+".uplink.interface", "uplink "+iface+" carries an address on Machine/"+bound.Name(), "choose an addressless interface, or set uplink.hostAddresses: bridge to move its addresses onto bridge "+bridge))
+				issues = append(issues, invariantRemediation(base+".bridgeMapping.interface", "bridge interface "+iface+" carries an address on Machine/"+bound.Name(), "choose an addressless interface, or set bridgeMapping.hostAddresses: bridge to move its addresses onto bridge "+bridge))
 			}
 			if onBridge && routesVia(native, iface) {
-				issues = append(issues, invariantRemediation(base+".uplink.interface", "uplink "+iface+" of network "+name+" is the next-hop interface of a route on Machine/"+bound.Name()+", which leaves it once bridge "+bridge+" carries its addresses", "remove the route, or choose an interface no route names"))
+				issues = append(issues, invariantRemediation(base+".bridgeMapping.interface", "bridge interface "+iface+" of network "+name+" is the next-hop interface of a route on Machine/"+bound.Name()+", which leaves it once bridge "+bridge+" carries its addresses", "remove the route, or choose an interface no route names"))
 			}
 		}
 		if !found || iface == install || reservedOVNInterface(iface) {
-			issues = append(issues, invariantRemediation(base+".uplink.interface", "uplink "+iface+" is missing, reserved or the install interface on Machine/"+bound.Name(), "declare an addressless dedicated interface on every node, or use bridge br-ex"))
+			issues = append(issues, invariantRemediation(base+".bridgeMapping.interface", "bridge interface "+iface+" is missing, reserved or the install interface on Machine/"+bound.Name(), "declare an addressless dedicated interface on every node, or use bridge br-ex"))
 		}
 		if other := interfaceBuiltOn(native, iface); other != "" {
-			issues = append(issues, invariantRemediation(base+".uplink.interface", fmt.Sprintf("uplink %s of network %s carries interface %s on node %s", iface, name, other, bound.Name()), "use an addressless VLAN interface of "+iface+" as the uplink"))
+			issues = append(issues, invariantRemediation(base+".bridgeMapping.interface", fmt.Sprintf("bridge interface %s of network %s carries interface %s on node %s", iface, name, other, bound.Name()), "use an addressless VLAN interface of "+iface+" as the bridge interface"))
 		}
 		for _, nic := range native.Get("interfaces").Items() {
 			if nic.Get("name").Text() == bridge {
-				issues = append(issues, invariantRemediation(base+".uplink.bridge", "bridge "+bridge+" already names a node interface on Machine/"+bound.Name(), "choose a new OVS bridge name"))
+				issues = append(issues, invariantRemediation(base+".bridgeMapping.bridge", "bridge "+bridge+" already names a node interface on Machine/"+bound.Name(), "choose a new OVS bridge name"))
 			}
 		}
 	}
 	if mtu, ok := n.Get("mtu").Int64(); ok && mtu > interfaceMTU(native, mtuInterface) {
-		issues = append(issues, invariantRemediation(base+".mtu", "secondary network "+name+" MTU exceeds its uplink MTU on Machine/"+bound.Name(), fmt.Sprintf("set mtu to at most %d", interfaceMTU(native, mtuInterface))))
+		issues = append(issues, invariantRemediation(base+".mtu", "secondary network "+name+" MTU exceeds its bridge interface MTU on Machine/"+bound.Name(), fmt.Sprintf("set mtu to at most %d", interfaceMTU(native, mtuInterface))))
 	}
 	return issues
 }
@@ -370,4 +384,128 @@ func reservedOVNInterface(name string) bool {
 		}
 	}
 	return false
+}
+
+func BridgeInterface(node, secondary api.Value) string {
+	if at := overrideIndex(node, secondary); at >= 0 {
+		return node.Get("bridgeInterfaces").Items()[at].Get("interface").Text()
+	}
+	return secondary.Get("bridgeMapping", "interface").Text()
+}
+
+func overrideIndex(node, secondary api.Value) int {
+	return slices.IndexFunc(node.Get("bridgeInterfaces").Items(), func(entry api.Value) bool {
+		return entry.Get("networkRef").Text() == secondary.Get("name").Text()
+	})
+}
+
+func validateBridgeInterfaces(o api.Object, nodeIndex int, node api.Value) []api.Issue {
+	issues := []api.Issue{}
+	networks := o.Spec().Get("networking", "secondaryNetworks").Items()
+	for i, entry := range node.Get("bridgeInterfaces").Items() {
+		at := slices.IndexFunc(networks, func(n api.Value) bool { return n.Get("name").Text() == entry.Get("networkRef").Text() })
+		if at < 0 || networks[at].Get("bridgeMapping", "bridge").Text() != "br-ex" {
+			continue
+		}
+		issues = append(issues, invariantRemediation(fmt.Sprintf("$.spec.nodes[%d].bridgeInterfaces[%d].networkRef", nodeIndex, i), fmt.Sprintf("node %s overrides the bridge interface of secondary network %s, which shares br-ex, the bridge OVN-Kubernetes builds on the install interface", node.Get("name").Text(), entry.Get("networkRef").Text()),
+			"remove the entry, or give "+entry.Get("networkRef").Text()+" a dedicated bridge and bridgeMapping.interface"))
+	}
+	for _, bridge := range sharedBridges(networks) {
+		chosen := map[string]string{}
+		for _, n := range networks {
+			if n.Get("bridgeMapping", "bridge").Text() == bridge {
+				chosen[BridgeInterface(node, n)] = n.Get("name").Text()
+			}
+		}
+		if len(chosen) > 1 {
+			issues = append(issues, invariantRemediation(fmt.Sprintf("$.spec.nodes[%d].bridgeInterfaces", nodeIndex), fmt.Sprintf("node %s gives the secondary networks on bridge %s different bridge interfaces", node.Get("name").Text(), bridge),
+				"set one interface for every secondary network on bridge "+bridge+" on node "+node.Get("name").Text()))
+		}
+	}
+	return issues
+}
+
+func sharedBridges(networks []api.Value) []string {
+	count := map[string]int{}
+	for _, n := range networks {
+		count[n.Get("bridgeMapping", "bridge").Text()]++
+	}
+	shared := []string{}
+	for bridge, n := range count {
+		if n > 1 && bridge != "br-ex" {
+			shared = append(shared, bridge)
+		}
+	}
+	slices.Sort(shared)
+	return shared
+}
+
+func validateSecondaryCarriage(n api.Value, index int, iface string, node api.Value, bound api.Object, c api.Catalog, native api.Value, install string, reported map[string]bool) []api.Issue {
+	base := fmt.Sprintf("$.spec.networking.secondaryNetworks[%d]", index)
+	name := n.Get("name").Text()
+	dedicated := n.Get("bridgeMapping", "bridge").Text() != "br-ex"
+	if !dedicated {
+		iface = install
+	}
+	if iface == "" {
+		return nil
+	}
+	vlan, _ := n.Get("vlan").Int64()
+	on := fmt.Sprintf("interface %s of node %s (%s)", iface, node.Get("name").Text(), bound.Identity())
+	issues := []api.Issue{}
+	report := func(key, field, message, remedy string) {
+		if !reported[key] {
+			reported[key] = true
+			issues = append(issues, invariantRemediation(field, message, remedy))
+		}
+	}
+	for _, reach := range machine.Reached(bound, c, native, iface, int(vlan)) {
+		path := on + ", NIC " + reach.NIC + " on " + reach.Segment
+		switch {
+		case reach.StackVLAN != "" && n.Has("vlan") && dedicated:
+			report(base+".vlan", base+".vlan", fmt.Sprintf("secondary network %s tags VLAN %d on %s, which VLAN interface %s already tags", name, vlan, on, reach.StackVLAN),
+				"remove vlan from secondary network "+name+", or name an untagged bridge interface")
+		case reach.StackVLAN != "" && n.Has("vlan"):
+		case !reach.Found():
+			carried := "carries no Network untagged"
+			field := base + ".bridgeMapping"
+			if reach.VLAN != 0 {
+				carried = fmt.Sprintf("carries no tagged Network with vlan %d", reach.VLAN)
+			}
+			if n.Has("vlan") {
+				field = base + ".vlan"
+			}
+			remedy := "set vlan on secondary network " + name + " to the vlan of a Network the segment carries, or omit it for the one it carries untagged"
+			if reach.Carriage != "" {
+				remedy += ", or add the Network to " + reach.Carriage
+			}
+			report(field+"\x00"+reach.Segment, field, fmt.Sprintf("secondary network %s reaches %s, which %s", name, path, carried), remedy)
+		default:
+			secondarySubnets(n, base, name, path, reach.Network, report)
+		}
+	}
+	return issues
+}
+
+func secondarySubnets(n api.Value, base, name, path string, held api.Object, report func(key, field, message, remedy string)) {
+	if n.Get("ipam", "mode").Text() != "Enabled" {
+		return
+	}
+	for i, raw := range n.Get("ipam", "subnets").Strings() {
+		subnet, err := netip.ParsePrefix(raw)
+		if err != nil {
+			continue
+		}
+		family := network.Family(subnet.Addr())
+		cidr, ok := network.Prefix(held, family)
+		if ok && cidr == subnet.Masked() {
+			continue
+		}
+		field := fmt.Sprintf("%s.ipam.subnets[%d]", base, i)
+		remedy := "set it to spec." + family + ".cidr " + cidr.String() + " of " + held.Identity() + ", keeping addresses from pods with ipam.excludeSubnets"
+		if !ok {
+			remedy = "declare spec." + family + ".cidr on " + held.Identity() + ", or remove the subnet"
+		}
+		report(field+"\x00"+held.Name(), field, fmt.Sprintf("IPAM subnet %s of secondary network %s is not the %s cidr of %s, which it carries through %s", raw, name, family, held.Identity(), path), remedy)
+	}
 }

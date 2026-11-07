@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"slices"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -69,6 +70,33 @@ func parseInterval(entry string) (interval, string, error) {
 }
 func overlaps(a, b interval) bool {
 	return a.first.BitLen() == b.first.BitLen() && a.first.Compare(b.last) <= 0 && b.first.Compare(a.last) <= 0
+}
+
+func uncovered(r, n interval, excluded []netip.Prefix) bool {
+	if !overlaps(r, n) {
+		return false
+	}
+	first, last := r.first, r.last
+	if n.first.Compare(first) > 0 {
+		first = n.first
+	}
+	if n.last.Compare(last) < 0 {
+		last = n.last
+	}
+	for advanced := true; advanced; {
+		advanced = false
+		for _, prefix := range excluded {
+			e := interval{first: prefix.Masked().Addr(), last: lastAddress(prefix)}
+			if !e.contains(first) {
+				continue
+			}
+			if e.last.Compare(last) >= 0 {
+				return false
+			}
+			first, advanced = e.last.Next(), true
+		}
+	}
+	return true
 }
 
 type poolIssue func(code, field, message, remedy string)
@@ -159,8 +187,8 @@ func interfaceNetworks(pool api.MetalLBPool, f addons.ClusterFacts, field string
 		} else if !addressed {
 			declared := iface
 			for _, network := range f.SecondaryNetworks {
-				if network.HostAddresses && network.UplinkBridge == iface {
-					declared = network.UplinkInterface
+				if network.HostAddresses && network.Bridge == iface {
+					declared = network.InterfaceOn(node.Machine)
 				}
 			}
 			add("api.invariant", field, fmt.Sprintf("interface %s of pool %s carries no %s address on node %s", iface, pool.Name, f.Family, node.Machine), fmt.Sprintf("assign %s an address in the pool's subnet on every node through network.addresses", declared))
@@ -174,10 +202,10 @@ func interfaceNetworks(pool api.MetalLBPool, f addons.ClusterFacts, field string
 	}
 	for _, network := range f.SecondaryNetworks {
 		switch {
-		case network.HostAddresses && iface == network.UplinkInterface:
-			add("api.invariant", field, fmt.Sprintf("interface %s of pool %s is the uplink of secondary network %s, whose bridge %s carries its node addresses", iface, pool.Name, network.Name, network.UplinkBridge), "set l2.interface to "+network.UplinkBridge)
-		case !network.HostAddresses && (iface == network.UplinkInterface || iface == network.UplinkBridge):
-			add("api.invariant", field, fmt.Sprintf("interface %s of pool %s is the uplink of secondary network %s, which carries no host address", iface, pool.Name, network.Name), "name an interface that carries a node address, or omit l2.interface")
+		case network.HostAddresses && slices.Contains(network.Interfaces(), iface):
+			add("api.invariant", field, fmt.Sprintf("interface %s of pool %s is the bridge interface of secondary network %s, whose bridge %s carries its node addresses", iface, pool.Name, network.Name, network.Bridge), "set l2.interface to "+network.Bridge)
+		case !network.HostAddresses && (slices.Contains(network.Interfaces(), iface) || iface == network.Bridge):
+			add("api.invariant", field, fmt.Sprintf("interface %s of pool %s is the bridge interface of secondary network %s, which carries no host address", iface, pool.Name, network.Name), "name an interface that carries a node address, or omit l2.interface")
 		}
 	}
 	if !f.Gateway.RoutingViaHost {
@@ -210,18 +238,18 @@ func checkPoolConflicts(pool api.MetalLBPool, f addons.ClusterFacts, field, entr
 		}
 	}
 	forbidden := []struct {
-		kind     string
-		prefixes []netip.Prefix
-	}{{"cluster network", f.ClusterNetworks}, {"service network", f.ServiceNetworks}}
+		kind               string
+		prefixes, excluded []netip.Prefix
+	}{{"cluster network", f.ClusterNetworks, nil}, {"service network", f.ServiceNetworks, nil}}
 	for _, n := range f.SecondaryNetworks {
 		forbidden = append(forbidden, struct {
-			kind     string
-			prefixes []netip.Prefix
-		}{"secondary network " + n.Name, n.Subnets})
+			kind               string
+			prefixes, excluded []netip.Prefix
+		}{"secondary network " + n.Name, n.Subnets, n.Excluded})
 	}
 	for _, group := range forbidden {
 		for _, n := range group.prefixes {
-			if overlaps(r, interval{first: n.Masked().Addr(), last: lastAddress(n)}) {
+			if uncovered(r, interval{first: n.Masked().Addr(), last: lastAddress(n)}, group.excluded) {
 				add("api.invariant", field, fmt.Sprintf("address %s of pool %s overlaps %s, the %s of OpenShiftCluster/%s", entry, pool.Name, n, group.kind, f.Name), "use addresses outside "+n.String())
 			}
 		}

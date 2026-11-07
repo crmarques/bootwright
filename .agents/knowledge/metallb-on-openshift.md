@@ -94,9 +94,10 @@ check, so it installs on platform `none` (R4:C22, medium confidence).
 ## Addressed localnet bridges
 
 A localnet whose VLAN also carries the nodes declares
-[`uplink.hostAddresses: bridge`](../../specs/api/openshift-clusters.md#secondary-networks):
-the addresses a Machine declares on the uplink move onto the bridge's internal
-interface, and a pool or an egress IP in that subnet leaves through the bridge.
+[`bridgeMapping.hostAddresses: bridge`](../../specs/api/openshift-clusters.md#secondary-networks):
+the addresses a Machine declares on the bridge interface move onto the bridge's
+internal interface, and a pool or an egress IP in that subnet leaves through
+the bridge.
 OpenShift 4.21 documents these facts for an egress IP on a secondary NIC
 (OVN-Kubernetes network plugin, "Configuring an egress IP address", section
 9.1.3,

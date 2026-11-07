@@ -59,7 +59,7 @@ spec:
       - name: nested-guests
         topology: Localnet
 
-        uplink:
+        bridgeMapping:
           bridge: br-nested
           interface: enp2s0
 

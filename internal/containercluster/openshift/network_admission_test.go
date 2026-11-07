@@ -10,7 +10,7 @@ import (
 )
 
 func secondaryNetwork() api.Value {
-	return m("name", "tenant", "topology", "Localnet", "uplink", m("bridge", "br-ex"), "namespaceSelector", m("matchLabels", m("tenant", "yes")))
+	return m("name", "tenant", "topology", "Localnet", "bridgeMapping", m("bridge", "br-ex"), "namespaceSelector", m("matchLabels", m("tenant", "yes")))
 }
 func TestSecondaryNetworkAdmission(t *testing.T) {
 	cluster, c := fixture("libvirt", 1, false)
@@ -21,12 +21,12 @@ func TestSecondaryNetworkAdmission(t *testing.T) {
 	}{
 		{"valid", secondaryNetwork(), ""},
 		{"reserved", secondaryNetwork().With("name", api.StringValue("physnet")), "reserved"},
-		{"bridge punctuation", secondaryNetwork().With("uplink", m("bridge", "br@tenant", "interface", "eth1")), "invalid or reserved bridge"},
-		{"bridge control", secondaryNetwork().With("uplink", m("bridge", "br\ttenant", "interface", "eth1")), "invalid or reserved bridge"},
-		{"bridge unicode", secondaryNetwork().With("uplink", m("bridge", "br-tenanté", "interface", "eth1")), "invalid or reserved bridge"},
+		{"bridge punctuation", secondaryNetwork().With("bridgeMapping", m("bridge", "br@tenant", "interface", "eth1")), "invalid or reserved bridge"},
+		{"bridge control", secondaryNetwork().With("bridgeMapping", m("bridge", "br\ttenant", "interface", "eth1")), "invalid or reserved bridge"},
+		{"bridge unicode", secondaryNetwork().With("bridgeMapping", m("bridge", "br-tenanté", "interface", "eth1")), "invalid or reserved bridge"},
 		{"selector", secondaryNetwork().With("namespaceSelector", m("matchLabels", m())), "labels"},
-		{"mixed uplink", secondaryNetwork().With("uplink", m("bridge", "br-ex", "interface", "eth1")), "br-ex alone"},
-		{"missing uplink", secondaryNetwork().With("uplink", m("bridge", "br-tenant", "interface", "eth1")), "missing"},
+		{"mixed uplink", secondaryNetwork().With("bridgeMapping", m("bridge", "br-ex", "interface", "eth1")), "br-ex alone"},
+		{"missing uplink", secondaryNetwork().With("bridgeMapping", m("bridge", "br-tenant", "interface", "eth1")), "missing"},
 		{"disabled subnet", secondaryNetwork().With("ipam", m("subnets", api.StringList("198.51.100.0/24"))), "disabled IPAM"},
 		{"enabled no subnet", secondaryNetwork().With("ipam", m("mode", "Enabled")), "one or two"},
 		{"repeated family", secondaryNetwork().With("ipam", m("mode", "Enabled", "subnets", api.StringList("198.51.100.0/24", "203.0.113.0/24"))), "repeat"},
@@ -88,12 +88,12 @@ func TestSecondaryNetworkReservedNames(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			bound, _ := catalog.Find(api.Machine, "node-0")
 			native := m("interfaces", list(m("name", name, "type", "ethernet")))
-			n := secondaryNetwork().With("uplink", m("interface", name, "bridge", "br-tenant"))
-			issues := validateNetworkUplink(n, 0, bound, native, "eth0")
-			if len(issues) != 1 || issues[0].Field != "$.spec.networking.secondaryNetworks[0].uplink.interface" {
+			n := secondaryNetwork().With("bridgeMapping", m("interface", name, "bridge", "br-tenant"))
+			issues := validateBridgeMapping(n, 0, BridgeInterface(m(), n), bound, native, "eth0")
+			if len(issues) != 1 || issues[0].Field != "$.spec.networking.secondaryNetworks[0].bridgeMapping.interface" {
 				t.Fatalf("reserved interface: %+v", issues)
 			}
-			n = secondaryNetwork().With("uplink", m("interface", "eth1", "bridge", name))
+			n = secondaryNetwork().With("bridgeMapping", m("interface", "eth1", "bridge", name))
 			if name == "br-ex" {
 				n = secondaryNetwork()
 			}
@@ -101,7 +101,7 @@ func TestSecondaryNetworkReservedNames(t *testing.T) {
 			issues = ValidateNetworkIntent(o, catalog)
 			found := false
 			for _, issue := range issues {
-				if issue.Field == "$.spec.networking.secondaryNetworks[0].uplink.bridge" {
+				if issue.Field == "$.spec.networking.secondaryNetworks[0].bridgeMapping.bridge" {
 					found = true
 				}
 			}
@@ -112,8 +112,8 @@ func TestSecondaryNetworkReservedNames(t *testing.T) {
 	}
 	bound, _ := catalog.Find(api.Machine, "node-0")
 	native := m("interfaces", list(m("name", "eth1", "type", "ethernet")))
-	n := secondaryNetwork().With("uplink", m("interface", "eth1", "bridge", "br-tenant"))
-	if issues := validateNetworkUplink(n, 0, bound, native, "eth0"); len(issues) != 0 {
+	n := secondaryNetwork().With("bridgeMapping", m("interface", "eth1", "bridge", "br-tenant"))
+	if issues := validateBridgeMapping(n, 0, BridgeInterface(m(), n), bound, native, "eth0"); len(issues) != 0 {
 		t.Fatalf("passing dedicated uplink: %+v", issues)
 	}
 }
@@ -133,7 +133,7 @@ func addressedNetwork(name, bridge, iface, hostAddresses, vlan string) api.Value
 	if hostAddresses != "" {
 		uplink = uplink.With("hostAddresses", api.StringValue(hostAddresses))
 	}
-	n := secondaryNetwork().With("name", api.StringValue(name)).With("uplink", uplink)
+	n := secondaryNetwork().With("name", api.StringValue(name)).With("bridgeMapping", uplink)
 	if vlan != "" {
 		n = n.With("vlan", api.IntegerValue(vlan))
 	}
@@ -182,30 +182,30 @@ func TestAddressedAndCarriedUplinkAdmission(t *testing.T) {
 		{"none over an addressless vlan", plain, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1.10", "none", "")}, "", "", ""},
 		{"bridge over an addressless vlan", plain, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1.10", "bridge", "")}, "", "", ""},
 		{"two networks one bridge", addressed, []api.Value{addressedNetwork("a", "br-tenant", "eth1.10", "bridge", "10"), addressedNetwork("b", "br-tenant", "eth1.10", "bridge", "20")}, "", "", ""},
-		{"addressed uplink without placement", addressed, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1.10", "", "")}, networks + "0].uplink.interface", "uplink eth1.10 carries an address on Machine/node-0", "set uplink.hostAddresses: bridge to move its addresses onto bridge br-tenant"},
-		{"addressed uplink with none", addressed, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1.10", "none", "")}, networks + "0].uplink.interface", "carries an address", "uplink.hostAddresses: bridge"},
-		{"bridge on br-ex", plain, []api.Value{addressedNetwork("tenant", "br-ex", "", "bridge", "")}, networks + "0].uplink.hostAddresses", "asks br-ex to carry host addresses", "dedicated bridge"},
-		{"shared bridge disagrees", addressed, []api.Value{addressedNetwork("a", "br-tenant", "eth1.10", "bridge", "10"), addressedNetwork("b", "br-tenant", "eth1.10", "", "20")}, networks + "1].uplink.hostAddresses", "secondary networks a and b share bridge br-tenant but differ in uplink.hostAddresses", "same uplink.hostAddresses"},
+		{"addressed uplink without placement", addressed, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1.10", "", "")}, networks + "0].bridgeMapping.interface", "bridge interface eth1.10 carries an address on Machine/node-0", "set bridgeMapping.hostAddresses: bridge to move its addresses onto bridge br-tenant"},
+		{"addressed uplink with none", addressed, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1.10", "none", "")}, networks + "0].bridgeMapping.interface", "carries an address", "bridgeMapping.hostAddresses: bridge"},
+		{"bridge on br-ex", plain, []api.Value{addressedNetwork("tenant", "br-ex", "", "bridge", "")}, networks + "0].bridgeMapping.hostAddresses", "asks br-ex to carry host addresses", "dedicated bridge"},
+		{"shared bridge disagrees", addressed, []api.Value{addressedNetwork("a", "br-tenant", "eth1.10", "bridge", "10"), addressedNetwork("b", "br-tenant", "eth1.10", "", "20")}, networks + "1].bridgeMapping.hostAddresses", "secondary networks a and b share bridge br-tenant but differ in bridgeMapping.hostAddresses", "same bridgeMapping.hostAddresses"},
 		{"bridge over dhcp", func() ([]api.Value, []api.Value, []api.Value) {
 			interfaces, addresses, routes := plain()
 			interfaces[2] = interfaces[2].With("ipv4", m("enabled", true, "dhcp", true))
 			return interfaces, addresses, routes
-		}, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1.10", "bridge", "")}, networks + "0].uplink.interface", "addressed by DHCP or autoconf", "declare static addresses"},
+		}, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1.10", "bridge", "")}, networks + "0].bridgeMapping.interface", "addressed by DHCP or autoconf", "declare static addresses"},
 		{"bridge over a routed uplink", func() ([]api.Value, []api.Value, []api.Value) {
 			interfaces, addresses, routes := addressed()
 			return interfaces, addresses, append(routes, m("destination", "203.0.113.0/24", "next-hop-interface", "eth1.10", "next-hop-address", "198.51.100.1"))
-		}, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1.10", "bridge", "")}, networks + "0].uplink.interface", "next-hop interface of a route on Machine/node-0", "remove the route"},
+		}, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1.10", "bridge", "")}, networks + "0].bridgeMapping.interface", "next-hop interface of a route on Machine/node-0", "remove the route"},
 		{"tag on br-ex over a vlan install interface", installVLAN, []api.Value{addressedNetwork("tenant", "br-ex", "", "", "10")}, networks + "0].vlan", "network tenant tags VLAN 10 on br-ex, which node node-0 builds on VLAN interface eth0.100", "its own bridge over an addressless VLAN interface"},
 		{"untagged on br-ex over a vlan install interface", installVLAN, []api.Value{addressedNetwork("tenant", "br-ex", "", "", "")}, "", "", ""},
 		{"tag on br-ex over an untagged install interface", plain, []api.Value{addressedNetwork("tenant", "br-ex", "", "", "10")}, "", "", ""},
-		{"uplink is the base of the install vlan", installVLAN, []api.Value{addressedNetwork("tenant", "br-tenant", "eth0", "", "")}, networks + "0].uplink.interface", "uplink eth0 of network tenant carries interface eth0.100 on node node-0", "addressless VLAN interface of eth0"},
-		{"uplink is the base of another vlan", plain, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1", "", "")}, networks + "0].uplink.interface", "uplink eth1 of network tenant carries interface eth1.10 on node node-0", "addressless VLAN interface of eth1"},
+		{"uplink is the base of the install vlan", installVLAN, []api.Value{addressedNetwork("tenant", "br-tenant", "eth0", "", "")}, networks + "0].bridgeMapping.interface", "bridge interface eth0 of network tenant carries interface eth0.100 on node node-0", "addressless VLAN interface of eth0"},
+		{"uplink is the base of another vlan", plain, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1", "", "")}, networks + "0].bridgeMapping.interface", "bridge interface eth1 of network tenant carries interface eth1.10 on node node-0", "addressless VLAN interface of eth1"},
 		{"uplink is a bond port", func() ([]api.Value, []api.Value, []api.Value) {
 			return []api.Value{eth("eth0"), eth("eth1"), m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList("eth1")))}, []api.Value{assign("primary", "192.0.2.10", "eth0")}, []api.Value{installRoute("eth0")}
-		}, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1", "", "")}, networks + "0].uplink.interface", "uplink eth1 of network tenant carries interface bond0 on node node-0", "addressless VLAN interface"},
+		}, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1", "", "")}, networks + "0].bridgeMapping.interface", "bridge interface eth1 of network tenant carries interface bond0 on node node-0", "addressless VLAN interface"},
 		{"uplink names its bond controller", func() ([]api.Value, []api.Value, []api.Value) {
 			return []api.Value{eth("eth0"), eth("eth1").With("controller", api.StringValue("bond0")), m("name", "bond0", "type", "bond")}, []api.Value{assign("primary", "192.0.2.10", "eth0")}, []api.Value{installRoute("eth0")}
-		}, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1", "", "")}, networks + "0].uplink.interface", "carries interface bond0", "addressless VLAN interface"},
+		}, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1", "", "")}, networks + "0].bridgeMapping.interface", "carries interface bond0", "addressless VLAN interface"},
 		{"bond uplink over its own vlan-free ports", func() ([]api.Value, []api.Value, []api.Value) {
 			return []api.Value{eth("eth0"), m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList("eth1", "eth2"))), eth("eth1"), eth("eth2")}, []api.Value{assign("primary", "192.0.2.10", "eth0")}, []api.Value{installRoute("eth0")}
 		}, []api.Value{addressedNetwork("tenant", "br-tenant", "bond0", "", "")}, "", "", ""},
@@ -237,7 +237,7 @@ func TestUnroutedInstallInterfaceStillConstrainsSecondaryNetworks(t *testing.T) 
 		network api.Value
 		field   string
 	}{
-		{addressedNetwork("tenant", "br-tenant", "eth0.100", "bridge", ""), "uplink.interface"},
+		{addressedNetwork("tenant", "br-tenant", "eth0.100", "bridge", ""), "bridgeMapping.interface"},
 		{addressedNetwork("tenant", "br-ex", "", "", "10"), "vlan"},
 	} {
 		o := NormalizeNetworkIntent(cluster.WithSpec(cluster.Spec().WithPath(list(test.network), "networking", "secondaryNetworks")))

@@ -70,7 +70,7 @@ spec:
       - name: workloads
         topology: Localnet
 
-        uplink:
+        bridgeMapping:
           bridge: br-workloads
           interface: enp2s0
 

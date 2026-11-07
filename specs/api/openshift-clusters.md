@@ -369,7 +369,7 @@ implicit trust inherited from another consumer.
 
 `ovnKubernetesConfig.mtu` plus 100, and a secondary network's `mtu`, are at
 most the effective MTU of the interface each rides on every node: the install
-interface for OVN and `br-ex`, else the network's `uplink.interface`. An
+interface for OVN and `br-ex`, else the node's bridge interface. An
 interface's effective MTU is its `mtu`, else that of its VLAN `base-iface` or
 of the bond it is a port of, recursively, else 1500; so OVN `mtu: 8900` over an
 MTU-less VLAN on a bond of `mtu: 9000` is admitted. A value above refuses at
@@ -404,48 +404,51 @@ addresses share one address family; dual-stack or mixed input refuses.
 
 ### Secondary networks
 
-Each `secondaryNetworks[]` entry is keyed by `name`, a DNS label that is
-neither `physnet` nor `exgwphysnet`, and becomes the name of the network, of its
-physical network and of the attachment definition workloads select.
+Each `secondaryNetworks[]` entry is keyed by `name`, a DNS label other than
+`physnet` and `exgwphysnet`, naming the network, its physical network and the
+attachment definition workloads select.
 
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
 | `topology` | string | yes | `Localnet`. |
-| `uplink.bridge` | string | yes | `br-ex`, sharing the default bridge, or a new OVS bridge name: 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
-| `uplink.interface` | string | with a new bridge | An `ethernet`, `bond` or `vlan` every node declares, other than its install interface: addressless, unless `uplink.hostAddresses` is `bridge`. |
-| `uplink.hostAddresses` | string | no | `none` (default): the uplink carries no node address. `bridge`: the static addresses each node declares on the uplink move onto the bridge, below. Only with a new bridge; the same on every network sharing that bridge. |
-| `vlan` | integer | no | Access VLAN `1..4094`; distinct among networks sharing an uplink. |
-| `mtu` | integer | no | `576..65536`, at least `1280` with an IPv6 subnet, at most the uplink interface's effective MTU. |
+| `bridgeMapping.bridge` | string | yes | `br-ex`, sharing the default bridge, or a new OVS bridge name: 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
+| `bridgeMapping.interface` | string | with a new bridge | The bridge interface: an `ethernet`, `bond` or `vlan` every node declares, not its install interface, addressless unless `hostAddresses` is `bridge`; a node's `bridgeInterfaces` entry overrides it. |
+| `bridgeMapping.hostAddresses` | string | no | `none` (default), or `bridge`: each node's static addresses on the bridge interface move onto the bridge. Only with a new bridge, alike on every network sharing it. |
+| `vlan` | integer | no | Access VLAN `1..4094`; distinct among networks sharing a bridge. |
+| `mtu` | integer | no | `576..65536`, at least `1280` with an IPv6 subnet, at most the bridge interface's effective MTU. |
 | `ipam.mode` | string | no | `Disabled` (default) or `Enabled`. |
 | `ipam.subnets` | array of CIDRs | with `Enabled` | One or two, of different families. |
 | `ipam.excludeSubnets` | array of CIDRs | no | At most 25, inside `subnets`. |
 | `ipam.lifecycle` | string | no | `Persistent`, with `Enabled` only. |
 | `namespaceSelector.matchLabels` | map | yes | Non-empty Kubernetes labels selecting the namespaces that receive the attachment definition. |
 
-A cluster that declares a secondary network needs a binding that
-selects a package or add-on providing `nmstate`.
+A secondary network needs a binding selecting a package or add-on providing
+`nmstate`.
 
-With `uplink.hostAddresses: bridge`, one VLAN carries both the node and the
-network's workloads, the way the machine network carries both through `br-ex`.
-Each node's Machine declares its address on the uplink, as on any other
-interface; the installer configures it there, and after installation the
+Native `vlan` and `ipam.subnets` are checked against the
+[Networks](networks.md#cross-kind-checks) (D240 (11)): on every node, the NICs
+under the bridge interface (for `br-ex`, the install one) sit on a
+segment carrying one Network, tagged `vlan` when set, else untagged, or tagged
+by a VLAN in the stack, which forbids `vlan`; each subnet equals its CIDR. A
+refusal, at `vlan`, `bridgeMapping` or the subnet, names the node, interface,
+segment and Network.
+
+With `hostAddresses: bridge`, one VLAN carries the node and the workloads, as
+`br-ex` does for the machine network. The node declares its address on the
+bridge interface; after installation the
 [cluster network block](../openshift-clusters.md#post-installation-network-configuration)
-moves it onto the bridge's own interface, named after the bridge. From then on
-the bridge, not the uplink, is the node's interface on that network, so a
-[MetalLB pool](addons.md#package-metallb) announcing there names the bridge in
-`l2.interface`, and an egress IP in its subnet leaves through it. Because the
-move leaves the uplink addressless, admission refuses at `uplink.interface` an
-uplink a node addresses by DHCP or autoconf, and one that a route of the node
-names as its `next-hop-interface`; with `none`, an uplink a node addresses
-refuses there too, naming `bridge` in its remedy.
+moves it onto the bridge's own interface, named after the bridge, which a
+[MetalLB pool](addons.md#package-metallb) then names in `l2.interface` and an
+egress IP in its subnet leaves through. Admission refuses at
+`bridgeMapping.interface` a bridge interface a node addresses by DHCP or
+autoconf or names as a route's `next-hop-interface`; with `none`, an addressed
+one refuses there, naming `bridge` in its remedy.
 
-Two uplinks refuse because their frames would not reach the network: a `vlan`
-on `br-ex` where a node's install interface is itself a `vlan` interface,
-because OVN-Kubernetes builds `br-ex` on that interface and the access tag
-would ride inside its tag, refuses at `vlan`; and an `uplink.interface` that is
-the `base-iface` of a `vlan` interface or a port of a bond the node declares,
-its install interface's included, because the bridge would take that interface
-away from the interface built on it, refuses at `uplink.interface`.
+Two bridge interfaces refuse because their frames would not reach the network:
+a `vlan` on `br-ex` over a `vlan` install interface, whose tag would carry the
+access tag inside it, at `vlan`; and a `base-iface` of a `vlan` or a bond port
+the node declares, install interface included, which the bridge would take from
+the interface built on it, at `bridgeMapping.interface`.
 
 ## Security
 
@@ -483,9 +486,8 @@ resource's enumeration lists.
 
 ## Nodes
 
-`spec.nodes` is non-empty. There are no authorable control-plane, compute, or
-machine-pool blocks; the node roster and roles are the single source from which
-a native renderer derives pools and replica counts.
+`spec.nodes` is non-empty and, with its roles, the single source of native
+pools and replica counts; no control-plane, compute or pool block is authored.
 
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
@@ -493,25 +495,25 @@ a native renderer derives pools and replica counts.
 | `spec.nodes[].fqdn` | string | no | Explicit DNS-subdomain override for the node identity. |
 | `spec.nodes[].role` | string | yes | `controlPlane`, `worker`, or `infra`. A `controlPlane` node is rendered as the installer's native `master`. |
 | `spec.nodes[].machineRef` | string | yes | Global `Machine` reference. |
-| `spec.nodes[].labels` | map of string to string | no | Kubernetes label keys and values the node carries once its installation completes. |
-| `spec.nodes[].taints` | array | no | Entries have required `key` and `effect`, optional `value`; effects are `NoSchedule`, `PreferNoSchedule`, or `NoExecute`. The node carries them once its installation completes. |
+| `spec.nodes[].labels` | map of string to string | no | Kubernetes labels the node carries once installed. |
+| `spec.nodes[].taints` | array | no | Required `key` and `effect` (`NoSchedule`, `PreferNoSchedule` or `NoExecute`), optional `value`, carried once installed. |
+| `spec.nodes[].bridgeInterfaces` | array | no | `{networkRef, interface}` keyed by `networkRef`, a [secondary network](#secondary-networks) with a new bridge: this node's bridge interface, alike for networks sharing one. |
 
 Normalization composes the node FQDN `<node>.<cluster>.<domain>` under
 [Environment domains](environment.md#domains); an authored `fqdn` wins verbatim.
-A derived node FQDN, and the derived endpoint names `api-int.<cluster>.<domain>`
-and `*.apps.<cluster>.<domain>`, must fit a DNS name (253 bytes, 63 per label);
-otherwise validate refuses with `api.invariant` at `spec.nodes[].name` or at the
-cluster's `metadata.name`, naming the composed name.
+It and the derived `api-int.<cluster>.<domain>` and `*.apps.<cluster>.<domain>`
+fit a DNS name (253 bytes, 63 per label), or validate refuses with
+`api.invariant` at `spec.nodes[].name` or `metadata.name`, naming the name.
 
 An `infra` node installs through the native worker pool and, once the
 installation completes, also carries `node-role.kubernetes.io/infra` with an
 empty value unless its `labels` author that key; no taint is implied by the
 role ([node placement](../openshift-clusters.md#node-placement)).
-Desired-state compilation accepts and preserves repeated authored taints. A
-native projection deduplicates by `key` plus `effect`; explicitly authoring the
-standard infra taint is therefore a no-op rather than an error.
+Repeated authored taints are kept; a native projection deduplicates them by
+`key` plus `effect`, so authoring the standard infra taint is a no-op.
 
-Every `machineRef` requires `os.provided: false`; naming it makes the Machine an OpenShift node, with no role declared on the Machine ([substrate arm](machines.md#substrate-arm)).
+Every `machineRef` requires `os.provided: false` and makes that Machine an
+OpenShift node, declaring no role on it ([substrate arm](machines.md#substrate-arm)).
 The cluster domain publishes these bindings as the cluster's membership
 (`containercluster.MemberMachines`), which Environment selection, node binding
 uniqueness and machine targeting read without naming this kind.

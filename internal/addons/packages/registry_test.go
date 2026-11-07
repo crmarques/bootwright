@@ -78,8 +78,8 @@ func TestSecondaryInterfaceAdmissionAndReservedAddresses(t *testing.T) {
 		t.Fatal(issues)
 	}
 	f.Reserved = nil
-	f.SecondaryNetworks = []addons.SecondaryNetwork{{Name: "local", UplinkInterface: "eth1"}}
-	if issues := admitPools(i, f); len(issues) != 1 || !strings.Contains(issues[0].Message, "uplink") {
+	f.SecondaryNetworks = []addons.SecondaryNetwork{{Name: "local", Interface: "eth1"}}
+	if issues := admitPools(i, f); len(issues) != 1 || !strings.Contains(issues[0].Message, "bridge interface") {
 		t.Fatal(issues)
 	}
 }
@@ -205,6 +205,17 @@ func TestMetalLBReadyBeforePoolCreation(t *testing.T) {
 	}
 }
 
+func TestAPoolMayUseTheExcludedAddressesOfASecondarySubnet(t *testing.T) {
+	f := facts()
+	f.Gateway = addons.OVNGateway{RoutingViaHost: true, IPForwarding: "Global"}
+	f.NodeNetworks[0].Interfaces = append(f.NodeNetworks[0].Interfaces, addons.NodeInterface{Name: "eth1", Addresses: []netip.Prefix{netip.MustParsePrefix("198.51.100.10/24")}})
+	f.SecondaryNetworks = []addons.SecondaryNetwork{{Name: "tenant", Subnets: []netip.Prefix{netip.MustParsePrefix("198.51.100.0/24")}, Excluded: []netip.Prefix{netip.MustParsePrefix("198.51.100.10/32"), netip.MustParsePrefix("198.51.100.80/29"), netip.MustParsePrefix("198.51.100.88/30")}}}
+	p := pool("secondary", "198.51.100.80-198.51.100.90").With("l2", api.MapValue(api.FieldValue{Name: "interface", Value: api.StringValue("eth1")}))
+	if issues := admitPools(addons.Instance{Config: config(p)}, f); len(issues) != 0 {
+		t.Fatalf("a pool inside excluded subnets: %+v", issues)
+	}
+}
+
 func TestPoolInterfaceRequiresFactsForEveryNode(t *testing.T) {
 	f := facts()
 	f.Nodes = []string{"node", "missing"}
@@ -235,10 +246,10 @@ func TestPoolInterfaceAndNetworkRefusalFields(t *testing.T) {
 		}, "lies outside 198.51.100.0/24, the subnet of eth1", ".addresses[0]"},
 		{"default interface", func(f *addons.ClusterFacts, _ *api.Value) { f.NodeNetworks[0].DefaultRouteInterface = "eth1" }, "default-route interface", ".l2.interface"},
 		{"secondary bridge", func(f *addons.ClusterFacts, _ *api.Value) {
-			f.SecondaryNetworks = []addons.SecondaryNetwork{{Name: "tenant", UplinkBridge: "eth1"}}
-		}, "uplink of secondary network tenant", ".l2.interface"},
-		{"uplink of an addressed bridge", func(f *addons.ClusterFacts, _ *api.Value) {
-			f.SecondaryNetworks = []addons.SecondaryNetwork{{Name: "tenant", UplinkInterface: "eth1", UplinkBridge: "br-tenant", HostAddresses: true}}
+			f.SecondaryNetworks = []addons.SecondaryNetwork{{Name: "tenant", Bridge: "eth1"}}
+		}, "bridge interface of secondary network tenant", ".l2.interface"},
+		{"bridge interface of an addressed bridge", func(f *addons.ClusterFacts, _ *api.Value) {
+			f.SecondaryNetworks = []addons.SecondaryNetwork{{Name: "tenant", Interface: "eth1", Bridge: "br-tenant", HostAddresses: true}}
 		}, "whose bridge br-tenant carries its node addresses", ".l2.interface"},
 		{"host routing", func(f *addons.ClusterFacts, _ *api.Value) { f.Gateway.RoutingViaHost = false }, "needs gatewayConfig.routingViaHost: true", ".l2.interface"},
 		{"forwarding", func(f *addons.ClusterFacts, _ *api.Value) { f.Gateway.IPForwarding = "Restricted" }, "needs gatewayConfig.ipForwarding: Global", ".l2.interface"},
@@ -253,6 +264,9 @@ func TestPoolInterfaceAndNetworkRefusalFields(t *testing.T) {
 		}, "the service network", ".addresses[0]"},
 		{"secondary subnet", func(f *addons.ClusterFacts, _ *api.Value) {
 			f.SecondaryNetworks = []addons.SecondaryNetwork{{Name: "tenant", Subnets: []netip.Prefix{netip.MustParsePrefix("198.51.100.64/26")}}}
+		}, "the secondary network tenant", ".addresses[0]"},
+		{"secondary subnet excluded in part", func(f *addons.ClusterFacts, _ *api.Value) {
+			f.SecondaryNetworks = []addons.SecondaryNetwork{{Name: "tenant", Subnets: []netip.Prefix{netip.MustParsePrefix("198.51.100.0/24")}, Excluded: []netip.Prefix{netip.MustParsePrefix("198.51.100.80/29"), netip.MustParsePrefix("198.51.100.88/31")}}}
 		}, "the secondary network tenant", ".addresses[0]"},
 	} {
 		t.Run(test.name, func(t *testing.T) {

@@ -72,7 +72,7 @@ func contractNetworkExample(t *testing.T, resolver capabilityResolver) contractE
 		if network == nil {
 			network = map[string]any{}
 		}
-		network["secondaryNetworks"] = []any{map[string]any{"name": "tenant", "topology": "Localnet", "uplink": map[string]any{"bridge": "br-ex"}, "namespaceSelector": map[string]any{"matchLabels": map[string]any{"tenant": "yes"}}}}
+		network["secondaryNetworks"] = []any{map[string]any{"name": "tenant", "topology": "Localnet", "bridgeMapping": map[string]any{"bridge": "br-ex"}, "namespaceSelector": map[string]any{"matchLabels": map[string]any{"tenant": "yes"}}}}
 		spec["networking"] = network
 		data, err := yaml.Marshal(doc)
 		if err != nil {

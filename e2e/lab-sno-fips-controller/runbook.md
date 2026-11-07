@@ -30,7 +30,7 @@ isolated environments (D231):
 | Node, on its Localnet bridge | `192.0.2.31` on `br-stg` | `203.0.113.31` on `br-prd` |
 | App container on this host | `192.0.2.50` | `203.0.113.50` |
 | MetalLB pool, its IngressController's only | `192.0.2.200`–`.207` | `203.0.113.200`–`.207` |
-| Pod addresses | `192.0.2.0/25` | `203.0.113.0/25` |
+| Pod addresses | the Network less the addresses above | the same |
 
 The node's own network stays `virbr-e2e`, with the default ingress. Bootwright
 builds the secondary networks, the NMState and MetalLB add-ons and the pools,

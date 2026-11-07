@@ -83,7 +83,7 @@ spec:
       - name: multidc-virtual-cluster-machine
         topology: Localnet
 
-        uplink:
+        bridgeMapping:
           bridge: br-ex
 
         mtu: 1500
@@ -98,7 +98,7 @@ spec:
       - name: multidc-virtual-cluster-ceph-public
         topology: Localnet
 
-        uplink:
+        bridgeMapping:
           bridge: br-ceph-public
           interface: bond0.200
           hostAddresses: bridge

@@ -127,7 +127,7 @@ func lineDiff(want, got string) string {
 
 func clusterFixture() api.Object {
 	network := func(name, vlan string) api.Value {
-		return mapping(field("name", text(name)), field("topology", text("Localnet")), field("uplink", mapping(field("interface", text("eth1")), field("bridge", text("br-tenant")))), field("vlan", api.IntegerValue(vlan)), field("ipam", mapping(field("mode", text("Disabled")))), field("namespaceSelector", mapping(field("matchLabels", mapping(field("tenant", text(name)))))))
+		return mapping(field("name", text(name)), field("topology", text("Localnet")), field("bridgeMapping", mapping(field("interface", text("eth1")), field("bridge", text("br-tenant")))), field("vlan", api.IntegerValue(vlan)), field("ipam", mapping(field("mode", text("Disabled")))), field("namespaceSelector", mapping(field("matchLabels", mapping(field("tenant", text(name)))))))
 	}
 	return api.NewObject(api.OpenShiftCluster, "cluster", mapping(), mapping(field("distribution", mapping(field("release", mapping(field("version", text("4.21.15")))))), field("nodes", api.ListValue(mapping(field("name", text("node-a")), field("machineRef", text("machine-a"))), mapping(field("name", text("node-b")), field("machineRef", text("machine-b"))))), field("networking", mapping(field("secondaryNetworks", api.ListValue(network("tenant-a", "10"), network("tenant-b", "20")))))))
 }
@@ -140,7 +140,7 @@ func TestNetworkRequestGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matchesGolden(t, "shared-uplink", data, false)
+	matchesGolden(t, "shared-bridge", data, false)
 	decoded, err := DecodeRequest(data)
 	if err != nil {
 		t.Fatal(err)
@@ -180,7 +180,7 @@ func addressedFixture(hostAddresses string) (api.Object, api.Catalog) {
 	if hostAddresses != "" {
 		uplink = uplink.With("hostAddresses", text(hostAddresses))
 	}
-	network := mapping(field("name", text("tenant")), field("topology", text("Localnet")), field("uplink", uplink), field("vlan", api.IntegerValue("10")), field("ipam", mapping(field("mode", text("Disabled")))), field("namespaceSelector", mapping(field("matchLabels", mapping(field("tenant", text("tenant")))))))
+	network := mapping(field("name", text("tenant")), field("topology", text("Localnet")), field("bridgeMapping", uplink), field("vlan", api.IntegerValue("10")), field("ipam", mapping(field("mode", text("Disabled")))), field("namespaceSelector", mapping(field("matchLabels", mapping(field("tenant", text("tenant")))))))
 	cluster := api.NewObject(api.OpenShiftCluster, "cluster", mapping(), mapping(field("distribution", mapping(field("release", mapping(field("version", text("4.21.15")))))), field("nodes", api.ListValue(mapping(field("name", text("node-a")), field("machineRef", text("machine-a"))), mapping(field("name", text("node-b")), field("machineRef", text("machine-b"))))), field("networking", mapping(field("secondaryNetworks", api.ListValue(network))))))
 	lan := api.NewObject(api.Network, "lan", mapping(), mapping(field("provided", api.BoolValue(true)), field("ipv4", mapping(field("cidr", text("198.51.100.0/24")))), field("ipv6", mapping(field("cidr", text("2001:db8:1::/64"))))))
 	return cluster, api.NewCatalog([]api.Object{
@@ -216,7 +216,7 @@ func TestHostAddressesNoneRendersTheAddresslessBridge(t *testing.T) {
 			t.Fatal(err)
 		}
 		if !bytes.Equal(got.Program, want.Program) {
-			t.Fatalf("hostAddresses %q changed the program of an addressed uplink", placement)
+			t.Fatalf("hostAddresses %q changed the program of an addressed bridge interface", placement)
 		}
 	}
 }
@@ -230,20 +230,59 @@ func TestAddressedBridgePolicyShape(t *testing.T) {
 		if len(issues) > 0 {
 			t.Fatal(issues)
 		}
-		return nodePolicy(machineName, networks, native).Body.Get("spec", "desiredState", "interfaces").Items()
+		return nodePolicy(api.MapValue(field("name", text(machineName)), field("machineRef", text(machineName))), networks, native).Body.Get("spec", "desiredState", "interfaces").Items()
 	}
 	b := policy("machine-b")
 	if len(b) != 1 || b[0].Get("bridge", "port").Len() != 1 {
-		t.Fatalf("a node with no uplink address renders the plain bridge: %v", b)
+		t.Fatalf("a node with no bridge-interface address renders the plain bridge: %v", b)
 	}
 	a := policy("machine-a")
 	if len(a) != 3 || a[0].Get("type").Text() != "ovs-bridge" || a[1].Get("type").Text() != "ovs-interface" || a[2].Get("name").Text() != "eth1" {
-		t.Fatalf("an addressed node renders bridge, bridge interface and restated uplink in name order: %v", a)
+		t.Fatalf("an addressed node renders bridge, bridge interface and restated port in name order: %v", a)
 	}
 	if a[0].Get("bridge", "port").Len() != 2 || a[1].Get("copy-mac-from").Text() != "eth1" || a[1].Get("ipv4", "address").Len() != 1 || a[1].Get("ipv6", "address").Len() != 1 {
 		t.Fatalf("bridge interface: %v", a[1])
 	}
 	if a[2].Get("ipv4", "enabled").Bool() || a[2].Get("ipv6", "enabled").Bool() || a[2].Get("ipv4", "address").Present() {
-		t.Fatalf("restated uplink: %v", a[2])
+		t.Fatalf("restated port: %v", a[2])
+	}
+}
+
+func TestABridgeInterfaceOverridesTheClusterInterfaceOnItsNode(t *testing.T) {
+	cluster := clusterFixture()
+	nodes := cluster.Spec().Get("nodes").Items()
+	nodes[1] = nodes[1].With("bridgeInterfaces", api.ListValue(mapping(field("networkRef", text("tenant-a")), field("interface", text("ens5"))), mapping(field("networkRef", text("tenant-b")), field("interface", text("ens5")))))
+	cluster = cluster.WithSpec(cluster.Spec().With("nodes", api.ListValue(nodes...)))
+	program, err := Render(cluster, noMachines)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ports := map[string]string{}
+	for _, step := range program.Steps {
+		if step.Create == nil || step.Create.Kind != "NodeNetworkConfigurationPolicy" {
+			continue
+		}
+		var body struct {
+			Spec struct {
+				DesiredState struct {
+					Interfaces []struct {
+						Bridge struct {
+							Port []struct{ Name string } `json:"port"`
+						} `json:"bridge"`
+					} `json:"interfaces"`
+				} `json:"desiredState"`
+			} `json:"spec"`
+		}
+		if err := json.Unmarshal(step.Create.Body, &body); err != nil {
+			t.Fatal(err)
+		}
+		interfaces := body.Spec.DesiredState.Interfaces
+		if len(interfaces) != 1 || len(interfaces[0].Bridge.Port) != 1 {
+			t.Fatalf("%s: %+v", step.Create.Name, interfaces)
+		}
+		ports[step.Create.Name] = interfaces[0].Bridge.Port[0].Name
+	}
+	if ports["bootwright-node-a"] != "eth1" || ports["bootwright-node-b"] != "ens5" {
+		t.Fatalf("bridge ports = %v", ports)
 	}
 }

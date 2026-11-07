@@ -1134,7 +1134,8 @@ package's configuration ([B727](milestones/m4.md#b727)), never the cluster's.
 
 For each node it applies one `NodeNetworkConfigurationPolicy`,
 `bootwright-<node>`, selecting that node by `kubernetes.io/hostname`, holding an
-OVS bridge for each dedicated uplink (with `allow-extra-patch-ports: true`) and
+OVS bridge over that node's bridge interface for each new bridge (with
+`allow-extra-patch-ports: true`) and
 one `ovn.bridge-mappings` entry per network, and waits for each to report
 `Available`. It then applies one `ClusterUserDefinedNetwork` per network, of
 topology `Localnet`, role `Secondary` and `physicalNetworkName` equal to the
@@ -1142,15 +1143,14 @@ network's name, and waits for `NetworkCreated`; OVN-Kubernetes renders a
 `NetworkAttachmentDefinition` of the same name into every namespace the
 network's selector matches, so pods and VMs attach by that name.
 
-On a bridge whose networks declare `uplink.hostAddresses: bridge`, the node's
-policy also lists the bridge's internal port among the bridge's ports, holds an
-`ovs-interface` of the bridge's name with DHCP and autoconf off carrying exactly
-the static addresses that node's Machine declares on the uplink, the uplink's
-declared MTU and `copy-mac-from` the uplink, so neighbours keep the node's
-hardware address, and restates the uplink with both address families disabled.
-This is the shape OpenShift documents for `br-ex`; nothing else of the node's
-network changes. A node that declares no address on the uplink gets the bridge
-as under `none`, without the internal port.
+On a bridge whose networks declare `bridgeMapping.hostAddresses: bridge`, the
+policy also lists the bridge's internal port, holds an `ovs-interface` of the
+bridge's name, DHCP and autoconf off, with exactly the static addresses the
+Machine declares on the bridge interface, its declared MTU and `copy-mac-from`
+it, so neighbours keep the node's hardware address, and restates the bridge
+interface with both families disabled: the shape OpenShift documents for
+`br-ex`; nothing else changes. A node with no address there gets the bridge as
+under `none`, without the internal port.
 
 Every object is created through the
 [cluster object program](add-ons.md#the-cluster-object-program) under its

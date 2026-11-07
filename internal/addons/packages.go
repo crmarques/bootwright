@@ -117,10 +117,30 @@ type OVNGateway struct {
 	IPForwarding   string
 }
 type SecondaryNetwork struct {
-	Name, UplinkInterface, UplinkBridge string
-	HostAddresses                       bool
-	Subnets                             []netip.Prefix
+	Name, Bridge, Interface string
+	NodeInterfaces          map[string]string
+	HostAddresses           bool
+	Subnets, Excluded       []netip.Prefix
 }
+
+func (n SecondaryNetwork) InterfaceOn(machine string) string {
+	if iface, ok := n.NodeInterfaces[machine]; ok {
+		return iface
+	}
+	return n.Interface
+}
+
+func (n SecondaryNetwork) Interfaces() []string {
+	interfaces := []string{n.Interface}
+	for _, iface := range n.NodeInterfaces {
+		if !slices.Contains(interfaces, iface) {
+			interfaces = append(interfaces, iface)
+		}
+	}
+	slices.Sort(interfaces)
+	return interfaces
+}
+
 type Rendered struct {
 	SubscriptionConfig *clusterobjects.SubscriptionConfig
 	Before, After      []clusterobjects.Phase

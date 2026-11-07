@@ -59,7 +59,8 @@ func openShiftClusterSchema() *Shape {
 	taint := record(required("key", nonempty()), field("value", text()), required("effect", enumeration("NoSchedule", "PreferNoSchedule", "NoExecute")))
 	taints := array(taint)
 	taints.ComparisonKeys = []string{"key", "effect"}
-	node := record(required("name", name()), field("fqdn", dns()), required("role", enumeration("controlPlane", "worker", "infra")), required("machineRef", ref(Machine)), field("labels", stringsMap()), field("taints", taints))
+	bridgeInterfaces := &Shape{Type: Sequence, Atomic: true, NameKey: "networkRef", Element: record(required("networkRef", nestedIn(Scope{Noun: "secondary network", Entries: []string{"networking", "secondaryNetworks"}})), required("interface", lexical("ifname")))}
+	node := record(required("name", name()), field("fqdn", dns()), required("role", enumeration("controlPlane", "worker", "infra")), required("machineRef", ref(Machine)), field("labels", stringsMap()), field("taints", taints), field("bridgeInterfaces", bridgeInterfaces))
 	distribution := record(defaulted("type", enumeration("openshift", "okd"), StringValue("openshift")), required("release", record(field("version", nonempty()), field("channel", nonempty()), field("image", image()))))
 	distribution.Suppress = []Suppression{{Field: "type", Value: StringValue("okd"), Fields: []string{"release.channel"}}}
 	return record(
@@ -75,5 +76,5 @@ func ovnKubernetesSchema() *Shape {
 	return record(field("mtu", integer("576", "65536")), field("gatewayConfig", record(field("routingViaHost", boolean()), field("ipForwarding", enumeration("Restricted", "Global")))))
 }
 func secondaryNetworksSchema() *Shape {
-	return named(record(required("name", name()), required("topology", enumeration("Localnet")), required("uplink", record(required("bridge", lexical("ifname")), field("interface", lexical("ifname")), field("hostAddresses", enumeration("none", "bridge")))), field("vlan", integer("1", "4094")), field("mtu", integer("576", "65536")), defaulted("ipam", record(defaulted("mode", enumeration("Disabled", "Enabled"), StringValue("Disabled")), field("subnets", array(cidr())), field("excludeSubnets", array(cidr())), field("lifecycle", enumeration("Persistent"))), MapValue()), required("namespaceSelector", record(required("matchLabels", stringsMap())))))
+	return named(record(required("name", name()), required("topology", enumeration("Localnet")), required("bridgeMapping", record(required("bridge", lexical("ifname")), field("interface", lexical("ifname")), field("hostAddresses", enumeration("none", "bridge")))), field("vlan", integer("1", "4094")), field("mtu", integer("576", "65536")), defaulted("ipam", record(defaulted("mode", enumeration("Disabled", "Enabled"), StringValue("Disabled")), field("subnets", array(cidr())), field("excludeSubnets", array(cidr())), field("lifecycle", enumeration("Persistent"))), MapValue()), required("namespaceSelector", record(required("matchLabels", stringsMap())))))
 }

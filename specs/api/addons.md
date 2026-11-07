@@ -461,11 +461,10 @@ announcer there.
 
 The named interface is never a node's default-route interface or `br-ex`,
 because OVN-Kubernetes builds `br-ex` from the install interface. It is never
-a secondary network's uplink interface, and names a secondary network's bridge
-only when that network's
-[`uplink.hostAddresses`](openshift-clusters.md#secondary-networks) is
+a secondary network's bridge interface, and names its bridge only when its
+[`bridgeMapping.hostAddresses`](openshift-clusters.md#secondary-networks) is
 `bridge`: the bridge then carries the addresses the nodes declare on the
-uplink, so the pool's subnet is theirs, and the pool shares its VLAN with the
+bridge interface, so the pool's subnet is theirs, and the pool shares its VLAN with the
 network's workloads, whose routing caveat toward a pool on their own subnet is
 in [knowledge](../../.agents/knowledge/metallb-on-openshift.md).
 
@@ -486,7 +485,7 @@ A pool includes none of these addresses:
 - the IPv4 network or broadcast address of its subnet.
 
 A pool also overlaps no other pool, no cluster or service network, and no
-secondary network's subnets. Pools change only when the cluster is applied
+secondary network's subnets outside its `excludeSubnets`. Pools change only when the cluster is applied
 again after a destroy.
 
 #### Service allocation
@@ -664,12 +663,12 @@ its own indexed field:
 | Announcer off the network | `api.invariant` | `$.spec.packages.metallb.pools[<i>].addresses[<j>]` | `node <machine> of OpenShiftCluster/<cluster> has no address in <network>, the network of pool <pool>, so it cannot answer for the pool on layer 2` | `assign Machine/<machine> an address in <network>, or name the interface whose subnet holds the pool under l2.interface` |
 | Pool spans networks | `api.invariant` | `$.spec.packages.metallb.pools[<i>].addresses` | `pool <pool> spans <network> and <network>` | `split the pool so that each pool lies inside one network` |
 | Interface missing on a node | `api.invariant` | `$.spec.packages.metallb.pools[<i>].l2.interface` | `interface <interface> of pool <pool> is not declared on node <machine> of OpenShiftCluster/<cluster>` | `declare <interface> on every node of <cluster>, or omit l2.interface` |
-| Interface without an address | `api.invariant` | as above | `interface <interface> of pool <pool> carries no <family> address on node <machine>` | `assign <declared> an address in the pool's subnet on every node through network.addresses`, where `<declared>` is the interface, or the uplink of a bridge that carries its uplink's addresses |
+| Interface without an address | `api.invariant` | as above | `interface <interface> of pool <pool> carries no <family> address on node <machine>` | `assign <declared> an address in the pool's subnet on every node through network.addresses`, where `<declared>` is the interface, or the node's bridge interface of a bridge that carries its addresses |
 | Interface on several subnets | `api.invariant` | as above | `interface <interface> of pool <pool> is on <subnet> on node <machine> and on <subnet> on node <machine>` | `assign every node's <interface> address in one subnet` |
 | Outside the interface subnet | `api.invariant` | `$.spec.packages.metallb.pools[<i>].addresses[<j>]` | `address <entry> of pool <pool> lies outside <subnet>, the subnet of <interface>` | `use addresses inside <subnet>` |
 | Default-route interface | `api.invariant` | `$.spec.packages.metallb.pools[<i>].l2.interface` | `interface <interface> of pool <pool> is the default-route interface of node <machine> or br-ex` | `omit l2.interface to announce a pool on the machine network` |
-| Secondary-network uplink | `api.invariant` | as above | `interface <interface> of pool <pool> is the uplink of secondary network <network>, which carries no host address` | `name an interface that carries a node address, or omit l2.interface` |
-| Uplink of an addressed bridge | `api.invariant` | as above | `interface <interface> of pool <pool> is the uplink of secondary network <network>, whose bridge <bridge> carries its node addresses` | `set l2.interface to <bridge>` |
+| Secondary-network bridge interface | `api.invariant` | as above | `interface <interface> of pool <pool> is the bridge interface of secondary network <network>, which carries no host address` | `name an interface that carries a node address, or omit l2.interface` |
+| Bridge interface of an addressed bridge | `api.invariant` | as above | `interface <interface> of pool <pool> is the bridge interface of secondary network <network>, whose bridge <bridge> carries its node addresses` | `set l2.interface to <bridge>` |
 | No host routing | `api.invariant` | as above | `pool <pool> announces on <interface>, which needs gatewayConfig.routingViaHost: true on OpenShiftCluster/<cluster>` | `set spec.networking.ovnKubernetesConfig.gatewayConfig.routingViaHost: true on <cluster>, or omit l2.interface` |
 | No forwarding | `api.invariant` | as above | `pool <pool> announces on <interface>, which needs gatewayConfig.ipForwarding: Global on OpenShiftCluster/<cluster>` | `set spec.networking.ovnKubernetesConfig.gatewayConfig.ipForwarding: Global on <cluster>, or omit l2.interface` |
 | Held address | `api.invariant` | `$.spec.packages.metallb.pools[<i>].addresses[<j>]` | `address <entry> of pool <pool> includes <address>, held by <holder>` | `exclude <address> from the pool` |

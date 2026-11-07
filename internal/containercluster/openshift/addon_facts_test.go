@@ -87,13 +87,13 @@ func TestAddonFactsComposeNodeInterfacesAndRoutes(t *testing.T) {
 func TestAddonFactsCarryGatewayAndSecondaryNetworks(t *testing.T) {
 	cluster, catalog := fixture("libvirt", 1, false)
 	cluster, _ = Normalize(cluster, catalog)
-	cluster = cluster.WithSpec(cluster.Spec().WithPath(m("routingViaHost", true, "ipForwarding", "Global"), "networking", "ovnKubernetesConfig", "gatewayConfig").WithPath(list(m("name", "secondary", "uplink", m("interface", "eth1", "bridge", "br-storage"), "ipam", m("mode", "Enabled", "subnets", api.StringList("203.0.113.0/24")))), "networking", "secondaryNetworks"))
+	cluster = cluster.WithSpec(cluster.Spec().WithPath(m("routingViaHost", true, "ipForwarding", "Global"), "networking", "ovnKubernetesConfig", "gatewayConfig").WithPath(list(m("name", "secondary", "bridgeMapping", m("interface", "eth1", "bridge", "br-storage"), "ipam", m("mode", "Enabled", "subnets", api.StringList("203.0.113.0/24")))), "networking", "secondaryNetworks"))
 	facts := AddonFacts(api.NewCatalog(append(catalog.Objects(), cluster)), cluster.Name())
 	if !facts.Gateway.RoutingViaHost || facts.Gateway.IPForwarding != "Global" || len(facts.SecondaryNetworks) != 1 {
 		t.Fatalf("network settings: %+v", facts)
 	}
 	secondary := facts.SecondaryNetworks[0]
-	if secondary.Name != "secondary" || secondary.UplinkInterface != "eth1" || secondary.UplinkBridge != "br-storage" || !slices.Equal(secondary.Subnets, []netip.Prefix{netip.MustParsePrefix("203.0.113.0/24")}) {
+	if secondary.Name != "secondary" || secondary.Interface != "eth1" || secondary.Bridge != "br-storage" || !slices.Equal(secondary.Subnets, []netip.Prefix{netip.MustParsePrefix("203.0.113.0/24")}) {
 		t.Fatalf("secondary: %+v", secondary)
 	}
 	cluster = cluster.WithSpec(cluster.Spec().WithPath(api.StringValue("Restricted"), "networking", "ovnKubernetesConfig", "gatewayConfig", "ipForwarding"))
@@ -163,8 +163,8 @@ func TestAddonFactsGatewayAndSecondaryNetworkTable(t *testing.T) {
 		{name: "absent"},
 		{name: "host routing", gateway: m("routingViaHost", true), routing: true},
 		{name: "global forwarding", gateway: m("routingViaHost", true, "ipForwarding", "Global"), routing: true, forwarding: "Global"},
-		{name: "default bridge", networks: list(m("name", "external", "uplink", m("bridge", "br-ex"), "ipam", m("mode", "Disabled")))},
-		{name: "dedicated bridge IPAM", networks: list(m("name", "external", "uplink", m("bridge", "br-secondary", "interface", "eth1"), "ipam", m("mode", "Enabled", "subnets", api.StringList("203.0.113.0/24")))), subnets: 1},
+		{name: "default bridge", networks: list(m("name", "external", "bridgeMapping", m("bridge", "br-ex"), "ipam", m("mode", "Disabled")))},
+		{name: "dedicated bridge IPAM", networks: list(m("name", "external", "bridgeMapping", m("bridge", "br-secondary", "interface", "eth1"), "ipam", m("mode", "Enabled", "subnets", api.StringList("203.0.113.0/24")))), subnets: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cluster, catalog := fixture("libvirt", 3, false)
@@ -185,7 +185,7 @@ func TestAddonFactsGatewayAndSecondaryNetworkTable(t *testing.T) {
 			if tc.networks.Len() > 0 {
 				n := facts.SecondaryNetworks[0]
 				input := tc.networks.Items()[0]
-				if n.Name != "external" || n.UplinkBridge != input.Get("uplink", "bridge").Text() || n.UplinkInterface != input.Get("uplink", "interface").Text() || len(n.Subnets) != tc.subnets {
+				if n.Name != "external" || n.Bridge != input.Get("bridgeMapping", "bridge").Text() || n.Interface != input.Get("bridgeMapping", "interface").Text() || len(n.Subnets) != tc.subnets {
 					t.Fatal(n)
 				}
 			}
@@ -284,9 +284,9 @@ func TestMetalLBPoolNamesTheBridgeThatCarriesTheUplinkAddresses(t *testing.T) {
 	}{
 		{"bridge of a Bridge network", "bridge", 1, "br-storage", "", "", addressed},
 		{"bridge shared by two Bridge networks", "bridge", 2, "br-storage", "", "", addressed},
-		{"uplink of a Bridge network", "bridge", 1, "eth1", "is the uplink of secondary network storage0, whose bridge br-storage carries its node addresses", "set l2.interface to br-storage", addressed},
+		{"uplink of a Bridge network", "bridge", 1, "eth1", "is the bridge interface of secondary network storage0, whose bridge br-storage carries its node addresses", "set l2.interface to br-storage", addressed},
 		{"bridge of a Bridge network over an addressless uplink", "bridge", 1, "br-storage", "interface br-storage of pool services carries no ipv4 address", "assign eth1 an address in the pool's subnet", objectsWith(primary)},
-		{"bridge of a None network", "none", 1, "br-storage", "is the uplink of secondary network storage0, which carries no host address", "name an interface that carries a node address", addressed},
+		{"bridge of a None network", "none", 1, "br-storage", "is the bridge interface of secondary network storage0, which carries no host address", "name an interface that carries a node address", addressed},
 		{"uplink of a None network", "", 1, "eth1", "which carries no host address", "name an interface that carries a node address", addressed},
 	} {
 		objects := test.objects
@@ -297,7 +297,7 @@ func TestMetalLBPoolNamesTheBridgeThatCarriesTheUplinkAddresses(t *testing.T) {
 				if test.hostAddresses != "" {
 					uplink = uplink.With("hostAddresses", api.StringValue(test.hostAddresses))
 				}
-				networks = append(networks, m("name", fmt.Sprintf("storage%d", i), "uplink", uplink, "ipam", m("mode", "Disabled")))
+				networks = append(networks, m("name", fmt.Sprintf("storage%d", i), "bridgeMapping", uplink, "ipam", m("mode", "Disabled")))
 			}
 			cluster, _ := Normalize(cluster, api.NewCatalog(objects))
 			cluster = cluster.WithSpec(cluster.Spec().WithPath(m("routingViaHost", true, "ipForwarding", "Global"), "networking", "ovnKubernetesConfig", "gatewayConfig").WithPath(list(networks...), "networking", "secondaryNetworks"))

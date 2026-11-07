@@ -8,6 +8,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	co "github.com/crmarques/bootwright/internal/addons/clusterobjects"
+	"github.com/crmarques/bootwright/internal/containercluster/openshift"
 	"github.com/crmarques/bootwright/internal/machine"
 )
 
@@ -34,12 +35,11 @@ func Render(cluster api.Object, catalog api.Catalog) (co.Program, error) {
 	policies := co.Phase{Gate: []co.Check{crd("nodenetworkconfigurationpolicies.nmstate.io")}}
 	networkPhase := co.Phase{Gate: []co.Check{crd("clusteruserdefinednetworks.k8s.ovn.org")}}
 	for _, node := range cluster.Spec().Get("nodes").Items() {
-		name := node.Get("name").Text()
 		var native api.Value
 		if bound, found := catalog.Find(api.Machine, node.Get("machineRef").Text()); found {
 			native, _ = machine.ComposeNetwork(bound, catalog)
 		}
-		policy := nodePolicy(name, networks, native)
+		policy := nodePolicy(node, networks, native)
 		policies.Objects = append(policies.Objects, policy)
 		check := condition(policy.Ref, "Available")
 		check.Condition.FailOn = []co.Failure{{Type: "Degraded", Status: "True"}, {Type: "Ignored", Status: "True", Reason: "NoMatchingNode"}}
@@ -64,20 +64,20 @@ func Render(cluster api.Object, catalog api.Catalog) (co.Program, error) {
 	}
 	return program, nil
 }
-func nodePolicy(node string, networks []api.Value, native api.Value) co.Object {
+func nodePolicy(node api.Value, networks []api.Value, native api.Value) co.Object {
 	interfaces := []api.Value{}
 	mappings := []api.Value{}
 	seen := map[string]bool{}
 	for _, network := range networks {
-		uplink := network.Get("uplink")
-		bridge := uplink.Get("bridge").Text()
-		iface := uplink.Get("interface").Text()
+		mapped := network.Get("bridgeMapping")
+		bridge := mapped.Get("bridge").Text()
+		iface := openshift.BridgeInterface(node, network)
 		if iface != "" && !seen[bridge] {
 			seen[bridge] = true
 			ports := []api.Value{mapping(field("name", text(iface)))}
-			if nic, addressed := addressedInterface(native, iface); addressed && uplink.Get("hostAddresses").Text() == "bridge" {
+			if nic, addressed := addressedInterface(native, iface); addressed && mapped.Get("hostAddresses").Text() == "bridge" {
 				ports = append(ports, mapping(field("name", text(bridge))))
-				interfaces = append(interfaces, bridgeInterface(bridge, nic), restatedUplink(nic))
+				interfaces = append(interfaces, bridgeInterface(bridge, nic), restatedPort(nic))
 			}
 			interfaces = append(interfaces, mapping(field("name", text(bridge)), field("type", text("ovs-bridge")), field("state", text("up")), field("bridge", mapping(field("allow-extra-patch-ports", api.BoolValue(true)), field("options", mapping(field("stp", api.BoolValue(false)), field("mcast-snooping-enable", api.BoolValue(true)))), field("port", api.ListValue(ports...))))))
 		}
@@ -90,7 +90,7 @@ func nodePolicy(node string, networks []api.Value, native api.Value) co.Object {
 	if len(interfaces) > 0 {
 		desired = desired.With("interfaces", api.ListValue(interfaces...))
 	}
-	return object("nmstate.io/v1", "NodeNetworkConfigurationPolicy", "bootwright-"+node, mapping(field("nodeSelector", mapping(field("kubernetes.io/hostname", text(node)))), field("desiredState", desired)))
+	return object("nmstate.io/v1", "NodeNetworkConfigurationPolicy", "bootwright-"+node.Get("name").Text(), mapping(field("nodeSelector", mapping(field("kubernetes.io/hostname", node.Get("name")))), field("desiredState", desired)))
 }
 
 func addressedInterface(native api.Value, name string) (api.Value, bool) {
@@ -102,10 +102,10 @@ func addressedInterface(native api.Value, name string) (api.Value, bool) {
 	return api.Value{}, false
 }
 
-func bridgeInterface(bridge string, uplink api.Value) api.Value {
-	nic := mapping(field("name", text(bridge)), field("type", text("ovs-interface")), field("state", text("up")), field("copy-mac-from", uplink.Get("name")), field("ipv4", addressFamily(uplink.Get("ipv4", "address"), false)), field("ipv6", addressFamily(uplink.Get("ipv6", "address"), true)))
-	if uplink.Has("mtu") {
-		nic = nic.With("mtu", uplink.Get("mtu"))
+func bridgeInterface(bridge string, port api.Value) api.Value {
+	nic := mapping(field("name", text(bridge)), field("type", text("ovs-interface")), field("state", text("up")), field("copy-mac-from", port.Get("name")), field("ipv4", addressFamily(port.Get("ipv4", "address"), false)), field("ipv6", addressFamily(port.Get("ipv6", "address"), true)))
+	if port.Has("mtu") {
+		nic = nic.With("mtu", port.Get("mtu"))
 	}
 	return nic
 }
@@ -121,9 +121,9 @@ func addressFamily(addresses api.Value, autoconf bool) api.Value {
 	return family.With("address", addresses)
 }
 
-func restatedUplink(uplink api.Value) api.Value {
+func restatedPort(port api.Value) api.Value {
 	disabled := mapping(field("enabled", api.BoolValue(false)))
-	return mapping(field("name", uplink.Get("name")), field("type", uplink.Get("type")), field("state", text("up")), field("ipv4", disabled), field("ipv6", disabled))
+	return mapping(field("name", port.Get("name")), field("type", port.Get("type")), field("state", text("up")), field("ipv4", disabled), field("ipv6", disabled))
 }
 func userNetwork(n api.Value) co.Object {
 	ipam := n.Get("ipam")

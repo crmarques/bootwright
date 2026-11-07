@@ -74,11 +74,24 @@ func AddonFacts(catalog api.Catalog, name string) addons.ClusterFacts {
 	gateway := spec.Get("networking", "ovnKubernetesConfig", "gatewayConfig")
 	facts.Gateway = addons.OVNGateway{RoutingViaHost: gateway.Get("routingViaHost").Bool(), IPForwarding: gateway.Get("ipForwarding").Text()}
 	for _, network := range spec.Get("networking", "secondaryNetworks").Items() {
-		entry := addons.SecondaryNetwork{Name: network.Get("name").Text(), UplinkInterface: network.Get("uplink", "interface").Text(), UplinkBridge: network.Get("uplink", "bridge").Text(), HostAddresses: network.Get("uplink", "hostAddresses").Text() == "bridge"}
+		entry := addons.SecondaryNetwork{Name: network.Get("name").Text(), Interface: network.Get("bridgeMapping", "interface").Text(), Bridge: network.Get("bridgeMapping", "bridge").Text(), HostAddresses: network.Get("bridgeMapping", "hostAddresses").Text() == "bridge"}
+		for _, node := range spec.Get("nodes").Items() {
+			if iface := BridgeInterface(node, network); iface != entry.Interface {
+				if entry.NodeInterfaces == nil {
+					entry.NodeInterfaces = map[string]string{}
+				}
+				entry.NodeInterfaces[node.Get("machineRef").Text()] = iface
+			}
+		}
 		if network.Get("ipam", "mode").Text() == "Enabled" {
 			for _, raw := range network.Get("ipam", "subnets").Strings() {
 				if p, e := netip.ParsePrefix(raw); e == nil {
 					entry.Subnets = append(entry.Subnets, p.Masked())
+				}
+			}
+			for _, raw := range network.Get("ipam", "excludeSubnets").Strings() {
+				if p, e := netip.ParsePrefix(raw); e == nil {
+					entry.Excluded = append(entry.Excluded, p.Masked())
 				}
 			}
 		}
@@ -98,14 +111,14 @@ func AddonFacts(catalog api.Catalog, name string) addons.ClusterFacts {
 }
 
 func moveToBridge(node addons.NodeNetwork, network addons.SecondaryNetwork) addons.NodeNetwork {
-	if slices.ContainsFunc(node.Interfaces, func(nic addons.NodeInterface) bool { return nic.Name == network.UplinkBridge }) {
+	if slices.ContainsFunc(node.Interfaces, func(nic addons.NodeInterface) bool { return nic.Name == network.Bridge }) {
 		return node
 	}
 	node.Interfaces = slices.Clone(node.Interfaces)
 	for i, nic := range node.Interfaces {
-		if nic.Name == network.UplinkInterface {
+		if nic.Name == network.InterfaceOn(node.Machine) {
 			node.Interfaces[i].Addresses = nil
-			node.Interfaces = append(node.Interfaces, addons.NodeInterface{Name: network.UplinkBridge, Type: "ovs-interface", Addresses: nic.Addresses})
+			node.Interfaces = append(node.Interfaces, addons.NodeInterface{Name: network.Bridge, Type: "ovs-interface", Addresses: nic.Addresses})
 			break
 		}
 	}

@@ -14,7 +14,7 @@ prerequisites to the consuming M3d run.
   logical CPUs, 88 GiB available memory and 640 GiB pool disk, plus media
   space.
 - Each node has three NICs: `enp1s0` on the machine network, an addressless
-  `enp2s0` localnet uplink on `lab-secondary`, and a statically addressed
+  `enp2s0` localnet bridge interface on `lab-secondary`, and a statically addressed
   `enp3s0` on `lab-routed` (192.0.2.128/25).
 - `infra/networks/` declares the three networks as
   [`Network`](../../../specs/api/networks.md) objects that `lab-libvirt`

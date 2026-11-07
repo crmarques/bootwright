@@ -87,7 +87,7 @@ func networkJourney(t *testing.T) (*lifecycle.CapabilityJourney, *networkAdapter
 	cluster := api.NewObject(api.OpenShiftCluster, installedCluster, api.Value{}, api.MapValue(
 		field("nodes", api.ListValue(api.MapValue(field("name", api.StringValue("sno-01"))))),
 		field("networking", api.MapValue(field("secondaryNetworks", api.ListValue(api.MapValue(
-			field("name", api.StringValue("tenant")), field("uplink", api.MapValue(field("bridge", api.StringValue("br-ex")))), field("namespaceSelector", api.MapValue(field("matchLabels", api.MapValue(field("tenant", api.StringValue("yes"))))))))))),
+			field("name", api.StringValue("tenant")), field("bridgeMapping", api.MapValue(field("bridge", api.StringValue("br-ex")))), field("namespaceSelector", api.MapValue(field("matchLabels", api.MapValue(field("tenant", api.StringValue("yes"))))))))))),
 	))
 	program, err := networking.Render(cluster, api.NewCatalog(nil))
 	if err != nil {

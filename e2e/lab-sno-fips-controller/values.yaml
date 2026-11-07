@@ -64,11 +64,11 @@ security:
 # trunk bridge, one VLAN interface per environment and one app container per
 # environment on this host (runbook.md, step 6); Bootwright names the bridge
 # as an existing-bridge segment and gives sno-01 a second NIC on it. On the node,
-# each VLAN interface is the uplink of its environment's Localnet bridge, which
-# carries the node's address there, so that environment's MetalLB pool
-# announces on it and its IngressController takes its address from it. Pods
-# draw from podSubnet, which holds neither the pool nor the host app. The
-# workload manifests under workloads/ assume these defaults.
+# each VLAN interface is the bridge interface of its environment's Localnet
+# bridge, which carries the node's address there, so that environment's MetalLB
+# pool announces on it and its IngressController takes its address from it.
+# Pods draw from the environment's cidr less the gateway, node, app and pool
+# addresses. The workload manifests under workloads/ assume these defaults.
 environments:
   enabled: true
 
@@ -84,8 +84,7 @@ environments:
     gatewayAddress: 192.0.2.1
     nodeAddress: 192.0.2.31
     appAddress: 192.0.2.50
-    podSubnet: 192.0.2.0/25
-    pool: 192.0.2.200-192.0.2.207
+    pool: 192.0.2.200/29
 
   production:
     vlan: 20
@@ -95,8 +94,7 @@ environments:
     gatewayAddress: 203.0.113.1
     nodeAddress: 203.0.113.31
     appAddress: 203.0.113.50
-    podSubnet: 203.0.113.0/25
-    pool: 203.0.113.200-203.0.113.207
+    pool: 203.0.113.200/29
 
 # The operators' OLM channel and exact CSV, read from the release's operator
 # catalog before rendering (runbook.md, step 2). The render fails until both

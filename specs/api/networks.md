@@ -109,15 +109,12 @@ fabric carriage and Ceph networks:
 
 - **Interface assignments** (Machine, at `spec.network.addresses[].address`):
   every [interface assignment](machines.md#addresses-and-access) lies in
-  exactly one Network of its family, scoped to the Machine's `placement.site`
-  when it has one, and takes that Network's prefix: the composed NMState
-  `prefix-length`, the Kickstart netmask, the install-address checks and the
-  node subnets read it.
-- **VLAN agreement** (Machine, at `spec.network.addresses[].interface`): when
-  the assigned interface's composed NMState stack carries a VLAN, itself or
-  along a bridge or bond port path (from an `ovs-interface` through its
-  bridge's other ports), every such `vlan.id` equals the Network's `vlan`, and
-  a Network without `vlan` refuses a tagged stack.
+  exactly one Network of its family, scoped to the Machine's `placement.site`,
+  and takes its prefix, which NMState, Kickstart and the node subnets read.
+- **VLAN agreement** (Machine, at `spec.network.addresses[].interface`): every
+  VLAN in the assigned interface's stack, itself or along a bridge or bond port
+  path, has the Network's `vlan` as its `vlan.id`; a Network without `vlan`
+  refuses a tagged stack.
 - **Carriage** (Machine, at the same field): each NIC under the assigned
   interface sits on a [segment](machines.md#machine-profiles-and-segments)
   that carries the Network tagged when a VLAN lies on the path to it, else
@@ -142,6 +139,11 @@ fabric carriage and Ceph networks:
   `spec.networking.clusterNetwork[].cidr` and `serviceNetwork[]`): no overlay
   overlaps a Network CIDR, beside the
   [node subnet overlaps](openshift-clusters.md#networking).
+- **Secondary networks** (OpenShiftCluster, at
+  `spec.networking.secondaryNetworks[]`): on every node the bridge
+  interface's NICs sit on a segment carrying one Network, which `vlan` selects
+  and each enabled `ipam.subnets` entry equals
+  ([secondary networks](openshift-clusters.md#secondary-networks)).
 - **Ceph networks** (CephCluster, at `spec.networks.publicCIDRs[]` and
   `clusterCIDRs[]`): every entry equals the CIDR of a declared Network
   ([D240](../milestones/backlog.md#d240) (11)).
