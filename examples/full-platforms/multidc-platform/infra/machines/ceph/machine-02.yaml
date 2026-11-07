@@ -26,15 +26,19 @@ spec:
       nics:
         - nicRef: nic0
           macAddress: 02:00:00:00:00:04
+          segmentRef: ceph-network
 
         - nicRef: nic1
           macAddress: 02:00:00:00:00:05
+          segmentRef: ceph-network
 
         - nicRef: nic2
           macAddress: 02:00:00:00:00:06
+          segmentRef: ceph-network
 
         - nicRef: nic3
           macAddress: 02:00:00:00:00:07
+          segmentRef: ceph-network
 
   os:
     provided: false

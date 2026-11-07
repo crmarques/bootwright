@@ -26,8 +26,9 @@ spec:
         tpm:
           persistent: true
 
-  networkAttachments:
+  segments:
     - name: hub-vm-machine
+      untaggedNetworkRef: machine
 
       kubevirt:
         networkRef:
@@ -36,6 +37,7 @@ spec:
           name: multidc-virtual-cluster-machine
 
     - name: hub-vm-ceph-public
+      untaggedNetworkRef: ceph-public
 
       kubevirt:
         networkRef:

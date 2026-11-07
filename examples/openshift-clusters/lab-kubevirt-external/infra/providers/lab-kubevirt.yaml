@@ -15,8 +15,9 @@ spec:
         memoryMiB: 16384
         diskGiB: 120
 
-  networkAttachments:
+  segments:
     - name: lab-guests
+      untaggedNetworkRef: lab-guests
       kubevirt:
         networkRef:
           apiGroup: k8s.cni.cncf.io

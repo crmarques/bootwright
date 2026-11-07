@@ -63,7 +63,7 @@ security:
 # Two isolated environments on one VLAN trunk (D231). The case builds the
 # trunk bridge, one VLAN interface per environment and one app container per
 # environment on this host (runbook.md, step 6); Bootwright names the bridge
-# as an external attachment and gives sno-01 a second NIC on it. On the node,
+# as an existing-bridge segment and gives sno-01 a second NIC on it. On the node,
 # each VLAN interface is the uplink of its environment's Localnet bridge, which
 # carries the node's address there, so that environment's MetalLB pool
 # announces on it and its IngressController takes its address from it. Pods

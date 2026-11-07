@@ -109,14 +109,14 @@ Its reason and remedy are the diagnostic's message and remediation, in which
 | A provider on an unrealized substrate | an `InfraProvider` whose arm is `vsphere` | `this executable realizes no provider on the substrate it declares` | `remove <provider> and the Machines it hosts from the selected Environment, or declare them on a baremetal, kubevirt or libvirt provider` |
 | A KubeVirt provider on a host without OpenShift Virtualization | a KubeVirt provider's `spec.kubevirt.hostClusterRef` naming a cluster on which no add-on instance provides `kubevirt` | `a KubeVirt provider hosted by <cluster> needs an add-on instance on that cluster that provides kubevirt, which owns the provider's namespace and access` | `bind the kubevirt package to <cluster>, or name the host through spec.kubevirt.kubeconfigRef on <provider>` |
 | A KubeVirt provider on a host whose kubevirt add-on is authored | a KubeVirt provider's `spec.kubevirt.hostClusterRef` naming a cluster on which only an authored `ClusterAddon` that declares `provides: [kubevirt]` provides `kubevirt` | `a KubeVirt provider hosted by <cluster> needs the built-in kubevirt package on that cluster, which alone renders the provider's namespace, service account and roles, and <addon> that provides kubevirt does not` | `bind the kubevirt package to <cluster>, or name the host through spec.kubevirt.kubeconfigRef on <provider>` |
-| A hosted KubeVirt provider's attachment on no host secondary network | an attachment of a KubeVirt provider with `spec.kubevirt.hostClusterRef` whose `networkRef` names no `ClusterUserDefinedNetwork` among the host's `spec.networking.secondaryNetworks` | `a KubeVirt provider hosted by <cluster> attaches only to that cluster's secondary networks, whose selectors label the namespace its kubevirt instance owns, and attachment <attachment> names another network` | `name a ClusterUserDefinedNetwork among spec.networking.secondaryNetworks of <cluster> in attachment <attachment> of <provider>` |
+| A hosted KubeVirt provider's segment on no host secondary network | a segment of a KubeVirt provider with `spec.kubevirt.hostClusterRef` whose `networkRef` names no `ClusterUserDefinedNetwork` among the host's `spec.networking.secondaryNetworks` | `a KubeVirt provider hosted by <cluster> attaches only to that cluster's secondary networks, whose selectors label the namespace its kubevirt instance owns, and segment <segment> names another network` | `name a ClusterUserDefinedNetwork among spec.networking.secondaryNetworks of <cluster> in segment <segment> of <provider>` |
 | A Machine on an unrealized substrate | a Machine with `os.provided: false` whose `spec.substrate.providerRef` names such a provider | `its provider <provider> is on a substrate this executable does not realize` | `host <machine> on a baremetal, kubevirt or libvirt provider, declare its operating system provided, or remove it from the selected Environment` |
 | A Bootwright-installed Machine on KubeVirt | a Machine on a KubeVirt provider that names `spec.os.installProfileRef` | `a KubeVirt Machine is realized for an installer that supplies its operating system, and this one names an install profile` | `remove spec.os.installProfileRef from <machine>, or host it on a baremetal or libvirt provider` |
 | A KubeVirt profile without a size | a non-provided Machine on a KubeVirt provider whose profile's `cpu`, `memoryMiB` or `diskGiB` is `0` | `a KubeVirt machine is created with the CPU count, memory and root disk its profile declares, and its profile <profile> declares one as zero` | `set cpu, memoryMiB and diskGiB above zero on profile <profile> of <provider>` |
-| A KubeVirt NIC on an unrealized network kind | a NIC of such a Machine whose attachment's `networkRef` is neither a `k8s.ovn.org` `ClusterUserDefinedNetwork` nor a `k8s.cni.cncf.io` `NetworkAttachmentDefinition` | `a KubeVirt NIC attaches to a Localnet ClusterUserDefinedNetwork or a bridge NetworkAttachmentDefinition, and attachment <attachment> names another kind` | `select a ClusterUserDefinedNetwork or NetworkAttachmentDefinition attachment for every NIC of <machine>` |
+| A KubeVirt NIC on an unrealized network kind | a NIC of such a Machine whose segment's `networkRef` is neither a `k8s.ovn.org` `ClusterUserDefinedNetwork` nor a `k8s.cni.cncf.io` `NetworkAttachmentDefinition` | `a KubeVirt NIC attaches to a Localnet ClusterUserDefinedNetwork or a bridge NetworkAttachmentDefinition, and segment <segment> names another kind` | `select a ClusterUserDefinedNetwork or NetworkAttachmentDefinition segment for every NIC of <machine>` |
 | An emulated BMC no endpoint can name | a libvirt provider's `spec.libvirt.bmcEmulation.bindAddress` that is not one unicast host address | `an emulated BMC listens on one unicast address its Machines' BMC endpoints can name, and this provider's bindAddress is not one` | `set spec.libvirt.bmcEmulation.bindAddress on <provider> to one unicast host address` |
 | A provider named by more managed Networks than its reservation holds | more than 20 managed `Network` objects whose `spec.libvirt.providerRef` names one libvirt provider | `a libvirt provider's host reservation claims three keys for each managed Network beside the two of its media pool and its firewall readiness unit, within the 64 keys one reservation holds, so at most 20 managed Networks name it` | `name <provider> in spec.libvirt.providerRef of at most 20 managed Networks, or make the others provided networks on existing bridges` |
-| A provider using more external bridges than its use reservation holds | a libvirt provider whose `networkAttachments[]` entries name more than 64 distinct bridges | `a libvirt provider's bridge-use reservation claims one shared key for each bridge its external attachments use, within the 64 keys one reservation holds, so they use at most 64 bridges` | `name at most 64 distinct bridges in the external attachments of spec.networkAttachments of <provider>` |
+| A provider using more existing bridges than its use reservation holds | a libvirt provider whose `segments[]` name more than 64 distinct bridges | `a libvirt provider's bridge-use reservation claims one shared key for each bridge its existing-bridge segments use, within the 64 keys one reservation holds, so they use at most 64 bridges` | `name at most 64 distinct bridges in spec.segments of <provider>` |
 
 ## Qualification
 
@@ -136,7 +136,7 @@ The vSphere arm is not realized and has no row.
 
 The block `substrate-host-<provider>` realizes the host's virtualization
 runtime, the managed Networks that name the provider, the bridges its
-attachments name, and the pool its emulated BMCs stage virtual media in.
+segments name, and the pool its emulated BMCs stage virtual media in.
 
 **Hypervisor closure.** The runtime is the libvirt daemon with its QEMU/KVM
 emulator, `qemu-img`, `swtpm` for emulated TPMs, and the libvirt client. On the
@@ -173,8 +173,8 @@ built-in resolver and DHCP disabled so a managed `DNSServer` may bind the
 bridge address, placed in the host firewall's trusted zone through explicit
 `zone="trusted"` on the XML bridge so its guests reach the controller's managed
 services, and carrying ownership metadata naming the
-context and the Network (the XML attribute keeps the name `attachment`). An
-attachment is proved present as a bridge
+context and the Network (the XML attribute keeps the name `attachment`). A
+provider segment's bridge is proved present as a bridge
 device, a `/sys/class/net/<name>/bridge` directory rather than any interface of
 that name, and is never defined, changed or removed; the fabric behind it is
 provided and only verified ([project](project.md#product-scope)). The
@@ -222,9 +222,8 @@ once a network starts.
 
 A managed network carries one IPv4 or IPv6 prefix, and its Network's `mtu`
 unless that is 1500, the MTU libvirt and the kernel already give; a Machine's
-NICs attach, each in declared order, to the attachment or managed Network its
-interface map names
-([machines](api/machines.md#machine-profiles-and-network-attachments)).
+NICs attach, each in declared order, to the segment its `nics` entry names
+([machines](api/machines.md#machine-profiles-and-segments)).
 
 **Firewall readiness.** A provider with a managed network requires firewalld
 already enabled and running; it never enables or reconfigures the host firewall.
@@ -322,8 +321,8 @@ holds ([controller record](contexts/controller-record.md#bounds)), and
 admission refuses more at each Network's `spec.libvirt.providerRef`
 (`TestTheManagedNetworkBoundKeepsTheHostReservationWithinItsKeys`).
 
-Each attachment claims the shared key `bridge-use:<name>` for the
-bridge it attaches to, so a bridge another context defines is known to be in
+Each provider segment claims the shared key `bridge-use:<name>` for the
+bridge it names, so a bridge another context defines is known to be in
 use. A removal that would release an exclusive `bridge:<name>` refuses
 `controller.conflict` while another context holds `bridge-use:<name>`, naming
 that context and `bootwright destroy --context <holder>`. The destroy proves
@@ -332,7 +331,7 @@ before its effect on the provider that holds the bridge, so a context that
 claims the key after registration refuses that effect with nothing performed
 (`TestAClaimMadeAfterTheDestroyRegisteredRefusesTheRemovalsEffect`).
 These keys travel in a shared reservation of their own, which holds at most 64
-keys, so a provider's attachments use at most 64 distinct bridges
+keys, so a provider's segments use at most 64 distinct bridges
 (the refusal table's external-bridge row). A `bridge-use:` key an abandoned
 context held is released with that context's deletion (D38), so it strands a
 removal only while the using context exists.
@@ -413,7 +412,7 @@ type with KVM and BIOS firmware, the selected profile's vCPU count and memory,
 a root disk of `diskGiB` and one disk per `dataDisks[]` entry, at most seven,
 as `qcow2` images beneath
 `/var/lib/libvirt/images/bootwright/<context>/machines/<machine>/`, one interface per
-`hardware.nics` entry, in order, on that NIC's attachment, with a locally
+`hardware.nics` entry, in order, on that NIC's segment, with a locally
 administered MAC derived from the context, Machine and NIC names, an
 emulated TPM 2.0 when the profile declares `tpm`, a serial console, and
 ownership metadata naming the context and Machine. Provider media and machine
@@ -441,8 +440,8 @@ Each interface carries the
 same derived address the realized target reports, so a consumer that must
 declare this Machine's hardware to an installer names exactly what the domain
 presents. An interface attaches to the
-libvirt network a managed Network defines, and to the bridge alone for an
-attachment, which the definition writes as an XML-escaped attribute value,
+libvirt network a managed Network defines, and to the bridge alone for a
+provider segment, which the definition writes as an XML-escaped attribute value,
 so the hypervisor holds the dependency on a network this context owns and
 refuses to start a Machine whose network is down rather than starting
 it unreachable. Admission refuses a non-provided Machine that declares no NIC,
@@ -944,18 +943,16 @@ namespace, ServiceAccount and access are then the host's
 [`kubevirt` instance's](api/addons.md#package-kubevirt), which owns one
 Namespace per hosted provider namespace, labelled with the union of the
 `namespaceSelector.matchLabels` of the host secondary networks the providers'
-attachments name; admission refuses two such networks that give one key two
-values, naming both, more than 16 hosted namespaces on one host, and an
-attachment that names a host network with `ipam.mode: Enabled`, because OVN
+segments name; admission refuses two such networks that give one key two
+values, naming both, more than 16 hosted namespaces on one host, and a
+segment that names a host network with `ipam.mode: Enabled`, because OVN
 would enforce IP port security on the addresses it assigns while the install
 address is static (a VirtualMachine attaches to a network whose IP address
-management is `Disabled`, the default); admission also refuses a guest
-interface whose NMState `mtu` exceeds the `mtu` of the host network its
-attachment names (1500 when the network declares none), as it does a libvirt
-guest ([machine profiles and network attachments](api/machines.md#machine-profiles-and-network-attachments)),
-only for a provider naming `hostClusterRef`, since an external host's network
-is not in the graph; and
-planning refuses an attachment that names no `ClusterUserDefinedNetwork` among
+management is `Disabled`, the default); a hosted segment's capacity is the
+`mtu` of the host network it names (1500 when that declares none), and a
+guest interface above it refuses as on every substrate
+([segments](api/machines.md#machine-profiles-and-segments)); and
+planning refuses a segment that names no `ClusterUserDefinedNetwork` among
 the host's `secondaryNetworks`, and a host on which no add-on instance
 provides `kubevirt`, or on which only an authored `ClusterAddon` that declares
 `provides: [kubevirt]` does, because only the built-in package renders the
@@ -1050,7 +1047,7 @@ would block it (the refusal names the class). The evidence records that set's
 access modes and volume mode. The node list is read in pages of 500, at most
 10 pages. At least one node must be labelled `kubevirt.io/schedulable: "true"`
 and allocate a positive `devices.kubevirt.io/kvm` quantity, and the evidence
-records how many do. Each attachment's definition is its `spec.config`, which
+records how many do. Each segment's definition is its `spec.config`, which
 must be a JSON object. A derived definition must be of CNI type
 `ovn-k8s-cni-overlay` with topology `localnet` and no `subnets`, since with
 IPAM enabled OVN enforces IP port security and assigns addresses the static
@@ -1060,7 +1057,7 @@ its config's `type` or as the first plugin of its `plugins` list.
 The evidence records each definition's CNI type, and its topology and MTU
 where the config declares them. It records a bridge's `macspoofchk` where the
 config declares it and refuses neither value, since whether its machines need
-installer VIPs is not known to the proof. A derived attachment's
+installer VIPs is not known to the proof. A derived segment's
 ClusterUserDefinedNetwork must exist, with its `NetworkCreated` condition true
 where the credential may read it. Where it may, it reads
 KubeMacPool's range and records the pinned MACs as inside, outside or unknown
@@ -1115,7 +1112,7 @@ class's StorageProfile decides them, at the profile's `diskGiB`, blank, and
 annotated `cdi.kubevirt.io/storage.bind.immediate.requested: "true"` so a
 stopped machine's claim binds on a WaitForFirstConsumer class. The root disk
 is the first `virtio` disk, presented as `/dev/vda`, with `bootOrder: 1`; the
-Machine presents no data disk ([profile fields](api/machines.md#machine-profiles-and-network-attachments)),
+Machine presents no data disk ([profile fields](api/machines.md#machine-profiles-and-segments)),
 so no Ceph OSD runs on one. Each
 `hardware.nics` entry becomes, in order, one interface named `nic<index>` with
 the `bridge` binding and a pinned `macAddress`, libvirt's derivation from the
@@ -1125,7 +1122,7 @@ MAC field; planning refuses, naming both Machines and the address, two
 NICs of the selected graph that derive one address, with the remedy to
 rename a NIC of one Machine or that Machine, because the derivation hashes
 the context name and no admission rule can see it; libvirt Machines derive
-through the same function and have no such refusal), on the network its attachment's `networkRef` names: for a
+through the same function and have no such refusal), on the network its segment's `networkRef` names: for a
 `Localnet` ClusterUserDefinedNetwork the derived NetworkAttachmentDefinition
 of the same name in the provider's namespace, and for a
 NetworkAttachmentDefinition of type `bridge` that object, in the namespace
@@ -1244,7 +1241,7 @@ becomes a cluster's own. The machine block creates each Machine powered off,
 in the failure domain's folder, compute cluster, resource pool and datastore,
 with EFI firmware and Secure Boot off, its profile's CPU, memory and one root
 disk, presented as `/dev/sda`, and one adapter per `hardware.nics` entry on
-its attachment's portgroup with a MAC in the manual range
+its segment's portgroup with a MAC in the manual range
 `00:50:56:00:00:00` through `00:50:56:3f:ff:ff`, derived from the context,
 Machine and NIC names when not authored. Before its first power-on it
 sets extraConfig `disk.EnableUUID` to `TRUE`, whatever platform a cluster

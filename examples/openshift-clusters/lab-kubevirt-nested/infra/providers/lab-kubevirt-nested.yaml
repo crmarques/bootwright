@@ -17,8 +17,9 @@ spec:
         memoryMiB: 16384
         diskGiB: 120
 
-  networkAttachments:
+  segments:
     - name: nested-guests
+      untaggedNetworkRef: lab-secondary
       kubevirt:
         networkRef:
           apiGroup: k8s.ovn.org

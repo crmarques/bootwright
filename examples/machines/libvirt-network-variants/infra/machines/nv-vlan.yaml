@@ -11,7 +11,7 @@ spec:
 
       nics:
         - nicRef: nic0
-          attachmentRef: nv-trunk
+          segmentRef: nv-trunk
 
   hardware:
     nics:

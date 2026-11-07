@@ -184,7 +184,7 @@ vCenter's `datacenters`. `nodeNetworking` is accepted and reaches no
 agent-installer input.
 
 A multi-node KubeVirt cluster may author `baremetal`; every slot's source is
-then `installer`, and every node's attachments are `Localnet`
+then `installer`, and every node's segments are `Localnet`
 ClusterUserDefinedNetworks or `bridge` NetworkAttachmentDefinitions.
 
 Not yet met: the vSphere arm admits no `vcenterCredentials`; tracked as
@@ -259,7 +259,7 @@ an `api.invariant` at the slot's address, naming the node and its Machine.
 **Endpoint addresses are the cluster's own.** An effective endpoint address
 equals no effective endpoint address of another selected OpenShiftCluster, no
 IP address a Machine declares other than the node a single-node cluster's
-`node` source names, no host address of a managed libvirt network attachment,
+`node` source names, no host address of a managed libvirt Network,
 no bind or endpoint address of a managed DNSServer, NTPServer, Proxy,
 ArtifactServer or Registry, no emulated BMC's bind address, and no
 LoadBalancer bind address other than the one its own `loadBalancer` source
@@ -273,7 +273,7 @@ on platform `none` slots may share one external or load-balancer address. Each
 refusal is an `api.invariant` at the slot's address, or at its source when the
 address is resolved, naming the other holder. A managed libvirt network's
 prefix belongs to one context through its exclusive reservation, so no other
-context's managed Network shares an address in it; a provider's attachment
+context's managed Network shares an address in it; a provider's segment
 claims no prefix, and on any other network Bootwright coordinates no address,
 as for node addresses.
 
@@ -548,7 +548,7 @@ catalog one.
 
 ## Cross-object invariants
 
-- Every bound machine's provider, profile, network selection, attachment, NIC
+- Every bound machine's provider, profile, network selection, segment, NIC
   binding, root-device hints, BMC facts, and install IP satisfy the machine and
   provider rules in [machines.md](machines.md).
 - A cluster's consumed machine networks and effective endpoint sources are

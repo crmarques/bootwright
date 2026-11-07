@@ -40,4 +40,4 @@ spec:
 
       - name: cluster-ip
         address: 203.0.113.13/24
-        interface: nic1
+        interface: nic1.140

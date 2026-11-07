@@ -12,10 +12,10 @@ spec:
 
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
 
         - nicRef: {{ .Values.environments.trunk.interface }}
-          attachmentRef: trunk
+          segmentRef: trunk
 {{- end }}
 
   hardware:

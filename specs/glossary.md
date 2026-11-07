@@ -58,6 +58,12 @@ its modifier wherever two of its senses can meet; elsewhere context decides. A n
   `hardware.nics[]` entry in order. A bond member is the
   interface that NMState `link-aggregation.port` lists; a listener port is a
   TCP or UDP service port.
+- **Segment** and **Network**: a segment is one provider network a NIC is
+  cabled to, an `InfraProvider` `segments[]` entry or a managed `Network` of
+  that provider, carrying its Networks untagged or tagged with an MTU capacity
+  ([machines](api/machines.md#machine-profiles-and-segments)); a `Network` is
+  one layer-2 network with its VLAN and subnets ([networks](api/networks.md)).
+  "Attachment" names neither.
 - **Profile**: always a machine profile, install profile
   ([`MachineInstallProfile`](api/machines.md#machineinstallprofile)), add-on
   profile ([`ClusterAddonProfile`](api/addons.md#clusteraddonprofile)) or

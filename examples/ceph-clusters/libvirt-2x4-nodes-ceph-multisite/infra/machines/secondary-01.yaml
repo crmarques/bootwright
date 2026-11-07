@@ -11,7 +11,7 @@ spec:
 
       nics:
         - nicRef: enp1s0
-          attachmentRef: secondary
+          segmentRef: secondary
 
   hardware:
     nics:

@@ -73,7 +73,7 @@ func TestMachineAdmissionRefusesWhatItsSubstrateCannotRealize(t *testing.T) {
 			"api.reference", guest, "$.spec.network.interfaceMatches[0].interface"},
 		"a realized Machine without NICs": {[]exampleEdit{{labGuest, "    nics:\n      - name: enp1s0\n\n", ""}},
 			"api.invariant", guest, "$.spec.hardware.nics"},
-		"a NIC entry naming no NIC": {[]exampleEdit{{labGuest, "      profileRef: rhel\n", "      profileRef: rhel\n      nics:\n        - nicRef: enp9s0\n          attachmentRef: lab-guests\n"}},
+		"a NIC entry naming no NIC": {[]exampleEdit{{labGuest, "      profileRef: rhel\n", "      profileRef: rhel\n      nics:\n        - nicRef: enp9s0\n          segmentRef: lab-guests\n"}},
 			"api.reference", guest, "$.spec.substrate.libvirt.nics[0].nicRef"},
 		"an authored NMState MAC": {[]exampleEdit{{"infra/networkconfigs/lab-guests.yaml", "type: ethernet", "type: ethernet\n        mac-address: 52:54:00:00:00:01"}},
 			"api.invariant", guest, "$.spec.network.configRef"},
@@ -88,9 +88,9 @@ func TestMachineAdmissionRefusesWhatItsSubstrateCannotRealize(t *testing.T) {
 }
 
 // The hardware boot block selected nothing any substrate read, so it is an
-// unknown field, and a bare-metal Machine selects no attachment, which
-// configures nothing.
-func TestABaremetalMachineCarriesNoBootNICOrAttachment(t *testing.T) {
+// unknown field, and a bare-metal provider may declare no segment, since a
+// segment configures nothing.
+func TestABaremetalMachineCarriesNoBootNICOrSegment(t *testing.T) {
 	const metal = "infra/machines/metal-01.yaml"
 	refusal := requireRefusal(t, editedExample(t, "lab-baremetal", exampleEdit{metal, "\n    nics:\n", "\n    boot:\n      nicRef: eno1\n\n    nics:\n"}),
 		"api.field", "Machine/metal-01", "$.spec.hardware.boot")
@@ -98,7 +98,7 @@ func TestABaremetalMachineCarriesNoBootNICOrAttachment(t *testing.T) {
 		t.Fatalf("the boot refusal says %q", refusal.Message)
 	}
 	compileAcceptance(t, editedExample(t, "lab-baremetal",
-		exampleEdit{"infra/providers/lab-metal.yaml", "\n  networkAttachments:\n    - name: lab-metal\n      baremetal: {}\n", ""}))
+		exampleEdit{"infra/providers/lab-metal.yaml", "\n  segments:\n    - name: lab-metal\n      untaggedNetworkRef: lab-metal\n      baremetal: {}\n", ""}))
 }
 
 // An operator-owned Machine no provider realizes, such as a bastion, authors

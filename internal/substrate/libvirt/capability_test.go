@@ -139,7 +139,7 @@ func TestAnEmulatedBMCBoundToABridgeRequiresTheProviderThatCreatesIt(t *testing.
 		storage := provider(field("libvirt", provider().Spec().Get("libvirt").With("machineRef", api.StringValue(host))))
 		if management == "external" {
 			storage = provider(field("libvirt", storage.Spec().Get("libvirt")),
-				field("networkAttachments", api.ListValue(api.MapValue(text("name", "storage"), field("libvirt", api.MapValue(text("bridge", "virbr-storage")))))))
+				field("segments", api.ListValue(api.MapValue(text("name", "storage"), field("libvirt", api.MapValue(text("bridge", "virbr-storage")))))))
 		}
 		objects := []api.Object{api.NewObject(api.InfraProvider, "lab-storage", api.Value{}, storage.Spec()), labNetwork()}
 		if address != "" {

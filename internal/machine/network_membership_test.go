@@ -91,7 +91,10 @@ func TestATaggedStackMustCarryItsNetworksVLAN(t *testing.T) {
 	machine, _ := fixture()
 	machine = withNetwork(machine, []string{"network", "addresses"}, list(m("name", "primary", "address", "192.0.2.11/24", "interface", "br0")))
 	tagged := lan(m("vlan", api.IntegerValue("200"), "ipv4", m("cidr", "192.0.2.0/24")))
-	if issues := membershipIssues(t, machine, vlanConfig("200"), tagged); issueAt(issues, "$.spec.network.addresses[0].interface", "VLAN") {
+	_, catalog := fixture()
+	provider, _ := catalog.Find(api.InfraProvider, "metal")
+	trunk := provider.WithSpec(provider.Spec().With("segments", list(m("name", "net", "taggedNetworkRefs", api.StringList("lan"), "baremetal", m()))))
+	if issues := membershipIssues(t, machine, vlanConfig("200"), tagged, trunk); issueAt(issues, "$.spec.network.addresses[0].interface", "VLAN") || issueAt(issues, "$.spec.network.configRef", "VLAN") {
 		t.Fatalf("a matching VLAN is refused: %+v", issues)
 	}
 	if issues := membershipIssues(t, machine, vlanConfig("300"), tagged); !issueAt(issues, "$.spec.network.addresses[0].interface", "tags VLAN 300, and its Network/lan is VLAN 200") {

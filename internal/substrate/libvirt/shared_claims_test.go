@@ -20,7 +20,7 @@ func externalAttachments(bridges ...string) api.FieldValue {
 		attachments = append(attachments, api.MapValue(text("name", fmt.Sprintf("edge-%02d", index)),
 			field("libvirt", api.MapValue(text("bridge", bridge)))))
 	}
-	return field("networkAttachments", api.ListValue(attachments...))
+	return field("segments", api.ListValue(attachments...))
 }
 
 func planned(t *testing.T, capability interface {

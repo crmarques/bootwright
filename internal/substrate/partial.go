@@ -8,10 +8,10 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 		return issues
 	}
 	if variant := Variant(o); variant != "" {
-		for _, attachment := range o.Spec().Get("networkAttachments").Items() {
+		for _, segment := range o.Spec().Get("segments").Items() {
 			for _, arm := range []string{"baremetal", "libvirt", "vsphere", "kubevirt"} {
-				if arm != variant && attachment.Has(arm) {
-					issues = add(issues, issue("$.spec.networkAttachments", "attachment arm must match its provider substrate"))
+				if arm != variant && segment.Has(arm) {
+					issues = add(issues, issue("$.spec.segments", "segment arm must match its provider substrate"))
 				}
 			}
 		}

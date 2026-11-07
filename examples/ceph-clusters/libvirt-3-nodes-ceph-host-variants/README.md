@@ -19,7 +19,7 @@ No live execution or operator acceptance is claimed.
 - `infra/networks/` declares the public `lab-guests`, which `lab-libvirt`
   defines, and the provided VLAN 140 `ceph-cluster` as [`Network`](../../../specs/api/networks.md) objects, which the CephCluster's
   `publicCIDRs` and `clusterCIDRs` equal.
-- Both NICs share one attachment and bridge, so the bond proves neither
+- Both NICs share one segment and bridge, so the bond proves neither
   physical isolation nor independent links.
 - The TPM2 policy is empty and selects no PCRs: it protects a copied disk
   without its TPM, not a tampered boot (see the

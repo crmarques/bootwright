@@ -44,9 +44,9 @@ spec:
       profileRef: rhel
       nics:
         - nicRef: nic0
-          attachmentRef: nv-lab
+          segmentRef: nv-lab
         - nicRef: nic1
-          attachmentRef: nv-lab
+          segmentRef: nv-lab
   hardware:
     nics:
       - name: nic0
@@ -103,7 +103,7 @@ spec:
       profileRef: rhel
       nics:
         - nicRef: nic0
-          attachmentRef: nv-trunk
+          segmentRef: nv-trunk
   hardware:
     nics:
       - name: nic0
@@ -157,9 +157,9 @@ spec:
       profileRef: rhel
       nics:
         - nicRef: nic0
-          attachmentRef: nv-trunk
+          segmentRef: nv-trunk
         - nicRef: nic1
-          attachmentRef: nv-trunk
+          segmentRef: nv-trunk
   hardware:
     nics:
       - name: nic0
@@ -292,6 +292,8 @@ spec:
     bridge: virbr-nv
     forward: nat
     hostAddress: 198.51.100.1
+    taggedNetworkRefs:
+      - nv-guest
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Network
@@ -553,8 +555,13 @@ spec:
         memoryMiB: 8192
         diskGiB: 60
         tpm: {}
-  networkAttachments:
+  segments:
     - name: nv-trunk
+      taggedNetworkRefs:
+        - nv-guest
+        - nv-vlan
+        - nv-vlan-bond
+      mtu: 1500
       libvirt:
         bridge: br-nv
 ---

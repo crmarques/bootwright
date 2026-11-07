@@ -36,7 +36,7 @@ arms for OpenShift nodes; the realization contracts they need are stated in
 | `spec.vsphere.failureDomains[].topology` | object | yes | Required `datacenter`, `computeCluster`, `datastore`, and non-empty `networks`; optional `folder` and `resourcePool`. |
 | `spec.vsphere.isoStaging.datastore` | string | conditional | Defaults to the selected failure domain's `topology.datastore`; at least one of `datastore` or `folder` is present when `isoStaging` is set. |
 | `spec.vsphere.isoStaging.folder` | string | conditional | Defaults to `bootwright-vmedia`; same presence rule for an authored `isoStaging` block. |
-| `spec.vsphere.machineProfiles` | array | no | Provider-local set keyed by `name`; [common profile shape](../api/machines.md#machine-profiles-and-network-attachments). |
+| `spec.vsphere.machineProfiles` | array | no | Provider-local set keyed by `name`; [common profile shape](../api/machines.md#machine-profiles-and-segments). |
 
 A machine profile must set `failureDomainRef` when more than one failure
 domain exists; with one domain the reference is implicit.
@@ -60,11 +60,11 @@ Exactly one of `hostClusterRef` and `kubeconfigRef` is present. The former
 selects a managed cluster and the latter an external host-cluster credential;
 they are never combined.
 
-## Profile and attachment fields
+## Profile and segment fields
 
 The vSphere `machineProfiles[]` entry adds `template` and `failureDomainRef`
-to the common [machine profile](../api/machines.md#machine-profiles-and-network-attachments)
-shape, and the network-attachment arms below extend its attachment shape; they
+to the common [machine profile](../api/machines.md#machine-profiles-and-segments)
+shape, and the segment arms below extend its segment shape; they
 apply only to the refused arms:
 
 | Field | Type | Required | Default | Rule |
@@ -105,9 +105,9 @@ libvirt's does, and that is never authored: the KubeVirt arm has no MAC field
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `spec.substrate.kubevirt.profileRef` | string | conditional | — | Provider-local `machineProfiles[].name`; required when the OS is not provided. |
-| `spec.substrate.kubevirt.nics` | array | conditional | — | Per-NIC attachments, on libvirt as on KubeVirt, as the [substrate arm](../api/machines.md#substrate-arm) states; each `attachmentRef` resolves to a KubeVirt arm of its provider. |
+| `spec.substrate.kubevirt.nics` | array | conditional | — | Per-NIC segments, on libvirt as on KubeVirt, as the [substrate arm](../api/machines.md#substrate-arm) states; each `segmentRef` resolves to a KubeVirt arm of its provider. |
 | `spec.substrate.vsphere.profileRef` | string | conditional | — | Provider-local `machineProfiles[].name`; required when the OS is not provided. The profile carries `template` and `failureDomainRef`. |
-| `spec.substrate.vsphere.nics` | array | no | — | `{nicRef, macAddress}` keyed by `nicRef`, each MAC in the manual assignment range above. |
+| `spec.substrate.vsphere.nics` | array | no | — | `{nicRef, macAddress, segmentRef}` keyed by `nicRef`, each MAC in the manual assignment range above; `segmentRef` follows the bare-metal rule. |
 
 ## Template-clone installer arm
 

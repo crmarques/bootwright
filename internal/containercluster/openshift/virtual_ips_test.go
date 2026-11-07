@@ -35,7 +35,7 @@ func TestVirtualIPsOnlyProbeManagedIPv4NetworksOnController(t *testing.T) {
 				cluster = cluster.WithSpec(cluster.Spec().WithPath(m("type", "installer"), "install", "endpoints", slot, "source"))
 			}
 			cluster, _ = Normalize(cluster, catalog)
-			provider := obj(api.InfraProvider, "network", m("libvirt", m("machineRef", tc.controller), "networkAttachments", list(m("name", "uplink", "libvirt", m("bridge", "br-uplink")))))
+			provider := obj(api.InfraProvider, "network", m("libvirt", m("machineRef", tc.controller), "segments", list(m("name", "uplink", "libvirt", m("bridge", "br-uplink")))))
 			objects := append(catalog.Objects(), provider)
 			if tc.management == "managed" {
 				objects = append(objects, managedNetwork("guests", "network", tc.address, "br-test"))

@@ -30,8 +30,9 @@ spec:
         diskGiB: {{ .Values.guest.diskGiB }}
         tpm: {}
 
-  networkAttachments:
+  segments:
     - name: lab-guests
+      untaggedNetworkRef: lab-guests
 
       libvirt:
         bridge: {{ .Values.host.bridge }}
@@ -40,6 +41,10 @@ spec:
     # The VLAN trunk the runbook builds on libvirt-host; Bootwright only
     # proves the bridge is there.
     - name: trunk
+
+      taggedNetworkRefs:
+        - staging
+        - production
 
       libvirt:
         bridge: {{ .Values.environments.trunk.bridge }}

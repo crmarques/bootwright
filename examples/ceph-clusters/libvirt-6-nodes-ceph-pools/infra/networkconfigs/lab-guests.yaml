@@ -30,9 +30,25 @@ spec:
         type: ethernet
         state: up
         mtu: 1500
+
+        ipv4:
+          enabled: false
+
+        ipv6:
+          enabled: false
+
+      - name: nic1.140
+        type: vlan
+        state: up
+
+        vlan:
+          base-iface: nic1
+          id: 140
+
         ipv4:
           enabled: true
           dhcp: false
+
         ipv6:
           enabled: false
 

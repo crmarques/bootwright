@@ -14,7 +14,7 @@ import (
 )
 
 // HostCapability realizes libvirt provider hosts: the hypervisor closure, the
-// networks their attachments declare and their virtual-media pool.
+// networks their segments declare and their virtual-media pool.
 type HostCapability struct{ runner Runner }
 
 // MachineCapability realizes one virtual machine together with its own

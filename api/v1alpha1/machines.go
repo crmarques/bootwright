@@ -34,11 +34,16 @@ func machineFirmwareSchema() *Shape {
 }
 
 func machineSubstrateSchema() *Shape {
-	macs := &Shape{Type: Sequence, Atomic: true, NameKey: "nicRef", Element: record(required("nicRef", nestedIn(Scope{Noun: "hardware NIC", Entries: []string{"hardware", "nics"}})), required("macAddress", lexical("mac")))}
-	attachments := &Shape{Type: Sequence, Atomic: true, NameKey: "nicRef", Element: record(required("nicRef", nestedIn(Scope{Noun: "hardware NIC", Entries: []string{"hardware", "nics"}})), required("attachmentRef", nestedIn(Scope{Noun: "network attachment", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Entries: []string{"networkAttachments"}, Joined: &ScopeJoin{Kind: Network, Field: []string{"libvirt", "providerRef"}}})))}
+	nicRef := func() Field {
+		return required("nicRef", nestedIn(Scope{Noun: "hardware NIC", Entries: []string{"hardware", "nics"}}))
+	}
+	segment := Scope{Noun: "segment", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Entries: []string{"segments"}}
+	macs := &Shape{Type: Sequence, Atomic: true, NameKey: "nicRef", Element: record(nicRef(), required("macAddress", lexical("mac")), field("segmentRef", nestedIn(segment)))}
+	segment.Joined = &ScopeJoin{Kind: Network, Field: []string{"libvirt", "providerRef"}}
+	vnics := &Shape{Type: Sequence, Atomic: true, NameKey: "nicRef", Element: record(nicRef(), required("segmentRef", nestedIn(segment)))}
 	baremetal := record(field("bmc", machineBMCSchema()), field("nics", macs), field("rootDevice", record(field("bootVolume", record()), field("volumeRef", atomic(external(record(required("storageId", nonempty()), required("volumeId", nonempty()))))), field("wwn", nonempty()), field("hctl", nonempty()), field("serialNumber", nonempty()), field("sizeBytes", integer("4096", "70368744177664")))), field("firmware", machineFirmwareSchema()))
-	libvirt := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"libvirt"}, Entries: []string{"libvirt", "machineProfiles"}})), field("nics", attachments))
-	kubevirt := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"kubevirt"}, Entries: []string{"kubevirt", "machineProfiles"}})), field("nics", attachments))
+	libvirt := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"libvirt"}, Entries: []string{"libvirt", "machineProfiles"}})), field("nics", vnics))
+	kubevirt := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"kubevirt"}, Entries: []string{"kubevirt", "machineProfiles"}})), field("nics", vnics))
 	vsphere := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"vsphere"}, Entries: []string{"vsphere", "machineProfiles"}})), field("nics", macs))
 	arms := choice(field("baremetal", baremetal), field("libvirt", libvirt), field("kubevirt", kubevirt), field("vsphere", vsphere))
 	arms.AllowEmpty = true
@@ -98,10 +103,9 @@ func machineProviderSchema() *Shape {
 	vsphere := record(required("vcenters", vcenters), required("failureDomains", nonemptyArray(named(record(required("name", nonempty()), required("region", nonempty()), required("zone", nonempty()), required("server", nonempty()), required("topology", topology))))), field("isoStaging", record(field("datastore", nonempty()), field("folder", nonempty()))), defaulted("machineProfiles", machineProfileSchema("vsphere"), ListValue()))
 	kubevirt := choice(field("hostClusterRef", clusters(ContainerClusterCategory)), field("kubeconfigRef", secret("opaque")))
 	kubevirt.Fields = append(kubevirt.Fields, required("namespace", name()), field("storageClassRef", externalRef()), defaulted("machineProfiles", machineProfileSchema("kubevirt"), ListValue()))
-	libvirtAttachment := record(required("bridge", lexical("bridge")), field("mtu", integer("576", "65536")))
-	attachment := choice(field("baremetal", record()), field("libvirt", libvirtAttachment), field("vsphere", record(required("portgroup", nonempty()), field("distributedSwitch", nonempty()))), field("kubevirt", record(required("networkRef", external(record(field("apiGroup", text()), field("kind", nonempty()), required("name", nonempty()), field("namespace", name())))))))
-	attachment.Fields = append([]Field{required("name", name())}, attachment.Fields...)
+	segment := choice(field("baremetal", record()), field("libvirt", record(required("bridge", lexical("bridge")))), field("vsphere", record(required("portgroup", nonempty()), field("distributedSwitch", nonempty()))), field("kubevirt", record(required("networkRef", external(record(field("apiGroup", text()), field("kind", nonempty()), required("name", nonempty()), field("namespace", name())))))))
+	segment.Fields = append([]Field{required("name", name()), field("untaggedNetworkRef", ref(Network)), field("taggedNetworkRefs", set(ref(Network))), defaulted("mtu", integer("576", "65536"), IntegerValue("1500"))}, segment.Fields...)
 	provider := choice(field("baremetal", baremetal), field("libvirt", libvirt), field("vsphere", vsphere), field("kubevirt", kubevirt))
-	provider.Fields = append(provider.Fields, field("networkAttachments", named(attachment)))
+	provider.Fields = append(provider.Fields, field("segments", named(segment)))
 	return provider
 }

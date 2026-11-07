@@ -27,8 +27,13 @@ spec:
         diskGiB: 60
         tpm: {}
 
-  networkAttachments:
+  segments:
     - name: nv-trunk
+
+      taggedNetworkRefs:
+        - nv-guest
+        - nv-vlan
+        - nv-vlan-bond
 
       libvirt:
         bridge: br-nv

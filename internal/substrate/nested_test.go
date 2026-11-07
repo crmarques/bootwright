@@ -18,7 +18,7 @@ func hostedOn(name, namespace string, networks ...string) api.Object {
 	for _, network := range networks {
 		attachments = append(attachments, cudn(network))
 	}
-	return obj(api.InfraProvider, name, m("kubevirt", m("hostClusterRef", "host", "namespace", namespace), "networkAttachments", list(attachments...)))
+	return obj(api.InfraProvider, name, m("kubevirt", m("hostClusterRef", "host", "namespace", namespace), "segments", list(attachments...)))
 }
 
 func hostOf(networks ...api.Value) api.Object {
@@ -99,10 +99,10 @@ func TestHostedAccessorsReadTheProvidersOwnShape(t *testing.T) {
 		t.Fatalf("namespace of an empty endpoint = %q", got)
 	}
 	provider := hostedOn("a", "guests", "machine")
-	if got := AttachmentNetworkKind(provider, "machine"); got != "ClusterUserDefinedNetwork" {
+	if got := SegmentNetworkKind(provider, "machine"); got != "ClusterUserDefinedNetwork" {
 		t.Fatalf("kind of machine = %q", got)
 	}
-	if got := AttachmentNetworkKind(provider, "missing"); got != "" {
+	if got := SegmentNetworkKind(provider, "missing"); got != "" {
 		t.Fatalf("kind of an undeclared attachment = %q", got)
 	}
 	for _, tc := range []struct {
@@ -140,7 +140,7 @@ func TestAHostedAttachmentRefusesAHostNetworkThatManagesAddresses(t *testing.T) 
 				}
 				return
 			}
-			found := issuesAt(issues, "$.spec.networkAttachments[1].kubevirt.networkRef")
+			found := issuesAt(issues, "$.spec.segments[1].kubevirt.networkRef")
 			if len(issues) != 1 || len(found) != 1 || !strings.Contains(found[0].Message, "secondary network storage of OpenShiftCluster/host") ||
 				!strings.Contains(found[0].Remediation, "set ipam.mode to Disabled") {
 				t.Fatalf("issues %+v", issues)

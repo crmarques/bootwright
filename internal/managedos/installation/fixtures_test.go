@@ -259,7 +259,7 @@ func labCatalog(overrides ...api.Object) api.Catalog {
 		}
 	}
 	for _, object := range objects {
-		for _, attachment := range object.Spec().Get("networkAttachments").Items() {
+		for _, attachment := range object.Spec().Get("segments").Items() {
 			if attachment.Get("name").Text() == "lab-guests" {
 				objects = slices.DeleteFunc(objects, func(o api.Object) bool { return o.Identity() == "Network/lab-guests" })
 			}

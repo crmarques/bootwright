@@ -5,7 +5,7 @@ Plan:     this executable plans the same blocks
 
 diff desired/infra/provider.yaml real/infra/provider.yaml
 # InfraProvider/lab-libvirt: plan: same (substrate-host-lab-libvirt); realized: done
-# InfraProvider/lab-libvirt: not compared: spec.libvirt.uri, spec.libvirt.machineRef, spec.libvirt.bmcEmulation, spec.libvirt.networkAttachments, spec.libvirt.machineProfiles[rhel].cpu, spec.libvirt.machineProfiles[rhel].memoryMiB
+# InfraProvider/lab-libvirt: not compared: spec.libvirt.uri, spec.libvirt.machineRef, spec.libvirt.bmcEmulation, spec.libvirt.segments, spec.libvirt.machineProfiles[rhel].cpu, spec.libvirt.machineProfiles[rhel].memoryMiB
 --- desired/infra/provider.yaml
 +++ real/infra/provider.yaml
 @@ -6,5 +6,5 @@

@@ -351,9 +351,9 @@ func TestUnsupportedRefusesWhatTheArmDoesNotRealize(t *testing.T) {
 	installed := node("master-0")
 	installed = installed.WithSpec(installed.Spec().WithPath(api.StringValue("rhel"), "os", "installProfileRef"))
 	udn := provider()
-	attachments := udn.Spec().Get("networkAttachments").Items()
+	attachments := udn.Spec().Get("segments").Items()
 	attachments[1] = attachments[1].WithPath(api.MapValue(text("apiGroup", "k8s.ovn.org"), text("kind", "UserDefinedNetwork"), text("name", "tenant")), "kubevirt", "networkRef")
-	udn = udn.WithSpec(udn.Spec().With("networkAttachments", api.ListValue(attachments...)))
+	udn = udn.WithSpec(udn.Spec().With("segments", api.ListValue(attachments...)))
 	for name, catalog := range map[string]api.Catalog{
 		"install profile": api.NewCatalog([]api.Object{controller(), networkConfig(), installed, provider()}),
 		"zero size":       labCatalog(provider(number("diskGiB", "0"))),

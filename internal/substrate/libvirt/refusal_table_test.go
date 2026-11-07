@@ -53,20 +53,20 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 			map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},
 		"A provider named by more managed Networks than its reservation holds": {catalogOf(managedNetworks(substrate.MaxManagedNetworks + 1)...),
 			"InfraProvider/lab-libvirt", map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},
-		"A provider using more external bridges than its use reservation holds": {catalogOf(controller(), provider(externalAttachments(manyBridges(substrate.MaxExternalBridges+1)...))),
+		"A provider using more existing bridges than its use reservation holds": {catalogOf(controller(), provider(externalAttachments(manyBridges(substrate.MaxExternalBridges+1)...))),
 			"InfraProvider/lab-libvirt", map[string]string{"<provider>": "InfraProvider/lab-libvirt"}},
 		"A KubeVirt provider on a host without OpenShift Virtualization": {catalogOf(controller(), kubevirtProvider("hostClusterRef", "")), "InfraProvider/kv",
 			map[string]string{"<provider>": "InfraProvider/kv", "<cluster>": "OpenShiftCluster/host"}},
 		"A KubeVirt provider on a host whose kubevirt add-on is authored": {catalogOf(controller(), kubevirtProvider("hostClusterRef", ""), authoredKubeVirtAddOn()), "InfraProvider/kv",
 			map[string]string{"<provider>": "InfraProvider/kv", "<cluster>": "OpenShiftCluster/host", "<addon>": "ClusterAddon/widgets"}},
-		"A hosted KubeVirt provider's attachment on no host secondary network": {catalogOf(controller(), api.NewObject(api.OpenShiftCluster, "host", api.Value{}, api.MapValue()), kubevirtProvider("hostClusterRef", "")),
-			"InfraProvider/kv", map[string]string{"<provider>": "InfraProvider/kv", "<cluster>": "OpenShiftCluster/host", "<attachment>": "lab-guests"}},
+		"A hosted KubeVirt provider's segment on no host secondary network": {catalogOf(controller(), api.NewObject(api.OpenShiftCluster, "host", api.Value{}, api.MapValue()), kubevirtProvider("hostClusterRef", "")),
+			"InfraProvider/kv", map[string]string{"<provider>": "InfraProvider/kv", "<cluster>": "OpenShiftCluster/host", "<segment>": "lab-guests"}},
 		"A Bootwright-installed Machine on KubeVirt": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", ""),
 			kubevirtGuest(text("installProfileRef", "rhel-9-8"))), "Machine/node-01", map[string]string{"<machine>": "Machine/node-01"}},
 		"A KubeVirt profile without a size": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", "", number("cpu", "0")), kubevirtGuest()),
 			"Machine/node-01", map[string]string{"<provider>": "InfraProvider/kv", "<profile>": "node"}},
 		"A KubeVirt NIC on an unrealized network kind": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", "UserDefinedNetwork"), kubevirtGuest()),
-			"Machine/node-01", map[string]string{"<machine>": "Machine/node-01", "<attachment>": "lab-guests"}},
+			"Machine/node-01", map[string]string{"<machine>": "Machine/node-01", "<segment>": "lab-guests"}},
 	}
 	authoredHost := func(catalog api.Catalog) kubevirt.HostCapability {
 		var requirements kubevirt.HostRequirements
@@ -192,7 +192,7 @@ func kubevirtProvider(credential, kind string, profile ...api.FieldValue) api.Ob
 	}
 	return api.NewObject(api.InfraProvider, "kv", api.Value{}, api.MapValue(
 		field("kubevirt", api.MapValue(text(credential, "host"), text("namespace", "guests"), field("machineProfiles", api.ListValue(selected)))),
-		field("networkAttachments", api.ListValue(api.MapValue(text("name", "lab-guests"), field("kubevirt", api.MapValue(field("networkRef",
+		field("segments", api.ListValue(api.MapValue(text("name", "lab-guests"), field("kubevirt", api.MapValue(field("networkRef",
 			api.MapValue(text("apiGroup", group), text("kind", kind), text("name", "guest-l2"), text("namespace", "guests")))))))),
 	))
 }

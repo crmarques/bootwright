@@ -22,7 +22,7 @@ func topologyProvider(name, host, port string, profile api.Value, attachments ..
 	arm := m("machineRef", host, "uri", "qemu:///system",
 		"bmcEmulation", m("port", api.IntegerValue(port), "bindAddress", "192.0.2.1", "auth", m("credentialsRef", "bmc")),
 		"machineProfiles", list(profile))
-	return obj(api.InfraProvider, name, m("libvirt", arm, "networkAttachments", list(attachments...)))
+	return obj(api.InfraProvider, name, m("libvirt", arm, "segments", list(attachments...)))
 }
 
 func managedNetwork(name, provider, bridge, address string) api.Object {
@@ -89,7 +89,7 @@ func TestAManagedNetworkNameIsNoAttachmentOfItsProvider(t *testing.T) {
 	guests := managedNetwork("guests", "a", "virbr-a", "198.51.100.1/24")
 	refused := issuesAt(Validate(guests, api.NewCatalog([]api.Object{a, b, host, guests})), field)
 	if len(refused) != 1 || refused[0].Code != "api.invariant" ||
-		!strings.Contains(refused[0].Message, "spec.networkAttachments[0] of InfraProvider/a is also named guests") ||
+		!strings.Contains(refused[0].Message, "spec.segments[0] of InfraProvider/a is also named guests") ||
 		!strings.Contains(refused[0].Remediation, "InfraProvider/a") || !strings.Contains(refused[0].Remediation, "Network/guests") {
 		t.Fatalf("a managed Network named like its provider's attachment: %v", refused)
 	}
@@ -111,7 +111,7 @@ func TestAManagedBridgeBelongsToOneNetworkOnItsHost(t *testing.T) {
 	}{
 		"two managed Networks of two providers": {managedNetwork("storage", "b", "virbr-x", "203.0.113.1/24"), "Network/storage of InfraProvider/b", []api.Object{topologyProvider("b", "host", "8001", topologyProfile())}},
 		"two managed Networks of one provider":  {managedNetwork("storage", "a", "virbr-x", "203.0.113.1/24"), "Network/storage of InfraProvider/a", nil},
-		"a managed Network and an attachment":   {api.Object{}, "spec.networkAttachments[0] of InfraProvider/b", []api.Object{topologyProvider("b", "host", "8001", topologyProfile(), externalAttachment("storage", "virbr-x"))}},
+		"a managed Network and an attachment":   {api.Object{}, "spec.segments[0] of InfraProvider/b", []api.Object{topologyProvider("b", "host", "8001", topologyProfile(), externalAttachment("storage", "virbr-x"))}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			objects := append([]api.Object{a, host, guests}, test.extra...)

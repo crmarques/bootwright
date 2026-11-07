@@ -134,12 +134,12 @@ func physicalMatrixState(t *testing.T, name string, original *compilation.State)
 	attachments := []api.Value{}
 	for _, object := range objects {
 		if object.Kind() == api.InfraProvider {
-			for _, attachment := range object.Spec().Get("networkAttachments").Items() {
+			for _, attachment := range object.Spec().Get("segments").Items() {
 				attachments = append(attachments, api.MapValue(api.FieldValue{Name: "name", Value: attachment.Get("name")}, api.FieldValue{Name: "baremetal", Value: api.MapValue()}))
 			}
 		}
 	}
-	provider = provider.WithSpec(provider.Spec().With("networkAttachments", api.ListValue(attachments...)))
+	provider = provider.WithSpec(provider.Spec().With("segments", api.ListValue(attachments...)))
 	objects = append(objects, provider, requireObject(t, base.Authored(), api.Secret, "lab-bmc-ca"))
 	for index, object := range objects {
 		spec := object.Spec()

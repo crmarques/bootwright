@@ -32,9 +32,11 @@ spec:
       nics:
         - nicRef: eth0
           macAddress: 02:00:00:00:00:22
+          segmentRef: ocp-bare-metal-network
 
         - nicRef: eth2
           macAddress: 02:00:00:00:00:23
+          segmentRef: ocp-bare-metal-network
 
   os:
     provided: false

@@ -14,7 +14,7 @@ Unless a field below declares a narrower namespace, a scalar `*Ref` is a plain
 `metadata.name` reference in the global namespace of its target kind. Local
 references are deliberately scalar too: a substrate arm's `profileRef`
 resolves inside one provider, NIC and address refs inside one machine, listener and endpoint refs
-inside one service, and attachment refs inside one provider. Loading order
+inside one service, and segment refs inside one provider. Loading order
 never chooses among duplicates.
 
 A field that references a Secret names its
@@ -25,7 +25,7 @@ access credential or trust anchor.
 
 | Kind | Declares |
 | --- | --- |
-| `InfraProvider` | One substrate provider, bare metal, a libvirt host, vSphere or KubeVirt, with its network attachments and machine profiles. |
+| `InfraProvider` | One substrate provider, bare metal, a libvirt host, vSphere or KubeVirt, with its segments and machine profiles. |
 | `Machine` | One host, physical or virtual, with its substrate arm, hardware, operating-system lifecycle, network and access. |
 | `MachineImage` | One operating-system installation image a profile installs from. |
 | `MachineInstallProfile` | One managed operating-system installation recipe: its installer, package source, customizations and services. |
@@ -35,7 +35,7 @@ access credential or trust anchor.
 
 `InfraProvider` declares substrate intent, not an adapter selection. Its
 spec contains exactly one substrate arm alongside optional
-`networkAttachments`. The arm name selects the substrate; `spec.type` is not
+`segments`. The arm name selects the substrate; `spec.type` is not
 accepted. Missing, multiple, or unknown arms fail validation, as do missing
 required fields inside the selected arm.
 
@@ -50,7 +50,7 @@ its 63-byte identity.
 | `spec.libvirt` | object | union | The libvirt arm below. |
 | `spec.vsphere` | object | union | A [refused arm](#refused-arms). |
 | `spec.kubevirt` | object | union | The KubeVirt arm, whose fields [refused machine arms](../deferred/machine-arms.md#kubevirt-arm) records. |
-| `spec.networkAttachments` | array | no | Set keyed by `name`; each entry has exactly the arm matching the selected substrate. |
+| `spec.segments` | array | no | Set keyed by `name`; each entry has exactly the arm matching the selected substrate ([segments](#machine-profiles-and-segments)). |
 
 ### Bare-metal arm
 
@@ -126,7 +126,7 @@ vendor minimum. Overflow beyond the native quantity representation refuses.
 
 ### Refused arms
 
-The `vsphere` provider arm and its network-attachment arm, and the
+The `vsphere` provider arm and its segment arm, and the
 `templateClone` installer arm, are admitted by the closed schema and refused
 before registration by
 [substrate selection](../substrates.md#selection-and-refusal) and
@@ -138,10 +138,10 @@ The field detail of the vSphere arm is recorded in
 [refused machine arms](../deferred/machine-arms.md), which
 [B99](../milestones/m1.md#b99) revives, and the KubeVirt arm's field reference
 is [its record](../deferred/machine-arms.md#kubevirt-arm).
-A libvirt or KubeVirt Machine's NIC attachments are its arm's `nics`
+A Machine NIC's segment is its arm's `nics[].segmentRef`
 ([substrate arm](#substrate-arm)).
 
-### Machine profiles and network attachments
+### Machine profiles and segments
 
 Every libvirt, vSphere, and KubeVirt `machineProfiles[]` entry has this exact
 shape; the vSphere-only `template` and `failureDomainRef` fields belong to the
@@ -167,43 +167,47 @@ in a mixed profile, in the effective disk order. Native consumers select the
 resulting guest path explicitly. Existing frozen requests retain their layout;
 changing media requires a new realization rather than modifying an owned disk.
 
-`networkAttachments[]` names are unique DNS labels. Each entry has required
-`name` and exactly one arm matching the provider's selected substrate; the
-`vsphere` arm is [refused](#refused-arms); the `kubevirt` arm is realized, and
-its fields are in [its reference](../deferred/machine-arms.md#kubevirt-arm):
+A segment is one provider network a Machine NIC is cabled to
+([D240](../milestones/backlog.md#d240) (2), (4)). `segments[]` names are unique
+DNS labels; each entry has required `name`, the fields below and exactly one
+arm matching the provider's substrate. The `vsphere` arm is
+[refused](#refused-arms); the `kubevirt` arm's fields are in
+[its reference](../deferred/machine-arms.md#kubevirt-arm).
 
-| Arm | Exact fields | Rule |
-| --- | --- | --- |
-| `baremetal` | none | Names a physical network a Machine may select; it configures nothing. VLAN and bond interfaces are declared in the Machine's NMState network; the attachment configures nothing for them. |
-| `libvirt` | required string `bridge`; optional integer `mtu` | An existing bridge, proved present and never created. `bridge` is 1 to 15 bytes of letters, digits, `_`, `.` or `-`, and neither `.` nor `..`; a `+` is refused because firewalld reads it as an interface wildcard and a managed network puts its bridge in zone `trusted` (`TestABridgeNameRefusesFirewalldsWildcard`). A network Bootwright defines is a [managed `Network`](networks.md#libvirt-arm), which owns the host-wide rules and joins this list under its own name. |
+| Field | Type | Default | Rule |
+| --- | --- | --- | --- |
+| `untaggedNetworkRef` | `Network` reference | none | The one network the segment carries untagged. On a `kubevirt` or `vsphere` segment it is required while the graph declares a Network (`api.required`). |
+| `taggedNetworkRefs` | set of `Network` references | none | The 802.1Q allow-list: each declares `vlan` and is not `untaggedNetworkRef`. Refused on a `kubevirt` or `vsphere` segment until [B1172](../milestones/backlog.md#b1172). |
+| `mtu` | integer 576 to 65536 | `1500`, materialized | The largest frame the segment carries, never derived into an interface MTU. A hosted KubeVirt segment naming a typed host `secondaryNetworks[]` entry takes that entry's `mtu`, 1500 when it has none, and an authored one refuses. |
+| `baremetal` | `{}` | | A physical network. |
+| `libvirt.bridge` | string | required | An existing bridge, proved present and never created: 1 to 15 bytes of letters, digits, `_`, `.` or `-`, neither `.` nor `..`; `+` refuses because firewalld reads it as an interface wildcard and a managed network puts its bridge in zone `trusted` (`TestABridgeNameRefusesFirewalldsWildcard`). |
 
-Only a managed `Network` configures a network. A bare-metal
-attachment, a libvirt bridge and the physical fabric behind them are named and
-verified, never changed ([product scope](../project.md#product-scope)).
+A [managed `Network`](networks.md#libvirt-arm) whose `libvirt.providerRef`
+names the provider is one of its segments under the Network's name, carrying
+itself untagged and its `libvirt.taggedNetworkRefs` tagged, with its `mtu` as
+capacity; it owns the host-wide rules. Only a managed Network configures a
+network: carriage and capacity name and check the fabric, never change it
+([product scope](../project.md#product-scope)). A libvirt vNIC's `<mtu>` and a
+managed network's MTU carry the capacity only when it is not 1500.
 
-A libvirt attachment may declare integer `mtu` (576 to 65,536), the largest
-frame its bridge is proved to carry; a managed Network's is its `spec.mtu`. A
-guest interface whose declared `mtu` exceeds its attachment's, or 1,500
-when the attachment declares none, refuses. A KubeVirt Machine whose provider
-names `hostClusterRef` is bound the same way by the `mtu` of the host
-`secondaryNetworks[]` entry its interface's attachment names, 1,500 when that
-entry declares none; a provider on an external host has no network in the graph
-and declares no bound. A managed Network's prefix may
-be IPv4 or IPv6.
+An interface's effective MTU is its `mtu`, else its VLAN parent's or bond's,
+else 1500. It must not exceed the capacity of the segment of any NIC under it,
+followed through VLAN parents and bond and bridge ports, nor, while the graph
+declares a Network, the `mtu` of a Network it holds an assignment on. Each
+excess refuses `api.invariant` at `$.spec.network`, naming the interface, the
+capacity and its holder, and the field to raise: the segment's `mtu`, the host
+secondary network's or the Network's.
 
 A bond's ports, followed through VLAN parents and nested bonds to their
-`ethernet` interfaces and their NICs, reach one attachment: a Machine whose arm
-`nics` put two ports of one bond on different attachments
-refuses `api.invariant` at the first differing entry's `attachmentRef`, naming
-the bond and each port's attachment, because a failover would move the host
-onto another network. The remedy attaches every port to one attachment or
-removes the other port from the bond.
+`ethernet` interfaces and their NICs, reach one segment: arm `nics` putting two
+ports of one bond on different segments refuse `api.invariant` at the first
+differing entry's `segmentRef`, naming the bond and each port's segment,
+because a failover would move the host onto another network.
 
-An attachment claims only the shared key `bridge-use:<name>`, never
-an exclusive reservation, so another context's managed Network may define
-the same bridge. The removal of a managed network
-therefore refuses while another context's attachment uses its bridge
-([substrates](../substrates.md#provider-host-realization) owns the rule).
+A libvirt segment claims only the shared key `bridge-use:<name>`, never an
+exclusive reservation, so another context's managed Network may define the
+same bridge, whose removal therefore refuses while another context's segment
+uses it ([substrates](../substrates.md#provider-host-realization) owns the rule).
 
 ## Machine
 
@@ -234,7 +238,7 @@ own refusal.
 | `spec.hardware.eraseOnRemoval` | object | no | retain | The bare-metal [physical erase policy](#physical-erase-policy). |
 | `spec.os.install.hostKeyRef` | string | conditional | — | `sshKeyPair` `Secret` whose pair the installation delivers as this machine's SSH host key; required for a bare-metal Bootwright-installed Machine and forbidden on every other Machine. Unique across Machines and no other credential. Effect material. |
 | `spec.proxy` | choice object | no | profile choice or direct access | Lifecycle-dependent atomic Machine-owned selection below; emits immediately after `os`. |
-| `spec.network` | object | no | contacts normalized below | Network selection, named contacts/static assignments, attachments, and bindings below. |
+| `spec.network` | object | no | contacts normalized below | Network selection, named contacts/static assignments and interface matches below. |
 | `spec.access` | object | lifecycle-dependent | normalized as below | Local or SSH access plus optional root-login posture. |
 
 ### OS lifecycle and substrate invariants
@@ -320,13 +324,13 @@ substrate reads; NIC names and substrate-neutral root-device hints stay in
 | Arm | Field | Type | Rule |
 | --- | --- | --- | --- |
 | `baremetal` | `bmc` | object | The management controller; exact shape [below](#bmc-and-root-device-shape). |
-| `baremetal` | `nics` | array | Set of `{nicRef, macAddress}` keyed by `nicRef`; `nicRef` names a `hardware.nics[].name`, at most one entry per NIC; `macAddress` is EUI-48. |
+| `baremetal` | `nics` | array | Set of `{nicRef, macAddress, segmentRef}` keyed by `nicRef`; `nicRef` names a `hardware.nics[].name`, at most one entry per NIC; `macAddress` is EUI-48; optional `segmentRef` names a segment of the provider with this arm, and is refused without `providerRef`. Omitted, the NIC takes the provider's sole segment; with two or more, a NIC an available ethernet interface matches needs one while the graph declares a Network (`api.invariant` at its entry, naming the candidates). |
 | `baremetal` | `rootDevice` | object | Physical-disk hints `wwn`, `hctl` and `serialNumber`, each a non-empty string, and `sizeBytes`, the root disk's exact capacity, 4096-aligned up to 64 TiB, proved by a Bootwright installation or the physical agent pre-boot serial proof. |
 | `baremetal` | `firmware` | object | Declared firmware settings; [shape](#firmware-block). |
 | `libvirt`, `kubevirt` | `profileRef` | string | Provider-local `machineProfiles[].name`. |
-| `libvirt`, `kubevirt` | `nics` | array | Set of `{nicRef, attachmentRef}` keyed by `nicRef`: `nicRef` names a `hardware.nics[].name`, `attachmentRef` a provider-local `networkAttachments[].name` with this arm or a managed Network naming the provider. A NIC without an entry takes the provider's sole one of these, whatever its name; with two or more, every NIC needs its entry, else `api.invariant` at this field names the NIC. |
+| `libvirt`, `kubevirt` | `nics` | array | Set of `{nicRef, segmentRef}` keyed by `nicRef`: `segmentRef` names a segment of the provider with this arm. A NIC without an entry takes the provider's sole segment, whatever its name; with two or more, every NIC needs its entry, else `api.invariant` at this field names the NIC. |
 | `vsphere` | `profileRef` | string | Provider-local `machineProfiles[].name`. |
-| `vsphere` | `nics` | array | As on bare metal; each authored MAC lies in the manual assignment range `00:50:56:00:00:00` through `00:50:56:3f:ff:ff` ([refused machine arms](../deferred/machine-arms.md#machine-fields)). |
+| `vsphere` | `nics` | array | As on bare metal, `segmentRef` admitted and not realized; each authored MAC lies in the manual assignment range `00:50:56:00:00:00` through `00:50:56:3f:ff:ff` ([refused machine arms](../deferred/machine-arms.md#machine-fields)). |
 
 A `libvirt`, `kubevirt` or `vsphere` arm requires `providerRef`; without it the
 arm refuses with `api.invariant` at `$.spec.substrate.<arm>`. A `baremetal` arm
@@ -369,13 +373,13 @@ selection or interface; an OS-ready Machine, which declares
 contacts only, is told to remove it.
 
 Effective normalization writes each defaulted arm `nics` entry and the complete
-`interfaceMatches` list. A bare-metal Machine, whose attachment configures
-nothing, selects none. A Machine attached to a managed libvirt network selects an install address inside
-that attachment's prefix, other than the bridge's host address and, for an IPv4
+`interfaceMatches` list; a bare-metal or vSphere NIC's sole-segment default is
+read, not written. A Machine on a managed libvirt network selects an install address inside
+that Network's prefix, other than the bridge's host address and, for an IPv4
 prefix shorter than /31, its network and broadcast addresses; each refuses at
 `network.installAddressRef` naming the prefix and every reserved address.
 The NICs under the install address's interface, following
-[VLAN parents and bond members](#nmstate-composition-subset), select those attachments.
+[VLAN parents and bond members](#nmstate-composition-subset), select those segments.
 
 A non-provided Machine of a libvirt provider selects a network configuration
 whose composed NMState, after its overrides, has at least one `ethernet`
@@ -980,7 +984,7 @@ network configuration.
 ### NMState composition subset
 
 Admission interprets only the native fields needed to prove Machine address,
-installation, NIC-binding and attachment-MTU invariants. The containing native maps remain
+installation, NIC-binding, carriage and capacity invariants. The containing native maps remain
 open under the [native scalar rules](../api.md#native-and-implementation-shaped-fields).
 This subset is not a claim of full NMState or installer-schema compatibility.
 
@@ -989,10 +993,10 @@ This subset is not a claim of full NMState or installer-schema compatibility.
 | `interfaces` | Array of interface mappings with unique, non-empty string `name` and explicit, non-empty string `type`; `name` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
 | `interfaces[].state` | Optional non-empty string; `absent` and `ignore` exclude the interface from assignment and binding. |
 | `interfaces[].mac-address` | Optional MAC address on bare metal, normalized before comparison with its matched NIC's; refused on a libvirt or KubeVirt Machine. |
-| `interfaces[].mtu` | Optional integer; on a libvirt or KubeVirt Machine it must not exceed the MTU of the attachment that carries the interface, found through VLAN parents and bond members. |
-| `interfaces[].vlan.base-iface` | Optional parent interface name; the interface takes the attachment of its parent. A VLAN install interface needs an available ethernet or bond parent. |
+| `interfaces[].mtu` | Optional integer; the effective MTU is [bounded by capacity](#machine-profiles-and-segments). |
+| `interfaces[].vlan.base-iface` | Optional parent interface name; the interface takes the segment of its parent. A VLAN install interface needs an available ethernet or bond parent. |
 | `interfaces[].vlan.id` | Optional integer; a VLAN install interface needs 1 to 4094 and an interface name that agrees with it ([managed OS](../managed-os.md#installation)). |
-| `interfaces[].link-aggregation.port` | Optional bond member names; with each ethernet whose `controller` names the bond, the members whose attachments it takes. |
+| `interfaces[].link-aggregation.port` | Optional bond member names; with each ethernet whose `controller` names the bond, the members whose segments it takes. |
 | `interfaces[].ipv4`, `interfaces[].ipv6` | Optional family mappings. |
 | `interfaces[].ipv4.enabled`, `interfaces[].ipv6.enabled` | Optional booleans; explicit `false` forbids static assignment. |
 | `interfaces[].ipv4.dhcp`, `interfaces[].ipv6.dhcp` | Optional booleans; explicit `true` forbids static assignment. |

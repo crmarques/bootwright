@@ -23,11 +23,11 @@ spec:
       profileRef: master
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp2s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp3s0
-          attachmentRef: lab-secondary
+          segmentRef: lab-secondary
   hardware:
     nics:
       - name: enp1s0
@@ -65,11 +65,11 @@ spec:
       profileRef: master
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp2s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp3s0
-          attachmentRef: lab-secondary
+          segmentRef: lab-secondary
   hardware:
     nics:
       - name: enp1s0
@@ -107,11 +107,11 @@ spec:
       profileRef: master
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp2s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp3s0
-          attachmentRef: lab-secondary
+          segmentRef: lab-secondary
   hardware:
     nics:
       - name: enp1s0
@@ -149,11 +149,11 @@ spec:
       profileRef: compute
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp2s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp3s0
-          attachmentRef: lab-secondary
+          segmentRef: lab-secondary
   hardware:
     nics:
       - name: enp1s0
@@ -191,11 +191,11 @@ spec:
       profileRef: compute
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp2s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp3s0
-          attachmentRef: lab-secondary
+          segmentRef: lab-secondary
   hardware:
     nics:
       - name: enp1s0
@@ -233,11 +233,11 @@ spec:
       profileRef: compute
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp2s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp3s0
-          attachmentRef: lab-secondary
+          segmentRef: lab-secondary
   hardware:
     nics:
       - name: enp1s0
@@ -275,11 +275,11 @@ spec:
       profileRef: compute
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp2s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp3s0
-          attachmentRef: lab-secondary
+          segmentRef: lab-secondary
   hardware:
     nics:
       - name: enp1s0
@@ -317,11 +317,11 @@ spec:
       profileRef: compute
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp2s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp3s0
-          attachmentRef: lab-secondary
+          segmentRef: lab-secondary
   hardware:
     nics:
       - name: enp1s0
@@ -359,11 +359,11 @@ spec:
       profileRef: compute
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp2s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp3s0
-          attachmentRef: lab-secondary
+          segmentRef: lab-secondary
   hardware:
     nics:
       - name: enp1s0
@@ -401,11 +401,11 @@ spec:
       profileRef: compute
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp2s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp3s0
-          attachmentRef: lab-secondary
+          segmentRef: lab-secondary
   hardware:
     nics:
       - name: enp1s0

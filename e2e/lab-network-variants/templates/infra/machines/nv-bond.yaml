@@ -11,10 +11,10 @@ spec:
 
       nics:
         - nicRef: nic0
-          attachmentRef: nv-lab
+          segmentRef: nv-lab
 
         - nicRef: nic1
-          attachmentRef: nv-lab
+          segmentRef: nv-lab
 
   hardware:
     nics:

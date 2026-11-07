@@ -41,7 +41,7 @@ func HypervisorPackages() []string { return append([]string(nil), hypervisorPack
 
 // serviceUnits are the modular libvirt drivers this provider's own resources
 // live in: the hypervisor the URI answers on, the network driver that owns a
-// managed attachment's bridge, and the storage driver that owns the media
+// managed Network's bridge, and the storage driver that owns the media
 // pool. Each is socket-activated by default, which starts autostart networks
 // and pools only once something asks the driver for them, so a host that
 // restarts carries neither until this block enables them.

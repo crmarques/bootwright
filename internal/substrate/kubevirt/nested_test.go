@@ -22,7 +22,7 @@ func hostedProvider() api.Object {
 	return api.NewObject(api.InfraProvider, "lab-kubevirt", api.Value{}, api.MapValue(
 		field("kubevirt", api.MapValue(text("hostClusterRef", "host"), text("namespace", "guests"),
 			field("machineProfiles", api.ListValue(api.MapValue(text("name", "node"), number("cpu", "8"), number("memoryMiB", "16384"), number("diskGiB", "120")))))),
-		field("networkAttachments", api.ListValue(
+		field("segments", api.ListValue(
 			api.MapValue(text("name", "lab-guests"), field("kubevirt", api.MapValue(field("networkRef", api.MapValue(
 				text("apiGroup", "k8s.ovn.org"), text("kind", "ClusterUserDefinedNetwork"), text("name", "guest-l2")))))),
 			api.MapValue(text("name", "storage"), field("kubevirt", api.MapValue(field("networkRef", api.MapValue(
@@ -125,7 +125,7 @@ func TestAHostedProviderRefusesAHostWithoutKubeVirtAndANetworkItDoesNotDeclare(t
 	}
 	bare := labCatalog(hostedProvider(), hostCluster(secondary("guest-l2", text("tier", "hub"))))
 	refused = NewHost(nil, hosting).Unsupported(compilation.NewState(bare, bare, nil))
-	if len(refused) != 1 || !strings.Contains(refused[0].Reason, "attachment storage names another network") {
+	if len(refused) != 1 || !strings.Contains(refused[0].Reason, "segment storage names another network") {
 		t.Fatalf("an undeclared network: %+v", refused)
 	}
 }

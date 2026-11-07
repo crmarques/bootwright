@@ -18,6 +18,7 @@ spec:
           # refuses an unverified leg.
           trustBundleRef: lab-bmc-ca
 
-  networkAttachments:
+  segments:
     - name: lab-metal
+      untaggedNetworkRef: lab-metal
       baremetal: {}

@@ -14,21 +14,21 @@ func MachineNICs(machine api.Object) []string {
 
 func VirtualArm(arm string) bool { return arm == ArmLibvirt || arm == ArmKubeVirt }
 
-func MachineNICAttachments(machine api.Object) api.Value {
-	if arm := MachineArm(machine); VirtualArm(arm) {
+func MachineNICSegments(machine api.Object) api.Value {
+	if arm := MachineArm(machine); arm != "" {
 		return machine.Spec().Get("substrate", arm, "nics")
 	}
 	return api.Value{}
 }
 
-func NICAttachment(catalog api.Catalog, provider, machine api.Object, nic string) string {
-	for _, entry := range MachineNICAttachments(machine).Items() {
-		if entry.Get("nicRef").Text() == nic {
-			return entry.Get("attachmentRef").Text()
+func NICSegment(catalog api.Catalog, provider, machine api.Object, nic string) string {
+	for _, entry := range MachineNICSegments(machine).Items() {
+		if entry.Get("nicRef").Text() == nic && entry.Has("segmentRef") {
+			return entry.Get("segmentRef").Text()
 		}
 	}
-	if attachments := Segments(catalog, provider); attachments.Len() == 1 {
-		return attachments.Items()[0].Get("name").Text()
+	if segments := Segments(catalog, provider); segments.Len() == 1 {
+		return segments.Items()[0].Get("name").Text()
 	}
 	return ""
 }

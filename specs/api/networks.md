@@ -77,7 +77,7 @@ network defined on a provider's host. Its fields, in emitted order:
 | Path | Type | Default | Rule |
 | --- | --- | --- | --- |
 | `providerRef` | `InfraProvider` reference | required | An `InfraProvider` with a `libvirt` arm. |
-| `bridge` | bridge name | required | The bridge-name grammar of a provider's libvirt attachment. |
+| `bridge` | bridge name | required | The bridge-name grammar of a provider's libvirt segment. |
 | `forward` | `nat` or `none` | `nat` | The libvirt forward mode. |
 | `hostAddress` | IP | the IPv4 gateway, else the IPv6 gateway | The host's address on the bridge: a host address inside the CIDR of its family, under the rules a gateway follows. Required when the Network declares no gateway. |
 | `taggedNetworkRefs` | set of `Network` references | none | The VLAN networks guests may stack on this bridge. Each declares `vlan` and is not the Network itself. |
@@ -85,16 +85,16 @@ network defined on a provider's host. Its fields, in emitted order:
 The host block of the provider `providerRef` names defines the network
 ([provider host realization](../substrates.md#provider-host-realization)) as
 `bootwright-<context>-<name>` with `hostAddress` and its CIDR's prefix; its
-`mtu` is emitted only when it is not 1500. The Network is a segment of that
-provider under its own name: a Machine NIC's
-[`attachmentRef`](machines.md#machine-profiles-and-network-attachments) names
-it, and an attachment of that provider with the same name refuses at
+`mtu` is emitted only when it is not 1500. The Network is a
+[segment](machines.md#machine-profiles-and-segments) of that provider under its
+own name, carrying itself untagged and `taggedNetworkRefs` tagged: a Machine
+NIC's `segmentRef` names it, and a provider segment of the same name refuses at
 `providerRef`. `taggedNetworkRefs` realizes nothing: the bridge already carries
 guest VLAN tags.
 
 Between the managed Networks naming providers of one host, each refused
 `api.invariant` at the Network, naming both Networks and their providers: no
-other managed Network or provider attachment on that host names its `bridge`,
+other managed Network or provider segment on that host names its `bridge`,
 and no other managed Network's prefix overlaps its own, IPv4 or IPv6. At most
 20 managed Networks name the providers of one host (`api.value`, the host
 reservation's bound).
@@ -114,8 +114,23 @@ While the graph declares a Network, each kind below refuses, with
   the assigned interface's composed NMState stack carries a VLAN, because the
   interface is a VLAN or a bridge or bond port path down from it reaches one,
   every such `vlan.id` equals the Network's `vlan`, and a Network without
-  `vlan` refuses a tagged stack. An untagged stack is not checked: an access
-  port or a native VLAN delivers the network untagged.
+  `vlan` refuses a tagged stack.
+- **Carriage** (Machine, at the same field): each NIC under the assigned
+  interface sits on a [segment](machines.md#machine-profiles-and-segments)
+  that carries the Network tagged when a VLAN lies on the path to it, else
+  untagged; a stack whose NICs sit on two segments is left to the bond rule.
+  Every available VLAN interface stacked on a NIC tags the `vlan` of a Network
+  that NIC's segment carries tagged (at the network configuration). Each
+  refusal names the Machine, interface, NIC, segment and Network, and the
+  remedy adds the Network to the segment's carriage or moves the NIC with
+  `segmentRef`.
+- **Capacity** (Machine, at `spec.network`): an interface's effective MTU does
+  not exceed the `mtu` of a Network it holds an assignment on.
+- **Segment selection** (Machine, at its bare-metal or vSphere `nics` entry): on
+  a provider with two or more segments, a NIC an available ethernet interface
+  matches names its `segmentRef`.
+- **Fabric carriage** (InfraProvider, at `spec.segments[].untaggedNetworkRef`):
+  a KubeVirt or vSphere segment carries one Network untagged.
 - **Install gateway** (Machine, at `spec.network.installAddressRef`): when the
   install address's Network declares a gateway of that family, the next hop
   of the install default route equals it, beside the rule that it lies inside

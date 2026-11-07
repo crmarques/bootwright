@@ -18,7 +18,7 @@ func kubevirtAttachments(kind string) (api.Object, api.Catalog) {
 	for index, object := range objects {
 		spec := object.Spec()
 		if object.Kind() == api.InfraProvider {
-			spec = spec.With("networkAttachments", list(m("name", "lan", "kubevirt", m("networkRef", m("kind", kind, "name", "lan")))))
+			spec = spec.With("segments", list(m("name", "lan", "kubevirt", m("networkRef", m("kind", kind, "name", "lan")))))
 		}
 		objects[index] = object.WithSpec(spec)
 	}
@@ -44,12 +44,12 @@ func TestAKubeVirtAttachmentRefusesOncePerNodeWhateverTheNICOrder(t *testing.T) 
 	for index, object := range objects {
 		spec := object.Spec()
 		if object.Kind() == api.InfraProvider {
-			spec = spec.With("networkAttachments", list(
+			spec = spec.With("segments", list(
 				m("name", "bad", "kubevirt", m("networkRef", m("kind", "Other", "name", "bad"))),
 				m("name", "good", "kubevirt", m("networkRef", m("kind", "ClusterUserDefinedNetwork", "name", "good")))))
 		}
 		if object.Kind() == api.Machine && object.Name() == "node-0" {
-			spec = spec.WithPath(list(m("nicRef", "eth0", "attachmentRef", "bad"), m("nicRef", "eth1", "attachmentRef", "good"), m("nicRef", "eth2", "attachmentRef", "bad"), m("nicRef", "eth3", "attachmentRef", "bad")), "substrate", "kubevirt", "nics")
+			spec = spec.WithPath(list(m("nicRef", "eth0", "segmentRef", "bad"), m("nicRef", "eth1", "segmentRef", "good"), m("nicRef", "eth2", "segmentRef", "bad"), m("nicRef", "eth3", "segmentRef", "bad")), "substrate", "kubevirt", "nics")
 		}
 		objects[index] = object.WithSpec(spec)
 	}

@@ -40,7 +40,7 @@ spec:
       profileRef: client
       nics:
         - nicRef: enp1s0
-          attachmentRef: primary
+          segmentRef: primary
   hardware:
     nics:
       - name: enp1s0
@@ -106,7 +106,7 @@ spec:
       profileRef: core
       nics:
         - nicRef: enp1s0
-          attachmentRef: primary
+          segmentRef: primary
   hardware:
     nics:
       - name: enp1s0
@@ -153,7 +153,7 @@ spec:
       profileRef: core
       nics:
         - nicRef: enp1s0
-          attachmentRef: primary
+          segmentRef: primary
   hardware:
     nics:
       - name: enp1s0
@@ -200,7 +200,7 @@ spec:
       profileRef: gateway
       nics:
         - nicRef: enp1s0
-          attachmentRef: primary
+          segmentRef: primary
   hardware:
     nics:
       - name: enp1s0
@@ -247,7 +247,7 @@ spec:
       profileRef: mirror
       nics:
         - nicRef: enp1s0
-          attachmentRef: primary
+          segmentRef: primary
   hardware:
     nics:
       - name: enp1s0
@@ -294,7 +294,7 @@ spec:
       profileRef: core
       nics:
         - nicRef: enp1s0
-          attachmentRef: secondary
+          segmentRef: secondary
   hardware:
     nics:
       - name: enp1s0
@@ -341,7 +341,7 @@ spec:
       profileRef: core
       nics:
         - nicRef: enp1s0
-          attachmentRef: secondary
+          segmentRef: secondary
   hardware:
     nics:
       - name: enp1s0
@@ -388,7 +388,7 @@ spec:
       profileRef: gateway
       nics:
         - nicRef: enp1s0
-          attachmentRef: secondary
+          segmentRef: secondary
   hardware:
     nics:
       - name: enp1s0
@@ -435,7 +435,7 @@ spec:
       profileRef: mirror
       nics:
         - nicRef: enp1s0
-          attachmentRef: secondary
+          segmentRef: secondary
   hardware:
     nics:
       - name: enp1s0

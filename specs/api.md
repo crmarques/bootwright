@@ -325,7 +325,7 @@ One rule decides between a presence arm and an enum, and
 
 Presence unions select `InfraProvider` and `ClusterAddon` (a `type` field on
 either is unknown), the Machine [substrate arm](api/machines.md#substrate-arm),
-provider attachments, machine-install backends and package sources,
+provider segments, machine-install backends and package sources,
 authentication, proxy choices, `Secret.spec.source`,
 `OpenShiftCluster.spec.install.agent` and `spec.install.platform`,
 `CephCluster.spec.distribution`, the `CephPool` protection, the

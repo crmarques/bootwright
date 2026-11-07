@@ -7,7 +7,7 @@ proxy and artifact services on the controller. Context `lab-network-variants`;
 Redfish BMC on loopback ports 8000 to 8002. Bond mode is `active-backup`, the
 only mode a libvirt Machine admits.
 
-| Machine | Install interface | Attachment | Install address | Gateway | Guest-only VLAN 140 |
+| Machine | Install interface | Segment | Install address | Gateway | Guest-only VLAN 140 |
 | --- | --- | --- | --- | --- | --- |
 | `nv-bond` | `bond0` over `nic0` and `nic1` | `nv-lab`, managed, bridge `virbr-e2e` | 198.51.100.11/26 | 198.51.100.1 | `bond0.140`, 203.0.113.11/24, MTU 1400 |
 | `nv-vlan` | `nic0.120` over `nic0` | `nv-trunk`, external, bridge `br-nv` | 198.51.100.71/26 | 198.51.100.65 | `nic0.140`, 203.0.113.12/24, MTU 1400 |

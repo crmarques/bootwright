@@ -125,7 +125,7 @@
             "spec.libvirt.uri",
             "spec.libvirt.machineRef",
             "spec.libvirt.bmcEmulation",
-            "spec.libvirt.networkAttachments",
+            "spec.libvirt.segments",
             "spec.libvirt.machineProfiles[rhel].cpu",
             "spec.libvirt.machineProfiles[rhel].memoryMiB"
           ],

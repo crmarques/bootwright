@@ -15,10 +15,10 @@ spec:
 
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
 
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
 
   hardware:
     nics:

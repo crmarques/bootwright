@@ -30,7 +30,7 @@ func m(kv ...any) api.Value {
 }
 func list(v ...api.Value) api.Value { return api.ListValue(v...) }
 func fixture() (api.Object, api.Catalog) {
-	provider := object(api.InfraProvider, "metal", m("baremetal", m("defaults", m("bmc", m("credentialsRef", "bmc", "tls", m("verify", false), "virtualMedia", m("tls", m("trust", "established"))))), "networkAttachments", list(m("name", "net", "baremetal", m()))))
+	provider := object(api.InfraProvider, "metal", m("baremetal", m("defaults", m("bmc", m("credentialsRef", "bmc", "tls", m("verify", false), "virtualMedia", m("tls", m("trust", "established"))))), "segments", list(m("name", "net", "untaggedNetworkRef", "lan", "baremetal", m()))))
 	network := object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")), "routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-interface", "eth0"))))))
 	machine := object(api.Machine, "node", m("substrate", m("providerRef", "metal", "baremetal", m("rootDevice", m("wwn", "0x5000c500a1b2c3d4"), "bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1"), "nics", list(m("nicRef", "eth0", "macAddress", "02-00-00-00-00-01")))), "os", m("provided", false), "hardware", m("nics", list(m("name", "eth0"))), "network", m("configRef", "net", "addresses", list(m("name", "primary", "address", "192.0.2.11/24", "interface", "eth0")))))
 	env := object(api.Environment, "env", m("domains", m("base", "example.test")))

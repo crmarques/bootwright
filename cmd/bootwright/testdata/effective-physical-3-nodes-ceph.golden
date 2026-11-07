@@ -387,8 +387,10 @@ spec:
           tls:
             trust: importCertificate
             removeCertificateAfterBoot: false
-  networkAttachments:
+  segments:
     - name: lab-metal
+      untaggedNetworkRef: lab-metal
+      mtu: 1500
       baremetal: {}
 ---
 apiVersion: bootwright.io/v1alpha1

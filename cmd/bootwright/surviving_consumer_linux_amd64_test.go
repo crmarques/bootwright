@@ -60,8 +60,9 @@ spec:
         credentialsRef: lab-bmc-credentials
         tls:
           trustBundleRef: lab-bmc-ca
-  networkAttachments:
+  segments:
     - name: lab-metal
+      untaggedNetworkRef: lab-guests
       baremetal: {}
 `
 

@@ -74,14 +74,14 @@ func TestUnusedDefaultsRejectPresentContradictions(t *testing.T) {
 }
 
 func TestUnusedDefaultsPermitMissingRequiredArmsAndReferences(t *testing.T) {
-	input := sources(environmentYAML + "  defaults:\n    InfraProvider:\n      baremetal: {}\n      networkAttachments: [{name: network}]\n    CephPool:\n      clusterRef: future\n      compression: {minBlobSize: 20}\n    Secret:\n      source: {generated: {bytes: 32}}\n")
+	input := sources(environmentYAML + "  defaults:\n    InfraProvider:\n      baremetal: {}\n      segments: [{name: network}]\n    CephPool:\n      clusterRef: future\n      compression: {minBlobSize: 20}\n    Secret:\n      source: {generated: {bytes: 32}}\n")
 	state, report, err := regressionCompiler().Compile(context.Background(), input)
 	if err != nil || report.Counts.ObjectsDecoded != 2 || len(state.Effective().Objects()) != 2 {
 		t.Fatalf("partial defaults were completed or required a recipient: state=%v report=%v err=%v", state, report, err)
 	}
 	env, _ := state.Effective().Find(api.Environment, "synthetic")
 	partial := env.Spec().Get("defaults", "InfraProvider")
-	if partial.Has("baremetal", "defaults") || partial.Get("networkAttachments").Items()[0].Has("baremetal") {
+	if partial.Has("baremetal", "defaults") || partial.Get("segments").Items()[0].Has("baremetal") {
 		t.Fatal("unused partial defaults acquired built-in fields")
 	}
 }

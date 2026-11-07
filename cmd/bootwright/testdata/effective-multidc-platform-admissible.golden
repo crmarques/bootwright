@@ -156,9 +156,9 @@ spec:
       profileRef: general
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -233,8 +233,10 @@ spec:
       nics:
         - nicRef: eth0
           macAddress: 02:00:00:00:00:18
+          segmentRef: ocp-bare-metal-network
         - nicRef: eth2
           macAddress: 02:00:00:00:00:19
+          segmentRef: ocp-bare-metal-network
       rootDevice:
         wwn: "0x500000000000f101"
   hardware:
@@ -286,8 +288,10 @@ spec:
       nics:
         - nicRef: eth0
           macAddress: 02:00:00:00:00:1a
+          segmentRef: ocp-bare-metal-network
         - nicRef: eth2
           macAddress: 02:00:00:00:00:1b
+          segmentRef: ocp-bare-metal-network
       rootDevice:
         wwn: "0x500000000000f102"
   hardware:
@@ -339,8 +343,10 @@ spec:
       nics:
         - nicRef: eth0
           macAddress: 02:00:00:00:00:1c
+          segmentRef: ocp-bare-metal-network
         - nicRef: eth2
           macAddress: 02:00:00:00:00:1d
+          segmentRef: ocp-bare-metal-network
       rootDevice:
         wwn: "0x500000000000f103"
   hardware:
@@ -392,8 +398,10 @@ spec:
       nics:
         - nicRef: eth0
           macAddress: 02:00:00:00:00:1e
+          segmentRef: ocp-bare-metal-network
         - nicRef: eth2
           macAddress: 02:00:00:00:00:1f
+          segmentRef: ocp-bare-metal-network
       rootDevice:
         wwn: "0x500000000000f104"
   hardware:
@@ -445,8 +453,10 @@ spec:
       nics:
         - nicRef: eth0
           macAddress: 02:00:00:00:00:20
+          segmentRef: ocp-bare-metal-network
         - nicRef: eth2
           macAddress: 02:00:00:00:00:21
+          segmentRef: ocp-bare-metal-network
       rootDevice:
         wwn: "0x500000000000f105"
   hardware:
@@ -498,8 +508,10 @@ spec:
       nics:
         - nicRef: eth0
           macAddress: 02:00:00:00:00:22
+          segmentRef: ocp-bare-metal-network
         - nicRef: eth2
           macAddress: 02:00:00:00:00:23
+          segmentRef: ocp-bare-metal-network
       rootDevice:
         wwn: "0x500000000000f106"
   hardware:
@@ -540,9 +552,9 @@ spec:
       profileRef: large
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -581,9 +593,9 @@ spec:
       profileRef: large
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -622,9 +634,9 @@ spec:
       profileRef: large
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -663,9 +675,9 @@ spec:
       profileRef: general
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -704,9 +716,9 @@ spec:
       profileRef: general
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -745,9 +757,9 @@ spec:
       profileRef: general
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -786,9 +798,9 @@ spec:
       profileRef: general
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -827,9 +839,9 @@ spec:
       profileRef: general
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -868,9 +880,9 @@ spec:
       profileRef: general
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -909,9 +921,9 @@ spec:
       profileRef: large
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -950,9 +962,9 @@ spec:
       profileRef: large
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -991,9 +1003,9 @@ spec:
       profileRef: large
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -1032,9 +1044,9 @@ spec:
       profileRef: general
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -1073,9 +1085,9 @@ spec:
       profileRef: general
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -1114,9 +1126,9 @@ spec:
       profileRef: general
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -1155,9 +1167,9 @@ spec:
       profileRef: general
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -1196,9 +1208,9 @@ spec:
       profileRef: general
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -1237,9 +1249,9 @@ spec:
       profileRef: general
       nics:
         - nicRef: primary
-          attachmentRef: hub-vm-machine
+          segmentRef: hub-vm-machine
         - nicRef: ceph-public
-          attachmentRef: hub-vm-ceph-public
+          segmentRef: hub-vm-ceph-public
   hardware:
     nics:
       - name: primary
@@ -1287,12 +1299,16 @@ spec:
       nics:
         - nicRef: nic0
           macAddress: 02:00:00:00:00:00
+          segmentRef: ceph-network
         - nicRef: nic1
           macAddress: 02:00:00:00:00:01
+          segmentRef: ceph-network
         - nicRef: nic2
           macAddress: 02:00:00:00:00:02
+          segmentRef: ceph-network
         - nicRef: nic3
           macAddress: 02:00:00:00:00:03
+          segmentRef: ceph-network
   hardware:
     nics:
       - name: nic0
@@ -1370,12 +1386,16 @@ spec:
       nics:
         - nicRef: nic0
           macAddress: 02:00:00:00:00:04
+          segmentRef: ceph-network
         - nicRef: nic1
           macAddress: 02:00:00:00:00:05
+          segmentRef: ceph-network
         - nicRef: nic2
           macAddress: 02:00:00:00:00:06
+          segmentRef: ceph-network
         - nicRef: nic3
           macAddress: 02:00:00:00:00:07
+          segmentRef: ceph-network
   hardware:
     nics:
       - name: nic0
@@ -1453,12 +1473,16 @@ spec:
       nics:
         - nicRef: nic0
           macAddress: 02:00:00:00:00:08
+          segmentRef: ceph-network
         - nicRef: nic1
           macAddress: 02:00:00:00:00:09
+          segmentRef: ceph-network
         - nicRef: nic2
           macAddress: 02:00:00:00:00:0a
+          segmentRef: ceph-network
         - nicRef: nic3
           macAddress: 02:00:00:00:00:0b
+          segmentRef: ceph-network
   hardware:
     nics:
       - name: nic0
@@ -1536,12 +1560,16 @@ spec:
       nics:
         - nicRef: nic0
           macAddress: 02:00:00:00:00:0c
+          segmentRef: ceph-network
         - nicRef: nic1
           macAddress: 02:00:00:00:00:0d
+          segmentRef: ceph-network
         - nicRef: nic2
           macAddress: 02:00:00:00:00:0e
+          segmentRef: ceph-network
         - nicRef: nic3
           macAddress: 02:00:00:00:00:0f
+          segmentRef: ceph-network
   hardware:
     nics:
       - name: nic0
@@ -1619,12 +1647,16 @@ spec:
       nics:
         - nicRef: nic0
           macAddress: 02:00:00:00:00:10
+          segmentRef: ceph-network
         - nicRef: nic1
           macAddress: 02:00:00:00:00:11
+          segmentRef: ceph-network
         - nicRef: nic2
           macAddress: 02:00:00:00:00:12
+          segmentRef: ceph-network
         - nicRef: nic3
           macAddress: 02:00:00:00:00:13
+          segmentRef: ceph-network
   hardware:
     nics:
       - name: nic0
@@ -1702,12 +1734,16 @@ spec:
       nics:
         - nicRef: nic0
           macAddress: 02:00:00:00:00:14
+          segmentRef: ceph-network
         - nicRef: nic1
           macAddress: 02:00:00:00:00:15
+          segmentRef: ceph-network
         - nicRef: nic2
           macAddress: 02:00:00:00:00:16
+          segmentRef: ceph-network
         - nicRef: nic3
           macAddress: 02:00:00:00:00:17
+          segmentRef: ceph-network
   hardware:
     nics:
       - name: nic0
@@ -2267,10 +2303,18 @@ spec:
         virtualMedia:
           tls:
             trust: established
-  networkAttachments:
+  segments:
     - name: ocp-bare-metal-network
+      taggedNetworkRefs:
+        - machine
+        - ceph-public
+      mtu: 1500
       baremetal: {}
     - name: ceph-network
+      taggedNetworkRefs:
+        - ceph-public
+        - ceph-cluster
+      mtu: 1500
       baremetal: {}
 ---
 apiVersion: bootwright.io/v1alpha1
@@ -2295,14 +2339,18 @@ spec:
         diskGiB: 160
         tpm:
           persistent: true
-  networkAttachments:
+  segments:
     - name: hub-vm-machine
+      untaggedNetworkRef: machine
+      mtu: 1500
       kubevirt:
         networkRef:
           apiGroup: k8s.ovn.org
           kind: ClusterUserDefinedNetwork
           name: multidc-virtual-cluster-machine
     - name: hub-vm-ceph-public
+      untaggedNetworkRef: ceph-public
+      mtu: 1500
       kubevirt:
         networkRef:
           apiGroup: k8s.ovn.org
@@ -2331,14 +2379,18 @@ spec:
         diskGiB: 160
         tpm:
           persistent: true
-  networkAttachments:
+  segments:
     - name: hub-vm-machine
+      untaggedNetworkRef: machine
+      mtu: 1500
       kubevirt:
         networkRef:
           apiGroup: k8s.ovn.org
           kind: ClusterUserDefinedNetwork
           name: multidc-virtual-cluster-machine
     - name: hub-vm-ceph-public
+      untaggedNetworkRef: ceph-public
+      mtu: 1500
       kubevirt:
         networkRef:
           apiGroup: k8s.ovn.org

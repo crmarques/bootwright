@@ -26,7 +26,7 @@ profile; its live run on an external host is B731's operator gate.
   leaves untouched.
 - The installer's keepalived holds the API and API-internal VIP 198.51.100.10
   and the ingress VIP 198.51.100.11 on the guests' shared layer 2, so the
-  attachment must let a guest answer for them: a bridge
+  segment's network must let a guest answer for them: a bridge
   NetworkAttachmentDefinition with `macspoofchk` off, or a `Localnet`
   ClusterUserDefinedNetwork with `ipam.mode: Disabled`. Provide the DNS
   records for `api`, `api-int`, `*.apps` and each node.

@@ -7,7 +7,7 @@ interface, then converges to the rest of its declared network: a second address
 on a guest-only VLAN, an extra route and an MTU of 1400. The addresses and names
 are documentation examples.
 
-| Machine | Install interface | Attachment | Install address | Gateway | Guest-only VLAN 140 |
+| Machine | Install interface | Segment | Install address | Gateway | Guest-only VLAN 140 |
 | --- | --- | --- | --- | --- | --- |
 | `nv-bond` | `bond0` over `nic0` and `nic1` | `nv-lab`, a managed Network, bridge `virbr-nv` | 198.51.100.11/26 | 198.51.100.1 | `bond0.140`, 203.0.113.11/24, MTU 1400 |
 | `nv-vlan` | `nic0.120` over `nic0` | `nv-trunk`, external, bridge `br-nv` | 198.51.100.71/26 | 198.51.100.65 | `nic0.140`, 203.0.113.12/24, MTU 1400 |

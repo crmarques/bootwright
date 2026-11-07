@@ -59,7 +59,7 @@ func kubevirtClusterCatalog() api.Catalog {
 			f("kubevirt", api.MapValue(s("kubeconfigRef", "host-kubeconfig"), s("namespace", "bootwright-guests"), s("storageClassRef", "guest-block-storage"),
 				f("machineProfiles", api.ListValue(api.MapValue(s("name", "kubevirt"), f("cpu", api.IntegerValue("6")),
 					f("memoryMiB", api.IntegerValue("16384")), f("diskGiB", api.IntegerValue("120"))))))),
-			f("networkAttachments", api.ListValue(api.MapValue(s("name", "lab-guests"), f("kubevirt", api.MapValue(f("networkRef", api.MapValue(
+			f("segments", api.ListValue(api.MapValue(s("name", "lab-guests"), f("kubevirt", api.MapValue(f("networkRef", api.MapValue(
 				s("apiGroup", "k8s.cni.cncf.io"), s("kind", "NetworkAttachmentDefinition"), s("namespace", "bootwright-guests"), s("name", "guest-l2")))))))))),
 	}
 	var nodes []api.Value

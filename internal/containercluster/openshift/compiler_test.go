@@ -54,7 +54,7 @@ spec:
         cpu: 4
         memoryMiB: 8192
         diskGiB: 80
-  networkAttachments:
+  segments:
     - name: workload
       kubevirt:
         networkRef:

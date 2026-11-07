@@ -23,7 +23,7 @@ func Variant(o api.Object) string {
 	return selected
 }
 
-func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
+func Normalize(o api.Object, catalog api.Catalog) (api.Object, []api.Issue) {
 	if o.Kind() == api.Network {
 		return normalizeNetworkArm(o), nil
 	}
@@ -68,30 +68,43 @@ func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 		return o, nil
 	}
 	spec = spec.With(variant, arm)
-	attachments := spec.Get("networkAttachments").Items()
-	if variant == "kubevirt" {
-		for index, attachment := range attachments {
-			ref := attachment.Get("kubevirt", "networkRef")
+	segments := spec.Get("segments").Items()
+	if variant == ArmKubeVirt {
+		host, hosted := catalog.Find(api.OpenShiftCluster, spec.Get(ArmKubeVirt, "hostClusterRef").Text())
+		for index, segment := range segments {
+			ref := segment.Get(ArmKubeVirt, "networkRef")
 			if !ref.Present() {
 				continue
 			}
-			ref = ref.Default("kind", api.StringValue("ClusterUserDefinedNetwork"))
-			switch ref.Get("kind").Text() {
-			case "ClusterUserDefinedNetwork", "UserDefinedNetwork":
-				ref = ref.Default("apiGroup", api.StringValue("k8s.ovn.org"))
-			case "NetworkAttachmentDefinition":
-				ref = ref.Default("apiGroup", api.StringValue("k8s.cni.cncf.io"))
+			segment = segment.WithPath(defaultedNetworkRef(ref, arm.Get("namespace")), ArmKubeVirt, "networkRef")
+			if !hosted {
+				segments[index] = segment
+				continue
 			}
-			if ref.Get("kind").Text() == "UserDefinedNetwork" || ref.Get("kind").Text() == "NetworkAttachmentDefinition" {
-				ref = ref.Default("namespace", arm.Get("namespace"))
+			if _, mtu, ok := HostNetworkMTU(host, segment); ok {
+				segment = segment.With("mtu", api.IntegerValue(fmt.Sprint(mtu)))
 			}
-			attachments[index] = attachment.WithPath(ref, "kubevirt", "networkRef")
+			segments[index] = segment
 		}
-		if spec.Has("networkAttachments") {
-			spec = spec.With("networkAttachments", api.ListValue(attachments...))
+		if spec.Has("segments") {
+			spec = spec.With("segments", api.ListValue(segments...))
 		}
 	}
 	return o.WithSpec(spec), nil
+}
+
+func defaultedNetworkRef(ref, namespace api.Value) api.Value {
+	ref = ref.Default("kind", api.StringValue("ClusterUserDefinedNetwork"))
+	switch ref.Get("kind").Text() {
+	case "ClusterUserDefinedNetwork", "UserDefinedNetwork":
+		ref = ref.Default("apiGroup", api.StringValue("k8s.ovn.org"))
+	case "NetworkAttachmentDefinition":
+		ref = ref.Default("apiGroup", api.StringValue("k8s.cni.cncf.io"))
+	}
+	if ref.Get("kind").Text() == "UserDefinedNetwork" || ref.Get("kind").Text() == "NetworkAttachmentDefinition" {
+		ref = ref.Default("namespace", namespace)
+	}
+	return ref
 }
 
 func NormalizeBMCDefaults(bmc api.Value) api.Value {
@@ -151,12 +164,13 @@ func validateProviderMediaTrust(bmc api.Value, path string) []api.Issue {
 		Remediation: "declare substrate.baremetal.bmc.virtualMedia.tls.trust: disableVerification on each Machine that needs it"}}
 }
 
-func ValidateAuthored(o api.Object, _ api.Catalog) []api.Issue {
+func ValidateAuthored(o api.Object, c api.Catalog) []api.Issue {
 	if o.Kind() != api.InfraProvider {
 		return nil
 	}
+	issues := validateHostedSegmentMTUs(o, c)
 	bmc := o.Spec().Get("baremetal", "defaults", "bmc")
-	issues := ValidateBMCDefaults(bmc, "$.spec.baremetal.defaults.bmc", true)
+	issues = add(issues, ValidateBMCDefaults(bmc, "$.spec.baremetal.defaults.bmc", true)...)
 	issues = add(issues, validateProviderMediaTrust(bmc, "$.spec.baremetal.defaults.bmc")...)
 	staging := o.Spec().Get("vsphere", "isoStaging")
 	if staging.Present() && !staging.Has("datastore") && !staging.Has("folder") {
@@ -225,16 +239,16 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 			}
 		}
 	}
-	for index, attachment := range o.Spec().Get("networkAttachments").Items() {
-		path := fmt.Sprintf("$.spec.networkAttachments[%d]", index)
-		if !attachment.Has(variant) {
-			issues = add(issues, issue(path, "attachment arm must match its provider substrate"))
+	for index, segment := range o.Spec().Get("segments").Items() {
+		path := fmt.Sprintf("$.spec.segments[%d]", index)
+		if !segment.Has(variant) {
+			issues = add(issues, issue(path, "segment arm must match its provider substrate"))
 		}
-		if variant == "vsphere" && arm.Get("failureDomains").Len() > 1 && !attachment.Get("vsphere").Has("distributedSwitch") {
+		if variant == "vsphere" && arm.Get("failureDomains").Len() > 1 && !segment.Get("vsphere").Has("distributedSwitch") {
 			issues = add(issues, issue(path+".vsphere.distributedSwitch", "multiple failure domains require an explicit distributed switch"))
 		}
 		if variant == "kubevirt" {
-			ref := attachment.Get("kubevirt", "networkRef")
+			ref := segment.Get("kubevirt", "networkRef")
 			kind := ref.Get("kind").Text()
 			if kind == "ClusterUserDefinedNetwork" && ref.Has("namespace") {
 				issues = add(issues, issue(path+".kubevirt.networkRef.namespace", "cluster-scoped networks forbid a namespace"))
@@ -243,6 +257,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 				issues = add(issues, issue(path+".kubevirt.networkRef.apiGroup", "unknown external network kinds require an explicit API group"))
 			}
 		}
+		issues = add(issues, validateCarriage(o, c, segment, variant, index)...)
 	}
 	issues = add(issues, validateHostedProvider(o, c)...)
 	return issues[:min(len(issues), 999)]
@@ -363,8 +378,8 @@ func validateLibvirtDataDisks(o api.Object, arm api.Value) []api.Issue {
 
 func ExternalBridges(provider api.Object) []string {
 	var bridges []string
-	for _, attachment := range provider.Spec().Get("networkAttachments").Items() {
-		if bridge := attachment.Get("libvirt", "bridge").Text(); bridge != "" {
+	for _, segment := range provider.Spec().Get("segments").Items() {
+		if bridge := segment.Get("libvirt", "bridge").Text(); bridge != "" {
 			bridges = append(bridges, bridge)
 		}
 	}

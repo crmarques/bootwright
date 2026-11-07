@@ -15,11 +15,13 @@ RBD images (`replicated-disk`, `ec42-disk`, `ec22-disk`).
   Total 24 vCPUs and 93 GiB RAM. Reserve 4 GiB controller memory; the
   provider's `capacityReserve` is example headroom.
 - Two NICs per guest on one lab bridge: `nic0` is the public subnet and
-  `nic1` the cluster subnet. Separate IP networks on a shared bridge give no
-  physical isolation. Execution range stays three to six storage hosts.
-- `infra/networks/` declares both subnets as untagged [`Network`](../../../specs/api/networks.md) objects,
-  `lab-guests`, which `lab-libvirt` defines, and the provided `ceph-cluster`,
-  which the CephCluster's `publicCIDRs` and `clusterCIDRs` equal.
+  `nic1.140`, VLAN 140 on `nic1`, the cluster subnet. A VLAN on a shared
+  bridge gives no physical isolation. Execution range stays three to six
+  storage hosts.
+- `infra/networks/` declares both as [`Network`](../../../specs/api/networks.md) objects:
+  `lab-guests`, which `lab-libvirt` defines and which carries the provided
+  `ceph-cluster` tagged; the CephCluster's `publicCIDRs` and `clusterCIDRs`
+  equal them.
 - OSD memory target is 4 GiB (`4294967296`) with autotuning off; not a cap.
 - `rbd-replicated` inherits protection 3/2 from `ssd-hosts` and carries quota,
   compression and PG bounds; the EC images use `rbd-headers` for metadata.

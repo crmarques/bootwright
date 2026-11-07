@@ -42,7 +42,7 @@ spec:
       profileRef: kubevirt
       nics:
         - nicRef: eth0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: eth0
@@ -74,7 +74,7 @@ spec:
       profileRef: kubevirt
       nics:
         - nicRef: eth0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: eth0
@@ -106,7 +106,7 @@ spec:
       profileRef: kubevirt
       nics:
         - nicRef: eth0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: eth0
@@ -138,7 +138,7 @@ spec:
       profileRef: kubevirt
       nics:
         - nicRef: eth0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: eth0
@@ -170,7 +170,7 @@ spec:
       profileRef: kubevirt
       nics:
         - nicRef: eth0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: eth0
@@ -197,7 +197,7 @@ metadata:
   name: lab-guests
 spec:
   provided: true
-  description: The guest network of the lab-guests attachment, a layer 2 network provided on the virtualization host.
+  description: The guest network of the lab-guests segment, a layer 2 network provided on the virtualization host.
   mtu: 1500
   ipv4:
     cidr: 198.51.100.0/24
@@ -250,8 +250,10 @@ spec:
         cpu: 8
         memoryMiB: 16384
         diskGiB: 120
-  networkAttachments:
+  segments:
     - name: lab-guests
+      untaggedNetworkRef: lab-guests
+      mtu: 1500
       kubevirt:
         networkRef:
           apiGroup: k8s.cni.cncf.io

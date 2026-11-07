@@ -54,8 +54,9 @@ spec:
             media: ssd
 {{- end }}
 
-  networkAttachments:
+  segments:
     - name: lab-guests
+      untaggedNetworkRef: lab-guests
 
       libvirt:
         bridge: {{ .Values.host.bridge }}

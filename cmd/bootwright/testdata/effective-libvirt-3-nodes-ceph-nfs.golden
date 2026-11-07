@@ -58,7 +58,7 @@ spec:
       profileRef: rhel
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: enp1s0
@@ -105,7 +105,7 @@ spec:
       profileRef: rhel
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: enp1s0
@@ -152,7 +152,7 @@ spec:
       profileRef: rhel
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: enp1s0

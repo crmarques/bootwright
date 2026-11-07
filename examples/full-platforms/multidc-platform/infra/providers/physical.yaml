@@ -17,9 +17,19 @@ spec:
           tls:
             trust: established
 
-  networkAttachments:
+  segments:
     - name: ocp-bare-metal-network
+
+      taggedNetworkRefs:
+        - machine
+        - ceph-public
+
       baremetal: {}
 
     - name: ceph-network
+
+      taggedNetworkRefs:
+        - ceph-public
+        - ceph-cluster
+
       baremetal: {}

@@ -59,7 +59,7 @@ func TestAManagedNetworkArmIsRefusedWhereNoLibvirtHostDefinesIt(t *testing.T) {
 // name, carrying the host address with its subnet's prefix and its forward
 // mode; an MTU of 1500 is the default libvirt already gives and is not carried.
 func TestAManagedNetworkIsASegmentOfItsProvider(t *testing.T) {
-	lab := obj(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host"), "networkAttachments", list(m("name", "uplink", "libvirt", m("bridge", "br0")))))
+	lab := obj(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host"), "segments", list(m("name", "uplink", "libvirt", m("bridge", "br0")))))
 	routed := armNetwork("routed", m("cidr", "192.0.2.128/25"), m("providerRef", "lab", "bridge", "virbr-routed", "forward", "none", "hostAddress", "192.0.2.129"))
 	routed = routed.WithSpec(routed.Spec().With("mtu", api.IntegerValue("9000")))
 	guests := armNetwork("guests", m("cidr", "198.51.100.0/24", "gateway", "198.51.100.1"), m("providerRef", "lab", "bridge", "virbr-lab"))
@@ -74,19 +74,22 @@ func TestAManagedNetworkIsASegmentOfItsProvider(t *testing.T) {
 	if strings.Join(names, ",") != "uplink,guests,routed" {
 		t.Fatalf("segments = %v", names)
 	}
-	if _, managed := ManagedAttachment(segments[0]); managed {
-		t.Fatal("an attachment read as a managed network")
+	if _, managed := ManagedSegmentNetwork(segments[0]); managed {
+		t.Fatal("a provider segment read as a managed network")
 	}
 	for index, want := range []ManagedNetwork{{Prefix: "198.51.100.1/24", Bridge: "virbr-lab", Forward: "nat"}, {Prefix: "192.0.2.129/25", Bridge: "virbr-routed", Forward: "none"}} {
-		if got, managed := ManagedAttachment(segments[index+1]); !managed || got != want {
+		if got, managed := ManagedSegmentNetwork(segments[index+1]); !managed || got != want {
 			t.Fatalf("segment %s = %+v (%v), want %+v", names[index+1], got, managed, want)
 		}
 	}
-	if mtu, ok := AttachmentMTU(segments[1]); ok {
-		t.Fatalf("the default MTU was carried as %d", mtu)
+	if mtu := EmittedMTU(segments[1]); mtu != 0 {
+		t.Fatalf("the default MTU was emitted as %d", mtu)
 	}
-	if mtu, _ := AttachmentMTU(segments[2]); mtu != 9000 {
+	if mtu := EmittedMTU(segments[2]); mtu != 9000 {
 		t.Fatalf("mtu = %d", mtu)
+	}
+	if untagged, tagged := SegmentUntagged(segments[2]), SegmentTagged(segments[2]); untagged != "routed" || len(tagged) != 0 {
+		t.Fatalf("carriage of routed = %q, %v", untagged, tagged)
 	}
 	if claims := AddressClaims(routed); len(claims) != 1 || claims[0] != (AddressClaim{Path: "spec.libvirt.hostAddress", Address: "192.0.2.129"}) {
 		t.Fatalf("claims = %+v", claims)

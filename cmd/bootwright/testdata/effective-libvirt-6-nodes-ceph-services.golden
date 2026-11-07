@@ -39,7 +39,7 @@ spec:
       profileRef: client
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: enp1s0
@@ -105,7 +105,7 @@ spec:
       profileRef: h1
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: enp1s0
@@ -152,7 +152,7 @@ spec:
       profileRef: h2
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: enp1s0
@@ -199,7 +199,7 @@ spec:
       profileRef: h3
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: enp1s0
@@ -246,7 +246,7 @@ spec:
       profileRef: h4
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: enp1s0
@@ -293,7 +293,7 @@ spec:
       profileRef: h5
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: enp1s0
@@ -340,7 +340,7 @@ spec:
       profileRef: h6
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: enp1s0

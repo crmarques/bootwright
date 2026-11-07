@@ -30,7 +30,7 @@ func VirtualIPs(catalog api.Catalog, cluster api.Object, controller string) []Vi
 					continue
 				}
 				for _, managed := range substrate.ManagedNetworksOf(catalog, provider) {
-					network, _ := substrate.ManagedAttachment(substrate.ManagedSegment(managed))
+					network, _ := substrate.ManagedSegmentNetwork(substrate.NetworkSegment(managed))
 					if prefix, err := netip.ParsePrefix(network.Prefix); err == nil && prefix.Contains(address) {
 						ip.Bridge = network.Bridge
 					}

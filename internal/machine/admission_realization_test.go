@@ -142,7 +142,7 @@ func TestAnInstallAddressIsNeitherTheBridgeNorItsNetworkOrBroadcast(t *testing.T
 			for _, perInterface := range []bool{false, true} {
 				node := installOn(address)
 				if perInterface {
-					node = node.WithSpec(node.Spec().WithPath(list(m("nicRef", "enp1s0", "attachmentRef", "net")), "substrate", "libvirt", "nics"))
+					node = node.WithSpec(node.Spec().WithPath(list(m("nicRef", "enp1s0", "segmentRef", "net")), "substrate", "libvirt", "nics"))
 				}
 				want := api.Issue{Code: "api.invariant", Field: "$.spec.network.installAddressRef", Message: message,
 					Remediation: "assign Machine/guest an install address inside 192.0.2.0/24 other than 192.0.2.1, 192.0.2.0 and 192.0.2.255"}
@@ -395,14 +395,14 @@ func TestAKubeVirtMachineAuthorsNoMAC(t *testing.T) {
 // network, so with two attachments to choose from each NIC names one.
 func TestABaremetalMachineSelectsNoAttachment(t *testing.T) {
 	inline := guest(m("inline", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet"))))))
-	requireOneIssue(t, admission(inline, twoAttachmentLab(list())...), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.nics",
-		Message:     "NIC enp1s0 of Machine/guest selects no network attachment, and InfraProvider/lab declares 2 attachments, not exactly one that every NIC defaults to",
-		Remediation: "add a spec.substrate.libvirt.nics entry with nicRef enp1s0 and an attachmentRef naming an attachment of InfraProvider/lab on Machine/guest"})
+	requireOneIssue(t, admission(inline, twoSegmentLab(list())...), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.nics",
+		Message:     "NIC enp1s0 of Machine/guest selects no segment, and InfraProvider/lab declares 2 segments, not exactly one that every NIC defaults to",
+		Remediation: "add a spec.substrate.libvirt.nics entry with nicRef enp1s0 and a segmentRef naming a segment of InfraProvider/lab on Machine/guest"})
 	server, catalog := fixture()
 	objects := without(catalog, server)
 	for i, existing := range objects {
 		if existing.Kind() == api.InfraProvider {
-			objects[i] = existing.WithSpec(existing.Spec().Without("networkAttachments"))
+			objects[i] = existing.WithSpec(existing.Spec().Without("segments"))
 		}
 	}
 	if issues := admission(server, objects...); len(issues) != 0 {
@@ -479,7 +479,7 @@ func TestInstallAttachmentContainmentFollowsVLANAndBondParents(t *testing.T) {
 		{"bond0", list(m("name", "enp1s0", "type", "ethernet"), m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList("enp1s0"))))},
 	} {
 		node := installOn("192.0.2.1/24")
-		node = node.WithSpec(node.Spec().With("network", node.Spec().Get("network").With("addresses", list(m("name", "ip", "address", "192.0.2.1/24", "interface", network.iface)))).WithPath(list(m("nicRef", "enp1s0", "attachmentRef", "net")), "substrate", "libvirt", "nics"))
+		node = node.WithSpec(node.Spec().With("network", node.Spec().Get("network").With("addresses", list(m("name", "ip", "address", "192.0.2.1/24", "interface", network.iface)))).WithPath(list(m("nicRef", "enp1s0", "segmentRef", "net")), "substrate", "libvirt", "nics"))
 		issues := admission(node, libvirtLab(network.interfaces)...)
 		if !slices.ContainsFunc(issues, func(issue api.Issue) bool {
 			return issue.Field == "$.spec.network.installAddressRef" && strings.Contains(issue.Message, "host address of managed Network/net")
@@ -525,8 +525,8 @@ func TestAProviderWithoutAttachmentsIsToldToDeclareOne(t *testing.T) {
 	lab = slices.DeleteFunc(lab, func(o api.Object) bool { return o.Kind() == api.Network })
 	issues := admission(installOn("192.0.2.11/24"), lab...)
 	want := api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.nics",
-		Message:     "Machine/guest cannot attach its vNICs: InfraProvider/lab declares no network attachment",
-		Remediation: "declare an attachment with a libvirt arm in spec.networkAttachments of InfraProvider/lab, or a Network with spec.provided false whose spec.libvirt.providerRef names lab"}
+		Message:     "Machine/guest cannot attach its vNICs: InfraProvider/lab declares no segment",
+		Remediation: "declare a segment with a libvirt arm in spec.segments of InfraProvider/lab, or a Network with spec.provided false whose spec.libvirt.providerRef names lab"}
 	if !slices.Contains(issues, want) {
 		t.Fatalf("issues = %#v, want %#v", issues, want)
 	}

@@ -26,12 +26,12 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 	var found []lifecycle.Refusal
 	for _, provider := range providers(catalog) {
 		if host, hosted := catalog.Find(api.OpenShiftCluster, substrate.HostCluster(provider)); hosted {
-			for _, attachment := range provider.Spec().Get("networkAttachments").Items() {
-				if !substrate.HostNetworkNamed(host, attachment) {
-					name := attachment.Get("name").Text()
+			for _, segment := range provider.Spec().Get("segments").Items() {
+				if !substrate.HostNetworkNamed(host, segment) {
+					name := segment.Get("name").Text()
 					found = append(found, lifecycle.RefusalOf(provider,
-						"a KubeVirt provider hosted by "+host.Identity()+" attaches only to that cluster's secondary networks, whose selectors label the namespace its kubevirt instance owns, and attachment "+name+" names another network",
-						"name a ClusterUserDefinedNetwork among spec.networking.secondaryNetworks of "+host.Identity()+" in attachment "+name+" of "+provider.Identity()))
+						"a KubeVirt provider hosted by "+host.Identity()+" attaches only to that cluster's secondary networks, whose selectors label the namespace its kubevirt instance owns, and segment "+name+" names another network",
+						"name a ClusterUserDefinedNetwork among spec.networking.secondaryNetworks of "+host.Identity()+" in segment "+name+" of "+provider.Identity()))
 				}
 			}
 		}
@@ -47,10 +47,10 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 					"a KubeVirt machine is created with the CPU count, memory and root disk its profile declares, and its profile "+name+" declares one as zero",
 					"set cpu, memoryMiB and diskGiB above zero on profile "+name+" of "+provider.Identity()))
 			}
-			for _, attachment := range unrealizedAttachments(catalog, provider, machine) {
+			for _, segment := range unrealizedSegments(catalog, provider, machine) {
 				found = append(found, lifecycle.RefusalOf(machine,
-					"a KubeVirt NIC attaches to a Localnet ClusterUserDefinedNetwork or a bridge NetworkAttachmentDefinition, and attachment "+attachment+" names another kind",
-					"select a ClusterUserDefinedNetwork or NetworkAttachmentDefinition attachment for every NIC of "+machine.Identity()))
+					"a KubeVirt NIC attaches to a Localnet ClusterUserDefinedNetwork or a bridge NetworkAttachmentDefinition, and segment "+segment+" names another kind",
+					"select a ClusterUserDefinedNetwork or NetworkAttachmentDefinition segment for every NIC of "+machine.Identity()))
 			}
 		}
 	}
@@ -89,15 +89,15 @@ func sized(profile api.Value) bool {
 	return true
 }
 
-func unrealizedAttachments(catalog api.Catalog, provider, machine api.Object) []string {
+func unrealizedSegments(catalog api.Catalog, provider, machine api.Object) []string {
 	var refused []string
 	for _, nic := range substrate.MachineNICs(machine) {
-		reference := substrate.NICAttachment(catalog, provider, machine, nic)
-		attachment, found := findNamed(provider.Spec().Get("networkAttachments"), "name", reference)
+		reference := substrate.NICSegment(catalog, provider, machine, nic)
+		segment, found := findNamed(provider.Spec().Get("segments"), "name", reference)
 		if !found {
 			continue
 		}
-		if _, ok := networkOf(provider, attachment); !ok && !slices.Contains(refused, reference) {
+		if _, ok := networkOf(provider, segment); !ok && !slices.Contains(refused, reference) {
 			refused = append(refused, reference)
 		}
 	}
@@ -133,8 +133,8 @@ func HostRequests(catalog api.Catalog, controllerMachine, contextName string) ([
 		if request.HostCluster != "" {
 			request.ServiceAccount = substrate.HostAccount
 		}
-		for _, attachment := range provider.Spec().Get("networkAttachments").Items() {
-			if network, ok := networkOf(provider, attachment); ok {
+		for _, segment := range provider.Spec().Get("segments").Items() {
+			if network, ok := networkOf(provider, segment); ok {
 				request.Networks = append(request.Networks, network)
 			}
 		}
@@ -233,16 +233,16 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, contro
 		request.TPM = &TPM{Persistent: substrate.PersistentTPM(profile)}
 	}
 	for _, iface := range target.Interfaces {
-		reference := substrate.NICAttachment(catalog, provider, machine, iface.Name)
-		attachment, found := findNamed(provider.Spec().Get("networkAttachments"), "name", reference)
+		reference := substrate.NICSegment(catalog, provider, machine, iface.Name)
+		segment, found := findNamed(provider.Spec().Get("segments"), "name", reference)
 		if !found {
-			return MachineRequest{}, refusal("api.reference", "NIC "+iface.Name+" of the Machine selects no attachment of its provider",
-				"add a spec.substrate.kubevirt.nics entry for NIC "+iface.Name+" naming an attachment of "+provider.Identity()+" on "+machine.Identity())
+			return MachineRequest{}, refusal("api.reference", "NIC "+iface.Name+" of the Machine selects no segment of its provider",
+				"add a spec.substrate.kubevirt.nics entry for NIC "+iface.Name+" naming a segment of "+provider.Identity()+" on "+machine.Identity())
 		}
-		network, ok := networkOf(provider, attachment)
+		network, ok := networkOf(provider, segment)
 		if !ok {
-			return MachineRequest{}, refusal("lifecycle.unsupported", "a KubeVirt NIC attaches to a Localnet ClusterUserDefinedNetwork or a bridge NetworkAttachmentDefinition, and attachment "+reference+" names another kind",
-				"select a ClusterUserDefinedNetwork or NetworkAttachmentDefinition attachment for every NIC of "+machine.Identity())
+			return MachineRequest{}, refusal("lifecycle.unsupported", "a KubeVirt NIC attaches to a Localnet ClusterUserDefinedNetwork or a bridge NetworkAttachmentDefinition, and segment "+reference+" names another kind",
+				"select a ClusterUserDefinedNetwork or NetworkAttachmentDefinition segment for every NIC of "+machine.Identity())
 		}
 		multus := network.Name
 		if network.Namespace != request.Namespace {
@@ -253,15 +253,15 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, contro
 	return request, nil
 }
 
-// networkOf resolves one attachment to the NetworkAttachmentDefinition the
+// networkOf resolves one segment to the NetworkAttachmentDefinition the
 // VirtualMachine names: a ClusterUserDefinedNetwork's derived one of its own
 // name in the provider's namespace, or the declared one. Any other kind is
 // not realized.
-func networkOf(provider api.Object, attachment api.Value) (Network, bool) {
-	ref := attachment.Get(substrate.ArmKubeVirt, "networkRef")
+func networkOf(provider api.Object, segment api.Value) (Network, bool) {
+	ref := segment.Get(substrate.ArmKubeVirt, "networkRef")
 	namespace := provider.Spec().Get(substrate.ArmKubeVirt, "namespace").Text()
 	group, kind, name := ref.Get("apiGroup").Text(), ref.Get("kind").Text(), ref.Get("name").Text()
-	network := Network{Attachment: attachment.Get("name").Text(), Name: name, Namespace: namespace}
+	network := Network{Attachment: segment.Get("name").Text(), Name: name, Namespace: namespace}
 	switch {
 	case group == cudnGroup && kind == cudnKind:
 		network.Derived = name

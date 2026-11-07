@@ -28,8 +28,8 @@ const MaxManagedNetworks = 20
 
 const MaxExternalBridges = 64
 
-func NetworkName(contextName, attachment string) string {
-	return Prefix + "-" + contextName + "-" + attachment
+func NetworkName(contextName, segment string) string {
+	return Prefix + "-" + contextName + "-" + segment
 }
 
 func PoolName(contextName, provider string) string {

@@ -5,7 +5,8 @@ metadata:
 
 spec:
   provided: true
-  description: The unrouted Ceph cluster subnet on the second NIC, which shares the lab-guests bridge.
+  description: The unrouted Ceph cluster network, VLAN 140 on the second NIC, which the guests carry over the lab-guests bridge.
+  vlan: 140
 
   ipv4:
     cidr: 203.0.113.0/24

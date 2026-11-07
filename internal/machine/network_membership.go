@@ -63,7 +63,11 @@ func validateNetworkMembership(o api.Object, c api.Catalog) []api.Issue {
 		}
 		if len(composed) == 0 && native.Present() {
 			issues = appendIssues(issues, validateAssignmentVLAN(o, native, match.Network, iface, path)...)
+			issues = appendIssues(issues, validateCarriage(o, c, native, match.Network, iface, path+".interface")...)
 		}
+	}
+	if len(composed) == 0 && native.Present() {
+		issues = appendIssues(issues, validateStackedVLANs(o, c, native)...)
 	}
 	return issues
 }

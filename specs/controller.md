@@ -482,7 +482,7 @@ the `nmstate` package by an agent-installed OpenShiftCluster with a node whose
 `machineRef` names a declared Machine; and the `iputils` package by an
 agent-installed OpenShiftCluster with at least two nodes on the `baremetal`
 platform that has an OpenShift-sourced IPv4 endpoint address inside a managed
-libvirt network attachment of a provider hosted on the controller Machine.
+libvirt Network of a provider hosted on the controller Machine.
 No closure forces another into the request. The plan presents each selected
 requirement by name, `install-host-package <requirement>`; planning reads no
 host, so it names what the closures require, and a requirement the host

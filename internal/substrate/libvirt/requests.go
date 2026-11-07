@@ -32,7 +32,7 @@ type Network struct {
 }
 
 // HostRequest is the complete frozen intent for one libvirt provider host: the
-// closure it runs, the networks its attachments declare and the pool its
+// closure it runs, the networks its segments declare and the pool its
 // emulated controllers stage media in. It carries no secret value.
 type HostRequest struct {
 	FirewallReadyUnit string               `json:"firewallReadyUnit"`
@@ -68,11 +68,11 @@ type Disk struct {
 	Target       string `json:"target"`
 }
 
-// Interface is one attachment the domain is wired to, with the address this
-// declaration always derives. A managed attachment names the libvirt network
-// that owns the bridge, so the hypervisor holds the dependency and refuses to
-// start a domain whose network is not up; an external one names the bridge
-// alone, because nothing on this host defines it.
+// Interface is one segment the domain is wired to, with the address this
+// declaration always derives. A managed Network's segment names the libvirt
+// network that owns the bridge, so the hypervisor holds the dependency and
+// refuses to start a domain whose network is not up; an existing bridge is
+// named alone, because nothing on this host defines it.
 type Interface struct {
 	Bridge     string `json:"bridge"`
 	MACAddress string `json:"macAddress"`

@@ -70,9 +70,9 @@ spec:
       profileRef: rhel-01
       nics:
         - nicRef: nic0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: nic1
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: nic0
@@ -125,9 +125,9 @@ spec:
       profileRef: rhel-02
       nics:
         - nicRef: nic0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: nic1
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: nic0
@@ -180,9 +180,9 @@ spec:
       profileRef: rhel-03
       nics:
         - nicRef: nic0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: nic1
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: nic0
@@ -330,6 +330,8 @@ spec:
     bridge: virbr-lab
     forward: nat
     hostAddress: 198.51.100.1
+    taggedNetworkRefs:
+      - ceph-cluster
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig

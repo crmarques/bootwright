@@ -27,8 +27,8 @@ func TestEveryNestedReferenceKindRefusesOnlyThroughTheSharedDiagnostic(t *testin
 	}{
 		{"a provider machine profile", "lab-compact-df", exampleEdit{machine, "profileRef: rhel", "profileRef: absent"},
 			[]string{"Machine/rhel-03 $.spec.substrate.libvirt.profileRef no machine profile named absent is declared on InfraProvider/lab-libvirt"}},
-		{"a provider network attachment", "lab-compact-df", exampleEdit{machine, "      profileRef: rhel\n", "      profileRef: rhel\n      nics:\n        - nicRef: enp1s0\n          attachmentRef: absent\n"},
-			[]string{"Machine/rhel-03 $.spec.substrate.libvirt.nics[0].attachmentRef no network attachment named absent is declared on InfraProvider/lab-libvirt"}},
+		{"a provider segment", "lab-compact-df", exampleEdit{machine, "      profileRef: rhel\n", "      profileRef: rhel\n      nics:\n        - nicRef: enp1s0\n          segmentRef: absent\n"},
+			[]string{"Machine/rhel-03 $.spec.substrate.libvirt.nics[0].segmentRef no segment named absent is declared on InfraProvider/lab-libvirt"}},
 		{"a Machine install address", "lab-compact-df", exampleEdit{machine, "installAddressRef: ip", "installAddressRef: absent"},
 			[]string{"Machine/rhel-03 $.spec.network.installAddressRef no address named absent is declared on Machine/rhel-03"}},
 		{"a server endpoint selection", "lab-compact-df", exampleEdit{machine, "endpointRef: ip", "endpointRef: absent"},

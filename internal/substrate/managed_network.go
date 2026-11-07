@@ -114,12 +114,8 @@ func HostAddress(o api.Object) (netip.Prefix, bool) {
 	return netip.PrefixFrom(address.WithZone(""), prefix.Bits()), true
 }
 
-func ManagedSegment(o api.Object) api.Value {
+func NetworkSegment(o api.Object) api.Value {
 	arm := o.Spec().Get(ArmLibvirt)
-	libvirt := api.MapValue(api.FieldValue{Name: "bridge", Value: arm.Get("bridge")})
-	if mtu, ok := o.Spec().Get("mtu").Int64(); ok && mtu != defaultMTU {
-		libvirt = libvirt.With("mtu", o.Spec().Get("mtu"))
-	}
 	forward := arm.Get("forward")
 	if !forward.Present() {
 		forward = api.StringValue("nat")
@@ -128,14 +124,22 @@ func ManagedSegment(o api.Object) api.Value {
 	if address, ok := HostAddress(o); ok {
 		managed = managed.With("address", api.StringValue(address.String()))
 	}
-	return api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue(o.Name())}, api.FieldValue{Name: ArmLibvirt, Value: libvirt}, api.FieldValue{Name: "managed", Value: managed})
+	mtu := o.Spec().Get("mtu")
+	if !mtu.Present() {
+		mtu = api.IntegerValue(fmt.Sprint(defaultMTU))
+	}
+	segment := api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue(o.Name())}, api.FieldValue{Name: "untaggedNetworkRef", Value: api.StringValue(o.Name())})
+	if arm.Has("taggedNetworkRefs") {
+		segment = segment.With("taggedNetworkRefs", arm.Get("taggedNetworkRefs"))
+	}
+	return segment.With("mtu", mtu).With(ArmLibvirt, api.MapValue(api.FieldValue{Name: "bridge", Value: arm.Get("bridge")})).With("managed", managed)
 }
 
 func Segments(c api.Catalog, provider api.Object) api.Value {
-	segments := provider.Spec().Get("networkAttachments").Items()
+	segments := provider.Spec().Get("segments").Items()
 	if Variant(provider) == ArmLibvirt {
 		for _, o := range ManagedNetworksOf(c, provider) {
-			segments = append(segments, ManagedSegment(o))
+			segments = append(segments, NetworkSegment(o))
 		}
 	}
 	return api.ListValue(segments...)
@@ -146,11 +150,11 @@ func validateSegmentName(o api.Object, c api.Catalog) []api.Issue {
 	if !found || !IsManagedNetwork(o) {
 		return nil
 	}
-	for index, attachment := range provider.Spec().Get("networkAttachments").Items() {
-		if attachment.Get("name").Text() == o.Name() {
+	for index, segment := range provider.Spec().Get("segments").Items() {
+		if segment.Get("name").Text() == o.Name() {
 			return []api.Issue{{Code: "api.invariant", Field: "$.spec.libvirt.providerRef",
-				Message:     fmt.Sprintf("%s is a segment of %s under its own name, and spec.networkAttachments[%d] of %s is also named %s, so a Machine NIC naming it would select two segments", o.Identity(), provider.Identity(), index, provider.Identity(), o.Name()),
-				Remediation: "rename spec.networkAttachments[" + fmt.Sprint(index) + "] of " + provider.Identity() + " or " + o.Identity() + ", with the attachmentRef of every Machine that selects it"}}
+				Message:     fmt.Sprintf("%s is a segment of %s under its own name, and spec.segments[%d] of %s is also named %s, so a Machine NIC naming it would select two segments", o.Identity(), provider.Identity(), index, provider.Identity(), o.Name()),
+				Remediation: "rename spec.segments[" + fmt.Sprint(index) + "] of " + provider.Identity() + " or " + o.Identity() + ", with the segmentRef of every Machine that selects it"}}
 		}
 	}
 	return nil
@@ -168,7 +172,7 @@ func (s hostSegment) label() string {
 	if s.owner.Kind() == api.Network {
 		return s.owner.Identity() + " of " + s.provider.Identity()
 	}
-	return fmt.Sprintf("spec.networkAttachments[%d] of %s", s.index, s.provider.Identity())
+	return fmt.Sprintf("spec.segments[%d] of %s", s.index, s.provider.Identity())
 }
 
 func segmentsOnHost(c api.Catalog, host string) (managed, external []hostSegment) {
@@ -176,8 +180,8 @@ func segmentsOnHost(c api.Catalog, host string) (managed, external []hostSegment
 		if HostMachine(provider) != host {
 			continue
 		}
-		for index, attachment := range provider.Spec().Get("networkAttachments").Items() {
-			if bridge := attachment.Get(ArmLibvirt, "bridge").Text(); api.ValidLexical("bridge", bridge) {
+		for index, segment := range provider.Spec().Get("segments").Items() {
+			if bridge := segment.Get(ArmLibvirt, "bridge").Text(); api.ValidLexical("bridge", bridge) {
 				external = append(external, hostSegment{owner: provider, provider: provider, index: index, bridge: bridge})
 			}
 		}

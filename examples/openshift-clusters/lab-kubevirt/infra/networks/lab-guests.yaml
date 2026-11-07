@@ -5,7 +5,7 @@ metadata:
 
 spec:
   provided: true
-  description: The guest network of the lab-guests attachment, a layer 2 network provided on the virtualization host.
+  description: The guest network of the lab-guests segment, a layer 2 network provided on the virtualization host.
 
   ipv4:
     cidr: 198.51.100.0/24

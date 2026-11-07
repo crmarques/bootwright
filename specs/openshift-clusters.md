@@ -223,7 +223,7 @@ is built and not published, and the [installation](#installation) boots, reads
 and releases each node through its arm's entry points. A cluster mixing such
 nodes with nodes of another arm refuses.
 
-Platform. Each arm's derivation, and the attachment rule of a KubeVirt cluster
+Platform. Each arm's derivation, and the segment rule of a KubeVirt cluster
 that authors `baremetal`, are in the
 [platform union](api/openshift-clusters.md#platform-union-and-derivation). The
 installer's keepalived holds the VIPs on the nodes' shared layer 2
@@ -270,9 +270,9 @@ The installation's inverse ejects the same way, and each Machine's own removal,
 which the plan orders after it and gates on the instance being absent, proves
 the VirtualMachine, every DataVolume and every claim absent, so the cluster's
 removal composes the arm's removal proof. The pre-boot VIP probe reaches no
-KubeVirt attachment, so the evidence names those VIPs unprobed.
+KubeVirt segment, so the evidence names those VIPs unprobed.
 
-Not yet met: an installer VIP on a KubeVirt attachment is not proved free
+Not yet met: an installer VIP on a KubeVirt segment is not proved free
 before a fresh boot; tracked as [B927](milestones/backlog.md#b927).
 
 Not yet met: a node on a vSphere provider refuses as a node on an unrealized

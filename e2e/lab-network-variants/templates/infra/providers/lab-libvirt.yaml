@@ -28,8 +28,13 @@ spec:
         tpm: {}
 {{- if not .Values.single }}
 
-  networkAttachments:
+  segments:
     - name: nv-trunk
+
+      taggedNetworkRefs:
+        - nv-guest
+        - nv-vlan
+        - nv-vlan-bond
 
       libvirt:
         bridge: {{ .Values.externalBridge }}

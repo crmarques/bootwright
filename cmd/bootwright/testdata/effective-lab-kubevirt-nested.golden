@@ -23,7 +23,7 @@ spec:
       profileRef: kubevirt
       nics:
         - nicRef: eth0
-          attachmentRef: nested-guests
+          segmentRef: nested-guests
   hardware:
     nics:
       - name: eth0
@@ -55,7 +55,7 @@ spec:
       profileRef: kubevirt
       nics:
         - nicRef: eth0
-          attachmentRef: nested-guests
+          segmentRef: nested-guests
   hardware:
     nics:
       - name: eth0
@@ -87,7 +87,7 @@ spec:
       profileRef: kubevirt
       nics:
         - nicRef: eth0
-          attachmentRef: nested-guests
+          segmentRef: nested-guests
   hardware:
     nics:
       - name: eth0
@@ -138,11 +138,11 @@ spec:
       profileRef: master
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp2s0
-          attachmentRef: lab-secondary
+          segmentRef: lab-secondary
         - nicRef: enp3s0
-          attachmentRef: lab-routed
+          segmentRef: lab-routed
   hardware:
     nics:
       - name: enp1s0
@@ -183,11 +183,11 @@ spec:
       profileRef: master
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp2s0
-          attachmentRef: lab-secondary
+          segmentRef: lab-secondary
         - nicRef: enp3s0
-          attachmentRef: lab-routed
+          segmentRef: lab-routed
   hardware:
     nics:
       - name: enp1s0
@@ -228,11 +228,11 @@ spec:
       profileRef: master
       nics:
         - nicRef: enp1s0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: enp2s0
-          attachmentRef: lab-secondary
+          segmentRef: lab-secondary
         - nicRef: enp3s0
-          attachmentRef: lab-routed
+          segmentRef: lab-routed
   hardware:
     nics:
       - name: enp1s0
@@ -409,8 +409,10 @@ spec:
         cpu: 4
         memoryMiB: 16384
         diskGiB: 120
-  networkAttachments:
+  segments:
     - name: nested-guests
+      untaggedNetworkRef: lab-secondary
+      mtu: 1500
       kubevirt:
         networkRef:
           apiGroup: k8s.ovn.org

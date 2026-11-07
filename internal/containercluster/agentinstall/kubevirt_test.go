@@ -30,7 +30,7 @@ func kubevirtProviderIn(name, namespace string) api.Object {
 		field("kubevirt", api.MapValue(text("kubeconfigRef", "host-kubeconfig"), text("namespace", namespace),
 			text("storageClassRef", "guest-block-storage"), field("machineProfiles", api.ListValue(api.MapValue(
 				text("name", "kubevirt"), number("cpu", "8"), number("memoryMiB", "16384"), number("diskGiB", "120")))))),
-		field("networkAttachments", api.ListValue(api.MapValue(text("name", "lab-guests"), field("kubevirt", api.MapValue(
+		field("segments", api.ListValue(api.MapValue(text("name", "lab-guests"), field("kubevirt", api.MapValue(
 			field("networkRef", api.MapValue(text("apiGroup", "k8s.cni.cncf.io"), text("kind", "NetworkAttachmentDefinition"),
 				text("namespace", namespace), text("name", "guest-l2")))))))),
 	))

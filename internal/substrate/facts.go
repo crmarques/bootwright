@@ -70,16 +70,26 @@ func HostCluster(provider api.Object) string {
 
 type ManagedNetwork struct{ Prefix, Bridge, Forward string }
 
-func ManagedAttachment(attachment api.Value) (ManagedNetwork, bool) {
-	managed := attachment.Get("managed")
+func ManagedSegmentNetwork(segment api.Value) (ManagedNetwork, bool) {
+	managed := segment.Get("managed")
 	if !managed.Present() {
 		return ManagedNetwork{}, false
 	}
-	return ManagedNetwork{Prefix: managed.Get("address").Text(), Bridge: attachment.Get(ArmLibvirt, "bridge").Text(), Forward: managed.Get("forward").Text()}, true
+	return ManagedNetwork{Prefix: managed.Get("address").Text(), Bridge: segment.Get(ArmLibvirt, "bridge").Text(), Forward: managed.Get("forward").Text()}, true
 }
 
-func AttachmentMTU(attachment api.Value) (int64, bool) {
-	return attachment.Get(ArmLibvirt, "mtu").Int64()
+func SegmentMTU(segment api.Value) int64 {
+	if mtu, ok := segment.Get("mtu").Int64(); ok {
+		return mtu
+	}
+	return defaultMTU
+}
+
+func EmittedMTU(segment api.Value) int {
+	if mtu := SegmentMTU(segment); mtu != defaultMTU {
+		return int(mtu)
+	}
+	return 0
 }
 
 type AddressClaim struct{ Path, Address string }

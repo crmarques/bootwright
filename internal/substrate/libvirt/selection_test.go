@@ -55,7 +55,7 @@ func TestHostRequestFreezesTheNetworksAndPoolItOwns(t *testing.T) {
 // An external attachment names a bridge this context proves, never one it
 // defines, so the frozen entry carries no address or forwarding to apply.
 func TestAnExternalAttachmentFreezesNoManagedNetworkFields(t *testing.T) {
-	external := provider(field("networkAttachments", api.ListValue(api.MapValue(
+	external := provider(field("segments", api.ListValue(api.MapValue(
 		text("name", "lab-guests"),
 		field("libvirt", api.MapValue(text("bridge", "br0"))),
 	))))
@@ -87,7 +87,7 @@ func TestAManagedAttachmentWiresTheDomainToItsLibvirtNetwork(t *testing.T) {
 	if wired.Network != "bootwright-lab-lab-guests" || wired.Bridge != "virbr-lab" {
 		t.Fatalf("managed interface = %+v", wired)
 	}
-	external := provider(field("networkAttachments", api.ListValue(api.MapValue(
+	external := provider(field("segments", api.ListValue(api.MapValue(
 		text("name", "lab-guests"),
 		field("libvirt", api.MapValue(text("bridge", "br0"))),
 	))))
@@ -318,7 +318,7 @@ func TestProvidedMachinesAreNeverRealized(t *testing.T) {
 
 func TestSelectionRefusesWhatItCannotDerive(t *testing.T) {
 	noProfile := guest("rhel-01", field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), field("libvirt", api.MapValue(text("profileRef", "absent"))))))
-	noAttachment := guest("rhel-01", field("substrate", guest("rhel-01").Spec().Get("substrate").WithPath(api.ListValue(api.MapValue(text("nicRef", "enp1s0"), text("attachmentRef", "absent"))), "libvirt", "nics")))
+	noAttachment := guest("rhel-01", field("substrate", guest("rhel-01").Spec().Get("substrate").WithPath(api.ListValue(api.MapValue(text("nicRef", "enp1s0"), text("segmentRef", "absent"))), "libvirt", "nics")))
 	for name, test := range map[string]struct {
 		catalog api.Catalog
 		code    string

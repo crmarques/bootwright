@@ -14,3 +14,6 @@ spec:
   libvirt:
     providerRef: lab-libvirt
     bridge: virbr-lab
+
+    taggedNetworkRefs:
+      - ceph-cluster

@@ -37,7 +37,7 @@ spec:
     kubeconfigRef: host-credentials
     namespace: workloads
     machineProfiles: [{name: standard, cpu: 4, memoryMiB: 8192, diskGiB: 80}]
-  networkAttachments:
+  segments:
     - name: workload
       kubevirt:
         networkRef: {name: workload}

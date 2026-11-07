@@ -58,9 +58,9 @@ spec:
       profileRef: mon-mgr
       nics:
         - nicRef: nic0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: nic1
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: nic0
@@ -87,7 +87,7 @@ spec:
         interface: nic0
       - name: cluster-ip
         address: 203.0.113.11/24
-        interface: nic1
+        interface: nic1.140
     interfaceMatches:
       - interface: nic0
         nicRef: nic0
@@ -113,9 +113,9 @@ spec:
       profileRef: mon-mgr
       nics:
         - nicRef: nic0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: nic1
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: nic0
@@ -142,7 +142,7 @@ spec:
         interface: nic0
       - name: cluster-ip
         address: 203.0.113.12/24
-        interface: nic1
+        interface: nic1.140
     interfaceMatches:
       - interface: nic0
         nicRef: nic0
@@ -168,9 +168,9 @@ spec:
       profileRef: mon
       nics:
         - nicRef: nic0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: nic1
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: nic0
@@ -197,7 +197,7 @@ spec:
         interface: nic0
       - name: cluster-ip
         address: 203.0.113.13/24
-        interface: nic1
+        interface: nic1.140
     interfaceMatches:
       - interface: nic0
         nicRef: nic0
@@ -223,9 +223,9 @@ spec:
       profileRef: mon
       nics:
         - nicRef: nic0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: nic1
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: nic0
@@ -252,7 +252,7 @@ spec:
         interface: nic0
       - name: cluster-ip
         address: 203.0.113.14/24
-        interface: nic1
+        interface: nic1.140
     interfaceMatches:
       - interface: nic0
         nicRef: nic0
@@ -278,9 +278,9 @@ spec:
       profileRef: mon
       nics:
         - nicRef: nic0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: nic1
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: nic0
@@ -307,7 +307,7 @@ spec:
         interface: nic0
       - name: cluster-ip
         address: 203.0.113.15/24
-        interface: nic1
+        interface: nic1.140
     interfaceMatches:
       - interface: nic0
         nicRef: nic0
@@ -333,9 +333,9 @@ spec:
       profileRef: osd
       nics:
         - nicRef: nic0
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
         - nicRef: nic1
-          attachmentRef: lab-guests
+          segmentRef: lab-guests
   hardware:
     nics:
       - name: nic0
@@ -362,7 +362,7 @@ spec:
         interface: nic0
       - name: cluster-ip
         address: 203.0.113.16/24
-        interface: nic1
+        interface: nic1.140
     interfaceMatches:
       - interface: nic0
         nicRef: nic0
@@ -455,7 +455,8 @@ metadata:
   name: ceph-cluster
 spec:
   provided: true
-  description: The unrouted Ceph cluster subnet on the second NIC, which shares the lab-guests bridge.
+  description: The unrouted Ceph cluster network, VLAN 140 on the second NIC, which the guests carry over the lab-guests bridge.
+  vlan: 140
   mtu: 1500
   ipv4:
     cidr: 203.0.113.0/24
@@ -476,6 +477,8 @@ spec:
     bridge: virbr-lab
     forward: nat
     hostAddress: 198.51.100.1
+    taggedNetworkRefs:
+      - ceph-cluster
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig
@@ -504,14 +507,24 @@ spec:
         state: up
         type: ethernet
       - ipv4:
-          dhcp: false
-          enabled: true
+          enabled: false
         ipv6:
           enabled: false
         mtu: 1500
         name: nic1
         state: up
         type: ethernet
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        name: nic1.140
+        state: up
+        type: vlan
+        vlan:
+          base-iface: nic1
+          id: 140
     routes:
       config:
         - destination: 0.0.0.0/0

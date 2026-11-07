@@ -42,7 +42,7 @@ func nestedClusterCatalog() api.Catalog {
 		if object.Kind() == api.InfraProvider {
 			object = api.NewObject(api.InfraProvider, object.Name(), api.Value{}, api.MapValue(
 				f("kubevirt", object.Spec().Get("kubevirt").Without("kubeconfigRef").With("hostClusterRef", api.StringValue(nestedHost))),
-				f("networkAttachments", api.ListValue(api.MapValue(s("name", "lab-guests"), f("kubevirt", api.MapValue(f("networkRef", api.MapValue(
+				f("segments", api.ListValue(api.MapValue(s("name", "lab-guests"), f("kubevirt", api.MapValue(f("networkRef", api.MapValue(
 					s("apiGroup", "k8s.ovn.org"), s("kind", "ClusterUserDefinedNetwork"), s("name", "guest-l2"))))))))))
 		}
 		objects = append(objects, object)

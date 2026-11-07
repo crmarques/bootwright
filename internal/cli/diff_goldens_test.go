@@ -132,7 +132,7 @@ func diffObserved() *lifecycle.DiffResult {
 		Kind: api.InfraProvider, Name: "lab-libvirt", Plan: "same", Blocks: []string{"substrate-host-lab-libvirt"}, Realization: lifecycle.RealizationDone,
 		Desired: diffProvider("80"),
 		Real: lifecycle.RealSide{Source: "observed", State: "present", Object: diffProvider("100"), NotCompared: []string{
-			"spec.libvirt.uri", "spec.libvirt.machineRef", "spec.libvirt.bmcEmulation", "spec.libvirt.networkAttachments",
+			"spec.libvirt.uri", "spec.libvirt.machineRef", "spec.libvirt.bmcEmulation", "spec.libvirt.segments",
 			"spec.libvirt.machineProfiles[rhel].cpu", "spec.libvirt.machineProfiles[rhel].memoryMiB",
 		}},
 	}

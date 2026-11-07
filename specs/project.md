@@ -48,14 +48,14 @@ into the portfolio; no session clause does.
 These lists bound Bootwright's intended scope; [milestones](milestones.md) own
 what is delivered.
 
-Bootwright owns the provider-host virtual networks that a
-[Machine's network attachment](api/machines.md#machine-profiles-and-network-attachments)
-declares as managed, the network configuration it installs on machines and
+Bootwright owns the provider-host virtual networks that a managed
+[`Network`](api/networks.md#libvirt-arm) declares, the network configuration it installs on machines and
 nodes, the secondary networks of a cluster, and the managed infrastructure
 services. It only verifies, and never changes, the physical fabric (switches,
 VLAN trunking and routing), an external bridge, the host firewall's
 configuration beyond the trusted-zone membership of a managed network's bridge,
-and an external DHCP or DNS service; a provider's attachment still names its
+and an external DHCP or DNS service; a provider's
+[segment](api/machines.md#machine-profiles-and-segments) still names its
 existing bridge ([substrates](substrates.md#provider-host-realization)). DNS and
 artifact serving are each a managed service or an external endpoint, as the
 Environment selects.

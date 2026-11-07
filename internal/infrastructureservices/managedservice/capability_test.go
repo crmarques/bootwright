@@ -227,7 +227,7 @@ func libvirtProvider(host, management, address string) []api.Object {
 		field("libvirt", api.MapValue(text("machineRef", host), text("uri", "qemu:///system"))),
 	))
 	if management != "managed" {
-		return []api.Object{provider.WithSpec(provider.Spec().With("networkAttachments", api.ListValue(api.MapValue(text("name", "lab-guests"), field("libvirt", api.MapValue(text("bridge", "virbr-lab")))))))}
+		return []api.Object{provider.WithSpec(provider.Spec().With("segments", api.ListValue(api.MapValue(text("name", "lab-guests"), field("libvirt", api.MapValue(text("bridge", "virbr-lab")))))))}
 	}
 	prefix := netip.MustParsePrefix(address)
 	family := "ipv4"

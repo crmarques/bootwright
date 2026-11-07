@@ -13,6 +13,7 @@ spec:
         tls:
           trustBundleRef: lab-bmc-ca
 
-  networkAttachments:
+  segments:
     - name: lab-metal
+      untaggedNetworkRef: lab-metal
       baremetal: {}

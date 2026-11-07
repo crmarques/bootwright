@@ -32,7 +32,7 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	network := normalizedContacts(o, c, s.Get("network"))
 	provider, found := Provider(o, c)
 	if arm := substrate.MachineArm(o); found && substrate.VirtualArm(arm) && s.Get("hardware", "nics").Len() > 0 && !s.Get("os", "provided").Bool() {
-		if entries, ok := defaultedNICAttachments(c, o, provider); ok {
+		if entries, ok := defaultedNICSegments(c, o, provider); ok {
 			s = s.WithPath(entries, "substrate", arm, "nics")
 		}
 	}
@@ -284,6 +284,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	if found && variant != "" && len(armIssues) == 0 {
 		issues = appendIssues(issues, validateSubstrate(c, o, provider, variant)...)
 	}
+	issues = appendIssues(issues, validateSegmentRefs(c, o, provider, found && len(armIssues) == 0)...)
 	issues = appendIssues(issues, validateHardware(o, c, variant)...)
 	issues = appendIssues(issues, validateErase(o, variant)...)
 	issues = appendIssues(issues, validateClear(o, variant == substrate.ArmBaremetal)...)
@@ -430,12 +431,7 @@ func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, fo
 	native, compositionIssues := ComposeNetwork(o, c)
 	issues = appendIssues(issues, compositionIssues...)
 	if found && configured {
-		issues = appendIssues(issues, validateAttachments(c, o, provider, native)...)
-	}
-	if found && configured && variant == substrate.ArmKubeVirt {
-		if host, hosted := substrate.HostClusterObject(c, provider); hosted {
-			issues = appendIssues(issues, validateKubeVirtAttachmentMTUs(c, o, provider, host, native)...)
-		}
+		issues = appendIssues(issues, validateSegments(c, o, provider, native)...)
 	}
 	if found && variant == substrate.ArmLibvirt && len(compositionIssues) == 0 {
 		issues = appendIssues(issues, validateDomainInterfaces(o, c, native, configured)...)
@@ -457,7 +453,7 @@ func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, fo
 				}
 			}
 			if found && variant == substrate.ArmLibvirt {
-				issues = appendIssues(issues, validateManagedAttachmentContainment(c, o, prefix, provider, address.Get("interface").Text(), native)...)
+				issues = appendIssues(issues, validateManagedSegmentContainment(c, o, prefix, provider, address.Get("interface").Text(), native)...)
 			}
 			issues = appendIssues(issues, validateInstallGateway(o, c, address, prefix, native)...)
 		}
@@ -526,21 +522,21 @@ func validateBMC(bmc api.Value, unresolvedProvider bool) []api.Issue {
 	return issues
 }
 
-// validateManagedAttachmentContainment requires the install address to be a
+// validateManagedSegmentContainment requires the install address to be a
 // guest's host address on a managed Network: inside its prefix, never the
 // bridge's own host address and, for an IPv4 prefix shorter than /31, never its
 // network or broadcast address.
-func validateManagedAttachmentContainment(c api.Catalog, o api.Object, address netip.Prefix, provider api.Object, installInterface string, native api.Value) []api.Issue {
+func validateManagedSegmentContainment(c api.Catalog, o api.Object, address netip.Prefix, provider api.Object, installInterface string, native api.Value) []api.Issue {
 	var issues []api.Issue
-	for _, reference := range installAttachmentReferences(c, o, provider, native, installInterface) {
-		issues = appendIssues(issues, validateManagedAttachmentAddress(c, o, address, provider, reference)...)
+	for _, reference := range installSegmentReferences(c, o, provider, native, installInterface) {
+		issues = appendIssues(issues, validateManagedSegmentAddress(c, o, address, provider, reference)...)
 	}
 	return issues
 }
 
-func validateManagedAttachmentAddress(c api.Catalog, o api.Object, address netip.Prefix, provider api.Object, reference string) []api.Issue {
-	attachment, ok := namedValue(substrate.Segments(c, provider), reference)
-	network, isManaged := substrate.ManagedAttachment(attachment)
+func validateManagedSegmentAddress(c api.Catalog, o api.Object, address netip.Prefix, provider api.Object, reference string) []api.Issue {
+	segment, ok := namedValue(substrate.Segments(c, provider), reference)
+	network, isManaged := substrate.ManagedSegmentNetwork(segment)
 	if !ok || !isManaged {
 		return nil
 	}
@@ -758,26 +754,13 @@ func validateHardware(o api.Object, c api.Catalog, variant string) []api.Issue {
 	return issues
 }
 
-func validateAttachments(c api.Catalog, o, provider api.Object, native api.Value) []api.Issue {
-	variant := substrate.Variant(provider)
-	issues := []api.Issue{}
-	if substrate.VirtualArm(variant) {
-		issues = appendIssues(issues, validateVirtualMACs(o, native, variant)...)
-		issues = appendIssues(issues, validateBondAttachments(o, native, "$.spec.substrate."+variant+".nics")...)
-	}
-	if variant == substrate.ArmLibvirt {
-		issues = appendIssues(issues, validateLibvirtAttachmentMTUs(c, o, provider, native)...)
-	}
-	return issues
-}
-
-func defaultedNICAttachments(c api.Catalog, o, provider api.Object) (api.Value, bool) {
-	attachments := substrate.Segments(c, provider)
-	entries := substrate.MachineNICAttachments(o)
-	if attachments.Len() != 1 {
+func defaultedNICSegments(c api.Catalog, o, provider api.Object) (api.Value, bool) {
+	segments := substrate.Segments(c, provider)
+	entries := substrate.MachineNICSegments(o)
+	if segments.Len() != 1 {
 		return entries, false
 	}
-	sole := attachments.Items()[0].Get("name")
+	sole := segments.Items()[0].Get("name")
 	if sole.Type() != api.String || sole.Text() == "" {
 		return entries, false
 	}
@@ -785,7 +768,7 @@ func defaultedNICAttachments(c api.Catalog, o, provider api.Object) (api.Value, 
 	for _, nic := range substrate.MachineNICs(o) {
 		entry, found := namedValueBy(entries, "nicRef", nic)
 		if !found {
-			entry = api.MapValue(api.FieldValue{Name: "nicRef", Value: api.StringValue(nic)}, api.FieldValue{Name: "attachmentRef", Value: sole})
+			entry = api.MapValue(api.FieldValue{Name: "nicRef", Value: api.StringValue(nic)}, api.FieldValue{Name: "segmentRef", Value: sole})
 		}
 		values = append(values, entry)
 	}
@@ -797,13 +780,36 @@ func defaultedNICAttachments(c api.Catalog, o, provider api.Object) (api.Value, 
 	return api.ListValue(values...), true
 }
 
+func validateSegmentRefs(c api.Catalog, o, provider api.Object, found bool) []api.Issue {
+	arm := substrate.MachineArm(o)
+	issues := []api.Issue{}
+	for i, entry := range substrate.MachineNICSegments(o).Items() {
+		if !entry.Has("segmentRef") {
+			continue
+		}
+		field := fmt.Sprintf("$.spec.substrate.%s.nics[%d].segmentRef", arm, i)
+		if !o.Spec().Has("substrate", "providerRef") {
+			if arm != substrate.ArmBaremetal {
+				continue
+			}
+			issues = appendIssues(issues, invariant(field, "NIC "+entry.Get("nicRef").Text()+" of "+o.Identity()+" names segment "+entry.Get("segmentRef").Text()+", and the Machine names no provider whose segments it could select",
+				"set spec.substrate.providerRef on "+o.Identity()+" to the InfraProvider that declares the segment, or remove "+field[2:]))
+			continue
+		}
+		if segment, ok := namedValue(substrate.Segments(c, provider), entry.Get("segmentRef").Text()); found && ok && !segment.Has(arm) {
+			issues = appendIssues(issues, reference(field, "segment must name a matching arm on the selected provider", "set "+field[2:]+" to a spec.segments entry of "+provider.Identity()+" that has its "+arm+" arm"))
+		}
+	}
+	return issues
+}
+
 func validateVirtualNICs(c api.Catalog, o, provider api.Object, variant string) []api.Issue {
 	nics := substrate.MachineNICs(o)
 	if len(nics) == 0 {
 		return []api.Issue{invariant("$.spec.hardware.nics", "a "+variant+" provider creates one vNIC per spec.hardware.nics entry, in order, and "+o.Identity()+" declares none",
 			"declare each vNIC of "+o.Identity()+" in spec.hardware.nics, in device order, such as one entry named enp1s0")}
 	}
-	attachments := substrate.Segments(c, provider)
+	segments := substrate.Segments(c, provider)
 	path := "$.spec.substrate." + variant + ".nics"
 	issues := []api.Issue{}
 	for i, nic := range nics {
@@ -813,23 +819,17 @@ func validateVirtualNICs(c api.Catalog, o, provider api.Object, variant string) 
 				"rename NIC "+nic+" in spec.hardware.nics on "+o.Identity()+" to an interface name the guest may use, such as enp"+strconv.Itoa(i+1)+"s0, and update every nicRef that names it"))
 		}
 	}
-	for i, entry := range substrate.MachineNICAttachments(o).Items() {
-		if a, ok := namedValue(attachments, entry.Get("attachmentRef").Text()); ok && !a.Has(variant) {
-			field := fmt.Sprintf("%s[%d].attachmentRef", path, i)
-			issues = appendIssues(issues, reference(field, "attachment must name a matching arm on the selected provider", "set "+field[2:]+" to a networkAttachments entry of "+provider.Identity()+" that has its "+variant+" arm"))
-		}
-	}
-	if attachments.Len() == 0 && !c.UndecodableOfKind(api.Network) {
-		remedy := "declare an attachment with a " + variant + " arm in spec.networkAttachments of " + provider.Identity()
+	if segments.Len() == 0 && !c.UndecodableOfKind(api.Network) {
+		remedy := "declare a segment with a " + variant + " arm in spec.segments of " + provider.Identity()
 		if variant == substrate.ArmLibvirt {
 			remedy += ", or a Network with spec.provided false whose spec." + variant + ".providerRef names " + provider.Name()
 		}
-		return append(issues, invariant(path, o.Identity()+" cannot attach its vNICs: "+provider.Identity()+" declares no network attachment", remedy))
+		return append(issues, invariant(path, o.Identity()+" cannot attach its vNICs: "+provider.Identity()+" declares no segment", remedy))
 	}
 	for _, nic := range nics {
-		if substrate.NICAttachment(c, provider, o, nic) == "" && !c.UndecodableOfKind(api.Network) {
-			issues = appendIssues(issues, invariant(path, fmt.Sprintf("NIC %s of %s selects no network attachment, and %s declares %d attachments, not exactly one that every NIC defaults to", nic, o.Identity(), provider.Identity(), attachments.Len()),
-				"add a "+path[2:]+" entry with nicRef "+nic+" and an attachmentRef naming an attachment of "+provider.Identity()+" on "+o.Identity()))
+		if substrate.NICSegment(c, provider, o, nic) == "" && !c.UndecodableOfKind(api.Network) {
+			issues = appendIssues(issues, invariant(path, fmt.Sprintf("NIC %s of %s selects no segment, and %s declares %d segments, not exactly one that every NIC defaults to", nic, o.Identity(), provider.Identity(), segments.Len()),
+				"add a "+path[2:]+" entry with nicRef "+nic+" and a segmentRef naming a segment of "+provider.Identity()+" on "+o.Identity()))
 		}
 	}
 	return issues
@@ -1007,10 +1007,10 @@ func providerBMCDefaults(bmc api.Value, provider api.Object) api.Value {
 	return defaults
 }
 
-func installAttachmentReferences(c api.Catalog, o, provider api.Object, native api.Value, name string) []string {
+func installSegmentReferences(c api.Catalog, o, provider api.Object, native api.Value, name string) []string {
 	var references []string
 	for _, leaf := range physicalLeaves(native, name, map[string]bool{}) {
-		references = append(references, substrate.NICAttachment(c, provider, o, substrate.InterfaceNIC(o, leaf)))
+		references = append(references, substrate.NICSegment(c, provider, o, substrate.InterfaceNIC(o, leaf)))
 	}
 	return references
 }
@@ -1059,8 +1059,8 @@ func nestsSplitBond(native api.Value, bond string, split map[string]bool, visiti
 	return false
 }
 
-func validateBondAttachments(o api.Object, native api.Value, attachmentsPath string) []api.Issue {
-	entries := substrate.MachineNICAttachments(o).Items()
+func validateBondSegments(o api.Object, native api.Value, nicsPath string) []api.Issue {
+	entries := substrate.MachineNICSegments(o).Items()
 	type splitBond struct {
 		name      string
 		placed    []string
@@ -1078,7 +1078,7 @@ func validateBondAttachments(o api.Object, native api.Value, attachmentsPath str
 		for _, leaf := range physicalLeaves(native, bond, map[string]bool{}) {
 			nic := substrate.InterfaceNIC(o, leaf)
 			for index, entry := range entries {
-				reference := entry.Get("attachmentRef").Text()
+				reference := entry.Get("segmentRef").Text()
 				if entry.Get("nicRef").Text() != nic || reference == "" {
 					continue
 				}
@@ -1100,9 +1100,9 @@ func validateBondAttachments(o api.Object, native api.Value, attachmentsPath str
 		if nestsSplitBond(native, s.name, split, map[string]bool{}) {
 			continue
 		}
-		issues = appendIssues(issues, invariant(fmt.Sprintf("%s[%d].attachmentRef", attachmentsPath, s.differing),
-			"bond "+s.name+" of "+o.Identity()+" has ports on different attachments ("+strings.Join(s.placed, ", ")+"), so a failover would move the host onto another network",
-			"attach the NIC of every port of bond "+s.name+" to one attachment in "+attachmentsPath[2:]+" on "+o.Identity()+", or remove the port on another attachment from the bond"))
+		issues = appendIssues(issues, invariant(fmt.Sprintf("%s[%d].segmentRef", nicsPath, s.differing),
+			"bond "+s.name+" of "+o.Identity()+" has ports on different segments ("+strings.Join(s.placed, ", ")+"), so a failover would move the host onto another network",
+			"put the NIC of every port of bond "+s.name+" on one segment in "+nicsPath[2:]+" on "+o.Identity()+", or remove the port on another segment from the bond"))
 	}
 	return issues
 }

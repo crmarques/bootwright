@@ -53,7 +53,7 @@ func installingOn(iface string) api.Object {
 // which carries the VLAN a VLAN install interface is tagged with.
 func externalProvider() api.Object {
 	lab := provider()
-	return lab.WithSpec(lab.Spec().With("networkAttachments", api.ListValue(api.MapValue(
+	return lab.WithSpec(lab.Spec().With("segments", api.ListValue(api.MapValue(
 		text("name", "lab-guests"), field("libvirt", api.MapValue(text("bridge", "br-lab"))),
 	))))
 }
@@ -417,7 +417,7 @@ func TestAVLANInstallOnAManagedLibvirtNetworkRefuses(t *testing.T) {
 	network := []api.Value{declaredInterface("enp1s0", "ethernet"), vlanInterface("enp1s0.100", "enp1s0", "100")}
 	expectNetworkRefusal(t, labCatalog(installingOn("enp1s0.100"), networkWith(network...)),
 		"a managed libvirt network gives its host an untagged address on virbr-lab, so the controller cannot reach the VLAN install address of Machine/rhel-01",
-		"attach Machine/rhel-01 to an external bridge whose host carries VLAN 100, or install over an untagged interface")
+		"attach Machine/rhel-01 to an existing-bridge segment whose host carries VLAN 100, or install over an untagged interface")
 	expectNoRefusal(t, labCatalog(externalProvider(), installingOn("enp1s0.100"), networkWith(network...)))
 	metal := metalCatalog(metalOn("enp1s0.100", hardwareNIC("enp1s0", "52:54:00:9a:1b:01")), metalNetwork(network...))
 	expectNoRefusal(t, metal)

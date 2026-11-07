@@ -38,7 +38,7 @@ func providerWithNAD(namespace string, profile ...api.FieldValue) api.Object {
 	return api.NewObject(api.InfraProvider, "lab-kubevirt", api.Value{}, api.MapValue(
 		field("kubevirt", api.MapValue(text("kubeconfigRef", "host-kubeconfig"), text("namespace", "guests"),
 			text("storageClassRef", "guest-block"), field("machineProfiles", api.ListValue(selected)))),
-		field("networkAttachments", api.ListValue(
+		field("segments", api.ListValue(
 			api.MapValue(text("name", "lab-guests"), field("kubevirt", api.MapValue(field("networkRef", api.MapValue(
 				text("apiGroup", "k8s.cni.cncf.io"), text("kind", "NetworkAttachmentDefinition"), text("name", "guest-l2"), text("namespace", namespace)))))),
 			api.MapValue(text("name", "storage"), field("kubevirt", api.MapValue(field("networkRef", api.MapValue(
@@ -61,8 +61,8 @@ func node(name string) api.Object {
 	return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(
 		field("substrate", api.MapValue(text("providerRef", "lab-kubevirt"), field("kubevirt", api.MapValue(text("profileRef", "node"),
 			field("nics", api.ListValue(
-				api.MapValue(text("nicRef", "enp1s0"), text("attachmentRef", "lab-guests")),
-				api.MapValue(text("nicRef", "enp2s0"), text("attachmentRef", "storage")),
+				api.MapValue(text("nicRef", "enp1s0"), text("segmentRef", "lab-guests")),
+				api.MapValue(text("nicRef", "enp2s0"), text("segmentRef", "storage")),
 			)))))),
 		field("hardware", api.MapValue(field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")), api.MapValue(text("name", "enp2s0")))))),
 		field("os", api.MapValue(field("provided", api.BoolValue(false)))),

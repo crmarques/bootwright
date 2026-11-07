@@ -81,7 +81,7 @@ func networkConfig() api.Object {
 func guest(name string, fields ...api.FieldValue) api.Object {
 	spec := api.MapValue(
 		field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), field("libvirt", api.MapValue(text("profileRef", "rhel"),
-			field("nics", api.ListValue(api.MapValue(text("nicRef", "enp1s0"), text("attachmentRef", "lab-guests")))))))),
+			field("nics", api.ListValue(api.MapValue(text("nicRef", "enp1s0"), text("segmentRef", "lab-guests")))))))),
 		field("os", api.MapValue(field("provided", api.BoolValue(false)), text("installProfileRef", "rhel-9-8"))),
 		field("hardware", api.MapValue(field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")))), field("rootDevice", api.MapValue(text("deviceName", "/dev/vda"))))),
 		field("network", api.MapValue(
@@ -125,7 +125,7 @@ func catalogOf(objects ...api.Object) api.Catalog {
 		if o.Kind() == api.Network {
 			return api.NewCatalog(objects)
 		}
-		for _, attachment := range o.Spec().Get("networkAttachments").Items() {
+		for _, attachment := range o.Spec().Get("segments").Items() {
 			if attachment.Get("name").Text() == "lab-guests" {
 				return api.NewCatalog(objects)
 			}

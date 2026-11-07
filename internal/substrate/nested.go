@@ -41,8 +41,8 @@ func HostedNamespaces(catalog api.Catalog, cluster string) []HostedNamespace {
 		}
 		namespace := &namespaces[index]
 		namespace.Providers = append(namespace.Providers, provider.Name())
-		for _, attachment := range provider.Spec().Get("networkAttachments").Items() {
-			network, ok := hostNetwork(host, attachment)
+		for _, segment := range provider.Spec().Get("segments").Items() {
+			network, ok := hostNetwork(host, segment)
 			if !declared || !ok {
 				continue
 			}
@@ -61,10 +61,10 @@ func HostedNamespaces(catalog api.Catalog, cluster string) []HostedNamespace {
 	return namespaces
 }
 
-func AttachmentNetworkKind(provider api.Object, attachment string) string {
+func SegmentNetworkKind(provider api.Object, segment string) string {
 	kind := ""
-	for _, declared := range provider.Spec().Get("networkAttachments").Items() {
-		if declared.Get("name").Text() == attachment {
+	for _, declared := range provider.Spec().Get("segments").Items() {
+		if declared.Get("name").Text() == segment {
 			kind = declared.Get(ArmKubeVirt, "networkRef", "kind").Text()
 		}
 	}
@@ -75,8 +75,8 @@ func PersistentTPM(profile api.Value) bool {
 	return profile.Has("tpm") && (!profile.Has("tpm", "persistent") || profile.Get("tpm", "persistent").Bool())
 }
 
-func HostNetworkNamed(host api.Object, attachment api.Value) bool {
-	_, ok := hostNetwork(host, attachment)
+func HostNetworkNamed(host api.Object, segment api.Value) bool {
+	_, ok := hostNetwork(host, segment)
 	return ok
 }
 
@@ -84,8 +84,8 @@ func HostClusterObject(catalog api.Catalog, provider api.Object) (api.Object, bo
 	return catalog.Find(api.OpenShiftCluster, HostCluster(provider))
 }
 
-func HostNetworkMTU(host api.Object, attachment api.Value) (string, int64, bool) {
-	network, ok := hostNetwork(host, attachment)
+func HostNetworkMTU(host api.Object, segment api.Value) (string, int64, bool) {
+	network, ok := hostNetwork(host, segment)
 	if !ok {
 		return "", 0, false
 	}
@@ -96,8 +96,8 @@ func HostNetworkMTU(host api.Object, attachment api.Value) (string, int64, bool)
 	return network.Get("name").Text(), mtu, true
 }
 
-func hostNetwork(host api.Object, attachment api.Value) (api.Value, bool) {
-	ref := attachment.Get(ArmKubeVirt, "networkRef")
+func hostNetwork(host api.Object, segment api.Value) (api.Value, bool) {
+	ref := segment.Get(ArmKubeVirt, "networkRef")
 	if ref.Get("apiGroup").Text() != "k8s.ovn.org" || ref.Get("kind").Text() != "ClusterUserDefinedNetwork" {
 		return api.Value{}, false
 	}
@@ -121,10 +121,10 @@ func validateHostedProvider(o api.Object, c api.Catalog) []api.Issue {
 			issues = add(issues, issue("$.spec.kubevirt.namespace", "namespace "+name+" cannot carry the selector of every secondary network its providers attach to: "+namespace.Conflict))
 		}
 	}
-	for index, attachment := range o.Spec().Get("networkAttachments").Items() {
-		if network, ok := hostNetwork(host, attachment); ok && network.Get("ipam", "mode").Text() == "Enabled" {
+	for index, segment := range o.Spec().Get("segments").Items() {
+		if network, ok := hostNetwork(host, segment); ok && network.Get("ipam", "mode").Text() == "Enabled" {
 			name := network.Get("name").Text()
-			path := fmt.Sprintf("$.spec.networkAttachments[%d].kubevirt.networkRef", index)
+			path := fmt.Sprintf("$.spec.segments[%d].kubevirt.networkRef", index)
 			issues = add(issues, api.Issue{Code: "api.invariant", Field: path,
 				Message:     "a VirtualMachine attaches only to a host network that leaves IP address management to the guest, and secondary network " + name + " of " + host.Identity() + " sets ipam.mode Enabled, so its OVN port security would enforce the addresses it assigns and not the static install address",
 				Remediation: "set ipam.mode to Disabled on secondary network " + name + " of " + host.Identity() + ", or attach " + o.Identity() + " to a network that does"})
