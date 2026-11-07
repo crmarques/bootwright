@@ -40,9 +40,10 @@ func Address(o api.Object, reference string) (string, bool) {
 
 // IPAddresses lists every IP a Machine declares, in declaration order and
 // without repetition. A DNS contact is not an IP and is left out, so a reader
-// sees exactly the value a consumer of that address would reach. A Machine whose addresses are assigned
-// at runtime declares none and reports none: an inspection contacts no host,
-// so it reports what desired state says rather than guessing what a guest took.
+// sees exactly the value a consumer of that address would reach. A Machine
+// whose addresses are assigned at runtime declares none and reports none: an
+// inspection contacts no host, so it reports what desired state says rather
+// than guessing what a guest took.
 func IPAddresses(o api.Object) []string {
 	found := []string{}
 	for _, address := range o.Spec().Get("network", "addresses").Items() {

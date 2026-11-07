@@ -358,7 +358,7 @@ host because it is the Environment's controller or a managed service's
 | --- | --- | --- | --- | --- |
 | `configRef` | string | union | — | Global `NetworkConfig`. |
 | `inline` | `NetworkConfig.spec` object | union | — | One-off alternative with the same NMState, CIDR, and DNS selection constraints. |
-| `installAddressRef` | string | when a consumer requires a static install IP | unique eligible address below | Machine-local `addresses[].name`; selects an interface-assigned IP inside a consumed machine network. |
+| `installAddressRef` | string | when a consumer requires a static install IP | unique eligible address below | Machine-local `addresses[].name`; selects an interface assignment in a declared Network. |
 | `addresses` | array | no | `[]`, plus derived `fqdn` contact | Set keyed by `name`; exact entry shape below. |
 | `interfaceMatches` | array | no | the NIC of the interface's name | Set of `{interface, nicRef}` keyed by `interface`, on every substrate; `interface` is a Linux interface name, as in the [subset](#nmstate-composition-subset). |
 | `overrides` | arbitrary map | no | `{}` | Valid only with `configRef`; merged into the selected native NMState template. |
@@ -400,13 +400,12 @@ Anaconda Machine that selects no configuration refuses only at
 | `interface` | string | no | Static assignment to an interface in the effective NMState map; omission declares only a contact. A Linux interface name, as in the [subset](#nmstate-composition-subset). |
 
 An assigned interface may be an ethernet or a logical interface, including a VLAN, bond, or
-OVS internal interface. DNS names cannot be assigned. An assignment takes the
-prefix of the one [`Network`](networks.md#cross-kind-checks) holding its IP,
-and the IP determines the family; an assignment in no Network, in several, or
-only in Networks of other sites refuses, so every assignment needs a Network
-and a contacts-only graph needs none. An IPv4 assignment in a Network shorter
-than /31 is a host address of it, never its network or broadcast address, and
-refuses with `api.value` at its `address`; a /31, a /32 and an IPv6 Network
+OVS internal interface. An assignment takes the prefix of the one
+[`Network`](networks.md#cross-kind-checks) holding its IP, and the IP
+determines the family; an assignment in no Network, in several, or only in
+Networks of other sites refuses, so every assignment needs a Network. An IPv4
+assignment in a Network shorter than /31 is a host address of it, never its
+network or broadcast address, and refuses with `api.value` at its `address`; a /31, a /32 and an IPv6 Network
 reserve neither. Consumers of an address reference receive the IP, or the DNS
 name for a DNS contact. A contact configures nothing.
 
@@ -427,10 +426,10 @@ An explicit `installAddressRef` must select an assignment in a declared
 Network. For a consumer requiring a static installation address with
 no authored selection, select the unique eligible address whose interface
 carries a default route for that address family; if there is none, select the
-sole eligible address. More than one candidate at either step is an error;
-names and declaration order never break ties. DNS and contact-only entries are
-ineligible. A consumer requiring static addressing rejects a
-missing candidate; a DHCP-capable consumer does not acquire a fabricated
+sole eligible address; every interface assignment in a declared Network is
+eligible. Several candidates at either step refuse, never broken by names or
+order: set `installAddressRef`. DNS and contact-only entries are ineligible. A
+consumer requiring static addressing rejects a missing candidate; a DHCP-capable consumer does not acquire a fabricated
 static address.
 
 On every substrate an available effective ethernet interface matches one NIC:

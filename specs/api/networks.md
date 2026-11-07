@@ -12,9 +12,8 @@ attach to. The examples keep one `Network` per file under `infra/networks/`.
 
 A `Network` name follows the [one name rule](../api.md#object-names);
 [cluster selection](environment.md#cluster-selection) says what retains it.
-`Network` is optional: a graph that declares none runs none of the checks
-below, and the [cross-kind checks](#cross-kind-checks) run as soon as it
-declares one.
+`Network` is optional: a graph with contacts only needs none, except as the
+[cross-kind checks](#cross-kind-checks) say.
 
 ## Kinds
 
@@ -103,22 +102,21 @@ Network's `cidr` is shorter than /32 or /128, leaving guests an address.
 
 ## Cross-kind checks
 
-Each kind below refuses, with `api.invariant` naming the object, the reason
-and the next step; a graph with contacts only declares no Network and meets
-none of them:
+Each kind below refuses, with `api.invariant` (fabric carriage `api.required`)
+naming the object, reason and next step; a contacts-only graph still meets
+fabric carriage and Ceph networks:
 
 - **Interface assignments** (Machine, at `spec.network.addresses[].address`):
   every [interface assignment](machines.md#addresses-and-access) lies in
   exactly one Network of its family, scoped to the Machine's `placement.site`
   when it has one, and takes that Network's prefix: the composed NMState
   `prefix-length`, the Kickstart netmask, the install-address checks and the
-  node subnets read it. An assignment in no Network, only in Networks of
-  other sites, or in several Networks is refused.
+  node subnets read it.
 - **VLAN agreement** (Machine, at `spec.network.addresses[].interface`): when
-  the assigned interface's composed NMState stack carries a VLAN, because it
-  is one or a bridge or bond port path down from it reaches one,
-  every such `vlan.id` equals the Network's `vlan`, and a Network without
-  `vlan` refuses a tagged stack.
+  the assigned interface's composed NMState stack carries a VLAN, itself or
+  along a bridge or bond port path (from an `ovs-interface` through its
+  bridge's other ports), every such `vlan.id` equals the Network's `vlan`, and
+  a Network without `vlan` refuses a tagged stack.
 - **Carriage** (Machine, at the same field): each NIC under the assigned
   interface sits on a [segment](machines.md#machine-profiles-and-segments)
   that carries the Network tagged when a VLAN lies on the path to it, else

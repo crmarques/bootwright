@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -197,7 +198,16 @@ func selectInstallAddress(o api.Object, c api.Catalog, required bool) (api.Value
 		return defaultRoute[0], nil
 	}
 	if len(defaultRoute) > 1 || len(eligible) > 1 {
-		return api.Value{}, []api.Issue{invariant("$.spec.network.installAddressRef", "installation address is ambiguous; author an explicit eligible address reference", "set network.installAddressRef to the address the installation uses")}
+		candidates, reason := eligible, "interface assignments lie in declared Networks"
+		if len(defaultRoute) > 1 {
+			candidates, reason = defaultRoute, "interface assignments carry a default route of their family"
+		}
+		var names []string
+		for _, candidate := range candidates {
+			names = append(names, candidate.Get("name").Text())
+		}
+		return api.Value{}, []api.Issue{invariant("$.spec.network.installAddressRef", "the installation address of "+o.Identity()+" is ambiguous: "+strconv.Itoa(len(candidates))+" "+reason+" ("+strings.Join(names, ", ")+"), and names never break the tie",
+			"set spec.network.installAddressRef on "+o.Identity()+" to the one the installation uses")}
 	}
 	if len(eligible) == 1 {
 		return eligible[0], nil

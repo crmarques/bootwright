@@ -157,3 +157,46 @@ func TestTheInstallRouteUsesItsNetworksGateway(t *testing.T) {
 		t.Fatalf("issues = %+v", issues)
 	}
 }
+
+func TestSeveralAssignmentsWithoutADefaultRouteNeedAnInstallAddressRef(t *testing.T) {
+	machine, catalog := fixture()
+	machine = withNetwork(machine, []string{"network", "addresses"}, list(
+		m("name", "primary", "address", "192.0.2.11", "interface", "eth0"),
+		m("name", "storage", "address", "198.51.100.11", "interface", "eth1")))
+	machine = withNetwork(machine, []string{"hardware", "nics"}, list(m("name", "eth0"), m("name", "eth1")))
+	flat := object(api.NetworkConfig, "net", m("nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet"), m("name", "eth1", "type", "ethernet")))))
+	storage := object(api.Network, "storage", m("provided", true, "ipv4", m("cidr", "198.51.100.0/24")))
+	objects := []api.Object{machine, flat, storage}
+	for _, o := range catalog.Objects() {
+		if o.Kind() != api.Machine && o.Kind() != api.NetworkConfig {
+			objects = append(objects, o)
+		}
+	}
+	_, issues := InstallAddress(machine, api.NewCatalog(objects))
+	if len(issues) != 1 || issues[0].Field != "$.spec.network.installAddressRef" ||
+		!strings.Contains(issues[0].Message, "Machine/node is ambiguous: 2 interface assignments lie in declared Networks (primary, storage)") ||
+		issues[0].Remediation != "set spec.network.installAddressRef on Machine/node to the one the installation uses" {
+		t.Fatalf("issues = %+v", issues)
+	}
+	selected, issues := InstallAddress(withNetwork(machine, []string{"network", "installAddressRef"}, api.StringValue("storage")), api.NewCatalog(objects))
+	if len(issues) != 0 || selected.Get("name").Text() != "storage" {
+		t.Fatalf("selected = %v, issues = %+v", selected, issues)
+	}
+}
+
+func TestAnOVSInternalInterfaceAgreesWithTheVLANOfItsBridgePort(t *testing.T) {
+	machine, _ := fixture()
+	machine = withNetwork(machine, []string{"network", "addresses"}, list(m("name", "primary", "address", "192.0.2.11", "interface", "ovs0")))
+	config := object(api.NetworkConfig, "net", m("nmstate", m("interfaces", list(
+		m("name", "eth0", "type", "ethernet"),
+		m("name", "eth0.200", "type", "vlan", "vlan", m("base-iface", "eth0", "id", api.IntegerValue("200"))),
+		m("name", "ovsbr", "type", "ovs-bridge", "bridge", m("port", list(m("name", "eth0.200"), m("name", "ovs0")))),
+		m("name", "ovs0", "type", "ovs-interface")),
+		"routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-interface", "ovs0"))))))
+	if issues := membershipIssues(t, machine, config, lan(m("vlan", api.IntegerValue("300"), "ipv4", m("cidr", "192.0.2.0/24")))); !issueAt(issues, "$.spec.network.addresses[0].interface", "interface ovs0 on Machine/node tags VLAN 200, and its Network/lan is VLAN 300") {
+		t.Fatalf("issues = %+v", issues)
+	}
+	if issues := membershipIssues(t, machine, config, lan(m("ipv4", m("cidr", "192.0.2.0/24")))); !issueAt(issues, "$.spec.network.addresses[0].interface", "tags VLAN 200, and its Network/lan declares no vlan") {
+		t.Fatalf("issues = %+v", issues)
+	}
+}

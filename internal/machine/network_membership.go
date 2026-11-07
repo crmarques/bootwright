@@ -100,11 +100,10 @@ func stackVLANs(native api.Value, name string, visiting map[string]bool) []int {
 	if id, ok := iface.Get("vlan", "id").Int64(); ok && (iface.Get("type").Text() == "vlan" || iface.Has("vlan", "base-iface")) {
 		return []int{int(id)}
 	}
-	ports := bondPorts(native, name)
-	for _, port := range iface.Get("bridge", "port").Items() {
-		if member := port.Get("name").Text(); member != "" && !slices.Contains(ports, member) {
-			ports = append(ports, member)
-		}
+	bridge, ports := stackPorts(native, iface, name, visiting)
+	if bridge != "" {
+		visiting[bridge] = true
+		defer delete(visiting, bridge)
 	}
 	var ids []int
 	for _, port := range ports {

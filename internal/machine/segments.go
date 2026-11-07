@@ -165,12 +165,11 @@ func walkStack(native api.Value, name string, at stackLeaf, visiting map[string]
 	if iface.Get("type").Text() == "bond" {
 		at.bond = name
 	}
-	ports := bridgeMembers(native, name)
-	if bridge := portOwner(native, name); len(ports) == 0 && iface.Get("type").Text() == "ovs-interface" && bridge != "" && !visiting[bridge] {
+	bridge, ports := stackPorts(native, iface, name, visiting)
+	if bridge != "" {
 		visiting[bridge] = true
 		defer delete(visiting, bridge)
 		at.path = append(at.path, bridge)
-		ports = slices.DeleteFunc(bridgeMembers(native, bridge), func(port string) bool { return port == name })
 	}
 	if len(ports) == 0 {
 		at.name = name
@@ -181,6 +180,14 @@ func walkStack(native api.Value, name string, at stackLeaf, visiting map[string]
 		leaves = append(leaves, walkStack(native, port, at, visiting)...)
 	}
 	return leaves
+}
+
+func stackPorts(native, iface api.Value, name string, visiting map[string]bool) (string, []string) {
+	ports := bridgeMembers(native, name)
+	if bridge := portOwner(native, name); len(ports) == 0 && iface.Get("type").Text() == "ovs-interface" && bridge != "" && !visiting[bridge] {
+		return bridge, slices.DeleteFunc(bridgeMembers(native, bridge), func(port string) bool { return port == name })
+	}
+	return "", ports
 }
 
 func bridgeMembers(native api.Value, name string) []string {
