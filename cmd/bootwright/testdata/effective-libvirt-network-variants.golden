@@ -42,7 +42,15 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: rhel
+      nics:
+        - nicRef: nic0
+          attachmentRef: nv-lab
+        - nicRef: nic1
+          attachmentRef: nv-lab
   hardware:
+    nics:
+      - name: nic0
+      - name: nic1
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -56,7 +64,6 @@ spec:
     direct: {}
   network:
     configRef: nv-bond
-    attachmentRef: nv-lab
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -67,6 +74,11 @@ spec:
       - name: guest
         address: 203.0.113.11/24
         interface: bond0.140
+    interfaceMatches:
+      - interface: nic0
+        nicRef: nic0
+      - interface: nic1
+        nicRef: nic1
     overrides:
       interfaces:
         - mtu: 1400
@@ -89,7 +101,12 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: rhel
+      nics:
+        - nicRef: nic0
+          attachmentRef: nv-trunk
   hardware:
+    nics:
+      - name: nic0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -103,7 +120,6 @@ spec:
     direct: {}
   network:
     configRef: nv-vlan
-    attachmentRef: nv-trunk
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -114,6 +130,9 @@ spec:
       - name: guest
         address: 203.0.113.12/24
         interface: nic0.140
+    interfaceMatches:
+      - interface: nic0
+        nicRef: nic0
     overrides:
       interfaces:
         - mtu: 1400
@@ -136,7 +155,15 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: rhel
+      nics:
+        - nicRef: nic0
+          attachmentRef: nv-trunk
+        - nicRef: nic1
+          attachmentRef: nv-trunk
   hardware:
+    nics:
+      - name: nic0
+      - name: nic1
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -150,7 +177,6 @@ spec:
     direct: {}
   network:
     configRef: nv-vlan-bond
-    attachmentRef: nv-trunk
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -161,6 +187,11 @@ spec:
       - name: guest
         address: 203.0.113.13/24
         interface: bond0.140
+    interfaceMatches:
+      - interface: nic0
+        nicRef: nic0
+      - interface: nic1
+        nicRef: nic1
     overrides:
       interfaces:
         - mtu: 1400

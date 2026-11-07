@@ -49,8 +49,8 @@ func TestMachineAdmissionRefusesWhatItsSubstrateCannotRealize(t *testing.T) {
 	})
 	installerProvisioned := []exampleEdit{
 		{labGuest, "    installProfileRef: rhel-9-8\n", ""},
-		{labGuest, "  hardware:\n    rootDevice:\n      deviceName: /dev/vda\n\n", ""},
-		{labGuest, "    configRef: lab-guests\n    # attachmentRef defaults to the configRef name, lab-guests.\n    installAddressRef: ip\n\n", ""},
+		{labGuest, "    rootDevice:\n      deviceName: /dev/vda\n\n", ""},
+		{labGuest, "    configRef: lab-guests\n    installAddressRef: ip\n\n", ""},
 		{labGuest, "\n    addresses:\n      - name: ip\n        address: 198.51.100.11/24\n        interface: enp1s0\n", "\n    addresses:\n      - name: fqdn\n        address: rhel-01.lab.example.test\n"},
 	}
 	// A /32 assignment reserves no address of its own, so only the managed
@@ -69,8 +69,14 @@ func TestMachineAdmissionRefusesWhatItsSubstrateCannotRealize(t *testing.T) {
 		"the bridge's network address":     {installAt("198.51.100.0/32"), "api.invariant", guest, "$.spec.network.installAddressRef"},
 		"the bridge's broadcast address":   {installAt("198.51.100.255/32"), "api.invariant", guest, "$.spec.network.installAddressRef"},
 		"its own prefix's network address": {installAt("198.51.100.0/24"), "api.value", guest, "$.spec.network.addresses[0].address"},
-		"an interface binding": {[]exampleEdit{{labGuest, "    installAddressRef: ip\n", "    installAddressRef: ip\n    interfaceBinding:\n      - nicRef: enp1s0\n        interfaceName: enp1s0\n"}},
-			"api.invariant", guest, "$.spec.network.interfaceBinding"},
+		"an interface match naming no ethernet interface": {[]exampleEdit{{labGuest, "    installAddressRef: ip\n", "    installAddressRef: ip\n    interfaceMatches:\n      - interface: enp9s0\n        nicRef: enp1s0\n"}},
+			"api.reference", guest, "$.spec.network.interfaceMatches[0].interface"},
+		"a realized Machine without NICs": {[]exampleEdit{{labGuest, "    nics:\n      - name: enp1s0\n\n", ""}},
+			"api.invariant", guest, "$.spec.hardware.nics"},
+		"a NIC entry naming no NIC": {[]exampleEdit{{labGuest, "      profileRef: rhel\n", "      profileRef: rhel\n      nics:\n        - nicRef: enp9s0\n          attachmentRef: lab-guests\n"}},
+			"api.reference", guest, "$.spec.substrate.libvirt.nics[0].nicRef"},
+		"an authored NMState MAC": {[]exampleEdit{{"infra/networkconfigs/lab-guests.yaml", "type: ethernet", "type: ethernet\n        mac-address: 52:54:00:00:00:01"}},
+			"api.invariant", guest, "$.spec.network.configRef"},
 		"a bare-metal arm": {[]exampleEdit{{labGuest, "      profileRef: rhel\n", "      profileRef: rhel\n    baremetal:\n      bmc:\n        address: https://bmc.example.test/redfish/v1/Systems/1\n        credentialsRef: lab-bmc-credentials\n"}},
 			"api.invariant", guest, "$.spec.substrate.baremetal"},
 	}

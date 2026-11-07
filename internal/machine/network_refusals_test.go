@@ -54,10 +54,10 @@ func twoAttachmentLab(interfaces api.Value) []api.Object {
 	return objects
 }
 
-// A provider's sole attachment is the default whatever its name, for a
+// A provider's sole attachment is every NIC's default whatever its name, for a
 // referenced or an inline configuration; the NetworkConfig's name selects
-// nothing, and two attachments still need an explicit selection.
-func TestAMachineDefaultsToItsProvidersSoleAttachment(t *testing.T) {
+// nothing, and with two attachments every NIC names its own.
+func TestEveryNICDefaultsToItsProvidersSoleAttachment(t *testing.T) {
 	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
 	for i, o := range lab {
 		if o.Kind() == api.NetworkConfig {
@@ -74,22 +74,22 @@ func TestAMachineDefaultsToItsProvidersSoleAttachment(t *testing.T) {
 			machine := guest(network)
 			catalog := api.NewCatalog(append([]api.Object{machine}, lab...))
 			normalized, _ := Normalize(machine, catalog)
-			if got := normalized.Spec().Get("network", "attachmentRef").Text(); got != "net" {
-				t.Fatalf("attachmentRef = %q, want the sole attachment net", got)
+			if got := normalized.Spec().Get("substrate", "libvirt", "nics"); !got.Equal(list(m("nicRef", "enp1s0", "attachmentRef", "net"))) {
+				t.Fatalf("substrate.libvirt.nics = %v, want enp1s0 on the sole attachment net", got)
 			}
 			if issues := admission(machine, lab...); len(issues) != 0 {
 				t.Fatalf("a Machine on its provider's sole attachment was refused: %v", issues)
 			}
-			selected := machine.WithSpec(machine.Spec().WithPath(list(m("interface", "enp1s0", "attachmentRef", "net")), "substrate", "libvirt", "interfaceAttachments"))
-			if normalized, _ := Normalize(selected, catalog); normalized.Spec().Has("network", "attachmentRef") {
-				t.Fatal("a default was added beside authored interfaceAttachments")
-			}
 		})
 	}
 	machine := guest(m("configRef", "net", "addresses", addresses))
-	requireOneIssue(t, admission(machine, twoAttachmentLab(list(m("name", "enp1s0", "type", "ethernet")))...), api.Issue{Code: "api.invariant", Field: "$.spec.network.attachmentRef",
-		Message:     "provider-backed configured networks require an explicit attachment unless their provider has exactly one",
-		Remediation: "set spec.network.attachmentRef on Machine/guest to an attachment of InfraProvider/lab"})
+	requireOneIssue(t, admission(machine, twoAttachmentLab(list(m("name", "enp1s0", "type", "ethernet")))...), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.nics",
+		Message:     "NIC enp1s0 of Machine/guest selects no network attachment, and InfraProvider/lab declares 2 attachments, not exactly one that every NIC defaults to",
+		Remediation: "add a spec.substrate.libvirt.nics entry with nicRef enp1s0 and an attachmentRef naming an attachment of InfraProvider/lab on Machine/guest"})
+	selected := machine.WithSpec(machine.Spec().WithPath(list(m("nicRef", "enp1s0", "attachmentRef", "storage")), "substrate", "libvirt", "nics"))
+	if issues := admission(selected, twoAttachmentLab(list(m("name", "enp1s0", "type", "ethernet")))...); len(issues) != 0 {
+		t.Fatalf("a NIC naming one of two attachments was refused: %v", issues)
+	}
 }
 
 // A bond's ports share one attachment: ports on two would move the host onto
@@ -99,11 +99,12 @@ func TestABondRefusesPortsOnDifferentAttachments(t *testing.T) {
 		m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList("enp1s0", "enp2s0"))))
 	bonded := func(second string) api.Object {
 		machine := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11/24", "interface", "bond0"))))
-		return machine.WithSpec(machine.Spec().WithPath(list(m("interface", "enp1s0", "attachmentRef", "net"), m("interface", "enp2s0", "attachmentRef", second)), "substrate", "libvirt", "interfaceAttachments"))
+		return machine.WithSpec(machine.Spec().WithPath(list(m("nicRef", "enp1s0", "attachmentRef", "net"), m("nicRef", "enp2s0", "attachmentRef", second)), "substrate", "libvirt", "nics").
+			WithPath(list(m("name", "enp1s0"), m("name", "enp2s0")), "hardware", "nics"))
 	}
-	requireOneIssue(t, admission(bonded("storage"), twoAttachmentLab(interfaces)...), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.interfaceAttachments[1].attachmentRef",
+	requireOneIssue(t, admission(bonded("storage"), twoAttachmentLab(interfaces)...), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.nics[1].attachmentRef",
 		Message:     "bond bond0 of Machine/guest has ports on different attachments (enp1s0 on net, enp2s0 on storage), so a failover would move the host onto another network",
-		Remediation: "attach every port of bond bond0 to one attachment in spec.substrate.libvirt.interfaceAttachments on Machine/guest, or remove the port on another attachment from the bond"})
+		Remediation: "attach the NIC of every port of bond bond0 to one attachment in spec.substrate.libvirt.nics on Machine/guest, or remove the port on another attachment from the bond"})
 	if issues := admission(bonded("net"), twoAttachmentLab(interfaces)...); len(issues) != 0 {
 		t.Fatalf("a bond on one attachment was refused: %v", issues)
 	}
@@ -120,17 +121,18 @@ func TestABondSplitThroughControllerOrNestingRefusesOnce(t *testing.T) {
 	}
 	attached := func(interfaces api.Value, install string, attachments ...string) []api.Issue {
 		machine := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11/24", "interface", install))))
-		var entries []api.Value
+		var entries, nics []api.Value
 		for index, reference := range attachments {
-			entries = append(entries, m("interface", []string{"enp1s0", "enp2s0", "enp3s0"}[index], "attachmentRef", reference))
+			name := []string{"enp1s0", "enp2s0", "enp3s0"}[index]
+			entries, nics = append(entries, m("nicRef", name, "attachmentRef", reference)), append(nics, m("name", name))
 		}
-		machine = machine.WithSpec(machine.Spec().WithPath(list(entries...), "substrate", "libvirt", "interfaceAttachments"))
+		machine = machine.WithSpec(machine.Spec().WithPath(list(entries...), "substrate", "libvirt", "nics").WithPath(list(nics...), "hardware", "nics"))
 		return admission(machine, twoAttachmentLab(interfaces)...)
 	}
 	controlled := list(ethernet("enp1s0", "bond0"), ethernet("enp2s0", "bond0"), m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup")))
-	requireOneIssue(t, attached(controlled, "bond0", "net", "storage"), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.interfaceAttachments[1].attachmentRef",
+	requireOneIssue(t, attached(controlled, "bond0", "net", "storage"), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.nics[1].attachmentRef",
 		Message:     "bond bond0 of Machine/guest has ports on different attachments (enp1s0 on net, enp2s0 on storage), so a failover would move the host onto another network",
-		Remediation: "attach every port of bond bond0 to one attachment in spec.substrate.libvirt.interfaceAttachments on Machine/guest, or remove the port on another attachment from the bond"})
+		Remediation: "attach the NIC of every port of bond bond0 to one attachment in spec.substrate.libvirt.nics on Machine/guest, or remove the port on another attachment from the bond"})
 	if issues := attached(controlled, "bond0", "net", "net"); len(issues) != 0 {
 		t.Fatalf("a controller-declared bond on one attachment was refused: %v", issues)
 	}
@@ -219,20 +221,61 @@ func TestAContactCarriesNoPrefix(t *testing.T) {
 	}
 }
 
-// An unbound NIC named as another NIC's bound interface would put that
-// interface name in the installer's host list twice, with two addresses.
-func TestAnUnboundNICMayNotShareABoundInterfaceName(t *testing.T) {
+// A NIC that matches no interface but is named as an interface another NIC
+// carries would put that interface name in the installer's host list twice,
+// with two addresses.
+func TestAnUnmatchedNICMayNotShareAMatchedInterfaceName(t *testing.T) {
 	node, catalog := fixture()
 	labelled := func(second string) api.Object {
 		return node.WithSpec(node.Spec().
 			WithPath(list(m("name", "nic-a"), m("name", second)), "hardware", "nics").
 			WithPath(list(m("nicRef", "nic-a", "macAddress", "02:00:00:00:00:01"), m("nicRef", second, "macAddress", "02:00:00:00:00:02")), "substrate", "baremetal", "nics").
-			WithPath(list(m("nicRef", "nic-a", "interfaceName", "eth0")), "network", "interfaceBinding"))
+			WithPath(list(m("interface", "eth0", "nicRef", "nic-a")), "network", "interfaceMatches"))
 	}
-	requireOneIssue(t, admission(labelled("eth0"), without(catalog, node)...), api.Issue{Code: "api.invariant", Field: "$.spec.network.interfaceBinding[0].interfaceName",
-		Message:     "hardware NIC eth0 of Machine/node is unbound but shares the name of interface eth0 that NIC nic-a binds, so the installer would list eth0 twice with two addresses",
-		Remediation: "bind NIC eth0 in spec.network.interfaceBinding on Machine/node, or rename it in spec.hardware.nics"})
+	requireOneIssue(t, admission(labelled("eth0"), without(catalog, node)...), api.Issue{Code: "api.invariant", Field: "$.spec.network.interfaceMatches[0].nicRef",
+		Message:     "hardware NIC eth0 of Machine/node matches no interface but shares the name of interface eth0, which NIC nic-a carries, so the installer would list eth0 twice with two addresses",
+		Remediation: "match NIC eth0 to an interface in spec.network.interfaceMatches on Machine/node, or rename it in spec.hardware.nics"})
 	if issues := admission(labelled("nic-b"), without(catalog, node)...); len(issues) != 0 {
-		t.Fatalf("an unbound NIC with its own name was refused: %v", issues)
+		t.Fatalf("an unmatched NIC with its own name was refused: %v", issues)
 	}
+}
+
+// Every available ethernet interface matches one NIC: an omitted match is the
+// NIC of the interface's name, and two interfaces never share one NIC. A NIC no
+// interface names stays unconfigured.
+func TestEveryEthernetInterfaceMatchesExactlyOneNIC(t *testing.T) {
+	two := list(m("name", "enp1s0", "type", "ethernet"), m("name", "enp2s0", "type", "ethernet"))
+	matched := func(nics api.Value, matches api.Value) []api.Issue {
+		machine := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11/24", "interface", "enp1s0"))))
+		spec := machine.Spec().WithPath(nics, "hardware", "nics")
+		if matches.Present() {
+			spec = spec.WithPath(matches, "network", "interfaceMatches")
+		}
+		return admission(machine.WithSpec(spec), libvirtLab(two)...)
+	}
+	requireOneIssue(t, matched(list(m("name", "enp1s0")), api.Value{}), api.Issue{Code: "api.invariant", Field: "$.spec.network.interfaceMatches",
+		Message:     "ethernet interface enp2s0 of Machine/guest matches no NIC: spec.hardware.nics declares no NIC enp2s0 and spec.network.interfaceMatches does not match it",
+		Remediation: "declare NIC enp2s0 in spec.hardware.nics on Machine/guest, or match interface enp2s0 to a NIC in spec.network.interfaceMatches"})
+	requireOneIssue(t, matched(list(m("name", "enp1s0"), m("name", "enp2s0")), list(m("interface", "enp2s0", "nicRef", "enp1s0"))), api.Issue{Code: "api.invariant", Field: "$.spec.network.interfaceMatches",
+		Message:     "NIC enp1s0 of Machine/guest is matched by interface enp1s0 and by interface enp2s0, and one NIC carries one ethernet interface",
+		Remediation: "match one of the two interfaces to another NIC in spec.network.interfaceMatches on Machine/guest"})
+	requireOneIssue(t, matched(list(m("name", "enp1s0"), m("name", "enp2s0")), list(m("interface", "eth9", "nicRef", "enp1s0"))), api.Issue{Code: "api.reference", Field: "$.spec.network.interfaceMatches[0].interface",
+		Message:     "interface eth9 of Machine/guest is no available ethernet interface of its composed network configuration, so it matches no NIC",
+		Remediation: "set spec.network.interfaceMatches[0].interface to an available ethernet interface of the network configuration, or remove the entry"})
+	if issues := matched(list(m("name", "enp1s0"), m("name", "enp2s0"), m("name", "spare")), api.Value{}); len(issues) != 0 {
+		t.Fatalf("a NIC no interface names was refused: %v", issues)
+	}
+	if issues := matched(list(m("name", "vnic0"), m("name", "vnic1")), list(m("interface", "enp1s0", "nicRef", "vnic0"), m("interface", "enp2s0", "nicRef", "vnic1"))); len(issues) != 0 {
+		t.Fatalf("interfaces matched to differently named vNICs were refused: %v", issues)
+	}
+}
+
+// A libvirt or KubeVirt provider derives each vNIC's MAC, so a Machine it
+// realizes authors none in its NMState.
+func TestAVirtualMachineAuthorsNoNMStateMAC(t *testing.T) {
+	interfaces := list(m("name", "enp1s0", "type", "ethernet", "mac-address", "52:54:00:00:00:01"))
+	machine := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11/24", "interface", "enp1s0"))))
+	requireOneIssue(t, admission(machine, libvirtLab(interfaces)...), api.Issue{Code: "api.invariant", Field: "$.spec.network.configRef",
+		Message:     "ethernet interface enp1s0 of Machine/guest authors a mac-address, but a libvirt provider derives each vNIC's MAC from the context, Machine and NIC names",
+		Remediation: "remove mac-address from interface enp1s0 in the network configuration of Machine/guest, and match the interface to its NIC with spec.network.interfaceMatches if their names differ"})
 }

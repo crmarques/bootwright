@@ -14,8 +14,9 @@ import (
 func TestARequestRefusesANetworkThatDoesNotCompose(t *testing.T) {
 	metal := metalOn("enp1s0", hardwareNIC("enp1s0", "52:54:00:9a:1b:01"), hardwareNIC("nic-b", "52:54:00:9a:1b:0b"))
 	metal = metal.WithSpec(metal.Spec().WithPath(api.ListValue(
-		api.MapValue(text("interfaceName", "enp2s0"), text("nicRef", "nic-b")),
-	), "network", "interfaceBinding"))
+		api.MapValue(text("interface", "enp1s0"), text("nicRef", "nic-b")),
+		api.MapValue(text("interface", "enp2s0"), text("nicRef", "nic-b")),
+	), "network", "interfaceMatches"))
 	catalog := metalCatalog(metal, metalNetwork(declaredInterface("enp1s0", "ethernet"), declaredInterface("enp2s0", "ethernet")))
 	requests, _, err := Requests(catalog, "controller", testContext)
 	reported := diagnostics.Of(err)

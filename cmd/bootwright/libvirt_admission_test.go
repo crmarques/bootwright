@@ -82,7 +82,7 @@ func TestLibvirtAdmissionRefusesWhatTheHostCannotRealize(t *testing.T) {
 		edits                        []exampleEdit
 		code, object, field, message string
 	}{
-		"an attachment name outside the label grammar": {[]exampleEdit{{labProvider, "- name: lab-guests", "- name: Lab_Guests"}, {"infra/machines/rhel-01.yaml", "    installAddressRef: ip\n", "    attachmentRef: Lab_Guests\n    installAddressRef: ip\n"}},
+		"an attachment name outside the label grammar": {[]exampleEdit{{labProvider, "- name: lab-guests", "- name: Lab_Guests"}},
 			"api.value", provider, "$.spec.networkAttachments[0].name", "value does not match the required name grammar"},
 		"a data disk name outside the label grammar": {[]exampleEdit{withDataDisks("Data_1")},
 			"api.value", provider, "$.spec.libvirt.machineProfiles[0].dataDisks[0].name", "value does not match the required name grammar"},
@@ -102,8 +102,8 @@ func TestLibvirtAdmissionRefusesWhatTheHostCannotRealize(t *testing.T) {
 			"api.value", provider, "$.spec.networkAttachments[0].libvirt.bridge", "value does not match the required bridge grammar"},
 		"a bridge longer than an interface name": {[]exampleEdit{{labProvider, "bridge: virbr-lab", "bridge: virbr-lab-guests1"}},
 			"api.value", provider, "$.spec.networkAttachments[0].libvirt.bridge", "value does not match the required bridge grammar"},
-		"an attachment interface holding a quote": {[]exampleEdit{{"infra/machines/rhel-01.yaml", "      profileRef: rhel\n", "      profileRef: rhel\n      interfaceAttachments:\n        - interface: 'enp1s0\"x'\n          attachmentRef: lab-guests\n"}},
-			"api.value", guest, "$.spec.substrate.libvirt.interfaceAttachments[0].interface", "value does not match the required ifname grammar"},
+		"an interface match holding a quote": {[]exampleEdit{{"infra/machines/rhel-01.yaml", "    installAddressRef: ip\n", "    installAddressRef: ip\n    interfaceMatches:\n      - interface: 'enp1s0\"x'\n        nicRef: enp1s0\n"}},
+			"api.value", guest, "$.spec.network.interfaceMatches[0].interface", "value does not match the required ifname grammar"},
 	}
 	for name, test := range cases {
 		t.Run(name, func(t *testing.T) {

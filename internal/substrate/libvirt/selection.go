@@ -186,7 +186,7 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, placem
 	if err != nil {
 		return MachineRequest{}, err
 	}
-	interfaces, err := interfacesFor(catalog, provider, machine, contextName)
+	interfaces, err := interfacesFor(provider, machine, contextName)
 	if err != nil {
 		return MachineRequest{}, err
 	}
@@ -256,27 +256,17 @@ func disksFor(profile api.Value, identity, contextName, machine string) ([]Disk,
 	return disks, nil
 }
 
-// interfacesFor preserves the declared NIC order and resolves each selected
-// attachment independently. Admission proves an authored map covers all NICs.
-func interfacesFor(catalog api.Catalog, provider, machine api.Object, contextName string) ([]Interface, error) {
-	network := machine.Spec().Get("network")
-	names, err := substrate.EthernetInterfaces(catalog, machine)
+func interfacesFor(provider, machine api.Object, contextName string) ([]Interface, error) {
+	nics, err := substrate.VirtualInterfaces(contextName, machine)
 	if err != nil {
 		return nil, err
 	}
-	interfaces := make([]Interface, 0, len(names))
-	for _, name := range names {
-		reference := network.Get("attachmentRef").Text()
-		if attachments := substrate.MachineInterfaceAttachments(machine); attachments.Present() {
-			entry, found := findNamed(attachments, "interface", name)
-			if !found {
-				return nil, refusal("api.reference", "the Machine's per-interface attachment map does not cover "+name, "correct spec.substrate.libvirt.interfaceAttachments on "+machine.Identity())
-			}
-			reference = entry.Get("attachmentRef").Text()
-		}
+	interfaces := make([]Interface, 0, len(nics))
+	for _, nic := range nics {
+		reference := substrate.NICAttachment(provider, machine, nic.Name)
 		attachment, found := findNamed(provider.Spec().Get("networkAttachments"), "name", reference)
 		if !found || !attachment.Has("libvirt") {
-			return nil, refusal("api.reference", "the Machine's attachment does not resolve on its provider", "correct spec.network.attachmentRef or spec.substrate.libvirt.interfaceAttachments on "+machine.Identity())
+			return nil, refusal("api.reference", "NIC "+nic.Name+" of the Machine selects no libvirt attachment of its provider", "add a spec.substrate.libvirt.nics entry for NIC "+nic.Name+" naming a libvirt attachment of "+provider.Identity()+" on "+machine.Identity())
 		}
 		arm := attachment.Get("libvirt")
 		defined := ""
@@ -285,7 +275,7 @@ func interfacesFor(catalog api.Catalog, provider, machine api.Object, contextNam
 		}
 		mtu, _ := arm.Get("mtu").Int64()
 		interfaces = append(interfaces, Interface{
-			Bridge: arm.Get("bridge").Text(), MACAddress: substrate.InterfaceMAC(contextName, machine.Name(), name), Name: name, Network: defined, MTU: int(mtu),
+			Bridge: arm.Get("bridge").Text(), MACAddress: nic.MACAddress, Name: nic.Name, Network: defined, MTU: int(mtu),
 		})
 	}
 	return interfaces, nil

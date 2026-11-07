@@ -10,7 +10,14 @@ spec:
     libvirt:
       profileRef: rhel
 
+      nics:
+        - nicRef: nic0
+          attachmentRef: nv-trunk
+
   hardware:
+    nics:
+      - name: nic0
+
     rootDevice:
       deviceName: /dev/vda
 
@@ -25,7 +32,6 @@ spec:
 
   network:
     configRef: nv-vlan
-    attachmentRef: nv-trunk
     installAddressRef: ip
 
     addresses:

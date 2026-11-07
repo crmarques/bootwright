@@ -25,7 +25,7 @@ func libvirtLab(interfaces api.Value) []api.Object {
 
 // guest is an installer-provisioned Machine of the lab provider with network.
 func guest(network api.Value) api.Object {
-	spec := m("substrate", m("providerRef", "lab", "libvirt", m("profileRef", "small")), "os", m("provided", false))
+	spec := m("substrate", m("providerRef", "lab", "libvirt", m("profileRef", "small")), "os", m("provided", false), "hardware", m("nics", list(m("name", "enp1s0"))))
 	if network.Present() {
 		spec = spec.With("network", network)
 	}
@@ -49,21 +49,21 @@ func requireOneIssue(t *testing.T, issues []api.Issue, want api.Issue) {
 	}
 }
 
-// A libvirt domain attaches one interface per available ethernet interface of
-// the configuration its Machine selects, so a non-provided Machine with none
+// A Machine a libvirt provider realizes is reached through the ethernet
+// interfaces its configuration selects, so a non-provided Machine with none
 // refuses at admission rather than at plan, after composition and its
 // overrides. An installed Anaconda Machine without a network keeps the one
 // refusal its installation rule already gives.
 func TestALibvirtMachineNeedsAnAvailableEthernetInterface(t *testing.T) {
 	up := list(m("name", "enp1s0", "type", "ethernet", "state", "up"))
 	absent := list(m("name", "enp1s0", "type", "ethernet", "state", "absent"))
-	attached := m("configRef", "net", "attachmentRef", "net")
+	attached := m("configRef", "net")
 	unavailable := api.Issue{Code: "api.invariant", Field: "$.spec.network.configRef",
-		Message:     "the network configuration presents no available ethernet interface, so the domain would have no interface",
+		Message:     "the network configuration presents no available ethernet interface, so no NIC of the Machine would be configured",
 		Remediation: "declare an ethernet interface that is not absent or ignored in the NMState Machine/guest selects, or select another configuration"}
 	t.Run("no network", func(t *testing.T) {
 		requireOneIssue(t, admission(guest(api.Value{}), libvirtLab(up)...), api.Issue{Code: "api.invariant", Field: "$.spec.network",
-			Message:     "a Machine a libvirt provider realizes attaches one interface per available ethernet interface of its network configuration, and this Machine selects none",
+			Message:     "a Machine a libvirt provider realizes is reached through the network configuration its operating system applies, and this Machine selects none",
 			Remediation: "select a network configuration on Machine/guest with spec.network.configRef or spec.network.inline, with an ethernet interface that is not absent or ignored"})
 	})
 	for name, test := range map[string]struct {
@@ -74,7 +74,7 @@ func TestALibvirtMachineNeedsAnAvailableEthernetInterface(t *testing.T) {
 		"only an ignored ethernet interface":  {list(m("name", "enp1s0", "type", "ethernet", "state", "ignore")), attached, "$.spec.network.configRef"},
 		"only a bond":                         {list(m("name", "bond0", "type", "bond")), attached, "$.spec.network.configRef"},
 		"an override removing the interface":  {up, attached.With("overrides", m("interfaces", list(m("name", "enp1s0", "state", "absent")))), "$.spec.network.configRef"},
-		"an inline configuration without one": {up, m("inline", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", absent)), "attachmentRef", "net"), "$.spec.network.inline.nmstate"},
+		"an inline configuration without one": {up, m("inline", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", absent))), "$.spec.network.inline.nmstate"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			want := unavailable
@@ -86,7 +86,7 @@ func TestALibvirtMachineNeedsAnAvailableEthernetInterface(t *testing.T) {
 		t.Fatalf("a Machine with one ethernet interface up was refused: %v", issues)
 	}
 	installed := guest(api.Value{})
-	installed = installed.WithSpec(installed.Spec().With("os", m("provided", false, "installProfileRef", "rhel")).With("hardware", m("rootDevice", m("deviceName", "/dev/vda"))))
+	installed = installed.WithSpec(installed.Spec().With("os", m("provided", false, "installProfileRef", "rhel")).With("hardware", m("nics", list(m("name", "enp1s0")), "rootDevice", m("deviceName", "/dev/vda"))))
 	issues := admission(installed, libvirtLab(up)...)
 	if len(issues) != 1 || issues[0].Field != "$.spec.network.installAddressRef" ||
 		issues[0].Message != "a Bootwright-installed Anaconda Machine installs with one static IPv4 address, and DHCP installation is not supported" {
@@ -116,7 +116,7 @@ func without(catalog api.Catalog, o api.Object) []api.Object {
 
 // installOn is the lab guest installing at address on enp1s0.
 func installOn(address string) api.Object {
-	return guest(m("configRef", "net", "attachmentRef", "net", "installAddressRef", "ip",
+	return guest(m("configRef", "net", "installAddressRef", "ip",
 		"addresses", list(m("name", "ip", "address", address, "interface", "enp1s0"))))
 }
 
@@ -137,7 +137,7 @@ func TestAnInstallAddressIsNeitherTheBridgeNorItsNetworkOrBroadcast(t *testing.T
 			for _, perInterface := range []bool{false, true} {
 				node := installOn(address)
 				if perInterface {
-					node = node.WithSpec(node.Spec().With("network", node.Spec().Get("network").Without("attachmentRef")).WithPath(list(m("interface", "enp1s0", "attachmentRef", "net")), "substrate", "libvirt", "interfaceAttachments"))
+					node = node.WithSpec(node.Spec().WithPath(list(m("nicRef", "enp1s0", "attachmentRef", "net")), "substrate", "libvirt", "nics"))
 				}
 				requireOneIssue(t, admission(node, lab...), api.Issue{Code: "api.invariant", Field: "$.spec.network.installAddressRef", Message: message,
 					Remediation: "assign Machine/guest an install address inside 192.0.2.0/24 other than 192.0.2.1, 192.0.2.0 and 192.0.2.255"})
@@ -383,14 +383,13 @@ func TestAKubeVirtMachineAuthorsNoMAC(t *testing.T) {
 }
 
 // A bare-metal attachment configures nothing, so a bare-metal Machine needs no
-// attachment selection; one it authors still names an attachment of its
-// provider. A libvirt Machine's attachment is its domain's network, so with
-// two attachments to choose from it still selects one.
+// attachment selection. A libvirt NIC's attachment is its domain interface's
+// network, so with two attachments to choose from each NIC names one.
 func TestABaremetalMachineSelectsNoAttachment(t *testing.T) {
 	inline := guest(m("inline", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet"))))))
-	requireOneIssue(t, admission(inline, twoAttachmentLab(list())...), api.Issue{Code: "api.invariant", Field: "$.spec.network.attachmentRef",
-		Message:     "provider-backed configured networks require an explicit attachment unless their provider has exactly one",
-		Remediation: "set spec.network.attachmentRef on Machine/guest to an attachment of InfraProvider/lab"})
+	requireOneIssue(t, admission(inline, twoAttachmentLab(list())...), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.nics",
+		Message:     "NIC enp1s0 of Machine/guest selects no network attachment, and InfraProvider/lab declares 2 attachments, not exactly one that every NIC defaults to",
+		Remediation: "add a spec.substrate.libvirt.nics entry with nicRef enp1s0 and an attachmentRef naming an attachment of InfraProvider/lab on Machine/guest"})
 	server, catalog := fixture()
 	objects := without(catalog, server)
 	for i, existing := range objects {
@@ -400,10 +399,6 @@ func TestABaremetalMachineSelectsNoAttachment(t *testing.T) {
 	}
 	if issues := admission(server, objects...); len(issues) != 0 {
 		t.Fatalf("a bare-metal Machine without an attachment was refused: %v", issues)
-	}
-	named := server.WithSpec(server.Spec().WithPath(api.StringValue("missing"), "network", "attachmentRef"))
-	if issues := admission(named, objects...); len(issues) != 0 {
-		t.Fatalf("an unresolved attachmentRef, which the shared reference check reports, was refused again: %#v", issues)
 	}
 }
 
@@ -449,17 +444,17 @@ func TestAMACNamesOneDeclaredHardwareNIC(t *testing.T) {
 	}
 }
 
-// A libvirt or KubeVirt provider creates every interface of its Machine, so
-// there is no hardware NIC to bind, and a profile names a machine profile of
-// the selected provider.
-func TestAVirtualMachineBindsNoNICAndNamesAProviderProfile(t *testing.T) {
+// A libvirt or KubeVirt provider creates one vNIC per declared NIC, so a
+// Machine it realizes declares at least one, and a profile names a machine
+// profile of the selected provider.
+func TestAVirtualMachineDeclaresItsNICsAndNamesAProviderProfile(t *testing.T) {
 	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
 	provider := lab[1]
-	bound := installOn("192.0.2.11/24")
-	bound = bound.WithSpec(bound.Spec().WithPath(m("eth0", "enp1s0"), "network", "interfaceBinding"))
-	requireOneIssue(t, validateSubstrate(bound, provider, substrate.ArmLibvirt), api.Issue{Code: "api.invariant", Field: "$.spec.network.interfaceBinding",
-		Message:     "a libvirt provider creates every interface of this Machine, so there is no hardware NIC to bind",
-		Remediation: "remove spec.network.interfaceBinding from Machine/guest"})
+	bare := installOn("192.0.2.11/24")
+	bare = bare.WithSpec(bare.Spec().Without("hardware"))
+	requireOneIssue(t, validateSubstrate(bare, provider, substrate.ArmLibvirt), api.Issue{Code: "api.invariant", Field: "$.spec.hardware.nics",
+		Message:     "a libvirt provider creates one vNIC per spec.hardware.nics entry, in order, and Machine/guest declares none",
+		Remediation: "declare each vNIC of Machine/guest in spec.hardware.nics, in device order, such as one entry named enp1s0"})
 	unknown := installOn("192.0.2.11/24")
 	unknown = unknown.WithSpec(unknown.Spec().WithPath(api.StringValue("missing"), "substrate", "libvirt", "profileRef"))
 	if issues := validateSubstrate(unknown, provider, substrate.ArmLibvirt); len(issues) != 0 {
@@ -476,7 +471,7 @@ func TestInstallAttachmentContainmentFollowsVLANAndBondParents(t *testing.T) {
 		{"bond0", list(m("name", "enp1s0", "type", "ethernet"), m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList("enp1s0"))))},
 	} {
 		node := installOn("192.0.2.1/24")
-		node = node.WithSpec(node.Spec().With("network", node.Spec().Get("network").Without("attachmentRef").With("addresses", list(m("name", "ip", "address", "192.0.2.1/24", "interface", network.iface)))).WithPath(list(m("interface", "enp1s0", "attachmentRef", "net")), "substrate", "libvirt", "interfaceAttachments"))
+		node = node.WithSpec(node.Spec().With("network", node.Spec().Get("network").With("addresses", list(m("name", "ip", "address", "192.0.2.1/24", "interface", network.iface)))).WithPath(list(m("nicRef", "enp1s0", "attachmentRef", "net")), "substrate", "libvirt", "nics"))
 		issues := admission(node, libvirtLab(network.interfaces)...)
 		if !slices.ContainsFunc(issues, func(issue api.Issue) bool {
 			return issue.Field == "$.spec.network.installAddressRef" && strings.Contains(issue.Message, "bridge's own host address")

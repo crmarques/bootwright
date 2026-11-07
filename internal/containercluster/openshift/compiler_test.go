@@ -69,6 +69,9 @@ spec:
     providerRef: host-provider
     kubevirt:
       profileRef: standard
+  hardware:
+    nics:
+      - name: eth0
   os:
     provided: false
   network:
@@ -79,7 +82,6 @@ spec:
         interfaces:
           - name: eth0
             type: ethernet
-    attachmentRef: workload
     addresses:
       - name: primary
         address: 192.0.2.10/24

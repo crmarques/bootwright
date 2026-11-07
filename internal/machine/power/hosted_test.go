@@ -30,9 +30,9 @@ func kubevirtCatalog() api.Catalog {
 		object(api.NetworkConfig, "guests", m("nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet", "state", "up"))))),
 		object(api.InfraProvider, "ext", m("kubevirt", m("kubeconfigRef", "ext-kubeconfig", "namespace", "guests"))),
 		object(api.InfraProvider, "kv", m("kubevirt", m("hostClusterRef", "host", "namespace", "nested"))),
-		object(api.Machine, "node-0", m("substrate", m("providerRef", "kv"), "os", m("provided", false), "network", m("configRef", "guests"))),
-		object(api.Machine, "node-1", m("substrate", m("providerRef", "kv"), "os", m("provided", false), "network", m("configRef", "guests"))),
-		object(api.Machine, "vm-0", m("substrate", m("providerRef", "ext"), "os", m("provided", false), "network", m("configRef", "guests"))),
+		object(api.Machine, "node-0", m("substrate", m("providerRef", "kv"), "os", m("provided", false), "hardware", m("nics", list(m("name", "enp1s0"))), "network", m("configRef", "guests"))),
+		object(api.Machine, "node-1", m("substrate", m("providerRef", "kv"), "os", m("provided", false), "hardware", m("nics", list(m("name", "enp1s0"))), "network", m("configRef", "guests"))),
+		object(api.Machine, "vm-0", m("substrate", m("providerRef", "ext"), "os", m("provided", false), "hardware", m("nics", list(m("name", "enp1s0"))), "network", m("configRef", "guests"))),
 	})
 }
 

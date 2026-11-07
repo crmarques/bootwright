@@ -138,9 +138,8 @@ The field detail of the vSphere arm is recorded in
 [refused machine arms](../deferred/machine-arms.md), which
 [B99](../milestones/m1.md#b99) revives, and the KubeVirt arm's field reference
 is [its record](../deferred/machine-arms.md#kubevirt-arm).
-A Machine's per-interface attachments, `substrate.libvirt.interfaceAttachments`
-and `substrate.kubevirt.interfaceAttachments` ([substrate arm](#substrate-arm)),
-are read by libvirt and KubeVirt Machines.
+A libvirt or KubeVirt Machine's NIC attachments are its arm's `nics`
+([substrate arm](#substrate-arm)).
 
 ### Machine profiles and network attachments
 
@@ -193,8 +192,8 @@ and declares no bound. A managed network's one prefix may
 be IPv4 or IPv6.
 
 A bond's ports, followed through VLAN parents and nested bonds to their
-`ethernet` interfaces, reach one attachment: a Machine whose
-`interfaceAttachments` put two ports of one bond on different attachments
+`ethernet` interfaces and their NICs, reach one attachment: a Machine whose arm
+`nics` put two ports of one bond on different attachments
 refuses `api.invariant` at the first differing entry's `attachmentRef`, naming
 the bond and each port's attachment, because a failover would move the host
 onto another network. The remedy attaches every port to one attachment or
@@ -223,10 +222,10 @@ own refusal.
 | `spec.placement.site` | string | conditional | — | `Environment.spec.sites[].name`; required only where a consumer needs site placement. |
 | `spec.substrate.providerRef` | string | conditional | — | Global `InfraProvider`; required whenever `os.provided: false`. |
 | `spec.substrate.baremetal` | object | conditional | — | The bare-metal [substrate arm](#substrate-arm): `bmc`, `nics`, `rootDevice` and [`firmware`](#firmware-block); required for a bare-metal install machine. |
-| `spec.substrate.libvirt` | object | conditional | — | The libvirt [substrate arm](#substrate-arm): `profileRef` and `interfaceAttachments`. |
-| `spec.substrate.kubevirt` | object | conditional | — | The KubeVirt [substrate arm](#substrate-arm): `profileRef` and `interfaceAttachments`. |
+| `spec.substrate.libvirt` | object | conditional | — | The libvirt [substrate arm](#substrate-arm): `profileRef` and `nics`. |
+| `spec.substrate.kubevirt` | object | conditional | — | The KubeVirt [substrate arm](#substrate-arm): `profileRef` and `nics`. |
 | `spec.substrate.vsphere` | object | conditional | — | The vSphere [substrate arm](#substrate-arm): `profileRef` and `nics`. |
-| `spec.hardware.nics` | array | conditional | `[]` | Set keyed by `name`; required for a bare-metal install machine. |
+| `spec.hardware.nics` | array | conditional | `[]` | The NIC list, in device order, set keyed by `name`; non-empty on a bare-metal install machine and on a non-provided libvirt or KubeVirt Machine, where each entry is one vNIC. |
 | `spec.hardware.nics[].name` | string | yes | — | Machine-local NIC name; the only NIC field, on every substrate. |
 | `spec.hardware.rootDevice` | object | no | — | Substrate-neutral root-device hints below; admitted on every substrate, with or without `installProfileRef`. |
 | `spec.os.provided` | boolean | yes | — | Selects the OS lifecycle with `installProfileRef`. |
@@ -262,7 +261,8 @@ provider.
 
 A bare-metal non-provided machine has at least one NIC; every NIC has a MAC in
 `substrate.baremetal.nics`; `substrate.baremetal.bmc` address and credentials
-are present. Root selection follows the [cluster agent](../openshift-clusters.md#selection)
+are present. A non-provided libvirt or KubeVirt Machine has at least one NIC,
+else `api.invariant` at `hardware.nics`. Root selection follows the [cluster agent](../openshift-clusters.md#selection)
 or [managed OS](../managed-os.md#physical-installation). Its BMC address, like every
 authored one, selects one exact `/redfish/v1/Systems/<id>` ComputerSystem in
 the [one spelling](#bmc-and-root-device-shape) the realized target sends. These
@@ -289,7 +289,7 @@ declares none, having no Bootwright-performed installation to deliver it.
 A NIC is one MAC-bearing port or function as Redfish EthernetInterfaces reports
 it, declared even when uncabled. Adapters, PCI slots, link speed, SR-IOV VFs (an
 add-on's concern) and a boot NIC are not modeled. A NIC name is Machine-local
-and need not be an OS interface name; `network.interfaceBinding` joins them when
+and need not be an OS interface name; `network.interfaceMatches` joins them when
 they differ.
 
 NIC names and canonical MACs are unique in a machine, and authored MACs are
@@ -297,16 +297,14 @@ unique across the complete graph. Effective normalization writes MACs as
 lowercase colon-separated EUI-48 values.
 
 A libvirt or KubeVirt arm has no MAC, BMC or physical root-device field,
-because realization would ignore each: the provider derives every interface's
-MAC from the context, Machine and interface names, and a libvirt provider
-realizes the Machine's management controller as its emulated BMC
-([substrates](../substrates.md#machine-realization),
+because realization would ignore each: the provider realizes one vNIC per
+`hardware.nics` entry, in order, derives its MAC from the context, Machine and
+NIC names, and a libvirt provider realizes the Machine's management controller
+as its emulated BMC ([substrates](../substrates.md#machine-realization),
 [KubeVirt machine realization](../substrates.md#kubevirt-machine-realization)).
-Such a Machine's NIC names stay admitted, and it takes no part in the
-graph-wide MAC uniqueness check. `network.interfaceBinding` injects a physical
-NIC's MAC into the installed OS and no binding feeds a derived MAC, so an
-authored one on a libvirt or KubeVirt Machine refuses with `api.invariant` at
-its path.
+Such a Machine takes no part in the graph-wide MAC uniqueness check, and an
+NMState `mac-address` on any of its ethernet interfaces refuses with
+`api.invariant` at its network selection (D197).
 
 ### Substrate arm
 
@@ -323,7 +321,7 @@ substrate reads; NIC names and substrate-neutral root-device hints stay in
 | `baremetal` | `rootDevice` | object | Physical-disk hints `wwn`, `hctl` and `serialNumber`, each a non-empty string, and `sizeBytes`, the root disk's exact capacity, 4096-aligned up to 64 TiB, proved by a Bootwright installation or the physical agent pre-boot serial proof. |
 | `baremetal` | `firmware` | object | Declared firmware settings; [shape](#firmware-block). |
 | `libvirt`, `kubevirt` | `profileRef` | string | Provider-local `machineProfiles[].name`. |
-| `libvirt`, `kubevirt` | `interfaceAttachments` | array | Set of `{interface, attachmentRef}` keyed by `interface`, as [network configuration](#network-configuration) states. |
+| `libvirt`, `kubevirt` | `nics` | array | Set of `{nicRef, attachmentRef}` keyed by `nicRef`: `nicRef` names a `hardware.nics[].name`, `attachmentRef` a provider-local `networkAttachments[].name` with this arm. A NIC without an entry takes the provider's sole attachment, whatever its name; with two or more, every NIC needs its entry, else `api.invariant` at this field names the NIC. |
 | `vsphere` | `profileRef` | string | Provider-local `machineProfiles[].name`. |
 | `vsphere` | `nics` | array | As on bare metal; each authored MAC lies in the manual assignment range `00:50:56:00:00:00` through `00:50:56:3f:ff:ff` ([refused machine arms](../deferred/machine-arms.md#machine-fields)). |
 
@@ -353,37 +351,34 @@ host because it is the Environment's controller or a managed service's
 | --- | --- | --- | --- | --- |
 | `configRef` | string | union | — | Global `NetworkConfig`. |
 | `inline` | `NetworkConfig.spec` object | union | — | One-off alternative with the same NMState, CIDR, and DNS selection constraints. |
-| `attachmentRef` | string | conditional | sole provider attachment | Provider-local `networkAttachments[].name`; applies one attachment to every effective ethernet interface. Required with a configured network on a libvirt Machine unless the default applies; optional on bare metal, where it selects nothing. |
 | `installAddressRef` | string | when a consumer requires a static install IP | unique eligible address below | Machine-local `addresses[].name`; selects an interface-assigned IP inside a consumed machine network. |
 | `addresses` | array | no | `[]`, plus derived `fqdn` contact | Set keyed by `name`; exact entry shape below. |
-| `interfaceBinding` | array | conditional | exact NIC-name matches for bare-metal install | Set of `{nicRef, interfaceName}`. Bare-metal only: refused on a libvirt or KubeVirt Machine, whose provider derives its MACs. `interfaceName` is a Linux interface name, as in the [subset](#nmstate-composition-subset). |
+| `interfaceMatches` | array | no | the NIC of the interface's name | Set of `{interface, nicRef}` keyed by `interface`, on every substrate; `interface` is a Linux interface name, as in the [subset](#nmstate-composition-subset). |
 | `overrides` | arbitrary map | no | `{}` | Valid only with `configRef`; merged into the selected native NMState template. |
 
 A configured network selects exactly one of `configRef` and `inline`.
 `inline` has the [NetworkConfig spec](#networkconfig) shape;
 `overrides` is forbidden with it. Contact-only Machines need neither form.
-Attachments, bindings, interface assignments, and an install-address selection
+Interface matches, interface assignments, and an install-address selection
 require a configured network. Each refuses at its own field with the remedy to
 select one with `network.configRef` or `network.inline` or to remove the
 selection or interface; an OS-ready Machine, which declares
 contacts only, is told to remove it.
 
-On a provider-backed machine with a configured network and neither
-`attachmentRef` nor `interfaceAttachments`, `attachmentRef` defaults to the
-provider's sole attachment, whatever its name. Otherwise nothing defaults:
-a libvirt Machine requires an explicit selection, while a bare-metal Machine,
-whose attachment configures nothing, needs none. An authored
-attachment always wins and resolves on its provider. A Machine attached to a managed libvirt network selects an install address inside
+Effective normalization writes each defaulted arm `nics` entry and the complete
+`interfaceMatches` list. A bare-metal Machine, whose attachment configures
+nothing, selects none. A Machine attached to a managed libvirt network selects an install address inside
 that attachment's prefix, other than the bridge's host address and, for an IPv4
 prefix shorter than /31, its network and broadcast addresses; each refuses at
 `network.installAddressRef` naming the prefix and every reserved address.
-Per-interface attachments use the install address's interface, following
-[VLAN parents and bond members](#nmstate-composition-subset).
+The NICs under the install address's interface, following
+[VLAN parents and bond members](#nmstate-composition-subset), select those attachments.
 
 A non-provided Machine of a libvirt provider selects a network configuration
 whose composed NMState, after its overrides, has at least one `ethernet`
-interface whose `state` is neither `absent` nor `ignore`, because its domain
-attaches one vNIC per such ethernet interface. One that selects no configuration
+interface whose `state` is neither `absent` nor `ignore`, or none of its NICs
+is configured. NMState never creates, removes or reorders a vNIC: `ignore` and
+`absent` leave it in place. One that selects no configuration
 refuses at `network`, and one whose configuration presents none at
 `network.configRef` or `network.inline.nmstate`. A Bootwright-installed
 Anaconda Machine that selects no configuration refuses only at
@@ -433,15 +428,16 @@ ineligible. A consumer requiring static addressing rejects a
 missing candidate; a DHCP-capable consumer does not acquire a fabricated
 static address.
 
-`network.interfaceBinding[]` entries have exactly `nicRef` and
-`interfaceName`; both resolve locally, and no NIC or effective ethernet
-interface is bound twice. A bare-metal non-provided machine binds every
-effective ethernet interface so its hardware MAC can be injected. An omitted
-list matches each such interface to exactly one hardware NIC by name; a missing
-or ambiguous match needs an explicit list, which replaces the inferred mapping
-and is complete, empty only when no binding is required. An unbound NIC named
-as another NIC's `interfaceName` refuses at that binding, naming both NICs,
-since the installer would list the name twice; bind or rename it. Virtual Machines receive no inferred bindings.
+On a Machine whose substrate realizes NICs, a bare-metal install or a
+non-provided libvirt or KubeVirt Machine, every available effective ethernet
+interface matches exactly one NIC: its `interfaceMatches` entry, else the NIC of
+its name. One matching none refuses at `network.interfaceMatches`, remedied by
+declaring the NIC or matching the interface; two matching one NIC refuse there
+too. An entry naming no available ethernet interface refuses at its
+`interface`. A NIC no interface matches stays unconfigured. A NIC matching no
+interface but named as an interface another NIC carries refuses at that entry,
+naming both NICs, since the installer would list the name twice; match or
+rename it. Bare metal injects each matched NIC's MAC into the installed OS.
 
 The reusable-template merge is deterministic:
 
@@ -989,7 +985,7 @@ This subset is not a claim of full NMState or installer-schema compatibility.
 | --- | --- |
 | `interfaces` | Array of interface mappings with unique, non-empty string `name` and explicit, non-empty string `type`; `name` is a Linux interface name, 1 to 15 bytes of letters, digits, `_`, `.`, `+` or `-`. |
 | `interfaces[].state` | Optional non-empty string; `absent` and `ignore` exclude the interface from assignment and binding. |
-| `interfaces[].mac-address` | Optional MAC address; normalize before comparison with a bound hardware NIC. |
+| `interfaces[].mac-address` | Optional MAC address on bare metal, normalized before comparison with its matched NIC's; refused on a libvirt or KubeVirt Machine. |
 | `interfaces[].mtu` | Optional integer; on a libvirt or KubeVirt Machine it must not exceed the MTU of the attachment that carries the interface, found through VLAN parents and bond members. |
 | `interfaces[].vlan.base-iface` | Optional parent interface name; the interface takes the attachment of its parent. A VLAN install interface needs an available ethernet or bond parent. |
 | `interfaces[].vlan.id` | Optional integer; a VLAN install interface needs 1 to 4094 and an interface name that agrees with it ([managed OS](../managed-os.md#installation)). |
@@ -1026,9 +1022,9 @@ interface. Route metrics do not resolve ambiguity. The existing
 [installation-address selection](#network-configuration) then chooses a unique
 eligible address or refuses; declaration order provides no fallback.
 
-Realization and installation read the same composed map, without the injected
-addresses and MACs: a libvirt domain attaches one vNIC per composed
-`ethernet` interface whose `state` is neither `absent` nor `ignore`. The
+Installation reads the composed map without the injected addresses and MACs;
+a libvirt domain attaches one vNIC per `hardware.nics` entry, whatever the
+map's ethernet interfaces. The
 gateway a managed-OS installation carries is the install interface's default
 route: the `next-hop-address` of the first composed route that is not `absent`,
 whose destination is a zero-prefix IPv4 CIDR, whose next hop is an IPv4 address

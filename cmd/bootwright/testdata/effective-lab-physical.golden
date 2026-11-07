@@ -63,7 +63,6 @@ spec:
     provided: false
   network:
     configRef: lab-metal
-    attachmentRef: lab-metal
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -71,9 +70,9 @@ spec:
       - name: ip
         address: 198.51.100.21/24
         interface: eno1
-    interfaceBinding:
-      - nicRef: eno1
-        interfaceName: eno1
+    interfaceMatches:
+      - interface: eno1
+        nicRef: eno1
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -106,7 +105,6 @@ spec:
     provided: false
   network:
     configRef: lab-metal
-    attachmentRef: lab-metal
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -114,9 +112,9 @@ spec:
       - name: ip
         address: 198.51.100.22/24
         interface: eno1
-    interfaceBinding:
-      - nicRef: eno1
-        interfaceName: eno1
+    interfaceMatches:
+      - interface: eno1
+        nicRef: eno1
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -149,7 +147,6 @@ spec:
     provided: false
   network:
     configRef: lab-metal
-    attachmentRef: lab-metal
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -157,9 +154,9 @@ spec:
       - name: ip
         address: 198.51.100.23/24
         interface: eno1
-    interfaceBinding:
-      - nicRef: eno1
-        interfaceName: eno1
+    interfaceMatches:
+      - interface: eno1
+        nicRef: eno1
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -192,7 +189,6 @@ spec:
     provided: false
   network:
     configRef: lab-metal
-    attachmentRef: lab-metal
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -200,9 +196,9 @@ spec:
       - name: ip
         address: 198.51.100.24/24
         interface: eno1
-    interfaceBinding:
-      - nicRef: eno1
-        interfaceName: eno1
+    interfaceMatches:
+      - interface: eno1
+        nicRef: eno1
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -235,7 +231,6 @@ spec:
     provided: false
   network:
     configRef: lab-metal
-    attachmentRef: lab-metal
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -243,9 +238,9 @@ spec:
       - name: ip
         address: 198.51.100.25/24
         interface: eno1
-    interfaceBinding:
-      - nicRef: eno1
-        interfaceName: eno1
+    interfaceMatches:
+      - interface: eno1
+        nicRef: eno1
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Network

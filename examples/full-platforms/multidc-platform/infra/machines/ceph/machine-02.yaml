@@ -45,7 +45,6 @@ spec:
 
   network:
     configRef: ceph-network
-    attachmentRef: ceph-network
     installAddressRef: ssh
 
     addresses:

@@ -474,7 +474,7 @@ func nodeProjections(catalog api.Catalog, cluster api.Object, contextName, contr
 		if err != nil {
 			return nil, err
 		}
-		interfaces := installerInterfaces(target.Interfaces, machine.InterfaceBindings(bound, catalog))
+		interfaces := installerInterfaces(target.Interfaces, machine.InterfaceMatches(bound, catalog))
 		network, err := networkConfig(catalog, bound, interfaces, resolvers)
 		if err != nil {
 			return nil, err

@@ -52,11 +52,11 @@ func TestBaremetalNormalizationPreservesDeclarations(t *testing.T) {
 	if normalized.Spec().Get("substrate", "baremetal", "bmc", "tls", "verify").Bool() {
 		t.Fatal("provider TLS choice lost")
 	}
-	if normalized.Spec().Get("network", "attachmentRef").Text() != "net" || normalized.Spec().Get("network", "installAddressRef").Text() != "primary" {
+	if normalized.Spec().Get("network", "installAddressRef").Text() != "primary" {
 		t.Fatal("network defaults missing")
 	}
-	if !normalized.Spec().Get("network", "interfaceBinding").Present() {
-		t.Fatal("binding not retained")
+	if !normalized.Spec().Get("network", "interfaceMatches").Equal(list(m("interface", "eth0", "nicRef", "eth0"))) {
+		t.Fatal("the defaulted interface match was not materialized")
 	}
 	native, issues := ComposeNetwork(normalized, c)
 	if len(issues) != 0 {
@@ -279,7 +279,7 @@ func TestManagedLibvirtAttachmentContainsTheInstallAddress(t *testing.T) {
 	network := object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.0/24"), m("cidr", "198.51.100.0/24")), "nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet")))))
 	env := object(api.Environment, "env", m("domains", m("base", "example.test")))
 	for address, valid := range map[string]bool{"192.0.2.11/24": true, "198.51.100.11/24": false} {
-		guest := object(api.Machine, "guest", m("substrate", m("providerRef", "lab", "libvirt", m("profileRef", "small")), "os", m("provided", false), "network", m("configRef", "net", "attachmentRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", address, "interface", "enp1s0")))))
+		guest := object(api.Machine, "guest", m("substrate", m("providerRef", "lab", "libvirt", m("profileRef", "small")), "os", m("provided", false), "hardware", m("nics", list(m("name", "enp1s0"))), "network", m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", address, "interface", "enp1s0")))))
 		c := api.NewCatalog([]api.Object{guest, host, provider, network, env})
 		guest, _ = Normalize(guest, c)
 		issues := Validate(guest, c)
@@ -322,7 +322,7 @@ func TestARootDeviceHintFollowsItsArm(t *testing.T) {
 	provider := object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", m("auth", m("credentialsRef", "bmc")), "machineProfiles", list(m("name", "small"))), "networkAttachments", list(m("name", "net", "libvirt", m("bridge", "virbr-lab", "management", "managed", "address", "192.0.2.1/24")))))
 	network := object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet")))))
 	env := object(api.Environment, "env", m("domains", m("base", "example.test")))
-	guest := object(api.Machine, "guest", m("substrate", m("providerRef", "lab", "libvirt", m("profileRef", "small")), "os", m("provided", false), "network", m("configRef", "net", "attachmentRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11/24", "interface", "enp1s0")))))
+	guest := object(api.Machine, "guest", m("substrate", m("providerRef", "lab", "libvirt", m("profileRef", "small")), "os", m("provided", false), "hardware", m("nics", list(m("name", "enp1s0"))), "network", m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11/24", "interface", "enp1s0")))))
 	virtual := api.NewCatalog([]api.Object{guest, host, provider, network, env})
 	server, physical := fixture()
 	admitted := api.MapValue(

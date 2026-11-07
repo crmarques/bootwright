@@ -47,13 +47,13 @@ kind: Machine
 metadata: {name: trust-node}
 spec:
   substrate: {providerRef: trust-provider, kubevirt: {profileRef: standard}}
+  hardware: {nics: [{name: eth0}]}
   os: {provided: false}
   network:
     inline:
       machineNetwork: [{cidr: 192.0.2.0/24}]
       nmstate:
         interfaces: [{name: eth0, type: ethernet}]
-    attachmentRef: workload
     addresses: [{name: primary, address: 192.0.2.20/24, interface: eth0}]
 ---
 apiVersion: bootwright.io/v1alpha1

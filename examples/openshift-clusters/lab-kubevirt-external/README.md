@@ -17,9 +17,9 @@ and removes the cluster in-tree. The API validates the profile.
 
 - Guests `kubevirt-01` to `kubevirt-03` (198.51.100.21 to .23), each 6 vCPU,
   16 GiB memory and a 120 GiB root disk; the installer owns the OS
-  (`provided: false`) and targets `/dev/vda`. The provider derives each MAC
-  from the context, Machine and interface name, so no Machine authors a MAC, and
-  `network.interfaceBinding` is refused on a KubeVirt Machine.
+  (`provided: false`) and targets `/dev/vda`. Each declares its one vNIC,
+  `eth0`, in `hardware.nics`; the provider derives its MAC from the context,
+  Machine and NIC name, so no Machine authors a MAC.
 - The host is reached through the context-bound `host-kubeconfig` Secret
   (opaque, for exactly the intended API server); Bootwright does not create the
   host cluster. Guests live in the operator-owned namespace `bootwright-guests`

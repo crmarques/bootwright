@@ -10,6 +10,9 @@ spec:
       profileRef: rhel-02
 
   hardware:
+    nics:
+      - name: enp1s0
+
     rootDevice:
       deviceName: /dev/vda
 
@@ -24,7 +27,6 @@ spec:
 
   network:
     configRef: lab-guests
-    attachmentRef: lab-guests
     installAddressRef: ip
 
     addresses:

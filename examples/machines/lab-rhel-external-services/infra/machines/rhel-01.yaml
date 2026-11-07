@@ -10,6 +10,9 @@ spec:
       profileRef: rhel
 
   hardware:
+    nics:
+      - name: enp1s0
+
     rootDevice:
       deviceName: /dev/vda
 
@@ -22,7 +25,6 @@ spec:
 
   network:
     configRef: lab-guests
-    # attachmentRef defaults to the configRef name, lab-guests.
     installAddressRef: ip
 
     # The fqdn contact derives as rhel-01.lab.example.test; an authored fqdn

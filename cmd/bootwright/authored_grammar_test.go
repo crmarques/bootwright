@@ -103,17 +103,17 @@ func TestAuthoredKickstartValuesAreRefusedBeforePlan(t *testing.T) {
 }
 
 // A field that names a Kickstart device carries its grammar, not only the rule
-// it shares with others: a bound interface name is a Linux interface name.
+// it shares with others: a matched interface name is a Linux interface name.
 func TestEveryKickstartBoundFieldCarriesItsGrammar(t *testing.T) {
 	binding := exampleEdit{"infra/machines/metal-01.yaml", "    installAddressRef: ip\n",
-		"    installAddressRef: ip\n\n    interfaceBinding:\n      - nicRef: eno1\n        interfaceName: \"eno1\\nnetwork --bootproto=dhcp\"\n"}
+		"    installAddressRef: ip\n\n    interfaceMatches:\n      - interface: \"eno1\\nnetwork --bootproto=dhcp\"\n        nicRef: eno1\n"}
 	cases := map[string]struct {
 		example             string
 		edit                exampleEdit
 		code, object, field string
 	}{
-		"a bound interface name holding a directive": {"lab-baremetal", binding,
-			"api.value", "Machine/metal-01", "$.spec.network.interfaceBinding[0].interfaceName"},
+		"a matched interface name holding a directive": {"lab-baremetal", binding,
+			"api.value", "Machine/metal-01", "$.spec.network.interfaceMatches[0].interface"},
 	}
 	for name, test := range cases {
 		t.Run(name, func(t *testing.T) {

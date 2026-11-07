@@ -36,7 +36,7 @@ func TestTwoMachinesDerivingOneMACRefuseBeforeRegistration(t *testing.T) {
 	if len(issues) != 1 {
 		t.Fatalf("issues %+v", issues)
 	}
-	for _, want := range []string{"Machine/" + first + " interface enp1s0", "Machine/" + second + " interface enp1s0", mac} {
+	for _, want := range []string{"Machine/" + first + " NIC enp1s0", "Machine/" + second + " NIC enp1s0", mac} {
 		if !strings.Contains(issues[0].Message, want) {
 			t.Errorf("the refusal does not name %q: %+v", want, issues[0])
 		}

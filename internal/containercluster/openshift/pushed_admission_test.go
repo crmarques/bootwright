@@ -20,9 +20,6 @@ func kubevirtAttachments(kind string) (api.Object, api.Catalog) {
 		if object.Kind() == api.InfraProvider {
 			spec = spec.With("networkAttachments", list(m("name", "lan", "kubevirt", m("networkRef", m("kind", kind, "name", "lan")))))
 		}
-		if object.Kind() == api.Machine {
-			spec = spec.WithPath(api.StringValue("lan"), "network", "attachmentRef")
-		}
 		objects[index] = object.WithSpec(spec)
 	}
 	return cluster, api.NewCatalog(objects)

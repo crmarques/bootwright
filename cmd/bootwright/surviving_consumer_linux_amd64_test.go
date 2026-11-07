@@ -37,7 +37,6 @@ spec:
     provided: false
   network:
     configRef: lab-guests
-    attachmentRef: lab-metal
     installAddressRef: ip
     addresses:
       - name: fqdn

@@ -30,6 +30,9 @@ spec:
       profileRef: {{ if and .gateway $v.ceph.services.object }}gateway{{ else }}data{{ end }}
 
   hardware:
+    nics:
+      - name: enp1s0
+
     rootDevice:
       deviceName: /dev/vda
 

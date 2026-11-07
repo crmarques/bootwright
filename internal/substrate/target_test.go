@@ -21,7 +21,7 @@ func targetCatalog() api.Catalog {
 	guests := obj(api.NetworkConfig, "guests", m("nmstate", m("interfaces",
 		list(m("name", "enp1s0", "type", "ethernet")))))
 	guest := obj(api.Machine, "guest", m("substrate", m("providerRef", "lab", "libvirt", m("profileRef", "small")),
-		"network", m("configRef", "guests"),
+		"network", m("configRef", "guests"), "hardware", m("nics", list(m("name", "enp1s0"))),
 		"os", m("provided", false, "installProfileRef", "rhel")))
 	metal := obj(api.InfraProvider, "floor", m("baremetal", m("defaults", m("bmc", m("credentialsRef", "shared")))))
 	server := obj(api.Machine, "server", m("substrate", m("providerRef", "floor", "baremetal", m(

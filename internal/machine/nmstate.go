@@ -94,11 +94,11 @@ func ComposeNetwork(o api.Object, c api.Catalog) (api.Value, []api.Issue) {
 		mode = mode.With("address", api.ListValue(api.MapValue(api.FieldValue{Name: "ip", Value: api.StringValue(prefix.Addr().String())}, api.FieldValue{Name: "prefix-length", Value: api.IntegerValue(fmt.Sprint(prefix.Bits()))})))
 		interfaces[position] = interfaces[position].With(family, mode)
 	}
-	bindings, bindingIssues := resolveBindings(o, c, native)
-	issues = appendIssues(issues, bindingIssues...)
-	for index, binding := range bindings.Items() {
-		position := interfaceIndex(interfaces, binding.Get("interfaceName").Text())
-		address := substrate.MachineMAC(o, binding.Get("nicRef").Text())
+	matches, matchIssues := resolveMatches(o, c, native)
+	issues = appendIssues(issues, matchIssues...)
+	for _, match := range matches.Items() {
+		position := interfaceIndex(interfaces, match.Get("interface").Text())
+		address := substrate.MachineMAC(o, match.Get("nicRef").Text())
 		if position < 0 || address == "" {
 			continue
 		}
@@ -109,7 +109,9 @@ func ComposeNetwork(o api.Object, c api.Catalog) (api.Value, []api.Issue) {
 		if raw := interfaces[position].Get("mac-address"); raw.Present() {
 			previous, valid := canonicalMAC(raw.Text())
 			if !valid || previous != mac {
-				issues = appendIssues(issues, invariant(fmt.Sprintf("$.spec.network.interfaceBinding[%d]", index), "native interface MAC conflicts with its bound hardware NIC", "remove the native mac-address, or bind the interface to the hardware NIC that has it"))
+				name := match.Get("interface").Text()
+				issues = appendIssues(issues, invariant(configurationPath(o), "ethernet interface "+name+" of "+o.Identity()+" authors a mac-address other than that of NIC "+match.Get("nicRef").Text()+", which it matches",
+					"remove mac-address from interface "+name+", or match the interface to the NIC with that MAC in spec.network.interfaceMatches on "+o.Identity()))
 				continue
 			}
 		}
@@ -344,54 +346,66 @@ func validateNativeRoute(route api.Value, field string) []api.Issue {
 	return issues
 }
 
-func resolveBindings(o api.Object, c api.Catalog, native api.Value) (api.Value, []api.Issue) {
+func resolveMatches(o api.Object, c api.Catalog, native api.Value) (api.Value, []api.Issue) {
 	interfaces := native.Get("interfaces").Items()
-	bindings := o.Spec().Get("network", "interfaceBinding")
-	provider, found := Provider(o, c)
-	required := found && substrate.RealizesPhysicalNICs(provider) && o.Spec().Get("os", "provided").Present() && !o.Spec().Get("os", "provided").Bool()
-	derived := !bindings.Present() && required
-	if derived {
-		values := []api.Value{}
-		for _, iface := range interfaces {
-			if iface.Get("type").Text() == "ethernet" && !unavailableInterface(iface) {
-				values = append(values, api.MapValue(api.FieldValue{Name: "nicRef", Value: iface.Get("name")}, api.FieldValue{Name: "interfaceName", Value: iface.Get("name")}))
-			}
-		}
-		bindings = api.ListValue(values...)
-	}
+	nics := o.Spec().Get("hardware", "nics")
+	required := realizesNICs(o, c) && nics.Len() > 0
 	issues := []api.Issue{}
-	seenNIC, seenInterface := map[string]bool{}, map[string]bool{}
-	for index, binding := range bindings.Items() {
-		field := fmt.Sprintf("$.spec.network.interfaceBinding[%d]", index)
-		nicName, interfaceName := binding.Get("nicRef").Text(), binding.Get("interfaceName").Text()
-		if _, ok := namedValue(o.Spec().Get("hardware", "nics"), nicName); derived && !ok {
-			issues = appendIssues(issues, reference(field+".nicRef", "NIC binding requires one declared hardware NIC; author an explicit complete binding when names differ", "set nicRef to a hardware NIC in hardware.nics, and author a complete binding when NIC and interface names differ"))
-		}
-		position := interfaceIndex(interfaces, interfaceName)
+	explicit, positions := map[string]string{}, map[string]int{}
+	for index, entry := range o.Spec().Get("network", "interfaceMatches").Items() {
+		field := fmt.Sprintf("$.spec.network.interfaceMatches[%d]", index)
+		name := entry.Get("interface").Text()
+		position := interfaceIndex(interfaces, name)
 		if position < 0 || unavailableInterface(interfaces[position]) || interfaces[position].Get("type").Text() != "ethernet" {
-			issues = appendIssues(issues, reference(field+".interfaceName", "NIC binding requires one available physical ethernet interface", "set interfaceName to an available physical ethernet interface of the network configuration"))
+			issues = appendIssues(issues, reference(field+".interface", "interface "+name+" of "+o.Identity()+" is no available ethernet interface of its composed network configuration, so it matches no NIC",
+				"set "+field[2:]+".interface to an available ethernet interface of the network configuration, or remove the entry"))
 		}
-		if seenNIC[nicName] || seenInterface[interfaceName] {
-			issues = appendIssues(issues, invariant(field, "NICs and physical interfaces may be bound only once", "bind each NIC and each physical interface once"))
-		}
-		seenNIC[nicName], seenInterface[interfaceName] = true, true
+		explicit[name], positions[name] = entry.Get("nicRef").Text(), index
 	}
-	for index, binding := range bindings.Items() {
-		nicName, interfaceName := binding.Get("nicRef").Text(), binding.Get("interfaceName").Text()
-		if _, named := namedValue(o.Spec().Get("hardware", "nics"), interfaceName); named && nicName != interfaceName && !seenNIC[interfaceName] {
-			issues = appendIssues(issues, invariant(fmt.Sprintf("$.spec.network.interfaceBinding[%d].interfaceName", index),
-				"hardware NIC "+interfaceName+" of "+o.Identity()+" is unbound but shares the name of interface "+interfaceName+" that NIC "+nicName+" binds, so the installer would list "+interfaceName+" twice with two addresses",
-				"bind NIC "+interfaceName+" in spec.network.interfaceBinding on "+o.Identity()+", or rename it in spec.hardware.nics"))
+	carried := map[string]string{}
+	values := []api.Value{}
+	for _, item := range interfaces {
+		name := item.Get("name").Text()
+		if item.Get("type").Text() != "ethernet" || unavailableInterface(item) {
+			continue
 		}
-	}
-	if required {
-		for _, iface := range interfaces {
-			if iface.Get("type").Text() == "ethernet" && !unavailableInterface(iface) && !seenInterface[iface.Get("name").Text()] {
-				issues = appendIssues(issues, invariant("$.spec.network.interfaceBinding", "bare-metal installation requires complete physical-interface NIC binding", "bind every physical ethernet interface to a hardware NIC in network.interfaceBinding"))
+		nic, authored := explicit[name]
+		if !authored {
+			if _, declared := namedValue(nics, name); !declared {
+				if required {
+					issues = appendIssues(issues, invariant("$.spec.network.interfaceMatches", "ethernet interface "+name+" of "+o.Identity()+" matches no NIC: spec.hardware.nics declares no NIC "+name+" and spec.network.interfaceMatches does not match it",
+						"declare NIC "+name+" in spec.hardware.nics on "+o.Identity()+", or match interface "+name+" to a NIC in spec.network.interfaceMatches"))
+				}
+				continue
 			}
+			nic = name
+		}
+		if previous, twice := carried[nic]; twice {
+			issues = appendIssues(issues, invariant("$.spec.network.interfaceMatches", "NIC "+nic+" of "+o.Identity()+" is matched by interface "+previous+" and by interface "+name+", and one NIC carries one ethernet interface",
+				"match one of the two interfaces to another NIC in spec.network.interfaceMatches on "+o.Identity()))
+			continue
+		}
+		carried[nic] = name
+		values = append(values, api.MapValue(api.FieldValue{Name: "interface", Value: api.StringValue(name)}, api.FieldValue{Name: "nicRef", Value: api.StringValue(nic)}))
+	}
+	for _, value := range values {
+		name, nic := value.Get("interface").Text(), value.Get("nicRef").Text()
+		if _, declared := namedValue(nics, name); declared && nic != name && carried[name] == "" {
+			issues = appendIssues(issues, invariant(fmt.Sprintf("$.spec.network.interfaceMatches[%d].nicRef", positions[name]),
+				"hardware NIC "+name+" of "+o.Identity()+" matches no interface but shares the name of interface "+name+", which NIC "+nic+" carries, so the installer would list "+name+" twice with two addresses",
+				"match NIC "+name+" to an interface in spec.network.interfaceMatches on "+o.Identity()+", or rename it in spec.hardware.nics"))
 		}
 	}
-	return bindings, issues
+	return api.ListValue(values...), issues
+}
+
+func realizesNICs(o api.Object, c api.Catalog) bool {
+	provider, found := Provider(o, c)
+	provided := o.Spec().Get("os", "provided")
+	if !found || !provided.Present() || provided.Bool() {
+		return false
+	}
+	return substrate.RealizesPhysicalNICs(provider) || substrate.VirtualArm(substrate.Variant(provider))
 }
 
 func interfaceIndex(values []api.Value, name string) int {

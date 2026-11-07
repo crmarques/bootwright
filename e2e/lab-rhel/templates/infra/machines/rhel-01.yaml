@@ -10,6 +10,9 @@ spec:
       profileRef: rhel
 
   hardware:
+    nics:
+      - name: enp1s0
+
     rootDevice:
       deviceName: /dev/vda
 

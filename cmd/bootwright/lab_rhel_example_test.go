@@ -143,7 +143,8 @@ func TestLabRHELExampleSelectsControllerDependenciesFromDesiredState(t *testing.
 		t.Fatal("the managed attachment lost the network Bootwright defines", attachment)
 	}
 	guest := requireObject(t, effective, api.Machine, "rhel-01")
-	if guest.Spec().Get("network", "attachmentRef").Text() != "lab-guests" || guest.Spec().Has("hardware", "nics") || len(guest.Spec().Get("hardware", "rootDevice").Fields()) != 1 || guest.Spec().Get("hardware", "rootDevice", "deviceName").Text() != "/dev/vda" {
+	if guest.Spec().Has("network", "attachmentRef") || !guest.Spec().Get("hardware", "nics").Equal(api.ListValue(api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue("enp1s0")}))) ||
+		guest.Spec().Get("substrate", "libvirt", "nics").Len() != 1 || guest.Spec().Get("substrate", "libvirt", "nics").Items()[0].Get("attachmentRef").Text() != "lab-guests" || len(guest.Spec().Get("hardware", "rootDevice").Fields()) != 1 || guest.Spec().Get("hardware", "rootDevice", "deviceName").Text() != "/dev/vda" {
 		t.Fatal("the installed guest acquired hardware it must not author", guest.Spec())
 	}
 	// A Bootwright-installed Machine authors no access; the fleet account and

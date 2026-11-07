@@ -35,10 +35,10 @@ func machineFirmwareSchema() *Shape {
 
 func machineSubstrateSchema() *Shape {
 	macs := &Shape{Type: Sequence, Atomic: true, NameKey: "nicRef", Element: record(required("nicRef", nestedIn(Scope{Noun: "hardware NIC", Entries: []string{"hardware", "nics"}})), required("macAddress", lexical("mac")))}
-	attachments := &Shape{Type: Sequence, Atomic: true, NameKey: "interface", Element: record(required("interface", lexical("ifname")), required("attachmentRef", nestedIn(Scope{Noun: "network attachment", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Entries: []string{"networkAttachments"}})))}
+	attachments := &Shape{Type: Sequence, Atomic: true, NameKey: "nicRef", Element: record(required("nicRef", nestedIn(Scope{Noun: "hardware NIC", Entries: []string{"hardware", "nics"}})), required("attachmentRef", nestedIn(Scope{Noun: "network attachment", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Entries: []string{"networkAttachments"}})))}
 	baremetal := record(field("bmc", machineBMCSchema()), field("nics", macs), field("rootDevice", record(field("bootVolume", record()), field("volumeRef", atomic(external(record(required("storageId", nonempty()), required("volumeId", nonempty()))))), field("wwn", nonempty()), field("hctl", nonempty()), field("serialNumber", nonempty()), field("sizeBytes", integer("4096", "70368744177664")))), field("firmware", machineFirmwareSchema()))
-	libvirt := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"libvirt"}, Entries: []string{"libvirt", "machineProfiles"}})), field("interfaceAttachments", attachments))
-	kubevirt := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"kubevirt"}, Entries: []string{"kubevirt", "machineProfiles"}})), field("interfaceAttachments", attachments))
+	libvirt := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"libvirt"}, Entries: []string{"libvirt", "machineProfiles"}})), field("nics", attachments))
+	kubevirt := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"kubevirt"}, Entries: []string{"kubevirt", "machineProfiles"}})), field("nics", attachments))
 	vsphere := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"vsphere"}, Entries: []string{"vsphere", "machineProfiles"}})), field("nics", macs))
 	arms := choice(field("baremetal", baremetal), field("libvirt", libvirt), field("kubevirt", kubevirt), field("vsphere", vsphere))
 	arms.AllowEmpty = true
@@ -54,9 +54,8 @@ func machineSchema() *Shape {
 	network := choice(field("configRef", ref(NetworkConfig)), field("inline", machineNetworkSchema()))
 	network.AllowEmpty = true
 	network.Fields = append(network.Fields,
-		field("attachmentRef", nestedIn(Scope{Noun: "network attachment", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Entries: []string{"networkAttachments"}})),
 		field("installAddressRef", nestedIn(Scope{Noun: "address", Entries: []string{"network", "addresses"}})), field("addresses", named(record(required("name", nonempty()), required("address", lexical("address")), field("interface", lexical("ifname"))))),
-		field("interfaceBinding", &Shape{Type: Sequence, Atomic: true, NameKey: "nicRef", Element: record(required("nicRef", nestedIn(Scope{Noun: "hardware NIC", Entries: []string{"hardware", "nics"}})), required("interfaceName", lexical("ifname")))}), field("overrides", native()))
+		field("interfaceMatches", &Shape{Type: Sequence, Atomic: true, NameKey: "interface", Element: record(required("interface", lexical("ifname")), required("nicRef", nestedIn(Scope{Noun: "hardware NIC", Entries: []string{"hardware", "nics"}})))}), field("overrides", native()))
 	return record(
 		field("placement", record(field("site", name()))),
 		field("substrate", machineSubstrateSchema()),

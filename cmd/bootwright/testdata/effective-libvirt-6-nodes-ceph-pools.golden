@@ -56,7 +56,15 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: mon-mgr
+      nics:
+        - nicRef: nic0
+          attachmentRef: lab-guests
+        - nicRef: nic1
+          attachmentRef: lab-guests
   hardware:
+    nics:
+      - name: nic0
+      - name: nic1
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -70,7 +78,6 @@ spec:
     direct: {}
   network:
     configRef: lab-guests
-    attachmentRef: lab-guests
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -81,6 +88,11 @@ spec:
       - name: cluster-ip
         address: 203.0.113.11/24
         interface: nic1
+    interfaceMatches:
+      - interface: nic0
+        nicRef: nic0
+      - interface: nic1
+        nicRef: nic1
   access:
     ssh:
       addressRef: ip
@@ -99,7 +111,15 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: mon-mgr
+      nics:
+        - nicRef: nic0
+          attachmentRef: lab-guests
+        - nicRef: nic1
+          attachmentRef: lab-guests
   hardware:
+    nics:
+      - name: nic0
+      - name: nic1
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -113,7 +133,6 @@ spec:
     direct: {}
   network:
     configRef: lab-guests
-    attachmentRef: lab-guests
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -124,6 +143,11 @@ spec:
       - name: cluster-ip
         address: 203.0.113.12/24
         interface: nic1
+    interfaceMatches:
+      - interface: nic0
+        nicRef: nic0
+      - interface: nic1
+        nicRef: nic1
   access:
     ssh:
       addressRef: ip
@@ -142,7 +166,15 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: mon
+      nics:
+        - nicRef: nic0
+          attachmentRef: lab-guests
+        - nicRef: nic1
+          attachmentRef: lab-guests
   hardware:
+    nics:
+      - name: nic0
+      - name: nic1
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -156,7 +188,6 @@ spec:
     direct: {}
   network:
     configRef: lab-guests
-    attachmentRef: lab-guests
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -167,6 +198,11 @@ spec:
       - name: cluster-ip
         address: 203.0.113.13/24
         interface: nic1
+    interfaceMatches:
+      - interface: nic0
+        nicRef: nic0
+      - interface: nic1
+        nicRef: nic1
   access:
     ssh:
       addressRef: ip
@@ -185,7 +221,15 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: mon
+      nics:
+        - nicRef: nic0
+          attachmentRef: lab-guests
+        - nicRef: nic1
+          attachmentRef: lab-guests
   hardware:
+    nics:
+      - name: nic0
+      - name: nic1
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -199,7 +243,6 @@ spec:
     direct: {}
   network:
     configRef: lab-guests
-    attachmentRef: lab-guests
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -210,6 +253,11 @@ spec:
       - name: cluster-ip
         address: 203.0.113.14/24
         interface: nic1
+    interfaceMatches:
+      - interface: nic0
+        nicRef: nic0
+      - interface: nic1
+        nicRef: nic1
   access:
     ssh:
       addressRef: ip
@@ -228,7 +276,15 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: mon
+      nics:
+        - nicRef: nic0
+          attachmentRef: lab-guests
+        - nicRef: nic1
+          attachmentRef: lab-guests
   hardware:
+    nics:
+      - name: nic0
+      - name: nic1
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -242,7 +298,6 @@ spec:
     direct: {}
   network:
     configRef: lab-guests
-    attachmentRef: lab-guests
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -253,6 +308,11 @@ spec:
       - name: cluster-ip
         address: 203.0.113.15/24
         interface: nic1
+    interfaceMatches:
+      - interface: nic0
+        nicRef: nic0
+      - interface: nic1
+        nicRef: nic1
   access:
     ssh:
       addressRef: ip
@@ -271,7 +331,15 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: osd
+      nics:
+        - nicRef: nic0
+          attachmentRef: lab-guests
+        - nicRef: nic1
+          attachmentRef: lab-guests
   hardware:
+    nics:
+      - name: nic0
+      - name: nic1
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -285,7 +353,6 @@ spec:
     direct: {}
   network:
     configRef: lab-guests
-    attachmentRef: lab-guests
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -296,6 +363,11 @@ spec:
       - name: cluster-ip
         address: 203.0.113.16/24
         interface: nic1
+    interfaceMatches:
+      - interface: nic0
+        nicRef: nic0
+      - interface: nic1
+        nicRef: nic1
   access:
     ssh:
       addressRef: ip

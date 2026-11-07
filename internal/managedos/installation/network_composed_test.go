@@ -61,8 +61,9 @@ func TestTheGatewaySkipsAnAbsentRouteForTheInstallInterfacesRoute(t *testing.T) 
 	}
 }
 
-// The domain attaches the interfaces the composed network keeps available.
-func TestAnOverrideAddedInterfaceIsRealized(t *testing.T) {
+// The domain attaches the declared NICs whatever the composed network does
+// with their interfaces: NMState never creates or removes a vNIC.
+func TestTheDomainAttachesTheDeclaredNICsWhateverTheNetworkKeeps(t *testing.T) {
 	ethernet := func(name string) api.Value { return api.MapValue(text("name", name), text("type", "ethernet")) }
 	for name, test := range map[string]struct {
 		config    api.Object
@@ -71,11 +72,12 @@ func TestAnOverrideAddedInterfaceIsRealized(t *testing.T) {
 	}{
 		"an added interface": {networkConfig(), api.MapValue(field("interfaces", api.ListValue(ethernet("enp9s0")))), []string{"enp1s0", "enp9s0"}},
 		"an absent interface": {networkWith(ethernet("enp1s0"), ethernet("enp2s0")),
-			api.MapValue(field("interfaces", api.ListValue(api.MapValue(text("name", "enp2s0"), text("state", "absent"))))), []string{"enp1s0"}},
+			api.MapValue(field("interfaces", api.ListValue(api.MapValue(text("name", "enp2s0"), text("state", "absent"))))), []string{"enp1s0", "enp2s0"}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			machine := overridden(test.overrides)
-			target, err := substrate.TargetFor(labCatalog(test.config, machine), machine, testContext, "controller")
+			catalog := labCatalog(test.config, overridden(test.overrides))
+			machine, _ := catalog.Find(api.Machine, "rhel-01")
+			target, err := substrate.TargetFor(catalog, machine, testContext, "controller")
 			if err != nil {
 				t.Fatal(err)
 			}

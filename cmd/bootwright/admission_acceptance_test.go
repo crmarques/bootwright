@@ -600,7 +600,7 @@ func TestActualCompilerCanonicalEffectiveOutputIsInspectionOnly(t *testing.T) {
 	}
 	// Machine network declarations remain present; composed native addresses
 	// belong to internal evidence rather than canonical template replacement.
-	if !bytes.Contains(data, []byte("attachmentRef: lab-guests")) || !bytes.Contains(data, []byte("configRef: lab-guests")) {
+	if !bytes.Contains(data, []byte("attachmentRef: lab-guests")) || !bytes.Contains(data, []byte("nicRef: enp1s0")) || !bytes.Contains(data, []byte("configRef: lab-guests")) {
 		t.Fatal("canonical output lost Machine declaration structure")
 	}
 }

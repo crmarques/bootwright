@@ -76,7 +76,6 @@ spec:
     direct: {}
   network:
     configRef: lab-metal
-    attachmentRef: lab-metal
     installAddressRef: ip
     addresses:
       - name: ip
@@ -84,9 +83,9 @@ spec:
         interface: eno1
       - name: fqdn
         address: metal-01.metal.example.test
-    interfaceBinding:
-      - nicRef: eno1
-        interfaceName: eno1
+    interfaceMatches:
+      - interface: eno1
+        nicRef: eno1
   access:
     ssh:
       addressRef: ip

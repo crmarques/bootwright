@@ -53,7 +53,7 @@ func catalog() api.Catalog {
 	guests := object(api.NetworkConfig, "guests", m("nmstate", m("interfaces",
 		list(m("name", "enp1s0", "type", "ethernet")))))
 	guest := object(api.Machine, "guest", m("substrate", m("providerRef", "lab"),
-		"os", m("provided", false, "installProfileRef", "rhel"),
+		"os", m("provided", false, "installProfileRef", "rhel"), "hardware", m("nics", list(m("name", "enp1s0"))),
 		"network", addresses("192.0.2.20/24").With("configRef", api.StringValue("guests"))))
 	physical := object(api.Machine, "metal", m("os", m("provided", true), "network", addresses("192.0.2.30/24"),
 		"hardware", m("nics", list(m("name", "eno1"))),

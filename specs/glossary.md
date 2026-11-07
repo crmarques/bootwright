@@ -46,14 +46,16 @@ its modifier wherever two of its senses can meet; elsewhere context decides. A n
   operation binds the exact secret material it froze
   ([secrets](secrets.md#immutable-binding-and-contexts)); a
   `ClusterAddonBinding` attaches add-ons to a cluster
-  ([add-ons](api/addons.md#clusteraddonbinding)); a Machine's
-  `network.interfaceBinding` binds each ethernet interface to a hardware NIC
+  ([add-ons](api/addons.md#clusteraddonbinding)). A Machine's
+  `network.interfaceMatches` matches an ethernet interface to a NIC, never
+  "binds" it, since KubeVirt's interface binding is another thing
   ([machines](api/machines.md#network-configuration)).
 - **Interface**, **NIC** and **vNIC**: an interface is an OS netdev, such as an
   NMState `interfaces[]` entry or a `network.addresses[].interface`; a NIC is
   one MAC-bearing port or function, `hardware.nics[]`, hardware or virtual
   ([machines](api/machines.md#os-lifecycle-and-substrate-invariants)); a vNIC
-  is the NIC a libvirt, KubeVirt or vSphere guest presents. A bond member is the
+  is the NIC a libvirt, KubeVirt or vSphere guest presents, one per
+  `hardware.nics[]` entry in order. A bond member is the
   interface that NMState `link-aggregation.port` lists; a listener port is a
   TCP or UDP service port.
 - **Profile**: always a machine profile, install profile

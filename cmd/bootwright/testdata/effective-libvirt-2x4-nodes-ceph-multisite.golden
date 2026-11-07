@@ -38,7 +38,12 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: client
+      nics:
+        - nicRef: enp1s0
+          attachmentRef: primary
   hardware:
+    nics:
+      - name: enp1s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -52,7 +57,6 @@ spec:
     direct: {}
   network:
     configRef: primary
-    attachmentRef: primary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -60,6 +64,9 @@ spec:
       - name: ip
         address: 198.51.100.30/24
         interface: enp1s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
   access:
     ssh:
       addressRef: ip
@@ -97,7 +104,12 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: core
+      nics:
+        - nicRef: enp1s0
+          attachmentRef: primary
   hardware:
+    nics:
+      - name: enp1s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -111,7 +123,6 @@ spec:
     direct: {}
   network:
     configRef: primary
-    attachmentRef: primary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -119,6 +130,9 @@ spec:
       - name: ip
         address: 198.51.100.11/24
         interface: enp1s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
   access:
     ssh:
       addressRef: ip
@@ -137,7 +151,12 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: core
+      nics:
+        - nicRef: enp1s0
+          attachmentRef: primary
   hardware:
+    nics:
+      - name: enp1s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -151,7 +170,6 @@ spec:
     direct: {}
   network:
     configRef: primary
-    attachmentRef: primary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -159,6 +177,9 @@ spec:
       - name: ip
         address: 198.51.100.12/24
         interface: enp1s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
   access:
     ssh:
       addressRef: ip
@@ -177,7 +198,12 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: gateway
+      nics:
+        - nicRef: enp1s0
+          attachmentRef: primary
   hardware:
+    nics:
+      - name: enp1s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -191,7 +217,6 @@ spec:
     direct: {}
   network:
     configRef: primary
-    attachmentRef: primary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -199,6 +224,9 @@ spec:
       - name: ip
         address: 198.51.100.13/24
         interface: enp1s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
   access:
     ssh:
       addressRef: ip
@@ -217,7 +245,12 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: mirror
+      nics:
+        - nicRef: enp1s0
+          attachmentRef: primary
   hardware:
+    nics:
+      - name: enp1s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -231,7 +264,6 @@ spec:
     direct: {}
   network:
     configRef: primary
-    attachmentRef: primary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -239,6 +271,9 @@ spec:
       - name: ip
         address: 198.51.100.14/24
         interface: enp1s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
   access:
     ssh:
       addressRef: ip
@@ -257,7 +292,12 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: core
+      nics:
+        - nicRef: enp1s0
+          attachmentRef: secondary
   hardware:
+    nics:
+      - name: enp1s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -271,7 +311,6 @@ spec:
     direct: {}
   network:
     configRef: secondary
-    attachmentRef: secondary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -279,6 +318,9 @@ spec:
       - name: ip
         address: 192.0.2.11/24
         interface: enp1s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
   access:
     ssh:
       addressRef: ip
@@ -297,7 +339,12 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: core
+      nics:
+        - nicRef: enp1s0
+          attachmentRef: secondary
   hardware:
+    nics:
+      - name: enp1s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -311,7 +358,6 @@ spec:
     direct: {}
   network:
     configRef: secondary
-    attachmentRef: secondary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -319,6 +365,9 @@ spec:
       - name: ip
         address: 192.0.2.12/24
         interface: enp1s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
   access:
     ssh:
       addressRef: ip
@@ -337,7 +386,12 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: gateway
+      nics:
+        - nicRef: enp1s0
+          attachmentRef: secondary
   hardware:
+    nics:
+      - name: enp1s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -351,7 +405,6 @@ spec:
     direct: {}
   network:
     configRef: secondary
-    attachmentRef: secondary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -359,6 +412,9 @@ spec:
       - name: ip
         address: 192.0.2.13/24
         interface: enp1s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
   access:
     ssh:
       addressRef: ip
@@ -377,7 +433,12 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: mirror
+      nics:
+        - nicRef: enp1s0
+          attachmentRef: secondary
   hardware:
+    nics:
+      - name: enp1s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -391,7 +452,6 @@ spec:
     direct: {}
   network:
     configRef: secondary
-    attachmentRef: secondary
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -399,6 +459,9 @@ spec:
       - name: ip
         address: 192.0.2.14/24
         interface: enp1s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
   access:
     ssh:
       addressRef: ip

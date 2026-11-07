@@ -40,14 +40,18 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: master
-      interfaceAttachments:
-        - interface: enp1s0
+      nics:
+        - nicRef: enp1s0
           attachmentRef: lab-guests
-        - interface: enp2s0
+        - nicRef: enp2s0
           attachmentRef: lab-secondary
-        - interface: enp3s0
+        - nicRef: enp3s0
           attachmentRef: lab-routed
   hardware:
+    nics:
+      - name: enp1s0
+      - name: enp2s0
+      - name: enp3s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -64,6 +68,13 @@ spec:
       - name: routed
         address: 192.0.2.141/25
         interface: enp3s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
+      - interface: enp2s0
+        nicRef: enp2s0
+      - interface: enp3s0
+        nicRef: enp3s0
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -74,14 +85,18 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: master
-      interfaceAttachments:
-        - interface: enp1s0
+      nics:
+        - nicRef: enp1s0
           attachmentRef: lab-guests
-        - interface: enp2s0
+        - nicRef: enp2s0
           attachmentRef: lab-secondary
-        - interface: enp3s0
+        - nicRef: enp3s0
           attachmentRef: lab-routed
   hardware:
+    nics:
+      - name: enp1s0
+      - name: enp2s0
+      - name: enp3s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -98,6 +113,13 @@ spec:
       - name: routed
         address: 192.0.2.142/25
         interface: enp3s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
+      - interface: enp2s0
+        nicRef: enp2s0
+      - interface: enp3s0
+        nicRef: enp3s0
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -108,14 +130,18 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: master
-      interfaceAttachments:
-        - interface: enp1s0
+      nics:
+        - nicRef: enp1s0
           attachmentRef: lab-guests
-        - interface: enp2s0
+        - nicRef: enp2s0
           attachmentRef: lab-secondary
-        - interface: enp3s0
+        - nicRef: enp3s0
           attachmentRef: lab-routed
   hardware:
+    nics:
+      - name: enp1s0
+      - name: enp2s0
+      - name: enp3s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -132,6 +158,13 @@ spec:
       - name: routed
         address: 192.0.2.143/25
         interface: enp3s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
+      - interface: enp2s0
+        nicRef: enp2s0
+      - interface: enp3s0
+        nicRef: enp3s0
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -142,14 +175,18 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: master
-      interfaceAttachments:
-        - interface: enp1s0
+      nics:
+        - nicRef: enp1s0
           attachmentRef: lab-guests
-        - interface: enp2s0
+        - nicRef: enp2s0
           attachmentRef: lab-secondary
-        - interface: enp3s0
+        - nicRef: enp3s0
           attachmentRef: lab-routed
   hardware:
+    nics:
+      - name: enp1s0
+      - name: enp2s0
+      - name: enp3s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -166,6 +203,13 @@ spec:
       - name: routed
         address: 192.0.2.144/25
         interface: enp3s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
+      - interface: enp2s0
+        nicRef: enp2s0
+      - interface: enp3s0
+        nicRef: enp3s0
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -176,14 +220,18 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: master
-      interfaceAttachments:
-        - interface: enp1s0
+      nics:
+        - nicRef: enp1s0
           attachmentRef: lab-guests
-        - interface: enp2s0
+        - nicRef: enp2s0
           attachmentRef: lab-secondary
-        - interface: enp3s0
+        - nicRef: enp3s0
           attachmentRef: lab-routed
   hardware:
+    nics:
+      - name: enp1s0
+      - name: enp2s0
+      - name: enp3s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -200,6 +248,13 @@ spec:
       - name: routed
         address: 192.0.2.145/25
         interface: enp3s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
+      - interface: enp2s0
+        nicRef: enp2s0
+      - interface: enp3s0
+        nicRef: enp3s0
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Network

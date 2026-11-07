@@ -13,12 +13,17 @@ spec:
     kubevirt:
       profileRef: general
 
-      interfaceAttachments:
-        - interface: primary
+      nics:
+        - nicRef: primary
           attachmentRef: hub-vm-machine
 
-        - interface: ceph-public
+        - nicRef: ceph-public
           attachmentRef: hub-vm-ceph-public
+
+  hardware:
+    nics:
+      - name: primary
+      - name: ceph-public
 
   os:
     provided: false

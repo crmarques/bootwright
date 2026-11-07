@@ -45,17 +45,13 @@ func validatePushedNodes(cluster api.Object, catalog api.Catalog) []api.Issue {
 		if !baremetal {
 			continue
 		}
-		network := bound.Spec().Get("network")
-		references := []string{network.Get("attachmentRef").Text()}
-		if attachments := substrate.MachineInterfaceAttachments(bound); attachments.Present() {
-			references = nil
-			for _, attached := range attachments.Items() {
-				references = append(references, attached.Get("attachmentRef").Text())
-			}
+		var references []string
+		for _, nic := range substrate.MachineNICs(bound) {
+			references = append(references, substrate.NICAttachment(provider, bound, nic))
 		}
-		for _, name := range references {
+		for _, name := range slices.Compact(references) {
 			if kind := substrate.AttachmentNetworkKind(provider, name); kind != "ClusterUserDefinedNetwork" && kind != "NetworkAttachmentDefinition" {
-				issues = add(issues, reference(path, "a KubeVirt baremetal platform requires ClusterUserDefinedNetwork or NetworkAttachmentDefinition attachments", "select a Localnet ClusterUserDefinedNetwork or bridge NetworkAttachmentDefinition for every interface of "+bound.Identity()))
+				issues = add(issues, reference(path, "a KubeVirt baremetal platform requires ClusterUserDefinedNetwork or NetworkAttachmentDefinition attachments", "select a Localnet ClusterUserDefinedNetwork or bridge NetworkAttachmentDefinition for every NIC of "+bound.Identity()))
 			}
 		}
 	}

@@ -7,10 +7,12 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: rhel
+  hardware:
+    nics:
+      - name: enp1s0
   os:
     provided: false
   network:
-    attachmentRef: lab-guests
     inline:
       machineNetwork:
         - cidr: 198.51.100.0/24

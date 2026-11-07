@@ -9,7 +9,14 @@ spec:
     libvirt:
       profileRef: client
 
+      nics:
+        - nicRef: enp1s0
+          attachmentRef: primary
+
   hardware:
+    nics:
+      - name: enp1s0
+
     rootDevice:
       deviceName: /dev/vda
 
@@ -24,7 +31,6 @@ spec:
 
   network:
     configRef: primary
-    attachmentRef: primary
     installAddressRef: ip
 
     addresses:

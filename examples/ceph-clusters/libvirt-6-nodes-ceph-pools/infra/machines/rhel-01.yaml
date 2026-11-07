@@ -10,6 +10,10 @@ spec:
       profileRef: mon-mgr
 
   hardware:
+    nics:
+      - name: nic0
+      - name: nic1
+
     rootDevice:
       deviceName: /dev/vda
 
@@ -24,7 +28,6 @@ spec:
 
   network:
     configRef: lab-guests
-    attachmentRef: lab-guests
     installAddressRef: ip
 
     addresses:

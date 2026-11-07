@@ -21,14 +21,18 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: compact
+      nics:
+        - nicRef: enp1s0
+          attachmentRef: lab-guests
   hardware:
+    nics:
+      - name: enp1s0
     rootDevice:
       deviceName: /dev/vda
   os:
     provided: false
   network:
     configRef: lab-guests
-    attachmentRef: lab-guests
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -36,6 +40,9 @@ spec:
       - name: ip
         address: 198.51.100.21/24
         interface: enp1s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -46,14 +53,18 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: compact
+      nics:
+        - nicRef: enp1s0
+          attachmentRef: lab-guests
   hardware:
+    nics:
+      - name: enp1s0
     rootDevice:
       deviceName: /dev/vda
   os:
     provided: false
   network:
     configRef: lab-guests
-    attachmentRef: lab-guests
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -61,6 +72,9 @@ spec:
       - name: ip
         address: 198.51.100.22/24
         interface: enp1s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -71,14 +85,18 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: compact
+      nics:
+        - nicRef: enp1s0
+          attachmentRef: lab-guests
   hardware:
+    nics:
+      - name: enp1s0
     rootDevice:
       deviceName: /dev/vda
   os:
     provided: false
   network:
     configRef: lab-guests
-    attachmentRef: lab-guests
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -86,6 +104,9 @@ spec:
       - name: ip
         address: 198.51.100.23/24
         interface: enp1s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine

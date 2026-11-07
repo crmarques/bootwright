@@ -60,10 +60,11 @@ func networkConfig() api.Object {
 func node(name string) api.Object {
 	return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(
 		field("substrate", api.MapValue(text("providerRef", "lab-kubevirt"), field("kubevirt", api.MapValue(text("profileRef", "node"),
-			field("interfaceAttachments", api.ListValue(
-				api.MapValue(text("interface", "enp1s0"), text("attachmentRef", "lab-guests")),
-				api.MapValue(text("interface", "enp2s0"), text("attachmentRef", "storage")),
+			field("nics", api.ListValue(
+				api.MapValue(text("nicRef", "enp1s0"), text("attachmentRef", "lab-guests")),
+				api.MapValue(text("nicRef", "enp2s0"), text("attachmentRef", "storage")),
 			)))))),
+		field("hardware", api.MapValue(field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")), api.MapValue(text("name", "enp2s0")))))),
 		field("os", api.MapValue(field("provided", api.BoolValue(false)))),
 		field("network", api.MapValue(text("configRef", "lab-guests"))),
 	))

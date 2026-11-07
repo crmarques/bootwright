@@ -155,7 +155,10 @@ func MachineBMC(machine api.Object) api.Value {
 }
 
 func MachineMACs(machine api.Object) api.Value {
-	return machine.Spec().Get("substrate", MachineArm(machine), "nics")
+	if arm := MachineArm(machine); arm == ArmBaremetal || arm == ArmVSphere {
+		return machine.Spec().Get("substrate", arm, "nics")
+	}
+	return api.Value{}
 }
 
 func MachineMAC(machine api.Object, nic string) string {
@@ -165,8 +168,4 @@ func MachineMAC(machine api.Object, nic string) string {
 		}
 	}
 	return ""
-}
-
-func MachineInterfaceAttachments(machine api.Object) api.Value {
-	return machine.Spec().Get("substrate", MachineArm(machine), "interfaceAttachments")
 }

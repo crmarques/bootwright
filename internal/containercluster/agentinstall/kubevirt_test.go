@@ -41,10 +41,10 @@ func kubevirtProviderIn(name, namespace string) api.Object {
 func kubevirtGuest(name, address string) api.Object {
 	return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(
 		field("substrate", api.MapValue(text("providerRef", "lab-kubevirt"), field("kubevirt", api.MapValue(text("profileRef", "kubevirt"))))),
-		field("hardware", api.MapValue(field("rootDevice", api.MapValue(text("deviceName", "/dev/vda"))))),
+		field("hardware", api.MapValue(field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")))), field("rootDevice", api.MapValue(text("deviceName", "/dev/vda"))))),
 		field("os", api.MapValue(field("provided", api.BoolValue(false)))),
 		field("network", api.MapValue(
-			text("configRef", "lab-guests"), text("attachmentRef", "lab-guests"), text("installAddressRef", "ip"),
+			text("configRef", "lab-guests"), text("installAddressRef", "ip"),
 			field("addresses", api.ListValue(
 				api.MapValue(text("name", "fqdn"), text("address", name+".lab.example.test")),
 				api.MapValue(text("name", "ip"), text("address", address), text("interface", "enp1s0")),

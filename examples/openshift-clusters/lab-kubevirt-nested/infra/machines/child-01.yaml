@@ -10,6 +10,9 @@ spec:
       profileRef: kubevirt
 
   hardware:
+    nics:
+      - name: eth0
+
     rootDevice:
       deviceName: /dev/vda
 
@@ -18,7 +21,6 @@ spec:
 
   network:
     configRef: nested-guests
-    attachmentRef: nested-guests
     installAddressRef: ip
 
     addresses:

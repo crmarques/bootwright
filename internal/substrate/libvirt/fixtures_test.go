@@ -87,11 +87,12 @@ func networkConfig() api.Object {
 
 func guest(name string, fields ...api.FieldValue) api.Object {
 	spec := api.MapValue(
-		field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), field("libvirt", api.MapValue(text("profileRef", "rhel"))))),
+		field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), field("libvirt", api.MapValue(text("profileRef", "rhel"),
+			field("nics", api.ListValue(api.MapValue(text("nicRef", "enp1s0"), text("attachmentRef", "lab-guests")))))))),
 		field("os", api.MapValue(field("provided", api.BoolValue(false)), text("installProfileRef", "rhel-9-8"))),
-		field("hardware", api.MapValue(field("rootDevice", api.MapValue(text("deviceName", "/dev/vda"))))),
+		field("hardware", api.MapValue(field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")))), field("rootDevice", api.MapValue(text("deviceName", "/dev/vda"))))),
 		field("network", api.MapValue(
-			text("configRef", "lab-guests"), text("attachmentRef", "lab-guests"), text("installAddressRef", "ip"),
+			text("configRef", "lab-guests"), text("installAddressRef", "ip"),
 			field("addresses", api.ListValue(
 				api.MapValue(text("name", "fqdn"), text("address", name+".lab.example.test")),
 				api.MapValue(text("name", "ip"), text("address", "198.51.100.11/24"), text("interface", "enp1s0")),

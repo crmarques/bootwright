@@ -66,6 +66,13 @@ func TestOpenShiftClusterRefusalTableMatchesUnsupported(t *testing.T) {
 		configuration := networkConfiguration().Spec()
 		configuration = configuration.With("nmstate", change(configuration.Get("nmstate")))
 		n = n.WithSpec(n.Spec().With("network", n.Spec().Get("network").Without("configRef").With("inline", configuration)))
+		var nics []api.Value
+		for _, iface := range configuration.Get("nmstate", "interfaces").Items() {
+			if iface.Get("type").Text() == "ethernet" {
+				nics = append(nics, api.MapValue(text("name", iface.Get("name").Text())))
+			}
+		}
+		n = n.WithSpec(n.Spec().WithPath(api.ListValue(nics...), "hardware", "nics"))
 		return refusalCase{onSNO(n), "OpenShiftCluster/sno", map[string]string{"<machine>": "Machine/sno-01", "<interface>": "extra"}}
 	}
 	endpointCase := func(slot, name string, value api.Value, port string) refusalCase {

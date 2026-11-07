@@ -10,15 +10,21 @@ spec:
       profileRef: sno
 {{- if .Values.environments.enabled }}
 
-      interfaceAttachments:
-        - interface: enp1s0
+      nics:
+        - nicRef: enp1s0
           attachmentRef: lab-guests
 
-        - interface: {{ .Values.environments.trunk.interface }}
+        - nicRef: {{ .Values.environments.trunk.interface }}
           attachmentRef: trunk
 {{- end }}
 
   hardware:
+    nics:
+      - name: enp1s0
+{{- if .Values.environments.enabled }}
+      - name: {{ .Values.environments.trunk.interface }}
+{{- end }}
+
     rootDevice:
       deviceName: /dev/vda
 
@@ -27,9 +33,6 @@ spec:
 
   network:
     configRef: lab-guests
-{{- if not .Values.environments.enabled }}
-    attachmentRef: lab-guests
-{{- end }}
     installAddressRef: ip
 
     addresses:

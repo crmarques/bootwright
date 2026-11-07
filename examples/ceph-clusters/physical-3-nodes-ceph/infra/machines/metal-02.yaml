@@ -61,7 +61,6 @@ spec:
 
   network:
     configRef: lab-metal
-    attachmentRef: lab-metal
     installAddressRef: ip
 
     addresses:

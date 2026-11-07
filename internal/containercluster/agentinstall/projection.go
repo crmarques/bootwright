@@ -271,14 +271,14 @@ func nodeInterfaces(node nodeProjection) []any {
 	return out
 }
 
-func installerInterfaces(presented []substrate.Interface, bindings []machine.InterfaceBinding) []substrate.Interface {
+func installerInterfaces(presented []substrate.Interface, matches []machine.InterfaceMatch) []substrate.Interface {
 	names := map[string]string{}
-	for _, binding := range bindings {
-		names[binding.NIC] = binding.Interface
+	for _, match := range matches {
+		names[match.NIC] = match.Interface
 	}
 	out := make([]substrate.Interface, 0, len(presented))
 	for _, declared := range presented {
-		if name, bound := names[declared.Name]; bound {
+		if name, matched := names[declared.Name]; matched {
 			declared.Name = name
 		}
 		out = append(out, declared)

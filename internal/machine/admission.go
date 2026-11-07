@@ -31,9 +31,9 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	}
 	network := normalizedContacts(o, c, s.Get("network"))
 	provider, found := Provider(o, c)
-	if attachments := provider.Spec().Get("networkAttachments"); found && (network.Has("configRef") || network.Has("inline")) && !network.Has("attachmentRef") && !substrate.MachineInterfaceAttachments(o).Present() && attachments.Len() == 1 {
-		if name := attachments.Items()[0].Get("name"); name.Type() == api.String && name.Text() != "" {
-			network = network.With("attachmentRef", name)
+	if arm := substrate.MachineArm(o); found && substrate.VirtualArm(arm) && s.Get("hardware", "nics").Len() > 0 {
+		if entries, ok := defaultedNICAttachments(o, provider); ok {
+			s = s.WithPath(entries, "substrate", arm, "nics")
 		}
 	}
 	if network.Present() {
@@ -51,8 +51,8 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 	}
 	o = o.WithSpec(s)
 	if native, issues := ComposeNetwork(o, c); native.Present() && len(issues) == 0 {
-		if binding, issues := resolveBindings(o, c, native); binding.Present() && len(issues) == 0 {
-			network = network.With("interfaceBinding", binding)
+		if matches, issues := resolveMatches(o, c, native); matches.Len() > 0 && len(issues) == 0 {
+			network = network.With("interfaceMatches", matches)
 		}
 		if selected, issues := selectInstallAddress(o, c, false); selected.Present() && len(issues) == 0 {
 			network = network.Default("installAddressRef", selected.Get("name"))
@@ -313,13 +313,13 @@ func validateProvision(o api.Object) []api.Issue {
 				issues = appendIssues(issues, invariant("$.spec.os."+key, "OS-ready Machines forbid installation declarations", "remove spec.os."+key+", or set spec.os.provided to false for a Machine Bootwright installs"))
 			}
 		}
-		for _, key := range []string{"configRef", "inline", "attachmentRef", "interfaceBinding", "installAddressRef", "overrides"} {
+		for _, key := range []string{"configRef", "inline", "interfaceMatches", "installAddressRef", "overrides"} {
 			if network.Has(key) {
 				issues = appendIssues(issues, invariant("$.spec.network."+key, "OS-ready Machines declare contacts only", "remove spec.network."+key+"; an OS-ready Machine declares contacts only"))
 			}
 		}
-		if arm := substrate.MachineArm(o); s.Has("substrate", arm, "interfaceAttachments") {
-			path := "spec.substrate." + arm + ".interfaceAttachments"
+		if arm := substrate.MachineArm(o); substrate.VirtualArm(arm) && s.Has("substrate", arm, "nics") {
+			path := "spec.substrate." + arm + ".nics"
 			issues = appendIssues(issues, invariant("$."+path, "OS-ready Machines declare contacts only", "remove "+path+"; an OS-ready Machine declares contacts only"))
 		}
 		for _, name := range substrate.MachineRootDeviceHints(o).Names() {
@@ -363,9 +363,8 @@ func validateSubstrate(o, provider api.Object, variant string) []api.Issue {
 			issues = appendIssues(issues, invariant(path, "virtual installation requires a provider-local machine profile", "set "+path[2:]+" to a machine profile of the selected provider"))
 		}
 	}
-	if (variant == substrate.ArmLibvirt || variant == substrate.ArmKubeVirt) && s.Has("network", "interfaceBinding") {
-		issues = appendIssues(issues, invariant("$.spec.network.interfaceBinding", "a "+variant+" provider creates every interface of this Machine, so there is no hardware NIC to bind",
-			"remove spec.network.interfaceBinding from "+o.Identity()))
+	if substrate.VirtualArm(variant) && provided.Present() && !provided.Bool() {
+		issues = appendIssues(issues, validateVirtualNICs(o, provider, variant)...)
 	}
 	if variant == substrate.ArmBaremetal && provided.Present() && !provided.Bool() {
 		issues = appendIssues(issues, validateBaremetal(o)...)
@@ -380,16 +379,12 @@ func validateNetworkContacts(o api.Object, c api.Catalog, configured bool) []api
 	if network.Has("overrides") && !network.Has("configRef") {
 		issues = appendIssues(issues, invariant("$.spec.network.overrides", "network overrides require configRef", "select a reusable configuration with spec.network.configRef, or remove spec.network.overrides"))
 	}
-	for _, key := range []string{"attachmentRef", "interfaceAttachments", "interfaceBinding", "installAddressRef"} {
+	for _, key := range []string{"interfaceMatches", "installAddressRef"} {
 		if key == "installAddressRef" && anacondaInstalled(o, c) {
 			continue
 		}
 		path := "spec.network." + key
-		present := network.Has(key)
-		if key == "interfaceAttachments" {
-			path, present = "spec.substrate."+substrate.MachineArm(o)+".interfaceAttachments", substrate.MachineInterfaceAttachments(o).Present()
-		}
-		if present && !configured && !provided.Bool() {
+		if network.Has(key) && !configured && !provided.Bool() {
 			issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: "$." + path, Message: "network selections and bindings require a configured network",
 				Remediation: "select a network configuration on " + o.Identity() + " with spec.network.configRef or spec.network.inline, or remove " + path})
 		}
@@ -478,12 +473,6 @@ func anacondaInstalled(o api.Object, c api.Catalog) bool {
 	return installed(o) && ok && profile.Spec().Has("installer", "anaconda")
 }
 
-// validateDomainInterfaces refuses a non-provided Machine a libvirt domain
-// could not attach: the domain has one interface per available ethernet
-// interface of the composed network configuration, so a Machine with none
-// would be realized unreachable, or refused at plan. A Bootwright-installed
-// Anaconda Machine that selects no configuration already refuses at its install
-// address with the same remedy, so it is refused once.
 func validateDomainInterfaces(o api.Object, c api.Catalog, native api.Value, configured bool) []api.Issue {
 	if provided := o.Spec().Get("os", "provided"); !provided.Present() || provided.Bool() {
 		return nil
@@ -493,7 +482,7 @@ func validateDomainInterfaces(o api.Object, c api.Catalog, native api.Value, con
 			return nil
 		}
 		return []api.Issue{{Code: "api.invariant", Field: "$.spec.network",
-			Message:     "a Machine a libvirt provider realizes attaches one interface per available ethernet interface of its network configuration, and this Machine selects none",
+			Message:     "a Machine a libvirt provider realizes is reached through the network configuration its operating system applies, and this Machine selects none",
 			Remediation: "select a network configuration on " + o.Identity() + " with spec.network.configRef or spec.network.inline, with an ethernet interface that is not absent or ignored"}}
 	}
 	if !native.Present() {
@@ -505,7 +494,7 @@ func validateDomainInterfaces(o api.Object, c api.Catalog, native api.Value, con
 		}
 	}
 	return []api.Issue{{Code: "api.invariant", Field: configurationPath(o),
-		Message:     "the network configuration presents no available ethernet interface, so the domain would have no interface",
+		Message:     "the network configuration presents no available ethernet interface, so no NIC of the Machine would be configured",
 		Remediation: "declare an ethernet interface that is not absent or ignored in the NMState " + o.Identity() + " selects, or select another configuration"}}
 }
 
@@ -543,7 +532,7 @@ func validateBMC(bmc api.Value, unresolvedProvider bool) []api.Issue {
 // an IPv4 prefix shorter than /31, never its network or broadcast address.
 func validateManagedAttachmentContainment(o api.Object, address netip.Prefix, provider api.Object, installInterface string, native api.Value) []api.Issue {
 	var issues []api.Issue
-	for _, reference := range installAttachmentReferences(o, native, installInterface) {
+	for _, reference := range installAttachmentReferences(o, provider, native, installInterface) {
 		issues = appendIssues(issues, validateManagedAttachmentAddress(o, address, provider, reference)...)
 	}
 	return issues
@@ -769,56 +758,76 @@ func validateHardware(o api.Object, c api.Catalog, variant string) []api.Issue {
 }
 
 func validateAttachments(o, provider api.Object, native api.Value) []api.Issue {
-	network := o.Spec().Get("network")
 	variant := substrate.Variant(provider)
-	attachments := substrate.MachineInterfaceAttachments(o)
-	attachmentsPath := "$.spec.substrate." + substrate.MachineArm(o) + ".interfaceAttachments"
 	issues := []api.Issue{}
-	if network.Has("attachmentRef") && attachments.Present() {
-		issues = appendIssues(issues, invariant(attachmentsPath, "attachmentRef and interfaceAttachments are mutually exclusive", "keep either spec.network.attachmentRef or "+attachmentsPath[2:]))
-	}
-	// A bare-metal attachment configures nothing, so bare metal selects none;
-	// one it authors still resolves below.
-	if variant != substrate.ArmBaremetal && !network.Has("attachmentRef") && !attachments.Present() {
-		issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: "$.spec.network.attachmentRef",
-			Message:     "provider-backed configured networks require an explicit attachment unless their provider has exactly one",
-			Remediation: "set spec.network.attachmentRef on " + o.Identity() + " to an attachment of " + provider.Identity()})
-	}
-	check := func(ref api.Value, path string) {
-		if ref.Present() {
-			a, ok := namedValue(provider.Spec().Get("networkAttachments"), ref.Text())
-			if ok && !a.Has(variant) {
-				issues = appendIssues(issues, reference(path, "attachment must name a matching arm on the selected provider", "set "+path[2:]+" to a networkAttachments entry of the selected provider that has this provider's arm"))
-			}
-		}
-	}
-	check(network.Get("attachmentRef"), "$.spec.network.attachmentRef")
-	if attachments.Present() {
-		seen := map[string]bool{}
-		for i, entry := range attachments.Items() {
-			path := fmt.Sprintf("%s[%d]", attachmentsPath, i)
-			check(entry.Get("attachmentRef"), path+".attachmentRef")
-			name := entry.Get("interface").Text()
-			if seen[name] {
-				issues = appendIssues(issues, invariant(path+".interface", "physical interfaces must be attached once", "attach each physical interface in one "+attachmentsPath[2:]+" entry only"))
-			}
-			seen[name] = true
-			if native.Present() {
-				iface, ok := namedValue(native.Get("interfaces"), name)
-				if !ok || iface.Get("type").Text() != "ethernet" || unavailableInterface(iface) {
-					issues = appendIssues(issues, reference(path+".interface", "attachment must name an available physical ethernet interface", "set "+path[2:]+".interface to an available physical ethernet interface of the network configuration"))
-				}
-			}
-		}
-		for _, iface := range native.Get("interfaces").Items() {
-			if iface.Get("type").Text() == "ethernet" && !unavailableInterface(iface) && !seen[iface.Get("name").Text()] {
-				issues = appendIssues(issues, invariant(attachmentsPath, "per-interface attachments must cover every physical interface", "add a "+attachmentsPath[2:]+" entry for every available physical ethernet interface"))
-			}
-		}
-		issues = appendIssues(issues, validateBondAttachments(o, native, attachmentsPath)...)
+	if substrate.VirtualArm(variant) {
+		issues = appendIssues(issues, validateVirtualMACs(o, native, variant)...)
+		issues = appendIssues(issues, validateBondAttachments(o, native, "$.spec.substrate."+variant+".nics")...)
 	}
 	if variant == substrate.ArmLibvirt {
 		issues = appendIssues(issues, validateLibvirtAttachmentMTUs(o, provider, native)...)
+	}
+	return issues
+}
+
+func defaultedNICAttachments(o, provider api.Object) (api.Value, bool) {
+	attachments := provider.Spec().Get("networkAttachments")
+	entries := substrate.MachineNICAttachments(o)
+	if attachments.Len() != 1 {
+		return entries, false
+	}
+	sole := attachments.Items()[0].Get("name")
+	if sole.Type() != api.String || sole.Text() == "" {
+		return entries, false
+	}
+	values := []api.Value{}
+	for _, nic := range substrate.MachineNICs(o) {
+		entry, found := namedValueBy(entries, "nicRef", nic)
+		if !found {
+			entry = api.MapValue(api.FieldValue{Name: "nicRef", Value: api.StringValue(nic)}, api.FieldValue{Name: "attachmentRef", Value: sole})
+		}
+		values = append(values, entry)
+	}
+	for _, entry := range entries.Items() {
+		if !slices.Contains(substrate.MachineNICs(o), entry.Get("nicRef").Text()) {
+			values = append(values, entry)
+		}
+	}
+	return api.ListValue(values...), true
+}
+
+func validateVirtualNICs(o, provider api.Object, variant string) []api.Issue {
+	nics := substrate.MachineNICs(o)
+	if len(nics) == 0 {
+		return []api.Issue{invariant("$.spec.hardware.nics", "a "+variant+" provider creates one vNIC per spec.hardware.nics entry, in order, and "+o.Identity()+" declares none",
+			"declare each vNIC of "+o.Identity()+" in spec.hardware.nics, in device order, such as one entry named enp1s0")}
+	}
+	attachments := provider.Spec().Get("networkAttachments")
+	path := "$.spec.substrate." + variant + ".nics"
+	issues := []api.Issue{}
+	for i, entry := range substrate.MachineNICAttachments(o).Items() {
+		if a, ok := namedValue(attachments, entry.Get("attachmentRef").Text()); ok && !a.Has(variant) {
+			field := fmt.Sprintf("%s[%d].attachmentRef", path, i)
+			issues = appendIssues(issues, reference(field, "attachment must name a matching arm on the selected provider", "set "+field[2:]+" to a networkAttachments entry of "+provider.Identity()+" that has its "+variant+" arm"))
+		}
+	}
+	for _, nic := range nics {
+		if substrate.NICAttachment(provider, o, nic) == "" {
+			issues = appendIssues(issues, invariant(path, fmt.Sprintf("NIC %s of %s selects no network attachment, and %s declares %d attachments, not exactly one that every NIC defaults to", nic, o.Identity(), provider.Identity(), attachments.Len()),
+				"add a "+path[2:]+" entry with nicRef "+nic+" and an attachmentRef naming an attachment of "+provider.Identity()+" on "+o.Identity()))
+		}
+	}
+	return issues
+}
+
+func validateVirtualMACs(o api.Object, native api.Value, variant string) []api.Issue {
+	issues := []api.Issue{}
+	for _, iface := range native.Get("interfaces").Items() {
+		if iface.Get("type").Text() == "ethernet" && iface.Has("mac-address") {
+			name := iface.Get("name").Text()
+			issues = appendIssues(issues, invariant(configurationPath(o), "ethernet interface "+name+" of "+o.Identity()+" authors a mac-address, but a "+variant+" provider derives each vNIC's MAC from the context, Machine and NIC names",
+				"remove mac-address from interface "+name+" in the network configuration of "+o.Identity()+", and match the interface to its NIC with spec.network.interfaceMatches if their names differ"))
+		}
 	}
 	return issues
 }
@@ -979,15 +988,10 @@ func providerBMCDefaults(bmc api.Value, provider api.Object) api.Value {
 	return defaults
 }
 
-func installAttachmentReferences(o api.Object, native api.Value, name string) []string {
+func installAttachmentReferences(o, provider api.Object, native api.Value, name string) []string {
 	var references []string
 	for _, leaf := range physicalLeaves(native, name, map[string]bool{}) {
-		if attachments := substrate.MachineInterfaceAttachments(o); attachments.Present() {
-			entry, _ := namedValueBy(attachments, "interface", leaf)
-			references = append(references, entry.Get("attachmentRef").Text())
-		} else {
-			references = append(references, o.Spec().Get("network", "attachmentRef").Text())
-		}
+		references = append(references, substrate.NICAttachment(provider, o, substrate.InterfaceNIC(o, leaf)))
 	}
 	return references
 }
@@ -1037,7 +1041,7 @@ func nestsSplitBond(native api.Value, bond string, split map[string]bool, visiti
 }
 
 func validateBondAttachments(o api.Object, native api.Value, attachmentsPath string) []api.Issue {
-	entries := substrate.MachineInterfaceAttachments(o).Items()
+	entries := substrate.MachineNICAttachments(o).Items()
 	type splitBond struct {
 		name      string
 		placed    []string
@@ -1053,9 +1057,10 @@ func validateBondAttachments(o api.Object, native api.Value, attachmentsPath str
 		var placed []string
 		first, differing := "", -1
 		for _, leaf := range physicalLeaves(native, bond, map[string]bool{}) {
+			nic := substrate.InterfaceNIC(o, leaf)
 			for index, entry := range entries {
 				reference := entry.Get("attachmentRef").Text()
-				if entry.Get("interface").Text() != leaf || reference == "" {
+				if entry.Get("nicRef").Text() != nic || reference == "" {
 					continue
 				}
 				placed = append(placed, leaf+" on "+reference)
@@ -1078,7 +1083,7 @@ func validateBondAttachments(o api.Object, native api.Value, attachmentsPath str
 		}
 		issues = appendIssues(issues, invariant(fmt.Sprintf("%s[%d].attachmentRef", attachmentsPath, s.differing),
 			"bond "+s.name+" of "+o.Identity()+" has ports on different attachments ("+strings.Join(s.placed, ", ")+"), so a failover would move the host onto another network",
-			"attach every port of bond "+s.name+" to one attachment in "+attachmentsPath[2:]+" on "+o.Identity()+", or remove the port on another attachment from the bond"))
+			"attach the NIC of every port of bond "+s.name+" to one attachment in "+attachmentsPath[2:]+" on "+o.Identity()+", or remove the port on another attachment from the bond"))
 	}
 	return issues
 }

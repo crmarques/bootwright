@@ -66,9 +66,9 @@ func kubevirtClusterCatalog() api.Catalog {
 	for index, name := range kubevirtNodes {
 		objects = append(objects, api.NewObject(api.Machine, name, api.Value{}, api.MapValue(
 			f("substrate", api.MapValue(s("providerRef", "lab-kubevirt"), f("kubevirt", api.MapValue(s("profileRef", "kubevirt"))))),
-			f("hardware", api.MapValue(f("rootDevice", api.MapValue(s("deviceName", "/dev/vda"))))),
+			f("hardware", api.MapValue(f("nics", api.ListValue(api.MapValue(s("name", "enp1s0")))), f("rootDevice", api.MapValue(s("deviceName", "/dev/vda"))))),
 			f("os", api.MapValue(f("provided", api.BoolValue(false)))),
-			f("network", api.MapValue(s("configRef", "lab-guests"), s("attachmentRef", "lab-guests"), s("installAddressRef", "ip"),
+			f("network", api.MapValue(s("configRef", "lab-guests"), s("installAddressRef", "ip"),
 				f("addresses", api.ListValue(api.MapValue(s("name", "ip"), s("address", "198.51.100.2"+string(rune('1'+index))+"/24"), s("interface", "enp1s0")))))))))
 		nodes = append(nodes, api.MapValue(s("name", "master-"+string(rune('0'+index))), s("role", "controlPlane"), s("machineRef", name)))
 	}

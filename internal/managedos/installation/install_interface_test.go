@@ -227,9 +227,9 @@ func TestEveryEthernetInterfaceIsPinnedByItsMAC(t *testing.T) {
 	}
 	metal := metalOn("enp1s0", hardwareNIC("enp1s0", "52:54:00:9A:1B:01"), hardwareNIC("nic-b", "52:54:00:9a:1b:0b"), hardwareNIC("nic-c", "52:54:00:9a:1b:0c"))
 	metal = metal.WithSpec(metal.Spec().WithPath(api.ListValue(
-		api.MapValue(text("interfaceName", "enp1s0"), text("nicRef", "enp1s0")),
-		api.MapValue(text("interfaceName", "enp2s0"), text("nicRef", "nic-b")),
-	), "network", "interfaceBinding"))
+		api.MapValue(text("interface", "enp1s0"), text("nicRef", "enp1s0")),
+		api.MapValue(text("interface", "enp2s0"), text("nicRef", "nic-b")),
+	), "network", "interfaceMatches"))
 	physical := requestOf(t, metalCatalog(metal, metalNetwork(declaredInterface("enp1s0", "ethernet"), declaredInterface("enp2s0", "ethernet"))), "metal-01")
 	if want := []string{"ifname=enp1s0:52:54:00:9a:1b:01", "ifname=enp2s0:52:54:00:9a:1b:0b"}; !slices.Equal(physical.InstallerArguments, want) {
 		t.Fatalf("physical installer arguments = %q, want %q", physical.InstallerArguments, want)
@@ -267,7 +267,7 @@ func TestKernelStyleNamesRefuse(t *testing.T) {
 
 func TestABareMetalEthernetInterfaceWithoutAHardwareNICRefuses(t *testing.T) {
 	unbound := "a managed-OS installation names each ethernet interface after its hardware address, and interface enp2s0 of Machine/metal-01 resolves to no declared hardware NIC, or to one whose address differs from its mac-address"
-	remedy := "bind interface enp2s0 to its hardware NIC in spec.network.interfaceBinding of Machine/metal-01, or mark it absent in its network"
+	remedy := "match interface enp2s0 to its hardware NIC in spec.network.interfaceMatches of Machine/metal-01, or mark it absent in its network"
 	two := metalNetwork(declaredInterface("enp1s0", "ethernet"), declaredInterface("enp2s0", "ethernet"))
 	_, _, err := Requests(metalCatalog(metalOn("enp1s0", hardwareNIC("enp1s0", "52:54:00:9a:1b:01")), two), "controller", testContext)
 	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.unsupported" || reported[0].Message != unbound || reported[0].Remediation != remedy {

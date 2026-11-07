@@ -63,7 +63,12 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: rhel
+      nics:
+        - nicRef: enp1s0
+          attachmentRef: lab-guests
   hardware:
+    nics:
+      - name: enp1s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -82,7 +87,6 @@ spec:
       - 198.51.100.0/24
   network:
     configRef: lab-guests
-    attachmentRef: lab-guests
     installAddressRef: ip
     addresses:
       - name: ip
@@ -90,6 +94,9 @@ spec:
         interface: enp1s0
       - name: fqdn
         address: rhel-01.lab.example.test
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
   access:
     ssh:
       addressRef: ip

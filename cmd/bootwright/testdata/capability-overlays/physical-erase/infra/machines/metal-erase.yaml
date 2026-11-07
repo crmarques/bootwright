@@ -33,7 +33,6 @@ spec:
       deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c3e1
   network:
     configRef: lab-metal
-    attachmentRef: lab-metal
     installAddressRef: ip
     addresses:
       - name: fqdn

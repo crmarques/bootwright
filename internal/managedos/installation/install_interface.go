@@ -130,7 +130,7 @@ func unboundReason(name, identity string) string {
 }
 
 func unboundRemedy(name, identity string) string {
-	return "bind interface " + name + " to its hardware NIC in spec.network.interfaceBinding of " + identity + ", or mark it absent in its network"
+	return "match interface " + name + " to its hardware NIC in spec.network.interfaceMatches of " + identity + ", or mark it absent in its network"
 }
 
 func hardwareMatches(machine api.Object, nics []Interface, declared api.Value) bool {
@@ -227,11 +227,18 @@ func vlanRefusal(catalog api.Catalog, machine api.Object, template, declared api
 	if !found {
 		return "", ""
 	}
-	attachment, attached := findNamed(provider.Spec().Get("networkAttachments"), "name", machine.Spec().Get("network", "attachmentRef").Text())
-	if network, managed := substrate.ManagedAttachment(attachment); attached && managed {
-		return "a managed libvirt network gives its host an untagged address on " + network.Bridge +
-				", so the controller cannot reach the VLAN install address of " + identity,
-			"attach " + identity + " to an external bridge whose host carries VLAN " + strconv.FormatInt(id, 10) + ", or install over an untagged interface"
+	leaves := []string{base.Text()}
+	if bond, ok := availableNamed(template, base.Text(), "bond"); ok {
+		leaves = bond.Get("link-aggregation", "port").Strings()
+	}
+	for _, leaf := range leaves {
+		reference := substrate.NICAttachment(provider, machine, substrate.InterfaceNIC(machine, leaf))
+		attachment, attached := findNamed(provider.Spec().Get("networkAttachments"), "name", reference)
+		if network, managed := substrate.ManagedAttachment(attachment); attached && managed {
+			return "a managed libvirt network gives its host an untagged address on " + network.Bridge +
+					", so the controller cannot reach the VLAN install address of " + identity,
+				"attach " + identity + " to an external bridge whose host carries VLAN " + strconv.FormatInt(id, 10) + ", or install over an untagged interface"
+		}
 	}
 	return "", ""
 }
@@ -287,13 +294,7 @@ func installGatewayRoute(template api.Value, iface string) (index int, gateway s
 }
 
 func interfaceMAC(machine api.Object, nics []Interface, name string) (string, bool) {
-	nic := name
-	for _, binding := range machine.Spec().Get("network", "interfaceBinding").Items() {
-		if binding.Get("interfaceName").Text() == name {
-			nic = binding.Get("nicRef").Text()
-			break
-		}
-	}
+	nic := substrate.InterfaceNIC(machine, name)
 	for _, declared := range nics {
 		if declared.Name == nic {
 			parsed, err := net.ParseMAC(declared.MACAddress)
@@ -310,7 +311,7 @@ func installerArguments(catalog api.Catalog, machine api.Object, request Request
 	}
 	arguments := make([]string, 0, len(names))
 	for _, name := range names {
-		mac := substrate.InterfaceMAC(request.Identity.Context, machine.Name(), name)
+		mac := substrate.InterfaceMAC(request.Identity.Context, machine.Name(), substrate.InterfaceNIC(machine, name))
 		if request.Target.Hardware != nil {
 			resolved, found := interfaceMAC(machine, request.Target.Hardware.Interfaces, name)
 			if !found {

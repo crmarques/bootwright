@@ -260,15 +260,11 @@ func virtualTarget(catalog api.Catalog, provider, machine api.Object, contextNam
 		URI:     provider.Spec().Get("libvirt", "uri").Text(),
 		Domain:  DomainName(contextName, machine.Name()),
 	}
-	names, err := EthernetInterfaces(catalog, machine)
+	interfaces, err := VirtualInterfaces(contextName, machine)
 	if err != nil {
 		return Target{}, err
 	}
-	for _, name := range names {
-		target.Interfaces = append(target.Interfaces, Interface{
-			Name: name, MACAddress: InterfaceMAC(contextName, machine.Name(), name),
-		})
-	}
+	target.Interfaces = interfaces
 	target.RootDeviceHints = rootDeviceHints(machine)
 	target.PlacementMachine = host
 	return target, nil
@@ -291,15 +287,11 @@ func kubevirtTarget(catalog api.Catalog, provider, machine api.Object, contextNa
 		CredentialsRef: credentials, HostCluster: cluster, TLSVerify: true,
 	}
 	target.Identity = Identity{Channel: ChannelNone}
-	names, err := EthernetInterfaces(catalog, machine)
+	interfaces, err := VirtualInterfaces(contextName, machine)
 	if err != nil {
 		return Target{}, err
 	}
-	for _, name := range names {
-		target.Interfaces = append(target.Interfaces, Interface{
-			Name: name, MACAddress: InterfaceMAC(contextName, machine.Name(), name),
-		})
-	}
+	target.Interfaces = interfaces
 	target.RootDeviceHints = rootDeviceHints(machine)
 	target.PlacementMachine = host
 	return target, nil

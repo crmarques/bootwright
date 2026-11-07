@@ -364,12 +364,12 @@ mac-address`, because a bond member reports the bond's address while it runs;
 no bond or VLAN carries one. An `ethernet` interface with both families
 disabled is an addressless NIC the substrate realizes and the image lists like
 any other. Each host's `interfaces` entry names an interface by its
-operating-system name with the hardware address of the NIC bound to it, through
-the Machine's `network.interfaceBinding` (the identity when omitted), so a NIC
-label that differs from its interface name lists, and matches in the host's
-network configuration, under the interface name. Every listed `ethernet`
-interface carries the realized target's address, which is a bound NIC's own,
-over any authored one. Interface MTUs reach the installer as declared.
+operating-system name with the address of the NIC it matches, through the
+Machine's `network.interfaceMatches` (the NIC of its name when omitted), on
+every substrate, so a NIC label that differs from its interface name lists, and
+matches in the host's network configuration, under the interface name. Every
+listed `ethernet` interface carries the realized target's address, its matched
+NIC's own, over any authored one. Interface MTUs reach the installer as declared.
 A node whose network configuration holds an OVS or Linux bridge, an `ovn` or
 `ovs-db` section, or an interface named as OVN-Kubernetes reserves refuses, and
 so does a node whose install address is not on its default-route interface,

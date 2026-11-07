@@ -65,7 +65,7 @@ func TestSubstrateRefusalTableMatchesUnsupported(t *testing.T) {
 			kubevirtGuest(text("installProfileRef", "rhel-9-8"))), "Machine/node-01", map[string]string{"<machine>": "Machine/node-01"}},
 		"A KubeVirt profile without a size": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", "", number("cpu", "0")), kubevirtGuest()),
 			"Machine/node-01", map[string]string{"<provider>": "InfraProvider/kv", "<profile>": "node"}},
-		"A KubeVirt interface on an unrealized network kind": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", "UserDefinedNetwork"), kubevirtGuest()),
+		"A KubeVirt NIC on an unrealized network kind": {catalogOf(controller(), networkConfig(), kubevirtProvider("kubeconfigRef", "UserDefinedNetwork"), kubevirtGuest()),
 			"Machine/node-01", map[string]string{"<machine>": "Machine/node-01", "<attachment>": "lab-guests"}},
 	}
 	authoredHost := func(catalog api.Catalog) kubevirt.HostCapability {
@@ -205,6 +205,7 @@ func kubevirtGuest(os ...api.FieldValue) api.Object {
 	return api.NewObject(api.Machine, "node-01", api.Value{}, api.MapValue(
 		field("substrate", api.MapValue(text("providerRef", "kv"), field("kubevirt", api.MapValue(text("profileRef", "node"))))),
 		field("os", declared),
-		field("network", api.MapValue(text("configRef", "lab-guests"), text("attachmentRef", "lab-guests"))),
+		field("hardware", api.MapValue(field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")))))),
+		field("network", api.MapValue(text("configRef", "lab-guests"))),
 	))
 }

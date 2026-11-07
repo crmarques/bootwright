@@ -25,16 +25,13 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 	if network.Has("inline") && network.Has("overrides") {
 		issues = appendIssues(issues, invariant("$.spec.network.overrides", "inline configuration forbids reusable-template overrides", "remove network.overrides, or select a reusable configuration with network.configRef instead of network.inline"))
 	}
-	if arm := substrate.MachineArm(o); network.Has("attachmentRef") && o.Spec().Has("substrate", arm, "interfaceAttachments") {
-		issues = appendIssues(issues, invariant("$.spec.substrate."+arm+".interfaceAttachments", "attachment selections are mutually exclusive", "keep either network.attachmentRef or substrate."+arm+".interfaceAttachments"))
-	}
 	issues = appendIssues(issues, validateDefaultMediaTrust(substrate.MachineBMC(o))...)
 	issues = appendIssues(issues, validateDefaultFirmware(o)...)
 	if o.Spec().Get("os", "provided").Bool() {
 		if o.Spec().Has("os", "install", "ntp") {
 			issues = appendIssues(issues, invariant("$.spec.os.install.ntp", "OS-ready Machines forbid installation NTP choices", "remove os.install.ntp"))
 		}
-		for _, key := range []string{"configRef", "inline", "attachmentRef", "interfaceBinding", "installAddressRef", "overrides"} {
+		for _, key := range []string{"configRef", "inline", "interfaceMatches", "installAddressRef", "overrides"} {
 			if network.Has(key) {
 				issues = appendIssues(issues, invariant("$.spec.network."+key, "OS-ready Machines declare contacts only", "remove network."+key+"; an OS-ready Machine declares contacts only"))
 			}

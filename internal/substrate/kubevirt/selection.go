@@ -47,10 +47,10 @@ func Refusals(catalog api.Catalog) []lifecycle.Refusal {
 					"a KubeVirt machine is created with the CPU count, memory and root disk its profile declares, and its profile "+name+" declares one as zero",
 					"set cpu, memoryMiB and diskGiB above zero on profile "+name+" of "+provider.Identity()))
 			}
-			for _, attachment := range unrealizedAttachments(catalog, provider, machine) {
+			for _, attachment := range unrealizedAttachments(provider, machine) {
 				found = append(found, lifecycle.RefusalOf(machine,
-					"a KubeVirt interface attaches to a Localnet ClusterUserDefinedNetwork or a bridge NetworkAttachmentDefinition, and attachment "+attachment+" names another kind",
-					"select a ClusterUserDefinedNetwork or NetworkAttachmentDefinition attachment for every interface of "+machine.Identity()))
+					"a KubeVirt NIC attaches to a Localnet ClusterUserDefinedNetwork or a bridge NetworkAttachmentDefinition, and attachment "+attachment+" names another kind",
+					"select a ClusterUserDefinedNetwork or NetworkAttachmentDefinition attachment for every NIC of "+machine.Identity()))
 			}
 		}
 	}
@@ -89,14 +89,10 @@ func sized(profile api.Value) bool {
 	return true
 }
 
-func unrealizedAttachments(catalog api.Catalog, provider, machine api.Object) []string {
-	names, err := substrate.EthernetInterfaces(catalog, machine)
-	if err != nil {
-		return nil
-	}
+func unrealizedAttachments(provider, machine api.Object) []string {
 	var refused []string
-	for _, name := range names {
-		reference := attachmentOf(machine, name)
+	for _, nic := range substrate.MachineNICs(machine) {
+		reference := substrate.NICAttachment(provider, machine, nic)
 		attachment, found := findNamed(provider.Spec().Get("networkAttachments"), "name", reference)
 		if !found {
 			continue
@@ -148,17 +144,17 @@ func HostRequests(catalog api.Catalog, controllerMachine, contextName string) ([
 				return nil, err
 			}
 			for _, iface := range target.Interfaces {
-				owner := machine.Identity() + " interface " + iface.Name
+				owner := machine.Identity() + " NIC " + iface.Name
 				if held, found := owners[iface.MACAddress]; found {
 					first, second := held, owner
 					if first > second {
 						first, second = second, first
 					}
-					remedy := "rename an interface of one of the two Machines, or rename that Machine"
-					if strings.HasPrefix(held, machine.Identity()+" interface ") {
-						remedy = "rename one of the two interfaces of " + machine.Identity()
+					remedy := "rename a NIC in spec.hardware.nics of one of the two Machines, or rename that Machine"
+					if strings.HasPrefix(held, machine.Identity()+" NIC ") {
+						remedy = "rename one of the two NICs in spec.hardware.nics of " + machine.Identity()
 					}
-					return nil, refusal("lifecycle.unsupported", "a KubeVirt interface's MAC address is derived from the context, Machine and interface names, and "+first+" and "+second+" derive the same address, "+iface.MACAddress,
+					return nil, refusal("lifecycle.unsupported", "a KubeVirt NIC's MAC address is derived from the context, Machine and NIC names, and "+first+" and "+second+" derive the same address, "+iface.MACAddress,
 						remedy)
 				}
 				owners[iface.MACAddress] = owner
@@ -237,16 +233,16 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, contro
 		request.TPM = &TPM{Persistent: substrate.PersistentTPM(profile)}
 	}
 	for _, iface := range target.Interfaces {
-		reference := attachmentOf(machine, iface.Name)
+		reference := substrate.NICAttachment(provider, machine, iface.Name)
 		attachment, found := findNamed(provider.Spec().Get("networkAttachments"), "name", reference)
 		if !found {
-			return MachineRequest{}, refusal("api.reference", "the Machine's attachment for "+iface.Name+" does not resolve on its provider",
-				"correct spec.network.attachmentRef or spec.substrate.kubevirt.interfaceAttachments on "+machine.Identity())
+			return MachineRequest{}, refusal("api.reference", "NIC "+iface.Name+" of the Machine selects no attachment of its provider",
+				"add a spec.substrate.kubevirt.nics entry for NIC "+iface.Name+" naming an attachment of "+provider.Identity()+" on "+machine.Identity())
 		}
 		network, ok := networkOf(provider, attachment)
 		if !ok {
-			return MachineRequest{}, refusal("lifecycle.unsupported", "a KubeVirt interface attaches to a Localnet ClusterUserDefinedNetwork or a bridge NetworkAttachmentDefinition, and attachment "+reference+" names another kind",
-				"select a ClusterUserDefinedNetwork or NetworkAttachmentDefinition attachment for every interface of "+machine.Identity())
+			return MachineRequest{}, refusal("lifecycle.unsupported", "a KubeVirt NIC attaches to a Localnet ClusterUserDefinedNetwork or a bridge NetworkAttachmentDefinition, and attachment "+reference+" names another kind",
+				"select a ClusterUserDefinedNetwork or NetworkAttachmentDefinition attachment for every NIC of "+machine.Identity())
 		}
 		multus := network.Name
 		if network.Namespace != request.Namespace {
@@ -277,16 +273,6 @@ func networkOf(provider api.Object, attachment api.Value) (Network, bool) {
 		return network, true
 	}
 	return Network{}, false
-}
-
-// attachmentOf names the attachment one interface selects: its own entry in
-// the per-interface map, or the Machine's one attachment.
-func attachmentOf(machine api.Object, iface string) string {
-	if attachments := substrate.MachineInterfaceAttachments(machine); attachments.Present() {
-		entry, _ := findNamed(attachments, "interface", iface)
-		return entry.Get("attachmentRef").Text()
-	}
-	return machine.Spec().Get("network", "attachmentRef").Text()
 }
 
 // placementFor runs every effect on the controller, which holds the lent

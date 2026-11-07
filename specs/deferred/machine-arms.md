@@ -94,19 +94,18 @@ derived by the provider and never authored
 ([machine realization](../substrates.md#machine-realization)). A vSphere MAC
 is authored in `spec.substrate.vsphere.nics[].macAddress`, in the manual
 assignment range `00:50:56:00:00:00` through `00:50:56:3f:ff:ff`, or else
-derived in that range from the context, Machine and interface names
+derived in that range from the context, Machine and NIC names
 ([vSphere machine realization](../substrates.md#vsphere-machine-realization)).
 A KubeVirt interface carries a pinned `macAddress`
 ([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization))
-that the provider derives from the context, Machine and interface names, as
-libvirt's does, and that is never authored: the KubeVirt arm has no MAC field,
-and a KubeVirt Machine's `network.interfaceBinding` refuses
+that the provider derives from the context, Machine and NIC names, as
+libvirt's does, and that is never authored: the KubeVirt arm has no MAC field
 ([B87](../milestones/m1.md#b87), D183, Q79).
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `spec.substrate.kubevirt.profileRef` | string | conditional | — | Provider-local `machineProfiles[].name`; required when the OS is not provided. |
-| `spec.substrate.kubevirt.interfaceAttachments` | array | conditional | — | Per-interface attachments, on libvirt as on KubeVirt, as [network configuration](../api/machines.md#network-configuration) states; each `attachmentRef` resolves to a KubeVirt arm of its provider. |
+| `spec.substrate.kubevirt.nics` | array | conditional | — | Per-NIC attachments, on libvirt as on KubeVirt, as the [substrate arm](../api/machines.md#substrate-arm) states; each `attachmentRef` resolves to a KubeVirt arm of its provider. |
 | `spec.substrate.vsphere.profileRef` | string | conditional | — | Provider-local `machineProfiles[].name`; required when the OS is not provided. The profile carries `template` and `failureDomainRef`. |
 | `spec.substrate.vsphere.nics` | array | no | — | `{nicRef, macAddress}` keyed by `nicRef`, each MAC in the manual assignment range above. |
 

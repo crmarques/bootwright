@@ -56,7 +56,12 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: rhel-01
+      nics:
+        - nicRef: enp1s0
+          attachmentRef: lab-guests
   hardware:
+    nics:
+      - name: enp1s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -70,7 +75,6 @@ spec:
     direct: {}
   network:
     configRef: lab-guests
-    attachmentRef: lab-guests
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -78,6 +82,9 @@ spec:
       - name: ip
         address: 198.51.100.11/24
         interface: enp1s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
   access:
     ssh:
       addressRef: ip
@@ -96,7 +103,12 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: rhel-02
+      nics:
+        - nicRef: enp1s0
+          attachmentRef: lab-guests
   hardware:
+    nics:
+      - name: enp1s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -110,7 +122,6 @@ spec:
     direct: {}
   network:
     configRef: lab-guests
-    attachmentRef: lab-guests
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -118,6 +129,9 @@ spec:
       - name: ip
         address: 198.51.100.12/24
         interface: enp1s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
   access:
     ssh:
       addressRef: ip
@@ -136,7 +150,12 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: rhel-03
+      nics:
+        - nicRef: enp1s0
+          attachmentRef: lab-guests
   hardware:
+    nics:
+      - name: enp1s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -150,7 +169,6 @@ spec:
     direct: {}
   network:
     configRef: lab-guests
-    attachmentRef: lab-guests
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -158,6 +176,9 @@ spec:
       - name: ip
         address: 198.51.100.13/24
         interface: enp1s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
   access:
     ssh:
       addressRef: ip
@@ -176,7 +197,12 @@ spec:
     providerRef: lab-libvirt
     libvirt:
       profileRef: rhel-04
+      nics:
+        - nicRef: enp1s0
+          attachmentRef: lab-guests
   hardware:
+    nics:
+      - name: enp1s0
     rootDevice:
       deviceName: /dev/vda
   os:
@@ -190,7 +216,6 @@ spec:
     direct: {}
   network:
     configRef: lab-guests
-    attachmentRef: lab-guests
     installAddressRef: ip
     addresses:
       - name: fqdn
@@ -198,6 +223,9 @@ spec:
       - name: ip
         address: 198.51.100.14/24
         interface: enp1s0
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
   access:
     ssh:
       addressRef: ip

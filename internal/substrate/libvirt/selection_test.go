@@ -322,14 +322,13 @@ func TestProvidedMachinesAreNeverRealized(t *testing.T) {
 
 func TestSelectionRefusesWhatItCannotDerive(t *testing.T) {
 	noProfile := guest("rhel-01", field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), field("libvirt", api.MapValue(text("profileRef", "absent"))))))
-	noAttachment := guest("rhel-01", field("network", guest("rhel-01").Spec().Get("network").With("attachmentRef", api.StringValue("absent"))))
+	noAttachment := guest("rhel-01", field("substrate", guest("rhel-01").Spec().Get("substrate").WithPath(api.ListValue(api.MapValue(text("nicRef", "enp1s0"), text("attachmentRef", "absent"))), "libvirt", "nics")))
 	for name, test := range map[string]struct {
 		catalog api.Catalog
 		code    string
 	}{
 		"missing profile":    {catalogOf(controller(), provider(), networkConfig(), noProfile), "api.reference"},
 		"missing attachment": {catalogOf(controller(), provider(), networkConfig(), noAttachment), "api.reference"},
-		"missing network":    {catalogOf(controller(), provider(), guest("rhel-01")), "api.reference"},
 		"missing host":       {catalogOf(provider(), networkConfig(), guest("rhel-01")), "api.reference"},
 	} {
 		t.Run(name, func(t *testing.T) {

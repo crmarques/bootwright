@@ -1,6 +1,8 @@
 package installation
 
 import (
+	"slices"
+
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
@@ -156,12 +158,12 @@ func installProfile(fields ...api.FieldValue) api.Object {
 func guest(fields ...api.FieldValue) api.Object {
 	spec := api.MapValue(
 		field("substrate", api.MapValue(text("providerRef", "lab-libvirt"), field("libvirt", api.MapValue(text("profileRef", "rhel"))))),
-		field("hardware", api.MapValue(field("rootDevice", api.MapValue(text("deviceName", "/dev/vda"))))),
+		field("hardware", api.MapValue(field("nics", api.ListValue(api.MapValue(text("name", "enp1s0")))), field("rootDevice", api.MapValue(text("deviceName", "/dev/vda"))))),
 		field("os", api.MapValue(
 			field("provided", api.BoolValue(false)), text("installProfileRef", "rhel-9-8"),
 		)),
 		field("network", api.MapValue(
-			text("configRef", "lab-guests"), text("attachmentRef", "lab-guests"), text("installAddressRef", "ip"),
+			text("configRef", "lab-guests"), text("installAddressRef", "ip"),
 			field("addresses", api.ListValue(
 				api.MapValue(text("name", "fqdn"), text("address", "rhel-01.lab.example.test")),
 				api.MapValue(text("name", "ip"), text("address", "198.51.100.11/24"), text("interface", "enp1s0")),
@@ -251,5 +253,32 @@ func labCatalog(overrides ...api.Object) api.Catalog {
 			objects = append(objects, override)
 		}
 	}
-	return api.NewCatalog(objects)
+	return api.NewCatalog(withGuestNICs(objects))
+}
+
+// withGuestNICs gives each libvirt guest one vNIC per ethernet interface its
+// network configuration declares, in order, as every example declares them.
+func withGuestNICs(objects []api.Object) []api.Object {
+	ethernet := map[string][]api.Value{}
+	for _, object := range objects {
+		if object.Kind() == api.NetworkConfig {
+			for _, iface := range object.Spec().Get("nmstate", "interfaces").Items() {
+				if iface.Get("type").Text() == "ethernet" {
+					ethernet[object.Name()] = append(ethernet[object.Name()], api.MapValue(text("name", iface.Get("name").Text())))
+				}
+			}
+		}
+	}
+	for index, object := range objects {
+		names := slices.Clone(ethernet[object.Spec().Get("network", "configRef").Text()])
+		for _, iface := range object.Spec().Get("network", "overrides", "interfaces").Items() {
+			if named := api.MapValue(text("name", iface.Get("name").Text())); iface.Get("type").Text() == "ethernet" && !slices.ContainsFunc(names, named.Equal) {
+				names = append(names, named)
+			}
+		}
+		if object.Kind() == api.Machine && object.Spec().Has("substrate", "libvirt") && len(names) > 0 {
+			objects[index] = object.WithSpec(object.Spec().WithPath(api.ListValue(names...), "hardware", "nics"))
+		}
+	}
+	return objects
 }

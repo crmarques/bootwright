@@ -53,9 +53,9 @@ func fixture(variant string, count int, ipv6 bool) (api.Object, api.Catalog) {
 		}
 		arm := m("providerRef", "provider")
 		if variant == "baremetal" {
-			arm = arm.With("baremetal", m("nics", list(m("nicRef", "eth0", "macAddress", fmt.Sprintf("02:00:00:00:00:%02x", i+1)))))
+			arm = arm.With("baremetal", m("nics", list(m("nicRef", "eth0", "macAddress", fmt.Sprintf("02:00:00:00:00:%02x", i+1)), m("nicRef", "eth1", "macAddress", fmt.Sprintf("02:00:00:00:01:%02x", i+1)), m("nicRef", "eth2", "macAddress", fmt.Sprintf("02:00:00:00:02:%02x", i+1)), m("nicRef", "eth3", "macAddress", fmt.Sprintf("02:00:00:00:03:%02x", i+1)))))
 		}
-		machine := obj(api.Machine, name, m("os", m("provided", false), "substrate", arm, "hardware", m("nics", list(m("name", "eth0"))), "network", m("inline", m("machineNetwork", list(m("cidr", cidr)), "nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")))), "addresses", list(m("name", "primary", "address", address, "interface", "eth0")))))
+		machine := obj(api.Machine, name, m("os", m("provided", false), "substrate", arm, "hardware", m("nics", list(m("name", "eth0"), m("name", "eth1"), m("name", "eth2"), m("name", "eth3"))), "network", m("inline", m("machineNetwork", list(m("cidr", cidr)), "nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")))), "addresses", list(m("name", "primary", "address", address, "interface", "eth0")))))
 		objects = append(objects, machine)
 		role := "worker"
 		if i < 3 {

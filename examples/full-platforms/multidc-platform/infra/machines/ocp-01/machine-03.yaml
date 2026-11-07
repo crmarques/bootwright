@@ -41,7 +41,6 @@ spec:
 
   network:
     configRef: ocp-bare-metal-network
-    attachmentRef: ocp-bare-metal-network
     installAddressRef: ip
 
     addresses:

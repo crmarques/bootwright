@@ -33,7 +33,6 @@ func validateKubeVirtAttachmentMTUs(o, provider, host api.Object, native api.Val
 }
 
 func validateAttachmentMTUs(o, provider api.Object, native api.Value, bound func(attachment api.Value) mtuBound) []api.Issue {
-	network := o.Spec().Get("network")
 	var limit func(string, map[string]bool) mtuBound
 	limit = func(name string, visiting map[string]bool) mtuBound {
 		if visiting[name] {
@@ -54,11 +53,7 @@ func validateAttachmentMTUs(o, provider api.Object, native api.Value, bound func
 			}
 			return narrowest
 		}
-		reference := network.Get("attachmentRef").Text()
-		if attachments := substrate.MachineInterfaceAttachments(o); attachments.Present() {
-			entry, _ := namedValueBy(attachments, "interface", name)
-			reference = entry.Get("attachmentRef").Text()
-		}
+		reference := substrate.NICAttachment(provider, o, substrate.InterfaceNIC(o, name))
 		attachment, found := namedValue(provider.Spec().Get("networkAttachments"), reference)
 		if reference != "" && !found {
 			return mtuBound{65536, "", ""}
