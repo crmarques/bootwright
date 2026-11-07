@@ -42,9 +42,9 @@ func validateCarriage(o api.Object, c api.Catalog, segment api.Value, variant st
 	name := segment.Get("name").Text()
 	untagged := SegmentUntagged(segment)
 	fabric := variant == ArmKubeVirt || variant == ArmVSphere
-	if fabric && untagged == "" && network.Declared(c) {
+	if fabric && untagged == "" {
 		issues = add(issues, api.Issue{Code: "api.required", Field: path + ".untaggedNetworkRef",
-			Message:     "a " + variant + " segment delivers exactly one network to each NIC on it, and segment " + name + " of " + o.Identity() + " names none while the graph declares Networks",
+			Message:     "a " + variant + " segment delivers exactly one network to each NIC on it, and segment " + name + " of " + o.Identity() + " names none",
 			Remediation: "set " + entry + ".untaggedNetworkRef on " + o.Identity() + " to the Network its " + variant + " network carries"})
 	}
 	for i, tagged := range SegmentTagged(segment) {

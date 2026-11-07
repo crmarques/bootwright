@@ -29,5 +29,5 @@ spec:
         address: features-03.{{ .Values.host.domain }}
 
       - name: ip
-        address: {{ index $net.masters 2 }}/{{ $net.prefix }}
+        address: {{ index $net.masters 2 }}
         interface: enp1s0

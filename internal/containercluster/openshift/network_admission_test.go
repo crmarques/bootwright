@@ -151,7 +151,7 @@ func uplinkLab(interfaces []api.Value, addresses []api.Value, routes ...api.Valu
 		}
 		objects = append(objects, o)
 	}
-	return cluster, api.NewCatalog(objects)
+	return cluster, api.NewCatalog(append(objects, obj(api.Network, "tenant-lan", m("provided", true, "ipv4", m("cidr", "198.51.100.0/24")))))
 }
 
 func installRoute(iface string) api.Value {
@@ -161,14 +161,14 @@ func installRoute(iface string) api.Value {
 func TestAddressedAndCarriedUplinkAdmission(t *testing.T) {
 	const networks = "$.spec.networking.secondaryNetworks["
 	plain := func() ([]api.Value, []api.Value, []api.Value) {
-		return []api.Value{eth("eth0"), eth("eth1"), vlanOn("eth1.10", "eth1")}, []api.Value{assign("primary", "192.0.2.10/24", "eth0")}, []api.Value{installRoute("eth0")}
+		return []api.Value{eth("eth0"), eth("eth1"), vlanOn("eth1.10", "eth1")}, []api.Value{assign("primary", "192.0.2.10", "eth0")}, []api.Value{installRoute("eth0")}
 	}
 	addressed := func() ([]api.Value, []api.Value, []api.Value) {
 		interfaces, addresses, routes := plain()
-		return interfaces, append(addresses, assign("tenant", "198.51.100.10/24", "eth1.10")), routes
+		return interfaces, append(addresses, assign("tenant", "198.51.100.10", "eth1.10")), routes
 	}
 	installVLAN := func() ([]api.Value, []api.Value, []api.Value) {
-		return []api.Value{eth("eth0"), vlanOn("eth0.100", "eth0"), eth("eth1")}, []api.Value{assign("primary", "192.0.2.10/24", "eth0.100")}, []api.Value{installRoute("eth0.100")}
+		return []api.Value{eth("eth0"), vlanOn("eth0.100", "eth0"), eth("eth1")}, []api.Value{assign("primary", "192.0.2.10", "eth0.100")}, []api.Value{installRoute("eth0.100")}
 	}
 	for _, test := range []struct {
 		name     string
@@ -201,13 +201,13 @@ func TestAddressedAndCarriedUplinkAdmission(t *testing.T) {
 		{"uplink is the base of the install vlan", installVLAN, []api.Value{addressedNetwork("tenant", "br-tenant", "eth0", "", "")}, networks + "0].uplink.interface", "uplink eth0 of network tenant carries interface eth0.100 on node node-0", "addressless VLAN interface of eth0"},
 		{"uplink is the base of another vlan", plain, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1", "", "")}, networks + "0].uplink.interface", "uplink eth1 of network tenant carries interface eth1.10 on node node-0", "addressless VLAN interface of eth1"},
 		{"uplink is a bond port", func() ([]api.Value, []api.Value, []api.Value) {
-			return []api.Value{eth("eth0"), eth("eth1"), m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList("eth1")))}, []api.Value{assign("primary", "192.0.2.10/24", "eth0")}, []api.Value{installRoute("eth0")}
+			return []api.Value{eth("eth0"), eth("eth1"), m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList("eth1")))}, []api.Value{assign("primary", "192.0.2.10", "eth0")}, []api.Value{installRoute("eth0")}
 		}, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1", "", "")}, networks + "0].uplink.interface", "uplink eth1 of network tenant carries interface bond0 on node node-0", "addressless VLAN interface"},
 		{"uplink names its bond controller", func() ([]api.Value, []api.Value, []api.Value) {
-			return []api.Value{eth("eth0"), eth("eth1").With("controller", api.StringValue("bond0")), m("name", "bond0", "type", "bond")}, []api.Value{assign("primary", "192.0.2.10/24", "eth0")}, []api.Value{installRoute("eth0")}
+			return []api.Value{eth("eth0"), eth("eth1").With("controller", api.StringValue("bond0")), m("name", "bond0", "type", "bond")}, []api.Value{assign("primary", "192.0.2.10", "eth0")}, []api.Value{installRoute("eth0")}
 		}, []api.Value{addressedNetwork("tenant", "br-tenant", "eth1", "", "")}, networks + "0].uplink.interface", "carries interface bond0", "addressless VLAN interface"},
 		{"bond uplink over its own vlan-free ports", func() ([]api.Value, []api.Value, []api.Value) {
-			return []api.Value{eth("eth0"), m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList("eth1", "eth2"))), eth("eth1"), eth("eth2")}, []api.Value{assign("primary", "192.0.2.10/24", "eth0")}, []api.Value{installRoute("eth0")}
+			return []api.Value{eth("eth0"), m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList("eth1", "eth2"))), eth("eth1"), eth("eth2")}, []api.Value{assign("primary", "192.0.2.10", "eth0")}, []api.Value{installRoute("eth0")}
 		}, []api.Value{addressedNetwork("tenant", "br-tenant", "bond0", "", "")}, "", "", ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -232,7 +232,7 @@ func TestAddressedAndCarriedUplinkAdmission(t *testing.T) {
 }
 
 func TestUnroutedInstallInterfaceStillConstrainsSecondaryNetworks(t *testing.T) {
-	cluster, catalog := uplinkLab([]api.Value{eth("eth0"), vlanOn("eth0.100", "eth0")}, []api.Value{assign("primary", "192.0.2.10/24", "eth0.100")})
+	cluster, catalog := uplinkLab([]api.Value{eth("eth0"), vlanOn("eth0.100", "eth0")}, []api.Value{assign("primary", "192.0.2.10", "eth0.100")})
 	for _, test := range []struct {
 		network api.Value
 		field   string
@@ -263,7 +263,7 @@ func bondOf(name string, mtu int64, ports ...string) api.Value {
 func TestClusterMTUBoundsReadTheEffectiveMTUThroughVLANAndBondParents(t *testing.T) {
 	jumbo := func() ([]api.Value, []api.Value, []api.Value) {
 		return []api.Value{eth("eth0"), eth("eth1"), eth("eth2"), bondOf("bond0", 9000, "eth0", "eth1"), vlanOn("bond0.100", "bond0"), vlanOn("eth2.10", "eth2"), eth("eth3"), bondOf("bond1", 9000, "eth3"), vlanOn("bond1.20", "bond1")},
-			[]api.Value{assign("primary", "192.0.2.10/24", "bond0.100")}, []api.Value{installRoute("bond0.100")}
+			[]api.Value{assign("primary", "192.0.2.10", "bond0.100")}, []api.Value{installRoute("bond0.100")}
 	}
 	for _, test := range []struct {
 		name    string

@@ -1,7 +1,6 @@
 package environment
 
 import (
-	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
@@ -143,22 +142,6 @@ func validateRescueArtifactEndpoint(selection api.Value, catalog api.Catalog) []
 		return issue("rescue artifact server requires an OS-ready Machine", "set spec.machineRef on "+component.Identity()+" to a Machine with os.provided: true")
 	}
 	return issues
-}
-
-func MachineNetworks(machine api.Object, catalog api.Catalog) []netip.Prefix {
-	config := machine.Spec().Get("network", "inline")
-	if ref := machine.Spec().Get("network", "configRef").Text(); ref != "" {
-		if network, ok := catalog.Find(api.NetworkConfig, ref); ok {
-			config = network.Spec()
-		}
-	}
-	result := []netip.Prefix{}
-	for _, entry := range config.Get("machineNetwork").Items() {
-		if prefix, err := netip.ParsePrefix(entry.Get("cidr").Text()); err == nil {
-			result = append(result, prefix.Masked())
-		}
-	}
-	return result
 }
 
 func CanonicalCatalog(objects []api.Object) api.Catalog {

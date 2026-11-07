@@ -13,18 +13,18 @@ import (
 // site and a provided tiebreaker at a third site on its own routed subnet.
 func stretchCatalog(t *testing.T, change func(api.Value) api.Value) (api.Object, api.Catalog) {
 	t.Helper()
-	catalog := replace(fixtureCatalog(), object(api.Environment, "environment", m("domains", m("base", "example.test"), "remoteMachinesAccessKey", m("keyRef", "fleet-key"),
+	catalog := replace(replace(fixtureCatalog(), lanNetwork("tiebreaker", "198.51.100.0/24")), object(api.Environment, "environment", m("domains", m("base", "example.test"), "remoteMachinesAccessKey", m("keyRef", "fleet-key"),
 		"sites", []api.Value{m("name", "site-a"), m("name", "site-b"), m("name", "site-c")})))
 	nodes := []api.Value{}
 	for i, name := range []string{"a1", "a2", "a3", "b1", "b2", "b3", "tie"} {
-		site, address := "site-"+name[:1], fmt.Sprintf("192.0.2.%d/24", 10+i)
+		site, address := "site-"+name[:1], fmt.Sprintf("192.0.2.%d", 10+i)
 		labels := api.StringList("storage")
 		if name == "tie" {
-			site, address, labels = "site-c", "198.51.100.10/24", api.StringList()
+			site, address, labels = "site-c", "198.51.100.10", api.StringList()
 		}
 		nodes = append(nodes, m("name", name, "machineRef", "machine-"+name, "labels", labels))
 		catalog = replace(catalog, object(api.Machine, "machine-"+name, m("placement", m("site", site), "hardware", m("rootDevice", m("deviceName", "/dev/vda")), "os", m("provided", true),
-			"network", m("addresses", []api.Value{m("name", "ssh", "address", address)}), "access", m("ssh", m("addressRef", "ssh")))))
+			"network", m("addresses", []api.Value{assignedAddress("ssh", address)}), "access", m("ssh", m("addressRef", "ssh")))))
 	}
 	services := api.ListValue(m("service_type", "mon", "placement", m("hosts", fqdns("a1", "a2", "b1", "b2", "tie"))), m("service_type", "mgr", "placement", m("hosts", fqdns("a1", "b1"))),
 		m("service_type", "osd", "service_id", "data", "placement", m("label", "storage"), "spec", m("data_devices", m("paths", api.StringList("/dev/vdb")))))

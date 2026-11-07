@@ -566,10 +566,10 @@ func TestSelectionRefusesWhatItCannotDerive(t *testing.T) {
 	noAddress := guest(field("network", guest().Spec().Get("network").With("installAddressRef", api.StringValue("absent"))))
 	noInterface := guest(field("network", guest().Spec().Get("network").With("addresses", api.ListValue(
 		api.MapValue(text("name", "fqdn"), text("address", "rhel-01.lab.example.test")),
-		api.MapValue(text("name", "ip"), text("address", "198.51.100.11/24")),
+		api.MapValue(text("name", "ip"), text("address", "198.51.100.11")),
 	))))
 	noFQDN := guest(field("network", guest().Spec().Get("network").With("addresses", api.ListValue(
-		api.MapValue(text("name", "ip"), text("address", "198.51.100.11/24"), text("interface", "enp1s0")),
+		api.MapValue(text("name", "ip"), text("address", "198.51.100.11"), text("interface", "enp1s0")),
 	))))
 	for name, test := range map[string]struct {
 		catalog api.Catalog

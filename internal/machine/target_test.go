@@ -13,10 +13,10 @@ import (
 func TestDeclaredIPsAreEveryIPInDeclaredOrderWithoutRepetition(t *testing.T) {
 	node := object(api.Machine, "node", m("network", m("addresses", list(
 		m("name", "fqdn", "address", "node.lab.example.test"),
-		m("name", "ssh", "address", "198.51.100.20/24"),
+		m("name", "ssh", "address", "198.51.100.20"),
 		m("name", "storage", "address", "192.0.2.20"),
-		m("name", "mirror", "address", "198.51.100.20/24"),
-		m("name", "six", "address", "2001:db8::20/64")))))
+		m("name", "mirror", "address", "198.51.100.20"),
+		m("name", "six", "address", "2001:db8::20")))))
 	want := []string{"198.51.100.20", "192.0.2.20", "2001:db8::20"}
 	if found := IPAddresses(node); !slices.Equal(found, want) {
 		t.Fatalf("declared IPs = %v, want %v", found, want)

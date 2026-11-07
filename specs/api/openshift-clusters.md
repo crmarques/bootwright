@@ -222,7 +222,7 @@ LoadBalancer and optional
 `node` is valid only for a one-node cluster and also forbids an authored
 address. Normalization resolves that node Machine's
 `network.installAddressRef` using the [Machine selection rules](machines.md#network-configuration)
-and materializes the selected IP without its prefix. Missing or ambiguous
+and materializes the selected IP. Missing or ambiguous
 candidates are errors. Single-node clusters reject the
 default `installer` source for all three slots; `source.type: node` is
 recommended, so one machine address is not repeated in three places;
@@ -380,7 +380,10 @@ declares `gatewayConfig.routingViaHost: true` and `gatewayConfig.ipForwarding:
 Global`: forwarding on that interface is the cluster's install-time
 declaration, never an add-on's change.
 
-The two lists default independently. An authored non-empty list retains its
+A cluster's machine networks are the CIDRs of the
+[Networks](networks.md) holding its nodes' install addresses, in node order and
+deduplicated; `install-config` `networking.machineNetwork` carries them. The
+two lists default independently. An authored non-empty list retains its
 membership and order while effective output canonicalizes CIDR text:
 
 | Consumed machine networks | `clusterNetwork` default | `serviceNetwork` default |
@@ -395,7 +398,7 @@ interface assignment a node's Machine declares or a secondary network's
 `ipam.subnets` entry, because traffic to that subnet would stay inside the
 cluster; each refusal is an `api.invariant` at the overlay entry, naming the
 subnet and its holder.
-The consumed `NetworkConfig.spec.machineNetwork` values, cluster networks, service
+The consumed machine networks, cluster networks, service
 networks, node install addresses, and endpoint addresses form one supported
 address family; dual-stack or mixed-family input is rejected by this contract.
 

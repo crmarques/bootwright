@@ -44,5 +44,5 @@ spec:
 
     addresses:
       - name: ip
-        address: 198.51.100.11/24
+        address: 198.51.100.11
         interface: eno1

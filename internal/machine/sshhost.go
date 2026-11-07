@@ -57,7 +57,7 @@ func HostKeyQualifier(key trust.HostKey) (string, bool) {
 func DeclaredAddresses(controller api.Object) []string {
 	var addresses []string
 	for _, declared := range controller.Spec().Get("network", "addresses").Items() {
-		if value, _, _ := strings.Cut(declared.Get("address").Text(), "/"); value != "" {
+		if value := declared.Get("address").Text(); value != "" {
 			addresses = append(addresses, value)
 		}
 	}

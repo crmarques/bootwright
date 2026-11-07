@@ -14,7 +14,7 @@ import (
 func TestEndpointURLsBracketIPv6(t *testing.T) {
 	addresses := controller().Spec().Get("network", "addresses").Items()
 	host := api.NewObject(api.Machine, "controller", api.Value{}, controller().Spec().With("network", api.MapValue(field("addresses", api.ListValue(append(addresses,
-		api.MapValue(text("name", "v6"), text("address", "fd00::10/64")),
+		api.MapValue(text("name", "v6"), text("address", "fd00::10")),
 		api.MapValue(text("name", "alias"), text("address", "artifacts.example.test")),
 	)...)))))
 	server := artifactServer(text("bindAddress", "::"), field("endpoints", api.ListValue(

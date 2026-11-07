@@ -12,7 +12,7 @@ import (
 func crowdedHost(n int) api.Object {
 	addresses := make([]api.Value, n)
 	for i := range addresses {
-		addresses[i] = m("name", fmt.Sprintf("a%02d", i), "address", fmt.Sprintf("198.51.100.%d/24", i+1))
+		addresses[i] = m("name", fmt.Sprintf("a%02d", i), "address", fmt.Sprintf("198.51.100.%d", i+1))
 	}
 	return obj(api.Machine, "host", m("network", m("addresses", list(addresses...))))
 }

@@ -25,7 +25,7 @@ func encryptedCatalog(roles []string, tpm bool) api.Catalog {
 			}
 		}
 	}
-	return api.NewCatalog(append(objects, guest("worker-01", "198.51.100.31/24")))
+	return api.NewCatalog(append(objects, guest("worker-01", "198.51.100.31")))
 }
 
 func TestDiskEncryptionGolden(t *testing.T) {

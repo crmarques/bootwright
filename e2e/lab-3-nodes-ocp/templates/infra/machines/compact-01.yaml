@@ -28,5 +28,5 @@ spec:
         address: compact-01.{{ .Values.host.domain }}
 
       - name: ip
-        address: {{ index .Values.guest.addresses 0 }}/{{ .Values.host.prefix }}
+        address: {{ index .Values.guest.addresses 0 }}
         interface: enp1s0

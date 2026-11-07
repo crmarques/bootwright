@@ -1,7 +1,6 @@
 package installation
 
 import (
-	"net/netip"
 	"regexp"
 	"slices"
 	"strconv"
@@ -724,13 +723,4 @@ func findNamed(values api.Value, key, name string) (api.Value, bool) {
 
 func refusal(code, message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
-}
-
-// netmaskPrefix reads the prefix length an address assignment carries.
-func netmaskPrefix(value string) (string, int, bool) {
-	prefix, err := netip.ParsePrefix(value)
-	if err != nil {
-		return "", 0, false
-	}
-	return prefix.Addr().String(), prefix.Bits(), true
 }

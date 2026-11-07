@@ -43,19 +43,20 @@ func fixture(variant string, count int, ipv6 bool) (api.Object, api.Catalog) {
 	if ipv6 {
 		cidr, ip = "2001:db8::/64", "2001:db8::"
 	}
-	objects := []api.Object{obj(api.Environment, "env", m("domains", m("base", "example.test", "containerClusters", "clusters.example.test"))), obj(api.InfraProvider, "provider", m(variant, m()))}
+	family := "ipv4"
+	if ipv6 {
+		family = "ipv6"
+	}
+	objects := []api.Object{obj(api.Environment, "env", m("domains", m("base", "example.test", "containerClusters", "clusters.example.test"))), obj(api.InfraProvider, "provider", m(variant, m())), obj(api.Network, "lan", m("provided", true, family, m("cidr", cidr)))}
 	nodes := []api.Value{}
 	for i := range count {
 		name := fmt.Sprintf("node-%d", i)
-		address := fmt.Sprintf("%s%d/24", ip, i+10)
-		if ipv6 {
-			address = fmt.Sprintf("%s%d/64", ip, i+10)
-		}
+		address := fmt.Sprintf("%s%d", ip, i+10)
 		arm := m("providerRef", "provider")
 		if variant == "baremetal" {
 			arm = arm.With("baremetal", m("nics", list(m("nicRef", "eth0", "macAddress", fmt.Sprintf("02:00:00:00:00:%02x", i+1)), m("nicRef", "eth1", "macAddress", fmt.Sprintf("02:00:00:00:01:%02x", i+1)), m("nicRef", "eth2", "macAddress", fmt.Sprintf("02:00:00:00:02:%02x", i+1)), m("nicRef", "eth3", "macAddress", fmt.Sprintf("02:00:00:00:03:%02x", i+1)))))
 		}
-		machine := obj(api.Machine, name, m("os", m("provided", false), "substrate", arm, "hardware", m("nics", list(m("name", "eth0"), m("name", "eth1"), m("name", "eth2"), m("name", "eth3"))), "network", m("inline", m("machineNetwork", list(m("cidr", cidr)), "nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")))), "addresses", list(m("name", "primary", "address", address, "interface", "eth0")))))
+		machine := obj(api.Machine, name, m("os", m("provided", false), "substrate", arm, "hardware", m("nics", list(m("name", "eth0"), m("name", "eth1"), m("name", "eth2"), m("name", "eth3"))), "network", m("inline", m("nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")))), "addresses", list(m("name", "primary", "address", address, "interface", "eth0")))))
 		objects = append(objects, machine)
 		role := "worker"
 		if i < 3 {

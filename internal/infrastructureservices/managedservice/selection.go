@@ -163,28 +163,23 @@ func Refusal(code, message, remediation string) error {
 	return diagnostics.NewFailureWithRemediation(code, message, "", remediation)
 }
 
-// hostAddress keeps only an IP literal, dropping any prefix a Machine declared
-// with it. A DNS contact is not an address a service can bind or answer with.
+// hostAddress keeps only an IP literal. A DNS contact is not an address a
+// service can bind or answer with.
 func hostAddress(value string) string {
-	host, _, _ := strings.Cut(value, "/")
-	if _, err := netip.ParseAddr(host); err != nil {
+	if _, err := netip.ParseAddr(value); err != nil {
 		return ""
 	}
-	return host
+	return value
 }
 
 // hostPrefix renders one declared address as the single-host prefix an access
-// list needs, whatever prefix length the Machine declared it with.
+// list needs.
 func hostPrefix(value string) string {
-	host := hostAddress(value)
-	if host == "" {
-		return ""
-	}
-	address, err := netip.ParseAddr(host)
+	address, err := netip.ParseAddr(value)
 	if err != nil {
 		return ""
 	}
-	return host + "/" + strconv.Itoa(address.BitLen())
+	return value + "/" + strconv.Itoa(address.BitLen())
 }
 
 // ServiceEndpoint resolves one name or time service selection to the address a

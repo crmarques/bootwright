@@ -43,7 +43,7 @@ func TestAnSSHHostIsItsAddressAndPort(t *testing.T) {
 func TestAnSSHEndpointIsTheControllerOnlyAtItsOwnAddresses(t *testing.T) {
 	controller := object(api.Machine, "controller", m("network", m("addresses", list(
 		m("name", "fqdn", "address", "controller.lab.example.test"),
-		m("name", "lab", "address", "192.0.2.1/24"),
+		m("name", "lab", "address", "192.0.2.1"),
 		m("name", "six", "address", "fd00::1")))))
 	for name, tc := range map[string]struct {
 		address    string

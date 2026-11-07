@@ -37,11 +37,11 @@ spec:
         address: hub-multidc-01-worker-01.example.com
 
       - name: ip
-        address: 192.0.2.16/24
+        address: 192.0.2.16
         interface: primary
 
       - name: ceph-public
-        address: 198.51.100.34/25
+        address: 198.51.100.34
         interface: ceph-public
 
     overrides: {}

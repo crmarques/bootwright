@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/machine"
 )
 
 var nativeID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
@@ -199,13 +200,13 @@ func (a *admission) nativeHostNetwork(node api.Value, network, field string) {
 	if len(a.catalog.Objects()) == 0 {
 		return
 	}
-	machine, ok := a.catalog.Find(api.Machine, textOf(node, "machineRef"))
+	bound, ok := a.catalog.Find(api.Machine, textOf(node, "machineRef"))
 	if !ok {
 		return
 	}
-	for _, address := range machine.Spec().Get("network", "addresses").Items() {
-		declared, err := netip.ParsePrefix(textOf(address, "address"))
-		if err == nil && ((ipErr == nil && declared.Addr() == ip) || (prefixErr == nil && prefix.Masked() == declared.Masked())) {
+	for _, address := range bound.Spec().Get("network", "addresses").Items() {
+		declared, assigned := machine.AssignedPrefix(bound, a.catalog, address)
+		if assigned && ((ipErr == nil && declared.Addr() == ip) || (prefixErr == nil && prefix.Masked() == declared.Masked())) {
 			return
 		}
 	}

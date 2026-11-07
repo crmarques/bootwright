@@ -11,21 +11,23 @@ import (
 // withIPv6Hosts gives each fixture Machine a second address on 2001:db8::/64,
 // so a dual-stack public network has its hosts on both families.
 func withIPv6Hosts(catalog api.Catalog) api.Catalog {
+	catalog = replace(catalog, lanNetwork("public-v6", "2001:db8::/64"))
 	for i := 1; i <= 3; i++ {
-		catalog = withMachineAddress(catalog, fmt.Sprintf("machine-%d", i), fmt.Sprintf("2001:db8::%d/64", i))
+		catalog = withMachineAddress(catalog, fmt.Sprintf("machine-%d", i), fmt.Sprintf("2001:db8::%d", i))
 	}
 	return catalog
 }
 
 func withMachineAddress(catalog api.Catalog, name, address string) api.Catalog {
 	machine, _ := catalog.Find(api.Machine, name)
-	addresses := append(machine.Spec().Get("network", "addresses").Items(), m("name", "extra", "address", address))
+	addresses := append(machine.Spec().Get("network", "addresses").Items(), assignedAddress("extra", address))
 	return replace(catalog, machine.WithSpec(machine.Spec().WithPath(api.ListValue(addresses...), "network", "addresses")))
 }
 
 func withReplicationHosts(catalog api.Catalog, names ...string) api.Catalog {
+	catalog = replace(catalog, lanNetwork("replication", "203.0.113.0/24"))
 	for i, name := range names {
-		catalog = withMachineAddress(catalog, "machine-"+name, fmt.Sprintf("203.0.113.%d/24", 10+i))
+		catalog = withMachineAddress(catalog, "machine-"+name, fmt.Sprintf("203.0.113.%d", 10+i))
 	}
 	return catalog
 }
@@ -45,6 +47,7 @@ func TestEveryCephCIDRContainsATopologyMachineAddress(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			cluster, catalog := stretchCatalog(t, test.change)
+			catalog = replace(catalog, lanNetwork("unused", "203.0.113.0/24"))
 			issues := Validate(cluster, catalog)
 			if test.field == "" {
 				if len(issues) != 0 {
@@ -79,7 +82,9 @@ func TestReplicationCoverageIsAdmittedAndExemptsTheTiebreaker(t *testing.T) {
 func TestEveryIngressHostIsOnTheVirtualIPSubnet(t *testing.T) {
 	catalog := bindingCatalog()
 	moved, _ := catalog.Find(api.Machine, "machine-2")
-	catalog = replace(catalog, moved.WithSpec(moved.Spec().WithPath(api.ListValue(m("name", "ssh", "address", "192.0.2.2/25")), "network", "addresses")))
+	catalog = replace(catalog, lanNetwork("public", "192.0.2.0/24", "site-a"))
+	catalog = replace(catalog, lanNetwork("narrow", "192.0.2.0/25", "site-b"))
+	catalog = replace(catalog, moved.WithSpec(moved.Spec().WithPath(api.StringValue("site-b"), "placement", "site")))
 	services := graphServices()
 	services[1] = services[1].WithPath(api.StringValue("192.0.2.200/24"), "spec", "virtual_ip")
 	cluster, changed := withGraph(t, catalog, services)
@@ -99,9 +104,14 @@ func TestEveryCephCIDRIsADeclaredNetwork(t *testing.T) {
 		t.Fatalf("the fixture declares public CIDRs %v", cidrs)
 	}
 	declare := func(cidrs ...string) api.Catalog {
-		objects := catalog.Objects()
+		objects := []api.Object{}
+		for _, object := range catalog.Objects() {
+			if object.Kind() != api.Network {
+				objects = append(objects, object)
+			}
+		}
 		for i, cidr := range cidrs {
-			objects = append(objects, api.NewObject(api.Network, fmt.Sprintf("public-%d", i), api.MapValue(), m("provided", true, "ipv4", m("cidr", cidr))))
+			objects = append(objects, lanNetwork(fmt.Sprintf("public-%d", i), cidr))
 		}
 		return api.NewCatalog(objects)
 	}

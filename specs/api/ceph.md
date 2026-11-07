@@ -448,8 +448,8 @@ checks:
 - every `networks.publicCIDRs` and `networks.clusterCIDRs` entry contains an
   IP literal, contact or assignment, that a Machine the topology names
   declares in `network.addresses`, refused at the entry; a DNS contact does not
-  count, nor does a NetworkConfig `machineNetwork`, which a provided host,
-  such as a stretch tiebreaker, may lack;
+  count, while an IP contact of a provided host, such as a stretch
+  tiebreaker, does;
 - with `networks.clusterCIDRs` declared, every topology node's Machine other
   than the stretch tiebreaker, which holds no OSD and never uses the
   cluster network, declares an IP address inside one of them, a Machine whose

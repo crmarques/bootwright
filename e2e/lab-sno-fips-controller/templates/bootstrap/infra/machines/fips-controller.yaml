@@ -31,5 +31,5 @@ spec:
         address: {{ .Values.controller.name }}.{{ .Values.host.domain }}
 
       - name: ip
-        address: {{ .Values.controller.address }}/{{ .Values.host.prefix }}
+        address: {{ .Values.controller.address }}
         interface: enp1s0

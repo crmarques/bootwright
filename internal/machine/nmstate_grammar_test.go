@@ -22,7 +22,7 @@ func withNative(name string, route api.Value) (api.Object, api.Catalog) {
 			spec := existing.Spec().
 				WithPath(list(m("name", name)), "hardware", "nics").
 				WithPath(list(m("nicRef", name, "macAddress", "02-00-00-00-00-01")), "substrate", "baremetal", "nics").
-				WithPath(list(m("name", "primary", "address", "192.0.2.11/24", "interface", name)), "network", "addresses")
+				WithPath(list(m("name", "primary", "address", "192.0.2.11", "interface", name)), "network", "addresses")
 			existing = existing.WithSpec(spec)
 			machine = existing
 		}

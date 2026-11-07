@@ -59,7 +59,7 @@ func machineSchema() *Shape {
 	network := choice(field("configRef", ref(NetworkConfig)), field("inline", machineNetworkSchema()))
 	network.AllowEmpty = true
 	network.Fields = append(network.Fields,
-		field("installAddressRef", nestedIn(Scope{Noun: "address", Entries: []string{"network", "addresses"}})), field("addresses", named(record(required("name", nonempty()), required("address", lexical("address")), field("interface", lexical("ifname"))))),
+		field("installAddressRef", nestedIn(Scope{Noun: "address", Entries: []string{"network", "addresses"}})), field("addresses", named(record(required("name", nonempty()), required("address", lexical("host")), field("interface", lexical("ifname"))))),
 		field("interfaceMatches", &Shape{Type: Sequence, Atomic: true, NameKey: "interface", Element: record(required("interface", lexical("ifname")), required("nicRef", nestedIn(Scope{Noun: "hardware NIC", Entries: []string{"hardware", "nics"}})))}), field("overrides", native()))
 	return record(
 		field("placement", record(field("site", name()))),
@@ -72,7 +72,7 @@ func machineSchema() *Shape {
 }
 
 func machineNetworkSchema() *Shape {
-	return record(required("machineNetwork", nonemptyArray(set(record(required("cidr", cidr()))))), field("dns", serverSelections(DNSServer)), required("nmstate", native()))
+	return record(field("dns", serverSelections(DNSServer)), required("nmstate", native()))
 }
 
 func machineProfileSchema(variant string) *Shape {

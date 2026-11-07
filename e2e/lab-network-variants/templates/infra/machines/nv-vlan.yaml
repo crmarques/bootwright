@@ -39,11 +39,11 @@ spec:
         address: nv-vlan.{{ .Values.host.domain }}
 
       - name: ip
-        address: {{ .Values.vlan.address }}/{{ .Values.host.prefix }}
+        address: {{ .Values.vlan.address }}
         interface: nic0.{{ .Values.vlan.id }}
 
       - name: guest
-        address: {{ .Values.converge.vlanAddress }}/{{ .Values.converge.prefix }}
+        address: {{ .Values.converge.vlanAddress }}
         interface: nic0.{{ .Values.converge.vlanId }}
 
     overrides:

@@ -35,9 +35,9 @@ spec:
         address: rhel-01.{{ .Values.host.domain }}
 
       - name: ip
-        address: {{ (index .Values.guest.nodes 0).address }}/{{ .Values.host.prefix }}
+        address: {{ (index .Values.guest.nodes 0).address }}
         interface: bond0
 
       - name: cluster
-        address: {{ (index .Values.guest.nodes 0).clusterAddress }}/{{ .Values.clusterNetwork.prefix }}
+        address: {{ (index .Values.guest.nodes 0).clusterAddress }}
         interface: bond0.{{ .Values.clusterNetwork.vlan }}

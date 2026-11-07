@@ -52,7 +52,7 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 	))))
 	vlan := guest(field("network", guest().Spec().Get("network").With("addresses", api.ListValue(
 		api.MapValue(text("name", "fqdn"), text("address", "rhel-01.lab.example.test")),
-		api.MapValue(text("name", "ip"), text("address", "198.51.100.11/24"), text("interface", "enp1s0.100")),
+		api.MapValue(text("name", "ip"), text("address", "198.51.100.11"), text("interface", "enp1s0.100")),
 	))))
 	onServices := artifactServer(text("machineRef", "services"), text("bindAddress", "192.0.2.2"))
 	providerOnServices := provider()

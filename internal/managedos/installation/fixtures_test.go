@@ -60,6 +60,12 @@ func labNetwork() api.Object {
 	))
 }
 
+func labLAN() api.Object {
+	return api.NewObject(api.Network, "lab-lan", api.Value{}, api.MapValue(
+		field("provided", api.BoolValue(true)), field("ipv4", api.MapValue(text("cidr", "198.51.100.0/24"))),
+	))
+}
+
 func artifactServer(fields ...api.FieldValue) api.Object {
 	spec := api.MapValue(
 		text("management", "managed"), text("machineRef", "controller"), text("bindAddress", "192.0.2.1"),
@@ -107,7 +113,6 @@ func service(kind api.Kind, name, port string) api.Object {
 
 func networkConfig() api.Object {
 	return api.NewObject(api.NetworkConfig, "lab-guests", api.Value{}, api.MapValue(
-		field("machineNetwork", api.ListValue(api.MapValue(text("cidr", "198.51.100.0/24")))),
 		field("dns", api.ListValue(api.MapValue(text("serverRef", "lab-dns"), text("endpointRef", "ip")))),
 		field("nmstate", api.MapValue(
 			field("interfaces", api.ListValue(api.MapValue(text("name", "enp1s0"), text("type", "ethernet")))),
@@ -171,7 +176,7 @@ func guest(fields ...api.FieldValue) api.Object {
 			text("configRef", "lab-guests"), text("installAddressRef", "ip"),
 			field("addresses", api.ListValue(
 				api.MapValue(text("name", "fqdn"), text("address", "rhel-01.lab.example.test")),
-				api.MapValue(text("name", "ip"), text("address", "198.51.100.11/24"), text("interface", "enp1s0")),
+				api.MapValue(text("name", "ip"), text("address", "198.51.100.11"), text("interface", "enp1s0")),
 			)),
 		)),
 	)
@@ -218,7 +223,7 @@ func server(hints api.Value) api.Object {
 			text("configRef", "lab-guests"), text("installAddressRef", "ip"),
 			field("addresses", api.ListValue(
 				api.MapValue(text("name", "fqdn"), text("address", "metal-01.lab.example.test")),
-				api.MapValue(text("name", "ip"), text("address", "198.51.100.41/24"), text("interface", "enp1s0")),
+				api.MapValue(text("name", "ip"), text("address", "198.51.100.41"), text("interface", "enp1s0")),
 			)),
 		)),
 	))
@@ -262,6 +267,9 @@ func labCatalog(overrides ...api.Object) api.Catalog {
 		for _, attachment := range object.Spec().Get("segments").Items() {
 			if attachment.Get("name").Text() == "lab-guests" {
 				objects = slices.DeleteFunc(objects, func(o api.Object) bool { return o.Identity() == "Network/lab-guests" })
+				if !slices.ContainsFunc(objects, func(o api.Object) bool { return o.Identity() == "Network/lab-lan" }) {
+					objects = append(objects, labLAN())
+				}
 			}
 		}
 	}

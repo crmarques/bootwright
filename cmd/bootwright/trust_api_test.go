@@ -39,8 +39,16 @@ spec:
     machineProfiles: [{name: standard, cpu: 4, memoryMiB: 8192, diskGiB: 80}]
   segments:
     - name: workload
+      untaggedNetworkRef: trust-lan
       kubevirt:
         networkRef: {name: workload}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata: {name: trust-lan}
+spec:
+  provided: true
+  ipv4: {cidr: 192.0.2.0/24}
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -51,10 +59,9 @@ spec:
   os: {provided: false}
   network:
     inline:
-      machineNetwork: [{cidr: 192.0.2.0/24}]
       nmstate:
         interfaces: [{name: eth0, type: ethernet}]
-    addresses: [{name: primary, address: 192.0.2.20/24, interface: eth0}]
+    addresses: [{name: primary, address: 192.0.2.20, interface: eth0}]
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Secret

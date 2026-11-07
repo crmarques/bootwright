@@ -272,11 +272,11 @@ spec:
 
     addresses:
       - name: primary
-        address: 192.0.2.220/24
+        address: 192.0.2.220
         interface: primary
 
       - name: storage
-        address: 198.51.100.120/25
+        address: 198.51.100.120
         interface: ceph-public
 
 ---

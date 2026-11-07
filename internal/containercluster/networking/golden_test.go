@@ -182,9 +182,11 @@ func addressedFixture(hostAddresses string) (api.Object, api.Catalog) {
 	}
 	network := mapping(field("name", text("tenant")), field("topology", text("Localnet")), field("uplink", uplink), field("vlan", api.IntegerValue("10")), field("ipam", mapping(field("mode", text("Disabled")))), field("namespaceSelector", mapping(field("matchLabels", mapping(field("tenant", text("tenant")))))))
 	cluster := api.NewObject(api.OpenShiftCluster, "cluster", mapping(), mapping(field("distribution", mapping(field("release", mapping(field("version", text("4.21.15")))))), field("nodes", api.ListValue(mapping(field("name", text("node-a")), field("machineRef", text("machine-a"))), mapping(field("name", text("node-b")), field("machineRef", text("machine-b"))))), field("networking", mapping(field("secondaryNetworks", api.ListValue(network))))))
+	lan := api.NewObject(api.Network, "lan", mapping(), mapping(field("provided", api.BoolValue(true)), field("ipv4", mapping(field("cidr", text("198.51.100.0/24")))), field("ipv6", mapping(field("cidr", text("2001:db8:1::/64"))))))
 	return cluster, api.NewCatalog([]api.Object{
-		machineObject("machine-a", address("host-0", "198.51.100.10/24", "eth0"), address("host-4", "198.51.100.11/24", "eth1"), address("host-6", "2001:db8:1::11/64", "eth1")),
-		machineObject("machine-b", address("host-0", "198.51.100.12/24", "eth0")),
+		lan,
+		machineObject("machine-a", address("host-0", "198.51.100.10", "eth0"), address("host-4", "198.51.100.11", "eth1"), address("host-6", "2001:db8:1::11", "eth1")),
+		machineObject("machine-b", address("host-0", "198.51.100.12", "eth0")),
 	})
 }
 

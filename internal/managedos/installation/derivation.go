@@ -8,6 +8,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -24,7 +25,7 @@ func installationFor(catalog api.Catalog, machine, profile api.Object, request R
 	if err != nil {
 		return Installation{}, err
 	}
-	address, prefix, iface, err := installAddress(machine)
+	address, prefix, iface, err := installAddress(catalog, machine)
 	if err != nil {
 		return Installation{}, err
 	}
@@ -143,23 +144,23 @@ func packageSource(request Request) (string, error) {
 }
 
 // installAddress reads the one static assignment the installer applies, from
-// the Machine's own selected install address.
-func installAddress(machine api.Object) (string, int, string, error) {
+// the Machine's own selected install address and the prefix of its Network.
+func installAddress(catalog api.Catalog, machine api.Object) (string, int, string, error) {
 	network := machine.Spec().Get("network")
 	reference := network.Get("installAddressRef").Text()
 	entry, found := findNamed(network.Get("addresses"), "name", reference)
 	if !found {
 		return "", 0, "", refusal("api.reference", "the Machine's install address does not resolve", "set spec.network.installAddressRef on "+machine.Identity())
 	}
-	address, prefix, ok := netmaskPrefix(entry.Get("address").Text())
-	if !ok {
-		return "", 0, "", refusal("api.value", "the Machine's install address carries no prefix", "declare it as an IP with its prefix on "+machine.Identity())
-	}
 	iface := entry.Get("interface").Text()
 	if iface == "" {
 		return "", 0, "", refusal("api.value", "the Machine's install address names no interface", "set the interface of that address on "+machine.Identity())
 	}
-	return address, prefix, iface, nil
+	prefix, ok := machineref.AssignedPrefix(machine, catalog, entry)
+	if !ok {
+		return "", 0, "", refusal("api.reference", "the Machine's install address lies in no declared Network", "declare the Network that holds the install address of "+machine.Identity())
+	}
+	return prefix.Addr().String(), prefix.Bits(), iface, nil
 }
 
 func machineHostname(machine api.Object) (string, error) {

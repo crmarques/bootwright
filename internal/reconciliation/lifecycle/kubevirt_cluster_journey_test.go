@@ -49,17 +49,18 @@ func kubevirtClusterCatalog() api.Catalog {
 			f("network", api.MapValue(f("addresses", api.ListValue(api.MapValue(s("name", "ip"), s("address", "192.0.2.1")))))),
 			f("access", api.MapValue(f("local", api.BoolValue(true)))))),
 		api.NewObject(api.NetworkConfig, "lab-guests", api.Value{}, api.MapValue(
-			f("machineNetwork", api.ListValue(api.MapValue(s("cidr", "198.51.100.0/24")))),
 			f("nmstate", api.MapValue(
 				f("interfaces", api.ListValue(api.MapValue(s("name", "enp1s0"), s("type", "ethernet"), s("state", "up"),
 					f("ipv4", api.MapValue(f("enabled", api.BoolValue(true)), f("dhcp", api.BoolValue(false))))))),
 				f("routes", api.MapValue(f("config", api.ListValue(api.MapValue(s("destination", "0.0.0.0/0"),
 					s("next-hop-address", "198.51.100.1"), s("next-hop-interface", "enp1s0")))))))))),
+		api.NewObject(api.Network, "lab-guests", api.Value{}, api.MapValue(
+			f("provided", api.BoolValue(true)), f("ipv4", api.MapValue(s("cidr", "198.51.100.0/24"))))),
 		api.NewObject(api.InfraProvider, "lab-kubevirt", api.Value{}, api.MapValue(
 			f("kubevirt", api.MapValue(s("kubeconfigRef", "host-kubeconfig"), s("namespace", "bootwright-guests"), s("storageClassRef", "guest-block-storage"),
 				f("machineProfiles", api.ListValue(api.MapValue(s("name", "kubevirt"), f("cpu", api.IntegerValue("6")),
 					f("memoryMiB", api.IntegerValue("16384")), f("diskGiB", api.IntegerValue("120"))))))),
-			f("segments", api.ListValue(api.MapValue(s("name", "lab-guests"), f("kubevirt", api.MapValue(f("networkRef", api.MapValue(
+			f("segments", api.ListValue(api.MapValue(s("name", "lab-guests"), s("untaggedNetworkRef", "lab-guests"), f("kubevirt", api.MapValue(f("networkRef", api.MapValue(
 				s("apiGroup", "k8s.cni.cncf.io"), s("kind", "NetworkAttachmentDefinition"), s("namespace", "bootwright-guests"), s("name", "guest-l2")))))))))),
 	}
 	var nodes []api.Value
@@ -69,7 +70,7 @@ func kubevirtClusterCatalog() api.Catalog {
 			f("hardware", api.MapValue(f("nics", api.ListValue(api.MapValue(s("name", "enp1s0")))), f("rootDevice", api.MapValue(s("deviceName", "/dev/vda"))))),
 			f("os", api.MapValue(f("provided", api.BoolValue(false)))),
 			f("network", api.MapValue(s("configRef", "lab-guests"), s("installAddressRef", "ip"),
-				f("addresses", api.ListValue(api.MapValue(s("name", "ip"), s("address", "198.51.100.2"+string(rune('1'+index))+"/24"), s("interface", "enp1s0")))))))))
+				f("addresses", api.ListValue(api.MapValue(s("name", "ip"), s("address", "198.51.100.2"+string(rune('1'+index))), s("interface", "enp1s0")))))))))
 		nodes = append(nodes, api.MapValue(s("name", "master-"+string(rune('0'+index))), s("role", "controlPlane"), s("machineRef", name)))
 	}
 	endpoint := func(address string) api.Value {

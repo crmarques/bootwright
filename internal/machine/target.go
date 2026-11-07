@@ -3,7 +3,6 @@ package machine
 import (
 	"net/netip"
 	"slices"
-	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/trust"
@@ -22,7 +21,7 @@ type SSHTarget struct {
 }
 
 // Address resolves a Machine-local address reference to the value a consumer
-// receives: the host IP without its prefix, or the DNS name. The second result
+// receives: the host IP or the DNS name. The second result
 // reports that the reference named a declared address, which is a different
 // fact from the value being usable, so a caller can tell an unresolved
 // reference from an empty one.
@@ -34,28 +33,20 @@ func Address(o api.Object, reference string) (string, bool) {
 		if address.Get("name").Text() != reference {
 			continue
 		}
-		value := address.Get("address").Text()
-		if host, _, found := strings.Cut(value, "/"); found {
-			value = host
-		}
-		return value, true
+		return address.Get("address").Text(), true
 	}
 	return "", false
 }
 
 // IPAddresses lists every IP a Machine declares, in declaration order and
-// without repetition. A DNS contact is not an IP and is left out, and a host
-// IP is reported without its prefix, so a reader sees exactly the value a
-// consumer of that address would reach. A Machine whose addresses are assigned
+// without repetition. A DNS contact is not an IP and is left out, so a reader
+// sees exactly the value a consumer of that address would reach. A Machine whose addresses are assigned
 // at runtime declares none and reports none: an inspection contacts no host,
 // so it reports what desired state says rather than guessing what a guest took.
 func IPAddresses(o api.Object) []string {
 	found := []string{}
 	for _, address := range o.Spec().Get("network", "addresses").Items() {
 		value := address.Get("address").Text()
-		if host, _, prefixed := strings.Cut(value, "/"); prefixed {
-			value = host
-		}
 		if _, err := netip.ParseAddr(value); err != nil {
 			continue
 		}

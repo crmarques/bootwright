@@ -101,15 +101,17 @@ reservation's bound).
 
 ## Cross-kind checks
 
-While the graph declares a Network, each kind below refuses, with
-`api.invariant` naming the object, the reason and the next step:
+Each kind below refuses, with `api.invariant` naming the object, the reason
+and the next step; a graph with contacts only declares no Network and meets
+none of them:
 
 - **Interface assignments** (Machine, at `spec.network.addresses[].address`):
   every [interface assignment](machines.md#addresses-and-access) lies in
   exactly one Network of its family, scoped to the Machine's `placement.site`
-  when it has one, and its prefix length equals that Network's. An assignment
-  in no Network, only in Networks of other sites, or in several Networks is
-  refused.
+  when it has one, and takes that Network's prefix: the composed NMState
+  `prefix-length`, the Kickstart netmask, the install-address checks and the
+  node subnets read it. An assignment in no Network, only in Networks of
+  other sites, or in several Networks is refused.
 - **VLAN agreement** (Machine, at `spec.network.addresses[].interface`): when
   the assigned interface's composed NMState stack carries a VLAN, because the
   interface is a VLAN or a bridge or bond port path down from it reaches one,

@@ -31,5 +31,5 @@ spec:
         address: arbiter-01.{{ .Values.host.domain }}
 
       - name: ip
-        address: {{ index .Values.addresses "arbiter-01" }}/{{ .Values.host.prefix }}
+        address: {{ index .Values.addresses "arbiter-01" }}
         interface: enp1s0

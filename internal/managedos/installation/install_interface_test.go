@@ -45,7 +45,7 @@ func vlanInterface(name, base, id string, fields ...api.FieldValue) api.Value {
 func installingOn(iface string) api.Object {
 	return guest(field("network", guest().Spec().Get("network").With("addresses", api.ListValue(
 		api.MapValue(text("name", "fqdn"), text("address", "rhel-01.lab.example.test")),
-		api.MapValue(text("name", "ip"), text("address", "198.51.100.11/24"), text("interface", iface)),
+		api.MapValue(text("name", "ip"), text("address", "198.51.100.11"), text("interface", iface)),
 	))))
 }
 
@@ -77,7 +77,7 @@ func metalOn(iface string, nics ...api.Value) api.Object {
 		WithPath(api.StringValue("metal-net"), "network", "configRef").
 		WithPath(api.ListValue(
 			api.MapValue(text("name", "fqdn"), text("address", "metal-01.lab.example.test")),
-			api.MapValue(text("name", "ip"), text("address", "198.51.100.41/24"), text("interface", iface)),
+			api.MapValue(text("name", "ip"), text("address", "198.51.100.41"), text("interface", iface)),
 		), "network", "addresses"))
 }
 
@@ -486,12 +486,15 @@ func TestSecondaryAddressesMTUAndRoutesNoLongerRefuse(t *testing.T) {
 	secondary := installingOn("bond0.200")
 	secondary = secondary.WithSpec(secondary.Spec().WithPath(api.ListValue(
 		api.MapValue(text("name", "fqdn"), text("address", "rhel-01.lab.example.test")),
-		api.MapValue(text("name", "ip"), text("address", "198.51.100.11/24"), text("interface", "bond0.200")),
-		api.MapValue(text("name", "cluster"), text("address", "192.0.2.50/24"), text("interface", "enp3s0")),
+		api.MapValue(text("name", "ip"), text("address", "198.51.100.11"), text("interface", "bond0.200")),
+		api.MapValue(text("name", "cluster"), text("address", "192.0.2.50"), text("interface", "enp3s0")),
 	), "network", "addresses"))
 	routes := withRoutes(networkWith(extra...), api.MapValue(text("destination", "0.0.0.0/0"), text("next-hop-address", "198.51.100.1")),
 		api.MapValue(text("destination", "203.0.113.0/24"), text("next-hop-address", "198.51.100.254")))
-	catalog := labCatalog(externalProvider(), secondary, routes)
+	clusterLAN := api.NewObject(api.Network, "cluster-lan", api.Value{}, api.MapValue(
+		field("provided", api.BoolValue(true)), field("ipv4", api.MapValue(text("cidr", "192.0.2.0/24"))),
+	))
+	catalog := labCatalog(externalProvider(), secondary, routes, clusterLAN)
 	expectNoRefusal(t, catalog)
 	document := documentOf(t, catalog, "rhel-01")
 	for _, name := range []string{"bond1", "enp3s0.300"} {

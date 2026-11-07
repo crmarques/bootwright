@@ -40,20 +40,20 @@ spec:
         address: sno-01.{{ .Values.host.domain }}
 
       - name: ip
-        address: {{ .Values.guest.address }}/{{ .Values.host.prefix }}
+        address: {{ .Values.guest.address }}
         interface: enp1s0
 {{- if .Values.environments.enabled }}
 {{- $trunk := .Values.environments.trunk.interface }}
 {{- with .Values.environments.staging }}
 
       - name: staging
-        address: {{ .nodeAddress }}/{{ .prefix }}
+        address: {{ .nodeAddress }}
         interface: {{ $trunk }}.{{ .vlan }}
 {{- end }}
 {{- with .Values.environments.production }}
 
       - name: production
-        address: {{ .nodeAddress }}/{{ .prefix }}
+        address: {{ .nodeAddress }}
         interface: {{ $trunk }}.{{ .vlan }}
 {{- end }}
 {{- end }}

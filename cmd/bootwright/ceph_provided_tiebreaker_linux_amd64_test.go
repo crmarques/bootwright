@@ -44,7 +44,7 @@ func tiebreakerSources(t *testing.T, access string) desiredstate.Sources {
 		return f.Path() == filepath.Join(root, "storage/placement-policy.yaml")
 	})
 	edit("environment.yaml", "  storageClusters:\n", "  sites:\n    - name: site-a\n    - name: site-b\n    - name: site-c\n\n  storageClusters:\n")
-	rhel04 := strings.ReplaceAll(strings.ReplaceAll(read("infra/machines/rhel-03.yaml"), "rhel-03", "rhel-04"), "198.51.100.13/24", "198.51.100.14/24")
+	rhel04 := strings.ReplaceAll(strings.ReplaceAll(read("infra/machines/rhel-03.yaml"), "rhel-03", "rhel-04"), "198.51.100.13", "198.51.100.14")
 	add("infra/machines/rhel-04.yaml", rhel04)
 	for machine, site := range map[string]string{"rhel-01": "site-a", "rhel-02": "site-a", "rhel-03": "site-b", "rhel-04": "site-b"} {
 		edit("infra/machines/"+machine+".yaml", "spec:\n  substrate:\n", "spec:\n  placement:\n    site: "+site+"\n\n  substrate:\n")

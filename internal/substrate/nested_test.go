@@ -10,7 +10,7 @@ import (
 )
 
 func cudn(name string) api.Value {
-	return m("name", name, "kubevirt", m("networkRef", m("apiGroup", "k8s.ovn.org", "kind", "ClusterUserDefinedNetwork", "name", name)))
+	return m("name", name, "untaggedNetworkRef", name, "kubevirt", m("networkRef", m("apiGroup", "k8s.ovn.org", "kind", "ClusterUserDefinedNetwork", "name", name)))
 }
 
 func hostedOn(name, namespace string, networks ...string) api.Object {

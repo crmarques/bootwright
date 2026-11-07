@@ -138,30 +138,25 @@ func endpointAddresses(cluster api.Object, slot string) []any {
 }
 
 // clusterNetworking is the machine, cluster and service networking the graph
-// resolves. The machine networks are the ones the nodes' own configurations
-// declare, so an installer and a node agree on which network the cluster lives
-// on.
+// resolves. The machine networks are the Networks that hold the nodes'
+// installation addresses, so an installer and a node agree on which network
+// the cluster lives on.
 func clusterNetworking(catalog api.Catalog, cluster api.Object, nodes []nodeProjection) (map[string]any, error) {
 	var machineNetworks []any
 	seen := map[string]bool{}
 	for _, node := range nodes {
-		configuration, found := machine.NetworkConfig(node.machine, catalog)
-		if !found {
-			return nil, refusal("api.reference", "a cluster node's network configuration is not in the selected graph",
-				"declare it or correct spec.network.configRef on "+node.machine.Identity())
+		cidr, err := installNetwork(catalog, node.machine)
+		if err != nil {
+			return nil, err
 		}
-		for _, network := range configuration.Get("machineNetwork").Items() {
-			cidr := network.Get("cidr").Text()
-			if cidr == "" || seen[cidr] {
-				continue
-			}
+		if !seen[cidr] {
 			seen[cidr] = true
 			machineNetworks = append(machineNetworks, map[string]any{"cidr": cidr})
 		}
 	}
 	if len(machineNetworks) == 0 {
-		return nil, refusalAt("api.required", "$.spec.nodes", "the cluster's nodes declare no machine network",
-			"set spec.network.inline.machineNetwork on each node Machine or spec.machineNetwork on its selected NetworkConfig in "+cluster.Identity())
+		return nil, refusalAt("api.required", "$.spec.nodes", "the cluster declares no node, so no Network holds its installation addresses",
+			"declare the nodes of "+cluster.Identity()+" in spec.nodes")
 	}
 	networking := cluster.Spec().Get("networking")
 	if networking.Get("clusterNetwork").Len() == 0 || networking.Get("serviceNetwork").Len() == 0 {

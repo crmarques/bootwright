@@ -36,20 +36,20 @@ func TestOpenShiftClusterRefusalTableMatchesUnsupported(t *testing.T) {
 		declared := cluster("sno",
 			installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
 			node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test"))
-		return api.NewCatalog(append(base(), guest("sno-01", "198.51.100.21/24"), declared.WithSpec(mutate(declared.Spec()))))
+		return api.NewCatalog(append(base(), guest("sno-01", "198.51.100.21"), declared.WithSpec(mutate(declared.Spec()))))
 	}
 	onSNO := func(machine api.Object, extra ...api.Object) api.Catalog {
 		return api.NewCatalog(append(append(base(), extra...), machine, cluster("sno",
 			installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
 			node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test"))))
 	}
-	installed := guest("sno-01", "198.51.100.21/24")
+	installed := guest("sno-01", "198.51.100.21")
 	installed = installed.WithSpec(installed.Spec().WithPath(api.StringValue("rhel-9-8"), "os", "installProfileRef"))
-	unrealized := guest("sno-01", "198.51.100.21/24")
+	unrealized := guest("sno-01", "198.51.100.21")
 	unrealized = unrealized.WithSpec(unrealized.Spec().WithPath(api.StringValue("vc"), "substrate", "providerRef"))
 	vsphere := api.NewObject(api.InfraProvider, "vc", api.Value{}, api.MapValue(field("vsphere", api.MapValue())))
 	multiNode := api.NewCatalog(append(base(),
-		guest("ocp-01", "198.51.100.31/24"), guest("ocp-02", "198.51.100.32/24"), guest("ocp-03", "198.51.100.33/24"),
+		guest("ocp-01", "198.51.100.31"), guest("ocp-02", "198.51.100.32"), guest("ocp-03", "198.51.100.33"),
 		cluster("ocp",
 			installSelection(
 				endpoints("198.51.100.10", "198.51.100.10", "198.51.100.11", "external"),
@@ -62,7 +62,7 @@ func TestOpenShiftClusterRefusalTableMatchesUnsupported(t *testing.T) {
 	onNode := map[string]string{"<cluster>": "OpenShiftCluster/sno", "<machine>": "Machine/sno-01"}
 
 	networkCase := func(change func(api.Value) api.Value) refusalCase {
-		n := guest("sno-01", "198.51.100.21/24")
+		n := guest("sno-01", "198.51.100.21")
 		configuration := networkConfiguration().Spec()
 		configuration = configuration.With("nmstate", change(configuration.Get("nmstate")))
 		n = n.WithSpec(n.Spec().With("network", n.Spec().Get("network").Without("configRef").With("inline", configuration)))
@@ -98,7 +98,7 @@ func TestOpenShiftClusterRefusalTableMatchesUnsupported(t *testing.T) {
 		}),
 
 		"A boot-image server off the controller": {
-			api.NewCatalog(append(append(base(), hypervisor()...), onRemote(guest("sno-01", "198.51.100.21/24")), servedBy("far-artifacts", cluster("sno", installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")), node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test"))))),
+			api.NewCatalog(append(append(base(), hypervisor()...), onRemote(guest("sno-01", "198.51.100.21")), servedBy("far-artifacts", cluster("sno", installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")), node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test"))))),
 			"OpenShiftCluster/sno", map[string]string{"<server>": "ArtifactServer/far-artifacts"},
 		},
 		"An OKD cluster": {sno(func(spec api.Value) api.Value {
@@ -125,7 +125,7 @@ func TestOpenShiftClusterRefusalTableMatchesUnsupported(t *testing.T) {
 		"A node with an install profile":    {onSNO(installed), "OpenShiftCluster/sno", onNode},
 		"A node on an unrealized substrate": {onSNO(unrealized, vsphere), "OpenShiftCluster/sno", onSNOCluster},
 		"A node whose emulated BMC port does not allocate": {
-			singleNodeOnProvider(portPastTheSpace, guest("sno-00", "198.51.100.20/24")), "OpenShiftCluster/sno", map[string]string{"<provider>": "InfraProvider/lab-libvirt", "<node>": "master-0", "<machine>": "Machine/sno-01"},
+			singleNodeOnProvider(portPastTheSpace, guest("sno-00", "198.51.100.20")), "OpenShiftCluster/sno", map[string]string{"<provider>": "InfraProvider/lab-libvirt", "<node>": "master-0", "<machine>": "Machine/sno-01"},
 		},
 		"A node's provider with no emulated BMC credential": {
 			singleNodeOnProvider(noControllerCredential), "OpenShiftCluster/sno", map[string]string{"<provider>": "InfraProvider/lab-libvirt", "<node>": "master-0", "<machine>": "Machine/sno-01"},

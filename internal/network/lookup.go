@@ -13,8 +13,6 @@ type Held struct {
 	Prefix  netip.Prefix
 }
 
-func Declared(c api.Catalog) bool { return len(c.OfKind(api.Network)) > 0 }
-
 func Family(address netip.Addr) string {
 	if address.Is4() {
 		return "ipv4"

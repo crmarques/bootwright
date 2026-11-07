@@ -51,12 +51,12 @@ func TestMachineAdmissionRefusesWhatItsSubstrateCannotRealize(t *testing.T) {
 		{labGuest, "    installProfileRef: rhel-9-8\n", ""},
 		{labGuest, "    rootDevice:\n      deviceName: /dev/vda\n\n", ""},
 		{labGuest, "    configRef: lab-guests\n    installAddressRef: ip\n\n", ""},
-		{labGuest, "\n    addresses:\n      - name: ip\n        address: 198.51.100.11/24\n        interface: enp1s0\n", "\n    addresses:\n      - name: fqdn\n        address: rhel-01.lab.example.test\n"},
+		{labGuest, "\n    addresses:\n      - name: ip\n        address: 198.51.100.11\n        interface: enp1s0\n", "\n    addresses:\n      - name: fqdn\n        address: rhel-01.lab.example.test\n"},
 	}
-	// A /32 assignment reserves no address of its own, so only the managed
-	// bridge's prefix refuses it.
+	// An install address takes the managed Network's prefix, so the bridge's
+	// host address and the prefix's network and broadcast addresses refuse.
 	installAt := func(address string) []exampleEdit {
-		return []exampleEdit{{labGuest, "address: 198.51.100.11/24", "address: " + address}}
+		return []exampleEdit{{labGuest, "address: 198.51.100.11", "address: " + address}}
 	}
 	cases := map[string]struct {
 		edits               []exampleEdit
@@ -65,10 +65,9 @@ func TestMachineAdmissionRefusesWhatItsSubstrateCannotRealize(t *testing.T) {
 		"an installer-provisioned Machine without a network": {installerProvisioned, "api.invariant", guest, "$.spec.network"},
 		"a bond-only network configuration": {[]exampleEdit{{"infra/networkconfigs/lab-guests.yaml", "type: ethernet", "type: bond"}},
 			"api.invariant", guest, "$.spec.network.configRef"},
-		"the bridge's host address":        {installAt("198.51.100.1/24"), "api.invariant", guest, "$.spec.network.installAddressRef"},
-		"the bridge's network address":     {installAt("198.51.100.0/32"), "api.invariant", guest, "$.spec.network.installAddressRef"},
-		"the bridge's broadcast address":   {installAt("198.51.100.255/32"), "api.invariant", guest, "$.spec.network.installAddressRef"},
-		"its own prefix's network address": {installAt("198.51.100.0/24"), "api.value", guest, "$.spec.network.addresses[0].address"},
+		"the bridge's host address":      {installAt("198.51.100.1"), "api.invariant", guest, "$.spec.network.installAddressRef"},
+		"the bridge's network address":   {installAt("198.51.100.0"), "api.value", guest, "$.spec.network.addresses[0].address"},
+		"the bridge's broadcast address": {installAt("198.51.100.255"), "api.value", guest, "$.spec.network.addresses[0].address"},
 		"an interface match naming no ethernet interface": {[]exampleEdit{{labGuest, "    installAddressRef: ip\n", "    installAddressRef: ip\n    interfaceMatches:\n      - interface: enp9s0\n        nicRef: enp1s0\n"}},
 			"api.reference", guest, "$.spec.network.interfaceMatches[0].interface"},
 		"a realized Machine without NICs": {[]exampleEdit{{labGuest, "    nics:\n      - name: enp1s0\n\n", ""}},

@@ -4,9 +4,6 @@ metadata:
   name: nv-bond
 
 spec:
-  machineNetwork:
-    - cidr: 198.51.100.0/26
-
   dns:
     - serverRef: lab-dns
       endpointRef: ip

@@ -21,7 +21,7 @@ func TestFortyEightPhysicalNodesFitThePlanStateEnvelope(t *testing.T) {
 	nodes := make([]api.Value, 0, 48)
 	for index := range 48 {
 		name := fmt.Sprintf("metal-%02d", index)
-		objects = append(objects, server(name, fmt.Sprintf("198.51.100.%d/24", 40+index), fmt.Sprintf("02:00:00:00:00:%02x", index)))
+		objects = append(objects, server(name, fmt.Sprintf("198.51.100.%d", 40+index), fmt.Sprintf("02:00:00:00:00:%02x", index)))
 		role := "worker"
 		if index < 3 {
 			role = "controlPlane"

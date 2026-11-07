@@ -31,10 +31,11 @@ func m(kv ...any) api.Value {
 func list(v ...api.Value) api.Value { return api.ListValue(v...) }
 func fixture() (api.Object, api.Catalog) {
 	provider := object(api.InfraProvider, "metal", m("baremetal", m("defaults", m("bmc", m("credentialsRef", "bmc", "tls", m("verify", false), "virtualMedia", m("tls", m("trust", "established"))))), "segments", list(m("name", "net", "untaggedNetworkRef", "lan", "baremetal", m()))))
-	network := object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")), "routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-interface", "eth0"))))))
-	machine := object(api.Machine, "node", m("substrate", m("providerRef", "metal", "baremetal", m("rootDevice", m("wwn", "0x5000c500a1b2c3d4"), "bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1"), "nics", list(m("nicRef", "eth0", "macAddress", "02-00-00-00-00-01")))), "os", m("provided", false), "hardware", m("nics", list(m("name", "eth0"))), "network", m("configRef", "net", "addresses", list(m("name", "primary", "address", "192.0.2.11/24", "interface", "eth0")))))
+	network := object(api.NetworkConfig, "net", m("nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")), "routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-interface", "eth0"))))))
+	machine := object(api.Machine, "node", m("substrate", m("providerRef", "metal", "baremetal", m("rootDevice", m("wwn", "0x5000c500a1b2c3d4"), "bmc", m("address", "https://bmc.example.test/redfish/v1/Systems/1"), "nics", list(m("nicRef", "eth0", "macAddress", "02-00-00-00-00-01")))), "os", m("provided", false), "hardware", m("nics", list(m("name", "eth0"))), "network", m("configRef", "net", "addresses", list(m("name", "primary", "address", "192.0.2.11", "interface", "eth0")))))
 	env := object(api.Environment, "env", m("domains", m("base", "example.test")))
-	return machine, api.NewCatalog([]api.Object{machine, network, provider, env})
+	lan := object(api.Network, "lan", m("provided", true, "ipv4", m("cidr", "192.0.2.0/24")))
+	return machine, api.NewCatalog([]api.Object{machine, network, provider, env, lan})
 }
 
 func TestBaremetalNormalizationPreservesDeclarations(t *testing.T) {
@@ -106,15 +107,16 @@ func TestNativeCompositionRejectsHiddenAndConflictingInputs(t *testing.T) {
 func TestInstallAddressSelectionHasNoOrderFallback(t *testing.T) {
 	o, c := fixture()
 	configuration, _ := c.Find(api.NetworkConfig, "net")
+	lan, _ := c.Find(api.Network, "lan")
 	configuration = configuration.WithSpec(configuration.Spec().WithPath(list(m("name", "eth0", "type", "ethernet"), m("name", "eth1", "type", "ethernet")), "nmstate", "interfaces"))
-	o = o.WithSpec(o.Spec().Without("hardware").Without("substrate").WithPath(list(m("name", "second", "address", "192.0.2.22/24", "interface", "eth1"), m("name", "first", "address", "192.0.2.11/24", "interface", "eth0")), "network", "addresses"))
-	c = api.NewCatalog([]api.Object{configuration})
+	o = o.WithSpec(o.Spec().Without("hardware").Without("substrate").WithPath(list(m("name", "second", "address", "192.0.2.22", "interface", "eth1"), m("name", "first", "address", "192.0.2.11", "interface", "eth0")), "network", "addresses"))
+	c = api.NewCatalog([]api.Object{configuration, lan})
 	selected, issues := InstallAddress(o, c)
 	if len(issues) != 0 || selected.Get("name").Text() != "first" {
 		t.Fatal(selected, issues)
 	}
 	configuration = configuration.WithSpec(configuration.Spec().WithPath(m(), "nmstate", "routes"))
-	c = api.NewCatalog([]api.Object{configuration})
+	c = api.NewCatalog([]api.Object{configuration, lan})
 	if _, issues = InstallAddress(o, c); len(issues) == 0 {
 		t.Fatal("ambiguous addresses admitted")
 	}
@@ -179,7 +181,7 @@ func TestAccessLifecycleAndGlobalIdentities(t *testing.T) {
 // network selects.
 func TestAnInstalledMachineDialsItsInstallAddress(t *testing.T) {
 	node, fixtures := fixture()
-	addresses := list(m("name", "ip", "address", "192.0.2.11/24", "interface", "eth0"))
+	addresses := list(m("name", "ip", "address", "192.0.2.11", "interface", "eth0"))
 	spec := node.Spec().WithPath(addresses, "network", "addresses")
 	installed := node.WithSpec(spec.With("os", spec.Get("os").With("installProfileRef", api.StringValue("rhel"))))
 	objects := []api.Object{object(api.MachineInstallProfile, "rhel", m()), object(api.Secret, "fleet", m("type", "sshKeyPair")),
@@ -221,17 +223,6 @@ func TestAnInstalledMachineDialsItsInstallAddress(t *testing.T) {
 	undeclared := installed.WithSpec(installed.Spec().WithPath(api.StringValue("missing"), "network", "installAddressRef"))
 	if got := dialed(undeclared).Get("access", "ssh", "addressRef").Text(); got != "fqdn" {
 		t.Fatalf("an installed Machine whose install address is undeclared dials %q", got)
-	}
-}
-
-func TestNetworkConfigurationCanonicalUniqueness(t *testing.T) {
-	n := object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.1/24"), m("cidr", "192.0.2.2/24")), "nmstate", m()))
-	n, _ = Normalize(n, api.Catalog{})
-	if n.Spec().Get("machineNetwork").Items()[0].Get("cidr").Text() != "192.0.2.0/24" {
-		t.Fatal("CIDR not masked")
-	}
-	if len(Validate(n, api.Catalog{})) == 0 {
-		t.Fatal("equivalent CIDRs admitted")
 	}
 }
 
@@ -278,9 +269,9 @@ func TestManagedLibvirtAttachmentContainsTheInstallAddress(t *testing.T) {
 	provider := object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", m("auth", m("credentialsRef", "bmc")), "machineProfiles", list(m("name", "small")))))
 	managed := managedNet("net", "lab", "192.0.2.0/24", "192.0.2.1")
 	other := object(api.Network, "other", m("provided", true, "ipv4", m("cidr", "198.51.100.0/24")))
-	network := object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.0/24"), m("cidr", "198.51.100.0/24")), "nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet")))))
+	network := object(api.NetworkConfig, "net", m("nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet")))))
 	env := object(api.Environment, "env", m("domains", m("base", "example.test")))
-	for address, valid := range map[string]bool{"192.0.2.11/24": true, "198.51.100.11/24": false} {
+	for address, valid := range map[string]bool{"192.0.2.11": true, "198.51.100.11": false} {
 		guest := object(api.Machine, "guest", m("substrate", m("providerRef", "lab", "libvirt", m("profileRef", "small")), "os", m("provided", false), "hardware", m("nics", list(m("name", "enp1s0"))), "network", m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", address, "interface", "enp1s0")))))
 		c := api.NewCatalog([]api.Object{guest, host, provider, network, env, managed, other})
 		guest, _ = Normalize(guest, c)
@@ -323,9 +314,9 @@ func TestARootDeviceHintFollowsItsArm(t *testing.T) {
 	host := object(api.Machine, "host", m("os", m("provided", true)))
 	provider := object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", m("auth", m("credentialsRef", "bmc")), "machineProfiles", list(m("name", "small")))))
 	managed := managedNet("net", "lab", "192.0.2.0/24", "192.0.2.1")
-	network := object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet")))))
+	network := object(api.NetworkConfig, "net", m("nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet")))))
 	env := object(api.Environment, "env", m("domains", m("base", "example.test")))
-	guest := object(api.Machine, "guest", m("substrate", m("providerRef", "lab", "libvirt", m("profileRef", "small")), "os", m("provided", false), "hardware", m("nics", list(m("name", "enp1s0"))), "network", m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11/24", "interface", "enp1s0")))))
+	guest := object(api.Machine, "guest", m("substrate", m("providerRef", "lab", "libvirt", m("profileRef", "small")), "os", m("provided", false), "hardware", m("nics", list(m("name", "enp1s0"))), "network", m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11", "interface", "enp1s0")))))
 	virtual := api.NewCatalog([]api.Object{guest, host, provider, network, env, managed})
 	server, physical := fixture()
 	admitted := api.MapValue(
@@ -551,11 +542,15 @@ func TestAnacondaInstallationRequiresAStaticIPv4Address(t *testing.T) {
 			nics = append(nics, m("name", iface.Get("name").Text()))
 			macs = append(macs, m("nicRef", iface.Get("name").Text(), "macAddress", fmt.Sprintf("02:00:00:00:00:%02x", i+1)))
 		}
-		network := object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", cidr)), "nmstate", m("interfaces", interfaces, "routes", m("config", list(routes...)))))
+		network := object(api.NetworkConfig, "net", m("nmstate", m("interfaces", interfaces, "routes", m("config", list(routes...)))))
+		family := "ipv4"
+		if strings.Contains(cidr, ":") {
+			family = "ipv6"
+		}
 		machine = machine.WithSpec(machine.Spec().With("os", osSpec).WithPath(addresses, "network", "addresses").WithPath(list(nics...), "hardware", "nics").WithPath(list(macs...), "substrate", "baremetal", "nics"))
-		objects := []api.Object{machine, network, object(api.MachineInstallProfile, "rhel", m("installer", m("anaconda", m("imageRef", "image"))))}
+		objects := []api.Object{machine, network, object(api.MachineInstallProfile, "rhel", m("installer", m("anaconda", m("imageRef", "image")))), object(api.Network, "lan", m("provided", true, family, m("cidr", cidr)))}
 		for _, existing := range catalog.Objects() {
-			if existing.Kind() != api.Machine && existing.Kind() != api.NetworkConfig {
+			if existing.Kind() != api.Machine && existing.Kind() != api.NetworkConfig && existing.Kind() != api.Network {
 				objects = append(objects, existing)
 			}
 		}
@@ -592,13 +587,13 @@ func TestAnacondaInstallationRequiresAStaticIPv4Address(t *testing.T) {
 		},
 		"an IPv6 install address": func() (api.Object, api.Catalog) {
 			return build(installed, list(m("name", "eth0", "type", "ethernet", "ipv6", m("enabled", true))), "2001:db8::/64",
-				list(m("name", "primary", "address", "2001:db8::11/64", "interface", "eth0")))
+				list(m("name", "primary", "address", "2001:db8::11", "interface", "eth0")))
 		},
 	}
 	for name, setup := range refused {
 		t.Run(name, func(t *testing.T) {
 			found := at(Validate(setup()))
-			remedy := "assign an IPv4 address with its prefix to the install interface in spec.network.addresses and select it with spec.network.installAddressRef"
+			remedy := "assign an IPv4 address to the install interface in spec.network.addresses and select it with spec.network.installAddressRef"
 			// No install interface exists before a network configuration does,
 			// so its remedy selects one first.
 			if name == "no network configuration" {
@@ -618,7 +613,7 @@ func TestAnacondaInstallationRequiresAStaticIPv4Address(t *testing.T) {
 		},
 		"a static IPv4 install address": func() (api.Object, api.Catalog) {
 			return build(installed, list(m("name", "eth0", "type", "ethernet")), "192.0.2.0/24",
-				list(m("name", "fqdn", "address", "node.example.test"), m("name", "primary", "address", "192.0.2.11/24", "interface", "eth0")))
+				list(m("name", "fqdn", "address", "node.example.test"), m("name", "primary", "address", "192.0.2.11", "interface", "eth0")))
 		},
 	}
 	for name, setup := range admitted {
@@ -629,7 +624,7 @@ func TestAnacondaInstallationRequiresAStaticIPv4Address(t *testing.T) {
 		})
 	}
 	ambiguous, catalog := build(installed, list(m("name", "eth0", "type", "ethernet"), m("name", "eth1", "type", "ethernet")), "192.0.2.0/24",
-		list(m("name", "primary", "address", "192.0.2.11/24", "interface", "eth0"), m("name", "secondary", "address", "192.0.2.12/24", "interface", "eth1")))
+		list(m("name", "primary", "address", "192.0.2.11", "interface", "eth0"), m("name", "secondary", "address", "192.0.2.12", "interface", "eth1")))
 	if found := at(Validate(ambiguous, catalog)); len(found) != 1 || !strings.Contains(found[0].Message, "ambiguous") {
 		t.Fatalf("an ambiguous install address refused %#v, want its ambiguity alone", found)
 	}

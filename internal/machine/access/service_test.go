@@ -48,7 +48,7 @@ func m(kv ...any) api.Value {
 func list(values ...api.Value) api.Value { return api.ListValue(values...) }
 
 func catalog() api.Catalog {
-	network := m("addresses", list(m("name", "ssh", "address", "192.0.2.10/24")))
+	network := m("addresses", list(m("name", "ssh", "address", "192.0.2.10")))
 	host := object(api.Machine, "host", m(
 		"os", m("provided", true), "network", network,
 		"access", m("ssh", m("addressRef", "ssh", "user", "operator", "port", api.IntegerValue("2222"),
@@ -66,10 +66,10 @@ func catalog() api.Catalog {
 		"access", m("ssh", m("addressRef", "ssh", "user", "admin", "auth", m("passwordRef", "admin-password")))))
 	local := object(api.Machine, "controller", m("os", m("provided", true), "access", m("local", true)))
 	peer := object(api.Machine, "peer", m(
-		"os", m("provided", true), "network", m("addresses", list(m("name", "ssh", "address", "192.0.2.11/24"))),
+		"os", m("provided", true), "network", m("addresses", list(m("name", "ssh", "address", "192.0.2.11"))),
 		"access", m("ssh", m("addressRef", "ssh", "user", "operator", "auth", m("operatorIdentity", m())))))
 	keyed := object(api.Machine, "keyed", m(
-		"os", m("provided", true), "network", m("addresses", list(m("name", "ssh", "address", "192.0.2.12/24"))),
+		"os", m("provided", true), "network", m("addresses", list(m("name", "ssh", "address", "192.0.2.12"))),
 		"access", m("ssh", m("addressRef", "ssh", "user", "admin", "auth", m("privateKeyRef", "admin-key")))))
 	return api.NewCatalog([]api.Object{host, guest, declared, secured, local, peer, keyed})
 }

@@ -16,10 +16,10 @@ import (
 func TestAddonFactsShareEndpointOwnershipClaims(t *testing.T) {
 	cluster, catalog := fixture("libvirt", 3, false)
 	cluster, _ = Normalize(cluster, catalog)
-	other := obj(api.Machine, "other", m("network", m("addresses", list(m("address", "192.0.2.90/24")))))
+	other := obj(api.Machine, "other", m("network", m("addresses", list(m("address", "192.0.2.90")))))
 	dns := obj(api.DNSServer, "dns", m("management", "managed", "bindAddress", "192.0.2.91"))
 	provider := managedNetwork("network-host", "lab", "192.0.2.1/24", "virbr-host")
-	objects := append(catalog.Objects(), cluster, other, dns, provider)
+	objects := append(withoutNetwork(catalog, "lan"), cluster, other, dns, provider)
 	facts := AddonFacts(api.NewCatalog(objects), cluster.Name())
 	if facts.Release != "4.21.15" || facts.Family != "ipv4" || len(facts.Nodes) != 3 || len(facts.NodeNetworks) != 3 {
 		t.Fatalf("cluster facts: %+v", facts)
@@ -198,9 +198,9 @@ func TestMetalLBInterfacePoolUsesDerivedGatewayFacts(t *testing.T) {
 	node, _ := catalog.Find(api.Machine, "node-0")
 	network := node.Spec().Get("network")
 	inline := network.Get("inline").With("nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet"), m("name", "eth1", "type", "ethernet")), "routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-interface", "eth0", "next-hop-address", "192.0.2.1")))))
-	network = network.With("inline", inline).With("addresses", list(m("name", "primary", "interface", "eth0", "address", "192.0.2.10/24"), m("name", "secondary", "interface", "eth1", "address", "203.0.113.10/24")))
+	network = network.With("inline", inline).With("addresses", list(m("name", "primary", "interface", "eth0", "address", "192.0.2.10"), m("name", "secondary", "interface", "eth1", "address", "203.0.113.10")))
 	node = node.WithSpec(node.Spec().With("network", network))
-	objects := []api.Object{node}
+	objects := []api.Object{node, storageNetwork()}
 	for _, o := range catalog.Objects() {
 		if o.Kind() != api.Machine {
 			objects = append(objects, o)
@@ -260,10 +260,10 @@ func TestMetalLBPoolNamesTheBridgeThatCarriesTheUplinkAddresses(t *testing.T) {
 	node, _ := catalog.Find(api.Machine, "node-0")
 	network := node.Spec().Get("network")
 	inline := network.Get("inline").With("nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet"), m("name", "eth1", "type", "ethernet")), "routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-interface", "eth0", "next-hop-address", "192.0.2.1")))))
-	primary := m("name", "primary", "interface", "eth0", "address", "192.0.2.10/24")
+	primary := m("name", "primary", "interface", "eth0", "address", "192.0.2.10")
 	objectsWith := func(addresses ...api.Value) []api.Object {
 		bound := node.WithSpec(node.Spec().With("network", network.With("inline", inline).With("addresses", list(addresses...))))
-		objects := []api.Object{bound}
+		objects := []api.Object{bound, storageNetwork()}
 		for _, o := range catalog.Objects() {
 			if o.Kind() != api.Machine {
 				objects = append(objects, o)
@@ -271,7 +271,7 @@ func TestMetalLBPoolNamesTheBridgeThatCarriesTheUplinkAddresses(t *testing.T) {
 		}
 		return objects
 	}
-	addressed := objectsWith(primary, m("name", "secondary", "interface", "eth1", "address", "203.0.113.10/24"))
+	addressed := objectsWith(primary, m("name", "secondary", "interface", "eth1", "address", "203.0.113.10"))
 	registry := addonpackages.Builtin()
 	for _, test := range []struct {
 		name          string
@@ -359,4 +359,18 @@ func TestMetalLBRefusesCephVirtualAddresses(t *testing.T) {
 			})
 		}
 	}
+}
+
+func withoutNetwork(catalog api.Catalog, name string) []api.Object {
+	objects := []api.Object{}
+	for _, o := range catalog.Objects() {
+		if o.Kind() != api.Network || o.Name() != name {
+			objects = append(objects, o)
+		}
+	}
+	return objects
+}
+
+func storageNetwork() api.Object {
+	return obj(api.Network, "storage-lan", m("provided", true, "ipv4", m("cidr", "203.0.113.0/24")))
 }

@@ -135,7 +135,7 @@ func nodeAddonNetwork(node api.Object, catalog api.Catalog, family string) addon
 		iface := addons.NodeInterface{Name: entry.Get("name").Text(), Type: entry.Get("type").Text()}
 		for _, assignment := range node.Spec().Get("network", "addresses").Items() {
 			if assignment.Get("interface").Text() == iface.Name {
-				if p, e := netip.ParsePrefix(assignment.Get("address").Text()); e == nil {
+				if p, ok := machine.AssignedPrefix(node, catalog, assignment); ok {
 					iface.Addresses = append(iface.Addresses, p)
 				}
 			}

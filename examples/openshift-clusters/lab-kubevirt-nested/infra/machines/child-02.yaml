@@ -28,5 +28,5 @@ spec:
         address: child-02.lab.example.test
 
       - name: ip
-        address: 203.0.113.22/24
+        address: 203.0.113.22
         interface: eth0

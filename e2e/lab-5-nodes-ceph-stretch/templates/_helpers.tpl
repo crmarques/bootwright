@@ -49,6 +49,6 @@ spec:
         address: {{ .name }}.{{ $v.host.domain }}
 
       - name: ip
-        address: {{ index $v.addresses .name }}/{{ $v.host.prefix }}
+        address: {{ index $v.addresses .name }}
         interface: enp1s0
 {{- end -}}

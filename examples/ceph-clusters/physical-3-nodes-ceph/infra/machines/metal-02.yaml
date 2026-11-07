@@ -68,5 +68,5 @@ spec:
         address: metal-02.metal.example.test
 
       - name: ip
-        address: 198.51.100.12/24
+        address: 198.51.100.12
         interface: eno1

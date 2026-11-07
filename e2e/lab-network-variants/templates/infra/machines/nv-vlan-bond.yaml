@@ -43,11 +43,11 @@ spec:
         address: nv-vlan-bond.{{ .Values.host.domain }}
 
       - name: ip
-        address: {{ .Values.vlanBond.address }}/{{ .Values.host.prefix }}
+        address: {{ .Values.vlanBond.address }}
         interface: bond0.{{ .Values.vlanBond.id }}
 
       - name: guest
-        address: {{ .Values.converge.vlanBondAddress }}/{{ .Values.converge.prefix }}
+        address: {{ .Values.converge.vlanBondAddress }}
         interface: bond0.{{ .Values.converge.vlanId }}
 
     overrides:

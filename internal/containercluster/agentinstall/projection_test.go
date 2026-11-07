@@ -147,13 +147,13 @@ func TestPhysicalNodesAreFrozenAsOperatorOwnedHardware(t *testing.T) {
 func TestPhysicalNodesFreezeTheirDeclaredInterfacesInOrder(t *testing.T) {
 	frozen := frozenNodes([]nodeProjection{
 		{
-			machine: server("metal-01", "198.51.100.41/24", "aa:bb:cc:dd:ee:01"), name: "master-0",
+			machine: server("metal-01", "198.51.100.41", "aa:bb:cc:dd:ee:01"), name: "master-0",
 			target: substrate.Target{Physical: true, Substrate: "baremetal", Interfaces: []substrate.Interface{
 				{Name: "enp2s0", MACAddress: "aa:bb:cc:dd:ee:02"}, {Name: "enp1s0", MACAddress: "aa:bb:cc:dd:ee:01"},
 			}},
 		},
 		{
-			machine: guest("sno-01", "198.51.100.21/24"), name: "master-1",
+			machine: guest("sno-01", "198.51.100.21"), name: "master-1",
 			target: substrate.Target{Substrate: "libvirt", Interfaces: []substrate.Interface{
 				{Name: "enp1s0", MACAddress: "52:54:00:06:3e:11"},
 			}},
@@ -247,7 +247,7 @@ func siteServicesCatalog() api.Catalog {
 		}
 		objects = append(objects, object)
 	}
-	return api.NewCatalog(append(objects, guest("sno-01", "198.51.100.21/24"), cluster("sno",
+	return api.NewCatalog(append(objects, guest("sno-01", "198.51.100.21"), cluster("sno",
 		installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")).
 			With("ntp", api.ListValue(api.MapValue(text("serverRef", "lab-ntp")))),
 		node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test"))))
@@ -311,7 +311,7 @@ func TestUnsupportedNamesEveryClusterThisContractCannotInstall(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			objects := append(base(), guest("sno-01", "198.51.100.21/24"))
+			objects := append(base(), guest("sno-01", "198.51.100.21"))
 			declared := cluster("sno",
 				installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
 				node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test"))
@@ -337,7 +337,7 @@ func TestUnsupportedNamesEveryClusterThisContractCannotInstall(t *testing.T) {
 // target does not derive refuses with its substrate's own reason and the remedy
 // naming the provider to correct.
 func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.T) {
-	installed := guest("sno-01", "198.51.100.21/24")
+	installed := guest("sno-01", "198.51.100.21")
 	installed = installed.WithSpec(installed.Spec().WithPath(api.StringValue("rhel-9-8"), "os", "installProfileRef"))
 	for name, test := range map[string]struct {
 		catalog     api.Catalog
@@ -354,7 +354,7 @@ func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.
 			"remove spec.os.installProfileRef from Machine/sno-01 or drop it from OpenShiftCluster/sno",
 		},
 		"controller port past the port space": {
-			singleNodeOnProvider(portPastTheSpace, guest("sno-00", "198.51.100.20/24")), "OpenShiftCluster/sno",
+			singleNodeOnProvider(portPastTheSpace, guest("sno-00", "198.51.100.20")), "OpenShiftCluster/sno",
 			"node master-0 (Machine/sno-01): the Machine's emulated BMC port does not allocate",
 			"correct spec.libvirt.bmcEmulation.port on InfraProvider/lab-libvirt",
 		},
@@ -408,7 +408,7 @@ func TestAMultiNodeClusterOnAnotherPlatformRefusesBeforeRegistration(t *testing.
 	for _, platform := range []string{"vsphere", "external"} {
 		t.Run(platform, func(t *testing.T) {
 			objects := append(base(),
-				guest("ocp-01", "198.51.100.31/24"), guest("ocp-02", "198.51.100.32/24"), guest("ocp-03", "198.51.100.33/24"))
+				guest("ocp-01", "198.51.100.31"), guest("ocp-02", "198.51.100.32"), guest("ocp-03", "198.51.100.33"))
 			objects = append(objects, cluster("ocp",
 				installSelection(
 					endpoints("198.51.100.10", "198.51.100.10", "198.51.100.11", "external"),
@@ -428,7 +428,7 @@ func TestAMultiNodeClusterOnAnotherPlatformRefusesBeforeRegistration(t *testing.
 				t.Fatalf("refusal = %#v", reported)
 			}
 
-			single := append(base(), guest("sno-01", "198.51.100.21/24"), cluster("sno",
+			single := append(base(), guest("sno-01", "198.51.100.21"), cluster("sno",
 				installSelection(
 					endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node"),
 					field("platform", api.MapValue(field(platform, api.MapValue()))),
@@ -455,7 +455,7 @@ func TestAMultiNodeClusterOnNoPlatformInstallsOnNone(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			objects := append(base(),
-				guest("ocp-01", "198.51.100.31/24"), guest("ocp-02", "198.51.100.32/24"), guest("ocp-03", "198.51.100.33/24"))
+				guest("ocp-01", "198.51.100.31"), guest("ocp-02", "198.51.100.32"), guest("ocp-03", "198.51.100.33"))
 			objects = append(objects, cluster("ocp",
 				installSelection(append([]api.FieldValue{
 					endpoints("198.51.100.10", "198.51.100.10", "198.51.100.11", "external"),
@@ -517,14 +517,14 @@ func TestAnEmulatedNodeOffTheServersHostImportsTheServerCertificate(t *testing.T
 		want    map[string]VirtualMedia
 	}{
 		"single node": {
-			[]api.Object{onRemote(guest("sno-01", "198.51.100.21/24")), cluster("sno",
+			[]api.Object{onRemote(guest("sno-01", "198.51.100.21")), cluster("sno",
 				installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
 				node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test"))},
 			map[string]VirtualMedia{"sno-01": verified},
 		},
 		"one node of three": {
 			[]api.Object{
-				guest("ocp-01", "198.51.100.31/24"), guest("ocp-02", "198.51.100.32/24"), onRemote(guest("ocp-03", "198.51.100.33/24")),
+				guest("ocp-01", "198.51.100.31"), guest("ocp-02", "198.51.100.32"), onRemote(guest("ocp-03", "198.51.100.33")),
 				cluster("ocp",
 					installSelection(
 						endpoints("198.51.100.10", "198.51.100.10", "198.51.100.11", "installer"),
@@ -559,7 +559,7 @@ func TestAnEmulatedNodeOffTheServersHostImportsTheServerCertificate(t *testing.T
 
 // A server placed with the provider still refuses if the installer is elsewhere.
 func TestAnOffControllerServerRefusesBeforeRegistration(t *testing.T) {
-	objects := append(append(base(), hypervisor()...), onRemote(guest("sno-01", "198.51.100.21/24")), servedBy("far-artifacts",
+	objects := append(append(base(), hypervisor()...), onRemote(guest("sno-01", "198.51.100.21")), servedBy("far-artifacts",
 		cluster("sno",
 			installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
 			node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test"))))
@@ -591,7 +591,7 @@ func TestAnUnresolvedServerIsRefusedAsTheSelection(t *testing.T) {
 			objects = append(objects, object)
 		}
 	}
-	objects = append(objects, external, guest("sno-01", "198.51.100.21/24"), cluster("sno",
+	objects = append(objects, external, guest("sno-01", "198.51.100.21"), cluster("sno",
 		installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
 		node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test")))
 	catalog := api.NewCatalog(objects)

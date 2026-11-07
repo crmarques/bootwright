@@ -28,5 +28,5 @@ spec:
         address: features-01.lab.example.test
 
       - name: ip
-        address: 2001:db8:2::21/64
+        address: 2001:db8:2::21
         interface: enp1s0

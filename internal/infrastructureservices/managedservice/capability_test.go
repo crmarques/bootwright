@@ -255,8 +255,8 @@ func TestAServiceBoundToAManagedBridgeRequiresItsProvider(t *testing.T) {
 	}
 	addresses := controller().Spec().Get("network", "addresses").Items()
 	host := api.NewObject(api.Machine, "controller", api.Value{}, controller().Spec().With("network", api.MapValue(field("addresses", api.ListValue(append(addresses,
-		api.MapValue(text("name", "guests"), text("address", "198.51.100.1/24")),
-		api.MapValue(text("name", "guests-v6"), text("address", "fd00:5::1/64")),
+		api.MapValue(text("name", "guests"), text("address", "198.51.100.1")),
+		api.MapValue(text("name", "guests-v6"), text("address", "fd00:5::1")),
 	)...)))))
 	for name, test := range map[string]struct {
 		provider       []api.Object
@@ -685,7 +685,6 @@ func clusterEnvironment() api.Object {
 
 func clusterCatalog() api.Catalog {
 	network := api.NewObject(api.NetworkConfig, "guests", api.Value{}, api.MapValue(
-		field("machineNetwork", api.ListValue(api.MapValue(text("cidr", "198.51.100.0/24")))),
 		field("nmstate", api.MapValue(field("interfaces", api.ListValue(
 			api.MapValue(text("name", "enp1s0"), text("type", "ethernet"), text("state", "up")),
 		)))),
@@ -695,7 +694,7 @@ func clusterCatalog() api.Catalog {
 		field("network", api.MapValue(
 			text("configRef", "guests"), text("installAddressRef", "ip"),
 			field("addresses", api.ListValue(
-				api.MapValue(text("name", "ip"), text("address", "198.51.100.21/24"), text("interface", "enp1s0")),
+				api.MapValue(text("name", "ip"), text("address", "198.51.100.21"), text("interface", "enp1s0")),
 			)),
 		)),
 	))
@@ -710,7 +709,17 @@ func clusterCatalog() api.Catalog {
 			text("fqdn", "master-0.sno.clusters.example.test"),
 		))),
 	))
-	return api.NewCatalog([]api.Object{clusterEnvironment(), controller(), network, node, cluster})
+	lan := api.NewObject(api.Network, "lan", api.Value{}, api.MapValue(
+		field("provided", api.BoolValue(true)), field("ipv4", api.MapValue(text("cidr", "198.51.100.0/24"))),
+	))
+	return api.NewCatalog([]api.Object{clusterEnvironment(), controller(), lan, network, node, cluster})
+}
+
+func TestClientsAdmitTheNetworkHoldingEachInterfaceAssignment(t *testing.T) {
+	want := []string{"127.0.0.1/32", "192.0.2.1/32", "198.51.100.0/24", "198.51.100.21/32", "::1/128"}
+	if got := Clients(clusterCatalog()); !slices.Equal(got, want) {
+		t.Fatalf("clients = %v, want %v", got, want)
+	}
 }
 
 func TestAnApplyHandsTheRunnerItsForeignListenerRefusal(t *testing.T) {

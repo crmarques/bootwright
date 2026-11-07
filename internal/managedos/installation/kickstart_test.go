@@ -60,7 +60,6 @@ func TestTheNetworkLineComesFromTheSelectedAddress(t *testing.T) {
 // a gateway the graph never declared.
 func TestATemplateWithoutADefaultRouteRendersNoGateway(t *testing.T) {
 	bare := api.NewObject(api.NetworkConfig, "lab-guests", api.Value{}, api.MapValue(
-		field("machineNetwork", api.ListValue(api.MapValue(text("cidr", "198.51.100.0/24")))),
 		field("nmstate", api.MapValue(field("interfaces", api.ListValue(
 			api.MapValue(text("name", "enp1s0"), text("type", "ethernet")),
 		)))),

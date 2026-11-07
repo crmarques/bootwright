@@ -64,8 +64,8 @@ func TestEveryNICDefaultsToItsProvidersSoleSegment(t *testing.T) {
 			lab[i] = api.NewObject(api.NetworkConfig, "profile", api.MapValue(), o.Spec())
 		}
 	}
-	addresses := list(m("name", "ip", "address", "192.0.2.11/24", "interface", "enp1s0"))
-	inline := m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet"))))
+	addresses := list(m("name", "ip", "address", "192.0.2.11", "interface", "enp1s0"))
+	inline := m("nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet"))))
 	for name, network := range map[string]api.Value{
 		"a referenced configuration": m("configRef", "profile", "addresses", addresses),
 		"an inline configuration":    m("inline", inline, "addresses", addresses),
@@ -98,7 +98,7 @@ func TestABondRefusesPortsOnDifferentSegments(t *testing.T) {
 	interfaces := list(m("name", "enp1s0", "type", "ethernet"), m("name", "enp2s0", "type", "ethernet"),
 		m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList("enp1s0", "enp2s0"))))
 	bonded := func(second string) api.Object {
-		machine := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11/24", "interface", "bond0"))))
+		machine := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11", "interface", "bond0"))))
 		return machine.WithSpec(machine.Spec().WithPath(list(m("nicRef", "enp1s0", "segmentRef", "net"), m("nicRef", "enp2s0", "segmentRef", second)), "substrate", "libvirt", "nics").
 			WithPath(list(m("name", "enp1s0"), m("name", "enp2s0")), "hardware", "nics"))
 	}
@@ -120,7 +120,7 @@ func TestABondSplitThroughControllerOrNestingRefusesOnce(t *testing.T) {
 		return m("name", name, "type", "ethernet", "controller", controller)
 	}
 	attached := func(interfaces api.Value, install string, attachments ...string) []api.Issue {
-		machine := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11/24", "interface", install))))
+		machine := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11", "interface", install))))
 		var entries, nics []api.Value
 		for index, reference := range attachments {
 			name := []string{"enp1s0", "enp2s0", "enp3s0"}[index]
@@ -167,7 +167,7 @@ func TestAnInstallGatewayLiesInsideTheInstallPrefix(t *testing.T) {
 	}
 	outside := api.Issue{Code: "api.invariant", Field: "$.spec.network.installAddressRef",
 		Message:     "install gateway 198.51.100.1, the next hop of the default route in NetworkConfig/net, lies outside install address primary 192.0.2.11/24 of Machine/node",
-		Remediation: "set that default route's next-hop-address in NetworkConfig/net to a gateway inside 192.0.2.0/24, or give install address primary a prefix that contains 198.51.100.1"}
+		Remediation: "set that default route's next-hop-address in NetworkConfig/net to a gateway inside 192.0.2.0/24, or move install address primary to a Network whose prefix contains 198.51.100.1"}
 	requireOneIssue(t, routed(m("destination", "0.0.0.0/0", "next-hop-interface", "eth0", "next-hop-address", "198.51.100.1")), outside)
 	requireOneIssue(t, routed(m("destination", "0.0.0.0/0", "next-hop-address", "198.51.100.1")), outside)
 	for name, route := range map[string]api.Value{
@@ -180,12 +180,17 @@ func TestAnInstallGatewayLiesInsideTheInstallPrefix(t *testing.T) {
 			t.Fatalf("%s was refused: %v", name, issues)
 		}
 	}
-	v6 := node.WithSpec(node.Spec().WithPath(list(m("name", "primary", "address", "2001:db8::11/64", "interface", "eth0")), "network", "addresses"))
+	v6 := node.WithSpec(node.Spec().WithPath(list(m("name", "primary", "address", "2001:db8::11", "interface", "eth0")), "network", "addresses"))
 	routedV6 := func(gateway string) []api.Issue {
 		objects := without(catalog, node)
 		for i, o := range objects {
 			if o.Kind() == api.NetworkConfig {
-				objects[i] = o.WithSpec(o.Spec().With("machineNetwork", list(m("cidr", "2001:db8::/64"))).WithPath(list(m("destination", "::/0", "next-hop-interface", "eth0", "next-hop-address", gateway)), "nmstate", "routes", "config"))
+				objects[i] = o.WithSpec(o.Spec().WithPath(list(m("destination", "::/0", "next-hop-interface", "eth0", "next-hop-address", gateway)), "nmstate", "routes", "config"))
+			}
+		}
+		for i, o := range objects {
+			if o.Kind() == api.Network {
+				objects[i] = o.WithSpec(o.Spec().With("ipv6", m("cidr", "2001:db8::/64")))
 			}
 		}
 		return admission(v6, objects...)
@@ -196,24 +201,20 @@ func TestAnInstallGatewayLiesInsideTheInstallPrefix(t *testing.T) {
 	if issues := routedV6("2001:db8:1::1"); len(issues) != 1 || issues[0].Message != "install gateway 2001:db8:1::1, the next hop of the default route in NetworkConfig/net, lies outside install address primary 2001:db8::11/64 of Machine/node" {
 		t.Fatalf("an IPv6 gateway outside the prefix: %#v", issues)
 	}
-	inline := node.WithSpec(node.Spec().With("network", node.Spec().Get("network").Without("configRef").With("inline", m("machineNetwork", list(m("cidr", "192.0.2.0/24")),
-		"nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")), "routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-address", "198.51.100.1"))))))))
+	inline := node.WithSpec(node.Spec().With("network", node.Spec().Get("network").Without("configRef").With("inline", m("nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")), "routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-address", "198.51.100.1"))))))))
 	issues := admission(inline, without(catalog, node)...)
 	if len(issues) != 1 || issues[0].Message != "install gateway 198.51.100.1, the next hop of the default route in spec.network.inline.nmstate, lies outside install address primary 192.0.2.11/24 of Machine/node" {
 		t.Fatalf("an inline network's gateway: %#v", issues)
 	}
 }
 
-// A contact names a host to reach and configures nothing, so it carries no
-// prefix.
-func TestAContactCarriesNoPrefix(t *testing.T) {
+// A contact names a host to reach and configures nothing: a bare IP or a DNS
+// name, which no Network needs to hold.
+func TestAContactNeedsNoNetwork(t *testing.T) {
 	ready := func(address string) []api.Issue {
 		machine := object(api.Machine, "ready", m("os", m("provided", true), "network", m("addresses", list(m("name", "ssh", "address", address)))))
 		return admission(machine)
 	}
-	requireOneIssue(t, ready("192.0.2.10/24"), api.Issue{Code: "api.invariant", Field: "$.spec.network.addresses[0].address",
-		Message:     "contact ssh of Machine/ready carries a prefix, but a contact names a host to reach and configures nothing",
-		Remediation: "remove the prefix from spec.network.addresses[0].address on Machine/ready, or assign the address to an interface with spec.network.addresses[0].interface"})
 	for _, address := range []string{"192.0.2.10", "2001:db8::10", "host.example.test"} {
 		if issues := ready(address); len(issues) != 0 {
 			t.Fatalf("contact %s was refused: %v", address, issues)
@@ -246,7 +247,7 @@ func TestAnUnmatchedNICMayNotShareAMatchedInterfaceName(t *testing.T) {
 func TestEveryEthernetInterfaceMatchesExactlyOneNIC(t *testing.T) {
 	two := list(m("name", "enp1s0", "type", "ethernet"), m("name", "enp2s0", "type", "ethernet"))
 	matched := func(nics api.Value, matches api.Value) []api.Issue {
-		machine := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11/24", "interface", "enp1s0"))))
+		machine := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11", "interface", "enp1s0"))))
 		spec := machine.Spec().WithPath(nics, "hardware", "nics")
 		if matches.Present() {
 			spec = spec.WithPath(matches, "network", "interfaceMatches")
@@ -274,7 +275,7 @@ func TestEveryEthernetInterfaceMatchesExactlyOneNIC(t *testing.T) {
 // realizes authors none in its NMState.
 func TestAVirtualMachineAuthorsNoNMStateMAC(t *testing.T) {
 	interfaces := list(m("name", "enp1s0", "type", "ethernet", "mac-address", "52:54:00:00:00:01"))
-	machine := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11/24", "interface", "enp1s0"))))
+	machine := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11", "interface", "enp1s0"))))
 	requireOneIssue(t, admission(machine, libvirtLab(interfaces)...), api.Issue{Code: "api.invariant", Field: "$.spec.network.configRef",
 		Message:     "ethernet interface enp1s0 of Machine/guest authors a mac-address, but a libvirt provider derives each vNIC's MAC from the context, Machine and NIC names",
 		Remediation: "remove mac-address from interface enp1s0 in the network configuration of Machine/guest, and match the interface to its NIC with spec.network.interfaceMatches if their names differ"})
@@ -285,7 +286,7 @@ func TestAVirtualMachineAuthorsNoNMStateMAC(t *testing.T) {
 func TestAnUnmatchedVirtualNICMayNotTakeAPinnedInterfaceName(t *testing.T) {
 	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
 	nics := func(second string) api.Object {
-		machine := installOn("192.0.2.11/24")
+		machine := installOn("192.0.2.11")
 		spec := machine.Spec().WithPath(list(m("name", "vnic0"), m("name", second)), "hardware", "nics").
 			WithPath(list(m("interface", "enp1s0", "nicRef", "vnic0")), "network", "interfaceMatches")
 		return machine.WithSpec(spec)

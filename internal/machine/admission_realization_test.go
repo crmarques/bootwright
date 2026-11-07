@@ -16,7 +16,7 @@ func libvirtLab(interfaces api.Value) []api.Object {
 	return []api.Object{
 		object(api.Machine, "host", m("os", m("provided", true))),
 		object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", m("auth", m("credentialsRef", "bmc")), "machineProfiles", list(m("name", "small"))))),
-		object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", interfaces))),
+		object(api.NetworkConfig, "net", m("nmstate", m("interfaces", interfaces))),
 		object(api.MachineInstallProfile, "rhel", m("installer", m("anaconda", m("imageRef", "image")))),
 		object(api.Environment, "env", m("domains", m("base", "example.test"))),
 		managedNet("net", "lab", "192.0.2.0/24", "192.0.2.1"),
@@ -79,7 +79,7 @@ func TestALibvirtMachineNeedsAnAvailableEthernetInterface(t *testing.T) {
 		"only an ignored ethernet interface":  {list(m("name", "enp1s0", "type", "ethernet", "state", "ignore")), attached, "$.spec.network.configRef"},
 		"only a bond":                         {list(m("name", "bond0", "type", "bond")), attached, "$.spec.network.configRef"},
 		"an override removing the interface":  {up, attached.With("overrides", m("interfaces", list(m("name", "enp1s0", "state", "absent")))), "$.spec.network.configRef"},
-		"an inline configuration without one": {up, m("inline", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", absent))), "$.spec.network.inline.nmstate"},
+		"an inline configuration without one": {up, m("inline", m("nmstate", m("interfaces", absent))), "$.spec.network.inline.nmstate"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			want := unavailable
@@ -125,18 +125,14 @@ func installOn(address string) api.Object {
 		"addresses", list(m("name", "ip", "address", address, "interface", "enp1s0"))))
 }
 
-// A managed Network's bridge holds its host address, and an IPv4 prefix shorter
-// than /31 reserves its network and broadcast addresses, so none of them
-// installs a guest; a /32 assignment also differs from its Network's prefix.
+// A managed Network's bridge holds its host address, so it never installs a
+// guest, and an install address outside the managed Network is refused.
 func TestAnInstallAddressIsNeitherTheBridgeNorItsNetworkOrBroadcast(t *testing.T) {
 	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
-	lab[2] = lab[2].WithSpec(lab[2].Spec().With("machineNetwork", list(m("cidr", "192.0.2.0/24"), m("cidr", "198.51.100.0/24"))))
 	lab = append(lab, object(api.Network, "other", m("provided", true, "ipv4", m("cidr", "198.51.100.0/24"))))
 	for address, message := range map[string]string{
-		"198.51.100.10/24": "install address must lie inside managed Network/net",
-		"192.0.2.1/24":     "the install address is the host address of managed Network/net on InfraProvider/lab",
-		"192.0.2.0/32":     "the install address is the network address of managed Network/net on InfraProvider/lab",
-		"192.0.2.255/32":   "the install address is the broadcast address of managed Network/net on InfraProvider/lab",
+		"198.51.100.10": "install address must lie inside managed Network/net",
+		"192.0.2.1":     "the install address is the host address of managed Network/net on InfraProvider/lab",
 	} {
 		t.Run(address, func(t *testing.T) {
 			for _, perInterface := range []bool{false, true} {
@@ -152,7 +148,7 @@ func TestAnInstallAddressIsNeitherTheBridgeNorItsNetworkOrBroadcast(t *testing.T
 			}
 		})
 	}
-	if issues := admission(installOn("192.0.2.11/24"), lab...); len(issues) != 0 {
+	if issues := admission(installOn("192.0.2.11"), lab...); len(issues) != 0 {
 		t.Fatalf("a host address inside the bridge's prefix was refused: %v", issues)
 	}
 }
@@ -161,21 +157,31 @@ func TestAnInstallAddressIsNeitherTheBridgeNorItsNetworkOrBroadcast(t *testing.T
 // interface assignment is never either; a /31, a /32 and IPv6 reserve neither.
 func TestAnIPv4AssignmentIsAHostAddressOfItsPrefix(t *testing.T) {
 	node, catalog := fixture()
-	compose := func(address string) []api.Issue {
+	compose := func(address, cidr string) []api.Issue {
 		edited := node.WithSpec(node.Spec().WithPath(list(m("name", "primary", "address", address, "interface", "eth0")), "network", "addresses"))
-		_, issues := ComposeNetwork(edited, catalog)
+		family := "ipv4"
+		if strings.Contains(cidr, ":") {
+			family = "ipv6"
+		}
+		objects := []api.Object{edited, object(api.Network, "lan", m("provided", true, family, m("cidr", cidr)))}
+		for _, o := range catalog.Objects() {
+			if o.Kind() != api.Machine && o.Kind() != api.Network {
+				objects = append(objects, o)
+			}
+		}
+		_, issues := ComposeNetwork(edited, api.NewCatalog(objects))
 		return issues
 	}
-	for _, address := range []string{"192.0.2.0/24", "192.0.2.255/24"} {
+	for _, address := range []string{"192.0.2.0", "192.0.2.255"} {
 		t.Run(address, func(t *testing.T) {
-			requireOneIssue(t, compose(address), api.Issue{Code: "api.value", Field: "$.spec.network.addresses[0].address",
-				Message:     "an IPv4 assignment is a host address of its prefix, never its network or broadcast address",
-				Remediation: "correct spec.network.addresses[0].address on Machine/node to a host address inside its prefix"})
+			requireOneIssue(t, compose(address, "192.0.2.0/24"), api.Issue{Code: "api.value", Field: "$.spec.network.addresses[0].address",
+				Message:     "an IPv4 assignment is a host address of its Network, never its network or broadcast address",
+				Remediation: "correct spec.network.addresses[0].address on Machine/node to a host address inside 192.0.2.0/24"})
 		})
 	}
-	for _, address := range []string{"192.0.2.0/31", "192.0.2.255/32", "2001:db8::/64"} {
-		if issues := compose(address); len(issues) != 0 {
-			t.Fatalf("%s was refused: %v", address, issues)
+	for address, cidr := range map[string]string{"192.0.2.0": "192.0.2.0/31", "192.0.2.255": "192.0.2.255/32", "2001:db8::": "2001:db8::/64"} {
+		if issues := compose(address, cidr); len(issues) != 0 {
+			t.Fatalf("%s in %s was refused: %v", address, cidr, issues)
 		}
 	}
 }
@@ -306,7 +312,7 @@ func TestAnUnresolvedFleetKeyDerivesNoAccess(t *testing.T) {
 // controller.
 func TestALibvirtMachineAuthorsOnlyItsOwnArm(t *testing.T) {
 	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
-	attached := installOn("192.0.2.11/24")
+	attached := installOn("192.0.2.11")
 	with := func(hardware, arm api.Value) api.Object {
 		return attached.WithSpec(attached.Spec().With("hardware", hardware).With("substrate", arm))
 	}
@@ -394,7 +400,7 @@ func TestAKubeVirtMachineAuthorsNoMAC(t *testing.T) {
 // attachment selection. A libvirt NIC's attachment is its domain interface's
 // network, so with two attachments to choose from each NIC names one.
 func TestABaremetalMachineSelectsNoAttachment(t *testing.T) {
-	inline := guest(m("inline", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet"))))))
+	inline := guest(m("inline", m("nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet"))))))
 	requireOneIssue(t, admission(inline, twoSegmentLab(list())...), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.nics",
 		Message:     "NIC enp1s0 of Machine/guest selects no segment, and InfraProvider/lab declares 2 segments, not exactly one that every NIC defaults to",
 		Remediation: "add a spec.substrate.libvirt.nics entry with nicRef enp1s0 and a segmentRef naming a segment of InfraProvider/lab on Machine/guest"})
@@ -414,7 +420,7 @@ func TestABaremetalMachineSelectsNoAttachment(t *testing.T) {
 func TestAnFQDNContactIsADNSName(t *testing.T) {
 	node, catalog := fixture()
 	contact := func(address string) []api.Issue {
-		edited := node.WithSpec(node.Spec().WithPath(list(m("name", "fqdn", "address", address), m("name", "primary", "address", "192.0.2.11/24", "interface", "eth0")), "network", "addresses"))
+		edited := node.WithSpec(node.Spec().WithPath(list(m("name", "fqdn", "address", address), m("name", "primary", "address", "192.0.2.11", "interface", "eth0")), "network", "addresses"))
 		return admission(edited, without(catalog, edited)...)
 	}
 	for _, address := range []string{"Rhel.example.test", "a-.example"} {
@@ -458,12 +464,12 @@ func TestAMACNamesOneDeclaredHardwareNIC(t *testing.T) {
 func TestAVirtualMachineDeclaresItsNICsAndNamesAProviderProfile(t *testing.T) {
 	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
 	provider := lab[1]
-	bare := installOn("192.0.2.11/24")
+	bare := installOn("192.0.2.11")
 	bare = bare.WithSpec(bare.Spec().Without("hardware"))
 	requireOneIssue(t, validateSubstrate(api.NewCatalog(lab), bare, provider, substrate.ArmLibvirt), api.Issue{Code: "api.invariant", Field: "$.spec.hardware.nics",
 		Message:     "a libvirt provider creates one vNIC per spec.hardware.nics entry, in order, and Machine/guest declares none",
 		Remediation: "declare each vNIC of Machine/guest in spec.hardware.nics, in device order, such as one entry named enp1s0"})
-	unknown := installOn("192.0.2.11/24")
+	unknown := installOn("192.0.2.11")
 	unknown = unknown.WithSpec(unknown.Spec().WithPath(api.StringValue("missing"), "substrate", "libvirt", "profileRef"))
 	if issues := validateSubstrate(api.NewCatalog(lab), unknown, provider, substrate.ArmLibvirt); len(issues) != 0 {
 		t.Fatalf("an unresolved profileRef, which the shared reference check reports, was refused again: %v", issues)
@@ -478,8 +484,8 @@ func TestInstallAttachmentContainmentFollowsVLANAndBondParents(t *testing.T) {
 		{"enp1s0.100", list(m("name", "enp1s0", "type", "ethernet"), m("name", "enp1s0.100", "type", "vlan", "vlan", m("base-iface", "enp1s0", "id", api.IntegerValue("100"))))},
 		{"bond0", list(m("name", "enp1s0", "type", "ethernet"), m("name", "bond0", "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList("enp1s0"))))},
 	} {
-		node := installOn("192.0.2.1/24")
-		node = node.WithSpec(node.Spec().With("network", node.Spec().Get("network").With("addresses", list(m("name", "ip", "address", "192.0.2.1/24", "interface", network.iface)))).WithPath(list(m("nicRef", "enp1s0", "segmentRef", "net")), "substrate", "libvirt", "nics"))
+		node := installOn("192.0.2.1")
+		node = node.WithSpec(node.Spec().With("network", node.Spec().Get("network").With("addresses", list(m("name", "ip", "address", "192.0.2.1", "interface", network.iface)))).WithPath(list(m("nicRef", "enp1s0", "segmentRef", "net")), "substrate", "libvirt", "nics"))
 		issues := admission(node, libvirtLab(network.interfaces)...)
 		if !slices.ContainsFunc(issues, func(issue api.Issue) bool {
 			return issue.Field == "$.spec.network.installAddressRef" && strings.Contains(issue.Message, "host address of managed Network/net")
@@ -507,7 +513,7 @@ func TestAnOSReadyVirtualMachineMayDeclareHardwareNICs(t *testing.T) {
 // A non-provided libvirt or KubeVirt Machine's NIC name is the interface name
 // the installer pins when no interface matches the NIC, so it is one.
 func TestAVirtualMachineNICNameIsAnInterfaceName(t *testing.T) {
-	machine := installOn("192.0.2.11/24")
+	machine := installOn("192.0.2.11")
 	machine = machine.WithSpec(machine.Spec().WithPath(list(m("name", "enp1s0"), m("name", "uplink port")), "hardware", "nics"))
 	requireOneIssue(t, admission(machine, libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))...), api.Issue{Code: "api.invariant", Field: "$.spec.hardware.nics[1].name",
 		Message:     "NIC uplink port of Machine/guest is a libvirt vNIC the installer pins under its NIC name unless an interface matches it, and " + interfaceNameRule,
@@ -523,7 +529,7 @@ func TestAVirtualMachineNICNameIsAnInterfaceName(t *testing.T) {
 func TestAProviderWithoutAttachmentsIsToldToDeclareOne(t *testing.T) {
 	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
 	lab = slices.DeleteFunc(lab, func(o api.Object) bool { return o.Kind() == api.Network })
-	issues := admission(installOn("192.0.2.11/24"), lab...)
+	issues := admission(installOn("192.0.2.11"), lab...)
 	want := api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.nics",
 		Message:     "Machine/guest cannot attach its vNICs: InfraProvider/lab declares no segment",
 		Remediation: "declare a segment with a libvirt arm in spec.segments of InfraProvider/lab, or a Network with spec.provided false whose spec.libvirt.providerRef names lab"}
@@ -536,7 +542,7 @@ func TestAProviderWithoutAttachmentsIsToldToDeclareOne(t *testing.T) {
 // override that sets it, else the network configuration.
 func TestAVirtualMACRefusalPointsAtTheFieldThatAuthorsIt(t *testing.T) {
 	network := func(extra ...any) api.Value {
-		return m(append([]any{"configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11/24", "interface", "enp1s0"))}, extra...)...)
+		return m(append([]any{"configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11", "interface", "enp1s0"))}, extra...)...)
 	}
 	plain := list(m("name", "enp1s0", "type", "ethernet"))
 	override := m("interfaces", list(m("name", "enp1s0", "mac-address", "52:54:00:00:00:01")))

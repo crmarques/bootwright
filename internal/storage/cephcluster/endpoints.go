@@ -149,9 +149,6 @@ func listenerRegistry(cluster api.Object, catalog api.Catalog) []listener {
 }
 
 func machineAddress(text string) (netip.Addr, bool) {
-	if prefix, err := netip.ParsePrefix(text); err == nil {
-		return prefix.Addr(), true
-	}
 	address, err := netip.ParseAddr(text)
 	return address, err == nil
 }

@@ -16,7 +16,7 @@ type fleetState struct{}
 
 func (fleetState) RenderEffective(context.Context, compilation.EffectiveRequest) (*compilation.EffectiveResult, error) {
 	witness := object(api.Machine, "witness", m(
-		"os", m("provided", true), "network", m("addresses", list(m("name", "ssh", "address", "192.0.2.10/24"))),
+		"os", m("provided", true), "network", m("addresses", list(m("name", "ssh", "address", "192.0.2.10"))),
 		"access", m("ssh", m("addressRef", "ssh", "user", "bootwright", "knownHostsRef", "declared-host-key",
 			"auth", m("operatorIdentity", m())))))
 	objects := append(catalog().Objects(), witness)

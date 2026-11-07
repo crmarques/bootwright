@@ -85,11 +85,6 @@ func ValidLexical(rule, value string) bool {
 	case "cidr":
 		_, err := netip.ParsePrefix(value)
 		return err == nil
-	case "address":
-		if p, err := netip.ParsePrefix(value); err == nil {
-			return p.Bits() > 0
-		}
-		return validHost(value)
 	case "http-url", "https-url":
 		return validHTTPURL(value, rule == "https-url")
 	case "repository-url":

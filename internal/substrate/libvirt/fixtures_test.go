@@ -65,7 +65,6 @@ func provider(fields ...api.FieldValue) api.Object {
 
 func networkConfig() api.Object {
 	return api.NewObject(api.NetworkConfig, "lab-guests", api.Value{}, api.MapValue(
-		field("machineNetwork", api.ListValue(api.MapValue(text("cidr", "198.51.100.0/24")))),
 		field("nmstate", api.MapValue(
 			field("interfaces", api.ListValue(api.MapValue(
 				text("name", "enp1s0"), text("type", "ethernet"), text("state", "up"),
@@ -88,7 +87,7 @@ func guest(name string, fields ...api.FieldValue) api.Object {
 			text("configRef", "lab-guests"), text("installAddressRef", "ip"),
 			field("addresses", api.ListValue(
 				api.MapValue(text("name", "fqdn"), text("address", name+".lab.example.test")),
-				api.MapValue(text("name", "ip"), text("address", "198.51.100.11/24"), text("interface", "enp1s0")),
+				api.MapValue(text("name", "ip"), text("address", "198.51.100.11"), text("interface", "enp1s0")),
 			)),
 		)),
 	)

@@ -33,7 +33,7 @@ func TestProviderVariantsAndNormalization(t *testing.T) {
 		"baremetal": m("baremetal", m("defaults", m("bmc", m("credentialsRef", "bmc")))),
 		"libvirt":   m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", bmc), "segments", list(m("name", "net", "libvirt", m("bridge", "virbr-lab")))),
 		"vsphere":   m("vsphere", m("vcenters", list(m("server", "vcenter.example.test", "datacenters", api.StringList("dc"), "credentialsRef", "vcenter")), "failureDomains", list(domain), "isoStaging", m("folder", "media"), "machineProfiles", list(m("name", "small", "cpu", api.IntegerValue("2"), "memoryMiB", api.IntegerValue("4096"), "diskGiB", api.IntegerValue("20"))))),
-		"kubevirt":  m("kubevirt", m("kubeconfigRef", "host-access", "namespace", "workloads"), "segments", list(m("name", "net", "kubevirt", m("networkRef", m("kind", "UserDefinedNetwork", "name", "net"))))),
+		"kubevirt":  m("kubevirt", m("kubeconfigRef", "host-access", "namespace", "workloads"), "segments", list(m("name", "net", "untaggedNetworkRef", "net", "kubevirt", m("networkRef", m("kind", "UserDefinedNetwork", "name", "net"))))),
 	}
 	host := obj(api.Machine, "host", m())
 	for variant, spec := range providers {

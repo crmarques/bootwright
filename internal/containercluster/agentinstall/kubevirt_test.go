@@ -30,9 +30,16 @@ func kubevirtProviderIn(name, namespace string) api.Object {
 		field("kubevirt", api.MapValue(text("kubeconfigRef", "host-kubeconfig"), text("namespace", namespace),
 			text("storageClassRef", "guest-block-storage"), field("machineProfiles", api.ListValue(api.MapValue(
 				text("name", "kubevirt"), number("cpu", "8"), number("memoryMiB", "16384"), number("diskGiB", "120")))))),
-		field("segments", api.ListValue(api.MapValue(text("name", "lab-guests"), field("kubevirt", api.MapValue(
+		field("segments", api.ListValue(api.MapValue(text("name", "lab-guests"), text("untaggedNetworkRef", "lab-guests"), field("kubevirt", api.MapValue(
 			field("networkRef", api.MapValue(text("apiGroup", "k8s.cni.cncf.io"), text("kind", "NetworkAttachmentDefinition"),
 				text("namespace", namespace), text("name", "guest-l2")))))))),
+	))
+}
+
+func providedNetwork() api.Object {
+	return api.NewObject(api.Network, "lab-guests", api.Value{}, api.MapValue(
+		field("provided", api.BoolValue(true)),
+		field("ipv4", api.MapValue(text("cidr", "198.51.100.0/24"))),
 	))
 }
 
@@ -58,7 +65,7 @@ func kubevirtGuest(name, address string) api.Object {
 // derived none platform behind external endpoints, as lab-kubevirt-external
 // does; one master alone takes its endpoints from its node.
 func kubevirtCatalog(masters, workers int, baremetal bool) api.Catalog {
-	objects := []api.Object{environment(), controller(), nameService(), timeService(), networkConfiguration(), kubevirtProvider()}
+	objects := []api.Object{environment(), controller(), nameService(), timeService(), networkConfiguration(), kubevirtProvider(), providedNetwork()}
 	var nodes []api.Value
 	for index := range masters + workers {
 		name, role := fmt.Sprintf("master-%d", index), "controlPlane"
@@ -66,7 +73,7 @@ func kubevirtCatalog(masters, workers int, baremetal bool) api.Catalog {
 			name, role = fmt.Sprintf("worker-%d", index-masters), "worker"
 		}
 		machine := fmt.Sprintf("kubevirt-%02d", index+1)
-		objects = append(objects, kubevirtGuest(machine, fmt.Sprintf("198.51.100.%d/24", 31+index)))
+		objects = append(objects, kubevirtGuest(machine, fmt.Sprintf("198.51.100.%d", 31+index)))
 		nodes = append(nodes, node(name, role, machine, name+".kubevirt.lab.example.test"))
 	}
 	install := installSelection(endpoints("198.51.100.10", "198.51.100.10", "198.51.100.11", "external"))

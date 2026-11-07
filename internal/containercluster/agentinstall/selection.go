@@ -2,7 +2,6 @@ package agentinstall
 
 import (
 	"cmp"
-	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
@@ -611,12 +610,17 @@ func installAddress(catalog api.Catalog, node api.Object) (string, error) {
 		return "", refusal("api.required", "a cluster node resolves no static installation address",
 			"set spec.network.installAddressRef on "+node.Identity())
 	}
-	prefix, err := netip.ParsePrefix(selected.Get("address").Text())
-	if err != nil {
-		return "", refusal("api.value", "a cluster node's installation address carries no prefix",
-			"declare it as an IP with its prefix on "+node.Identity())
+	return selected.Get("address").Text(), nil
+}
+
+func installNetwork(catalog api.Catalog, node api.Object) (string, error) {
+	selected, issues := machine.InstallAddress(node, catalog)
+	held, ok := machine.AssignedNetwork(node, catalog, selected)
+	if len(issues) != 0 || !ok {
+		return "", refusal("api.required", "the installation address of cluster node "+node.Identity()+" lies in no declared Network",
+			"set spec.network.installAddressRef on "+node.Identity()+" to an interface assignment inside a declared Network")
 	}
-	return prefix.Addr().String(), nil
+	return held.Prefix.String(), nil
 }
 
 // resolverAddresses derives the name servers a node resolves through, from its

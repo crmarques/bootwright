@@ -65,7 +65,6 @@ func timeService() api.Object {
 
 func networkConfiguration() api.Object {
 	return api.NewObject(api.NetworkConfig, "lab-guests", api.Value{}, api.MapValue(
-		field("machineNetwork", api.ListValue(api.MapValue(text("cidr", "198.51.100.0/24")))),
 		field("dns", api.ListValue(api.MapValue(text("serverRef", "lab-dns"), text("endpointRef", "ip")))),
 		field("nmstate", api.MapValue(
 			field("interfaces", api.ListValue(api.MapValue(
@@ -208,7 +207,7 @@ func base() []api.Object {
 // singleNodeCatalog is the shape examples/openshift-clusters/lab-sno declares:
 // one cluster whose three endpoint slots resolve to its one node.
 func singleNodeCatalog() api.Catalog {
-	objects := append(base(), guest("sno-01", "198.51.100.21/24"))
+	objects := append(base(), guest("sno-01", "198.51.100.21"))
 	objects = append(objects, cluster("sno",
 		installSelection(endpoints("198.51.100.21", "198.51.100.21", "198.51.100.21", "node")),
 		node("master-0", "controlPlane", "sno-01", "master-0.sno.lab.example.test")))
@@ -220,7 +219,7 @@ func singleNodeCatalog() api.Catalog {
 // addresses no single node owns.
 func compactCatalog() api.Catalog {
 	objects := append(base(),
-		guest("ocp-01", "198.51.100.31/24"), guest("ocp-02", "198.51.100.32/24"), guest("ocp-03", "198.51.100.33/24"))
+		guest("ocp-01", "198.51.100.31"), guest("ocp-02", "198.51.100.32"), guest("ocp-03", "198.51.100.33"))
 	objects = append(objects, cluster("ocp",
 		installSelection(
 			endpoints("198.51.100.10", "198.51.100.10", "198.51.100.11", "installer"),
@@ -275,9 +274,9 @@ func everyHint() []api.FieldValue {
 // and whose third names its device.
 func hintsCatalog() api.Catalog {
 	objects := append(base(),
-		withHints(guest("ocp-01", "198.51.100.31/24"), virtualHints()...),
-		withHints(guest("ocp-02", "198.51.100.32/24"), number("minSizeGigabytes", "100")),
-		guest("ocp-03", "198.51.100.33/24"))
+		withHints(guest("ocp-01", "198.51.100.31"), virtualHints()...),
+		withHints(guest("ocp-02", "198.51.100.32"), number("minSizeGigabytes", "100")),
+		guest("ocp-03", "198.51.100.33"))
 	compact, _ := compactCatalog().Find(api.OpenShiftCluster, "ocp")
 	return api.NewCatalog(append(objects, compact))
 }
@@ -324,7 +323,7 @@ func noControllerCredential(spec api.Value) api.Value {
 // defaults, so its media request freezes the declared networking.
 func externalCatalog() api.Catalog {
 	objects := append(base(),
-		guest("ocp-01", "198.51.100.31/24"), guest("ocp-02", "198.51.100.32/24"), guest("ocp-03", "198.51.100.33/24"))
+		guest("ocp-01", "198.51.100.31"), guest("ocp-02", "198.51.100.32"), guest("ocp-03", "198.51.100.33"))
 	declared := cluster("ocp",
 		installSelection(
 			endpoints("198.51.100.20", "198.51.100.20", "198.51.100.21", "external"),
@@ -346,9 +345,9 @@ func externalCatalog() api.Catalog {
 // the controllers those machines declare.
 func physicalCatalog() api.Catalog {
 	objects := append(base(), metalProvider(),
-		server("metal-01", "198.51.100.41/24", "aa:bb:cc:dd:ee:01"),
-		server("metal-02", "198.51.100.42/24", "aa:bb:cc:dd:ee:02"),
-		server("metal-03", "198.51.100.43/24", "aa:bb:cc:dd:ee:03"))
+		server("metal-01", "198.51.100.41", "aa:bb:cc:dd:ee:01"),
+		server("metal-02", "198.51.100.42", "aa:bb:cc:dd:ee:02"),
+		server("metal-03", "198.51.100.43", "aa:bb:cc:dd:ee:03"))
 	objects = append(objects, cluster("metal",
 		installSelection(
 			endpoints("198.51.100.20", "198.51.100.20", "198.51.100.21", "external"),

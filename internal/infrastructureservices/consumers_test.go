@@ -16,9 +16,9 @@ func consumerHost(provided bool, addresses ...api.Value) api.Object {
 func consumerAddresses() []api.Value {
 	return []api.Value{
 		m("name", "fqdn", "address", "host.example.test"),
-		m("name", "ip", "address", "192.0.2.10/24"),
-		m("name", "other", "address", "192.0.2.11/24"),
-		m("name", "v6", "address", "2001:0DB8:0:0::0010/64"),
+		m("name", "ip", "address", "192.0.2.10"),
+		m("name", "other", "address", "192.0.2.11"),
+		m("name", "v6", "address", "2001:0DB8:0:0::0010"),
 	}
 }
 

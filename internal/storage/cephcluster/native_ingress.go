@@ -311,10 +311,7 @@ func machineAddresses(catalog api.Catalog) []netip.Addr {
 	out := []netip.Addr{}
 	for _, machine := range catalog.OfKind(api.Machine) {
 		for _, entry := range machine.Spec().Get("network", "addresses").Items() {
-			text := textOf(entry, "address")
-			if prefix, err := netip.ParsePrefix(text); err == nil {
-				out = append(out, prefix.Addr())
-			} else if address, err := netip.ParseAddr(text); err == nil {
+			if address, err := netip.ParseAddr(textOf(entry, "address")); err == nil {
 				out = append(out, address)
 			}
 		}

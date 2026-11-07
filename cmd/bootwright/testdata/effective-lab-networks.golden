@@ -63,10 +63,10 @@ spec:
       - name: fqdn
         address: networks-01.lab.example.test
       - name: ip
-        address: 198.51.100.21/24
+        address: 198.51.100.21
         interface: enp1s0
       - name: routed
-        address: 192.0.2.141/25
+        address: 192.0.2.141
         interface: enp3s0
     interfaceMatches:
       - interface: enp1s0
@@ -108,10 +108,10 @@ spec:
       - name: fqdn
         address: networks-02.lab.example.test
       - name: ip
-        address: 198.51.100.22/24
+        address: 198.51.100.22
         interface: enp1s0
       - name: routed
-        address: 192.0.2.142/25
+        address: 192.0.2.142
         interface: enp3s0
     interfaceMatches:
       - interface: enp1s0
@@ -153,10 +153,10 @@ spec:
       - name: fqdn
         address: networks-03.lab.example.test
       - name: ip
-        address: 198.51.100.23/24
+        address: 198.51.100.23
         interface: enp1s0
       - name: routed
-        address: 192.0.2.143/25
+        address: 192.0.2.143
         interface: enp3s0
     interfaceMatches:
       - interface: enp1s0
@@ -198,10 +198,10 @@ spec:
       - name: fqdn
         address: networks-04.lab.example.test
       - name: ip
-        address: 198.51.100.24/24
+        address: 198.51.100.24
         interface: enp1s0
       - name: routed
-        address: 192.0.2.144/25
+        address: 192.0.2.144
         interface: enp3s0
     interfaceMatches:
       - interface: enp1s0
@@ -243,10 +243,10 @@ spec:
       - name: fqdn
         address: networks-05.lab.example.test
       - name: ip
-        address: 198.51.100.25/24
+        address: 198.51.100.25
         interface: enp1s0
       - name: routed
-        address: 192.0.2.145/25
+        address: 192.0.2.145
         interface: enp3s0
     interfaceMatches:
       - interface: enp1s0
@@ -310,8 +310,6 @@ kind: NetworkConfig
 metadata:
   name: lab-guests
 spec:
-  machineNetwork:
-    - cidr: 198.51.100.0/24
   dns:
     - serverRef: lab-dns
       endpointRef: ip

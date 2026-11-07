@@ -6,6 +6,10 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
+func withNetwork(c api.Catalog, name, cidr string) api.Catalog {
+	return api.NewCatalog(append(c.Objects(), obj(api.Network, name, m("provided", true, "ipv4", m("cidr", cidr)))))
+}
+
 func withNodeAddress(c api.Catalog, name string, assignments ...api.Value) api.Catalog {
 	objects := c.Objects()
 	for i, object := range objects {
@@ -22,7 +26,8 @@ func TestClusterAndServiceNetworksOverlapNoNodeOrSecondarySubnet(t *testing.T) {
 	if issues := validateOverlayOverlaps(o, c); len(issues) != 0 {
 		t.Fatal("default overlays refused", issues)
 	}
-	c = withNodeAddress(c, "node-1", m("name", "primary", "address", "192.0.2.11/24", "interface", "eth0"), m("name", "storage", "address", "10.130.4.11/24", "interface", "eth1"))
+	c = withNetwork(c, "node-storage", "10.130.4.0/24")
+	c = withNodeAddress(c, "node-1", m("name", "primary", "address", "192.0.2.11", "interface", "eth0"), m("name", "storage", "address", "10.130.4.11", "interface", "eth1"))
 	secondary := list(m("name", "tenant", "ipam", m("mode", "Enabled", "subnets", api.StringList("172.30.8.0/24"))))
 	o = o.WithSpec(o.Spec().WithPath(secondary, "networking", "secondaryNetworks"))
 	issues := Validate(o, c)
@@ -45,7 +50,8 @@ func TestEveryNodeThatCanHoldAnInstallerVIPIsOnItsSubnet(t *testing.T) {
 	if issues := validateVIPAdjacency(o, c); len(issues) != 0 {
 		t.Fatal("nodes on the VIP subnet refused", issues)
 	}
-	worker := withNodeAddress(c, "node-3", m("name", "primary", "address", "198.51.100.13/24", "interface", "eth0"))
+	c = withNetwork(c, "off-vip", "198.51.100.0/24")
+	worker := withNodeAddress(c, "node-3", m("name", "primary", "address", "198.51.100.13", "interface", "eth0"))
 	issues := Validate(o, worker)
 	if !hasIssue(issues, "$.spec.install.endpoints.ingress.address", "the ingress VIP 192.0.2.3 lies in no interface subnet of node node-3 (Machine/node-3)") {
 		t.Fatal("an ingress holder off the VIP subnet admitted", issues)
@@ -53,7 +59,7 @@ func TestEveryNodeThatCanHoldAnInstallerVIPIsOnItsSubnet(t *testing.T) {
 	if hasField(issues, "$.spec.install.endpoints.api.address") {
 		t.Fatal("a worker refused for the API VIP it never holds", issues)
 	}
-	master := withNodeAddress(c, "node-0", m("name", "primary", "address", "198.51.100.10/24", "interface", "eth0"))
+	master := withNodeAddress(c, "node-0", m("name", "primary", "address", "198.51.100.10", "interface", "eth0"))
 	if !hasIssue(Validate(o, master), "$.spec.install.endpoints.api.address", "the api VIP 192.0.2.2 lies in no interface subnet of node node-0 (Machine/node-0)") {
 		t.Fatal("an API holder off the VIP subnet admitted")
 	}

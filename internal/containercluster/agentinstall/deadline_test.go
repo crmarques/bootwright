@@ -445,7 +445,7 @@ func largeCatalog(count int) api.Catalog {
 	var nodes []api.Value
 	for index := range count {
 		machine := fmt.Sprintf("ocp-%02d", index+1)
-		objects = append(objects, guest(machine, fmt.Sprintf("198.51.100.%d/24", 100+index)))
+		objects = append(objects, guest(machine, fmt.Sprintf("198.51.100.%d", 100+index)))
 		nodes = append(nodes, node(fmt.Sprintf("master-%d", index), "controlPlane", machine,
 			fmt.Sprintf("master-%d.ocp.lab.example.test", index)))
 	}
@@ -463,7 +463,7 @@ func largePhysicalCatalog(count int) api.Catalog {
 	var nodes []api.Value
 	for index := range count {
 		machine := fmt.Sprintf("metal-%02d", index+1)
-		objects = append(objects, server(machine, fmt.Sprintf("198.51.100.%d/24", 100+index), fmt.Sprintf("aa:bb:cc:dd:ee:%02x", index+1)))
+		objects = append(objects, server(machine, fmt.Sprintf("198.51.100.%d", 100+index), fmt.Sprintf("aa:bb:cc:dd:ee:%02x", index+1)))
 		nodes = append(nodes, node(fmt.Sprintf("master-%d", index), "controlPlane", machine,
 			fmt.Sprintf("master-%d.metal.lab.example.test", index)))
 	}

@@ -224,7 +224,7 @@ func withControllerAddress() *compilation.State {
 		api.NewObject(api.Machine, "controller", api.Value{}, api.MapValue(
 			api.FieldValue{Name: "network", Value: api.MapValue(api.FieldValue{Name: "addresses", Value: api.ListValue(
 				api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue("fqdn")}, api.FieldValue{Name: "address", Value: api.StringValue("controller.lab.example.test")}),
-				api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue("lab")}, api.FieldValue{Name: "address", Value: api.StringValue("192.0.2.1/24")}),
+				api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue("lab")}, api.FieldValue{Name: "address", Value: api.StringValue("192.0.2.1")}),
 			)})},
 		)),
 	})

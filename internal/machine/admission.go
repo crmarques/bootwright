@@ -76,9 +76,7 @@ func normalizedContacts(o api.Object, c api.Catalog, network api.Value) api.Valu
 	}
 	addresses := network.Get("addresses").Items()
 	for i, address := range addresses {
-		if prefix, err := netip.ParsePrefix(address.Get("address").Text()); err == nil {
-			addresses[i] = address.With("address", api.StringValue(prefix.String()))
-		} else if ip, err := netip.ParseAddr(address.Get("address").Text()); err == nil {
+		if ip, err := netip.ParseAddr(address.Get("address").Text()); err == nil {
 			addresses[i] = address.With("address", api.StringValue(ip.String()))
 		}
 	}
@@ -402,10 +400,6 @@ func validateNetworkContacts(o api.Object, c api.Catalog, configured bool) []api
 			}
 			issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: path + ".interface", Message: "interface assignment requires a non-provided Machine with configured network", Remediation: remediation})
 		}
-		if _, err := netip.ParsePrefix(address.Get("address").Text()); err == nil && !address.Has("interface") {
-			issues = appendIssues(issues, invariant(path+".address", "contact "+address.Get("name").Text()+" of "+o.Identity()+" carries a prefix, but a contact names a host to reach and configures nothing",
-				"remove the prefix from "+path[2:]+".address on "+o.Identity()+", or assign the address to an interface with "+path[2:]+".interface"))
-		}
 		if address.Get("name").Text() == "fqdn" {
 			if address.Has("interface") || !api.ValidLexical("dns", address.Get("address").Text()) {
 				issues = appendIssues(issues, api.Issue{Code: "api.invariant", Field: path, Message: "fqdn must be an unassigned DNS contact",
@@ -440,14 +434,14 @@ func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, fo
 		address, selectionIssues := selectInstallAddress(o, c, false)
 		issues = appendIssues(issues, selectionIssues...)
 		if address.Present() {
-			prefix, _ := netip.ParsePrefix(address.Get("address").Text())
+			prefix, _ := AssignedPrefix(o, c, address)
 			for _, other := range c.OfKind(api.Machine) {
 				if other.Identity() == o.Identity() {
 					continue
 				}
 				peer, pi := selectInstallAddress(other, c, false)
-				pp, e := netip.ParsePrefix(peer.Get("address").Text())
-				if len(pi) == 0 && e == nil && prefix.Addr() == pp.Addr() {
+				pp, e := netip.ParseAddr(peer.Get("address").Text())
+				if len(pi) == 0 && e == nil && prefix.Addr() == pp {
 					issues = appendIssues(issues, invariant("$.spec.network.installAddressRef", "selected installation IPs must be unique across Machines", "select an install address whose IP no other Machine selects"))
 					break
 				}
@@ -457,7 +451,7 @@ func validateInstallNetwork(o api.Object, c api.Catalog, provider api.Object, fo
 			}
 			issues = appendIssues(issues, validateInstallGateway(o, c, address, prefix, native)...)
 		}
-		if anacondaInstalled(o, c) && len(selectionIssues) == 0 {
+		if anacondaInstalled(o, c) && len(selectionIssues) == 0 && (address.Present() || !c.UndecodableOfKind(api.Network)) {
 			issues = appendIssues(issues, validateAnacondaNetwork(address, native, configured)...)
 		}
 	}
@@ -586,7 +580,7 @@ func validateInstallGateway(o api.Object, c api.Catalog, address api.Value, pref
 	name := address.Get("name").Text()
 	return []api.Issue{invariant("$.spec.network.installAddressRef",
 		"install gateway "+gateway.String()+", the next hop of the default route in "+source+", lies outside install address "+name+" "+prefix.String()+" of "+o.Identity(),
-		"set that default route's next-hop-address in "+source+" to a gateway inside "+prefix.Masked().String()+", or give install address "+name+" a prefix that contains "+gateway.String())}
+		"set that default route's next-hop-address in "+source+" to a gateway inside "+prefix.Masked().String()+", or move install address "+name+" to a Network whose prefix contains "+gateway.String())}
 }
 
 func defaultGateway(native api.Value, ipv4 bool, iface string) (netip.Addr, bool) {
@@ -862,7 +856,7 @@ func validateAnacondaNetwork(address, native api.Value, configured bool) []api.I
 	if configured && !native.Present() {
 		return nil
 	}
-	remediation := "assign an IPv4 address with its prefix to the install interface in spec.network.addresses and select it with spec.network.installAddressRef"
+	remediation := "assign an IPv4 address to the install interface in spec.network.addresses and select it with spec.network.installAddressRef"
 	if !configured {
 		remediation = "select a network configuration with spec.network.configRef or declare one in spec.network.inline, then " + remediation
 	}
@@ -872,7 +866,7 @@ func validateAnacondaNetwork(address, native api.Value, configured bool) []api.I
 	if !address.Present() {
 		return []api.Issue{static}
 	}
-	if prefix, err := netip.ParsePrefix(address.Get("address").Text()); err == nil && !prefix.Addr().Is4() {
+	if ip, err := netip.ParseAddr(address.Get("address").Text()); err == nil && !ip.Is4() {
 		return []api.Issue{static}
 	}
 	iface, ok := namedValue(native.Get("interfaces"), address.Get("interface").Text())
@@ -885,15 +879,6 @@ func validateAnacondaNetwork(address, native api.Value, configured bool) []api.I
 func normalizeConfiguration(config api.Value, c api.Catalog) api.Value {
 	if config.Has("dns") {
 		config = config.With("dns", infrastructureservices.NormalizeServerSelections(config.Get("dns"), c, api.DNSServer))
-	}
-	networks := config.Get("machineNetwork").Items()
-	for i, network := range networks {
-		if prefix, err := netip.ParsePrefix(network.Get("cidr").Text()); err == nil {
-			networks[i] = network.With("cidr", api.StringValue(prefix.Masked().String()))
-		}
-	}
-	if config.Has("machineNetwork") {
-		config = config.With("machineNetwork", api.ListValue(networks...))
 	}
 	if config.Has("nmstate") {
 		config = config.With("nmstate", normalizeNativeMACs(config.Get("nmstate")))
@@ -916,17 +901,6 @@ func normalizeNativeMACs(native api.Value) api.Value {
 
 func validateConfiguration(config api.Value, c api.Catalog, path string) []api.Issue {
 	issues := validateNative(config.Get("nmstate"), path+".nmstate", false)
-	seen := map[netip.Prefix]bool{}
-	for i, network := range config.Get("machineNetwork").Items() {
-		prefix, err := netip.ParsePrefix(network.Get("cidr").Text())
-		if err == nil {
-			prefix = prefix.Masked()
-			if seen[prefix] {
-				issues = appendIssues(issues, invariant(fmt.Sprintf("%s.machineNetwork[%d].cidr", path, i), "machine networks must have unique canonical CIDRs", "remove the repeated CIDR from machineNetwork"))
-			}
-			seen[prefix] = true
-		}
-	}
 	issues = appendIssues(issues, infrastructureservices.ValidateServerSelections(config.Get("dns"), c, api.DNSServer, path+".dns")...)
 	managed := map[string]bool{}
 	for _, selection := range config.Get("dns").Items() {

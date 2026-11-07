@@ -56,9 +56,19 @@ spec:
         diskGiB: 80
   segments:
     - name: workload
+      untaggedNetworkRef: lan
       kubevirt:
         networkRef:
           name: workload
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: lan
+spec:
+  provided: true
+  ipv4:
+    cidr: 192.0.2.0/24
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -76,15 +86,13 @@ spec:
     provided: false
   network:
     inline:
-      machineNetwork:
-        - cidr: 192.0.2.0/24
       nmstate:
         interfaces:
           - name: eth0
             type: ethernet
     addresses:
       - name: primary
-        address: 192.0.2.10/24
+        address: 192.0.2.10
         interface: eth0
 ---
 apiVersion: bootwright.io/v1alpha1

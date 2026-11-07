@@ -12,7 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-const nestedMachine = "\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: %s}\nspec:\n  os: {provided: true}\n  network:\n    addresses: [{name: lan, address: 192.0.2.10/24}]\n"
+const nestedMachine = "\n---\napiVersion: bootwright.io/v1alpha1\nkind: Machine\nmetadata: {name: %s}\nspec:\n  os: {provided: true}\n  network:\n    addresses: [{name: lan, address: 192.0.2.10}]\n"
 
 const nestedProxy = "\n---\napiVersion: bootwright.io/v1alpha1\nkind: Proxy\nmetadata: {name: edge}\nspec:\n  management: managed\n  machineRef: host\n  endpoints: [{name: main, addressRef: lan}]\n"
 

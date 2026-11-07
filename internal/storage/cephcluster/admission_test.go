@@ -36,6 +36,20 @@ func v(value any) api.Value {
 func object(kind api.Kind, name string, spec api.Value) api.Object {
 	return api.NewObject(kind, name, api.MapValue(), spec)
 }
+func assignedAddress(name, address string) api.Value {
+	return m("name", name, "interface", "eth0", "address", address)
+}
+func lanNetwork(name, cidr string, sites ...string) api.Object {
+	family := "ipv4"
+	if strings.Contains(cidr, ":") {
+		family = "ipv6"
+	}
+	spec := m("provided", true, family, m("cidr", cidr))
+	if len(sites) != 0 {
+		spec = spec.With("sites", api.StringList(sites...))
+	}
+	return object(api.Network, name, spec)
+}
 func safePair() api.Value { return m("size", 2, "minSize", 2) }
 
 func fixtureCatalog() api.Catalog {
@@ -45,9 +59,9 @@ func fixtureCatalog() api.Catalog {
 		name := fmt.Sprintf("node-%d", i)
 		machine := fmt.Sprintf("machine-%d", i)
 		nodes = append(nodes, m("name", name, "machineRef", machine, "site", "site-a", "labels", api.StringList("mon", "mgr", "storage")))
-		objects = append(objects, object(api.Machine, machine, m("placement", m("site", "site-a"), "hardware", m("rootDevice", m("deviceName", "/dev/vda")), "os", m("provided", true), "network", m("addresses", []api.Value{m("name", "ssh", "address", fmt.Sprintf("192.0.2.%d/24", i))}), "access", m("ssh", m("addressRef", "ssh")))))
+		objects = append(objects, object(api.Machine, machine, m("placement", m("site", "site-a"), "hardware", m("rootDevice", m("deviceName", "/dev/vda")), "os", m("provided", true), "network", m("addresses", []api.Value{assignedAddress("ssh", fmt.Sprintf("192.0.2.%d", i))}), "access", m("ssh", m("addressRef", "ssh")))))
 	}
-	objects = append(objects,
+	objects = append(objects, lanNetwork("public", "192.0.2.0/24"),
 		object(api.CephCluster, "storage", m("release", "19.2.1", "cephadm", m("clusterSSH", m("user", "root"), "bootstrap", m("nodeRef", "node-1")), "networks", m("publicCIDRs", api.StringList("192.0.2.0/24")), "services", coreServices(), "topology", m("nodes", nodes), "config", m("global", m("osd_pool_default_size", "2", "osd_pool_default_min_size", "2")))),
 		object(api.CephPlacementPolicy, "policy", m("clusterRef", "storage", "ruleName", "replicated", "failureDomain", "host", "replicated", safePair())),
 		object(api.CephPool, "metadata", m("clusterRef", "storage", "role", "cephfsMetadata", "placementPolicyRef", "policy")),

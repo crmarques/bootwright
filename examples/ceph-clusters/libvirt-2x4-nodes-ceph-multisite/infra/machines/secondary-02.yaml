@@ -38,5 +38,5 @@ spec:
         address: secondary-02.lab.example.test
 
       - name: ip
-        address: 192.0.2.12/24
+        address: 192.0.2.12
         interface: enp1s0

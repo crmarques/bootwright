@@ -67,7 +67,7 @@ func TestAnacondaInstallAddressWithoutANetworkIsRefusedOnce(t *testing.T) {
 		With("os", m("provided", false, "installProfileRef", "rhel")).
 		With("network", m("installAddressRef", "primary", "addresses", list(
 			m("name", "fqdn", "address", "node.example.test"),
-			m("name", "primary", "address", "192.0.2.11/24")))))
+			m("name", "primary", "address", "192.0.2.11")))))
 	objects := []api.Object{machine, object(api.MachineInstallProfile, "rhel", m("installer", m("anaconda", m("imageRef", "image"))))}
 	for _, existing := range catalog.Objects() {
 		if existing.Kind() != api.Machine {
@@ -82,7 +82,7 @@ func TestAnacondaInstallAddressWithoutANetworkIsRefusedOnce(t *testing.T) {
 			found = append(found, issue)
 		}
 	}
-	const remediation = "select a network configuration with spec.network.configRef or declare one in spec.network.inline, then assign an IPv4 address with its prefix to the install interface in spec.network.addresses and select it with spec.network.installAddressRef"
+	const remediation = "select a network configuration with spec.network.configRef or declare one in spec.network.inline, then assign an IPv4 address to the install interface in spec.network.addresses and select it with spec.network.installAddressRef"
 	if len(found) != 1 || found[0].Code != "api.invariant" ||
 		found[0].Message != "a Bootwright-installed Anaconda Machine installs with one static IPv4 address, and DHCP installation is not supported" ||
 		found[0].Remediation != remediation {

@@ -14,7 +14,7 @@ func metalProvider(segments ...api.Value) api.Object {
 }
 
 func twoNICConfig(interfaces ...api.Value) api.Object {
-	return object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", list(interfaces...),
+	return object(api.NetworkConfig, "net", m("nmstate", m("interfaces", list(interfaces...),
 		"routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-interface", "eth0"))))))
 }
 
@@ -55,9 +55,6 @@ func TestABareMetalNICOnASharedProviderNamesItsSegment(t *testing.T) {
 	uncabled := twoNICConfig(m("name", "eth0", "type", "ethernet"))
 	if issues := membershipIssues(t, twoNICMachine(""), two, network, uncabled); len(issues) != 0 {
 		t.Fatalf("an unmatched NIC without a segment was refused: %+v", issues)
-	}
-	if issues := membershipIssues(t, twoNICMachine(""), two, cabled); len(issues) != 0 {
-		t.Fatalf("a graph without Networks required a segmentRef: %+v", issues)
 	}
 	if _, found := issueWith(membershipIssues(t, twoNICMachine("absent-arm"), metalProvider(m("name", "net", "untaggedNetworkRef", "lan", "baremetal", m()), m("name", "absent-arm", "libvirt", m("bridge", "br0"))), network, cabled),
 		"$.spec.substrate.baremetal.nics[1].segmentRef", "segment must name a matching arm"); !found {
@@ -104,7 +101,7 @@ func TestAnAssignmentsStackAgreesWithItsSegmentsCarriage(t *testing.T) {
 		t.Fatal("a stack reaching a Network its segment carries untagged for another was admitted")
 	}
 
-	machine = withNetwork(machine, []string{"network", "addresses"}, list(m("name", "primary", "address", "192.0.2.11/24", "interface", "br0")))
+	machine = withNetwork(machine, []string{"network", "addresses"}, list(m("name", "primary", "address", "192.0.2.11", "interface", "br0")))
 	tagged := lan(m("vlan", api.IntegerValue("200"), "ipv4", m("cidr", "192.0.2.0/24")))
 	issues := membershipIssues(t, machine, vlanConfig("200"), tagged, metalProvider(m("name", "net", "baremetal", m())))
 	issue, found = issueWith(issues, "$.spec.network.addresses[0].interface", "interface br0 of Machine/node reaches Network/lan through a VLAN on NIC eth0, and segment net (spec.segments[0] of InfraProvider/metal) does not carry it tagged")
@@ -127,7 +124,7 @@ func TestAnAssignmentsStackAgreesWithItsSegmentsCarriage(t *testing.T) {
 // that reaches another Network untagged on it can only move.
 func TestAManagedSegmentCarriesOnlyItsOwnNetworkUntagged(t *testing.T) {
 	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
-	machine := guest(m("configRef", "net", "addresses", list(m("name", "ip", "address", "198.51.100.11/24", "interface", "enp1s0"))))
+	machine := guest(m("configRef", "net", "addresses", list(m("name", "ip", "address", "198.51.100.11", "interface", "enp1s0"))))
 	other := object(api.Network, "other", m("provided", true, "ipv4", m("cidr", "198.51.100.0/24")))
 	issue, found := issueWith(admission(machine, append(lab, other)...), "$.spec.network.addresses[0].interface", "reaches Network/other untagged on NIC enp1s0, and segment net (managed Network/net of InfraProvider/lab) carries Network/net untagged")
 	if !found || issue.Remediation != "move NIC enp1s0 with its segmentRef on Machine/guest to a segment that carries Network/other untagged" {

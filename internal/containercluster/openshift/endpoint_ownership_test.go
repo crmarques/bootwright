@@ -17,7 +17,7 @@ func TestEndpointOwnershipAcrossCatalog(t *testing.T) {
 		field  string
 	}{
 		{"cluster", obj(api.OpenShiftCluster, "other", m("install", m("endpoints", m("api", endpoint)))), "spec.install.endpoints.api.address"},
-		{"machine", obj(api.Machine, "other", m("network", m("addresses", list(m("address", "192.0.2.2/24"))))), "spec.network.addresses[0].address"},
+		{"machine", obj(api.Machine, "other", m("network", m("addresses", list(m("address", "192.0.2.2"))))), "spec.network.addresses[0].address"},
 		{"network host", managedNetwork("other", "lab", "192.0.2.2/24", "virbr-other"), "spec.libvirt.hostAddress"},
 		{"BMC", obj(api.InfraProvider, "other", m("libvirt", m("bmcEmulation", m("bindAddress", "192.0.2.2")))), "spec.libvirt.bmcEmulation.bindAddress"},
 		{"load balancer", obj(api.LoadBalancer, "other", m("bindAddresses", list(m("address", "192.0.2.2")))), "spec.bindAddresses[0].address"},
@@ -34,7 +34,7 @@ func TestEndpointOwnershipAcrossCatalog(t *testing.T) {
 			field  string
 		}{string(kind) + " endpoint", obj(kind, "other", m("management", "managed", "machineRef", "service-host", "endpoints", list(m("addressRef", "service")))), "spec.endpoints[0].addressRef"})
 	}
-	host := obj(api.Machine, "service-host", m("network", m("addresses", list(m("name", "service", "address", "192.0.2.2/24")))))
+	host := obj(api.Machine, "service-host", m("network", m("addresses", list(m("name", "service", "address", "192.0.2.2")))))
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := api.NewCatalog(append(catalog.Objects(), tc.holder, host))

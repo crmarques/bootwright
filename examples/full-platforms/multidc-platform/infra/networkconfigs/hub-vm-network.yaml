@@ -4,9 +4,6 @@ metadata:
   name: hub-vm-network
 
 spec:
-  machineNetwork:
-    - cidr: 192.0.2.0/24
-
   dns:
     - serverRef: default-01
     - serverRef: default-02

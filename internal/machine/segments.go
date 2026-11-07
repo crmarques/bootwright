@@ -2,7 +2,6 @@ package machine
 
 import (
 	"fmt"
-	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
@@ -26,7 +25,7 @@ func validateSegments(c api.Catalog, o, provider api.Object, native api.Value) [
 func validateNICSegmentSelection(c api.Catalog, o, provider api.Object, native api.Value) []api.Issue {
 	variant := substrate.Variant(provider)
 	segments := substrate.Segments(c, provider)
-	if substrate.VirtualArm(variant) || segments.Len() < 2 || !network.Declared(c) {
+	if substrate.VirtualArm(variant) || segments.Len() < 2 {
 		return nil
 	}
 	var names []string
@@ -112,26 +111,20 @@ func validateCapacities(c api.Catalog, o, provider api.Object, native api.Value)
 			}
 		}
 	}
-	if !network.Declared(c) {
-		return issues
-	}
 	for _, entry := range o.Spec().Get("network", "addresses").Items() {
-		prefix, err := netip.ParsePrefix(entry.Get("address").Text())
 		name := entry.Get("interface").Text()
 		iface, declared := namedValue(native.Get("interfaces"), name)
-		if err != nil || !declared || unavailableInterface(iface) {
+		match, assigned := AssignedNetwork(o, c, entry)
+		if !assigned || !declared || unavailableInterface(iface) {
 			continue
 		}
-		match, _, _ := assignmentNetwork(o, c, prefix.Addr())
-		if match.Network.Name() == "" {
-			continue
-		}
+		address := entry.Get("address").Text()
 		capacity, ok := match.Network.Spec().Get("mtu").Int64()
 		if !ok {
 			capacity = 1500
 		}
 		if mtu, _ := effectiveMTU(native, name, map[string]bool{}); mtu > capacity {
-			issues = appendIssues(issues, invariant("$.spec.network", fmt.Sprintf("interface %s of %s has MTU %d above capacity %d of %s, on which it holds address %s", name, o.Identity(), mtu, capacity, match.Network.Identity(), prefix.Addr()),
+			issues = appendIssues(issues, invariant("$.spec.network", fmt.Sprintf("interface %s of %s has MTU %d above capacity %d of %s, on which it holds address %s", name, o.Identity(), mtu, capacity, match.Network.Identity(), address),
 				"lower the interface mtu in the network configuration of "+o.Identity()+", or raise spec.mtu of "+match.Network.Identity()))
 		}
 	}

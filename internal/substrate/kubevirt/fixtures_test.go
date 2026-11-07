@@ -49,7 +49,6 @@ func providerWithNAD(namespace string, profile ...api.FieldValue) api.Object {
 
 func networkConfig() api.Object {
 	return api.NewObject(api.NetworkConfig, "lab-guests", api.Value{}, api.MapValue(
-		field("machineNetwork", api.ListValue(api.MapValue(text("cidr", "198.51.100.0/24")))),
 		field("nmstate", api.MapValue(field("interfaces", api.ListValue(
 			api.MapValue(text("name", "enp1s0"), text("type", "ethernet"), text("state", "up")),
 			api.MapValue(text("name", "enp2s0"), text("type", "ethernet"), text("state", "up")),

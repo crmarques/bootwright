@@ -109,7 +109,7 @@ spec:
       - name: fqdn
         address: metal-01.metal.example.test
       - name: ip
-        address: 198.51.100.11/24
+        address: 198.51.100.11
         interface: eno1
     interfaceMatches:
       - interface: eno1
@@ -185,7 +185,7 @@ spec:
       - name: fqdn
         address: metal-02.metal.example.test
       - name: ip
-        address: 198.51.100.12/24
+        address: 198.51.100.12
         interface: eno1
     interfaceMatches:
       - interface: eno1
@@ -261,7 +261,7 @@ spec:
       - name: fqdn
         address: metal-03.metal.example.test
       - name: ip
-        address: 198.51.100.13/24
+        address: 198.51.100.13
         interface: eno1
     interfaceMatches:
       - interface: eno1
@@ -349,8 +349,6 @@ kind: NetworkConfig
 metadata:
   name: lab-metal
 spec:
-  machineNetwork:
-    - cidr: 198.51.100.0/24
   dns:
     - serverRef: lab-dns
       endpointRef: ip

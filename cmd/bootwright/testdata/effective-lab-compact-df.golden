@@ -56,7 +56,7 @@ spec:
       - name: fqdn
         address: compact-01.lab.example.test
       - name: ip
-        address: 198.51.100.21/24
+        address: 198.51.100.21
         interface: enp1s0
     interfaceMatches:
       - interface: enp1s0
@@ -88,7 +88,7 @@ spec:
       - name: fqdn
         address: compact-02.lab.example.test
       - name: ip
-        address: 198.51.100.22/24
+        address: 198.51.100.22
         interface: enp1s0
     interfaceMatches:
       - interface: enp1s0
@@ -120,7 +120,7 @@ spec:
       - name: fqdn
         address: compact-03.lab.example.test
       - name: ip
-        address: 198.51.100.23/24
+        address: 198.51.100.23
         interface: enp1s0
     interfaceMatches:
       - interface: enp1s0
@@ -178,7 +178,7 @@ spec:
       - name: fqdn
         address: rhel-01.lab.example.test
       - name: ip
-        address: 198.51.100.31/24
+        address: 198.51.100.31
         interface: enp1s0
     interfaceMatches:
       - interface: enp1s0
@@ -225,7 +225,7 @@ spec:
       - name: fqdn
         address: rhel-02.lab.example.test
       - name: ip
-        address: 198.51.100.32/24
+        address: 198.51.100.32
         interface: enp1s0
     interfaceMatches:
       - interface: enp1s0
@@ -272,7 +272,7 @@ spec:
       - name: fqdn
         address: rhel-03.lab.example.test
       - name: ip
-        address: 198.51.100.33/24
+        address: 198.51.100.33
         interface: enp1s0
     interfaceMatches:
       - interface: enp1s0
@@ -378,8 +378,6 @@ kind: NetworkConfig
 metadata:
   name: lab-guests
 spec:
-  machineNetwork:
-    - cidr: 198.51.100.0/24
   dns:
     - serverRef: lab-dns
       endpointRef: ip

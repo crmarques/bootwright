@@ -44,7 +44,7 @@ spec:
       - name: fqdn
         address: anysize-01.lab.example.test
       - name: ip
-        address: 198.51.100.21/24
+        address: 198.51.100.21
         interface: bond0
     interfaceMatches:
       - interface: enp1s0
@@ -86,7 +86,7 @@ spec:
       - name: fqdn
         address: anysize-02.lab.example.test
       - name: ip
-        address: 198.51.100.22/24
+        address: 198.51.100.22
         interface: bond0
     interfaceMatches:
       - interface: enp1s0
@@ -128,7 +128,7 @@ spec:
       - name: fqdn
         address: anysize-03.lab.example.test
       - name: ip
-        address: 198.51.100.23/24
+        address: 198.51.100.23
         interface: bond0
     interfaceMatches:
       - interface: enp1s0
@@ -170,7 +170,7 @@ spec:
       - name: fqdn
         address: anysize-04.lab.example.test
       - name: ip
-        address: 198.51.100.24/24
+        address: 198.51.100.24
         interface: bond0
     interfaceMatches:
       - interface: enp1s0
@@ -212,7 +212,7 @@ spec:
       - name: fqdn
         address: anysize-05.lab.example.test
       - name: ip
-        address: 198.51.100.25/24
+        address: 198.51.100.25
         interface: bond0
     interfaceMatches:
       - interface: enp1s0
@@ -254,7 +254,7 @@ spec:
       - name: fqdn
         address: anysize-06.lab.example.test
       - name: ip
-        address: 198.51.100.26/24
+        address: 198.51.100.26
         interface: bond0
     interfaceMatches:
       - interface: enp1s0
@@ -296,7 +296,7 @@ spec:
       - name: fqdn
         address: anysize-07.lab.example.test
       - name: ip
-        address: 198.51.100.27/24
+        address: 198.51.100.27
         interface: bond0
     interfaceMatches:
       - interface: enp1s0
@@ -338,7 +338,7 @@ spec:
       - name: fqdn
         address: anysize-08.lab.example.test
       - name: ip
-        address: 198.51.100.28/24
+        address: 198.51.100.28
         interface: bond0
     interfaceMatches:
       - interface: enp1s0
@@ -380,7 +380,7 @@ spec:
       - name: fqdn
         address: anysize-09.lab.example.test
       - name: ip
-        address: 198.51.100.29/24
+        address: 198.51.100.29
         interface: bond0
     interfaceMatches:
       - interface: enp1s0
@@ -422,7 +422,7 @@ spec:
       - name: fqdn
         address: anysize-10.lab.example.test
       - name: ip
-        address: 198.51.100.30/24
+        address: 198.51.100.30
         interface: bond0
     interfaceMatches:
       - interface: enp1s0
@@ -489,8 +489,6 @@ kind: NetworkConfig
 metadata:
   name: lab-guests
 spec:
-  machineNetwork:
-    - cidr: 198.51.100.0/24
   dns:
     - serverRef: lab-dns
       endpointRef: ip

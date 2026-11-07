@@ -56,11 +56,11 @@ spec:
         address: storage-a-01.example.com
 
       - name: ssh
-        address: 198.51.100.1/25
+        address: 198.51.100.1
         interface: bond0.200
 
       - name: cluster
-        address: 203.0.113.1/24
+        address: 203.0.113.1
         interface: bond0.300
 
     overrides: {}

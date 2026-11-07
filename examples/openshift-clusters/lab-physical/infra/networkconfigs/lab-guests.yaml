@@ -4,9 +4,6 @@ metadata:
   name: lab-metal
 
 spec:
-  machineNetwork:
-    - cidr: 198.51.100.0/24
-
   dns:
     - serverRef: lab-dns
       endpointRef: ip

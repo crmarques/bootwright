@@ -27,9 +27,9 @@ func NodeNetworkIssues(node api.Object, catalog api.Catalog, native api.Value) [
 	}
 	address, errors := machine.InstallAddress(node, catalog)
 	if len(errors) == 0 && address.Present() {
-		prefix, err := netip.ParsePrefix(address.Get("address").Text())
+		ip, err := netip.ParseAddr(address.Get("address").Text())
 		if err == nil {
-			routes := defaultRouteInterfaces(native, prefix.Addr().BitLen())
+			routes := defaultRouteInterfaces(native, ip.BitLen())
 			if len(routes) > 1 {
 				add("installation address of "+node.Identity()+" has default routes on multiple interfaces", "use one default-route interface for the installation address family")
 			} else if len(routes) == 1 && routes[0] != address.Get("interface").Text() {

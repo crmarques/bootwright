@@ -28,8 +28,8 @@ func requireNoIssueAt(t *testing.T, issues []api.Issue, field string) {
 
 // A segment carries at most one network untagged and an allow-list of tagged
 // ones, each declaring a vlan; a KubeVirt or vSphere segment carries exactly
-// one untagged network once the graph declares Networks, and no tagged one
-// until B1172 observes what the fabric carries.
+// one untagged network, and no tagged one until B1172 observes what the fabric
+// carries.
 func TestASegmentsCarriageNamesItsNetworks(t *testing.T) {
 	plain := obj(api.Network, "plain", m("provided", true, "ipv4", m("cidr", "192.0.2.0/24")))
 	tagged := obj(api.Network, "tagged", m("provided", true, "vlan", api.IntegerValue("200"), "ipv4", m("cidr", "198.51.100.0/24")))
@@ -47,7 +47,7 @@ func TestASegmentsCarriageNamesItsNetworks(t *testing.T) {
 	kubevirt := func(segment api.Value) api.Object {
 		return obj(api.InfraProvider, "kv", m("kubevirt", m("kubeconfigRef", "host", "namespace", "guests"), "segments", list(segment)))
 	}
-	requireNoIssueAt(t, segmentIssues(kubevirt(cudnSegment("guests", "guests"))), "$.spec.segments[0].untaggedNetworkRef")
+	requireArmIssue(t, segmentIssues(kubevirt(cudnSegment("guests", "guests"))), "$.spec.segments[0].untaggedNetworkRef", "a kubevirt segment delivers exactly one network to each NIC on it")
 	issues := segmentIssues(kubevirt(cudnSegment("guests", "guests")), plain)
 	requireArmIssue(t, issues, "$.spec.segments[0].untaggedNetworkRef", "a kubevirt segment delivers exactly one network to each NIC on it")
 	if issues[0].Code != "api.required" {

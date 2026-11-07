@@ -170,10 +170,10 @@ spec:
     installAddressRef: primary
     addresses:
       - name: primary
-        address: 192.0.2.220/24
+        address: 192.0.2.220
         interface: primary
       - name: storage
-        address: 198.51.100.120/25
+        address: 198.51.100.120
         interface: ceph-public
       - name: fqdn
         address: acceptance-sno-node.example.com
@@ -252,10 +252,10 @@ spec:
       - name: fqdn
         address: edge-a-01.example.com
       - name: ip
-        address: 192.0.2.3/24
+        address: 192.0.2.3
         interface: bond0.100
       - name: ceph-public
-        address: 198.51.100.21/25
+        address: 198.51.100.21
         interface: bond0.200
     interfaceMatches:
       - interface: eth0
@@ -307,10 +307,10 @@ spec:
       - name: fqdn
         address: edge-a-02.example.com
       - name: ip
-        address: 192.0.2.4/24
+        address: 192.0.2.4
         interface: bond0.100
       - name: ceph-public
-        address: 198.51.100.22/25
+        address: 198.51.100.22
         interface: bond0.200
     interfaceMatches:
       - interface: eth0
@@ -362,10 +362,10 @@ spec:
       - name: fqdn
         address: edge-a-03.example.com
       - name: ip
-        address: 192.0.2.5/24
+        address: 192.0.2.5
         interface: bond0.100
       - name: ceph-public
-        address: 198.51.100.23/25
+        address: 198.51.100.23
         interface: bond0.200
     interfaceMatches:
       - interface: eth0
@@ -417,10 +417,10 @@ spec:
       - name: fqdn
         address: edge-b-01.example.com
       - name: ip
-        address: 192.0.2.133/24
+        address: 192.0.2.133
         interface: bond0.100
       - name: ceph-public
-        address: 198.51.100.24/25
+        address: 198.51.100.24
         interface: bond0.200
     interfaceMatches:
       - interface: eth0
@@ -472,10 +472,10 @@ spec:
       - name: fqdn
         address: edge-b-02.example.com
       - name: ip
-        address: 192.0.2.134/24
+        address: 192.0.2.134
         interface: bond0.100
       - name: ceph-public
-        address: 198.51.100.25/25
+        address: 198.51.100.25
         interface: bond0.200
     interfaceMatches:
       - interface: eth0
@@ -527,10 +527,10 @@ spec:
       - name: fqdn
         address: edge-b-03.example.com
       - name: ip
-        address: 192.0.2.135/24
+        address: 192.0.2.135
         interface: bond0.100
       - name: ceph-public
-        address: 198.51.100.26/25
+        address: 198.51.100.26
         interface: bond0.200
     interfaceMatches:
       - interface: eth0
@@ -568,10 +568,10 @@ spec:
       - name: fqdn
         address: hub-multidc-01-infra-01.example.com
       - name: ip
-        address: 192.0.2.19/24
+        address: 192.0.2.19
         interface: primary
       - name: ceph-public
-        address: 198.51.100.37/25
+        address: 198.51.100.37
         interface: ceph-public
     interfaceMatches:
       - interface: primary
@@ -609,10 +609,10 @@ spec:
       - name: fqdn
         address: hub-multidc-01-infra-02.example.com
       - name: ip
-        address: 192.0.2.20/24
+        address: 192.0.2.20
         interface: primary
       - name: ceph-public
-        address: 198.51.100.38/25
+        address: 198.51.100.38
         interface: ceph-public
     interfaceMatches:
       - interface: primary
@@ -650,10 +650,10 @@ spec:
       - name: fqdn
         address: hub-multidc-01-infra-03.example.com
       - name: ip
-        address: 192.0.2.21/24
+        address: 192.0.2.21
         interface: primary
       - name: ceph-public
-        address: 198.51.100.39/25
+        address: 198.51.100.39
         interface: ceph-public
     interfaceMatches:
       - interface: primary
@@ -691,10 +691,10 @@ spec:
       - name: fqdn
         address: hub-multidc-01-master-01.example.com
       - name: ip
-        address: 192.0.2.13/24
+        address: 192.0.2.13
         interface: primary
       - name: ceph-public
-        address: 198.51.100.31/25
+        address: 198.51.100.31
         interface: ceph-public
     interfaceMatches:
       - interface: primary
@@ -732,10 +732,10 @@ spec:
       - name: fqdn
         address: hub-multidc-01-master-02.example.com
       - name: ip
-        address: 192.0.2.14/24
+        address: 192.0.2.14
         interface: primary
       - name: ceph-public
-        address: 198.51.100.32/25
+        address: 198.51.100.32
         interface: ceph-public
     interfaceMatches:
       - interface: primary
@@ -773,10 +773,10 @@ spec:
       - name: fqdn
         address: hub-multidc-01-master-03.example.com
       - name: ip
-        address: 192.0.2.15/24
+        address: 192.0.2.15
         interface: primary
       - name: ceph-public
-        address: 198.51.100.33/25
+        address: 198.51.100.33
         interface: ceph-public
     interfaceMatches:
       - interface: primary
@@ -814,10 +814,10 @@ spec:
       - name: fqdn
         address: hub-multidc-01-worker-01.example.com
       - name: ip
-        address: 192.0.2.16/24
+        address: 192.0.2.16
         interface: primary
       - name: ceph-public
-        address: 198.51.100.34/25
+        address: 198.51.100.34
         interface: ceph-public
     interfaceMatches:
       - interface: primary
@@ -855,10 +855,10 @@ spec:
       - name: fqdn
         address: hub-multidc-01-worker-02.example.com
       - name: ip
-        address: 192.0.2.17/24
+        address: 192.0.2.17
         interface: primary
       - name: ceph-public
-        address: 198.51.100.35/25
+        address: 198.51.100.35
         interface: ceph-public
     interfaceMatches:
       - interface: primary
@@ -896,10 +896,10 @@ spec:
       - name: fqdn
         address: hub-multidc-01-worker-03.example.com
       - name: ip
-        address: 192.0.2.18/24
+        address: 192.0.2.18
         interface: primary
       - name: ceph-public
-        address: 198.51.100.36/25
+        address: 198.51.100.36
         interface: ceph-public
     interfaceMatches:
       - interface: primary
@@ -937,10 +937,10 @@ spec:
       - name: fqdn
         address: hub-multidc-02-infra-01.example.com
       - name: ip
-        address: 192.0.2.149/24
+        address: 192.0.2.149
         interface: primary
       - name: ceph-public
-        address: 198.51.100.47/25
+        address: 198.51.100.47
         interface: ceph-public
     interfaceMatches:
       - interface: primary
@@ -978,10 +978,10 @@ spec:
       - name: fqdn
         address: hub-multidc-02-infra-02.example.com
       - name: ip
-        address: 192.0.2.150/24
+        address: 192.0.2.150
         interface: primary
       - name: ceph-public
-        address: 198.51.100.48/25
+        address: 198.51.100.48
         interface: ceph-public
     interfaceMatches:
       - interface: primary
@@ -1019,10 +1019,10 @@ spec:
       - name: fqdn
         address: hub-multidc-02-infra-03.example.com
       - name: ip
-        address: 192.0.2.151/24
+        address: 192.0.2.151
         interface: primary
       - name: ceph-public
-        address: 198.51.100.49/25
+        address: 198.51.100.49
         interface: ceph-public
     interfaceMatches:
       - interface: primary
@@ -1060,10 +1060,10 @@ spec:
       - name: fqdn
         address: hub-multidc-02-master-01.example.com
       - name: ip
-        address: 192.0.2.143/24
+        address: 192.0.2.143
         interface: primary
       - name: ceph-public
-        address: 198.51.100.41/25
+        address: 198.51.100.41
         interface: ceph-public
     interfaceMatches:
       - interface: primary
@@ -1101,10 +1101,10 @@ spec:
       - name: fqdn
         address: hub-multidc-02-master-02.example.com
       - name: ip
-        address: 192.0.2.144/24
+        address: 192.0.2.144
         interface: primary
       - name: ceph-public
-        address: 198.51.100.42/25
+        address: 198.51.100.42
         interface: ceph-public
     interfaceMatches:
       - interface: primary
@@ -1142,10 +1142,10 @@ spec:
       - name: fqdn
         address: hub-multidc-02-master-03.example.com
       - name: ip
-        address: 192.0.2.145/24
+        address: 192.0.2.145
         interface: primary
       - name: ceph-public
-        address: 198.51.100.43/25
+        address: 198.51.100.43
         interface: ceph-public
     interfaceMatches:
       - interface: primary
@@ -1183,10 +1183,10 @@ spec:
       - name: fqdn
         address: hub-multidc-02-worker-01.example.com
       - name: ip
-        address: 192.0.2.146/24
+        address: 192.0.2.146
         interface: primary
       - name: ceph-public
-        address: 198.51.100.44/25
+        address: 198.51.100.44
         interface: ceph-public
     interfaceMatches:
       - interface: primary
@@ -1224,10 +1224,10 @@ spec:
       - name: fqdn
         address: hub-multidc-02-worker-02.example.com
       - name: ip
-        address: 192.0.2.147/24
+        address: 192.0.2.147
         interface: primary
       - name: ceph-public
-        address: 198.51.100.45/25
+        address: 198.51.100.45
         interface: ceph-public
     interfaceMatches:
       - interface: primary
@@ -1265,10 +1265,10 @@ spec:
       - name: fqdn
         address: hub-multidc-02-worker-03.example.com
       - name: ip
-        address: 192.0.2.148/24
+        address: 192.0.2.148
         interface: primary
       - name: ceph-public
-        address: 198.51.100.46/25
+        address: 198.51.100.46
         interface: ceph-public
     interfaceMatches:
       - interface: primary
@@ -1340,10 +1340,10 @@ spec:
       - name: fqdn
         address: storage-a-01.example.com
       - name: ssh
-        address: 198.51.100.1/25
+        address: 198.51.100.1
         interface: bond0.200
       - name: cluster
-        address: 203.0.113.1/24
+        address: 203.0.113.1
         interface: bond0.300
     interfaceMatches:
       - interface: nic0
@@ -1427,10 +1427,10 @@ spec:
       - name: fqdn
         address: storage-a-02.example.com
       - name: ssh
-        address: 198.51.100.2/25
+        address: 198.51.100.2
         interface: bond0.200
       - name: cluster
-        address: 203.0.113.2/24
+        address: 203.0.113.2
         interface: bond0.300
     interfaceMatches:
       - interface: nic0
@@ -1514,10 +1514,10 @@ spec:
       - name: fqdn
         address: storage-a-03.example.com
       - name: ssh
-        address: 198.51.100.3/25
+        address: 198.51.100.3
         interface: bond0.200
       - name: cluster
-        address: 203.0.113.3/24
+        address: 203.0.113.3
         interface: bond0.300
     interfaceMatches:
       - interface: nic0
@@ -1601,10 +1601,10 @@ spec:
       - name: fqdn
         address: storage-b-01.example.com
       - name: ssh
-        address: 198.51.100.64/25
+        address: 198.51.100.64
         interface: bond0.200
       - name: cluster
-        address: 203.0.113.4/24
+        address: 203.0.113.4
         interface: bond0.300
     interfaceMatches:
       - interface: nic0
@@ -1688,10 +1688,10 @@ spec:
       - name: fqdn
         address: storage-b-02.example.com
       - name: ssh
-        address: 198.51.100.65/25
+        address: 198.51.100.65
         interface: bond0.200
       - name: cluster
-        address: 203.0.113.5/24
+        address: 203.0.113.5
         interface: bond0.300
     interfaceMatches:
       - interface: nic0
@@ -1775,10 +1775,10 @@ spec:
       - name: fqdn
         address: storage-b-03.example.com
       - name: ssh
-        address: 198.51.100.66/25
+        address: 198.51.100.66
         interface: bond0.200
       - name: cluster
-        address: 203.0.113.6/24
+        address: 203.0.113.6
         interface: bond0.300
     interfaceMatches:
       - interface: nic0
@@ -2013,9 +2013,6 @@ kind: NetworkConfig
 metadata:
   name: ceph-network
 spec:
-  machineNetwork:
-    - cidr: 198.51.100.0/25
-    - cidr: 203.0.113.0/24
   dns:
     - serverRef: default-01
     - serverRef: default-02
@@ -2117,8 +2114,6 @@ kind: NetworkConfig
 metadata:
   name: hub-vm-network
 spec:
-  machineNetwork:
-    - cidr: 192.0.2.0/24
   dns:
     - serverRef: default-01
     - serverRef: default-02
@@ -2160,8 +2155,6 @@ kind: NetworkConfig
 metadata:
   name: ocp-bare-metal-network
 spec:
-  machineNetwork:
-    - cidr: 192.0.2.0/24
   dns:
     - serverRef: default-01
     - serverRef: default-02

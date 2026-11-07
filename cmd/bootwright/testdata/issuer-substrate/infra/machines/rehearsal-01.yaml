@@ -14,8 +14,6 @@ spec:
     provided: false
   network:
     inline:
-      machineNetwork:
-        - cidr: 198.51.100.0/24
       nmstate:
         interfaces:
           - name: enp1s0

@@ -640,9 +640,6 @@ metadata:
   name: net
 
 spec:
-  machineNetwork:
-    - cidr: 192.0.2.0/24
-
   nmstate:
     interfaces:
       - name: eth0

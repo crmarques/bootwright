@@ -94,7 +94,7 @@ func (a *admission) ingressAdjacency(service api.Value, field string, placed []a
 		if !found {
 			continue
 		}
-		prefixes := machinePrefixes(m)
+		prefixes := machinePrefixes(m, a.catalog)
 		if len(prefixes) == 0 || slices.ContainsFunc(prefixes, adjacentTo(vip, interfaceNetworks)) {
 			continue
 		}
@@ -108,10 +108,10 @@ func (a *admission) ingressAdjacency(service api.Value, field string, placed []a
 	}
 }
 
-func machinePrefixes(m api.Object) []netip.Prefix {
+func machinePrefixes(m api.Object, c api.Catalog) []netip.Prefix {
 	out := []netip.Prefix{}
 	for _, entry := range m.Spec().Get("network", "addresses").Items() {
-		if prefix, err := netip.ParsePrefix(textOf(entry, "address")); err == nil {
+		if prefix, ok := machine.AssignedPrefix(m, c, entry); ok {
 			out = append(out, prefix)
 		}
 	}
@@ -128,9 +128,6 @@ func adjacentTo(vip netip.Addr, interfaceNetworks []netip.Prefix) func(netip.Pre
 }
 
 func (a *admission) declaredNetworks(ceph api.Value) {
-	if !network.Declared(a.catalog) {
-		return
-	}
 	declared := network.CIDRs(a.catalog)
 	for _, entry := range cidrRoles {
 		for i, cidr := range ceph.Get("networks", entry.key).Strings() {

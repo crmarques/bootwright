@@ -176,7 +176,7 @@ arm matching the provider's substrate. The `vsphere` arm is
 
 | Field | Type | Default | Rule |
 | --- | --- | --- | --- |
-| `untaggedNetworkRef` | `Network` reference | none | The one network the segment carries untagged. On a `kubevirt` or `vsphere` segment it is required while the graph declares a Network (`api.required`). |
+| `untaggedNetworkRef` | `Network` reference | none | The one network the segment carries untagged. Required on a `kubevirt` or `vsphere` segment (`api.required`). |
 | `taggedNetworkRefs` | set of `Network` references | none | The 802.1Q allow-list: each declares `vlan` and is not `untaggedNetworkRef`. Refused on a `kubevirt` or `vsphere` segment until [B1172](../milestones/backlog.md#b1172). |
 | `mtu` | integer 576 to 65536 | `1500`, materialized | The largest frame the segment carries, never derived into an interface MTU. A hosted KubeVirt segment naming a typed host `secondaryNetworks[]` entry takes that entry's `mtu`, 1500 when it has none, and an authored one refuses. |
 | `baremetal` | `{}` | | A physical network. |
@@ -192,8 +192,8 @@ managed network's MTU carry the capacity only when it is not 1500.
 
 An interface's effective MTU is its `mtu`, else its VLAN parent's or bond's,
 else 1500. It must not exceed the capacity of the segment of any NIC under it,
-followed through VLAN parents and bond and bridge ports, nor, while the graph
-declares a Network, the `mtu` of a Network it holds an assignment on. Each
+followed through VLAN parents and bond and bridge ports, nor the `mtu` of a
+Network it holds an assignment on. Each
 excess refuses `api.invariant` at `$.spec.network`, naming the interface, the
 capacity and its holder, and the field to raise: the segment's `mtu`, the host
 secondary network's or the Network's.
@@ -324,7 +324,7 @@ substrate reads; NIC names and substrate-neutral root-device hints stay in
 | Arm | Field | Type | Rule |
 | --- | --- | --- | --- |
 | `baremetal` | `bmc` | object | The management controller; exact shape [below](#bmc-and-root-device-shape). |
-| `baremetal` | `nics` | array | Set of `{nicRef, macAddress, segmentRef}` keyed by `nicRef`; `nicRef` names a `hardware.nics[].name`, at most one entry per NIC; `macAddress` is EUI-48; optional `segmentRef` names a segment of the provider with this arm, and is refused without `providerRef`. Omitted, the NIC takes the provider's sole segment; with two or more, a NIC an available ethernet interface matches needs one while the graph declares a Network (`api.invariant` at its entry, naming the candidates). |
+| `baremetal` | `nics` | array | Set of `{nicRef, macAddress, segmentRef}` keyed by `nicRef`; `nicRef` names a `hardware.nics[].name`, at most one entry per NIC; `macAddress` is EUI-48; optional `segmentRef` names a segment of the provider with this arm, and is refused without `providerRef`. Omitted, the NIC takes the provider's sole segment; with two or more, a NIC an available ethernet interface matches needs one (`api.invariant` at its entry, naming the candidates). |
 | `baremetal` | `rootDevice` | object | Physical-disk hints `wwn`, `hctl` and `serialNumber`, each a non-empty string, and `sizeBytes`, the root disk's exact capacity, 4096-aligned up to 64 TiB, proved by a Bootwright installation or the physical agent pre-boot serial proof. |
 | `baremetal` | `firmware` | object | Declared firmware settings; [shape](#firmware-block). |
 | `libvirt`, `kubevirt` | `profileRef` | string | Provider-local `machineProfiles[].name`. |
@@ -396,37 +396,35 @@ Anaconda Machine that selects no configuration refuses only at
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
 | `name` | string | yes | Non-empty Machine-local name, unique across contacts and assignments. |
-| `address` | string | yes | DNS contact, unzoned IP contact, or host IP with a prefix; an assignment requires the prefix. |
+| `address` | string | yes | A bare unzoned IP or, for a contact only, a DNS name; a prefix refuses with the `host` grammar's `api.value`. |
 | `interface` | string | no | Static assignment to an interface in the effective NMState map; omission declares only a contact. A Linux interface name, as in the [subset](#nmstate-composition-subset). |
 
 An assigned interface may be an ethernet or a logical interface, including a VLAN, bond, or
-OVS internal interface. DNS names cannot be assigned. IPv4 prefixes are
-`1..32`, IPv6 prefixes `1..128`; the IP determines the family. An IPv4
-assignment with a prefix shorter than /31 is a host address of its prefix,
-never its network or broadcast address, and refuses with `api.value` at its
-`address`; a /31, a /32 and an IPv6 assignment reserve neither. Preserve host
-bits while canonicalizing IP/prefix spelling: `192.0.2.3/24` must not become
-`192.0.2.0/24`. Consumers of an address reference receive the host IP without
-its prefix, or the DNS name for a DNS contact. A contact configures nothing;
-a prefix on one refuses `api.invariant` at its `address`.
+OVS internal interface. DNS names cannot be assigned. An assignment takes the
+prefix of the one [`Network`](networks.md#cross-kind-checks) holding its IP,
+and the IP determines the family; an assignment in no Network, in several, or
+only in Networks of other sites refuses, so every assignment needs a Network
+and a contacts-only graph needs none. An IPv4 assignment in a Network shorter
+than /31 is a host address of it, never its network or broadcast address, and
+refuses with `api.value` at its `address`; a /31, a /32 and an IPv6 Network
+reserve neither. Consumers of an address reference receive the IP, or the DNS
+name for a DNS contact. A contact configures nothing.
 
 There is at most one static assignment per interface and family. Duplicate
 names, repeated assigned IPs, and conflicting interface assignments fail
-validation. Secondary assignments may be outside `machineNetwork`; only
-installation candidates must lie inside a selected machine-network CIDR.
-The same install IP cannot be selected by another Machine.
+validation. The same install IP cannot be selected by another Machine.
 
 Static assignments have one owner, `network.addresses`; native templates and
 overrides carry no second static-address declaration. Compose the
-native map first, then inject each assigned host IP and prefix into its
+native map first, then inject each assigned IP and its Network's prefix into its
 interface's matching address family. The family must permit static
 configuration, not be disabled or request DHCP/autoconfiguration. Every static
 IP in the resulting NMState map must have exactly one declared assignment.
 The interpreted fields and omitted-family behavior are fixed by the
 [NMState composition subset](#nmstate-composition-subset).
 
-An explicit `installAddressRef` must select an assigned IP inside a consumed
-`machineNetwork`. For a consumer requiring a static installation address with
+An explicit `installAddressRef` must select an assignment in a declared
+Network. For a consumer requiring a static installation address with
 no authored selection, select the unique eligible address whose interface
 carries a default route for that address family; if there is none, select the
 sole eligible address. More than one candidate at either step is an error;
@@ -957,12 +955,11 @@ firewall requirements are checked before effective rendering.
 
 ## NetworkConfig
 
-`NetworkConfig` owns reusable machine CIDRs, DNS service selections, and
-an NMState template:
+`NetworkConfig` owns reusable DNS service selections and an NMState template;
+subnets are [`Network`](networks.md) objects:
 
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
-| `spec.machineNetwork` | array | yes | Non-empty set of `{cidr}` with valid, unique CIDRs; effective state masks host bits. |
 | `spec.dns` | array of selections | no | Ordered `{serverRef, endpointRef?}` records targeting DNSServer; unique by resolved pair. |
 | `spec.nmstate` | arbitrary map | yes | Native NMState desired-state template. |
 
@@ -1044,11 +1041,11 @@ the subset interprets only the keys its table lists. Every other route and the o
 the line does not carry are applied after installation by
 [network convergence](../managed-os.md#network-convergence).
 
-The install gateway lies inside the install address's prefix. For every
+The install gateway lies inside the install address's Network prefix. For every
 Machine with a selected install address, admission reads the default route of
 that address's family, IPv4 or IPv6, by the rule above; a gateway outside the
 prefix refuses `api.invariant` at `network.installAddressRef`, naming the
-gateway, the install address with its prefix and the `NetworkConfig` or inline
+gateway, the install address with its Network's prefix and the `NetworkConfig` or inline
 network holding the route. No such route or `next-hop-address`, or an IPv6
 link-local gateway, on-link by definition, is untouched; an on-link route to
 another gateway outside the prefix is not admitted.

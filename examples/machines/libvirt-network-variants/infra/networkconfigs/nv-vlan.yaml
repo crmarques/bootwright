@@ -4,9 +4,6 @@ metadata:
   name: nv-vlan
 
 spec:
-  machineNetwork:
-    - cidr: 198.51.100.64/26
-
   dns:
     - serverRef: lab-dns
       endpointRef: ip

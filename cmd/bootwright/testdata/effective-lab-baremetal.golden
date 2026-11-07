@@ -79,7 +79,7 @@ spec:
     installAddressRef: ip
     addresses:
       - name: ip
-        address: 198.51.100.11/24
+        address: 198.51.100.11
         interface: eno1
       - name: fqdn
         address: metal-01.metal.example.test
@@ -169,8 +169,6 @@ kind: NetworkConfig
 metadata:
   name: lab-metal
 spec:
-  machineNetwork:
-    - cidr: 198.51.100.0/24
   dns:
     - serverRef: lab-dns
       endpointRef: ip

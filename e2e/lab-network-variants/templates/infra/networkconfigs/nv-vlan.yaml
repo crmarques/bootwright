@@ -5,9 +5,6 @@ metadata:
   name: nv-vlan
 
 spec:
-  machineNetwork:
-    - cidr: {{ .Values.vlan.cidr }}
-
   dns:
     - serverRef: lab-dns
       endpointRef: ip

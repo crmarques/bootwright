@@ -3,8 +3,10 @@ package openshift
 import (
 	"fmt"
 	"net/netip"
+	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/network"
 )
 
@@ -21,9 +23,8 @@ func nodeSubnets(o api.Object, c api.Catalog) []heldSubnet {
 			continue
 		}
 		for _, assignment := range bound.Spec().Get("network", "addresses").Items() {
-			iface := assignment.Get("interface").Text()
-			if prefix, err := netip.ParsePrefix(assignment.Get("address").Text()); err == nil && iface != "" {
-				held = append(held, heldSubnet{prefix.Masked(), "the subnet of interface " + iface + " on " + bound.Identity()})
+			if match, ok := machine.AssignedNetwork(bound, c, assignment); ok {
+				held = append(held, heldSubnet{match.Prefix, "the subnet of interface " + assignment.Get("interface").Text() + " on " + bound.Identity()})
 			}
 		}
 	}
@@ -84,7 +85,7 @@ func validateVIPAdjacency(o api.Object, c api.Catalog) []api.Issue {
 				continue
 			}
 			bound, ok := c.Find(api.Machine, node.Get("machineRef").Text())
-			if !ok || holdsSubnetOf(bound, address.Unmap()) {
+			if !ok || holdsSubnetOf(bound, c, address.Unmap()) {
 				continue
 			}
 			issues = add(issues, invariantRemediation("$.spec.install.endpoints."+slot+".address",
@@ -95,17 +96,7 @@ func validateVIPAdjacency(o api.Object, c api.Catalog) []api.Issue {
 	return issues
 }
 
-func holdsSubnetOf(m api.Object, address netip.Addr) bool {
-	assigned := false
-	for _, assignment := range m.Spec().Get("network", "addresses").Items() {
-		prefix, err := netip.ParsePrefix(assignment.Get("address").Text())
-		if err != nil || assignment.Get("interface").Text() == "" {
-			continue
-		}
-		assigned = true
-		if prefix.Masked().Contains(address) {
-			return true
-		}
-	}
-	return !assigned
+func holdsSubnetOf(m api.Object, c api.Catalog, address netip.Addr) bool {
+	held := machine.AssignedNetworks(m, c)
+	return len(held) == 0 || slices.ContainsFunc(held, func(match network.Held) bool { return match.Prefix.Contains(address) })
 }

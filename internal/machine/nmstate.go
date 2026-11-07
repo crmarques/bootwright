@@ -57,14 +57,9 @@ func ComposeNetwork(o api.Object, c api.Catalog) (api.Value, []api.Issue) {
 			continue
 		}
 		field := fmt.Sprintf("$.spec.network.addresses[%d]", index)
-		prefix, err := netip.ParsePrefix(assignment.Get("address").Text())
-		if err != nil || prefix.Bits() == 0 {
-			issues = appendIssues(issues, invariant(field+".address", "interface assignments require an IP address with a nonzero prefix", "give the address a nonzero prefix length, such as /24"))
-			continue
-		}
-		if reservedEnd(prefix, prefix.Addr()) != "" {
-			issues = appendIssues(issues, valueIssue(field+".address", "an IPv4 assignment is a host address of its prefix, never its network or broadcast address",
-				fmt.Sprintf("correct spec.network.addresses[%d].address on %s to a host address inside its prefix", index, o.Identity())))
+		prefix, problems := composedPrefix(o, c, assignment, field)
+		if len(problems) != 0 || !prefix.IsValid() {
+			issues = appendIssues(issues, problems...)
 			continue
 		}
 		position := interfaceIndex(interfaces, assignment.Get("interface").Text())
@@ -164,10 +159,6 @@ func InstallAddress(o api.Object, c api.Catalog) (api.Value, []api.Issue) {
 }
 
 func selectInstallAddress(o api.Object, c api.Catalog, required bool) (api.Value, []api.Issue) {
-	configuration, found := NetworkConfig(o, c)
-	if !found {
-		return api.Value{}, nil
-	}
 	native, issues := ComposeNetwork(o, c)
 	if len(issues) != 0 || !native.Present() {
 		return api.Value{}, nil
@@ -178,8 +169,8 @@ func selectInstallAddress(o api.Object, c api.Catalog, required bool) (api.Value
 		if !address.Has("interface") {
 			continue
 		}
-		prefix, err := netip.ParsePrefix(address.Get("address").Text())
-		if err != nil || !insideNetworks(prefix.Addr(), configuration.Get("machineNetwork")) {
+		prefix, ok := AssignedPrefix(o, c, address)
+		if !ok {
 			continue
 		}
 		eligible = append(eligible, address)
@@ -197,7 +188,10 @@ func selectInstallAddress(o api.Object, c api.Catalog, required bool) (api.Value
 				return address, nil
 			}
 		}
-		return api.Value{}, []api.Issue{reference("$.spec.network.installAddressRef", "install address must select an interface-assigned IP inside the machine networks", "set network.installAddressRef to an address in network.addresses that names an interface and lies inside a machine network")}
+		if c.UndecodableOfKind(api.Network) {
+			return api.Value{}, nil
+		}
+		return api.Value{}, []api.Issue{reference("$.spec.network.installAddressRef", "install address must select an interface-assigned IP inside a declared Network", "set network.installAddressRef to an address in network.addresses that names an interface and lies inside a declared Network")}
 	}
 	if len(defaultRoute) == 1 {
 		return defaultRoute[0], nil
@@ -208,8 +202,8 @@ func selectInstallAddress(o api.Object, c api.Catalog, required bool) (api.Value
 	if len(eligible) == 1 {
 		return eligible[0], nil
 	}
-	if required {
-		return api.Value{}, []api.Issue{invariant("$.spec.network.installAddressRef", "this consumer requires a static interface-assigned installation address", "assign a static IP inside a machine network to an interface in network.addresses and select it with network.installAddressRef")}
+	if required && !c.UndecodableOfKind(api.Network) {
+		return api.Value{}, []api.Issue{invariant("$.spec.network.installAddressRef", "this consumer requires a static interface-assigned installation address", "assign a static IP inside a declared Network to an interface in network.addresses and select it with network.installAddressRef")}
 	}
 	return api.Value{}, nil
 }
@@ -423,16 +417,6 @@ func interfaceIndex(values []api.Value, name string) int {
 
 func unavailableInterface(value api.Value) bool {
 	return value.Get("state").Text() == "absent" || value.Get("state").Text() == "ignore"
-}
-
-func insideNetworks(address netip.Addr, networks api.Value) bool {
-	for _, network := range networks.Items() {
-		prefix, err := netip.ParsePrefix(network.Get("cidr").Text())
-		if err == nil && prefix.Contains(address) {
-			return true
-		}
-	}
-	return false
 }
 
 func canonicalMAC(raw string) (string, bool) {

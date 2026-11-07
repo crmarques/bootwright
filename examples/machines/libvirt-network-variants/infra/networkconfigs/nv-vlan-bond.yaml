@@ -4,9 +4,6 @@ metadata:
   name: nv-vlan-bond
 
 spec:
-  machineNetwork:
-    - cidr: 198.51.100.128/26
-
   dns:
     - serverRef: lab-dns
       endpointRef: ip

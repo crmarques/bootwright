@@ -28,7 +28,7 @@ func TestGatewayDNSRefusesAnUnresolvedPublicPlacement(t *testing.T) {
 	catalog := gatewayDNSCatalog(t)
 	gateway := find(t, catalog, api.CephObjectGateway, "objects")
 	host := find(t, catalog, api.Machine, "machine-1")
-	host = host.WithSpec(host.Spec().WithPath(api.ListValue(m("name", "other", "address", "198.51.100.1/24")), "network", "addresses"))
+	host = host.WithSpec(host.Spec().WithPath(api.ListValue(m("name", "other", "address", "198.51.100.1")), "network", "addresses"))
 	if addresses, err := GatewayDNSAddresses(replace(catalog, host), gateway); err == nil || addresses != nil {
 		t.Fatalf("unresolved host = %v (%v)", addresses, err)
 	}

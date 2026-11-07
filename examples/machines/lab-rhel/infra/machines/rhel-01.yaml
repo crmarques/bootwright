@@ -35,5 +35,5 @@ spec:
     # entry in addresses overrides it.
     addresses:
       - name: ip
-        address: 198.51.100.11/24
+        address: 198.51.100.11
         interface: enp1s0

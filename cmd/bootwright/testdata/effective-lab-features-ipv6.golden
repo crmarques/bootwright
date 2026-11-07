@@ -57,7 +57,7 @@ spec:
       - name: fqdn
         address: features-01.lab.example.test
       - name: ip
-        address: 2001:db8:2::21/64
+        address: 2001:db8:2::21
         interface: enp1s0
     interfaceMatches:
       - interface: enp1s0
@@ -89,7 +89,7 @@ spec:
       - name: fqdn
         address: features-02.lab.example.test
       - name: ip
-        address: 2001:db8:2::22/64
+        address: 2001:db8:2::22
         interface: enp1s0
     interfaceMatches:
       - interface: enp1s0
@@ -121,7 +121,7 @@ spec:
       - name: fqdn
         address: features-03.lab.example.test
       - name: ip
-        address: 2001:db8:2::23/64
+        address: 2001:db8:2::23
         interface: enp1s0
     interfaceMatches:
       - interface: enp1s0
@@ -149,8 +149,6 @@ kind: NetworkConfig
 metadata:
   name: lab-guests
 spec:
-  machineNetwork:
-    - cidr: 2001:db8:2::/64
   dns:
     - serverRef: lab-dns
       endpointRef: ip

@@ -71,10 +71,10 @@ func TestADefaultedIdentityMatchGivesTheSameHostEntryAsAnAuthoredOne(t *testing.
 // device that does not exist.
 func TestNetworkConfigCarriesTheRealizedMACOverAnAuthoredOne(t *testing.T) {
 	interfaces := api.ListValue(api.MapValue(text("name", "enp1s0"), text("type", "ethernet"), text("mac-address", "02:00:00:00:00:ff")))
-	inline := api.MapValue(field("machineNetwork", api.ListValue(api.MapValue(text("cidr", "198.51.100.0/24")))), field("nmstate", api.MapValue(field("interfaces", interfaces))))
-	addresses := api.ListValue(api.MapValue(text("name", "ip"), text("interface", "enp1s0"), text("address", "198.51.100.21/24")))
+	inline := api.MapValue(field("nmstate", api.MapValue(field("interfaces", interfaces))))
+	addresses := api.ListValue(api.MapValue(text("name", "ip"), text("interface", "enp1s0"), text("address", "198.51.100.21")))
 	node := api.NewObject(api.Machine, "node", api.Value{}, api.MapValue(field("network", api.MapValue(field("inline", inline), field("addresses", addresses), text("installAddressRef", "ip")))))
-	network, err := networkConfig(api.NewCatalog(nil), node, []substrate.Interface{{Name: "enp1s0", MACAddress: "02:00:00:00:00:01"}}, nil)
+	network, err := networkConfig(api.NewCatalog([]api.Object{labNetwork()}), node, []substrate.Interface{{Name: "enp1s0", MACAddress: "02:00:00:00:00:01"}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

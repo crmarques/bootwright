@@ -50,11 +50,11 @@ spec:
         address: edge-b-01.example.com
 
       - name: ip
-        address: 192.0.2.133/24
+        address: 192.0.2.133
         interface: bond0.100
 
       - name: ceph-public
-        address: 198.51.100.24/25
+        address: 198.51.100.24
         interface: bond0.200
 
     overrides: {}

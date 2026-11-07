@@ -549,8 +549,7 @@ inspection output.
 Names, enums, reference names, versions, paths, and URLs satisfy their authored
 lexical rules and otherwise remain unchanged. MAC addresses normalize to
 lowercase colon notation. IPs normalize to compressed canonical text. Network
-CIDRs mask host bits (a `Network` object's CIDR refuses them); Machine interface-address IP/prefix values retain host
-bits and normalize the host and prefix separately. Digest algorithms and
+CIDRs mask host bits (a `Network` object's CIDR refuses them). Digest algorithms and
 hexadecimal digests normalize to lowercase. Set-valued lists sort only where
 their owning schema says so; ordered lists retain authored order.
 

@@ -29,7 +29,7 @@ func obj(kind api.Kind, name string, spec api.Value) api.Object {
 func list(v ...api.Value) api.Value { return api.ListValue(v...) }
 
 func TestManagedServicesAndPlacement(t *testing.T) {
-	machine := obj(api.Machine, "host", m("network", m("addresses", list(m("name", "fqdn", "address", "host.example.test"), m("name", "ip", "address", "192.0.2.10/24")))))
+	machine := obj(api.Machine, "host", m("network", m("addresses", list(m("name", "fqdn", "address", "host.example.test"), m("name", "ip", "address", "192.0.2.10")))))
 	c := api.NewCatalog([]api.Object{machine})
 	endpoints := list(m("name", "ip", "addressRef", "ip"))
 	services := map[api.Kind]api.Value{

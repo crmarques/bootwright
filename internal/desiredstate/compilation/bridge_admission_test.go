@@ -42,7 +42,7 @@ func TestValidateRefusesAWildcardBridgeName(t *testing.T) {
 // managed network is a Network and the capacity is the segment's mtu, so each
 // field the arm held is an unknown field.
 func TestALibvirtSegmentArmCarriesOnlyItsBridge(t *testing.T) {
-	provider := strings.Replace(fmt.Sprintf(libvirtProviderYAML, "virbr-lab"), "{bridge: \"virbr-lab\"}", "{bridge: virbr-lab, management: managed, address: 198.51.100.1/24, forward: nat, mtu: 9000}", 1)
+	provider := strings.Replace(fmt.Sprintf(libvirtProviderYAML, "virbr-lab"), "{bridge: \"virbr-lab\"}", "{bridge: virbr-lab, management: managed, address: 198.51.100.1, forward: nat, mtu: 9000}", 1)
 	state, report, err := regressionCompiler().Compile(context.Background(), sources(environmentYAML+provider))
 	refused := map[string]bool{}
 	for _, d := range requireCompilationFailure(t, state, report, err) {

@@ -296,13 +296,12 @@ func placementOf(value api.Value) string {
 }
 
 // machineAddress resolves a Machine-local address reference as machine.Address
-// does, to the first entry of that name without its prefix; this package
-// cannot import internal/machine, which imports it.
+// does, to the first entry of that name; this package cannot import
+// internal/machine, which imports it.
 func machineAddress(machine api.Object, reference string) string {
 	for _, address := range machine.Spec().Get("network", "addresses").Items() {
 		if address.Get("name").Text() == reference {
-			value, _, _ := strings.Cut(address.Get("address").Text(), "/")
-			return value
+			return address.Get("address").Text()
 		}
 	}
 	return ""

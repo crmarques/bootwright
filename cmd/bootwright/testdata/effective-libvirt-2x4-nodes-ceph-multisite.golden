@@ -62,7 +62,7 @@ spec:
       - name: fqdn
         address: client.lab.example.test
       - name: ip
-        address: 198.51.100.30/24
+        address: 198.51.100.30
         interface: enp1s0
     interfaceMatches:
       - interface: enp1s0
@@ -128,7 +128,7 @@ spec:
       - name: fqdn
         address: primary-01.lab.example.test
       - name: ip
-        address: 198.51.100.11/24
+        address: 198.51.100.11
         interface: enp1s0
     interfaceMatches:
       - interface: enp1s0
@@ -175,7 +175,7 @@ spec:
       - name: fqdn
         address: primary-02.lab.example.test
       - name: ip
-        address: 198.51.100.12/24
+        address: 198.51.100.12
         interface: enp1s0
     interfaceMatches:
       - interface: enp1s0
@@ -222,7 +222,7 @@ spec:
       - name: fqdn
         address: primary-03.lab.example.test
       - name: ip
-        address: 198.51.100.13/24
+        address: 198.51.100.13
         interface: enp1s0
     interfaceMatches:
       - interface: enp1s0
@@ -269,7 +269,7 @@ spec:
       - name: fqdn
         address: primary-04.lab.example.test
       - name: ip
-        address: 198.51.100.14/24
+        address: 198.51.100.14
         interface: enp1s0
     interfaceMatches:
       - interface: enp1s0
@@ -316,7 +316,7 @@ spec:
       - name: fqdn
         address: secondary-01.lab.example.test
       - name: ip
-        address: 192.0.2.11/24
+        address: 192.0.2.11
         interface: enp1s0
     interfaceMatches:
       - interface: enp1s0
@@ -363,7 +363,7 @@ spec:
       - name: fqdn
         address: secondary-02.lab.example.test
       - name: ip
-        address: 192.0.2.12/24
+        address: 192.0.2.12
         interface: enp1s0
     interfaceMatches:
       - interface: enp1s0
@@ -410,7 +410,7 @@ spec:
       - name: fqdn
         address: secondary-03.lab.example.test
       - name: ip
-        address: 192.0.2.13/24
+        address: 192.0.2.13
         interface: enp1s0
     interfaceMatches:
       - interface: enp1s0
@@ -457,7 +457,7 @@ spec:
       - name: fqdn
         address: secondary-04.lab.example.test
       - name: ip
-        address: 192.0.2.14/24
+        address: 192.0.2.14
         interface: enp1s0
     interfaceMatches:
       - interface: enp1s0
@@ -580,8 +580,6 @@ kind: NetworkConfig
 metadata:
   name: primary
 spec:
-  machineNetwork:
-    - cidr: 198.51.100.0/24
   dns:
     - serverRef: lab-dns
       endpointRef: ip
@@ -613,8 +611,6 @@ kind: NetworkConfig
 metadata:
   name: secondary
 spec:
-  machineNetwork:
-    - cidr: 192.0.2.0/24
   dns:
     - serverRef: lab-dns
       endpointRef: ip

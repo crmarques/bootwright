@@ -8,7 +8,6 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	environmentdomain "github.com/crmarques/bootwright/internal/environment"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
-	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // InstallProxy freezes endpoints with an explicit authentication placeholder.
@@ -68,15 +67,12 @@ func installationProxy(catalog api.Catalog, cluster api.Object) (*InstallProxy, 
 		if !ok {
 			continue
 		}
-		network, err := substrate.NetworkSpec(catalog, machine)
+		cidr, err := installNetwork(catalog, machine)
 		if err != nil {
 			return nil, "", err
 		}
-		for _, item := range network.Get("machineNetwork").Items() {
-			cidr := item.Get("cidr").Text()
-			if !slices.Contains(entries, cidr) {
-				entries = append(entries, cidr)
-			}
+		if !slices.Contains(entries, cidr) {
+			entries = append(entries, cidr)
 		}
 	}
 	entries = append(entries, "."+cluster.Name()+"."+environmentdomain.ContainerClusterDomain(catalog))

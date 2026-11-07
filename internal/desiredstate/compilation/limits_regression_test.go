@@ -23,7 +23,7 @@ func nestedNativeValue(levels int) api.Value {
 }
 
 func TestExpandedDepthCeilingIsInclusiveAndStopsLaterNormalizers(t *testing.T) {
-	input := sources(environmentYAML + "---\napiVersion: bootwright.io/v1alpha1\nkind: NetworkConfig\nmetadata: {name: network}\nspec:\n  machineNetwork: [{cidr: 192.0.2.0/24}]\n  nmstate: {}\n")
+	input := sources(environmentYAML + "---\napiVersion: bootwright.io/v1alpha1\nkind: NetworkConfig\nmetadata: {name: network}\nspec:\n  nmstate: {}\n")
 	for _, depth := range []int{desiredstate.MaxDepth, desiredstate.MaxDepth + 1} {
 		t.Run(fmt.Sprint(depth), func(t *testing.T) {
 			later := 0
@@ -64,7 +64,7 @@ func TestInheritedCopiesConsumeAggregateRepresentationBudget(t *testing.T) {
 			var documents strings.Builder
 			documents.WriteString(base)
 			for i := range recipients {
-				fmt.Fprintf(&documents, "---\napiVersion: bootwright.io/v1alpha1\nkind: NetworkConfig\nmetadata: {name: network-%d}\nspec:\n  machineNetwork: [{cidr: 192.0.2.0/24}]\n", i)
+				fmt.Fprintf(&documents, "---\napiVersion: bootwright.io/v1alpha1\nkind: NetworkConfig\nmetadata: {name: network-%d}\nspec: {}\n", i)
 			}
 			calls := 0
 			compiler := compilation.NewCompiler(yamlstream.Parser{}, nil, compilation.Rules{Normalize: func(object api.Object, _ api.Catalog) (api.Object, []api.Issue) { calls++; return object, nil }})

@@ -63,7 +63,9 @@ func ipv6Fixture(value api.Value) api.Value {
 			fields[i].Value = ipv6Fixture(fields[i].Value)
 		}
 		out := api.MapValue(fields...)
-		if value.Has("ipv4") {
+		if value.Has("ipv4") && value.Get("ipv4").Has("cidr") {
+			out = out.Without("ipv4").With("ipv6", ipv6Fixture(value.Get("ipv4")))
+		} else if value.Has("ipv4") {
 			out = out.Without("ipv4").With("ipv6", api.MapValue(field("enabled", api.BoolValue(true)), field("dhcp", api.BoolValue(false))))
 		}
 		return out

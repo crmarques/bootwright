@@ -148,7 +148,7 @@ func TestTheLookupHelpersReadOneNetwork(t *testing.T) {
 	if gateway, ok := Gateway(scoped, "ipv4"); !ok || gateway.String() != "192.0.2.1" {
 		t.Fatalf("gateway = %v", gateway)
 	}
-	if _, ok := Gateway(scoped, "ipv6"); ok || !Declared(catalog) || Declared(api.NewCatalog(nil)) {
-		t.Fatal("an absent gateway or an empty graph reads as declared")
+	if _, ok := Gateway(scoped, "ipv6"); ok {
+		t.Fatal("an absent gateway reads as declared")
 	}
 }

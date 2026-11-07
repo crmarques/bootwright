@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/managedos"
 )
 
@@ -95,12 +96,12 @@ func declaredPublicNetworks(cluster api.Object, catalog api.Catalog) []netip.Pre
 		return out
 	}
 	for _, node := range cluster.Spec().Get("topology", "nodes").Items() {
-		machine, ok := catalog.Find(api.Machine, textOf(node, "machineRef"))
+		bound, ok := catalog.Find(api.Machine, textOf(node, "machineRef"))
 		if !ok {
 			continue
 		}
-		for _, value := range machine.Spec().Get("network", "addresses").Items() {
-			if prefix, err := netip.ParsePrefix(textOf(value, "address")); err == nil {
+		for _, value := range bound.Spec().Get("network", "addresses").Items() {
+			if prefix, ok := machine.AssignedPrefix(bound, catalog, value); ok {
 				out = append(out, prefix.Masked())
 			}
 		}

@@ -74,21 +74,17 @@ func (r Request) ProbeTargets() []string {
 }
 
 // Clients is the deterministic set of addresses a managed service answers.
-// Loopback is always permitted; everything else comes from the selected
-// machine networks and the addresses the retained Machines declare.
+// Loopback is always permitted; everything else is the subnet of each Network
+// that holds an interface assignment of a retained Machine, and each address
+// the retained Machines declare as a single host.
 func Clients(catalog api.Catalog) []string {
 	clients := []string{"127.0.0.1/32", "::1/128"}
-	for _, config := range catalog.OfKind(api.NetworkConfig) {
-		for _, network := range config.Spec().Get("machineNetwork").Items() {
-			if cidr := network.Get("cidr").Text(); cidr != "" && !slices.Contains(clients, cidr) {
-				clients = append(clients, cidr)
+	for _, bound := range catalog.OfKind(api.Machine) {
+		for _, address := range bound.Spec().Get("network", "addresses").Items() {
+			if held, ok := machine.AssignedNetwork(bound, catalog, address); ok {
+				clients = append(clients, held.Prefix.String())
 			}
-		}
-	}
-	for _, machine := range catalog.OfKind(api.Machine) {
-		for _, address := range machine.Spec().Get("network", "addresses").Items() {
-			cidr := hostPrefix(address.Get("address").Text())
-			if cidr != "" && !slices.Contains(clients, cidr) {
+			if cidr := hostPrefix(address.Get("address").Text()); cidr != "" {
 				clients = append(clients, cidr)
 			}
 		}

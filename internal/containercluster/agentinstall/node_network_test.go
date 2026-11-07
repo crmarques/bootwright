@@ -18,12 +18,12 @@ func TestBondVLANAndAddresslessProjectionGolden(t *testing.T) {
 			}
 			interfaces := api.ListValue(ethernet("eno1"), ethernet("eno2"), ethernet("eno3"), api.MapValue(text("name", "bond0"), text("type", "bond"), text("state", "up"), field("link-aggregation", api.MapValue(text("mode", mode), field("port", api.StringList("eno1", "eno2"))))), api.MapValue(text("name", "bond0.100"), text("type", "vlan"), text("state", "up"), field("ipv4", api.MapValue(field("enabled", api.BoolValue(true)))), field("vlan", api.MapValue(text("base-iface", "bond0"), number("id", "100")))))
 			native := api.MapValue(field("interfaces", interfaces), field("routes", api.MapValue(field("config", api.ListValue(api.MapValue(text("destination", "0.0.0.0/0"), text("next-hop-interface", "bond0.100"), text("next-hop-address", "198.51.100.1")))))))
-			inline := api.MapValue(field("machineNetwork", api.ListValue(api.MapValue(text("cidr", "198.51.100.0/24")))), field("nmstate", native))
-			addresses := api.ListValue(api.MapValue(text("name", "ip"), text("interface", "bond0.100"), text("address", "198.51.100.21/24")))
+			inline := api.MapValue(field("nmstate", native))
+			addresses := api.ListValue(api.MapValue(text("name", "ip"), text("interface", "bond0.100"), text("address", "198.51.100.21")))
 			networkSpec := api.MapValue(field("inline", inline), field("addresses", addresses), text("installAddressRef", "ip"))
 			node := api.NewObject(api.Machine, "node", api.Value{}, api.MapValue(field("network", networkSpec)))
 			physical := []substrate.Interface{{Name: "eno1", MACAddress: "02:00:00:00:00:01"}, {Name: "eno2", MACAddress: "02:00:00:00:00:02"}, {Name: "eno3", MACAddress: "02:00:00:00:00:03"}}
-			network, err := networkConfig(api.NewCatalog(nil), node, physical, nil)
+			network, err := networkConfig(api.NewCatalog([]api.Object{labNetwork()}), node, physical, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

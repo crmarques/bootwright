@@ -26,50 +26,49 @@ func assignmentNetwork(o api.Object, c api.Catalog, address netip.Addr) (network
 	return network.Held{}, held, scoped
 }
 
+func assignmentIssues(o api.Object, c api.Catalog, entry api.Value, path string) []api.Issue {
+	address, err := netip.ParseAddr(entry.Get("address").Text())
+	iface := entry.Get("interface").Text()
+	if err != nil {
+		return []api.Issue{invariant(path+".address", "address "+entry.Get("address").Text()+" of interface "+iface+" on "+o.Identity()+" is no IP address, and an interface assignment configures one",
+			"write "+path[2:]+".address on "+o.Identity()+" as a bare IP address, or remove "+path[2:]+".interface to keep a DNS name as a contact")}
+	}
+	site := o.Spec().Get("placement", "site").Text()
+	family := network.Family(address)
+	match, held, scoped := assignmentNetwork(o, c, address)
+	switch {
+	case match.Network.Name() == "" && c.UndecodableOfKind(api.Network):
+		return nil
+	case len(held) == 0:
+		return []api.Issue{invariant(path+".address", "address "+address.String()+" of interface "+iface+" on "+o.Identity()+" lies in no declared Network, and an interface assignment takes its prefix from its Network",
+			"declare a Network whose spec."+family+".cidr contains "+address.String()+", or correct "+path[2:]+".address on "+o.Identity())}
+	case len(scoped) == 0:
+		return []api.Issue{invariant(path+".address", "address "+address.String()+" of interface "+iface+" on "+o.Identity()+" lies in "+heldNames(held)+", not scoped to site "+site+" where the Machine is placed",
+			"add site "+site+" to spec.sites of "+heldNames(held)+", or assign "+o.Identity()+" an address in a Network of site "+site)}
+	case len(scoped) > 1:
+		return []api.Issue{invariant(path+".address", "address "+address.String()+" of interface "+iface+" on "+o.Identity()+" lies in more than one Network, "+heldNames(scoped),
+			"set spec.placement.site on "+o.Identity()+" to the site whose Network it uses, or scope those Networks to disjoint spec.sites")}
+	}
+	return nil
+}
+
 func validateNetworkMembership(o api.Object, c api.Catalog) []api.Issue {
-	if !network.Declared(c) {
+	native, composed := ComposeNetwork(o, c)
+	if len(composed) != 0 || !native.Present() {
 		return nil
 	}
 	var issues []api.Issue
-	native, composed := ComposeNetwork(o, c)
-	site := o.Spec().Get("placement", "site").Text()
 	for i, entry := range o.Spec().Get("network", "addresses").Items() {
-		prefix, err := netip.ParsePrefix(entry.Get("address").Text())
-		iface := entry.Get("interface").Text()
-		if err != nil || iface == "" {
+		match, ok := AssignedNetwork(o, c, entry)
+		if !ok {
 			continue
 		}
 		path := fmt.Sprintf("$.spec.network.addresses[%d]", i)
-		address := prefix.Addr()
-		family := network.Family(address)
-		match, held, scoped := assignmentNetwork(o, c, address)
-		switch {
-		case len(held) == 0:
-			issues = appendIssues(issues, invariant(path+".address", "address "+address.String()+" of interface "+iface+" on "+o.Identity()+" lies in no declared Network",
-				"declare a Network whose spec."+family+".cidr contains "+address.String()+", or correct "+path[2:]+".address on "+o.Identity()))
-			continue
-		case len(scoped) == 0:
-			issues = appendIssues(issues, invariant(path+".address", "address "+address.String()+" of interface "+iface+" on "+o.Identity()+" lies in "+heldNames(held)+", not scoped to site "+site+" where the Machine is placed",
-				"add site "+site+" to spec.sites of "+heldNames(held)+", or assign "+o.Identity()+" an address in a Network of site "+site))
-			continue
-		case len(scoped) > 1:
-			issues = appendIssues(issues, invariant(path+".address", "address "+address.String()+" of interface "+iface+" on "+o.Identity()+" lies in more than one Network, "+heldNames(scoped),
-				"set spec.placement.site on "+o.Identity()+" to the site whose Network it uses, or scope those Networks to disjoint spec.sites"))
-			continue
-		}
-		if prefix.Bits() != match.Prefix.Bits() {
-			issues = appendIssues(issues, invariant(path+".address", "address "+prefix.String()+" of interface "+iface+" on "+o.Identity()+" has prefix length /"+strconv.Itoa(prefix.Bits())+", and its "+match.Network.Identity()+" is "+match.Prefix.String(),
-				"write "+path[2:]+".address on "+o.Identity()+" as "+netip.PrefixFrom(address, match.Prefix.Bits()).String()))
-		}
-		if len(composed) == 0 && native.Present() {
-			issues = appendIssues(issues, validateAssignmentVLAN(o, native, match.Network, iface, path)...)
-			issues = appendIssues(issues, validateCarriage(o, c, native, match.Network, iface, path+".interface")...)
-		}
+		iface := entry.Get("interface").Text()
+		issues = appendIssues(issues, validateAssignmentVLAN(o, native, match.Network, iface, path)...)
+		issues = appendIssues(issues, validateCarriage(o, c, native, match.Network, iface, path+".interface")...)
 	}
-	if len(composed) == 0 && native.Present() {
-		issues = appendIssues(issues, validateStackedVLANs(o, c, native)...)
-	}
-	return issues
+	return appendIssues(issues, validateStackedVLANs(o, c, native)...)
 }
 
 func validateAssignmentVLAN(o api.Object, native api.Value, owner api.Object, iface, path string) []api.Issue {

@@ -1072,8 +1072,7 @@ A Machine's contact and its addresses are separate facts, and the listing
 reports both, as the `CONTACT` and `ADDRESSES` columns and the `contact` and
 `addresses` fields of its [JSON row](cli/output.md#machine-results). The
 contact is the one address its SSH access resolves, which is
-commonly a DNS name; the addresses are every IP the Machine declares, each
-without its prefix, in the order declared and without repetition. A DNS contact
+commonly a DNS name; the addresses are every IP the Machine declares, in the order declared and without repetition. A DNS contact
 is not an address, a Machine may declare several, and one whose addresses are
 assigned at runtime declares none and reports none: an inspection contacts no
 host, so it never reports an address desired state does not carry.

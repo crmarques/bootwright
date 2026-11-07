@@ -57,7 +57,7 @@ func withNetwork(machine api.Object, path []string, value api.Value) api.Object 
 }
 
 func vlanConfig(id string) api.Object {
-	return object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", list(
+	return object(api.NetworkConfig, "net", m("nmstate", m("interfaces", list(
 		m("name", "eth0", "type", "ethernet"),
 		m("name", "br0", "type", "linux-bridge", "bridge", m("port", list(m("name", "eth0.200")))),
 		m("name", "eth0.200", "type", "vlan", "vlan", m("base-iface", "eth0", "id", api.IntegerValue(id)))),
@@ -80,16 +80,31 @@ func TestAnAssignmentOutsideEveryNetworkIsRefused(t *testing.T) {
 	}
 }
 
-func TestAnAssignmentPrefixMustEqualItsNetworks(t *testing.T) {
-	machine, _ := fixture()
-	if issues := membershipIssues(t, machine, lan(m("ipv4", m("cidr", "192.0.2.0/25")))); !issueAt(issues, "$.spec.network.addresses[0].address", "has prefix length /24, and its Network/lan is 192.0.2.0/25") {
-		t.Fatalf("issues = %+v", issues)
+func TestAnAssignmentTakesThePrefixOfItsNetwork(t *testing.T) {
+	machine, catalog := fixture()
+	objects := []api.Object{}
+	for _, o := range catalog.Objects() {
+		if o.Kind() != api.Network {
+			objects = append(objects, o)
+		}
+	}
+	narrow := api.NewCatalog(append(objects, lan(m("ipv4", m("cidr", "192.0.2.0/25")))))
+	composed, issues := ComposeNetwork(machine, narrow)
+	address := composed.Get("interfaces").Items()[0].Get("ipv4", "address").Items()
+	if len(issues) != 0 || len(address) != 1 || address[0].Get("ip").Text() != "192.0.2.11" || address[0].Get("prefix-length").Text() != "25" {
+		t.Fatalf("composed = %v, issues = %+v", address, issues)
+	}
+	if prefix, ok := AssignedPrefix(machine, narrow, machine.Spec().Get("network", "addresses").Items()[0]); !ok || prefix.String() != "192.0.2.11/25" {
+		t.Fatalf("assigned prefix = %v", prefix)
+	}
+	if _, issues := ComposeNetwork(machine, api.NewCatalog(objects)); !issueAt(issues, "$.spec.network.addresses[0].address", "lies in no declared Network") {
+		t.Fatalf("an assignment in a graph without Networks: %+v", issues)
 	}
 }
 
 func TestATaggedStackMustCarryItsNetworksVLAN(t *testing.T) {
 	machine, _ := fixture()
-	machine = withNetwork(machine, []string{"network", "addresses"}, list(m("name", "primary", "address", "192.0.2.11/24", "interface", "br0")))
+	machine = withNetwork(machine, []string{"network", "addresses"}, list(m("name", "primary", "address", "192.0.2.11", "interface", "br0")))
 	tagged := lan(m("vlan", api.IntegerValue("200"), "ipv4", m("cidr", "192.0.2.0/24")))
 	_, catalog := fixture()
 	provider, _ := catalog.Find(api.InfraProvider, "metal")
@@ -116,7 +131,7 @@ func TestAPlacedMachineUsesOnlyNetworksOfItsSite(t *testing.T) {
 
 func TestTheInstallRouteUsesItsNetworksGateway(t *testing.T) {
 	machine, _ := fixture()
-	config := object(api.NetworkConfig, "net", m("machineNetwork", list(m("cidr", "192.0.2.0/24")), "nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")),
+	config := object(api.NetworkConfig, "net", m("nmstate", m("interfaces", list(m("name", "eth0", "type", "ethernet")),
 		"routes", m("config", list(m("destination", "0.0.0.0/0", "next-hop-interface", "eth0", "next-hop-address", "192.0.2.1"))))))
 	if issues := membershipIssues(t, machine, config, lan(m("ipv4", m("cidr", "192.0.2.0/24", "gateway", "192.0.2.1")))); issueAt(issues, "$.spec.network.installAddressRef", "gateway") {
 		t.Fatalf("the Network's own gateway is refused: %+v", issues)

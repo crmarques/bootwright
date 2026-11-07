@@ -4,9 +4,6 @@ metadata:
   name: lab-guests
 
 spec:
-  machineNetwork:
-    - cidr: {{ .Values.host.cidr }}
-
   dns:
     - serverRef: lab-dns
       endpointRef: ip

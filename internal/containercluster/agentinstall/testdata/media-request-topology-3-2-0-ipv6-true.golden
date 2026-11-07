@@ -305,7 +305,7 @@
       ],
       "machineNetwork": [
         {
-          "cidr": "2001:db8:1::0/64"
+          "cidr": "2001:db8:1::/64"
         }
       ],
       "networkType": "OVNKubernetes",

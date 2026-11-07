@@ -51,14 +51,14 @@ func catalog() api.Catalog {
 		return m("addresses", list(m("name", "ssh", "address", address)))
 	}
 	return api.NewCatalog([]api.Object{
-		object("node-a", m("os", m("provided", true), "network", network("192.0.2.10/24"),
+		object("node-a", m("os", m("provided", true), "network", network("192.0.2.10"),
 			"access", m("ssh", m("addressRef", "ssh", "user", "admin", "auth", m("operatorIdentity", m()))))),
-		object("node-b", m("os", m("provided", true), "network", network("192.0.2.11/24"),
+		object("node-b", m("os", m("provided", true), "network", network("192.0.2.11"),
 			"access", m("ssh", m("addressRef", "ssh", "user", "admin", "port", api.IntegerValue("2222"),
 				"auth", m("operatorIdentity", m()))))),
-		object("installed", m("os", m("provided", false, "installProfileRef", "rhel"), "network", network("192.0.2.12/24"),
+		object("installed", m("os", m("provided", false, "installProfileRef", "rhel"), "network", network("192.0.2.12"),
 			"access", m("ssh", m("addressRef", "ssh", "user", "bootwright", "auth", m("privateKeyRef", "fleet"))))),
-		object("declared", m("os", m("provided", true), "network", network("192.0.2.13/24"),
+		object("declared", m("os", m("provided", true), "network", network("192.0.2.13"),
 			"access", m("ssh", m("addressRef", "ssh", "user", "admin", "knownHostsRef", "pinned",
 				"auth", m("operatorIdentity", m()))))),
 		object("controller", m("os", m("provided", true), "access", m("local", true))),

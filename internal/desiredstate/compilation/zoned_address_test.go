@@ -30,7 +30,7 @@ func TestAZonedSSHAddressRefusesAtValidate(t *testing.T) {
 		}
 		want := []string{}
 		if strings.Contains(address, "%") {
-			want = []string{"api.value $.spec.network.addresses[0].address value does not match the required address grammar"}
+			want = []string{"api.value $.spec.network.addresses[0].address value does not match the required host grammar"}
 		}
 		if !slices.Equal(got, want) {
 			t.Errorf("%s: diagnostics = %q, want %q", address, got, want)

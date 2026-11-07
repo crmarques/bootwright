@@ -25,10 +25,10 @@ func refusedNetwork(catalog api.Catalog, machine api.Object, host installHost) (
 	network := machine.Spec().Get("network")
 	entry, found := findNamed(network.Get("addresses"), "name", network.Get("installAddressRef").Text())
 	iface := entry.Get("interface").Text()
-	prefix, err := netip.ParsePrefix(entry.Get("address").Text())
-	if !found || iface == "" || err != nil || !prefix.Addr().Is4() {
+	address, err := netip.ParseAddr(entry.Get("address").Text())
+	if !found || iface == "" || err != nil || !address.Is4() {
 		return "a managed-OS installation configures one static IPv4 install address, and the Machine selects none; DHCP installation is not supported",
-			"assign an IPv4 address with its prefix to the install interface in spec.network.addresses of " + machine.Identity() +
+			"assign an IPv4 address to the install interface in spec.network.addresses of " + machine.Identity() +
 				" and select it with spec.network.installAddressRef"
 	}
 	if !composed.Present() {

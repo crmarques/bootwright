@@ -42,7 +42,7 @@ spec:
       - name: fqdn
         address: compact-01.lab.example.test
       - name: ip
-        address: 198.51.100.21/24
+        address: 198.51.100.21
         interface: enp1s0
   hardware:
     nics:

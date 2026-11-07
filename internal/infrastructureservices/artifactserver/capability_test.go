@@ -104,7 +104,7 @@ func TestAServerBoundToAManagedBridgeRequiresItsProvider(t *testing.T) {
 	))
 	addresses := controller().Spec().Get("network", "addresses").Items()
 	host := api.NewObject(api.Machine, "controller", api.Value{}, controller().Spec().With("network", api.MapValue(field("addresses", api.ListValue(append(addresses,
-		api.MapValue(text("name", "guests"), text("address", "198.51.100.1/24")),
+		api.MapValue(text("name", "guests"), text("address", "198.51.100.1")),
 	)...)))))
 	endpoints := func(https string) api.FieldValue {
 		return field("endpoints", api.ListValue(

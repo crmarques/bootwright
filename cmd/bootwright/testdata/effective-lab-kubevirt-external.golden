@@ -57,7 +57,7 @@ spec:
       - name: fqdn
         address: kubevirt-01.lab.example.test
       - name: ip
-        address: 198.51.100.21/24
+        address: 198.51.100.21
         interface: eth0
     interfaceMatches:
       - interface: eth0
@@ -89,7 +89,7 @@ spec:
       - name: fqdn
         address: kubevirt-02.lab.example.test
       - name: ip
-        address: 198.51.100.22/24
+        address: 198.51.100.22
         interface: eth0
     interfaceMatches:
       - interface: eth0
@@ -121,7 +121,7 @@ spec:
       - name: fqdn
         address: kubevirt-03.lab.example.test
       - name: ip
-        address: 198.51.100.23/24
+        address: 198.51.100.23
         interface: eth0
     interfaceMatches:
       - interface: eth0
@@ -144,8 +144,6 @@ kind: NetworkConfig
 metadata:
   name: lab-guests
 spec:
-  machineNetwork:
-    - cidr: 198.51.100.0/24
   dns:
     - serverRef: lab-dns
       endpointRef: ip

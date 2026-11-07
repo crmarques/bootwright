@@ -527,8 +527,8 @@ func endpointAddress(o api.Object, endpoint api.Value, c api.Catalog, path strin
 			}
 			return api.Value{}, source, issues
 		}
-		if prefix, err := netip.ParsePrefix(address.Get("address").Text()); err == nil {
-			return api.StringValue(prefix.Addr().String()), source, nil
+		if ip, err := netip.ParseAddr(address.Get("address").Text()); err == nil {
+			return api.StringValue(ip.String()), source, nil
 		}
 		return api.Value{}, source, nil
 	}
@@ -595,7 +595,7 @@ func validateEndpoints(o api.Object, c api.Catalog) []api.Issue {
 			issues = add(issues, invariantRemediation(path+".address", "an IPv4-compatible IPv6 endpoint address (::/96) prints differently in glibc; write the IPv4 address", "write "+path+".address as an IPv4 literal"))
 		}
 		if len(networks) > 0 && !contains(networks, address) {
-			issues = add(issues, invariantRemediation(path+".address", "endpoint IP must belong to a consumed machine network", "set "+path+".address to an IP in the bound Machines machineNetwork"))
+			issues = add(issues, invariantRemediation(path+".address", "endpoint IP must belong to a consumed machine network", "set "+path+".address to an IP in the Network that holds the install address of the bound Machines"))
 		}
 		issues = add(issues, endpointCollisions(o, c, slot, endpoint, address)...)
 		narrow := []netip.Prefix{}
@@ -650,8 +650,8 @@ func validateNetworks(o api.Object, c api.Catalog) []api.Issue {
 	for _, node := range o.Spec().Get("nodes").Items() {
 		if bound, ok := c.Find(api.Machine, node.Get("machineRef").Text()); ok {
 			address, issues := machine.InstallAddress(bound, c)
-			if prefix, err := netip.ParsePrefix(address.Get("address").Text()); len(issues) == 0 && err == nil {
-				include(prefix.Addr())
+			if ip, err := netip.ParseAddr(address.Get("address").Text()); len(issues) == 0 && err == nil {
+				include(ip)
 			}
 		}
 	}
@@ -734,18 +734,13 @@ func machineNetworks(o api.Object, c api.Catalog) ([]netip.Prefix, bool) {
 			complete = false
 			continue
 		}
-		config, ok := machine.NetworkConfig(bound, c)
-		if !ok || config.Get("machineNetwork").Len() == 0 {
+		address, issues := machine.InstallAddress(bound, c)
+		held, ok := machine.AssignedNetwork(bound, c, address)
+		if len(issues) != 0 || !ok {
 			complete = false
 			continue
 		}
-		for _, entry := range config.Get("machineNetwork").Items() {
-			if prefix, err := netip.ParsePrefix(entry.Get("cidr").Text()); err == nil {
-				out = append(out, prefix.Masked())
-			} else {
-				complete = false
-			}
-		}
+		out = append(out, held.Prefix)
 	}
 	return out, complete
 }
