@@ -629,11 +629,11 @@ graph, never from authored daemon syntax:
 | `DNSServer` | One name per retained Machine, from its effective `fqdn` contact, answering every declared IPv4 and IPv6 address of that Machine as its own record, with the reverse record on the first address only, and the records each selected container cluster answers at. | `bindAddress`, `port`, `forwarders[]` |
 | `NTPServer` | The client set below, as the only addresses it answers. | `bindAddress`, `port`, `upstreamSources[]` |
 
-The client set is loopback, the CIDR of every [`Network`](api/networks.md)
-holding an interface assignment of a retained Machine, in that assignment's
-family, and every retained Machine IP address as a single-host prefix, sorted
-and deduplicated ([D240](milestones/backlog.md#d240) (8)). A contact or a VIP
-adds only its host, never a network, so a managed proxy or time service is
+The client set is loopback, the CIDR of each [`Network`](api/networks.md)
+holding a retained Machine's install address, in its family, and every
+retained Machine IP address as a single-host prefix, sorted and deduplicated
+([D240](milestones/backlog.md#d240) (8)). Other Networks, which can hold hosts
+outside the graph, and VIPs add nothing, so a managed proxy or time service is
 never planned open to the world.
 
 A `DNSServer` with no authored forwarder answers only its own records rather

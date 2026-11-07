@@ -30,7 +30,7 @@ Effective output emits the fields in this order, which is the schema's.
 | --- | --- | --- | --- |
 | `spec.provided` | boolean | required | `true`: the network exists outside Bootwright, which names and checks it and never changes it. `false`: Bootwright realizes it through exactly one arm. |
 | `spec.description` | string | none | Inert. |
-| `spec.vlan` | integer 1 to 4094 | none | The 802.1Q VLAN ID the network is tagged with. Absent: the network is only carried untagged. |
+| `spec.vlan` | integer 1 to 4094 | none | The 802.1Q VLAN ID the network is tagged with. Absent: carried only untagged. |
 | `spec.mtu` | integer 576 to 65536 | `1500`, materialized | The largest frame the network allows: a capacity, never derived into an interface MTU, and emitted only as a [managed network's](#libvirt-arm) MTU. With `spec.ipv6`, below 1280 (RFC 8200) is refused. |
 | `spec.sites` | non-empty set of site names | none: every site | Each name is a site of the selected Environment's `spec.sites`, refused `api.reference` otherwise. |
 | `spec.ipv4`, `spec.ipv6` | `{cidr, gateway}` | none | At least one is present. See [subnets](#subnets-and-gateways). |
@@ -42,19 +42,19 @@ Effective output emits the fields in this order, which is the schema's.
 [`os.provided`](machines.md#os-lifecycle-and-substrate-invariants) and sits
 beside the arms as the [union rule](../api.md#unions) allows: the arms are a
 presence union of at most one. A provided Network with an arm is refused at the
-arm, because a provided network is realized by nothing; a Network that is not
-provided and names no arm is refused at `$.spec`, naming every arm as remedy.
-Both refusals are `api.invariant`.
+arm, since nothing realizes it; one not provided that names no arm is refused
+at `$.spec`, naming every arm. Both refusals are `api.invariant`.
 
 A Network with `provided: false` is realized by its arm; there is no block per
 Network ([D240](../milestones/backlog.md#d240) (13)).
 
 ### Subnets and gateways
 
-- `cidr` is an IP prefix of the block's family with no host bits set. A prefix
-  with host bits set is refused at the field with its canonical spelling as the
-  remedy; it is never masked. Normalization writes the canonical text of an
-  admitted prefix and of the gateway.
+- `cidr` is an IP prefix of the block's family with no host bits set, else
+  refused at the field naming its canonical spelling, never masked.
+  A zero-length, loopback (`127.0.0.0/8`, `::1/128`) or multicast
+  (`224.0.0.0/4`, `ff00::/8`) prefix is refused there (`api.value`).
+  Normalization writes the canonical text of an admitted prefix and gateway.
 - `gateway`, optional, is an IP of the block's family inside `cidr`. On IPv4
   below /31 it is neither the network nor the broadcast address. On IPv6 it is
   neither the Subnet-Router anycast address (the all-zero interface identifier,
@@ -89,18 +89,17 @@ The host block of the provider `providerRef` names defines the network
 [segment](machines.md#machine-profiles-and-segments) of that provider under its
 own name, carrying itself untagged and `taggedNetworkRefs` tagged: a Machine
 NIC's `segmentRef` names it, and a provider segment of the same name refuses at
-`providerRef`. `taggedNetworkRefs` realizes nothing: the bridge already carries
-guest VLAN tags.
+`providerRef`. `taggedNetworkRefs` realizes nothing: the bridge carries guest
+VLAN tags.
 
-Between the managed Networks naming providers of one host, each refused
+Between the managed Networks of one host's providers, each refused
 `api.invariant` at the Network, naming both Networks and their providers: no
 other managed Network or provider segment on that host names its `bridge`,
 and no other managed Network's prefix overlaps its own, IPv4 or IPv6, unless
 [one 802.1Q domain per site](#one-8021q-domain-per-site) already refuses the
 pair. One host defines at most 20 managed Networks, refused once (`api.value`)
 at the first by name past the bound, naming each Network over it. A managed
-Network's `cidr` is shorter than /32 or /128, so guests have an address beside
-the host's.
+Network's `cidr` is shorter than /32 or /128, leaving guests an address.
 
 ## Cross-kind checks
 

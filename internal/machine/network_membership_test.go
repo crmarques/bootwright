@@ -102,6 +102,23 @@ func TestAnAssignmentTakesThePrefixOfItsNetwork(t *testing.T) {
 	}
 }
 
+func TestAZeroLengthNetworkPrefixComposesNoAssignment(t *testing.T) {
+	machine, catalog := fixture()
+	objects := []api.Object{}
+	for _, o := range catalog.Objects() {
+		if o.Kind() != api.Network {
+			objects = append(objects, o)
+		}
+	}
+	_, issues := ComposeNetwork(machine, api.NewCatalog(append(objects, lan(m("ipv4", m("cidr", "0.0.0.0/0"))))))
+	for _, issue := range issues {
+		if issue.Code == "api.value" && issue.Field == "$.spec.network.addresses[0].address" && strings.Contains(issue.Message, "zero-length prefix 0.0.0.0/0") && issue.Remediation == "set spec.ipv4.cidr on Network/lan to the subnet its hosts actually share" {
+			return
+		}
+	}
+	t.Fatalf("issues = %+v", issues)
+}
+
 func TestATaggedStackMustCarryItsNetworksVLAN(t *testing.T) {
 	machine, _ := fixture()
 	machine = withNetwork(machine, []string{"network", "addresses"}, list(m("name", "primary", "address", "192.0.2.11", "interface", "br0")))

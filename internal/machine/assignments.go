@@ -40,6 +40,11 @@ func composedPrefix(o api.Object, c api.Catalog, entry api.Value, field string) 
 		return netip.Prefix{}, membership
 	}
 	prefix, assigned := AssignedPrefix(o, c, entry)
+	if assigned && prefix.Bits() == 0 {
+		held, _ := AssignedNetwork(o, c, entry)
+		return netip.Prefix{}, []api.Issue{valueIssue(field+".address", "address "+prefix.Addr().String()+" on "+o.Identity()+" lies in "+held.Network.Identity()+", whose zero-length prefix "+held.Prefix.String()+" names no subnet an interface can configure",
+			"set spec."+network.Family(prefix.Addr())+".cidr on "+held.Network.Identity()+" to the subnet its hosts actually share")}
+	}
 	if assigned && reservedEnd(prefix, prefix.Addr()) != "" {
 		return netip.Prefix{}, []api.Issue{valueIssue(field+".address", "an IPv4 assignment is a host address of its Network, never its network or broadcast address",
 			"correct "+field[2:]+".address on "+o.Identity()+" to a host address inside "+prefix.Masked().String())}

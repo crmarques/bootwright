@@ -75,15 +75,17 @@ func (r Request) ProbeTargets() []string {
 
 // Clients is the deterministic set of addresses a managed service answers.
 // Loopback is always permitted; everything else is the subnet of each Network
-// that holds an interface assignment of a retained Machine, and each address
+// that holds the installation address of a retained Machine, and each address
 // the retained Machines declare as a single host.
 func Clients(catalog api.Catalog) []string {
 	clients := []string{"127.0.0.1/32", "::1/128"}
 	for _, bound := range catalog.OfKind(api.Machine) {
-		for _, address := range bound.Spec().Get("network", "addresses").Items() {
-			if held, ok := machine.AssignedNetwork(bound, catalog, address); ok {
+		if selected, issues := machine.InstallAddress(bound, catalog); len(issues) == 0 && selected.Present() {
+			if held, ok := machine.AssignedNetwork(bound, catalog, selected); ok {
 				clients = append(clients, held.Prefix.String())
 			}
+		}
+		for _, address := range bound.Spec().Get("network", "addresses").Items() {
 			if cidr := hostPrefix(address.Get("address").Text()); cidr != "" {
 				clients = append(clients, cidr)
 			}

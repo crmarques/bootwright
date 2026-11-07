@@ -722,6 +722,93 @@ func TestClientsAdmitTheNetworkHoldingEachInterfaceAssignment(t *testing.T) {
 	}
 }
 
+func clientNetwork(name string, fields ...api.FieldValue) api.Object {
+	return api.NewObject(api.Network, name, api.Value{}, api.MapValue(append([]api.FieldValue{field("provided", api.BoolValue(true))}, fields...)...))
+}
+
+func clientMachine(name, site, installRef string, addresses ...api.Value) api.Object {
+	network := []api.FieldValue{text("configRef", "hosts"), field("addresses", api.ListValue(addresses...))}
+	if installRef != "" {
+		network = append(network, text("installAddressRef", installRef))
+	}
+	fields := []api.FieldValue{field("os", api.MapValue(field("provided", api.BoolValue(false)))), field("network", api.MapValue(network...))}
+	if site != "" {
+		fields = append(fields, field("placement", api.MapValue(text("site", site))))
+	}
+	return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(fields...))
+}
+
+func assignment(name, address, iface string) api.Value {
+	if iface == "" {
+		return api.MapValue(text("name", name), text("address", address))
+	}
+	return api.MapValue(text("name", name), text("address", address), text("interface", iface))
+}
+
+func TestClientsAdmitOnlyInstallNetworksAndDeclaredHosts(t *testing.T) {
+	hosts := api.NewObject(api.NetworkConfig, "hosts", api.Value{}, api.MapValue(
+		field("nmstate", api.MapValue(field("interfaces", api.ListValue(
+			api.MapValue(text("name", "enp1s0"), text("type", "ethernet"), text("state", "up")),
+			api.MapValue(text("name", "enp2s0"), text("type", "ethernet"), text("state", "up")),
+		)))),
+	))
+	sites := api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue(
+		field("domains", api.MapValue(text("base", "example.test"))),
+		field("sites", api.ListValue(api.MapValue(text("name", "a")), api.MapValue(text("name", "b")))),
+	))
+	lan := clientNetwork("lan", field("ipv4", api.MapValue(text("cidr", "198.51.100.0/24"))), field("ipv6", api.MapValue(text("cidr", "2001:db8:1::/64"))))
+	storage := clientNetwork("storage", field("ipv4", api.MapValue(text("cidr", "203.0.113.0/24"))))
+	west := clientNetwork("west", field("sites", api.StringList("a")), field("ipv4", api.MapValue(text("cidr", "100.64.0.0/24"))))
+	east := clientNetwork("east", field("sites", api.StringList("b")), field("ipv4", api.MapValue(text("cidr", "100.64.0.0/23"))))
+	loopback := []string{"127.0.0.1/32", "::1/128"}
+	with := func(extra ...string) []string {
+		all := append(slices.Clone(loopback), extra...)
+		slices.Sort(all)
+		return all
+	}
+	for _, tc := range []struct {
+		name    string
+		objects []api.Object
+		want    []string
+	}{
+		{"a Network no retained Machine installs on is excluded, and an unretained Machine is absent", []api.Object{hosts, lan, storage}, with()},
+		{"the install Network and every declared host", []api.Object{hosts, lan, storage, clientMachine("node", "", "ip",
+			assignment("ip", "198.51.100.21", "enp1s0"), assignment("storage", "203.0.113.21", "enp2s0"))},
+			with("198.51.100.0/24", "198.51.100.21/32", "203.0.113.21/32")},
+		{"a dual-stack Network adds the install address family alone", []api.Object{hosts, lan, clientMachine("node", "", "ip",
+			assignment("ip", "198.51.100.21", "enp1s0"), assignment("ip6", "2001:db8:1::21", "enp1s0"))},
+			with("198.51.100.0/24", "198.51.100.21/32", "2001:db8:1::21/128")},
+		{"an automatic selection of the one assignment", []api.Object{hosts, storage, clientMachine("node", "", "",
+			assignment("storage", "203.0.113.21", "enp2s0"))},
+			with("203.0.113.0/24", "203.0.113.21/32")},
+		{"a Machine at site a never adds a Network of site b", []api.Object{sites, hosts, west, east, clientMachine("node", "a", "ip",
+			assignment("ip", "100.64.0.10", "enp1s0"))},
+			with("100.64.0.0/24", "100.64.0.10/32")},
+		{"an assignment only another site's Network holds adds its host", []api.Object{sites, hosts, east, clientMachine("node", "a", "ip",
+			assignment("ip", "100.64.0.10", "enp1s0"))},
+			with("100.64.0.10/32")},
+		{"an assignment in no Network adds its host", []api.Object{hosts, lan, clientMachine("node", "", "ip",
+			assignment("ip", "192.0.2.50", "enp1s0"))},
+			with("192.0.2.50/32")},
+		{"an ambiguous selection adds the hosts alone", []api.Object{hosts, lan, storage, clientMachine("node", "", "",
+			assignment("ip", "198.51.100.21", "enp1s0"), assignment("storage", "203.0.113.21", "enp2s0"))},
+			with("198.51.100.21/32", "203.0.113.21/32")},
+		{"a contact adds its host and a DNS name nothing", []api.Object{hosts, lan, clientMachine("node", "", "",
+			assignment("ip", "198.51.100.30", ""), assignment("fqdn", "node.example.test", ""))},
+			with("198.51.100.30/32")},
+		{"duplicates collapse across Machines", []api.Object{hosts, lan,
+			clientMachine("one", "", "ip", assignment("ip", "198.51.100.21", "enp1s0")),
+			clientMachine("two", "", "ip", assignment("ip", "198.51.100.22", "enp1s0"), assignment("peer", "198.51.100.21", ""))},
+			with("198.51.100.0/24", "198.51.100.21/32", "198.51.100.22/32")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := Clients(api.NewCatalog(tc.objects)); !slices.Equal(got, tc.want) {
+				t.Fatalf("clients = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestAnApplyHandsTheRunnerItsForeignListenerRefusal(t *testing.T) {
 	catalog := catalogOf(controller(), service(api.Proxy, "lab-proxy"))
 	plan, err := NewCapability(testDefinition(), nil).Plan(context.Background(), lifecycle.PlanInput{

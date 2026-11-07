@@ -152,3 +152,31 @@ func TestTheLookupHelpersReadOneNetwork(t *testing.T) {
 		t.Fatal("an absent gateway reads as declared")
 	}
 }
+
+func TestANetworkNeverSpansEveryLoopbackOrMulticastAddress(t *testing.T) {
+	for _, tc := range []struct{ family, cidr, reason string }{
+		{"ipv4", "0.0.0.0/0", "zero-length prefix that spans every IPv4 address"},
+		{"ipv6", "::/0", "zero-length prefix that spans every IPv6 address"},
+		{"ipv4", "127.0.0.0/8", "loopback range 127.0.0.0/8"},
+		{"ipv4", "127.1.2.0/24", "loopback range 127.0.0.0/8"},
+		{"ipv6", "::1/128", "loopback address ::1/128"},
+		{"ipv4", "224.0.0.0/4", "multicast range 224.0.0.0/4"},
+		{"ipv4", "239.1.0.0/16", "multicast range 224.0.0.0/4"},
+		{"ipv6", "ff02::/16", "multicast range ff00::/8"},
+	} {
+		issues := validate(net("wide", m("provided", true, tc.family, m("cidr", tc.cidr))))
+		found := false
+		for _, issue := range issues {
+			found = found || issue.Code == "api.value" && issue.Field == "$.spec."+tc.family+".cidr" &&
+				strings.Contains(issue.Message, tc.cidr+" of Network/wide ") && strings.Contains(issue.Message, tc.reason) &&
+				issue.Remediation == "set spec."+tc.family+".cidr on Network/wide to the subnet its hosts actually share"
+		}
+		if !found {
+			t.Errorf("%s: issues = %+v", tc.cidr, issues)
+		}
+	}
+	for _, cidr := range []string{"128.0.0.0/1", "126.0.0.0/8", "223.255.255.0/24", "240.0.0.0/4"} {
+		requireNone(t, validate(net("lan", m("provided", true, "ipv4", m("cidr", cidr)))))
+	}
+	requireNone(t, validate(net("lan", m("provided", true, "ipv6", m("cidr", "fe80::/64")))))
+}

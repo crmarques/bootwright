@@ -98,6 +98,10 @@ func validateSubnet(o api.Object, family string) []api.Issue {
 		return []api.Issue{invariant(path+".cidr", "spec."+family+".cidr "+subnet.Get("cidr").Text()+" of "+o.Identity()+" sets host bits, so it names an address, not a network",
 			"write spec."+family+".cidr as "+prefix.Masked().String()+", and the host address as spec."+family+".gateway if it is the gateway")}
 	}
+	if reason := unsharedRange(prefix); reason != "" {
+		return []api.Issue{{Code: "api.value", Field: path + ".cidr", Message: "spec." + family + ".cidr " + prefix.String() + " of " + o.Identity() + " " + reason + ", so no hosts share it as a subnet",
+			Remediation: "set spec." + family + ".cidr on " + o.Identity() + " to the subnet its hosts actually share"}}
+	}
 	gateway, err := netip.ParseAddr(subnet.Get("gateway").Text())
 	if err != nil {
 		return nil
@@ -107,6 +111,28 @@ func validateSubnet(o api.Object, family string) []api.Issue {
 			"set spec."+family+".gateway to a host address inside "+prefix.String()+", or remove it when the network has no gateway")}
 	}
 	return nil
+}
+
+var unsharedRanges = []struct {
+	prefix netip.Prefix
+	reason string
+}{
+	{netip.MustParsePrefix("127.0.0.0/8"), "lies in the loopback range 127.0.0.0/8"},
+	{netip.MustParsePrefix("::1/128"), "is the loopback address ::1/128"},
+	{netip.MustParsePrefix("224.0.0.0/4"), "lies in the multicast range 224.0.0.0/4"},
+	{netip.MustParsePrefix("ff00::/8"), "lies in the multicast range ff00::/8"},
+}
+
+func unsharedRange(prefix netip.Prefix) string {
+	if prefix.Bits() == 0 {
+		return "has a zero-length prefix that spans every " + familyName(Family(prefix.Addr())) + " address"
+	}
+	for _, reserved := range unsharedRanges {
+		if reserved.prefix.Addr().Is4() == prefix.Addr().Is4() && reserved.prefix.Bits() <= prefix.Bits() && reserved.prefix.Contains(prefix.Addr()) {
+			return reserved.reason
+		}
+	}
+	return ""
 }
 
 func ReservedAddress(prefix netip.Prefix, address netip.Addr) string {

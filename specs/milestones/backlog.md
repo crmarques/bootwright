@@ -7325,8 +7325,9 @@ session, pending the owner's review:
 6. vSphere MACs stay authored in the manual range.
 7. IPv6 networks are admitted from X322.
 8. The managed proxy and time-service client set becomes the networks that
-   hold any assignment of a retained Machine, reviewed under security-safety
-   in X323.
+   hold a retained Machine's install address plus each Machine address as a
+   host, reviewed under security-safety in X323: a secondary network can hold
+   hosts outside the graph.
 9. One VLAN ID per network, assuming one 802.1Q domain per site.
 10. A Ceph MON address separate from the cephadm SSH address is a candidate
     item.
