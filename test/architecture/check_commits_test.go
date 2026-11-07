@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -13,7 +14,8 @@ import (
 // check to its Contract rule: a commit touching the collection's automation or
 // a capability package answers whether it moved a contract, a moved
 // implementation's golden changes with it, a commit moving a golden's content
-// digest never answers unchanged, and any other commit needs no answer.
+// digest never answers unchanged, and any other commit needs no answer. A
+// moved contract or store format version is marked as a breaking change.
 func TestCheckCommitsRequiresAContractLineWhereAContractCanMove(t *testing.T) {
 	root := t.TempDir()
 	script, err := os.ReadFile(filepath.Join("..", "..", "scripts", "check-commits"))
@@ -26,6 +28,7 @@ func TestCheckCommitsRequiresAContractLineWhereAContractCanMove(t *testing.T) {
 	ratchetGit(t, root, "commit", "-q", "-m", "chore: start\n\nGates: none.")
 	role := "ansible/collections/ansible_collections/bootwright/core/roles/storage_ceph_core/tasks/destroy.yml"
 	golden := "cmd/bootwright/testdata/contracts/storage-ceph-core-v3.golden"
+	format := "internal/workspace/contexts/contracts.go"
 	for _, step := range []struct {
 		name    string
 		files   []string
@@ -40,7 +43,9 @@ func TestCheckCommitsRequiresAContractLineWhereAContractCanMove(t *testing.T) {
 			"fix(ceph): plugin\n\nGates: make focus passed.\n\nContract: storage-ceph-core-v3 storage-ceph-host-v1", "add one body line"},
 		{"a moved contract without its golden", []string{role}, "fix(ceph): role\n\nGates: make focus passed.\n\nContract: storage-ceph-core-v3",
 			"names storage-ceph-core-v3 in its Contract line but does not change " + golden},
-		{"a moved contract with its golden", []string{role, golden}, "fix(ceph): role\n\nGates: make focus passed.\n\nContract: storage-ceph-core-v3", ""},
+		{"a moved contract unannounced", []string{role, golden}, "fix(ceph): role\n\nGates: make focus passed.\n\nContract: storage-ceph-core-v3",
+			"mark the subject with '!' and add a 'BREAKING CHANGE: ' footer"},
+		{"a moved contract with its golden", []string{role, golden}, "fix(ceph)!: role\n\nGates: make focus passed.\n\nContract: storage-ceph-core-v3\n\nBREAKING CHANGE: an incomplete Ceph operation of an earlier build refuses; finish it with that build.", ""},
 		{"a Contract line alone", []string{"internal/substrate/naming.go"}, "fix(substrate): naming\n\nContract: unchanged", "body is empty"},
 		{"a nested capability package", []string{"internal/addons/clusterobjects/driver/driver.go"}, "fix(addons): driver\n\nGates: make focus passed.",
 			"add one body line"},
@@ -48,7 +53,16 @@ func TestCheckCommitsRequiresAContractLineWhereAContractCanMove(t *testing.T) {
 			"fix(ansible): playbook\n\nGates: make focus passed.", "add one body line"},
 		{"a moved digest called unchanged", []string{role, golden}, "fix(ceph): role\n\nGates: make focus passed.\n\nContract: unchanged",
 			"says 'Contract: unchanged' but changes a content-digest line of a contract golden"},
-		{"a moved digest named", []string{role, golden}, "fix(ceph): role again\n\nGates: make focus passed.\n\nContract: storage-ceph-core-v3", ""},
+		{"a moved digest named", []string{role, golden}, "fix(ceph)!: role again\n\nGates: make focus passed.\n\nContract: storage-ceph-core-v3\n\nBREAKING CHANGE: an incomplete Ceph operation of an earlier build refuses; finish it with that build.", ""},
+		{"a store format added", []string{"internal/workspace/contexts/contracts.go"}, "feat(contexts): registry\n\nGates: make focus passed.", ""},
+		{"a store format moved unannounced", []string{format}, "fix(contexts): registry\n\nGates: make focus passed.",
+			"moves a contract or a store format version"},
+		{"a store format moved and announced", []string{format}, "fix(contexts)!: registry again\n\nGates: make focus passed.\n\nBREAKING CHANGE: a context store of an earlier build refuses; reinstall the controller.", ""},
+		{"a store format constant removed", []string{"internal/workspace/contexts/contracts.go"}, "refactor(contexts): drop constant\n\nGates: make focus passed.", ""},
+		{"a store format re-added commented", []string{"internal/workspace/contexts/contracts.go"}, "feat(contexts): registry once more\n\nGates: make focus passed.", ""},
+		{"a store format typed and commented moved", []string{"internal/workspace/contexts/contracts.go"}, "fix(contexts): registry typed\n\nGates: make focus passed.",
+			"moves a contract or a store format version"},
+		{"a test version constant", []string{"internal/workspace/contexts/contracts_test.go"}, "test(contexts): fixture\n\nGates: make focus passed.", ""},
 		{"a golden's digest kept", []string{role, golden}, "fix(ceph): role once more\n\nGates: make focus passed.\n\nContract: unchanged", ""},
 	} {
 		for _, file := range step.files {
@@ -56,6 +70,16 @@ func TestCheckCommitsRequiresAContractLineWhereAContractCanMove(t *testing.T) {
 			// A golden's content digest is the third word of the step name.
 			if file == golden {
 				content = "content-digest: " + strings.Fields(step.name)[2] + "\n" + step.name + "\n"
+			}
+			// A version constant's value is the step's word count.
+			if strings.HasPrefix(file, "internal/workspace/contexts/") {
+				content = "const RegistryVersion = " + strconv.Itoa(len(strings.Fields(step.name))) + "\n"
+				if strings.Contains(step.name, "commented") {
+					content = "const RegistryVersion int = " + strconv.Itoa(len(strings.Fields(step.name))) + " // the registry format\n"
+				}
+				if strings.HasSuffix(step.name, "removed") {
+					content = "package contexts\n"
+				}
 			}
 			ratchetWrite(t, root, file, content, 0o644)
 		}

@@ -3666,6 +3666,8 @@ holding such a clause, the clauses pending and the work they enable.
   in-tree slices X309 to X312 and its recorded owner questions Q139 to Q152.
 - [D240](#d240): clauses (1) to (14), the networking API program's slices
   X321 to X324.
+- [D241](#d241): clauses (1) to (5), the removal of backward compatibility
+  and the version reset (X325).
 
 ### D1
 
@@ -7336,3 +7338,34 @@ session, pending the owner's review:
 13. A managed Network is realized by its provider's host block, as a managed
     attachment is today; a block per Network is a candidate item.
 14. `NetworkConfig` keeps its name beside `Network`.
+
+### D241
+
+**session-pending** (2026-11-06, the owner's request; the clauses after the
+owner's words are taken by the session, pending the owner's review): "search
+and identify any code for backward compatibility and remove it; there is no
+live instance of an older version of Bootwright anywhere; make code as lean as
+possible; keep or improve the strategy that lets future releases run with
+builds from now on; it can accept eventual incompatibility, made clear when
+it happens; reset internal versioning of components and charts; no reason to
+start now with some internal version v10". This opens X325 in M1, out of
+sequence. Taken by the session, pending the owner's review:
+
+1. Code, tests and spec text that serve only an earlier build, its stored
+   state or an earlier input shape are removed, including the retired-field,
+   retired-value and retired-kind tables, the Secret `file` source refusal,
+   the legacy Secret fingerprint (D71), the registry and setup cut-over
+   refusals (D152), absent-member fallbacks in records and requests, and
+   re-checks of frozen requests against rules added later.
+2. A renamed or removed input path is refused by the closed decoder as an
+   unknown field with its nearest-name hint; Q87 (a) and D240 (2) keep their
+   batching but write no retired-path refusals.
+3. Every internal version, store formats, frozen requests, evidence,
+   persisted automation formats, digest pins and implementation identities,
+   restarts at 1, and the `environment-ha` and `ceph-cluster` input charts
+   restart at 0.1.0.
+4. D142's same-blocks continuation and exact-version readers stay as the
+   forward strategy ([pre-1.0 policy](../project.md#design-priorities-and-non-goals)).
+5. A commit that moves a contract or a Go store format version is marked with
+   the Conventional Commit `!` and a `BREAKING CHANGE:` footer naming what it
+   refuses and the remedy, which `scripts/check-commits` enforces.

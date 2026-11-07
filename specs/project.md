@@ -133,8 +133,21 @@ input copies it into the Bootwright store, later commands read only that copy,
 and a recorded source location is provenance, never identity, uniqueness or a
 read path.
 
-Before 1.0, a durable format change converts no earlier format: a record in an
-earlier format is refused, and the refusal names the remedy.
+Before 1.0, Bootwright carries no backward compatibility for what earlier
+builds already wrote (D241): no converter, adoption, fallback or tailored
+refusal for an earlier record, request or input field. Every internal version
+starts at 1 and moves by one when a change would make what an earlier build
+wrote mean something else, and a reader refuses any version it does not read
+by naming it and the remedy. Forward from 1, a later build keeps reading what
+an earlier one wrote while its version stands: an optional member its owning
+spec admits keeps the version, a keyring names the oldest reader it needs,
+and a later build continues an operation when it
+[freezes the same blocks](state-reconciliation.md#dependency-safety-during-recovery)
+and removes what an earlier build applied while it reads that build's frozen
+requests. A change that makes a build refuse what an earlier build
+left, a moved contract or store format version, is announced in its commit as
+a breaking change that names what it refuses and the remedy
+([commit convention](../.agents/skills/code-implementation/references/git-integration.md#breaking-changes)).
 
 Day-2 operations are outside the current scope, including ongoing drift repair
 and publication of application or fleet GitOps content. Bootwright's lifecycle

@@ -145,5 +145,7 @@ capability's request, evidence, observation or ownership code:
   `cephMarkerNames`. A removal reads its target's identity from the frozen
   request; a value it reads from the build in hand instead is a `fixed`
   classification.
-- A moved version still refuses a record of the old one by name (D142): add no
-  converter and no older reader.
+- A version starts at 1 and moves by one. A moved version refuses a record of
+  the old one by name (D142, D241): add no converter, older reader, fallback
+  for an absent member or tailored refusal of a retired field, and mark the
+  commit as a [breaking change](git-integration.md#breaking-changes).

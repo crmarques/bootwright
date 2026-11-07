@@ -8,6 +8,12 @@
 # (cmd/bootwright/testdata/contracts/<implementation>.golden) the same commit
 # changes: the author's answer to whether the change alters what an effect is
 # (specs/state-reconciliation.md, "Continuation and removal").
+#
+# A commit that names a moved contract, or changes the value of a Go store
+# format version (a non-test `...Version = <integer>` line), makes this build refuse state an
+# earlier build left, so it marks its subject with "!" and carries a
+# "BREAKING CHANGE: " footer naming what it refuses and the remedy
+# (specs/project.md, "Design priorities and non-goals").
 set -euf
 # The collection's meta, playbooks, plugins and roles, and every package that
 # defines a contract version's implementation, request or evidence type, or a
@@ -60,30 +66,50 @@ for commit in $(git rev-list --no-merges "$1..$2"); do
         status=1
     fi
     changed=$(git -c core.quotePath=false diff-tree --no-commit-id --name-only -r --root "$commit")
-    if ! touches_contract "$changed"; then
-        continue
-    fi
-    contract=$(git log -1 --format=%b "$commit" | sed -n 's/^Contract: //p')
-    if test "$contract" = unchanged; then
-        moved=$(git -c core.quotePath=false diff-tree --no-commit-id -p -r --root "$commit" -- 'cmd/bootwright/testdata/contracts/*.golden' |
-            grep -E '^[-+]content-digest: ' || true)
-        if test -n "$moved"; then
-            echo "$commit: says 'Contract: unchanged' but changes a content-digest line of a contract golden; name each implementation whose contract it moved" >&2
-            status=1
-        fi
-        continue
-    fi
-    if test -z "$contract" || test "$(printf '%s\n' "$contract" | wc -l)" -ne 1 ||
-        ! printf '%s\n' "$contract" | grep -Eqx '[a-z][a-z0-9-]*(, [a-z][a-z0-9-]*)*'; then
-        echo "$commit: touches automation or a capability package; add one body line 'Contract: unchanged' or 'Contract: <implementation>, ...' naming each implementation whose contract it moved" >&2
-        status=1
-        continue
-    fi
-    for implementation in $(printf '%s\n' "$contract" | tr -d ','); do
-        if ! printf '%s\n' "$changed" | grep -Fqx "cmd/bootwright/testdata/contracts/$implementation.golden"; then
-            echo "$commit: names $implementation in its Contract line but does not change cmd/bootwright/testdata/contracts/$implementation.golden" >&2
-            status=1
+    formats=$(git -c core.quotePath=false diff-tree --no-commit-id -p -r --root "$commit" -- 'internal/*.go' ':(exclude)*_test.go' |
+        awk '/^--- a\// { file = substr($0, 7) }
+            /^\+\+\+ b\// { file = substr($0, 7) }
+            match($0, /^[-+][[:space:]]*(const[[:space:]]+)?[A-Za-z]*Version([[:space:]]+[A-Za-z0-9]+)?[[:space:]]*=[[:space:]]*[0-9]+[[:space:]]*(\/\/.*)?$/) {
+                line = $0; sub(/[[:space:]]*\/\/.*$/, "", line); sign = substr(line, 1, 1)
+                name = line; sub(/^[-+][[:space:]]*(const[[:space:]]+)?/, "", name); sub(/[^A-Za-z].*$/, "", name)
+                value = line; sub(/^.*=[[:space:]]*/, "", value); sub(/[[:space:]]*$/, "", value)
+                print sign file ":" name "=" value
+            }')
+    breaking=
+    for removed in $(printf '%s\n' "$formats" | sed -n 's/^-//p'); do
+        if printf '%s\n' "$formats" | grep -q "^+${removed%%=*}=" && ! printf '%s\n' "$formats" | grep -Fqx "+$removed"; then
+            breaking="$breaking ${removed%%=*}"
         fi
     done
+    if touches_contract "$changed"; then
+        contract=$(git log -1 --format=%b "$commit" | sed -n 's/^Contract: //p')
+        if test "$contract" = unchanged; then
+            moved=$(git -c core.quotePath=false diff-tree --no-commit-id -p -r --root "$commit" -- 'cmd/bootwright/testdata/contracts/*.golden' |
+                grep -E '^[-+]content-digest: ' || true)
+            if test -n "$moved"; then
+                echo "$commit: says 'Contract: unchanged' but changes a content-digest line of a contract golden; name each implementation whose contract it moved" >&2
+                status=1
+            fi
+        elif test -z "$contract" || test "$(printf '%s\n' "$contract" | wc -l)" -ne 1 ||
+            ! printf '%s\n' "$contract" | grep -Eqx '[a-z][a-z0-9-]*(, [a-z][a-z0-9-]*)*'; then
+            echo "$commit: touches automation or a capability package; add one body line 'Contract: unchanged' or 'Contract: <implementation>, ...' naming each implementation whose contract it moved" >&2
+            status=1
+        else
+            breaking="$breaking$contract"
+            for implementation in $(printf '%s\n' "$contract" | tr -d ','); do
+                if ! printf '%s\n' "$changed" | grep -Fqx "cmd/bootwright/testdata/contracts/$implementation.golden"; then
+                    echo "$commit: names $implementation in its Contract line but does not change cmd/bootwright/testdata/contracts/$implementation.golden" >&2
+                    status=1
+                fi
+            done
+        fi
+    fi
+    if test -n "$breaking"; then
+        if ! printf '%s\n' "$subject" | grep -Eq '^[a-z]+(\([a-z0-9-]+\))?!: ' ||
+            ! git log -1 --format=%b "$commit" | grep -Eq '^BREAKING CHANGE: [^ ]'; then
+            echo "$commit: moves a contract or a store format version, so this build refuses state an earlier build left; mark the subject with '!' and add a 'BREAKING CHANGE: ' footer naming what it refuses and the remedy" >&2
+            status=1
+        fi
+    fi
 done
 exit "$status"

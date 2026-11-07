@@ -42,6 +42,18 @@ a value a content digest hashes: `internal/addons/instance/`,
 `TestCheckCommitsContractPathsCoverEveryImplementation` holds the list to the
 implementations the contract goldens pin.
 
+## Breaking changes
+
+A commit that names a moved contract in its `Contract:` line, or changes the
+value of a Go store format version (a non-test `...Version = <integer>` line
+under `internal/`), makes this build refuse something an earlier build left: an
+incomplete operation, a frozen request or a whole store. `scripts/check-commits`
+refuses it unless its subject carries the Conventional Commit `!` and its body
+a `BREAKING CHANGE: ` footer naming what it refuses and the remedy, such as
+finishing or destroying the operation with the earlier build, or a fresh
+`controller install` ([pre-1.0 policy](../../../../specs/project.md#design-priorities-and-non-goals)).
+`git log --grep '^BREAKING CHANGE:'` lists them for release notes.
+
 ## Integration variants
 
 - **Local fast-forward (default).** Under
