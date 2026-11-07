@@ -138,8 +138,8 @@
     - containercluster_media_agent_before.observation.booted
 
 # A replay builds nothing, and build.yml still repairs and proves what it
-# serves, so an image an earlier executable published is fetched through the
-# listener before it is reported unchanged.
+# serves, so the published image is fetched through the listener before it is
+# reported unchanged.
 - name: Build and publish the boot image, or prove the one already published
   ansible.builtin.include_tasks: build.yml
 

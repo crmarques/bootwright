@@ -133,7 +133,7 @@ func contractRecipes() map[string]digestRecipe {
 			partPin("e04c153c9c84d6a73bfb3f05e09e0e7b4f4104332ee1d318cc4b3021570dc1a5")),
 		installation.Implementation: digestOf(partDomain("bootwright.managedos.install-anaconda-v1"), partImplementation(installation.Implementation), partRequest("os-install-anaconda-v27"),
 			partVersion("kickstart-anaconda-v19"), partPin("os"), partPin("private"), partPin("public"), partPin(installation.MarkerPath), partPin(installation.HostKeyPath),
-			partPin(installation.NetworkDocumentPath), partPin(installation.NetworkMarkerPath), partPin(strconv.Itoa(300)), partPin("lorax,xorriso"), partPin("proved-installation-disk-boot,replay-safe-unread-registration")),
+			partPin(installation.NetworkDocumentPath), partPin(installation.NetworkMarkerPath), partPin(strconv.Itoa(300)), partPin("proved-installation-disk-boot,replay-safe-unread-registration")),
 		agentinstall.MediaImplementation: digestOf(partDomain("bootwright.containercluster.media-agent-v1"), partImplementation(agentinstall.MediaImplementation), partRequest("cluster-media-agent-v11"),
 			partPin("clusters"), partPin(agentinstall.ImageFile), partPin("/var/lib/bootwright-clusters"), partPin("openshift-install")),
 		agentinstall.InstallImplementation: digestOf(partDomain("bootwright.containercluster.install-agent-v1"), partImplementation(agentinstall.InstallImplementation), partRequest("cluster-install-agent-v16"),

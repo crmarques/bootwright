@@ -1,8 +1,8 @@
 ---
 # Included by every apply. A replay, whose published image is already this
 # request's, builds and publishes nothing, yet still re-applies the mode and
-# label of what it serves and fetches it through the listener, so an image an
-# earlier executable published is repaired and proved rather than replayed.
+# label of what it serves and fetches it through the listener, so a drifted
+# image is repaired and proved rather than replayed.
 
 # The installer consumes its inputs into its own asset state, so a build always
 # starts from the frozen bytes rather than from what a previous one left. The

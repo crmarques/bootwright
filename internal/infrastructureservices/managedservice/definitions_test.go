@@ -3,7 +3,6 @@ package managedservice_test
 import (
 	"encoding/json"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -32,9 +31,9 @@ func refusal(t *testing.T, err error) diagnostics.Diagnostic {
 }
 
 // Each managed service reads only the request version this build writes. A
-// request an earlier build froze, even one carrying a member since removed,
-// refuses by naming its version and the build that can still destroy it.
-func TestAnOlderManagedServiceRequestRefusesNamingItsVersion(t *testing.T) {
+// request of another version, even one carrying a member this build does not
+// declare, refuses by naming its version and the build that can still destroy it.
+func TestAManagedServiceRequestOfAnotherVersionRefusesNamingItsVersion(t *testing.T) {
 	for kind, definition := range definitions() {
 		for _, retired := range []string{kind + "-v1", kind + "-v2", "managed-service-v3"} {
 			t.Run(retired, func(t *testing.T) {
@@ -58,7 +57,7 @@ func TestAnOlderManagedServiceRequestRefusesNamingItsVersion(t *testing.T) {
 				}
 				_, err = managedservice.DecodeRequest(data, definition.Version)
 				reported := refusal(t, err)
-				if !strings.Contains(reported.Message, strconv.Quote(retired)) || !strings.Contains(reported.Remediation, "build that applied it") {
+				if !strings.Contains(reported.Message, retired) || !strings.Contains(reported.Remediation, "build that applied it") {
 					t.Fatalf("%s refused a request at %s as %q, remedy %q", definition.Implementation, retired, reported.Message, reported.Remediation)
 				}
 			})
@@ -66,7 +65,7 @@ func TestAnOlderManagedServiceRequestRefusesNamingItsVersion(t *testing.T) {
 	}
 }
 
-func TestAManagedServiceRequestWithoutAReadableVersionIsMalformed(t *testing.T) {
+func TestAManagedServiceRequestWithoutAReadableVersionIsRefused(t *testing.T) {
 	for name, data := range map[string]string{
 		"no version":        `{"kind":"Proxy"}`,
 		"a numeric version": `{"kind":"Proxy","version":3}`,
@@ -74,7 +73,7 @@ func TestAManagedServiceRequestWithoutAReadableVersionIsMalformed(t *testing.T) 
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := managedservice.DecodeRequest([]byte(data), managedservice.RequestVersion)
-			if reported := refusal(t, err); !strings.Contains(reported.Message, "malformed") {
+			if reported := refusal(t, err); !strings.Contains(reported.Message, "unsupported version") && !strings.Contains(reported.Message, "malformed") {
 				t.Fatalf("refused as %q", reported.Message)
 			}
 		})

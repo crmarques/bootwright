@@ -37,7 +37,7 @@ def request(tmp_path):
     directory = content / 'public' / 'private' / 'clusters' / 'cluster' / TOKEN
     directory.mkdir(parents=True)
     (directory / 'agent.iso').write_bytes(b'image')
-    return {'image': {'path': str(directory.parent), 'url': URL}}
+    return {'deliveryKind': 'fetch', 'image': {'path': str(directory.parent), 'url': URL}}
 
 
 def run(arguments, capsys):

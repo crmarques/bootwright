@@ -29,10 +29,10 @@
     containercluster_install_agent_port_arguments:
       state_read: >-
         {{ {'media': true, 'media_identity': bootwright_cluster_install_request.imageIdentity}
-           if (bootwright_cluster_install_request.deliveryKind | default('fetch')) == 'push' else {'media': true} }}
+           if bootwright_cluster_install_request.deliveryKind == 'push' else {'media': true} }}
 
       media_insert: >-
-        {{ containercluster_install_agent_pushed_insert if (bootwright_cluster_install_request.deliveryKind | default('fetch')) == 'push'
+        {{ containercluster_install_agent_pushed_insert if bootwright_cluster_install_request.deliveryKind == 'push'
            else containercluster_install_agent_fetched_insert }}
 
       media_eject:

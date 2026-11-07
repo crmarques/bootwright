@@ -29,6 +29,7 @@ TOKEN = "0123456789abcdef" * 4
 def request(tmp_path):
     """The frozen media request's fields the inspection and these tasks read."""
     return {
+        "deliveryKind": "fetch",
         "identity": {"block": "cluster-media-sno", "cluster": "sno", "context": "lab"},
         "image": {"path": str(tmp_path / "private"), "url": URL},
         "release": {"version": RELEASE},

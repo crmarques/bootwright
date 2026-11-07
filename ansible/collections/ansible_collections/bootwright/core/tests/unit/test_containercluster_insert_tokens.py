@@ -137,7 +137,8 @@ def test_a_failed_insert_reads_its_controller_and_retires_its_link_when_not_pres
     ]:
         scope = {'containercluster_install_agent_insertion': insertion,
                  'containercluster_install_agent_after_insert': after,
-                 'containercluster_install_agent_token': token}
+                 'containercluster_install_agent_token': token,
+                 'bootwright_cluster_install_request': {'deliveryKind': 'fetch'}}
         assert guard_holds(remove, scope) is retires, (insertion, after)
 
 

@@ -376,7 +376,7 @@ def test_partial_enrollment_fence_resumes_without_erasing_ownership(native):
     assert native.markers.writes == []
 
 
-def test_legacy_owner_without_recovery_scope_refuses_instead_of_becoming_prepared(native):
+def test_owner_without_recovery_scope_refuses_instead_of_becoming_prepared(native):
     native.daemons = lambda: []
     with pytest.raises(ceph_native.Refusal, match="ownership"):
         native.preparation_state()

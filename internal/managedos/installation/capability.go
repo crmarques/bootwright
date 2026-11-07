@@ -315,7 +315,7 @@ func (c Capability) Destroy(ctx context.Context, execution lifecycle.Execution) 
 
 func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.Result, error) {
 	unknown := lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}
-	request, marker, err := c.prepare(ctx, execution, operation)
+	request, marker, err := c.prepare(ctx, execution)
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
@@ -439,7 +439,7 @@ func removalEffect(evidence []byte, request Request, digest, marker string, unre
 // proves, and reads its evidence for the verb the block was frozen for.
 func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, verb reconciliation.Verb) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
-	request, marker, err := c.prepare(ctx, execution, "observe")
+	request, marker, err := c.prepare(ctx, execution)
 	if err != nil {
 		return unknown, err
 	}
@@ -470,7 +470,7 @@ func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, 
 
 // prepare decodes the frozen request and derives the exact marker bytes this
 // attempt proves, which name the request digest the plan froze.
-func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution, operation string) (Request, []byte, error) {
+func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution) (Request, []byte, error) {
 	if err := ctx.Err(); err != nil {
 		return Request{}, nil, err
 	}
@@ -481,39 +481,11 @@ func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution, 
 	if err != nil {
 		return Request{}, nil, err
 	}
-	if operation == "apply" {
-		if err := refusedContinuation(execution.Context, request); err != nil {
-			return Request{}, nil, err
-		}
-	}
 	marker, err := MarkerFor(request, execution.Block.RequestDigest)
 	if err != nil {
 		return Request{}, nil, err
 	}
 	return request, marker, nil
-}
-
-// refusedContinuation says why this executable does not apply a request an
-// earlier executable froze, or nothing when it would plan that request itself.
-// Planning publishes exactly one installer image, privately for a delivered
-// key, and refuses a private delivery over an unverified controller leg, but
-// an operation registered before those rules still carries what it froze, and
-// an apply performs exactly that. A destroy and an observation are never
-// refused: the one takes back published content and the other reads. The
-// removal it names is the one of the context the operation runs in.
-func refusedContinuation(contextName string, request Request) error {
-	machine := "Machine/" + request.Identity.Object
-	remediation := "run bootwright destroy --context " + contextName + " to end this operation, then plan it again under this executable"
-	if (request.Image == nil) == (request.Private == nil) {
-		return refusal("lifecycle.state", "this operation froze an installation of "+machine+
-			" with no single installer image publication, which this executable refuses", remediation)
-	}
-	controller := request.Target.Controller
-	if request.Private != nil && (!strings.HasPrefix(controller.Endpoint, "https://") || !controller.TLSVerify) {
-		return refusal("lifecycle.state", "this operation froze a private publication for "+machine+
-			" whose BMC is not reached over a verified connection, which this executable refuses", remediation)
-	}
-	return nil
 }
 
 // deliveredKeyMatches refuses an apply whose bound host key is not of the type

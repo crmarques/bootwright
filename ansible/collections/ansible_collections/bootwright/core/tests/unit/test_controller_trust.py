@@ -234,7 +234,7 @@ def test_the_managed_os_installation_sets_and_settles_the_frozen_trust(lookups, 
 def test_cluster_media_calls_carry_each_nodes_frozen_trust(physical):
     tasks = loaded(ROLES / "containercluster_install_agent/tasks/port.yml")
     invocation = next(task for task in tasks if "ansible.builtin.include_role" in task)
-    variables = {**invocation["vars"],
+    variables = {**invocation["vars"], "bootwright_cluster_install_request": {"deliveryKind": "fetch"},
                  "containercluster_install_agent_node": {"physical": physical, "controller": {
                      "endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "tlsVerify": True,
                      "virtualMedia": {"trust": "importCertificate", "restoreVerification": False, "removeCertificate": True}}},

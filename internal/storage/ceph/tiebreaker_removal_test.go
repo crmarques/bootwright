@@ -226,11 +226,11 @@ func TestTheTiebreakerRemovalObservationReadsTheHostBeforeAnyRepeat(t *testing.T
 
 func TestARetirementRecordOfAnotherVersionRefusesByName(t *testing.T) {
 	r := providedStretchRequest(t)
-	older := retirementFor(r)
-	data, _ := json.Marshal(older)
+	other := retirementFor(r)
+	data, _ := json.Marshal(other)
 	_, err := EvaluateRetirement(data, r, true)
 	refusedWith(t, err, "lifecycle.state", "the Ceph retirement record carries no version, and this build reads only ceph-core-retirement-v2",
-		"continue this operation with the Bootwright build that recorded it; this build converts no older record")
+		"continue this operation with the Bootwright build that recorded it")
 	stray := clusterRetirement(r)
 	stray.Tiebreaker.Removed = false
 	data, _ = json.Marshal(stray)

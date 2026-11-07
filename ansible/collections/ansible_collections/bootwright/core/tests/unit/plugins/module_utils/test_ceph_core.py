@@ -227,11 +227,11 @@ def test_pool_replication_requires_an_additional_osd_host(core_request, size, mi
             ceph_native.validate(core_request)
 
 
-def test_previous_core_request_version_refuses_before_any_native_effect(core_request):
+def test_core_request_of_another_version_refuses_before_any_native_effect(core_request):
     core_request["version"] = "ceph-core-v12"
     with pytest.raises(ceph_native.Refusal, match="^request$"):
         ceph_native.Worker(core_request, core_request["bootstrap"],
-                           run=lambda *args, **kwargs: pytest.fail("previous request reached native effects"))
+                           run=lambda *args, **kwargs: pytest.fail("request of another version reached native effects"))
 
 
 @pytest.mark.parametrize("change", ["tag", "unknown", "root-disk", "empty-serial", "overlap", "selector", "missing-host"])
@@ -868,7 +868,7 @@ def test_an_unproved_pool_id_still_refuses_observation(core_request, case):
         native.observe_resource(native.empty_evidence(), True)
 
 
-def test_client_caps_and_legacy_hash_binding_refuse_unproved_identity(core_request, monkeypatch):
+def test_client_caps_and_a_hash_only_binding_refuse_unproved_identity(core_request, monkeypatch):
     core_request.update(action="client", client={"name": "reader", "pool": "volumes", "access": "readOnly", "dataPools": [],
                                                  "filesystem": "", "group": "", "subvolume": ""})
     marks = Markers()
@@ -2228,8 +2228,8 @@ def test_evidence_resource_member(core_request):
     assert ceph_core.evidence(copy.deepcopy(value), "d" * 64, core_request)["resource"] == {"id": "", "path": ""}
     pool = dict(value, action="pool", resource={"id": "8", "path": ""})
     assert ceph_core.evidence(copy.deepcopy(pool), "d" * 64)["resource"] == {"id": "8", "path": ""}
-    legacy = {key: item for key, item in value.items() if key != "resource"}
-    refused = [dict(legacy, poolID=-1), dict(value, poolID=-1), dict(value, resource={"id": "", "path": "", "zone": ""}), dict(value, resource={"id": ""}),
+    unreported = {key: item for key, item in value.items() if key != "resource"}
+    refused = [dict(unreported, poolID=-1), dict(value, poolID=-1), dict(value, resource={"id": "", "path": "", "zone": ""}), dict(value, resource={"id": ""}),
                dict(pool, resource={"id": 8, "path": ""}), dict(pool, resource={"id": "-1", "path": ""}), dict(pool, resource={"id": "01", "path": ""}),
                dict(pool, resource={"id": "8", "path": "/volumes"}), dict(pool, resource=None), dict(value, resource={"id": "8", "path": ""}),
                dict(value, action="client", resource={"id": "8", "path": ""})]

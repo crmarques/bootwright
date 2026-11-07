@@ -77,9 +77,6 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 	if !install.Target.Physical || install.Private == nil || machine.Spec().Get("os", "provided").Bool() || !eraseMethod(policy.Get("method").Text()) {
 		return request, refusal("api.invariant", "physical erase requires a managed physical Anaconda Machine and the logicalOverwrite or metadataClear method", "omit spec.hardware.eraseOnRemoval to retain its disks")
 	}
-	if err := refusedContinuation(install.Identity.Context, install); err != nil {
-		return request, err
-	}
 	for _, line := range strings.Split(install.Kickstart, "\n") {
 		if strings.HasPrefix(line, "network ") {
 			request.Network += line + "\n"

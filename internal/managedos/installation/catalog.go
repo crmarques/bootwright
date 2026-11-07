@@ -121,11 +121,6 @@ func machineBootDisk(arm string) time.Duration {
 	return substrate.LibvirtBootDiskBound
 }
 
-// frozenTooling is the tooling closure an earlier build named here, which the
-// controller stage now owns. It stays in the content digest unchanged, so
-// deleting the name moved no frozen plan.
-const frozenTooling = "lorax,xorriso"
-
 const provedDiskBoot = "proved-installation-disk-boot,replay-safe-unread-registration"
 
 // BlockID names the block this capability contributes. A consumer states
@@ -140,7 +135,7 @@ func ContentDigest() string {
 		"bootwright.managedos.install-anaconda-v1",
 		Implementation, requestVersion, kickstartVersion,
 		consumerPrefix, privatePrefix, servedRoot, MarkerPath, HostKeyPath,
-		NetworkDocumentPath, NetworkMarkerPath, strconv.Itoa(networkCheckpointSeconds), frozenTooling, provedDiskBoot,
+		NetworkDocumentPath, NetworkMarkerPath, strconv.Itoa(networkCheckpointSeconds), provedDiskBoot,
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }

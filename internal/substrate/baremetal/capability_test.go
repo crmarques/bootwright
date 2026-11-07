@@ -202,7 +202,7 @@ func TestTheClaimReadsTheControllerThroughItsBundle(t *testing.T) {
 }
 
 // A claim reads exactly the version it writes, with no conversion, so a claim
-// an earlier build froze refuses both its continuation and its removal here.
+// of another version refuses both its continuation and its removal here.
 func TestAFrozenClaimOfAnotherVersionRefuses(t *testing.T) {
 	current := planOf(t, reconciliation.Apply).Definitions[0].Request
 	for _, version := range []string{"machine-baremetal-v1", "machine-baremetal-v2"} {

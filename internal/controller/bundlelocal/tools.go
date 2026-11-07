@@ -37,7 +37,7 @@ func NewToolCatalog() *ToolCatalog { return &ToolCatalog{metadata: fetchToolMeta
 var _ prerequisites.TargetToolCatalog = (*ToolCatalog)(nil)
 
 func (c *ToolCatalog) Select(requests []controller.ToolRequest, retained []prerequisites.DependencySource) ([]prerequisites.ToolDefinition, bool, error) {
-	requests, err := toolRequests(requests, frozenMirror)
+	requests, err := toolRequests(requests)
 	if err != nil {
 		return nil, false, err
 	}
@@ -112,7 +112,7 @@ func (c *ToolCatalog) Present(ctx context.Context, area prerequisites.BundleArea
 }
 
 func (c *ToolCatalog) Resolve(ctx context.Context, requests []controller.ToolRequest, egress prerequisites.SetupEgress) ([]prerequisites.ToolDefinition, error) {
-	requests, err := toolRequests(requests, stagedMirror)
+	requests, err := toolRequests(requests)
 	if err != nil {
 		return nil, err
 	}
@@ -142,18 +142,13 @@ func (c *ToolCatalog) Resolve(ctx context.Context, requests []controller.ToolReq
 // rule, so validate refuses every mirror Resolve would refuse.
 func stagedMirror(mirror string) bool { return api.ValidLexical("mirror-url", mirror) }
 
-// frozenMirror reads the mirror of a frozen request at the tolerance of the
-// earlier stage too, so recovering a block an earlier build froze never
-// refuses where that build observed. Only Resolve acts on a mirror.
-func frozenMirror(mirror string) bool { return stagedMirror(mirror) || safeToolURL(mirror) }
-
-func toolRequests(requests []controller.ToolRequest, mirrorAdmitted func(string) bool) ([]controller.ToolRequest, error) {
+func toolRequests(requests []controller.ToolRequest) ([]controller.ToolRequest, error) {
 	if len(requests) > 128 {
 		return nil, bundleFailure("target tool requests exceed the supported closure bound")
 	}
 	requests = slices.Clone(requests)
 	for _, request := range requests {
-		if request.Mirror != "" && !mirrorAdmitted(request.Mirror) {
+		if request.Mirror != "" && !stagedMirror(request.Mirror) {
 			return nil, bundleFailure("tool mirrors require credential-free HTTPS base URLs")
 		}
 		if request.Version != "latest" && !toolVersion(request.Version) {

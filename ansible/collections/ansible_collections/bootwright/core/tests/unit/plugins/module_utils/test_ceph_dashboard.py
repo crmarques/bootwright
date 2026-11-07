@@ -611,7 +611,7 @@ def cluster_evidence(request, **dashboard):
                                          ("certificateSHA256", "A" * 64), ("certificateSHA256", 7), ("reachable", 1), ("password", "x"),
                                          ("monAddrs", [{"host": "node-1", "address": "node-1"}]), ("monAddrs", [{"host": "foreign", "address": "192.0.2.9"}]),
                                          ("version", "ceph-core-evidence-v1")])
-def test_evidence_v2_bounds_the_dashboard_and_monitor_projection(dashboard, field, value):
+def test_evidence_bounds_the_dashboard_and_monitor_projection(dashboard, field, value):
     good = cluster_evidence(dashboard.request)
     assert ceph_core.evidence(copy.deepcopy(good), "d" * 64, dashboard.request)["dashboard"]["url"] == URL
     if field in ("monAddrs", "version"):
@@ -814,7 +814,7 @@ def test_endpoint_loss_during_initial_failover_repairs_only_the_missing_manager(
     assert "dashboard-redeployed.json" in dashboard.markers.records
 
 
-def test_completed_legacy_redeploy_requires_ports_on_every_manager_before_acceptance(dashboard):
+def test_completed_redeploy_requires_ports_on_every_manager_before_acceptance(dashboard):
     password = dashboard.native.dashboard()["private"]
     original_done = copy.deepcopy(dashboard.markers.records["dashboard-redeployed.json"])
     dashboard.state.ports = {MANAGER_ONE: [8765], MANAGER_TWO: [8765, 8765]}
@@ -1059,7 +1059,7 @@ def test_publication_lost_after_first_url_requires_a_new_snapshot_before_schedul
     assert dashboard.state.redeploys == 1
 
 
-def test_legacy_retry_waits_for_publication_before_scheduling_again(dashboard):
+def test_retry_waits_for_publication_before_scheduling_again(dashboard):
     effect = dashboard.native.tunnel_effect
     dashboard.native.tunnel_effect = lambda *args, **options: ceph_native.require(False, "native-timeout")
     with pytest.raises(ceph_native.Refusal, match="^native-timeout$"):

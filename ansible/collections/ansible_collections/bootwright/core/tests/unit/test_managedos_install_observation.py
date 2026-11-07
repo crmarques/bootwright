@@ -67,7 +67,7 @@ def scope(observes, unregister="guest", **registered):
     variables = {
         "bootwright_os_install_digest": DIGEST,
         "bootwright_os_install_material": material,
-        "bootwright_os_install_request": {"address": "198.51.100.11"},
+        "bootwright_os_install_request": {"address": "198.51.100.11", "installerArguments": []},
         "managedos_install_anaconda_observes_removal": defaults()["managedos_install_anaconda_observes_removal"],
         "managedos_install_anaconda_unregisters": defaults()["managedos_install_anaconda_unregisters"],
     }
@@ -101,7 +101,7 @@ def machine_reads(scoped="not (managedos_install_anaconda_observes_removal | boo
 def test_an_apply_observation_reads_the_machine(observes):
     variables = scope(observes, managedos_install_anaconda_host_key="ssh-ed25519 AAAAHOST",
                       managedos_install_anaconda_reachable={"rc": 0},
-                      bootwright_os_install_request={"address": "198.51.100.11", "registration": {}})
+                      bootwright_os_install_request={"address": "198.51.100.11", "installerArguments": [], "registration": {}})
     assert all(runs(task, variables) for task in machine_reads())
 
 
@@ -121,7 +121,7 @@ def test_a_registering_removal_observation_reads_the_guest_registration_alone():
     marker = '{"request":"%s"}' % DIGEST
     variables = scope("removal", managedos_install_anaconda_host_key="ssh-ed25519 AAAAHOST",
                       managedos_install_anaconda_answered=True, managedos_install_anaconda_marker=marker,
-                      bootwright_os_install_request={"address": "198.51.100.11", "registration": {}})
+                      bootwright_os_install_request={"address": "198.51.100.11", "installerArguments": [], "registration": {}})
     variables["bootwright_os_install_material"]["marker"] = marker
     variables.update(next(task for task in LOADER.load_from_file(str(ROLE / "tasks" / "observe.yml"), trusted_as_template=True)
                           if task.get("name") == "Read the registration a removal takes back")["vars"])
@@ -219,7 +219,7 @@ def test_a_removal_observation_never_reads_an_unanswered_machine_as_released(ans
                       managedos_install_anaconda_marker=marker,
                       managedos_install_anaconda_observed={"observation": NOTHING},
                       managedos_install_anaconda_controller={"changed": False, "skipped": True},
-                      bootwright_os_install_request={"address": "198.51.100.11", "registration": {}})
+                      bootwright_os_install_request={"address": "198.51.100.11", "installerArguments": [], "registration": {}})
     variables["bootwright_os_install_material"]["marker"] = '{"request":"%s"}' % DIGEST
     variables.update(next(task for task in LOADER.load_from_file(str(ROLE / "tasks" / "observe.yml"), trusted_as_template=True)
                           if task.get("name") == "Read the registration a removal takes back")["vars"])
@@ -251,12 +251,12 @@ def test_removal_observation_reads_the_guest_only_when_told_to_unregister(unregi
                       managedos_install_anaconda_answered=True, managedos_install_anaconda_marker=marker,
                       managedos_install_anaconda_observed={"observation": NOTHING},
                       managedos_install_anaconda_controller={"changed": False, "skipped": True},
-                      bootwright_os_install_request={"address": "198.51.100.11", "registration": {}})
+                      bootwright_os_install_request={"address": "198.51.100.11", "installerArguments": [], "registration": {}})
     variables["bootwright_os_install_material"]["marker"] = marker
     variables.update(next(task for task in LOADER.load_from_file(str(ROLE / "tasks" / "observe.yml"), trusted_as_template=True)
                           if task.get("name") == "Read the registration a removal takes back")["vars"])
     assert validated(variables) is (unregister is not None)
-    assert validated(scope(None, None, bootwright_os_install_request={"registration": {}}))
+    assert validated(scope(None, None, bootwright_os_install_request={"installerArguments": [], "registration": {}}))
     assert validated(scope("removal", None))
     unregisters = Templar(loader=LOADER, variables=variables).template(variables["managedos_install_anaconda_unregisters"])
     assert unregisters is (unregister == "guest")

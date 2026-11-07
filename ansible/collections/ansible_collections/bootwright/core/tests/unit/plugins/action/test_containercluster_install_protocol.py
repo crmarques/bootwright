@@ -313,6 +313,7 @@ def resolved_media(results, published=PUBLISHED):
     scope["containercluster_install_agent_controllers"] = {"results": results}
     scope["containercluster_install_agent_before"] = {"observation": {"identity": IDENTITY, "url": published}}
     scope["containercluster_install_agent_state"] = {}
+    scope["bootwright_cluster_install_request"] = {"deliveryKind": "fetch"}
     identities = []
     with tempfile.TemporaryDirectory() as directory, mock.patch.object(containercluster_publication, "trusted", lambda fd, path: None):
         if published:
@@ -525,7 +526,7 @@ def test_a_removal_observation_of_a_foreign_image_publishes_the_media_alone():
     skipped = {"changed": False, "skipped": True}
     variables.update({name: skipped for name in CLUSTER_READS})
     variables["bootwright_cluster_install_request"] = {
-        "release": {"version": RELEASE}, "nodes": [{"machine": "sno-01", "name": "master-0"}]}
+        "deliveryKind": "fetch", "release": {"version": RELEASE}, "nodes": [{"machine": "sno-01", "name": "master-0"}]}
     variables["containercluster_install_agent_controllers"] = {
         "results": [controller("sno-01", BASE + "e0" * 32 + "/agent.iso")]}
     variables["containercluster_install_agent_before"] = {"observation": {"identity": IDENTITY, "url": PUBLISHED}}

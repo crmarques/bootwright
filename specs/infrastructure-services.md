@@ -95,10 +95,9 @@ another host or port, or no decodable key of an accepted type, refuses
 known-hosts file is not its placement's own `knownHostsRef` refuses
 `lifecycle.state`; no ssh reads either
 (`TestAnSSHPlacementRefusesKnownHostsNotOneEntryForItsHostBeforeItConnects`).
-The rule holds for every run, a continuation and a removal included, whatever
-build froze the operation: no run tolerates material an earlier build
-admitted, and an operation whose frozen Secret holds more than one entry
-refuses until its Secret is corrected and bound again. The host token
+The rule holds for every run, a continuation and a removal included: an
+operation whose frozen Secret holds more than one entry refuses until its
+Secret is corrected and bound again. The host token
 compares as OpenSSH compares it, a name without case and an IP in its
 canonical form (`TestAKnownHostsHostMatchesAsOpenSSHReadsIt`), and ssh is
 handed only the validated entry, rewritten as one line for the placement's
@@ -407,11 +406,8 @@ socket accepts a connection at the declared address and port; an HTTPS listener
 completes a handshake whose presented leaf certificate digest equals the bound
 certificate's; and the listener answers one bounded HTTP status line. A
 listener is probed at the bind address, or under a wildcard bind at each
-endpoint address that names it. A frozen request with no probe target, or with
-a listener no target probes, such as one an earlier build froze for a wildcard
-bind that admission now refuses, therefore never proves presence: everything
-present reads as a partial realization, and its removal, which reads no probe,
-is unaffected (`TestPresenceRefusesAnUnprobedListener`). A certificate
+endpoint address that names it; admission refuses a wildcard bind with a
+listener no endpoint names, so every listener has a probe target. A certificate
 mismatch or a refused connection after the service reports started is a
 definite failure. A socket that never answers within the bounded readiness
 window is unknown, not failure. A listener left unproved is reported with its
@@ -596,8 +592,8 @@ templates for that implementation from a fixed table, and every task is shared.
 Validation admits one implementation per kind, so each kind selects exactly one
 row, and the selection plans only the objects whose `spec.implementation`
 matches its definition. The three kinds freeze one request version, so
-a request an earlier build froze for one kind refuses by naming its version,
-and its remedy is to destroy the context with the build that applied it.
+a request of another version refuses by naming its version, and its remedy is
+to destroy the context with the build that applied it.
 
 **Implementation.** One container image per kind, selected, pinned and acquired
 exactly as the [artifact server's](#managed-artifact-serving) is. The unit
@@ -669,10 +665,8 @@ or container-cluster package.
 
 **Readiness.** Completion requires a positive answer on every address the
 service serves: the declared bind address, or every declared endpoint address
-when the bind address is a wildcard. A frozen request naming no such address,
-such as one an earlier build froze for a wildcard bind without an endpoint that
-admission now refuses, never proves presence, so everything present reads as a
-partial realization (`TestPresenceRequiresEveryDeclaredAnswer`). A proxy
+when the bind address is a wildcard, for which admission requires an endpoint
+(`TestPresenceRequiresEveryDeclaredAnswer`). A proxy
 answers a bounded HTTP request with a well-formed status line; a resolver answers every declared address of every one of its records over
 UDP, and over TCP as well; a time service returns a server-mode reply, whose stratum may
 show it unsynchronized without being a failure. Readiness therefore proves that

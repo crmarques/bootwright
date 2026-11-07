@@ -186,7 +186,7 @@ func (c InstallCapability) Destroy(ctx context.Context, execution lifecycle.Exec
 // this run proved complete; a removal declares no output at all.
 func (c InstallCapability) mutate(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.Result, error) {
 	unknown := lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}
-	request, err := c.prepare(ctx, execution, operation)
+	request, err := c.prepare(ctx, execution)
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
@@ -299,7 +299,7 @@ func installEffect(verb reconciliation.Verb, evidence []byte, request InstallReq
 // access, and offers it only when it reads the installation complete.
 func (c InstallCapability) observe(ctx context.Context, execution lifecycle.Execution, verb reconciliation.Verb) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
-	request, err := c.prepare(ctx, execution, "observe")
+	request, err := c.prepare(ctx, execution)
 	if err != nil {
 		return unknown, err
 	}
@@ -348,7 +348,7 @@ func (InstallCapability) Unsupported(state *compilation.State) []lifecycle.Refus
 	return Refusals(state.Effective())
 }
 
-func (c InstallCapability) prepare(ctx context.Context, execution lifecycle.Execution, operation string) (InstallRequest, error) {
+func (c InstallCapability) prepare(ctx context.Context, execution lifecycle.Execution) (InstallRequest, error) {
 	if err := ctx.Err(); err != nil {
 		return InstallRequest{}, err
 	}
@@ -359,26 +359,7 @@ func (c InstallCapability) prepare(ctx context.Context, execution lifecycle.Exec
 	if err != nil {
 		return InstallRequest{}, err
 	}
-	if operation == "apply" {
-		if err := refusedContinuation(execution.Context, request); err != nil {
-			return InstallRequest{}, err
-		}
-	}
 	return request, nil
-}
-
-// refusedContinuation applies the same private-delivery boundary to frozen
-// physical requests that admission applies to newly planned ones.
-func refusedContinuation(contextName string, request InstallRequest) error {
-	for _, node := range request.Nodes {
-		if node.Physical {
-			if reason, _ := privateControllerRefusal(node.Machine, node.Controller); reason != "" {
-				return refusal("lifecycle.state", "Machine/"+node.Machine+" of OpenShiftCluster/"+request.Identity.Cluster+": "+reason,
-					"run bootwright destroy --context "+contextName+" to end this operation, then correct the node's transport trust and plan it again")
-			}
-		}
-	}
-	return nil
 }
 
 func (c InstallCapability) run(ctx context.Context, execution lifecycle.Execution, operation string, request InstallRequest) (lifecycle.RunResult, error) {

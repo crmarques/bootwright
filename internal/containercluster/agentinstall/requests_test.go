@@ -58,10 +58,9 @@ func TestAForeignRequestVersionRefuses(t *testing.T) {
 	}
 }
 
-// An install request frozen by the build before physical nodes froze their
-// hardware is not read as this one, so its apply, and even its destroy, run
-// only on the build that registered it.
-func TestAnInstallRequestOfThePreviousVersionRefuses(t *testing.T) {
+// An install request of another version is not read as this one, so its apply,
+// and even its destroy, run only on the build that registered it.
+func TestAnInstallRequestOfAnotherVersionRefuses(t *testing.T) {
 	_, install, _ := onlyRequests(t, singleNodeCatalog())
 	install.Version = "cluster-install-agent-v2"
 	data, err := install.Canonical()
@@ -69,7 +68,7 @@ func TestAnInstallRequestOfThePreviousVersionRefuses(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := DecodeInstallRequest(data); err == nil {
-		t.Fatal("an install request of the previous version was read as this one")
+		t.Fatal("an install request of another version was read as this one")
 	} else if code := refusalCode(t, err); code != "lifecycle.state" {
 		t.Fatalf("refusal = %s", code)
 	}
@@ -143,10 +142,9 @@ func frozen(t *testing.T, request interface{ Canonical() ([]byte, error) }) []by
 	return canonical
 }
 
-// A media request frozen by the build before its install configuration named
-// the additional trust bundles is not read as this one, so its apply, and even
-// its destroy, run only on the build that registered it.
-func TestAMediaRequestOfThePreviousVersionRefuses(t *testing.T) {
+// A media request of another version is not read as this one, so its apply,
+// and even its destroy, run only on the build that registered it.
+func TestAMediaRequestOfAnotherVersionRefuses(t *testing.T) {
 	media, _, _ := onlyRequests(t, externalCatalog())
 	media.Version = "cluster-media-agent-v4"
 	data, err := media.Canonical()
@@ -154,7 +152,7 @@ func TestAMediaRequestOfThePreviousVersionRefuses(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := DecodeMediaRequest(data); err == nil {
-		t.Fatal("a media request of the previous version was read as this one")
+		t.Fatal("a media request of another version was read as this one")
 	} else if code := refusalCode(t, err); code != "lifecycle.state" {
 		t.Fatalf("refusal = %s", code)
 	}
@@ -204,16 +202,16 @@ func TestTheInstallRequestNamesItsMachinesInBootOrder(t *testing.T) {
 	}
 }
 
-// withARemovedField gives canonical bytes a member this build does not
-// declare, as a field an earlier version carried. It sorts first, so the bytes
+// withAnUndeclaredField gives canonical bytes a member this build does not
+// declare, as a field another version carried. It sorts first, so the bytes
 // stay canonical and only the shape refuses them.
-func withARemovedField(t *testing.T, encode func() ([]byte, error)) []byte {
+func withAnUndeclaredField(t *testing.T, encode func() ([]byte, error)) []byte {
 	t.Helper()
 	canonical, err := encode()
 	if err != nil || !strings.HasPrefix(string(canonical), `{"`) {
 		t.Fatalf("not a canonical object: %s (%v)", canonical, err)
 	}
-	return []byte(`{"aRemovedField":true,` + string(canonical[1:]))
+	return []byte(`{"anUndeclaredField":true,` + string(canonical[1:]))
 }
 
 func expectVersionRefusal(t *testing.T, err error, subject, version string) {
@@ -222,25 +220,25 @@ func expectVersionRefusal(t *testing.T, err error, subject, version string) {
 	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Source != nil ||
 		reported[0].Message != "the frozen "+subject+" request has an unsupported version: "+version ||
 		reported[0].Remediation != "destroy it with the build that applied it" {
-		t.Fatalf("an earlier %s request refused as %+v", subject, reported)
+		t.Fatalf("a %s request of another version refused as %+v", subject, reported)
 	}
 }
 
-func TestAnEarlierMediaRequestWithARemovedFieldRefusesByItsVersion(t *testing.T) {
+func TestAMediaRequestOfAnotherVersionWithAnUndeclaredFieldRefusesByItsVersion(t *testing.T) {
 	media, _, _ := onlyRequests(t, singleNodeCatalog())
 	media.Version = "cluster-media-agent-v4"
-	_, err := DecodeMediaRequest(withARemovedField(t, media.Canonical))
+	_, err := DecodeMediaRequest(withAnUndeclaredField(t, media.Canonical))
 	expectVersionRefusal(t, err, "cluster media", "cluster-media-agent-v4")
 }
 
-func TestAnEarlierInstallRequestWithARemovedFieldRefusesByItsVersion(t *testing.T) {
+func TestAnInstallRequestOfAnotherVersionWithAnUndeclaredFieldRefusesByItsVersion(t *testing.T) {
 	_, install, _ := onlyRequests(t, singleNodeCatalog())
 	install.Version = "cluster-install-agent-v2"
-	_, err := DecodeInstallRequest(withARemovedField(t, install.Canonical))
+	_, err := DecodeInstallRequest(withAnUndeclaredField(t, install.Canonical))
 	expectVersionRefusal(t, err, "cluster install", "cluster-install-agent-v2")
 }
 
-func TestEarlierPhysicalSelectionAndMediaOwnershipContractsRefuse(t *testing.T) {
+func TestMediaAndInstallRequestsOfOtherVersionsRefuse(t *testing.T) {
 	media, install, _ := onlyRequests(t, singleNodeCatalog())
 	media.Version = "cluster-media-agent-v9"
 	encoded, err := media.Canonical()

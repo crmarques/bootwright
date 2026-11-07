@@ -168,7 +168,7 @@ def failing_scope(**overrides):
     scope = {
         "bootwright_os_install_digest": DIGEST,
         "bootwright_os_install_request": {
-            "identity": {"object": MACHINE}, "address": ADDRESS, "placement": {"machine": "controller"},
+            "identity": {"object": MACHINE}, "address": ADDRESS, "installerArguments": [], "placement": {"machine": "controller"},
             "target": {"substrate": "libvirt", "physical": False},
             "network": {"checkpointSeconds": 300, "document": DOCUMENT, "documentPath": "/etc/bootwright/network.yml",
                         "markerPath": "/etc/bootwright/network-marker.json"},
@@ -750,7 +750,7 @@ def publication(name, **scope):
     task = next(task for task in flattened(name) if (task.get(PROTOCOL) or {}).get("phase") == "completed")
     variables = dict(defaults(), **{
         "bootwright_os_install_digest": DIGEST,
-        "bootwright_os_install_request": {"address": ADDRESS},
+        "bootwright_os_install_request": {"address": ADDRESS, "installerArguments": []},
         "managedos_install_anaconda_was_installed": True,
         "managedos_install_anaconda_after": {"observation": {"image": True, "tree": True}},
         "managedos_install_anaconda_observed": {"observation": {"image": True, "tree": True}},

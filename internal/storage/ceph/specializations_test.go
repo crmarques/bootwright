@@ -98,8 +98,8 @@ func TestHostEvidenceSpecializationsMemberIsOptionalAndClosed(t *testing.T) {
 			t.Errorf("%s: %v", name, d)
 		}
 	}
-	earlier := preparedEvidence(t, e, r, func(v *HostEvidence) { v.Version = "ceph-host-evidence-v1" })
-	if _, err := observe(earlier); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Message != "Ceph host evidence names another request" {
-		t.Fatalf("an earlier host evidence version read as %v", diagnostics.Of(err))
+	other := preparedEvidence(t, e, r, func(v *HostEvidence) { v.Version = "ceph-host-evidence-v1" })
+	if _, err := observe(other); len(diagnostics.Of(err)) != 1 || diagnostics.Of(err)[0].Message != "Ceph host evidence names another request" {
+		t.Fatalf("host evidence of another version read as %v", diagnostics.Of(err))
 	}
 }

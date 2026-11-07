@@ -26,11 +26,11 @@ def frozen():
 class FrozenRequest(unittest.TestCase):
     """Each tool's acquisition deadline travels with the request, in its order."""
 
-    def test_a_v6_request_whose_deadlines_match_its_tools_is_accepted(self):
+    def test_a_request_whose_deadlines_match_its_tools_is_accepted(self):
         request = frozen()
         self.assertIs(frozen_request(request), request)
 
-    def test_a_native_or_older_request_or_a_mismatched_deadline_is_refused(self):
+    def test_a_native_or_other_version_request_or_a_mismatched_deadline_is_refused(self):
         request = frozen()
         missing = dict(request)
         del missing["acquisition"]

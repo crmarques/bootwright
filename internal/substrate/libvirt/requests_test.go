@@ -25,9 +25,8 @@ func TestAFrozenHostRequestOfAnyOtherVersionRefuses(t *testing.T) {
 	}
 }
 
-// A machine request earlier builds froze, whose placement could still name an
-// escalation Secret or which carried no egress, refuses by its version, and so
-// does any other.
+// A machine request of any version but the one this build writes refuses by its
+// version.
 func TestAFrozenMachineRequestOfAnyOtherVersionRefuses(t *testing.T) {
 	for _, version := range []string{"machine-libvirt-v1", "machine-libvirt-v2", "machine-libvirt-v3", "machine-libvirt-v4", "machine-libvirt-v5", "machine-libvirt-v6", "machine-libvirt-v7", "machine-libvirt-v8", ""} {
 		_, err := DecodeMachineRequest([]byte(`{"version":"` + version + `"}`))
@@ -35,23 +34,6 @@ func TestAFrozenMachineRequestOfAnyOtherVersionRefuses(t *testing.T) {
 			t.Fatalf("version %q was not refused by its version: %v", version, err)
 		}
 	}
-}
-
-// A canonical request the previous build froze, with no egress, refuses by its
-// version before anything reads it.
-func TestAFrozenMachineRequestOfTheEgresslessVersionRefuses(t *testing.T) {
-	requests, err := MachineRequests(labCatalog(), "controller", testContext)
-	if err != nil {
-		t.Fatal(err)
-	}
-	earlier := requests[0]
-	earlier.Version = "machine-libvirt-v2"
-	data, err := earlier.Canonical()
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = DecodeMachineRequest(data)
-	expectRefusal(t, err, "lifecycle.state")
 }
 
 func TestAFrozenHostRequestOfThisVersionRoundTrips(t *testing.T) {
@@ -96,15 +78,15 @@ func TestAFrozenHostRequestWithAnUnknownKeyRefuses(t *testing.T) {
 	}
 }
 
-// withARemovedField gives canonical bytes a member this build does not
-// declare, as a field an earlier version carried. It sorts first, so the bytes
+// withAnUndeclaredField gives canonical bytes a member this build does not
+// declare, as a field another version carried. It sorts first, so the bytes
 // stay canonical and only the shape refuses them.
-func withARemovedField(t *testing.T, canonical []byte) []byte {
+func withAnUndeclaredField(t *testing.T, canonical []byte) []byte {
 	t.Helper()
 	if !strings.HasPrefix(string(canonical), `{"`) {
 		t.Fatalf("not a canonical object: %s", canonical)
 	}
-	return []byte(`{"aRemovedField":true,` + string(canonical[1:]))
+	return []byte(`{"anUndeclaredField":true,` + string(canonical[1:]))
 }
 
 func expectVersionRefusal(t *testing.T, err error, subject, version string) {
@@ -113,37 +95,37 @@ func expectVersionRefusal(t *testing.T, err error, subject, version string) {
 	if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Source != nil ||
 		reported[0].Message != "the frozen "+subject+" request has an unsupported version: "+version ||
 		reported[0].Remediation != "destroy it with the build that applied it" {
-		t.Fatalf("an earlier %s request refused as %+v", subject, reported)
+		t.Fatalf("a %s request of another version refused as %+v", subject, reported)
 	}
 }
 
-func TestAnEarlierHostRequestWithARemovedFieldRefusesByItsVersion(t *testing.T) {
-	earlier := HostRequest{
+func TestAHostRequestOfAnotherVersionRefusesByItsVersion(t *testing.T) {
+	other := HostRequest{
 		Identity: Identity{Block: HostBlockID("lab"), Context: "lab-rhel", Object: "lab"},
 		Networks: []Network{{Bridge: "virbr-lab", Managed: true, Name: "bootwright-lab-rhel-lab-guests"}},
 		Packages: HypervisorPackages(), PoolName: "bootwright-lab-rhel-lab-vmedia",
 		PoolPath: "/var/lib/bootwright-services/lab-rhel/vmedia", Provisioned: true,
 		Services: ServiceUnits(), URI: "qemu:///system", Version: "substrate-host-libvirt-v2",
 	}
-	data, err := earlier.Canonical()
+	data, err := other.Canonical()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = DecodeHostRequest(withARemovedField(t, data))
+	_, err = DecodeHostRequest(withAnUndeclaredField(t, data))
 	expectVersionRefusal(t, err, "provider host", "substrate-host-libvirt-v2")
 }
 
-func TestAnEarlierMachineRequestWithARemovedFieldRefusesByItsVersion(t *testing.T) {
+func TestAMachineRequestOfAnotherVersionRefusesByItsVersion(t *testing.T) {
 	requests, err := MachineRequests(labCatalog(), "controller", testContext)
 	if err != nil {
 		t.Fatal(err)
 	}
-	earlier := requests[0]
-	earlier.Version = "machine-libvirt-v2"
-	data, err := earlier.Canonical()
+	other := requests[0]
+	other.Version = "machine-libvirt-v2"
+	data, err := other.Canonical()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = DecodeMachineRequest(withARemovedField(t, data))
+	_, err = DecodeMachineRequest(withAnUndeclaredField(t, data))
 	expectVersionRefusal(t, err, "machine", "machine-libvirt-v2")
 }

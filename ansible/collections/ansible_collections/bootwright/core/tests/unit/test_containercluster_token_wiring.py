@@ -190,7 +190,7 @@ def test_the_ownership_read_calls_an_insert_link_own_and_any_other_file_foreign(
         (root / name / 'agent.iso').write_bytes(b'image')
     (root / 'insert-own').mkdir()
     os.link(root / 'abcdef' / 'agent.iso', root / 'insert-own' / 'agent.iso')
-    request = {'publicationRoot': {'path': str(root), 'url': base}}
+    request = {'deliveryKind': 'fetch', 'publicationRoot': {'path': str(root), 'url': base}}
     published = base + '/abcdef/agent.iso'
     presented = ['', published, base + '/insert-own/agent.iso', base + '/insert-foreign/agent.iso']
     controllers = [{'item': {'machine': 'sno-%02d' % number}, 'media': image, 'power': 'On'} for number, image in enumerate(presented)]
@@ -206,7 +206,8 @@ def test_the_ownership_read_calls_an_insert_link_own_and_any_other_file_foreign(
     assert [result['own'] for result in results] == [False, True, True, False]
     resolve = only(state, lambda t: 'containercluster_install_agent_state' in t.get('ansible.builtin.set_fact', {}))
     facts = resolve['ansible.builtin.set_fact']['containercluster_install_agent_state']
-    scope = {'containercluster_install_agent_media_identity': {'results': results},
+    scope = {'bootwright_cluster_install_request': request,
+             'containercluster_install_agent_media_identity': {'results': results},
              'containercluster_install_agent_controllers': {'results': controllers},
              'containercluster_install_agent_state': {'cluster': '', 'release': '', 'completed': '', 'missing': []}}
     scope.update(resolve['vars'])

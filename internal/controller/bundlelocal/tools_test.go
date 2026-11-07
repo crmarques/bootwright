@@ -22,7 +22,7 @@ func TestEveryAdmittedCLIVersionPassesTheToolScreen(t *testing.T) {
 			continue
 		}
 		requests := []controller.ToolRequest{{Kind: "helm", Version: "v" + strings.TrimPrefix(value, "v")}}
-		if _, err := toolRequests(requests, func(string) bool { return true }); err != nil {
+		if _, err := toolRequests(requests); err != nil {
 			t.Errorf("admitted %d-byte tag %q is refused by setup: %v", len(value), value, err)
 		}
 	}
@@ -345,7 +345,7 @@ func TestContextLatestIgnoresANewerReleaseRetainedByAnotherContext(t *testing.T)
 
 func TestOpenShiftToolRequestsRequireTheSharedExactReleaseGrammar(t *testing.T) {
 	for _, version := range []string{"4.21", "4.22.0-rc.1"} {
-		_, err := toolRequests([]controller.ToolRequest{{Kind: "openshift-install", Compatibility: "openshift", Version: version}}, frozenMirror)
+		_, err := toolRequests([]controller.ToolRequest{{Kind: "openshift-install", Compatibility: "openshift", Version: version}})
 		if (err == nil) != (version == "4.22.0-rc.1") {
 			t.Fatalf("release %s: %v", version, err)
 		}
@@ -383,7 +383,7 @@ func TestFIPSInstallerUsesVerifiedExactReleaseArchiveAndRetainedIdentity(t *test
 		}
 	}
 	for _, request := range []controller.ToolRequest{{Kind: "openshift-install-fips", Version: "latest", Compatibility: "openshift"}, {Kind: "openshift-install-fips", Version: "4.21.10", Compatibility: "okd"}} {
-		if _, err := toolRequests([]controller.ToolRequest{request}, stagedMirror); err == nil {
+		if _, err := toolRequests([]controller.ToolRequest{request}); err == nil {
 			t.Fatal("unqualified FIPS acquisition admitted", request)
 		}
 	}

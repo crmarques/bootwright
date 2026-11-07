@@ -353,9 +353,7 @@ func TestAPrivateInstallationRefusesAnUnverifiedController(t *testing.T) {
 }
 
 // A delivered key's URL is named by the Kickstart implanted in the installer
-// image, so that image is never derived as a public publication, and an
-// operation an earlier build froze with a public image beside its private
-// publication refuses its apply before anything is published.
+// image, so that image is never derived as a public publication.
 func TestAPhysicalInstallationRefusesWhileItsHostKeyWouldBePublic(t *testing.T) {
 	catalog := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"))),
 		sshKeySecret(api.MapValue(field("generated", api.MapValue()))))
@@ -371,17 +369,6 @@ func TestAPhysicalInstallationRefusesWhileItsHostKeyWouldBePublic(t *testing.T) 
 		delivered++
 		if request.Image != nil || request.Private == nil {
 			t.Fatalf("a delivered-key installation of %s derived a public image: %+v", request.Identity.Object, request.Image)
-		}
-		exposed := request
-		exposed.Image = &Publication{Path: request.Private.Path + "/install.iso", URL: request.Private.URL + "/install.iso"}
-		err := refusedContinuation(testContext, exposed)
-		expectRefusal(t, err, "lifecycle.state")
-		if reported := diagnostics.Of(err)[0]; reported.Message !=
-			"this operation froze an installation of Machine/metal-01 with no single installer image publication, which this executable refuses" {
-			t.Fatalf("message = %q", reported.Message)
-		}
-		if err := refusedContinuation(testContext, request); err != nil {
-			t.Fatalf("the derived request refused: %v", diagnostics.Of(err))
 		}
 	}
 	if delivered != 1 {

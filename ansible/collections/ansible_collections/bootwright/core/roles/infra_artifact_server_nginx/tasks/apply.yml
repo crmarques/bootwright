@@ -98,10 +98,10 @@
   environment:
     HTTP_PROXY: '{{ bootwright_artifact_server_request.egress.httpProxy | default("") }}'
     HTTPS_PROXY: '{{ bootwright_artifact_server_request.egress.httpsProxy | default("") }}'
-    NO_PROXY: '{{ bootwright_artifact_server_request.egress.noProxy | default([]) | join(",") }}'
+    NO_PROXY: '{{ bootwright_artifact_server_request.egress.noProxy | join(",") }}'
     http_proxy: '{{ bootwright_artifact_server_request.egress.httpProxy | default("") }}'
     https_proxy: '{{ bootwright_artifact_server_request.egress.httpsProxy | default("") }}'
-    no_proxy: '{{ bootwright_artifact_server_request.egress.noProxy | default([]) | join(",") }}'
+    no_proxy: '{{ bootwright_artifact_server_request.egress.noProxy | join(",") }}'
   register: infra_artifact_server_nginx_pull
   when: infra_artifact_server_nginx_image_present.rc != 0
   changed_when: infra_artifact_server_nginx_image_present.rc != 0

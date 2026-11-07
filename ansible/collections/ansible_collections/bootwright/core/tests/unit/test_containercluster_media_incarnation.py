@@ -53,7 +53,7 @@ def holds(templar, conditions):
 
 
 def test_only_a_receipt_naming_another_incarnation_is_foreign():
-    for receipt, foreign in (({"incarnation": EARLIER}, True), ({"incarnation": OWN}, False), ({"inputs": "x"}, False), (None, False)):
+    for receipt, foreign in (({"incarnation": EARLIER}, True), ({"incarnation": OWN}, False), (None, False)):
         assert holds(scope(receipt), "containercluster_media_agent_foreign | bool") is foreign, receipt
 
 

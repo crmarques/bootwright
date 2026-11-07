@@ -75,7 +75,7 @@ def test_progress_covers_post_network_work_and_success_follows_refusals():
 ])
 def test_progress_conditions_match_the_frozen_request(frozen, expected):
     tasks = applied()
-    templar = Templar(loader=LOADER, variables={"bootwright_os_install_request": frozen})
+    templar = Templar(loader=LOADER, variables={"bootwright_os_install_request": {"installerArguments": [], **frozen}})
     for group in ("verify-security", "register-subscription", "update-packages", "verify-completion"):
         for status in ("running", "ok"):
             task = tasks[event(tasks, group, status)]

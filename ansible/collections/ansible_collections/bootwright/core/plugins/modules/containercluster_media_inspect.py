@@ -94,7 +94,7 @@ def receipt(path):
 def observe(request):
     """What this block has published and what its work area holds."""
     work = request["workRoot"]
-    image = (prove_push(request) if request.get("deliveryKind", "fetch") == "push"
+    image = (prove_push(request) if request["deliveryKind"] == "push"
              else published(request["image"]["path"]) is not None)
     recorded = receipt(os.path.join(work, RECEIPT))
     return {

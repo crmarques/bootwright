@@ -192,7 +192,7 @@
     networkReboot: '{{ managedos_install_anaconda_network_result.networkReboot | default(false) }}'
     networkDifferences: '{{ managedos_install_anaconda_network_result.networkDifferences | default([]) }}'
     fips: '{{ managedos_install_anaconda_fips | default(false) }}'
-    fipsRequired: "{{ 'fips=1' in (bootwright_os_install_request.installerArguments | default([])) }}"
+    fipsRequired: "{{ 'fips=1' in (bootwright_os_install_request.installerArguments) }}"
     rootEncryption: '{{ managedos_install_anaconda_root_encryption | default(false) }}'
     rootEncryptionRequired: "{{ bootwright_os_install_request.diskEncryption is defined }}"
     registration: '{{ managedos_install_anaconda_registration | default({}) }}'

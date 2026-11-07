@@ -74,7 +74,7 @@ def main():
     operation = module.params["operation"]
     try:
         request = module.params["request"]
-        present = (prove_push(request) if request.get("deliveryKind", "fetch") == "push"
+        present = (prove_push(request) if request["deliveryKind"] == "push"
                    else prove(request["image"]["path"], removal=operation == "remove"))
     except LayoutError as error:
         module.fail_json(msg="the boot image of this cluster cannot be %s safely: %s. Nothing was %s; fix that "

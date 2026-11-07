@@ -1,7 +1,6 @@
 package managedservice
 
 import (
-	"fmt"
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -50,26 +49,7 @@ func (r Request) Canonical() ([]byte, error) {
 }
 
 func DecodeRequest(data []byte, version string) (Request, error) {
-	if members, err := reconciliation.Thaw[map[string]any](data, "managed service"); err == nil {
-		frozen, ok := members["version"].(string)
-		if !ok {
-			return Request{}, Refusal("lifecycle.state", "the frozen managed service request is malformed", "")
-		}
-		if frozen != version {
-			return Request{}, Refusal("lifecycle.state", fmt.Sprintf("the frozen managed service request has version %q, and this build reads only %q", frozen, version), "destroy the context with the Bootwright build that applied it")
-		}
-	}
-	request, err := reconciliation.Thaw[Request](data, "managed service")
-	if err != nil {
-		return Request{}, err
-	}
-	if request.Version != version {
-		return Request{}, Refusal("lifecycle.state", "the frozen managed service request has an unsupported version", "")
-	}
-	if err := reconciliation.ProveCanonical(data, request, "managed service"); err != nil {
-		return Request{}, err
-	}
-	return request, nil
+	return reconciliation.ThawVersion[Request](data, "managed service", version)
 }
 
 // ReservationKeys are the exclusive host resources this request claims.

@@ -16,13 +16,13 @@
     follow: false
     get_checksum: false
   register: containercluster_install_agent_pushed_image
-  when: (bootwright_cluster_install_request.deliveryKind | default('fetch')) == 'push'
+  when: bootwright_cluster_install_request.deliveryKind == 'push'
 
 - name: Decide whether this cluster has an image for its nodes to boot
   ansible.builtin.set_fact:
     containercluster_install_agent_image_ready: >-
       {{ (containercluster_install_agent_pushed_image.stat.isreg | default(false))
-         if (bootwright_cluster_install_request.deliveryKind | default('fetch')) == 'push' else containercluster_install_agent_url | length > 0 }}
+         if bootwright_cluster_install_request.deliveryKind == 'push' else containercluster_install_agent_url | length > 0 }}
 
 - name: Retain a missing boot image as a typed node refusal
   ansible.builtin.set_fact:
@@ -110,7 +110,7 @@
         # A fetching node is handed a link of its own; a pushed node is handed
         # the file, so it has no link to publish, prove or retire.
         - name: Publish and prove this insert's own link
-          when: not ((bootwright_cluster_install_request.deliveryKind | default('fetch')) == 'push')
+          when: not (bootwright_cluster_install_request.deliveryKind == 'push')
           block:
             - name: Publish a fresh private link for this insert
               bootwright.core.containercluster_media_token:
@@ -289,7 +289,7 @@
             image: '{{ containercluster_install_agent_token.url }}'
             operation: remove
           when:
-            - not ((bootwright_cluster_install_request.deliveryKind | default('fetch')) == 'push')
+            - not (bootwright_cluster_install_request.deliveryKind == 'push')
             - containercluster_install_agent_insertion.msg is defined
             - containercluster_install_agent_after_insert.media is defined
             - containercluster_install_agent_token.url.split('/')[-2] not in (containercluster_install_agent_after_insert.media | string)

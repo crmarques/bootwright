@@ -323,11 +323,10 @@ func TestRequestRefusalsNameTheFieldThatDeclaresIt(t *testing.T) {
 	}
 }
 
-// The content digest binds a plan to this build's behavior, so deleting the
-// tooling list it once named must leave its input, and every frozen plan,
-// unchanged.
+// The content digest binds a plan to this build's behavior, so any change to
+// what it hashes is deliberate.
 func TestTheContentDigestIsPinned(t *testing.T) {
-	if digest := ContentDigest(); digest != "f1798c5ed87219bf0d8b61d938a6752584130b27872e65c9751c5b5d5283891a" {
+	if digest := ContentDigest(); digest != "4c1db159a8361ffb365bab97035feca8e932f6d80db8d2f748212ad1e172bb7f" {
 		t.Fatalf("content digest = %s", digest)
 	}
 }

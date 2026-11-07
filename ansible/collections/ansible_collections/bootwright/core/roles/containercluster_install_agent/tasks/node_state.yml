@@ -40,7 +40,7 @@
       ansible.builtin.set_fact:
         containercluster_install_agent_node_identity:
           own: "{{ containercluster_install_agent_node_read.media_state | default('') == 'own' }}"
-      when: (bootwright_cluster_install_request.deliveryKind | default('fetch')) == 'push'
+      when: bootwright_cluster_install_request.deliveryKind == 'push'
       no_log: true
 
     - name: Mark this node phase complete only after its final step

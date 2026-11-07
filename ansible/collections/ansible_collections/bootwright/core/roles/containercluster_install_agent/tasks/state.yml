@@ -56,7 +56,7 @@
         {{ (containercluster_install_agent_controllers.results | default([])
             | selectattr('media_state', 'defined') | selectattr('media_state', 'equalto', 'own')
             | map(attribute='item.machine') | list)
-           if (bootwright_cluster_install_request.deliveryKind | default('fetch')) == 'push' else
+           if bootwright_cluster_install_request.deliveryKind == 'push' else
            (containercluster_install_agent_media_identity.results | default([])
             | selectattr('own', 'defined') | selectattr('own', 'equalto', true)
             | map(attribute='item.item.machine') | list) }}

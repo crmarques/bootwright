@@ -217,7 +217,7 @@ def test_disk_backed_first_pull_replays_without_deleting_attempt_records(request
 
 
 @pytest.mark.parametrize("state", ["cached", "uncompleted", "exhausted"])
-def test_disk_backed_pull_continuation_preserves_validated_records_and_cleans_legacy_scratch(request_value, tmp_path, state):
+def test_disk_backed_pull_continuation_preserves_validated_records_and_cleans_killed_pull_scratch(request_value, tmp_path, state):
     podman = Podman(request_value, ["ok"] if state == "exhausted" else [], present=state != "exhausted")
     worker, markers = filesystem_host_runtime(request_value, tmp_path, podman)
     count = runtime.PULL_ATTEMPTS if state == "exhausted" else 1

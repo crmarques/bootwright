@@ -1234,11 +1234,7 @@ controller the tokenized URL of the private installer image, so it refuses
 before registration, naming its Machine, unless its BMC is addressed
 over `https` with its certificate verified: `tls.verify` not opted out, and a
 `tls.trustBundleRef` naming the authority when the system trust store does not
-hold it. An operation that froze an installation with no single installer
-image publication, or a private publication over an unverified
-controller-to-BMC leg, refuses its apply at execution, naming the Machine and
-directing the operator to destroy the operation and plan again, while its destroy and
-observation still run.
+hold it.
 
 This arm is proved in-tree only. The emulated rehearsal, B73's operator gate,
 and an installation on real hardware ([B78](milestones/m1.md#b78)) have not

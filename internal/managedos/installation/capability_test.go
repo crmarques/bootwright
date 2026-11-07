@@ -534,71 +534,13 @@ func privateExecution(t *testing.T, freeze func(*Request)) (lifecycle.Execution,
 }
 
 // A verified physical installation that publishes its installer image only
-// beneath its private subtree reaches the adapter. An operation registered
-// before the controller-leg rule or the single-publication rule still carries
-// what it froze: its apply refuses before the adapter boots or publishes
-// anything, naming the Machine, while its destroy and its observation still
-// run, because they install nothing and are how the operator leaves that
-// operation.
-func TestAFrozenRefusedInstallationRefusesOnlyItsApply(t *testing.T) {
+// beneath its private subtree reaches the adapter.
+func TestAVerifiedPrivateInstallationReachesTheAdapter(t *testing.T) {
 	call, request := privateExecution(t, nil)
 	marker, _ := MarkerFor(request, "digest")
 	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: completeEvidence(request, "digest", string(marker))}}
 	if _, err := New(runner).WithIdentities(&pinReader{}).Apply(context.Background(), call); len(runner.requests) != 1 {
 		t.Fatalf("a verified private installation did not reach the adapter: %v", diagnostics.Of(err))
-	}
-	public := &Publication{Path: "/srv/public/os/rhel-01/install.iso", URL: "https://artifacts.lab.example.test/os/rhel-01/install.iso"}
-	for name, test := range map[string]struct {
-		freeze  func(*Request)
-		message string
-	}{
-		"an http controller": {
-			func(r *Request) { r.Target.Controller.Endpoint = "http://bmc-01.lab.example.test/redfish/v1/Systems/1" },
-			"this operation froze a private publication for Machine/rhel-01 whose BMC is not reached over a verified connection, which this executable refuses",
-		},
-		"an unverified controller": {
-			func(r *Request) { r.Target.Controller.TLSVerify = false },
-			"this operation froze a private publication for Machine/rhel-01 whose BMC is not reached over a verified connection, which this executable refuses",
-		},
-		"both publications": {
-			func(r *Request) { r.Image = public },
-			"this operation froze an installation of Machine/rhel-01 with no single installer image publication, which this executable refuses",
-		},
-		"neither publication": {
-			func(r *Request) { r.Private = nil },
-			"this operation froze an installation of Machine/rhel-01 with no single installer image publication, which this executable refuses",
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			call, request := privateExecution(t, test.freeze)
-			marker, _ := MarkerFor(request, "digest")
-			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: completeEvidence(request, "digest", string(marker))}}
-			result, err := New(runner).WithIdentities(&pinReader{}).Apply(context.Background(), call)
-			if err == nil || result.Outcome != reconciliation.OutcomeFailed {
-				t.Fatalf("an apply of a frozen refused installation = %+v (%v)", result, err)
-			}
-			reported := diagnostics.Of(err)
-			if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != test.message {
-				t.Fatalf("refusal = %#v", reported)
-			}
-			if reported[0].Remediation != "run bootwright destroy --context lab-b to end this operation, then plan it again under this executable" {
-				t.Fatalf("remediation = %q", reported[0].Remediation)
-			}
-			if len(runner.requests) != 0 {
-				t.Fatal("a refused apply reached the adapter")
-			}
-			absent, _ := json.Marshal(Evidence{Absent: true, Postcondition: true, Request: "digest"})
-			runner = &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: absent}}
-			if _, err := New(runner).WithIdentities(&pinReader{}).Destroy(context.Background(), call); err != nil || len(runner.requests) != 1 {
-				t.Fatalf("destroy of a frozen refused installation = %v after %d invocations", err, len(runner.requests))
-			}
-			fresh, _ := json.Marshal(Evidence{Power: "Off", Request: "digest"})
-			runner = &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: fresh}}
-			observation, err := New(runner).WithIdentities(&pinReader{}).Observe(context.Background(), call)
-			if err != nil || observation.Effect != reconciliation.EffectNoEffect {
-				t.Fatalf("observation of a frozen refused installation = %+v (%v)", observation, err)
-			}
-		})
 	}
 }
 

@@ -12,7 +12,6 @@ import (
 	controllerscope "github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
-	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -256,56 +255,6 @@ func TestAbsentClientsRefuseBeforeBooting(t *testing.T) {
 	}
 	if len(runner.requests) != 0 {
 		t.Fatal("the adapter was invoked without its clients")
-	}
-}
-
-// An operation registered before physical nodes were refused still carries one
-// in its frozen request. Its apply refuses before the adapter boots anything,
-// naming the node, while its destroy and its observation still run, because
-// they boot nothing and are how the operator leaves that operation.
-func TestAnUnsafeFrozenPhysicalNodeRefusesOnlyItsApply(t *testing.T) {
-	execution, request := installExecution(t, singleNodeCatalog(), testDigest)
-	request.Nodes[0].Physical = true
-	request.Nodes[0].ControllerKind = "physical"
-	request.Nodes[0].Hardware = &Hardware{RootSelector: "wwn"}
-	request.Nodes[0].Controller.TLSVerify = false
-	canonical, err := request.Canonical()
-	if err != nil {
-		t.Fatal(err)
-	}
-	execution.Block.Request, execution.Context = canonical, "lab-b"
-	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: installEvidence(t, testDigest, nil)}}
-	result, err := NewInstall(runner).Apply(context.Background(), execution)
-	if err == nil {
-		t.Fatal("an apply booted a frozen physical node")
-	}
-	if result.Outcome != reconciliation.OutcomeFailed {
-		t.Fatalf("outcome = %q", result.Outcome)
-	}
-	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
-		reported[0].Message != "Machine/sno-01 of OpenShiftCluster/sno: a physical node's private boot image requires a BMC connection that verifies its certificate" {
-		t.Fatalf("refusal = %#v", reported)
-	}
-	if reported[0].Remediation != "run bootwright destroy --context lab-b to end this operation, then correct the node's transport trust and plan it again" {
-		t.Fatalf("remediation = %q", reported[0].Remediation)
-	}
-	if len(runner.requests) != 0 {
-		t.Fatal("a refused apply reached the adapter")
-	}
-	runner = &fakeRunner{result: lifecycle.RunResult{
-		Outcome: "changed",
-		Evidence: installEvidence(t, testDigest, func(e *InstallEvidence) {
-			e.Absent, e.Postcondition, e.Media = true, true, []string{}
-		}),
-	}}
-	if _, err := NewInstall(runner).Destroy(context.Background(), execution); err != nil || len(runner.requests) != 1 {
-		t.Fatalf("destroy of a frozen physical node = %v after %d invocations", err, len(runner.requests))
-	}
-	runner = &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: installEvidence(t, testDigest, nil)}}
-	observation, err := NewInstall(runner).Observe(context.Background(), execution)
-	if err != nil || observation.Effect != reconciliation.EffectCompleted {
-		t.Fatalf("observation of a frozen physical node = %+v (%v)", observation, err)
 	}
 }
 

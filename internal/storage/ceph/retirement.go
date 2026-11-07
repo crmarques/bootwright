@@ -275,5 +275,5 @@ func retirementVersionFailure(got, want string) error {
 		want = "no version"
 	}
 	return failure("lifecycle.state", fmt.Sprintf("the Ceph retirement record carries %s, and this build reads only %s", got, want),
-		"continue this operation with the Bootwright build that recorded it; this build converts no older record")
+		"continue this operation with the Bootwright build that recorded it")
 }

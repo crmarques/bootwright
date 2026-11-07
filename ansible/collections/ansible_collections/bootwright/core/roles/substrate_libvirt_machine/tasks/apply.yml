@@ -181,10 +181,10 @@
   environment:
     HTTP_PROXY: '{{ bootwright_substrate_machine_request.egress.httpProxy | default("") }}'
     HTTPS_PROXY: '{{ bootwright_substrate_machine_request.egress.httpsProxy | default("") }}'
-    NO_PROXY: '{{ bootwright_substrate_machine_request.egress.noProxy | default([], true) | join(",") }}'
+    NO_PROXY: '{{ bootwright_substrate_machine_request.egress.noProxy | join(",") }}'
     http_proxy: '{{ bootwright_substrate_machine_request.egress.httpProxy | default("") }}'
     https_proxy: '{{ bootwright_substrate_machine_request.egress.httpsProxy | default("") }}'
-    no_proxy: '{{ bootwright_substrate_machine_request.egress.noProxy | default([], true) | join(",") }}'
+    no_proxy: '{{ bootwright_substrate_machine_request.egress.noProxy | join(",") }}'
   register: substrate_libvirt_machine_pull
   when: substrate_libvirt_machine_image_present.rc != 0
   changed_when: substrate_libvirt_machine_image_present.rc != 0

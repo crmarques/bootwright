@@ -473,7 +473,7 @@ def test_closed_scope_shapes_apply_to_material_and_native_effect_records(client,
     assert client.state.generated == client.state.added == 1
 
 
-def test_legacy_secret_hash_is_refused_without_adoption(client):
+def test_a_secret_hash_only_record_is_refused_without_adoption(client):
     client.markers.records["client-id-consumer.json"] = {"keyHash": hashlib.sha256(client.state.key.encode()).hexdigest()}
     with pytest.raises(ceph_native.Refusal, match="client-identity"):
         client.native.client()

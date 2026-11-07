@@ -60,6 +60,7 @@ INCLUDES = ("ansible.builtin.include_tasks", "ansible.builtin.import_tasks")
 def request(tmp_path):
     """The frozen media request's fields the inspection and these tasks read."""
     return {
+        "deliveryKind": "fetch",
         "identity": {"block": "cluster-media-sno", "cluster": "sno", "context": "lab"},
         "image": {"path": str(tmp_path / "private"), "url": URL},
         "release": {"version": RELEASE},
@@ -189,16 +190,13 @@ def incarnation_refusal():
 
 
 def receipt_of(incarnation):
-    content = {"inputs": DIGEST, "installer": RELEASE}
-    if incarnation is not None:
-        content["incarnation"] = incarnation
+    content = {"inputs": DIGEST, "installer": RELEASE, "incarnation": incarnation}
     return {"content": base64.b64encode(json.dumps(content).encode()).decode()}
 
 
 INCARNATIONS = {
     "another incarnation": (receipt_of("64769:9999"), True),
     "this incarnation": (receipt_of("64769:4242"), False),
-    "a receipt an earlier build wrote": (receipt_of(None), False),
     "no receipt": ({"failed": True, "msg": "file not found"}, False),
 }
 

@@ -481,8 +481,7 @@ filesystem reuses a freed inode; a context directory with neither refuses
 another incarnation, as a recreated context of the same name finds one its
 predecessor left, refuses before any effect, naming the area and keeping it,
 and the hand-over of a kept kubeconfig to custody before a removal refuses
-naming such an area rather than skipping it. A receipt an earlier build wrote
-records no directory identity and names no other incarnation.
+naming such an area rather than skipping it.
 
 **A work area an installation booted from is never rebuilt.** The area also
 holds the state the [installation](#installation) boots its nodes into and the
@@ -579,9 +578,9 @@ was built from the same inputs by the same installer version. It publishes
 nothing, yet it applies the published image's mode and label again and proves
 the publication by the same fetch through the listener a build makes, as the
 [private consumer publication contract](infrastructure-services.md#private-consumer-publication)
-requires, before it reports: an image an earlier executable published with a
-mode the serving process cannot read is repaired and reported changed, and one
-the listener still refuses fails the block with its cause. The inverse
+requires, before it reports: a published image with a mode the serving
+process cannot read is repaired and reported changed, and one the listener
+still refuses fails the block with its cause. The inverse
 removes the published image and the private directory that held it, discards
 the installer work directory, and proves each absent. That directory holds the
 installation's kept administrator kubeconfig, which is never deleted while
@@ -626,9 +625,7 @@ node's disk, and that is the moment its existing content is lost. A cluster of
 virtual nodes consumes nothing here, because their disks are created by their
 realization and removed by its inverse. A physical node refuses before
 registration, as [selection](#selection-and-refusal)
-states; an operation that froze one refuses its apply at execution, naming the
-node and directing the operator to destroy the operation and plan again, while
-its destroy and observation still run.
+states.
 
 **Resolution before boot.** The installer polls the cluster API from the
 controller, so before anything is booted the block resolves the name of each
