@@ -308,6 +308,7 @@ Alias cell.
 | [B1214](#b1214) | new, 2026-11-08 (lab-5-nodes-ceph-networks run) | product | Infrastructure services | A managed DNS name answers only the addresses its clients reach | Every client of this run dialed IPs; cephadm takes each host's address explicitly |
 | [B1215](#b1215) | new, 2026-11-08 (lab-5-nodes-ceph-networks run) | product | Substrate | A managed libvirt network does not route the CIDR of a tagged Network it carries with no host address | Only a misdirected guest probe left through NAT; no Ceph traffic routes there |
 | [B1216](#b1216) | new, 2026-11-08 (owner's host cleanup) | product | Controller, with Workspace | A controller store an older build wrote has a named, cheap exit | D241 makes the refusal rare; the owner recovered by hand once |
+| [B1217](#b1217) | new, 2026-11-08 (X326 review) | defect | Substrate, with Managed OS | The capacity gate attributes each publication to its own filesystem and reads a stage-scoped apply's completed installs | A mount below a per-context content root is unusual, and the owner's staged applies continue one operation |
 
 ### B82
 
@@ -3430,6 +3431,26 @@ unit or container remains on the host, then archives or removes those roots
 and names each path.
 **Outcome:** a version move costs one named command, never a hand-written
 removal.
+
+
+### B1217
+
+**Owner:** Substrate, with Managed OS. **Kind:** defect. **Requires:** X326.
+**Definition:** `Specified`, from the review of
+[X326](delivered.md#x326--capacity-admission-counts-what-the-apply-writes): (1) the
+gate observes publications at their artifact server's content root, so a
+filesystem mounted below that root would be charged to the root's; observe the
+nearest existing ancestor of each publication's own directory instead,
+de-duplicated per host and directory; (2) storage preflight reads an
+installation block's completion from the current operation's lineage, so an
+apply started alone with `--stage` that holds no installation block would count
+media already written; either prove that such an apply chains to the apply that
+installed the Machines, or read the latest apply that held the block. Optional:
+read completion once per preflight rather than per Machine, and derive the
+publication root from the request's selected server rather than selecting it
+again. **Exit evidence:** a test of each case failing on X326's source.
+**Outcome:** a publication is gated on the filesystem it lands on, and an
+installed Machine's media are never counted twice.
 
 ## Audit remediation (2026-10-26)
 
