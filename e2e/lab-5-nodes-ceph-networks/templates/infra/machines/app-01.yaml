@@ -12,10 +12,10 @@ spec:
 
       nics:
         - nicRef: nic0
-          segmentRef: ceph-trunk
+          segmentRef: ceph-public
 
         - nicRef: nic1
-          segmentRef: user-lan
+          segmentRef: app-users
 
   hardware:
     nics:
@@ -39,7 +39,7 @@ spec:
 
       - name: ip
         address: {{ $app.public }}
-        interface: nic0.{{ .Values.networks.cephPublic.vlan }}
+        interface: nic0
 
       - name: user
         address: {{ $app.user }}

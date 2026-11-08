@@ -1,9 +1,9 @@
-"""Client of the lab-4-nodes-ceph-vlans sample server.
+"""Client of the lab-5-nodes-ceph-networks sample server.
 
-Runs in a container on the controller host, on the host network, and talks to
+Runs in a container on client-01, on that guest's network, and talks to
 the sample server over the user network only. Standard library only:
 
-    podman run --rm -i --network host IMAGE python3 - URL MODE [EXPECTED_SOURCE] < client.py
+    client-run.sh IMAGE URL MODE [EXPECTED_SOURCE]
 
 MODE is one of
     roundtrip     for each store: put 4 KiB, 1 MiB and 8 MiB of random bytes,
@@ -26,7 +26,7 @@ import urllib.request
 
 STORES = ("block", "file", "object")
 SIZES = (4096, 1024 * 1024, 8 * 1024 * 1024)
-CANARY = "canary-lab-4-nodes-ceph-vlans"
+CANARY = "canary-lab-5-nodes-ceph-networks"
 
 
 def call(base, method, path, body=None):

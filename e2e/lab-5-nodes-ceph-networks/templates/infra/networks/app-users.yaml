@@ -1,0 +1,18 @@
+{{- $n := .Values.networks.user -}}
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: app-users
+
+spec:
+  provided: false
+  description: The user network lab-libvirt defines on its host for the sample server and its client, NAT to the internet.
+
+  ipv4:
+    cidr: {{ $n.cidr }}
+    gateway: {{ $n.gateway }}
+
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: {{ $n.bridge }}
+    forward: nat

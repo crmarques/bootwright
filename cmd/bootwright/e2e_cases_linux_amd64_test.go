@@ -48,9 +48,9 @@ var e2eRenders = map[string][]e2eRender{
 	},
 	"lab-network-variants":           {{name: "default"}},
 	"lab-3-nodes-ceph-host-variants": {{name: "default"}},
-	"lab-4-nodes-ceph-vlans":         {{name: "default"}},
 	"lab-3-nodes-ocp":                {{name: "metallb off", sets: []string{"addons.metallb=false"}}},
 	"lab-3-nodes-ocp-features":       {{name: "mirror off", sets: []string{"mirror.enabled=false"}}},
+	"lab-5-nodes-ceph-networks":      {{name: "default"}},
 	"lab-5-nodes-ceph-stretch": {
 		{name: "default"},
 		{name: "file off", sets: []string{"ceph.services.file=false"}},

@@ -1,0 +1,37 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: client-01
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: client
+
+      nics:
+        - nicRef: nic0
+          segmentRef: app-users
+
+  hardware:
+    nics:
+      - name: nic0
+
+    rootDevice:
+      deviceName: /dev/vda
+
+  os:
+    provided: false
+    installProfileRef: rhel
+
+  network:
+    configRef: client
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: client-01.{{ .Values.host.domain }}
+
+      - name: ip
+        address: {{ .Values.guest.client.address }}
+        interface: nic0

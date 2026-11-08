@@ -1,4 +1,4 @@
-"""Sample server of the lab-4-nodes-ceph-vlans case.
+"""Sample server of the lab-5-nodes-ceph-networks case.
 
 It answers HTTP on the user network only and stores each request body in one
 of three Ceph stores reached over the Ceph public network:

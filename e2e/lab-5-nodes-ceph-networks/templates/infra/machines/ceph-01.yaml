@@ -12,7 +12,7 @@ spec:
 
       nics:
         - nicRef: nic0
-          segmentRef: ceph-trunk
+          segmentRef: ceph-public
 
   hardware:
     nics:
@@ -35,7 +35,7 @@ spec:
 
       - name: ip
         address: {{ $node.public }}
-        interface: nic0.{{ .Values.networks.cephPublic.vlan }}
+        interface: nic0
 
       - name: cluster
         address: {{ $node.cluster }}

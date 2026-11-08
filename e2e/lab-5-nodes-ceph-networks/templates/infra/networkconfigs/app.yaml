@@ -17,21 +17,6 @@ spec:
         mtu: 1500
 
         ipv4:
-          enabled: false
-
-        ipv6:
-          enabled: false
-
-      - name: nic0.{{ $pub.vlan }}
-        type: vlan
-        state: up
-        mtu: 1500
-
-        vlan:
-          base-iface: nic0
-          id: {{ $pub.vlan }}
-
-        ipv4:
           enabled: true
           dhcp: false
 
@@ -59,6 +44,6 @@ spec:
       config:
         - destination: 0.0.0.0/0
           next-hop-address: {{ $pub.gateway }}
-          next-hop-interface: nic0.{{ $pub.vlan }}
+          next-hop-interface: nic0
           table-id: 254
           metric: 100

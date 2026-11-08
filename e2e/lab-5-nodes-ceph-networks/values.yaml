@@ -1,4 +1,4 @@
-# Default input of the lab-4-nodes-ceph-vlans case. Override keys with
+# Default input of the lab-5-nodes-ceph-networks case. Override keys with
 # e2e/render.sh --set or a --values file.
 
 host:
@@ -13,39 +13,32 @@ host:
   upstreamNTP:
     - 162.159.200.1
 
-# Two operator-created bridges without a physical port. The runbook makes
-# them and Bootwright never creates or removes them. cephBridge is a VLAN
-# trunk carrying cephPublic and cephCluster tagged; userBridge carries the
-# user network untagged.
-fabric:
-  cephBridge: br-ceph
-  userBridge: br-user
-
-  # The largest frame the trunk carries: the replication VLAN uses jumbo
-  # frames, the public VLAN stays at 1500.
-  cephTrunkMTU: 9000
-
+# Every network below is a Bootwright Network. Bootwright creates the two
+# managed ones on this host (bridge, host address, NAT) and removes them at
+# destroy; the cluster VLAN rides tagged on the public network's bridge.
 networks:
-  # Ceph public (client) network: install, SSH, MON, OSD front and RGW
-  # ingress traffic. The host's VLAN leg holds the gateway.
+  # Ceph public (client) network, managed: install, SSH, MON, OSD front and
+  # RGW ingress traffic. NAT gives the guests internet access.
   cephPublic:
-    vlan: 110
+    bridge: virbr-ceph
     cidr: 198.51.100.0/26
     gateway: 198.51.100.1
     prefix: 26
 
-  # Ceph cluster (replication) network: OSD back traffic only. No gateway and
-  # no host leg, so nothing outside the three Ceph hosts reaches it.
+  # Ceph cluster (replication) network: OSD back traffic only, VLAN 120
+  # tagged on virbr-ceph. No host address, so nothing outside the three Ceph
+  # hosts reaches it.
   cephCluster:
     vlan: 120
     cidr: 203.0.113.0/26
-    mtu: 9000
 
-  # User network: the HTTP clients of the sample server. The host's address on
-  # userBridge is the only other member.
+  # User network, managed: the sample server's clients. Its NAT lets
+  # client-01 pull its container image; libvirt refuses new connections
+  # between the two managed networks.
   user:
+    bridge: virbr-user
     cidr: 198.51.100.64/26
-    hostAddress: 198.51.100.65
+    gateway: 198.51.100.65
     prefix: 26
 
 # Media names as added with `bootwright media add --name`.
@@ -67,9 +60,9 @@ guest:
       - public: 198.51.100.13
         cluster: 203.0.113.13
 
-    cpu: 4
+    cpu: 3
     memoryMiB: 6144
-    diskGiB: 35
+    diskGiB: 30
     osdDiskGiB: 25
 
   # app-01: the sample server, on the Ceph public and the user networks.
@@ -79,6 +72,13 @@ guest:
     cpu: 2
     memoryMiB: 2048
     diskGiB: 20
+
+  # client-01: the client container, on the user network only.
+  client:
+    address: 198.51.100.80
+    cpu: 1
+    memoryMiB: 1536
+    diskGiB: 15
 
 # IBM Storage Ceph. A release moves these together: release, packageVersion,
 # ansiblePackageVersion, image, callHome and the auxiliary images below; the

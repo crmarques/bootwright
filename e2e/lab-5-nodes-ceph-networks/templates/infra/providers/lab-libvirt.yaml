@@ -1,5 +1,6 @@
 {{- $ceph := .Values.guest.ceph -}}
 {{- $app := .Values.guest.app -}}
+{{- $client := .Values.guest.client -}}
 apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
 metadata:
@@ -40,19 +41,8 @@ spec:
         diskGiB: {{ $app.diskGiB }}
         tpm: {}
 
-  segments:
-    - name: ceph-trunk
-      mtu: {{ .Values.fabric.cephTrunkMTU }}
-
-      taggedNetworkRefs:
-        - ceph-public
-        - ceph-cluster
-
-      libvirt:
-        bridge: {{ .Values.fabric.cephBridge }}
-
-    - name: user-lan
-      untaggedNetworkRef: app-users
-
-      libvirt:
-        bridge: {{ .Values.fabric.userBridge }}
+      - name: client
+        cpu: {{ $client.cpu }}
+        memoryMiB: {{ $client.memoryMiB }}
+        diskGiB: {{ $client.diskGiB }}
+        tpm: {}

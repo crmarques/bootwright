@@ -1,7 +1,7 @@
 apiVersion: bootwright.io/v1alpha1
 kind: Environment
 metadata:
-  name: lab-4-nodes-ceph-vlans
+  name: lab-5-nodes-ceph-networks
 
 spec:
   domains:

@@ -1,8 +1,8 @@
-{{- $node := index .Values.guest.ceph.nodes 2 -}}
+{{- $node := index .Values.guest.ceph.nodes 1 -}}
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata:
-  name: ceph-03
+  name: ceph-02
 
 spec:
   substrate:
@@ -12,7 +12,7 @@ spec:
 
       nics:
         - nicRef: nic0
-          segmentRef: ceph-trunk
+          segmentRef: ceph-public
 
   hardware:
     nics:
@@ -31,11 +31,11 @@ spec:
 
     addresses:
       - name: fqdn
-        address: ceph-03.{{ .Values.host.domain }}
+        address: ceph-02.{{ .Values.host.domain }}
 
       - name: ip
         address: {{ $node.public }}
-        interface: nic0.{{ .Values.networks.cephPublic.vlan }}
+        interface: nic0
 
       - name: cluster
         address: {{ $node.cluster }}
