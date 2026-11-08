@@ -132,11 +132,15 @@ systemctl reset-failed "$unit" 2>/dev/null || true
 systemd-run --unit "$unit" --property Restart=on-failure --property RestartSec=2 \
     /usr/bin/python3 -I "$lib/sample-server.py" "$etc/config.json"
 
-for _ in $(seq 1 30); do
-    if curl -fsS --noproxy '*' "http://$USER_ADDRESS:$PORT/healthz"; then
+# The unit needs a moment to listen; only the last poll's error is shown.
+for _ in $(seq 1 29); do
+    if curl -fsS --noproxy '*' "http://$USER_ADDRESS:$PORT/healthz" 2>/dev/null; then
         exit 0
     fi
     sleep 2
 done
+if curl -fsS --noproxy '*' "http://$USER_ADDRESS:$PORT/healthz"; then
+    exit 0
+fi
 journalctl -u "$unit" -n 50 --no-pager >&2
 exit 1
