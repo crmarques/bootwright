@@ -70,8 +70,10 @@ func AdmitCapacity(ctx context.Context, contextName string, catalog api.Catalog,
 	}
 	var projected []capacity.Write
 	if writes != nil {
-		projected, err = writes(ctx, catalog, contextName, allocations, func(kind, object string) bool {
-			return slices.ContainsFunc(starting, func(block reconciliation.Block) bool { return block.Kind == kind && block.Object == object })
+		projected, err = writes(ctx, catalog, contextName, allocations, func(kind, implementation, object string) (bool, error) {
+			return slices.ContainsFunc(starting, func(block reconciliation.Block) bool {
+				return block.Kind == kind && block.Implementation == implementation && block.Object == object
+			}), nil
 		})
 		if err != nil {
 			return err

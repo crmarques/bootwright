@@ -30,6 +30,11 @@ func (o containerPreflightOwnership) Ownership(context.Context, string) (map[str
 	return o, nil
 }
 
+func (o containerPreflightOwnership) Completed(_ context.Context, _, kind, _, object string) (bool, error) {
+	state := o[kind+"/"+object]
+	return state.Verb == machine.VerbApply && state.State == machine.BlockDone, nil
+}
+
 type containerCapacityFacts capacity.Facts
 
 func (f containerCapacityFacts) Observe(context.Context, capacity.Target) (capacity.Facts, error) {

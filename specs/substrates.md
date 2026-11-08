@@ -628,16 +628,20 @@ and storage preflight report the same checks.
 
 Each backing filesystem's disk check also counts what the apply itself writes
 there beside the guests' disks ([D242](milestones/backlog.md#d242), pending the
-owner's review): the hosted package tree of each install profile whose tree
-block may still start, and, for each Bootwright-installed Machine whose blocks
-may still start, its installer image as the artifact server publishes it and,
-on a libvirt provider, the copy its emulated controller stages in that
-provider's virtual-media pool. A write counts on the filesystem its own path,
-or that path's nearest existing ancestor, resolves to on the host it lands on,
-observed as the pool path is. It joins a check only when that filesystem holds
-a counted guest disk on the same host; on any other filesystem it is not
-gated. A write whose filesystem cannot be observed makes that host's disk
-checks unknown.
+owner's review): each hosted package tree publication path, once, while its
+tree block may still start, and, for each Bootwright-installed Machine whose
+installation block may still start, its installer image as the artifact server
+publishes it and, on a libvirt provider, the copy its emulated controller
+stages in that provider's virtual-media pool. A block is read by its kind,
+object and implementation, so a Machine's firewall, erase or realization block
+never stands for its installation. A publication counts on the filesystem of
+its artifact server's content root, which the server owns for the context, and
+a staged copy on that of the pool path; each is read once, at that path or its
+nearest existing ancestor, whatever its type and without following a link, on
+the host the write lands on, as the pool path is. A write joins a check only
+when that filesystem holds a counted guest disk on the same host; on any other
+filesystem it is not gated. A write whose filesystem cannot be observed makes
+that host's disk checks unknown.
 
 Sizes are known before the effect. The admission reads the image sizes its
 plan froze; preflight reads the media store's records, and an image without a
@@ -648,12 +652,13 @@ copy its boot image's size plus `installation.InstallerAllowance` (64 MiB, the
 kickstart and boot configuration mkksiso adds). A write receives no credit for
 bytes already present: a retried tree publication clears its staging before it
 extracts, and a rebuilt installer image replaces the published one only by
-rename, so each needs its full size again. Preflight counts the writes of a
-Machine or profile whose blocks the context's applied operation has not
-completed; a completed apply's bytes are already absent from the observed
-availability. The disk check's reason names each group it counts: the guest
-disks, each hosted package tree, the published and the staged installer media,
-and the reserve.
+rename, so each needs its full size again. Preflight counts the writes of an
+installation or tree block the context's applied operation has not completed,
+reading that block's own record; a completed block's bytes are already absent
+from the observed availability. A dry run and a context with no libvirt guest
+project no writes. The disk check's reason names each group it counts: the
+guest disks, each hosted package tree, the published and the staged installer
+media, and the reserve.
 
 A provider host on the SSH arm is observed over its placement connection,
 pinned to its `knownHostsRef` key and authenticated by its `privateKeyRef`.

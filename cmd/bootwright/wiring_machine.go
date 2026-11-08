@@ -161,6 +161,24 @@ func (o machineOwnership) Ownership(ctx context.Context, name string) (map[strin
 	return owned, nil
 }
 
+func (o machineOwnership) Completed(ctx context.Context, contextName, kind, implementation, object string) (bool, error) {
+	published, err := o.reconciler.Evidence(ctx, contextName, kind, object)
+	if err != nil {
+		return false, err
+	}
+	completed := false
+	for _, block := range published {
+		if block.Implementation != implementation {
+			continue
+		}
+		if block.Verb != reconciliation.Apply || block.State != reconciliation.BlockDone {
+			return false, nil
+		}
+		completed = true
+	}
+	return completed, nil
+}
+
 // machineRealization reads the block that realizes one Machine on its
 // provider. Its emulated controller or KubeVirt port is that block's effect,
 // so power asks it alone: the installation that follows it on the same

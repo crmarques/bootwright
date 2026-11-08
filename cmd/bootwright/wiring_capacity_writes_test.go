@@ -103,13 +103,13 @@ func TestCapacityAdmissionCountsWhatTheApplyWritesBesideItsGuests(t *testing.T) 
 	if err := admit(filesystemFacts{available: fits, apart: "/var/lib/bootwright-services/"}, fixture.starting[:1]); err == nil {
 		t.Fatal("the staged installer image on the guests' filesystem was not counted")
 	}
-	var guestsOnly []reconciliation.Block
+	var installsOnly []reconciliation.Block
 	for _, block := range fixture.starting {
-		if block.Kind == libvirt.MachineKind {
-			guestsOnly = append(guestsOnly, block)
+		if block.Implementation == installation.Implementation {
+			installsOnly = append(installsOnly, block)
 		}
 	}
-	if err := admit(filesystemFacts{available: fits + fixture.staged, apart: "/var/lib/bootwright-services/"}, guestsOnly); err != nil {
+	if err := admit(filesystemFacts{available: fits + fixture.staged, apart: "/var/lib/bootwright-services/"}, installsOnly); err != nil {
 		t.Fatalf("published media on another filesystem, or a tree no block starts, was counted: %v", diagnostics.Of(err))
 	}
 }
@@ -157,6 +157,11 @@ type staticOwnership map[string]machine.OwnershipState
 
 func (s staticOwnership) Ownership(context.Context, string) (map[string]machine.OwnershipState, error) {
 	return s, nil
+}
+
+func (s staticOwnership) Completed(_ context.Context, _, kind, _, object string) (bool, error) {
+	state := s[kind+"/"+object]
+	return state.Verb == machine.VerbApply && state.State == machine.BlockDone, nil
 }
 
 func diskReason(checks []capacity.Check) string {

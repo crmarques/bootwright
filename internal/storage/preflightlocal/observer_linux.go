@@ -66,7 +66,7 @@ func (o Observer) Observe(ctx context.Context, target preflight.Target) (preflig
 	return facts, ctx.Err()
 }
 func diskFacts(path string) preflight.Facts {
-	disk, identity, err := availableDisk(path)
+	disk, identity, err := filesystemOf(path)
 	if err != nil {
 		return preflight.Facts{Reason: "the bounded local filesystem capacity fact could not be read"}
 	}
@@ -96,15 +96,7 @@ func availableDisk(path string) (int64, string, error) {
 			if err != nil || !info.IsDir() {
 				return 0, "", errors.New("pool ancestor is not a readable directory")
 			}
-			var stat unix.Statfs_t
-			if err := unix.Fstatfs(int(file.Fd()), &stat); err != nil {
-				return 0, "", err
-			}
-			if stat.Bsize <= 0 || stat.Bavail > uint64(math.MaxInt64)/uint64(stat.Bsize) {
-				return 0, "", errors.New("invalid filesystem capacity")
-			}
-			// A filesystem identity is used only for in-memory aggregation.
-			return int64(stat.Bavail) * int64(stat.Bsize), fmt.Sprintf("%v", stat.Fsid), nil
+			return filesystemCapacity(int(file.Fd()))
 		}
 		if !os.IsNotExist(err) || path == "/" {
 			return 0, "", err
@@ -124,4 +116,61 @@ func recordReuse(facts *preflight.Facts, machine string, credit preflight.Quanti
 		}
 		facts.Unproved[machine] = reason
 	}
+}
+
+// A filesystem identity is used only for in-memory aggregation.
+func filesystemCapacity(descriptor int) (int64, string, error) {
+	var stat unix.Statfs_t
+	if err := unix.Fstatfs(descriptor, &stat); err != nil {
+		return 0, "", err
+	}
+	if stat.Bsize <= 0 || stat.Bavail > uint64(math.MaxInt64)/uint64(stat.Bsize) {
+		return 0, "", errors.New("invalid filesystem capacity")
+	}
+	return int64(stat.Bavail) * int64(stat.Bsize), fmt.Sprintf("%v", stat.Fsid), nil
+}
+
+func filesystemOf(path string) (int64, string, error) {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return 0, "", errors.New("capacity write path is not absolute and clean")
+	}
+	for {
+		descriptor, err := openPathSafe(path)
+		if err == nil {
+			defer unix.Close(descriptor)
+			var info unix.Stat_t
+			if err := unix.Fstat(descriptor, &info); err != nil {
+				return 0, "", err
+			}
+			if info.Mode&unix.S_IFMT == unix.S_IFLNK {
+				return 0, "", errors.New("capacity write path is a symbolic link")
+			}
+			return filesystemCapacity(descriptor)
+		}
+		if !os.IsNotExist(err) || path == "/" {
+			return 0, "", err
+		}
+		path = filepath.Dir(path)
+	}
+}
+
+func openPathSafe(path string) (int, error) {
+	descriptor, err := unix.Open("/", unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil || path == "/" {
+		return descriptor, err
+	}
+	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	for i, part := range parts {
+		flags := unix.O_PATH | unix.O_NOFOLLOW | unix.O_CLOEXEC
+		if i < len(parts)-1 {
+			flags |= unix.O_DIRECTORY
+		}
+		next, err := unix.Openat(descriptor, part, flags, 0)
+		unix.Close(descriptor)
+		if err != nil {
+			return -1, err
+		}
+		descriptor = next
+	}
+	return descriptor, nil
 }

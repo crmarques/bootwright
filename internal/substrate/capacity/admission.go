@@ -5,16 +5,18 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/machine"
 )
 
-func PendingWrites(ctx context.Context, writes WriteProjector, catalog api.Catalog, contextName string, allocations []Allocation, owned map[string]machine.OwnershipState) ([]Write, error) {
+func PendingWrites(ctx context.Context, writes WriteProjector, ownership Ownership, catalog api.Catalog, contextName string, allocations []Allocation) ([]Write, error) {
 	if writes == nil {
 		return nil, nil
 	}
-	return writes(ctx, catalog, contextName, allocations, func(kind, object string) bool {
-		state, found := owned[kind+"/"+object]
-		return !found || state.Verb != machine.VerbApply || state.State != machine.BlockDone
+	return writes(ctx, catalog, contextName, allocations, func(kind, implementation, object string) (bool, error) {
+		if ownership == nil {
+			return true, nil
+		}
+		done, err := ownership.Completed(ctx, contextName, kind, implementation, object)
+		return !done, err
 	})
 }
 

@@ -61,9 +61,11 @@ func (s Service) CheckCapacity(ctx context.Context, catalog api.Catalog, context
 	if s.Capacity == nil {
 		return nil, availability.ErrNotImplemented
 	}
-	writes, err := capacity.PendingWrites(ctx, s.Writes, catalog, contextName, allocations, owned)
-	if err != nil {
-		return nil, err
+	var writes []Write
+	if !dryRun {
+		if writes, err = capacity.PendingWrites(ctx, s.Writes, s.Ownership, catalog, contextName, allocations); err != nil {
+			return nil, err
+		}
 	}
 	return s.Capacity.Check(ctx, allocations, writes, dryRun)
 }

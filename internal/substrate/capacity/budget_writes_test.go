@@ -99,25 +99,34 @@ func mustCheckDry(t *testing.T, budget capacity.Budget, allocations []capacity.A
 	return checks
 }
 
-func TestPendingWritesSkipOnlyWhatAnApplyCompleted(t *testing.T) {
+type completion map[string]bool
+
+func (c completion) Ownership(context.Context, string) (map[string]machine.OwnershipState, error) {
+	return nil, nil
+}
+
+func (c completion) Completed(_ context.Context, contextName, kind, implementation, object string) (bool, error) {
+	return c[contextName+"/"+kind+"/"+implementation+"/"+object], nil
+}
+
+func TestPendingWritesAskTheBlockByItsImplementation(t *testing.T) {
 	var asked []string
-	projector := capacity.WriteProjector(func(_ context.Context, _ api.Catalog, _ string, _ []capacity.Allocation, pending func(kind, object string) bool) ([]capacity.Write, error) {
-		for _, object := range []string{"applied", "destroyed", "running", "absent"} {
-			if pending("Machine", object) {
-				asked = append(asked, object)
+	projector := capacity.WriteProjector(func(_ context.Context, _ api.Catalog, _ string, _ []capacity.Allocation, pending capacity.Unfinished) ([]capacity.Write, error) {
+		for _, implementation := range []string{"install", "firewall"} {
+			if waiting, err := pending("Machine", implementation, "m"); err != nil || waiting {
+				asked = append(asked, implementation)
 			}
 		}
 		return nil, nil
 	})
-	owned := map[string]machine.OwnershipState{
-		"Machine/applied":   {Verb: machine.VerbApply, State: machine.BlockDone},
-		"Machine/destroyed": {Verb: machine.VerbDestroy, State: machine.BlockDone},
-		"Machine/running":   {Verb: machine.VerbApply, State: "running"},
-	}
-	if _, err := capacity.PendingWrites(context.Background(), projector, api.Catalog{}, "lab", nil, owned); err != nil || strings.Join(asked, ",") != "destroyed,running,absent" {
+	if _, err := capacity.PendingWrites(context.Background(), projector, completion{"lab/Machine/install/m": true}, api.Catalog{}, "lab", nil); err != nil || strings.Join(asked, ",") != "firewall" {
 		t.Fatalf("pending %v, %v", asked, err)
 	}
-	if writes, err := capacity.PendingWrites(context.Background(), nil, api.Catalog{}, "lab", nil, owned); writes != nil || err != nil {
+	asked = nil
+	if _, err := capacity.PendingWrites(context.Background(), projector, nil, api.Catalog{}, "lab", nil); err != nil || strings.Join(asked, ",") != "install,firewall" {
+		t.Fatalf("without ownership, pending %v, %v", asked, err)
+	}
+	if writes, err := capacity.PendingWrites(context.Background(), nil, completion{}, api.Catalog{}, "lab", nil); writes != nil || err != nil {
 		t.Fatal("a missing projector projected writes")
 	}
 }

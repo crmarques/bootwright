@@ -6,7 +6,6 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
-	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
@@ -71,8 +70,8 @@ type plannedWrite struct {
 }
 
 func CapacityWrites(sizes MediaSizes) capacity.WriteProjector {
-	return func(ctx context.Context, catalog api.Catalog, contextName string, allocations []capacity.Allocation, pending func(kind, object string) bool) ([]capacity.Write, error) {
-		if len(InstalledMachines(catalog)) == 0 {
+	return func(ctx context.Context, catalog api.Catalog, contextName string, allocations []capacity.Allocation, pending capacity.Unfinished) ([]capacity.Write, error) {
+		if len(allocations) == 0 || len(InstalledMachines(catalog)) == 0 {
 			return nil, nil
 		}
 		controller, err := lifecycle.ControllerMachine(catalog)
@@ -108,7 +107,7 @@ func CapacityWrites(sizes MediaSizes) capacity.WriteProjector {
 	}
 }
 
-func plannedWrites(catalog api.Catalog, controller, contextName string, requests []Request, allocations []capacity.Allocation, pending func(kind, object string) bool) ([]plannedWrite, error) {
+func plannedWrites(catalog api.Catalog, controller, contextName string, requests []Request, allocations []capacity.Allocation, pending capacity.Unfinished) ([]plannedWrite, error) {
 	hosted := make(map[string]capacity.Allocation, len(allocations))
 	for _, allocation := range allocations {
 		hosted[allocation.Machine] = allocation
@@ -116,25 +115,37 @@ func plannedWrites(catalog api.Catalog, controller, contextName string, requests
 	var planned []plannedWrite
 	trees := map[string]bool{}
 	for _, request := range requests {
-		profile := request.Identity.Profile
-		if request.Tree != nil && request.TreeMedia != nil && !trees[profile] && pending(TreeKind, profile) {
-			trees[profile] = true
-			placement, err := treePlacement(catalog, profile, controller)
+		profile, _ := catalog.Find(api.MachineInstallProfile, request.Identity.Profile)
+		anaconda := profile.Spec().Get("installer", "anaconda")
+		if request.Tree != nil && request.TreeMedia != nil {
+			tree, err := publishedWrite(catalog, anaconda.Get("packageSource", "hostedTree", "artifactServerEndpoint"), profile.Identity(), controller, contextName, TreeWrite+" "+profile.Name(), request.TreeMedia.Name, TreeAllowance)
 			if err != nil {
 				return nil, err
 			}
-			planned = append(planned, placedWrite(TreeWrite+" "+profile, placement, contextName, request.Tree.Path, request.TreeMedia.Name, TreeAllowance))
+			key := tree.write.Host + "\x00" + request.Tree.Path
+			if !trees[key] {
+				trees[key] = true
+				if waiting, err := pending(TreeKind, TreeImplementation, profile.Name()); err != nil {
+					return nil, err
+				} else if waiting {
+					planned = append(planned, tree)
+				}
+			}
 		}
 		machine := request.Identity.Object
-		if !pending(Kind, machine) {
+		waiting, err := pending(Kind, Implementation, machine)
+		if err != nil {
+			return nil, err
+		}
+		if !waiting {
 			continue
 		}
-		published := request.Image
-		if published == nil {
-			published = request.Private
-		}
-		if published != nil {
-			planned = append(planned, placedWrite(PublishedWrite, request.Placement, contextName, published.Path, request.BootMedia.Name, InstallerAllowance))
+		if request.Image != nil || request.Private != nil {
+			image, err := publishedWrite(catalog, anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"), profile.Identity(), controller, contextName, PublishedWrite, request.BootMedia.Name, InstallerAllowance)
+			if err != nil {
+				return nil, err
+			}
+			planned = append(planned, image)
 		}
 		if allocation, found := hosted[machine]; found && allocation.Staging != "" {
 			planned = append(planned, plannedWrite{
@@ -146,19 +157,17 @@ func plannedWrites(catalog api.Catalog, controller, contextName string, requests
 	return planned, nil
 }
 
-func placedWrite(label string, placement machineref.Placement, contextName, path, image string, allowance int64) plannedWrite {
-	return plannedWrite{
-		write: capacity.Write{Label: label, Host: placement.Machine, Path: path, Context: contextName, Local: placement.Local()},
-		image: image, allowance: allowance,
-	}
-}
-
-func treePlacement(catalog api.Catalog, profileName, controller string) (machineref.Placement, error) {
-	profile, _ := catalog.Find(api.MachineInstallProfile, profileName)
-	source := profile.Spec().Get("installer", "anaconda", "packageSource", "hostedTree")
-	server, err := artifactserver.Selected(catalog, source.Get("artifactServerEndpoint"), profile.Identity())
+func publishedWrite(catalog api.Catalog, selection api.Value, identity, controller, contextName, label, image string, allowance int64) (plannedWrite, error) {
+	server, err := artifactserver.Selected(catalog, selection, identity)
 	if err != nil {
-		return machineref.Placement{}, err
+		return plannedWrite{}, err
 	}
-	return artifactserver.PlacementFor(catalog, server, controller)
+	placement, err := artifactserver.PlacementFor(catalog, server, controller)
+	if err != nil {
+		return plannedWrite{}, err
+	}
+	return plannedWrite{
+		write: capacity.Write{Label: label, Host: placement.Machine, Path: artifactserver.ContentRoot(contextName, server.Name()), Context: contextName, Local: placement.Local()},
+		image: image, allowance: allowance,
+	}, nil
 }

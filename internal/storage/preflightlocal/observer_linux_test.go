@@ -2,6 +2,8 @@ package preflightlocal
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/storage/preflight"
@@ -34,5 +36,25 @@ func TestADiskOnlyLocalTargetReadsOnlyItsFilesystem(t *testing.T) {
 	facts, err = (Observer{}).Observe(context.Background(), preflight.Target{Host: "controller", Local: true, Pool: "relative", DiskOnly: true})
 	if err != nil || facts.DiskKnown || facts.Reason == "" {
 		t.Fatalf("%+v %v", facts, err)
+	}
+}
+
+func TestADiskOnlyLocalTargetObservesAnExistingFileItCannotRead(t *testing.T) {
+	directory := t.TempDir()
+	image := filepath.Join(directory, "install.iso")
+	if err := os.WriteFile(image, []byte("iso"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(directory, "link")
+	if err := os.Symlink(image, link); err != nil {
+		t.Fatal(err)
+	}
+	facts, err := (Observer{}).Observe(context.Background(), preflight.Target{Host: "controller", Local: true, Pool: image, DiskOnly: true})
+	parent, _ := (Observer{}).Observe(context.Background(), preflight.Target{Host: "controller", Local: true, Pool: directory, DiskOnly: true})
+	if err != nil || !facts.DiskKnown || facts.DiskIdentity != parent.DiskIdentity {
+		t.Fatalf("an existing installer image left its filesystem unobserved: %+v %v", facts, err)
+	}
+	if facts, _ := (Observer{}).Observe(context.Background(), preflight.Target{Host: "controller", Local: true, Pool: link, DiskOnly: true}); facts.DiskKnown {
+		t.Fatalf("a symbolic link was followed: %+v", facts)
 	}
 }

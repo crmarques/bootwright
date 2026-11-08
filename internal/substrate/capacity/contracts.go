@@ -72,13 +72,15 @@ type Check struct {
 type CapacityChecker interface {
 	Check(context.Context, []Allocation, []Write, bool) ([]Check, error)
 }
-type WriteProjector func(context.Context, api.Catalog, string, []Allocation, func(kind, object string) bool) ([]Write, error)
+type Unfinished func(kind, implementation, object string) (bool, error)
+type WriteProjector func(context.Context, api.Catalog, string, []Allocation, Unfinished) ([]Write, error)
 
 type Graph interface {
 	Effective(context.Context, string) (api.Catalog, error)
 }
 type Ownership interface {
 	Ownership(context.Context, string) (map[string]machine.OwnershipState, error)
+	Completed(ctx context.Context, contextName, kind, implementation, object string) (bool, error)
 }
 type Projector func(api.Catalog, string) ([]Allocation, error)
 

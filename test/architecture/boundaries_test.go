@@ -144,7 +144,9 @@ func applicationDependencies() map[string][]string {
 		"internal/substrate/kubevirt":  capabilityDependencies(),
 		// Storage derives its DVD package endpoint through ArtifactServer's
 		// published selection/path rules rather than reconstructing publication.
-		"internal/storage/ceph":                          {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle", "internal/infrastructureservices/artifactserver"},
+		"internal/storage/ceph": {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle", "internal/infrastructureservices/artifactserver"},
+		// Installation publishes through ArtifactServer's selection and path rules,
+		// and projects the bytes its publications write into the capacity budget.
 		"internal/managedos/installation":                append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice", "internal/substrate/capacity"),
 		"internal/containercluster/agentinstall":         append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice"),
 		"internal/infrastructureservices/artifactserver": append(capabilityDependencies(), "internal/infrastructureservices/managedservice"),
@@ -511,8 +513,8 @@ func effectGrants() map[string][]string {
 		"internal/storage/preflightlocal": {
 			"golang.org/x/sys/unix.CPUSet", "golang.org/x/sys/unix.Close", "golang.org/x/sys/unix.Fstat", "golang.org/x/sys/unix.Fstatfs",
 			"golang.org/x/sys/unix.O_CLOEXEC", "golang.org/x/sys/unix.O_DIRECTORY", "golang.org/x/sys/unix.O_NOFOLLOW",
-			"golang.org/x/sys/unix.O_NONBLOCK", "golang.org/x/sys/unix.O_RDONLY", "golang.org/x/sys/unix.Open", "golang.org/x/sys/unix.Openat",
-			"golang.org/x/sys/unix.SchedGetaffinity", "golang.org/x/sys/unix.S_IFMT", "golang.org/x/sys/unix.S_IFREG",
+			"golang.org/x/sys/unix.O_NONBLOCK", "golang.org/x/sys/unix.O_PATH", "golang.org/x/sys/unix.O_RDONLY", "golang.org/x/sys/unix.Open", "golang.org/x/sys/unix.Openat",
+			"golang.org/x/sys/unix.SchedGetaffinity", "golang.org/x/sys/unix.S_IFLNK", "golang.org/x/sys/unix.S_IFMT", "golang.org/x/sys/unix.S_IFREG",
 			"golang.org/x/sys/unix.Statfs_t", "golang.org/x/sys/unix.Stat_t", "io", "os.File", "os.IsNotExist", "os.NewFile",
 		},
 		"internal/controller/bundlelocal":  {"io", "net.Dialer", "net/http", "os", "syscall"},

@@ -19,6 +19,11 @@ func (o ownedStub) Ownership(context.Context, string) (map[string]machine.Owners
 	return o, nil
 }
 
+func (o ownedStub) Completed(_ context.Context, _, kind, _, object string) (bool, error) {
+	state := o[kind+"/"+object]
+	return state.Verb == machine.VerbApply && state.State == machine.BlockDone, nil
+}
+
 type guestFunc func(context.Context, string, api.Object, PreflightRequest) ([]Check, error)
 
 func (f guestFunc) CheckGuest(ctx context.Context, name string, object api.Object, _ HostRequirements, request PreflightRequest) ([]Check, error) {

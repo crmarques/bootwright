@@ -212,9 +212,11 @@ func (s Service) capacityChecks(ctx context.Context, catalog api.Catalog, select
 			return nil, err
 		}
 	}
-	writes, err := capacity.PendingWrites(ctx, s.Writes, catalog, selected, allocations, owned)
-	if err != nil {
-		return nil, err
+	var writes []capacity.Write
+	if !dryRun {
+		if writes, err = capacity.PendingWrites(ctx, s.Writes, s.Ownership, catalog, selected, allocations); err != nil {
+			return nil, err
+		}
 	}
 	allocations = slices.DeleteFunc(allocations, func(a capacity.Allocation) bool { return !hosts[a.Host] })
 	if len(allocations) > 0 {
