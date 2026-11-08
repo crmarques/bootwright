@@ -1,0 +1,119 @@
+# Default input of the lab-4-nodes-ceph-vlans case. Override keys with
+# e2e/render.sh --set or a --values file.
+
+host:
+  # The controller address the managed services bind and the guests reach;
+  # "auto" takes this host's default-route source address at render time.
+  address: auto
+  domain: e2e.example.test
+
+  upstreamDNS:
+    - 1.1.1.1
+
+  upstreamNTP:
+    - 162.159.200.1
+
+# Two operator-created bridges without a physical port. The runbook makes
+# them and Bootwright never creates or removes them. cephBridge is a VLAN
+# trunk carrying cephPublic and cephCluster tagged; userBridge carries the
+# user network untagged.
+fabric:
+  cephBridge: br-ceph
+  userBridge: br-user
+
+  # The largest frame the trunk carries: the replication VLAN uses jumbo
+  # frames, the public VLAN stays at 1500.
+  cephTrunkMTU: 9000
+
+networks:
+  # Ceph public (client) network: install, SSH, MON, OSD front and RGW
+  # ingress traffic. The host's VLAN leg holds the gateway.
+  cephPublic:
+    vlan: 110
+    cidr: 198.51.100.0/26
+    gateway: 198.51.100.1
+    prefix: 26
+
+  # Ceph cluster (replication) network: OSD back traffic only. No gateway and
+  # no host leg, so nothing outside the three Ceph hosts reaches it.
+  cephCluster:
+    vlan: 120
+    cidr: 203.0.113.0/26
+    mtu: 9000
+
+  # User network: the HTTP clients of the sample server. The host's address on
+  # userBridge is the only other member.
+  user:
+    cidr: 198.51.100.64/26
+    hostAddress: 198.51.100.65
+    prefix: 26
+
+# Media names as added with `bootwright media add --name`.
+rhel:
+  version: "9.8"
+  bootMedia: rhel-9.8-x86_64-boot.iso
+  dvdMedia: rhel-9.8-x86_64-dvd.iso
+
+guest:
+  # ceph-01 to ceph-03, in this order: public and cluster address.
+  ceph:
+    nodes:
+      - public: 198.51.100.11
+        cluster: 203.0.113.11
+
+      - public: 198.51.100.12
+        cluster: 203.0.113.12
+
+      - public: 198.51.100.13
+        cluster: 203.0.113.13
+
+    cpu: 4
+    memoryMiB: 6144
+    diskGiB: 35
+    osdDiskGiB: 25
+
+  # app-01: the sample server, on the Ceph public and the user networks.
+  app:
+    public: 198.51.100.21
+    user: 198.51.100.70
+    cpu: 2
+    memoryMiB: 2048
+    diskGiB: 20
+
+# IBM Storage Ceph. A release moves these together: release, packageVersion,
+# ansiblePackageVersion, image, callHome and the auxiliary images below; the
+# lab-3-nodes-ceph runbook's release table lists the known sets.
+ceph:
+  release: 9.9.2.0
+  packageVersion: 20.2.2-349.el9cp
+  ansiblePackageVersion: 5.0.3-1.el9cp
+  callHome: enabled
+
+  image:
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
+    version: v9.9.2-26947
+
+  # The guests' package repository for the release's RPMs.
+  repository:
+    id: ibm-storage-ceph-9
+    displayName: IBM Storage Ceph 9 packages
+    baseURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/
+    gpgKeyURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH
+
+  osdMemoryTarget: "2147483648"
+
+  # The object ingress VIP, inside networks.cephPublic and outside every
+  # guest. It has no DNS record.
+  objectVIP: 198.51.100.60
+
+  # Auxiliary images of the object ingress, authored as linux/amd64 platform
+  # manifest digests of the build above (D171); see the lab-3-nodes-ceph
+  # values for how to read them.
+  images:
+    haproxy:
+      base: cp.icr.io/cp/ibm-ceph/haproxy-rhel10
+      version: sha256:90a29584b593eac133a844ec4f94c7f7d83d127936c91cab0b088e765ed5dad9
+
+    keepalived:
+      base: cp.icr.io/cp/ibm-ceph/keepalived-rhel10
+      version: sha256:ed18865b7c22051db1166e3df3de38effe225244b0bab32dcee429bb7b43f5db

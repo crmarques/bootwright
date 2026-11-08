@@ -1,0 +1,149 @@
+{{- $c := .Values.ceph -}}
+{{- $dom := .Values.host.domain -}}
+apiVersion: bootwright.io/v1alpha1
+kind: CephCluster
+metadata:
+  name: ceph-e2e
+
+spec:
+  management: managed
+
+  distribution:
+    ibm:
+      callHome: {{ $c.callHome }}
+
+      packages:
+        source: vendor
+
+  release: {{ $c.release }}
+  packageVersion: {{ $c.packageVersion }}
+
+  image:
+    base: {{ $c.image.base }}
+    version: {{ $c.image.version }}
+
+  entitlementRef: ibm-ceph
+
+  cephadm:
+    addressRef: ip
+
+    ansible:
+      packageVersion: {{ $c.ansiblePackageVersion }}
+
+    clusterSSH:
+      user: bootwright
+      keyRef: ceph-cluster-key
+      transport: verifiedTunnel
+
+    bootstrap:
+      nodeRef: ceph-01
+      addressRef: ip
+
+  networks:
+    publicCIDRs:
+      - {{ .Values.networks.cephPublic.cidr }}
+
+    clusterCIDRs:
+      - {{ .Values.networks.cephCluster.cidr }}
+
+  config:
+    global:
+      osd_pool_default_size: '2'
+      osd_pool_default_min_size: '2'
+
+    osd:
+      osd_memory_target_autotune: 'false'
+      osd_memory_target: {{ $c.osdMemoryTarget | quote }}
+
+  services:
+    - service_type: mon
+
+      placement:
+        count: 3
+        label: ceph-core
+
+    - service_type: mgr
+
+      placement:
+        count: 2
+        label: ceph-core
+
+    - service_type: osd
+      service_id: data
+
+      placement:
+        label: ceph-core
+
+      spec:
+        data_devices:
+          paths:
+            - /dev/sda
+
+    - service_type: mds
+      service_id: files
+
+      placement:
+        count: 2
+        label: ceph-core
+
+    - service_type: rgw
+      service_id: objects
+
+      placement:
+        count: 2
+
+        hosts:
+          - ceph-01.{{ $dom }}
+          - ceph-02.{{ $dom }}
+
+      spec:
+        rgw_frontend_port: 8081
+        ssl: false
+
+    - service_type: ingress
+      service_id: rgw.objects
+
+      placement:
+        count: 2
+
+        hosts:
+          - ceph-02.{{ $dom }}
+          - ceph-03.{{ $dom }}
+
+      spec:
+        backend_service: rgw.objects
+        virtual_ip: {{ $c.objectVIP }}/{{ .Values.networks.cephPublic.prefix }}
+        frontend_port: 443
+        monitor_port: 9043
+        ssl: true
+        certificate_source: inline
+        first_virtual_router_id: 60
+
+  topology:
+    nodes:
+{{- range $n := until 3 }}
+      - name: ceph-0{{ add $n 1 }}
+        fqdn: ceph-0{{ add $n 1 }}.{{ $dom }}
+        machineRef: ceph-0{{ add $n 1 }}
+
+        labels:
+          - ceph-core
+{{ end }}
+  images:
+    haproxy:
+      base: {{ $c.images.haproxy.base }}
+      version: {{ $c.images.haproxy.version }}
+
+    keepalived:
+      base: {{ $c.images.keepalived.base }}
+      version: {{ $c.images.keepalived.version }}
+
+  serviceBindings:
+    - serviceRef: ingress.rgw.objects
+
+      secrets:
+        - path: /spec/ssl_cert
+          secretRef: rgw-objects-tls
+
+        - path: /spec/ssl_key
+          secretRef: rgw-objects-tls

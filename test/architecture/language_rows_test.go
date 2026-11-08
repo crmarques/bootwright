@@ -14,6 +14,7 @@ const (
 	rowPython         = "Python in the collection"
 	rowShell          = "Shell"
 	rowCaseRenderer   = "Case renderer"
+	rowCaseWorkload   = "Case workload"
 	rowRepositoryTool = "Repository tool"
 
 	collectionPlugins = "ansible/collections/ansible_collections/bootwright/core/plugins/"
@@ -23,6 +24,7 @@ const (
 	examplesRoot      = "examples/"
 
 	caseRendererShebang = "#!/usr/bin/env bash"
+	caseWorkloadShebang = "#!/bin/bash"
 )
 
 // toolDataSuffixes are the pinned data files a repository tool reads beside its code:
@@ -40,13 +42,17 @@ func inSourceRoot(name string) bool {
 // sourceRow maps one tracked file under the collection's plugins, scripts/,
 // e2e/ or examples/ to the language row that holds it, from its path and first
 // line, or reports that no row does. A file under e2e/ or examples/ is a
-// source only when it is a script, and only a bash script directly under e2e/
-// has a row. A file outside every root is not a source of this map.
+// source only when it is a script; a bash script directly under e2e/ and a
+// Python file or bash script directly under e2e/<case>/app/ have a row. A
+// file outside every root is not a source of this map.
 func sourceRow(name, firstLine string) (row string, mapped bool) {
 	switch {
 	case strings.HasPrefix(name, e2eRoot), strings.HasPrefix(name, examplesRoot):
 		if !isScript(name, firstLine) {
 			return "", true
+		}
+		if isCaseWorkload(name) {
+			return rowCaseWorkload, strings.HasSuffix(name, ".py") || firstLine == caseWorkloadShebang
 		}
 		return rowCaseRenderer, strings.HasPrefix(name, e2eRoot) && !strings.Contains(strings.TrimPrefix(name, e2eRoot), "/") && firstLine == caseRendererShebang
 	case strings.HasPrefix(name, collectionPlugins):
@@ -60,6 +66,12 @@ func sourceRow(name, firstLine string) (row string, mapped bool) {
 		return rowShell, firstLine == "#!/bin/sh"
 	}
 	return "", true
+}
+
+// isCaseWorkload reports a file directly under e2e/<case>/app/.
+func isCaseWorkload(name string) bool {
+	parts := strings.Split(strings.TrimPrefix(name, e2eRoot), "/")
+	return strings.HasPrefix(name, e2eRoot) && len(parts) == 3 && parts[0] != "" && parts[1] == "app" && parts[2] != ""
 }
 
 // unmappedSources lists each tracked source under the collection's plugins,
@@ -91,11 +103,12 @@ func firstLineOf(root string) func(string) string {
 // TestEveryCollectionAndScriptSourceMapsToALanguageRow holds new logic to the
 // language table: a plugin that is not Python, a script that is not POSIX
 // shell, a tool file that is neither Python nor pinned data, and a script
-// under e2e/ or examples/ other than the bash case renderer have no row.
+// under e2e/ or examples/ other than the bash case renderer or a case
+// workload have no row.
 func TestEveryCollectionAndScriptSourceMapsToALanguageRow(t *testing.T) {
 	root := filepath.Join("..", "..")
 	for _, name := range unmappedSources(repositoryFiles(t), firstLineOf(root)) {
-		t.Errorf("%s maps to no row of the specs/architecture.md language table: a collection plugin is a .py file, a script under scripts/ starts with #!/bin/sh, and a file under scripts/tools/ is Python or pinned data, and the only script under e2e/ or examples/ is the case renderer, a bash script directly under e2e/", name)
+		t.Errorf("%s maps to no row of the specs/architecture.md language table: a collection plugin is a .py file, a script under scripts/ starts with #!/bin/sh, and a file under scripts/tools/ is Python or pinned data, and the only scripts under e2e/ or examples/ are the case renderer, a bash script directly under e2e/, and case workloads, Python files or #!/bin/bash scripts directly under e2e/<case>/app/", name)
 	}
 }
 
@@ -112,7 +125,7 @@ func TestLanguageRowsNameTheRowsTheMapUses(t *testing.T) {
 		t.Fatal("specs/architecture.md has no Language responsibility section")
 	}
 	section, _, _ = strings.Cut(section, "\n## ")
-	for _, row := range []string{rowPython, rowShell, rowCaseRenderer} {
+	for _, row := range []string{rowPython, rowShell, rowCaseRenderer, rowCaseWorkload} {
 		if !strings.Contains(section, "\n| "+row+" |") {
 			t.Errorf("the Language responsibility table has no %s row, which the source map uses", row)
 		}
@@ -146,6 +159,12 @@ func TestSourceMapRefusesAnUnmappedFile(t *testing.T) {
 		"e2e/check.sh":                              "#!/bin/sh",
 		"e2e/prepare":                               "#!/usr/bin/env python3",
 		"e2e/lab-rhel/helper.sh":                    caseRendererShebang,
+		"e2e/lab-rhel/app/server.py":                "\"\"\"Sample server.\"\"\"",
+		"e2e/lab-rhel/app/setup.sh":                 caseWorkloadShebang,
+		"e2e/lab-rhel/app/setup-sh.sh":              "#!/bin/sh",
+		"e2e/lab-rhel/app/nested/client.py":         "",
+		"e2e/app/client.py":                         "",
+		"examples/ceph/app/server.py":               "",
 		"examples/README.md":                        "",
 		"examples/ceph/cluster.yaml":                "",
 		"examples/run.sh":                           caseRendererShebang,
@@ -159,9 +178,13 @@ func TestSourceMapRefusesAnUnmappedFile(t *testing.T) {
 	want := []string{
 		collectionPlugins + "module_utils/b.sh",
 		collectionPlugins + "modules/a.yml",
+		"e2e/app/client.py",
 		"e2e/check.sh",
+		"e2e/lab-rhel/app/nested/client.py",
+		"e2e/lab-rhel/app/setup-sh.sh",
 		"e2e/lab-rhel/helper.sh",
 		"e2e/prepare",
+		"examples/ceph/app/server.py",
 		"examples/run.sh",
 		"scripts/bash-script",
 		"scripts/python-script",

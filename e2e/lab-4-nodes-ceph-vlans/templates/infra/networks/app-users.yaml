@@ -1,0 +1,11 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: app-users
+
+spec:
+  provided: true
+  description: The user network the sample server answers on, untagged on its own bridge and shared only with the host.
+
+  ipv4:
+    cidr: {{ .Values.networks.user.cidr }}

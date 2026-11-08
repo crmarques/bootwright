@@ -1,0 +1,14 @@
+{{- $n := .Values.networks.cephPublic -}}
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: ceph-public
+
+spec:
+  provided: true
+  description: The Ceph public network, a VLAN on the ceph-trunk bridge whose gateway is the host's VLAN leg.
+  vlan: {{ $n.vlan }}
+
+  ipv4:
+    cidr: {{ $n.cidr }}
+    gateway: {{ $n.gateway }}

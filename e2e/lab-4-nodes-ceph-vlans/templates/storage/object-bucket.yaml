@@ -1,0 +1,9 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephObjectBucket
+metadata:
+  name: app-bucket
+
+spec:
+  clusterRef: ceph-e2e
+  objectGatewayRef: objects
+  ownerRef: app-objects

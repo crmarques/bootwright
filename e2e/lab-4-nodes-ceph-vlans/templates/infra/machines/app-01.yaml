@@ -1,0 +1,46 @@
+{{- $app := .Values.guest.app -}}
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: app-01
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: app
+
+      nics:
+        - nicRef: nic0
+          segmentRef: ceph-trunk
+
+        - nicRef: nic1
+          segmentRef: user-lan
+
+  hardware:
+    nics:
+      - name: nic0
+      - name: nic1
+
+    rootDevice:
+      deviceName: /dev/vda
+
+  os:
+    provided: false
+    installProfileRef: rhel
+
+  network:
+    configRef: app
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: app-01.{{ .Values.host.domain }}
+
+      - name: ip
+        address: {{ $app.public }}
+        interface: nic0.{{ .Values.networks.cephPublic.vlan }}
+
+      - name: user
+        address: {{ $app.user }}
+        interface: nic1

@@ -1,0 +1,13 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephSubvolume
+metadata:
+  name: app-files
+
+spec:
+  clusterRef: ceph-e2e
+  filesystemRef: files
+  group: apps
+  sizeBytes: 1073741824
+  uid: 0
+  gid: 0
+  mode: '750'

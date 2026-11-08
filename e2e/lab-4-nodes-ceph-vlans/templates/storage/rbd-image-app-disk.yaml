@@ -1,0 +1,9 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephRBDImage
+metadata:
+  name: app-disk
+
+spec:
+  clusterRef: ceph-e2e
+  poolRef: rbd-data
+  sizeBytes: 1073741824
