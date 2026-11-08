@@ -33,7 +33,7 @@ func (g graph) Effective(context.Context, string) (api.Catalog, error) { return 
 
 type checker func(context.Context, []capacity.Allocation, bool) ([]capacity.Check, error)
 
-func (f checker) Check(ctx context.Context, a []capacity.Allocation, dry bool) ([]capacity.Check, error) {
+func (f checker) Check(ctx context.Context, a []capacity.Allocation, _ []capacity.Write, dry bool) ([]capacity.Check, error) {
 	return f(ctx, a, dry)
 }
 func fixture(t *testing.T, managed bool) Service {

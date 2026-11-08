@@ -626,6 +626,35 @@ Pure planning probes nothing, a continuation whose Machine blocks are all done
 is not gated, and [container-cluster preflight](openshift-clusters.md#preflight)
 and storage preflight report the same checks.
 
+Each backing filesystem's disk check also counts what the apply itself writes
+there beside the guests' disks ([D242](milestones/backlog.md#d242), pending the
+owner's review): the hosted package tree of each install profile whose tree
+block may still start, and, for each Bootwright-installed Machine whose blocks
+may still start, its installer image as the artifact server publishes it and,
+on a libvirt provider, the copy its emulated controller stages in that
+provider's virtual-media pool. A write counts on the filesystem its own path,
+or that path's nearest existing ancestor, resolves to on the host it lands on,
+observed as the pool path is. It joins a check only when that filesystem holds
+a counted guest disk on the same host; on any other filesystem it is not
+gated. A write whose filesystem cannot be observed makes that host's disk
+checks unknown.
+
+Sizes are known before the effect. The admission reads the image sizes its
+plan froze; preflight reads the media store's records, and an image without a
+record leaves the check unknown. Each write is an upper bound: a tree counts
+its image's recorded size plus `installation.TreeAllowance` (256 MiB, block
+rounding for up to 65,536 extracted entries at 4 KiB), and each installer
+copy its boot image's size plus `installation.InstallerAllowance` (64 MiB, the
+kickstart and boot configuration mkksiso adds). A write receives no credit for
+bytes already present: a retried tree publication clears its staging before it
+extracts, and a rebuilt installer image replaces the published one only by
+rename, so each needs its full size again. Preflight counts the writes of a
+Machine or profile whose blocks the context's applied operation has not
+completed; a completed apply's bytes are already absent from the observed
+availability. The disk check's reason names each group it counts: the guest
+disks, each hosted package tree, the published and the staged installer media,
+and the reserve.
+
 A provider host on the SSH arm is observed over its placement connection,
 pinned to its `knownHostsRef` key and authenticated by its `privateKeyRef`.
 The observation runs fixed, read-only commands with absolute paths and no

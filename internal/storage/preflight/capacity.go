@@ -11,6 +11,7 @@ type Quantities = capacity.Quantities
 type Reserve = capacity.Reserve
 type Allocation = capacity.Allocation
 type Target = capacity.Target
+type Write = capacity.Write
 type Facts = capacity.Facts
 type Observer = capacity.Observer
 type Reserves = capacity.Reserves
@@ -21,6 +22,6 @@ type CapacityChecker = capacity.CapacityChecker
 func ReservesFromCatalog(catalog api.Catalog, allocations []Allocation) Reserves {
 	return capacity.ReservesFromCatalog(catalog, allocations)
 }
-func Admit(ctx context.Context, checker CapacityChecker, allocations []Allocation) error {
-	return capacity.Admit(ctx, checker, allocations)
+func Admit(ctx context.Context, checker CapacityChecker, allocations []Allocation, writes []Write) error {
+	return capacity.Admit(ctx, checker, allocations, writes)
 }

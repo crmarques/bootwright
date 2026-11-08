@@ -48,6 +48,14 @@ func observeRemote(ctx context.Context, remote RemoteCommands, target preflight.
 		}
 		return remote.Run(ctx, target.Context, target.Host, argv, bound)
 	}
+	if target.DiskOnly {
+		if disk, identity, ok := remoteDisk(ctx, run, target); ok {
+			facts.Available.Disk, facts.DiskIdentity, facts.DiskKnown = disk, "ssh/"+target.Host+"/"+identity, true
+		} else {
+			facts.Reason = remoteFactsFailure
+		}
+		return facts, ctx.Err()
+	}
 	inventoryFailed := false
 	if out, status, err := run(remoteFactBound, "/usr/bin/nproc"); err == nil && status == 0 {
 		if cpus, ok := parseCPUCount(out); ok {

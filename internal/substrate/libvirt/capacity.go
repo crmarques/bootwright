@@ -9,6 +9,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate"
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
 )
 
@@ -24,7 +25,8 @@ func CapacityAllocations(catalog api.Catalog, contextName string) ([]capacity.Al
 	result := make([]capacity.Allocation, 0, len(requests))
 	for _, request := range requests {
 		object, _ := catalog.Find(api.Machine, request.Identity.Object)
-		allocation := capacity.Allocation{Machine: request.Identity.Object, Provider: object.Spec().Get("substrate", "providerRef").Text(), Host: request.Placement.Machine, Pool: request.Directory, Context: contextName, Domain: request.Domain, UUID: request.UUID, Local: request.Placement.Local(), Quantities: capacity.Quantities{CPU: int64(request.VCPU)}}
+		provider := object.Spec().Get("substrate", "providerRef").Text()
+		allocation := capacity.Allocation{Machine: request.Identity.Object, Provider: provider, Host: request.Placement.Machine, Pool: request.Directory, Staging: substrate.PoolPath(contextName, provider), Context: contextName, Domain: request.Domain, UUID: request.UUID, Local: request.Placement.Local(), Quantities: capacity.Quantities{CPU: int64(request.VCPU)}}
 		if int64(request.MemoryMiB) > math.MaxInt64/(1<<20) {
 			return nil, capacityProjectionFailure()
 		}
@@ -49,7 +51,7 @@ func capacityProjectionFailure() error {
 	return errors.New("the aggregate declared resource budget overflows its supported quantity")
 }
 
-func AdmitCapacity(ctx context.Context, contextName string, catalog api.Catalog, owned map[string]lifecycle.ObjectOwnership, starting []reconciliation.Block, checker capacity.CapacityChecker) error {
+func AdmitCapacity(ctx context.Context, contextName string, catalog api.Catalog, owned map[string]lifecycle.ObjectOwnership, starting []reconciliation.Block, checker capacity.CapacityChecker, writes capacity.WriteProjector) error {
 	allocations, err := CapacityAllocations(catalog, contextName)
 	if err != nil {
 		return err
@@ -66,5 +68,14 @@ func AdmitCapacity(ctx context.Context, contextName string, catalog api.Catalog,
 		a.Allocated = found && !(state.Verb == "destroy" && state.State == "done")
 		a.Reserve = reserves(capacity.Target{Host: a.Host, Pool: a.Pool, Context: a.Context, Local: a.Local})
 	}
-	return capacity.Admit(ctx, checker, allocations)
+	var projected []capacity.Write
+	if writes != nil {
+		projected, err = writes(ctx, catalog, contextName, allocations, func(kind, object string) bool {
+			return slices.ContainsFunc(starting, func(block reconciliation.Block) bool { return block.Kind == kind && block.Object == object })
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return capacity.Admit(ctx, checker, allocations, projected)
 }

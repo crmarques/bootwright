@@ -57,7 +57,7 @@ func TestStorageCapacityAdmissionSkipsTransitionsThatAllocateNoGuest(t *testing.
 
 type capacityCheckFunc func(context.Context, []capacity.Allocation, bool) ([]capacity.Check, error)
 
-func (f capacityCheckFunc) Check(ctx context.Context, a []capacity.Allocation, dry bool) ([]capacity.Check, error) {
+func (f capacityCheckFunc) Check(ctx context.Context, a []capacity.Allocation, _ []capacity.Write, dry bool) ([]capacity.Check, error) {
 	return f(ctx, a, dry)
 }
 
@@ -80,10 +80,10 @@ func TestContainerOnlyApplyProvesAllDeclaredLibvirtGuestsBeforeAdmission(t *test
 		return []capacity.Check{{ID: "capacity.memory", Target: got[0].Host, Status: capacity.Failed, Reason: "declared guests exceed available memory"}}, nil
 	})
 	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Kind: libvirt.MachineKind, Object: allocations[0].Machine}}
-	if err := libvirt.AdmitCapacity(context.Background(), "lab", catalog, nil, []reconciliation.Block{block}, checker); err == nil {
+	if err := libvirt.AdmitCapacity(context.Background(), "lab", catalog, nil, []reconciliation.Block{block}, checker, nil); err == nil {
 		t.Fatal("insufficient container-only host capacity admitted")
 	}
-	if err := libvirt.AdmitCapacity(context.Background(), "lab", catalog, nil, nil, checker); err != nil {
+	if err := libvirt.AdmitCapacity(context.Background(), "lab", catalog, nil, nil, checker, nil); err != nil {
 		t.Fatal(err)
 	}
 	if called != 1 {

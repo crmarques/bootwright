@@ -350,3 +350,20 @@ func TestRemoteDomainFilesAboveOneFactBoundStillCountForeignCPUs(t *testing.T) {
 		t.Fatalf("%+v %v", facts, err)
 	}
 }
+
+func TestADiskOnlyTargetRunsOnlyTheFilesystemRead(t *testing.T) {
+	remote := &fakeRemote{answers: map[string][]byte{statCommand("/var/lib/bootwright-services"): []byte("10 4096 ab\n")}}
+	facts, err := observeRemote(context.Background(), remote, preflight.Target{Host: "host", Context: "lab", Pool: "/var/lib/bootwright-services/lab/artifact-server/files/public/os/rhel-01/install.iso", DiskOnly: true})
+	if err != nil || !facts.DiskKnown || facts.CPUKnown || facts.MemoryKnown || facts.Available.Disk != 40960 || facts.DiskIdentity != "ssh/host/ab" {
+		t.Fatalf("%+v %v", facts, err)
+	}
+	for _, argv := range remote.argvs() {
+		if !strings.HasPrefix(argv, "/usr/bin/stat --file-system") {
+			t.Fatalf("a disk-only observation ran %q", argv)
+		}
+	}
+	facts, err = observeRemote(context.Background(), &fakeRemote{failing: map[string]bool{statCommand("/pool"): true}}, preflight.Target{Host: "host", Context: "lab", Pool: "/pool", DiskOnly: true})
+	if err != nil || facts.DiskKnown || facts.Reason == "" {
+		t.Fatalf("%+v %v", facts, err)
+	}
+}

@@ -25,3 +25,14 @@ func TestRemoteTargetNeverReadsLocalFacts(t *testing.T) {
 		t.Fatalf("%+v %v", facts, err)
 	}
 }
+
+func TestADiskOnlyLocalTargetReadsOnlyItsFilesystem(t *testing.T) {
+	facts, err := (Observer{}).Observe(context.Background(), preflight.Target{Host: "controller", Local: true, Pool: t.TempDir() + "/absent/install.iso", DiskOnly: true})
+	if err != nil || !facts.DiskKnown || facts.DiskIdentity == "" || facts.CPUKnown || facts.MemoryKnown || facts.Reusable != nil {
+		t.Fatalf("%+v %v", facts, err)
+	}
+	facts, err = (Observer{}).Observe(context.Background(), preflight.Target{Host: "controller", Local: true, Pool: "relative", DiskOnly: true})
+	if err != nil || facts.DiskKnown || facts.Reason == "" {
+		t.Fatalf("%+v %v", facts, err)
+	}
+}

@@ -18,6 +18,7 @@ type Service struct {
 	Graph     Graph
 	Ownership Ownership
 	Project   Projector
+	Writes    capacity.WriteProjector
 	Capacity  CapacityChecker
 	Guests    GuestObserver
 	HostPorts func(api.Catalog) ([]HostPortRequirement, error)
@@ -43,9 +44,9 @@ func (s Service) CheckCapacity(ctx context.Context, catalog api.Catalog, context
 	if err != nil {
 		return nil, err
 	}
+	owned := map[string]machine.OwnershipState{}
 	if s.Ownership != nil {
-		owned, err := s.Ownership.Ownership(ctx, contextName)
-		if err != nil {
+		if owned, err = s.Ownership.Ownership(ctx, contextName); err != nil {
 			return nil, err
 		}
 		for i := range allocations {
@@ -60,7 +61,11 @@ func (s Service) CheckCapacity(ctx context.Context, catalog api.Catalog, context
 	if s.Capacity == nil {
 		return nil, availability.ErrNotImplemented
 	}
-	return s.Capacity.Check(ctx, allocations, dryRun)
+	writes, err := capacity.PendingWrites(ctx, s.Writes, catalog, contextName, allocations, owned)
+	if err != nil {
+		return nil, err
+	}
+	return s.Capacity.Check(ctx, allocations, writes, dryRun)
 }
 
 func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, error) {

@@ -27,6 +27,9 @@ func (o Observer) Observe(ctx context.Context, target preflight.Target) (preflig
 	if !target.Local {
 		return preflight.Facts{Reason: "verified remote capacity observation is unavailable"}, nil
 	}
+	if target.DiskOnly {
+		return diskFacts(target.Pool), ctx.Err()
+	}
 	facts := preflight.Facts{}
 	inventoryFailure := ""
 	var cpus unix.CPUSet
@@ -61,6 +64,13 @@ func (o Observer) Observe(ctx context.Context, target preflight.Target) (preflig
 		}
 	}
 	return facts, ctx.Err()
+}
+func diskFacts(path string) preflight.Facts {
+	disk, identity, err := availableDisk(path)
+	if err != nil {
+		return preflight.Facts{Reason: "the bounded local filesystem capacity fact could not be read"}
+	}
+	return preflight.Facts{Available: preflight.Quantities{Disk: disk}, DiskIdentity: identity, DiskKnown: true}
 }
 func unreadReason(facts preflight.Facts, inventoryFailure string) string {
 	if facts.CPUKnown && facts.MemoryKnown && facts.DiskKnown {

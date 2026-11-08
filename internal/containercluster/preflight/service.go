@@ -20,6 +20,7 @@ type Service struct {
 	Selection func(context.Context) (string, error)
 	Ownership capacity.Ownership
 	Project   capacity.Projector
+	Writes    capacity.WriteProjector
 	Capacity  capacity.CapacityChecker
 	Blocks    func(context.Context, string) (map[string]string, error)
 	DNSBlock  func(server string) string
@@ -202,13 +203,22 @@ func (s Service) capacityChecks(ctx context.Context, catalog api.Catalog, select
 			hosts[a.Host] = true
 		}
 	}
+	if !slices.ContainsFunc(allocations, func(a capacity.Allocation) bool { return hosts[a.Host] }) {
+		return nil, nil
+	}
+	owned := map[string]machine.OwnershipState{}
+	if s.Ownership != nil {
+		if owned, err = s.Ownership.Ownership(ctx, selected); err != nil {
+			return nil, err
+		}
+	}
+	writes, err := capacity.PendingWrites(ctx, s.Writes, catalog, selected, allocations, owned)
+	if err != nil {
+		return nil, err
+	}
 	allocations = slices.DeleteFunc(allocations, func(a capacity.Allocation) bool { return !hosts[a.Host] })
 	if len(allocations) > 0 {
 		if s.Ownership != nil {
-			owned, err := s.Ownership.Ownership(ctx, selected)
-			if err != nil {
-				return nil, err
-			}
 			for i := range allocations {
 				state, found := owned["Machine/"+allocations[i].Machine]
 				allocations[i].Allocated = found && !(state.Verb == machine.VerbDestroy && state.State == machine.BlockDone)
@@ -219,7 +229,7 @@ func (s Service) capacityChecks(ctx context.Context, catalog api.Catalog, select
 			a := &allocations[i]
 			a.Reserve = reserves(capacity.Target{Host: a.Host, Pool: a.Pool, Context: a.Context, Local: a.Local})
 		}
-		checks, err := s.Capacity.Check(ctx, allocations, dryRun)
+		checks, err := s.Capacity.Check(ctx, allocations, writes, dryRun)
 		if err != nil {
 			return nil, err
 		}

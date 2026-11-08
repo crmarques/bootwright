@@ -3706,6 +3706,8 @@ holding such a clause, the clauses pending and the work they enable.
   X321 to X324.
 - [D241](#d241): clauses (1) to (5), the removal of backward compatibility
   and the version reset (X325).
+- [D242](#d242): clauses (1) to (4), what the capacity admission counts
+  beside the guests' disks (X326).
 
 ### D1
 
@@ -7408,3 +7410,30 @@ sequence. Taken by the session, pending the owner's review:
 5. A commit that moves a contract or a Go store format version is marked with
    the Conventional Commit `!` and a `BREAKING CHANGE:` footer naming what it
    refuses and the remedy, which `scripts/check-commits` enforces.
+
+### D242
+
+**session-pending** (2026-11-08, the owner's request; the clauses after the
+owner's words are taken by the session, pending the owner's review): the
+lab-5-nodes-ceph-networks run's storage preflight reported `capacity.disk`
+failed once the machines stage had written the package tree and installer
+media beside guests the gate had admitted, and the owner asked to "fix any
+issue you might have found in this run". This moves B1213 from parked to M1
+and opens X326, out of sequence. Taken by the session, pending the owner's
+review:
+
+1. The [capacity admission](../substrates.md#capacity-admission) counts the
+   bytes the apply writes beside the guests' disks inside the disk check of
+   the filesystem they land on: each hosted package tree, each installed
+   Machine's published installer image and, on libvirt, the copy staged in
+   its provider's virtual-media pool. The check's reason names each group; no
+   separate check is added.
+2. A write joins a check only on a filesystem that holds a counted guest disk
+   on the same host; elsewhere it is not gated. A write whose filesystem
+   cannot be observed makes that host's disk checks unknown.
+3. Sizes are the plan's frozen image sizes at admission and the media store's
+   records in preflight, each with an upper-bound allowance: 256 MiB per tree
+   and 64 MiB per installer copy.
+4. A write receives no credit for bytes already present. The admission counts
+   the writes of blocks it may still start; preflight skips those of
+   Machines and profiles the applied operation completed.

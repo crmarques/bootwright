@@ -145,7 +145,7 @@ func applicationDependencies() map[string][]string {
 		// Storage derives its DVD package endpoint through ArtifactServer's
 		// published selection/path rules rather than reconstructing publication.
 		"internal/storage/ceph":                          {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle", "internal/infrastructureservices/artifactserver"},
-		"internal/managedos/installation":                append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice"),
+		"internal/managedos/installation":                append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice", "internal/substrate/capacity"),
 		"internal/containercluster/agentinstall":         append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice"),
 		"internal/infrastructureservices/artifactserver": append(capabilityDependencies(), "internal/infrastructureservices/managedservice"),
 		"internal/infrastructureservices/managedservice": {"internal/controller/prerequisites", "internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},

@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -50,9 +52,10 @@ type observation struct {
 	reserve  Reserve
 	credit   Quantities
 	unproved struct{ memory, disk string }
+	writes   map[string]int64
 }
 
-func (b Budget) Check(ctx context.Context, allocations []Allocation, dryRun bool) ([]Check, error) {
+func (b Budget) Check(ctx context.Context, allocations []Allocation, writes []Write, dryRun bool) ([]Check, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -72,7 +75,86 @@ func (b Budget) Check(ctx context.Context, allocations []Allocation, dryRun bool
 	if err != nil {
 		return nil, err
 	}
+	if !dryRun {
+		if err := b.addWrites(ctx, disks, writes); err != nil {
+			return nil, err
+		}
+	}
 	return budgetChecks(hosts, disks)
+}
+
+func (b Budget) addWrites(ctx context.Context, disks map[string]observation, writes []Write) error {
+	hosts := map[string]bool{}
+	for _, row := range disks {
+		hosts[row.target.Host] = true
+	}
+	observed := map[string]Facts{}
+	for _, write := range writes {
+		if write.Label == "" || write.Path == "" || write.Bytes < 0 {
+			return errors.New("capacity projection contains an invalid write")
+		}
+		if !hosts[write.Host] {
+			continue
+		}
+		key := write.Host + "\x00" + write.Path
+		facts, seen := observed[key]
+		if !seen {
+			var err error
+			if facts, err = b.observeDisk(ctx, Target{Host: write.Host, Pool: write.Path, Context: write.Context, Local: write.Local, DiskOnly: true}); err != nil {
+				return err
+			}
+			observed[key] = facts
+		}
+		var err error
+		for id, row := range disks {
+			if row.target.Host != write.Host {
+				continue
+			}
+			switch {
+			case !facts.DiskKnown || facts.DiskIdentity == "":
+				row.facts.DiskKnown = false
+				row.facts.Reason = cmp.Or(row.facts.Reason, "the filesystem the "+write.Label+" at "+write.Path+" lands on could not be observed")
+			case facts.DiskIdentity != row.facts.DiskIdentity:
+				continue
+			case write.Unknown != "":
+				row.facts.DiskKnown = false
+				row.facts.Reason = cmp.Or(row.facts.Reason, write.Unknown)
+			default:
+				if row.required.Disk, err = add(row.required.Disk, write.Bytes); err != nil {
+					return err
+				}
+				if row.writes == nil {
+					row.writes = map[string]int64{}
+				}
+				if row.writes[write.Label], err = add(row.writes[write.Label], write.Bytes); err != nil {
+					return err
+				}
+			}
+			disks[id] = row
+		}
+	}
+	return nil
+}
+
+func (b Budget) observeDisk(ctx context.Context, target Target) (Facts, error) {
+	if b.Observer == nil {
+		return Facts{}, nil
+	}
+	timeout := ProbeTimeout
+	if !target.Local {
+		timeout = RemoteProbeTimeout
+	}
+	probe, cancel := context.WithTimeout(ctx, timeout)
+	facts, err := b.Observer.Observe(probe, target)
+	expired := probe.Err()
+	cancel()
+	if ctx.Err() != nil {
+		return Facts{}, ctx.Err()
+	}
+	if err != nil || expired != nil {
+		return Facts{}, nil
+	}
+	return facts, nil
 }
 
 func allocationGroups(allocations []Allocation) ([]*budgetGroup, error) {
@@ -265,10 +347,32 @@ func budgetChecks(hostGroups, diskGroups map[string]observation) ([]Check, error
 				return nil, err
 			}
 		}
-		checks = append(checks, capacityCheck(row.target.Host+":"+row.target.Pool, "disk", "bytes", row.required.Disk, row.facts.Available.Disk, row.reserve.Quantities.Disk, row.facts.DiskKnown, row.reserve.Configured, row.facts.Reason, row.unproved.disk))
+		check := capacityCheck(row.target.Host+":"+row.target.Pool, "disk", "bytes", row.required.Disk, row.facts.Available.Disk, row.reserve.Quantities.Disk, row.facts.DiskKnown, row.reserve.Configured, row.facts.Reason, row.unproved.disk)
+		if len(row.writes) > 0 {
+			nameWrites(&check, row)
+		}
+		checks = append(checks, check)
 	}
 	slices.SortFunc(checks, func(a, b Check) int { return strings.Compare(a.Target+"/"+a.ID, b.Target+"/"+b.ID) })
 	return checks, nil
+}
+
+func nameWrites(check *Check, row observation) {
+	labels := slices.Sorted(maps.Keys(row.writes))
+	guests := row.required.Disk
+	parts := make([]string, 0, len(labels))
+	for _, label := range labels {
+		guests -= row.writes[label]
+		parts = append(parts, fmt.Sprintf("%s %d", label, row.writes[label]))
+	}
+	groups := "guest disks " + strconv.FormatInt(guests, 10) + ", " + strings.Join(parts, ", ")
+	switch check.Status {
+	case Failed:
+		check.Reason = fmt.Sprintf("%s and reserve %d require %d bytes; %d are available", groups, check.Capacity.Reserve, check.Capacity.Required+check.Capacity.Reserve, check.Capacity.Available)
+		check.Next = "increase available capacity on this filesystem, reduce the declared guest budget, or place what the apply writes on another filesystem"
+	case Passed:
+		check.Reason = "available capacity covers " + groups + " and reserve " + strconv.FormatInt(check.Capacity.Reserve, 10) + " bytes"
+	}
 }
 
 func capacityCheck(target, resource, unit string, required, available, reserve int64, known, configured bool, reason, unproved string) Check {

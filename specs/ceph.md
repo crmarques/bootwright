@@ -442,7 +442,9 @@ vendor sizing profile or default reserve. Existing owned allocations receive
 credit only after exact protected domain, process and backing-file proofs.
 Foreign configured domains, including inactive domains, reserve their vCPUs.
 Memory uses observed available memory plus proved owned resident memory; disk
-uses actual backing-filesystem availability plus unique proved allocations.
+uses actual backing-filesystem availability plus unique proved allocations,
+and counts what the apply writes beside its guests as
+[capacity admission](substrates.md#capacity-admission) states.
 A provider host on the SSH arm is observed as
 [capacity admission](substrates.md#capacity-admission) states, without reuse
 credit.

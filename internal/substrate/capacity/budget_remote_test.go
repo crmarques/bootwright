@@ -42,7 +42,7 @@ func remoteAllocation() capacity.Allocation {
 }
 
 func TestRemoteTargetWithCompleteFactsPassesAndAMissingFactStaysUnknown(t *testing.T) {
-	checks, err := remoteBudget(completeAnswers()).Check(context.Background(), []capacity.Allocation{remoteAllocation()}, false)
+	checks, err := remoteBudget(completeAnswers()).Check(context.Background(), []capacity.Allocation{remoteAllocation()}, nil, false)
 	if err != nil || len(checks) != 3 {
 		t.Fatalf("%+v %v", checks, err)
 	}
@@ -54,7 +54,7 @@ func TestRemoteTargetWithCompleteFactsPassesAndAMissingFactStaysUnknown(t *testi
 	for command := range completeAnswers() {
 		answers := completeAnswers()
 		delete(answers, command)
-		checks, err := remoteBudget(answers).Check(context.Background(), []capacity.Allocation{remoteAllocation()}, false)
+		checks, err := remoteBudget(answers).Check(context.Background(), []capacity.Allocation{remoteAllocation()}, nil, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -82,11 +82,11 @@ func TestRemoteTargetCarriesItsContextAndRefusesAMixedOne(t *testing.T) {
 	})}
 	other := remoteAllocation()
 	other.Machine, other.UUID = "second", "u2"
-	if _, err := budget.Check(context.Background(), []capacity.Allocation{remoteAllocation(), other}, false); err != nil || seen.Context != "lab" || len(seen.Allocations) != 2 {
+	if _, err := budget.Check(context.Background(), []capacity.Allocation{remoteAllocation(), other}, nil, false); err != nil || seen.Context != "lab" || len(seen.Allocations) != 2 {
 		t.Fatalf("%+v %v", seen, err)
 	}
 	other.Context = "elsewhere"
-	if _, err := budget.Check(context.Background(), []capacity.Allocation{remoteAllocation(), other}, false); err == nil {
+	if _, err := budget.Check(context.Background(), []capacity.Allocation{remoteAllocation(), other}, nil, false); err == nil {
 		t.Fatal("one check spanned two contexts")
 	}
 }
@@ -119,7 +119,7 @@ func TestRemoteTargetObservesWithinTheRemoteProbeBudget(t *testing.T) {
 		{Machine: "local", Host: "controller", Pool: "/a", Local: true, Quantities: capacity.Quantities{CPU: 1}},
 		{Machine: "remote", Host: "libvirt-host", Pool: "/b", Context: "lab", Quantities: capacity.Quantities{CPU: 1}},
 	}
-	if _, err := budget.Check(context.Background(), allocations, false); err != nil {
+	if _, err := budget.Check(context.Background(), allocations, nil, false); err != nil {
 		t.Fatal(err)
 	}
 	if local, remote := observer.budgets[true], observer.budgets[false]; local > capacity.ProbeTimeout || local <= 0 ||

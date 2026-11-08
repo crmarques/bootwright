@@ -70,11 +70,11 @@ func TestContainerPreflightUsesCompletedDNSAndApplyCapacityRows(t *testing.T) {
 			var gateAllocations []capacity.Allocation
 			checker := capacityCheckFunc(func(ctx context.Context, a []capacity.Allocation, dry bool) ([]capacity.Check, error) {
 				gateAllocations = a
-				gateRows, err = budget.Check(ctx, a, dry)
+				gateRows, err = budget.Check(ctx, a, nil, dry)
 				return gateRows, err
 			})
 			identity := "Machine/" + allocation.Machine
-			if err := libvirt.AdmitCapacity(context.Background(), "lab-sno", catalog, map[string]lifecycle.ObjectOwnership{identity: owned}, []reconciliation.Block{block}, checker); err != nil {
+			if err := libvirt.AdmitCapacity(context.Background(), "lab-sno", catalog, map[string]lifecycle.ObjectOwnership{identity: owned}, []reconciliation.Block{block}, checker, nil); err != nil {
 				t.Fatal(err)
 			}
 			if gateAllocations[0].Allocated != (owned.Verb == "apply") {

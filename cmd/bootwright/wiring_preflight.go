@@ -11,6 +11,7 @@ import (
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/sshlocal"
+	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/storage/preflight"
@@ -21,7 +22,7 @@ import (
 )
 
 func wireStoragePreflight(state inventory.EffectiveState, reconciler lifecycle.Service, deps serviceDependencies) preflight.Service {
-	return preflight.Service{Graph: effectiveGraph{state: state}, Ownership: machineOwnership{reconciler: reconciler}, Project: libvirt.CapacityAllocations, Capacity: capacity.Budget{Observer: remoteObserver(state, &reconciler, deps)}, Guests: preflight.GuestChecks{Commands: preflightCommands(state, reconciler, deps)}, HostPorts: preflightHostPorts, Selection: currentSelection(deps.Selection)}
+	return preflight.Service{Graph: effectiveGraph{state: state}, Ownership: machineOwnership{reconciler: reconciler}, Project: libvirt.CapacityAllocations, Writes: preflightWrites(deps), Capacity: capacity.Budget{Observer: remoteObserver(state, &reconciler, deps)}, Guests: preflight.GuestChecks{Commands: preflightCommands(state, reconciler, deps)}, HostPorts: preflightHostPorts, Selection: currentSelection(deps.Selection)}
 }
 
 func libvirtCapacityAdmission(checker capacity.CapacityChecker) lifecycle.ApplyAdmission {
@@ -29,8 +30,12 @@ func libvirtCapacityAdmission(checker capacity.CapacityChecker) lifecycle.ApplyA
 		checker = capacity.Budget{Observer: preflightlocal.Observer{}}
 	}
 	return func(ctx context.Context, contextName string, catalog api.Catalog, owned map[string]lifecycle.ObjectOwnership, starting []reconciliation.Block) error {
-		return libvirt.AdmitCapacity(ctx, contextName, catalog, owned, starting, checker)
+		return libvirt.AdmitCapacity(ctx, contextName, catalog, owned, starting, checker, installation.CapacityWrites(installation.FrozenSizes(starting)))
 	}
+}
+
+func preflightWrites(deps serviceDependencies) capacity.WriteProjector {
+	return installation.CapacityWrites(installation.StoreSizes(lifecycleMedia(deps.Lifecycle)))
 }
 
 func remoteObserver(state inventory.EffectiveState, reconciler *lifecycle.Service, deps serviceDependencies) preflightlocal.Observer {
@@ -128,7 +133,7 @@ func requestFleetIdentity(request preflight.CommandRequest) func(api.Catalog, ap
 }
 
 func wireContainerPreflight(state inventory.EffectiveState, reconciler lifecycle.Service, deps serviceDependencies) containerpreflight.Service {
-	return containerpreflight.Service{Graph: effectiveGraph{state: state}, Selection: currentSelection(deps.Selection), Ownership: machineOwnership{reconciler: reconciler}, Project: libvirt.CapacityAllocations, Capacity: capacity.Budget{Observer: remoteObserver(state, &reconciler, deps)}, Resolver: containerpreflightlocal.Resolver{}, DNSBlock: dnsServerDefinition().BlockID, Blocks: func(ctx context.Context, name string) (map[string]string, error) {
+	return containerpreflight.Service{Graph: effectiveGraph{state: state}, Selection: currentSelection(deps.Selection), Ownership: machineOwnership{reconciler: reconciler}, Project: libvirt.CapacityAllocations, Writes: preflightWrites(deps), Capacity: capacity.Budget{Observer: remoteObserver(state, &reconciler, deps)}, Resolver: containerpreflightlocal.Resolver{}, DNSBlock: dnsServerDefinition().BlockID, Blocks: func(ctx context.Context, name string) (map[string]string, error) {
 		result, err := reconciler.Status(ctx, lifecycle.StatusRequest{ContextName: name})
 		if err != nil {
 			return nil, err

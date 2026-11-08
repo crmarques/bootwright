@@ -27,15 +27,23 @@ type Allocation struct {
 	Context                       string
 	Domain, UUID                  string
 	Disks                         []string
+	Staging                       string
 	Local                         bool
 	Allocated                     bool
 	Reserve                       Reserve
 	Quantities                    Quantities
 }
+type Write struct {
+	Label, Host, Path, Context string
+	Unknown                    string
+	Local                      bool
+	Bytes                      int64
+}
 type Target struct {
 	Host, Pool  string
 	Context     string
 	Local       bool
+	DiskOnly    bool
 	Allocations []Allocation
 }
 
@@ -62,8 +70,9 @@ type Check struct {
 	Capacity                         *Capacity
 }
 type CapacityChecker interface {
-	Check(context.Context, []Allocation, bool) ([]Check, error)
+	Check(context.Context, []Allocation, []Write, bool) ([]Check, error)
 }
+type WriteProjector func(context.Context, api.Catalog, string, []Allocation, func(kind, object string) bool) ([]Write, error)
 
 type Graph interface {
 	Effective(context.Context, string) (api.Catalog, error)
