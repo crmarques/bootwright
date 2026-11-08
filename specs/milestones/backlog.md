@@ -305,6 +305,7 @@ Alias cell.
 | [B1209](#b1209) | new, 2026-11-06 (D240 (13)) | enabling | Substrate | One lifecycle block per managed `Network` | The provider host block realizes managed Networks without a request change; a block of its own is needed only past 20 managed Networks per host or for a fabric arm (D240 (13)) |
 | [B1211](#b1211) | new, 2026-11-07 (X323) | product | Machine and Substrate | A NIC's segment derived from the Networks its stack carries | Explicit `segmentRef` with the sole-segment default covers every input; derivation only saves authoring on multi-segment providers |
 | [B1212](#b1212) | new, 2026-11-07 (X323 review) | product | Network | Several subnets of one family on one Network | One subnet per family and one untagged Network per segment (D240 (1)) refuse two subnets on one untagged L2 domain; no tracked input needs it since libvirt-6-nodes-ceph-pools moved to VLAN 140 |
+| [B1213](#b1213) | new, 2026-11-08 (lab-5-nodes-ceph-networks run) | product | Substrate | Capacity admission counts what the apply itself writes | The gate counts declared guest disks and the reserve only; the e2e README now tells the operator to leave room for the package tree and installer media, and the guests' thin disks rarely grow to their declared size in a lab run |
 
 ### B82
 
@@ -3380,6 +3381,22 @@ several subnets of one family on one L2 domain (multinetting), and how the
 assignment, gateway and client-set rules read them ([Network](../api/networks.md#network)).
 **Outcome:** an L2 domain that carries two subnets untagged is declared as it
 is built.
+
+### B1213
+
+**Owner:** Substrate. **Kind:** product. **Requires:** owner decision.
+**Definition:** Candidate, needs an owner decision: whether the libvirt
+[capacity admission](../substrates.md#capacity-admission) also counts the
+bytes its own apply will write to the guests' filesystem outside their disks,
+the published installation package tree and each guest's staged installer
+media, or reports them as their own line. Observed 2026-11-08 on
+lab-5-nodes-ceph-networks: the gate admitted the apply with 234 GiB free
+against a 210 GiB budget, the machines stage then wrote about 23 GiB of tree
+and media, and storage preflight reported `capacity.disk` failed with a
+6.6 GB deficit although every Machine block was done and the clusters stage
+was no longer gated. The disks' credit was correct.
+**Outcome:** an apply the gate admits still fits after its own installation
+writes, or preflight names those writes as the cause.
 
 ## Audit remediation (2026-10-26)
 

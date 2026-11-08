@@ -37,7 +37,14 @@ CPUs, memory and disk are what the apply gate requires on the host: the
 declared guests plus the provider's reserve
 ([capacity admission](../specs/substrates.md#capacity-admission)). Memory is
 `MemAvailable`, and swap never counts; disk is free space on the filesystem
-under `/var/lib/libvirt`. A 16-CPU, 32 GiB laptop leaves at most about 28 GiB
+under `/var/lib/libvirt`. The disk column counts the guests' declared disks and
+the reserve only, so a case that installs RHEL also needs room for what its
+own apply writes before the guests fill their disks: the published package
+tree, about the DVD's size (15 GiB for RHEL 9.8), and about 1.5 GiB of staged
+installer media per installed guest, when they share that filesystem.
+Without it, storage preflight after the machines stage reports
+`capacity.disk` failed ([B1213](../specs/milestones/backlog.md#b1213)).
+A 16-CPU, 32 GiB laptop leaves at most about 28 GiB
 available, so the cases marked "larger host" need one. Run one case at a time:
 they share the bridge `virbr-e2e`, the guest subnet `198.51.100.0/24` and the
 service ports.

@@ -88,7 +88,9 @@ The [capacity gate](../../specs/substrates.md#capacity-admission) counts three
 Ceph guests (3 vCPU, 6 GiB, 30 GiB root and a 25 GiB OSD disk each), `app-01`
 (2 vCPU, 2 GiB, 20 GiB), `client-01` (1 vCPU, 1.5 GiB, 15 GiB) and the reserve
 (1 vCPU, 2 GiB, 10 GiB): 13 host CPUs, 24 GiB of `MemAvailable` and 210 GiB
-free under `/var/lib/libvirt`. Close large applications first. The host's
+free under `/var/lib/libvirt`, plus about 23 GiB for the package tree and the
+five guests' installer media
+([disk headroom](../README.md#end-to-end-cases)), so about 233 GiB in all. Close large applications first. The host's
 ports 53, 123, 3128, 8080 and 8443 on its address and loopback 8000 to 8004
 must be free. No other case may be applied: this one uses 198.51.100.0/25 and
 203.0.113.0/26. Require no output from each check:
