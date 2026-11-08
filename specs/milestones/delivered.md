@@ -12483,3 +12483,25 @@ Network with exclusions. The input chart follows in the template-input
 repository (1657b2a, environment-ha 0.4.0); the gitignored inputs needed no
 change. Gates: `make check` and `make race` passed on the integrated branch;
 no live run or push occurred.
+
+### X326 — Capacity admission counts what the apply writes
+
+**Item:** B1213, completed in-tree (2026-11-08), under the session clauses of
+[D242](backlog.md#d242). The [capacity admission](../substrates.md#capacity-admission)
+and storage and container preflight add, to the disk check of each guests'
+filesystem, the hosted package trees, the published installer images and
+their copies staged in the libvirt provider's virtual-media pool that the
+apply will still write there, sized before the effect with a stated upper
+bound, and name each group in the check's reason. A write on another
+filesystem is not gated; one whose filesystem or size is unknown leaves the
+host's disk checks unknown. No request, evidence, contract version or content
+digest moved.
+
+**Commits:** 02bc9c90e (gate, projection, specs and D242), with this record and
+the e2e headroom note. `TestCapacityAdmissionCountsWhatTheApplyWritesBesideItsGuests`
+failed on the previous source (the overflowing apply was admitted) and passes.
+Gates: `make focus` passed on both commits; `make check` was left to
+integration, and no live run or push occurred. **Limitation:** bytes already
+written by an interrupted publication get no credit, and a transient work copy
+of an installer image on a filesystem other than its publication's is not
+counted.
