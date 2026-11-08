@@ -286,9 +286,10 @@ Alias cell.
 | [B1209](#b1209) | new, 2026-11-06 (D240 (13)) | enabling | Substrate | One lifecycle block per managed `Network` | The provider host block realizes managed Networks without a request change; a block of its own is needed only past 20 managed Networks per host or for a fabric arm (D240 (13)) |
 | [B1211](#b1211) | new, 2026-11-07 (X323) | product | Machine and Substrate | A NIC's segment derived from the Networks its stack carries | Explicit `segmentRef` with the sole-segment default covers every input; derivation only saves authoring on multi-segment providers |
 | [B1212](#b1212) | new, 2026-11-07 (X323 review) | product | Network | Several subnets of one family on one Network | One subnet per family and one untagged Network per segment (D240 (1)) refuse two subnets on one untagged L2 domain; no tracked input needs it since libvirt-6-nodes-ceph-pools moved to VLAN 140 |
-| [B1216](#b1216) | new, 2026-11-08 (owner's host cleanup) | product | Controller, with Workspace | A controller store an older build wrote has a named, cheap exit | D241 makes the refusal rare; the owner recovered by hand once |
 | [B1217](#b1217) | new, 2026-11-08 (X326 review) | defect | Substrate, with Managed OS | The capacity gate attributes each publication to its own filesystem and reads a stage-scoped apply's completed installs | A mount below a per-context content root is unusual, and the owner's staged applies continue one operation |
 | [B1219](#b1219) | new, 2026-11-08 (X327 review) | safety | CLI, with agent guidance | Every grouped ask pattern also matches global flags written between the group and its command | Predates X327, which fixes only the `render` patterns; `TestDocsAskRuleCatchesGlobalFlagsBetweenAGroupAndItsCommand` holds that case |
+| [B1226](#b1226) | new, 2026-11-08 (D244 (5)) | product | Reconciliation, with CLI | Operation events are also written to the system journal, by context, operation and block | `bootwright logs` (B1223) answers where to look; the journal duplicates `operation.jsonl` |
+| [B1227](#b1227) | new, 2026-11-08 (D244 (5)) | product | CLI | A JSON `apply` or `destroy` can stream its progress events | No machine consumer has asked; it changes the one-document contract of JSON output |
 | [B1229](#b1229) | new, 2026-11-09 (X332's review) | defect | Substrate | A provider host that stops defining managed Networks removes the refusal and firewall-ready units an earlier apply installed | The units stay owned and refuse only the subnets they held; the firewall-ready unit's gap predates X332 |
 | [B1230](#b1230) | new, 2026-11-09 (X331) | product | Machine power, with Substrate | A failed revoke of a lent KubeVirt token reaches the operator of a power command or reading | Power results carry no warning channel; the token still ends at its bounded lifetime and the revoke's adapter output is retained |
 
@@ -3183,22 +3184,6 @@ assignment, gateway and client-set rules read them ([Network](../api/networks.md
 **Outcome:** an L2 domain that carries two subnets untagged is declared as it
 is built.
 
-### B1216
-
-**Owner:** Controller, with Workspace. **Kind:** product. **Requires:** owner
-decision. **Definition:** Candidate, needs an owner decision: a named exit for a
-state root this build cannot read ([D241](#d241) removed the older readers).
-On 2026-11-08 `context list`, `controller uninstall` and every context command
-refused `context.state`, and the owner removed `/var/lib/bootwright` and the
-per-context roots under `/var/lib/bootwright-install`,
-`/var/lib/bootwright-substrate`, `/var/lib/bootwright-services` and
-`/var/lib/libvirt/images/bootwright` by hand after proving no domain, network,
-unit or container remained. Recommendation: `controller uninstall
---discard-unreadable`, which proves no Bootwright-owned domain, network, pool,
-unit or container remains on the host, then archives or removes those roots
-and names each path.
-**Outcome:** a version move costs one named command, never a hand-written
-removal.
 
 ### B1217
 
@@ -3234,6 +3219,25 @@ list every grouped command in `askRuleGroupFlagCommands`. **Exit evidence:**
 every grouped command with effects. **Outcome:** no effectful command escapes
 its ask rule through a flag written after its group.
 
+### B1226
+
+**Owner:** Reconciliation, with CLI. **Kind:** product. **Requires:** B1223.
+**Definition:** Candidate, parked by [D244](#d244) (5): each normalized
+operation event `operation.jsonl` records is also sent to the system journal,
+never raw adapter output, with fields naming the context, operation and block,
+so `journalctl` can follow a context without Bootwright. **Exit evidence:** a
+journal writer test over an injected socket, and a record that carries no
+secret, raw adapter byte or terminal control sequence.
+**Outcome:** a running operation can be followed with standard host tooling.
+
+### B1227
+
+**Owner:** CLI. **Kind:** product. **Requires:** a machine consumer that asks.
+**Definition:** Candidate, parked by [D244](#d244) (5): an `apply` or `destroy`
+with JSON output streams one line per progress event to a separate stream,
+leaving the final document unchanged. **Exit evidence:** a golden of the
+stream beside an unchanged result document.
+**Outcome:** a driver follows an operation without parsing human output.
 
 ### B1229
 
@@ -7352,6 +7356,36 @@ recommendations". This opens X327, out of sequence, with B1218 and B376.
     knowledge pages, audits and acceptance rows keep the names they recorded.
 11. The per-kind preflight services leave the CLI's services, and the unused
     add-on preflight stub package is deleted.
+
+### D244
+
+**owner** (2026-11-08): the owner asked for an audit of Bootwright's on-host
+storage and log structure across controller roles, saw the proposed layout and
+log examples, then said "Proceed implementation. I accept recommendations".
+This authorizes X328 (M1: B1216, B1228, B1220, B1221, B1222) and X329 (M1:
+B1223, B1224, B1225), out of sequence. The accepted recommendations:
+
+1. Roots by the nature of their data: the private store at
+   `/var/lib/bootwright`, troubleshooting output at `/var/log/bootwright`, what
+   a context realized on a host as a workload host at
+   `/var/lib/bootwright-hosted/<context>/`, and per-invocation scratch at
+   `/var/lib/bootwright-staging`; libvirt images, Ceph node trees and managed
+   Machines' `/etc/bootwright` records stay where they are.
+2. The store's host-wide state moves under one `host/` directory in the same
+   version move, with its record formats unchanged.
+3. Operation logs, bounded-run output and setup output leave the store, with
+   one naming scheme, `<kind>-NNNNNN.output`, and no one-file directories.
+4. `controller uninstall` removes every root, and B1216's exit for a store
+   this build cannot read lands in the same slice, so the version move costs
+   one named command.
+5. A `bootwright logs` command, a `Live` view of running blocks in `status`
+   and a follow hint beside every `Logs` field; journal export and a JSON event
+   stream stay parked (B1226, B1227). One root for everything and a separate
+   `/var/cache/bootwright` are rejected.
+
+Taken by the session, pending the owner's review: X328 lands before X329,
+reversing the recommended order, because another session's X327 restructures
+the CLI concurrently and X329 rebases on it.
 
 ### D245
 
