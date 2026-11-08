@@ -264,7 +264,7 @@ func TestNativeMergeDiagnosticsDoNotExposeMapKeys(t *testing.T) {
 	}
 }
 
-func TestManagedLibvirtAttachmentContainsTheInstallAddress(t *testing.T) {
+func TestManagedLibvirtSegmentContainsTheInstallAddress(t *testing.T) {
 	host := object(api.Machine, "host", m("os", m("provided", true)))
 	provider := object(api.InfraProvider, "lab", m("libvirt", m("machineRef", "host", "uri", "qemu:///system", "bmcEmulation", m("auth", m("credentialsRef", "bmc")), "machineProfiles", list(m("name", "small")))))
 	managed := managedNet("net", "lab", "192.0.2.0/24", "192.0.2.1")
@@ -366,7 +366,7 @@ func installedFixture() (api.Object, api.Catalog) {
 		}
 	}
 	// Validation reads effective state, where the provider's BMC defaults and
-	// the sole attachment have already been inherited.
+	// the sole segment have already been inherited.
 	complete := api.NewCatalog(objects)
 	normalized, _ := Normalize(machine, complete)
 	objects[0] = normalized

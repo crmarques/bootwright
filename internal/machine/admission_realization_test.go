@@ -413,10 +413,10 @@ func TestAKubeVirtMachineAuthorsNoMAC(t *testing.T) {
 	}
 }
 
-// A bare-metal attachment configures nothing, so a bare-metal Machine needs no
-// attachment selection. A libvirt NIC's attachment is its domain interface's
-// network, so with two attachments to choose from each NIC names one.
-func TestABaremetalMachineSelectsNoAttachment(t *testing.T) {
+// A bare-metal segment configures nothing, so a bare-metal Machine needs no
+// segment selection. A libvirt NIC's segment is its domain interface's
+// network, so with two segments to choose from each NIC names one.
+func TestABaremetalMachineSelectsNoSegment(t *testing.T) {
 	inline := guest(m("inline", m("nmstate", m("interfaces", list(m("name", "enp1s0", "type", "ethernet"))))))
 	requireOneIssue(t, admission(inline, twoSegmentLab(list())...), api.Issue{Code: "api.invariant", Field: "$.spec.substrate.libvirt.nics",
 		Message:     "NIC enp1s0 of Machine/guest selects no segment, and InfraProvider/lab offers 2 segments across spec.segments and the managed Networks whose spec.libvirt.providerRef names it, not exactly one that every NIC defaults to",
@@ -429,7 +429,7 @@ func TestABaremetalMachineSelectsNoAttachment(t *testing.T) {
 		}
 	}
 	if issues := admission(server, objects...); len(issues) != 0 {
-		t.Fatalf("a bare-metal Machine without an attachment was refused: %v", issues)
+		t.Fatalf("a bare-metal Machine without an segment was refused: %v", issues)
 	}
 }
 
@@ -493,7 +493,7 @@ func TestAVirtualMachineDeclaresItsNICsAndNamesAProviderProfile(t *testing.T) {
 	}
 }
 
-func TestInstallAttachmentContainmentFollowsVLANAndBondParents(t *testing.T) {
+func TestInstallSegmentContainmentFollowsVLANAndBondParents(t *testing.T) {
 	for _, network := range []struct {
 		iface      string
 		interfaces api.Value
@@ -512,7 +512,7 @@ func TestInstallAttachmentContainmentFollowsVLANAndBondParents(t *testing.T) {
 	}
 }
 
-// An OS-ready Machine of a one-attachment libvirt provider may declare its
+// An OS-ready Machine of a one-segment libvirt provider may declare its
 // hardware NICs: normalization defaults no arm nics entry for it, so the rule
 // that an OS-ready Machine declares contacts only has nothing to refuse.
 func TestAnOSReadyVirtualMachineMayDeclareHardwareNICs(t *testing.T) {
@@ -541,9 +541,9 @@ func TestAVirtualMachineNICNameIsAnInterfaceName(t *testing.T) {
 	}
 }
 
-// A provider with no network attachment cannot attach any vNIC, so the step
-// is to declare one on the provider, not to name an attachment that is absent.
-func TestAProviderWithoutAttachmentsIsToldToDeclareOne(t *testing.T) {
+// A provider with no network segment cannot attach any vNIC, so the step
+// is to declare one on the provider, not to name an segment that is absent.
+func TestAProviderWithoutSegmentsIsToldToDeclareOne(t *testing.T) {
 	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
 	lab = slices.DeleteFunc(lab, func(o api.Object) bool { return o.Kind() == api.Network })
 	issues := admission(installOn("192.0.2.11"), lab...)

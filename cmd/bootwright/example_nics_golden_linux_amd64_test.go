@@ -20,7 +20,7 @@ import (
 )
 
 // exampleNICs is everything one example derives from its Machines' NICs: each
-// vNIC's name, MAC and attachment, each provider's MAC claims, each Kickstart
+// vNIC's name, MAC and segment, each provider's MAC claims, each Kickstart
 // interface pin and each agent host's interfaces and network configuration. A
 // derivation that refuses is pinned by its refusal.
 type exampleNICs struct {
@@ -34,7 +34,7 @@ type exampleNICs struct {
 
 // TestEveryExampleNICDerivationMatchesItsGolden pins the vNICs, MACs and
 // interface pins every tracked example derives, so a change to how NICs are
-// declared moves no realized MAC, name or attachment.
+// declared moves no realized MAC, name or segment.
 func TestEveryExampleNICDerivationMatchesItsGolden(t *testing.T) {
 	const contextName = "lab"
 	directories := exampleDirectories(t)

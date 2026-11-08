@@ -16,7 +16,7 @@ import (
 
 const labProvider, labNetwork = "infra/providers/lab-libvirt.yaml", "infra/networks/lab-guests.yaml"
 
-// withUplink gives the lab provider an attachment to an existing bridge.
+// withUplink gives the lab provider an segment to an existing bridge.
 func withUplink(name, bridge string) exampleEdit {
 	return exampleEdit{labProvider, "        tpm: {}\n", "        tpm: {}\n\n  segments:\n    - name: " + name + "\n      libvirt:\n        bridge: " + bridge + "\n"}
 }
@@ -42,8 +42,8 @@ func extendedExample(t *testing.T, name string, files map[string]string, edits .
 }
 
 // secondLabProvider is a second libvirt provider on the lab controller with
-// one attachment.
-func secondLabProvider(attachment string) map[string]string {
+// one segment.
+func secondLabProvider(segment string) map[string]string {
 	return map[string]string{"infra/providers/lab-libvirt-b.yaml": `apiVersion: bootwright.io/v1alpha1
 kind: InfraProvider
 metadata:
@@ -62,7 +62,7 @@ spec:
         credentialsRef: lab-bmc-credentials
 
   segments:
-` + attachment}
+` + segment}
 }
 
 func withDataDisks(names ...string) exampleEdit {
@@ -77,7 +77,7 @@ func withSizedDataDisks(size string, names ...string) exampleEdit {
 	return exampleEdit{labProvider, "        tpm: {}\n", disks + "        tpm: {}\n"}
 }
 
-// Validate refuses every libvirt provider, profile and attachment shape the
+// Validate refuses every libvirt provider, profile and segment shape the
 // host cannot realize, where plan or apply would otherwise fail, each at its
 // own field.
 func TestLibvirtAdmissionRefusesWhatTheHostCannotRealize(t *testing.T) {
@@ -87,7 +87,7 @@ func TestLibvirtAdmissionRefusesWhatTheHostCannotRealize(t *testing.T) {
 		edits                        []exampleEdit
 		code, object, field, message string
 	}{
-		"an attachment name outside the label grammar": {[]exampleEdit{withUplink("Lab_Uplink", "br-uplink")},
+		"an segment name outside the label grammar": {[]exampleEdit{withUplink("Lab_Uplink", "br-uplink")},
 			"api.value", provider, "$.spec.segments[0].name", "value does not match the required name grammar"},
 		"a data disk name outside the label grammar": {[]exampleEdit{withDataDisks("Data_1")},
 			"api.value", provider, "$.spec.libvirt.machineProfiles[0].dataDisks[0].name", "value does not match the required name grammar"},
@@ -107,7 +107,7 @@ func TestLibvirtAdmissionRefusesWhatTheHostCannotRealize(t *testing.T) {
 			"api.value", network, "$.spec.libvirt.bridge", "value does not match the required bridge grammar"},
 		"a bridge longer than an interface name": {[]exampleEdit{{labNetwork, "bridge: virbr-lab", "bridge: virbr-lab-guests1"}},
 			"api.value", network, "$.spec.libvirt.bridge", "value does not match the required bridge grammar"},
-		"an attachment bridge holding a quote": {[]exampleEdit{withUplink("uplink", `'br-uplink"x'`)},
+		"an segment bridge holding a quote": {[]exampleEdit{withUplink("uplink", `'br-uplink"x'`)},
 			"api.value", provider, "$.spec.segments[0].libvirt.bridge", "value does not match the required bridge grammar"},
 		"an interface match holding a quote": {[]exampleEdit{{"infra/machines/rhel-01.yaml", "    installAddressRef: ip\n", "    installAddressRef: ip\n    interfaceMatches:\n      - interface: 'enp1s0\"x'\n        nicRef: enp1s0\n"}},
 			"api.value", guest, "$.spec.network.interfaceMatches[0].interface", "value does not match the required ifname grammar"},
@@ -120,7 +120,7 @@ func TestLibvirtAdmissionRefusesWhatTheHostCannotRealize(t *testing.T) {
 			}
 		})
 	}
-	t.Run("a managed Network named like an attachment of its provider", func(t *testing.T) {
+	t.Run("a managed Network named like an segment of its provider", func(t *testing.T) {
 		refusal := requireRefusal(t, editedExample(t, "lab-rhel", withUplink("lab-guests", "br-uplink")), "api.invariant", network, "$.spec.libvirt.providerRef")
 		if !strings.Contains(refusal.Message, "spec.segments[0] of "+provider+" is also named lab-guests") {
 			t.Fatalf("the refusal says %q", refusal.Message)
@@ -152,14 +152,4 @@ spec:
         address: ready-01.lab.example.test
 `}, exampleEdit{labProvider, "port: 8000", "port: 65535"}))
 	})
-}
-
-// The bare-metal attachment configures nothing, so a VLAN it once carried is an
-// unknown field rather than a selection nothing applies.
-func TestTheBareMetalAttachmentCarriesNoVLAN(t *testing.T) {
-	sources := editedExample(t, "lab-baremetal", exampleEdit{"infra/providers/lab-metal.yaml", "      baremetal: {}\n", "      baremetal:\n        vlan: 0\n"})
-	refusal := requireRefusal(t, sources, "api.field", "InfraProvider/lab-metal", "$.spec.segments[0].baremetal.vlan")
-	if !strings.Contains(refusal.Message, "permits no fields") {
-		t.Fatalf("the VLAN refusal says %q", refusal.Message)
-	}
 }

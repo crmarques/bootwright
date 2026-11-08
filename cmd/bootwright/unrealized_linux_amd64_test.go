@@ -187,8 +187,8 @@ func milestonePage(t *testing.T, item string) string {
 	return ""
 }
 
-// A managed Network is no longer admitted but unrealized: planning claims each
-// one through the host block of the provider it names, which defines it.
+// Planning claims each managed Network through the host block of the provider
+// it names, which defines it.
 func TestPlanningClaimsEveryManagedNetworkThroughItsProviderHost(t *testing.T) {
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-networks"))
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})

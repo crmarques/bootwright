@@ -47,16 +47,16 @@ func twoSegmentLab(interfaces api.Value) []api.Object {
 	objects := libvirtLab(interfaces)
 	for i, o := range objects {
 		if o.Kind() == api.InfraProvider {
-			attachments := append(o.Spec().Get("segments").Items(), m("name", "storage", "libvirt", m("bridge", "br-storage")))
-			objects[i] = o.WithSpec(o.Spec().With("segments", list(attachments...)))
+			segments := append(o.Spec().Get("segments").Items(), m("name", "storage", "libvirt", m("bridge", "br-storage")))
+			objects[i] = o.WithSpec(o.Spec().With("segments", list(segments...)))
 		}
 	}
 	return objects
 }
 
-// A provider's sole attachment is every NIC's default whatever its name, for a
+// A provider's sole segment is every NIC's default whatever its name, for a
 // referenced or an inline configuration; the NetworkConfig's name selects
-// nothing, and with two attachments every NIC names its own.
+// nothing, and with two segments every NIC names its own.
 func TestEveryNICDefaultsToItsProvidersSoleSegment(t *testing.T) {
 	lab := libvirtLab(list(m("name", "enp1s0", "type", "ethernet")))
 	for i, o := range lab {
@@ -75,10 +75,10 @@ func TestEveryNICDefaultsToItsProvidersSoleSegment(t *testing.T) {
 			catalog := api.NewCatalog(append([]api.Object{machine}, lab...))
 			normalized, _ := Normalize(machine, catalog)
 			if got := normalized.Spec().Get("substrate", "libvirt", "nics"); !got.Equal(list(m("nicRef", "enp1s0", "segmentRef", "net"))) {
-				t.Fatalf("substrate.libvirt.nics = %v, want enp1s0 on the sole attachment net", got)
+				t.Fatalf("substrate.libvirt.nics = %v, want enp1s0 on the sole segment net", got)
 			}
 			if issues := admission(machine, lab...); len(issues) != 0 {
-				t.Fatalf("a Machine on its provider's sole attachment was refused: %v", issues)
+				t.Fatalf("a Machine on its provider's sole segment was refused: %v", issues)
 			}
 		})
 	}
@@ -92,7 +92,7 @@ func TestEveryNICDefaultsToItsProvidersSoleSegment(t *testing.T) {
 	}
 }
 
-// A bond's ports share one attachment: ports on two would move the host onto
+// A bond's ports share one segment: ports on two would move the host onto
 // another network at the first failover.
 func TestABondRefusesPortsOnDifferentSegments(t *testing.T) {
 	interfaces := list(m("name", "enp1s0", "type", "ethernet"), m("name", "enp2s0", "type", "ethernet"),
@@ -106,7 +106,7 @@ func TestABondRefusesPortsOnDifferentSegments(t *testing.T) {
 		Message:     "bond bond0 of Machine/guest has ports on different segments (enp1s0 on net, enp2s0 on storage), so a failover would move the host onto another network",
 		Remediation: "put the NIC of every port of bond bond0 on one segment in spec.substrate.libvirt.nics on Machine/guest, or remove the port on another segment from the bond"})
 	if issues := admission(bonded("net"), twoSegmentLab(interfaces)...); len(issues) != 0 {
-		t.Fatalf("a bond on one attachment was refused: %v", issues)
+		t.Fatalf("a bond on one segment was refused: %v", issues)
 	}
 }
 
@@ -119,10 +119,10 @@ func TestABondSplitThroughControllerOrNestingRefusesOnce(t *testing.T) {
 		}
 		return m("name", name, "type", "ethernet", "controller", controller)
 	}
-	attached := func(interfaces api.Value, install string, attachments ...string) []api.Issue {
+	attached := func(interfaces api.Value, install string, segments ...string) []api.Issue {
 		machine := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11", "interface", install))))
 		var entries, nics []api.Value
-		for index, reference := range attachments {
+		for index, reference := range segments {
 			name := []string{"enp1s0", "enp2s0", "enp3s0"}[index]
 			entries, nics = append(entries, m("nicRef", name, "segmentRef", reference)), append(nics, m("name", name))
 		}
@@ -134,7 +134,7 @@ func TestABondSplitThroughControllerOrNestingRefusesOnce(t *testing.T) {
 		Message:     "bond bond0 of Machine/guest has ports on different segments (enp1s0 on net, enp2s0 on storage), so a failover would move the host onto another network",
 		Remediation: "put the NIC of every port of bond bond0 on one segment in spec.substrate.libvirt.nics on Machine/guest, or remove the port on another segment from the bond"})
 	if issues := attached(controlled, "bond0", "net", "net"); len(issues) != 0 {
-		t.Fatalf("a controller-declared bond on one attachment was refused: %v", issues)
+		t.Fatalf("a controller-declared bond on one segment was refused: %v", issues)
 	}
 	nested := list(ethernet("enp1s0", ""), ethernet("enp2s0", ""), ethernet("enp3s0", ""),
 		m("name", "bond1", "type", "bond", "link-aggregation", m("mode", "active-backup", "port", api.StringList("enp1s0", "enp2s0"))),

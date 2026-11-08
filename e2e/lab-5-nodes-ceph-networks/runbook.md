@@ -36,8 +36,7 @@ network from its `Network` objects. Context `lab-5-nodes-ceph-networks`;
 The case exercises [managed Networks](../../specs/api/networks.md#libvirt-arm)
 as provider segments, a tagged Network on a managed bridge, a NIC per segment,
 the [cross-kind checks](../../specs/api/networks.md#cross-kind-checks) and the
-Ceph network checks of X323 and X324 on live guests. It accepts no milestone
-item; it was added at the owner's request of 2026-11-08.
+Ceph network checks on live guests. It accepts no milestone item.
 
 The host holds an address on each managed network, as their gateway, and
 libvirt refuses new connections between two of its networks, so the two

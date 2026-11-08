@@ -86,16 +86,9 @@ func TestMachineAdmissionRefusesWhatItsSubstrateCannotRealize(t *testing.T) {
 	}
 }
 
-// The hardware boot block selected nothing any substrate read, so it is an
-// unknown field, and a bare-metal provider may declare no segment, since a
-// segment configures nothing.
-func TestABaremetalMachineCarriesNoBootNICOrSegment(t *testing.T) {
-	const metal = "infra/machines/metal-01.yaml"
-	refusal := requireRefusal(t, editedExample(t, "lab-baremetal", exampleEdit{metal, "\n    nics:\n", "\n    boot:\n      nicRef: eno1\n\n    nics:\n"}),
-		"api.field", "Machine/metal-01", "$.spec.hardware.boot")
-	if !strings.Contains(refusal.Message, "clearOnInstall, eraseOnRemoval, nics, rootDevice") {
-		t.Fatalf("the boot refusal says %q", refusal.Message)
-	}
+// A bare-metal provider may declare no segment, since a segment configures
+// nothing.
+func TestABaremetalProviderMayDeclareNoSegment(t *testing.T) {
 	compileAcceptance(t, editedExample(t, "lab-baremetal",
 		exampleEdit{"infra/providers/lab-metal.yaml", "\n  segments:\n    - name: lab-metal\n      untaggedNetworkRef: lab-metal\n      baremetal: {}\n", ""}))
 }

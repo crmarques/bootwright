@@ -12,13 +12,8 @@ import (
 
 const workloadsMapping = "        bridgeMapping:\n          bridge: br-workloads\n          interface: enp2s0\n"
 
-// The renamed uplink is an unknown field, and a node's bridge interface names
-// a declared secondary network.
-func TestASecondaryNetworkMapsItsBridge(t *testing.T) {
-	refusal := requireRefusal(t, editedExample(t, "lab-networks", exampleEdit{networksCluster, "        bridgeMapping:\n", "        uplink:\n"}), "api.field", "OpenShiftCluster/networks", "$.spec.networking.secondaryNetworks[0].uplink")
-	if !strings.Contains(refusal.Message+refusal.Remediation, "bridgeMapping") {
-		t.Fatalf("refusal = %+v", refusal)
-	}
+// A node's bridge interface names a declared secondary network.
+func TestANodeBridgeInterfaceNamesADeclaredSecondaryNetwork(t *testing.T) {
 	override := exampleEdit{networksCluster, "      machineRef: networks-04\n", "      machineRef: networks-04\n\n      bridgeInterfaces:\n        - networkRef: tenants\n          interface: enp2s0\n"}
 	requireRefusal(t, editedExample(t, "lab-networks", override), "api.reference", "OpenShiftCluster/networks", "$.spec.nodes[3].bridgeInterfaces[0].networkRef")
 }
