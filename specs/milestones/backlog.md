@@ -305,6 +305,9 @@ Alias cell.
 | [B1209](#b1209) | new, 2026-11-06 (D240 (13)) | enabling | Substrate | One lifecycle block per managed `Network` | The provider host block realizes managed Networks without a request change; a block of its own is needed only past 20 managed Networks per host or for a fabric arm (D240 (13)) |
 | [B1211](#b1211) | new, 2026-11-07 (X323) | product | Machine and Substrate | A NIC's segment derived from the Networks its stack carries | Explicit `segmentRef` with the sole-segment default covers every input; derivation only saves authoring on multi-segment providers |
 | [B1212](#b1212) | new, 2026-11-07 (X323 review) | product | Network | Several subnets of one family on one Network | One subnet per family and one untagged Network per segment (D240 (1)) refuse two subnets on one untagged L2 domain; no tracked input needs it since libvirt-6-nodes-ceph-pools moved to VLAN 140 |
+| [B1214](#b1214) | new, 2026-11-08 (lab-5-nodes-ceph-networks run) | product | Infrastructure services | A managed DNS name answers only the addresses its clients reach | Every client of this run dialed IPs; cephadm takes each host's address explicitly |
+| [B1215](#b1215) | new, 2026-11-08 (lab-5-nodes-ceph-networks run) | product | Substrate | A managed libvirt network does not route the CIDR of a tagged Network it carries with no host address | Only a misdirected guest probe left through NAT; no Ceph traffic routes there |
+| [B1216](#b1216) | new, 2026-11-08 (owner's host cleanup) | product | Controller, with Workspace | A controller store an older build wrote has a named, cheap exit | D241 makes the refusal rare; the owner recovered by hand once |
 
 ### B82
 
@@ -3380,6 +3383,53 @@ several subnets of one family on one L2 domain (multinetting), and how the
 assignment, gateway and client-set rules read them ([Network](../api/networks.md#network)).
 **Outcome:** an L2 domain that carries two subnets untagged is declared as it
 is built.
+
+
+### B1214
+
+**Owner:** Infrastructure services. **Kind:** product. **Requires:** owner
+decision. **Definition:** Candidate, needs an owner decision: which addresses a
+managed `DNSServer` name answers. Today a Machine's name answers every declared
+address ([managed services](../infrastructure-services.md)); on
+lab-5-nodes-ceph-networks each Ceph host's name also answered its address on the
+unrouted cluster VLAN, which only the Ceph hosts reach. Options: (a) keep every
+address; (b) answer only addresses on Networks with a gateway and the Machine's
+install address, publishing an unrouted Network's address under no name; (c) an
+authored per-address opt-out. Recommendation (b): a name answers what its
+resolver's clients can dial, and members of an unrouted Network address each
+other explicitly, as cephadm does.
+**Outcome:** a name never resolves to an address its clients cannot reach.
+
+### B1215
+
+**Owner:** Substrate. **Kind:** product. **Requires:** owner decision.
+**Definition:** Candidate, needs an owner decision: whether the provider host
+block that realizes a [managed Network](../api/networks.md#libvirt-arm) refuses to
+route the CIDR of each `taggedNetworkRefs` Network that holds no host address,
+for example with an unreachable route it owns and removes with the network.
+On lab-5-nodes-ceph-networks a guest's probe of the cluster VLAN left through
+the host's NAT to the internet instead of being refused; no Ceph traffic took
+that path. Recommendation: refuse locally, since the host already owns the
+network that carries the VLAN.
+**Outcome:** traffic for a VLAN carried on a managed bridge never leaves the
+host through its uplink.
+
+### B1216
+
+**Owner:** Controller, with Workspace. **Kind:** product. **Requires:** owner
+decision. **Definition:** Candidate, needs an owner decision: a named exit for a
+state root this build cannot read ([D241](#d241) removed the older readers).
+On 2026-11-08 `context list`, `controller uninstall` and every context command
+refused `context.state`, and the owner removed `/var/lib/bootwright` and the
+per-context roots under `/var/lib/bootwright-install`,
+`/var/lib/bootwright-substrate`, `/var/lib/bootwright-services` and
+`/var/lib/libvirt/images/bootwright` by hand after proving no domain, network,
+unit or container remained. Recommendation: `controller uninstall
+--discard-unreadable`, which proves no Bootwright-owned domain, network, pool,
+unit or container remains on the host, then archives or removes those roots
+and names each path.
+**Outcome:** a version move costs one named command, never a hand-written
+removal.
 
 ## Audit remediation (2026-10-26)
 
