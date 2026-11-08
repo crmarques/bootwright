@@ -7405,18 +7405,17 @@ issue you might have found in this run". This moves B1213 from parked to M1
 and opens X326, out of sequence. Taken by the session, pending the owner's
 review:
 
-1. The [capacity admission](../substrates.md#capacity-admission) counts the
-   bytes the apply writes beside the guests' disks inside the disk check of
-   the filesystem they land on: each hosted package tree, each installed
-   Machine's published installer image and, on libvirt, the copy staged in
-   its provider's virtual-media pool. The check's reason names each group; no
-   separate check is added.
-2. A write joins a check only on a filesystem that holds a counted guest disk
-   on the same host; elsewhere it is not gated. A write whose filesystem
-   cannot be observed makes that host's disk checks unknown.
-3. Sizes are the plan's frozen image sizes at admission and the media store's
-   records in preflight, each with an upper-bound allowance: 256 MiB per tree
-   and 64 MiB per installer copy.
-4. A write receives no credit for bytes already present. The admission counts
-   the writes of blocks it may still start; preflight skips those of
-   Machines and profiles the applied operation completed.
+1. What an apply writes beside its guests' disks, the hosted package trees
+   and the published and staged installer media, joins the disk check of the
+   filesystem it lands on, whose reason names each group; no separate check
+   is added.
+2. A write is gated only on a filesystem that holds a counted guest disk on
+   the same host, and an unobservable one leaves that host's disk checks
+   unknown.
+3. Sizes are the frozen or recorded image sizes plus a stated upper-bound
+   allowance.
+4. Bytes already written get no credit, and a block is read by its
+   implementation, never by its Machine's other blocks.
+
+The [capacity admission](../substrates.md#capacity-admission) section owns
+each rule.

@@ -40,10 +40,10 @@ declared guests plus the provider's reserve
 under `/var/lib/libvirt`. The disk column counts the guests' declared disks and
 the reserve only. A case that installs RHEL needs more, and the gate counts it
 when it shares that filesystem: what the apply itself writes before the guests
-fill their disks, the published package tree, about the DVD's size (15 GiB for
-RHEL 9.8), and about 3 GiB per installed guest, its installer image as the
-artifact server publishes it plus the copy staged in the provider's
-virtual-media pool ([B1213](../specs/milestones/m1.md#b1213)).
+fill their disks, the published package tree, about the DVD's size (about
+15.5 GB for RHEL 9.8), and about 3 GB per installed guest, its installer image
+as the artifact server publishes it (about 1.5 GB) plus the copy staged in the
+provider's virtual-media pool ([B1213](../specs/milestones/m1.md#b1213)).
 A 16-CPU, 32 GiB laptop leaves at most about 28 GiB
 available, so the cases marked "larger host" need one. Run one case at a time:
 they share the bridge `virbr-e2e`, the guest subnet `198.51.100.0/24` and the

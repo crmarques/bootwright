@@ -12498,10 +12498,19 @@ host's disk checks unknown. No request, evidence, contract version or content
 digest moved.
 
 **Commits:** 02bc9c90e (gate, projection, specs and D242), with this record and
-the e2e headroom note. `TestCapacityAdmissionCountsWhatTheApplyWritesBesideItsGuests`
-failed on the previous source (the overflowing apply was admitted) and passes.
-Gates: `make focus` passed on both commits; `make check` was left to
-integration, and no live run or push occurred. **Limitation:** bytes already
-written by an interrupted publication get no credit, and a transient work copy
-of an installer image on a filesystem other than its publication's is not
-counted.
+the e2e headroom note, then 741c3af36 after an independent review: blocks are
+read by implementation, so a firewall or guest block alone projects no media
+and an installed Machine with a failed firewall block is not charged again;
+the local disk-only read accepts an existing or unreadable file; each artifact
+server's content root and each pool is observed once; dry runs and contexts
+without libvirt guests project nothing. Each fix's regression test failed on
+the source before it, `TestCapacityAdmissionCountsWhatTheApplyWritesBesideItsGuests`
+on 9942a6127 (the overflowing apply was admitted) and the review's five on
+96189deca. Gates: `make focus` passed on every commit; `make check` was left
+to integration, and no live run or push occurred. **Limitations:** bytes
+already written by an interrupted publication get no credit; a transient work
+copy of an installer image on a filesystem other than its publication's is not
+counted; and the local filesystem identity is the statfs `f_fsid`, which btrfs
+gives each subvolume its own, so a write on another subvolume of the guests'
+btrfs filesystem is not gated, as guest disks on two subvolumes already form
+two checks.
