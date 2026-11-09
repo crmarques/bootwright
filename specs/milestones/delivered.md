@@ -12650,3 +12650,41 @@ still refuses. No request, evidence, contract version or content digest moved.
 **Commits:** c5b2974bb and this record. Gates: the admission test failed on the
 previous source; `make focus` passed; `make check` and `make race` passed on
 the integrated branch; no live run or push occurred.
+
+### X334 — A MetalLB interface forwards alone
+
+**Item:** B1231, completed in-tree (2026-11-09) and awaiting operator
+acceptance, under [D246](backlog.md#d246). An IPv4
+[MetalLB interface pool](../api/addons.md#package-metallb) needs only the
+cluster's `routingViaHost: true`; unless the cluster declares
+`ipForwarding: Global`, the
+[cluster network block](../openshift-clusters.md#post-installation-network-configuration)
+enables IPv4 forwarding on that interface alone, and a cluster with such a pool
+and no secondary network gets the block with only its node policies. An IPv6
+interface pool still needs `Global`. Requests of inputs admitted before are
+byte-identical, so no request, evidence, contract version or content digest
+moved. The lab-networks example (4.21) keeps `Global`; the 4.22
+`e2e/lab-sno-fips-controller` case forwards per interface and its runbook
+reads both bridges' forwarding. [Product scope](../project.md#product-scope)
+states D246's boundary, and B1124 is retired. The environment-ha input chart
+moved to 0.5.0 in its own repository (local commits de2ece1 and 1ececda),
+leaving environment segregation to GitOps.
+
+**Commits:** 39865710f, the review fixes ff1578b62 and this record. Gates:
+the new admission, planning and golden tests pass and the IPv6 rule's test
+fails on the previous source; an independent review found nothing blocking
+in the product change; `make focus` and `make check` passed on the
+integrated branch; no live run or push occurred.
+**Remaining:** B1231's operator run, on its
+[milestone page](m4.md#b1231).
+
+### X335 — OVN-Kubernetes is the only network type
+
+**Item:** B1232 (2026-11-09, under [D246](backlog.md#d246)), completed
+in-tree: [`networkType`](../api/openshift-clusters.md#networking) admits
+`OVNKubernetes` alone and stays optional, so an absent value keeps the
+installer's default; every networking rule reads OVN-Kubernetes.
+
+**Commits:** 853c12e01 and this record. Gates:
+`TestNetworkTypeAdmitsOVNKubernetesAlone` fails on the previous schema and
+passes now; `make focus` and `make check` passed on the integrated branch.
