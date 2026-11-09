@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -43,13 +44,14 @@ func TestSupersededRegistryFormatsRefuseWithoutRewriting(t *testing.T) {
 }
 
 func TestRegistryCanonicalFields(t *testing.T) {
-	valid := []byte("{\"version\":1,\"contexts\":[]}\n")
+	version := "\"version\":" + strconv.Itoa(contexts.RegistryVersion)
+	valid := []byte("{" + version + ",\"contexts\":[]}\n")
 	for _, data := range [][]byte{
 		bytes.Replace(valid, []byte("\"contexts\":[]"), []byte("\"contexts\":null"), 1),
-		bytes.Replace(valid, []byte("\"version\":1,"), nil, 1),
+		bytes.Replace(valid, []byte(version+","), nil, 1),
 		bytes.Replace(valid, []byte("\"contexts\":[]"), []byte("\"identities\":[],\"contexts\":[]"), 1),
 		bytes.Replace(valid, []byte("\"contexts\":[]"), []byte("\"contexts\":[],\"nextIdentity\":1"), 1),
-		bytes.Replace(valid, []byte("\"version\":1"), []byte("\"version\":1,\"version\":1"), 1),
+		bytes.Replace(valid, []byte(version), []byte(version+","+version), 1),
 	} {
 		var registry contexts.Registry
 		expectState(t, decodeRecord(data, maxRegistry, &registry))

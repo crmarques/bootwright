@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -75,7 +76,7 @@ const bundlePayloadSize = 280000
 
 // bundlePath is where the tool area id lives beneath the store.
 func bundlePath(store *Store, id string) string {
-	return filepath.Join(store.options.Root, "controller", toolAreasName, id)
+	return filepath.Join(store.options.Root, hostContainer, controllerSubtree, toolAreasName, id)
 }
 
 // writeBundlePayload is a controller stage that publishes one executable into
@@ -470,6 +471,58 @@ func TestAnotherBuildsRootRefusesWithTheLiveEnvironmentRemedy(t *testing.T) {
 				t.Fatalf("the refusals changed the root:\nbefore: %#v\nafter:  %#v", before, after)
 			}
 		})
+	}
+}
+
+// A store an earlier build wrote, with its controller record in controller/,
+// its setup in setup/ and a registry of the previous format version, is
+// another build's: every command refuses it with the live-environment remedy
+// and leaves it as it was.
+func TestAStoreWithTheEarlierLayoutIsAnotherBuilds(t *testing.T) {
+	ctx := context.Background()
+	store, sources := fixture(t)
+	record := publish(t, store, "example", sources)
+	recordPreparedSetup(t, store)
+	bind(t, store, record.Name)
+	root := store.options.Root
+	for from, to := range map[string]string{"host/record": "controller", "host/setup": "setup"} {
+		if err := os.Rename(filepath.Join(root, from), filepath.Join(root, to)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Remove(filepath.Join(root, "host")); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "registry.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := []byte("{\"version\":" + strconv.Itoa(contexts.RegistryVersion) + ",")
+	earlier := bytes.Replace(data, current, []byte("{\"version\":"+strconv.Itoa(contexts.RegistryVersion-1)+","), 1)
+	if bytes.Equal(earlier, data) {
+		t.Fatal("the fixture did not change the registry version")
+	}
+	writePrivate(t, path, earlier)
+	before := snapshotRootEntries(t, root)
+	_, err = store.View(ctx)
+	requireOtherBuildRemedy(t, "list", err)
+	requireOtherBuildRemedy(t, "init", store.Transact(ctx, true, nil, func(contexts.Transaction) error {
+		t.Fatal("init reached an earlier build's store")
+		return nil
+	}))
+	_, err = store.ReadSetup(ctx)
+	requireOtherBuildRemedy(t, "install preview", err)
+	requireOtherBuildRemedy(t, "install", store.MutateSetup(ctx, func(prerequisites.SetupTransaction) error {
+		t.Fatal("install reached an earlier build's store")
+		return nil
+	}))
+	requireOtherBuildRemedy(t, "uninstall", store.Uninstall(ctx, func(prerequisites.UninstallTransaction) error {
+		t.Fatal("uninstall reached an earlier build's store")
+		return nil
+	}))
+	if after := snapshotRootEntries(t, root); !reflect.DeepEqual(before, after) {
+		t.Fatalf("the refusals changed the store:\nbefore: %#v\nafter:  %#v", before, after)
 	}
 }
 

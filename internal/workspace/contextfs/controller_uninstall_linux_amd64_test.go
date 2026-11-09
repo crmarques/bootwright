@@ -81,7 +81,7 @@ func TestAnUninstallRenamesTheStateAsideThenRemovesIt(t *testing.T) {
 	if err := os.WriteFile(outside, []byte("keep\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	cache := filepath.Join(base, "bootwright", "setup", "cache")
+	cache := filepath.Join(base, "bootwright", hostContainer, setupSubtree, "cache")
 	mkdirs(t, 0700, filepath.Join(cache, "wheels", "deep", "er"))
 	if err := os.Symlink(outside, filepath.Join(cache, "escape")); err != nil {
 		t.Fatal(err)
@@ -130,8 +130,8 @@ func TestTheNextUninstallFinishesAnInterruptedOne(t *testing.T) {
 	store := New(testOptions(filepath.Join(base, "bootwright")))
 	root := filepath.Join(base, ".bootwright-uninstall-"+strings.Repeat("a", 32))
 	staging := filepath.Join(base, ".bootwright-staging-uninstall-"+strings.Repeat("b", 32))
-	mkdirs(t, 0700, filepath.Join(root, "setup", "runtimes", "x"), staging)
-	if err := os.WriteFile(filepath.Join(root, "setup", "state.json"), []byte("{}"), 0600); err != nil {
+	mkdirs(t, 0700, filepath.Join(root, hostContainer, setupSubtree, "runtimes", "x"), staging)
+	if err := os.WriteFile(filepath.Join(root, hostContainer, setupSubtree, "state.json"), []byte("{}"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	link := filepath.Join(base, ".bootwright-uninstall-"+strings.Repeat("c", 32))
@@ -277,7 +277,7 @@ func TestAnUninstallRefusesAMountedRootOrStagingBeforeAnyEffect(t *testing.T) {
 func TestAnUninstallFinishesLeftoversBeforeItsOwnRenames(t *testing.T) {
 	store, base := installedStore(t)
 	leftover := filepath.Join(base, ".bootwright-uninstall-"+strings.Repeat("d", 32))
-	mkdirs(t, 0700, filepath.Join(leftover, "setup"))
+	mkdirs(t, 0700, filepath.Join(leftover, hostContainer, setupSubtree))
 	err := store.Uninstall(context.Background(), func(tx prerequisites.UninstallTransaction) error {
 		if err := os.Rename(filepath.Join(base, "bootwright"), filepath.Join(base, "moved")); err != nil {
 			t.Fatal(err)

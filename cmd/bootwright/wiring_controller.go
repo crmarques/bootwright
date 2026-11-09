@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	setupRuntimes = "/var/lib/bootwright/setup/runtimes"
-	setupWheels   = "/var/lib/bootwright/setup/cache/wheels"
+	setupRuntimes = "/var/lib/bootwright/host/setup/runtimes"
+	setupWheels   = "/var/lib/bootwright/host/setup/cache/wheels"
 )
 
 // controllerDependencies names every local capability controller setup and

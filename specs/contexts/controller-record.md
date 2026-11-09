@@ -10,8 +10,10 @@ owns the relationship between a context and its host.
 
 ## Location and file modes
 
-Shared host state belongs under `/var/lib/bootwright/controller/`, with each
-tool area in `controller/tools/<digest>/`. Host
+Shared host state belongs under `/var/lib/bootwright/host/record/`, with each
+tool area in `host/record/tools/<digest>/`, beside
+[the setup subtree](#the-setup-subtree) in the same
+[`host/` container](../contexts.md#storage-locking-and-publication). Host
 identity, every context binding and every reservation share one atomic
 `state.json` publication; there is no independently published per-context
 binding record, so a binding and the host it names cannot disagree after an
@@ -35,11 +37,12 @@ never introduces Controller state, and ordinary context publications preserve
 an existing descriptor.
 
 The descriptor fixes version `1`, mode `initializing` or `ready`, and the
-Controller directory's device/inode. Its reservation precedes directory
-creation; a second publication records the actual directory identity, and the
-mode becomes `ready` once the first record is durable. An unattributable
-directory after a crash is preserved and refuses adoption with
-`context.state`, "existing controller directory cannot be adopted"; an
+device/inode of the Controller directory, `host/record/`. Its reservation
+precedes directory creation; a second publication records the actual
+directory identity, and the mode becomes `ready` once the first record is
+durable. An unattributable directory after a crash is preserved and refuses
+adoption with `context.state`, "existing controller directory cannot be
+adopted"; an
 attributable initialization that stopped before `ready` is finished by the
 next binding, which publishes the record only when none is there.
 
@@ -217,10 +220,12 @@ origin refuses.
 
 ## The setup subtree
 
-`/var/lib/bootwright/setup/` is setup's own, independently versioned and
+`/var/lib/bootwright/host/setup/` is setup's own, independently versioned and
 outside the registry: the Controller descriptor never names it, no registry
 verification decodes it, and it stays root `0700` like the rest of the store.
-`setup/lock` is the exclusive lock of setup and of runtime publication, which
+Setup creates it, and the `host/` container it lies in, under one exclusive
+registry transaction when either is missing.
+`host/setup/lock` is the exclusive lock of setup and of runtime publication, which
 the controller stage's host-package install takes too. Setup and the stage
 never wait for it and refuse a held lock as busy; a launch's
 [cache-only rebuild](../controller.md#the-controller-runtime) waits for it,
@@ -258,7 +263,7 @@ exclusively, and published at `runtimes/<runtime-digest>/` only with its
 `renameat2(RENAME_NOREPLACE)` and a synchronized parent, so a directory under
 a runtime digest always holds a whole runtime. A publisher that finds the
 runtime already published discards its stage, and setup removes the stages a
-killed run left under `setup/lock`, however many entries `runtimes/` holds. A
+killed run left under `host/setup/lock`, however many entries `runtimes/` holds. A
 launch holds the runtime's `.lock` shared for its whole Ansible block, and only
 while the runtime's `runtime.json` names its own digest; retirement takes the
 lock exclusively without waiting, so a runtime in use is skipped, and retires a

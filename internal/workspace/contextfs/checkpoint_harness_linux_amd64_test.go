@@ -503,7 +503,7 @@ func checkpointStaleEntries(root string, mode checkpointMode, retried bool) ([]s
 		}
 		parts := strings.Split(relative, string(filepath.Separator))
 		secrets := len(parts) > 3 && parts[0] == "contexts" && parts[2] == "secrets"
-		bundle := len(parts) > 3 && parts[0] == "controller" && parts[1] == toolAreasName
+		bundle := len(parts) > 4 && parts[0] == hostContainer && parts[1] == controllerSubtree && parts[2] == toolAreasName
 		switch {
 		case retried:
 			stale = append(stale, relative)
@@ -1023,7 +1023,7 @@ func checkpointTraceShapes() map[string]map[checkpoint]int {
 			checkpointBeforeStageCollection: 4, checkpointSyncDirectory: 4,
 		},
 		"setup": {
-			checkpointMkdir: 3, checkpointSyncDirectory: 8, checkpointCreateFile: 2, checkpointWriteFile: 2,
+			checkpointMkdir: 4, checkpointSyncDirectory: 9, checkpointCreateFile: 2, checkpointWriteFile: 2,
 			checkpointSyncFile: 2, checkpointBeforeSetupStateRename: 2, checkpointAfterSetupStateRename: 2,
 			checkpointBeforeSetupRuntimeRename: 1,
 		},
@@ -1794,7 +1794,7 @@ func checkpointClientAreaScenario() checkpointScenario {
 			if err != nil || mode != "sealed" || inode == 0 {
 				return fmt.Errorf("client reservation is %q at inode %d (%v)", mode, inode, err)
 			}
-			info, err := os.Stat(filepath.Join(store.options.Root, "controller", toolAreasName, clientClosure, "tools", "helm", "helm"))
+			info, err := os.Stat(filepath.Join(store.options.Root, hostContainer, controllerSubtree, toolAreasName, clientClosure, "tools", "helm", "helm"))
 			if err != nil || info.Mode().Perm() != 0700 {
 				return fmt.Errorf("published client is %v (%v)", info, err)
 			}
@@ -1830,7 +1830,7 @@ func checkpointToolAreaRetirementScenario() checkpointScenario {
 			if err != nil || mode != "sealed" || inode == 0 {
 				return fmt.Errorf("client reservation is %q at inode %d (%v)", mode, inode, err)
 			}
-			if _, err := os.Stat(filepath.Join(store.options.Root, "controller", toolAreasName, sealedToolArea)); !errors.Is(err, fs.ErrNotExist) {
+			if _, err := os.Stat(filepath.Join(store.options.Root, hostContainer, controllerSubtree, toolAreasName, sealedToolArea)); !errors.Is(err, fs.ErrNotExist) {
 				return fmt.Errorf("the unnamed area's directory remains (%v)", err)
 			}
 			return store.ReadController(ctx, "", func(view prerequisites.StorageView) error {
@@ -2505,7 +2505,7 @@ func checkpointStageCollectionScenario() checkpointScenario {
 			root := store.options.Root
 			runtime := filepath.Join(root, "contexts", checkpointContext, "state")
 			plant(t, root, "pending-"+strings.Repeat("4", 32)+".json", "registry.json", nil)
-			plant(t, filepath.Join(root, "controller"), "pending-"+strings.Repeat("1", 32)+".json", "state.json", nil)
+			plant(t, filepath.Join(root, hostContainer, controllerSubtree), "pending-"+strings.Repeat("1", 32)+".json", "state.json", nil)
 			plant(t, runtime, "pending-"+strings.Repeat("2", 32)+".json", "mutation.json", nil)
 			plant(t, filepath.Join(runtime, "operations", "op-1"), "pending-"+strings.Repeat("3", 32), "", []byte("{}\n"))
 			return store

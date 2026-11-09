@@ -47,7 +47,7 @@ func TestSetupSequenceExhaustionKeepsReceiptWithoutAStoredRun(t *testing.T) {
 		}
 		return run.Close()
 	})
-	root := filepath.Join(store.options.Root, setupSubtree, setupRunsName)
+	root := filepath.Join(store.options.Root, hostContainer, setupSubtree, setupRunsName)
 	if err := os.Rename(filepath.Join(root, "setup-000001"), filepath.Join(root, "setup-999999")); err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestSetupSequenceExhaustionKeepsReceiptWithoutAStoredRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	python := &healingPython{setup: filepath.Join(store.options.Root, setupSubtree)}
+	python := &healingPython{setup: filepath.Join(store.options.Root, hostContainer, setupSubtree)}
 	service := prerequisites.New(healingController{}, healingController{}, healingHost{identity}, prerequisites.Ports{
 		Setup: store, Packages: healingPackages{}, Python: python, Lock: healingLock,
 	}, prerequisites.Options{Presenter: &healingPlans{}})

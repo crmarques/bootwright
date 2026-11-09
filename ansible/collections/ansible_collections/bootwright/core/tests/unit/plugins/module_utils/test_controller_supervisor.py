@@ -126,7 +126,7 @@ class Flags:
 
 
 def test_only_the_isolated_controller_venv_runs_the_supervisor():
-    venv, base = "/var/lib/bootwright/setup/runtimes/abc", "/usr"
+    venv, base = "/var/lib/bootwright/host/setup/runtimes/abc", "/usr"
     assert supervisor.controller_runtime(Flags(1, 1), venv, base)
     assert not supervisor.controller_runtime(Flags(0, 1), venv, base)
     assert not supervisor.controller_runtime(Flags(1, 0), venv, base)

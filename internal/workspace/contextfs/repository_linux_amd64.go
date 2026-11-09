@@ -264,8 +264,9 @@ func inspectInitialRegistry(ctx context.Context, root *directory) (string, sysca
 }
 
 // verifyRootEntries admits only the store's own published objects: the
-// registry, the context container, a declared controller subtree and bounded
-// private files left by an interrupted registry replacement. Anything else is
+// registry, the context container, the media container, the host container
+// holding setup and a declared controller subtree, and bounded private files
+// left by an interrupted registry replacement. Anything else is
 // unattributable state that only a complete restore can resolve.
 func verifyRootEntries(ctx context.Context, root *directory, registry contexts.Registry) error {
 	names, err := rootEntryNames(root, maxContexts+1)
@@ -281,11 +282,11 @@ func verifyRootEntries(ctx context.Context, root *directory, registry contexts.R
 				return err
 			}
 			dir.file.Close()
-		case "controller":
-			if err := verifyControllerRootEntry(root, registry); err != nil {
+		case hostContainer:
+			if err := verifyHostEntries(root, registry); err != nil {
 				return err
 			}
-		case mediaContainer, setupSubtree:
+		case mediaContainer:
 			dir, err := openDirectory(root, name)
 			if err != nil {
 				return err
@@ -310,11 +311,40 @@ func verifyRootEntries(ctx context.Context, root *directory, registry contexts.R
 	return root.verify()
 }
 
-func verifyControllerRootEntry(root *directory, registry contexts.Registry) error {
+func verifyHostEntries(root *directory, registry contexts.Registry) error {
+	host, err := openDirectory(root, hostContainer)
+	if err != nil {
+		return err
+	}
+	defer host.file.Close()
+	names, err := directoryNames(host, 2)
+	if err != nil {
+		return unsupportedRootState()
+	}
+	for _, name := range names {
+		switch name {
+		case setupSubtree:
+			dir, err := openDirectory(host, name)
+			if err != nil {
+				return err
+			}
+			dir.file.Close()
+		case controllerSubtree:
+			if err := verifyControllerEntry(host, registry); err != nil {
+				return err
+			}
+		default:
+			return unsupportedRootState()
+		}
+	}
+	return host.verify()
+}
+
+func verifyControllerEntry(host *directory, registry contexts.Registry) error {
 	if registry.Controller == (contexts.ControllerDescriptor{}) {
 		return state("context store contains an undeclared controller subtree")
 	}
-	dir, err := openDirectory(root, "controller")
+	dir, err := openDirectory(host, controllerSubtree)
 	if err != nil {
 		return err
 	}

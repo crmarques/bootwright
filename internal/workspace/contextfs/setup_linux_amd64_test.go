@@ -80,7 +80,7 @@ func buildRuntime(tx prerequisites.SetupTransaction, marker, digest string) (pre
 
 func setupEntries(t *testing.T, store *Store, path ...string) []string {
 	t.Helper()
-	entries, err := os.ReadDir(filepath.Join(append([]string{store.options.Root, setupSubtree}, path...)...))
+	entries, err := os.ReadDir(filepath.Join(append([]string{store.options.Root, hostContainer, setupSubtree}, path...)...))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestTheSetupSubtreeIsOutsideTheRegistryDescriptor(t *testing.T) {
 	if registry.Controller != (contexts.ControllerDescriptor{}) {
 		t.Fatalf("the registry describes the setup subtree: %#v", registry.Controller)
 	}
-	if err := os.WriteFile(filepath.Join(store.options.Root, setupSubtree, setupStateName), []byte("written by a future build"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(store.options.Root, hostContainer, setupSubtree, setupStateName), []byte("written by a future build"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.View(context.Background()); err != nil {
@@ -146,7 +146,8 @@ func TestTheSetupSubtreeIsOutsideTheRegistryDescriptor(t *testing.T) {
 
 func TestASetupSubtreeOfAnotherTypeRefusesTheStore(t *testing.T) {
 	store := mediaFixture(t)
-	if err := os.WriteFile(filepath.Join(store.options.Root, setupSubtree), nil, 0600); err != nil {
+	mkdirs(t, 0700, filepath.Join(store.options.Root, hostContainer))
+	if err := os.WriteFile(filepath.Join(store.options.Root, hostContainer, setupSubtree), nil, 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.View(context.Background()); err == nil {
@@ -282,7 +283,7 @@ func TestAnotherBuildsSetupFormatRefusesALaunch(t *testing.T) {
 				_, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "kept", setupDigest(2)), setupDigest(2))
 				return err
 			})
-			if err := os.WriteFile(filepath.Join(store.options.Root, setupSubtree, test.entry), test.content, 0600); err != nil {
+			if err := os.WriteFile(filepath.Join(store.options.Root, hostContainer, setupSubtree, test.entry), test.content, 0600); err != nil {
 				t.Fatal(err)
 			}
 			view, err := store.ReadSetup(context.Background())
@@ -390,7 +391,7 @@ func TestDiscardRefusesWhileALaunchHoldsARuntime(t *testing.T) {
 		t.Fatalf("a launch could not hold a published runtime: %#v", err)
 	}
 	defer hold.Release()
-	if err := os.WriteFile(filepath.Join(store.options.Root, setupSubtree, "venvs"), []byte("x"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(store.options.Root, hostContainer, setupSubtree, "venvs"), []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	discard := func() error {
@@ -473,7 +474,7 @@ func TestConcurrentPublishersLeaveOneRuntime(t *testing.T) {
 		t.Fatalf("racing publishers left %q", names)
 	}
 	winner := strconv.Itoa(slices.Index(wins, true))
-	if data, err := os.ReadFile(filepath.Join(store.options.Root, setupSubtree, setupRuntimesName, racing, "runtime.json")); err != nil || !strings.Contains(string(data), "\""+winner+"\"") {
+	if data, err := os.ReadFile(filepath.Join(store.options.Root, hostContainer, setupSubtree, setupRuntimesName, racing, "runtime.json")); err != nil || !strings.Contains(string(data), "\""+winner+"\"") {
 		t.Fatalf("the published runtime is not the winner's whole stage: %q %v", data, err)
 	}
 }
@@ -548,7 +549,7 @@ func TestWheelPathsAreConfinedToTheCache(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		want := filepath.Join(store.options.Root, setupSubtree, setupCacheName, setupWheelsName, setupDigest(9), "ansible_core-2.21.6-py3-none-any.whl")
+		want := filepath.Join(store.options.Root, hostContainer, setupSubtree, setupCacheName, setupWheelsName, setupDigest(9), "ansible_core-2.21.6-py3-none-any.whl")
 		if path != want {
 			t.Fatalf("wheel path %q, want %q", path, want)
 		}
@@ -619,7 +620,7 @@ func duplicateSetupLock(t *testing.T, store *Store) int {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(store.options.Root, setupSubtree, setupLockName)
+	want := filepath.Join(store.options.Root, hostContainer, setupSubtree, setupLockName)
 	for _, entry := range entries {
 		path, err := os.Readlink(filepath.Join("/proc/self/fd", entry.Name()))
 		if err != nil || path != want {
@@ -688,7 +689,7 @@ func TestRetiringARuntimeWithoutItsLaunchLockRemovesIt(t *testing.T) {
 		_, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "unlocked", digest), digest)
 		return err
 	})
-	if err := os.Remove(filepath.Join(store.options.Root, setupSubtree, setupRuntimesName, digest, runtimeLockName)); err != nil {
+	if err := os.Remove(filepath.Join(store.options.Root, hostContainer, setupSubtree, setupRuntimesName, digest, runtimeLockName)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.HoldRuntime(context.Background(), digest); !errors.Is(err, prerequisites.ErrRuntimeUnavailable) {
@@ -742,7 +743,7 @@ func TestTheSweepAdmitsManyRuntimeEntries(t *testing.T) {
 		_, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "kept", setupDigest(2)), setupDigest(2))
 		return err
 	})
-	runtimes := filepath.Join(store.options.Root, setupSubtree, setupRuntimesName)
+	runtimes := filepath.Join(store.options.Root, hostContainer, setupSubtree, setupRuntimesName)
 	for index := range 80 {
 		if err := os.Mkdir(filepath.Join(runtimes, runtimeStagePrefix+strconv.Itoa(index)), 0700); err != nil {
 			t.Fatal(err)
@@ -826,7 +827,7 @@ func checkpointSetupScenario() checkpointScenario {
 			if err != nil || view.Foreign != "" || view.State.Pending != nil || view.State.Receipt == nil || view.State.Runtimes.Current != digest {
 				return fmt.Errorf("setup settled on %#v (%v)", view, err)
 			}
-			runtimes, err := os.ReadDir(filepath.Join(store.options.Root, setupSubtree, setupRuntimesName))
+			runtimes, err := os.ReadDir(filepath.Join(store.options.Root, hostContainer, setupSubtree, setupRuntimesName))
 			if err != nil || len(runtimes) != 1 || runtimes[0].Name() != digest {
 				return fmt.Errorf("the runtimes directory holds %v (%v)", runtimes, err)
 			}

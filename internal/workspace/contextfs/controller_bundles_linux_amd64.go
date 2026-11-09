@@ -95,7 +95,7 @@ type controllerBundleArea struct {
 
 func (a *controllerBundleArea) close() {
 	for index := len(a.owned) - 1; index >= 0; index-- {
-		a.owned[index].file.Close()
+		a.owned[index].close()
 	}
 	a.owned = nil
 	a.dir = nil

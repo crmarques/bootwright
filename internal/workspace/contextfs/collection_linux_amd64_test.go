@@ -177,7 +177,7 @@ func TestTheNextExclusiveCommandCollectsControllerStages(t *testing.T) {
 	} {
 		t.Run(command.name, func(t *testing.T) {
 			store := checkpointSealedFixture(t)
-			directory := filepath.Join(store.options.Root, "controller")
+			directory := filepath.Join(store.options.Root, hostContainer, controllerSubtree)
 			receipt, err := os.ReadFile(filepath.Join(directory, "state.json"))
 			if err != nil {
 				t.Fatal(err)
@@ -282,7 +282,7 @@ func TestReadsNeverCollectAStage(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	receipt, err := os.ReadFile(filepath.Join(store.options.Root, "controller", "state.json"))
+	receipt, err := os.ReadFile(filepath.Join(store.options.Root, hostContainer, controllerSubtree, "state.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,10 +291,10 @@ func TestReadsNeverCollectAStage(t *testing.T) {
 		t.Fatal(err)
 	}
 	planted := map[string][]byte{
-		filepath.Join(store.options.Root, plantedStageName(4, ".json")):                       registry,
-		filepath.Join(store.options.Root, "controller", plantedStageName(1, ".json")):         receipt,
-		filepath.Join(contextStatePath(store), "operations", "op-1", plantedStageName(2, "")): []byte("{}\n"),
-		filepath.Join(contextStatePath(store), plantedStageName(3, ".json")):                  []byte("{}\n"),
+		filepath.Join(store.options.Root, plantedStageName(4, ".json")):                                   registry,
+		filepath.Join(store.options.Root, hostContainer, controllerSubtree, plantedStageName(1, ".json")): receipt,
+		filepath.Join(contextStatePath(store), "operations", "op-1", plantedStageName(2, "")):             []byte("{}\n"),
+		filepath.Join(contextStatePath(store), plantedStageName(3, ".json")):                              []byte("{}\n"),
 	}
 	for path, data := range planted {
 		plantStage(t, path, data)
@@ -490,7 +490,7 @@ func TestTheCollectorLeavesWhatItCannotProve(t *testing.T) {
 	} {
 		t.Run(controller.name, func(t *testing.T) {
 			store := checkpointSealedFixture(t)
-			path := filepath.Join(store.options.Root, "controller", controller.stage)
+			path := filepath.Join(store.options.Root, hostContainer, controllerSubtree, controller.stage)
 			plantStage(t, path, []byte("{}\n"))
 			if err := os.Chmod(path, controller.mode); err != nil {
 				t.Fatal(err)

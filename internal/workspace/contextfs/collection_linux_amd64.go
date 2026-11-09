@@ -172,6 +172,6 @@ func (s *Store) collectControllerStages(ctx context.Context, root *directory, re
 	if err != nil {
 		return nil
 	}
-	defer dir.file.Close()
+	defer dir.close()
 	return s.collectStages(ctx, dir, maxControllerStages+2, maxControllerState, false, -1)
 }

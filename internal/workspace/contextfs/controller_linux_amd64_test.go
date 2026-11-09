@@ -140,7 +140,7 @@ func TestControllerAbsentReadsAndTheFirstBindingCreatesTheRecord(t *testing.T) {
 	if err != nil || registry.Version != contexts.RegistryVersion || registry.Controller.Mode != "ready" || registry.Controller.DirectoryInode == 0 {
 		t.Fatalf("the first binding did not attribute a ready controller (%v): %+v", err, registry.Controller)
 	}
-	before, err := os.ReadFile(filepath.Join(store.options.Root, "controller", "state.json"))
+	before, err := os.ReadFile(filepath.Join(store.options.Root, hostContainer, controllerSubtree, "state.json"))
 	if err != nil || !bytes.HasSuffix(before, []byte("\n")) {
 		t.Fatalf("controller record is missing or not canonical (%v)", err)
 	}
@@ -160,7 +160,7 @@ func TestControllerAbsentReadsAndTheFirstBindingCreatesTheRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	bind(t, store, record.Name)
-	after, _ := os.ReadFile(filepath.Join(store.options.Root, "controller", "state.json"))
+	after, _ := os.ReadFile(filepath.Join(store.options.Root, hostContainer, controllerSubtree, "state.json"))
 	if !bytes.Equal(before, after) {
 		t.Fatal("revalidating the binding changed evidence")
 	}
@@ -179,7 +179,7 @@ func TestTheFirstBindingRefusesBeforeSetupCompletes(t *testing.T) {
 		},
 		"another build's format": func(t *testing.T, store *Store) {
 			recordPreparedSetup(t, store)
-			if err := os.WriteFile(filepath.Join(store.options.Root, setupSubtree, setupStateName), []byte(`{"format":"bootwright.setup-state-v9"}`+"\n"), 0600); err != nil {
+			if err := os.WriteFile(filepath.Join(store.options.Root, hostContainer, setupSubtree, setupStateName), []byte(`{"format":"bootwright.setup-state-v9"}`+"\n"), 0600); err != nil {
 				t.Fatal(err)
 			}
 		},
@@ -195,8 +195,81 @@ func TestTheFirstBindingRefusesBeforeSetupCompletes(t *testing.T) {
 				found[0].Remediation != "run bootwright controller install, then repeat the command" {
 				t.Fatalf("binding before setup = %#v", found)
 			}
-			if _, err := os.Stat(filepath.Join(store.options.Root, "controller")); !errors.Is(err, os.ErrNotExist) {
+			if _, err := os.Stat(filepath.Join(store.options.Root, hostContainer, controllerSubtree)); !errors.Is(err, os.ErrNotExist) {
 				t.Fatalf("a refused binding left a controller directory (%v)", err)
+			}
+		})
+	}
+}
+
+// The store keeps its host-wide state under host/: setup's lock, record and
+// runtimes in host/setup and the attributed controller record in host/record,
+// which the descriptor names. The host container admits nothing else: an
+// unknown entry, a setup that is no directory and a record no descriptor
+// declares each refuse every read.
+func TestTheStoreAdmitsHostWithOnlySetupAndRecord(t *testing.T) {
+	ctx := context.Background()
+	store, sources := fixture(t)
+	record := publish(t, store, "example", sources)
+	recordPreparedSetup(t, store)
+	digest := setupDigest(7)
+	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
+		_, err := tx.PublishRuntime(ctx, stageRuntime(t, tx, "layout", digest), digest)
+		return err
+	})
+	bind(t, store, record.Name)
+	root := store.options.Root
+	for _, path := range []string{"host/setup/lock", "host/setup/state.json", "host/setup/runtimes/" + digest, "host/record/state.json"} {
+		if _, err := os.Lstat(filepath.Join(root, path)); err != nil {
+			t.Errorf("the store holds no %s (%v)", path, err)
+		}
+	}
+	for _, path := range []string{"controller", "setup"} {
+		if _, err := os.Lstat(filepath.Join(root, path)); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("the store holds the earlier layout's %s (%v)", path, err)
+		}
+	}
+	hold, err := store.HoldRuntime(ctx, digest)
+	if err != nil || hold.Path() != filepath.Join(root, "host/setup/runtimes", digest) {
+		t.Fatalf("the runtime is held at %v (%v)", hold, err)
+	}
+	hold.Release()
+	var stat syscall.Stat_t
+	if err := syscall.Stat(filepath.Join(root, "host/record"), &stat); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := store.View(ctx)
+	if err != nil || registry.Controller.DirectoryInode != stat.Ino || registry.Controller.DirectoryDevice != stat.Dev {
+		t.Fatalf("the descriptor %+v does not name host/record (%v)", registry.Controller, err)
+	}
+	for name, test := range map[string]struct {
+		arrange func(*testing.T, string)
+		message string
+	}{
+		"an unknown directory": {func(t *testing.T, root string) { mkdirs(t, 0700, filepath.Join(root, "host/runs")) }, unsupportedRootStateMessage},
+		"an unknown file": {func(t *testing.T, root string) {
+			mkdirs(t, 0700, filepath.Join(root, "host"))
+			writePrivate(t, filepath.Join(root, "host/controller"), nil)
+		}, unsupportedRootStateMessage},
+		"a setup file": {func(t *testing.T, root string) {
+			mkdirs(t, 0700, filepath.Join(root, "host"))
+			writePrivate(t, filepath.Join(root, "host/setup"), nil)
+		}, "could not be safely accessed: not a directory"},
+		"an undeclared record": {func(t *testing.T, root string) { mkdirs(t, 0700, filepath.Join(root, "host/record")) }, "context store contains an undeclared controller subtree"},
+		"a host file":          {func(t *testing.T, root string) { writePrivate(t, filepath.Join(root, "host"), nil) }, "could not be safely accessed: not a directory"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store, sources := fixture(t)
+			record := publish(t, store, "example", sources)
+			test.arrange(t, store.options.Root)
+			for operation, err := range map[string]error{
+				"view":            func() error { _, err := store.View(ctx); return err }(),
+				"controller read": store.ReadController(ctx, record.Name, func(prerequisites.StorageView) error { return nil }),
+				"lifecycle read":  store.ReadLifecycle(ctx, record.Name, func(lifecycle.View) error { return nil }),
+			} {
+				if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "context.state" || !strings.Contains(reported[0].Message, test.message) {
+					t.Errorf("the %s refused with %#v, want %q", operation, reported, test.message)
+				}
 			}
 		})
 	}
@@ -393,7 +466,7 @@ func TestToolAreaRejectsUnknownSubstitutionAndSymlinks(t *testing.T) {
 	for _, mode := range []string{"unattributed", "symlink", "hardlink", "world-readable", "replace-directory"} {
 		t.Run(mode, func(t *testing.T) {
 			store := boundFixture(t)
-			path := filepath.Join(store.options.Root, "controller", toolAreasName, clientClosure)
+			path := filepath.Join(store.options.Root, hostContainer, controllerSubtree, toolAreasName, clientClosure)
 			if mode != "unattributed" {
 				if err := withClientArea(t, store, func(_ lifecycle.Transaction, area prerequisites.BundleArea) error {
 					return area.Write(context.Background(), "original", []byte("private"), false)
@@ -642,15 +715,15 @@ func TestControllerDirectoryCreationInterruptionNeverAdoptsOrphan(t *testing.T) 
 	}
 	store.fail = nil
 	before, _ := os.ReadFile(filepath.Join(store.options.Root, "registry.json"))
-	if err := bindOnce(); err == nil {
-		t.Fatal("retry adopted an unattributed controller directory")
+	if reported := diagnostics.Of(bindOnce()); len(reported) != 1 || reported[0].Code != "context.state" || reported[0].Message != "existing controller directory cannot be adopted" {
+		t.Fatalf("a retry over an unattributed host/record reported %#v", reported)
 	}
 	after, _ := os.ReadFile(filepath.Join(store.options.Root, "registry.json"))
 	if !bytes.Equal(before, after) {
 		t.Fatal("orphan refusal rewrote attribution")
 	}
 	var stat syscall.Stat_t
-	if err := syscall.Stat(filepath.Join(store.options.Root, "controller"), &stat); err != nil {
+	if err := syscall.Stat(filepath.Join(store.options.Root, hostContainer, controllerSubtree), &stat); err != nil {
 		t.Fatal("refusal removed unknown evidence")
 	}
 }
@@ -664,7 +737,7 @@ func TestAControllerRecordOfAnotherVersionNamesTheFreshInstall(t *testing.T) {
 	record := publish(t, store, "example", sources)
 	recordPreparedSetup(t, store)
 	bind(t, store, record.Name)
-	path := filepath.Join(store.options.Root, "controller", "state.json")
+	path := filepath.Join(store.options.Root, hostContainer, controllerSubtree, "state.json")
 	current, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)

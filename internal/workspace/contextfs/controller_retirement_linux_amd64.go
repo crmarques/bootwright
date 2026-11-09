@@ -67,7 +67,7 @@ func (t *transaction) publishToolAreas(ctx context.Context, stored controllerSto
 	if err != nil {
 		return stored, err
 	}
-	defer dir.file.Close()
+	defer dir.close()
 	if _, err := t.store.replaceControllerRecord(ctx, dir, stored, data, retry); err != nil {
 		return stored, err
 	}
@@ -81,7 +81,7 @@ func (t *transaction) removeRetiringAreas(ctx context.Context, areas []controlle
 	if err != nil {
 		return err
 	}
-	defer owner.file.Close()
+	defer owner.close()
 	parent, err := openDirectory(owner, toolAreasName)
 	if errors.Is(err, syscall.ENOENT) {
 		return nil

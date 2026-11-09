@@ -301,7 +301,7 @@ func (s memoryStage) Path() string { return string(s) }
 type memoryRun struct{ closeError error }
 
 func (memoryRun) Write(data []byte) (int, error) { return len(data), nil }
-func (memoryRun) Location() string               { return "/var/lib/bootwright/setup/runs/setup-000043" }
+func (memoryRun) Location() string               { return "/var/lib/bootwright/host/setup/runs/setup-000043" }
 func (r memoryRun) Close() error                 { return r.closeError }
 
 func (t memoryTransaction) View() SetupView { return t.m.view }
@@ -341,7 +341,7 @@ func (t memoryTransaction) OpenRun(context.Context) (string, SetupRun, error) {
 }
 
 func (t memoryTransaction) StageRuntime(context.Context) (RuntimeStage, error) {
-	return memoryStage("/var/lib/bootwright/setup/runtimes/.stage-1"), nil
+	return memoryStage("/var/lib/bootwright/host/setup/runtimes/.stage-1"), nil
 }
 
 func (t memoryTransaction) PublishRuntime(context.Context, RuntimeStage, string) (bool, error) {

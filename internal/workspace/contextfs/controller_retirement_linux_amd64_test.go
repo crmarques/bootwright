@@ -40,7 +40,7 @@ func requireAreas(t *testing.T, store *Store, want ...string) {
 	if err != nil {
 		t.Fatalf("the record could not be read: %#v", diagnostics.Of(err))
 	}
-	entries, err := os.ReadDir(filepath.Join(store.options.Root, "controller", toolAreasName))
+	entries, err := os.ReadDir(filepath.Join(store.options.Root, hostContainer, controllerSubtree, toolAreasName))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func requireAreas(t *testing.T, store *Store, want ...string) {
 		if _, found := held[id]; !found {
 			t.Fatalf("the host holds %v, want %s", held, id[:8])
 		}
-		if _, err := os.Stat(filepath.Join(store.options.Root, "controller", toolAreasName, id)); err != nil {
+		if _, err := os.Stat(filepath.Join(store.options.Root, hostContainer, controllerSubtree, toolAreasName, id)); err != nil {
 			t.Fatalf("area %s has no directory under controller/tools: %v", id[:8], err)
 		}
 	}
@@ -84,7 +84,7 @@ func TestAStageRetiresTheAreaNoBindingNames(t *testing.T) {
 	if err := publishClients(store, clientClosure, true); err != nil {
 		t.Fatalf("client publication failed: %#v", diagnostics.Of(err))
 	}
-	if _, err := os.Stat(filepath.Join(store.options.Root, "controller", "bundles")); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(store.options.Root, hostContainer, controllerSubtree, "bundles")); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("the controller still holds a bundles directory: %v", err)
 	}
 	requireAreas(t, store, sealedToolArea, clientClosure)

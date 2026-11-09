@@ -52,7 +52,7 @@ func (s *Store) RebindController(ctx context.Context, recorded, next controller.
 		if err != nil {
 			return err
 		}
-		defer dir.file.Close()
+		defer dir.close()
 		if _, err := s.replaceControllerRecord(ctx, dir, stored, data, rebindRetry); err != nil {
 			return err
 		}

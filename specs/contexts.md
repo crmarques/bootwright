@@ -237,30 +237,35 @@ The 4096-name bound applies to active or reserved contexts, not past creations.
 A `registry.json` of any other format version than `RegistryVersion` is
 refused rather than converted, as state this build cannot read, with the
 other-build guidance below, and nothing in that store is rewritten. There is
-no fallback from corrupt state to older metadata.
+no fallback from corrupt state to older metadata. A store whose host-wide state
+lies outside `host/` carries an earlier `RegistryVersion`, so it meets this
+refusal (`TestAStoreWithTheEarlierLayoutIsAnotherBuilds`).
 
-The production root is `/var/lib/bootwright`. Its Controller subtree follows
-the [controller record](contexts/controller-record.md) and exists only after a
-first binding; its setup subtree exists after a confirmed setup:
+The production root is `/var/lib/bootwright`. Its host-wide state lives in one
+`host/` directory: the Controller subtree `host/record/` follows the
+[controller record](contexts/controller-record.md) and exists only after a
+first binding, and the setup subtree `host/setup/` exists after a confirmed
+setup:
 
 ```text
 /var/lib/bootwright/
   registry.json
-  controller/
-    state.json
-    tools/<tool-closure-digest>/
-      sources/
-      tools/
+  host/
+    setup/
+      lock
+      state.json
+      runtimes/<runtime-digest>/
+      cache/wheels/<sha256>/<file>
+      runs/setup-NNNNNN/
+        run.output
+    record/
+      state.json
+      tools/<tool-closure-digest>/
+        sources/
+        tools/
   media/
     <filename.iso>
     <filename.iso>.json
-  setup/
-    lock
-    state.json
-    runtimes/<runtime-digest>/
-    cache/wheels/<sha256>/<file>
-    runs/setup-NNNNNN/
-      run.output
   contexts/<name>/
     context.yaml
     desired-state/revisions/<revision-id>/
@@ -284,7 +289,9 @@ first binding; its setup subtree exists after a confirmed setup:
 | --- | --- |
 | `registry.json` | One atomic map of context names to their selected inputs and status, plus the Controller descriptor once a first binding publishes it. |
 | `media/` | Host-wide installer media under the [Managed OS media contract](managed-os.md#media-store): each image's exact bytes beside its canonical record, created by the first `media add`, shared read-only by every context and frozen through shared reservations rather than copied. An image is [acquired](#media-acquisition) into a private stage in this directory while no root lock is held, then published exclusively and atomically with its record; a pinned stage whose publication met another command's lock is kept beside its record for the command's repetition; deletion is guarded by the reservation record. |
-| `setup/` | Setup's own [subtree](contexts/controller-record.md#the-setup-subtree), independently versioned and outside the registry: its lock, its `prerequisites.SetupStateFormat` record with the pending intent and receipt, the published runtimes, the locked wheel cache and the newest setup runs. |
+| `host/` | The host-wide state no context owns, in a plain container no descriptor attributes, created with the setup subtree and, if missing, by the first binding. It holds only `setup/` and `record/`, each a private directory; any other entry, either of them of another type, or a `record/` no descriptor declares refuses the store (`TestTheStoreAdmitsHostWithOnlySetupAndRecord`). |
+| `host/record/` | The [Controller record](contexts/controller-record.md), its tool areas and its publication stages, in the directory the descriptor's device and inode name. |
+| `host/setup/` | Setup's own [subtree](contexts/controller-record.md#the-setup-subtree), independently versioned and outside the registry: its lock, its `prerequisites.SetupStateFormat` record with the pending intent and receipt, the published runtimes, the locked wheel cache and the newest setup runs. |
 | `contexts/<name>/context.yaml` | Canonical immutable Context configuration; keeps the authored configuration contract separate from runtime metadata. |
 | `desired-state/revisions/<revision-id>/` | Immutable input snapshot, so publication and protected recovery can retain a complete selected revision. Collect unselected revisions only with disposal proof. |
 | `manifest.json` | Original input provenance, blob mapping, sizes and hashes needed to verify and replay the snapshot. |
@@ -364,7 +371,7 @@ retained beside it.
 | --- | --- | --- |
 | shared | none | Every read: `context list` and `current`, `plan`, `status`, `preflight`, `controller check`, `secret check`, `list` and `show`, `secret encryption status`, `media list`, including the opening of each image `--checksums` then reads, the admission a `media add` or `media delete` without `--yes` reviews before its confirmation, the store check a `secret set` from standard input makes before it reads, the plan a `context update` or `context delete` without `--yes` presents before its confirmation, SSH-trust and input reads, and the reads that precede `apply` and `destroy`. |
 | exclusive | none | Every other command that may publish, such as `context use`, a `context update` that imports no input, `media delete`, the admission and publication of `media add`, the SSH trust that `machine trust` or a confirmed first use records, and the registry transaction in which `controller install` creates a missing setup subtree. |
-| none | none | The [acquisition](#media-acquisition) of `media add` between those two holds: its copy or download, or its re-read of a stage it adopts, its digest verification, and the record it retains beside a stage whose publication met another's lock; the full read of each image by `media list --checksums`, through the descriptor its shared hold opened; the confirmation prompt of `media add`, `media delete`, `context update` and `context delete`; the [read of standard input](secrets.md#acquisition-and-commands) by `secret set --value-stdin` or `--password-stdin`, including its terminal prompt; and every other part of `controller install`, which holds only [`setup/lock`](contexts/controller-record.md#the-setup-subtree). |
+| none | none | The [acquisition](#media-acquisition) of `media add` between those two holds: its copy or download, or its re-read of a stage it adopts, its digest verification, and the record it retains beside a stage whose publication met another's lock; the full read of each image by `media list --checksums`, through the descriptor its shared hold opened; the confirmation prompt of `media add`, `media delete`, `context update` and `context delete`; the [read of standard input](secrets.md#acquisition-and-commands) by `secret set --value-stdin` or `--password-stdin`, including its terminal prompt; and every other part of `controller install`, which holds only [`host/setup/lock`](contexts/controller-record.md#the-setup-subtree). |
 | exclusive | held | `context init`; a `context update` that imports input; `context delete` of a ready context; `secret set` (from standard input, only to write what it read), `generate` and `delete`, `secret encryption init` and `rotate`, and the Secret binding `apply` and `destroy` take before they execute; and the short shared-state publications of `apply` and `destroy`. |
 | none during effects | exclusive | The execution of `apply` and `destroy`, between short root transactions. |
 | shared during admission, none during effects | shared | [Bounded runs](cli/output.md#bounded-run-output), including Machine power; their lease excludes lifecycle mutation of the same context. |
@@ -387,8 +394,8 @@ succeed; a lease that refuses is released at once. `controller install`
 [selects no context](controller.md#the-setup-flow), so it
 takes no lease and collects no stage in a context's `state/` subtree. Its
 reads take no root lock, and its run holds none exclusively: it opens
-one exclusive registry transaction only to create the root and its setup
-subtree when missing, then holds only `setup/lock`
+one exclusive registry transaction only to create the root, `host/` and its
+setup subtree when missing, then holds only `host/setup/lock`
 ([controller](controller.md#host-identity-and-shared-prerequisites)).
 Revalidate target, identity and evidence under those locks. Read-only
 operations perform no repair, initialization or publication.
@@ -726,11 +733,11 @@ build's services run; a store this build created is restored whole from a
 [matching backup](#format-and-restore-boundary).
 
 The root admits only the store's own published objects: `registry.json`, the
-`contexts` container, the `controller` subtree once the registry declares it,
-the `media` container once a `media add` has created it, the private `setup`
-directory once setup has created it, whose content the root admission never reads,
-and verified private, bounded `pending-<32 lowercase hexadecimal digits>.json`
-files left by an interrupted registry replacement; reads ignore them, nothing
+`contexts` container, the `media` container once a `media add` has created
+it, the private `host` container, which admits only the `setup` directory once
+setup has created it, whose content the root admission never reads, and the
+`record` subtree once the registry declares it, and verified private, bounded
+`pending-<32 lowercase hexadecimal digits>.json` files left by an interrupted registry replacement; reads ignore them, nothing
 adopts them, and the next command that opens a registry transaction removes
 them. Any other entry refuses with the same other-build and whole-store
 guidance, whether or not the registry holds contexts. Bounds never authorize evidence

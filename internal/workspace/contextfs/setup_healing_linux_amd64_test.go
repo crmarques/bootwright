@@ -168,7 +168,7 @@ func TestHealingASubtreeOverAHealthyRuntimeLeavesItLaunchable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	python, plans := &healingPython{setup: filepath.Join(store.options.Root, setupSubtree)}, &healingPlans{}
+	python, plans := &healingPython{setup: filepath.Join(store.options.Root, hostContainer, setupSubtree)}, &healingPlans{}
 	service := prerequisites.New(healingController{}, healingController{}, healingHost{identity}, prerequisites.Ports{
 		Setup: store, Packages: healingPackages{}, Python: python, Lock: healingLock,
 	}, prerequisites.Options{Presenter: plans})

@@ -620,7 +620,7 @@ func (t *lifecycleTransaction) publishControllerState(ctx context.Context, value
 	if err != nil {
 		return err
 	}
-	defer dir.file.Close()
+	defer dir.close()
 	data, err := encodeRecord(controllerRecord(value, bundles), maxControllerState)
 	if err != nil {
 		return err

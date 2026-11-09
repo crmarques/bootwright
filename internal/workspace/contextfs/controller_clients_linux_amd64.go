@@ -99,7 +99,7 @@ func (t *lifecycleTransaction) attributeClientArea(ctx context.Context, id strin
 	if err != nil {
 		return err
 	}
-	defer owner.file.Close()
+	defer owner.close()
 	parent, err := t.base.store.ensureDirectory(ctx, owner, toolAreasName)
 	if err != nil {
 		return err

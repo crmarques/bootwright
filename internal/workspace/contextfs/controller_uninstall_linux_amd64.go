@@ -160,7 +160,7 @@ func (s *Store) inspectRootForUninstall(ctx context.Context, parent, root *direc
 	if view.Media, err = uninstallMedia(ctx, s, root); err != nil {
 		return release, err
 	}
-	dir, err := openDirectory(root, setupSubtree)
+	dir, err := openHostEntry(root, setupSubtree)
 	if errors.Is(err, syscall.ENOENT) {
 		return release, nil
 	}
@@ -169,12 +169,12 @@ func (s *Store) inspectRootForUninstall(ctx context.Context, parent, root *direc
 	}
 	held, err := lockSetup(ctx, dir, false)
 	if err != nil {
-		dir.file.Close()
+		dir.close()
 		return release, err
 	}
 	release = func() {
 		held.Close()
-		dir.file.Close()
+		dir.close()
 	}
 	view.Setup, err = readSetupView(ctx, dir)
 	return release, err

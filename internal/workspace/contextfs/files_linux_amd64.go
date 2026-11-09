@@ -111,11 +111,19 @@ const (
 )
 
 type directory struct {
-	file     *os.File
-	path     string
-	identity syscall.Stat_t
-	parent   *directory
-	name     string
+	file       *os.File
+	path       string
+	identity   syscall.Stat_t
+	parent     *directory
+	name       string
+	ownsParent bool
+}
+
+func (d *directory) close() {
+	d.file.Close()
+	if d.ownsParent {
+		d.parent.file.Close()
+	}
 }
 
 func statHandle(file *os.File) (syscall.Stat_t, error) {

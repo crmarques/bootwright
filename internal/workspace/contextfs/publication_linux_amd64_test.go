@@ -24,7 +24,7 @@ import (
 // returned left it.
 func controllerEntries(t *testing.T, store *Store) []string {
 	t.Helper()
-	entries, err := os.ReadDir(filepath.Join(store.options.Root, "controller"))
+	entries, err := os.ReadDir(filepath.Join(store.options.Root, hostContainer, controllerSubtree))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestARefusedControllerPublicationLeavesNoStage(t *testing.T) {
 			name:    "replaced-destination",
 			message: "controller receipt changed before publication",
 			act: func(store *Store, _ context.CancelFunc) error {
-				directory := filepath.Join(store.options.Root, "controller")
+				directory := filepath.Join(store.options.Root, hostContainer, controllerSubtree)
 				data, err := os.ReadFile(filepath.Join(directory, "state.json"))
 				if err != nil {
 					return err
@@ -143,7 +143,7 @@ func TestAFirstControllerPublicationOverAnExistingRecordLeavesNoStage(t *testing
 			return nil
 		}
 		planted = true
-		return os.WriteFile(filepath.Join(store.options.Root, "controller", "state.json"), []byte("{}\n"), 0600)
+		return os.WriteFile(filepath.Join(store.options.Root, hostContainer, controllerSubtree, "state.json"), []byte("{}\n"), 0600)
 	}
 	recordPreparedSetup(t, store)
 	err := store.MutateLifecycle(ctx, "alpha", func(tx lifecycle.Transaction) error {
@@ -168,7 +168,7 @@ func TestAFirstControllerPublicationOverAnExistingRecordLeavesNoStage(t *testing
 func TestAFailureAfterTheRenameIsAnUnknownOutcome(t *testing.T) {
 	ctx := context.Background()
 	store := checkpointSealedFixture(t)
-	path := filepath.Join(store.options.Root, "controller", "state.json")
+	path := filepath.Join(store.options.Root, hostContainer, controllerSubtree, "state.json")
 	before, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)

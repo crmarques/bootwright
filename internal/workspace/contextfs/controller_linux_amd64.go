@@ -46,6 +46,27 @@ func deletionRetry(name string) string {
 	return "once storage is healthy, finish the deletion with bootwright context delete --name " + name + " --purge"
 }
 
+const (
+	hostContainer     = "host"
+	controllerSubtree = "record"
+)
+
+// openHostEntry opens a child of the host container, holding the container
+// open until the child's close.
+func openHostEntry(root *directory, name string) (*directory, error) {
+	host, err := openDirectory(root, hostContainer)
+	if err != nil {
+		return nil, err
+	}
+	dir, err := openDirectory(host, name)
+	if err != nil {
+		host.file.Close()
+		return nil, err
+	}
+	dir.ownsParent = true
+	return dir, nil
+}
+
 func openControllerDirectory(root *directory, registry contexts.Registry) (*directory, error) {
 	// An unattributed descriptor is an interrupted initialization. Any
 	// directory beside it holds no readable controller state, so reads report
@@ -54,12 +75,12 @@ func openControllerDirectory(root *directory, registry contexts.Registry) (*dire
 	if registry.Controller.DirectoryInode == 0 {
 		return nil, syscall.ENOENT
 	}
-	dir, err := openDirectory(root, "controller")
+	dir, err := openHostEntry(root, controllerSubtree)
 	if err != nil {
 		return nil, state("attributed controller directory is missing or unsafe")
 	}
 	if registry.Controller.DirectoryInode != dir.identity.Ino || registry.Controller.DirectoryDevice != uint64(dir.identity.Dev) {
-		dir.file.Close()
+		dir.close()
 		return nil, state("controller directory is unattributable or replaced; preserve the complete store for recovery")
 	}
 	return dir, nil
@@ -79,7 +100,7 @@ func readControllerStored(ctx context.Context, root *directory, registry context
 	if err != nil {
 		return controllerStored{}, err
 	}
-	defer dir.file.Close()
+	defer dir.close()
 	names, err := controllerNames(dir)
 	if err != nil {
 		return controllerStored{}, err
@@ -139,14 +160,14 @@ func controllerNames(dir *directory) ([]string, error) {
 // setupPrepared reports a completed setup in the setup subtree: a receipt, no
 // interrupted setup and no other build's format.
 func setupPrepared(ctx context.Context, root *directory) (bool, error) {
-	dir, err := openDirectory(root, setupSubtree)
+	dir, err := openHostEntry(root, setupSubtree)
 	if errors.Is(err, syscall.ENOENT) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	defer dir.file.Close()
+	defer dir.close()
 	view, err := readSetupView(ctx, dir)
 	if err != nil {
 		return false, err
@@ -288,13 +309,20 @@ func (t *transaction) initializeController(ctx context.Context, host controller.
 		}
 	}
 	if t.registry.Controller.DirectoryInode == 0 {
-		if dir, err := openDirectory(t.root, "controller"); err == nil {
-			dir.file.Close()
-			return controllerStored{}, state("existing controller directory cannot be adopted")
-		} else if !errors.Is(err, syscall.ENOENT) {
+		host, err := t.store.ensureDirectory(ctx, t.root, hostContainer)
+		if err != nil {
 			return controllerStored{}, err
 		}
-		dir, err := t.store.newDirectory(ctx, t.root, "controller")
+		if dir, err := openDirectory(host, controllerSubtree); err == nil {
+			dir.file.Close()
+			host.file.Close()
+			return controllerStored{}, state("existing controller directory cannot be adopted")
+		} else if !errors.Is(err, syscall.ENOENT) {
+			host.file.Close()
+			return controllerStored{}, err
+		}
+		dir, err := t.store.newDirectory(ctx, host, controllerSubtree)
+		host.file.Close()
 		if err != nil {
 			return controllerStored{}, err
 		}
@@ -323,7 +351,7 @@ func (t *transaction) initializeController(ctx context.Context, host controller.
 		if err == nil {
 			_, err = t.store.replaceControllerRecord(ctx, dir, stored, data, retry)
 		}
-		dir.file.Close()
+		dir.close()
 		if err != nil {
 			return controllerStored{}, err
 		}

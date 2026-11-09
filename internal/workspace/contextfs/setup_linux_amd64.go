@@ -57,14 +57,14 @@ func (s *Store) ReadSetup(ctx context.Context) (prerequisites.SetupView, error) 
 	if err := admitRegistry(ctx, root); err != nil {
 		return prerequisites.SetupView{}, safeError(err)
 	}
-	dir, err := openDirectory(root, setupSubtree)
+	dir, err := openHostEntry(root, setupSubtree)
 	if errors.Is(err, syscall.ENOENT) {
 		return prerequisites.SetupView{}, nil
 	}
 	if err != nil {
 		return prerequisites.SetupView{}, safeError(err)
 	}
-	defer dir.file.Close()
+	defer dir.close()
 	view, err := readSetupView(ctx, dir)
 	return view, safeError(err)
 }
@@ -136,11 +136,11 @@ func (s *Store) mutateSetup(ctx context.Context, callback func(prerequisites.Set
 	if err := admitRegistry(ctx, root); err != nil {
 		return safeError(err)
 	}
-	dir, err := openDirectory(root, setupSubtree)
+	dir, err := openHostEntry(root, setupSubtree)
 	if err != nil {
 		return safeError(err)
 	}
-	defer dir.file.Close()
+	defer dir.close()
 	held, err := lockSetup(ctx, dir, wait)
 	if err != nil {
 		return err
@@ -157,10 +157,12 @@ func (s *Store) mutateSetup(ctx context.Context, callback func(prerequisites.Set
 func (s *Store) ensureSetupSubtree(ctx context.Context) error {
 	root, err := s.openRoot(ctx, false, nil)
 	if err == nil {
-		dir, openErr := openDirectory(root, setupSubtree)
+		dir, openErr := openHostEntry(root, setupSubtree)
+		if openErr == nil {
+			dir.close()
+		}
 		root.file.Close()
 		if openErr == nil {
-			dir.file.Close()
 			return nil
 		}
 		err = openErr
@@ -170,7 +172,12 @@ func (s *Store) ensureSetupSubtree(ctx context.Context) error {
 	}
 	return s.Transact(ctx, true, nil, func(base contexts.Transaction) error {
 		t := base.(*transaction)
-		dir, err := t.store.ensureDirectory(ctx, t.root, setupSubtree)
+		host, err := t.store.ensureDirectory(ctx, t.root, hostContainer)
+		if err != nil {
+			return err
+		}
+		defer host.file.Close()
+		dir, err := t.store.ensureDirectory(ctx, host, setupSubtree)
 		if err != nil {
 			return err
 		}
@@ -742,11 +749,11 @@ func (s *Store) HoldRuntime(ctx context.Context, digest string) (prerequisites.R
 		return nil, runtimeUnavailable(err)
 	}
 	defer root.file.Close()
-	setup, err := openDirectory(root, setupSubtree)
+	setup, err := openHostEntry(root, setupSubtree)
 	if err != nil {
 		return nil, runtimeUnavailable(err)
 	}
-	defer setup.file.Close()
+	defer setup.close()
 	runtimes, err := openDirectory(setup, setupRuntimesName)
 	if err != nil {
 		return nil, runtimeUnavailable(err)
