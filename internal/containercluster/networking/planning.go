@@ -66,11 +66,11 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		if len(requires) == 1 {
 			return plan, fmt.Errorf("the node networks of %s require an executable nmstate package", cluster.Identity())
 		}
-		description := "configure secondary networks on " + cluster.Name()
+		description, group := "configure secondary networks on "+cluster.Name(), "apply and check secondary networks"
 		if !secondary {
-			description = "enable IP forwarding on the MetalLB interfaces of " + cluster.Name()
+			description, group = "enable IP forwarding on the MetalLB interfaces of "+cluster.Name(), "apply and check node forwarding policies"
 		}
-		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: BlockID(cluster.Name()), Description: description, Stage: reconciliation.StageAddOns, Requires: requires, Impacts: []string{"configure-secondary-networks " + cluster.Name()}, Groups: []reconciliation.Group{{ID: "configure-networks", Description: "apply and check secondary networks", Machines: []string{controller}}}, Kind: Kind, Object: cluster.Name(), Implementation: Implementation, ContentDigest: ContentDigest(), Request: data})
+		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: BlockID(cluster.Name()), Description: description, Stage: reconciliation.StageAddOns, Requires: requires, Impacts: []string{"configure-secondary-networks " + cluster.Name()}, Groups: []reconciliation.Group{{ID: "configure-networks", Description: group, Machines: []string{controller}}}, Kind: Kind, Object: cluster.Name(), Implementation: Implementation, ContentDigest: ContentDigest(), Request: data})
 		if input.Verb == reconciliation.Destroy {
 			index := len(plan.Definitions) - 1
 			removal, err := c.Removal(ctx, reconciliation.Block{BlockDefinition: plan.Definitions[index]})
@@ -106,7 +106,7 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 			continue
 		}
 		if _, err := RenderForwarding(cluster, state.Effective(), forwarded); err != nil {
-			result = append(result, lifecycle.RefusalOf(cluster, err.Error(), "reduce or correct the secondary-network declarations"))
+			result = append(result, lifecycle.RefusalOf(cluster, err.Error(), "reduce or correct the secondary-network or MetalLB interface-pool declarations"))
 		}
 	}
 	return lifecycle.SortRefusals(result)

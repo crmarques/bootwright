@@ -91,7 +91,7 @@ func TestAForwardedMetalLBInterfacePlansTheNetworkBlockAlone(t *testing.T) {
 	}
 	withPool := subscription("metallb-operator.v0.0.0").With("pools", api.ListValue(pool("198.51.100.80-198.51.100.90")))
 	got := plan(withPool, "Restricted")
-	if len(got.Definitions) != 1 || got.Definitions[0].Description != "enable IP forwarding on the MetalLB interfaces of cluster" || !slices.Contains(got.Definitions[0].Requires, reconciliation.ObjectRef{Kind: "ClusterAddonBinding", Object: "cluster.nmstate"}) {
+	if len(got.Definitions) != 1 || got.Definitions[0].Description != "enable IP forwarding on the MetalLB interfaces of cluster" || got.Definitions[0].Groups[0].Description != "apply and check node forwarding policies" || !slices.Contains(got.Definitions[0].Requires, reconciliation.ObjectRef{Kind: "ClusterAddonBinding", Object: "cluster.nmstate"}) {
 		t.Fatalf("%+v", got.Definitions)
 	}
 	for name, metallb := range map[string]api.Value{

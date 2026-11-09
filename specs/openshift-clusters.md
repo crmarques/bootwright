@@ -1162,7 +1162,10 @@ its declared static IPv4 addresses, DHCP off. A cluster with such a pool and no
 secondary network still gets the block, holding only those policies: it
 states no bridge mapping, waits for each policy `Available` and creates no
 ClusterUserDefinedNetwork ([D246](milestones/backlog.md#d246)). No other
-interface forwards because of Bootwright.
+interface forwards because of Bootwright. The policies change with the pools
+only through a destroy and a fresh apply, like every object of the block, and
+a retired block leaves forwarding as its policies set it on a node that keeps
+running.
 
 Every object is created through the
 [cluster object program](add-ons.md#the-cluster-object-program) under its

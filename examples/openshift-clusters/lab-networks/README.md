@@ -22,10 +22,12 @@ prerequisites to the consuming M3d run.
   gateway are checked against them.
 - The cluster declares the `workloads` Localnet secondary network (bridge
   `br-workloads` on `enp2s0`, IPAM disabled, namespaces labelled
-  `network.example.test/workloads: enabled`) and `routingViaHost`. It leaves
-  `ipForwarding` unset, so the cluster network block enables IPv4 forwarding
-  on `enp3s0` alone, the interface the `routed-services` pool announces on;
-  the native operator rows remain the owning B729 and M4 gates.
+  `network.example.test/workloads: enabled`), `routingViaHost` and
+  `ipForwarding: Global`. Leaving `ipForwarding` unset instead makes the
+  cluster network block enable IPv4 forwarding on `enp3s0` alone, the
+  interface the `routed-services` pool announces on, a variant whose live run
+  is [B1231](../../../specs/milestones/m4.md#b1231)'s; the native operator rows
+  remain the owning B729 and M4 gates.
 - The binding selects NMState and MetalLB with two pools: `services` on the
   machine network and `routed-services` on `enp3s0`. Reserve pool addresses so
   no other host or DHCP service allocates them, and route both pools from the
