@@ -4,8 +4,8 @@
     "bmc:192.0.2.1:8000/1",
     "libvirt-domain:bootwright-example-rhel-01",
     "path:/srv/artifacts/private/sno",
-    "path:/var/lib/bootwright-clusters/example/compact",
-    "path:/var/lib/bootwright-clusters/example/sno"
+    "path:/var/lib/bootwright-hosted/example/clusters/compact",
+    "path:/var/lib/bootwright-hosted/example/clusters/sno"
   ],
   "refusal": {
     "message": "context example still owns realized objects; deleting it would orphan them",
@@ -16,7 +16,7 @@
     "libvirt-domain:bootwright-example-rhel-01",
     "media:rhel-9.iso",
     "path:/srv/artifacts/private/sno",
-    "path:/var/lib/bootwright-clusters/example/compact",
-    "path:/var/lib/bootwright-clusters/example/sno"
+    "path:/var/lib/bootwright-hosted/example/clusters/compact",
+    "path:/var/lib/bootwright-hosted/example/clusters/sno"
   ]
 }

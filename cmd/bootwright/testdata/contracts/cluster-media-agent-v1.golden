@@ -1,5 +1,5 @@
 implementation: cluster-media-agent-v1
-content-digest: 74c018b538267400348083a4f7fe7400602e976b0cf9a9d32fb5f63aa81c9b42
+content-digest: db641632342c170783b4a217aa14dc198138743938bd6965492b7020dba39b2e
 request-version: cluster-media-agent-v1
 automation-formats: none
 mark-formats: none
@@ -8,7 +8,8 @@ fixed-places: /.bootwright-kubeconfig
 effect-pins:
   clusters
   agent.iso
-  /var/lib/bootwright-clusters
+  /var/lib/bootwright-hosted
+  clusters
   openshift-install
 request-identity:
   identity.context

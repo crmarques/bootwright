@@ -75,7 +75,7 @@
     "context": "lab"
   },
   "image": {
-    "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/private/clusters/sno",
+    "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/private/clusters/sno",
     "url": "https://192.0.2.1:8443/private/clusters/sno"
   },
   "installConfig": {
@@ -152,5 +152,5 @@
     "mirror-ca"
   ],
   "version": "cluster-media-agent-v1",
-  "workRoot": "/var/lib/bootwright-clusters/lab/sno"
+  "workRoot": "/var/lib/bootwright-hosted/lab/clusters/sno"
 }

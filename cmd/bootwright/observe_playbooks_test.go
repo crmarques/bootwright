@@ -133,8 +133,9 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("infra_managed_service", "observe.yml", observeCollection+"infra_service_inspect", "reads the managed service's unit, container and answers", read)
 	add("managedos_install_anaconda", "observe.yml", observeCollection+"managedos_install_inspect", "reads the published installation content", read)
 	add("managedos_install_anaconda", "observe.yml", "ansible.builtin.set_fact", "names, in memory, a removal's read of a machine holding nothing of this installation", read)
-	add("managedos_install_anaconda", "work.yml", "ansible.builtin.stat", "reads a work-area ancestor without following links", read)
-	add("managedos_install_anaconda", "work.yml", "ansible.builtin.assert", "refuses an ancestor that is not private to root", read)
+	add("managedos_install_anaconda", "observe.yml", observeCollection+"hosted_area", "proves the work area's hosted ancestors without creating one", func(params, _ map[string]any) bool {
+		return params["state"] == "proved"
+	})
 	add("substrate_machine", "dispatch.yml", "ansible.builtin.fail", "refuses an arm with no machine port before any lookup", read)
 	add("substrate_machine", "dispatch.yml", "ansible.builtin.set_fact", "republishes the arm's answer in memory", read)
 	add("managedos_install_anaconda", "identity.yml", "ansible.builtin.set_fact", "takes the channel's answer in memory", read)
@@ -182,7 +183,6 @@ func addObserveScratch(add func(string, string, string, string, func(map[string]
 	add("managedos_host_firewall", "observe.yml", observeCollection+"lifecycle_scratch", "creates and removes this invocation's private bootwright_run_scratch", observeScratchRoot)
 	add("managedos_host_firewall", "observe.yml", "ansible.builtin.copy", "writes one connection's files under bootwright_run_scratch", observeUnder("dest", "{{ managedos_host_firewall_scratch }}/"))
 	add("managedos_host_firewall", "observe.yml", "ansible.builtin.file", "removes one connection's files under bootwright_run_scratch", observeUnder("path", "{{ managedos_host_firewall_scratch }}/"))
-	add("managedos_install_anaconda", "work.yml", "ansible.builtin.file", "creates a work ancestor only when the caller sets managedos_install_anaconda_work_create, which observe sets false", observeWorkCreate)
 	add("managedos_install_anaconda", "reachable.yml", "ansible.builtin.copy", "writes one connection's files under bootwright_run_scratch", observeUnder("dest", "{{ managedos_install_anaconda_scratch }}/"))
 	add("managedos_install_anaconda", "reachable.yml", "ansible.builtin.file", "removes one connection's files under bootwright_run_scratch", observeUnder("path", "{{ managedos_install_anaconda_scratch }}/"))
 	add("managedos_install_anaconda", "guest.yml", "ansible.builtin.copy", "writes one connection's files under bootwright_run_scratch", observeUnder("dest", "{{ managedos_install_anaconda_scratch }}/"))
@@ -228,10 +228,6 @@ func observeWhens(task map[string]any) []string {
 
 func observeCustodyCopy(_, task map[string]any) bool {
 	return slices.ContainsFunc(observeWhens(task), observeCustodyWhen.MatchString)
-}
-
-func observeWorkCreate(_, task map[string]any) bool {
-	return slices.Contains(observeWhens(task), "managedos_install_anaconda_work_create | bool")
 }
 
 func observeUnder(field, prefix string) func(map[string]any, map[string]any) bool {

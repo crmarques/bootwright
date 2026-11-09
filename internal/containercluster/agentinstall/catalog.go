@@ -59,11 +59,13 @@ const consumerPrefix = "clusters"
 // unguessable directory the attempt mints.
 const ImageFile = "agent.iso"
 
-// workRootPrefix is outside the Bootwright state root, because what the native
+// HostedRoot is outside the Bootwright state root, because what the native
 // installer keeps there is its own opaque state rather than context storage.
-// It is created `0700`: the installer retains inside it the material it was
-// given.
-const workRootPrefix = "/var/lib/bootwright-clusters"
+// The work root is created `0700`: the installer retains inside it the
+// material it was given.
+const HostedRoot = "/var/lib/bootwright-hosted"
+
+const clustersArea = "clusters"
 
 // installerTool is the client kind whose executable builds the image and
 // watches the install, and clientTool reads its release payload and the
@@ -91,7 +93,7 @@ const KubeconfigOutput = "kubeconfig"
 // WorkRoot is the area one cluster's native installer keeps its state in, on
 // the Machine the artifact server is placed on.
 func WorkRoot(contextName, cluster string) string {
-	return workRootPrefix + "/" + contextName + "/" + cluster
+	return HostedRoot + "/" + contextName + "/" + clustersArea + "/" + cluster
 }
 
 // MediaContentDigest and InstallContentDigest bind a plan to the exact
@@ -99,12 +101,12 @@ func WorkRoot(contextName, cluster string) string {
 // layout invalidates a frozen plan.
 func MediaContentDigest() string {
 	return contentDigest("bootwright.containercluster.media-agent-v1",
-		MediaImplementation, mediaRequestVersion, consumerPrefix, ImageFile, workRootPrefix, installerTool)
+		MediaImplementation, mediaRequestVersion, consumerPrefix, ImageFile, HostedRoot, clustersArea, installerTool)
 }
 
 func InstallContentDigest() string {
 	return contentDigest("bootwright.containercluster.install-agent-v1",
-		InstallImplementation, installRequestVersion, consumerPrefix, ImageFile, workRootPrefix, installerTool, clientTool, hostAccessLend, hostAccessBound)
+		InstallImplementation, installRequestVersion, consumerPrefix, ImageFile, HostedRoot, clustersArea, installerTool, clientTool, hostAccessLend, hostAccessBound)
 }
 
 const (

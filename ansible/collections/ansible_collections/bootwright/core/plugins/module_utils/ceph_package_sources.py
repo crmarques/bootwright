@@ -129,7 +129,7 @@ def source_for(request, host):
         ceph_native.require(isinstance(source["media"], str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,254}\.iso", source["media"]) is not None,
                             "packages")
         ceph_native.require(ceph_native.digest(source["mediaSHA256"]) and type(source["mediaSize"]) is int and 0 < source["mediaSize"] <= 64 << 30, "packages")
-        ceph_native.require(isinstance(source["publicationPath"], str) and source["publicationPath"].startswith("/var/lib/bootwright-services/")
+        ceph_native.require(isinstance(source["publicationPath"], str) and source["publicationPath"].startswith("/var/lib/bootwright-hosted/")
                             and source["publicationPath"].endswith("/public/os/" + source["profile"] + "/tree") and len(source["publicationPath"]) <= 1024,
                             "packages")
         safe_url(source["url"])

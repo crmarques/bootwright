@@ -15,6 +15,7 @@ import (
 )
 
 const EraseImplementation = "physical-erase-v1"
+const eraseRequestVersion = "physical-erase-v2"
 const eraseVariable = "bootwright_physical_erase"
 
 const (
@@ -51,7 +52,7 @@ func EraseBlockID(machine string) string {
 }
 
 func EraseContentDigest() string {
-	digest := sha256.Sum256([]byte(EraseImplementation + ":descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v1"))
+	digest := sha256.Sum256([]byte(EraseImplementation + ":" + eraseRequestVersion + ":descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v1"))
 	return hex.EncodeToString(digest[:])
 }
 
@@ -60,12 +61,12 @@ func (r EraseRequest) Canonical() ([]byte, error) { return reconciliation.Freeze
 func (r EraseRequest) SecretReferences() []string { return r.Install.SecretReferences() }
 
 func DecodeEraseRequest(data []byte) (EraseRequest, error) {
-	return reconciliation.ThawVersion[EraseRequest](data, "physical erase", EraseImplementation)
+	return reconciliation.ThawVersion[EraseRequest](data, "physical erase", eraseRequestVersion)
 }
 
 func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 	policy := machine.Spec().Get("hardware", "eraseOnRemoval")
-	request := EraseRequest{Version: EraseImplementation, Install: install, DeadlineSeconds: 14400}
+	request := EraseRequest{Version: eraseRequestVersion, Install: install, DeadlineSeconds: 14400}
 	installed, err := install.Canonical()
 	if err != nil {
 		return request, err

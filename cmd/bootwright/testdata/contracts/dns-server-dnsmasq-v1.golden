@@ -1,5 +1,5 @@
 implementation: dns-server-dnsmasq-v1
-content-digest: cba184c89c047678e5632ca20b7f43de7f5758d2719f3a23f429903d1c301d62
+content-digest: 544a52237167283339c48158b98dc4639c72040c96fb129f3ba84675bde743df
 request-version: managed-service-v1
 automation-formats: none
 mark-formats: none
@@ -7,7 +7,8 @@ proof-ids: none
 fixed-places: none
 effect-pins:
   docker.io/4km3/dnsmasq@sha256:52e25fb2601156ab66f6a0872c180b285df7cafaa41267d8d65689f066490641
-  /var/lib/bootwright-services
+  /var/lib/bootwright-hosted
+  services
   bootwright
 request-identity:
   identity.context

@@ -82,7 +82,7 @@ func TestRequestsDeriveTheFrozenLocalPlacement(t *testing.T) {
 	if request.Unit != "bootwright-"+testContext+"-proxy-lab-proxy" {
 		t.Fatalf("unit = %q", request.Unit)
 	}
-	if request.ContentRoot != ContentRootPrefix+"/"+testContext+"/proxy/lab-proxy" {
+	if request.ContentRoot != HostedRoot+"/"+testContext+"/services/proxy/lab-proxy" {
 		t.Fatalf("content root = %q", request.ContentRoot)
 	}
 	if !slices.Equal(request.Clients, []string{"127.0.0.1/32", "192.0.2.1/32", "::1/128"}) {
@@ -197,7 +197,7 @@ func TestReservationKeysCoverTheUnitPathAndSocket(t *testing.T) {
 	keys := requests[0].ReservationKeys()
 	for _, want := range []string{
 		"unit:bootwright-" + testContext + "-proxy-lab-proxy",
-		"path:" + ContentRootPrefix + "/" + testContext + "/proxy/lab-proxy",
+		"path:" + HostedRoot + "/" + testContext + "/services/proxy/lab-proxy",
 		"socket:192.0.2.1:3128",
 	} {
 		if !slices.Contains(keys, want) {

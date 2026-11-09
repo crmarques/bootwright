@@ -277,7 +277,7 @@
     "context": "lab"
   },
   "image": {
-    "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/private/clusters/ocp",
+    "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/private/clusters/ocp",
     "url": "https://192.0.2.1:8443/private/clusters/ocp"
   },
   "installConfig": {
@@ -345,5 +345,5 @@
     "version": "4.21.15"
   },
   "version": "cluster-media-agent-v1",
-  "workRoot": "/var/lib/bootwright-clusters/lab/ocp"
+  "workRoot": "/var/lib/bootwright-hosted/lab/clusters/ocp"
 }

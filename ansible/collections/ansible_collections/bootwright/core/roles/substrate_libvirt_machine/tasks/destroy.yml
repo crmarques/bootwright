@@ -2,7 +2,7 @@
 - name: Validate the frozen machine request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_machine_request.version == 'machine-libvirt-v1'
+      - bootwright_substrate_machine_request.version == 'machine-libvirt-v2'
       - bootwright_substrate_machine_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_substrate_machine_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_substrate_machine_request.directory == '/var/lib/libvirt/images/bootwright/'
@@ -15,6 +15,12 @@
   bootwright.core.substrate_libvirt_machine_protocol:
     phase: loaded
   no_log: true
+
+- name: Prove the context's hosted machine directories before any effect
+  bootwright.core.hosted_area:
+    context: '{{ bootwright_substrate_machine_request.identity.context }}'
+    path: '{{ substrate_libvirt_machine_area }}'
+    state: proved
 
 - name: Report controller removal
   bootwright.core.substrate_libvirt_machine_protocol:
@@ -107,22 +113,15 @@
     state: absent
   register: substrate_libvirt_machine_state_removed
 
-# The context's controller-state directory goes once no other machine's state
-# remains, never recursively; one that still holds another, or is already
-# gone, is left as it is.
-- name: Remove the context's empty controller-state directory
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/rmdir
-      - '{{ substrate_libvirt_machine_state | dirname }}'
-  environment:
-    LC_ALL: C
+# The Machine's, the machines' and the context's hosted directories go once
+# nothing else remains in them, never recursively; one that still holds
+# another, or is already gone, is left as it is.
+- name: Remove the Machine's and the context's empty hosted directories
+  bootwright.core.hosted_area:
+    context: '{{ bootwright_substrate_machine_request.identity.context }}'
+    path: '{{ substrate_libvirt_machine_area }}'
+    state: absent
   register: substrate_libvirt_machine_state_parent
-  failed_when:
-    - substrate_libvirt_machine_state_parent.rc != 0
-    - "'Directory not empty' not in substrate_libvirt_machine_state_parent.stderr"
-    - "'No such file or directory' not in substrate_libvirt_machine_state_parent.stderr"
-  changed_when: substrate_libvirt_machine_state_parent.rc == 0
 
 - name: Report controller removal completion
   bootwright.core.substrate_libvirt_machine_protocol:

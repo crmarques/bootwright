@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import pathlib
 import shutil
+import stat
 from types import SimpleNamespace
 
 import pytest
@@ -14,6 +15,7 @@ from ansible.template import Templar
 from ansible_collections.bootwright.core.plugins.action import managedos_install_protocol as protocol
 from ansible_collections.bootwright.core.plugins.modules.managedos_install_inspect import observe
 from ansible_collections.bootwright.core.plugins.modules.lifecycle_scratch import manage
+from ansible_collections.bootwright.core.plugins.module_utils import hosted_area
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_install_anaconda"
 LOADER = DataLoader()
@@ -26,7 +28,8 @@ INCLUDE = "ansible.builtin.include_tasks"
 STAT = "ansible.builtin.stat"
 COPY = "ansible.builtin.copy"
 SCRATCH = "bootwright.core.lifecycle_scratch"
-MODELLED = (INSPECT, PROTOCOL, FILE, COMMAND, INCLUDE, STAT, COPY, SCRATCH)
+HOSTED = "bootwright.core.hosted_area"
+MODELLED = (INSPECT, PROTOCOL, FILE, COMMAND, INCLUDE, STAT, COPY, SCRATCH, HOSTED)
 BOOT = {"name": "rhel-9.8-x86_64-boot.iso", "sha256": "b" * 64, "size": 1105199104}
 DVD = {"name": "rhel-9.8-x86_64-dvd.iso", "sha256": "d" * 64, "size": 13107200000}
 BUILD = "Build this machine's own installer image"
@@ -58,8 +61,9 @@ class Host:
         self.tree = root / "public" / "os" / "rhel-9-8" / "tree"
         self.staging = self.tree.parent / "tree.staging"
         self.image = root / "public" / "os" / machine / "install.iso"
-        self.parent = root / "var" / "lib" / "bootwright-install"
-        self.work = self.parent / "lab" / machine / "work"
+        self.parent = root / "var" / "lib" / "bootwright-hosted"
+        self.machine = machine
+        self.work = self.parent / "lab" / "machines" / machine / "install"
         self.scratch_root = root / "var" / "lib" / "bootwright-staging" / "runs" / ("bootwright-scratch-%d-1" % job)
         self.scratch_root.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.scratch_root.parent.chmod(0o700)
@@ -180,6 +184,8 @@ class Host:
         if arguments.get("state") == "directory":
             existed = path.is_dir()
             path.mkdir(parents=True, exist_ok=True)
+            if arguments.get("mode"):
+                path.chmod(int(arguments["mode"], 8))
             return {"changed": not existed}
         assert arguments.get("state") == "absent", arguments
         if path.is_dir() and not path.is_symlink():
@@ -211,6 +217,17 @@ class Host:
                       str(self.scratch_root.parent), os.getuid())
         return {"changed": False, "path": path}
 
+    def hosted_area(self, arguments):
+        context, path, state = arguments["context"], list(arguments["path"]), arguments.get("state", "present")
+        found = {"present": hosted_area.ensure, "proved": hosted_area.prove, "absent": hosted_area.remove}[state]
+        result = found(context, path, str(self.parent), os.getuid())
+        return {"changed": bool(result) and state != "proved", "exists": bool(result) if state == "proved" else None}
+
+    def hosted(self):
+        """Create this Machine's hosted ancestors as an apply would, private to the test's user."""
+        self.parent.parent.mkdir(parents=True, exist_ok=True)
+        hosted_area.ensure("lab", ["machines", self.machine], str(self.parent), os.getuid())
+
     def command(self, arguments):
         argv = [str(argument) for argument in arguments["argv"]]
         if argv[0] == "/usr/bin/mv":
@@ -220,21 +237,6 @@ class Host:
             output = self.inside(argv[-1])
             assert not output.exists(), "%s already exists" % output
             output.write_bytes(b"built")
-        elif argv[0] == "/usr/bin/rmdir":
-            # GNU rmdir --ignore-fail-on-non-empty leaves a directory that is
-            # not empty and succeeds; any other failure still fails, and a
-            # missing directory exits 1 naming strerror(ENOENT), as coreutils
-            # src/rmdir.c ignorable_failure and remove_parents read: only
-            # ENOTEMPTY and EEXIST are ignored. LC_ALL=C keeps that text.
-            assert argv[1:-1] == ["--ignore-fail-on-non-empty"], argv
-            assert self.environment.get("LC_ALL") == "C", "rmdir's diagnostic would be localized"
-            directory = self.inside(argv[-1])
-            assert directory != self.parent, "a removal would take the shared work root"
-            if not os.path.lexists(directory):
-                return {"changed": True, "rc": 1, "stdout": "",
-                        "stderr": "/usr/bin/rmdir: failed to remove '%s': No such file or directory" % directory}
-            if not any(directory.iterdir()):
-                directory.rmdir()
         else:
             assert argv[0] == "/usr/bin/chcon", argv
         return {"changed": True, "rc": 0, "stdout": "", "stderr": ""}
@@ -246,7 +248,8 @@ class Host:
 
 
 def killed_build(host):
-    host.work.mkdir(parents=True)
+    host.hosted()
+    host.work.mkdir(mode=0o700)
     (host.work / "install.iso").write_bytes(b"stale")
 
 
@@ -319,12 +322,11 @@ def test_a_removal_reports_its_own_work_only(tmp_path, monkeypatch, left):
 
 def test_a_removal_takes_back_the_directories_its_apply_created(tmp_path, monkeypatch):
     host = Host(tmp_path, monkeypatch)
-    host.parent.mkdir(parents=True)
     host.run("apply.yml", through=BUILD)
     assert host.work.is_dir()
     host.run("destroy.yml")
-    assert not os.path.lexists(host.work.parent) and not os.path.lexists(host.work.parent.parent)
-    assert host.parent.is_dir()
+    assert not os.path.lexists(host.parent / "lab")
+    assert host.parent.is_dir() and stat.S_IMODE(host.parent.stat().st_mode) == 0o700
     assert host.completion()["outcome"] == "changed"
     assert host.completion()["evidence"]["postcondition"] is True
 
@@ -333,9 +335,9 @@ def test_a_removal_takes_back_the_directories_its_apply_created(tmp_path, monkey
 # back, so taking them back is a change even when no work area remains.
 def test_a_removal_of_only_empty_directories_is_a_change(tmp_path, monkeypatch):
     host = Host(tmp_path, monkeypatch)
-    host.work.parent.mkdir(parents=True)
+    host.hosted()
     host.run("destroy.yml")
-    assert not os.path.lexists(host.work.parent.parent) and host.parent.is_dir()
+    assert not os.path.lexists(host.parent / "lab") and host.parent.is_dir()
     assert host.completion()["outcome"] == "changed"
 
 
@@ -349,40 +351,30 @@ def test_a_removal_leaves_a_sibling_machines_work(tmp_path, monkeypatch):
     assert (second.work / "install.iso").read_bytes() == b"built"
 
 
-# Sibling Machines' removals run concurrently on one installer host, so both can
-# read the context directory present before either removes it; the one whose
-# rmdir then finds it gone already holds the absence it wants.
-def test_sibling_removals_racing_for_the_context_directory_both_complete(tmp_path, monkeypatch):
+# Sibling Machines' removals run concurrently on one installer host: one that
+# runs while a sibling's emptied directory is still there leaves the shared
+# directories to the sibling, which takes them back once it is the last.
+def test_sibling_removals_interleaved_both_complete(tmp_path, monkeypatch):
     first, second = Host(tmp_path, monkeypatch), Host(tmp_path, monkeypatch, "rhel-02", 2)
     first.run("apply.yml", through=BUILD)
     second.run("apply.yml", through=BUILD)
-    second.after["Read this context's work directory before empty directory removal"] = (
-        lambda: first.run("destroy.yml"))
+    second.after["Remove the work area an interrupted attempt left"] = lambda: first.run("destroy.yml")
     second.run("destroy.yml")
-    assert first.variables["managedos_install_anaconda_context_dir_removed"]["rc"] == 0
-    assert second.variables["managedos_install_anaconda_context_dir_before"]["stat"]["isdir"] is True
-    assert second.variables["managedos_install_anaconda_context_dir_removed"]["rc"] == 1
-    assert not os.path.lexists(first.work.parent.parent) and first.parent.is_dir()
+    assert first.variables["managedos_install_anaconda_parents"]["changed"] is True
+    assert second.variables["managedos_install_anaconda_parents"]["changed"] is True
+    assert not os.path.lexists(first.parent / "lab") and first.parent.is_dir()
     for host in (first, second):
         assert host.completion()["evidence"]["postcondition"] is True
 
 
-# Any other rmdir failure is still the removal's failure.
-def test_a_removal_fails_when_rmdir_fails_otherwise(tmp_path, monkeypatch):
+# An unsafe hosted ancestor refuses the removal before anything is removed.
+def test_a_removal_refuses_an_ancestor_not_private_to_root(tmp_path, monkeypatch):
     host = Host(tmp_path, monkeypatch)
-    host.work.parent.mkdir(parents=True)
-    denied = host.command
-
-    def refused(arguments):
-        if arguments["argv"][0] == "/usr/bin/rmdir":
-            return {"changed": True, "rc": 1, "stdout": "",
-                    "stderr": "/usr/bin/rmdir: failed to remove '%s': Permission denied" % arguments["argv"][-1]}
-        return denied(arguments)
-
-    host.command = refused
-    with pytest.raises(TaskFailed, match="Permission denied"):
+    killed_build(host)
+    (host.parent / "lab" / "machines").chmod(0o755)
+    with pytest.raises(hosted_area.Refusal, match="only root may enter"):
         host.run("destroy.yml")
-    assert host.work.parent.is_dir()
+    assert names(host.work) == {"install.iso"}
 
 
 # Observation leaves durable work as found and cleans its own connection files.

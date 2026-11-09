@@ -348,17 +348,18 @@ until destroy.
 one server configuration, one unit definition and, when any listener is HTTPS,
 one certificate and private key beneath that root. Directories are `0755`
 except the private key's directory, which is `0700`; the private key is `0600`.
-The content root is outside the Bootwright state root, so serving never exposes
-context storage. The apply creates the context's and the kind's directories
-beneath `/var/lib/bootwright-services` that hold the content root; the destroy
-removes each once it is empty, never recursively, and retains
-`/var/lib/bootwright-services` itself
+The content root lies in the context's [hosted directory](contexts.md#hosted-root),
+outside the Bootwright state root, so serving never exposes context storage.
+The apply proves and creates the hosted root's, the context's, `services` and
+the kind's directories that hold the content root, each a root-owned `0700`
+directory, and the destroy removes each beneath the hosted root once it is
+empty, never recursively, and retains the hosted root itself
 (`test_a_destroy_removes_each_empty_parent_never_recursively`). Its apply and
 its destroy each refuse, as their first check and so before any effect or
 removal, a content root that is not exactly
-`/var/lib/bootwright-services/<context>/<kind>/<name>` in normal form: one with
-a `.` or `..` component, an empty component from a repeated or trailing slash,
-or another depth
+`/var/lib/bootwright-hosted/<context>/services/<kind>/<name>` in normal form:
+one with a `.` or `..` component, an empty component from a repeated or
+trailing slash, or another depth
 (`test_a_content_root_not_in_normal_form_refuses_before_any_removal`). Nothing
 else on the host is created, modified or removed.
 
@@ -605,14 +606,13 @@ its destroy is reset by it, as the
 [artifact server's inverse](#managed-artifact-serving) states
 (`test_the_proxy_stops_within_podmans_stop_timeout`).
 
-**Owned host state.** Each service owns one content root, one daemon
-configuration inside it and one unit definition. Directories are `0755`. The
-content root is outside the Bootwright state root. The apply creates the
-context's and the kind's directories beneath `/var/lib/bootwright-services`
-that hold the content root; the destroy removes each once it is empty, never
-recursively, and retains `/var/lib/bootwright-services` itself. Each service's
-apply and destroy refuse a content root not in normal form before any effect,
-as the artifact server's do. Nothing else on the host is created, modified or
+**Owned host state.** Each service owns one content root,
+`/var/lib/bootwright-hosted/<context>/services/<kind>/<name>`, one daemon
+configuration inside it and one unit definition. The content root and its
+directories are `0755`; the [hosted directories](contexts.md#hosted-root)
+above it are created and removed as the artifact server's are, and the hosted
+root itself is retained. Each service's apply and destroy refuse a content
+root not in normal form before any effect, as the artifact server's do. Nothing else on the host is created, modified or
 removed, and no managed service writes to the
 host's own resolver, proxy or time configuration. A controller that must
 resolve names a managed DNSServer serves, as a container-cluster installation

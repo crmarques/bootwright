@@ -359,7 +359,7 @@ func TestAPrivateMachinePoweredOffByTheRestartReadsNoEffectAlone(t *testing.T) {
 	off := func(image bool) []byte {
 		return encode(t, Evidence{Address: "198.51.100.11", Image: image, Power: "Off", Request: "digest", NetworkDifferences: []string{}})
 	}
-	private := Request{Address: "198.51.100.11", Private: &Publication{Path: "/var/lib/bootwright-services/x", URL: "https://x"}}
+	private := Request{Address: "198.51.100.11", Private: &Publication{Path: "/var/lib/bootwright-hosted/x", URL: "https://x"}}
 	if effect, _ := installationEffect(reconciliation.Apply, off(false), private, "digest", "{}"); effect != reconciliation.EffectNoEffect {
 		t.Fatalf("a delivered-key machine powered off by the restart reads as %s, want no-effect", effect)
 	}

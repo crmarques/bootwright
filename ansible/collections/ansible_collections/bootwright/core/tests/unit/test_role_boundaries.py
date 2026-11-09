@@ -1036,7 +1036,7 @@ def test_the_allowlisted_host_paths_are_still_named_by_a_role():
     "pid /run/nginx.pid;",
     "Volume=/run/libvirt:/run/libvirt:rw",
     "path: /run/libvirt/libvirt-sock",
-    "path: /var/lib/bootwright-install/lab/node/work",
+    "path: /var/lib/bootwright-hosted/lab/machines/node/install",
     "path: /usr/lib/tmp/x",
 ], ids=["the run scratch", "a role scratch", "the pid allowance", "the socket allowance", "under the socket allowance",
         "durable work", "a longer path that ends in tmp"])

@@ -46,16 +46,16 @@ MANAGED_SOURCES = {
 # slug, and artifactserver.ContentRoot with the artifact server's unit prefix.
 SERVICES = {
     "NTPServer": dict(MANAGED_SOURCES, role=MANAGED, kind="NTPServer", service="time",
-                      contentRoot="/var/lib/bootwright-services/lab/ntp/time", unit="bootwright-lab-ntp-time"),
+                      contentRoot="/var/lib/bootwright-hosted/lab/services/ntp/time", unit="bootwright-lab-ntp-time"),
     "DNSServer": dict(MANAGED_SOURCES, role=MANAGED, kind="DNSServer", service="resolver",
-                      contentRoot="/var/lib/bootwright-services/lab/dns/resolver", unit="bootwright-lab-dns-resolver"),
+                      contentRoot="/var/lib/bootwright-hosted/lab/services/dns/resolver", unit="bootwright-lab-dns-resolver"),
     "Proxy": dict(MANAGED_SOURCES, role=MANAGED, kind="Proxy", service="egress",
-                  contentRoot="/var/lib/bootwright-services/lab/proxy/egress", unit="bootwright-lab-proxy-egress"),
+                  contentRoot="/var/lib/bootwright-hosted/lab/services/proxy/egress", unit="bootwright-lab-proxy-egress"),
     SERVER: {
         "role": SERVER,
         "request": "bootwright_artifact_server_request", "digest": "bootwright_artifact_server_digest",
         "configuration": "nginx.conf.j2", "unitSource": "unit.container.j2", "service": "lab-artifacts",
-        "contentRoot": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts",
+        "contentRoot": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts",
         "unit": "bootwright-lab-artifacts-lab-artifacts",
     },
 }

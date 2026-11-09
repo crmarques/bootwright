@@ -282,7 +282,7 @@ func TestExternalServicesAreNoRequirement(t *testing.T) {
 // because it carries the pull secret in its own ignition.
 func TestTheBootImageIsPublishedPrivately(t *testing.T) {
 	media, install, _ := onlyRequests(t, singleNodeCatalog())
-	const path = "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/private/clusters/sno"
+	const path = "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/private/clusters/sno"
 	if media.Image.Path != path || media.Image.URL != "https://192.0.2.1:8443/private/clusters/sno" {
 		t.Fatalf("image = %+v", media.Image)
 	}

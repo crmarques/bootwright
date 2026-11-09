@@ -27,7 +27,7 @@
     "context": "lab"
   },
   "image": {
-    "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/private/clusters/metal",
+    "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/private/clusters/metal",
     "url": "https://192.0.2.1:8443/private/clusters/metal"
   },
   "nodes": [
@@ -121,7 +121,7 @@
     "machine": "controller"
   },
   "publicationRoot": {
-    "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/private/clusters/metal",
+    "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/private/clusters/metal",
     "url": "https://192.0.2.1:8443/private/clusters/metal"
   },
   "release": {
@@ -137,5 +137,5 @@
   },
   "version": "cluster-install-agent-v1",
   "vips": [],
-  "workRoot": "/var/lib/bootwright-clusters/lab/metal"
+  "workRoot": "/var/lib/bootwright-hosted/lab/clusters/metal"
 }

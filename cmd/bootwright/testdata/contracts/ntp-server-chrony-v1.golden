@@ -1,5 +1,5 @@
 implementation: ntp-server-chrony-v1
-content-digest: 1ed0c6683b65f264d1259dd791fe060d0b555b1fcb522479f55feddf59a42718
+content-digest: ec5e1a6ce989dff7c9cb987f5f0f6c97f8dc6f166f8ad2572f2394727e3ef029
 request-version: managed-service-v1
 automation-formats: none
 mark-formats: none
@@ -7,7 +7,8 @@ proof-ids: none
 fixed-places: none
 effect-pins:
   docker.io/dockurr/chrony@sha256:f584829f268b26b26b351000b60aa7c3507933873b6a6d77ffe9dcabcfdc7025
-  /var/lib/bootwright-services
+  /var/lib/bootwright-hosted
+  services
   bootwright
 request-identity:
   identity.context

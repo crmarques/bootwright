@@ -2539,8 +2539,11 @@ The boot media's frozen size and SHA-256 remain mandatory. Source review does
 not qualify an image build or physical machine.
 
 Original-attempt custody and a fresh erase-only SSH host key remain private on
-the execution host, beneath the immutable original apply operation identity so
-reuse of a context name cannot adopt an old receipt. Initial private custody is
+the execution host, in
+`/var/lib/bootwright-hosted/<context>/machines/<machine>/erase/<operation>/`
+of the context's [hosted directory](contexts.md#hosted-root), beneath the
+immutable original apply operation identity so reuse of a context name cannot
+adopt an old receipt. Initial private custody is
 atomically committed before boot; its first erase attempt remains frozen across
 retries. The installed OS's existing host key is never the erase
 receipt identity. The RAM service accepts only receipt reads and receipt-hash

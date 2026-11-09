@@ -180,10 +180,10 @@ def test_a_removal_observation_publishes_the_content_left_and_nothing_of_the_mac
 @pytest.mark.parametrize("observes", [None, "removal"], ids=["unscoped", "removal"])
 def test_the_observation_reports_what_a_killed_apply_left(tmp_path, monkeypatch, observes):
     tree = tmp_path / "public" / "os" / "rhel-9-8" / "tree"
-    parent = tmp_path / "var" / "lib" / "bootwright-install"
-    work = parent / "work"
+    parent = tmp_path / "var" / "lib" / "bootwright-hosted" / "lab" / "machines" / "rhel-01"
+    work = parent / "install"
     (tree.parent / "tree.staging" / "Packages").mkdir(parents=True)
-    # The role creates the root-only parent before the work area beneath it.
+    # The role creates the root-only hosted ancestors before the work area beneath them.
     parent.mkdir(parents=True, mode=0o700)
     work.mkdir()
     variables = scope(observes, managedos_install_anaconda_controller={"changed": False, "media": "", "power": "Off"})

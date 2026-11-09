@@ -144,5 +144,5 @@
   },
   "tlsCertificateRef": "lab-artifacts-tls",
   "user": "bootwright",
-  "version": "os-install-anaconda-v1"
+  "version": "os-install-anaconda-v2"
 }

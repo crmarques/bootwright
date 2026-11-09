@@ -605,10 +605,13 @@ fields](state-reconciliation.md#observable-fields-by-implementation) table owns
 the paths.
 The inverse refuses a domain that is not shut off, as Quiescence states. It then
 stops and removes the BMC unit, container and state, undefines the domain,
-deletes the disks this context owns and proves each absent. After the disks
-and the state it removes the context's directories beneath
-`/var/lib/libvirt/images/bootwright` and `/var/lib/bootwright-substrate` when
-each is empty, never recursively, and retains both prefixes. It proves
+deletes the disks this context owns and proves each absent. The BMC state is
+`/var/lib/bootwright-hosted/<context>/machines/<machine>/bmc/` in the
+context's [hosted directory](contexts.md#hosted-root). After the disks and the
+state it removes the context's directories beneath
+`/var/lib/libvirt/images/bootwright` and the Machine's, the machines' and the
+context's hosted directories when each is empty, never recursively, and
+retains `/var/lib/libvirt/images/bootwright` and the hosted root. It proves
 nothing listens on the BMC's socket before that reservation is released.
 A disk is present while anything exists at its path, whatever its image
 reports. Because the deleted disks may hold an installed operating system, the

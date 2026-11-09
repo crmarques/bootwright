@@ -103,10 +103,10 @@ def test_the_cluster_is_read_through_the_kubeconfig_the_identity_is_taken_from()
     assert not [value for value in argv if "insecure" in value or "certificate-authority" in value]
     assert read["failed_when"] is False
     defaults = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
-    defaults["bootwright_cluster_install_request"] = {"workRoot": "/var/lib/bootwright-clusters/lab/sno"}
+    defaults["bootwright_cluster_install_request"] = {"workRoot": "/var/lib/bootwright-hosted/lab/clusters/sno"}
     rendered = Templar(loader=LOADER, variables=defaults).template(defaults["containercluster_install_agent_kubeconfig"])
-    assert rendered == os.path.join("/var/lib/bootwright-clusters/lab/sno", KEPT)
-    assert rendered != os.path.join("/var/lib/bootwright-clusters/lab/sno", KUBECONFIG)
+    assert rendered == os.path.join("/var/lib/bootwright-hosted/lab/clusters/sno", KEPT)
+    assert rendered != os.path.join("/var/lib/bootwright-hosted/lab/clusters/sno", KUBECONFIG)
 
 
 # What oc prints on stderr, through StandardErrorMessage in

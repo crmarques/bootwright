@@ -95,7 +95,7 @@
       "machine": "controller"
     },
     "private": {
-      "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/private/os/metal-01-erase",
+      "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/private/os/metal-01-erase",
       "url": "https://192.0.2.1:8443/private/os/metal-01-erase"
     },
     "target": {
@@ -126,7 +126,7 @@
     },
     "tlsCertificateRef": "lab-artifacts-tls",
     "tree": {
-      "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/os/rhel-9-8/tree",
+      "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/os/rhel-9-8/tree",
       "url": "http://192.0.2.1:8080/os/rhel-9-8/tree"
     },
     "treeMedia": {
@@ -135,9 +135,9 @@
       "size": 0
     },
     "user": "bootwright",
-    "version": "os-install-anaconda-v1"
+    "version": "os-install-anaconda-v2"
   },
-  "installDigest": "fbd9ca9deafa0ba79b9542983c50241fd239b60ff77415cb337f0c80d6f7f2d9",
+  "installDigest": "b4412c2556c57a492328b319e81e01d620c691f627bfa8c54f9a32bd9895fe1d",
   "network": "network --bootproto=static --device=enp1s0 --ip=198.51.100.41 --netmask=255.255.255.0 --hostname=metal-01.lab.example.test --onboot=on --activate --gateway=198.51.100.1 --nameserver=192.0.2.1\n",
   "targets": [
     {
@@ -148,5 +148,5 @@
       "wwn": "wwn-example"
     }
   ],
-  "version": "physical-erase-v1"
+  "version": "physical-erase-v2"
 }

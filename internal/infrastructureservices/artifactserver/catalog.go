@@ -19,9 +19,11 @@ const Kind = "ArtifactServer"
 // replaces it; neither may use a floating tag.
 const defaultImage = "registry.access.redhat.com/ubi9/nginx-124@sha256:bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56"
 
-// contentRootPrefix is outside the Bootwright state root, so serving a
+// HostedRoot is outside the Bootwright state root, so serving a
 // directory can never expose context storage.
-const contentRootPrefix = "/var/lib/bootwright-services"
+const HostedRoot = "/var/lib/bootwright-hosted"
+
+const servicesArea = "services"
 
 // unitPrefix namespaces every host unit this capability owns.
 const unitPrefix = "bootwright"
@@ -36,7 +38,8 @@ func ContentDigest() string {
 		Implementation,
 		requestVersion,
 		defaultImage,
-		contentRootPrefix,
+		HostedRoot,
+		servicesArea,
 		unitPrefix,
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])

@@ -11,15 +11,17 @@ import (
 	machineref "github.com/crmarques/bootwright/internal/machine"
 )
 
-// ContentRootPrefix is outside the Bootwright state root, so an owned service
+// HostedRoot is outside the Bootwright state root, so an owned service
 // directory can never expose context storage.
-const ContentRootPrefix = "/var/lib/bootwright-services"
+const HostedRoot = "/var/lib/bootwright-hosted"
+
+const ServicesArea = "services"
 
 // UnitPrefix namespaces every host unit these capabilities own.
 const UnitPrefix = "bootwright"
 
 func ContentRoot(contextName, slug, service string) string {
-	return ContentRootPrefix + "/" + contextName + "/" + slug + "/" + service
+	return HostedRoot + "/" + contextName + "/" + ServicesArea + "/" + slug + "/" + service
 }
 
 func UnitName(contextName, slug, service string) string {

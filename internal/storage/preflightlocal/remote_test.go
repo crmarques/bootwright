@@ -352,8 +352,8 @@ func TestRemoteDomainFilesAboveOneFactBoundStillCountForeignCPUs(t *testing.T) {
 }
 
 func TestADiskOnlyTargetRunsOnlyTheFilesystemRead(t *testing.T) {
-	remote := &fakeRemote{answers: map[string][]byte{statCommand("/var/lib/bootwright-services"): []byte("10 4096 ab\n")}}
-	facts, err := observeRemote(context.Background(), remote, preflight.Target{Host: "host", Context: "lab", Pool: "/var/lib/bootwright-services/lab/artifact-server/files/public/os/rhel-01/install.iso", DiskOnly: true})
+	remote := &fakeRemote{answers: map[string][]byte{statCommand("/var/lib/bootwright-hosted"): []byte("10 4096 ab\n")}}
+	facts, err := observeRemote(context.Background(), remote, preflight.Target{Host: "host", Context: "lab", Pool: "/var/lib/bootwright-hosted/lab/services/artifact-server/files/public/os/rhel-01/install.iso", DiskOnly: true})
 	if err != nil || !facts.DiskKnown || facts.CPUKnown || facts.MemoryKnown || facts.Available.Disk != 40960 || facts.DiskIdentity != "ssh/host/ab" {
 		t.Fatalf("%+v %v", facts, err)
 	}

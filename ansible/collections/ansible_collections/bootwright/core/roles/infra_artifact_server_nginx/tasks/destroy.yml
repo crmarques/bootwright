@@ -3,14 +3,16 @@
   ansible.builtin.assert:
     that:
       - bootwright_artifact_server_request.version == 'artifact-server-nginx-v1'
-      - bootwright_artifact_server_request.contentRoot.startswith('/var/lib/bootwright-services/')
-      - bootwright_artifact_server_request.contentRoot.split('/') | length == 7
+      - bootwright_artifact_server_request.contentRoot.startswith('/var/lib/bootwright-hosted/')
+      - bootwright_artifact_server_request.contentRoot.split('/') | length == 8
+      - bootwright_artifact_server_request.contentRoot.split('/')[3] == 'bootwright-hosted'
+      - bootwright_artifact_server_request.contentRoot.split('/')[5] == 'services'
       - >-
         bootwright_artifact_server_request.contentRoot.split('/')[1:]
         | select('in', ['', '.', '..']) | list | length == 0
       - >-
-        (bootwright_artifact_server_request.contentRoot | dirname | dirname)
-        == '/var/lib/bootwright-services/' ~ bootwright_artifact_server_request.identity.context
+        (bootwright_artifact_server_request.contentRoot | dirname | dirname | dirname)
+        == '/var/lib/bootwright-hosted/' ~ bootwright_artifact_server_request.identity.context
       - bootwright_artifact_server_digest is match('[0-9a-f]{64}')
     quiet: true
   no_log: true
@@ -19,6 +21,12 @@
   bootwright.core.artifact_server_protocol:
     phase: loaded
   no_log: true
+
+- name: Prove the context's hosted service directories before any effect
+  bootwright.core.hosted_area:
+    context: '{{ bootwright_artifact_server_request.identity.context }}'
+    path: '{{ infra_artifact_server_nginx_area }}'
+    state: proved
 
 - name: Report service stop
   bootwright.core.artifact_server_protocol:
@@ -118,26 +126,16 @@
     state: absent
   register: infra_artifact_server_nginx_root_removed
 
-# The content root is <prefix>/<context>/<kind>/<name>, as the validation above
-# requires, so these are the kind's and the context's directories, each removed
-# only once empty and never recursively; the retained prefix itself is never
-# reached.
+# The content root is <hosted root>/<context>/services/<kind>/<name>, as the
+# validation above requires, so these are the kind's, the services' and the
+# context's directories, each removed only once empty and never recursively;
+# the hosted root itself is never reached.
 - name: Remove the service's and the context's directories once empty
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/rmdir
-      - '{{ item }}'
-  loop:
-    - '{{ bootwright_artifact_server_request.contentRoot | dirname }}'
-    - '{{ bootwright_artifact_server_request.contentRoot | dirname | dirname }}'
-  environment:
-    LC_ALL: C
+  bootwright.core.hosted_area:
+    context: '{{ bootwright_artifact_server_request.identity.context }}'
+    path: '{{ infra_artifact_server_nginx_area }}'
+    state: absent
   register: infra_artifact_server_nginx_parents
-  failed_when:
-    - infra_artifact_server_nginx_parents.rc != 0
-    - '"Directory not empty" not in infra_artifact_server_nginx_parents.stderr'
-    - '"No such file or directory" not in infra_artifact_server_nginx_parents.stderr'
-  changed_when: infra_artifact_server_nginx_parents.rc == 0
 
 - name: Report configuration removal completion
   bootwright.core.artifact_server_protocol:

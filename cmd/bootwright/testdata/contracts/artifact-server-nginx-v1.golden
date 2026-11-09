@@ -1,5 +1,5 @@
 implementation: artifact-server-nginx-v1
-content-digest: 317ad68188764b246d0fea5040029b7ef4f2a301ee847dc070952a664bc60c14
+content-digest: 2f2f45093fa223e22af8ec602c85eb355793c1fc91528dc93bd2e68c2a79e283
 request-version: artifact-server-nginx-v1
 automation-formats: none
 mark-formats: none
@@ -7,7 +7,8 @@ proof-ids: none
 fixed-places: none
 effect-pins:
   registry.access.redhat.com/ubi9/nginx-124@sha256:bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56
-  /var/lib/bootwright-services
+  /var/lib/bootwright-hosted
+  services
   bootwright
 request-identity:
   identity.context

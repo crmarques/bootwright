@@ -227,7 +227,7 @@ func automationFormats() map[string]automationFormat {
 		"ceph-replication-evidence-v1": {class: formatMirrored},
 		// The request versions each role refuses unless its request names.
 		"substrate-host-libvirt-v1":  {class: formatMirrored},
-		"machine-libvirt-v1":         {class: formatMirrored},
+		"machine-libvirt-v2":         {class: formatMirrored},
 		"machine-baremetal-v1":       {class: formatMirrored},
 		"substrate-host-kubevirt-v1": {class: formatMirrored},
 		"machine-kubevirt-v1":        {class: formatMirrored},
@@ -236,7 +236,8 @@ func automationFormats() map[string]automationFormat {
 		"substrate-access-kubevirt-v1":          {class: formatMirrored},
 		"substrate-access-kubevirt-evidence-v1": {class: formatMirrored},
 		"os-package-tree-v1":                    {class: formatMirrored},
-		"os-install-anaconda-v1":                {class: formatMirrored},
+		"os-install-anaconda-v2":                {class: formatMirrored},
+		"physical-erase-v2":                     {class: formatMirrored},
 		"physical-erase-v1":                     {class: formatMirrored},
 		"os-host-firewall-v1":                   {class: formatMirrored},
 		"os-host-firewall-evidence-v1":          {class: formatMirrored},
@@ -313,17 +314,14 @@ func automationIdentities() map[string]automationFormat {
 		"/etc/bootwright/update.json":             fixedBy(kindProof, "the update record the update worker resumes from and an observation reads", anaconda),
 		"/etc/rhsm/ca/bootwright-satellite.pem":   fixedBy(kindPlace, "the Satellite CA bundle the registration worker writes and rhsm.conf names", anaconda),
 		".bootwright-satellite.pem.tmp":           fixedBy(kindPlace, "the stage the registration worker renames onto the Satellite CA bundle", anaconda),
-		"/var/lib/bootwright-install":             fixedBy(kindPlace, "the parent of the installation's work area", anaconda),
-		"/var/lib/bootwright-install/":            fixedBy(kindPlace, "the parent of the installation's work area", anaconda),
+		"/var/lib/bootwright-hosted":              fixedBy(kindPlace, "the hosted root the Machine's controller state, the installation's work area and the erase's per-operation area lie beneath", libvirt.MachineImplementation, anaconda, erase),
 		"/run/bootwright":                         fixedBy(kindPlace, "the installed machine's network convergence runtime directory", anaconda),
 		"bootwright-network-apply.service":        fixedBy(kindPlace, "the installed machine's network convergence unit", anaconda),
-		"/var/lib/bootwright-substrate/":          fixedBy(kindPlace, "the parent of the Machine's management controller area", libvirt.MachineImplementation),
-		"/var/lib/bootwright-erase":               fixedBy(kindPlace, "the controller root of the erase's per-operation area", erase),
 		"bootwright.erase=1":                      fixedBy(kindProof, "the kernel argument that proves the booted environment is the erase environment", erase),
 
-		"/var/lib/bootwright-services/":            validated("the content root every service request must lie beneath"),
+		"/var/lib/bootwright-hosted/":              validated("the hosted root every service content root, package tree, publication and cluster work root a request names must lie beneath"),
+		"bootwright-hosted":                        validated("the hosted root's name a service content root's normal form requires"),
 		"/var/lib/bootwright-staging/runs":         validated("the private parent every runner-issued run scratch must lie directly beneath"),
-		"/var/lib/bootwright-clusters/":            validated("the work root every cluster media and install request must lie beneath"),
 		"/var/lib/libvirt/images/bootwright/":      validated("the media pool path every libvirt request must name"),
 		"/etc/bootwright/install-marker.json":      validated("the marker path every installation request must name, and the guest agent may read"),
 		"/etc/bootwright/host-key.pub":             validated("the host key path every installation request must name, and the guest agent may read"),
@@ -573,7 +571,7 @@ func TestEveryAutomationVersionLiteralIsClassified(t *testing.T) {
 	for _, name := range unread {
 		t.Errorf("%s is embedded automation the scan does not read: read its extension in automationTexts, or make it collection documentation", name)
 	}
-	for _, sentinel := range []string{"ceph-tunnel-v1", "/var/lib/bootwright/ceph", "bootwright.io/owner", "/var/lib/bootwright-install", "bootwright-network-apply.service"} {
+	for _, sentinel := range []string{"ceph-tunnel-v1", "/var/lib/bootwright/ceph", "bootwright.io/owner", "/var/lib/bootwright-hosted", "bootwright-network-apply.service"} {
 		if _, ok := found[sentinel]; !ok {
 			t.Errorf("the scan no longer finds %q: the scan is broken, or the literal moved and another sentinel must replace it", sentinel)
 		}

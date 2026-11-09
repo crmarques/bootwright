@@ -46,7 +46,7 @@ MEDIA = ROLES / "containercluster_media_agent"
 # The published image exactly as TestTheBootImageIsPublishedPrivately pins it
 # (internal/containercluster/agentinstall/projection_test.go): PrivatePath's
 # <content root>/public/private/clusters/<cluster>, and the URL it is served at.
-CONTENT_ROOT = "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts"
+CONTENT_ROOT = "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts"
 IMAGE = {"path": CONTENT_ROOT + "/public/private/clusters/sno", "url": "https://192.0.2.1:8443/private/clusters/sno"}
 # What `openssl rand -hex 32` mints: 64 hexadecimal digits.
 TOKEN = "0123456789abcdef" * 4

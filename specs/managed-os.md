@@ -441,14 +441,14 @@ token it does not know. A hosted package tree belongs to the
 installation requires and reads without mutating or claiming it.
 
 The image is built outside the served root, in
-`/var/lib/bootwright-install/<context>/<machine>/work`. The root-only parent
-and its identity subdirectories are proved before use, refusing links,
-another owner or any mode other than 0700. A partial image build may leave
+`/var/lib/bootwright-hosted/<context>/machines/<machine>/install`, in the
+context's [hosted directory](contexts.md#hosted-root), whose ancestors are
+proved before use, refusing links, another owner or any mode other than 0700. A partial image build may leave
 this machine's work behind; its next apply clears only that work before
 writing. Transient SSH configuration and known hosts use the runner's private
 invocation scratch, never this durable work or a host-global path. A removal
-takes back its own work, then its per-Machine and per-context work
-directories, each only when empty, and retains the shared root. A
+takes back its own work, then the Machine's, the machines' and the context's
+hosted directories, each only when empty, and retains the hosted root. A
 directory a concurrent sibling removal already took is that absence, never
 a failure.
 A Machine and a profile of one name that publish through one server are

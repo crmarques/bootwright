@@ -2,7 +2,8 @@
 
 The managed network services and the artifact server each remove one content
 root recursively, so their first task refuses a root that is not exactly
-<prefix>/<context>/<kind>/<name> with no empty, `.` or `..` component. Their
+<hosted root>/<context>/services/<kind>/<name> with no empty, `.` or `..`
+component. Their
 destroy resets the failed state systemd still lists a removed unit in, so a
 destroy after a failed apply leaves no managed unit listed failed. Evaluating
 those guards needs Ansible's controller (DataLoader and Templar), so these
@@ -27,7 +28,7 @@ from ansible_collections.bootwright.core.tests.unit.test_managed_service_role im
     variables,
 )
 
-PREFIX = "/var/lib/bootwright-services"
+PREFIX = "/var/lib/bootwright-hosted"
 ARTIFACT_APPLY = dict(
     ARTIFACT,
     unit="bootwright-lab-artifact-server-media",
@@ -41,14 +42,19 @@ ENTRIES = [
     ("infra_artifact_server_nginx", "apply.yml", "bootwright_artifact_server", ARTIFACT_APPLY, "artifact-server", "media"),
 ]
 PLANTED = [
-    ("lab", "{p}/lab/{k}/.."),
-    ("lab", "{p}/lab/{k}/."),
-    ("lab", "{p}/lab/./{n}"),
-    ("lab", "{p}/lab//{k}/{n}"),
-    ("lab", "{p}/lab/{k}/{n}/"),
-    ("lab", "{p}/lab/{k}/{n}/extra"),
-    ("..", "{p}/../{k}/{n}"),
-    ("lab/nested", "{p}/lab/nested/{k}/{n}"),
+    ("lab", "{p}/lab/services/{k}/.."),
+    ("lab", "{p}/lab/services/{k}/."),
+    ("lab", "{p}/lab/services/./{n}"),
+    ("lab", "{p}/lab/services//{k}/{n}"),
+    ("lab", "{p}/lab/services/{k}/{n}/"),
+    ("lab", "{p}/lab/services/{k}/{n}/extra"),
+    ("lab", "{p}/lab/{k}/{n}"),
+    ("lab", "{p}/lab/machines/{k}/{n}"),
+    ("lab", "{p}/lab/services/{n}"),
+    ("..", "{p}/../services/{k}/{n}"),
+    ("lab/nested", "{p}/lab/nested/services/{k}/{n}"),
+    ("lab", "/var/lib/bootwright-services/lab/services/{k}/{n}"),
+    ("lab", "/var/lib/other-hosted/lab/services/{k}/{n}"),
 ]
 DESTROYS = [
     ("infra_managed_service", "bootwright_managed_service", dict(MANAGED)),

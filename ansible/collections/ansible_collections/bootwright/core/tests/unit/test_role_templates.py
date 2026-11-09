@@ -45,7 +45,7 @@ def service(kind, slug, name, port, **fields):
     """A managed network service request, keyed as managedservice.Request is."""
     request = {
         "bindAddress": "192.0.2.1",
-        "contentRoot": "/var/lib/bootwright-services/%s/%s/%s" % (CONTEXT, slug, name),
+        "contentRoot": "/var/lib/bootwright-hosted/%s/services/%s/%s" % (CONTEXT, slug, name),
         "egress": EGRESS,
         "endpoints": [{"address": "192.0.2.1:%d" % port, "name": name}],
         "identity": {"block": "service-" + name, "context": CONTEXT, "service": name},
@@ -63,7 +63,7 @@ def service(kind, slug, name, port, **fields):
 
 ARTIFACT_SERVER = {
     "bindAddress": "192.0.2.1",
-    "contentRoot": "/var/lib/bootwright-services/%s/artifact-server/media" % CONTEXT,
+    "contentRoot": "/var/lib/bootwright-hosted/%s/services/artifact-server/media" % CONTEXT,
     "egress": EGRESS,
     "endpoints": [{"address": "http://192.0.2.1:8080", "name": "http"}, {"address": "https://192.0.2.1:8443", "name": "https"}],
     "identity": {"block": "service-media", "context": CONTEXT, "service": "media"},
@@ -115,7 +115,7 @@ MACHINE = {
     "uri": "qemu:///system",
     "uuid": "7b9ec716-85d4-8e28-84d3-f0d571d55f15",
     "vcpu": 4,
-    "version": "machine-libvirt-v1",
+    "version": "machine-libvirt-v2",
 }
 
 # Each rendered template with the variables its task sees beside the role's

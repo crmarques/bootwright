@@ -27,10 +27,10 @@
     "context": "lab"
   },
   "image": {
-    "path": "/var/lib/bootwright-clusters/lab/kubevirt/agent.iso",
+    "path": "/var/lib/bootwright-hosted/lab/clusters/kubevirt/agent.iso",
     "url": ""
   },
-  "imageIdentity": "ae9cd77335111c11abf325f5c64dcf5f016a89269855531e207f69da63bed375",
+  "imageIdentity": "4dc3832a5aa435c53e8b83f6bc7134f3d669c66249467e3433269be05e4980f7",
   "nodes": [
     {
       "address": "198.51.100.31",
@@ -81,5 +81,5 @@
   },
   "version": "cluster-install-agent-v1",
   "vips": [],
-  "workRoot": "/var/lib/bootwright-clusters/lab/kubevirt"
+  "workRoot": "/var/lib/bootwright-hosted/lab/clusters/kubevirt"
 }

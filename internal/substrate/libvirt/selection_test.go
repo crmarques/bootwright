@@ -253,7 +253,7 @@ func TestAnIPv6ControllerIsBracketedAndClaimsTheSharedSocketKey(t *testing.T) {
 		t.Fatalf("machine keys = %v, managed service keys = %v", requests[0].ReservationKeys(), service)
 	}
 	held := []prerequisites.HostReservation{{Context: "other", Kind: "proxy", Service: "proxy",
-		Keys: managedservice.ReservationKeys("bootwright-other-proxy", "/var/lib/bootwright-services/other/proxy", service)}}
+		Keys: managedservice.ReservationKeys("bootwright-other-proxy", "/var/lib/bootwright-hosted/other/services/proxy", service)}}
 	wanted := []prerequisites.HostReservation{{Context: testContext, Kind: "substrate-machine", Service: "rhel-01", Keys: requests[0].ReservationKeys()}}
 	conflicts := prerequisites.Conflicts(held, wanted)
 	if len(conflicts) != 1 || conflicts[0].Held.Context != "other" || conflicts[0].HeldKey != service[0] || conflicts[0].WantedKey != service[0] {

@@ -46,7 +46,7 @@ func (d Definition) BlockID(service string) string {
 func (d Definition) ContentDigest() string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		"bootwright.infrastructureservices.managed-service-v1",
-		d.Implementation, d.Version, d.Image, ContentRootPrefix, UnitPrefix,
+		d.Implementation, d.Version, d.Image, HostedRoot, ServicesArea, UnitPrefix,
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }

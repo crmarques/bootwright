@@ -13,6 +13,7 @@ import secrets
 import stat
 import time
 
+from ansible_collections.bootwright.core.plugins.module_utils import hosted_area
 from ansible_collections.bootwright.core.plugins.module_utils import managedos_guest_ssh as ssh
 from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_boot as boot
 from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_process as process
@@ -20,7 +21,8 @@ from ansible_collections.bootwright.core.plugins.module_utils import physical_er
 from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_worker as worker
 from ansible_collections.bootwright.core.plugins.module_utils import ssh_key_policy
 
-ROOT = Path("/var/lib/bootwright-erase")
+ROOT = Path(hosted_area.ROOT)
+REQUEST_VERSION = "physical-erase-v2"
 MEDIA = Path("/var/lib/bootwright/media")
 
 
@@ -82,7 +84,7 @@ def directory(path, create, mode=0o700):
 class Controller:
     def __init__(self, request, digest, material, create=False):
         self.request, self.digest, self.material = request, digest, material
-        if request.get("version") != worker.VERSION or not re.fullmatch("[0-9a-f]{64}", digest):
+        if request.get("version") != REQUEST_VERSION or not re.fullmatch("[0-9a-f]{64}", digest):
             raise worker.Refusal("request")
         identity = request["install"]["identity"]
         if not all(re.fullmatch("[a-z0-9][a-z0-9-]*", identity[key]) for key in ("context", "object")):
@@ -90,9 +92,12 @@ class Controller:
         operation = material.get("applyOperation", "")
         if not re.fullmatch("op-[0-9a-f]{32}", operation):
             raise worker.Refusal("apply-operation")
-        self.root = ROOT / identity["context"] / identity["object"] / operation
-        for path in (ROOT, self.root.parent.parent, self.root.parent, self.root):
+        path = ROOT
+        directory(path, create)
+        for name in (identity["context"], "machines", identity["object"], "erase", operation):
+            path = path / name
             directory(path, create)
+        self.root = path
         self.lock = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         # Every phase can recover or finalize custody. One owner holds its
         # lock across the complete call, including reads that decide to write.

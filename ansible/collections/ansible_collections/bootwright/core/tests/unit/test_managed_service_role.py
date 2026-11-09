@@ -9,9 +9,9 @@ table, so every task is shared.
 The proxy refuses loopback, unspecified and link-local destinations and its
 cache manager before it admits any derived client, and it stops within
 podman's stop timeout. A destroy of a managed service or the artifact server
-removes the kind's and the context's directories once each is empty, never
-recursively, and only when the content root sits exactly at
-<prefix>/<context>/<kind>/<name>. Evaluating those guards needs Ansible's
+removes the kind's, the services' and the context's directories once each is
+empty, never recursively, and only when the content root sits exactly at
+<hosted root>/<context>/services/<kind>/<name>. Evaluating those guards needs Ansible's
 controller (DataLoader and Templar), so these checks live here rather than
 under tests/unit/plugins.
 """
@@ -151,20 +151,20 @@ MANAGED = {
     "implementation": "dns-server-dnsmasq-v1",
     "unit": "bootwright-lab-dns-resolver",
     "identity": {"context": "lab"},
-    "contentRoot": "/var/lib/bootwright-services/lab/dns/resolver",
+    "contentRoot": "/var/lib/bootwright-hosted/lab/services/dns/resolver",
     "image": "registry.example/dnsmasq@sha256:" + "0" * 64,
     "port": 53,
 }
 ARTIFACT = {
     "version": "artifact-server-nginx-v1",
     "identity": {"context": "lab"},
-    "contentRoot": "/var/lib/bootwright-services/lab/artifact-server/media",
+    "contentRoot": "/var/lib/bootwright-hosted/lab/services/artifact-server/media",
 }
 DESTROYS = [
-    ("infra_managed_service", "bootwright_managed_service", MANAGED, ["/var/lib/bootwright-services/lab/dns", "/var/lib/bootwright-services/lab"]),
-    ("infra_artifact_server_nginx", "bootwright_artifact_server", ARTIFACT,
-     ["/var/lib/bootwright-services/lab/artifact-server", "/var/lib/bootwright-services/lab"]),
+    ("infra_managed_service", "bootwright_managed_service", MANAGED, ["services", "dns"]),
+    ("infra_artifact_server_nginx", "bootwright_artifact_server", ARTIFACT, ["services", "artifact-server"]),
 ]
+HOSTED = "bootwright.core.hosted_area"
 
 
 def variables(prefix, request):
@@ -174,37 +174,50 @@ def variables(prefix, request):
     return found
 
 
-@pytest.mark.parametrize("role, prefix, request_, parents", DESTROYS, ids=["managed service", "artifact server"])
-def test_a_destroy_removes_each_empty_parent_never_recursively(role, prefix, request_, parents):
+def role_scope(role, prefix, request_):
+    found = variables(prefix, request_)
+    found.update(LOADER.load_from_file(str(ROLES / role / "defaults" / "main.yml"), trusted_as_template=True))
+    return found
+
+
+@pytest.mark.parametrize("role, prefix, request_, area", DESTROYS, ids=["managed service", "artifact server"])
+def test_a_destroy_removes_each_empty_parent_never_recursively(role, prefix, request_, area):
     tasks = load_tasks(role, "destroy.yml")
     root = index_of(tasks, lambda task: task.get("name") == "Remove the owned content root", "removes the content root")
-    removal = index_of(tasks, lambda task: argv_of(task)[:1] == ["/usr/bin/rmdir"], "removes the empty parents")
+    removal = index_of(tasks, lambda task: task.get(HOSTED, {}).get("state") == "absent", "removes the empty parents")
     assert removal == root + 1
-    assert argv_of(tasks[removal]) == ["/usr/bin/rmdir", "{{ item }}"]
-    templar = Templar(loader=LOADER, variables=variables(prefix, request_))
-    assert templar.template(tasks[removal]["loop"]) == parents
+    templar = Templar(loader=LOADER, variables=role_scope(role, prefix, request_))
+    assert templar.template(tasks[removal][HOSTED]["path"]) == area
+    assert templar.template(tasks[removal][HOSTED]["context"]) == "lab"
+    assert tasks[removal]["register"] == role + "_parents"
     validate = validate_of(tasks)
     assert holds(validate, variables(prefix, request_))
-    shallow = dict(request_, contentRoot="/var/lib/bootwright-services/lab/resolver")
+    shallow = dict(request_, contentRoot="/var/lib/bootwright-hosted/lab/services/resolver")
     assert not holds(validate, variables(prefix, shallow))
-    foreign = dict(request_, contentRoot="/var/lib/bootwright-services/other/dns/resolver")
+    foreign = dict(request_, contentRoot="/var/lib/bootwright-hosted/other/services/dns/resolver")
     assert not holds(validate, variables(prefix, foreign))
 
 
-@pytest.mark.parametrize("result, failed, changed", [
-    ({"rc": 0, "stderr": ""}, False, True),
-    ({"rc": 1, "stderr": "rmdir: failed to remove '/x': Directory not empty"}, False, False),
-    ({"rc": 1, "stderr": "rmdir: failed to remove '/x': No such file or directory"}, False, False),
-    ({"rc": 1, "stderr": "rmdir: failed to remove '/x': Permission denied"}, True, False),
-])
-@pytest.mark.parametrize("role", [destroy[0] for destroy in DESTROYS])
-def test_only_a_non_empty_or_absent_parent_is_tolerated(role, result, failed, changed):
-    tasks = load_tasks(role, "destroy.yml")
-    removal = tasks[index_of(tasks, lambda task: argv_of(task)[:1] == ["/usr/bin/rmdir"], "removes the empty parents")]
-    templar = Templar(loader=LOADER, variables={role + "_parents": result})
-    failed_when = removal["failed_when"]
-    assert all(templar.evaluate_conditional(trust_as_template(str(c))) for c in failed_when) is failed
-    assert templar.evaluate_conditional(trust_as_template(str(removal["changed_when"]))) is changed
+@pytest.mark.parametrize("role, prefix, request_, area", DESTROYS, ids=["managed service", "artifact server"])
+@pytest.mark.parametrize("entry", ["apply.yml", "destroy.yml"])
+def test_the_hosted_ancestors_are_proved_right_after_the_handoff(role, prefix, request_, area, entry):
+    tasks = load_tasks(role, entry)
+    handoff = index_of(tasks, lambda task: any(key.endswith("_protocol") and task[key].get("phase") == "loaded" for key in task),
+                       "hands the runner its loaded record")
+    proof = tasks[handoff + 1]
+    assert proof[HOSTED]["state"] == "proved"
+    templar = Templar(loader=LOADER, variables=role_scope(role, prefix, request_))
+    assert templar.template(proof[HOSTED]["path"]) == area
+
+
+@pytest.mark.parametrize("role, prefix, request_, area", DESTROYS, ids=["managed service", "artifact server"])
+def test_the_apply_creates_its_hosted_ancestors_before_the_content_root(role, prefix, request_, area):
+    tasks = load_tasks(role, "apply.yml")
+    create = index_of(tasks, lambda task: task.get(HOSTED, {}).get("state") == "present", "creates the hosted ancestors")
+    directories = index_of(tasks, lambda task: task.get("name") == "Create the owned service directories", "creates the content root")
+    assert create == directories - 1
+    templar = Templar(loader=LOADER, variables=role_scope(role, prefix, request_))
+    assert templar.template(tasks[create][HOSTED]["path"]) == area
 
 
 def test_a_destroy_reports_a_removed_parent_as_a_change():
@@ -218,7 +231,8 @@ def test_a_destroy_reports_a_removed_parent_as_a_change():
 def test_the_apply_refuses_a_content_root_outside_its_context_and_kind():
     validate = validate_of(load_tasks("infra_managed_service", "apply.yml"))
     assert holds(validate, variables("bootwright_managed_service", MANAGED))
-    for root in ("/var/lib/bootwright-services/lab/resolver", "/var/lib/bootwright-services/other/dns/resolver"):
+    for root in ("/var/lib/bootwright-hosted/lab/services/resolver", "/var/lib/bootwright-hosted/other/services/dns/resolver",
+                 "/var/lib/bootwright-hosted/lab/dns/resolver/extra", "/var/lib/bootwright-services/lab/services/dns/resolver"):
         assert not holds(validate, variables("bootwright_managed_service", dict(MANAGED, contentRoot=root))), root
 
 

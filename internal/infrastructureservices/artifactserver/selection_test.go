@@ -71,7 +71,7 @@ func TestRequestsDeriveTheFrozenLocalPlacement(t *testing.T) {
 	if request.Image != defaultImage {
 		t.Fatalf("image = %q", request.Image)
 	}
-	if request.ContentRoot != contentRootPrefix+"/"+testContext+"/artifact-server/lab-artifacts" {
+	if request.ContentRoot != HostedRoot+"/"+testContext+"/services/artifact-server/lab-artifacts" {
 		t.Fatalf("content root = %q", request.ContentRoot)
 	}
 	if strings.HasPrefix(request.ContentRoot, "/var/lib/bootwright/") {
@@ -284,7 +284,7 @@ func TestReservationKeysCoverEverySocketUnitAndPath(t *testing.T) {
 	for _, want := range []string{
 		"socket:192.0.2.1:8080", "socket:192.0.2.1:8443",
 		"unit:" + unitPrefix + "-" + testContext + "-artifacts-lab-artifacts",
-		"path:" + contentRootPrefix + "/" + testContext + "/artifact-server/lab-artifacts",
+		"path:" + HostedRoot + "/" + testContext + "/services/artifact-server/lab-artifacts",
 	} {
 		if !slices.Contains(keys, want) {
 			t.Fatalf("keys = %v, missing %q", keys, want)

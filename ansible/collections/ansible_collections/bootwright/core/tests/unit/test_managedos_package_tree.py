@@ -29,9 +29,9 @@ ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_packag
 LOADER = DataLoader()
 SOURCE = b"the frozen installation DVD"
 SHA = hashlib.sha256(SOURCE).hexdigest()
-PUBLICATION = "/var/lib/bootwright-services/lab/public/os/rhel-9-8/tree"
+PUBLICATION = "/var/lib/bootwright-hosted/lab/services/public/os/rhel-9-8/tree"
 MEDIA = "rhel-9.8-x86_64-dvd.iso"
-MAPPED = ("/var/lib/bootwright-services/", "/var/lib/bootwright/media/")
+MAPPED = ("/var/lib/bootwright-hosted/", "/var/lib/bootwright/media/")
 
 
 class Interrupted(Exception):

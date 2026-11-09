@@ -13,7 +13,7 @@
     "machine": "controller"
   },
   "publication": {
-    "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/os/rhel-9-8/tree",
+    "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/os/rhel-9-8/tree",
     "url": "http://192.0.2.1:8080/os/rhel-9-8/tree"
   },
   "version": "os-package-tree-v1"

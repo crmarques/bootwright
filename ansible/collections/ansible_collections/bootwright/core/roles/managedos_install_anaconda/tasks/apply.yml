@@ -2,14 +2,14 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v1'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v2'
       - bootwright_os_install_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_os_install_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
-      - managedos_install_anaconda_work == '/var/lib/bootwright-install/'
-        ~ bootwright_os_install_request.identity.context ~ '/' ~ bootwright_os_install_request.identity.object ~ '/work'
+      - managedos_install_anaconda_work == '/var/lib/bootwright-hosted/'
+        ~ bootwright_os_install_request.identity.context ~ '/machines/' ~ bootwright_os_install_request.identity.object ~ '/install'
       - (bootwright_os_install_request.image is defined) != (bootwright_os_install_request.private is defined)
       - (bootwright_os_install_request.image.path if bootwright_os_install_request.image is defined
-         else bootwright_os_install_request.private.path).startswith('/var/lib/bootwright-services/')
+         else bootwright_os_install_request.private.path).startswith('/var/lib/bootwright-hosted/')
       - bootwright_os_install_request.markerPath == '/etc/bootwright/install-marker.json'
       - bootwright_os_install_request.hostKeyPath == '/etc/bootwright/host-key.pub'
       - bootwright_os_install_digest is match('[0-9a-f]{64}')
@@ -75,16 +75,11 @@
       ansible.builtin.fail:
         msg: The placement host SSH policy did not admit this installation's bound keys
 
-- name: Prove each ancestor of this Machine's durable work area
-  ansible.builtin.include_tasks: work.yml
-  loop:
-    - '{{ managedos_install_anaconda_work_parent }}'
-    - '{{ managedos_install_anaconda_work | dirname | dirname }}'
-    - '{{ managedos_install_anaconda_work | dirname }}'
-  loop_control:
-    loop_var: managedos_install_anaconda_work_ancestor
-  vars:
-    managedos_install_anaconda_work_create: true
+- name: Prove and create each private hosted ancestor of this Machine's work area top-down
+  bootwright.core.hosted_area:
+    context: '{{ bootwright_os_install_request.identity.context }}'
+    path: '{{ managedos_install_anaconda_area[:2] }}'
+    state: present
 
 - name: Install through this invocation's private connection files
   block:

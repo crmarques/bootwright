@@ -75,7 +75,7 @@
     "context": "lab"
   },
   "image": {
-    "path": "/var/lib/bootwright-clusters/lab/kubevirt/agent.iso",
+    "path": "/var/lib/bootwright-hosted/lab/clusters/kubevirt/agent.iso",
     "url": ""
   },
   "installConfig": {
@@ -134,5 +134,5 @@
     "version": "4.21.15"
   },
   "version": "cluster-media-agent-v1",
-  "workRoot": "/var/lib/bootwright-clusters/lab/kubevirt"
+  "workRoot": "/var/lib/bootwright-hosted/lab/clusters/kubevirt"
 }

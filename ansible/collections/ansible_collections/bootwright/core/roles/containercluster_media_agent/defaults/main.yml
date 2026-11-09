@@ -2,6 +2,7 @@
 # Derived from the frozen request only. Nothing here is authored by desired
 # state, and no value selects an executable, a role or a task file.
 containercluster_media_agent_work: '{{ bootwright_cluster_media_request.workRoot }}'
+containercluster_media_agent_area: "{{ ['clusters', bootwright_cluster_media_request.identity.cluster] }}"
 # Pushed delivery never enters a served root; its frozen image path is proved
 # equal to this file before any build or removal.
 containercluster_media_agent_push_image: '{{ containercluster_media_agent_work }}/agent.iso'

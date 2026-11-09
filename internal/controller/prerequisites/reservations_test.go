@@ -22,7 +22,7 @@ func TestAWildcardSocketConflictsWithEveryAddressAtItsPort(t *testing.T) {
 		"a wildcard at another port":          {held: "socket:0.0.0.0:3128", wanted: "socket:192.0.2.2:3129"},
 		"a port whose digits end the other":   {held: "socket:0.0.0.0:80", wanted: "socket:192.0.2.2:8080"},
 		"an address ending in the port":       {held: "socket:0.0.0.0:80", wanted: "socket:fd00::80:8080"},
-		"a wildcard beside another key class": {held: "socket:0.0.0.0:3128", wanted: "path:/var/lib/bootwright-services/lab/proxy"},
+		"a wildcard beside another key class": {held: "socket:0.0.0.0:3128", wanted: "path:/var/lib/bootwright-hosted/lab/services/proxy"},
 		"a shared held wildcard":              {held: "socket:0.0.0.0:3128", wanted: "socket:192.0.2.2:3128", heldShared: true},
 		"a shared wanted wildcard":            {held: "socket:192.0.2.2:3128", wanted: "socket:0.0.0.0:3128", wantedShared: true},
 	} {

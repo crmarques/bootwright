@@ -20,6 +20,7 @@ plugins/modules/containercluster_media_protocol.py validate-modules:missing-gplv
 plugins/modules/controller_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/controller_tool.py validate-modules:missing-gplv3-license
 plugins/modules/guest_agent_read.py validate-modules:missing-gplv3-license
+plugins/modules/hosted_area.py validate-modules:missing-gplv3-license
 plugins/modules/infra_service_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/infra_service_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/libvirt_domain_inspect.py validate-modules:missing-gplv3-license

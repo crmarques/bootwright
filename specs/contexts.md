@@ -730,6 +730,19 @@ them. Any other entry refuses with the same other-build and whole-store
 guidance, whether or not the registry holds contexts. Bounds never authorize evidence
 deletion to make room.
 
+### Hosted root
+
+What a context realizes on a host as a workload host, controller or SSH
+placement host alike, lives in `/var/lib/bootwright-hosted/<context>/`:
+`services/<kind>/<service>/` content roots, and `machines/<machine>/` `bmc/`,
+`install/` and `erase/<op>/`, and `clusters/<cluster>/` work areas. The root
+and every directory down to the one a capability owns is a root-owned `0700`
+directory, never a link: automation proves each existing one by no-follow
+descent before any effect, refuses one that is not without repair, and creates
+a missing one `0700` beneath its proved parent, top-down. A destroy removes
+each emptied directory up to the context's, never recursively and never the
+root, which [the uninstall flow](controller.md#the-uninstall-flow) owns.
+
 ### Media acquisition
 
 `media add` takes the exclusive root lock twice and holds no root lock

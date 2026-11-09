@@ -64,7 +64,7 @@ LOADER = DataLoader()
 INSTALL_BUDGETS = {"bootSeconds": 311, "bootstrapSeconds": 4703, "fanOut": 4, "installSeconds": 5903, "roundMarginSeconds": 83}
 MEDIA_BUDGETS = {"buildSeconds": 1709}
 INSTALL_REQUEST = {"budgets": INSTALL_BUDGETS, "identity": {"cluster": "sno", "context": "lab"},
-                   "workRoot": "/var/lib/bootwright-clusters/lab/sno"}
+                   "workRoot": "/var/lib/bootwright-hosted/lab/clusters/sno"}
 SPENT = (124, 137, -9)
 CLIENT = "{{ containercluster_install_agent_client }}"
 TIMED_OUT = "level=fatal msg=\"bootstrap process timed out\""
@@ -144,7 +144,7 @@ def scope(role, **variables):
     values["bootwright_cluster_install_request"] = dict(INSTALL_REQUEST)
     values["bootwright_cluster_install_material"] = {"openshiftinstall": "/installer", "oc": "/oc"}
     values["bootwright_cluster_media_request"] = {
-        "budgets": MEDIA_BUDGETS, "identity": {"cluster": "sno"}, "workRoot": "/var/lib/bootwright-clusters/lab/sno"}
+        "budgets": MEDIA_BUDGETS, "identity": {"cluster": "sno"}, "workRoot": "/var/lib/bootwright-hosted/lab/clusters/sno"}
     values["bootwright_cluster_media_material"] = {"installer": "/installer"}
     values.update(variables)
     return Templar(loader=LOADER, variables=values)

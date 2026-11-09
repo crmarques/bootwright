@@ -100,7 +100,7 @@
         "mediaSHA256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "mediaSize": 123456,
         "profile": "rhel",
-        "publicationPath": "/var/lib/bootwright-services/synthetic/artifact-server/artifacts/public/os/rhel/tree",
+        "publicationPath": "/var/lib/bootwright-hosted/synthetic/services/artifact-server/artifacts/public/os/rhel/tree",
         "url": "https://192.0.2.10:8443/os/rhel/tree"
       },
       {
@@ -110,7 +110,7 @@
         "mediaSHA256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "mediaSize": 123456,
         "profile": "rhel",
-        "publicationPath": "/var/lib/bootwright-services/synthetic/artifact-server/artifacts/public/os/rhel/tree",
+        "publicationPath": "/var/lib/bootwright-hosted/synthetic/services/artifact-server/artifacts/public/os/rhel/tree",
         "url": "https://192.0.2.10:8443/os/rhel/tree"
       },
       {
@@ -120,7 +120,7 @@
         "mediaSHA256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "mediaSize": 123456,
         "profile": "rhel",
-        "publicationPath": "/var/lib/bootwright-services/synthetic/artifact-server/artifacts/public/os/rhel/tree",
+        "publicationPath": "/var/lib/bootwright-hosted/synthetic/services/artifact-server/artifacts/public/os/rhel/tree",
         "url": "https://192.0.2.10:8443/os/rhel/tree"
       }
     ],

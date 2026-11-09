@@ -7,8 +7,8 @@
     "exclusive": null,
     "id": "cluster-media-compact",
     "impacts": [
-      "create-path /var/lib/bootwright-clusters/lab-compact/compact",
-      "publish-content /var/lib/bootwright-services/lab-compact/artifact-server/lab-artifacts/public/private/clusters/compact"
+      "create-path /var/lib/bootwright-hosted/lab-compact/clusters/compact",
+      "publish-content /var/lib/bootwright-hosted/lab-compact/services/artifact-server/lab-artifacts/public/private/clusters/compact"
     ]
   },
   {

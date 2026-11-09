@@ -1,6 +1,7 @@
 ---
 # Derived from the frozen request only. Nothing here is authored by desired
 # state, and no value selects an executable, a role or a task file.
+infra_artifact_server_nginx_area: "{{ bootwright_artifact_server_request.contentRoot.split('/')[5:7] }}"
 infra_artifact_server_nginx_config_dir: '{{ bootwright_artifact_server_request.contentRoot }}/config'
 infra_artifact_server_nginx_tls_dir: '{{ bootwright_artifact_server_request.contentRoot }}/tls'
 infra_artifact_server_nginx_served_dir: '{{ bootwright_artifact_server_request.contentRoot }}/public'

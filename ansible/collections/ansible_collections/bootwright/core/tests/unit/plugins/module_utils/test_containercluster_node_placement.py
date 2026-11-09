@@ -17,7 +17,7 @@ import pytest
 
 from ansible_collections.bootwright.core.plugins.module_utils import containercluster_node_placement as placement
 
-OC, KUBECONFIG = "/opt/clients/oc", "/var/lib/bootwright-clusters/ocp/.bootwright-kubeconfig"
+OC, KUBECONFIG = "/opt/clients/oc", "/var/lib/bootwright-hosted/ocp/clusters/.bootwright-kubeconfig"
 INFRA = "node-role.kubernetes.io/infra"
 
 

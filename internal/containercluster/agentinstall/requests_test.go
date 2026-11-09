@@ -164,8 +164,8 @@ func TestMediaReservationsClaimTheImageTreeAndWorkArea(t *testing.T) {
 	media, _, _ := onlyRequests(t, singleNodeCatalog())
 	keys := media.ReservationKeys()
 	for _, want := range []string{
-		"path:/var/lib/bootwright-clusters/lab/sno",
-		"path:/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/private/clusters/sno",
+		"path:/var/lib/bootwright-hosted/lab/clusters/sno",
+		"path:/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/private/clusters/sno",
 	} {
 		if !slices.Contains(keys, want) {
 			t.Fatalf("reservations = %v, missing %q", keys, want)

@@ -462,7 +462,8 @@ executable refuses the same way.
 
 **The image is built once, from frozen inputs.** The block owns one work area
 on the artifact server's placement Machine,
-`/var/lib/bootwright-clusters/<context>/<cluster>/`, reserved by path and
+`/var/lib/bootwright-hosted/<context>/clusters/<cluster>/` in the context's
+[hosted directory](contexts.md#hosted-root), reserved by path and
 created `0700` because the installer retains inside it the material it was
 given, which makes the area [native-side
 retention](secrets.md#native-side-retention). The attempt writes the frozen input files there, substitutes the bound
@@ -549,7 +550,7 @@ consumer.
 
 **Pushed delivery.** A cluster whose every node takes pushed delivery needs no
 artifact server: the block builds its image in the work area
-`/var/lib/bootwright-clusters/<context>/<cluster>/` on the controller Machine,
+`/var/lib/bootwright-hosted/<context>/clusters/<cluster>/` on the controller Machine,
 publishes nothing, and its evidence is the receipt and the image in that area.
 The installation freezes the image's path and its media identity, and each
 node's `media_insert` transfers that file from the controller to where the node

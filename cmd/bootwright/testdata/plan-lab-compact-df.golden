@@ -5,7 +5,7 @@
     "dependencies": [],
     "impacts": [
       "create-container-unit bootwright-lab-compact-df-artifacts-lab-artifacts",
-      "create-path /var/lib/bootwright-services/lab-compact-df/artifact-server/lab-artifacts",
+      "create-path /var/lib/bootwright-hosted/lab-compact-df/services/artifact-server/lab-artifacts",
       "open-listener 192.0.2.1:8080",
       "open-listener 192.0.2.1:8443"
     ]
@@ -47,7 +47,7 @@
     "dependencies": [],
     "impacts": [
       "create-container-unit bootwright-lab-compact-df-dns-lab-dns",
-      "create-path /var/lib/bootwright-services/lab-compact-df/dns/lab-dns",
+      "create-path /var/lib/bootwright-hosted/lab-compact-df/services/dns/lab-dns",
       "open-listener 192.0.2.1:53"
     ]
   },
@@ -57,7 +57,7 @@
     "dependencies": [],
     "impacts": [
       "create-container-unit bootwright-lab-compact-df-ntp-lab-ntp",
-      "create-path /var/lib/bootwright-services/lab-compact-df/ntp/lab-ntp",
+      "create-path /var/lib/bootwright-hosted/lab-compact-df/services/ntp/lab-ntp",
       "open-listener 192.0.2.1:123"
     ]
   },
@@ -67,7 +67,7 @@
     "dependencies": [],
     "impacts": [
       "create-container-unit bootwright-lab-compact-df-proxy-lab-proxy",
-      "create-path /var/lib/bootwright-services/lab-compact-df/proxy/lab-proxy",
+      "create-path /var/lib/bootwright-hosted/lab-compact-df/services/proxy/lab-proxy",
       "open-listener 192.0.2.1:3128"
     ]
   },
@@ -89,8 +89,8 @@
       "artifact-server-lab-artifacts"
     ],
     "impacts": [
-      "create-path /var/lib/bootwright-clusters/lab-compact-df/compact",
-      "publish-content /var/lib/bootwright-services/lab-compact-df/artifact-server/lab-artifacts/public/private/clusters/compact"
+      "create-path /var/lib/bootwright-hosted/lab-compact-df/clusters/compact",
+      "publish-content /var/lib/bootwright-hosted/lab-compact-df/services/artifact-server/lab-artifacts/public/private/clusters/compact"
     ]
   },
   {
@@ -188,7 +188,7 @@
       "controller-prerequisites"
     ],
     "impacts": [
-      "publish-content /var/lib/bootwright-services/lab-compact-df/artifact-server/lab-artifacts/public/os/rhel-9-8/tree"
+      "publish-content /var/lib/bootwright-hosted/lab-compact-df/services/artifact-server/lab-artifacts/public/os/rhel-9-8/tree"
     ]
   },
   {
@@ -225,7 +225,7 @@
       "configure-network rhel-01",
       "install-operating-system rhel-01",
       "power-on rhel-01",
-      "publish-content /var/lib/bootwright-services/lab-compact-df/artifact-server/lab-artifacts/public/os/rhel-01/install.iso",
+      "publish-content /var/lib/bootwright-hosted/lab-compact-df/services/artifact-server/lab-artifacts/public/os/rhel-01/install.iso",
       "restart rhel-01"
     ]
   },
@@ -243,7 +243,7 @@
       "configure-network rhel-02",
       "install-operating-system rhel-02",
       "power-on rhel-02",
-      "publish-content /var/lib/bootwright-services/lab-compact-df/artifact-server/lab-artifacts/public/os/rhel-02/install.iso",
+      "publish-content /var/lib/bootwright-hosted/lab-compact-df/services/artifact-server/lab-artifacts/public/os/rhel-02/install.iso",
       "restart rhel-02"
     ]
   },
@@ -261,7 +261,7 @@
       "configure-network rhel-03",
       "install-operating-system rhel-03",
       "power-on rhel-03",
-      "publish-content /var/lib/bootwright-services/lab-compact-df/artifact-server/lab-artifacts/public/os/rhel-03/install.iso",
+      "publish-content /var/lib/bootwright-hosted/lab-compact-df/services/artifact-server/lab-artifacts/public/os/rhel-03/install.iso",
       "restart rhel-03"
     ]
   },

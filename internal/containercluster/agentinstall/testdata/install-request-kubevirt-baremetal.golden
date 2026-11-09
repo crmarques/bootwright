@@ -27,10 +27,10 @@
     "context": "lab"
   },
   "image": {
-    "path": "/var/lib/bootwright-clusters/lab/kubevirt/agent.iso",
+    "path": "/var/lib/bootwright-hosted/lab/clusters/kubevirt/agent.iso",
     "url": ""
   },
-  "imageIdentity": "aaa0a09b54511937c92a7ddd27caaf7c5f543feb36238d319839da246fb0f369",
+  "imageIdentity": "ac2c9eaa8c11a3187b31bf14664894c92d867ac921af2a18d7321580f8dcb5fc",
   "nodes": [
     {
       "address": "198.51.100.31",
@@ -177,5 +177,5 @@
       "slot": "ingress"
     }
   ],
-  "workRoot": "/var/lib/bootwright-clusters/lab/kubevirt"
+  "workRoot": "/var/lib/bootwright-hosted/lab/clusters/kubevirt"
 }

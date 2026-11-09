@@ -4,14 +4,16 @@
     that:
       - bootwright_artifact_server_request.version == 'artifact-server-nginx-v1'
       - bootwright_artifact_server_request.unit is string
-      - bootwright_artifact_server_request.contentRoot.startswith('/var/lib/bootwright-services/')
-      - bootwright_artifact_server_request.contentRoot.split('/') | length == 7
+      - bootwright_artifact_server_request.contentRoot.startswith('/var/lib/bootwright-hosted/')
+      - bootwright_artifact_server_request.contentRoot.split('/') | length == 8
+      - bootwright_artifact_server_request.contentRoot.split('/')[3] == 'bootwright-hosted'
+      - bootwright_artifact_server_request.contentRoot.split('/')[5] == 'services'
       - >-
         bootwright_artifact_server_request.contentRoot.split('/')[1:]
         | select('in', ['', '.', '..']) | list | length == 0
       - >-
-        (bootwright_artifact_server_request.contentRoot | dirname | dirname)
-        == '/var/lib/bootwright-services/' ~ bootwright_artifact_server_request.identity.context
+        (bootwright_artifact_server_request.contentRoot | dirname | dirname | dirname)
+        == '/var/lib/bootwright-hosted/' ~ bootwright_artifact_server_request.identity.context
       - bootwright_artifact_server_request.image is search('@sha256:[0-9a-f]{64}$')
       - bootwright_artifact_server_request.listeners | length > 0
       - bootwright_artifact_server_digest is match('[0-9a-f]{64}')
@@ -22,6 +24,12 @@
   bootwright.core.artifact_server_protocol:
     phase: loaded
   no_log: true
+
+- name: Prove the context's hosted service directories before any effect
+  bootwright.core.hosted_area:
+    context: '{{ bootwright_artifact_server_request.identity.context }}'
+    path: '{{ infra_artifact_server_nginx_area }}'
+    state: proved
 
 # A host reservation compares only the contexts Bootwright coordinates, so a
 # socket another daemon holds is proved here, before anything is pulled,
@@ -119,6 +127,12 @@
     group: publish-configuration
     status: running
   no_log: true
+
+- name: Create the context's private hosted service directories top-down
+  bootwright.core.hosted_area:
+    context: '{{ bootwright_artifact_server_request.identity.context }}'
+    path: '{{ infra_artifact_server_nginx_area }}'
+    state: present
 
 - name: Create the owned service directories
   ansible.builtin.file:

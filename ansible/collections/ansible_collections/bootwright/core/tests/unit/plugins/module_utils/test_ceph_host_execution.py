@@ -36,7 +36,7 @@ def host_request(request_value):
     del cluster["action"]
     cluster["packages"] = {"version": "ceph-packages-v1", "licenseAccepted": True, "sources": [
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "e" * 64, "mediaSize": 1024,
-         "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
+         "publicationPath": "/var/lib/bootwright-hosted/example/services/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"}
         for host in cluster["hosts"]]}
     cluster["auxiliary"] = [{"name": "haproxy", "image": host_fixtures.HAPROXY}, {"name": "keepalived", "image": host_fixtures.KEEPALIVED}]

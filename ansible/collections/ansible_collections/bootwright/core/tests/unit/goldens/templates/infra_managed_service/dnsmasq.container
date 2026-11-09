@@ -10,7 +10,7 @@ Network=host
 User=0
 Entrypoint=/usr/sbin/dnsmasq
 Exec=--keep-in-foreground --conf-file=/etc/dnsmasq.conf
-Volume=/var/lib/bootwright-services/lab-rhel/dns-server-dnsmasq/dns/config/dnsmasq.conf:/etc/dnsmasq.conf:ro,Z
+Volume=/var/lib/bootwright-hosted/lab-rhel/services/dns-server-dnsmasq/dns/config/dnsmasq.conf:/etc/dnsmasq.conf:ro,Z
 
 [Service]
 Restart=always

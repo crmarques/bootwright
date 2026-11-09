@@ -102,8 +102,8 @@ def variables(**extra):
         "bootwright_os_install_material": {},
         "bootwright_os_install_request": {
             "bootMedia": dict(BOOT),
-            "image": {"path": "/var/lib/bootwright-services/lab/public/os/rhel-01/install.iso"},
-            "tree": {"path": "/var/lib/bootwright-services/lab/public/os/rhel-9-8/tree"},
+            "image": {"path": "/var/lib/bootwright-hosted/lab/services/public/os/rhel-01/install.iso"},
+            "tree": {"path": "/var/lib/bootwright-hosted/lab/services/public/os/rhel-9-8/tree"},
             "treeMedia": dict(DVD),
         },
     })
@@ -298,32 +298,16 @@ def test_the_work_area_lives_under_a_root_only_parent():
     for scratch in ("/var/tmp", "/tmp"):
         assert not parent.startswith(scratch + "/") and not work.startswith(scratch + "/")
 
-    tasks = flattened(ROLE / "tasks" / "work.yml")
-    read, proof, create = tasks
-    assert read[STAT]["follow"] is False
-    assert create[FILE]["mode"] == "0700"
-    assert create[FILE]["owner"] == create[FILE]["group"] == "root"
-    assert create["when"] == ["managedos_install_anaconda_work_create | bool",
-                              "not (managedos_install_anaconda_ancestor.stat.exists | default(false))"]
+    assert parent == "/var/lib/bootwright-hosted"
+    assert work == parent + "/lab/machines/node/install"
     for operation in ("apply", "observe", "destroy"):
         listed = flattened(ROLE / "tasks" / (operation + ".yml"))
-        ancestor = index_of(listed, lambda task: task.get("ansible.builtin.include_tasks") == "work.yml", "prove all ancestors")
+        ancestor = next(index for index, task in enumerate(listed) if "bootwright.core.hosted_area" in task)
         first_inspection = index_of(
             listed, lambda task: task.get("register") in ("managedos_install_anaconda_before", "managedos_install_anaconda_observed"),
             "read durable work")
         assert ancestor < first_inspection
-        assert len(listed[ancestor]["loop"]) == 3
-        assert listed[ancestor]["vars"]["managedos_install_anaconda_work_create"] is (operation == "apply")
-
-    def proves(**stat):
-        proved = dict({"exists": True, "isdir": True, "islnk": False, "uid": 0, "mode": "0700"}, **stat)
-        checks = Templar(loader=LOADER, variables={read["register"]: {"stat": proved}})
-        return all(checks.evaluate_conditional(trust_as_template(condition)) for condition in proof["ansible.builtin.assert"]["that"])
-    assert proves()
-    assert not proves(mode="0755")
-    assert not proves(uid=1000)
-    assert not proves(islnk=True)
-    assert not proves(isdir=False)
+        assert listed[ancestor]["bootwright.core.hosted_area"]["state"] == ("present" if operation == "apply" else "proved")
 
 
 def test_the_image_and_tree_are_fetched_through_the_listener_before_the_insert():

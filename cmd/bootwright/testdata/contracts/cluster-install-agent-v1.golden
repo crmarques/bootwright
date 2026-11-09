@@ -1,5 +1,5 @@
 implementation: cluster-install-agent-v1
-content-digest: 4d4d690e47c94e4ee2b23e7fdbcac273f98160690932368afc71ab78364ddfcd
+content-digest: e80e26523af74f3c99922501b0b451bdaa1bd6b416d712b7b8e539e8b723ffeb
 request-version: cluster-install-agent-v1
 automation-formats: none
 mark-formats: bootwright.io/lend
@@ -8,7 +8,8 @@ fixed-places: .bootwright-kubeconfig, /.bootwright-kubeconfig, bootwright-, boot
 effect-pins:
   clusters
   agent.iso
-  /var/lib/bootwright-clusters
+  /var/lib/bootwright-hosted
+  clusters
   openshift-install
   openshift-clients
   substrate-access-kubevirt-v1

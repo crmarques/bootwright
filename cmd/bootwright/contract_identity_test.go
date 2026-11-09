@@ -112,7 +112,7 @@ func contractRecipes() map[string]digestRecipe {
 		clients.Implementation: digestOf(partDomain("bootwright.controller.client-stage-v1"), partImplementation(clients.Implementation), partRequest(clients.Version)),
 		libvirt.HostImplementation: digestOf(partDomain("bootwright.substrate.libvirt.host-v1"), partImplementation(libvirt.HostImplementation), partRequest("substrate-host-libvirt-v1"),
 			partPin(strings.Join(libvirt.HypervisorPackages(), ",")), partPin(substrate.ImagePrefix), partPin(substrate.Prefix), partPin(strings.Join(libvirt.ServiceUnits(), ",")), partPin("bridge-use-claim"), partPin("vlan-refusal-v1")),
-		libvirt.MachineImplementation: digestOf(partDomain("bootwright.substrate.libvirt.machine-v1"), partImplementation(libvirt.MachineImplementation), partRequest("machine-libvirt-v1"),
+		libvirt.MachineImplementation: digestOf(partDomain("bootwright.substrate.libvirt.machine-v1"), partImplementation(libvirt.MachineImplementation), partRequest("machine-libvirt-v2"),
 			partPin("quay.io/metal3-io/sushy-tools@sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e"),
 			partPin(substrate.ImagePrefix), partPin(substrate.Prefix), partPin("data-media-ssd-scsi-v1"), partPin("shared-bmc-claim"), partPin("attached-disk-evidence-v1")),
 		kubevirt.HostImplementation: digestOf(partDomain("bootwright.substrate.kubevirt.host-v1"), partImplementation(kubevirt.HostImplementation), partRequest("substrate-host-kubevirt-v1"),
@@ -126,21 +126,21 @@ func contractRecipes() map[string]digestRecipe {
 		baremetal.Implementation: digestOf(partDomain("bootwright.substrate.baremetal.machine-v1"), partImplementation(baremetal.Implementation), partRequest("machine-baremetal-v1"),
 			partPin("identity+exact-addresses+power+system-claim+logical-volume")),
 		installation.TreeImplementation:  digestOf(partImplementation(installation.TreeImplementation), partVersion(installation.TreeEvidenceVersion)),
-		installation.EraseImplementation: {separator: ":", parts: []digestPart{partImplementation(installation.EraseImplementation), partPin("descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v1")}},
+		installation.EraseImplementation: {separator: ":", parts: []digestPart{partImplementation(installation.EraseImplementation), partRequest("physical-erase-v2"), partPin("descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v1")}},
 		installation.FirewallImplementation: digestOf(partDomain("bootwright.managedos.host-firewall-v1"), partImplementation(installation.FirewallImplementation),
 			partVersion(installation.FirewallEvidenceVersion), partPin(installation.FirewallServiceRoot),
 			partPin("bootwright-host-firewall context=context block=os-firewall-machine apply=operation"), partPin("bootwright-context-publisher"),
 			partPin("e04c153c9c84d6a73bfb3f05e09e0e7b4f4104332ee1d318cc4b3021570dc1a5")),
-		installation.Implementation: digestOf(partDomain("bootwright.managedos.install-anaconda-v1"), partImplementation(installation.Implementation), partRequest("os-install-anaconda-v1"),
+		installation.Implementation: digestOf(partDomain("bootwright.managedos.install-anaconda-v1"), partImplementation(installation.Implementation), partRequest("os-install-anaconda-v2"),
 			partVersion("kickstart-anaconda-v1"), partPin("os"), partPin("private"), partPin("public"), partPin(installation.MarkerPath), partPin(installation.HostKeyPath),
 			partPin(installation.NetworkDocumentPath), partPin(installation.NetworkMarkerPath), partPin(strconv.Itoa(300)), partPin("proved-installation-disk-boot,replay-safe-unread-registration")),
 		agentinstall.MediaImplementation: digestOf(partDomain("bootwright.containercluster.media-agent-v1"), partImplementation(agentinstall.MediaImplementation), partRequest("cluster-media-agent-v1"),
-			partPin("clusters"), partPin(agentinstall.ImageFile), partPin("/var/lib/bootwright-clusters"), partPin("openshift-install")),
+			partPin("clusters"), partPin(agentinstall.ImageFile), partPin("/var/lib/bootwright-hosted"), partPin("clusters"), partPin("openshift-install")),
 		agentinstall.InstallImplementation: digestOf(partDomain("bootwright.containercluster.install-agent-v1"), partImplementation(agentinstall.InstallImplementation), partRequest("cluster-install-agent-v1"),
-			partPin("clusters"), partPin(agentinstall.ImageFile), partPin("/var/lib/bootwright-clusters"), partPin("openshift-install"), partPin("openshift-clients"), partPin("substrate-access-kubevirt-v1"), partPin("lend-bound-secret")),
+			partPin("clusters"), partPin(agentinstall.ImageFile), partPin("/var/lib/bootwright-hosted"), partPin("clusters"), partPin("openshift-install"), partPin("openshift-clients"), partPin("substrate-access-kubevirt-v1"), partPin("lend-bound-secret")),
 		artifactserver.Implementation: digestOf(partDomain("bootwright.infrastructureservices.artifact-server-v1"), partImplementation(artifactserver.Implementation), partRequest("artifact-server-nginx-v1"),
 			partPin("registry.access.redhat.com/ubi9/nginx-124@sha256:bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56"),
-			partPin("/var/lib/bootwright-services"), partPin("bootwright")),
+			partPin("/var/lib/bootwright-hosted"), partPin("services"), partPin("bootwright")),
 		ceph.Implementation: digestOf(partImplementation(ceph.Implementation), partRequest(ceph.Version), partVersion(ceph.EvidenceVersion), partVersion(ceph.PackageVersion),
 			partVersion(ceph.RetirementVersion), partVersion(ceph.TiebreakerEvidenceVersion), partPin("selected-tunnel-image-v1")),
 		ceph.ImageImplementation: digestOf(partImplementation(ceph.ImageImplementation), partRequest(ceph.ImageVersion), partPin("selected-artifact-manifest-v1")),
@@ -155,7 +155,7 @@ func contractRecipes() map[string]digestRecipe {
 	}
 	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsServerDefinition(), ntpserver.Definition()} {
 		recipes[definition.Implementation] = digestOf(partDomain("bootwright.infrastructureservices.managed-service-v1"), partImplementation(definition.Implementation),
-			partRequest(definition.Version), partPin(definition.Image), partPin(managedservice.ContentRootPrefix), partPin(managedservice.UnitPrefix))
+			partRequest(definition.Version), partPin(definition.Image), partPin(managedservice.HostedRoot), partPin(managedservice.ServicesArea), partPin(managedservice.UnitPrefix))
 	}
 	return recipes
 }

@@ -2,7 +2,7 @@
 - name: Validate the frozen machine request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_machine_request.version == 'machine-libvirt-v1'
+      - bootwright_substrate_machine_request.version == 'machine-libvirt-v2'
       - bootwright_substrate_machine_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_substrate_machine_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_substrate_machine_request.directory == '/var/lib/libvirt/images/bootwright/'
@@ -17,6 +17,12 @@
   bootwright.core.substrate_libvirt_machine_protocol:
     phase: loaded
   no_log: true
+
+- name: Prove the context's hosted machine directories before any effect
+  bootwright.core.hosted_area:
+    context: '{{ bootwright_substrate_machine_request.identity.context }}'
+    path: '{{ substrate_libvirt_machine_area }}'
+    state: proved
 
 - name: Report disk creation
   bootwright.core.substrate_libvirt_machine_protocol:
@@ -138,6 +144,12 @@
     group: start-controller
     status: running
   no_log: true
+
+- name: Create the context's private hosted machine directories top-down
+  bootwright.core.hosted_area:
+    context: '{{ bootwright_substrate_machine_request.identity.context }}'
+    path: '{{ substrate_libvirt_machine_area[:2] }}'
+    state: present
 
 - name: Create the controller's private state directory
   ansible.builtin.file:

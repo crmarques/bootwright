@@ -29,6 +29,12 @@
         state: absent
       changed_when: false
 
+    - name: Create the context's private hosted cluster directories top-down
+      bootwright.core.hosted_area:
+        context: '{{ bootwright_cluster_media_request.identity.context }}'
+        path: '{{ containercluster_media_agent_area[:1] }}'
+        state: present
+
     - name: Create the work area this cluster's installer keeps its state in
       ansible.builtin.file:
         path: '{{ containercluster_media_agent_work }}'

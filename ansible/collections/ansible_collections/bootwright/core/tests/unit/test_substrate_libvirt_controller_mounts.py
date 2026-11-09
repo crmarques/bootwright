@@ -48,7 +48,7 @@ def settings(text, key):
 
 def test_the_unit_mounts_its_own_files_and_the_libvirt_socket_directory_alone():
     unit = render("unit.container.j2")
-    state = "/var/lib/bootwright-substrate/lab/rhel-01"
+    state = "/var/lib/bootwright-hosted/lab/machines/rhel-01/bmc"
     assert sorted(settings(unit, "Volume")) == sorted([
         state + "/conf.py:/etc/sushy/conf.py:ro",
         state + "/htpasswd:/etc/sushy/htpasswd:ro",

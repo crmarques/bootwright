@@ -117,7 +117,7 @@ def served_fixture(tmp_path, monkeypatch):
     monkeypatch.setattr(sources, "IBM_BASE", base + "/ibm/ceph/9/rhel9/x86_64")
     monkeypatch.setattr(sources, "IBM_KEY", base + "/ibm/ceph/RPM-GPG-KEY-IBM-CEPH")
     source = {"host": "node-1", "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "c" * 64, "mediaSize": 1000000,
-              "publicationPath": "/var/lib/bootwright-services/example/artifact-server/artifacts/public/os/rhel/tree",
+              "publicationPath": "/var/lib/bootwright-hosted/example/services/artifact-server/artifacts/public/os/rhel/tree",
               "url": base + "/os/rhel/tree", "certificateRef": "serving-tls"}
     yield SimpleNamespace(source=source, chain=chain.read_text(), base=base, seen=seen)
     server.shutdown()

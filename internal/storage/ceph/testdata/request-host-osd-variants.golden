@@ -114,7 +114,7 @@
           "host": "node-1",
           "media": "rhel-dvd.iso",
           "profile": "rhel",
-          "publicationPath": "/var/lib/bootwright-services/synthetic/artifact-server/artifacts/public/os/rhel/tree",
+          "publicationPath": "/var/lib/bootwright-hosted/synthetic/services/artifact-server/artifacts/public/os/rhel/tree",
           "url": "https://192.0.2.10:8443/os/rhel/tree"
         },
         {
@@ -122,7 +122,7 @@
           "host": "node-2",
           "media": "rhel-dvd.iso",
           "profile": "rhel",
-          "publicationPath": "/var/lib/bootwright-services/synthetic/artifact-server/artifacts/public/os/rhel/tree",
+          "publicationPath": "/var/lib/bootwright-hosted/synthetic/services/artifact-server/artifacts/public/os/rhel/tree",
           "url": "https://192.0.2.10:8443/os/rhel/tree"
         },
         {
@@ -130,7 +130,7 @@
           "host": "node-3",
           "media": "rhel-dvd.iso",
           "profile": "rhel",
-          "publicationPath": "/var/lib/bootwright-services/synthetic/artifact-server/artifacts/public/os/rhel/tree",
+          "publicationPath": "/var/lib/bootwright-hosted/synthetic/services/artifact-server/artifacts/public/os/rhel/tree",
           "url": "https://192.0.2.10:8443/os/rhel/tree"
         }
       ],

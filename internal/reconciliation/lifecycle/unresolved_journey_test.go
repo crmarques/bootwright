@@ -23,7 +23,7 @@ const lostMachine = "machine-rhel-01"
 // provider host reached over SSH.
 func lostMachineRequest() libvirt.MachineRequest {
 	return libvirt.MachineRequest{
-		Version:  "machine-libvirt-v1",
+		Version:  "machine-libvirt-v2",
 		Identity: libvirt.Identity{Block: lostMachine, Context: lifecycle.JourneyContext, Object: "rhel-01"},
 		Controller: libvirt.Controller{
 			Address: "192.0.2.1", CredentialsRef: "lab-bmc-credentials", Endpoint: "http://192.0.2.1:8000/redfish/v1/Systems/5c1d3a52-0b3e-4f6a-9d2c-7e8f9a0b1c2d",

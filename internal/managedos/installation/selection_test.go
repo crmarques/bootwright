@@ -34,7 +34,7 @@ func TestRequestFreezesThePublishedContentAndItsURLs(t *testing.T) {
 	if request.Identity.Block != "os-install-rhel-01" || request.Identity.Profile != "rhel-9-8" {
 		t.Fatalf("identity = %+v", request.Identity)
 	}
-	root := "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public"
+	root := "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public"
 	if request.Image.Path != root+"/os/rhel-01/install.iso" {
 		t.Fatalf("image path = %q", request.Image.Path)
 	}
@@ -397,7 +397,7 @@ func TestAVerifiedPhysicalInstallationDerivesAPrivateRequest(t *testing.T) {
 			request, needs = candidate, requirements[index]
 		}
 	}
-	root := "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public"
+	root := "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public"
 	if request.Image != nil {
 		t.Fatalf("a delivered-key installation froze a public image: %+v", request.Image)
 	}
@@ -647,7 +647,7 @@ func TestTheMarkerNamesTheRequestItProves(t *testing.T) {
 // Every version but the one this build writes refuses, and the refusal names
 // it so the remedy is the executable that registered the operation.
 func TestAFrozenRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"os-install-anaconda-v0", "os-install-anaconda-v2", "os-install-anaconda-v3", "os-install-anaconda-v4", "os-install-anaconda-v5", "os-install-anaconda-v6", "os-install-anaconda-v7", "os-install-anaconda-v8", "os-install-anaconda-v9", "os-install-anaconda-v10", "os-install-anaconda-v11", "os-install-anaconda-v12", "os-install-anaconda-v13"} {
+	for _, version := range []string{"os-install-anaconda-v0", "os-install-anaconda-v1", "os-install-anaconda-v3", "os-install-anaconda-v4", "os-install-anaconda-v5", "os-install-anaconda-v6", "os-install-anaconda-v7", "os-install-anaconda-v8", "os-install-anaconda-v9", "os-install-anaconda-v10", "os-install-anaconda-v11", "os-install-anaconda-v12", "os-install-anaconda-v13"} {
 		_, err := DecodeRequest([]byte(`{"version":"` + version + `"}`))
 		if err == nil {
 			t.Fatalf("version %q was accepted", version)

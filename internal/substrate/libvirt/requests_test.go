@@ -28,7 +28,7 @@ func TestAFrozenHostRequestOfAnyOtherVersionRefuses(t *testing.T) {
 // A machine request of any version but the one this build writes refuses by its
 // version.
 func TestAFrozenMachineRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"machine-libvirt-v2", "machine-libvirt-v3", "machine-libvirt-v4", "machine-libvirt-v5", "machine-libvirt-v6", "machine-libvirt-v7", "machine-libvirt-v8", ""} {
+	for _, version := range []string{"machine-libvirt-v1", "machine-libvirt-v3", "machine-libvirt-v4", "machine-libvirt-v5", "machine-libvirt-v6", "machine-libvirt-v7", "machine-libvirt-v8", ""} {
 		_, err := DecodeMachineRequest([]byte(`{"version":"` + version + `"}`))
 		if reported := diagnostics.Of(err); err == nil || len(reported) == 0 || !strings.Contains(reported[0].Message, "unsupported version") {
 			t.Fatalf("version %q was not refused by its version: %v", version, err)
@@ -42,7 +42,7 @@ func TestAFrozenHostRequestOfThisVersionRoundTrips(t *testing.T) {
 		Networks:    []Network{{Bridge: "virbr-lab", Managed: true, Name: "bootwright-lab-rhel-lab-guests"}},
 		Packages:    HypervisorPackages(),
 		PoolName:    "bootwright-lab-rhel-lab-vmedia",
-		PoolPath:    "/var/lib/bootwright-services/lab-rhel/vmedia",
+		PoolPath:    "/var/lib/bootwright-hosted/lab-rhel/services/vmedia",
 		Provisioned: true,
 		Services:    ServiceUnits(),
 		URI:         "qemu:///system",
@@ -104,7 +104,7 @@ func TestAHostRequestOfAnotherVersionRefusesByItsVersion(t *testing.T) {
 		Identity: Identity{Block: HostBlockID("lab"), Context: "lab-rhel", Object: "lab"},
 		Networks: []Network{{Bridge: "virbr-lab", Managed: true, Name: "bootwright-lab-rhel-lab-guests"}},
 		Packages: HypervisorPackages(), PoolName: "bootwright-lab-rhel-lab-vmedia",
-		PoolPath: "/var/lib/bootwright-services/lab-rhel/vmedia", Provisioned: true,
+		PoolPath: "/var/lib/bootwright-hosted/lab-rhel/services/vmedia", Provisioned: true,
 		Services: ServiceUnits(), URI: "qemu:///system", Version: "substrate-host-libvirt-v2",
 	}
 	data, err := other.Canonical()
@@ -121,11 +121,11 @@ func TestAMachineRequestOfAnotherVersionRefusesByItsVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	other := requests[0]
-	other.Version = "machine-libvirt-v2"
+	other.Version = "machine-libvirt-v1"
 	data, err := other.Canonical()
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = DecodeMachineRequest(withAnUndeclaredField(t, data))
-	expectVersionRefusal(t, err, "machine", "machine-libvirt-v2")
+	expectVersionRefusal(t, err, "machine", "machine-libvirt-v1")
 }

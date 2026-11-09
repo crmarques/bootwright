@@ -30,7 +30,7 @@ INCLUDE = "ansible.builtin.include_role"
 MATERIAL = "/run/bootwright/material/"
 CLUSTER_UID = "0b1c2d3e-0000-4000-8000-000000000001"
 VM_UID = "6a1f0000-0000-4000-8000-000000000002"
-IMAGE = "/var/lib/bootwright-clusters/lab/kubevirt/agent.iso"
+IMAGE = "/var/lib/bootwright-hosted/lab/clusters/kubevirt/agent.iso"
 IDENTITY = "1e0719118245b0f464190073bb910808a6934b598f7a073d8390969c6e1e23b0"
 VIRTCTL = "/var/lib/bootwright/host/record/tools/area/tools/virtctl/kubevirt/v1.6.2/virtctl"
 

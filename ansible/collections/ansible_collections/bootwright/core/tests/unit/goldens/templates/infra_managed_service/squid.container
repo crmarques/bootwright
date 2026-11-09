@@ -10,7 +10,7 @@ Network=host
 User=0
 Entrypoint=/usr/sbin/squid
 Exec=-f /etc/squid/squid.conf -N
-Volume=/var/lib/bootwright-services/lab-rhel/proxy-squid/egress/config/squid.conf:/etc/squid/squid.conf:ro,Z
+Volume=/var/lib/bootwright-hosted/lab-rhel/services/proxy-squid/egress/config/squid.conf:/etc/squid/squid.conf:ro,Z
 
 [Service]
 Restart=always

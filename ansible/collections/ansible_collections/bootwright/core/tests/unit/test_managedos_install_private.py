@@ -41,7 +41,7 @@ PROTOCOL = "bootwright.core.managedos_install_protocol"
 TOKEN = "0123456789abcdef" * 4
 DIGEST = "fedcba9876543210" * 4
 # PrivatePath's layout (internal/infrastructureservices/artifactserver/publication.go).
-SERVED = "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public"
+SERVED = "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public"
 PRIVATE = {"path": SERVED + "/private/os/metal-01", "url": "https://192.0.2.1:8443/private/os/metal-01"}
 PUBLIC = {"path": SERVED + "/os/rhel-01/install.iso", "url": "https://192.0.2.1:8443/os/rhel-01/install.iso"}
 # The names whose value carries the token while an installation delivers a key.

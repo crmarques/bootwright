@@ -2,6 +2,7 @@
 # Derived from the frozen request only. Nothing here is authored by desired
 # state, and no value selects an executable, a role or a task file. The kind
 # table in vars selects only templates, keyed by the validated frozen kind.
+infra_managed_service_area: "{{ bootwright_managed_service_request.contentRoot.split('/')[5:7] }}"
 infra_managed_service_config_dir: '{{ bootwright_managed_service_request.contentRoot }}/config'
 infra_managed_service_unit_path: /etc/containers/systemd/{{ bootwright_managed_service_request.unit }}.container
 infra_managed_service_configuration_path: '{{ infra_managed_service_config_dir }}/{{ infra_managed_service_implementation.configuration }}'

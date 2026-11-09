@@ -362,7 +362,7 @@ def host_block(core_request):
     cluster = {key: value for key, value in copy.deepcopy(core_request).items() if key != "action"}
     cluster["packages"] = {"version": "ceph-packages-v1", "licenseAccepted": True, "sources": [
         {"host": host["name"], "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "e" * 64, "mediaSize": 1024,
-         "publicationPath": "/var/lib/bootwright-services/example/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
+         "publicationPath": "/var/lib/bootwright-hosted/example/services/public/os/rhel/tree", "url": "https://192.0.2.10:8443/os/rhel/tree",
          "certificateRef": "serving-tls"} for host in cluster["hosts"]]}
     request = {"version": "ceph-host-v1", "cluster": cluster, "host": "node-2", "pulls": []}
     record = {"version": "ceph-host-evidence-v1", "host": "node-2", "owner": cluster["owner"], "fsid": cluster["fsid"], "image": cluster["image"],

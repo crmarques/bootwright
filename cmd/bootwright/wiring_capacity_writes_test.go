@@ -100,7 +100,7 @@ func TestCapacityAdmissionCountsWhatTheApplyWritesBesideItsGuests(t *testing.T) 
 	if err := admit(filesystemFacts{available: fits + fixture.writes}, fixture.starting); err != nil {
 		t.Fatalf("an apply whose writes fit was refused: %v", diagnostics.Of(err))
 	}
-	if err := admit(filesystemFacts{available: fits, apart: "/var/lib/bootwright-services/"}, fixture.starting[:1]); err == nil {
+	if err := admit(filesystemFacts{available: fits, apart: "/var/lib/bootwright-hosted/"}, fixture.starting[:1]); err == nil {
 		t.Fatal("the staged installer image on the guests' filesystem was not counted")
 	}
 	var installsOnly []reconciliation.Block
@@ -109,7 +109,7 @@ func TestCapacityAdmissionCountsWhatTheApplyWritesBesideItsGuests(t *testing.T) 
 			installsOnly = append(installsOnly, block)
 		}
 	}
-	if err := admit(filesystemFacts{available: fits + fixture.staged, apart: "/var/lib/bootwright-services/"}, installsOnly); err != nil {
+	if err := admit(filesystemFacts{available: fits + fixture.staged, apart: "/var/lib/bootwright-hosted/"}, installsOnly); err != nil {
 		t.Fatalf("published media on another filesystem, or a tree no block starts, was counted: %v", diagnostics.Of(err))
 	}
 }

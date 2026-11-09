@@ -15,9 +15,10 @@ LOADER = DataLoader()
 LAYOUT = 'bootwright.core.containercluster_media_layout'
 REQUEST = '{{ bootwright_cluster_media_request }}'
 # What the apply runs before the layout is proved: checks, the protocol's
-# progress and the installer's version read, none of which touches the
-# served root.
-BEFORE = {'ansible.builtin.assert', 'bootwright.core.containercluster_media_protocol', 'ansible.builtin.command'}
+# progress, the hosted directories' proof and the installer's version read,
+# none of which touches the served root.
+HOSTED = 'bootwright.core.hosted_area'
+BEFORE = {'ansible.builtin.assert', 'bootwright.core.containercluster_media_protocol', 'ansible.builtin.command', HOSTED}
 
 
 def tasks(name):
@@ -54,6 +55,7 @@ def test_the_apply_proves_the_layout_before_it_includes_the_build():
         assert modules(task) <= BEFORE, task['name']
         command = task.get('ansible.builtin.command')
         assert command is None or command['argv'][1:] == ['version'], task['name']
+        assert HOSTED not in task or task[HOSTED]['state'] == 'proved', task['name']
     assert not any(LAYOUT in task for task in flat(tasks('build.yml')))
     includes = [task for task in flat(tasks('build.yml')) if 'ansible.builtin.include_tasks' in task]
     assert {task['ansible.builtin.include_tasks']: task['when'] for task in includes} == {
@@ -72,6 +74,7 @@ def test_the_destroy_proves_the_layout_before_it_removes_the_reserved_subtree():
                 if (task.get('ansible.builtin.file') or {}).get('state') == 'absent']
     assert removals and proved < min(removals)
     assert all(modules(task) <= BEFORE - {'ansible.builtin.command'} for task in destroy[:proved])
+    assert all(task[HOSTED]['state'] == 'proved' for task in destroy[:proved] if HOSTED in task)
 
 
 def test_pushed_media_stays_private_and_never_reaches_a_listener():

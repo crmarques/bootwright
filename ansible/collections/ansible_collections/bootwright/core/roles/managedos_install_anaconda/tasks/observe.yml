@@ -2,11 +2,11 @@
 - name: Validate the frozen installation request
   ansible.builtin.assert:
     that:
-      - bootwright_os_install_request.version == 'os-install-anaconda-v1'
+      - bootwright_os_install_request.version == 'os-install-anaconda-v2'
       - bootwright_os_install_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_os_install_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
-      - managedos_install_anaconda_work == '/var/lib/bootwright-install/'
-        ~ bootwright_os_install_request.identity.context ~ '/' ~ bootwright_os_install_request.identity.object ~ '/work'
+      - managedos_install_anaconda_work == '/var/lib/bootwright-hosted/'
+        ~ bootwright_os_install_request.identity.context ~ '/machines/' ~ bootwright_os_install_request.identity.object ~ '/install'
       - bootwright_os_install_digest is match('[0-9a-f]{64}')
       - bootwright_os_install_request.network.documentPath == '/etc/bootwright/network.yml'
       - bootwright_os_install_request.network.markerPath == '/etc/bootwright/network-marker.json'
@@ -23,16 +23,11 @@
     phase: loaded
   no_log: true
 
-- name: Prove each ancestor of this Machine's durable work area
-  ansible.builtin.include_tasks: work.yml
-  loop:
-    - '{{ managedos_install_anaconda_work_parent }}'
-    - '{{ managedos_install_anaconda_work | dirname | dirname }}'
-    - '{{ managedos_install_anaconda_work | dirname }}'
-  loop_control:
-    loop_var: managedos_install_anaconda_work_ancestor
-  vars:
-    managedos_install_anaconda_work_create: false
+- name: Prove each existing hosted ancestor of this Machine's work area
+  bootwright.core.hosted_area:
+    context: '{{ bootwright_os_install_request.identity.context }}'
+    path: '{{ managedos_install_anaconda_area }}'
+    state: proved
 
 - name: Observe what this installation publishes
   bootwright.core.managedos_install_inspect:

@@ -56,7 +56,7 @@ def package_request():
                          {"service_type": "osd", "service_id": "data", "placement": {"hosts": names}, "spec": {"data_devices": {"paths": ["/dev/vdb"]}}}],
             "packages": {"version": "ceph-packages-v1", "licenseAccepted": True,
                          "sources": [{"host": name, "profile": "rhel", "media": "rhel-dvd.iso", "mediaSHA256": "c" * 64, "mediaSize": 1000000,
-                                      "publicationPath": "/var/lib/bootwright-services/example/artifact-server/artifacts/public/os/rhel/tree",
+                                      "publicationPath": "/var/lib/bootwright-hosted/example/services/artifact-server/artifacts/public/os/rhel/tree",
                                       "url": "https://192.0.2.10:8443/os/rhel/tree", "certificateRef": "serving-tls"} for name in names]}}
 
 
@@ -620,7 +620,7 @@ def test_repository_selection_proves_actual_publication_pin_and_tree_layout(pack
     assert len(result) == 3
     assert seen[:2] == [("rhel-baseos", base + "/BaseOS", native_signatures.RHEL_SIGNER),
                         ("rhel-appstream", base + "/AppStream", native_signatures.RHEL_SIGNER)]
-    assert sources.source_for(package_request, "node-1")["publicationPath"].startswith("/var/lib/bootwright-services/")
+    assert sources.source_for(package_request, "node-1")["publicationPath"].startswith("/var/lib/bootwright-hosted/")
     for metadata in (TREEINFO.replace(b"x86_64", b"aarch64"),
                      TREEINFO.replace(b"repository = BaseOS", b"repository = ../foreign")):
         documents[base + "/.treeinfo"] = metadata

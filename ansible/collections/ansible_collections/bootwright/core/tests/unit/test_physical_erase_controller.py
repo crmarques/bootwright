@@ -12,6 +12,30 @@ from ansible_collections.bootwright.core.plugins.module_utils import physical_er
 
 
 class ControllerTests(unittest.TestCase):
+    def test_custody_lives_beneath_the_machines_hosted_erase_directory_created_top_down(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "bootwright-hosted"
+            visited = []
+
+            def proved(path, create):
+                visited.append((path, create))
+                if create:
+                    path.mkdir(mode=0o700)
+
+            request = {"version": "physical-erase-v2", "install": {"identity": {"context": "lab", "object": "metal-01"}}}
+            material = {"applyOperation": "op-" + "0" * 32}
+            with patch.object(controller, "ROOT", root), patch.object(controller, "directory", side_effect=proved):
+                instance = controller.Controller(request, "a" * 64, material, create=True)
+            instance.close()
+            expected = [root, root / "lab", root / "lab" / "machines", root / "lab" / "machines" / "metal-01",
+                        root / "lab" / "machines" / "metal-01" / "erase", root / "lab" / "machines" / "metal-01" / "erase" / material["applyOperation"]]
+            self.assertEqual(visited, [(path, True) for path in expected])
+            self.assertEqual(instance.root, expected[-1])
+            self.assertEqual(str(controller.ROOT), "/var/lib/bootwright-hosted")
+            for version in ("physical-erase-v1", "physical-erase-v3"):
+                with self.assertRaises(controller.worker.Refusal):
+                    controller.Controller(dict(request, version=version), "a" * 64, material)
+
     def test_build_keeps_the_verified_input_descriptor_through_native_readers(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

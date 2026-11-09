@@ -100,7 +100,7 @@
         "machine": "controller"
       },
       "private": {
-        "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/private/os/metal-01",
+        "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/private/os/metal-01",
         "url": "https://192.0.2.1:8443/private/os/metal-01"
       },
       "target": {
@@ -137,7 +137,7 @@
       },
       "tlsCertificateRef": "artifact-server-tls",
       "tree": {
-        "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/os/rhel-9-8/tree",
+        "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/os/rhel-9-8/tree",
         "url": "http://192.0.2.1:8080/os/rhel-9-8/tree"
       },
       "treeMedia": {
@@ -146,7 +146,7 @@
         "size": 13107200000
       },
       "user": "bootwright",
-      "version": "os-install-anaconda-v1"
+      "version": "os-install-anaconda-v2"
     }
   ],
   "baremetalMachines": [

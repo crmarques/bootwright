@@ -36,7 +36,7 @@ def position(entries, predicate):
 
 def scope(receipt, **variables):
     values = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
-    values["bootwright_cluster_media_request"] = {"workRoot": "/var/lib/bootwright-clusters/lab/sno", "image": {"path": ""}}
+    values["bootwright_cluster_media_request"] = {"workRoot": "/var/lib/bootwright-hosted/lab/clusters/sno", "image": {"path": ""}}
     values["bootwright_cluster_media_material"] = {"incarnation": OWN}
     if receipt is not None:
         encoded = base64.b64encode(json.dumps(receipt).encode()).decode()

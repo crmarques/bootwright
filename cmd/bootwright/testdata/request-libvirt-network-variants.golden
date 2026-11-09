@@ -106,7 +106,7 @@
       "uri": "qemu:///system",
       "uuid": "aba29103-d1de-8981-82e0-9cff228257f9",
       "vcpu": 4,
-      "version": "machine-libvirt-v1"
+      "version": "machine-libvirt-v2"
     },
     {
       "controller": {
@@ -155,7 +155,7 @@
       "uri": "qemu:///system",
       "uuid": "99955efc-42ad-8162-a1fb-9cdabe3b8e57",
       "vcpu": 4,
-      "version": "machine-libvirt-v1"
+      "version": "machine-libvirt-v2"
     },
     {
       "controller": {
@@ -210,7 +210,7 @@
       "uri": "qemu:///system",
       "uuid": "f84ec133-de31-8b74-9989-e15275b6bca9",
       "vcpu": 4,
-      "version": "machine-libvirt-v1"
+      "version": "machine-libvirt-v2"
     }
   ],
   "installations": [
@@ -258,7 +258,7 @@
       },
       "image": {
         "certificateRef": "artifact-server-tls",
-        "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/os/nv-bond/install.iso",
+        "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/os/nv-bond/install.iso",
         "url": "https://192.0.2.1:8443/os/nv-bond/install.iso"
       },
       "installerArguments": [
@@ -419,7 +419,7 @@
         "uri": "qemu:///system"
       },
       "tree": {
-        "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/os/rhel-9-8/tree",
+        "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/os/rhel-9-8/tree",
         "url": "http://192.0.2.1:8080/os/rhel-9-8/tree"
       },
       "treeMedia": {
@@ -428,7 +428,7 @@
         "size": 13107200000
       },
       "user": "bootwright",
-      "version": "os-install-anaconda-v1"
+      "version": "os-install-anaconda-v2"
     },
     {
       "address": "198.51.100.71",
@@ -474,7 +474,7 @@
       },
       "image": {
         "certificateRef": "artifact-server-tls",
-        "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/os/nv-vlan/install.iso",
+        "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/os/nv-vlan/install.iso",
         "url": "https://192.0.2.1:8443/os/nv-vlan/install.iso"
       },
       "installerArguments": [
@@ -611,7 +611,7 @@
         "uri": "qemu:///system"
       },
       "tree": {
-        "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/os/rhel-9-8/tree",
+        "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/os/rhel-9-8/tree",
         "url": "http://192.0.2.1:8080/os/rhel-9-8/tree"
       },
       "treeMedia": {
@@ -620,7 +620,7 @@
         "size": 13107200000
       },
       "user": "bootwright",
-      "version": "os-install-anaconda-v1"
+      "version": "os-install-anaconda-v2"
     },
     {
       "address": "198.51.100.141",
@@ -666,7 +666,7 @@
       },
       "image": {
         "certificateRef": "artifact-server-tls",
-        "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/os/nv-vlan-bond/install.iso",
+        "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/os/nv-vlan-bond/install.iso",
         "url": "https://192.0.2.1:8443/os/nv-vlan-bond/install.iso"
       },
       "installerArguments": [
@@ -846,7 +846,7 @@
         "uri": "qemu:///system"
       },
       "tree": {
-        "path": "/var/lib/bootwright-services/lab/artifact-server/lab-artifacts/public/os/rhel-9-8/tree",
+        "path": "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts/public/os/rhel-9-8/tree",
         "url": "http://192.0.2.1:8080/os/rhel-9-8/tree"
       },
       "treeMedia": {
@@ -855,7 +855,7 @@
         "size": 13107200000
       },
       "user": "bootwright",
-      "version": "os-install-anaconda-v1"
+      "version": "os-install-anaconda-v2"
     }
   ]
 }

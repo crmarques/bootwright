@@ -367,32 +367,46 @@ def test_the_emulator_configuration_renders_the_uri_as_data():
 def test_a_machine_destroy_removes_each_empty_context_parent():
     tasks = load_machine("destroy.yml")
     templar = Templar(loader=LOADER, variables=machine_variables())
-    for removal, expected in (
-        ("Remove the controller's private state", "/var/lib/bootwright-substrate/lab"),
-        ("Delete every owned disk", "/var/lib/libvirt/images/bootwright/lab"),
+    outcome = tasks[named(tasks, "Publish bounded machine removal evidence")]
+    hosted = tasks[named(tasks, "Remove the controller's private state") + 1]
+    assert hosted["bootwright.core.hosted_area"]["state"] == "absent"
+    assert templar.template(hosted["bootwright.core.hosted_area"]["context"]) == "lab"
+    assert templar.template(hosted["bootwright.core.hosted_area"]["path"]) == ["machines", "rhel-01", "bmc"]
+    assert hosted["register"] + " is changed" in str(outcome["bootwright.core.substrate_libvirt_machine_protocol"]["outcome"])
+    expected = "/var/lib/libvirt/images/bootwright/lab"
+    parent = tasks[named(tasks, "Delete every owned disk") + 1]
+    assert argv_of(parent) == ["/usr/bin/rmdir", "{{ item }}"]
+    assert templar.template(parent["loop"]) == [expected + "/machines", expected]
+    assert parent["environment"] == {"LC_ALL": "C"}
+    assert parent["register"] + " is changed" in str(outcome["bootwright.core.substrate_libvirt_machine_protocol"]["outcome"])
+    for result, failed in (
+        ({"rc": 0, "stderr": ""}, False),
+        ({"rc": 1, "stderr": "rmdir: failed to remove 'x': Directory not empty"}, False),
+        ({"rc": 1, "stderr": "rmdir: failed to remove 'x': No such file or directory"}, False),
+        ({"rc": 1, "stderr": "rmdir: failed to remove 'x': Permission denied"}, True),
     ):
-        parent = tasks[named(tasks, removal) + 1]
-        if "loop" in parent:
-            assert argv_of(parent) == ["/usr/bin/rmdir", "{{ item }}"]
-            assert templar.template(parent["loop"]) == [expected + "/machines", expected]
-        else:
-            argv = [str(templar.template(trust_as_template(value))) for value in argv_of(parent)]
-            assert argv == ["/usr/bin/rmdir", expected], removal
-        assert parent["environment"] == {"LC_ALL": "C"}
-        outcome = tasks[named(tasks, "Publish bounded machine removal evidence")]
-        assert parent["register"] + " is changed" in str(outcome["bootwright.core.substrate_libvirt_machine_protocol"]["outcome"])
-        for result, failed in (
-            ({"rc": 0, "stderr": ""}, False),
-            ({"rc": 1, "stderr": "rmdir: failed to remove 'x': Directory not empty"}, False),
-            ({"rc": 1, "stderr": "rmdir: failed to remove 'x': No such file or directory"}, False),
-            ({"rc": 1, "stderr": "rmdir: failed to remove 'x': Permission denied"}, True),
-        ):
-            assert evaluate(parent["failed_when"], {parent["register"]: result}) is failed, (removal, result)
+        assert evaluate(parent["failed_when"], {parent["register"]: result}) is failed, result
     validate = named(tasks, "Validate the frozen machine request")
     base = {"bootwright_substrate_machine_digest": "0" * 64}
-    assert holds(tasks[validate], dict(base, bootwright_substrate_machine_request=dict(MACHINE, version="machine-libvirt-v1")))
-    shallow = dict(MACHINE, version="machine-libvirt-v1", directory="/var/lib/libvirt/images/bootwright/rhel-01")
+    assert holds(tasks[validate], dict(base, bootwright_substrate_machine_request=dict(MACHINE, version="machine-libvirt-v2")))
+    assert not holds(tasks[validate], dict(base, bootwright_substrate_machine_request=dict(MACHINE, version="machine-libvirt-v1")))
+    shallow = dict(MACHINE, version="machine-libvirt-v2", directory="/var/lib/libvirt/images/bootwright/rhel-01")
     assert not holds(tasks[validate], dict(base, bootwright_substrate_machine_request=shallow))
+
+
+def test_the_machine_state_lies_beneath_its_hosted_machine_directory():
+    templar = Templar(loader=LOADER, variables=machine_variables())
+    state = templar.template(trust_as_template("{{ substrate_libvirt_machine_state }}"))
+    assert state == "/var/lib/bootwright-hosted/lab/machines/rhel-01/bmc"
+    tasks = load_machine("apply.yml")
+    create = named(tasks, "Create the context's private hosted machine directories top-down")
+    assert create == named(tasks, "Create the controller's private state directory") - 1
+    assert templar.template(tasks[create]["bootwright.core.hosted_area"]["path"]) == ["machines", "rhel-01"]
+    assert tasks[create]["bootwright.core.hosted_area"]["state"] == "present"
+    for entry in ("apply.yml", "destroy.yml"):
+        listed = load_machine(entry)
+        proof = listed[named(listed, "Complete the qualified execution handoff") + 1]
+        assert proof["bootwright.core.hosted_area"]["state"] == "proved", entry
 
 
 def test_the_not_shut_off_refusal_names_its_context():

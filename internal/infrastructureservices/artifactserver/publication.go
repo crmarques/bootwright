@@ -83,7 +83,7 @@ func PrivatePath(catalog api.Catalog, server api.Object, selection api.Value, co
 // consumer publishes beneath the root that server created, so the layout has
 // one owner rather than one copy per consumer.
 func ContentRoot(contextName, server string) string {
-	return contentRootPrefix + "/" + contextName + "/artifact-server/" + server
+	return HostedRoot + "/" + contextName + "/" + servicesArea + "/artifact-server/" + server
 }
 
 // EndpointURL is the base URL one selected endpoint serves at.

@@ -1,5 +1,5 @@
 implementation: proxy-squid-v1
-content-digest: faf9a24b420d83540c14d74cd70f6ffe58397e7141234eef55aea6332344a971
+content-digest: f6f3786ce9c60b6b307aa8169bc8e87ab296769ab62d47fcfc5e536479147c16
 request-version: managed-service-v1
 automation-formats: none
 mark-formats: none
@@ -7,7 +7,8 @@ proof-ids: none
 fixed-places: none
 effect-pins:
   docker.io/ubuntu/squid@sha256:6a097f68bae708cedbabd6188d68c7e2e7a38cedd05a176e1cc0ba29e3bbe029
-  /var/lib/bootwright-services
+  /var/lib/bootwright-hosted
+  services
   bootwright
 request-identity:
   identity.context

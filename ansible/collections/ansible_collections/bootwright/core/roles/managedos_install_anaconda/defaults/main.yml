@@ -2,9 +2,10 @@
 # Derived from the frozen request only. Nothing here is authored by desired
 # state, and no value selects an executable, a role or a task file.
 # Interrupted image builds stay private to their context and Machine.
-managedos_install_anaconda_work_parent: /var/lib/bootwright-install
+managedos_install_anaconda_work_parent: /var/lib/bootwright-hosted
+managedos_install_anaconda_area: "{{ ['machines', bootwright_os_install_request.identity.object, 'install'] }}"
 managedos_install_anaconda_work: >-
-  {{ managedos_install_anaconda_work_parent }}/{{ bootwright_os_install_request.identity.context }}/{{ bootwright_os_install_request.identity.object }}/work
+  {{ managedos_install_anaconda_work_parent }}/{{ bootwright_os_install_request.identity.context }}/{{ managedos_install_anaconda_area | join('/') }}
 managedos_install_anaconda_scratch: '{{ bootwright_run_scratch }}/managedos-install'
 managedos_install_anaconda_media: /var/lib/bootwright/media
 # The executables this block needs, proved by path. The controller stage
