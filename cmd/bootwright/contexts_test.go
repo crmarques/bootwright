@@ -201,7 +201,7 @@ func TestMissingContextRegistryExplainsSafeRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := stateFingerprint(t, root)
-	want := "  error  context.state\n    the state root holds state but no registry.json this build can read\n    Next: another Bootwright build may have created this root and may manage live environments there: run this build on another controller host, or retire that build's environments before archiving its root, and never move it aside while its services run; a store this build created is restored whole from a matching backup\n"
+	want := "  error  context.state\n    the state root holds state but no registry.json this build can read\n    Next: another Bootwright build may have created this root and may manage live environments there: run this build on another controller host, or retire that build's environments before archiving its root, and never move it aside while its services run; once none of them remains, bootwright controller uninstall --discard-unreadable removes it with every root Bootwright keeps on this host; a store this build created is restored whole from a matching backup\n"
 	for _, args := range [][]string{
 		{"context", "list"},
 		{"context", "delete", "--name", "test", "--purge"},

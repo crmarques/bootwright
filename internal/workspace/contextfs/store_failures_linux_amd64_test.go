@@ -426,7 +426,7 @@ func requireOtherBuildRemedy(t *testing.T, operation string, err error) {
 	if len(reported) != 1 || reported[0].Code != "context.state" || reported[0].Message != missingRegistryMessage || reported[0].Remediation != storeRecoveryRemediation {
 		t.Fatalf("%s refused with %v %#v", operation, err, reported)
 	}
-	for _, fragment := range []string{"another Bootwright build may have created this root and may manage live environments there", "run this build on another controller host", "never move it aside while its services run", "restored whole from a matching backup"} {
+	for _, fragment := range []string{"another Bootwright build may have created this root and may manage live environments there", "run this build on another controller host", "never move it aside while its services run", "bootwright controller uninstall --discard-unreadable removes it", "restored whole from a matching backup"} {
 		if !strings.Contains(reported[0].Remediation, fragment) {
 			t.Fatalf("%s refused without %q: %#v", operation, fragment, reported)
 		}
@@ -477,7 +477,8 @@ func TestAnotherBuildsRootRefusesWithTheLiveEnvironmentRemedy(t *testing.T) {
 // A store an earlier build wrote, with its controller record in controller/,
 // its setup in setup/ and a registry of the previous format version, is
 // another build's: every command refuses it with the live-environment remedy
-// and leaves it as it was.
+// and leaves it as it was, and uninstall hands that refusal to its service,
+// which only a discard accepts.
 func TestAStoreWithTheEarlierLayoutIsAnotherBuilds(t *testing.T) {
 	ctx := context.Background()
 	store, sources := fixture(t)
@@ -517,9 +518,11 @@ func TestAStoreWithTheEarlierLayoutIsAnotherBuilds(t *testing.T) {
 		t.Fatal("install reached an earlier build's store")
 		return nil
 	}))
-	requireOtherBuildRemedy(t, "uninstall", store.Uninstall(ctx, func(prerequisites.UninstallTransaction) error {
-		t.Fatal("uninstall reached an earlier build's store")
-		return nil
+	requireOtherBuildRemedy(t, "uninstall", store.Uninstall(ctx, func(tx prerequisites.UninstallTransaction) error {
+		if view := tx.View(); !view.RootExists || len(view.Contexts) != 0 || view.Setup.Exists {
+			t.Fatalf("uninstall read an earlier build's store: %+v", view)
+		}
+		return tx.View().Unreadable
 	}))
 	if after := snapshotRootEntries(t, root); !reflect.DeepEqual(before, after) {
 		t.Fatalf("the refusals changed the store:\nbefore: %#v\nafter:  %#v", before, after)

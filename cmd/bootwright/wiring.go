@@ -23,6 +23,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/material"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
+	"github.com/crmarques/bootwright/internal/substrate"
 	"github.com/crmarques/bootwright/internal/workspace/contextfs"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -104,7 +105,7 @@ func wireServices(process processDependencies) (cli.Services, func()) {
 // localServiceDependencies binds every local adapter to its port, and also
 // returns the release for every local resource those adapters retain.
 func localServiceDependencies(process processDependencies) (serviceDependencies, func()) {
-	repository := contextfs.New(contextfs.Options{})
+	repository := contextfs.New(contextfs.Options{LibvirtImages: substrate.ImagePrefix})
 	account := invokingAccount{resolver: privilege.Resolver{}}
 	files := openerFiles{opener: account.files()}
 	controllerPorts, release := localControllerDependencies(repository, process)

@@ -324,13 +324,21 @@ sudo bootwright controller uninstall
 ```
 
 It refuses, naming the command that clears each, while a context or an image
-remains. Its plan shows `dnf remove --assumeno` for the packages the install
-receipt names as install's own, then removes them with dnf and removes
-`/var/lib/bootwright` and `/var/lib/bootwright-staging`. Packages present
-before Bootwright, packages a controller stage installed and the executable
-stay. `--keep-packages` removes only the state; it is also the way out when
-the install record was interrupted or written by another build. An
-interrupted uninstall is finished by the next one
+remains, and names each libvirt domain, network or pool, systemd unit,
+quadlet source or podman container Bootwright still owns. Its plan shows
+`dnf remove --assumeno` for the packages the install receipt names as
+install's own, then removes them with dnf and removes every root Bootwright
+keeps on this host, whole: `/var/lib/bootwright`,
+`/var/lib/bootwright-staging`, `/var/log/bootwright`,
+`/var/lib/bootwright-hosted` and an empty `/var/lib/libvirt/images/bootwright`.
+Packages present before Bootwright, packages a controller stage installed,
+the executable and what a context realized on an SSH placement host stay.
+`--keep-packages` removes only the state; it is also the way out when the
+install record was interrupted or written by another build. A store this
+build cannot read, such as one an earlier build left, and guest disks no
+removal took back are removed by `sudo bootwright controller uninstall
+--discard-unreadable`, which removes no package. An interrupted uninstall is
+finished by the next one
 ([uninstall flow](../specs/controller.md#the-uninstall-flow)).
 
 ## Network exposure

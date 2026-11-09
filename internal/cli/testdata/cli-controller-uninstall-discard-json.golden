@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "controller uninstall",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "outcome": "removed",
+    "packages": [],
+    "paths": [
+      "/var/lib/bootwright",
+      "/var/log/bootwright",
+      "/var/lib/bootwright-hosted",
+      "/var/lib/libvirt/images/bootwright"
+    ],
+    "kept": [
+      "every host package: --discard-unreadable removes none",
+      "the host packages present before Bootwright",
+      "the host packages a controller stage installed",
+      "the bootwright executable",
+      "what a context realized on an SSH placement host, which no uninstall reaches"
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

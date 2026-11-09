@@ -10,10 +10,12 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/firewalllocal"
 	"github.com/crmarques/bootwright/internal/controller/hostdnf"
 	"github.com/crmarques/bootwright/internal/controller/hostlinux"
+	"github.com/crmarques/bootwright/internal/controller/hostowned"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/controller/runtimelock"
 	"github.com/crmarques/bootwright/internal/controller/stagelocal"
 	"github.com/crmarques/bootwright/internal/controller/venvlocal"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 const (
@@ -38,6 +40,7 @@ type controllerDependencies struct {
 	StagePackages   clients.HostPackages
 	Presenter       prerequisites.PlanPresenter
 	Progress        prerequisites.ProgressReporter
+	Owned           prerequisites.HostOwnedObjects
 }
 
 // localControllerDependencies also returns a release the invocation calls
@@ -55,6 +58,8 @@ func localControllerDependencies(storage prerequisites.Storage, process processD
 		StagePackages:   stagePackages,
 		Presenter:       process.Presenter,
 		Progress:        process.Progress,
+		Owned: hostowned.New(hostowned.Config{Prefix: substrate.Prefix + "-", Namespace: substrate.OwnershipNamespace,
+			ImagePrefix: substrate.ImagePrefix}),
 	}
 	if setup, holds := storage.(prerequisites.SetupStore); holds {
 		deps.Setup = setup
@@ -91,7 +96,7 @@ func runtimeLock(lock runtimelock.Lock) *prerequisites.RuntimeLock {
 }
 
 func wireController(deps controllerDependencies, compiler prerequisites.Compiler, confirmer prerequisites.Confirmer, route controller.Route) cli.ControllerService {
-	ports := prerequisites.Ports{Setup: deps.Setup, Python: deps.Python}
+	ports := prerequisites.Ports{Setup: deps.Setup, Python: deps.Python, Owned: deps.Owned}
 	if deps.Lock != nil {
 		ports.Lock = *deps.Lock
 	}

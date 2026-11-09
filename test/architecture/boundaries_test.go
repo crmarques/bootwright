@@ -53,6 +53,7 @@ func packageRoles() map[string]packageRole {
 		"internal/controller/ansiblelocal":         adapterRole,
 		"internal/controller/runtimelock":          domainRole,
 		"internal/controller/hostdnf":              adapterRole,
+		"internal/controller/hostowned":            adapterRole,
 		"internal/controller/venvlocal":            adapterRole,
 		"internal/controller/stagelocal":           adapterRole,
 		"internal/reconciliation/ansiblerunner":    adapterRole,
@@ -524,6 +525,7 @@ func effectGrants() map[string][]string {
 		"internal/controller/bundlelocal":  {"io", "net.Dialer", "net/http", "os", "syscall"},
 		"internal/controller/ansiblelocal": {"io", "os", "os/exec", "syscall"},
 		"internal/controller/hostdnf":      {"io", "os/exec", "syscall"},
+		"internal/controller/hostowned":    {"io", "os", "os/exec", "syscall"},
 		"internal/controller/venvlocal":    {"io", "net.Dialer", "net/http", "os", "os/exec", "syscall"},
 		"internal/controller/stagelocal":   {"golang.org/x/sys/unix", "io", "os", "syscall"},
 		// The SSH session adapter runs the one pinned client as a child and

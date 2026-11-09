@@ -354,25 +354,35 @@ owns them.
 
 `controller uninstall` is the inverse of `controller install` on a host that
 holds no context ([D209](milestones/backlog.md#d209)). It removes the host
-packages an install recorded as its own and the state Bootwright keeps on this
-host, `/var/lib/bootwright` and `/var/lib/bootwright-staging`, so the host is
-as it was before its first install apart from what the operator or a
-context's controller stage added. It never removes the Bootwright executable,
+packages an install recorded as its own and every root Bootwright keeps on
+this host, whole ([D244](milestones/backlog.md#d244)): the store
+`/var/lib/bootwright`, the staging directory `/var/lib/bootwright-staging`,
+the [log root](contexts.md#log-root) `/var/log/bootwright`, the
+[hosted root](contexts.md#hosted-root) `/var/lib/bootwright-hosted` with any
+physical-erase receipts under `machines/<machine>/erase/<op>`, and the libvirt
+image prefix `/var/lib/libvirt/images/bootwright` when it is empty, so the
+host is as it was before its first install apart from what the operator or a
+context's controller stage added. No context remains, so no operation can
+read what those roots hold again. It never removes the Bootwright executable,
 a package present before Bootwright, a package a
 [controller stage](#the-controller-stage) installed, which no record names,
-or data the operator supplied. Like install it selects no context, refuses
+data the operator supplied, or what a context realized on an SSH placement
+host, which no uninstall reaches. Like install it selects no context, refuses
 `--context`, and elevates as install does.
 
 | Invocation | Required behavior |
 | --- | --- |
-| `bootwright controller uninstall` | Elevate, take the exclusive root lock and [`host/setup/lock`](contexts/controller-record.md#the-setup-subtree), each refused as busy rather than awaited, and inspect read-only. A host with no state root, no staging directory and no tree an interrupted uninstall renamed prints `Nothing to do.` and changes nothing. A root without a setup subtree has no receipt, so it names no package to remove. Otherwise present the plan, confirm, inspect again under the same locks and refuse a host that moved, remove the packages, then remove the state, and report what it removed and what it kept. |
+| `bootwright controller uninstall` | Elevate, take the exclusive root lock and [`host/setup/lock`](contexts/controller-record.md#the-setup-subtree), each refused as busy rather than awaited, and inspect read-only. A host where every root is absent and no tree an interrupted uninstall renamed remains prints `Nothing to do.` and changes nothing. A root without a setup subtree has no receipt, so it names no package to remove. Otherwise run the owned-object proof below, present the plan, confirm, inspect and prove again under the same locks and refuse a host that moved, remove the packages, then remove every root, and report what it removed and what it kept. |
 | `bootwright controller uninstall --keep-packages` | The same, without the package action: no `rpm` erase test, dnf preview or dnf removal, and no refusal that only package removal needs. |
+| `bootwright controller uninstall --discard-unreadable` | Discard what this build cannot read or attribute ([B1216](milestones/m1.md#b1216)): accepted when the store refuses as another build's (a registry of another version, unsupported root state, or state without a registry), or when the store is readable and holds no context; it then also takes the guest disks under the libvirt image prefix. It takes the same locks, a held `host/setup/lock` included when one stands there, runs the same owned-object proof, and removes every root and the image prefix whole. It never removes a package, and reads no receipt of a store it cannot read, so it runs no `rpm` or dnf and reads no egress route. A malformed registry of this build, an I/O, busy or permission refusal, and a readable store holding any context or image still refuse as the plain uninstall does. With `--keep-packages` it is a usage error. It knows no path an earlier build used. |
 
 **Refusals before any effect.** Each refuses `controller.uninstall` with the
 remedy named, unless it names another code:
 
-- a store this build cannot read refuses with the store's own refusal and
-  remedy, because uninstall cannot prove it holds no context;
+- without `--discard-unreadable`, a store this build cannot read refuses with
+  the store's own refusal and remedy, because uninstall cannot prove it holds
+  no context; that remedy names `--discard-unreadable` as the exit once no
+  environment of the other build remains;
 - a registry that names any context, active or reserved, refuses naming each
   one, with the remedy "destroy each environment
   (`bootwright destroy --context <name>`) and delete each context
@@ -384,6 +394,16 @@ remedy named, unless it names another code:
   deletes media the operator supplied;
 - a staging extraction another process holds refuses `lifecycle.lease` with a
   retry remedy;
+- any Bootwright-owned object the owned-object proof below
+  finds refuses naming each, such as "libvirt domain bootwright-lab-rhel-01",
+  with the remedy to destroy the context that owns it with a build that reads
+  it, or remove it by hand, then run uninstall again; a proof that cannot
+  answer refuses with what it could not read;
+- without `--discard-unreadable`, any entry under
+  `/var/lib/libvirt/images/bootwright` refuses naming each as guest disks no
+  removal took back, with the remedy
+  `bootwright controller uninstall --discard-unreadable`, because they may hold
+  data and only a destroy consumes `data-loss` for them;
 - without `--keep-packages`, a setup record that carries a pending intent, or
   that cannot be read or carries another format, refuses, because the
   packages that install added are not known: "an earlier install (`<id>`) was
@@ -419,40 +439,79 @@ configuration and running uninstall again. A package removal that fails
 removes no state, so the receipt that names what to remove survives for the
 next run.
 
-**State.** After the packages, uninstall renames `/var/lib/bootwright` to
-`/var/lib/.bootwright-uninstall-<32 hex>` and `/var/lib/bootwright-staging` to
-`/var/lib/.bootwright-staging-uninstall-<32 hex>`, each one atomic rename in
-`/var/lib` reached as the store reaches its root, then removes each renamed
-tree without following a link. Once the root is renamed no command finds a
-store, so every one reports a missing install. An uninstall interrupted after
-the rename is finished by the next one, which removes every
-`/var/lib/.bootwright-uninstall-*` and `/var/lib/.bootwright-staging-uninstall-*`
-directory it finds, owned by `root:root`, and reports them. Install ignores
-them.
+**The owned-object proof.** Before the plan and again after confirmation,
+under the same locks and as root, uninstall proves that no object
+Bootwright's names or ownership metadata mark remains on this host
+(`internal/controller/hostowned`): libvirt domains and networks on
+`qemu:///system` named `bootwright-*` or whose inactive XML carries the
+metadata namespace `https://bootwright.io/substrate/v1`, pools named
+`bootwright-*` or targeting the image prefix or beneath it, systemd loaded
+units and unit files named `bootwright-*`, quadlet sources
+`/etc/containers/systemd/bootwright-*.container`, and podman containers named
+`bootwright-*`. It fails closed: a missing `virsh` counts as no libvirt only
+when no socket exists under `/run/libvirt`, a missing `podman` as no
+container and a missing quadlet directory as no source, a missing
+`systemctl` refuses, and any non-zero exit, unparseable output or listing
+beyond its bound refuses. `virsh`, `systemctl` and `podman` are qualified as
+[host packages](#host-packages) qualify `rpm` and dnf: absolute, root-owned
+and writable by no group or other, run with a fixed environment and a
+bounded output. Its limits: it sees only what those tools list now, so it
+cannot see a process of an older build that holds no lock, nor anything on an
+SSH placement host, whose hosted content stays
+(`TestEveryOwnedObjectKindIsFound`, `TestTheProofRefusesWhatItCannotRead`).
+
+**State.** After the packages, uninstall renames each root that exists aside
+within its own parent, each one atomic rename reached through directories
+only, never following a link: `/var/lib/bootwright` to
+`/var/lib/.bootwright-uninstall-<32 hex>`, `/var/lib/bootwright-staging` to
+`/var/lib/.bootwright-staging-uninstall-<32 hex>`, `/var/lib/bootwright-hosted`
+to `/var/lib/.bootwright-hosted-uninstall-<32 hex>`, `/var/log/bootwright` to
+`/var/log/.bootwright-uninstall-<32 hex>` and
+`/var/lib/libvirt/images/bootwright` to
+`/var/lib/libvirt/images/.bootwright-uninstall-<32 hex>`. It then syncs each
+parent and removes each renamed tree without following a link or crossing a
+device. Each root must first be a directory its owner (`root`) owns, writable
+by no group or other, not a link, not a mount point and on its parent's
+device, or uninstall refuses naming it. Once the store is renamed no command
+finds a store, so every one reports a missing install. An uninstall or
+discard interrupted after a rename is finished by the next one, which removes
+every directory of those names it finds in `/var/lib`, `/var/log` and
+`/var/lib/libvirt/images`, owned by `root:root`, and reports them
+(`TestTheNextUninstallFinishesAnInterruptedDiscard`). Install ignores them.
 
 The plan names each action in order, then what stays:
 
 - `remove-host-packages`, "Remove the host packages install added: `<names>`",
   with dnf's verbatim preview; absent with `--keep-packages` or when no package
   remains to remove;
-- `remove-state`, "Remove Bootwright's state on this host: /var/lib/bootwright
-  (the install record, runtimes, wheel cache, controller record and tools) and
-  /var/lib/bootwright-staging";
+- `remove-state`, "Remove Bootwright's state on this host:", naming each root
+  that exists with what it holds: the store (the install record, runtimes,
+  wheel cache, controller record and tools), the staging directory, the log
+  root (operation logs and run output), the hosted root (what contexts
+  realized on this host, physical-erase receipts included) and the empty
+  image prefix;
+- `discard`, in place of `remove-state` with `--discard-unreadable`, "Discard
+  what this build cannot read or attribute, with everything beneath it:",
+  naming the same roots, the store with its own refusal when this build cannot
+  read it, and the image prefix with each guest disk entry;
 - `finish-removal`, when an interrupted uninstall left renamed trees, naming
   them;
 - what stays: each package marked `present before bootwright`, and, with
-  `--keep-packages`, each package install added, and always the packages a
-  controller stage installed and the executable itself.
+  `--keep-packages`, each package install added, with `--discard-unreadable`
+  every host package, and always the packages present before Bootwright, the
+  packages a controller stage installed, the executable itself and what a
+  context realized on an SSH placement host.
 
 The inspection after confirmation repeats the erase test and the preview
 check before dnf removes anything, so a dependent installed meanwhile still
 refuses; one another dnf installs after that last test is an accepted window.
 A media stage a running `media add` holds refuses `lifecycle.lease`; an
-abandoned stage goes with the state. A state root or staging directory that is
-its own mount, a bind mount included, refuses before any effect, since no
-rename in `/var/lib` can move it, and a staging directory that is a link, or
-that another user owns or may write, refuses as not Bootwright's
-(`TestAnUninstallRefusesAMountedRootOrStagingBeforeAnyEffect`,
+abandoned stage goes with the state. A root that is its own mount, a bind
+mount included, refuses before any effect, since no rename in its parent can
+move it, and a staging directory, log root, hosted root or image prefix that
+is a link, or that another user owns or may write, refuses as not
+Bootwright's (`TestAnUninstallRefusesAMountedRootOrStagingBeforeAnyEffect`,
+`TestAnUninstallNamesGuestDisksAndRefusesForeignRoots`,
 `TestAnUninstallLeavesWhatIsNotItsOwn`). Each renamed tree is locked while a
 run removes it, so a second run refuses busy, and renamed trees go before the
 run's own renames, so a failing rename strands none. A state removal that

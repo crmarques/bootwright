@@ -2,6 +2,7 @@ package contextfs
 
 import (
 	"encoding/json"
+	"errors"
 
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -11,7 +12,20 @@ import (
 // running from it.
 const otherBuildGuidance = "another Bootwright build may have created this root and may manage live environments there: " +
 	"run this build on another controller host, or retire that build's environments before archiving its root, " +
-	"and never move it aside while its services run"
+	"and never move it aside while its services run; once none of them remains, bootwright controller uninstall --discard-unreadable removes it with every root Bootwright keeps on this host"
+
+type anotherBuildsStore struct{ failure error }
+
+func (e *anotherBuildsStore) Error() string { return e.failure.Error() }
+
+func (e *anotherBuildsStore) Unwrap() error { return e.failure }
+
+func anotherBuilds(failure error) error { return &anotherBuildsStore{failure: failure} }
+
+func isAnotherBuilds(err error) bool {
+	var another *anotherBuildsStore
+	return errors.As(err, &another)
+}
 
 const (
 	missingRegistryMessage   = "the state root holds state but no registry.json this build can read"
@@ -43,7 +57,7 @@ func decodeRegistry(data []byte, maximum int, target *contexts.Registry) error {
 	if envelope.Version != contexts.RegistryVersion {
 		// Any other version is another build's state, never damage this build
 		// may convert or move aside.
-		return contexts.StateErrorWithRemediation(missingRegistryMessage, storeRecoveryRemediation)
+		return anotherBuilds(contexts.StateErrorWithRemediation(missingRegistryMessage, storeRecoveryRemediation))
 	}
 	var record registryRecord
 	if err := decodeRecord(data, maximum, &record); err != nil {

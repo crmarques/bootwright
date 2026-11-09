@@ -27,6 +27,14 @@ type uninstallFixture struct {
 	decline    error
 	plan       *UninstallPlan
 	asked      string
+	owned      []OwnedObject
+	ownedErr   error
+	proofs     int
+}
+
+func (f *uninstallFixture) OwnedObjects(context.Context) ([]OwnedObject, error) {
+	f.proofs++
+	return slices.Clone(f.owned), f.ownedErr
 }
 
 func (f *uninstallFixture) record(event string) { f.events = append(f.events, event) }
@@ -116,7 +124,7 @@ func (f *uninstallFixture) Confirm(_ context.Context, action, _ string) error {
 }
 
 func (f *uninstallFixture) service() Service {
-	return New(f, nil, nil, Ports{Packages: removalPackages{f: f}}, Options{Confirmer: f, Presenter: uninstallPresenter{f: f}})
+	return New(f, nil, nil, Ports{Packages: removalPackages{f: f}, Owned: f}, Options{Confirmer: f, Presenter: uninstallPresenter{f: f}})
 }
 
 func receiptView(packages ...ReceiptPackage) UninstallView {
@@ -232,7 +240,7 @@ func TestAnUninstallWithKeepPackagesTouchesNoPackage(t *testing.T) {
 	for name, view := range map[string]UninstallView{"a receipt": installReceipt(), "a pending intent": pending, "a foreign record": foreign} {
 		t.Run(name, func(t *testing.T) {
 			f := &uninstallFixture{views: []UninstallView{view}, installed: []string{"podman"}}
-			service := New(f, nil, nil, Ports{}, Options{Confirmer: f, Presenter: uninstallPresenter{f: f}})
+			service := New(f, nil, nil, Ports{Owned: f}, Options{Confirmer: f, Presenter: uninstallPresenter{f: f}})
 			result, err := service.Uninstall(context.Background(), UninstallRequest{KeepPackages: true})
 			if err != nil {
 				t.Fatalf("the uninstall failed: %#v", diagnostics.Of(err))
@@ -359,4 +367,129 @@ func TestAnUninstallWhoseStateFailsNamesTheRemovedPackages(t *testing.T) {
 		stateErr: failure("context.state", "the state root was replaced while uninstall inspected it", "")}
 	_, err := f.service().Uninstall(context.Background(), UninstallRequest{SkipConfirmation: true})
 	uninstallRefusal(t, err, uninstallCode, "removed the host packages podman but not the state: the state root was replaced")
+}
+
+func everyRootView() UninstallView {
+	view := installReceipt()
+	view.Logs, view.Hosted, view.Images = "/var/log/bootwright", "/var/lib/bootwright-hosted", "/var/lib/libvirt/images/bootwright"
+	view.LogsSeen, view.HostedSeen, view.ImagesSeen = true, true, true
+	return view
+}
+
+func unreadableView() UninstallView {
+	view := everyRootView()
+	view.Setup = SetupView{}
+	view.Unreadable = failure("context.state", "the state root holds state but no registry.json this build can read", "another Bootwright build may have created this root")
+	return view
+}
+
+func actionIDs(plan *UninstallPlan) []string {
+	ids := []string{}
+	for _, action := range plan.Actions {
+		ids = append(ids, action.ID)
+	}
+	return ids
+}
+
+// A plain uninstall proves no owned object remains, under the lock, at the
+// plan and again after confirmation, and removes the log root, the hosted
+// root and an empty image prefix with the store.
+func TestAnUninstallRemovesEveryRootAfterTheOwnedObjectProof(t *testing.T) {
+	f := &uninstallFixture{views: []UninstallView{everyRootView()}, installed: []string{"podman"}}
+	if _, err := f.service().Uninstall(context.Background(), UninstallRequest{SkipConfirmation: true}); err != nil {
+		t.Fatalf("the uninstall failed: %#v", diagnostics.Of(err))
+	}
+	state := f.plan.Actions[len(f.plan.Actions)-1]
+	if f.proofs != 2 || state.ID != RemoveStateAction ||
+		!slices.Equal(state.Items, []string{"/var/lib/bootwright", "/var/lib/bootwright-staging", "/var/log/bootwright", "/var/lib/bootwright-hosted", "/var/lib/libvirt/images/bootwright"}) ||
+		!strings.Contains(state.Text, "physical-erase receipts included") || !strings.Contains(state.Text, "/var/lib/libvirt/images/bootwright (empty)") {
+		t.Fatalf("proofs %d, plan %+v", f.proofs, f.plan)
+	}
+	for _, kept := range []string{"the host packages a controller stage installed", "the bootwright executable", "the host packages present before Bootwright", "SSH placement host"} {
+		if !slices.ContainsFunc(f.plan.Kept, func(line string) bool { return strings.Contains(line, kept) }) {
+			t.Fatalf("kept %q lacks %q", f.plan.Kept, kept)
+		}
+	}
+}
+
+// An owned object refuses naming each before the plan, and a proof that
+// cannot answer refuses with its own refusal; guest disks beneath the image
+// prefix refuse a plain uninstall naming the discard.
+func TestAnUninstallRefusesOwnedObjectsAndGuestDisks(t *testing.T) {
+	f := &uninstallFixture{views: []UninstallView{everyRootView()}, installed: []string{"podman"},
+		owned: []OwnedObject{{Kind: "systemd unit", Name: "bootwright-lab-bmc-rhel-01.service"}, {Kind: "libvirt domain", Name: "bootwright-lab-rhel-01"}}}
+	_, err := f.service().Uninstall(context.Background(), UninstallRequest{})
+	uninstallRefusal(t, err, uninstallCode, "Bootwright-owned objects remain on this host: libvirt domain bootwright-lab-rhel-01, systemd unit bootwright-lab-bmc-rhel-01.service")
+	if remedy := diagnostics.Of(err)[0].Remediation; !strings.Contains(remedy, "with a build that reads it") || !strings.Contains(remedy, "remove each by hand") {
+		t.Fatalf("remedy = %q", remedy)
+	}
+	f = &uninstallFixture{views: []UninstallView{everyRootView()}, ownedErr: failure(uninstallCode, "uninstall cannot prove that no Bootwright-owned libvirt domain remains", "")}
+	_, err = f.service().Uninstall(context.Background(), UninstallRequest{})
+	uninstallRefusal(t, err, uninstallCode, "cannot prove")
+	disks := everyRootView()
+	disks.GuestDisks = []string{"/var/lib/libvirt/images/bootwright/lab"}
+	f = &uninstallFixture{views: []UninstallView{disks}, installed: []string{"podman"}}
+	_, err = f.service().Uninstall(context.Background(), UninstallRequest{})
+	uninstallRefusal(t, err, uninstallCode, "guest disks no removal took back remain under /var/lib/libvirt/images/bootwright: /var/lib/libvirt/images/bootwright/lab")
+	if remedy := diagnostics.Of(err)[0].Remediation; !strings.Contains(remedy, "bootwright controller uninstall --discard-unreadable") {
+		t.Fatalf("remedy = %q", remedy)
+	}
+	if slices.Contains(f.events, "plan") || slices.Contains(f.events, "remove-state") {
+		t.Fatalf("a refused uninstall acted: %q", f.events)
+	}
+}
+
+// A plain uninstall refuses another build's store with the store's own
+// refusal; a discard accepts it, removes no package even with no package
+// port, and plans the discard of every root and the guest disks.
+func TestADiscardTakesAStoreThisBuildCannotRead(t *testing.T) {
+	f := &uninstallFixture{views: []UninstallView{unreadableView()}}
+	_, err := f.service().Uninstall(context.Background(), UninstallRequest{})
+	uninstallRefusal(t, err, "context.state", "no registry.json this build can read")
+	if f.proofs != 0 {
+		t.Fatal("a refused store ran the owned-object proof")
+	}
+	view := unreadableView()
+	view.GuestDisks = []string{"/var/lib/libvirt/images/bootwright/lab"}
+	f = &uninstallFixture{views: []UninstallView{view}}
+	service := New(f, nil, nil, Ports{Owned: f}, Options{Confirmer: f, Presenter: uninstallPresenter{f: f}})
+	result, err := service.Uninstall(context.Background(), UninstallRequest{DiscardUnreadable: true})
+	if err != nil {
+		t.Fatalf("the discard failed: %#v", diagnostics.Of(err))
+	}
+	if !slices.Equal(f.events, []string{"plan", "confirm", "remove-state"}) || f.proofs != 2 || len(result.Packages) != 0 ||
+		!slices.Equal(actionIDs(f.plan), []string{DiscardAction}) {
+		t.Fatalf("events %q, proofs %d, plan %+v", f.events, f.proofs, f.plan)
+	}
+	text := f.plan.Actions[0].Text
+	if !strings.Contains(text, "a store this build cannot read: the state root holds state but no registry.json") ||
+		!strings.Contains(text, "guest disks no removal took back: /var/lib/libvirt/images/bootwright/lab") ||
+		!slices.Contains(result.Kept, "every host package: --discard-unreadable removes none") {
+		t.Fatalf("plan %q, kept %q", text, result.Kept)
+	}
+}
+
+// A discard over a readable store with no context removes no package either,
+// one over a store that holds a context refuses as a plain uninstall does,
+// and a discard with --keep-packages refuses before any inspection.
+func TestADiscardOfAReadableStoreRemovesNoPackageAndKeepsTheContextRefusal(t *testing.T) {
+	f := &uninstallFixture{views: []UninstallView{everyRootView()}, installed: []string{"podman"}}
+	if _, err := f.service().Uninstall(context.Background(), UninstallRequest{DiscardUnreadable: true, SkipConfirmation: true}); err != nil {
+		t.Fatalf("the discard failed: %#v", diagnostics.Of(err))
+	}
+	if slices.ContainsFunc(f.events, func(event string) bool { return strings.HasPrefix(event, "rpm") || strings.HasPrefix(event, "dnf") }) ||
+		!slices.Equal(actionIDs(f.plan), []string{DiscardAction}) || !slices.Contains(f.plan.Kept, "openssh-clients (present before bootwright)") {
+		t.Fatalf("events %q, plan %+v", f.events, f.plan)
+	}
+	held := everyRootView()
+	held.Contexts = []string{"lab"}
+	f = &uninstallFixture{views: []UninstallView{held}}
+	_, err := f.service().Uninstall(context.Background(), UninstallRequest{DiscardUnreadable: true})
+	uninstallRefusal(t, err, uninstallCode, "this host holds contexts: lab")
+	f = &uninstallFixture{views: []UninstallView{everyRootView()}}
+	_, err = f.service().Uninstall(context.Background(), UninstallRequest{DiscardUnreadable: true, KeepPackages: true})
+	uninstallRefusal(t, err, uninstallCode, "takes no --keep-packages")
+	if f.inspected != 0 {
+		t.Fatal("a refused request inspected the host")
+	}
 }

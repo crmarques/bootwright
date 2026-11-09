@@ -217,8 +217,11 @@ func TestAnUninstallInspectionRefusesWhatItMustNotRemove(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(base, "bootwright", "registry.json"), []byte(`{"version":99,"contexts":[]}`+"\n"), 0600); err != nil {
 			t.Fatal(err)
 		}
-		_, err := uninstallView(t, store)
-		uninstallDiagnostic(t, err, "context.state", "no registry.json this build can read")
+		view, err := uninstallView(t, store)
+		if err != nil || !view.RootExists {
+			t.Fatalf("view = %+v (%#v)", view, diagnostics.Of(err))
+		}
+		uninstallDiagnostic(t, view.Unreadable, "context.state", "no registry.json this build can read")
 	})
 	t.Run("a staging directory of another type", func(t *testing.T) {
 		store, base := installedStore(t)
@@ -323,5 +326,214 @@ func TestAnUninstallLeavesWhatIsNotItsOwn(t *testing.T) {
 	uninstallDiagnostic(t, err, "lifecycle.lease", "another Bootwright command holds "+leftover)
 	if _, err := os.Lstat(file); err != nil {
 		t.Fatalf("the look-alike file was removed (%v)", err)
+	}
+}
+
+// everyRootStore is an installed store whose log root lies in a parent of its
+// own, as /var/log is, with a hosted root and a libvirt image prefix.
+func everyRootStore(t *testing.T) (*Store, string) {
+	t.Helper()
+	base := t.TempDir()
+	options := testOptions(filepath.Join(base, "bootwright"))
+	options.Logs = filepath.Join(base, "log", "bootwright")
+	options.LibvirtImages = filepath.Join(base, "images", "bootwright")
+	store := New(options)
+	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
+		state := setupReceiptState()
+		state.Format = prerequisites.SetupStateFormat
+		return tx.Record(context.Background(), state)
+	})
+	mkdirs(t, 0700, filepath.Join(base, "log", "bootwright", "contexts", "lab", "operations", "op-1"),
+		filepath.Join(base, "bootwright-hosted", "lab", "machines", "rhel-01", "erase", "op-1"))
+	mkdirs(t, 0711, filepath.Join(base, "images", "bootwright"))
+	for path, data := range map[string]string{
+		filepath.Join(base, "log", "bootwright", "contexts", "lab", "operations", "op-1", "operation.jsonl"):    "{}\n",
+		filepath.Join(base, "bootwright-hosted", "lab", "machines", "rhel-01", "erase", "op-1", "receipt.json"): "{}\n",
+	} {
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return store, base
+}
+
+// A plain uninstall removes the log root and the hosted root whole, a
+// physical-erase receipt included, and an empty libvirt image prefix, each
+// renamed aside within its own parent, leaving every sibling there.
+func TestAnUninstallRemovesEveryRootItKeeps(t *testing.T) {
+	store, base := everyRootStore(t)
+	for _, sibling := range []string{filepath.Join(base, "log", "messages"), filepath.Join(base, "images", "operator.qcow2")} {
+		if err := os.WriteFile(sibling, nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	view, err := uninstallView(t, store)
+	if err != nil || !view.RootExists || !view.LogsSeen || !view.HostedSeen || !view.ImagesSeen || view.StagingSeen ||
+		len(view.GuestDisks) != 0 || view.Unreadable != nil || view.Hosted != filepath.Join(base, "bootwright-hosted") {
+		t.Fatalf("view = %+v (%#v)", view, diagnostics.Of(err))
+	}
+	removed := uninstallState(t, store)
+	want := []string{filepath.Join(base, "bootwright"), filepath.Join(base, "log", "bootwright"), filepath.Join(base, "bootwright-hosted"), filepath.Join(base, "images", "bootwright")}
+	if !slices.Equal(removed, want) {
+		t.Fatalf("removed = %q, want %q", removed, want)
+	}
+	for parent, survivor := range map[string]string{base: "images", filepath.Join(base, "log"): "messages", filepath.Join(base, "images"): "operator.qcow2"} {
+		entries, err := os.ReadDir(parent)
+		names := []string{}
+		for _, entry := range entries {
+			names = append(names, entry.Name())
+		}
+		if err != nil || !slices.Contains(names, survivor) || slices.ContainsFunc(names, func(name string) bool { return strings.Contains(name, "bootwright") }) {
+			t.Fatalf("%s holds %q (%v)", parent, names, err)
+		}
+	}
+}
+
+// What the libvirt image prefix holds is named for the service to refuse, a
+// link there is not Bootwright's, and a mounted log or hosted root refuses
+// before any effect.
+func TestAnUninstallNamesGuestDisksAndRefusesForeignRoots(t *testing.T) {
+	store, base := everyRootStore(t)
+	disk := filepath.Join(base, "images", "bootwright", "lab")
+	mkdirs(t, 0700, filepath.Join(disk, "machines", "rhel-01"))
+	view, err := uninstallView(t, store)
+	if err != nil || !slices.Equal(view.GuestDisks, []string{disk}) {
+		t.Fatalf("view = %+v (%#v)", view, diagnostics.Of(err))
+	}
+	for _, mounted := range []string{"bootwright-hosted", "log/bootwright"} {
+		t.Run(mounted, func(t *testing.T) {
+			store, base := everyRootStore(t)
+			store.uninstallEntry = func(parent, name string) (syscall.Stat_t, error) {
+				if filepath.Join(parent, name) == filepath.Join(base, mounted) {
+					return syscall.Stat_t{}, syscall.EXDEV
+				}
+				var stat syscall.Stat_t
+				err := syscall.Lstat(filepath.Join(parent, name), &stat)
+				return stat, err
+			}
+			_, err := uninstallView(t, store)
+			uninstallDiagnostic(t, err, "controller.uninstall", filepath.Join(base, mounted)+" is a mount point")
+		})
+	}
+	store, base = everyRootStore(t)
+	hosted := filepath.Join(base, "bootwright-hosted")
+	if err := os.Chmod(hosted, 0770); err != nil {
+		t.Fatal(err)
+	}
+	_, err = uninstallView(t, store)
+	uninstallDiagnostic(t, err, "controller.uninstall", hosted+" is not a directory Bootwright owns")
+}
+
+// A registry of another version, unsupported root state and state without a
+// registry are another build's store, handed to the service as Unreadable
+// under the same locks; a malformed registry of this version, a held root
+// lock and a held setup lock refuse instead.
+func TestAnUninstallHandsAnotherBuildsStoreToTheService(t *testing.T) {
+	unreadable := map[string]func(root string){
+		"another registry version": func(root string) {
+			writePrivate(t, filepath.Join(root, "registry.json"), []byte(`{"version":99,"contexts":[]}`+"\n"))
+		},
+		"unsupported root state": func(root string) { mkdirs(t, 0700, filepath.Join(root, "controller")) },
+		"state without a registry": func(root string) {
+			if err := os.Remove(filepath.Join(root, "registry.json")); err != nil && !os.IsNotExist(err) {
+				t.Fatal(err)
+			}
+		},
+	}
+	for name, damage := range unreadable {
+		t.Run(name, func(t *testing.T) {
+			store, base := everyRootStore(t)
+			damage(filepath.Join(base, "bootwright"))
+			view, err := uninstallView(t, store)
+			if err != nil || view.Unreadable == nil || !view.RootExists || view.Setup.Exists || !view.LogsSeen || !view.HostedSeen {
+				t.Fatalf("view = %+v (%#v)", view, diagnostics.Of(err))
+			}
+			uninstallDiagnostic(t, view.Unreadable, "context.state", "")
+		})
+	}
+	t.Run("a malformed registry", func(t *testing.T) {
+		store, base := everyRootStore(t)
+		writePrivate(t, filepath.Join(base, "bootwright", "registry.json"), []byte("{\n"))
+		_, err := uninstallView(t, store)
+		uninstallDiagnostic(t, err, "context.state", "malformed")
+	})
+	t.Run("a held setup lock", func(t *testing.T) {
+		store, base := everyRootStore(t)
+		writePrivate(t, filepath.Join(base, "bootwright", "registry.json"), []byte(`{"version":99,"contexts":[]}`+"\n"))
+		lock, err := os.OpenFile(filepath.Join(base, "bootwright", hostContainer, setupSubtree, setupLockName), os.O_CREATE|os.O_RDWR, 0600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer lock.Close()
+		if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+			t.Fatal(err)
+		}
+		_, err = uninstallView(t, store)
+		uninstallDiagnostic(t, err, "lifecycle.lease", "controller setup is held")
+	})
+	t.Run("a held root lock", func(t *testing.T) {
+		store, base := everyRootStore(t)
+		writePrivate(t, filepath.Join(base, "bootwright", "registry.json"), []byte(`{"version":99,"contexts":[]}`+"\n"))
+		holder, err := os.Open(filepath.Join(base, "bootwright"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer holder.Close()
+		if err := syscall.Flock(int(holder.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+			t.Fatal(err)
+		}
+		_, err = uninstallView(t, store)
+		uninstallDiagnostic(t, err, "lifecycle.lease", "held by another")
+	})
+}
+
+// interruptedContext reports cancellation once after calls of Err have
+// answered, as a killed uninstall stops between two effects.
+type interruptedContext struct {
+	context.Context
+	calls *int
+	after int
+}
+
+func (c interruptedContext) Err() error {
+	*c.calls++
+	if *c.calls > c.after {
+		return context.Canceled
+	}
+	return nil
+}
+
+// A discard interrupted after its renames, over another build's store and
+// guest disks, leaves renamed trees in /var/lib, /var/log and the image
+// prefix's parent, which the next uninstall finds as leftovers and removes.
+func TestTheNextUninstallFinishesAnInterruptedDiscard(t *testing.T) {
+	store, base := everyRootStore(t)
+	writePrivate(t, filepath.Join(base, "bootwright", "registry.json"), []byte(`{"version":99,"contexts":[]}`+"\n"))
+	mkdirs(t, 0700, filepath.Join(base, "images", "bootwright", "lab", "machines", "rhel-01"))
+	calls := 0
+	err := store.Uninstall(context.Background(), func(tx prerequisites.UninstallTransaction) error {
+		if tx.View().Unreadable == nil || len(tx.View().GuestDisks) != 1 {
+			t.Fatalf("view = %+v", tx.View())
+		}
+		_, err := tx.RemoveState(interruptedContext{Context: context.Background(), calls: &calls, after: 1})
+		return err
+	})
+	if err == nil {
+		t.Fatal("the interrupted discard reported success")
+	}
+	view, err := uninstallView(t, store)
+	if err != nil || view.RootExists || view.LogsSeen || view.HostedSeen || view.ImagesSeen || len(view.Leftovers) != 4 {
+		t.Fatalf("view after the interruption = %+v (%#v)", view, diagnostics.Of(err))
+	}
+	for _, leftover := range view.Leftovers {
+		if parent := filepath.Dir(leftover); parent != base && parent != filepath.Join(base, "log") && parent != filepath.Join(base, "images") {
+			t.Fatalf("leftover %s lies outside the roots' parents", leftover)
+		}
+	}
+	if removed := uninstallState(t, store); !slices.Equal(removed, view.Leftovers) {
+		t.Fatalf("removed = %q, want %q", removed, view.Leftovers)
+	}
+	if view, err := uninstallView(t, store); err != nil || len(view.Leftovers) != 0 || view.RootExists {
+		t.Fatalf("a final inspection = %+v (%v)", view, err)
 	}
 }

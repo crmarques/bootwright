@@ -11,12 +11,17 @@
     ],
     "paths": [
       "/var/lib/bootwright",
-      "/var/lib/bootwright-staging"
+      "/var/lib/bootwright-staging",
+      "/var/log/bootwright",
+      "/var/lib/bootwright-hosted",
+      "/var/lib/libvirt/images/bootwright"
     ],
     "kept": [
       "openssh-clients (present before bootwright)",
+      "the host packages present before Bootwright",
       "the host packages a controller stage installed",
-      "the bootwright executable"
+      "the bootwright executable",
+      "what a context realized on an SSH placement host, which no uninstall reaches"
     ]
   },
   "diagnostics": [],

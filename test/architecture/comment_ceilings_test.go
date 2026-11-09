@@ -15,7 +15,7 @@ func commentLineCeilings() map[string]int {
 		"internal/containercluster/agentinstall": 467, "internal/containercluster/installation": 0,
 		"internal/containercluster/preflight": 0, "internal/containercluster/preflightlocal": 0, "internal/substrate/capacity": 0, "internal/controller": 125,
 		"internal/controller/ansiblelocal": 91, "internal/controller/bundlelocal": 20,
-		"internal/controller/clients": 134, "internal/controller/hostdnf": 1, "internal/controller/firewall": 0,
+		"internal/controller/clients": 134, "internal/controller/hostdnf": 1, "internal/controller/hostowned": 1, "internal/controller/firewall": 0,
 		"internal/controller/firewalllocal": 0,
 		"internal/controller/hostlinux":     24,
 		"internal/controller/prerequisites": 288, "internal/controller/privilege": 245, "internal/controller/runtimelock": 32,

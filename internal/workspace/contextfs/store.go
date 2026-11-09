@@ -30,10 +30,12 @@ const pristineMutation = "{\"version\":1,\"operation\":\"none\",\"ownership\":\"
 type Ownership struct{ UID, GID uint32 }
 
 type Options struct {
-	Root    string
-	Staging string
-	Logs    string
-	Owner   *Ownership
+	Root          string
+	Staging       string
+	Logs          string
+	Hosted        string
+	LibvirtImages string
+	Owner         *Ownership
 }
 
 // Store has no effects until a repository method is called. A Store is safe for

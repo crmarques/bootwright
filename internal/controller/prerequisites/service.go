@@ -31,6 +31,7 @@ type Ports struct {
 	Packages HostPackages
 	Python   PythonRuntime
 	Lock     RuntimeLock
+	Owned    HostOwnedObjects
 }
 
 type Service struct {

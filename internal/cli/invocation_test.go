@@ -131,6 +131,7 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"controller rebind", nil, ignoresRoute},
 		{"controller uninstall", nil, readsRoute},
 		{"controller uninstall", []string{"--keep-packages"}, ignoresRoute},
+		{"controller uninstall", []string{"--discard-unreadable"}, ignoresRoute},
 		// Every other command acquires nothing before a context exists.
 		{"context init", []string{"--name", "lab"}, ignoresRoute},
 		{"context update", []string{"--name", "lab", "--input-dir", "inputs"}, ignoresRoute},

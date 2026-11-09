@@ -160,17 +160,17 @@ func readRegistry(ctx context.Context, root *directory) (contexts.Registry, bool
 }
 
 func missingRegistry() error {
-	return &missingRegistryError{failure: contexts.StateErrorWithRemediation(
+	return &missingRegistryError{failure: anotherBuilds(contexts.StateErrorWithRemediation(
 		missingRegistryMessage,
 		storeRecoveryRemediation,
-	)}
+	))}
 }
 
 func unsupportedRootState() error {
-	return contexts.StateErrorWithRemediation(
+	return anotherBuilds(contexts.StateErrorWithRemediation(
 		unsupportedRootStateMessage,
 		storeRecoveryRemediation,
-	)
+	))
 }
 
 func pendingInitialRegistry() error {

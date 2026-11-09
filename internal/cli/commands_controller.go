@@ -28,8 +28,9 @@ func controllerRebindCommand() commandSpec {
 func controllerUninstallCommand() commandSpec {
 	return available(commandSpec{path: "controller uninstall", short: "Remove what controller install added to this host", flags: []flagSpec{
 		confirmationFlag(),
+		boolFlag("discard-unreadable", "Discard what this build cannot read or attribute: a store another build wrote, or guest disks no removal took back; never removes packages"),
 		boolFlag("keep-packages", "Leave every host package installed and remove only Bootwright's state"),
-	}, long: "Remove, on a host that holds no context and no installer media, the host packages controller install recorded as its own, through the host's own dnf, then Bootwright's state: /var/lib/bootwright and /var/lib/bootwright-staging. It never removes a package present before Bootwright, a package a controller stage installed, or this executable. It refuses before any effect while a context or an image remains, naming the commands that remove each, while another command holds the store, and, without --keep-packages, when the install record cannot say what install added or another installed package requires one of them. The plan shows dnf's own removal preview and what stays before confirmation. A host with nothing to remove prints Nothing to do. Review the plan before confirming; --yes skips ordinary confirmation."})
+	}, long: "Remove, on a host that holds no context and no installer media, the host packages controller install recorded as its own, through the host's own dnf, then every root Bootwright keeps on this host, whole: the store /var/lib/bootwright, the staging directory /var/lib/bootwright-staging, the log root /var/log/bootwright, the hosted root /var/lib/bootwright-hosted with any physical-erase receipts, and the libvirt image prefix /var/lib/libvirt/images/bootwright when it is empty. It never removes a package present before Bootwright, a package a controller stage installed, this executable, or what a context realized on an SSH placement host. It refuses before any effect while a context or an image remains, naming the commands that remove each, while any libvirt domain, network or pool, systemd unit, quadlet source or podman container Bootwright owns remains, naming each, while another command holds the store, while guest disks remain under the libvirt image prefix, and, without --keep-packages, when the install record cannot say what install added or another installed package requires one of them. --discard-unreadable is the exit for a store this build cannot read, such as one an earlier build wrote, and for guest disks no removal took back: after the same proof that no owned object remains, it removes every root and the libvirt image prefix whole, and never a package. The plan shows dnf's own removal preview and what stays before confirmation. A host with nothing to remove prints Nothing to do. Review the plan before confirming; --yes skips ordinary confirmation."})
 }
 
 type ControllerService interface {
@@ -66,8 +67,9 @@ func (s Services) invokeController(ctx context.Context, path string, values *req
 		}, s.Controller.Rebind)
 	case "controller uninstall":
 		result.uninstall, err = invokeResult(ctx, values, prerequisites.UninstallRequest{
-			SkipConfirmation: values.boolean("yes"),
-			KeepPackages:     values.boolean("keep-packages"),
+			SkipConfirmation:  values.boolean("yes"),
+			KeepPackages:      values.boolean("keep-packages"),
+			DiscardUnreadable: values.boolean("discard-unreadable"),
 		}, s.Controller.Uninstall)
 	default:
 		return commandResult{}, errors.New("command has no application dispatch")

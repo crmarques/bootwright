@@ -744,7 +744,9 @@ controller runtime, a virtual environment on the OS Python
 (`internal/controller/venvlocal`), and installs host packages by running the
 host's own dnf (`internal/controller/hostdnf`, a `--assumeno` preview and an
 `--assumeyes` install), for setup and for a context's controller stage alike;
-no Ansible role installs a host package. Native target CLI installation
+no Ansible role installs a host package. Controller uninstall proves that no
+Bootwright-owned host object remains by running the host's own `virsh`,
+`systemctl` and `podman` read-only (`internal/controller/hostowned`). Native target CLI installation
 crosses the fixed Ansible `controller_prerequisites` role through
 [Controller ports](controller.md#egress-and-local-effects). A tool
 contacting a managed remote component belongs inside Ansible. Go reaches a

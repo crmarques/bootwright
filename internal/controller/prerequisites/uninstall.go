@@ -10,8 +10,9 @@ import (
 )
 
 type UninstallRequest struct {
-	SkipConfirmation bool
-	KeepPackages     bool
+	SkipConfirmation  bool
+	KeepPackages      bool
+	DiscardUnreadable bool
 }
 
 type UninstallResult struct {
@@ -36,16 +37,26 @@ type UninstallAction struct {
 const (
 	RemoveHostPackagesAction = "remove-host-packages"
 	RemoveStateAction        = "remove-state"
+	DiscardAction            = "discard"
 	FinishRemovalAction      = "finish-removal"
 	uninstallInvocation      = "bootwright controller uninstall"
+	discardInvocation        = uninstallInvocation + " --discard-unreadable"
 	uninstallCode            = "controller.uninstall"
 )
 
 type UninstallView struct {
 	Root        string
 	Staging     string
+	Logs        string
+	Hosted      string
+	Images      string
 	RootExists  bool
 	StagingSeen bool
+	LogsSeen    bool
+	HostedSeen  bool
+	ImagesSeen  bool
+	GuestDisks  []string
+	Unreadable  error
 	Leftovers   []string
 	Contexts    []string
 	Media       []string
@@ -56,18 +67,22 @@ var receiptEpoch = regexp.MustCompile(`^[0-9]+:`)
 
 type uninstallInspection struct {
 	view     UninstallView
+	discard  bool
 	packages []string
 	before   []string
 	kept     []string
 }
 
 func (i uninstallInspection) empty() bool {
-	return !i.view.RootExists && !i.view.StagingSeen && len(i.view.Leftovers) == 0
+	v := i.view
+	return !v.RootExists && !v.StagingSeen && !v.LogsSeen && !v.HostedSeen && !v.ImagesSeen && len(v.Leftovers) == 0
 }
 
 func (i uninstallInspection) same(other uninstallInspection) bool {
-	return i.view.RootExists == other.view.RootExists && i.view.StagingSeen == other.view.StagingSeen &&
-		slices.Equal(i.view.Leftovers, other.view.Leftovers) && slices.Equal(i.packages, other.packages) && slices.Equal(i.before, other.before) && slices.Equal(i.kept, other.kept)
+	a, b := i.view, other.view
+	return a.RootExists == b.RootExists && a.StagingSeen == b.StagingSeen && a.LogsSeen == b.LogsSeen && a.HostedSeen == b.HostedSeen &&
+		a.ImagesSeen == b.ImagesSeen && (a.Unreadable == nil) == (b.Unreadable == nil) && slices.Equal(a.GuestDisks, b.GuestDisks) &&
+		slices.Equal(a.Leftovers, b.Leftovers) && slices.Equal(i.packages, other.packages) && slices.Equal(i.before, other.before) && slices.Equal(i.kept, other.kept)
 }
 
 func (s Service) Uninstall(ctx context.Context, request UninstallRequest) (*UninstallResult, error) {
@@ -77,13 +92,17 @@ func (s Service) Uninstall(ctx context.Context, request UninstallRequest) (*Unin
 	store, stores := s.storage.(UninstallStore)
 	presenter, presents := s.options.Presenter.(UninstallPresenter)
 	removal, removes := s.ports.Packages.(HostPackageRemoval)
-	if !stores || !presents || !request.KeepPackages && !removes {
+	if request.DiscardUnreadable && request.KeepPackages {
+		return nil, failure(uninstallCode, "--discard-unreadable removes no package, so it takes no --keep-packages", "repeat with one of them")
+	}
+	keep := request.KeepPackages || request.DiscardUnreadable
+	if !stores || !presents || s.ports.Owned == nil || !keep && !removes {
 		return nil, failure(uninstallCode, "controller uninstall is not configured", "")
 	}
 	var planned uninstallInspection
 	err := store.Uninstall(ctx, func(tx UninstallTransaction) error {
 		var err error
-		planned, err = s.inspectUninstall(ctx, tx.View(), request.KeepPackages, removal)
+		planned, err = s.inspectUninstall(ctx, tx.View(), request, removal)
 		return err
 	})
 	if err != nil {
@@ -113,7 +132,7 @@ func (s Service) Uninstall(ctx context.Context, request UninstallRequest) (*Unin
 	}
 	result := &UninstallResult{Outcome: "removed", Packages: []string{}, Kept: slices.Clone(plan.Kept)}
 	err = store.Uninstall(ctx, func(tx UninstallTransaction) error {
-		fresh, err := s.inspectUninstall(ctx, tx.View(), request.KeepPackages, removal)
+		fresh, err := s.inspectUninstall(ctx, tx.View(), request, removal)
 		if err != nil {
 			return err
 		}
@@ -138,8 +157,11 @@ func (s Service) Uninstall(ctx context.Context, request UninstallRequest) (*Unin
 	return result, nil
 }
 
-func (s Service) inspectUninstall(ctx context.Context, view UninstallView, keep bool, removal HostPackageRemoval) (uninstallInspection, error) {
-	inspection := uninstallInspection{view: view}
+func (s Service) inspectUninstall(ctx context.Context, view UninstallView, request UninstallRequest, removal HostPackageRemoval) (uninstallInspection, error) {
+	inspection := uninstallInspection{view: view, discard: request.DiscardUnreadable}
+	if view.Unreadable != nil && !request.DiscardUnreadable {
+		return inspection, view.Unreadable
+	}
 	if len(view.Contexts) != 0 {
 		return inspection, failure(uninstallCode, "this host holds contexts: "+strings.Join(view.Contexts, ", "),
 			"destroy each environment (bootwright destroy --context <name>) and delete each context (bootwright context delete --name <name> --purge), then run "+uninstallInvocation+" again")
@@ -152,14 +174,27 @@ func (s Service) inspectUninstall(ctx context.Context, view UninstallView, keep 
 		return inspection, failure(uninstallCode, "the media store holds installer media the operator supplied: "+strings.Join(view.Media, ", "),
 			"run "+strings.Join(remedies, "; run ")+"; then run "+uninstallInvocation+" again")
 	}
+	keep := request.KeepPackages || request.DiscardUnreadable
 	added, before, err := receiptNames(view.Setup, keep)
 	if err != nil {
 		return inspection, err
 	}
+	if inspection.empty() {
+		return inspection, nil
+	}
+	if err := s.ownedObjectsGone(ctx); err != nil {
+		return inspection, err
+	}
+	if len(view.GuestDisks) != 0 && !request.DiscardUnreadable {
+		return inspection, failure(uninstallCode, "guest disks no removal took back remain under "+view.Images+": "+strings.Join(view.GuestDisks, ", "),
+			"they may hold data: copy what you need from them, then run "+discardInvocation+" to remove them with the rest")
+	}
 	inspection.before = before
-	if keep {
+	switch {
+	case request.KeepPackages:
 		inspection.kept = added
-	} else if len(added) != 0 {
+	case request.DiscardUnreadable:
+	case len(added) != 0:
 		installed, err := removal.InstalledNames(ctx, added)
 		if err != nil {
 			return inspection, err
@@ -172,6 +207,23 @@ func (s Service) inspectUninstall(ctx context.Context, view UninstallView, keep 
 		inspection.packages = installed
 	}
 	return inspection, nil
+}
+
+func (s Service) ownedObjectsGone(ctx context.Context) error {
+	owned, err := s.ports.Owned.OwnedObjects(ctx)
+	if err != nil {
+		return err
+	}
+	if len(owned) == 0 {
+		return nil
+	}
+	named := make([]string, 0, len(owned))
+	for _, object := range owned {
+		named = append(named, object.Kind+" "+object.Name)
+	}
+	slices.Sort(named)
+	return failure(uninstallCode, "Bootwright-owned objects remain on this host: "+strings.Join(named, ", "),
+		"destroy the context that owns each with a build that reads it (bootwright destroy --context <name>), or remove each by hand, then run "+uninstallInvocation+" again")
 }
 
 func receiptNames(setup SetupView, keep bool) ([]string, []string, error) {
@@ -307,31 +359,46 @@ func (i uninstallInspection) plan() UninstallPlan {
 		plan.Actions = append(plan.Actions, UninstallAction{ID: RemoveHostPackagesAction,
 			Text: "Remove the host packages install added: " + strings.Join(i.packages, ", "), Items: slices.Clone(i.packages)})
 	}
-	var paths []string
-	if i.view.RootExists {
-		paths = append(paths, i.view.Root)
+	v := i.view
+	var paths, texts []string
+	add := func(seen bool, path, text string) {
+		if seen {
+			paths = append(paths, path)
+			texts = append(texts, path+text)
+		}
 	}
-	if i.view.StagingSeen {
-		paths = append(paths, i.view.Staging)
+	store := " (the install record, runtimes, wheel cache, controller record and tools)"
+	if v.Unreadable != nil {
+		store = " (a store this build cannot read: " + refusalText(v.Unreadable) + ")"
 	}
+	add(v.RootExists, v.Root, store)
+	add(v.StagingSeen, v.Staging, "")
+	add(v.LogsSeen, v.Logs, " (operation logs and run output)")
+	add(v.HostedSeen, v.Hosted, " (what contexts realized on this host, physical-erase receipts included)")
+	disks := " (empty)"
+	if len(v.GuestDisks) != 0 {
+		disks = " (guest disks no removal took back: " + strings.Join(v.GuestDisks, ", ") + ")"
+	}
+	add(v.ImagesSeen, v.Images, disks)
 	if len(paths) != 0 {
-		text := "Remove Bootwright's state on this host: "
-		if i.view.RootExists {
-			text += i.view.Root + " (the install record, runtimes, wheel cache, controller record and tools)"
-			if i.view.StagingSeen {
-				text += " and "
-			}
+		action := UninstallAction{ID: RemoveStateAction, Text: "Remove Bootwright's state on this host: " + strings.Join(texts, "; "), Items: paths}
+		if i.discard {
+			action = UninstallAction{ID: DiscardAction, Text: "Discard what this build cannot read or attribute, with everything beneath it: " + strings.Join(texts, "; "), Items: paths}
 		}
-		if i.view.StagingSeen {
-			text += i.view.Staging
-		}
-		plan.Actions = append(plan.Actions, UninstallAction{ID: RemoveStateAction, Text: text, Items: paths})
+		plan.Actions = append(plan.Actions, action)
 	}
-	if len(i.view.Leftovers) != 0 {
+	if len(v.Leftovers) != 0 {
 		plan.Actions = append(plan.Actions, UninstallAction{ID: FinishRemovalAction,
-			Text: "Finish removing what an interrupted uninstall renamed: " + strings.Join(i.view.Leftovers, ", "), Items: slices.Clone(i.view.Leftovers)})
+			Text: "Finish removing what an interrupted uninstall renamed: " + strings.Join(v.Leftovers, ", "), Items: slices.Clone(v.Leftovers)})
 	}
 	return plan
+}
+
+func refusalText(err error) string {
+	if reported := diagnostics.Of(err); len(reported) != 0 {
+		return reported[0].Message
+	}
+	return "it holds another build's state"
 }
 
 func (i uninstallInspection) keptText() []string {
@@ -342,5 +409,9 @@ func (i uninstallInspection) keptText() []string {
 	for _, name := range i.kept {
 		kept = append(kept, name+" (install added it; --keep-packages keeps it)")
 	}
-	return append(kept, "the host packages a controller stage installed", "the bootwright executable")
+	if i.discard {
+		kept = append(kept, "every host package: --discard-unreadable removes none")
+	}
+	return append(kept, "the host packages present before Bootwright", "the host packages a controller stage installed", "the bootwright executable",
+		"what a context realized on an SSH placement host, which no uninstall reaches")
 }

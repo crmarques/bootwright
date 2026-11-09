@@ -952,6 +952,8 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-controller-rebind-json", args: "controller rebind --output json", record: rebound},
 		{golden: "cli-controller-uninstall", args: "controller uninstall --yes", record: uninstalled},
 		{golden: "cli-controller-uninstall-json", args: "controller uninstall --yes --output json", record: uninstalled},
+		{golden: "cli-controller-uninstall-discard", args: "controller uninstall --discard-unreadable --yes", record: discarded},
+		{golden: "cli-controller-uninstall-discard-json", args: "controller uninstall --discard-unreadable --yes --output json", record: discarded},
 		{golden: "cli-controller-uninstall-nothing", args: "controller uninstall", record: func(r *dispatchRecord) {
 			r.result.uninstall = &prerequisites.UninstallResult{Outcome: "unchanged", Packages: []string{}, Paths: []string{}, Kept: []string{}}
 		}},
@@ -1477,8 +1479,16 @@ func rebound(r *dispatchRecord) {
 
 func uninstalled(r *dispatchRecord) {
 	r.result.uninstall = &prerequisites.UninstallResult{Outcome: "removed", Packages: []string{"podman", "python3.13"},
-		Paths: []string{"/var/lib/bootwright", "/var/lib/bootwright-staging"},
-		Kept:  []string{"openssh-clients (present before bootwright)", "the host packages a controller stage installed", "the bootwright executable"}}
+		Paths: []string{"/var/lib/bootwright", "/var/lib/bootwright-staging", "/var/log/bootwright", "/var/lib/bootwright-hosted", "/var/lib/libvirt/images/bootwright"},
+		Kept: []string{"openssh-clients (present before bootwright)", "the host packages present before Bootwright", "the host packages a controller stage installed",
+			"the bootwright executable", "what a context realized on an SSH placement host, which no uninstall reaches"}}
+}
+
+func discarded(r *dispatchRecord) {
+	r.result.uninstall = &prerequisites.UninstallResult{Outcome: "removed", Packages: []string{},
+		Paths: []string{"/var/lib/bootwright", "/var/log/bootwright", "/var/lib/bootwright-hosted", "/var/lib/libvirt/images/bootwright"},
+		Kept: []string{"every host package: --discard-unreadable removes none", "the host packages present before Bootwright", "the host packages a controller stage installed",
+			"the bootwright executable", "what a context realized on an SSH placement host, which no uninstall reaches"}}
 }
 
 func lifecycleRemedies(gaps []lifecycle.ReadinessGap) []string {

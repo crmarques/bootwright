@@ -1,0 +1,14 @@
+  ✓ Controller uninstalled from this host
+
+  Removed paths
+    /var/lib/bootwright
+    /var/log/bootwright
+    /var/lib/bootwright-hosted
+    /var/lib/libvirt/images/bootwright
+
+  Kept
+    every host package: --discard-unreadable removes none
+    the host packages present before Bootwright
+    the host packages a controller stage installed
+    the bootwright executable
+    what a context realized on an SSH placement host, which no uninstall reaches

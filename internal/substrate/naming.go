@@ -17,6 +17,10 @@ const Prefix = "bootwright"
 // carries the labels the hypervisor expects.
 const ImagePrefix = "/var/lib/libvirt/images/bootwright"
 
+// OwnershipNamespace is the namespace of the ownership metadata a libvirt
+// network, pool or domain carries.
+const OwnershipNamespace = "https://bootwright.io/substrate/v1"
+
 // MaxDataDisks is how many data disks a libvirt domain presents after its root.
 const MaxDataDisks = 7
 

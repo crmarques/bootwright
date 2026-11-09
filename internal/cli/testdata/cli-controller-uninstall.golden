@@ -7,8 +7,13 @@
   Removed paths
     /var/lib/bootwright
     /var/lib/bootwright-staging
+    /var/log/bootwright
+    /var/lib/bootwright-hosted
+    /var/lib/libvirt/images/bootwright
 
   Kept
     openssh-clients (present before bootwright)
+    the host packages present before Bootwright
     the host packages a controller stage installed
     the bootwright executable
+    what a context realized on an SSH placement host, which no uninstall reaches

@@ -98,7 +98,7 @@ func contextFreeAcquisition(path string, flags *pflag.FlagSet) bool {
 	case "controller install":
 		return true
 	case "controller uninstall":
-		return !boolValue(flags, "keep-packages")
+		return !boolValue(flags, "keep-packages") && !boolValue(flags, "discard-unreadable")
 	case "controller check":
 		return true
 	case "media add":

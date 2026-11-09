@@ -194,6 +194,8 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 		}
 	case "controller install":
 		return validateSetupFlags(flags)
+	case "controller uninstall":
+		return validateUninstallFlags(flags)
 	case "context delete":
 		if !boolValue(flags, "purge") {
 			return "context delete requires --purge=true"
@@ -293,6 +295,13 @@ func validateMachineTrust(command *cobra.Command, flags *pflag.FlagSet) string {
 }
 
 var hostKeyFingerprint = regexp.MustCompile(`^SHA256:[A-Za-z0-9+/]{43}$`)
+
+func validateUninstallFlags(flags *pflag.FlagSet) string {
+	if boolValue(flags, "discard-unreadable") && boolValue(flags, "keep-packages") {
+		return "--discard-unreadable conflicts with --keep-packages; a discard removes no package"
+	}
+	return ""
+}
 
 func validateSetupFlags(flags *pflag.FlagSet) string {
 	download := boolValue(flags, "download-only")

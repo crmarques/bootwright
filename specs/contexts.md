@@ -325,7 +325,11 @@ and never adopts or converts it, by what it lacks rather than by recognizing
 another build's files. The refusal says that another Bootwright build may
 manage live environments there, to run this build on another controller host
 or to retire that build's environments before archiving its root, and that the
-root is never moved aside while that build's services run.
+root is never moved aside while that build's services run. Once none of that
+build's environments remains,
+`bootwright controller uninstall --discard-unreadable` is the exit: it proves
+no Bootwright-owned object remains and removes that store with every root this
+build keeps on the host, under [the uninstall flow](controller.md#the-uninstall-flow).
 
 A context's name is its durable identity, so nothing is allocated for it:
 reserve the name durably before creating its directory. Revision IDs use `rev-`
@@ -829,7 +833,9 @@ directory, never a link: automation proves each existing one by no-follow
 descent before any effect, refuses one that is not without repair, and creates
 a missing one `0700` beneath its proved parent, top-down. A destroy removes
 each emptied directory up to the context's, never recursively and never the
-root, which [the uninstall flow](controller.md#the-uninstall-flow) owns.
+root, which [the uninstall flow](controller.md#the-uninstall-flow) owns: on a
+host that holds no context, `controller uninstall` removes it whole,
+physical-erase receipts included, and an SSH placement host keeps its own.
 
 ### Log root
 

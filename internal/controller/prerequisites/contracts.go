@@ -242,6 +242,15 @@ type UninstallTransaction interface {
 	RemoveState(ctx context.Context) ([]string, error)
 }
 
+type HostOwnedObjects interface {
+	OwnedObjects(ctx context.Context) ([]OwnedObject, error)
+}
+
+type OwnedObject struct {
+	Kind string
+	Name string
+}
+
 type HostPackageRemoval interface {
 	InstalledNames(ctx context.Context, names []string) ([]string, error)
 	EraseTest(ctx context.Context, names []string) error
