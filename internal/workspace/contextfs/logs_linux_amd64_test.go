@@ -300,6 +300,60 @@ func TestDeletionRemovesTheContextLogDirectory(t *testing.T) {
 	}
 }
 
+// A regular file the store never creates, one that is not mode 0600 or has
+// another link, is not an entry deletion may unlink: it refuses naming the
+// file and removes nothing else's.
+func TestDeletionRefusesAFileThatIsNoPrivateSingleLinkFile(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		plant func(t *testing.T, path string)
+		fix   func(t *testing.T, path string)
+	}{
+		{"mode", func(t *testing.T, path string) {
+			writePrivate(t, path, []byte("x"))
+			if err := os.Chmod(path, 0644); err != nil {
+				t.Fatal(err)
+			}
+		}, func(t *testing.T, path string) {
+			if err := os.Chmod(path, 0600); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"link", func(t *testing.T, path string) {
+			writePrivate(t, path, []byte("x"))
+			if err := os.Link(path, path+".other"); err != nil {
+				t.Fatal(err)
+			}
+		}, func(t *testing.T, path string) {
+			if err := os.Remove(path + ".other"); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store, record := lifecycleFixture(t)
+			registerOperation(t, store, fmt.Sprintf("op-%032x", 1))
+			logs := contextLogsPath(store, "example")
+			loose := filepath.Join(logs, operationLogs, "loose")
+			tc.plant(t, loose)
+			reported := diagnostics.Of(deleteExample(store, record))
+			if len(reported) != 1 || reported[0].Code != "context.state" || !strings.Contains(reported[0].Message, loose) {
+				t.Fatalf("a log directory holding a %s file reported %#v, want its refusal", tc.name, reported)
+			}
+			if _, err := os.Lstat(loose); err != nil {
+				t.Fatalf("the refused file was removed (%v)", err)
+			}
+			tc.fix(t, loose)
+			if err := deleteExample(store, record); err != nil {
+				t.Fatalf("the repeated deletion failed: %#v", diagnostics.Of(err))
+			}
+			if _, err := os.Lstat(logs); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("the deleted context left its log directory (%v)", err)
+			}
+		})
+	}
+}
+
 // A context initialized under a name an earlier context left logs under starts
 // with none: initialization removes the leftover directory before the context
 // is ready.

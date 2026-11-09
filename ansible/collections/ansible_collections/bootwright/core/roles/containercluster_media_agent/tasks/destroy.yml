@@ -6,7 +6,8 @@
       - bootwright_cluster_media_request.deliveryKind in ['fetch', 'push']
       - >-
         (bootwright_cluster_media_request.deliveryKind == 'fetch'
-         and bootwright_cluster_media_request.image.path.startswith('/var/lib/bootwright-hosted/'))
+         and bootwright_cluster_media_request.image.path.startswith(
+               '/var/lib/bootwright-hosted/' ~ bootwright_cluster_media_request.identity.context ~ '/services/'))
         or (bootwright_cluster_media_request.deliveryKind == 'push'
             and bootwright_cluster_media_request.image.path == bootwright_cluster_media_request.workRoot ~ '/agent.iso'
             and bootwright_cluster_media_request.image.url == '')

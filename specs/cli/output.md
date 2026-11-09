@@ -242,7 +242,7 @@ schemas, ordering and escaping remain stable.
 | `exitCode` | Exact Bootwright process exit status: `0`, `1`, `2`, or `130`, and `3` only for a `diff --exit-code` that found a difference, whose `result` is the comparison and whose `diagnostics` are empty. |
 | `result` | Command-specific object, or JSON `null` when no trustworthy result exists. |
 | `diagnostics` | Ordered diagnostic objects; empty when none. |
-| `logs` | Ordered safe paths relative to the state root for private logs actually created; empty when none. |
+| `logs` | Ordered safe paths relative to the [log root](../contexts/log-root.md) for private logs actually created; empty when none. |
 
 Successful result objects have stable top-level fields:
 
@@ -494,7 +494,7 @@ management controller proved after the verb, omitted for a Machine whose run
 did not settle; `previous`, the state it reported before the verb, omitted when
 it reported none; `changed`, whether the verb changed it, `false` for a row
 that did not settle; and `logs`, an array of the safe paths, relative to the
-state root, of that run's retained output, in the form the envelope's
+log root, of that run's retained output, in the form the envelope's
 [`logs`](#private-operation-logs) uses. Envelope `logs` lists every row's files
 in row order. When any Machine did not settle and the request named several,
 the envelope has `ok` `false` and `exitCode` `1` and still carries the rows of
@@ -874,7 +874,7 @@ probe. Its result orders these fields:
 | `secrets` | `declared`, the Secret objects the selected input declares, and `bindings`, the Secret bindings the current operation's record holds: one per operation however many Secrets it covers, and 0 beside no operation and once a completed removal finalized, which its pristine evidence proves without reading the keyring. |
 | `readiness` | Ordered `{kind, name, state, remedy}` rows for what the next `plan` and `apply` read from the selected input and the host does not hold: each declared Secret whose material is `missing` or `stale` as [`secret check`](../secrets.md) reports it (`kind` `secret`, ordered by name), then each installer image a MachineImage's `bootMedia` or a MachineInstallProfile's `hostedTree.fromMedia` names that [`media list`](../managed-os.md) does not show (`kind` `media`, `state` `missing`, ordered by name). `remedy` is the command that supplies it: `bootwright secret set --context <name> --name <secret> ...` or `bootwright secret generate ...` as `secret check` names it, and `bootwright media add --name <image> --from-file <path>`, with `<path>` left for the operator. The rows come from the keyring's metadata and the media store's records alone, never from Secret material or image bytes, under the shared reads those commands take, and run no effect. `[]` beside an operation, where the frozen plan and its Secret binding decide, while a deletion or `bootwright controller install` is the only step, when nothing is missing, and when a read fails (`secret check` and `media list` report the failure); a failed read leaves only its own rows out. Human output has a Readiness section listing each row's state and `Kind/name`, omitted when empty. |
 | `nextSteps` | Ordered command strings whose decision would pass over the records `status` read, as the [lifecycle receipt](../cli.md#lifecycle-receipt) states; empty when none would. Each `readiness` remedy, in row order, precedes the `plan` step. |
-| `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next` (the receipt's action token, which the human Lifecycle `Next` row prints as the receipt does; the command it maps to is in `nextSteps`), `anotherBuild` (boolean: the build in hand is not the one that registered the operation, by the rule of [another build](../state-reconciliation.md#dependency-safety-during-recovery)), `lineage` (present only when the operation is an [additive apply](../state-reconciliation.md#additive-apply): the applies it adds to, root first and itself last, each `{operation, verb, state}`), ordered `blocks` of `{id, description, stage, state, outcome, attempts}`, and `logs` of safe paths relative to the state root, in the order and form the envelope's [`logs`](#private-operation-logs) list them. A block that is `unknown` or `running` adds `unresolved`, `{reason, remedy}`: why its outcome is unproved and what the operator does, which for a block no resolution observed is the exact command, with `--context` and the frozen plan's `--authorize` tokens, that observes it, as its [resolution](../state-reconciliation.md#attempts-and-unknown-outcomes) names them; every other block omits it. |
+| `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next` (the receipt's action token, which the human Lifecycle `Next` row prints as the receipt does; the command it maps to is in `nextSteps`), `anotherBuild` (boolean: the build in hand is not the one that registered the operation, by the rule of [another build](../state-reconciliation.md#dependency-safety-during-recovery)), `lineage` (present only when the operation is an [additive apply](../state-reconciliation.md#additive-apply): the applies it adds to, root first and itself last, each `{operation, verb, state}`), ordered `blocks` of `{id, description, stage, state, outcome, attempts}`, and `logs` of safe paths relative to the log root, in the order and form the envelope's [`logs`](#private-operation-logs) list them. A block that is `unknown` or `running` adds `unresolved`, `{reason, remedy}`: why its outcome is unproved and what the operator does, which for a block no resolution observed is the exact command, with `--context` and the frozen plan's `--authorize` tokens, that observes it, as its [resolution](../state-reconciliation.md#attempts-and-unknown-outcomes) names them; every other block omits it. |
 | `handoff` | `{ready, reasons}` derived from the [handoff predicate](../state-reconciliation.md#bootstrap-completion-and-gitops-readiness), with a boolean `ready` and ordered reason strings; `reasons` is `[]` when ready. Human output has a Handoff section with `ready`, or `not ready` followed by each reason. A completed apply with a latched log fault over unchanged input offers the settled apply in `nextSteps` as the invocation that [restores](../state-reconciliation.md#converging-an-effect) that boundary. |
 | `contradictions` | Ordered strings naming what the context's durable records contradict, each worded as the [refusal](../state-reconciliation.md#continuation-and-removal) over those records names it, and last an operation whose continuation or removal reopens a frozen Secret binding the context's keyring no longer lists, or whose keyring listing fails reporting the material corrupt or undecryptable; empty when nothing does. |
 
@@ -1109,32 +1109,32 @@ no lifecycle identity or log. Setup uses its
 [private recovery receipt](../controller.md#publication-and-interrupted-setup),
 separate from the lifecycle receipt and operation logs, and keeps what its
 dnf printed in a [setup run](#setup-run-output) and nothing
-else. Only lifecycle effects and unknown-effect resolution use the state-owned
-operation, block, and attempt log tree below; a
+else. Only lifecycle effects and unknown-effect resolution use the operation,
+block, and attempt log tree below; a
 [bounded run](#bounded-run-output) retains what its own adapter printed and
 nothing else.
 
-Managed operations use this tree:
+Managed operations use this tree beneath the log root, `/var/log/bootwright`:
 
 ```text
-<state-root>/contexts/<context-name>/state/operations/<operation-id>/
-  logs/
-    operation.jsonl
-    blocks/<block-id>/
-      attempt-000001.jsonl
-      attempt-000001.output
-      attempt-000002.jsonl
-      attempt-000002-resolution-000001.jsonl
-<state-root>/contexts/<context-name>/state/runs/<run-id>/
-  run.output
+contexts/<context-name>/operations/<operation-id>/
+  operation.jsonl
+  blocks/<block-id>/
+    attempt-000001.jsonl
+    attempt-000001.output
+    attempt-000002.jsonl
+    attempt-000002-resolution-000001.jsonl
 ```
 
-[Workspace](../contexts.md#storage-locking-and-publication) owns `<state-root>` and `<context-name>`; state reconciliation
-owns `<operation-id>`, `<run-id>`, `<block-id>`, and attempt numbers. Their safe
+The [log root](../contexts/log-root.md) owns this layout, its modes, how it is
+created, and the retention of operation logs; the log root is never part of the
+store, so no path here is relative to the state root. State reconciliation owns
+`<operation-id>`, `<block-id>`, and attempt numbers, and Workspace owns
+`<context-name>`. Their safe
 grammar, allocation, collision, and crash-gap rules are defined by
 [state reconciliation](../state-reconciliation.md#durable-identities-and-private-paths).
-Directories are `0700`; files are `0600`. Creation is exclusive beneath a held,
-verified root handle and never follows a link or overwrites unrelated content.
+Creation is exclusive beneath a held, verified directory handle and never
+follows a link or overwrites unrelated content.
 
 `operation.jsonl` contains bounded normalized operation summaries. Each effect
 or resolution attempt has one separately identified log. Raw callback bytes,
@@ -1159,11 +1159,10 @@ requires the adapter process to be launched so that it does not withhold its own
 output, because a tool that buffers until it exits defeats the retention
 whatever this side does. Each write publishes before returning, so its final bytes remain visible
 even when the adapter produces nothing more. The file is bounded and truncated at its limit without an inline
-marker, or sooner where it would take the operation area into the bytes
-[admission keeps free](../contexts.md#storage-locking-and-publication) for
-records and logs, which leaves no file once nothing fits beneath them. It is
-troubleshooting material only: nothing reads it back, it is never product
-output, ownership evidence or a continuation cursor, and its attempt log
+marker, or sooner where the context's operation log area holds
+`operationstore.MaxContextLogBytes`, which leaves no file once nothing fits
+beneath it. It is troubleshooting material only: nothing reads it back for a
+decision, it is never product output, ownership evidence or a continuation cursor, and its attempt log
 records the file by name with the bytes it holds and whether the bound cut it
 short. Neither retaining it nor failing to ever changes the outcome the
 operation records.
@@ -1178,17 +1177,18 @@ Logs are troubleshooting material, never ownership evidence or a continuation
 cursor.
 
 Human output names the operation's own log directory as a `Logs` field, giving
-its path on this host rather than one relative to the state root, because the
+its path on this host rather than one relative to the log root, because the
 point of naming it is that an operator can open it. It is named twice: once
 before the first effect runs and so before every row under `Progress`, so the
 work can be followed while it happens, and once after the terminal summary, so
 it survives in the scrollback. A check that precedes registration precedes the
 field as well, because the directory belongs to an operation that does not
 exist until the check admits it. Both name the same directory, which is where a
-run still in flight is writing; that directory and its files are private to the
-identity owning the state tree, so reading them is a privileged action. JSON
-`logs` keeps naming safe paths relative to the state root, and lists created
-paths once: operation log first, then blocks in frozen plan order, effect
+run still in flight is writing; that directory and its files are private to
+`root`, so reading them is a privileged action. JSON `logs` names safe paths
+relative to the log root, such as
+`contexts/<context-name>/operations/<operation-id>/operation.jsonl`, and lists
+created paths once: operation log first, then blocks in frozen plan order, effect
 attempts in numeric order, each attempt's retained adapter output directly
 after its own log, and their resolution attempts in numeric order.
 
@@ -1196,80 +1196,78 @@ after its own log, and their resolution attempts in numeric order.
 
 A [bounded operation](../cli.md#machine-power-operations) registers no lifecycle
 operation, so it has no attempt log for its adapter's output to sit beside. It
-allocates a `<run-id>` of its own and keeps exactly one file, `run.output`,
-holding what that adapter printed on its own standard output and error, raw and
-unparsed. It writes no structured log, because it publishes no events, and it
-publishes no evidence, ownership or continuation: a run is never an operation,
-and nothing resumes, continues or is resolved through one.
+keeps exactly one file, `contexts/<context-name>/runs/run-NNNNNN.output`
+beneath the log root, holding what that adapter printed on its own standard
+output and error, raw and unparsed. It writes no structured log, because it
+publishes no events, and it publishes no evidence, ownership or continuation:
+a run is never an operation, and nothing resumes, continues or is resolved
+through one.
 
-The file is created exclusively, under the same grammar, modes and retention
-bounds an attempt's retained output has, once the controller admits the run's
-private Python runtime and before the adapter runs, so the path an operator is
-given exists whether or not the run reaches its result. Its content is retained
-while the run produces it, under the same masking obligation: every adapter
-task that reads bound material marks itself `no_log`, so a retained run carries
-none. Neither retaining it nor failing to changes what the run reports. An
-adapter failure that its output explains points its remediation at this file,
+The file is created exclusively, under the log root's
+[numbering, modes and retention](../contexts/log-root.md#bounded-runs), once
+the controller admits the run's private Python runtime and before the adapter
+runs, so the path an operator is given exists whether or not the run reaches
+its result. Its content is retained while the run produces it, under the same
+masking obligation: every adapter task that reads bound material marks itself
+`no_log`, so a retained run carries none. It is cut at
+`operationstore.MaxAdapterOutputBytes` without a marker. Neither retaining it
+nor failing to changes what the run reports. An adapter failure that its output explains points its remediation at this file,
 as an attempt's points at the output beside that attempt's log. A
 [reading](../cli.md#resource-inspection-and-explicit-access) names no retained
-output, so it keeps none: it allocates no `<run-id>`, creates nothing in the
-context's runs area, discards what its adapter printed and points no
-remediation at output.
+output, so it keeps none: it creates no run file, discards what its adapter
+printed and points no remediation at output.
 
-Human output names the run's own directory as the same `Logs` field, before the
+Human output names the run's own file as the same `Logs` field, before the
 adapter runs and again after the result, for the same reason an operation names
-its log tree twice. Naming it first is what a refused run depends on, because a
+its log directory twice. Naming it first is what a refused run depends on, because a
 run that fails reports a diagnostic instead of a result. JSON `logs` names the
-retained file the same way an operation's logs are named. A JSON invocation
+retained file relative to the log root, as an operation's logs are named. A JSON invocation
 reports no progress, so a run that fails once the controller admits its private
-Python runtime, which is where human output first names the directory, names
+Python runtime, which is where human output first names the file, names
 the file in its failure envelope: `result` is `null` and `logs` lists the file
 beside the diagnostic, whether the adapter refused or the run was interrupted,
 canceled or past its deadline. A batch of several Machines whose runs failed
 with diagnostics keeps the [result](#machine-results) of the runs it admitted
 beside them, but one interrupted, canceled or past its deadline has a `null`
 `result` and lists every admitted run's file. A run that fails before that
-admission lists none, as its human output names no directory, and keeps none: the file is
+admission lists none, as its human output names no file, and keeps none: the file is
 created only once the runtime is admitted, so a refused admission, such as a
 native package transaction holding its lock, or an interrupt, cancellation or
-deadline that lands first leaves no unnamed file behind. A run whose directory
-or file cannot be created, including one an interrupt stops between the two
-and one whose file landed before an interrupt, or a failed read-back or sync of
-its publication, stopped it, fails before its adapter runs, names neither and
-removes what it made, even once interrupted: the file while it still holds
-nothing, then the directory.
+deadline that lands first leaves no unnamed file behind. A run whose file
+cannot be created, including one an interrupt stops first and one whose file
+landed before an interrupt, or a failed read-back or sync of its publication,
+stopped it, fails before its adapter runs, names no file and removes the file
+it created, even once interrupted.
 
 ### Setup run output
 
 Local `controller install` registers no lifecycle operation and selects no context, so the
 dnf it runs has neither an attempt log nor a context's run area to sit beside.
-A confirmed setup first creates a run of its own beneath its setup subtree and
-keeps exactly one file there:
+A confirmed setup first creates an output of its own in the log root's host
+directory and keeps exactly one file there:
 
 ```text
-/var/lib/bootwright/setup/runs/<setup-run-id>/
-  run.output
+/var/log/bootwright/host/setup-NNNNNN.output
 ```
 
-`<setup-run-id>` is `setup-` and six digits, numbered upward from
-`setup-000001`. The
-[setup subtree](../contexts/controller-record.md#the-setup-subtree) owns its
-grammar, modes, byte bound, admission and retention: only the newest runs are
-kept, and the oldest is removed before a new one is created. The run and its
-file are created exclusively beneath the held setup directory handle, never
-through a link and never over an existing name. The file exists before dnf
+`NNNNNN` is six digits, numbered upward from `000001`. The
+[log root](../contexts/log-root.md#setup-output) owns its numbering, modes,
+byte bound, admission and retention: only the newest outputs are kept, and the
+oldest is removed before a new one is created. The file is created
+exclusively beneath the held host log directory handle, never through a link
+and never over an existing name. It exists before dnf
 starts and keeps dnf's standard output and error, raw and unparsed, while it
 runs. It is truncated at its bound without a marker. Like every retained
 output it is troubleshooting material only: the receipt never names it and
-nothing reads it back.
+nothing reads it back for a decision.
 
-A dry run and a no-op setup create no run. Neither creating, writing nor
-removing a run ever changes a setup outcome or its receipt: a run that cannot
+A dry run and a no-op setup create no output. Neither creating, writing nor
+removing one ever changes a setup outcome or its receipt: an output that cannot
 be created leaves dnf's output discarded, exactly as a setup kept none.
 
-Human setup output names the run's directory on this host as the same `Logs`
+Human setup output names the file on this host as the same `Logs`
 field, once before dnf starts and once with the result, for the reason an
-operation names its log tree twice. A dry run's JSON output starts nothing, so
+operation names its log directory twice. A dry run's JSON output starts nothing, so
 no `logs` member names it.
 
 ## Multi-machine presentation

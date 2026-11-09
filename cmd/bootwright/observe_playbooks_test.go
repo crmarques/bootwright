@@ -157,6 +157,9 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("managedos_install_anaconda", "update_observe.yml", "ansible.builtin.set_fact", "names the pinned key's algorithms and the update answers in memory", read)
 	add("managedos_install_anaconda", "update_observe.yml", observeCollection+"managedos_update", "runs the update worker's read-only inspect operation over ssh pinned to the reported key", observeRegistrationInspect)
 	add("managedos_package_tree", "observe.yml", observeCollection+"managedos_tree_inspect", "reads the shared tree and its staging area", read)
+	add("managedos_package_tree", "observe.yml", observeCollection+"hosted_area", "proves the artifact server's hosted directories without creating one", func(params, _ map[string]any) bool {
+		return params["state"] == "proved"
+	})
 	add("managedos_host_firewall", "observe.yml", observeCollection+"ssh_key_policy", "reads the host's effective crypto policy", read)
 	add("managedos_host_firewall", "observe.yml", "ansible.builtin.set_fact", "names the pinned key's algorithms in memory", read)
 	add("managedos_host_firewall", "observe.yml", "ansible.builtin.fail", "refuses an unproved observation without touching the guest", read)

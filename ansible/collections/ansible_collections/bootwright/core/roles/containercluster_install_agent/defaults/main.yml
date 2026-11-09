@@ -2,6 +2,7 @@
 # Derived from the frozen request only. Nothing here is authored by desired
 # state, and no value selects an executable, a role or a task file.
 containercluster_install_agent_work: '{{ bootwright_cluster_install_request.workRoot }}'
+containercluster_install_agent_area: "{{ ['clusters', bootwright_cluster_install_request.identity.cluster] }}"
 # The copy of the installer's kubeconfig this installation keeps while that file
 # is whole (the inspection's KEPT): every read of the cluster and the access
 # offered for custody go through it, never through the file the installer

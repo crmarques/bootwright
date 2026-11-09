@@ -948,12 +948,13 @@ publication and the controller stage's dnf take; a launch takes none and holds
 its runtime's `.lock` shared instead. The OS package-manager lock is an
 additional requirement, not a replacement for Bootwright coordination.
 
-**Setup subtree.** Setup keeps its pending intent, receipt, runtimes, wheel
-cache and runs in `/var/lib/bootwright/host/setup/`, beside the
+**Setup subtree.** Setup keeps its pending intent, receipt, runtimes and wheel
+cache in `/var/lib/bootwright/host/setup/`, beside the
 controller record's `host/record/`, independently versioned as
 `prerequisites.SetupStateFormat` and outside the registry; the
 [controller record](contexts/controller-record.md#the-setup-subtree) owns its
-layout and bounds.
+layout and bounds. Its dnf output is kept under the
+[log root](contexts.md#log-root), not here.
 
 **Execution closure.** An operation freezes
 `prerequisites.RuntimeClosureFormat`: SHA-256 over that name, the lock

@@ -95,7 +95,9 @@ past `999999` refuses `lifecycle.state`, naming the `runs/` directory to remove
 
 ## Setup output
 
-A setup's output is `host/setup-NNNNNN.output`, its number also the setup's ID.
+A setup's output is `host/setup-NNNNNN.output`, its number the setup's ID for a
+setup that starts afresh; a resumed setup writes its output under a new number
+and keeps its original ID.
 The next is numbered past both the newest output and every `setup-NNNNNN` the
 setup record's receipt or pending intent names, so retention never lends a
 later setup an ID a receipt attributes

@@ -138,6 +138,40 @@ def test_any_other_removal_failure_still_fails(tmp_path, monkeypatch):
         hosted_area.remove("lab", ["clusters", "sno"], str(root), OWNER)
 
 
+def sibling_destroy_before_each_mkdir(monkeypatch, root, times):
+    """Remove the empty machines directory just before the walk creates beneath it, as a sibling destroy does."""
+    real = os.mkdir
+    state = {"left": times}
+
+    def raced(name, mode=0o777, dir_fd=None):
+        if name == "node" and state["left"] > 0:
+            state["left"] -= 1
+            os.rmdir(root / "lab" / "machines")
+        return real(name, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(hosted_area.os, "mkdir", raced)
+    return state
+
+
+def test_a_create_walk_restarts_when_a_sibling_destroy_removes_its_parent(tmp_path, monkeypatch):
+    root = root_of(tmp_path)
+    hosted_area.ensure("lab", ["machines"], str(root), OWNER)
+    state = sibling_destroy_before_each_mkdir(monkeypatch, root, 1)
+    assert hosted_area.ensure("lab", ["machines", "node"], str(root), OWNER) is True
+    assert state["left"] == 0
+    for path in (root / "lab", root / "lab" / "machines", root / "lab" / "machines" / "node"):
+        assert mode(path) == 0o700, path
+
+
+def test_a_create_walk_that_keeps_losing_the_race_refuses_after_a_bounded_number_of_tries(tmp_path, monkeypatch):
+    root = root_of(tmp_path)
+    hosted_area.ensure("lab", ["machines"], str(root), OWNER)
+    state = sibling_destroy_before_each_mkdir(monkeypatch, root, 10)
+    with pytest.raises(hosted_area.Refusal):
+        hosted_area.ensure("lab", ["machines", "node"], str(root), OWNER)
+    assert state["left"] == 10 - hosted_area.ATTEMPTS
+
+
 @pytest.mark.parametrize("context, path", [
     ("lab", []),
     ("lab", ["logs", "x"]),

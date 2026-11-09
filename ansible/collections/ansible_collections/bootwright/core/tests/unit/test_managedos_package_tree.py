@@ -22,6 +22,7 @@ from types import SimpleNamespace
 import pytest
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar
+from ansible_collections.bootwright.core.plugins.module_utils import hosted_area
 from ansible_collections.bootwright.core.plugins.module_utils.package_tree import observe
 from ansible_collections.bootwright.core.plugins.action import managedos_tree_protocol as protocol
 
@@ -29,9 +30,17 @@ ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "managedos_packag
 LOADER = DataLoader()
 SOURCE = b"the frozen installation DVD"
 SHA = hashlib.sha256(SOURCE).hexdigest()
-PUBLICATION = "/var/lib/bootwright-hosted/lab/services/public/os/rhel-9-8/tree"
+PUBLICATION = "/var/lib/bootwright-hosted/lab/services/artifact-server/artifacts/public/os/rhel-9-8/tree"
 MEDIA = "rhel-9.8-x86_64-dvd.iso"
 MAPPED = ("/var/lib/bootwright-hosted/", "/var/lib/bootwright/media/")
+
+
+@pytest.fixture(autouse=True)
+def private_directories():
+    """Every directory the test host creates is 0700, as the hosted directories the role proves are."""
+    previous = os.umask(0o077)
+    yield
+    os.umask(previous)
 
 
 class Interrupted(Exception):
@@ -50,7 +59,7 @@ class Host:
         self.source = self.local("/var/lib/bootwright/media/" + MEDIA)
         self.source.parent.mkdir(parents=True)
         self.source.write_bytes(SOURCE)
-        self.extracts, self.kill, self.evidence = 0, False, []
+        self.extracts, self.kill, self.evidence, self.proofs = 0, False, [], []
         self.values = dict(LOADER.load_from_file(str(ROLE / "defaults/main.yml"), trusted_as_template=True))
         self.values.update({"bootwright_os_tree_digest": "1" * 64, "bootwright_os_tree_material": {},
                             "bootwright_os_tree_request": {
@@ -110,6 +119,15 @@ class Host:
                 self.values[task["register"]] = result
 
     def invoke(self, key, args):
+        if key.endswith("hosted_area"):
+            assert args["state"] == "proved", args
+            root = str(self.root / "var/lib/bootwright-hosted")
+            try:
+                exists = hosted_area.prove(args["context"], args["path"], root, os.getuid())
+            except hosted_area.Refusal as refusal:
+                raise Refused(str(refusal)) from None
+            self.proofs.append(list(args["path"]))
+            return {"changed": False, "exists": exists}
         if key.endswith("managedos_tree_inspect"):
             request = args["request"]
             return {"changed": False, "observation": observe(str(self.local(request["publication"]["path"])), request["media"]["sha256"])}
@@ -281,3 +299,23 @@ def test_apply_from_the_frozen_source_names_no_refusal(tmp_path, monkeypatch):
     host.run("apply.yml")
     assert not host.refusals()
     assert host.extracts == 1 and host.completed()[-1]["evidence"]["postcondition"]
+
+
+@pytest.mark.parametrize("operation", ["apply.yml", "destroy.yml", "observe.yml"])
+def test_every_entry_point_proves_the_artifact_servers_hosted_directories_before_any_effect(tmp_path, monkeypatch, operation):
+    host = Host(tmp_path, monkeypatch)
+    server = host.tree.parents[3]
+    server.mkdir(parents=True)
+    server.chmod(0o755)
+    host.tree.mkdir(parents=True)
+    (host.tree / "preserved").write_text("kept")
+    with pytest.raises(Refused, match="is not a directory only root may enter"):
+        host.run(operation)
+    assert host.extracts == 0 and not host.evidence[1:]
+    assert not host.stage.exists() and (host.tree / "preserved").read_text() == "kept"
+
+
+def test_the_proof_names_the_servers_service_directories(tmp_path, monkeypatch):
+    host = Host(tmp_path, monkeypatch)
+    host.run("apply.yml")
+    assert host.proofs == [["services", "artifact-server", "artifacts"]]

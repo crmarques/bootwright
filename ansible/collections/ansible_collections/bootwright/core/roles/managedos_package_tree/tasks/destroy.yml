@@ -20,6 +20,12 @@
     phase: loaded
   no_log: true
 
+- name: Prove the artifact server's hosted directories before any effect
+  bootwright.core.hosted_area:
+    context: '{{ bootwright_os_tree_request.identity.context }}'
+    path: '{{ managedos_package_tree_area }}'
+    state: proved
+
 - name: Prove the publication paths before removal
   bootwright.core.managedos_tree_inspect:
     request: '{{ bootwright_os_tree_request }}'

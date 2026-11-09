@@ -335,6 +335,30 @@ def test_only_an_apply_keeps_the_installers_kubeconfig():
         assert found and not [task for task in found if task[INSPECT].get("keep", False)], name
 
 
+# Only a path string check stood between the apply and the work area it writes
+# the booted mark and the kept kubeconfig into, so the apply proves each
+# existing hosted directory down to the cluster's by no-follow descent before
+# any task but its request checks and the handoff.
+def test_the_apply_proves_the_hosted_cluster_directories_before_any_effect():
+    entries = apply_tasks()
+    proof = only(entries, lambda task: "bootwright.core.hosted_area" in task)
+    assert entries[proof]["bootwright.core.hosted_area"] == {
+        "context": "{{ bootwright_cluster_install_request.identity.context }}",
+        "path": "{{ containercluster_install_agent_area }}", "state": "proved"}
+    assert all(set(task) - {"name", "no_log", "vars", "loop", "loop_control"} <= {
+        "ansible.builtin.assert", "bootwright.core.containercluster_install_protocol", "ansible.builtin.include_role"}
+        for task in entries[:proof])
+    defaults = dict(LOADER.load_from_file(str(ROLE / "defaults/main.yml"), trusted_as_template=True))
+    templar = Templar(loader=LOADER, variables={**defaults, "bootwright_cluster_install_request": {
+        "identity": {"context": "lab", "cluster": "sno"}, "workRoot": "/var/lib/bootwright-hosted/lab/clusters/sno"}})
+    assert templar.template(defaults["containercluster_install_agent_area"]) == ["clusters", "sno"]
+    equality = next(item for item in entries[0]["ansible.builtin.assert"]["that"] if "/clusters/" in item)
+    assert templar.evaluate_conditional(equality)
+    other = Templar(loader=LOADER, variables={"bootwright_cluster_install_request": {
+        "identity": {"context": "lab", "cluster": "sno"}, "workRoot": "/var/lib/bootwright-hosted/lab/machines/node/install"}})
+    assert not other.evaluate_conditional(equality)
+
+
 def refused(observation):
     """Whether the apply's refusal fires over what its first inspection named, and its message."""
     refusal = one("apply.yml", lambda task: task.get("name") == "Refuse an installation with no whole kubeconfig to read its cluster through")

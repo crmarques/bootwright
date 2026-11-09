@@ -290,8 +290,8 @@ func logTreeBytes(dir *directory, depth int) int64 {
 }
 
 // removeLogTree removes a log directory holding only the owner's private
-// directories on its device, files and links, never followed; anything else
-// refuses by its path.
+// directories on its device, private singly linked files and links, never
+// followed; anything else refuses by its path.
 func (s *Store) removeLogTree(ctx context.Context, parent *directory, name string, expected syscall.Stat_t, depth int) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -318,7 +318,7 @@ func (s *Store) removeLogTree(ctx context.Context, parent *directory, name strin
 		switch {
 		case owned && stat.Mode&syscall.S_IFMT == syscall.S_IFDIR:
 			err = s.removeLogTree(ctx, dir, child, stat, depth+1)
-		case owned && (stat.Mode&syscall.S_IFMT == syscall.S_IFREG || stat.Mode&syscall.S_IFMT == syscall.S_IFLNK):
+		case owned && (private(stat, syscall.S_IFREG, dir.identity.Uid, dir.identity.Gid) || stat.Mode&syscall.S_IFMT == syscall.S_IFLNK):
 			if unlinkVerified(dir, child, stat, false) != nil {
 				err = unsafeLogPath(filepath.Join(location, child))
 			}

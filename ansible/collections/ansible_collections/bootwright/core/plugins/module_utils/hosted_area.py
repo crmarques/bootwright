@@ -22,11 +22,16 @@ AREAS = frozenset(("services", "machines", "clusters"))
 NAME = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?")
 DEPTH = 4
 MODE = 0o700
+ATTEMPTS = 3
 FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 
 
 class Refusal(ValueError):
     """A hosted directory is not one only root may enter, or the request names no hosted directory."""
+
+
+class Vanished(Exception):
+    """A directory this walk was creating beneath was removed by a sibling destroy before the walk held it."""
 
 
 def unsafe(path):
@@ -67,9 +72,14 @@ def created(parent, name, path, owner):
     except FileExistsError:
         descriptor = entered(parent, name, path, owner)
         if descriptor is None:
-            raise unsafe(path)
+            raise Vanished(path) from None
         return descriptor, False
-    descriptor = os.open(name, FLAGS, dir_fd=parent)
+    except FileNotFoundError:
+        raise Vanished(path) from None
+    try:
+        descriptor = os.open(name, FLAGS, dir_fd=parent)
+    except FileNotFoundError:
+        raise Vanished(path) from None
     try:
         os.fchmod(descriptor, MODE)
     except OSError:
@@ -78,7 +88,7 @@ def created(parent, name, path, owner):
     os.close(descriptor)
     descriptor = entered(parent, name, path, owner)
     if descriptor is None:
-        raise unsafe(path)
+        raise Vanished(path)
     return descriptor, True
 
 
@@ -87,8 +97,20 @@ def walk(context, path, root, owner, create):
 
     Returns the open descriptors, the paths they name and how many were
     created; the walk stops at the first missing component when it creates
-    nothing.
+    nothing. A directory that a sibling destroy removes while a creating walk
+    is beneath it restarts the walk from the root, at most ATTEMPTS times in
+    all, because the sibling removed it only because it was empty.
     """
+    for attempt in range(ATTEMPTS):
+        try:
+            return descend(context, path, root, owner, create)
+        except Vanished as error:
+            if attempt == ATTEMPTS - 1:
+                raise unsafe(str(error)) from None
+    raise AssertionError("unreachable")
+
+
+def descend(context, path, root, owner, create):
     listed = [os.path.basename(root)] + names(context, path)
     current = os.path.dirname(root)
     held = [os.open(current, FLAGS)]

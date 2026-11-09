@@ -32,6 +32,12 @@
     loop_var: containercluster_install_agent_node
     label: '{{ containercluster_install_agent_node.machine }}'
 
+- name: Prove the context's hosted cluster directories before any effect
+  bootwright.core.hosted_area:
+    context: '{{ bootwright_cluster_install_request.identity.context }}'
+    path: '{{ containercluster_install_agent_area }}'
+    state: proved
+
 - name: Read the media's logical root-volume binding
   ansible.builtin.slurp:
     src: '{{ bootwright_cluster_install_request.workRoot }}/bootwright-media.json'

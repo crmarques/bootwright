@@ -9,7 +9,8 @@
         ~ bootwright_os_install_request.identity.context ~ '/machines/' ~ bootwright_os_install_request.identity.object ~ '/install'
       - (bootwright_os_install_request.image is defined) != (bootwright_os_install_request.private is defined)
       - (bootwright_os_install_request.image.path if bootwright_os_install_request.image is defined
-         else bootwright_os_install_request.private.path).startswith('/var/lib/bootwright-hosted/')
+         else bootwright_os_install_request.private.path).startswith(
+           '/var/lib/bootwright-hosted/' ~ bootwright_os_install_request.identity.context ~ '/services/')
       - bootwright_os_install_request.markerPath == '/etc/bootwright/install-marker.json'
       - bootwright_os_install_request.hostKeyPath == '/etc/bootwright/host-key.pub'
       - bootwright_os_install_digest is match('[0-9a-f]{64}')

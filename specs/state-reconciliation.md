@@ -358,9 +358,10 @@ Context-free read-only commands do not access the root except available
 [Controller inspection](controller.md#the-setup-flow), which
 may read shared host metadata without selecting a context. Context-backed reads
 acquire the existing store's shared lock and never create, repair or migrate
-state. A bounded run takes the same shared lock and creates at most one thing:
+state. A bounded run takes the same shared lock and creates only
 the file under the [log root](contexts.md#log-root) its own adapter output is
-[retained](cli/output.md#bounded-run-output) in, once its private runtime is
+[retained](cli/output.md#bounded-run-output) in, with any private log
+directory above it that is missing, once its private runtime is
 admitted and only for a run whose result names it, so a reading creates
 nothing. That file is troubleshooting material, never state, so a run still
 repairs and migrates nothing. A bounded run or a bounded consumer binds no
