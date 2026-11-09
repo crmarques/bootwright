@@ -8,6 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/logview"
@@ -106,4 +107,8 @@ func (*Store) OpenRun(ctx context.Context, _, _ string) (logview.Stream, bool, e
 
 func (*Store) OpenSetup(ctx context.Context, _ string) (logview.Stream, bool, error) {
 	return nil, false, unsupported(ctx)
+}
+
+func (*Store) Paths(ctx context.Context, _ string) ([]lifecycle.ContextPath, []diagnostics.Diagnostic, error) {
+	return nil, nil, unsupported(ctx)
 }

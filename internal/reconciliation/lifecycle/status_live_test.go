@@ -86,14 +86,15 @@ func TestStatusLiveReadsNoHost(t *testing.T) {
 }
 
 type pathsSource struct {
-	asked []string
-	paths []ContextPath
-	err   error
+	asked    []string
+	paths    []ContextPath
+	warnings []diagnostics.Diagnostic
+	err      error
 }
 
-func (p *pathsSource) Paths(_ context.Context, name string) ([]ContextPath, error) {
+func (p *pathsSource) Paths(_ context.Context, name string) ([]ContextPath, []diagnostics.Diagnostic, error) {
 	p.asked = append(p.asked, name)
-	return slices.Clone(p.paths), p.err
+	return slices.Clone(p.paths), slices.Clone(p.warnings), p.err
 }
 
 // The places a context keeps its content are asked of the host only when the
@@ -108,6 +109,7 @@ func TestStatusPathsOnlyWhenAsked(t *testing.T) {
 		{Kind: "hosted", Path: "/var/lib/bootwright-hosted/lab"},
 		{Kind: "libvirt-images", Path: "/var/lib/libvirt/images/bootwright/lab"},
 	}}
+	source.warnings = []diagnostics.Diagnostic{{Severity: "warning", Code: "context.state", Message: "the host would not say whether /var/lib/bootwright-hosted/lab exists"}}
 	h.service.options.Paths = source
 	plain, err := h.service.Status(ctx, StatusRequest{ContextName: "lab"})
 	if err != nil || plain.Paths != nil || len(source.asked) != 0 {
@@ -119,6 +121,9 @@ func TestStatusPathsOnlyWhenAsked(t *testing.T) {
 	}
 	if !slices.Equal(asked.Paths, source.paths) || !slices.Equal(source.asked, []string{"lab"}) {
 		t.Fatalf("paths = %+v after asking %q", asked.Paths, source.asked)
+	}
+	if !slices.ContainsFunc(asked.Warnings, func(d diagnostics.Diagnostic) bool { return d == source.warnings[0] }) || slices.ContainsFunc(plain.Warnings, func(d diagnostics.Diagnostic) bool { return d.Code == "context.state" }) {
+		t.Fatalf("warnings = %+v, want the paths source's warning only when asked", asked.Warnings)
 	}
 	source.err = errors.New("the host answered no")
 	if _, err := h.service.Status(ctx, StatusRequest{ContextName: "lab", Paths: true}); !errors.Is(err, source.err) {

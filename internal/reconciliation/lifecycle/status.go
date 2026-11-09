@@ -33,9 +33,11 @@ func (s Service) Status(ctx context.Context, request StatusRequest) (*StatusResu
 			return err
 		}
 		if request.Paths {
-			if result.Paths, err = s.contextPaths(ctx, name); err != nil {
+			var warnings []diagnostics.Diagnostic
+			if result.Paths, warnings, err = s.contextPaths(ctx, name); err != nil {
 				return err
 			}
+			result.Warnings = append(result.Warnings, warnings...)
 		}
 		frozen, err = frozenReopenOf(ctx, s.store(view))
 		return err
@@ -51,15 +53,15 @@ func (s Service) Status(ctx context.Context, request StatusRequest) (*StatusResu
 }
 
 // contextPaths refuses a build wired with no source rather than answer empty.
-func (s Service) contextPaths(ctx context.Context, name string) ([]ContextPath, error) {
+func (s Service) contextPaths(ctx context.Context, name string) ([]ContextPath, []diagnostics.Diagnostic, error) {
 	if s.options.Paths == nil {
-		return nil, failure("runtime.internal", "context paths are not configured", "")
+		return nil, nil, failure("runtime.internal", "context paths are not configured", "")
 	}
-	paths, err := s.options.Paths.Paths(ctx, name)
+	paths, warnings, err := s.options.Paths.Paths(ctx, name)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return append([]ContextPath{}, paths...), nil
+	return append([]ContextPath{}, paths...), warnings, nil
 }
 
 // ObjectOwnership is what the context's current operation proves about one API

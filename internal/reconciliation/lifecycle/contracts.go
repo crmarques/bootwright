@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -557,8 +558,9 @@ type LogLocation struct {
 }
 
 // ContextPaths names where a context keeps its content, reading none of it.
+// A path whose presence the host would not answer is absent with a warning.
 type ContextPaths interface {
-	Paths(ctx context.Context, name string) ([]ContextPath, error)
+	Paths(ctx context.Context, name string) ([]ContextPath, []diagnostics.Diagnostic, error)
 }
 
 type Clock interface {
