@@ -12688,3 +12688,78 @@ installer's default; every networking rule reads OVN-Kubernetes.
 **Commits:** 853c12e01 and this record. Gates:
 `TestNetworkTypeAdmitsOVNKubernetesAlone` fails on the previous schema and
 passes now; `make focus` and `make check` passed on the integrated branch.
+
+### X328 — Roots by the nature of their data, and an uninstall that removes them
+
+**Items:** B1228, B1220 and B1222, completed in-tree (2026-11-09), under
+[D244](backlog.md#d244). **Awaiting operator acceptance:** B1216 and B1221.
+B1228: the store's Controller record, tool areas and setup subtree share one
+`host/` directory, and the registry version moved to 2, so a store an earlier
+build wrote reads as another build's
+([storage and publication](../contexts.md#storage-locking-and-publication)).
+B1220: operation logs, retained adapter output, bounded-run output and setup
+output live under `/var/log/bootwright`, named `<kind>-NNNNNN.output`, bounded
+and pruned there and no longer counted against the operation area
+([log root](../contexts/log-root.md)). B1221: served content, emulated BMC
+state, installer and erase work and cluster-installer work of a context live
+under `/var/lib/bootwright-hosted/<context>/`, whose ancestors automation
+proves before any effect; `machine-libvirt`, `os-install-anaconda` and
+`physical-erase` moved to v2 and nine contract goldens moved
+([roots beside the store](../contexts.md#roots-beside-the-store)). B1222 and
+B1216: `controller uninstall` proves that no Bootwright-owned libvirt object,
+systemd unit, quadlet or container remains, then removes the store, staging,
+log and hosted roots, and `--discard-unreadable` takes a store this build
+cannot read without removing a package
+([the uninstall flow](../controller.md#the-uninstall-flow)).
+
+**Commits:** 99339ee57, 57a9427d1, 614d06afb, 5e2674297, adb79738c,
+cc40fd01e, 6635758d2, 27b7f408f, 6f4323723 (shared with X329) and this
+record. An independent review of the layout move found the CLI output spec
+still describing the in-store log tree, an automation walk that failed on a
+concurrent removal of an empty directory, two roles that did not prove their
+hosted ancestors, two roles that accepted any path under the hosted root, and
+retention that unlinked a file of any mode; cc40fd01e fixes them. A second
+review found that `--discard-unreadable` skipped the context and media
+refusals of a readable store beside a stray root entry or a failed listing,
+and that a group-writable parent or a root of another group was accepted;
+27b7f408f fixes them, and the reviewer confirmed the fixes. Gates:
+`make focus` and `make quick` passed on each lane; `make check` and
+`make race` passed on the integrated branch; no live run or push occurred.
+**Limitations:** a discard detects another build's command only through the
+locks this build takes; the foreign-owner refusals need root and are not
+tested; uninstall removes the roots of the host it runs on, so an SSH
+placement host's hosted root is left to destroy.
+
+### X329 — Reading and following logs, live blocks and a context's paths
+
+**Items:** B1224 and B1225, completed in-tree (2026-11-09), under
+[D244](backlog.md#d244). **Awaiting operator acceptance:** B1223.
+`bootwright logs` renders an operation's events merged from its operation log
+and every attempt log, prints one block's retained output with `--raw`, a
+bounded run's with `--run` and the setup output with `--setup`, and `--follow`
+streams until the operation, run or setup ends
+([reading and following logs](../cli/output.md#reading-and-following-logs)).
+`status` lists each running block's newest output from records alone,
+`--paths` names the store, log, hosted and libvirt image roots of the context
+with their presence, and every `Logs` field is followed by a `Follow` command
+([lifecycle and status results](../cli/output.md#lifecycle-and-status-results));
+the operator guide maps each root to the roles that create it. Every mutator
+except `controller uninstall` now waits up to the root lock wait for a
+reader's short hold instead of refusing at once
+([storage and publication](../contexts.md#storage-locking-and-publication)).
+No request, evidence, contract version or content digest moved.
+
+**Commits:** be1213308, 586315a9f, 8d59f993e, 9ca7bee52, 27eeb4f5f,
+6886ffb1d, 27730cb57, 740278950, 1d6a03896 and this record. An independent
+review found
+that a follow's shared hold each second made a mutator starting inside it
+refuse at once, that a follow kept streaming an operation another had
+replaced, and that a block that ran between two polls never streamed its
+output; 740278950 fixes them with tests, and the reviewer confirmed the fixes.
+Gates: `make focus` and `make quick` passed on each lane; `make check` and
+`make race` passed on the integrated branch; no live run or push occurred.
+**Limitations:** text output escapes every line, so exact bytes leave only
+through JSON or YAML output or the file itself; a `controller install` that
+starts at the instant of a `logs --setup --follow` probe is refused busy; an
+attempt's log records only its outcome word, not its cause
+([B1233](backlog.md#b1233)).
