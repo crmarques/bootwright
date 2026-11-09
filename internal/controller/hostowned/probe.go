@@ -95,6 +95,10 @@ func unproved(what, command, detail string) error {
 }
 
 func (p *Probe) output(ctx context.Context, what, tool string, args ...string) ([]byte, error) {
+	return p.listing(ctx, what, tool, 0, args...)
+}
+
+func (p *Probe) listing(ctx context.Context, what, tool string, silentNone int, args ...string) ([]byte, error) {
 	command := strings.Join(append([]string{tool}, args...), " ")
 	answer, err := p.run(ctx, tool, args)
 	if canceled := ctx.Err(); canceled != nil {
@@ -102,6 +106,9 @@ func (p *Probe) output(ctx context.Context, what, tool string, args ...string) (
 	}
 	if err != nil {
 		return nil, unproved(what, command, command+" could not run")
+	}
+	if answer.code != 0 && answer.code == silentNone && len(answer.stdout) == 0 && answer.stderr == "" {
+		return nil, nil
 	}
 	if answer.code != 0 {
 		detail := command + " exited " + strconv.Itoa(answer.code)
@@ -245,11 +252,15 @@ func (p *Probe) units(ctx context.Context) ([]prerequisites.OwnedObject, error) 
 	}
 	pattern := p.config.Prefix + "*"
 	owned := []prerequisites.OwnedObject{}
-	for _, args := range [][]string{
-		{"list-units", "--all", "--plain", "--no-legend", "--no-pager", "--full", "--", pattern},
-		{"list-unit-files", "--no-legend", "--no-pager", "--full", "--", pattern},
+	for _, listing := range []struct {
+		silentNone int
+		args       []string
+	}{
+		{0, []string{"list-units", "--all", "--plain", "--no-legend", "--no-pager", "--full", "--", pattern}},
+		{1, []string{"list-unit-files", "--no-legend", "--no-pager", "--full", "--", pattern}},
 	} {
-		data, err := p.output(ctx, "systemd unit", systemctl, args...)
+		args := listing.args
+		data, err := p.listing(ctx, "systemd unit", systemctl, listing.silentNone, args...)
 		if err != nil {
 			return nil, err
 		}

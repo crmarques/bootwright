@@ -51,9 +51,9 @@ flag and is load-bearing. Both runner tests assert the exact
 equivalent, because retention on this side cannot compensate for a tool that
 withholds its output until it exits.
 
-Reading it needs root, because the log root is `0700` and root-owned. Follow a
-block with `sudo bootwright logs --context <ctx> --block <block> --raw
---follow`, or tail the files themselves:
+Reading it needs root, because the log root is `0700` and root-owned. Follow the running
+blocks' output with `bootwright logs --context <ctx> --follow`, which asks for
+authorization itself, or tail the files themselves:
 
 ```sh
 sudo sh -c 'tail -F /var/log/bootwright/contexts/<ctx>/operations/<op>/blocks/*/*.output'

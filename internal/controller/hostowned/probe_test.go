@@ -114,20 +114,27 @@ func TestEveryOwnedObjectKindIsFound(t *testing.T) {
 }
 
 // A host without virsh, libvirt sockets, podman or quadlet sources, and with
-// no unit listed, holds nothing owned.
+// no unit listed, holds nothing owned, also when systemctl answers a pattern
+// no unit file matches with exit 1 and no output at all, as systemd does.
 func TestAHostWithoutLibvirtOrPodmanHoldsNothingOwned(t *testing.T) {
-	h := &host{missing: []string{virshPath, podmanPath}}
-	owned, err := h.probe().OwnedObjects(context.Background())
-	if err != nil || len(owned) != 0 {
-		t.Fatalf("owned = %+v (%#v)", owned, diagnostics.Of(err))
-	}
-	if !slices.Equal(h.ran, []string{units("list-units"), units("list-unit-files")}) {
-		t.Fatalf("ran = %q", h.ran)
+	for name, files := range map[string]result{"exit 0": {}, "silent exit 1": {code: 1}} {
+		t.Run(name, func(t *testing.T) {
+			h := &host{missing: []string{virshPath, podmanPath}, answers: map[string]result{units("list-unit-files"): files}}
+			owned, err := h.probe().OwnedObjects(context.Background())
+			if err != nil || len(owned) != 0 {
+				t.Fatalf("owned = %+v (%#v)", owned, diagnostics.Of(err))
+			}
+			if !slices.Equal(h.ran, []string{units("list-units"), units("list-unit-files")}) {
+				t.Fatalf("ran = %q", h.ran)
+			}
+		})
 	}
 }
 
 // Every probe fails closed: a missing virsh while a libvirt socket exists, an
-// unqualified executable, a missing systemctl, a non-zero exit, a name that is
+// unqualified executable, a missing systemctl, a non-zero exit, including a
+// unit-file listing's exit 1 with an error or output and a loaded-unit
+// listing's silent exit 1, a name that is
 // not printable, a unit listing naming another unit and XML that does not
 // parse each refuse rather than report nothing.
 func TestTheProofRefusesWhatItCannotRead(t *testing.T) {
@@ -146,6 +153,12 @@ func TestTheProofRefusesWhatItCannotRead(t *testing.T) {
 			"its XML cannot be parsed"},
 		"a unit of another prefix": {host{missing: []string{virshPath}, answers: map[string]result{units("list-units"): out("sshd.service loaded active running OpenSSH\n")}},
 			"not a list of units"},
+		"unit files exiting 1 with an error": {host{missing: []string{virshPath}, answers: map[string]result{units("list-unit-files"): {code: 1, stderr: "Failed to list unit files: Access denied\n"}}},
+			"exited 1: Failed to list unit files: Access denied"},
+		"unit files exiting 1 with output": {host{missing: []string{virshPath}, answers: map[string]result{units("list-unit-files"): {code: 1, stdout: []byte("bootwright-lab-dns.service enabled enabled\n")}}},
+			"list-unit-files --no-legend --no-pager --full -- bootwright-* exited 1"},
+		"loaded units exiting 1 silently": {host{missing: []string{virshPath}, answers: map[string]result{units("list-units"): {code: 1}}},
+			"list-units --all --plain --no-legend --no-pager --full -- bootwright-* exited 1"},
 		"a failing podman": {host{missing: []string{virshPath}, answers: map[string]result{podmanPath + " ps --all --format {{.Names}}": {code: 125, stderr: "database is locked"}}},
 			"podman container remains"},
 	}

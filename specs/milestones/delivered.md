@@ -12852,3 +12852,25 @@ repositories.
 occurred. **Limitations:** a build host needs `files.pythonhosted.org`, or a
 warm cache, for its first `make wheels`; the context's controller stage still
 downloads its target tools from their publishers.
+
+### X340 — Uninstall on a host with no Bootwright unit file
+
+**Item:** B1239, delivered in-tree (2026-11-09) and awaiting operator
+acceptance, at the owner's explicit request. The
+[owned-object proof](../controller.md#the-uninstall-flow) counts a unit-file
+listing that exits 1 with no output on either stream as no unit file, which is
+how systemd 259 answers a pattern nothing matches; an exit 1 with an error or
+output, and any non-zero exit of the loaded-unit listing, still refuse. The
+operator guide and the live-retention knowledge page no longer tell the
+operator to run `controller rebind`, `controller uninstall` or `logs` under
+`sudo`: each asks for authorization from the operator's own account, and a
+`sudo bootwright` invocation is refused `runtime.privilege` on a stock Fedora
+host, whose sudo policy keeps the `HOSTNAME` its profile exports. No request,
+evidence, contract version or content digest moved.
+
+**Commits:** this record's commit. An independent review found no way for
+the acceptance to pass a failure or a host holding a unit file, and a logs
+example on the knowledge page that combined `--raw` with `--follow`, which the
+CLI refuses; it is corrected. Gates: the new proof test failed on the previous
+source; `make focus`, `make quick`, `make check` and `make race` passed; no
+live run or push occurred.

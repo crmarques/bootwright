@@ -292,10 +292,11 @@ Changing the controller's machine-id, DMI product UUID or root filesystem UUID
 strands every context bound to it: the next command refuses with the host
 mismatch. Destroy each context from this host before such a change. When the
 host keeps the same `/var/lib/bootwright` under its new identity, as a
-recreated VM with the same disk does, rebind the record once as root:
+recreated VM with the same disk does, rebind the record once from your own
+account; it asks for authorization as other commands do:
 
 ```sh
-sudo bootwright controller rebind
+bootwright controller rebind
 ```
 
 It names the recorded and the new identity before it asks, keeps every
@@ -312,10 +313,11 @@ names the other exits.
 ### Uninstalling Bootwright from this host
 
 Once every environment is destroyed, every context deleted and every image
-removed with `bootwright media delete`, remove what `controller install` added:
+removed with `bootwright media delete`, remove what `controller install` added,
+from your own account; it asks for authorization as other commands do:
 
 ```sh
-sudo bootwright controller uninstall
+bootwright controller uninstall
 ```
 
 It refuses, naming the command that clears each, while a context or an image
@@ -331,7 +333,7 @@ the executable and what a context realized on an SSH placement host stay.
 `--keep-packages` removes only the state; it is also the way out when the
 install record was interrupted or written by another build. A store this
 build cannot read, such as one an earlier build left, and guest disks no
-removal took back are removed by `sudo bootwright controller uninstall
+removal took back are removed by `bootwright controller uninstall
 --discard-unreadable`, which removes no package. An interrupted uninstall is
 finished by the next one
 ([uninstall flow](../specs/controller.md#the-uninstall-flow)).

@@ -471,7 +471,10 @@ units and unit files named `bootwright-*`, quadlet sources
 when no socket exists under `/run/libvirt`, a missing `podman` as no
 container and a missing quadlet directory as no source, a missing
 `systemctl` refuses, and any non-zero exit, unparseable output or listing
-beyond its bound refuses. `virsh`, `systemctl` and `podman` are qualified as
+beyond its bound refuses, except that a unit-file listing exiting 1 with no
+output on either stream is systemd's answer that no unit file matches and
+counts as none ([B1239](milestones/m1.md#b1239),
+`TestAHostWithoutLibvirtOrPodmanHoldsNothingOwned`). `virsh`, `systemctl` and `podman` are qualified as
 [host packages](#host-packages) qualify `rpm` and dnf: absolute, root-owned
 and writable by no group or other, run with a fixed environment and a
 bounded output. Its limits: it sees only what those tools list now, so it
