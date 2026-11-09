@@ -481,6 +481,11 @@ func ValidateNetworkProviders(o api.Object, c api.Catalog, r addons.Registry) []
 				return nil
 			}
 		}
+		for _, f := range b.Spec().Get("packages").Fields() {
+			if p, ok := r.Find(f.Name); ok && slices.Contains(p.Provides, "nmstate") {
+				return nil
+			}
+		}
 	}
 	return []api.Issue{invariantRemediation("$.spec.networking.secondaryNetworks", "secondary networks of OpenShiftCluster/"+o.Name()+" require capability nmstate", "select a package or add-on providing nmstate in a binding for this cluster")}
 }
