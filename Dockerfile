@@ -18,6 +18,7 @@ RUN --mount=type=secret,id=build-env \
     --mount=type=secret,id=proxy-ca \
     --mount=type=cache,id=bootwright-go-mod,target=/go/pkg/mod \
     --mount=type=cache,id=bootwright-go-build,target=/root/.cache/go-build \
+    --mount=type=cache,id=bootwright-runtime-wheels,target=/root/.cache/bootwright-runtime-wheels \
     set -eu; \
     if test -s /run/secrets/build-env; then \
         while IFS= read -r setting; do export "$setting"; done </run/secrets/build-env; \
@@ -27,6 +28,8 @@ RUN --mount=type=secret,id=build-env \
         export SSL_CERT_FILE=/tmp/ca-bundle.pem GIT_SSL_CAINFO=/tmp/ca-bundle.pem; \
     fi; \
     ./scripts/go mod download; \
+    export WHEELS_CACHE=/root/.cache/bootwright-runtime-wheels; \
+    make wheels; \
     rm -f /tmp/ca-bundle.pem; \
     test -n "$VERSION" || unset VERSION; \
     test -n "$COMMIT" || unset COMMIT; \

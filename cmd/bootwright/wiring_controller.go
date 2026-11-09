@@ -66,7 +66,7 @@ func localControllerDependencies(storage prerequisites.Storage, process processD
 	}
 	if lock, err := runtimelock.Embedded(); err == nil {
 		deps.Lock = runtimeLock(lock)
-		deps.Python = venvlocal.New(venvlocal.Config{Lock: lock, Runtimes: setupRuntimes, Wheels: setupWheels})
+		deps.Python = venvlocal.New(venvlocal.Config{Lock: lock, Runtimes: setupRuntimes, Wheels: setupWheels, Carried: runtimelock.Carried()})
 	}
 	return deps, func() {}
 }

@@ -99,7 +99,9 @@ build makes, for the building host's architecture, stamped with the identity
 itself: `docker build --build-arg GO_VERSION=<go.mod version> --output type=local,dest=bin .`;
 from a checkout whose `.git` is a directory it then stamps itself in the build.
 
-Go's module and build caches are cache mounts the engine keeps between builds:
+The build runs `make wheels` while the proxy settings below are set, into a
+cache mount of its own, so a warm cache fetches no wheel. Go's module and
+build caches are cache mounts the engine keeps between builds:
 on the reference host a cold build took 31 seconds, a rebuild after a source
 change 8, and a build that leaves go.mod unchanged downloads nothing. The
 compile runs with `GOPROXY=off`. `podman image prune --build-cache` or
@@ -120,7 +122,7 @@ records build arguments: Podman in the build stage's image metadata, Docker
 in the build record that `docker buildx history inspect` shows, values
 included. The recipe therefore writes them to a file only its user can read,
 passes it as the `build-env` build secret and removes it, and echoes only
-their names; the build reads them for the module download, and no image,
+their names; the build reads them for the module and wheel downloads, and no image,
 cache or build record keeps them. `PROXY_CA` names the CA certificate of a
 proxy that intercepts TLS, passed the same way as the `proxy-ca` secret.
 `TestContainerBuildPassesSettingsOnlyAsASecret` keeps every other value out
@@ -142,7 +144,8 @@ Go.
 
 | Command | Result |
 | --- | --- |
-| `make build` | Build `bin/bootwright`, stamped with the version, commit and source state of the checkout it was built from. |
+| `make build` | Run `make wheels`, then build `bin/bootwright`, stamped with the version, commit and source state of the checkout it was built from. |
+| `make wheels` | Place the runtime lock's wheels where the executable embeds them, each checked against the lock, from the shared cache or, on a cold cache, `files.pythonhosted.org`; [carried wheels](../specs/controller.md#the-runtime-lock). |
 | `make container-build` | Build the same executable into `CONTAINER_OUT` with Docker or Podman only; [building in a container](#building-in-a-container). |
 | `make focus` | Run the inner loop: the narrowest checks of the branch's diff, in concurrent lanes. It is no gate; [the tiers](../.agents/skills/code-implementation/references/verification.md#focus) say what it selects and what it leaves to `make check`. |
 | `make quick` | Run formatting, vet, the architecture suite and the packages a change on this branch reaches; [the tiers](../.agents/skills/code-implementation/references/verification.md) say when to run it and [architecture verification](../specs/architecture.md#architecture-verification) how it selects them. |
@@ -271,7 +274,8 @@ SHA-256, computes the glibc floor
 from the highest manylinux tag and carries the `tested` list forward; add a
 release to it with `--tested fedora:43,44 --tested rhel:9,10` once it ran.
 Move `scripts/tools/ansible-requirements.txt` to the same ansible-core patch in
-the same commit. `verify` downloads every locked URL and compares it, and
+the same commit, and run `make wheels`, which replaces the files the build
+carries with the new lock's. `verify` downloads every locked URL and compares it, and
 `outdated` prints newer 2.21 patches and dependency releases without gating;
 `.github/workflows/runtime-lock.yml` runs `verify` when the lock or the tool
 changes and weekly, with `outdated` as an advisory summary.

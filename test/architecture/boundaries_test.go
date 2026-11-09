@@ -526,7 +526,7 @@ func effectGrants() map[string][]string {
 		"internal/controller/ansiblelocal": {"io", "os", "os/exec", "syscall"},
 		"internal/controller/hostdnf":      {"io", "os/exec", "syscall"},
 		"internal/controller/hostowned":    {"io", "os", "os/exec", "syscall"},
-		"internal/controller/venvlocal":    {"io", "net.Dialer", "net/http", "os", "os/exec", "syscall"},
+		"internal/controller/venvlocal":    {"io", "os", "os/exec", "syscall"},
 		"internal/controller/stagelocal":   {"golang.org/x/sys/unix", "io", "os", "syscall"},
 		// The SSH session adapter runs the one pinned client as a child and
 		// hands it the operator's streams and its material descriptors. An

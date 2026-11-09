@@ -86,9 +86,10 @@ the exit status. A non-empty /etc/ld.so.preload is reported the same way, as
   /var/lib/bootwright/host/setup/runtimes, on the host's own `/usr/bin/python3.X`:
   Python 3.12 to 3.14, newest first, or the interpreter setup chose before
   while it still qualifies. Its ansible-core and supporting wheels are the
-  exact files the lock compiled into this build names, fetched from
-  `files.pythonhosted.org` into a cache beside it, checked for size and
-  SHA-256, and installed by pip with no index and no other source
+  exact files the lock compiled into this build names, carried inside the
+  executable itself, copied into a cache beside it, checked for size and
+  SHA-256, and installed by pip with no index and no other source, so
+  installing them downloads nothing
   ([the controller runtime](../specs/controller.md#the-controller-runtime)).
   Nothing is installed into the host's own Python.
 
@@ -130,19 +131,12 @@ the host's own dnf in the same way, on RHEL as on Fedora: register a RHEL
 controller, or enable the repositories that carry them, before that context's
 first apply.
 
-Preparing a host with no route to `files.pythonhosted.org` takes two steps.
-On any connected host, with no privilege, run
-`bootwright controller install --download-only --dest-dir /srv/bootwright-wheels`: it writes
-the locked wheels of every Python ABI, the pip wheel and a copy of `lock.json`
-there. Copy that directory to the offline host, or serve it over HTTPS, and run
-`bootwright controller install --wheel-mirror file:///srv/bootwright-wheels` (or
-`--wheel-mirror https://mirror.example/bootwright-wheels`) there. The mirror is
-untrusted transport: `controller install` uses a file only when its size and SHA-256 match the
-lock this build embeds, so a stale or tampered file is refused with its name.
-`bootwright controller install --dry-run --output json` lists every locked file's URL and
-SHA-256 for fetching them another way. Host packages already come from
-wherever the host's dnf is configured to read them, a local `file://`
-repository, a DVD or a Satellite mirror included.
+A host with no route to the Internet prepares the same way: `controller install`
+reaches only the repositories the host's dnf is configured to read, a local
+`file://` repository, a DVD or a Satellite mirror included, because the
+executable carries every Python wheel the runtime needs.
+`bootwright controller install --dry-run --output json` lists each carried
+file's SHA-256.
 
 ### On a proxied network
 
@@ -175,9 +169,9 @@ with, through dnf's `proxy=` or the forwarded route, so a proxy must also
 admit those: their mirrors, metalink or Satellite, whatever `dnf repolist -v`
 names. Bootwright names no repository host of its own. A proxy that admits
 only listed destinations must also admit HTTPS, on port 443, to these hosts,
-which `controller install` and the controller stage contact, directly or through a redirect
-the download follows; `media add --from-url` contacts the URL it is given. A
-proxy that inspects TLS re-signs every certificate, so its certificate
+which a context's controller stage contacts, directly or through a redirect
+the download follows; `controller install` contacts none of them, and
+`media add --from-url` contacts the URL it is given. A proxy that inspects TLS re-signs every certificate, so its certificate
 authority must be in the host's system trust store, which every acquisition
 verifies against.
 
@@ -185,8 +179,6 @@ verifies against.
   clients.
 - `cdn.dl.k8s.io`: where `dl.k8s.io` redirects a kubectl download.
 - `dl.k8s.io`: kubectl releases and their stable version.
-- `files.pythonhosted.org`: the locked `ansible-core` wheel, its supporting
-  wheels and the pip wheel that installs them.
 - `get.helm.sh`: helm releases.
 - `github.com`: the govc, virtctl and OKD client releases.
 - `mirror.openshift.com`: OpenShift client and installer releases.

@@ -630,9 +630,6 @@ func cliGoldens() []cliGolden {
 			r.result.controller = setupDryRun(platform)
 			r.result.controller.Warnings = []diagnostics.Diagnostic{{Severity: "warning", Code: "controller.untested-release", Message: "Fedora 45 is newer than the releases this build was tested on (43, 44); setup checks its floors and continues"}}
 		}},
-		{golden: "cli-setup-download", args: "controller install --download-only --dest-dir wheels", record: func(r *dispatchRecord) {
-			r.result.controller = setupDownload()
-		}},
 		{golden: "cli-setup-changed", args: "controller install --yes", record: func(r *dispatchRecord) {
 			r.result.controller = &prerequisites.Report{
 				Platform: platform, Route: "direct", Outcome: "changed", PlanPresented: true,
@@ -1364,17 +1361,6 @@ func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 
 // setupDryRun is what setup --dry-run reports on a host missing podman whose
 // interpreter it found but whose runtime and setup record it cannot read.
-func setupDownload() *prerequisites.Report {
-	return &prerequisites.Report{
-		Route: "direct", Outcome: "downloaded",
-		Export: &prerequisites.WheelExport{Directory: "/srv/bootwright-wheels", Files: []prerequisites.ExportedWheel{
-			{Filename: "ansible_core-2.21.5-py3-none-any.whl", SHA256: strings.Repeat("a", 64), Size: 2_400_000, Origin: prerequisites.OriginDownload},
-			{Filename: "cffi-2.0.0-cp314-cp314-manylinux_2_17_x86_64.whl", SHA256: strings.Repeat("c", 64), Size: 220_000, Origin: prerequisites.OriginCache},
-			{Filename: "pip-26.0.1-py3-none-any.whl", SHA256: strings.Repeat("b", 64), Size: 1_800_000, Origin: prerequisites.OriginPresent},
-		}},
-	}
-}
-
 func setupDryRun(platform prerequisites.Platform) *prerequisites.Report {
 	return &prerequisites.Report{
 		Platform: platform, Route: "direct", DryRun: true, Outcome: "planned", Next: "bootwright controller install",
@@ -1386,7 +1372,7 @@ func setupDryRun(platform prerequisites.Platform) *prerequisites.Report {
 		},
 		Actions: []string{
 			"Install host packages with dnf: podman",
-			"Verify or prepare the controller runtime: Python 3.14 at /usr/bin/python3.14, ansible-core 2.21.5: 1 of 2 wheels to download (2.4 MB), 1 cached",
+			"Verify or prepare the controller runtime: Python 3.14 at /usr/bin/python3.14, ansible-core 2.21.5: 1 of 2 wheels to copy from this executable (2.4 MB), 1 cached",
 		},
 		Dependencies: []string{"podman"},
 		Files: []prerequisites.LockedFile{

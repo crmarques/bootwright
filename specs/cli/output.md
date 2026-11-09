@@ -275,7 +275,6 @@ Successful result objects have stable top-level fields:
 | `render effective` | `counts`, `effectiveState`, and with `--origins` `origins`; with `--output-dir`, optional `inputDir`, `outputDir`, `effectiveStatePath`, `objects` instead |
 | `render installer` | `clusters` |
 | `render storage` | `clusters` |
-| `controller install` (with `--download-only`) | `directory`, `outcome`, `files`, `next` |
 | `controller install` (mutation), `controller check` | optional `context`, optional `machine`, optional `route`, `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files`, optional `preview`, `progress`, optional `receipt`, `next` |
 | `controller install` (with `--dry-run`) | `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files` |
 | `machine list`, `machine info` | `context`, `machines`, `powerRead` |

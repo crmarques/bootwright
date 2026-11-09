@@ -30,7 +30,6 @@ var cliResults = []reflect.Type{
 	reflect.TypeFor[secretMutationPresentation](),
 	reflect.TypeFor[mediaMutationPresentation](),
 	reflect.TypeFor[encryptionMutationPresentation](),
-	reflect.TypeFor[setupDownloadPresentation](),
 	reflect.TypeFor[exportResult](),
 	reflect.TypeFor[helpPresentation](),
 	reflect.TypeFor[versionPresentation](),

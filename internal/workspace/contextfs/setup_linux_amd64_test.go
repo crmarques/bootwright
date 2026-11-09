@@ -207,7 +207,7 @@ func TestPendingIntentIsDurableBeforeEffects(t *testing.T) {
 		t.Fatal(err)
 	}
 	refusal := onlyDiagnostic(t, prerequisites.SetupLaunchRefusal(view))
-	if refusal.Code != "controller.state" || refusal.Message != "a controller setup (setup-000001) was interrupted before it finished" || refusal.Remediation != "run bootwright controller install, adding --wheel-mirror <mirror> on a host that cannot reach the wheel origins" {
+	if refusal.Code != "controller.state" || refusal.Message != "a controller setup (setup-000001) was interrupted before it finished" || refusal.Remediation != "run bootwright controller install" {
 		t.Fatalf("an interrupted setup refuses a launch with %#v", refusal)
 	}
 }

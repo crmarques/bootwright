@@ -751,8 +751,7 @@ crosses the fixed Ansible `controller_prerequisites` role through
 [Controller ports](controller.md#egress-and-local-effects). A tool
 contacting a managed remote component belongs inside Ansible. Go reaches a
 network endpoint only when it is no managed component, read-only, bounded and
-through the admitted egress route: the controller runtime's wheels
-(`controller/venvlocal`), target-tool publisher metadata
+through the admitted egress route: target-tool publisher metadata
 (`controller/bundlelocal`) and installer media import
 (`managedos/medialocal`). Every contact with a managed component, apart from
 [Machine's direct SSH sessions](#named-exceptions), and every target-tool
@@ -799,7 +798,10 @@ purpose, or an encoding that differs on purpose is a named exception with its
 reason in that test, and the lists only shrink. Repository tools under
 `scripts/tools/` are Python outside the collection; the
 [Python reference](../.agents/skills/code-implementation/references/python.md#repository-tools)
-owns them. `TestEveryCollectionAndScriptSourceMapsToALanguageRow` fails on a
+owns them. A build step that must run where only Go is present is a
+standard-library Go package of that directory's own module instead:
+`runtimewheels`, which `make wheels` runs in the container build
+([carried wheels](controller.md#the-runtime-lock)). `TestEveryCollectionAndScriptSourceMapsToALanguageRow` fails on a
 tracked source under the collection's plugins, `scripts/`, `e2e/` or
 `examples/` that no row holds.
 

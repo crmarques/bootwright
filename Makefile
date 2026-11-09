@@ -1,4 +1,4 @@
-.PHONY: build container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check focus quick race check-offline check check-go
+.PHONY: build wheels container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check focus quick race check-offline check check-go
 
 GO := ./scripts/go
 VULNDB ?= https://vuln.go.dev
@@ -24,7 +24,16 @@ GO_VERSION = $(shell awk '$$1 == "go" { print $$2; exit }' go.mod)
 CONTAINER_SETTINGS = HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy GOPROXY GOSUMDB GOPRIVATE GONOSUMDB GONOPROXY
 comma := ,
 
-build:
+# The executable carries the runtime lock's wheels, so controller install
+# downloads none. The tool places them where the build embeds them, checking
+# each against the lock, and keeps them in the shared cache directory, so a
+# warm cache builds offline.
+WHEELS_CACHE ?= $(shell ./scripts/cache-dir)/runtime-wheels
+wheels:
+	$(GO) -C scripts/tools run ./runtimewheels -lock "$(CURDIR)/internal/controller/runtimelock/lock.json" \
+		-dest "$(CURDIR)/internal/controller/runtimelock/wheels" -cache "$(WHEELS_CACHE)"
+
+build: wheels
 	CGO_ENABLED=0 $(GO) build -trimpath -buildvcs=false -ldflags '$(STAMP)' -o bin/bootwright ./cmd/bootwright
 
 container-build:
@@ -57,6 +66,7 @@ container-build:
 
 test:
 	$(GO) test ./...
+	$(GO) -C scripts/tools test ./runtimewheels/...
 
 vet:
 	$(GO) vet ./...
@@ -126,4 +136,4 @@ check:
 	$(MAKE) -k --no-print-directory --output-sync=target -j2 ansible-check check-go
 	git diff --check
 
-check-go: fmt-check modules-check tidy-check test vet completion-test vulncheck
+check-go: wheels fmt-check modules-check tidy-check test vet completion-test vulncheck

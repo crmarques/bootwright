@@ -1,6 +1,9 @@
 package runtimelock
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"io/fs"
 	"os"
 	"regexp"
 	"strconv"
@@ -29,6 +32,47 @@ func TestTheEmbeddedLockIsTheOneTheBuildParses(t *testing.T) {
 	if lock.Digest() != parsed.Digest() {
 		t.Errorf("the embedded lock digest %s differs from lock.json's %s", lock.Digest(), parsed.Digest())
 	}
+}
+
+// A build carries every locked file with its locked size and SHA-256, or, when
+// make wheels did not run, none; nothing else but the directory's ignore file.
+func TestTheCarriedWheelsAreTheLockedFiles(t *testing.T) {
+	lock, err := Embedded()
+	if err != nil {
+		t.Fatal(err)
+	}
+	locked := map[string]File{lock.Installer().Filename: lock.Installer()}
+	for _, abi := range lock.PythonABIs() {
+		files, _ := lock.Files(abi)
+		for _, file := range files {
+			locked[file.Filename] = file
+		}
+	}
+	entries, err := fs.ReadDir(Carried(), ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	carried := 0
+	for _, entry := range entries {
+		if entry.Name() == ".gitignore" {
+			continue
+		}
+		file, found := locked[entry.Name()]
+		if !found || !entry.Type().IsRegular() {
+			t.Errorf("the build carries %s, which the lock does not name", entry.Name())
+			continue
+		}
+		data, err := fs.ReadFile(Carried(), entry.Name())
+		sum := sha256.Sum256(data)
+		if err != nil || int64(len(data)) != file.Size || hex.EncodeToString(sum[:]) != file.SHA256 {
+			t.Errorf("the carried %s does not match its locked size and SHA-256", entry.Name())
+		}
+		carried++
+	}
+	if carried != 0 && carried != len(locked) {
+		t.Errorf("the build carries %d of the %d locked files; make wheels places all of them", carried, len(locked))
+	}
+	t.Logf("the build carries %d of the %d locked files", carried, len(locked))
 }
 
 // The lock, the check suite's pin and the collection's requires_ansible name

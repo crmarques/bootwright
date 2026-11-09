@@ -27,7 +27,7 @@ func TestMakeBuildYieldsAStaticExecutable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	recipe := regexp.MustCompile(`(?m)^build:\n\t(.+)$`).FindSubmatch(data)
+	recipe := regexp.MustCompile(`(?m)^build:[^\n]*\n\t(.+)$`).FindSubmatch(data)
 	if recipe == nil {
 		t.Fatal("the Makefile has no one-line build recipe")
 	}

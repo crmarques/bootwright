@@ -61,7 +61,7 @@ func ClassifyInvocation(args []string) InvocationClass {
 		return classification
 	}
 	ambient := contextFreeAcquisition(path, command.Flags())
-	if path == "controller install" && (boolValue(command.Flags(), "dry-run") || boolValue(command.Flags(), "download-only")) {
+	if path == "controller install" && boolValue(command.Flags(), "dry-run") {
 		classification.AmbientRoute = ambient
 		return classification
 	}

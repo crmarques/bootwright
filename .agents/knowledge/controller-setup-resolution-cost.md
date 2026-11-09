@@ -7,8 +7,9 @@ readiness by presence. This page records what setup costs since setup v2 (X88,
 
 ## Since X88
 
-Setup resolves nothing. The build embeds a lock that names every wheel, and
-the host's dnf owns every package, so setup only asks what is missing:
+Setup resolves and downloads nothing of its own. The build embeds a lock that
+names every wheel and, since X339 (2026-11-09, D248), the wheels themselves,
+and the host's dnf owns every package, so setup only asks what is missing:
 
 - **Ready host.** `/etc/os-release`, `rpm -q --whatprovides` for the baseline
   packages run as the invoking user, the setup record, and an ownership walk of
@@ -21,10 +22,12 @@ the host's dnf owns every package, so setup only asks what is missing:
 - **A new build.** The runtime's identity is the lock digest, the Python ABI
   and the interpreter path, and automation is no part of it, so a build with
   the same lock, an `ansible/`-only fix included, needs no setup. A build whose
-  lock moved builds a new venv and downloads only the wheels its cache lacks,
-  often one file. Evidence: `TestACacheHitMakesNoRequest`.
-- **Fresh runtime.** Ten wheels of about 8.7 MB and the 1.8 MB pip wheel
-  (the lock of 2026-10-14), at most 4 fetches at a time, a
+  lock moved builds a new venv and copies from the executable only the wheels
+  its cache lacks, often one file. Evidence:
+  `TestTheCacheIsFilledFromTheCarriedWheelsAndAWarmCacheCopiesNone`.
+- **Fresh runtime.** Six wheels of about 3.7 MB and the 1.8 MB pip wheel (the
+  lock of 2026-11-09, X338; ten wheels of 8.7 MB fetched from
+  `files.pythonhosted.org` before), copied from the executable, a
   `venv --without-pip`, pip from local files with hashes, `compileall`, and
   one `syncfs` before the publishing rename, in place of an `fsync` per file.
   Code: `internal/controller/venvlocal/build_linux_amd64.go`, and the

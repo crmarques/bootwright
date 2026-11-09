@@ -135,18 +135,11 @@ func remedyInvocation(err error) string {
 }
 
 func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, error) {
-	mirror, err := ParseWheelMirror(request.WheelMirror)
-	if err != nil {
-		return nil, failure("controller.install", err.Error(), "pass --wheel-mirror as "+WheelMirrorUsage)
-	}
-	if request.DownloadOnly {
-		return s.downloadOnly(ctx, request, mirror)
-	}
 	if err := s.available(ctx); err != nil {
 		return nil, err
 	}
 	if request.DryRun {
-		return s.dryRun(ctx, mirror)
+		return s.dryRun(ctx)
 	}
 	view, err := s.ports.Setup.ReadSetup(ctx)
 	if err != nil {
@@ -156,7 +149,6 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 	if err != nil {
 		return nil, err
 	}
-	current.mirror = mirror
 	if current.ready() {
 		current.report.Outcome = "unchanged"
 		return &current.report, nil
@@ -189,37 +181,15 @@ func (s Service) setup(ctx context.Context, request SetupRequest) (*Report, erro
 
 // dryRun never elevates: it reads no setup record, previews nothing with dnf
 // and names what setup would install by requirement.
-func (s Service) dryRun(ctx context.Context, mirror WheelMirror) (*Report, error) {
+func (s Service) dryRun(ctx context.Context) (*Report, error) {
 	current, err := s.inspect(ctx, SetupView{}, StorageView{}, "", true)
 	if err != nil {
 		return nil, err
 	}
-	current.mirror = mirror
 	current.plan()
 	current.report.Outcome, current.report.Next = "planned", setupInvocation
 	current.report.Files = s.lockedFiles()
 	return &current.report, s.stateRoot(ctx, &current.report)
-}
-
-func (s Service) downloadOnly(ctx context.Context, request SetupRequest, mirror WheelMirror) (*Report, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if s.ports.Python == nil || s.ports.Lock.Digest == "" {
-		return nil, availability.ErrNotImplemented
-	}
-	if request.DryRun {
-		return nil, failure("controller.install", "--download-only writes the locked files, so it cannot be a dry run", "drop --dry-run, or use controller install --dry-run --output json to list the locked files")
-	}
-	if request.Destination == "" {
-		return nil, failure("controller.install", "--download-only needs a directory to write", "pass --dest-dir <directory>")
-	}
-	route := inspection{selection: controller.Baseline().WithAmbientRoute(s.options.AmbientRoute)}
-	export, err := s.ports.Python.Export(ctx, request.Destination, route.route(), mirror)
-	if err != nil {
-		return nil, err
-	}
-	return &Report{Route: route.routeSummary(), Outcome: "downloaded", Export: &export}, nil
 }
 
 func (s Service) lockedFiles() []LockedFile {
@@ -264,11 +234,6 @@ func cloneReport(report Report) Report {
 	report.Dependencies = slices.Clone(report.Dependencies)
 	report.Warnings = slices.Clone(report.Warnings)
 	report.Files = slices.Clone(report.Files)
-	if report.Export != nil {
-		export := *report.Export
-		export.Files = slices.Clone(export.Files)
-		report.Export = &export
-	}
 	if report.Preview != nil {
 		preview := *report.Preview
 		preview.Notes = slices.Clone(preview.Notes)

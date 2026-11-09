@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -198,8 +197,6 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 		if path == "context update" && len(arrayValue(flags, "file")) == 0 && stringValue(flags, "input-dir") == "" {
 			return "context update requires --file or --input-dir"
 		}
-	case "controller install":
-		return validateSetupFlags(flags)
 	case "controller uninstall":
 		return validateUninstallFlags(flags)
 	case "context delete":
@@ -305,22 +302,6 @@ var hostKeyFingerprint = regexp.MustCompile(`^SHA256:[A-Za-z0-9+/]{43}$`)
 func validateUninstallFlags(flags *pflag.FlagSet) string {
 	if boolValue(flags, "discard-unreadable") && boolValue(flags, "keep-packages") {
 		return "--discard-unreadable conflicts with --keep-packages; a discard removes no package"
-	}
-	return ""
-}
-
-func validateSetupFlags(flags *pflag.FlagSet) string {
-	download := boolValue(flags, "download-only")
-	switch {
-	case download && boolValue(flags, "dry-run"):
-		return "--download-only conflicts with --dry-run; controller install --dry-run --output json lists the locked files"
-	case download && stringValue(flags, "dest-dir") == "":
-		return "--download-only requires --dest-dir"
-	case !download && flags.Changed("dest-dir"):
-		return "--dest-dir requires --download-only"
-	}
-	if _, err := prerequisites.ParseWheelMirror(stringValue(flags, "wheel-mirror")); err != nil {
-		return "--wheel-mirror must be " + prerequisites.WheelMirrorUsage
 	}
 	return ""
 }

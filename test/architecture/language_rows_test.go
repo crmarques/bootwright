@@ -58,7 +58,7 @@ func sourceRow(name, firstLine string) (row string, mapped bool) {
 	case strings.HasPrefix(name, collectionPlugins):
 		return rowPython, strings.HasSuffix(name, ".py")
 	case strings.HasPrefix(name, toolsRoot):
-		if strings.HasSuffix(name, ".py") {
+		if strings.HasSuffix(name, ".py") || strings.HasSuffix(name, ".go") && strings.Contains(strings.TrimPrefix(name, toolsRoot), "/") {
 			return rowRepositoryTool, true
 		}
 		return rowRepositoryTool, slices.ContainsFunc(toolDataSuffixes, func(suffix string) bool { return strings.HasSuffix(name, suffix) })
@@ -108,7 +108,7 @@ func firstLineOf(root string) func(string) string {
 func TestEveryCollectionAndScriptSourceMapsToALanguageRow(t *testing.T) {
 	root := filepath.Join("..", "..")
 	for _, name := range unmappedSources(repositoryFiles(t), firstLineOf(root)) {
-		t.Errorf("%s maps to no row of the specs/architecture.md language table: a collection plugin is a .py file, a script under scripts/ starts with #!/bin/sh, and a file under scripts/tools/ is Python or pinned data, and the only scripts under e2e/ or examples/ are the case renderer, a bash script directly under e2e/, and case workloads, Python files or #!/bin/bash scripts directly under e2e/<case>/app/", name)
+		t.Errorf("%s maps to no row of the specs/architecture.md language table: a collection plugin is a .py file, a script under scripts/ starts with #!/bin/sh, and a file under scripts/tools/ is Python, a Go package of the tools module or pinned data, and the only scripts under e2e/ or examples/ are the case renderer, a bash script directly under e2e/, and case workloads, Python files or #!/bin/bash scripts directly under e2e/<case>/app/", name)
 	}
 }
 
@@ -145,6 +145,8 @@ func TestSourceMapRefusesAnUnmappedFile(t *testing.T) {
 		"scripts/tools/ansible-requirements.txt":    "",
 		"scripts/tools/go.mod":                      "",
 		"scripts/tools/launcher.rb":                 "",
+		"scripts/tools/runtimewheels/main.go":       "// Command runtimewheels places the wheels.",
+		"scripts/tools/loose.go":                    "package tools",
 		collectionPlugins + "modules/a.py":          "",
 		collectionPlugins + "modules/a.yml":         "",
 		collectionPlugins + "module_utils/b.sh":     "#!/bin/sh",
@@ -189,6 +191,7 @@ func TestSourceMapRefusesAnUnmappedFile(t *testing.T) {
 		"scripts/bash-script",
 		"scripts/python-script",
 		"scripts/tools/launcher.rb",
+		"scripts/tools/loose.go",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("unmapped = %q, want %q", got, want)

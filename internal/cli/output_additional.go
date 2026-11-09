@@ -123,22 +123,6 @@ type encryptionMutationPresentation struct {
 
 func (encryptionMutationPresentation) documentedResult() {}
 
-type setupDownloadPresentation struct {
-	Directory string                     `json:"directory"`
-	Outcome   string                     `json:"outcome"`
-	Files     []downloadFilePresentation `json:"files"`
-	Next      string                     `json:"next"`
-}
-
-func (setupDownloadPresentation) documentedResult() {}
-
-type downloadFilePresentation struct {
-	Filename string `json:"filename"`
-	SHA256   string `json:"sha256"`
-	Size     int64  `json:"size"`
-	Origin   string `json:"origin"`
-}
-
 func writeAdditionalStructuredResult(out io.Writer, command *cobra.Command, path string, result commandResult) (bool, error) {
 	var shown jsonResult
 	var reported []diagnostic
@@ -184,13 +168,6 @@ func writeAdditionalStructuredResult(out io.Writer, command *cobra.Command, path
 		}, ActiveKey: escapeDisplayLine(m.ActiveKey), Changed: m.Changed, RetiredKeys: displayNames(m.RetiredKeys), ReencryptedVersions: m.ReencryptedVersions, ReencryptedParts: m.ReencryptedParts}
 	case path == "render effective" && validRender(result.rendered):
 		shown = displayRender(result.rendered)
-	case path == "controller install" && validSetupDownload(result.controller):
-		r := result.controller
-		download := setupDownloadPresentation{Directory: escapeDisplayLine(r.Export.Directory), Outcome: escapeDisplayLine(r.Outcome), Files: []downloadFilePresentation{}, Next: escapeDisplayLine(r.Next)}
-		for _, f := range r.Export.Files {
-			download.Files = append(download.Files, downloadFilePresentation{Filename: escapeDisplayLine(f.Filename), SHA256: escapeDisplayLine(f.SHA256), Size: f.Size, Origin: escapeDisplayLine(f.Origin)})
-		}
-		shown, reported = download, r.Warnings
 	case (path == "controller check" || path == "controller install" && result.controller != nil && !result.controller.DryRun) && validControllerReport(result.controller):
 		return true, writeStructuredController(out, path, result.controller, nil, 0)
 	case path == "plan" && result.lifecyclePlan != nil:

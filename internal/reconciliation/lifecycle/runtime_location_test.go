@@ -49,7 +49,7 @@ func TestAPendingSetupBlocksALaunch(t *testing.T) {
 	h.setup.set(view)
 	launchRefused(t, h, "a controller setup (setup-000042) was interrupted before it finished")
 	_, err := apply(h)
-	want := "run bootwright controller install, adding --wheel-mirror <mirror> on a host that cannot reach the wheel origins, or run the controller install of the Bootwright build whose lock the receipt names (" + view.State.Receipt.Lock + ") to keep its runtime"
+	want := "run bootwright controller install, or run the controller install of the Bootwright build whose lock the receipt names (" + view.State.Receipt.Lock + ") to keep its runtime"
 	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Remediation != want {
 		t.Fatalf("the launch reported %+v, want the remedy %q", reported, want)
 	}

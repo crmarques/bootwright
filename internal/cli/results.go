@@ -287,8 +287,6 @@ func writeControllerOutcome(out, errOut io.Writer, path string, result commandRe
 		return true, writeRebind(out, result.rebind)
 	case path == "controller uninstall" && validUninstall(result.uninstall):
 		return true, writeUninstall(out, result.uninstall)
-	case path == "controller install" && validSetupDownload(result.controller):
-		return true, writeSetupDownload(out, result.controller)
 	case validControllerReport(result.controller) && successfulControllerReport(path, result.controller):
 		return true, writeControllerResult(out, errOut, path, result.controller, jsonMode)
 	}

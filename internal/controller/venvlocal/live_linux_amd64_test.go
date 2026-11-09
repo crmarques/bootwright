@@ -14,13 +14,12 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/runtimelock"
 )
 
-// TestALiveBuildOnThisHost builds a real venv from the embedded lock on this
-// host's /usr/bin/python3.X and launches through the guard. It needs network
-// on a cold cache and runs only when asked:
+// TestALiveBuildOnThisHost builds a real venv from the embedded lock and the
+// wheels the test binary carries on this host's /usr/bin/python3.X and
+// launches through the guard. It needs make wheels first and runs only when
+// asked:
 //
-//	BOOTWRIGHT_VENV_LIVE=1 [BOOTWRIGHT_VENV_WHEELS=<dir>] ./scripts/go test -run TestALiveBuildOnThisHost -v ./internal/controller/venvlocal/
-//
-// BOOTWRIGHT_VENV_WHEELS keeps the wheel cache across runs.
+//	make wheels && BOOTWRIGHT_VENV_LIVE=1 ./scripts/go test -run TestALiveBuildOnThisHost -v ./internal/controller/venvlocal/
 func TestALiveBuildOnThisHost(t *testing.T) {
 	if os.Getenv("BOOTWRIGHT_VENV_LIVE") != "1" {
 		t.Skip("set BOOTWRIGHT_VENV_LIVE=1 to build a real venv on this host")
@@ -31,14 +30,14 @@ func TestALiveBuildOnThisHost(t *testing.T) {
 	}
 	root := t.TempDir()
 	runtimes := filepath.Join(root, "runtimes")
-	wheels := cmpOr(os.Getenv("BOOTWRIGHT_VENV_WHEELS"), filepath.Join(root, "wheels"))
+	wheels := filepath.Join(root, "wheels")
 	for _, directory := range []string{runtimes, wheels} {
 		if err := os.MkdirAll(directory, 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
 	host := newFakeHost(t)
-	adapter := New(Config{Lock: lock, Runtimes: runtimes, Wheels: wheels})
+	adapter := New(Config{Lock: lock, Runtimes: runtimes, Wheels: wheels, Carried: runtimelock.Carried()})
 	publishers.Store(adapter, &renameStore{host: host, runtimes: runtimes})
 	me := uint32(os.Getuid())
 	adapter.trusted = func(uid uint32) bool { return uid == 0 || uid == me }
@@ -48,7 +47,7 @@ func TestALiveBuildOnThisHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("selected %s (Python %s, glibc %s)", interpreter.Path, interpreter.Version, interpreter.Glibc)
-	if err := adapter.Fetch(ctx, interpreter.ABI, prerequisites.SetupEgress{HTTPSProxy: os.Getenv("HTTPS_PROXY")}, prerequisites.WheelMirror{}); err != nil {
+	if err := adapter.Fetch(ctx, interpreter.ABI); err != nil {
 		t.Fatal(err)
 	}
 	runtime, err := testBuild(adapter, ctx, interpreter)
@@ -82,11 +81,4 @@ func TestALiveBuildOnThisHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-}
-
-func cmpOr(value, fallback string) string {
-	if value != "" {
-		return value
-	}
-	return fallback
 }

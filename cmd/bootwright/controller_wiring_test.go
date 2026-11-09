@@ -28,24 +28,6 @@ func TestComposedBaselineDryRunReadsNoSetupState(t *testing.T) {
 	}
 }
 
-func TestComposedDownloadOnlyStaysBelowThePrivilegeBoundaryAndReadsNoState(t *testing.T) {
-	destination := t.TempDir()
-	args := []string{"controller", "install", "--download-only", "--dest-dir", destination, "--wheel-mirror", "file:///srv/wheels"}
-	if class := cli.ClassifyInvocation(args); class.RequiresRoot || class.Command != "controller install" {
-		t.Fatalf("controller install --download-only classifies as %+v", class)
-	}
-	ports, stores := &setupPorts{}, &controllerPorts{}
-	services := assembleServices(serviceDependencies{Controller: ports.setupDependencies(stores, stores)})
-	var out, errOut bytes.Buffer
-	code := runServices(context.Background(), args, &out, &errOut, services)
-	if code != 0 || errOut.Len() != 0 || ports.reads != 0 || ports.effects != 0 || stores.effects != 0 || !reflect.DeepEqual(ports.exports, []string{destination}) {
-		t.Fatal(code, out.String(), errOut.String(), ports, stores)
-	}
-	if !strings.Contains(out.String(), "Controller wheel download") || !strings.Contains(out.String(), "Outcome  downloaded") || !strings.Contains(out.String(), "ansible_core-2.21.5-py3-none-any.whl") {
-		t.Fatal(out.String())
-	}
-}
-
 func TestTheDryRunJSONListsEveryLockedFileOfTheEmbeddedLock(t *testing.T) {
 	lock, err := runtimelock.Embedded()
 	if err != nil {

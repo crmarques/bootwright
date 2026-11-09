@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/fstest"
 
 	"golang.org/x/sys/unix"
 
@@ -146,13 +147,26 @@ func (h *fakeHost) adapter(lock runtimelock.Lock) *Adapter {
 			h.t.Fatal(err)
 		}
 	}
-	adapter := New(Config{Lock: lock, Runtimes: runtimes, Wheels: wheels})
+	adapter := New(Config{Lock: lock, Runtimes: runtimes, Wheels: wheels, Carried: carriedWheels(lock)})
 	publishers.Store(adapter, &renameStore{host: h, runtimes: runtimes})
 	me := uint32(os.Getuid())
 	adapter.bin, adapter.top = filepath.Join(h.root, "usr", "bin"), h.root
 	adapter.trusted = func(uid uint32) bool { return uid == 0 || uid == me }
 	adapter.run = h.run
 	return adapter
+}
+
+// carriedWheels is the executable's embedded set for a lock: every file of
+// every ABI and the installer, holding the bytes its lock entry hashes.
+func carriedWheels(lock runtimelock.Lock) fstest.MapFS {
+	carried := fstest.MapFS{lock.Installer().Filename: {Data: wheelBytes(lock.Installer().Filename), Mode: 0o444}}
+	for _, abi := range lock.PythonABIs() {
+		files, _ := lock.Files(abi)
+		for _, file := range files {
+			carried[file.Filename] = &fstest.MapFile{Data: wheelBytes(file.Filename), Mode: 0o444}
+		}
+	}
+	return carried
 }
 
 func (h *fakeHost) fillCache(adapter *Adapter, abi string) {

@@ -30,7 +30,8 @@ names the host a context expects to run on; `controller install` never reads it.
 
 Setup installs only what is missing and never checks for updates: a host
 package is asked of the host's own dnf by name or RPM capability, and the
-runtime's wheels come from the lock the running build embeds. A ready host is
+runtime's wheels are the locked files the running build carries, so setup
+downloads none. A ready host is
 reported in under a second with no network request, confirmation or write.
 The upgrade verb is a new Bootwright build ([D152](milestones/backlog.md#d152)).
 
@@ -111,6 +112,18 @@ ABI's wheel tags, its floor and that closure, and the collection's units suite
 runs every playbook and imports every plugin with nothing but the closure
 importable (`TestTheCollectionTestsNameTheLockedClosure`).
 
+**Carried wheels.** Each build carries every file the lock names, so
+installation reads no wheel origin ([D248](milestones/backlog.md#d248)).
+`make wheels` places them in `internal/controller/runtimelock/wheels`, which
+the executable embeds: each comes from the shared cache, or from its locked
+URL, and takes its name only once its size and SHA-256 match the lock;
+`make build` runs it first. Only a build reaches `files.pythonhosted.org`. A
+build that skipped it compiles and carries none, and its `controller install`
+refuses before the plan, naming `make build`; nothing falls back to a download
+(`TestAnExecutableWithoutItsWheelsRefusesBeforeThePlan`), and
+`TestTheCarriedWheelsAreTheLockedFiles` holds a build to every locked file or
+none.
+
 ## The controller runtime
 
 **Interpreter.** The runtime runs on the host's own CPython at its versioned
@@ -141,10 +154,9 @@ interpreter path, NUL-separated. Setup builds it in a stage the
 
 1. `python<abi> -I -m venv --without-pip <stage>`, so the OS pip wheel is no
    dependency;
-2. each locked wheel of the ABI, and the pip wheel, is fetched into the wheel
-   cache over HTTPS with bounded same-origin redirects and at most 4 concurrent fetches,
-   verified for size and SHA-256 before it is renamed into place; a cached
-   wheel makes no request;
+2. each locked wheel of the ABI, and the pip wheel, is copied into the wheel
+   cache from the wheels the executable carries, verified for size and SHA-256
+   before it is renamed into place; a cached wheel is not copied again;
 3. the stage's own Python runs the cached pip wheel as
    `pip install --isolated --no-index --find-links <only the locked files>
    --no-deps --require-hashes --only-binary=:all: --no-compile --no-input
@@ -320,8 +332,7 @@ SSH flags remain unconsumed by these checks.
 | Invocation | Required behavior |
 | --- | --- |
 | `bootwright controller install --dry-run` | Admit the host as setup does, select the interpreter and list by name the host package requirements setup would install, through unprivileged `rpm` presence queries and without a dnf preview. No setup record is read, so this stays below the privilege boundary. No network, Secret read, privilege escalation or write. Runtime readiness and the setup state are explicitly unverified. With `--output json`, which setup accepts only with `--dry-run`, the result also lists every locked wheel's ABI, file, URL and SHA-256. The `state-root` check reports, from an unprivileged look at the state root, an absent root, which setup creates, or a `root:root` `0700` directory on a local filesystem, whose contents setup verifies. A root of another type, owner or mode, one on an unqualified filesystem, and, when the root's owner runs the dry run, one holding state this build cannot read, are not ready: the dry run reports the check beside the store's own refusal and remedy, and exits 1. The check reaches the root as the store opens it, every ancestor without following a link and on a qualified local filesystem. A root behind a symbolic link in its path is not ready, and the dry run reports the store's own refusal beside the check (`TestTheStateRootInspectionReachesTheRootAsTheStoreOpensIt`). |
-| `bootwright controller install --download-only --dest-dir <dir>` | Write the lock's files into `<dir>` as [Offline and mirrored wheels](#offline-and-mirrored-wheels) defines. It never elevates and admits no host: it reads no setup record, runs no `rpm` or `dnf` and changes nothing outside `<dir>`, so any connected host can run it. |
-| `bootwright controller install` | Elevate, then inspect read-only: admission, the installed host, FIPS mode, the untested release and loader preload (informational), the setup state, the interpreter and its runtime and the baseline package presence. A ready host prints the receipt table and `Nothing to do.`, with no network request, confirmation or write. Otherwise run the preview and present the plan, confirm, take `host/setup/lock`, inspect again and refuse a host that moved, record the pending intent, install with dnf, fetch, build, verify and publish the runtime, and write the receipt, which clears the pending intent. Publish no binding and touch no controller record. |
+| `bootwright controller install` | Elevate, then inspect read-only: admission, the installed host, FIPS mode, the untested release and loader preload (informational), the setup state, the interpreter and its runtime and the baseline package presence. A ready host prints the receipt table and `Nothing to do.`, with no network request, confirmation or write. Otherwise run the preview and present the plan, confirm, take `host/setup/lock`, inspect again and refuse a host that moved, record the pending intent, install with dnf, copy the carried wheels, build, verify and publish the runtime, and write the receipt, which clears the pending intent. Publish no binding and touch no controller record. |
 | `bootwright controller check` | Read and verify the same host checks as setup with bounded local probes and no dnf preview, and report the host's FIPS mode and the missing package names. May use the verified privilege boundary for private metadata. A ready host names `bootwright context init --name <name> --input-dir <dir>` as its next command. |
 | `bootwright preflight --stage controller --context <name>` | Additionally report that context's own target tools, its container runtime, libvirt client, hypervisor, installer-media, `nmstate` and `iputils` requirements by `rpm` presence, and its host binding, as context-scoped checks. Contact no publisher and read no repository metadata for them. |
 
@@ -340,7 +351,7 @@ The plan names each action setup takes, in order:
   host and continues";
 - `native-packages`, with the verbatim dnf preview and its core-package note;
 - `runtime`, for example "Python 3.14 at /usr/bin/python3.14, ansible-core
-  2.21.5: 3 of 7 wheels to download (2.1 MB), 4 cached".
+  2.21.5: 3 of 7 wheels to copy from this executable (2.1 MB), 4 cached".
 
 A dry run, preflight and an interrupted setup never discover versions: the
 lock decides every wheel and the host's dnf every package. A valid dry run
@@ -357,10 +368,6 @@ its first apply binds it, and stays not ready rather than pending.
 the prompt; decline, noninteractive input without `--yes`, or cancellation
 starts no setup mutation. Setup changes neither current-context selection nor
 Environment input, and claims no context.
-
-`--wheel-mirror` and `--download-only --dest-dir` serve a host that cannot
-reach `files.pythonhosted.org`; [Offline and mirrored wheels](#offline-and-mirrored-wheels)
-owns them.
 
 ## The uninstall flow
 
@@ -812,91 +819,15 @@ read Secret material to probe an unsupported route; authenticated or
 private-trust acquisition needs its own Secrets consumer and recovery
 definition.
 
-**Trust off the Fedora/RHEL family.** The `tls-ca-bundle.pem` read above is the
-only trust the wheel fetch reads while that file exists, and an unsafe one is
-refused. Where the file is absent, as on a Debian, SUSE or Alpine workstation
-that runs `controller install --download-only`, the fetch uses Go's system certificate pool,
-which reads the host's own bundle locations; a host with no trust at all is
-refused naming the absent bundle and `--wheel-mirror`. A wheel is used only
-when its size and SHA-256 match the lock, so the TLS trust never decides what
-is installed (`TestAnAbsentFedoraBundleFallsBackToTheSystemPool`,
-`TestAnUnsafeBundleIsNeverReplacedByTheSystemPool`).
+**No wheel origin.** Setup contacts no wheel origin: every wheel comes from
+the executable's [carried wheels](#the-runtime-lock), so pypi.org,
+`files.pythonhosted.org` and GitHub are never contacted to install it.
 
-**Wheel origins.** Setup fetches only the URLs the lock names, on
-`files.pythonhosted.org`, over the route it admitted, or the files of a
-`--wheel-mirror` in their place; pypi.org, uv metadata and GitHub are not
-contacted. A cached wheel is never fetched again.
+### Locked files and the dnf route
 
-### Offline and mirrored wheels
-
-**`--wheel-mirror <mirror>`** moves where setup, and `controller install --download-only`,
-read each locked wheel from: the lock's URL becomes `<mirror>/<filename>`.
-The mirror is untrusted transport. The lock's size and SHA-256 alone decide
-whether its bytes are used, through the same wheel cache and the same
-verification as a fetch from the lock's URL, so a mirror cannot change what is
-installed, only where the bytes come from. A mirror is one of:
-
-- `file:///<absolute directory>`, with no host. Setup opens
-  `<directory>/<filename>` without following a link or waiting on a pipe,
-  requires the opened file to be a regular file of the locked size, never a
-  link, a device or a pipe, and copies it into the cache from that handle.
-- `https://<host>[/<base>]` on the default port, with no credentials, query or
-  fragment, fetched over the same client as a lock URL: the system trust
-  store, the admitted [route](#the-context-free-acquisition-route), HTTPS-only
-  redirects within the declared mirror origin and a bounded chain.
-
-Every wheel redirect stays on the initial lock URL's origin, or the explicitly
-selected mirror's origin. Each actual connection resolves its endpoint once,
-checks every answer, and dials only a checked IP address. Public lock origins
-and public tool-metadata origins admit public unicast destinations only. A
-declared HTTPS mirror or explicit proxy can use private unicast addresses;
-loopback or link-local access requires that exact IP literal in the declared
-mirror or proxy URL. A hostname cannot rebind into loopback or link-local
-space. Unspecified and multicast addresses are refused. When an explicit
-proxy is selected, this rule checks the connection to that proxy; upstream
-name resolution is delegated to the declared proxy. Neither ambient proxy
-configuration nor a redirect can widen this authority.
-
-Any other form, including `http`, a credential, a query or a relative
-directory, is a usage error naming the accepted forms. The mirror's base path
-is kept percent-encoded, so an encoded `?` or `/` stays part of one path
-segment. A wheel the mirror lacks, answers with another status or holds with
-other bytes fails setup before that file enters the cache and before the
-runtime is built, naming the file, the mirror and the remedy: place the locked
-wheels there, or drop `--wheel-mirror`. An HTTPS mirror host this host cannot
-reach is refused as any unreachable publisher is. A cached wheel is still never
-fetched again, so a mirror is read only for what the cache lacks. The mirror
-only replaces wheel origins: it changes no dnf configuration, and the plan's
-runtime action names it.
-
-**`controller install --download-only --dest-dir <dir>`** is the counterpart of
-`dnf --downloadonly --destdir`. It runs unprivileged on any connected host and
-never elevates: the invocation classification treats it as `controller install --dry-run`
-is, and the command reads no setup record, takes no lock, admits no OS family
-and runs no package manager. It writes into `<dir>`, which it creates when
-absent:
-
-- every locked wheel of every Python ABI, because the offline host's
-  interpreter is not known here, and the pip wheel, each as `<filename>`, so
-  that `<dir>` serves as a `file:///<dir>` mirror unchanged;
-- `lock.json`, a copy of the lock this build embeds, byte for byte.
-
-Nothing else is written. A wheel is copied from the wheel cache when this
-account can read it, which is the case when it runs as root, and is otherwise
-fetched from the lock's URL, or from `--wheel-mirror`, over the admitted
-route. Each file passes the same size and SHA-256 verification before it
-takes its name, through a partial file that a refused or interrupted transfer
-leaves nothing of. A file already in `<dir>` with its locked size and SHA-256
-is kept and not fetched again. Files are `0644` and the directory `0755`.
-`--download-only` requires `--dest-dir`, conflicts with `--dry-run`, and takes
-no `--output json`; a missing or unwritable `<dir>` is a failure naming it,
-and a failed transfer names the file and the host.
-
-**`controller install --dry-run --output json`** lists every locked file under `files`: its
-Python ABI (absent for the pip wheel), filename, URL and SHA-256, so an
-operator can fetch them by other means. With `--wheel-mirror`, the plan's
-runtime action also names the mirror; the listed URLs stay the lock's.
-The fields are the `controller install` row of the [result fields](cli/output.md#json-output).
+**`controller install --dry-run --output json`** lists every locked file the
+executable carries under `files`: its Python ABI (absent for the pip wheel),
+filename, the URL a build fetches it from, and SHA-256. The fields are the `controller install` row of the [result fields](cli/output.md#json-output).
 
 **The dnf route.** When the admitted route is a proxy, dnf receives it as
 `https_proxy` and `no_proxy`, and a `proxy=` in the host's dnf configuration
@@ -963,8 +894,8 @@ drop. A sudoers rule that permits neither `SETENV` nor `ALL` refuses that
 forwarding, and the refusal, human or JSON, names the `SETENV` tag as its
 remedy ([local privilege](cli.md#local-privilege-and-user-identity)); running as
 root reads the environment directly. Child processes
-still receive no proxy variable of their own: the route reaches the wheel
-fetcher, the automation and dnf as request data, exactly as a declared route
+still receive no proxy variable of their own: the route reaches the
+automation and dnf as request data, exactly as a declared route
 does.
 
 Reject a bootstrap dependency on a proxy or other service whose readiness
@@ -1045,8 +976,7 @@ digest and the ABI, with the ABI and `ansible-core` release a refusal names
 An OS Python z-stream update, an OS release upgrade that keeps the ABI, and any
 rebuild with the same lock continue a live operation; a new lock or another
 ABI refuses its continuation, naming the build that registered it, whose `controller install`
-restores its runtime, fetching any wheel the cache no longer holds over the
-network or with `--wheel-mirror`, because [retention](#publication-and-interrupted-setup)
+restores its runtime from the wheels that build carries, because [retention](#publication-and-interrupted-setup)
 keeps only the current and previous runtimes and a setup-format discard keeps
 none, or the destroy that takes back what it owns.
 
@@ -1071,7 +1001,7 @@ and synchronizes the pending intent: its setup ID, plan digest, remaining
 actions, start time and missing package requirements, as the
 [setup record](contexts/controller-record.md#the-setup-subtree) specifies. Each finished action shortens that list, and the
 receipt written last clears it. A setup that fails before any dnf transaction
-began, as a failed wheel fetch does, also clears it, because a runtime
+began, as a failed wheel copy does, also clears it, because a runtime
 publishes only whole and nothing else changed, so the runtime a kept receipt
 names still launches. Interrupted or failed setup may leave approved
 packages installed; nothing is rolled back, and install never removes a
@@ -1079,8 +1009,7 @@ package: only [uninstall](#the-uninstall-flow) removes what a receipt records.
 
 **An unknown outcome blocks every consumer.** A launch that finds the pending
 intent refuses `controller.state`, "a controller setup (`setup-000042`) was
-interrupted before it finished", with the remedy `run bootwright controller install`, adding
-`--wheel-mirror <mirror>` on a host that cannot reach the wheel origins, or,
+interrupted before it finished", with the remedy `run bootwright controller install` or,
 when it keeps a receipt, the `controller install` of the build whose lock that receipt names,
 which keeps its runtime. Setup itself
 re-inspects: its plan names the interrupted run and the step it stopped in and
@@ -1096,15 +1025,14 @@ Bootwright build wrote (`<format>`)", removes the subtree after confirmation,
 taking every runtime's lock first so it never removes one in use, and
 proceeds. Because the discard removes every runtime and the wheel cache, the
 plan treats them as absent: its `runtime` row counts every locked wheel as one
-to download, and setup fetches, builds and publishes the runtime before the
+to copy, and setup copies, builds and publishes the runtime before the
 receipt names it. A launch refuses as the
 [setup subtree](contexts/controller-record.md#the-setup-subtree) states. A
 future setup-format change therefore never leaves setup
 unable to heal its own state, but the discard also removes the previous
 runtime: an operation registered under the discarded closure continues only
-through its registering build's `controller install`, which fetches its wheels again and so
-needs network or `--wheel-mirror`, and which discards this build's subtree in
-turn, or through the removal that supersedes it.
+through its registering build's `controller install`, which copies the wheels
+that build carries again and discards this build's subtree in turn, or through the removal that supersedes it.
 
 **Publication.** A runtime is published only whole, as the
 [setup subtree](contexts/controller-record.md#the-setup-subtree) defines.

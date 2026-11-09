@@ -1347,8 +1347,8 @@ Before a continuation of either verb restores its operation's log, raises
 evidence or marks its operation `running`, it refuses `lifecycle.state`, with no
 effect and no record changed, when this build's runtime carries another closure (another
 runtime lock or another interpreter ABI), naming the build that registered it,
-whose `controller install` restores its runtime, fetching any uncached wheel over
-the network or with `--wheel-mirror`, then continues it, and for an
+whose `controller install` restores its runtime from the wheels that build
+carries, then continues it, and for an
 apply the removal that takes back what it owns, or when
 another build registered the operation and this executable does not freeze the
 same blocks. Another build is one whose automation differs from the one the

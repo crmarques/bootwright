@@ -183,8 +183,6 @@ type osPython struct {
 	glibcLow  bool
 	cached    bool
 	named     map[string][]string
-	mirrors   []string
-	exported  []string
 	buildErr  error
 	fetchErr  error
 }
@@ -221,16 +219,9 @@ func (p *osPython) RuntimeWheels(_ context.Context, digest string) ([]string, er
 	return named, nil
 }
 
-func (p *osPython) Fetch(_ context.Context, _ string, _ SetupEgress, mirror WheelMirror) error {
+func (p *osPython) Fetch(context.Context, string) error {
 	p.owner.record("fetch")
-	p.mirrors = append(p.mirrors, mirror.String())
 	return p.fetchErr
-}
-
-func (p *osPython) Export(_ context.Context, destination string, _ SetupEgress, mirror WheelMirror) (WheelExport, error) {
-	p.owner.record("export")
-	p.exported = append(p.exported, destination+" "+mirror.String())
-	return WheelExport{Directory: destination, Files: []ExportedWheel{{Filename: "ansible_core-2.21.5-py3-none-any.whl", SHA256: strings.Repeat("a", 64), Size: 2_400_000, Origin: OriginDownload}}}, nil
 }
 
 func (p *osPython) Inspect(context.Context, PythonInterpreter) (Runtime, bool, error) {
@@ -508,7 +499,7 @@ func TestAFailureBeforeAnyDnfTransactionClearsThePendingIntent(t *testing.T) {
 			if test.missing != "" {
 				f.packages.present[test.missing] = false
 			}
-			f.python.fetchErr = failure("controller.install", "the wheel origin did not answer", "pass --wheel-mirror")
+			f.python.fetchErr = failure("controller.install", "this executable does not carry a locked wheel", "install an executable built with make build")
 			if _, err := f.service.Setup(context.Background(), SetupRequest{}); codeOf(err) != "controller.install" {
 				t.Fatalf("Setup = %v", err)
 			}
@@ -639,7 +630,7 @@ func TestDiscardingAnotherBuildsStateRebuildsAHealthyRuntime(t *testing.T) {
 	if err != nil || report.Outcome != "changed" {
 		t.Fatalf("Setup = %+v, %v", report, err)
 	}
-	want := "Prepare the controller runtime: Python 3.14 at " + testPython + ", ansible-core 2.21.5: 2 of 2 wheels to download (4.2 MB), 0 cached"
+	want := "Prepare the controller runtime: Python 3.14 at " + testPython + ", ansible-core 2.21.5: 2 of 2 wheels to copy from this executable (4.2 MB), 0 cached"
 	if !slices.Equal(f.plan.Actions, []string{DiscardForeignSetupAction(unrecognizedTestFormat), want}) {
 		t.Fatalf("the plan is %q", f.plan.Actions)
 	}

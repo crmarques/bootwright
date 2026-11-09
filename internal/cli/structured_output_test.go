@@ -359,7 +359,6 @@ func TestStructuredMutationsUseMetadataResults(t *testing.T) {
 			{[]string{"secret", "encryption", "rotate", "--yes"}, commandResult{encryptionMutation: &encryption.MutationResult{Context: secretResultContext(), Implementation: selection, ActiveKey: "key-2", Changed: true, RetiredKeys: []string{"key-1"}, ReencryptedParts: 2, ReencryptedVersions: 1}}, "reencryptedParts"},
 			{[]string{"apply", "--yes"}, commandResult{lifecycleOperation: &lifecycle.OperationResult{Verb: "apply", Receipt: lifecycle.Receipt{Operation: "op-demo", Verb: "apply", State: "done", Next: "none"}}}, "receipt"},
 			{[]string{"destroy", "--yes"}, commandResult{lifecycleOperation: &lifecycle.OperationResult{Verb: "destroy", Receipt: lifecycle.Receipt{Operation: "op-demo", Verb: "destroy", State: "done", Next: "none"}}}, "receipt"},
-			{[]string{"controller", "install", "--download-only", "--dest-dir", "wheels"}, commandResult{controller: &prerequisites.Report{Outcome: "downloaded", Export: &prerequisites.WheelExport{Directory: "wheels", Files: []prerequisites.ExportedWheel{{Filename: "demo.whl", SHA256: strings.Repeat("a", 64), Size: 42, Origin: prerequisites.OriginDownload}}}}}, "files"},
 		} {
 			record := &dispatchRecord{result: test.result}
 			args := append([]string{"--output", format}, test.args...)

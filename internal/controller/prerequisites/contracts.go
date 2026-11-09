@@ -62,8 +62,7 @@ type PythonRuntime interface {
 	PythonExecutionGuard
 	Select(ctx context.Context, preferred string) (PythonInterpreter, error)
 	Wheels(ctx context.Context, abi string) ([]RuntimeWheel, error)
-	Fetch(ctx context.Context, abi string, egress SetupEgress, mirror WheelMirror) error
-	Export(ctx context.Context, destination string, egress SetupEgress, mirror WheelMirror) (WheelExport, error)
+	Fetch(ctx context.Context, abi string) error
 	Inspect(ctx context.Context, interpreter PythonInterpreter) (Runtime, bool, error)
 	Build(ctx context.Context, publisher RuntimePublisher, interpreter PythonInterpreter) (Runtime, error)
 	RuntimeWheels(ctx context.Context, digest string) ([]string, error)

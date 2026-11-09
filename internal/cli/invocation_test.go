@@ -112,8 +112,6 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"controller install", []string{"--dry-run"}, readsRoute},
 		{"controller install", []string{"--yes"}, readsRoute},
 		{"controller install", []string{"--dry-run", "--output", "json"}, readsRoute},
-		{"controller install", []string{"--download-only", "--dest-dir", "wheels"}, readsRoute},
-		{"controller install", []string{"--wheel-mirror", "https://mirror.example/wheels"}, readsRoute},
 		// The controller check is context-free, so it reads the route whatever
 		// else it is given.
 		{"controller check", nil, readsRoute},

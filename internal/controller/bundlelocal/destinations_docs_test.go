@@ -16,15 +16,14 @@ import (
 
 // destinationSources are the files that name every host the controller stage
 // contacts: the publishers it acquires tools from and the hosts its Go
-// transports admit. The collection's redirect hosts and the runtime lock's
-// wheel URLs complete the set.
+// transports admit. The collection's redirect hosts complete the set; the
+// runtime lock's wheel URLs are contacted by a build, never by a host.
 var destinationSources = []string{
 	"tools.go", "tools_transport.go",
 }
 
 const (
 	redirectHostsSource = "../../../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/controller_files.py"
-	runtimeLockSource   = "../runtimelock/lock.json"
 	operatorGuide       = "../../../docs/operator-guide.md"
 	destinationsHeading = "#### Destinations to allow"
 )
@@ -108,17 +107,6 @@ func codeDestinations(t *testing.T) map[string]string {
 		}
 		hosts[host] = redirectHostsSource
 	}
-	lock, err := os.ReadFile(runtimeLockSource)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, match := range regexp.MustCompile(`"url":\s*"([^"]*)"`).FindAllSubmatch(lock, -1) {
-		parsed, err := url.Parse(string(match[1]))
-		if err != nil || parsed.Hostname() == "" {
-			t.Fatalf("%s: %q is no URL with a host", runtimeLockSource, match[1])
-		}
-		hosts[parsed.Hostname()] = runtimeLockSource
-	}
 	return hosts
 }
 
@@ -146,7 +134,7 @@ func guideDestinations(t *testing.T) []string {
 }
 
 // An allowlisting proxy admits only the hosts the guide lists, so that list is
-// exactly what setup and the controller stage contact: a host the code adds
+// exactly what the controller stage contacts: a host the code adds
 // and the guide omits is refused at the proxy, and one the guide keeps after
 // the code dropped it is a needless opening.
 func TestDocsProxiedNetworkDestinationsMatchTheCode(t *testing.T) {

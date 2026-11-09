@@ -30,9 +30,7 @@ func applicationValues() packageSymbols {
 		"internal/managedos/installation": {"Request": true},
 		// ScopedFailure is the failure value a dependency adapter raises for
 		// its caller's scope to render; it binds no replaceable service.
-		// WheelMirror is the validated --wheel-mirror value the CLI checks and
-		// the wheel adapter reads: an immutable value, not a service.
-		"internal/controller/prerequisites": {"ScopedFailure": true, "WheelMirror": true},
+		"internal/controller/prerequisites": {"ScopedFailure": true},
 		// The immutable request and service definition other capabilities
 		// construct and read; they bind no replaceable service.
 		"internal/infrastructureservices/managedservice": {"Request": true, "Definition": true},

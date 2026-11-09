@@ -58,7 +58,7 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"media delete", media.DeleteMediaRequest{Name: "demo", SkipConfirmation: true}},
 		{"validate", compilation.ValidateRequest{ContextName: "", Files: []string{"inputs"}}},
 		{"controller check", prerequisites.CheckRequest{}},
-		{"controller install", prerequisites.SetupRequest{DryRun: true, SkipConfirmation: true, WheelMirror: "file:///srv/wheels", DownloadOnly: true, Destination: "/srv/wheels-out"}},
+		{"controller install", prerequisites.SetupRequest{DryRun: true, SkipConfirmation: true}},
 		{"preflight", environmentpreflight.PreflightRequest{ContextName: "example", Stages: []string{"infrastructure-services", "substrates"}, Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
 		{"cluster list", inspection.ListClustersRequest{ContextName: "example"}},
 		{"cluster info", inspection.ClusterInfoRequest{ContextName: "example", Names: []string{"demo"}, Secrets: true}},

@@ -5608,8 +5608,8 @@ it can take, and nothing staged is executable.
 `TestAnUnsafeDnfExecutableIsRefused`; `internal/controller/venvlocal`:
 `TestSelectionPrefersTheReceiptsInterpreterThenTheNewestABI`,
 `TestAnInterpreterBelowAWritableDirectoryIsSkipped`,
-`TestTheStdlibDirectoriesAreWalked`, `TestACacheHitMakesNoRequest`,
-`TestAWheelWithAnotherHashIsRefused`, `TestTheVenvHoldsNoPthOrStartupHook`,
+`TestTheStdlibDirectoriesAreWalked`, TestACacheHitMakesNoRequest,
+TestAWheelWithAnotherHashIsRefused, `TestTheVenvHoldsNoPthOrStartupHook`,
 `TestBytecodeIsUncheckedHash`, `TestRuntimeJsonIsWrittenBeforePublication`,
 `TestABuildReplacesAPublishedRuntimeThatFailsItsProbe` and
 `TestTheGuardHoldsTheRuntimeSharedForTheBlock`;
@@ -6124,22 +6124,22 @@ network. The setup result's `execution-bundle` check keeps its ID.
 `TestARebuildIsRefusedWhereOnlySetupCanPrepareTheRuntime`,
 `TestAFailedBuildIsARebuildFailure`,
 `TestARebuildAdoptsARuntimePublishedMeanwhile`,
-`TestAWheelMirrorIsAFileDirectoryOrAnHTTPSBase`,
-`TestAMirrorEscapesTheFilenameItReads`,
-`TestSetupReadsTheMirrorAndTheRuntimeActionNamesIt`,
-`TestADryRunNamesTheMirrorAndStillListsTheLocksURLs`,
-`TestAnInvalidMirrorRefusesBeforeAnyInspection`,
-`TestDownloadOnlyTouchesNoHostPortAndElevatesNothing`,
-`TestDownloadOnlyRefusesWhatItCannotDo` and
-`TestDownloadOnlyWithoutTheLockIsUnavailable`;
-`internal/controller/venvlocal`: `TestAFileMirrorWheelWithAnotherHashIsRefused`,
-`TestAFileMirrorMissingAWheelOrHoldingTheWrongSizeIsRefusedWithARemedy`,
-`TestAFileMirrorRefusesAPipeOrALinkNamedAsAWheel`,
-`TestAnHTTPSMirrorWheelWithAnotherHashIsRefused`,
-`TestAnHTTPSMirrorLackingAWheelIsRefusedNamingTheMirrorAndTheRemedy`,
-`TestACachedWheelIsNeverReadFromTheMirror`,
-`TestExportWritesExactlyTheLockedSetAndTheLock`,
-`TestExportFromAnUnreadableCacheFetchesAndRefusesTamperedBytes`,
+TestAWheelMirrorIsAFileDirectoryOrAnHTTPSBase,
+TestAMirrorEscapesTheFilenameItReads,
+TestSetupReadsTheMirrorAndTheRuntimeActionNamesIt,
+TestADryRunNamesTheMirrorAndStillListsTheLocksURLs,
+TestAnInvalidMirrorRefusesBeforeAnyInspection,
+TestDownloadOnlyTouchesNoHostPortAndElevatesNothing,
+TestDownloadOnlyRefusesWhatItCannotDo and
+TestDownloadOnlyWithoutTheLockIsUnavailable;
+`internal/controller/venvlocal`: TestAFileMirrorWheelWithAnotherHashIsRefused,
+TestAFileMirrorMissingAWheelOrHoldingTheWrongSizeIsRefusedWithARemedy,
+TestAFileMirrorRefusesAPipeOrALinkNamedAsAWheel,
+TestAnHTTPSMirrorWheelWithAnotherHashIsRefused,
+TestAnHTTPSMirrorLackingAWheelIsRefusedNamingTheMirrorAndTheRemedy,
+TestACachedWheelIsNeverReadFromTheMirror,
+TestExportWritesExactlyTheLockedSetAndTheLock,
+TestExportFromAnUnreadableCacheFetchesAndRefusesTamperedBytes,
 `TestARuntimeNamesTheWheelsItsBuildInstalled` and the live
 `TestALiveBuildOnThisHost`; `internal/reconciliation/lifecycle`:
 `TestAMissingRuntimeIsRebuiltFromCachedWheels`,
@@ -6157,7 +6157,7 @@ and `TestStatusNeverRebuildsAMissingRuntime`; `internal/workspace/contextfs`:
 `TestTheSweepAdmitsManyRuntimeEntries` and `TestPruningKeepsOnlyTheNamedWheels`;
 `internal/controller/clients`: `TestEverySuccessfulStageNamesItsAreaAndRetiresTheRest`
 and `TestARetirementFailureKeepsTheStageOutcomeHonest`; `cmd/bootwright`:
-`TestComposedDownloadOnlyStaysBelowThePrivilegeBoundaryAndReadsNoState` and
+TestComposedDownloadOnlyStaysBelowThePrivilegeBoundaryAndReadsNoState and
 `TestTheDryRunJSONListsEveryLockedFileOfTheEmbeddedLock`; and the
 `cli-setup-download` and `help-setup` goldens.
 
@@ -6254,9 +6254,9 @@ twelve findings. **Decisions:** D152, pending the owner's review.
     absent it falls back to Go's system pool, an unsafe bundle is still
     refused, and a host with no trust is refused naming `--wheel-mirror`;
     each trust refusal names its remedy.
-    `TestAnAbsentFedoraBundleFallsBackToTheSystemPool`,
-    `TestAnUnsafeBundleIsNeverReplacedByTheSystemPool` and
-    `TestAHostWithNoTrustAtAllRefusesNamingTheBundleAndARemedy`.
+    TestAnAbsentFedoraBundleFallsBackToTheSystemPool,
+    TestAnUnsafeBundleIsNeverReplacedByTheSystemPool and
+    TestAHostWithNoTrustAtAllRefusesNamingTheBundleAndARemedy.
 
 **Gates:** in the x92 worktree on main 50aebb522, as its commit records:
 `make check` passes (mod verify, tidy, `go test ./...`, vet, the completion
@@ -12825,3 +12825,30 @@ OpenSSL, since the runtime carries none.
 occurred. **Limitations:** the lock's digest moved, so each host runs
 `controller install` once with this build, and a live operation another build
 registered refuses to continue across the closure change.
+
+### X339 — The executable carries its Python wheels
+
+**Item:** B1238 (2026-11-09, [D248](backlog.md#d248) (3) and (4)), completed
+in-tree and awaiting operator acceptance. The executable embeds every file the
+runtime lock names, and `controller install` copies them into the wheel cache,
+checks each against the lock and builds the runtime as before, so installation
+downloads no wheel and reaches no package index
+([carried wheels](../controller.md#the-runtime-lock)). `make wheels`, a
+standard-library Go tool in `scripts/tools/runtimewheels`, places the files in
+the ignored `internal/controller/runtimelock/wheels`, from the shared cache or
+from their locked URLs, each taking its name only once its size and SHA-256
+match the lock, and removes what the lock no longer names; `make build` and
+`make check` run it first, and the container build runs it while its proxy
+settings are set, into a cache mount of its own. A build that skipped it
+compiles, carries none and refuses `controller install` before the plan. The
+wheel HTTP client and its trust store reading, `--wheel-mirror`,
+`--download-only --dest-dir` and their result go, with the tests earlier
+records name for them, and the venv adapter loses its network grant. The
+operator guide no longer lists `files.pythonhosted.org` among the destinations
+a proxy must admit; `controller install` contacts only the host's dnf
+repositories.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** a build host needs `files.pythonhosted.org`, or a
+warm cache, for its first `make wheels`; the context's controller stage still
+downloads its target tools from their publishers.

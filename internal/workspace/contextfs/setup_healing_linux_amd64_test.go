@@ -61,7 +61,7 @@ func (p *healingPython) Wheels(context.Context, string) ([]prerequisites.Runtime
 	return wheels, nil
 }
 
-func (p *healingPython) Fetch(context.Context, string, prerequisites.SetupEgress, prerequisites.WheelMirror) error {
+func (p *healingPython) Fetch(context.Context, string) error {
 	for _, file := range healingLock.Files {
 		if err := os.MkdirAll(filepath.Dir(p.wheel(file)), 0700); err != nil {
 			return err
@@ -71,10 +71,6 @@ func (p *healingPython) Fetch(context.Context, string, prerequisites.SetupEgress
 		}
 	}
 	return nil
-}
-
-func (p *healingPython) Export(context.Context, string, prerequisites.SetupEgress, prerequisites.WheelMirror) (prerequisites.WheelExport, error) {
-	return prerequisites.WheelExport{}, errors.New("no export in a healing test")
 }
 
 func (p *healingPython) Inspect(context.Context, prerequisites.PythonInterpreter) (prerequisites.Runtime, bool, error) {
@@ -192,7 +188,7 @@ func TestHealingASubtreeOverAHealthyRuntimeLeavesItLaunchable(t *testing.T) {
 	}
 	setup()
 	healed := plans.actions[len(plans.actions)-1]
-	if len(healed) != 2 || !strings.HasPrefix(healed[1], "Prepare the controller runtime") || !strings.Contains(healed[1], "2 of 2 wheels to download") {
+	if len(healed) != 2 || !strings.HasPrefix(healed[1], "Prepare the controller runtime") || !strings.Contains(healed[1], "2 of 2 wheels to copy from this executable") {
 		t.Fatalf("the healing plan is %q", healed)
 	}
 	if python.builds != 2 {

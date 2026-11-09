@@ -3,64 +3,49 @@
 package venvlocal
 
 import (
-	"bytes"
 	"context"
-	"io"
-	"net/http"
+	"errors"
+	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
-	"sync"
-	"sync/atomic"
+	"strings"
 	"testing"
-	"time"
+	"testing/fstest"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
-// publisher answers each locked URL with the bytes named by its filename,
-// counting requests and the most that were ever in flight together.
-type publisher struct {
-	requests, inFlight, peak atomic.Int32
-	body                     func(filename string) []byte
-	mutex                    sync.Mutex
-	urls                     []string
+// told is the message and correction a scoped failure carries.
+func told(err error) string {
+	var scoped *prerequisites.ScopedFailure
+	if !errors.As(err, &scoped) {
+		return ""
+	}
+	return scoped.Message + " " + scoped.Correction
 }
 
-func (p *publisher) client(context.Context, prerequisites.SetupEgress) (*http.Client, error) {
-	return &http.Client{Transport: roundTrip(func(request *http.Request) (*http.Response, error) {
-		p.requests.Add(1)
-		current := p.inFlight.Add(1)
-		defer p.inFlight.Add(-1)
-		for {
-			peak := p.peak.Load()
-			if current <= peak || p.peak.CompareAndSwap(peak, current) {
-				break
-			}
-		}
-		time.Sleep(5 * time.Millisecond)
-		p.mutex.Lock()
-		p.urls = append(p.urls, request.URL.String())
-		p.mutex.Unlock()
-		body := p.body(path.Base(request.URL.Path))
-		return &http.Response{StatusCode: http.StatusOK, ContentLength: int64(len(body)), Body: io.NopCloser(bytes.NewReader(body)), Header: http.Header{}}, nil
-	})}, nil
+// countingFS counts every file opened in the carried set.
+type countingFS struct {
+	fstest.MapFS
+	opened int
 }
 
-func TestACacheHitMakesNoRequest(t *testing.T) {
+func (c *countingFS) Open(name string) (fs.File, error) {
+	c.opened++
+	return c.MapFS.Open(name)
+}
+
+func TestTheCacheIsFilledFromTheCarriedWheelsAndAWarmCacheCopiesNone(t *testing.T) {
 	host := newFakeHost(t)
 	adapter := host.adapter(testLock(t, "3.14"))
-	source := &publisher{body: wheelBytes}
-	adapter.client = source.client
-	if err := adapter.Fetch(context.Background(), "3.14", prerequisites.SetupEgress{}, prerequisites.WheelMirror{}); err != nil {
+	carried := &countingFS{MapFS: carriedWheels(adapter.lock)}
+	adapter.carried = carried
+	if err := adapter.Fetch(context.Background(), "3.14"); err != nil {
 		t.Fatal(err)
 	}
 	files, _ := adapter.lock.Files("3.14")
-	if got, want := source.requests.Load(), int32(len(files)+1); got != want {
-		t.Fatalf("a cold cache made %d requests, want one per locked file and the installer, %d", got, want)
-	}
-	if peak := source.peak.Load(); peak > fetchers {
-		t.Fatalf("%d fetches ran at once, above the bound of %d", peak, fetchers)
+	if got, want := carried.opened, len(files)+1; got != want {
+		t.Fatalf("a cold cache opened %d carried files, want one per locked file and the installer, %d", got, want)
 	}
 	wheels, err := adapter.Wheels(context.Background(), "3.14")
 	if err != nil {
@@ -71,42 +56,29 @@ func TestACacheHitMakesNoRequest(t *testing.T) {
 			t.Fatalf("%s is not cached after a fetch", wheel.Filename)
 		}
 	}
-	source.requests.Store(0)
-	if err := adapter.Fetch(context.Background(), "3.14", prerequisites.SetupEgress{}, prerequisites.WheelMirror{}); err != nil {
-		t.Fatal(err)
-	}
-	if got := source.requests.Load(); got != 0 {
-		t.Fatalf("a warm cache made %d requests", got)
+	carried.opened = 0
+	if err := adapter.Fetch(context.Background(), "3.14"); err != nil || carried.opened != 0 {
+		t.Fatalf("a warm cache opened %d carried files (%v)", carried.opened, err)
 	}
 	if err := os.WriteFile(adapter.cachePath(files[0]), []byte("tampered"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := adapter.Fetch(context.Background(), "3.14", prerequisites.SetupEgress{}, prerequisites.WheelMirror{}); err != nil {
-		t.Fatal(err)
-	}
-	if got := source.requests.Load(); got != 1 {
-		t.Fatalf("one tampered cache entry made %d requests, want 1", got)
+	if err := adapter.Fetch(context.Background(), "3.14"); err != nil || carried.opened != 1 {
+		t.Fatalf("one tampered cache entry opened %d carried files (%v), want 1", carried.opened, err)
 	}
 }
 
-func TestAWheelWithAnotherHashIsRefused(t *testing.T) {
+func TestACarriedWheelWithAnotherHashIsRefused(t *testing.T) {
 	host := newFakeHost(t)
 	adapter := host.adapter(testLock(t, "3.14"))
 	files, _ := adapter.lock.Files("3.14")
-	target := files[0].Filename
-	adapter.client = (&publisher{body: func(filename string) []byte {
-		data := wheelBytes(filename)
-		if filename == target {
-			data[0] ^= 0xff
-		}
-		return data
-	}}).client
-	err := adapter.Fetch(context.Background(), "3.14", prerequisites.SetupEgress{}, prerequisites.WheelMirror{})
-	if err == nil {
-		t.Fatal("a wheel whose bytes differ from the lock's SHA-256 was accepted")
+	carried := carriedWheels(adapter.lock)
+	carried[files[0].Filename].Data[0] ^= 0xff
+	adapter.carried = carried
+	if err := adapter.Fetch(context.Background(), "3.14"); !strings.Contains(told(err), "does not match its locked size and SHA-256") {
+		t.Fatalf("a carried wheel whose bytes differ from the lock's SHA-256: %v", err)
 	}
-	directory := filepath.Join(adapter.wheels, files[0].SHA256)
-	entries, _ := os.ReadDir(directory)
+	entries, _ := os.ReadDir(filepath.Join(adapter.wheels, files[0].SHA256))
 	if len(entries) != 0 {
 		t.Fatalf("a refused wheel left %v in its cache directory", entries)
 	}
@@ -115,14 +87,23 @@ func TestAWheelWithAnotherHashIsRefused(t *testing.T) {
 	}
 }
 
-func TestAWheelURLOutsideHTTPSIsRefused(t *testing.T) {
-	for _, address := range []string{"http://files.pythonhosted.org/x.whl", "https://user@files.pythonhosted.org/x.whl", "file:///x.whl", "https://files.pythonhosted.org:8443/x.whl"} {
-		parsed, err := http.NewRequest(http.MethodGet, address, nil)
-		if err != nil {
-			t.Fatal(err)
+// A build without make wheels carries nothing: setup refuses before it plans,
+// naming the build step, and nothing falls back to a download.
+func TestAnExecutableWithoutItsWheelsRefusesBeforeThePlan(t *testing.T) {
+	host := newFakeHost(t)
+	adapter := host.adapter(testLock(t, "3.14"))
+	adapter.carried = fstest.MapFS{".gitignore": {Data: []byte("*.whl\n")}}
+	for name, call := range map[string]func() error{
+		"wheels": func() error { _, err := adapter.Wheels(context.Background(), "3.14"); return err },
+		"fetch":  func() error { return adapter.Fetch(context.Background(), "3.14") },
+	} {
+		err := call()
+		if !strings.Contains(told(err), "does not carry the locked wheel") || !strings.Contains(told(err), "built with make build") {
+			t.Errorf("%s: %v", name, err)
 		}
-		if approvedURL(parsed.URL) {
-			t.Errorf("%s is approved", address)
-		}
+	}
+	host.fillCache(adapter, "3.14")
+	if _, err := adapter.Wheels(context.Background(), "3.14"); err != nil {
+		t.Errorf("a host whose cache holds every wheel needs none carried: %v", err)
 	}
 }

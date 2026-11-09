@@ -214,7 +214,7 @@ func (s Service) closureRefusal(ctx context.Context, view View, operation operat
 	if current != *operation.Closure {
 		frozen := *operation.Closure
 		remediation := "run the controller install of " + registeredWith(operation.Executable) + ", which restores its runtime (Python " + frozen.Python + ", ansible-core " + frozen.Ansible +
-			"), fetching any wheel its cache no longer holds over the network or with --wheel-mirror <mirror>, then continue it with that build"
+			") from the wheels it carries, then continue it with that build"
 		if supersedable(operation) {
 			remediation += ", or take back what it owns with " + contextCommand(view.Identity().Name, string(reconciliation.Destroy))
 		}

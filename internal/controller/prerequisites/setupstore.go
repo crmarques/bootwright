@@ -86,7 +86,7 @@ func SetupLaunchRefusal(v SetupView) error {
 }
 
 func interruptedSetupRemedy(receipt *HostReceipt) string {
-	remedy := setupStateRemedy + ", adding --wheel-mirror <mirror> on a host that cannot reach the wheel origins"
+	remedy := setupStateRemedy
 	if receipt == nil || receipt.Lock == "" {
 		return remedy
 	}

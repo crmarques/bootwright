@@ -5,7 +5,7 @@ package venvlocal
 
 import (
 	"context"
-	"net/http"
+	"io/fs"
 	"path/filepath"
 	"regexp"
 
@@ -17,6 +17,7 @@ type Config struct {
 	Lock     runtimelock.Lock
 	Runtimes string
 	Wheels   string
+	Carried  fs.FS
 }
 
 type command struct {
@@ -34,7 +35,7 @@ type Adapter struct {
 	top      string
 	trusted  func(uint32) bool
 	run      func(context.Context, command) ([]byte, error)
-	client   func(context.Context, prerequisites.SetupEgress) (*http.Client, error)
+	carried  fs.FS
 }
 
 var _ prerequisites.PythonRuntime = (*Adapter)(nil)
@@ -43,18 +44,16 @@ func New(config Config) *Adapter {
 	return &Adapter{
 		lock: config.Lock, runtimes: config.Runtimes, wheels: config.Wheels,
 		bin: "/usr/bin", top: "/", trusted: func(uid uint32) bool { return uid == 0 },
-		run: runCommand, client: wheelClient,
+		run: runCommand, carried: config.Carried,
 	}
 }
 
 const (
-	shimName    = "bootwright-python"
-	recordName  = "runtime.json"
-	lockName    = ".lock"
-	maxRecord   = 64 << 10
-	maxOutput   = 1 << 20
-	maxRedirect = 5
-	fetchers    = 4
+	shimName   = "bootwright-python"
+	recordName = "runtime.json"
+	lockName   = ".lock"
+	maxRecord  = 64 << 10
+	maxOutput  = 1 << 20
 )
 
 var digestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
