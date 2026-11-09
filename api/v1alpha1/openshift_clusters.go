@@ -45,7 +45,7 @@ func openShiftClusterSchema() *Shape {
 	install.Arms = []string{"agent"}
 	install.Suppress = []Suppression{{Field: "mode", Value: StringValue("connected"), Fields: []string{"agent.bootArtifacts"}}}
 	networking := record(
-		field("networkType", nonempty()),
+		field("networkType", enumeration("OVNKubernetes")),
 		field("machineNetworkRefs", set(ref(Network))),
 		field("ovnKubernetesConfig", ovnKubernetesSchema()),
 		field("secondaryNetworks", secondaryNetworksSchema()),

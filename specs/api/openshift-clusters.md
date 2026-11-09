@@ -360,7 +360,7 @@ implicit trust inherited from another consumer.
 
 | Field | Type | Required | Default |
 | --- | --- | --- | --- |
-| `networkType` | string | no | Installer default when absent. |
+| `networkType` | string | no | `OVNKubernetes`, the only network plugin every networking rule here reads; the installer default when absent. |
 | `machineNetworkRefs` | set of Network references | no | The machine networks below. |
 | `clusterNetwork` | array of `{cidr, hostPrefix}` | normalized | Family-dependent default below. |
 | `serviceNetwork` | array of CIDR strings | normalized | Family-dependent default below. |

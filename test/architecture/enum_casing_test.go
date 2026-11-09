@@ -32,6 +32,7 @@ var nativeEnumFields = map[string]string{
 	"MachineInstallProfile.spec.os.architecture":                                      "machine architectures",
 	"OpenShiftCluster.spec.install.additionalTrustBundlePolicy":                       "install-config trust bundle policies",
 	"OpenShiftCluster.spec.install.registries.imageDigestSources[].sourcePolicy":      "image digest source policies",
+	"OpenShiftCluster.spec.networking.networkType":                                    "OpenShift network plugin names",
 	"OpenShiftCluster.spec.networking.ovnKubernetesConfig.gatewayConfig.ipForwarding": "OVN-Kubernetes IP forwarding modes",
 	"OpenShiftCluster.spec.networking.secondaryNetworks[].ipam.lifecycle":             "OVN-Kubernetes IPAM lifecycles",
 	"OpenShiftCluster.spec.networking.secondaryNetworks[].ipam.mode":                  "OVN-Kubernetes IPAM modes",
