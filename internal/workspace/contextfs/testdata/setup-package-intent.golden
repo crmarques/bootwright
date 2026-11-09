@@ -5,7 +5,7 @@
       "podman",
       "python3.14"
     ],
-    "id": "setup-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "id": "install-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "planDigest": "4444444444444444444444444444444444444444444444444444444444444444",
     "actions": [
       "runtime",
@@ -39,7 +39,7 @@
         ],
         "provider": "podman-5:5.8.1-1.fc44.x86_64",
         "repository": "updates",
-        "installedBy": "setup-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "installedBy": "install-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       },
       {
         "requirement": "openssh-clients",

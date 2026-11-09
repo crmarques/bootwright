@@ -7602,3 +7602,33 @@ This authorizes, out of sequence, X338 (M1: [B559](m1.md#b559)) and X339 (M1:
 5. Not every image can come from a Red Hat registry, so no default image moves
    under the owner's condition; what a move would need is parked as
    [B1237](#b1237).
+
+### D249
+
+**owner** (2026-11-09): shown the on-host layout, the owner asked to rename
+`/var/lib/bootwright/host/setup` to `/var/lib/bootwright/controller/asset`:
+"i don't like the name you gave. do you have better alternatives?". Offered
+`install`, `runtime`, `toolchain` and `asset`, each with what it names and
+what it costs, the owner answered "proceed with recommendation. no backward
+compatibility". The owner's choices:
+
+1. The store's host-wide container is `controller/`, named for the commands
+   that write it, and setup's subtree is `controller/install/`, named for
+   `controller install`; the Controller record moves to `controller/record/`
+   ([storage and publication](../contexts.md#storage-locking-and-publication)).
+   This amends [D244](#d244) (2)'s `host/`.
+2. Setup output is `/var/log/bootwright/controller/install-NNNNNN.output`, and
+   setup IDs are `install-NNNNNN`, so the file names the directory's command
+   ([log root](../contexts/log-root.md)).
+3. No backward compatibility: the registry version moves, so a store with
+   `host/` reads as another build's, which
+   `controller uninstall --discard-unreadable` takes
+   ([B1216](m1.md#b1216)).
+
+This authorizes, out of sequence, X341 (M1: B1241). Taken by the session,
+pending the owner's review:
+
+4. `bootwright logs --setup` becomes `--install`, so the flag names the run it
+   reads ([reading and following logs](../cli/output.md#reading-and-following-logs)).
+   Specs and code keep "setup" as the name of the flow `controller install`
+   runs, and `controller check` keeps its `setup-state` check ID.

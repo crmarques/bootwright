@@ -88,14 +88,14 @@ func usage(message string) error {
 func Validate(selection Selection) error { return validate(selection) }
 
 func validate(selection Selection) error {
-	stream := selection.Run != "" || selection.Setup != ""
+	stream := selection.Run != "" || selection.Install != ""
 	switch {
-	case selection.Run != "" && selection.Setup != "":
-		return usage("--run and --setup select different outputs; name one")
+	case selection.Run != "" && selection.Install != "":
+		return usage("--run and --install select different outputs; name one")
 	case stream && (selection.Operation != "" || selection.Block != "" || selection.Raw || selection.Attempt != 0):
-		return usage("--run and --setup select one whole output and take no --operation, --block, --raw or --attempt")
-	case selection.Setup != "" && selection.Context != "":
-		return usage("--setup reads the host's setup output and takes no --context")
+		return usage("--run and --install select one whole output and take no --operation, --block, --raw or --attempt")
+	case selection.Install != "" && selection.Context != "":
+		return usage("--install reads the host's controller install output and takes no --context")
 	case selection.Raw && selection.Block == "":
 		return usage("--raw needs the --block whose output it reads")
 	case selection.Attempt != 0 && !selection.Raw:
@@ -108,8 +108,8 @@ func validate(selection Selection) error {
 		return usage("--block names a block of the operation's plan")
 	case selection.Run != "" && !validNumbered(selection.Run, "run-"):
 		return usage("--run names a bounded run as run-NNNNNN")
-	case selection.Setup != "" && selection.Setup != NewestSetup && !validNumbered(selection.Setup, "setup-") && !validSetupID(selection.Setup):
-		return usage("--setup names a setup as newest or setup-NNNNNN")
+	case selection.Install != "" && selection.Install != NewestInstall && !validNumbered(selection.Install, "install-") && !validInstallID(selection.Install):
+		return usage("--install names a controller install as newest or install-NNNNNN")
 	}
 	return nil
 }
@@ -120,8 +120,8 @@ func validNumbered(value, prefix string) bool {
 	return found && err == nil
 }
 
-func validSetupID(value string) bool {
-	digits, found := strings.CutPrefix(value, "setup-")
+func validInstallID(value string) bool {
+	digits, found := strings.CutPrefix(value, "install-")
 	return found && len(digits) == 32 && strings.Trim(digits, "0123456789abcdef") == ""
 }
 

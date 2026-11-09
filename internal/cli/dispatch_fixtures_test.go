@@ -367,7 +367,7 @@ func dispatchFlags() *pflag.FlagSet {
 		"private-key-file": "", "public-key-file": "", "type": "local-keyring",
 		"username": "", "input-dir": "inputs", "output-dir": "artifacts",
 		"stage": "infrastructure-services,substrates", "until": "compact.gitops",
-		"operation": "", "block": "", "attempt": "", "run": "", "setup": "",
+		"operation": "", "block": "", "attempt": "", "run": "", "install": "",
 	} {
 		flags.String(name, value, "")
 	}

@@ -396,12 +396,12 @@ func TestFollowStreamsARunUntilItIsNoLongerHeld(t *testing.T) {
 	if _, err := New(ws, Options{Operations: stores}).Show(context.Background(), Selection{Context: "lab", Run: "run-000004"}); !slices.Equal(codes(err), []string{"logs.not-found"}) {
 		t.Fatalf("an absent run = %#v", diagnostics.Of(err))
 	}
-	ws.setups = []*stream{{name: "setup-000001", data: []byte("old\n")}, {name: "setup-000002", data: []byte("new\n")}}
-	setup, err := New(ws, Options{Operations: stores}).Show(context.Background(), Selection{Setup: NewestSetup})
-	if err != nil || setup.Raw.Source != (Source{Kind: SourceSetup, Setup: "setup-000002"}) || setup.Raw.Path != "host/setup-000002.output" || setup.Context != "" {
+	ws.setups = []*stream{{name: "install-000001", data: []byte("old\n")}, {name: "install-000002", data: []byte("new\n")}}
+	setup, err := New(ws, Options{Operations: stores}).Show(context.Background(), Selection{Install: NewestInstall})
+	if err != nil || setup.Raw.Source != (Source{Kind: SourceInstall, Install: "install-000002"}) || setup.Raw.Path != "controller/install-000002.output" || setup.Context != "" {
 		t.Fatalf("the newest setup = %+v %v", setup, err)
 	}
-	if _, err := New(ws, Options{Operations: stores}).Show(context.Background(), Selection{Setup: "setup-" + strings.Repeat("ab", 16)}); !slices.Equal(codes(err), []string{"logs.not-found"}) {
+	if _, err := New(ws, Options{Operations: stores}).Show(context.Background(), Selection{Install: "install-" + strings.Repeat("ab", 16)}); !slices.Equal(codes(err), []string{"logs.not-found"}) {
 		t.Fatalf("a setup that kept no output = %#v", diagnostics.Of(err))
 	}
 }
@@ -411,12 +411,12 @@ func TestConflictingSelectionsAreUsageRefusals(t *testing.T) {
 	for _, selection := range []Selection{
 		{Context: "lab", Raw: true},
 		{Context: "lab", Attempt: 1, Block: "dns"},
-		{Context: "lab", Run: "run-000001", Setup: NewestSetup},
+		{Context: "lab", Run: "run-000001", Install: NewestInstall},
 		{Context: "lab", Run: "run-000001", Block: "dns"},
-		{Context: "lab", Setup: NewestSetup},
+		{Context: "lab", Install: NewestInstall},
 		{Context: "lab", Operation: "op-1"},
 		{Context: "lab", Run: "run-1"},
-		{Setup: "setup-1"},
+		{Install: "install-1"},
 		{Context: "lab", Block: "Dns"},
 	} {
 		if _, err := service.Show(context.Background(), selection); !diagnostics.IsUsage(err) {

@@ -299,7 +299,7 @@ type memoryRun struct {
 func (memoryRun) Write(data []byte) (int, error) { return len(data), nil }
 func (r memoryRun) Close() error                 { return r.closeError }
 func (r memoryRun) Location() string {
-	return fmt.Sprintf("/var/log/bootwright/host/setup-%06d.output", max(r.number, 43))
+	return fmt.Sprintf("/var/log/bootwright/controller/install-%06d.output", max(r.number, 43))
 }
 
 func (t memoryTransaction) View() SetupView { return t.m.view }
@@ -325,7 +325,7 @@ func (t memoryTransaction) DiscardForeign(context.Context) error {
 }
 
 func (t memoryTransaction) NewSetupID(context.Context) (string, error) {
-	return "setup-" + strings.Repeat("a", 32), t.m.setupIDError
+	return "install-" + strings.Repeat("a", 32), t.m.setupIDError
 }
 
 func (t memoryTransaction) OpenRun(context.Context) (string, SetupRun, error) {
@@ -335,11 +335,11 @@ func (t memoryTransaction) OpenRun(context.Context) (string, SetupRun, error) {
 	if t.m.runID != "" {
 		return t.m.runID, memoryRun{closeError: t.m.runCloseError, number: t.m.runNumber}, nil
 	}
-	return "setup-000043", memoryRun{closeError: t.m.runCloseError}, nil
+	return "install-000043", memoryRun{closeError: t.m.runCloseError}, nil
 }
 
 func (t memoryTransaction) StageRuntime(context.Context) (RuntimeStage, error) {
-	return memoryStage("/var/lib/bootwright/host/setup/runtimes/.stage-1"), nil
+	return memoryStage("/var/lib/bootwright/controller/install/runtimes/.stage-1"), nil
 }
 
 func (t memoryTransaction) PublishRuntime(context.Context, RuntimeStage, string) (bool, error) {
@@ -450,7 +450,7 @@ func TestThePlanShowsTheDnfPreviewVerbatim(t *testing.T) {
 	for _, item := range receipt.Packages {
 		installedBy[item.Requirement] = item.InstalledBy
 	}
-	if installedBy["openssh-clients"] != "setup-000043" || len(installedBy) != 1 {
+	if installedBy["openssh-clients"] != "install-000043" || len(installedBy) != 1 {
 		t.Fatalf("the receipt's packages are %+v", receipt.Packages)
 	}
 }
@@ -459,12 +459,12 @@ func TestAnInterruptedSetupIsReinspectedAfterConfirmation(t *testing.T) {
 	f := newSetupFixture(t)
 	f.prepared()
 	f.python.ready = false
-	f.store.view.State.Pending = &PendingSetup{ID: "setup-000042", PlanDigest: strings.Repeat("2", 64), Actions: []string{"runtime", "receipt"}, StartedAt: "2026-10-13T10:00:00Z"}
+	f.store.view.State.Pending = &PendingSetup{ID: "install-000042", PlanDigest: strings.Repeat("2", 64), Actions: []string{"runtime", "receipt"}, StartedAt: "2026-10-13T10:00:00Z"}
 	report, err := f.service.Setup(context.Background(), SetupRequest{})
 	if err != nil || report.Outcome != "changed" {
 		t.Fatalf("Setup = %+v, %v", report, err)
 	}
-	notice := InterruptedSetupNotice("setup-000042", "runtime")
+	notice := InterruptedSetupNotice("install-000042", "runtime")
 	if !slices.Contains(f.plan.Actions, notice) {
 		t.Fatalf("the plan %v does not say %q", f.plan.Actions, notice)
 	}
@@ -472,7 +472,7 @@ func TestAnInterruptedSetupIsReinspectedAfterConfirmation(t *testing.T) {
 	if confirm < 0 || !slices.Contains(f.events[confirm:], "select") || !slices.Contains(f.events[confirm:], "missing") || f.count("build") != 1 {
 		t.Fatalf("the host was not inspected again after confirmation: %v", f.events)
 	}
-	if first := f.store.recorded[0]; first.Pending == nil || first.Pending.ID != "setup-000042" {
+	if first := f.store.recorded[0]; first.Pending == nil || first.Pending.ID != "install-000042" {
 		t.Fatalf("the setup recorded %+v before its effects", first.Pending)
 	}
 	if final := f.store.view.State; final.Pending != nil || final.Receipt == nil || final.Runtimes.Current != f.python.runtime().Digest {
@@ -589,7 +589,7 @@ func TestNoLockedInterpreterAddsThePythonABIRequirement(t *testing.T) {
 	}
 	receipt := f.store.view.State.Receipt
 	found := slices.ContainsFunc(receipt.Packages, func(item ReceiptPackage) bool {
-		return item.Requirement == "python3.13" && item.InstalledBy == "setup-000043" && slices.Equal(item.RequiredBy, []string{"runtime"})
+		return item.Requirement == "python3.13" && item.InstalledBy == "install-000043" && slices.Equal(item.RequiredBy, []string{"runtime"})
 	})
 	if !found {
 		t.Fatalf("the receipt's packages are %+v", receipt.Packages)

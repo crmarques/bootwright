@@ -31,12 +31,12 @@ func TestLogsRefusesConflictingSelections(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"--block", "b", "--run", "run-000001"}, "--run and --setup select one whole output"},
-		{[]string{"--raw", "--block", "b", "--setup"}, "--run and --setup select one whole output"},
-		{[]string{"--attempt", "1", "--raw", "--block", "b", "--run", "run-000001"}, "--run and --setup select one whole output"},
-		{[]string{"--run", "run-000001", "--setup"}, "--run and --setup select different outputs"},
-		{[]string{"--operation", "op-0123456789abcdef0123456789abcdef", "--run", "run-000001"}, "--run and --setup select one whole output"},
-		{[]string{"--setup", "--context", "lab"}, "--setup reads the host's setup output and takes no --context"},
+		{[]string{"--block", "b", "--run", "run-000001"}, "--run and --install select one whole output"},
+		{[]string{"--raw", "--block", "b", "--install"}, "--run and --install select one whole output"},
+		{[]string{"--attempt", "1", "--raw", "--block", "b", "--run", "run-000001"}, "--run and --install select one whole output"},
+		{[]string{"--run", "run-000001", "--install"}, "--run and --install select different outputs"},
+		{[]string{"--operation", "op-0123456789abcdef0123456789abcdef", "--run", "run-000001"}, "--run and --install select one whole output"},
+		{[]string{"--install", "--context", "lab"}, "--install reads the host's controller install output and takes no --context"},
 		{[]string{"--raw"}, "--raw needs the --block"},
 		{[]string{"--attempt", "2"}, "--attempt selects the output --raw reads"},
 		{[]string{"--attempt", "0", "--raw", "--block", "b"}, "--attempt is a number from 1 to 999999"},
@@ -46,7 +46,7 @@ func TestLogsRefusesConflictingSelections(t *testing.T) {
 		{[]string{"--operation", "op-1"}, "--operation names an operation as op- and 32 lowercase hexadecimal digits"},
 		{[]string{"--block", "Bad/Block"}, "--block names a block of the operation's plan"},
 		{[]string{"--run", "run-1"}, "--run names a bounded run as run-NNNNNN"},
-		{[]string{"--setup=latest"}, "--setup names a setup as newest or setup-NNNNNN"},
+		{[]string{"--install=latest"}, "--install names a controller install as newest or install-NNNNNN"},
 	} {
 		args := append([]string{"logs"}, test.args...)
 		if ClassifyInvocation(args).RequiresRoot {
@@ -58,7 +58,7 @@ func TestLogsRefusesConflictingSelections(t *testing.T) {
 			t.Errorf("%v: exit %d after %d calls, stdout %q, stderr %q; want usage %q", args, code, record.calls, out, errOut, test.want)
 		}
 	}
-	for _, valid := range [][]string{{"logs"}, {"logs", "--follow"}, {"logs", "--setup", "--follow"}, {"logs", "--setup=setup-000003"}, {"logs", "--run", "run-000003", "--follow"},
+	for _, valid := range [][]string{{"logs"}, {"logs", "--follow"}, {"logs", "--install", "--follow"}, {"logs", "--install=install-000003"}, {"logs", "--run", "run-000003", "--follow"},
 		{"logs", "--operation", "op-0123456789abcdef0123456789abcdef", "--block", "b", "--raw", "--attempt", "2"}} {
 		if !ClassifyInvocation(valid).RequiresRoot {
 			t.Errorf("%v was refused or needs no root, want it admitted as privileged as status is", valid)
@@ -80,24 +80,24 @@ func TestFollowRefusesStructuredOutputBeforePrivilege(t *testing.T) {
 	}
 }
 
-// A bare --setup reads the newest setup, and its value is taken only after
+// A bare --install reads the newest controller install, and its value is taken only after
 // =: one written after a space is an operand, refused with the spelling.
-func TestSetupOptionalValueNeedsEquals(t *testing.T) {
+func TestInstallOptionalValueNeedsEquals(t *testing.T) {
 	for _, test := range []struct {
 		args []string
 		want string
-	}{{[]string{"logs", "--setup"}, logview.NewestSetup}, {[]string{"logs", "--setup=setup-000003"}, "setup-000003"}} {
-		record := &dispatchRecord{result: commandResult{logs: logsStream(logview.SourceSetup, "setup-000003", "host/setup-000003.output")}}
-		if code, _, errOut := runLogs(t, record, test.args...); code != 0 || record.request.(logview.Selection).Setup != test.want {
-			t.Fatalf("%v: exit %d (%q), selection %+v, want setup %q", test.args, code, errOut, record.request, test.want)
+	}{{[]string{"logs", "--install"}, logview.NewestInstall}, {[]string{"logs", "--install=install-000003"}, "install-000003"}} {
+		record := &dispatchRecord{result: commandResult{logs: logsStream(logview.SourceInstall, "install-000003", "controller/install-000003.output")}}
+		if code, _, errOut := runLogs(t, record, test.args...); code != 0 || record.request.(logview.Selection).Install != test.want {
+			t.Fatalf("%v: exit %d (%q), selection %+v, want install %q", test.args, code, errOut, record.request, test.want)
 		}
 	}
 	record := &dispatchRecord{}
-	code, _, errOut := runLogs(t, record, "logs", "--setup", "setup-000003")
-	if code != 2 || record.calls != 0 || !strings.Contains(errOut, "--setup takes its value after =; write --setup=setup-000003") {
+	code, _, errOut := runLogs(t, record, "logs", "--install", "install-000003")
+	if code != 2 || record.calls != 0 || !strings.Contains(errOut, "--install takes its value after =; write --install=install-000003") {
 		t.Fatalf("exit %d after %d calls with %q", code, record.calls, errOut)
 	}
-	if code, _, errOut := runLogs(t, &dispatchRecord{}, "logs", "--setup", "other"); code != 2 || !strings.Contains(errOut, "this command accepts no positional operands") {
+	if code, _, errOut := runLogs(t, &dispatchRecord{}, "logs", "--install", "other"); code != 2 || !strings.Contains(errOut, "this command accepts no positional operands") {
 		t.Fatalf("an unrelated operand exited %d with %q", code, errOut)
 	}
 }
@@ -198,15 +198,15 @@ func TestEveryLogsFieldHasItsHint(t *testing.T) {
 			(&LifecycleProgressPresenter{progress: progressPresenter{out: out, clock: newManualClock().clock()}}).ReportLogLocation(context.Background(), lifecycle.LogLocation{Path: "/logs", Context: "lab", Run: "run-000003"})
 		}), "bootwright logs --context lab --run run-000003 --follow\n"},
 		"setup progress": {progress(func(out io.Writer) {
-			(&ControllerPresenter{progress: progressPresenter{out: out, clock: newManualClock().clock()}}).ReportLogLocation(context.Background(), prerequisites.LogLocation{Path: "/logs", Setup: "setup-000003"})
-		}), "bootwright logs --setup=setup-000003 --follow\n"},
+			(&ControllerPresenter{progress: progressPresenter{out: out, clock: newManualClock().clock()}}).ReportLogLocation(context.Background(), prerequisites.LogLocation{Path: "/logs", Setup: "install-000003"})
+		}), "bootwright logs --install=install-000003 --follow\n"},
 		"running apply":  {operationResult("running"), "bootwright logs --context lab --follow\n"},
 		"settled apply":  {operationResult("failed"), "bootwright logs --context lab --operation " + operation + "\n"},
 		"running status": {statusResult("running"), "bootwright logs --context lab --follow\n"},
 		"settled status": {statusResult("done"), "bootwright logs --context lab --operation " + operation + "\n"},
 		"setup result": {render(func(text *display) {
-			text.fields(controllerOutcomeFields("controller install", &prerequisites.Report{Outcome: "changed", LogLocation: "/logs", SetupRun: "setup-000003"})...)
-		}), "bootwright logs --setup=setup-000003\n"},
+			text.fields(controllerOutcomeFields("controller install", &prerequisites.Report{Outcome: "changed", LogLocation: "/logs", SetupRun: "install-000003"})...)
+		}), "bootwright logs --install=install-000003\n"},
 		"power result": {func() string {
 			var out bytes.Buffer
 			_ = writeSingleMachinePower(&out, power.Result{Context: "lab", Machine: "m", Power: "off", LogLocation: "/logs", Run: "run-000003"})

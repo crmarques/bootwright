@@ -15,8 +15,8 @@ func TestSetupRetainsOriginalPackageProvenanceAcrossProviderUpdates(t *testing.T
 	f.packages.present["podman"] = true
 	f.python.ready = false
 	f.store.view.State.Receipt.Packages = []ReceiptPackage{
-		{Requirement: "podman", Provider: "podman-0:1.0-1.x86_64", InstalledBy: "setup-000042"},
-		{Requirement: "python3.14", Provider: provider("python3.14"), InstalledBy: "setup-000042"},
+		{Requirement: "podman", Provider: "podman-0:1.0-1.x86_64", InstalledBy: "install-000042"},
+		{Requirement: "python3.14", Provider: provider("python3.14"), InstalledBy: "install-000042"},
 	}
 	if _, err := f.service.Setup(context.Background(), SetupRequest{}); err != nil {
 		t.Fatal(err)
@@ -26,7 +26,7 @@ func TestSetupRetainsOriginalPackageProvenanceAcrossProviderUpdates(t *testing.T
 		t.Fatalf("owned packages = %v, %v; receipt %+v", owned, err, f.store.view.State.Receipt.Packages)
 	}
 	for _, entry := range f.store.view.State.Receipt.Packages {
-		if entry.Requirement != "openssh-clients" && entry.InstalledBy != "setup-000042" {
+		if entry.Requirement != "openssh-clients" && entry.InstalledBy != "install-000042" {
 			t.Fatalf("attribution changed: %+v", entry)
 		}
 	}
@@ -44,7 +44,7 @@ func TestInterruptedSetupKeepsTheOriginalPackageIntentUntilReceipt(t *testing.T)
 		t.Fatal("lost intent")
 	}
 	f.python.buildErr = nil
-	f.store.runID = "setup-000044"
+	f.store.runID = "install-000044"
 	if _, err := f.service.Setup(context.Background(), SetupRequest{}); err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestInterruptedSetupKeepsTheOriginalPackageIntentUntilReceipt(t *testing.T)
 		t.Fatalf("resumed owned packages = %v (%v)", owned, err)
 	}
 	for _, item := range f.store.view.State.Receipt.Packages {
-		if item.Requirement == "openssh-clients" && item.InstalledBy != "setup-000043" {
+		if item.Requirement == "openssh-clients" && item.InstalledBy != "install-000043" {
 			t.Fatalf("lost original run: %+v", item)
 		}
 	}
@@ -72,7 +72,7 @@ func TestSetupCanDiscardUnavailableRunOutputWithoutLosingReceipt(t *testing.T) {
 		t.Fatalf("unlogged receipt lost ownership: %v (%v)", owned, err)
 	}
 	for _, item := range f.store.view.State.Receipt.Packages {
-		if item.Requirement == "openssh-clients" && item.InstalledBy != "setup-"+strings.Repeat("a", 32) {
+		if item.Requirement == "openssh-clients" && item.InstalledBy != "install-"+strings.Repeat("a", 32) {
 			t.Fatalf("injected identity was lost: %+v", item)
 		}
 	}
@@ -130,16 +130,16 @@ func TestSetupReportsItsRunID(t *testing.T) {
 	f.packages.present["openssh-clients"] = false
 	named := &namedRuns{}
 	f.service.options.Progress = named
-	f.store.runID, f.store.runNumber = "setup-"+strings.Repeat("b", 32), 57
+	f.store.runID, f.store.runNumber = "install-"+strings.Repeat("b", 32), 57
 	report, err := f.service.Setup(context.Background(), SetupRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	const path = "/var/log/bootwright/host/setup-000057.output"
-	if report.LogLocation != path || report.SetupRun != "setup-000057" {
-		t.Fatalf("report names %q and %q, want %q and setup-000057", report.LogLocation, report.SetupRun, path)
+	const path = "/var/log/bootwright/controller/install-000057.output"
+	if report.LogLocation != path || report.SetupRun != "install-000057" {
+		t.Fatalf("report names %q and %q, want %q and install-000057", report.LogLocation, report.SetupRun, path)
 	}
-	if want := (LogLocation{Path: path, Setup: "setup-000057"}); len(named.located) != 1 || named.located[0] != want {
+	if want := (LogLocation{Path: path, Setup: "install-000057"}); len(named.located) != 1 || named.located[0] != want {
 		t.Fatalf("progress named %+v, want %+v", named.located, want)
 	}
 	f = newSetupFixture(t)

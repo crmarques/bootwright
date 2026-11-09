@@ -207,7 +207,7 @@ compares the closure from the setup receipt alone, so a cache that lacks a
 wheel is reported by the continuation it names. When the
 receipt is complete, its interpreter still qualifies at the same path and the
 wheel cache holds every locked wheel of its ABI and the installer, the launch
-waits for `host/setup/lock` (it never refuses a held lock as busy), repeats those
+waits for `controller/install/lock` (it never refuses a held lock as busy), repeats those
 checks under it, and builds and publishes the runtime exactly as setup does
 from the cache alone: no network, no confirmation and no change to the setup
 record, so it is a store-internal effect rather than a setup. A runtime another
@@ -332,7 +332,7 @@ SSH flags remain unconsumed by these checks.
 | Invocation | Required behavior |
 | --- | --- |
 | `bootwright controller install --dry-run` | Admit the host as setup does, select the interpreter and list by name the host package requirements setup would install, through unprivileged `rpm` presence queries and without a dnf preview. No setup record is read, so this stays below the privilege boundary. No network, Secret read, privilege escalation or write. Runtime readiness and the setup state are explicitly unverified. With `--output json`, which setup accepts only with `--dry-run`, the result also lists every locked wheel's ABI, file, URL and SHA-256. The `state-root` check reports, from an unprivileged look at the state root, an absent root, which setup creates, or a `root:root` `0700` directory on a local filesystem, whose contents setup verifies. A root of another type, owner or mode, one on an unqualified filesystem, and, when the root's owner runs the dry run, one holding state this build cannot read, are not ready: the dry run reports the check beside the store's own refusal and remedy, and exits 1. The check reaches the root as the store opens it, every ancestor without following a link and on a qualified local filesystem. A root behind a symbolic link in its path is not ready, and the dry run reports the store's own refusal beside the check (`TestTheStateRootInspectionReachesTheRootAsTheStoreOpensIt`). |
-| `bootwright controller install` | Elevate, then inspect read-only: admission, the installed host, FIPS mode, the untested release and loader preload (informational), the setup state, the interpreter and its runtime and the baseline package presence. A ready host prints the receipt table and `Nothing to do.`, with no network request, confirmation or write. Otherwise run the preview and present the plan, confirm, take `host/setup/lock`, inspect again and refuse a host that moved, record the pending intent, install with dnf, copy the carried wheels, build, verify and publish the runtime, and write the receipt, which clears the pending intent. Publish no binding and touch no controller record. |
+| `bootwright controller install` | Elevate, then inspect read-only: admission, the installed host, FIPS mode, the untested release and loader preload (informational), the setup state, the interpreter and its runtime and the baseline package presence. A ready host prints the receipt table and `Nothing to do.`, with no network request, confirmation or write. Otherwise run the preview and present the plan, confirm, take `controller/install/lock`, inspect again and refuse a host that moved, record the pending intent, install with dnf, copy the carried wheels, build, verify and publish the runtime, and write the receipt, which clears the pending intent. Publish no binding and touch no controller record. |
 | `bootwright controller check` | Read and verify the same host checks as setup with bounded local probes and no dnf preview, and report the host's FIPS mode and the missing package names. May use the verified privilege boundary for private metadata. A ready host names `bootwright context init --name <name> --input-dir <dir>` as its next command. |
 | `bootwright preflight --stage controller --context <name>` | Additionally report that context's own target tools, its container runtime, libvirt client, hypervisor, installer-media, `nmstate` and `iputils` requirements by `rpm` presence, and its host binding, as context-scoped checks. Contact no publisher and read no repository metadata for them. |
 
@@ -347,7 +347,7 @@ The plan names each action setup takes, in order:
   another format: "Discard setup state another Bootwright build wrote
   (`<format>`)", which removes the subtree after confirmation;
 - `resume`, when a pending intent is present: "An earlier setup
-  (`setup-000042`) was interrupted during `<step>`; this run re-inspects the
+  (`install-000042`) was interrupted during `<step>`; this run re-inspects the
   host and continues";
 - `native-packages`, with the verbatim dnf preview and its core-package note;
 - `runtime`, for example "Python 3.14 at /usr/bin/python3.14, ansible-core
@@ -391,9 +391,9 @@ host, which no uninstall reaches. Like install it selects no context, refuses
 
 | Invocation | Required behavior |
 | --- | --- |
-| `bootwright controller uninstall` | Elevate, take the exclusive root lock and [`host/setup/lock`](contexts/controller-record.md#the-setup-subtree), each refused as busy rather than awaited, and inspect read-only. A host where every root is absent and no tree an interrupted uninstall renamed remains prints `Nothing to do.` and changes nothing. A root without a setup subtree has no receipt, so it names no package to remove. Otherwise run the owned-object proof below, present the plan, confirm, inspect and prove again under the same locks and refuse a host that moved, remove the packages, then remove every root, and report what it removed and what it kept. |
+| `bootwright controller uninstall` | Elevate, take the exclusive root lock and [`controller/install/lock`](contexts/controller-record.md#the-setup-subtree), each refused as busy rather than awaited, and inspect read-only. A host where every root is absent and no tree an interrupted uninstall renamed remains prints `Nothing to do.` and changes nothing. A root without a setup subtree has no receipt, so it names no package to remove. Otherwise run the owned-object proof below, present the plan, confirm, inspect and prove again under the same locks and refuse a host that moved, remove the packages, then remove every root, and report what it removed and what it kept. |
 | `bootwright controller uninstall --keep-packages` | The same, without the package action: no `rpm` erase test, dnf preview or dnf removal, and no refusal that only package removal needs. |
-| `bootwright controller uninstall --discard-unreadable` | Discard what this build cannot read or attribute ([B1216](milestones/m1.md#b1216)): accepted when the store refuses as another build's (a registry of another version, or state without a registry), when this build's registry stands beside an entry it cannot attribute and names no context, or when the store is readable and holds no context; it then also takes the guest disks under the libvirt image prefix. It takes the same locks, a held `host/setup/lock` included when one stands there, runs the same owned-object proof, and removes every root and the image prefix whole. It never removes a package, and reads no receipt of a store it cannot read, so it runs no `rpm` or dnf and reads no egress route. A malformed registry of this build, a store listing that fails, changes while read or outgrows its bound, an I/O, busy or permission refusal, and a registry this build decodes that names any context or a media store holding any image, beside an unattributed entry too, still refuse as the plain uninstall does (`TestADiscardBesideAnUnattributedEntryStillRefusesContextsAndMedia`, `TestADiscardRefusesAListingOrReadFailureOfTheStore`). With `--keep-packages` it is a usage error. It knows no path an earlier build used. |
+| `bootwright controller uninstall --discard-unreadable` | Discard what this build cannot read or attribute ([B1216](milestones/m1.md#b1216)): accepted when the store refuses as another build's (a registry of another version, or state without a registry), when this build's registry stands beside an entry it cannot attribute and names no context, or when the store is readable and holds no context; it then also takes the guest disks under the libvirt image prefix. It takes the same locks, a held `controller/install/lock` included when one stands there, runs the same owned-object proof, and removes every root and the image prefix whole. It never removes a package, and reads no receipt of a store it cannot read, so it runs no `rpm` or dnf and reads no egress route. A malformed registry of this build, a store listing that fails, changes while read or outgrows its bound, an I/O, busy or permission refusal, and a registry this build decodes that names any context or a media store holding any image, beside an unattributed entry too, still refuse as the plain uninstall does (`TestADiscardBesideAnUnattributedEntryStillRefusesContextsAndMedia`, `TestADiscardRefusesAListingOrReadFailureOfTheStore`). With `--keep-packages` it is a usage error. It knows no path an earlier build used. |
 
 **Refusals before any effect.** Each refuses `controller.uninstall` with the
 remedy named, unless it names another code:
@@ -481,7 +481,7 @@ bounded output. Its limits: it sees only what those tools list now, so it
 cannot see a process of an older build that holds no lock, nor anything on an
 SSH placement host, whose hosted content stays. A command of another build is
 detected only through the locks this build takes, the root lock and
-`host/setup/lock`, and a discard reads no context lease of a store it cannot
+`controller/install/lock`, and a discard reads no context lease of a store it cannot
 read, so stop every other build's command before a discard
 (`TestEveryOwnedObjectKindIsFound`, `TestTheProofRefusesWhatItCannotRead`).
 
@@ -636,7 +636,7 @@ controller record. A declared `spec.dependencyVersions.libvirt` other than
 naming the Environment and the remedy of removing it: the host's repositories
 decide the libvirt release.
 
-Missing host packages are installed as root under `host/setup/lock`, so setup and
+Missing host packages are installed as root under `controller/install/lock`, so setup and
 another context's stage never run dnf beside it; a busy lock refuses rather
 than waits. Under the lock the stage refuses an interrupted or foreign setup
 record as a launch does, reads presence again and asks only for what is still
@@ -959,14 +959,14 @@ fixed root using its exclusive root lock, acquired before a context lease.
 Preflight holds a shared root lock when the root exists, for coherent stored
 evidence. An absent root reports missing setup with `controller install` guidance
 and creates nothing. A busy lock refuses; there is no timeout-based takeover.
-Setup's own subtree has its own lock, `host/setup/lock`, which setup, runtime
+Setup's own subtree has its own lock, `controller/install/lock`, which setup, runtime
 publication and the controller stage's dnf take; a launch takes none and holds
 its runtime's `.lock` shared instead. The OS package-manager lock is an
 additional requirement, not a replacement for Bootwright coordination.
 
 **Setup subtree.** Setup keeps its pending intent, receipt, runtimes and wheel
-cache in `/var/lib/bootwright/host/setup/`, beside the
-controller record's `host/record/`, independently versioned as
+cache in `/var/lib/bootwright/controller/install/`, beside the
+controller record's `controller/record/`, independently versioned as
 `prerequisites.SetupStateFormat` and outside the registry; the
 [controller record](contexts/controller-record.md#the-setup-subtree) owns its
 layout and bounds. Its dnf output is kept under the
@@ -1011,7 +1011,7 @@ packages installed; nothing is rolled back, and install never removes a
 package: only [uninstall](#the-uninstall-flow) removes what a receipt records.
 
 **An unknown outcome blocks every consumer.** A launch that finds the pending
-intent refuses `controller.state`, "a controller setup (`setup-000042`) was
+intent refuses `controller.state`, "a controller setup (`install-000042`) was
 interrupted before it finished", with the remedy `run bootwright controller install` or,
 when it keeps a receipt, the `controller install` of the build whose lock that receipt names,
 which keeps its runtime. Setup itself
@@ -1044,7 +1044,7 @@ that build carries again and discards this build's subtree in turn, or through t
 opening one removes the oldest beyond 7 first, and its number passes every
 setup ID the receipt names. The receipt names the current runtime and the
 record's `runtimes` the current and the immediately previous distinct one. After
-each setup that writes its receipt, under the same `host/setup/lock` and before it
+each setup that writes its receipt, under the same `controller/install/lock` and before it
 reports:
 
 - every published runtime but those two is retired, each under

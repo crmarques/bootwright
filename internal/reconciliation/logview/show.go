@@ -18,7 +18,7 @@ func (s Service) Show(ctx context.Context, selection Selection) (*Result, error)
 	if err := validate(selection); err != nil {
 		return nil, err
 	}
-	if selection.Run != "" || selection.Setup != "" {
+	if selection.Run != "" || selection.Install != "" {
 		return s.showStream(ctx, selection)
 	}
 	name, err := s.resolve(ctx, selection.Context)
@@ -151,17 +151,17 @@ func readAll(file LogFile) ([]byte, error) {
 }
 
 func (s Service) openStream(ctx context.Context, selection Selection) (Stream, string, error) {
-	if selection.Setup != "" {
-		setup := selection.Setup
-		if setup == NewestSetup {
+	if selection.Install != "" {
+		setup := selection.Install
+		if setup == NewestInstall {
 			setup = ""
 		}
-		if validSetupID(setup) {
-			return nil, "", notFound("setup "+setup+" retained no output", "run bootwright logs --setup to read the newest setup's output")
+		if validInstallID(setup) {
+			return nil, "", notFound("controller install "+setup+" retained no output", "run bootwright logs --install to read the newest controller install's output")
 		}
 		stream, found, err := s.workspace.OpenSetup(ctx, setup)
 		if err == nil && !found {
-			err = notFound("this host retains no setup output"+named(setup), "the log root keeps the newest 8 setups' output; run bootwright controller check to see the host's setup")
+			err = notFound("this host retains no controller install output"+named(setup), "the log root keeps the newest 8 controller installs' output; run bootwright controller check to see the host's install")
 		}
 		return stream, "", err
 	}
@@ -194,8 +194,8 @@ func (s Service) showStream(ctx context.Context, selection Selection) (*Result, 
 		return nil, err
 	}
 	source := Source{Kind: SourceRun, Run: stream.Name()}
-	if selection.Setup != "" {
-		source = Source{Kind: SourceSetup, Setup: stream.Name()}
+	if selection.Install != "" {
+		source = Source{Kind: SourceInstall, Install: stream.Name()}
 	}
 	return &Result{Context: name, Raw: &Raw{Source: source, Path: stream.Reference(), Bytes: int64(len(content)), Content: content}}, nil
 }

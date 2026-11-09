@@ -12874,3 +12874,29 @@ example on the knowledge page that combined `--raw` with `--follow`, which the
 CLI refuses; it is corrected. Gates: the new proof test failed on the previous
 source; `make focus`, `make quick`, `make check` and `make race` passed; no
 live run or push occurred.
+
+### X341 — The controller's state named for `controller install`
+
+**Item:** B1241 (2026-11-09, [D249](backlog.md#d249)), completed in-tree. The
+store's host-wide container is `controller/`, holding setup's subtree at
+`controller/install/` and the Controller record at `controller/record/`, and
+`RegistryVersion` moved to 3, so a store with the earlier `host/` reads as
+another build's
+([storage and publication](../contexts.md#storage-locking-and-publication)).
+Setup output is `/var/log/bootwright/controller/install-NNNNNN.output`, setup
+IDs are `install-NNNNNN`, and `bootwright logs --install` reads that output
+([log root](../contexts/log-root.md),
+[reading and following logs](../cli/output.md#reading-and-following-logs)).
+The descriptor, `ControllerRecordVersion`, `SetupStateFormat`, every contract
+version and every content digest are unchanged.
+
+**Commits:** this commit. An independent review found no code defect; it
+found the logs JSON spec still naming a `setup` source kind and three spec
+passages still naming `host/`, which are corrected. Gates: listed in its
+message. No live run or push occurred. **Limitations:** a host installed with
+the `host/` layout runs
+`controller uninstall --discard-unreadable` before `controller install` with
+this build, as [B1216](m1.md#b1216)'s operator run already does; knowing no
+earlier path, that discard cannot see an earlier build's `controller install`
+still running, so every command of that build stops first
+([the uninstall flow](../controller.md#the-uninstall-flow)).

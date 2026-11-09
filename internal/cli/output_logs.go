@@ -45,7 +45,7 @@ type logsSource struct {
 	Attempt    int    `json:"attempt,omitempty"`
 	Resolution int    `json:"resolution,omitempty"`
 	Run        string `json:"run,omitempty"`
-	Setup      string `json:"setup,omitempty"`
+	Install    string `json:"install,omitempty"`
 }
 
 func displayLogs(result *logview.Result) jsonResult {
@@ -53,7 +53,7 @@ func displayLogs(result *logview.Result) jsonResult {
 		source := raw.Source
 		shown := logsOutputResult{
 			Source: logsSource{Kind: escapeDisplayLine(source.Kind), Operation: escapeDisplayLine(source.Operation), Block: escapeDisplayLine(source.Block),
-				Attempt: source.Attempt, Resolution: source.Resolution, Run: escapeDisplayLine(source.Run), Setup: escapeDisplayLine(source.Setup)},
+				Attempt: source.Attempt, Resolution: source.Resolution, Run: escapeDisplayLine(source.Run), Install: escapeDisplayLine(source.Install)},
 			Path: escapeDisplayLine(raw.Path), Bytes: raw.Bytes, Output: exportedResult("text/plain", raw.Content).Export,
 		}
 		if source.Kind == logview.SourceAttempt {
@@ -81,8 +81,8 @@ func writeLogs(out, errOut io.Writer, result *logview.Result, structured bool) e
 		switch raw.Source.Kind {
 		case logview.SourceRun:
 			source = raw.Source.Run
-		case logview.SourceSetup:
-			source = raw.Source.Setup
+		case logview.SourceInstall:
+			source = raw.Source.Install
 		}
 		for _, line := range outputLines(raw.Content) {
 			if err := presenter.Output(logview.Line{Source: source, Text: line}); err != nil {

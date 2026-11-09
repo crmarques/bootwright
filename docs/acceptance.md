@@ -62,7 +62,7 @@ additions.
 Fedora 44 controller and a RHEL 9 VM, run on a build that contains X90 on a
 host with no Bootwright store, prepared as the
 [operator guide](operator-guide.md#prepare-a-host) describes. It runs no example, so its log digest covers
-setup's outputs (`/var/log/bootwright/host`) and the controller stage's
+setup's outputs (`/var/log/bootwright/controller`) and the controller stage's
 operation. Copy this template into the ledger and replace every `<...>`:
 
 ```text
@@ -70,7 +70,7 @@ operation. Copy this template into the ledger and replace every `<...>`:
 ```
 
 Measure the bytes with
-`sudo du -sb /var/lib/bootwright/host/setup/cache/wheels /var/lib/bootwright/host/setup/runtimes`
+`sudo du -sb /var/lib/bootwright/controller/install/cache/wheels /var/lib/bootwright/controller/install/runtimes`
 and count each directory's files with `sudo find <directory> -type f`. Switch
 the crypto policy with `sudo update-crypto-policies --set FUTURE`, and back
 with `--set DEFAULT`, around the Redfish check.

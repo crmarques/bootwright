@@ -141,8 +141,8 @@ func receipt(requirement, provider, by string) ReceiptPackage {
 func installReceipt() UninstallView {
 	return receiptView(
 		receipt("openssh-clients", "openssh-clients-0:9.9p1-3.fc44.x86_64", PresentBeforeBootwright),
-		receipt("podman", "podman-5:5.6.1-1.fc44.x86_64", "setup-000001"),
-		receipt("python3.13", "python3.13-0:3.13.9-1.fc44.x86_64", "setup-000002"),
+		receipt("podman", "podman-5:5.6.1-1.fc44.x86_64", "install-000001"),
+		receipt("python3.13", "python3.13-0:3.13.9-1.fc44.x86_64", "install-000002"),
 	)
 }
 
@@ -193,7 +193,7 @@ func TestAnUninstallRemovesThePackagesBeforeTheState(t *testing.T) {
 // and before the plan is presented.
 func TestAnUninstallRefusesBeforeAnyEffect(t *testing.T) {
 	pending := installReceipt()
-	pending.Setup.State.Pending = &PendingSetup{ID: "setup-000003"}
+	pending.Setup.State.Pending = &PendingSetup{ID: "install-000003"}
 	foreign := installReceipt()
 	foreign.Setup = SetupView{Exists: true, Foreign: "bootwright.setup-state-v0"}
 	held := diagnostics.NewFailureWithRemediation("lifecycle.lease", "a staging extraction is held by another process", "", "retry")
@@ -205,10 +205,10 @@ func TestAnUninstallRefusesBeforeAnyEffect(t *testing.T) {
 		"a context":                {view: UninstallView{RootExists: true, Contexts: []string{"lab", "prod"}}, code: uninstallCode, message: "lab, prod"},
 		"an image":                 {view: UninstallView{RootExists: true, Media: []string{"rhel.iso"}}, code: uninstallCode, message: "rhel.iso"},
 		"a held staging stage":     {view: installReceipt(), busy: held, code: "lifecycle.lease", message: "staging extraction"},
-		"an interrupted install":   {view: pending, code: uninstallCode, message: "(setup-000003) was interrupted"},
+		"an interrupted install":   {view: pending, code: uninstallCode, message: "(install-000003) was interrupted"},
 		"a foreign record":         {view: foreign, code: uninstallCode, message: "written by another Bootwright build"},
 		"a dependent package":      {view: installReceipt(), erase: failure(uninstallCode, "other installed packages require podman: cockpit-podman", ""), code: uninstallCode, message: "cockpit-podman"},
-		"an unreadable provider":   {view: receiptView(receipt("podman", "podman", "setup-000001")), code: uninstallCode, message: "cannot read"},
+		"an unreadable provider":   {view: receiptView(receipt("podman", "podman", "install-000001")), code: uninstallCode, message: "cannot read"},
 		"a store this build skips": {view: installReceipt(), busy: failure("context.state", "registry version 99", ""), code: "context.state", message: "registry version 99"},
 	}
 	for name, test := range cases {
@@ -234,7 +234,7 @@ func TestAnUninstallRefusesBeforeAnyEffect(t *testing.T) {
 // foreign install record refuses, and every package install added stays.
 func TestAnUninstallWithKeepPackagesTouchesNoPackage(t *testing.T) {
 	pending := installReceipt()
-	pending.Setup.State.Pending = &PendingSetup{ID: "setup-000003"}
+	pending.Setup.State.Pending = &PendingSetup{ID: "install-000003"}
 	foreign := installReceipt()
 	foreign.Setup = SetupView{Exists: true, Foreign: unrecognizedFormat}
 	for name, view := range map[string]UninstallView{"a receipt": installReceipt(), "a pending intent": pending, "a foreign record": foreign} {

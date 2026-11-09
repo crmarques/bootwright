@@ -645,7 +645,7 @@ func TestAHostPackageFailureIsFailedBeforeTheInstallAndUnknownAfter(t *testing.T
 		install bool
 	}{
 		"a preview refusal": {dnf: &fakeDnf{installed: map[string]bool{}, previewErr: refusal}, setup: &fakeSetup{}, outcome: reconciliation.OutcomeFailed, code: "controller.install"},
-		"an interrupted setup": {dnf: newDnf(), setup: &fakeSetup{view: prerequisites.SetupView{Exists: true, State: prerequisites.SetupState{Pending: &prerequisites.PendingSetup{ID: "setup-000042"}}}},
+		"an interrupted setup": {dnf: newDnf(), setup: &fakeSetup{view: prerequisites.SetupView{Exists: true, State: prerequisites.SetupState{Pending: &prerequisites.PendingSetup{ID: "install-000042"}}}},
 			outcome: reconciliation.OutcomeFailed, code: "controller.state"},
 		"a failed install": {dnf: &fakeDnf{installed: map[string]bool{}, installErr: refusal}, setup: &fakeSetup{}, outcome: reconciliation.OutcomeUnknown, code: "controller.install", install: true},
 	} {

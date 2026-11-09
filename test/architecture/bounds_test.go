@@ -77,7 +77,7 @@ func documentedBounds() []documentedBound {
 		{"specs/contexts/controller-record.md", "There are at most %s tool areas", bundles, "maxControllerBundles", nil, false},
 		{contexts, "| [Setup outputs](#log-root) the log root keeps | %s |", setupRuns, "maxSetupRuns", nil, false},
 		{"specs/contexts/controller-record.md", "There are at most %s outputs:", setupRuns, "maxSetupRuns", nil, false},
-		{"specs/contexts/controller-record.md", "`host/setup/lock` and bounded at %s.", setupRuns, "maxSetupRunOutput", nil, true},
+		{"specs/contexts/controller-record.md", "`controller/install/lock` and bounded at %s.", setupRuns, "maxSetupRunOutput", nil, true},
 		{contexts, "| [Bounded runs](cli/output.md#bounded-run-output) one context's runs area keeps | %s |", boundedRuns, "maxBoundedRuns", nil, false},
 		{contexts, "| Root lock wait of a mutator | %s |", "internal/workspace/contextfs/files_linux_amd64.go", "rootLockWait", &application{runner: "awaitRoot"}, false},
 		{contexts, "| Lifecycle operations one context retains | %s |", operations, "MaxOperations", nil, false},

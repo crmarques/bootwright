@@ -10,7 +10,7 @@ import (
 
 func recordedPackages() []ReceiptPackage {
 	return []ReceiptPackage{
-		{Requirement: "podman", RequiredBy: []string{"setup"}, Provider: "podman-5:5.8.1-1.fc44", Repository: "updates", InstalledBy: "setup-000042"},
+		{Requirement: "podman", RequiredBy: []string{"setup"}, Provider: "podman-5:5.8.1-1.fc44", Repository: "updates", InstalledBy: "install-000042"},
 		{Requirement: "openssh-clients", RequiredBy: []string{"setup"}, Provider: "openssh-clients-10.2p1-1.fc44", Repository: "fedora", InstalledBy: PresentBeforeBootwright},
 	}
 }

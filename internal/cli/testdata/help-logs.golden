@@ -4,11 +4,11 @@
       --raw prints that block's newest retained adapter output instead, or attempt N's with
       --attempt. --follow prints what is written so far, then streams new events and each
       running block's output, prefixed by its block, until the operation leaves running. --run
-      prints a bounded run's output and --setup the host's newest setup output, or one named as
-      --setup=setup-NNNNNN; either follows with --follow. Text output escapes every line for
-      the terminal; JSON and YAML carry the exact output bytes. --detail full prints each
-      event's full UTC timestamp. It reads under short shared locks and never holds a lease an
-      apply waits on.
+      prints a bounded run's output and --install the host's newest controller install output,
+      or one named as --install=install-NNNNNN; either follows with --follow. Text output
+      escapes every line for the terminal; JSON and YAML carry the exact output bytes. --detail
+      full prints each event's full UTC timestamp. It reads under short shared locks and never
+      holds a lease an apply waits on.
 
   Usage
     bootwright logs [flags]
@@ -17,11 +17,12 @@
       --attempt    Print attempt N's output with --raw (default: the newest)
       --block      Keep one block's events, or name the block whose output --raw prints
       --follow     Stream new events and running blocks' output until the operation, run or
-                   setup ends
+                   controller install ends
+      --install    Print the newest controller install's output, or one named as
+                   --install=install-NNNNNN
       --operation  Select an operation by its op- ID (default: the current operation)
       --raw        Print the block's newest retained adapter output instead of events
       --run        Print a bounded run's output, named run-NNNNNN
-      --setup      Print the newest setup's output, or one named as --setup=setup-NNNNNN
 
   Common flags
       --ascii       Use ASCII status markers

@@ -22,12 +22,12 @@ const (
 	// own bound, operationstore.MaxAdapterOutputBytes, so every run's output
 	// shares one (D92).
 	maxSetupRunOutput = 4 << 20
-	setupRunPrefix    = "setup-"
+	installRunPrefix  = "install-"
 	setupRunDigits    = 6
 )
 
 func setupRunNumber(name string) (int, bool) {
-	digits, found := strings.CutPrefix(name, setupRunPrefix)
+	digits, found := strings.CutPrefix(name, installRunPrefix)
 	if !found || len(digits) != setupRunDigits || strings.Trim(digits, "0123456789") != "" {
 		return 0, false
 	}
@@ -37,7 +37,7 @@ func setupRunNumber(name string) (int, bool) {
 
 func setupRunName(number int) string {
 	digits := strconv.Itoa(number)
-	return setupRunPrefix + strings.Repeat("0", max(setupRunDigits-len(digits), 0)) + digits
+	return installRunPrefix + strings.Repeat("0", max(setupRunDigits-len(digits), 0)) + digits
 }
 
 func unsafeSetupRun(path, reason string) error {
@@ -66,7 +66,7 @@ func setupRunNumbers(ctx context.Context, host *directory) ([]int, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		number, valid := outputNumber(name, setupRunPrefix)
+		number, valid := outputNumber(name, installRunPrefix)
 		if !valid {
 			continue
 		}
@@ -84,7 +84,7 @@ func setupRunNumbers(ctx context.Context, host *directory) ([]int, error) {
 	return numbers, nil
 }
 
-// recordedSetupNumber is the highest setup-NNNNNN the setup record names, in
+// recordedSetupNumber is the highest install-NNNNNN the setup record names, in
 // its pending intent or its receipt, so output retention never frees a number
 // a receipt still attributes.
 func recordedSetupNumber(state prerequisites.SetupState) int {
@@ -111,7 +111,7 @@ func (s *Store) nextSetupRun(ctx context.Context, host *directory, recorded int)
 	if len(numbers) != 0 {
 		next = max(next, numbers[len(numbers)-1]+1)
 	}
-	if len(setupRunName(next)) != len(setupRunPrefix)+setupRunDigits {
+	if len(setupRunName(next)) != len(installRunPrefix)+setupRunDigits {
 		return "", nil, state("setup run numbers are exhausted")
 	}
 	for len(numbers) >= maxSetupRuns {

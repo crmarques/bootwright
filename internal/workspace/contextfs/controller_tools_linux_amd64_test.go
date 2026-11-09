@@ -227,7 +227,7 @@ func TestTheInstallLocatesTheClientsTheControllerStageInstalled(t *testing.T) {
 			if err != nil {
 				t.Fatalf("the install could not locate its %s: %#v", executable, diagnostics.Of(err))
 			}
-			want := filepath.Join(store.options.Root, hostContainer, controllerSubtree, toolAreasName, area, "tools", kind, "openshift", "4.19.3", executable)
+			want := filepath.Join(store.options.Root, controllerContainer, controllerSubtree, toolAreasName, area, "tools", kind, "openshift", "4.19.3", executable)
 			if located != want {
 				t.Fatalf("the %s was located at %q, want %q", executable, located, want)
 			}

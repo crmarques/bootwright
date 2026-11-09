@@ -270,7 +270,7 @@ Successful result objects have stable top-level fields:
 | `validate` | `counts`, `excludedContainerClusters`, `excludedStorageClusters`, `advisories` |
 | `preflight` | `context`, `target`, `checks`, `summary` |
 | `status` | `context`, `setupChecks`, `desired`, `clusters`, `storageClusters`, `shared`, `secrets`, `readiness`, `nextSteps`, `lifecycle`, `handoff`, `contradictions`, and with `--paths` `paths` |
-| `logs` | `context`, `operation`, `verb`, `state`, `events`; with `--raw`, `--run` or `--setup` instead `source`, `path`, `bytes`, `truncated` (an attempt's output only) and `output` |
+| `logs` | `context`, `operation`, `verb`, `state`, `events`; with `--raw`, `--run` or `--install` instead `source`, `path`, `bytes`, `truncated` (an attempt's output only) and `output` |
 | `diff` | `context`, `operation`, `input`, optional `adds`, `plan`, `observed`, `blocks`, `objects`, `summary` |
 | `render effective` | `counts`, `effectiveState`, and with `--origins` `origins`; with `--output-dir`, optional `inputDir`, `outputDir`, `effectiveStatePath`, `objects` instead |
 | `render installer` | `clusters` |
@@ -1277,18 +1277,18 @@ it created, even once interrupted.
 
 Local `controller install` registers no lifecycle operation and selects no context, so the
 dnf it runs has neither an attempt log nor a context's run area to sit beside.
-A confirmed setup first creates an output of its own in the log root's host
+A confirmed setup first creates an output of its own in the log root's `controller/`
 directory and keeps exactly one file there:
 
 ```text
-/var/log/bootwright/host/setup-NNNNNN.output
+/var/log/bootwright/controller/install-NNNNNN.output
 ```
 
 `NNNNNN` is six digits, numbered upward from `000001`. The
 [log root](../contexts/log-root.md#setup-output) owns its numbering, modes,
 byte bound, admission and retention: only the newest outputs are kept, and the
 oldest is removed before a new one is created. The file is created
-exclusively beneath the held host log directory handle, never through a link
+exclusively beneath the held `controller/` log directory handle, never through a link
 and never over an existing name. It exists before dnf
 starts and keeps dnf's standard output and error, raw and unparsed, while it
 runs. It is truncated at its bound without a marker. Like every retained
@@ -1302,7 +1302,7 @@ be created leaves dnf's output discarded, exactly as a setup kept none.
 Human setup output names the file on this host as the same `Logs`
 field, once before dnf starts and once with the result, for the reason an
 operation names its log directory twice, each time with a `Follow` field of
-`bootwright logs --setup=setup-NNNNNN`, plus `--follow` before dnf finishes. A dry run's JSON output starts nothing, so
+`bootwright logs --install=install-NNNNNN`, plus `--follow` before dnf finishes. A dry run's JSON output starts nothing, so
 no `logs` member names it.
 
 ### Reading and following logs
@@ -1313,7 +1313,7 @@ never writes. Its [flags and refusals](commands.md) select one of three things:
 a context's operation, the current one unless `--operation` names another, as
 events, or with `--raw --block` one block's newest retained output, `--attempt`
 naming an earlier attempt; a context's bounded run, `--run`; or the host's
-setup, `--setup` for the newest or `--setup=setup-NNNNNN`. `--block` keeps one
+setup, `--install` for the newest or `--install=install-NNNNNN`. `--block` keeps one
 block's events. `--detail full` prints each time as the full RFC 3339 UTC stamp.
 
 **Event lines.** An event is `HH:MM:SS  <block>  <event>  <detail>`: the
@@ -1338,7 +1338,7 @@ reads what was appended: the operation log's events, then each block in frozen
 order, its events before its output, a new attempt or a block that starts
 running picked up as it appears, and a block that started and settled between
 two polls still has its output for that attempt streamed once, then flushed. A
-`--run` or `--setup` follow streams the whole file. It ends with exit `0`, after
+`--run` or `--install` follow streams the whole file. It ends with exit `0`, after
 draining what was written, when the operation leaves `running`; when it is no
 longer the context's current operation, checked at every poll, with no
 warning; or after two
@@ -1367,16 +1367,16 @@ there and its rest dropped.
 **Text output.** Every line, event or output, passes through the safe display
 escaper even into a pipe: backslash, tab, CR and LF print as `\\`, `\t`, `\r`
 and `\n`, other control characters as `\uNNNN` and invalid UTF-8 as `\xNN`, so
-output cannot drive the terminal. With `--raw`, `--run`, `--setup` and a follow,
-each output line is prefixed `[<block>] `, `[run-NNNNNN] ` or `[setup-NNNNNN] `.
+output cannot drive the terminal. With `--raw`, `--run`, `--install` and a follow,
+each output line is prefixed `[<block>] `, `[run-NNNNNN] ` or `[install-NNNNNN] `.
 The exact bytes leave only through the structured export or the file itself.
 
 **Structured output.** JSON and YAML write one document whose envelope `logs` is
 `[]`. Events: `context`, `operation`, `verb`, `state` and `events`, each
 `{time, block, attempt, resolution, event, group, detail}`, with block `""` and
-attempt `0` for operation-log rows. Raw, run and setup: `source` (`kind` of
-`attempt`, `run` or `setup`, with the operation, block, attempt, resolution, run
-or setup it names), `path` relative to the log root, `bytes`, `truncated` for
+attempt `0` for operation-log rows. Raw, run and install: `source` (`kind` of
+`attempt`, `run` or `install`, with the operation, block, attempt, resolution, run
+or install it names), `path` relative to the log root, `bytes`, `truncated` for
 an attempt's output alone, and `output`, the export `{mediaType, encoding,
 content}` of the exact bytes, encoded as the [export rule](#json-output) says. `--follow`
 with either format is a `cli.usage` refusal, as is `--follow --raw`.

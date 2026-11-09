@@ -226,7 +226,7 @@ func (s *Store) OpenRun(ctx context.Context, name, run string) (logview.Stream, 
 
 func (s *Store) OpenSetup(ctx context.Context, setup string) (logview.Stream, bool, error) {
 	if _, valid := setupRunNumber(setup); setup != "" && !valid {
-		return nil, false, state("a setup output is named setup-NNNNNN")
+		return nil, false, state("a controller install output is named install-NNNNNN")
 	}
 	root, err := s.openLogRoot(ctx, false)
 	if errors.Is(err, syscall.ENOENT) {
@@ -236,7 +236,7 @@ func (s *Store) OpenSetup(ctx context.Context, setup string) (logview.Stream, bo
 		return nil, false, err
 	}
 	defer root.file.Close()
-	host, err := s.logDirectory(ctx, root, logHost, false)
+	host, err := s.logDirectory(ctx, root, logController, false)
 	if errors.Is(err, syscall.ENOENT) {
 		return nil, false, nil
 	}
@@ -273,7 +273,7 @@ func (s *Store) openSetupOutput(ctx context.Context, host *directory, setup stri
 		if !found {
 			return nil, false, nil
 		}
-		return &heldOutput{logFile: file, name: selected, reference: path.Join(logHost, selected+outputSuffix), held: s.setupHeld}, true, nil
+		return &heldOutput{logFile: file, name: selected, reference: path.Join(logController, selected+outputSuffix), held: s.setupHeld}, true, nil
 	}
 }
 
@@ -284,7 +284,7 @@ func newestSetupOutput(host *directory) (string, error) {
 	}
 	highest := 0
 	for _, name := range names {
-		if number, valid := outputNumber(name, setupRunPrefix); valid {
+		if number, valid := outputNumber(name, installRunPrefix); valid {
 			highest = max(highest, number)
 		}
 	}
@@ -303,7 +303,7 @@ func (s *Store) setupHeld(ctx context.Context) (bool, error) {
 		return false, safeError(err)
 	}
 	defer root.file.Close()
-	dir, err := openHostEntry(root, setupSubtree)
+	dir, err := openControllerEntry(root, installSubtree)
 	if errors.Is(err, syscall.ENOENT) {
 		return false, nil
 	}

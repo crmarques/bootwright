@@ -19,7 +19,7 @@ func (s Service) Follow(ctx context.Context, selection Selection, sink Sink) (*S
 		return nil, usage("--follow streams events and output as they are written; --raw reads one whole output")
 	case sink == nil:
 		return nil, diagnostics.NewFailure("runtime.internal", "a followed log has nowhere to be written", "")
-	case selection.Run != "" || selection.Setup != "":
+	case selection.Run != "" || selection.Install != "":
 		return s.followStream(ctx, selection, sink)
 	}
 	name, err := s.resolve(ctx, selection.Context)
@@ -223,8 +223,8 @@ func (s Service) followStream(ctx context.Context, selection Selection, sink Sin
 	defer stream.Close()
 	file := &tracked{file: stream, block: stream.Name()}
 	summary := &Summary{Context: name}
-	if selection.Setup != "" {
-		summary.Setup = stream.Name()
+	if selection.Install != "" {
+		summary.Install = stream.Name()
 	} else {
 		summary.Run = stream.Name()
 	}

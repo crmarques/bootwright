@@ -24,7 +24,7 @@ const (
 	productionLogs     = "/var/log/bootwright"
 	logsSuffix         = "-logs"
 	logContexts        = "contexts"
-	logHost            = "host"
+	logController      = "controller"
 	operationLogs      = "operations"
 	currentLink        = "current"
 	currentStagePrefix = ".current-"

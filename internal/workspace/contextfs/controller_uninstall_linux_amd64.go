@@ -334,7 +334,7 @@ func (s *Store) inspectRootForUninstall(ctx context.Context, parent, root *direc
 	if view.Media, err = uninstallMedia(ctx, s, root); err != nil {
 		return release, err
 	}
-	dir, err := openHostEntry(root, setupSubtree)
+	dir, err := openControllerEntry(root, installSubtree)
 	if errors.Is(err, syscall.ENOENT) {
 		return release, nil
 	}
@@ -492,7 +492,7 @@ func (t *uninstallTransaction) guardParents(uid uint32) error {
 
 func holdUnreadableSetup(root *directory) (func(), error) {
 	release := func() {}
-	file, err := openWithin(root, hostContainer+"/"+setupSubtree+"/"+setupLockName, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
+	file, err := openWithin(root, controllerContainer+"/"+installSubtree+"/"+setupLockName, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return release, nil
 	}

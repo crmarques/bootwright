@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	setupSubtree            = "setup"
+	installSubtree          = "install"
 	setupLockName           = "lock"
 	setupStateName          = "state.json"
 	setupRuntimesName       = "runtimes"
@@ -57,7 +57,7 @@ func (s *Store) ReadSetup(ctx context.Context) (prerequisites.SetupView, error) 
 	if err := admitRegistry(ctx, root); err != nil {
 		return prerequisites.SetupView{}, safeError(err)
 	}
-	dir, err := openHostEntry(root, setupSubtree)
+	dir, err := openControllerEntry(root, installSubtree)
 	if errors.Is(err, syscall.ENOENT) {
 		return prerequisites.SetupView{}, nil
 	}
@@ -136,7 +136,7 @@ func (s *Store) mutateSetup(ctx context.Context, callback func(prerequisites.Set
 	if err := admitRegistry(ctx, root); err != nil {
 		return safeError(err)
 	}
-	dir, err := openHostEntry(root, setupSubtree)
+	dir, err := openControllerEntry(root, installSubtree)
 	if err != nil {
 		return safeError(err)
 	}
@@ -157,7 +157,7 @@ func (s *Store) mutateSetup(ctx context.Context, callback func(prerequisites.Set
 func (s *Store) ensureSetupSubtree(ctx context.Context) error {
 	root, err := s.openRoot(ctx, false, nil)
 	if err == nil {
-		dir, openErr := openHostEntry(root, setupSubtree)
+		dir, openErr := openControllerEntry(root, installSubtree)
 		if openErr == nil {
 			dir.close()
 		}
@@ -172,12 +172,12 @@ func (s *Store) ensureSetupSubtree(ctx context.Context) error {
 	}
 	return s.Transact(ctx, true, nil, func(base contexts.Transaction) error {
 		t := base.(*transaction)
-		host, err := t.store.ensureDirectory(ctx, t.root, hostContainer)
+		host, err := t.store.ensureDirectory(ctx, t.root, controllerContainer)
 		if err != nil {
 			return err
 		}
 		defer host.file.Close()
-		dir, err := t.store.ensureDirectory(ctx, host, setupSubtree)
+		dir, err := t.store.ensureDirectory(ctx, host, installSubtree)
 		if err != nil {
 			return err
 		}
@@ -413,7 +413,7 @@ func (t *setupTransaction) NewSetupID(ctx context.Context) (string, error) {
 	if err := t.owned(ctx); err != nil {
 		return "", err
 	}
-	return t.store.candidate("setup-")
+	return t.store.candidate(installRunPrefix)
 }
 
 func (t *setupTransaction) OpenRun(ctx context.Context) (string, prerequisites.SetupRun, error) {
@@ -425,7 +425,7 @@ func (t *setupTransaction) OpenRun(ctx context.Context) (string, prerequisites.S
 		return "", nil, setupLogError(err)
 	}
 	defer root.file.Close()
-	host, err := t.store.logDirectory(ctx, root, logHost, true)
+	host, err := t.store.logDirectory(ctx, root, logController, true)
 	if err != nil {
 		return "", nil, setupLogError(err)
 	}
@@ -749,7 +749,7 @@ func (s *Store) HoldRuntime(ctx context.Context, digest string) (prerequisites.R
 		return nil, runtimeUnavailable(err)
 	}
 	defer root.file.Close()
-	setup, err := openHostEntry(root, setupSubtree)
+	setup, err := openControllerEntry(root, installSubtree)
 	if err != nil {
 		return nil, runtimeUnavailable(err)
 	}

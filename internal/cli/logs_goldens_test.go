@@ -33,8 +33,8 @@ func logsRaw() *logview.Result {
 
 func logsStream(kind, name, reference string) *logview.Result {
 	source := logview.Source{Kind: kind, Run: name}
-	if kind == logview.SourceSetup {
-		source = logview.Source{Kind: kind, Setup: name}
+	if kind == logview.SourceInstall {
+		source = logview.Source{Kind: kind, Install: name}
 	}
 	return &logview.Result{Raw: &logview.Raw{Source: source, Path: reference, Bytes: 27, Content: []byte("PLAY [power]\nok: [rhel-01]\n")}}
 }
@@ -90,8 +90,8 @@ func logsGoldens() []cliGolden {
 		{golden: "cli-logs-run", args: "logs --context lab --run run-000003", record: func(r *dispatchRecord) {
 			r.result.logs = logsStream(logview.SourceRun, "run-000003", "contexts/lab/runs/run-000003.output")
 		}},
-		{golden: "cli-logs-setup", args: "logs --setup", record: func(r *dispatchRecord) {
-			r.result.logs = logsStream(logview.SourceSetup, "setup-000003", "host/setup-000003.output")
+		{golden: "cli-logs-install", args: "logs --install", record: func(r *dispatchRecord) {
+			r.result.logs = logsStream(logview.SourceInstall, "install-000003", "controller/install-000003.output")
 		}},
 		{golden: "cli-logs-follow", args: "logs --context lab --follow",
 			stderr: "  warning  logs.detached\n    operation " + logsOperation + " is running but no apply or destroy holds\n    context lab\n    Next: continue it with bootwright apply --context lab\n",

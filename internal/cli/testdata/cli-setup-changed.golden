@@ -1,6 +1,6 @@
 
     Outcome    changed
     Readiness  all required prerequisites verified
-    Logs       /var/log/bootwright/host/setup-000003.output
-    Follow     bootwright logs --setup=setup-000003
+    Logs       /var/log/bootwright/controller/install-000003.output
+    Follow     bootwright logs --install=install-000003
     Next       bootwright controller check

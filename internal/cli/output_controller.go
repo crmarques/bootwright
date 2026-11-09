@@ -121,7 +121,7 @@ func (p *ControllerPresenter) ReportLogLocation(ctx context.Context, location pr
 	if p == nil || p.progress.out == nil || ctx.Err() != nil || location.Path == "" {
 		return
 	}
-	p.progress.fields(logFields(location.Path, logsHint{Setup: location.Setup, Running: true})...)
+	p.progress.fields(logFields(location.Path, logsHint{Install: location.Setup, Running: true})...)
 }
 
 // Finish terminates a row a terminal is still rewriting. The runner calls it
@@ -298,7 +298,7 @@ func controllerOutcomeFields(command string, report *prerequisites.Report) []fie
 	if report.PlanPresented && (report.Outcome == "changed" || report.Outcome == "unchanged") {
 		fields = append(fields, field{Label: "Readiness", Value: "all required prerequisites verified"})
 	}
-	fields = append(fields, logFields(report.LogLocation, logsHint{Setup: report.SetupRun})...)
+	fields = append(fields, logFields(report.LogLocation, logsHint{Install: report.SetupRun})...)
 	if next := controllerNextCommand(command, report); next != "" {
 		fields = append(fields, field{Label: "Next", Value: next})
 	}

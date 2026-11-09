@@ -498,7 +498,7 @@ func TestControllerScopeNamesTheAcquisitionRoute(t *testing.T) {
 // through the plan, whose dnf preview is shown verbatim, to the result.
 func TestControllerSetupShowsThePreviewAndNamesItsRunGolden(t *testing.T) {
 	ctx := context.Background()
-	const location = "/var/log/bootwright/host/setup-000003.output"
+	const location = "/var/log/bootwright/controller/install-000003.output"
 	var out, errOut bytes.Buffer
 	presenter := &ControllerPresenter{progress: progressPresenter{out: &out, clock: newManualClock().clock()}}
 	report := &prerequisites.Report{
@@ -530,7 +530,7 @@ func TestControllerSetupShowsThePreviewAndNamesItsRunGolden(t *testing.T) {
 		if err := presenter.PresentControllerPlan(ctx, *report); err != nil {
 			t.Fatal(err)
 		}
-		presenter.ReportLogLocation(ctx, prerequisites.LogLocation{Path: location, Setup: "setup-000003"})
+		presenter.ReportLogLocation(ctx, prerequisites.LogLocation{Path: location, Setup: "install-000003"})
 		for _, event := range []prerequisites.ProgressEvent{
 			{Action: "native-packages", Status: "running", Step: 1, Steps: 2}, {Action: "native-packages", Status: "changed", Step: 1, Steps: 2},
 			{Action: "receipt", Status: "running", Step: 2, Steps: 2}, {Action: "receipt", Status: "changed", Step: 2, Steps: 2},
@@ -544,7 +544,7 @@ func TestControllerSetupShowsThePreviewAndNamesItsRunGolden(t *testing.T) {
 		Checks:      []prerequisites.Check{report.Checks[0], report.Checks[1], {ID: "host-packages", Required: "openssh-clients, podman", Observed: "openssh-clients, podman", Status: "ready", Scope: prerequisites.HostScope}, report.Checks[3]},
 		Actions:     report.Actions,
 		Progress:    []prerequisites.ActionProgress{{ID: "native-packages", Phase: "observed", Outcome: "changed"}, {ID: "receipt", Phase: "observed", Outcome: "changed"}},
-		LogLocation: location, SetupRun: "setup-000003",
+		LogLocation: location, SetupRun: "install-000003",
 	}
 	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record), FinishProgress: presenter.Finish}).Run(ctx, []string{"controller", "install", "--yes"})
 	if code != 0 || errOut.Len() != 0 {

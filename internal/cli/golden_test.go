@@ -635,7 +635,7 @@ func cliGoldens() []cliGolden {
 				Platform: platform, Route: "direct", Outcome: "changed", PlanPresented: true,
 				Checks:      []prerequisites.Check{ready("host", "fedora 43/amd64"), ready("python-runtime", "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5"), ready("host-packages", "openssh-clients, podman"), ready("setup-state", "complete")},
 				Actions:     []string{"Install host packages with dnf: podman"},
-				LogLocation: "/var/log/bootwright/host/setup-000003.output", SetupRun: "setup-000003",
+				LogLocation: "/var/log/bootwright/controller/install-000003.output", SetupRun: "install-000003",
 			}
 		}},
 		// Refused setups: a confirmation refusal's remedy repeats the
@@ -703,7 +703,7 @@ func cliGoldens() []cliGolden {
 						ready("host", "fedora 43/amd64"),
 						ready("python-runtime", "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5"),
 						ready("host-packages", "openssh-clients, podman"),
-						{ID: "setup-state", Required: "complete", Observed: "interrupted (setup-000042)", Status: "not-ready", Scope: prerequisites.HostScope},
+						{ID: "setup-state", Required: "complete", Observed: "interrupted (install-000042)", Status: "not-ready", Scope: prerequisites.HostScope},
 					},
 					Table: &prerequisites.ReceiptTable{
 						Host:     "Fedora Linux 43 (amd64), glibc 2.42 — tested",

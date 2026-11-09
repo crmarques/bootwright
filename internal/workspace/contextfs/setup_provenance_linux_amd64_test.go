@@ -19,7 +19,7 @@ import (
 func TestSetupPackageIntentGoldenAndUnloggedIdentityRoundTrip(t *testing.T) {
 	state := setupReceiptState()
 	state.Pending = &prerequisites.PendingSetup{
-		ID: "setup-" + strings.Repeat("a", 32), PlanDigest: setupDigest(4),
+		ID: "install-" + strings.Repeat("a", 32), PlanDigest: setupDigest(4),
 		Actions: []string{"runtime", "receipt"}, StartedAt: "2026-10-14T09:00:00Z", Requested: []string{"podman", "python3.14"},
 	}
 	state.Receipt.Packages[0].InstalledBy = state.Pending.ID
@@ -47,15 +47,15 @@ func TestSetupSequenceExhaustionKeepsReceiptWithoutAStoredRun(t *testing.T) {
 		}
 		return run.Close()
 	})
-	root := filepath.Join(store.options.Root+logsSuffix, logHost)
-	if err := os.Rename(filepath.Join(root, "setup-000001.output"), filepath.Join(root, "setup-999999.output")); err != nil {
+	root := filepath.Join(store.options.Root+logsSuffix, logController)
+	if err := os.Rename(filepath.Join(root, "install-000001.output"), filepath.Join(root, "install-999999.output")); err != nil {
 		t.Fatal(err)
 	}
 	identity, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1, strings.Repeat("1", 32), "11111111-2222-4333-8444-555555555555", "22222222-3333-4444-8555-666666666666")
 	if err != nil {
 		t.Fatal(err)
 	}
-	python := &healingPython{setup: filepath.Join(store.options.Root, hostContainer, setupSubtree)}
+	python := &healingPython{setup: filepath.Join(store.options.Root, controllerContainer, installSubtree)}
 	service := prerequisites.New(healingController{}, healingController{}, healingHost{identity}, prerequisites.Ports{
 		Setup: store, Packages: healingPackages{}, Python: python, Lock: healingLock,
 	}, prerequisites.Options{Presenter: &healingPlans{}})

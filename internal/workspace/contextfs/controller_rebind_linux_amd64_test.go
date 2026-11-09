@@ -100,7 +100,7 @@ func TestARebindRefusesAnotherStoreAndAChangedRecord(t *testing.T) {
 	before := storedController(t, store)
 	_, err := store.RebindController(ctx, rebindHost(t, "8"), rebindHost(t, "9"))
 	rebindRefused(t, err, "changed while its rebind was being confirmed")
-	controllerDir := filepath.Join(store.options.Root, hostContainer, controllerSubtree)
+	controllerDir := filepath.Join(store.options.Root, controllerContainer, controllerSubtree)
 	kept := store.options.Root + "-record"
 	if err := os.Rename(controllerDir, kept); err != nil {
 		t.Fatal(err)

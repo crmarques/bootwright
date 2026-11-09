@@ -45,9 +45,9 @@ func requireSetupRefusal(t *testing.T, err error, message string) {
 func TestAPendingSetupBlocksALaunch(t *testing.T) {
 	h := newHarness(t, "artifact-server-lab")
 	view := completedSetup("3.14", "3.14.8")
-	view.State.Pending = &prerequisites.PendingSetup{ID: "setup-000042", Actions: []string{"runtime"}}
+	view.State.Pending = &prerequisites.PendingSetup{ID: "install-000042", Actions: []string{"runtime"}}
 	h.setup.set(view)
-	launchRefused(t, h, "a controller setup (setup-000042) was interrupted before it finished")
+	launchRefused(t, h, "a controller setup (install-000042) was interrupted before it finished")
 	_, err := apply(h)
 	want := "run bootwright controller install, or run the controller install of the Bootwright build whose lock the receipt names (" + view.State.Receipt.Lock + ") to keep its runtime"
 	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Remediation != want {

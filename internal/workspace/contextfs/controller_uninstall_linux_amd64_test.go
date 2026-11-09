@@ -83,7 +83,7 @@ func TestAnUninstallRenamesTheStateAsideThenRemovesIt(t *testing.T) {
 	if err := os.WriteFile(outside, []byte("keep\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	cache := filepath.Join(base, "bootwright", hostContainer, setupSubtree, "cache")
+	cache := filepath.Join(base, "bootwright", controllerContainer, installSubtree, "cache")
 	mkdirs(t, 0700, filepath.Join(cache, "wheels", "deep", "er"))
 	if err := os.Symlink(outside, filepath.Join(cache, "escape")); err != nil {
 		t.Fatal(err)
@@ -132,8 +132,8 @@ func TestTheNextUninstallFinishesAnInterruptedOne(t *testing.T) {
 	store := New(testOptions(filepath.Join(base, "bootwright")))
 	root := filepath.Join(base, ".bootwright-uninstall-"+strings.Repeat("a", 32))
 	staging := filepath.Join(base, ".bootwright-staging-uninstall-"+strings.Repeat("b", 32))
-	mkdirs(t, 0700, filepath.Join(root, hostContainer, setupSubtree, "runtimes", "x"), staging)
-	if err := os.WriteFile(filepath.Join(root, hostContainer, setupSubtree, "state.json"), []byte("{}"), 0600); err != nil {
+	mkdirs(t, 0700, filepath.Join(root, controllerContainer, installSubtree, "runtimes", "x"), staging)
+	if err := os.WriteFile(filepath.Join(root, controllerContainer, installSubtree, "state.json"), []byte("{}"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	link := filepath.Join(base, ".bootwright-uninstall-"+strings.Repeat("c", 32))
@@ -282,7 +282,7 @@ func TestAnUninstallRefusesAMountedRootOrStagingBeforeAnyEffect(t *testing.T) {
 func TestAnUninstallFinishesLeftoversBeforeItsOwnRenames(t *testing.T) {
 	store, base := installedStore(t)
 	leftover := filepath.Join(base, ".bootwright-uninstall-"+strings.Repeat("d", 32))
-	mkdirs(t, 0700, filepath.Join(leftover, hostContainer, setupSubtree))
+	mkdirs(t, 0700, filepath.Join(leftover, controllerContainer, installSubtree))
 	err := store.Uninstall(context.Background(), func(tx prerequisites.UninstallTransaction) error {
 		if err := os.Rename(filepath.Join(base, "bootwright"), filepath.Join(base, "moved")); err != nil {
 			t.Fatal(err)
@@ -436,7 +436,7 @@ func TestAnUninstallHandsAnotherBuildsStoreToTheService(t *testing.T) {
 		"another registry version": func(root string) {
 			writePrivate(t, filepath.Join(root, "registry.json"), []byte(`{"version":99,"contexts":[]}`+"\n"))
 		},
-		"unsupported root state": func(root string) { mkdirs(t, 0700, filepath.Join(root, "controller")) },
+		"unsupported root state": func(root string) { mkdirs(t, 0700, filepath.Join(root, "host")) },
 		"state without a registry": func(root string) {
 			if err := os.Remove(filepath.Join(root, "registry.json")); err != nil && !os.IsNotExist(err) {
 				t.Fatal(err)
@@ -463,7 +463,7 @@ func TestAnUninstallHandsAnotherBuildsStoreToTheService(t *testing.T) {
 	t.Run("a held setup lock", func(t *testing.T) {
 		store, base := everyRootStore(t)
 		writePrivate(t, filepath.Join(base, "bootwright", "registry.json"), []byte(`{"version":99,"contexts":[]}`+"\n"))
-		lock, err := os.OpenFile(filepath.Join(base, "bootwright", hostContainer, setupSubtree, setupLockName), os.O_CREATE|os.O_RDWR, 0600)
+		lock, err := os.OpenFile(filepath.Join(base, "bootwright", controllerContainer, installSubtree, setupLockName), os.O_CREATE|os.O_RDWR, 0600)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -570,9 +570,9 @@ func (refusingPresenter) PresentControllerPlan(context.Context, prerequisites.Re
 func TestADiscardBesideAnUnattributedEntryStillRefusesContextsAndMedia(t *testing.T) {
 	store, sources := fixture(t)
 	publish(t, store, "lab", sources)
-	for name, stray := range map[string]string{"in the root": filepath.Join(store.options.Root, "notes.txt"), "in the host container": filepath.Join(store.options.Root, hostContainer, "notes.txt")} {
+	for name, stray := range map[string]string{"in the root": filepath.Join(store.options.Root, "notes.txt"), "in the host container": filepath.Join(store.options.Root, controllerContainer, "notes.txt")} {
 		t.Run(name, func(t *testing.T) {
-			mkdirs(t, 0700, filepath.Join(store.options.Root, hostContainer))
+			mkdirs(t, 0700, filepath.Join(store.options.Root, controllerContainer))
 			writePrivate(t, stray, nil)
 			defer os.Remove(stray)
 			view, err := uninstallView(t, store)
@@ -607,7 +607,7 @@ func TestADiscardBesideAnUnattributedEntryStillRefusesContextsAndMedia(t *testin
 // each be unattributable, and a pending registry stage that cannot be read
 // beside no registry refuses rather than reads as another build's.
 func TestADiscardRefusesAListingOrReadFailureOfTheStore(t *testing.T) {
-	for name, directory := range map[string]string{"the root": "", "the host container": hostContainer} {
+	for name, directory := range map[string]string{"the root": "", "the host container": controllerContainer} {
 		t.Run(name, func(t *testing.T) {
 			store, base := everyRootStore(t)
 			parent := filepath.Join(base, "bootwright", directory)
@@ -628,7 +628,7 @@ func TestADiscardRefusesAListingOrReadFailureOfTheStore(t *testing.T) {
 	t.Run("an unsafe registry stage", func(t *testing.T) {
 		store, base := everyRootStore(t)
 		root := filepath.Join(base, "bootwright")
-		if err := os.RemoveAll(filepath.Join(root, hostContainer)); err != nil {
+		if err := os.RemoveAll(filepath.Join(root, controllerContainer)); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.Remove(filepath.Join(root, "registry.json")); err != nil {

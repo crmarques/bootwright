@@ -164,6 +164,6 @@ func validSetupIdentity(id string) bool {
 	if _, ok := setupRunNumber(id); ok {
 		return true
 	}
-	token, ok := strings.CutPrefix(id, "setup-")
+	token, ok := strings.CutPrefix(id, installRunPrefix)
 	return ok && len(token) == 32 && strings.Trim(token, "0123456789abcdef") == ""
 }

@@ -2,12 +2,12 @@ package logview
 
 import "github.com/crmarques/bootwright/internal/diagnostics"
 
-const NewestSetup = "newest"
+const NewestInstall = "newest"
 
 const (
 	SourceAttempt = "attempt"
 	SourceRun     = "run"
-	SourceSetup   = "setup"
+	SourceInstall = "install"
 )
 
 type Selection struct {
@@ -17,7 +17,7 @@ type Selection struct {
 	Raw       bool
 	Attempt   int
 	Run       string
-	Setup     string
+	Install   string
 	FullTimes bool
 }
 
@@ -38,7 +38,7 @@ type Source struct {
 	Attempt    int
 	Resolution int
 	Run        string
-	Setup      string
+	Install    string
 }
 
 type Raw struct {
@@ -68,7 +68,7 @@ type Summary struct {
 	Context   string
 	Operation string
 	Run       string
-	Setup     string
+	Install   string
 	State     string
 	Warnings  []diagnostics.Diagnostic
 }

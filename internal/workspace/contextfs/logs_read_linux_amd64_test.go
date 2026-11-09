@@ -382,7 +382,7 @@ func TestSetupLivenessFollowsSetupLock(t *testing.T) {
 	if held, err := stream.Held(ctx); err != nil || !held {
 		t.Errorf("a live setup reads as held %t (%v)", held, err)
 	}
-	if stream.Name() != id || stream.Reference() != "host/"+id+outputSuffix || readAt(t, stream) != "installing\n" {
+	if stream.Name() != id || stream.Reference() != "controller/"+id+outputSuffix || readAt(t, stream) != "installing\n" {
 		t.Errorf("the setup is %q at %q", stream.Name(), stream.Reference())
 	}
 	release()
@@ -394,7 +394,7 @@ func TestSetupLivenessFollowsSetupLock(t *testing.T) {
 	} else {
 		named.Close()
 	}
-	if _, found, err := store.OpenSetup(ctx, "setup-000099"); found || err != nil {
+	if _, found, err := store.OpenSetup(ctx, "install-000099"); found || err != nil {
 		t.Errorf("an absent setup = %t %v, want absent", found, err)
 	}
 }
@@ -402,21 +402,21 @@ func TestSetupLivenessFollowsSetupLock(t *testing.T) {
 func TestNewestSetupOutputSurvivesPruningBetweenListAndOpen(t *testing.T) {
 	ctx := context.Background()
 	store := New(testOptions(filepath.Join(t.TempDir(), "state")))
-	host := filepath.Join(store.options.Root+logsSuffix, logHost)
+	host := filepath.Join(store.options.Root+logsSuffix, logController)
 	if err := os.MkdirAll(host, 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chmod(store.options.Root+logsSuffix, 0700); err != nil {
 		t.Fatal(err)
 	}
-	writePrivate(t, filepath.Join(host, "setup-000002.output"), []byte("second\n"))
-	writePrivate(t, filepath.Join(host, "setup-000003.output"), []byte("third\n"))
+	writePrivate(t, filepath.Join(host, "install-000002.output"), []byte("second\n"))
+	writePrivate(t, filepath.Join(host, "install-000003.output"), []byte("third\n"))
 	root, err := store.openLogRoot(ctx, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer root.file.Close()
-	held, err := store.logDirectory(ctx, root, logHost, false)
+	held, err := store.logDirectory(ctx, root, logController, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -424,15 +424,15 @@ func TestNewestSetupOutputSurvivesPruningBetweenListAndOpen(t *testing.T) {
 	listings := 0
 	stream, found, err := store.openSetupOutput(ctx, held, "", func() {
 		if listings++; listings == 1 {
-			os.Remove(filepath.Join(host, "setup-000003.output"))
-			writePrivate(t, filepath.Join(host, "setup-000004.output"), []byte("fourth\n"))
+			os.Remove(filepath.Join(host, "install-000003.output"))
+			writePrivate(t, filepath.Join(host, "install-000004.output"), []byte("fourth\n"))
 		}
 	})
 	if err != nil || !found {
 		t.Fatalf("the newest setup after pruning = %t %#v", found, diagnostics.Of(err))
 	}
 	defer stream.Close()
-	if stream.Name() != "setup-000004" || readAt(t, stream) != "fourth\n" || listings != 2 {
-		t.Fatalf("read %q after %d listings, want setup-000004 after a second", stream.Name(), listings)
+	if stream.Name() != "install-000004" || readAt(t, stream) != "fourth\n" || listings != 2 {
+		t.Fatalf("read %q after %d listings, want install-000004 after a second", stream.Name(), listings)
 	}
 }

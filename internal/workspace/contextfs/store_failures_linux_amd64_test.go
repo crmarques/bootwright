@@ -76,7 +76,7 @@ const bundlePayloadSize = 280000
 
 // bundlePath is where the tool area id lives beneath the store.
 func bundlePath(store *Store, id string) string {
-	return filepath.Join(store.options.Root, hostContainer, controllerSubtree, toolAreasName, id)
+	return filepath.Join(store.options.Root, controllerContainer, controllerSubtree, toolAreasName, id)
 }
 
 // writeBundlePayload is a controller stage that publishes one executable into
@@ -474,11 +474,11 @@ func TestAnotherBuildsRootRefusesWithTheLiveEnvironmentRemedy(t *testing.T) {
 	}
 }
 
-// A store an earlier build wrote, with its controller record in controller/,
-// its setup in setup/ and a registry of the previous format version, is
-// another build's: every command refuses it with the live-environment remedy
-// and leaves it as it was, and uninstall hands that refusal to its service,
-// which only a discard accepts.
+// A store an earlier build wrote, with its host-wide state in host/, its setup
+// in host/setup/ and a registry of the previous format version, is another
+// build's: every command refuses it with the live-environment remedy and
+// leaves it as it was, and uninstall hands that refusal to its service, which
+// only a discard accepts.
 func TestAStoreWithTheEarlierLayoutIsAnotherBuilds(t *testing.T) {
 	ctx := context.Background()
 	store, sources := fixture(t)
@@ -486,13 +486,10 @@ func TestAStoreWithTheEarlierLayoutIsAnotherBuilds(t *testing.T) {
 	recordPreparedSetup(t, store)
 	bind(t, store, record.Name)
 	root := store.options.Root
-	for from, to := range map[string]string{"host/record": "controller", "host/setup": "setup"} {
-		if err := os.Rename(filepath.Join(root, from), filepath.Join(root, to)); err != nil {
+	for _, move := range [][2]string{{controllerContainer, "host"}, {"host/" + installSubtree, "host/setup"}} {
+		if err := os.Rename(filepath.Join(root, move[0]), filepath.Join(root, move[1])); err != nil {
 			t.Fatal(err)
 		}
-	}
-	if err := os.Remove(filepath.Join(root, "host")); err != nil {
-		t.Fatal(err)
 	}
 	path := filepath.Join(root, "registry.json")
 	data, err := os.ReadFile(path)

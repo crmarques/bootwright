@@ -83,7 +83,7 @@ the exit status. A non-empty /etc/ld.so.preload is reported the same way, as
   enable the repositories that carry these packages, AppStream for a RHEL 9
   Python, before setup.
 - **The controller runtime** is one Python virtual environment, beneath
-  /var/lib/bootwright/host/setup/runtimes, on the host's own `/usr/bin/python3.X`:
+  /var/lib/bootwright/controller/install/runtimes, on the host's own `/usr/bin/python3.X`:
   Python 3.12 to 3.14, newest first, or the interpreter setup chose before
   while it still qualifies. Its ansible-core and supporting wheels are the
   exact files the lock compiled into this build names, carried inside the
@@ -115,12 +115,12 @@ setup, which downloads only the wheels it has not cached.
 
 A setup that installs host packages keeps what dnf printed in a
 [setup run](../specs/cli/output.md#setup-run-output),
-/var/log/bootwright/host/setup-NNNNNN.output, which only root
+/var/log/bootwright/controller/install-NNNNNN.output, which only root
 can read. The host keeps the newest 8 outputs, and the `Logs` field of its
 result names the run; a failure that run explains names its output in its
-remedy. `bootwright logs --setup` prints the newest, and `--follow` shows
+remedy. `bootwright logs --install` prints the newest, and `--follow` shows
 a running install's as it grows. A setup that was interrupted blocks every command that runs
-Ansible with `controller.state`, "a controller setup (`setup-000042`) was
+Ansible with `controller.state`, "a controller setup (`install-000042`) was
 interrupted before it finished"; run `bootwright controller install` again, which
 re-inspects the host, names the interrupted run in its plan and continues
 after confirmation.
@@ -346,9 +346,9 @@ which of these roots it holds on this host.
 
 | Root | Contents | Created by | Host roles |
 | --- | --- | --- | --- |
-| `/var/lib/bootwright` | The store: contexts, registry, secrets, media; `host/setup` (runtimes, wheel cache, receipt) and `host/record` | `controller install` and `context init` | Control only |
+| `/var/lib/bootwright` | The store: contexts, registry, secrets, media; `controller/install` (runtimes, wheel cache, receipt) and `controller/record` | `controller install` and `context init` | Control only |
 | `/var/lib/bootwright-staging` | The embedded automation unpacked for each run | The first command that runs Ansible | Control only |
-| `/var/log/bootwright` | `host/setup-NNNNNN.output`; per context under `contexts/<context>/`, `operations/<op>/`, `runs/run-NNNNNN.output` and `current` | The first command that writes a log | Control only |
+| `/var/log/bootwright` | `controller/install-NNNNNN.output`; per context under `contexts/<context>/`, `operations/<op>/`, `runs/run-NNNNNN.output` and `current` | The first command that writes a log | Control only |
 | `/var/lib/bootwright-hosted/<context>/services/<kind>/<service>` | A hosted service's content root, configuration and certificate | `apply` of an artifact server or managed service | Hosting services |
 | `/var/lib/bootwright-hosted/<context>/machines/<machine>/install`, `.../erase/<operation>` and `clusters/<cluster>` | An installation image built before it is served; a physical erase's custody; a cluster installer's work area | `apply` of the installation, the erase or the cluster | Serving installations |
 | `/var/lib/bootwright-hosted/<context>/machines/<machine>/bmc` and `/var/lib/libvirt/images/bootwright/<context>` | The emulated BMC's state; guest disks and the virtual-media pool | `apply` of the libvirt provider and its Machines | Libvirt provider host |
@@ -382,8 +382,8 @@ pinned to that operation, run or setup:
 - `bootwright logs --context <name> --run run-NNNNNN` shows a bounded
   run, such as a machine power command, and `--follow` follows one still
   running.
-- `bootwright logs --setup` shows the newest `controller install` output,
-  `--setup=setup-NNNNNN` a named one (write the `=`), and `--follow` follows
+- `bootwright logs --install` shows the newest `controller install` output,
+  `--install=install-NNNNNN` a named one (write the `=`), and `--follow` follows
   one still running.
 - `--operation <id>` reads an earlier operation than the current one.
 
@@ -395,7 +395,7 @@ holds the context; the warning names the command that continues it, and ends
 quietly once a newer operation becomes current. A follow
 holds no lease, so it does not keep the operation it watches from finishing or
 the next one from starting; a command that writes the store waits out its
-short read instead of failing. In the instant a `--setup --follow` probes whether
+short read instead of failing. In the instant a `--install --follow` probes whether
 the install still runs, a `controller install` that starts can be refused as
 busy; repeat it. The full contract is
 [reading and following logs](../specs/cli/output.md#reading-and-following-logs).

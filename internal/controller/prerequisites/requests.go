@@ -83,7 +83,7 @@ type Report struct {
 	// LogLocation names the output file of the setup run that kept what the
 	// controller Ansible printed, empty if none; it never changes Outcome.
 	LogLocation string
-	// SetupRun is that run's name, setup-NNNNNN, by the number its output file
+	// SetupRun is that run's name, install-NNNNNN, by the number its output file
 	// carries, which a resumed setup's ID does not share.
 	SetupRun string
 }

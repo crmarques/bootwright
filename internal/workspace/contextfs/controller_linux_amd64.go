@@ -47,14 +47,14 @@ func deletionRetry(name string) string {
 }
 
 const (
-	hostContainer     = "host"
-	controllerSubtree = "record"
+	controllerContainer = "controller"
+	controllerSubtree   = "record"
 )
 
-// openHostEntry opens a child of the host container, holding the container
+// openControllerEntry opens a child of the controller container, holding the container
 // open until the child's close.
-func openHostEntry(root *directory, name string) (*directory, error) {
-	host, err := openDirectory(root, hostContainer)
+func openControllerEntry(root *directory, name string) (*directory, error) {
+	host, err := openDirectory(root, controllerContainer)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func openControllerDirectory(root *directory, registry contexts.Registry) (*dire
 	if registry.Controller.DirectoryInode == 0 {
 		return nil, syscall.ENOENT
 	}
-	dir, err := openHostEntry(root, controllerSubtree)
+	dir, err := openControllerEntry(root, controllerSubtree)
 	if err != nil {
 		return nil, state("attributed controller directory is missing or unsafe")
 	}
@@ -160,7 +160,7 @@ func controllerNames(dir *directory) ([]string, error) {
 // setupPrepared reports a completed setup in the setup subtree: a receipt, no
 // interrupted setup and no other build's format.
 func setupPrepared(ctx context.Context, root *directory) (bool, error) {
-	dir, err := openHostEntry(root, setupSubtree)
+	dir, err := openControllerEntry(root, installSubtree)
 	if errors.Is(err, syscall.ENOENT) {
 		return false, nil
 	}
@@ -309,7 +309,7 @@ func (t *transaction) initializeController(ctx context.Context, host controller.
 		}
 	}
 	if t.registry.Controller.DirectoryInode == 0 {
-		host, err := t.store.ensureDirectory(ctx, t.root, hostContainer)
+		host, err := t.store.ensureDirectory(ctx, t.root, controllerContainer)
 		if err != nil {
 			return controllerStored{}, err
 		}

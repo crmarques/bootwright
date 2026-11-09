@@ -125,7 +125,7 @@ func TestARebuildIsRefusedWhereOnlySetupCanPrepareTheRuntime(t *testing.T) {
 		"interpreter gone":     func(f *setupFixture, _ *Runtime) { f.python.installed = false },
 		"another interpreter":  func(_ *setupFixture, runtime *Runtime) { runtime.Interpreter.Path = "/usr/bin/python3.13" },
 		"another lock":         func(_ *setupFixture, runtime *Runtime) { runtime.LockDigest = strings.Repeat("9", 64) },
-		"an interrupted setup": func(f *setupFixture, _ *Runtime) { f.store.view.State.Pending = &PendingSetup{ID: "setup-000042"} },
+		"an interrupted setup": func(f *setupFixture, _ *Runtime) { f.store.view.State.Pending = &PendingSetup{ID: "install-000042"} },
 		"another build's record": func(f *setupFixture, _ *Runtime) {
 			f.store.view = SetupView{Exists: true, Foreign: "bootwright.setup-state-v9"}
 		},

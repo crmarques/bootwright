@@ -313,8 +313,8 @@ func (s *stream) Close() error { return nil }
 func (s *stream) Name() string { return s.name }
 
 func (s *stream) Reference() string {
-	if strings.HasPrefix(s.name, "setup-") {
-		return "host/" + s.name + ".output"
+	if strings.HasPrefix(s.name, "install-") {
+		return "controller/" + s.name + ".output"
 	}
 	return "contexts/lab/runs/" + s.name + ".output"
 }

@@ -10,10 +10,10 @@ owns the relationship between a context and its host.
 
 ## Location and file modes
 
-Shared host state belongs under `/var/lib/bootwright/host/record/`, with each
-tool area in `host/record/tools/<digest>/`, beside
+Shared host state belongs under `/var/lib/bootwright/controller/record/`, with each
+tool area in `controller/record/tools/<digest>/`, beside
 [the setup subtree](#the-setup-subtree) in the same
-[`host/` container](../contexts.md#storage-locking-and-publication). Host
+[`controller/` container](../contexts.md#storage-locking-and-publication). Host
 identity, every context binding and every reservation share one atomic
 `state.json` publication; there is no independently published per-context
 binding record, so a binding and the host it names cannot disagree after an
@@ -37,7 +37,7 @@ never introduces Controller state, and ordinary context publications preserve
 an existing descriptor.
 
 The descriptor fixes version `1`, mode `initializing` or `ready`, and the
-device/inode of the Controller directory, `host/record/`. Its reservation
+device/inode of the Controller directory, `controller/record/`. Its reservation
 precedes directory creation; a second publication records the actual
 directory identity, and the mode becomes `ready` once the first record is
 durable. An unattributable directory after a crash is preserved and refuses
@@ -220,12 +220,12 @@ origin refuses.
 
 ## The setup subtree
 
-`/var/lib/bootwright/host/setup/` is setup's own, independently versioned and
+`/var/lib/bootwright/controller/install/` is setup's own, independently versioned and
 outside the registry: the Controller descriptor never names it, no registry
 verification decodes it, and it stays root `0700` like the rest of the store.
-Setup creates it, and the `host/` container it lies in, under one exclusive
+Setup creates it, and the `controller/` container it lies in, under one exclusive
 registry transaction when either is missing.
-`host/setup/lock` is the exclusive lock of setup and of runtime publication, which
+`controller/install/lock` is the exclusive lock of setup and of runtime publication, which
 the controller stage's host-package install takes too. Setup and the stage
 never wait for it and refuse a held lock as busy; a launch's
 [cache-only rebuild](../controller.md#the-controller-runtime) waits for it,
@@ -246,7 +246,7 @@ original ID until it writes the receipt, attributing newly present requested
 providers to that ID. A subsequent setup carries forward every still-installed
 provider attributed to an earlier setup, including its Python interpreter,
 matching the requirement and package name across NEVRA updates. If no log run
-can be retained, the durable setup ID instead uses `setup-` followed by a
+can be retained, the durable setup ID instead uses `install-` followed by a
 random 32-digit hexadecimal token; it names no output file.
 `runtimes` names the current and the previous
 runtime digest. A record that cannot be read, or that carries another format,
@@ -263,7 +263,7 @@ exclusively, and published at `runtimes/<runtime-digest>/` only with its
 `renameat2(RENAME_NOREPLACE)` and a synchronized parent, so a directory under
 a runtime digest always holds a whole runtime. A publisher that finds the
 runtime already published discards its stage, and setup removes the stages a
-killed run left under `host/setup/lock`, however many entries `runtimes/` holds. A
+killed run left under `controller/install/lock`, however many entries `runtimes/` holds. A
 launch holds the runtime's `.lock` shared for its whole Ansible block, and only
 while the runtime's `runtime.json` names its own digest; retirement takes the
 lock exclusively without waiting, so a runtime in use is skipped, and retires a
@@ -280,8 +280,8 @@ Which runtimes and cached wheels a setup keeps and retires follows its
 What setup's dnf prints is kept outside this subtree, under the
 [log root](../contexts.md#log-root), as
 [setup run output](../cli/output.md#setup-run-output) describes: one private
-file `host/setup-NNNNNN.output` per run, named by the run's setup ID from
-`setup-000001` upward, written under `host/setup/lock` and bounded at 4 MiB.
+file `controller/install-NNNNNN.output` per run, named by the run's setup ID from
+`install-000001` upward, written under `controller/install/lock` and bounded at 4 MiB.
 That is the [bounded run](../cli/output.md#bounded-run-output)'s bound, so
 every run's output shares one ([D92](../milestones/backlog.md#d92)).
 There are at most 8 outputs: the next is numbered past both the newest output and every

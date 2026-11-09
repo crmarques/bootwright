@@ -381,7 +381,7 @@ func (discardedSetupRun) Location() string               { return "" }
 
 func setupRunName(location string) string {
 	name, found := strings.CutSuffix(path.Base(location), ".output")
-	if !found || !strings.HasPrefix(name, "setup-") {
+	if !found || !strings.HasPrefix(name, "install-") {
 		return ""
 	}
 	return name

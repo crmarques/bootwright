@@ -122,7 +122,7 @@ type retainedInstaller struct{ agentinstall.InstallCapability }
 
 func located(execution lifecycle.Execution) lifecycle.Execution {
 	execution.LocateTool = func(_ context.Context, tool controller.InstalledTool) (string, error) {
-		return "/var/lib/bootwright/host/record/tools/" + tool.Kind + "/" + tool.Version + "/" + tool.Executable, nil
+		return "/var/lib/bootwright/controller/record/tools/" + tool.Kind + "/" + tool.Version + "/" + tool.Executable, nil
 	}
 	return execution
 }

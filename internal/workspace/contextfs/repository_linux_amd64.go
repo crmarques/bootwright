@@ -276,7 +276,7 @@ func inspectInitialRegistry(ctx context.Context, root *directory) (string, sysca
 }
 
 // verifyRootEntries admits only the store's own published objects: the
-// registry, the context container, the media container, the host container
+// registry, the context container, the media container, the controller container
 // holding setup and a declared controller subtree, and bounded private files
 // left by an interrupted registry replacement. Anything else is
 // unattributable state that only a complete restore can resolve.
@@ -295,8 +295,8 @@ func verifyRootEntries(ctx context.Context, root *directory, registry contexts.R
 				return err
 			}
 			dir.file.Close()
-		case hostContainer:
-			if err := verifyHostEntries(root, registry); isUnattributedEntry(err) {
+		case controllerContainer:
+			if err := verifyControllerContainer(root, registry); isUnattributedEntry(err) {
 				unattributed = err
 			} else if err != nil {
 				return err
@@ -330,8 +330,8 @@ func verifyRootEntries(ctx context.Context, root *directory, registry contexts.R
 	return unattributed
 }
 
-func verifyHostEntries(root *directory, registry contexts.Registry) error {
-	host, err := openDirectory(root, hostContainer)
+func verifyControllerContainer(root *directory, registry contexts.Registry) error {
+	host, err := openDirectory(root, controllerContainer)
 	if err != nil {
 		return err
 	}
@@ -343,7 +343,7 @@ func verifyHostEntries(root *directory, registry contexts.Registry) error {
 	var unattributed error
 	for _, name := range names {
 		switch name {
-		case setupSubtree:
+		case installSubtree:
 			dir, err := openDirectory(host, name)
 			if err != nil {
 				return err

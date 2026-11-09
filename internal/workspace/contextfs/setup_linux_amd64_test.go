@@ -34,7 +34,7 @@ func setupReceiptState() prerequisites.SetupState {
 			Runtime:  prerequisites.ReceiptRuntime{Digest: setupDigest(2), Interpreter: "/usr/bin/python3.14", Python: "3.14.8", ABI: "cp314", AnsibleCore: "2.21.6"},
 			Closure:  setupDigest(3),
 			Packages: []prerequisites.ReceiptPackage{
-				{Requirement: "podman", RequiredBy: []string{"controller"}, Provider: "podman-5:5.8.1-1.fc44.x86_64", Repository: "updates", InstalledBy: "setup-000001"},
+				{Requirement: "podman", RequiredBy: []string{"controller"}, Provider: "podman-5:5.8.1-1.fc44.x86_64", Repository: "updates", InstalledBy: "install-000001"},
 				{Requirement: "openssh-clients", Provider: "openssh-clients-10.2p1-1.fc44.x86_64", Repository: "@System", InstalledBy: prerequisites.PresentBeforeBootwright},
 			},
 		},
@@ -80,7 +80,7 @@ func buildRuntime(tx prerequisites.SetupTransaction, marker, digest string) (pre
 
 func setupEntries(t *testing.T, store *Store, path ...string) []string {
 	t.Helper()
-	entries, err := os.ReadDir(filepath.Join(append([]string{store.options.Root, hostContainer, setupSubtree}, path...)...))
+	entries, err := os.ReadDir(filepath.Join(append([]string{store.options.Root, controllerContainer, installSubtree}, path...)...))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestTheSetupSubtreeIsOutsideTheRegistryDescriptor(t *testing.T) {
 	if registry.Controller != (contexts.ControllerDescriptor{}) {
 		t.Fatalf("the registry describes the setup subtree: %#v", registry.Controller)
 	}
-	if err := os.WriteFile(filepath.Join(store.options.Root, hostContainer, setupSubtree, setupStateName), []byte("written by a future build"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(store.options.Root, controllerContainer, installSubtree, setupStateName), []byte("written by a future build"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.View(context.Background()); err != nil {
@@ -146,8 +146,8 @@ func TestTheSetupSubtreeIsOutsideTheRegistryDescriptor(t *testing.T) {
 
 func TestASetupSubtreeOfAnotherTypeRefusesTheStore(t *testing.T) {
 	store := mediaFixture(t)
-	mkdirs(t, 0700, filepath.Join(store.options.Root, hostContainer))
-	if err := os.WriteFile(filepath.Join(store.options.Root, hostContainer, setupSubtree), nil, 0600); err != nil {
+	mkdirs(t, 0700, filepath.Join(store.options.Root, controllerContainer))
+	if err := os.WriteFile(filepath.Join(store.options.Root, controllerContainer, installSubtree), nil, 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.View(context.Background()); err == nil {
@@ -175,8 +175,8 @@ func TestPendingIntentIsDurableBeforeEffects(t *testing.T) {
 			return err
 		}
 		defer run.Close()
-		if id != "setup-000001" || run.Location() != filepath.Join(root+logsSuffix, logHost, id+outputSuffix) {
-			t.Fatalf("run %q at %q, want setup-000001", id, run.Location())
+		if id != "install-000001" || run.Location() != filepath.Join(root+logsSuffix, logController, id+outputSuffix) {
+			t.Fatalf("run %q at %q, want install-000001", id, run.Location())
 		}
 		pending := prerequisites.PendingSetup{ID: id, PlanDigest: setupDigest(4), Actions: []string{"native-packages", "runtime"}, StartedAt: "2026-10-14T09:00:00Z"}
 		mutex.Lock()
@@ -207,7 +207,7 @@ func TestPendingIntentIsDurableBeforeEffects(t *testing.T) {
 		t.Fatal(err)
 	}
 	refusal := onlyDiagnostic(t, prerequisites.SetupLaunchRefusal(view))
-	if refusal.Code != "controller.state" || refusal.Message != "a controller setup (setup-000001) was interrupted before it finished" || refusal.Remediation != "run bootwright controller install" {
+	if refusal.Code != "controller.state" || refusal.Message != "a controller setup (install-000001) was interrupted before it finished" || refusal.Remediation != "run bootwright controller install" {
 		t.Fatalf("an interrupted setup refuses a launch with %#v", refusal)
 	}
 }
@@ -224,7 +224,7 @@ func TestARefusedIntentLeavesNoRecord(t *testing.T) {
 		return nil
 	}
 	err := store.MutateSetup(context.Background(), func(tx prerequisites.SetupTransaction) error {
-		pending := prerequisites.PendingSetup{ID: "setup-000001", PlanDigest: setupDigest(4), Actions: []string{}, StartedAt: "2026-10-14T09:00:00Z"}
+		pending := prerequisites.PendingSetup{ID: "install-000001", PlanDigest: setupDigest(4), Actions: []string{}, StartedAt: "2026-10-14T09:00:00Z"}
 		return tx.Record(context.Background(), prerequisites.SetupState{Pending: &pending})
 	})
 	if !fired || err == nil {
@@ -283,7 +283,7 @@ func TestAnotherBuildsSetupFormatRefusesALaunch(t *testing.T) {
 				_, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "kept", setupDigest(2)), setupDigest(2))
 				return err
 			})
-			if err := os.WriteFile(filepath.Join(store.options.Root, hostContainer, setupSubtree, test.entry), test.content, 0600); err != nil {
+			if err := os.WriteFile(filepath.Join(store.options.Root, controllerContainer, installSubtree, test.entry), test.content, 0600); err != nil {
 				t.Fatal(err)
 			}
 			view, err := store.ReadSetup(context.Background())
@@ -391,7 +391,7 @@ func TestDiscardRefusesWhileALaunchHoldsARuntime(t *testing.T) {
 		t.Fatalf("a launch could not hold a published runtime: %#v", err)
 	}
 	defer hold.Release()
-	if err := os.WriteFile(filepath.Join(store.options.Root, hostContainer, setupSubtree, "venvs"), []byte("x"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(store.options.Root, controllerContainer, installSubtree, "venvs"), []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	discard := func() error {
@@ -474,7 +474,7 @@ func TestConcurrentPublishersLeaveOneRuntime(t *testing.T) {
 		t.Fatalf("racing publishers left %q", names)
 	}
 	winner := strconv.Itoa(slices.Index(wins, true))
-	if data, err := os.ReadFile(filepath.Join(store.options.Root, hostContainer, setupSubtree, setupRuntimesName, racing, "runtime.json")); err != nil || !strings.Contains(string(data), "\""+winner+"\"") {
+	if data, err := os.ReadFile(filepath.Join(store.options.Root, controllerContainer, installSubtree, setupRuntimesName, racing, "runtime.json")); err != nil || !strings.Contains(string(data), "\""+winner+"\"") {
 		t.Fatalf("the published runtime is not the winner's whole stage: %q %v", data, err)
 	}
 }
@@ -536,8 +536,8 @@ func TestSetupKeepsTheNewestEightRuns(t *testing.T) {
 		}
 		return nil
 	})
-	names := heldNamesOf(t, filepath.Join(store.options.Root+logsSuffix, logHost))
-	if len(names) != maxSetupRuns || names[0] != "setup-000002.output" || names[len(names)-1] != "setup-000009.output" {
+	names := heldNamesOf(t, filepath.Join(store.options.Root+logsSuffix, logController))
+	if len(names) != maxSetupRuns || names[0] != "install-000002.output" || names[len(names)-1] != "install-000009.output" {
 		t.Fatalf("runs kept %q", names)
 	}
 }
@@ -548,13 +548,13 @@ func TestSetupKeepsTheNewestEightRuns(t *testing.T) {
 func TestSetupOutputNumbersPastTheReceiptsIDs(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "state")
 	store := New(testOptions(root))
-	host := filepath.Join(root+logsSuffix, logHost)
+	host := filepath.Join(root+logsSuffix, logController)
 	mkdirs(t, 0700, root+logsSuffix, host)
-	writePrivate(t, filepath.Join(host, "setup-000002.output"), nil)
+	writePrivate(t, filepath.Join(host, "install-000002.output"), nil)
 	writePrivate(t, filepath.Join(host, "notes"), nil)
 	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
 		state := setupReceiptState()
-		state.Receipt.Packages[0].InstalledBy = "setup-000007"
+		state.Receipt.Packages[0].InstalledBy = "install-000007"
 		if err := tx.Record(context.Background(), state); err != nil {
 			return err
 		}
@@ -563,12 +563,12 @@ func TestSetupOutputNumbersPastTheReceiptsIDs(t *testing.T) {
 			return err
 		}
 		defer run.Close()
-		if id != "setup-000008" || run.Location() != filepath.Join(host, "setup-000008.output") {
-			t.Fatalf("the setup output opened %s at %s, want setup-000008 past the receipt's setup-000007", id, run.Location())
+		if id != "install-000008" || run.Location() != filepath.Join(host, "install-000008.output") {
+			t.Fatalf("the setup output opened %s at %s, want install-000008 past the receipt's install-000007", id, run.Location())
 		}
 		return nil
 	})
-	if names := heldNamesOf(t, host); !slices.Equal(names, []string{"notes", "setup-000002.output", "setup-000008.output"}) {
+	if names := heldNamesOf(t, host); !slices.Equal(names, []string{"install-000002.output", "install-000008.output", "notes"}) {
 		t.Fatalf("the host log directory holds %v", names)
 	}
 }
@@ -580,7 +580,7 @@ func TestWheelPathsAreConfinedToTheCache(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		want := filepath.Join(store.options.Root, hostContainer, setupSubtree, setupCacheName, setupWheelsName, setupDigest(9), "ansible_core-2.21.6-py3-none-any.whl")
+		want := filepath.Join(store.options.Root, controllerContainer, installSubtree, setupCacheName, setupWheelsName, setupDigest(9), "ansible_core-2.21.6-py3-none-any.whl")
 		if path != want {
 			t.Fatalf("wheel path %q, want %q", path, want)
 		}
@@ -651,7 +651,7 @@ func duplicateSetupLock(t *testing.T, store *Store) int {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := filepath.Join(store.options.Root, hostContainer, setupSubtree, setupLockName)
+	want := filepath.Join(store.options.Root, controllerContainer, installSubtree, setupLockName)
 	for _, entry := range entries {
 		path, err := os.Readlink(filepath.Join("/proc/self/fd", entry.Name()))
 		if err != nil || path != want {
@@ -720,7 +720,7 @@ func TestRetiringARuntimeWithoutItsLaunchLockRemovesIt(t *testing.T) {
 		_, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "unlocked", digest), digest)
 		return err
 	})
-	if err := os.Remove(filepath.Join(store.options.Root, hostContainer, setupSubtree, setupRuntimesName, digest, runtimeLockName)); err != nil {
+	if err := os.Remove(filepath.Join(store.options.Root, controllerContainer, installSubtree, setupRuntimesName, digest, runtimeLockName)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.HoldRuntime(context.Background(), digest); !errors.Is(err, prerequisites.ErrRuntimeUnavailable) {
@@ -774,7 +774,7 @@ func TestTheSweepAdmitsManyRuntimeEntries(t *testing.T) {
 		_, err := tx.PublishRuntime(context.Background(), stageRuntime(t, tx, "kept", setupDigest(2)), setupDigest(2))
 		return err
 	})
-	runtimes := filepath.Join(store.options.Root, hostContainer, setupSubtree, setupRuntimesName)
+	runtimes := filepath.Join(store.options.Root, controllerContainer, installSubtree, setupRuntimesName)
 	for index := range 80 {
 		if err := os.Mkdir(filepath.Join(runtimes, runtimeStagePrefix+strconv.Itoa(index)), 0700); err != nil {
 			t.Fatal(err)
@@ -834,7 +834,7 @@ func checkpointSetupScenario() checkpointScenario {
 			if receipt := tx.View().State.Receipt; receipt != nil && tx.View().State.Pending == nil {
 				return nil
 			}
-			pending := prerequisites.PendingSetup{ID: "setup-000001", PlanDigest: setupDigest(4), Actions: []string{"runtime"}, StartedAt: "2026-10-14T09:00:00Z"}
+			pending := prerequisites.PendingSetup{ID: "install-000001", PlanDigest: setupDigest(4), Actions: []string{"runtime"}, StartedAt: "2026-10-14T09:00:00Z"}
 			if err := tx.Record(ctx, prerequisites.SetupState{Pending: &pending}); err != nil {
 				return err
 			}
@@ -858,7 +858,7 @@ func checkpointSetupScenario() checkpointScenario {
 			if err != nil || view.Foreign != "" || view.State.Pending != nil || view.State.Receipt == nil || view.State.Runtimes.Current != digest {
 				return fmt.Errorf("setup settled on %#v (%v)", view, err)
 			}
-			runtimes, err := os.ReadDir(filepath.Join(store.options.Root, hostContainer, setupSubtree, setupRuntimesName))
+			runtimes, err := os.ReadDir(filepath.Join(store.options.Root, controllerContainer, installSubtree, setupRuntimesName))
 			if err != nil || len(runtimes) != 1 || runtimes[0].Name() != digest {
 				return fmt.Errorf("the runtimes directory holds %v (%v)", runtimes, err)
 			}

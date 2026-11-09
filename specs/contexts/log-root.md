@@ -13,7 +13,7 @@ everything else Bootwright keeps for a context.
 
 ```text
 /var/log/bootwright/
-  host/setup-NNNNNN.output
+  controller/install-NNNNNN.output
   contexts/<name>/
     current -> operations/<operation-id>
     operations/<operation-id>/operation.jsonl
@@ -42,10 +42,10 @@ needs no persistent filesystem: on tmpfs a reboot loses only logs.
 
 A context's `operations/` is written only inside its lifecycle transaction,
 under the context's exclusive lease; its `runs/` by its bounded runs under the
-shared lease, each holding its own file under an advisory lock; and `host/`
-under `host/setup/lock`. A reader of a context's logs holds only the shared root
+shared lease, each holding its own file under an advisory lock; and `controller/`
+under the store's `controller/install/lock`. A reader of a context's logs holds only the shared root
 lock, released before it reads a byte of any file it opened, and takes no
-lease; a reader of `host/` takes no root lock; a directory not yet created
+lease; a reader of `controller/` takes no root lock; a directory not yet created
 lists nothing. Each poll of a follow re-reads the record and re-lists the
 directory only of a block that was not `done` at its previous poll, so its hold
 shrinks as blocks settle, and a mutator's registry transaction waits that hold
@@ -105,10 +105,10 @@ past `999999` refuses `lifecycle.state`, naming the `runs/` directory to remove
 
 ## Setup output
 
-A setup's output is `host/setup-NNNNNN.output`, its number the setup's ID for a
+A setup's output is `controller/install-NNNNNN.output`, its number the setup's ID for a
 setup that starts afresh; a resumed setup writes its output under a new number
 and keeps its original ID.
-The next is numbered past both the newest output and every `setup-NNNNNN` the
+The next is numbered past both the newest output and every `install-NNNNNN` the
 setup record's receipt or pending intent names, so retention never lends a
 later setup an ID a receipt attributes
 (`TestSetupOutputNumbersPastTheReceiptsIDs`), and the oldest outputs beyond the
