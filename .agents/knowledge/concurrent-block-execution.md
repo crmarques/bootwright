@@ -42,11 +42,11 @@ shared flock on the runtime's `.lock`, so concurrent holders are expected; see
 
 ## A shared directory created lazily is a race too
 
-The operation store makes only `<id>`, `<id>/blocks` and `<id>/logs` up front;
-`logs/blocks/` and each block's directory are created by the first write that
-needs them, through `operationArea.EnsureDirectory` and `OpenLog`. With a first
-wave of several blocks, every one of them races to `Mkdirat` the same
-`logs/blocks`, and the context's first operation also races on the
+The operation store makes only the operation's own directories up front; the
+log tree's `blocks/` and each block's directory are created by the
+first write that needs them, through `operationArea.EnsureDirectory` and
+`OpenLog`. With a first wave of several blocks, every one of them races to
+`Mkdirat` the same `blocks`, and the context's first operation also races on the
 `operations` subtree itself. The losers' `EEXIST` used to be refused as a
 foreign entry, so a real-host `destroy` of a 13-block context ended
 `state: unknown` with `runtime.log: a required private operation log could not

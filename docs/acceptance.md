@@ -62,15 +62,15 @@ additions.
 Fedora 44 controller and a RHEL 9 VM, run on a build that contains X90 on a
 host with no Bootwright store, prepared as the
 [operator guide](operator-guide.md#prepare-a-host) describes. It runs no example, so its log digest covers
-setup's runs (`/var/lib/bootwright/setup/runs`) and the controller stage's
+setup's outputs (`/var/log/bootwright/host`) and the controller stage's
 operation. Copy this template into the ledger and replace every `<...>`:
 
 ```text
-| <YYYY-MM-DD> | Commit <sha>; Source clean | <Fedora 44 or RHEL 9.x> amd64, <dnf4 or dnf5> | none: setup fresh install (B555); controller stage of <context> | setup --dry-run; setup --yes (fresh); setup --yes (ready); setup --yes on <same-lock build commit>; apply --context <context> --stage controller; controller check | fresh setup <s> wall, <s> of it dnf (from run.output), target 60 s without dnf; ready <s>, target 2 s, "Nothing to do."; same-lock build <s>, target 2 s, "Nothing to do."; wheel cache <bytes>/<files> and runtime <bytes>/<files>, target 60 MB and 3,000 files; controller stage <s> with nothing missing; controller check <ready or not>; dnf preview captured <yes/no>, core-package note <yes/no>; Redfish TLS to <BMC> under DEFAULT <ok/refused> and FUTURE <ok/refused>; refusals: <none or each one> | <sha256> | observation, not acceptance |
+| <YYYY-MM-DD> | Commit <sha>; Source clean | <Fedora 44 or RHEL 9.x> amd64, <dnf4 or dnf5> | none: setup fresh install (B555); controller stage of <context> | setup --dry-run; setup --yes (fresh); setup --yes (ready); setup --yes on <same-lock build commit>; apply --context <context> --stage controller; controller check | fresh setup <s> wall, <s> of it dnf (from the setup output), target 60 s without dnf; ready <s>, target 2 s, "Nothing to do."; same-lock build <s>, target 2 s, "Nothing to do."; wheel cache <bytes>/<files> and runtime <bytes>/<files>, target 60 MB and 3,000 files; controller stage <s> with nothing missing; controller check <ready or not>; dnf preview captured <yes/no>, core-package note <yes/no>; Redfish TLS to <BMC> under DEFAULT <ok/refused> and FUTURE <ok/refused>; refusals: <none or each one> | <sha256> | observation, not acceptance |
 ```
 
 Measure the bytes with
-`sudo du -sb /var/lib/bootwright/setup/cache/wheels /var/lib/bootwright/setup/runtimes`
+`sudo du -sb /var/lib/bootwright/host/setup/cache/wheels /var/lib/bootwright/host/setup/runtimes`
 and count each directory's files with `sudo find <directory> -type f`. Switch
 the crypto policy with `sudo update-crypto-policies --set FUTURE`, and back
 with `--set DEFAULT`, around the Redfish check.

@@ -6,7 +6,7 @@ Observed on 2026-09-16. Required behavior stays in
 ## Symptom
 
 An `apply` sat on one block for minutes with a `[RUNNING]` row, and
-`tail -F` over the operation's `logs` tree printed nothing. The retained
+`tail -F` over the operation's `blocks` tree printed nothing. The retained
 `attempt-NNNNNN.output` files of blocks that had already finished held their
 whole Ansible transcript, so the plumbing worked; only a run still in flight was
 invisible, which is exactly when an operator wants to read it.
@@ -51,9 +51,10 @@ flag and is load-bearing. Both runner tests assert the exact
 equivalent, because retention on this side cannot compensate for a tool that
 withholds its output until it exits.
 
-Reading it needs root, because the state tree is `0700` and root-owned, and a
-non-root shell cannot even expand a glob into it:
+Reading it needs root, because the log root is `0700` and root-owned. Follow a
+block with `sudo bootwright logs --context <ctx> --block <block> --raw
+--follow`, or tail the files themselves:
 
 ```sh
-sudo sh -c 'tail -F /var/lib/bootwright/contexts/<ctx>/state/operations/<op>/logs/blocks/*/*.output'
+sudo sh -c 'tail -F /var/log/bootwright/contexts/<ctx>/operations/<op>/blocks/*/*.output'
 ```

@@ -111,22 +111,22 @@ checkpoints separately when the case needs them.
     mkdir -p -m 0700 -- "$EVIDENCE_ROOT"
     chmod 0700 -- "$EVIDENCE_ROOT"
     EVIDENCE_DIR=$(mktemp -d "$EVIDENCE_ROOT/${EVIDENCE_CONTEXT}.XXXXXXXX")
-    STATE_DIR="/var/lib/bootwright/contexts/$EVIDENCE_CONTEXT/state"
+    LOG_DIR="/var/log/bootwright/contexts/$EVIDENCE_CONTEXT"
     ./bin/bootwright status --context "$EVIDENCE_CONTEXT" --output json > "$EVIDENCE_DIR/status.json"
     sudo bash -euo pipefail -c '
-        find "$1/operations" -mindepth 2 -maxdepth 2 -type d -name logs -print0 |
+        find "$1/operations" -mindepth 1 -maxdepth 1 -type d -print0 |
             sort -z | while IFS= read -r -d "" LOGS; do
-                OPERATION_ID=$(basename -- "$(dirname -- "$LOGS")")
+                OPERATION_ID=$(basename -- "$LOGS")
                 DIGEST=$(find "$LOGS" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum)
                 printf "%s\t%s\t%s\n" "$OPERATION_ID" "$LOGS" "$DIGEST"
             done
-    ' _ "$STATE_DIR" > "$EVIDENCE_DIR/operation-log-digests.tsv"
+    ' _ "$LOG_DIR" > "$EVIDENCE_DIR/operation-log-digests.tsv"
     test -s "$EVIDENCE_DIR/operation-log-digests.tsv"
     sudo bash -euo pipefail -c '
         cd -- "$1"
-        find operations runs -type f \( -path "operations/*/logs/*" -o -path "runs/*/run.output" \) -print0 |
+        find operations runs -type f -print0 |
             sort -z | tar -cf - --null --no-recursion -T -
-    ' _ "$STATE_DIR" | gzip > "$EVIDENCE_DIR/logs.tar.gz"
+    ' _ "$LOG_DIR" | gzip > "$EVIDENCE_DIR/logs.tar.gz"
     cd -- "$EVIDENCE_DIR"
     gzip -t logs.tar.gz
     tar -tzf logs.tar.gz > archive-files.txt

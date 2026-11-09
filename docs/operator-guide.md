@@ -81,7 +81,7 @@ the exit status. A non-empty /etc/ld.so.preload is reported the same way, as
   enable the repositories that carry these packages, AppStream for a RHEL 9
   Python, before setup.
 - **The controller runtime** is one Python virtual environment, beneath
-  /var/lib/bootwright/setup/runtimes, on the host's own `/usr/bin/python3.X`:
+  /var/lib/bootwright/host/setup/runtimes, on the host's own `/usr/bin/python3.X`:
   Python 3.12 to 3.14, newest first, or the interpreter setup chose before
   while it still qualifies. Its ansible-core and supporting wheels are the
   exact files the lock compiled into this build names, fetched from
@@ -112,10 +112,11 @@ setup, which downloads only the wheels it has not cached.
 
 A setup that installs host packages keeps what dnf printed in a
 [setup run](../specs/cli/output.md#setup-run-output),
-/var/lib/bootwright/setup/runs/setup-NNNNNN/run.output, which only root
-can read. The host keeps the newest 8 runs, and the `Logs` field of its
-result names the run; a failure that run explains names its `run.output` in
-its remedy. A setup that was interrupted blocks every command that runs
+/var/log/bootwright/host/setup-NNNNNN.output, which only root
+can read. The host keeps the newest 8 outputs, and the `Logs` field of its
+result names the run; a failure that run explains names its output in its
+remedy. `bootwright logs --setup` prints the newest, and `--follow` shows
+a running install's as it grows. A setup that was interrupted blocks every command that runs
 Ansible with `controller.state`, "a controller setup (`setup-000042`) was
 interrupted before it finished"; run `bootwright controller install` again, which
 re-inspects the host, names the interrupted run in its plan and continues
@@ -340,6 +341,50 @@ removal took back are removed by `sudo bootwright controller uninstall
 --discard-unreadable`, which removes no package. An interrupted uninstall is
 finished by the next one
 ([uninstall flow](../specs/controller.md#the-uninstall-flow)).
+
+### Where Bootwright writes
+
+Each root is created by the first command that needs it, and `controller
+uninstall` removes each one on this host; an SSH placement host's content stays. `status --context <name> --paths` lists, for one context,
+which of these roots it holds on this host.
+
+| Root | Contents | Created by | Host roles |
+| --- | --- | --- | --- |
+| `/var/lib/bootwright` | The store: contexts, registry, secrets, media; `host/setup` (runtimes, wheel cache, receipt) and `host/record` | `controller install` and `context init` | Control only |
+| `/var/lib/bootwright-staging` | The embedded automation unpacked for each run | The first command that runs Ansible | Control only |
+| `/var/log/bootwright` | `host/setup-NNNNNN.output`; per context `operations/<op>/`, `runs/run-NNNNNN.output` and `current` | The first command that writes a log | Control only |
+| `/var/lib/bootwright-hosted/<context>/services/<kind>/<service>` | A hosted service's content root, configuration and certificate | `apply` of an artifact server or managed service | Hosting services |
+| `/var/lib/bootwright-hosted/<context>/machines/<machine>/install`, `.../erase/<operation>` and `clusters/<cluster>` | An installation image built before it is served; a physical erase's custody; a cluster installer's work area | `apply` of the installation, the erase or the cluster | Serving installations |
+| `/var/lib/bootwright-hosted/<context>/machines/<machine>/bmc` and `/var/lib/libvirt/images/bootwright/<context>` | The emulated BMC's state; guest disks and the virtual-media pool | `apply` of the libvirt provider and its Machines | Libvirt provider host |
+| `/var/lib/bootwright-hosted/<context>/...` on the placement host | The same hosted content, on the host the graph names | The same `apply`, over SSH | SSH placement host: not read by `status`, and left in place by `controller uninstall` |
+
+Logs are troubleshooting output only: no decision reads them. The hosted and
+image roots hold what an `apply` realized; `destroy` removes each emptied
+directory but never a root, and `controller uninstall` refuses while a context
+remains ([the contexts spec](../specs/contexts.md#roots-beside-the-store)).
+
+### Following an apply or destroy
+
+Start the operation in one terminal and follow it from a second. The log root
+is private to root, so `logs` asks for authorization as other commands do:
+
+- `bootwright logs --context <name> --follow` follows the context's
+  current operation, block by block, and ends when the operation does.
+- `bootwright status --context <name>` shows, in its Live section, each running
+  block's newest output.
+- `bootwright logs --context <name> --block <block> --raw --follow` shows
+  an adapter's own output for one block; `--attempt <n>` picks an earlier
+  attempt.
+- `bootwright logs --context <name> --run run-NNNNNN` shows a bounded
+  run, such as a machine power command, and `--follow` follows one still
+  running.
+- `bootwright logs --setup` shows the newest `controller install` output,
+  `--setup=setup-NNNNNN` a named one.
+- `--operation <id>` reads an earlier operation than the current one.
+
+A follow holds no lease, so it does not keep the operation it watches from finishing or the next one from starting. In the
+instant a `--setup --follow` probes whether the install still runs, a
+`controller install` that starts can be refused as busy; repeat it.
 
 ## Network exposure
 

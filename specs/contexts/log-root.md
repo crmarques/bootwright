@@ -43,9 +43,14 @@ needs no persistent filesystem: on tmpfs a reboot loses only logs.
 A context's `operations/` is written only inside its lifecycle transaction,
 under the context's exclusive lease; its `runs/` by its bounded runs under the
 shared lease, each holding its own file under an advisory lock; and `host/`
-under `host/setup/lock`. A reader of the log root holds only the shared root
-lock, and a directory not yet created lists nothing. `operations/` is the
-context's operation log area, an `operationstore.Area` that the shared area
+under `host/setup/lock`. A reader of a context's logs holds only the shared root
+lock, released before it reads a byte of any file it opened, and takes no
+lease; a reader of `host/` takes no root lock; a directory not yet created
+lists nothing. A reader opens each file through the same no-follow descent and
+refuses a file that is not a regular, singly linked file of the directory's
+owner that no group or other may read (`context.state`, naming the file,
+`TestLogOpenRefusesALinkASecondLinkAGroupReadableFileOrANonRegularOne`).
+`operations/` is the context's operation log area, an `operationstore.Area` that the shared area
 contract holds, as it holds `runs/` (`TestTheLogAreasHonourTheAreaContract`).
 Each JSONL log keeps its own bound, the attempt log's in the [bounds
 table](../contexts.md#storage-locking-and-publication) and 8 MiB for an

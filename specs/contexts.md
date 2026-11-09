@@ -389,9 +389,12 @@ and the lease to write and re-proves its
 [replacement decision](secrets.md#acquisition-and-commands) there. A command
 that cannot take the lock or lease refuses with `lifecycle.lease` and a retry
 remedy; no lock or lease is ever taken over. A `logs --follow` takes no
-lease, and `logs --setup` no root lock: whether a writer still holds the
-operation, run or setup it follows is a non-blocking lock test released at
-once. A lease is held
+lease, and `logs --setup` no root lock, so it lists `host/` unlocked:
+whether a writer still holds the operation, run or setup it follows is a
+non-blocking lock test released at once. That probe of the setup lock is a
+shared test, and `controller install` takes the setup lock without waiting, so
+an install that starts at the instant of a probe is refused as busy with
+`lifecycle.lease` and repeats at once. A lease is held
 only once its stage collection, layout verification and reservation check
 succeed; a lease that refuses is released at once. `controller install`
 [selects no context](controller.md#the-setup-flow), so it

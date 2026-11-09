@@ -470,9 +470,9 @@ func TestADiscardTakesAStoreThisBuildCannotRead(t *testing.T) {
 }
 
 // A discard over a readable store with no context removes no package either,
-// one over a store that holds a context refuses as a plain uninstall does,
-// and a discard with --keep-packages refuses before any inspection.
-func TestADiscardOfAReadableStoreRemovesNoPackageAndKeepsTheContextRefusal(t *testing.T) {
+// one over a store that holds a context or media refuses as a plain uninstall
+// does, and a discard with --keep-packages refuses before any inspection.
+func TestADiscardOfAReadableStoreRemovesNoPackageAndKeepsTheContextAndMediaRefusals(t *testing.T) {
 	f := &uninstallFixture{views: []UninstallView{everyRootView()}, installed: []string{"podman"}}
 	if _, err := f.service().Uninstall(context.Background(), UninstallRequest{DiscardUnreadable: true, SkipConfirmation: true}); err != nil {
 		t.Fatalf("the discard failed: %#v", diagnostics.Of(err))
@@ -486,6 +486,17 @@ func TestADiscardOfAReadableStoreRemovesNoPackageAndKeepsTheContextRefusal(t *te
 	f = &uninstallFixture{views: []UninstallView{held}}
 	_, err := f.service().Uninstall(context.Background(), UninstallRequest{DiscardUnreadable: true})
 	uninstallRefusal(t, err, uninstallCode, "this host holds contexts: lab")
+	imaged := unreadableView()
+	imaged.Media = []string{"rhel.iso"}
+	f = &uninstallFixture{views: []UninstallView{imaged}}
+	_, err = f.service().Uninstall(context.Background(), UninstallRequest{DiscardUnreadable: true, SkipConfirmation: true})
+	uninstallRefusal(t, err, uninstallCode, "installer media the operator supplied: rhel.iso")
+	if remedy := diagnostics.Of(err)[0].Remediation; !strings.Contains(remedy, "bootwright media delete --name rhel.iso") {
+		t.Fatalf("remedy %q", remedy)
+	}
+	if slices.Contains(f.events, "remove-state") || f.proofs != 0 {
+		t.Fatalf("a discard beside media removed state or ran the proof: events %q, proofs %d", f.events, f.proofs)
+	}
 	f = &uninstallFixture{views: []UninstallView{everyRootView()}}
 	_, err = f.service().Uninstall(context.Background(), UninstallRequest{DiscardUnreadable: true, KeepPackages: true})
 	uninstallRefusal(t, err, uninstallCode, "takes no --keep-packages")

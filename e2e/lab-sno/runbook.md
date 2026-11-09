@@ -425,7 +425,7 @@ start the apply in the original terminal:
 For B462, while that apply runs, repeat this observation in the second terminal:
 
 ```sh
-sudo KUBECONFIG=/var/lib/bootwright-clusters/lab-sno/sno/auth/kubeconfig oc get clusterversion
+sudo KUBECONFIG=/var/lib/bootwright-hosted/lab-sno/clusters/sno/auth/kubeconfig oc get clusterversion
 ```
 
 Perform the interruption selected above and wait for apply to exit. The

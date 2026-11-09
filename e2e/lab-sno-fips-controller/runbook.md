@@ -342,7 +342,7 @@ because its inputs hold the pull secret. When the build fails, read the
 installer's log on this controller:
 
 ```sh
-sudo tail -n 60 /var/lib/bootwright-clusters/lab-sno-fips-controller/sno/.openshift_install.log
+sudo tail -n 60 /var/lib/bootwright-hosted/lab-sno-fips-controller/clusters/sno/.openshift_install.log
 ```
 
 Run no `CTX_BOOT` command on the host while a `CTX_FIPS` apply runs: both
