@@ -2103,7 +2103,7 @@ which the owner decides ([B372](#x46--the-safety-and-defect-sweep-of-m1)); and n
 policy that logs a standard-input secret ([B373](#x46--the-safety-and-defect-sweep-of-m1)). Under D116 these
 nine join M1 on X46. A Secret version stored before X40 stays current only
 while its declaring path and document index are unchanged, so the first
-re-import from another directory stales it once ([B362](backlog.md#b362)).
+re-import from another directory stales it once (B362).
 Tracked elsewhere: the confirmation prompts of `secret set`, `delete` and
 rotation, which still call the Secret a context
 ([B287](#x41--lifecycle-results-the-controller-stage-installation-shapes-and-bounded-runs), D75);
@@ -3639,7 +3639,7 @@ error ([B456](#x46--the-safety-and-defect-sweep-of-m1)), the Machine and Environ
 host observations ([B463](backlog.md#b463)) and the wording, tests and dead code
 ([B464](backlog.md#b464)). Already tracked: the enrollment test double and the
 status of a setup receipt with no execution definition are
-[B368](backlog.md#b368) and [B375](backlog.md#b375).
+[B368](backlog.md#b368) and B375.
 
 **Second pass:** five file-disjoint lanes over the slice's opening commit, each
 one commit, cherry-picked onto the task branch without a conflict.
@@ -6912,7 +6912,7 @@ authenticated registry. Follow-ups: [B627](#x57--applied-specializations-in-ceph
 tail on a continued seed, [B630](backlog.md#b630) narrowing `partial-cluster`
 for a proved-absent rejection, [B631](backlog.md#b631) an earlier Call Home
 refusal, [B632](#x277--parked-defects-fixed-on-request) the unused `installed_cephadm`,
-[B633](backlog.md#b633) a flaky parallel test, [B634](backlog.md#b634) the
+[B633](backlog.md#b633) a flaky parallel test, B634 the
 runbook per release and [B635](backlog.md#b635) the review's untested edges. The
 multidc example still cannot plan because of `cephadm.workarounds`;
 [B479](m2.md#b479) owns that migration. The comment ceiling of
@@ -7074,7 +7074,7 @@ release requirement), gap1-package-resolution-matri-3-4 (binding the license to
 a Ceph release) and gap1-test-weakening-2-1 (an OS gate; its residual
 diagnostic is parked). Owner questions B650 to B656, answered by
 [D165](backlog.md#d165) and closed in
-[X104](#x104--owner-answers-of-2026-10-19). Parked: [B657](backlog.md#b657) to [B664](backlog.md#b664),
+[X104](#x104--owner-answers-of-2026-10-19). Parked: [B657](backlog.md#b657) to B664,
 [B674](backlog.md#b674), [B675](backlog.md#b675), [B677](backlog.md#b677),
 [B678](#x277--parked-defects-fixed-on-request) and [B679](backlog.md#b679). The audit also noted that
 the numbering of the peer branch `m2c` against the ids on main
@@ -7406,7 +7406,7 @@ certification: the Ceph FIPS rows belong to [B484](m2.md#b484) and stay unrun.
 
 **Not yet implemented:** X61's other work. The acceptance matrix lanes X61-L2
 to X61-L9 are not implemented, nor are the lanes D166 released from their hold,
-x61-ceph-fips (the ECDSA synthetic probe keys of [B660](backlog.md#b660) and
+x61-ceph-fips (the ECDSA synthetic probe keys of B660 and
 the FIPS host proofs), x61-host-variants-example and X61-L6. B484 names them.
 The int-x61 review left no finding unfixed.
 

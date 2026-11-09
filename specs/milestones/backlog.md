@@ -54,12 +54,8 @@ Alias cell.
 | [B248](#b248) | new, 2026-09-30 (X32); artifact part split into B1145 on 2026-11-05 (D233) | defect | Infrastructure services | A backward host clock does not force repeated managed-service restarts | Found after the M1 freeze (D48); separate clock defect stays parked |
 | [B256](#b256) | new, 2026-10-01 (X33) | enabling | Architecture | Line-limit texts for empty lists | Found after the M1 freeze (D48) |
 | [B258](#b258) | split from B206 on 2026-10-01 (D52) | enabling | State reconciliation | Pruning retained operations | D52 names the existing exits; pruning needs a retention rule for evidence and audit |
-| [B261](#b261) | new, 2026-10-01 (X34) | defect | Controller setup | A resumed carried-forward receipt reads its approved bytes | Found after the M1 freeze (D48) |
-| [B262](#b262) | new, 2026-10-01 (X34) | safety | Controller setup | A pending receipt this executable cannot prepare refuses first | Found after the M1 freeze (D48) |
 | [B266](#b266) | new, 2026-10-01 (X34) | enabling | Substrate | The drifted-network refusal names an exit that works | Found after the M1 freeze (D48) |
 | [B267](#b267) | new, 2026-10-01 (X34) | enabling | State reconciliation | Exits at the retained-operation bound | Found after the M1 freeze (D48); one part needs an owner confirmation |
-| [B268](#b268) | new, 2026-10-03 (X35) | enabling | Controller setup | The storage contract holds doubles to the terminal-receipt rule | Found after the M1 freeze (D48) |
-| [B269](#b269) | new, 2026-10-03 (X35) | defect | Controller setup | A setup at the bound that fails after an effect reports it | Found after the M1 freeze (D48) |
 | [B273](#b273) | new, 2026-10-03 (X37) | enabling | Architecture | Build and gate on Go 1.27 | Found after the M1 freeze (D48); needs an owner decision |
 | [B274](#b274) | new, 2026-10-03 (X37) | enabling | Architecture | The Ansible check gate on CPython 3.14 | Found after the M1 freeze (D48); needs an owner decision |
 | [B323](#b323) | new, 2026-10-05 | safety | Infrastructure services | Removals prove a service's sockets free before releasing them | D102: no failure was observed, and the proof belongs in the evidence functions B19 creates |
@@ -77,7 +73,6 @@ Alias cell.
 | [B353](#b353) | new, 2026-10-05 (X39) | enabling | Each test's owner | Tests X39 left narrower than they read | Found in X39 after D56; parked under D48 |
 | [B354](#b354) | new, 2026-10-05 (X39) | enabling | Each spec's owner | Wording X39 left | Found in X39 after D56; parked under D48 |
 | [B355](#b355) | new, 2026-10-05 (X39) | enabling | Architecture | Knowledge lessons X39 left | Found in X39 after D56; parked under D48 |
-| [B362](#b362) | new, 2026-10-06 (X40) | enabling | Secrets | A Secret version stored before X40 stays current across a re-import from another directory | Found in X40; parked under D48 (D116); D71 accepted the residual |
 | [B363](#b363) | new, 2026-10-06 (X40) | enabling | State reconciliation | Status diagnoses a removal whose source apply's records are unreadable | Found in X40; parked under D48 (D116); the specs require today's refusal |
 | [B364](#b364) | new, 2026-10-06 (X40) | enabling | State reconciliation | A plan preview over a keyring listing that fails as corrupt names the lost binding | Found in X40; parked under D48 (D116) |
 | [B366](#b366) | new, 2026-10-06 (X40) | enabling | Machine, with Desired state | Repeated reads X40 left | Found in X40; parked under D48 (D116) |
@@ -85,8 +80,6 @@ Alias cell.
 | [B368](#b368) | new, 2026-10-06 (X40) | enabling | Each test's owner | Tests and gates X40 left | Found in X40; parked under D48 (D116) |
 | [B369](#b369) | new, 2026-10-06 (X40) | enabling | Each spec's owner | Wording X40 left | Found in X40; parked under D48 (D116) |
 | [B374](#b374) | new, 2026-10-06 (X40) | enabling | State reconciliation | Status names a keyring listing that fails for any reason | Found in X40; parked under D48 (D116) |
-| [B375](#b375) | new, 2026-10-06 (X40) | enabling | State reconciliation, with Controller setup | Status over a failed setup receipt that has no execution definition | Found in X40; parked under D48 (D116) |
-| [B385](#b385) | split from B94 on 2026-10-06 (X41) | enabling | Workspace, with Controller setup | Setup's receipt and controller mutation drop the context they never use | Found in X41; parked under D48 (D116); dropping the receipt member moves the setup plan digest |
 | [B386](#b386) | new, 2026-10-06 (X41) | enabling | Controller, with Environment and Container cluster | Dead code X41 left | Found in X41; parked under D48 (D116) |
 | [B387](#b387) | new, 2026-10-06 (X41) | enabling | Managed OS | The installation request, its digest and its role drop what D82 retired | Found in X41; parked under D48 (D116); it moves every installation plan digest and the automation digest |
 | [B388](#b388) | new, 2026-10-06 (X41) | enabling | CLI, with Secrets and Machine | One confirmer port carries `ConfirmIn`, and no unconfigured-confirmer refusal is left without its command | Found in X41; parked under D48 (D116) |
@@ -126,7 +119,6 @@ Alias cell.
 | [B463](#b463) | new, 2026-10-08 (X46) | enabling | Controller (privilege), Desired state and Infrastructure services | Host observations of what X46 proved only in-tree | Found in X46; parked under D48 (D116); each needs root on a host, which D59's closing run provides |
 | [B464](#b464) | new, 2026-10-08 (X46) | enabling | Each spec's and test's owner | Wording, tests and dead code X46 left | Found in X46; parked under D48 (D116) |
 | [B495](#b495) | new, 2026-10-12 (X48 review) | enabling | State reconciliation, with Managed OS, Substrate and Infrastructure services | The three-node lifecycle composition runs end to end with the real runner and controlled adapters | Found in X48's review; parked under D48 (D116): D125's operator gate already proves overlap on a host, and X48's tests qualify each part |
-| [B503](#b503) | new, 2026-10-12 (the 2026-10-11 M2 review) | defect | Substrate and Secrets | Applying a generated BMC serving certificate proves its expiry and that its key matches | Found in the M2 review; no milestone depends on it: admission now proves the names and a fresh apply binds the stored certificate |
 | [B510](#b510) | new, 2026-10-12 (the owner's M2b fixture run) | defect | Workspace | Every on-demand directory creation is durable for each writer that proceeds | Found reviewing B506's fix; no milestone depends on it: each window is microseconds wide and the winner's failed sync fails its own operation |
 | [B521](#b521) | new, 2026-10-13 (the owner's M2b Ceph run) | product | CLI and Lifecycle | A stage-selection plan says how many blocks the invocation will run and how wide that selection is | Found in the M2b Ceph run; no milestone depends on it: the step markers are correct, only the closing summary misleads |
 | [B522](#b522) | new, 2026-10-13 (the owner's M2b Ceph run) | product | Machine inventory, with CLI | A provided Machine whose blocks are done does not read as untouched in `machine list` | Found in the M2b Ceph run; no milestone depends on it: the column follows the spec, which ties the position to a Machine block that a provided Machine never has |
@@ -157,16 +149,13 @@ Alias cell.
 | [B582](#b582) | new, 2026-10-14 (X91 audit) | enabling | State reconciliation | `StartResolution` proves the attempt and parses entry names as `LastResolution` does | Found by the X91 audit; no milestone depends on it: the two parsers agree on every name the store writes |
 | [B583](#b583) | new, 2026-10-14 (X91 audit) | enabling | State reconciliation | Record version literals come from one declaration per record | Found by the X91 audit; no milestone depends on it: a missed site fails closed |
 | [B584](#b584) | new, 2026-10-14 (X91 audit) | enabling | State reconciliation | Goldens pin a resolution with an observation failure, an adopted attempt and `replaces` | Found by the X91 audit; no milestone depends on it: test depth |
-| [B587](#b587) | new, 2026-10-14 (X91 audit) | defect | Storage | Detected Ceph pool `size` and `min_size` drift refuses without writing until a named delta admits it | D155 selects refusal without writes; X99's pool setters refuse drift of a completed `size` or `min_size` without writing; a drift test remains, and M2c's B81 extends the same records to every pool setter |
 | [B588](#b588) | new, 2026-10-14 (X91 audit) | enabling | Storage and Managed OS | Image and tree observations surface decode errors as unknown with a reason | Found by the X91 audit; no milestone depends on it: the effect is the same, only the diagnostic is weaker |
 | [B589](#b589) | new, 2026-10-14 (X91 audit) | enabling | Storage | Ceph core and host blocks gain an unresolved reason | Found by the X91 audit; no milestone depends on it: diagnostics only |
 | [B590](#b590) | new, 2026-10-14 (X91 audit) | enabling | Storage | Ceph wires its image dependency one way | Found by the X91 audit; no milestone depends on it: the edges are correct today |
 | [B591](#b591) | new, 2026-10-14 (X91 audit) | enabling | State reconciliation | `status` and `Ownership` share one per-object derivation | Found by the X91 audit; no milestone depends on it: the two views disagree only for a released object |
 | [B593](#b593) | new, 2026-10-14 (X91 audit) | enabling | Desired state | `RenderEffective` can keep the authored catalog and origins for a consumer that needs them | Found by the X91 audit; no consumer: `diff` takes the compile port |
 | [B594](#b594) | new, 2026-10-14 (X91 audit) | enabling | Desired state | One envelope shape definition serves the decoder and the encoder | Found by the X91 audit; no milestone depends on it: drift risk only |
-| [B595](#b595) | new, 2026-10-14 (X91 audit) | enabling | Storage | A Ceph refusal table test and a docs-check entry | Found by the X91 audit; no consumer until the first Ceph delta scenario |
 | [B598](#b598) | new, 2026-10-14 (X91 audit) | safety | State reconciliation and Workspace | Input restored byte for byte after an edit settles a completed apply | D155 accepts exact-byte restoration for a future named slice; current refusal stays |
-| [B599](#b599) | new, 2026-10-14 (X91 audit) | safety | Substrate and Managed OS | Every observe task writes only inside the runner's private directories | Found by the X91 audit; its extent is what the allowlist test finds, and the audit names two candidates |
 | [B1117](#b1117) | new, 2026-11-04 (D230) | product | CLI | `diff` pages a long text result | Candidate; parked by D230 |
 | [B1119](#b1119) | new, 2026-11-04 (D230; found by B1113) | safety | Substrate | `diff --observe` reads a libvirt guest that holds a disk attached by hand beside its declared data disks | Candidate; parked: it changes what the domain ownership proof accepts |
 | [B601](#b601) | new, 2026-10-14 (X91 audit) | product | Substrate | `diff --observe` names a bare-metal Machine's hardware NICs and the BMC address that answered | Candidate; found by the X91 audit; one projector, promoted when an operator asks for it |
@@ -184,14 +173,11 @@ Alias cell.
 | [B630](#b630) | new, 2026-10-19 (X101) | safety | Storage | A proved-absent native rejection leaves a bootstrap or `set-user` attempt recoverable instead of `partial-cluster` | Found in X101; narrowing a safety refusal needs its own named slice and decision; X101's argv check before the attempt record already covers the bootstrap options |
 | [B631](#b631) | new, 2026-10-19 (X101) | enabling | Storage | A wrong `spec.distribution.ibm.callHome` for the selected build is refused before any host block runs | Found in X101; Go has no planning-visible Call Home model fact, and D157 forbids gating on the release |
 | [B633](#b633) | new, 2026-10-19 (X101); widened 2026-10-19 (X102) | defect | Architecture and developer tooling | Two unit tests stop failing under load: the native-timeout test's xdist worker and the libvirt firewall readiness replay case | Found in X101 and X102; each file passes alone and the whole tree passed on rerun |
-| [B634](#b634) | new, 2026-10-19 (X101) | enabling | Storage | The libvirt three-node Ceph runbook validates the operator's selected coordinates, not only the tracked ones | Found in X101; documentation for the owner's runs, no gate |
 | [B635](#b635) | new, 2026-10-19 (X101) | enabling | Storage, with Container clusters | The edges X101's reviews left untested or unreconciled are tested or recorded | Found in X101; each is hardening of a path no signed build reaches today |
 | [B657](#b657) | new, 2026-10-19 (X102) | safety | Storage package resolution, with Security | Plan packages from the `broker` root must be RHEL-signed and sourced from the host's DVD tree | No trust break today: every package is verified under its repository's pinned signer, and no IBM repository ships `openssl` |
 | [B658](#b658) | new, 2026-10-19 (X102) | enabling | Storage preflight and State reconciliation | Cross-context capacity admission states its limit or holds a host-scoped reservation | No spec violation, a short window, and a reservation would be new durable cross-context state |
-| [B660](#b660) | new, 2026-10-19 (X102); assigned to M2c lane x61-ceph-fips on 2026-10-19 (D166) | safety | Ceph host runtime route probe, with the future FIPS core profile | The route probe's synthetic keys follow the cluster key's type under FIPS | In-tree key selection and refusals implemented; operator FIPS acceptance stays with B484 |
 | [B661](#b661) | new, 2026-10-19 (X102) | enabling | Ceph host runtime image profile | The cephadm payload bound is raised or derived and an oversized payload refuses with its measured size | The largest current payload is 1,676,391 bytes; a future refusal, not a defect |
 | [B663](#b663) | new, 2026-10-19 (X102) | enabling | Storage adapter | Authored package candidates mark only the chosen root, keeping DNF's own no-match text | No wrong plan was observed; refusing glob characters would be a Bootwright version grammar |
-| [B664](#b664) | new, 2026-10-19 (X102); assigned to M2c lane x59-d4-host-pull-route on 2026-10-19 (D166); field decided on 2026-10-20 (D169) | product | the owner for scope, then Storage adapter | Mirror or disconnected IBM package sources are decided, with the publisher key location authored beside them | Fail-closed today; D166 decided the scope and assigns the fix to M2c lane x59-d4-host-pull-route, and D169 decided the field `ceph.packageRepositoryKey` that lane adds |
 | [B665](#b665) | new, 2026-10-19 (X103) | enabling | Developer tooling, with the code-implementation skill | Commits that change a trust anchor say so; `scripts/check-commits` resolves `Refs:` tokens, the subject length and attribution trailers; policy changes land apart from reformats | Process tooling; history stays as it is |
 | [B666](#b666) | new, 2026-10-19 (X103) | enabling | Infrastructure, substrate libvirt | The firewall readiness barrier reloads systemd only when something changed, and destroy removes its stale staging files | Each leftover is inert and the reload is harmless; fixing it adds durable creation state for no behavioural gain |
 | [B667](#b667) | new, 2026-10-19 (X103) | enabling | CLI presentation and help | Compact `cluster info` explains not-applicable access rows once, and `session` and `exec` help list the SSH flags | The output matches the spec today and the "More detail" pointer keeps the flags discoverable |
@@ -228,7 +214,6 @@ Alias cell.
 | [B990](#b990) | new, 2026-10-30 (D211; B90 first slice) | product | Add-ons | An authored add-on creates a cluster-scoped custom resource once a program check proves the kind's scope | No consumer; the first slice admits only namespaced resources in the add-on's own namespace |
 | [B998](#b998) | new, 2026-10-30 (X234) | enabling | State reconciliation | A resolution of a predecessor's block reserves the room of the lineage's removal | Found in X234 review; the reserve rule reads one apply today and holds in the shipped cases |
 | [B999](#b999) | new, 2026-10-30 (X235 review; pre-existing) | defect | Add-ons | Selection reports two built-in packages that create one CatalogSource name or share one hosted namespace on a cluster | No profile selects two such packages today; the check belongs with the package-facts selection rules, not B90's authored slice |
-| [B1050](#b1050) | new, 2026-11-02 (`make check` during the Ceph E2E fixes) | defect | Managed OS | The physical target proof's partition case is deterministic under concurrent gate runs, or its cause is recorded | Failed once in a gate run beside a second one and passed on rerun and in 20 isolated runs; gates no milestone |
 | [B1053](#b1053) | new, 2026-11-02 (owner's request: `make test` too slow) | enabling | Architecture and developer tooling | The Go suite's slowest packages run their independent tests concurrently | Partly delivered by X286; the rest needs a shared-state audit of each package; gates no milestone |
 | [B771](#b771) | new, 2026-10-20 (D173); folds B365 | defect | Add-ons, with Workspace | The `add-ons/_store` selection exception, its marker and its reader rules leave the input reader | Dead surface now that B89 is retired; removing input-reader rules is not needed by any M4 package |
 | [B772](#b772) | new, 2026-10-20 (D173) | product | Add-ons | A package installed through OLM v1 (`ClusterExtension`) | ODF/FDF, ACM, MCE and GitLab do not qualify; own-namespace installs are Technology Preview |
@@ -282,7 +267,6 @@ Alias cell.
 | [B1165](#b1165) | new, 2026-11-05 (D234) | product | State reconciliation, with Substrate | An additive apply that adds KubeVirt providers, Machines and clusters to a completed apply | Q144; it needs per-namespace access blocks and a proof request without the MAC set |
 | [B1166](#b1166) | new, 2026-11-05 (D234) | product | Substrate and Managed OS | A KubeVirt Machine whose root is cloned from an image and seeded by cloud-init | An alternative to B905 the owner has not chosen (Q148) |
 | [B1168](#b1168) | new, 2026-11-05 (D234) | product | Add-ons | Typed `HyperConverged` fields: boot-image import, live-migration limits and network, workload placement | No profile needs them yet; locations follow the observed CRD, never a CSV (D163) |
-| [B1169](#b1169) | new, 2026-11-05 (D234) | safety | Substrate and Secrets | A minted host token bound to a per-run object, revoked when the run ends | D202 accepts the lifetime bound as the only revocation |
 | [B1170](#b1170) | new, 2026-11-05 (D234) | safety | Secrets and State reconciliation | A rebind of the host installation's administrator kubeconfig after rotation | Nothing rotates it today |
 | [B1171](#b1171) | new, 2026-11-05 (D234) | product | Substrate | Data disks on KubeVirt Machines with virtio serials and a mandatory root identity | Q149 |
 | [B1172](#b1172) | new, 2026-11-05 (D234) | product | Substrate | A rule for guest `vlan` and `bond` interfaces over KubeVirt ethernets | Awaits a live observation of what OVN carries |
@@ -297,7 +281,7 @@ Alias cell.
 | [B1182](#b1182) | new, 2026-11-06 (X312 review) | product | Substrate | Derived MAC addresses are unique across libvirt and KubeVirt Machines that share one network | The KubeVirt check covers the KubeVirt arm alone; no profile bridges both arms onto one network |
 | [B1185](#b1185) | new, 2026-11-06 (X314 review) | product | Add-ons | A partial instance over an owner-upgraded operator continues through `apply` | D235 (8) authorized observation only; an attempt over a reached chain still refuses that its approval proof differs |
 | [B1186](#b1186) | new, 2026-11-06 (X314 review) | enabling | Add-ons and Container cluster | A test ties each Ansible role's quoted evidence version to its Go constant | X314 updated the literals by hand; every gate passed with them mismatched |
-| [B1187](#b1187) | new, 2026-11-06 (X313 review) | safety | Substrate | A lent KubeVirt host token is revoked when its run returns | The token is unbound and lives until it expires, now the run's deadline plus ten minutes, which the specs accept |
+| [B1187](#b1187) | new, 2026-11-06 (X313 review); B1169 folded into it on 2026-11-08 | safety | Substrate | A lent KubeVirt host token is revoked when its run returns | The token is unbound and lives until it expires, now the run's deadline plus ten minutes, which the specs accept |
 | [B1188](#b1188) | new, 2026-11-06 (X313 review) | safety | Container cluster | An installation whose derived deadline passes the installer's own credential lifetimes is refused or reported | Unverified: bootstrap certificates last 24 h and agent tokens may expire; derived deadlines pass 24 h only past about 88 KubeVirt or 236 emulated nodes |
 | [B1207](#b1207) | new, 2026-11-06 (D240 (5)) | product | Substrate | Predictable guest interface names through libvirt `acpi index` and KubeVirt `acpiIndex` | Agent-path ethernet names are admitted with a warning (D240 (5)); no consumer needs fixed guest names yet |
 | [B1208](#b1208) | new, 2026-11-06 (D240 (10)) | product | Storage | A Ceph MON address chosen separately from the cephadm SSH address | `cephadm.addressRef` serves both today; separating them moves the CephCluster request (D240 (10)) |
@@ -575,14 +559,6 @@ Since X33 both awaiting-split lists are empty, but the collection's line-limit t
 
 No command prunes retained operations, so a context at the 1024-operation bound leaves only through destroy and deletion (D52). Pruning needs a rule for which completed operations no block's ownership and no audit depends on. **Exit evidence:** the retention rule, and a pruning journey that keeps every operation the index names.
 
-### B261
-
-A carried-forward pending receipt does not record the bundle it was carried from, so its resume acquires every source from the publisher again, and the controller spec's rule that a carried resolution consults no publisher does not survive an interruption (found in X34). **Exit evidence:** a resume test that reads the retained bytes.
-
-### B262
-
-Below the bound, a pending receipt whose bundle holds no area and that another executable recorded still refuses only at preparation, after setup presented its plan, published its intent and reserved an empty area; and the purge's help and the bound refusal do not name the stranded case (found in X34). **Exit evidence:** a refusal before any effect, and the texts.
-
 ### B266
 
 The host block runs before any Machine of its apply is realized, so the running Machines X34's drifted-network refusal names can only be domains a deleted context left behind, and `machine stop` refuses each of them as not realized; the refusal could name the domain and stopping it on the host. The network and the Machines also reach only the retained output, because an adapter refusal cannot carry names it read (found in X34). **Exit evidence:** a refusal whose exit runs.
@@ -590,14 +566,6 @@ The host block runs before any Machine of its apply is realized, so the running 
 ### B267
 
 Since X34 the retained-operation refusal names destroy, but a removal refused at its own registration names an orphan-acknowledged delete and a fresh init, since destroy would refuse again; a fresh apply's claim does not reclaim idle claims under pristine evidence before counting them; and status still offers `apply` over a context at the bound (found in X34). **Exit evidence:** the owner's exit, a reclaim before counting, and the status step.
-
-### B268
-
-The storage contract suite has no clause for the store's rule on settled receipts: a failed or canceled receipt keeps no intent or unknown effect, and every observed action carries evidence. Since X35 the prerequisites memory double enforces it, but no contract clause holds a future double to it (found in X35). **Exit evidence:** a contract clause both stores pass and a double without the rule fails.
-
-### B269
-
-When a setup at the bound fails after its first durable effect, the cancellation of a stranded receipt or a retirement, its result reports the outcome `planned`, which implies nothing changed, and does not name the cancellation (found in X35). **Exit evidence:** a failure after the cancellation and one after a retirement, each reported with what changed.
 
 ### B273
 
@@ -672,10 +640,6 @@ The architecture spec says `validate -f`, `context init` and `context update` re
 
 Two lessons have no knowledge page: pykickstart splits a file as Python's `str.splitlines` does, so vertical tab, form feed, the file, group and record separators, NEL and U+2028 and U+2029 start lines, tokenizes command lines with `shlex` comments enabled and cuts `%packages` lines at `#`; and one terminal hangup delivers SIGHUP twice to a foreground job, once from the shell and once from the kernel (found in X39). **Exit evidence:** the pages, indexed by symptom.
 
-### B362
-
-A Secret version stored before X40 matches its declaration only through the legacy fingerprint, which covers the absolute import path and the document index, so it stays current only while both are unchanged: the first re-import from another directory, or with the declaring documents reordered, stales it once, and `secret generate` then mints a generated Secret again (found in X40). D71 accepted that residual, and X40 rewrites no stored version. **Exit evidence:** a legacy version recorded under the provenance-free fingerprint by the first command that writes its store, and a later re-import from another directory keeping it current.
-
 ### B363
 
 Since X40 `status` reads the operation, plan and block records of the apply each current removal removes, so a removal whose source apply lost its plan fails `status` outright, as every other reader of damaged plan records already did, while `destroy` reads only the source operation record and still decides (found in X40). The state-reconciliation spec requires that refusal; a tolerant reading would report the affected rows `unknown` and name the damaged record with the exit its refusal names. **Exit evidence:** the owner's choice, and under a tolerant reading a status golden over such a removal.
@@ -703,14 +667,6 @@ The CLI spec's `--power-status` paragraph still calls an emulated controller unr
 ### B374
 
 Since X40 `status` reads a keyring listing that fails as corrupt or undecryptable as the reopen will and names the binding lost, but a listing that fails for any other reason, such as `secret.store.key-unavailable`, names nothing, and `status` still offers `apply` and `destroy`, which then refuse with that cause (found in X40). **Exit evidence:** a status golden over a key-unavailable listing that names the failure and offers no verb that would refuse.
-
-### B375
-
-A fresh destroy over a failed setup receipt is proved to decide only in the lifecycle harness, whose receipt keeps an execution definition. The execution closure refuses a receipt that has none, naming `bootwright setup`, so the setup-gated steps `status` offers may have to name setup there in place of destroy; nobody checked what a failed receipt the context store writes holds (found in X40). X46 saw `status` report its `execution-bundle` setup check as ready over a receipt that holds no execution definition (found in X46). **Exit evidence:** a failed receipt written through the context store, with `status` and `destroy` agreeing on the step, and that check not ready.
-
-### B385
-
-Setup has run context-free since X32, and X41 deleted its controller-binding action, yet the setup receipt still encodes, and its plan digest still covers, an always-empty `context` member, and the controller mutation keeps a context scope no production caller uses: its lease, its controller-input check and its binding comparison, and the storage contract's scoped mutation (found in X41; the receipt member was tracked under B94, which X41 delivered without it). Dropping the member moves the plan digest of every receipt, so a pending receipt's compatibility is settled first. **Exit evidence:** a receipt without the member that a pending earlier receipt still settles, the controller mutation context-free under its contract tests, and the [controller record](../contexts/controller-record.md)'s Not-yet-met line removed.
 
 ### B386
 
@@ -1103,15 +1059,6 @@ and one cancellation each leaving no sibling's scratch or effect removed, and
 its destroy in inverse order, with a mutation check that unwires the
 production bound or the invocation scope; `make quick`, `make docs-check`,
 `make race` and `make check`; or withdrawn by the owner.
-
-### B503
-
-A generated BMC serving certificate is proved only for the names it covers, at
-admission, and a stored certificate when a fresh apply binds it. Its expiry and
-the match between its private key and public certificate are not proved before
-the emulator starts (found by the 2026-10-11 M2 review). **Exit evidence:**
-bind-time tests that an expired certificate and a mismatched key refuse before
-any effect, and that the remedy names the Secret.
 
 ### B510
 
@@ -1671,24 +1618,6 @@ attempt has the same shape as `attempt-running`
 `resolution-unknown-failure.golden` and goldens for an adopted attempt and for
 `replaces`. **Exit evidence:** the three goldens.
 
-### B587
-
-When the X91 audit ran, the Ceph pool phase ran `osd pool set size` and
-`min_size` blindly on every pass that was not ready and passed the ownership
-check, writing drift back unreported. [D155](#d155) accepts refusal without
-writes until a named delta admits drift.
-[X99](delivered.md#x99--operator-selected-ceph-artifacts-and-m2b-completion)
-delivers that policy for the minimal pool phase: each setter retains its intent
-before the effect and its completion after readback, keyed by the numeric pool
-ID, and a completed setting whose live value differs refuses `pool-identity`
-without writing
-(`ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/ceph_native.py:2874-2889`);
-[storage](../ceph.md) requires it for every pool setter. **Remaining:** no
-role test shows detected drift of a completed setting refusing without writing,
-and M2c's [B81](m2.md#b81) must route its quota, compression and EC-overwrite
-setters through the same records. **Exit evidence:** that role test. The
-projector that proves them is [B600](m2.md#b600).
-
 ### B588
 
 `Observe` on the Ceph image and on the installation tree drops decode errors and
@@ -1756,16 +1685,6 @@ encoding (`internal/desiredstate/compilation/decoding.go:59-64`,
 a renderer. **Smallest fix:** one shared constructor in the API package. **Exit
 evidence:** one definition and a round-trip test.
 
-### B595
-
-Ceph has no refusal table in the spec and no
-`Test*RefusalTableMatchesUnsupported`, and the docs-check package list, kept by
-hand, omits it (`internal/storage/ceph/capability.go:104-122`,
-`internal/reconciliation/lifecycle/contracts.go:295-297`, `Makefile:54`). Ceph is
-the first scenario consumer. **Impact:** a refusal can change without the spec.
-**Smallest fix:** the table, a test over `Unsupported()`, and the package in the
-docs-check list. **Exit evidence:** that test and a docs-check entry.
-
 ### B598
 
 Input restored byte for byte after an edit gets a new revision, so a completed
@@ -1775,17 +1694,6 @@ slice. Until that slice changes the content comparison and spec row, the
 current code and refusal remain. **Exit evidence:** a lifecycle test and spec
 row admitting exact-original-byte restoration while every other changed input
 still refuses before effects.
-
-### B599
-
-Whatever the allowlist test over the observe entry points finds: any observe task
-that writes outside the runner's job directory or its scratch directory. The
-candidates are `work.yml` and `reachable.yml` of
-`ansible/collections/ansible_collections/bootwright/core/roles/managedos_install_anaconda/tasks/`.
-**Impact:** an observation, which the read-only guard assumes changes nothing,
-would leave files elsewhere. **Smallest fix:** observe writes nothing outside the
-runner's private directories. **Exit evidence:** the allowlist test with no entry
-that writes outside them.
 
 ### B1117
 
@@ -1996,18 +1904,6 @@ time matched; only access time differed after the read. Neither the test nor
 its production module is changed by M3b. This remains B633's follow-up rather
 than a change to the M3b implementation.
 
-### B634
-
-The runbook's validation text and its Dashboard and IBM Call Home rows assume
-the tracked `callHome: enabled` and `20.2.2-349.el9cp`, and the guide for guests
-of another RHEL minor does not say to rename `metadata.name` in the two copied
-profile files. **Outcome:** the validation steps compare against the operator's
-own selected coordinates and the Call Home intent the selected build realizes
-(`call_home_agent` enabled, or not enabled for `disabled`), with no per-release
-table (D163), and the guide names every field to change in the copied profile
-files, including `metadata.name`. **Requires:** none. **Definition:** `Specified`.
-**Exit evidence:** a docs-check pass and the owner's three runs reading it.
-
 ### B635
 
 X101's reviews left these edges, none reached by a signed build today:
@@ -2056,16 +1952,6 @@ state. It joins M2 if pulled in. **Requires:** none. **Definition:**
 `Needs definition`. **Exit evidence:** the spec sentence, or a two-context
 admission test that refuses the second apply.
 
-### B660
-
-Assigned to M2c lane x61-ceph-fips on 2026-10-19 ([D166](#d166)), under
-[B484](m2.md#b484). The in-tree route probe selects ECDSA synthetic keys from
-the observed FIPS kernel state and keeps inherited crypto policy. Declared
-and bound Ed25519 cluster keys refuse before host preparation. Host-independent
-fixtures cover key selection, native policy mismatches and no-effect refusals.
-Operator FIPS acceptance remains open with B484; this claims no provider
-qualification. D166's ECDSA selection supersedes following an RSA cluster key.
-
 ### B661
 
 The cephadm payload bound `MAX_PAYLOAD` (2 MiB) in the host runtime sits
@@ -2088,34 +1974,6 @@ surfacing DNF's own no-match text, so a glob subject leaves no extra goal jobs.
 refusals, and refusing glob characters would be a Bootwright version grammar,
 which D163 excludes. **Requires:** none. **Definition:** `Specified`. **Exit
 evidence:** a resolution test with a glob subject that leaves one goal job.
-
-### B664
-
-The publisher key is always fetched from IBM's public site, so a mirror or
-disconnected package source cannot supply it. Found by the audit
-(`gap2-gap2-package-signer-trus-1-2`). **Outcome:** decide whether mirror or
-disconnected IBM package sources are supported; if so, the publisher key
-location is authored beside `ceph.packageRepository` while the code-pinned IBM
-fingerprint stays the trust anchor, and the `el10cp` signer is recorded in
-[knowledge](../../.agents/knowledge/ibm-ceph-version-constraints.md) once an
-`el10cp` package is inspected. **Why parked:** it fails closed today and needed
-a scope decision. **Assigned:** M2c lane x59-d4-host-pull-route on 2026-10-19
-([D166](#d166)), which takes the key from the declared mirror under its
-trust bundle. **Decided outcome:** D166 took the "if so" branch, and
-[D169](#d169) (2026-10-20, the owner) chose "Add the field": a new
-required field `ceph.packageRepositoryKey` whenever `ceph.packageRepository` is
-authored, using that repository's scheme, host and port and its trust bundle,
-with the key's fingerprint matching the code pin. Lane x59-d4-host-pull-route
-adds it and stays the item's carrier; the item keeps its state until that lane
-lands. **Implementation:** B493's x59-d4 consumes the authored key at the
-repository origin and TLS anchor, preserves the pinned IBM fingerprint, and
-freezes the key URL in core and host requests. Host-independent tests cover
-foreign origins, missing/untrusted keys, no public fallback and mismatched
-publisher fingerprints. The `el10cp` signer observation remains pending a
-separate inspected package; this change qualifies no new package signer.
-**Requires:** none; D166 and D169 answered the owner decision. **Definition:**
-`Specified`. **Exit evidence:** a package-source test with an authored
-key location whose fingerprint differs from the pin and refuses.
 
 ### B665
 
@@ -3013,32 +2871,6 @@ as the authored add-on's
 [shared identities](../api/addons.md#admission-diagnostics) are reported, with
 a test over a synthetic package pair.
 
-### B1050
-
-`TestThePhysicalTargetProofStopsBeforeStorageUnlessTheRootIsAWholeDisk/a_partition`
-in `internal/managedos/installation` failed once during `make check` on
-2026-11-02, run beside a second gate run: the installer script's MAC-address
-check refused first instead of the expected "is not a whole disk" refusal. It
-passed on the rerun and in 20 isolated runs. The test runs the rendered `%pre` script under real `bash` with
-`set -euo pipefail` against a temporary sysfs, so only the MAC pipelines, never
-the partition check, can produce that refusal. Read-only, the suspected cause
-is timing under CPU contention in those pipelines, such as
-`printf ... | grep -Fqx` under `pipefail`: a nonzero status of either side
-reads as the address missing. It is unconfirmed and was not reproduced.
-It failed again on 2026-11-03, in
-`TestThePhysicalTargetProofComparesTheRootDiskWWNAndSerial/a_WWN_beyond_its_bound`,
-during `make check` of the two-context stretch fixes, with the same MAC
-refusal in place of the expected one; it passed in 5 isolated runs there and 3
-on main. That recurrence meets this item's revive condition.
-
-**Outcome:** the case is deterministic under concurrent gate runs, or its
-cause is recorded. **Requires:** none. **Definition:** `Specified`. **Exit
-evidence:** repeated concurrent runs of the package's tests with no MAC refusal
-in the partition case. Parked because one failure is unreproduced, the tests
-passed on rerun, and the item gates no milestone. **Revive when** the case fails
-again, or a gate run records its output. The fix is in the test or in the
-rendered script's pipeline, never a retry.
-
 ### B1053
 
 `make test` took 112 s uncached on 2026-11-02 (16 cores), up from about 43 s
@@ -3217,10 +3049,6 @@ cannot reach the other network.
 
 **Owner:** Add-ons. **Kind:** product. **Requires:** [B883](m4.md#b883). **Definition:** Needs definition: typed `HyperConverged` fields for boot-image import, live-migration limits and network, and workload placement. Their locations follow the observed CRD, never a CSV ([D163](#d163)). **Outcome:** The `kubevirt` package sets those fields from typed intent. **Exit evidence:** Package goldens and an owner-run observation of the rendered fields.
 
-### B1169
-
-**Owner:** Substrate and Secrets. **Kind:** safety. **Requires:** [B732](m3.md#b732). **Definition:** Needs definition: how a minted host token binds to a per-run object. [D202](#d202) accepts the lifetime bound as the only revocation today. **Outcome:** The token is revoked when its run ends. **Exit evidence:** Token tests for the bound object and the revocation, and an owner-run apply and destroy.
-
 ### B1170
 
 **Owner:** Secrets and State reconciliation. **Kind:** safety. **Requires:** [B732](m3.md#b732). **Definition:** Needs definition: which command rebinds the host installation's administrator kubeconfig after a rotation. Nothing rotates it today. **Outcome:** A rotated administrator kubeconfig is rebound without a destroy. **Exit evidence:** Secrets and reconciliation tests over a rotated kubeconfig.
@@ -3381,7 +3209,6 @@ assignment, gateway and client-set rules read them ([Network](../api/networks.md
 **Outcome:** an L2 domain that carries two subnets untagged is declared as it
 is built.
 
-
 ### B1214
 
 **Owner:** Infrastructure services. **Kind:** product. **Requires:** owner
@@ -3427,7 +3254,6 @@ unit or container remains on the host, then archives or removes those roots
 and names each path.
 **Outcome:** a version move costs one named command, never a hand-written
 removal.
-
 
 ### B1217
 
@@ -3691,6 +3517,22 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | B496 | 2026-11-03 | [D224](#d224): its remaining gate was the emulated bare-metal rehearsal; its in-tree delivery, the generated `issuerRef` CA-signed leaf of D175, stays on main. |
 | B1062 | 2026-11-03 | [D224](#d224): the emulated bare-metal rehearsal it would have planned was removed. |
 | B122 | 2026-11-05 | JSON results already exist; the remaining attempt/outcome reporting is folded into [B1135](delivered.md#x304--audit-003-foundation-remediation) by D233. |
+| B261 | 2026-11-08 | Moot under [D152](#d152): X89 (e01bf1de8) deleted the carried-forward receipt and its bundle publisher; setup records only a pending plan and a host receipt. |
+| B262 | 2026-11-08 | Moot under [D152](#d152): X89 deleted the execution-area bound and `--purge-old-bundles`; an interrupted setup refuses before any effect. |
+| B268 | 2026-11-08 | Moot under [D152](#d152): X89 deleted the receipt's intent, action and effect records; the host receipt holds platform, lock, runtime, closure and packages only. |
+| B269 | 2026-11-08 | Moot under [D152](#d152): the bound, its cancellation and its retirement are gone, and X90 (50aebb522) keeps a retention fault from changing the setup's outcome. |
+| B362 | 2026-11-08 | Moot under [D241](#d241): 8dc0d0afc removed the legacy Secret fingerprint. |
+| B375 | 2026-11-08 | Moot under [D152](#d152): setup keeps no execution definition; the `execution-bundle` check reads the controller's prepared receipt. |
+| B385 | 2026-11-08 | Delivered by X89 (e01bf1de8): the host receipt has no `context` member and the setup mutation takes no context scope; [D241](#d241) leaves no earlier receipt to settle. |
+| B503 | 2026-11-08 | Already met: binding a stored certificate validates its expiry and key match before any effect, the remedy naming the Secret (`internal/secrets/custody`, `internal/secrets/material`). |
+| B587 | 2026-11-08 | Delivered by 0671b3f86: role tests refuse drift of a completed pool setting without writing; [B81](m2.md#b81) and [B600](m2.md#b600) own the remaining setters and projector. |
+| B595 | 2026-11-08 | Delivered by X61-L1 (bd3bfe48a): the Ceph refusal table, `TestCephRefusalTableMatchesUnsupported` and its docs-check entry. |
+| B599 | 2026-11-08 | Delivered by [X91](delivered.md#x91--read-only-diff-and-the-delta-seam): `TestEveryObservePlaybookRunsOnlyAllowedTasks` holds the observe allowlist; under observe `work.yml` creates nothing and `reachable.yml` writes only in the runner's scratch. |
+| B634 | 2026-11-08 | Moot: the `e2e/lab-3-nodes-ceph` case (dfcc0be16) replaced the copied-profile runbook; its inputs are rendered values and its checks read the selected release. |
+| B660 | 2026-11-08 | Delivered in-tree by [X61](delivered.md#x61--ceph-transport-crypto-policy)'s x61-ceph-fips lane; operator FIPS acceptance stays with [B484](m2.md#b484). |
+| B664 | 2026-11-08 | Delivered in-tree by lane x59-d4 under [B493](m2.md#b493): `ceph.packageRepositoryKey` ([D169](#d169)) keeps the pinned IBM fingerprint; the `el10cp` signer goes to knowledge when such a package is inspected. |
+| B1050 | 2026-11-08 | Delivered by B1144 ([X304](delivered.md#x304--audit-003-foundation-remediation), 98a4e30a4): the MAC pipelines no longer close their producer early under `pipefail`, the recorded cause. |
+| B1169 | 2026-11-08 | Duplicate of [B1187](#b1187): the same lend-minted host token, revoked when its run returns. |
 
 ## Decisions
 
@@ -4503,7 +4345,7 @@ or authorizing an agent-run privileged or entitled test.
 
 ### D153
 
-**accepted-by D155** (2026-10-14, the owner): "today bootwright must accept only this scenario: non-existent real state ... half-provisioned/setup ... real state already equals desired state ... bootwright could have an command: bootwright diff ... do not implement this support yet, just make code, logic and architecture ready for this in the future ... reconciliation must be predictable and safe. target environment can never be broken with bootwright apply". Taken by the session, pending the owner's review: (1) `apply` admits exactly three scenarios: a fresh apply where the context's records show no operation or a completed destroy, a continuation of an incomplete apply over byte-identical input, and an idempotent settle of a completed apply over unchanged input. Changed input over a completed apply keeps refusing before any effect and names what changed, with destroy then apply as the remedy; `TestApplyAdmitsOnlyTheFourScenarios` pins the placement. (2) `bootwright diff` is read-only: it compares the context's selected desired state with what its apply realized, object by object, reads durable records only, or with `--observe` each realized block's target through that block's read-only observation, writes no record, takes no lock beyond the shared read lock and exits 0 whenever it renders. (3) Every further scenario is added one per named slice by the recipe in the design: a decision, a spec row and a `stateMachineRows` case, the prerequisite items, and one branch in the changed-input path, all in one commit; none is implemented here, and this slice builds only seams with a present consumer (the comparison, the read-only guard, the retained-revision reader). (4) The settled scenario means "the records prove the frozen plan done over unchanged input": a settled apply attests its own records and reaches no host. Drift that `diff --observe` shows is reported, never repaired. [X91](delivered.md#x91--read-only-diff-and-the-delta-seam) delivers it; the audit's blocking findings [B567](#b567) and [B568](#b568) stay parked and recommended as a dedicated safety slice before any further `destroy` on a shared libvirt host. Needs the owner's decision: whether a settle also requires the current build to freeze the same plan ([B574](#retired); the recommendation is not now). Needs the owner's decision: whether input restored byte for byte after an edit settles a completed apply ([B598](#b598)). Needs the owner's decision: the libvirt redefine semantics and what machine evidence proves ([B576](#b576)). Needs the owner's decision: whether Ceph pool `size` and `min_size` drift is refused or reported ([B587](#b587)). Needs the owner's decision: the context incarnation identity design ([B568](#b568)).
+**accepted-by D155** (2026-10-14, the owner): "today bootwright must accept only this scenario: non-existent real state ... half-provisioned/setup ... real state already equals desired state ... bootwright could have an command: bootwright diff ... do not implement this support yet, just make code, logic and architecture ready for this in the future ... reconciliation must be predictable and safe. target environment can never be broken with bootwright apply". Taken by the session, pending the owner's review: (1) `apply` admits exactly three scenarios: a fresh apply where the context's records show no operation or a completed destroy, a continuation of an incomplete apply over byte-identical input, and an idempotent settle of a completed apply over unchanged input. Changed input over a completed apply keeps refusing before any effect and names what changed, with destroy then apply as the remedy; `TestApplyAdmitsOnlyTheFourScenarios` pins the placement. (2) `bootwright diff` is read-only: it compares the context's selected desired state with what its apply realized, object by object, reads durable records only, or with `--observe` each realized block's target through that block's read-only observation, writes no record, takes no lock beyond the shared read lock and exits 0 whenever it renders. (3) Every further scenario is added one per named slice by the recipe in the design: a decision, a spec row and a `stateMachineRows` case, the prerequisite items, and one branch in the changed-input path, all in one commit; none is implemented here, and this slice builds only seams with a present consumer (the comparison, the read-only guard, the retained-revision reader). (4) The settled scenario means "the records prove the frozen plan done over unchanged input": a settled apply attests its own records and reaches no host. Drift that `diff --observe` shows is reported, never repaired. [X91](delivered.md#x91--read-only-diff-and-the-delta-seam) delivers it; the audit's blocking findings [B567](#b567) and [B568](#b568) stay parked and recommended as a dedicated safety slice before any further `destroy` on a shared libvirt host. Needs the owner's decision: whether a settle also requires the current build to freeze the same plan ([B574](#retired); the recommendation is not now). Needs the owner's decision: whether input restored byte for byte after an edit settles a completed apply ([B598](#b598)). Needs the owner's decision: the libvirt redefine semantics and what machine evidence proves ([B576](#b576)). Needs the owner's decision: whether Ceph pool `size` and `min_size` drift is refused or reported (B587). Needs the owner's decision: the context incarnation identity design ([B568](#b568)).
 
 ### D154
 
@@ -4927,11 +4769,11 @@ registry; `v9.9.2-26947` replaces it under [D171](#d171).
 
 **owner** (2026-10-19, the owner): the owner answered the session's question
 about the two audit defects that X102 parked and that held eight M2c lanes,
-choosing "Fix both in M2c (Recommended)". (1) [B660](#b660): the Ceph route
+choosing "Fix both in M2c (Recommended)". (1) B660: the Ceph route
 probe always generates ssh-ed25519 synthetic keys, so a FIPS-mode Ceph host
 cannot pass host preparation and its refusal reads as a route failure; M2c
 lane x61-ceph-fips fixes it with ECDSA synthetic probe keys on FIPS hosts.
-(2) [B664](#b664): the IBM package publisher key is always fetched from the
+(2) B664: the IBM package publisher key is always fetched from the
 public IBM site even when `ceph.packageRepository` names a mirror; M2c lane
 x59-d4-host-pull-route fixes it, and the key comes from the declared mirror
 under its trust bundle. The answer releases the program's two holds: the
@@ -4983,7 +4825,7 @@ operator acceptance, with the active-directory live row unrun (D161, OD15);
 owner left open (D161, OD27); and [B477](m2.md#b477), [B478](m2.md#b478) and
 [B479](m2.md#b479) plan their families once the images are authored.
 It then merged X59's in-tree lanes after the int-x59 checkpoint, with the
-docs commit of D166 that assigns [B664](#b664) to the lane
+docs commit of D166 that assigns B664 to the lane
 x59-d4-host-pull-route: [B619](delivered.md#x59--registry-trust-bundle-consumer)
 is delivered; [B483](m2.md#b483) stays in progress for the replication lanes
 (D160, OD18 (A) and OD19 (a)) and [B493](m2.md#b493) for the host pull route
@@ -5023,7 +4865,7 @@ removes them with admission, spec and example updates. (2) [B627](delivered.md#x
 (the core and host evidence `specializations` member and its `cluster info`
 line): "Carry it in M2c (Recommended)". The next M2c lane that moves the Ceph
 core contract adds the member and the line with B627's exit evidence, so no
-version moves for B627 alone. (3) [B664](#b664)'s fix in lane
+version moves for B627 alone. (3) B664's fix in lane
 x59-d4-host-pull-route: "Add the field (Recommended)". A new required field
 `ceph.packageRepositoryKey` whenever `ceph.packageRepository` is authored,
 using the repository's scheme, host and port and its trust bundle, with the

@@ -291,13 +291,13 @@ refuses `lifecycle.lease` while an apply holds the root lock
   literals; no golden for a resolution with an observation failure; the spec
   says root disk where the role refuses any owned disk; an over-claiming
   controller-clients digest comment.
-- [B587](../../specs/milestones/backlog.md#b587) to
+- B587 to
   [B590](../../specs/milestones/backlog.md#b590): Ceph pool `size` and
   `min_size` drift rewritten unreported; decode errors dropped by image and
   tree observations; no unresolved reason for Ceph core and host; the image
   dependency wired two ways.
 - [B592](../../specs/milestones/delivered.md#x160--spec-audit-corrections-and-parked-remediation) (delivered by X160) and [B593](../../specs/milestones/backlog.md#b593) to
-  [B595](../../specs/milestones/backlog.md#b595): stale CLI stage-selection
+  B595: stale CLI stage-selection
   text after D144 and D146; `RenderEffective` keeps no authored catalog, which
   no consumer needs while `diff` takes the compile port; the envelope shape
   defined twice; no Ceph refusal table test.

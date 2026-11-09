@@ -91,9 +91,9 @@ cluster and its pools, and the operator adds one `CephPool`.
      ([B577](../milestones/backlog.md#b577)), so `Compare` reports exactly
      one added block and every other block the same.
    - The Ceph refusal table is pinned by a test
-     ([B595](../milestones/backlog.md#b595)).
+     (B595).
    - Pool `size` and `min_size` drift is refused or reported, not silently
-     converged ([B587](../milestones/backlog.md#b587)).
+     converged (B587).
    - One pure classifier replaces the parallel transition derivations
      ([B575](../milestones/delivered.md#x234--additive-apply-of-add-on-instances)); it is the slice's first step.
    - A retention rule bounds the operations a union lineage keeps
