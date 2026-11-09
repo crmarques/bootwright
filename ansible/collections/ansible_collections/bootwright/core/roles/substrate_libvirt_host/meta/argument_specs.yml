@@ -33,6 +33,10 @@ argument_specs:
           provisioned:
             type: bool
             required: true
+          refusedPrefixes:
+            type: list
+            elements: str
+            required: false
           services:
             type: list
             elements: str
@@ -45,6 +49,9 @@ argument_specs:
             required: true
             choices:
               - substrate-host-libvirt-v1
+          vlanRefusalUnit:
+            type: str
+            required: false
       bootwright_substrate_host_digest:
         type: str
         required: true

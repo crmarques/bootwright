@@ -26,10 +26,10 @@ func TestTheManagedNetworkBoundKeepsTheHostReservationWithinItsKeys(t *testing.T
 		t.Fatalf("requests = %+v (%v)", requests, err)
 	}
 	keys := requests[0].ReservationKeys()
-	if len(keys) != 3+3*substrate.MaxManagedNetworks || len(keys) > prerequisites.MaxReservationKeys {
+	if len(keys) != 4+3*substrate.MaxManagedNetworks || len(keys) > prerequisites.MaxReservationKeys {
 		t.Fatalf("%d managed Networks claim %d keys, of the %d one reservation holds", substrate.MaxManagedNetworks, len(keys), prerequisites.MaxReservationKeys)
 	}
-	if 3+3*(substrate.MaxManagedNetworks+1) <= prerequisites.MaxReservationKeys {
+	if 4+3*(substrate.MaxManagedNetworks+1) <= prerequisites.MaxReservationKeys {
 		t.Fatalf("%d managed Networks still fit the %d keys one reservation holds, so the bound is not the largest", substrate.MaxManagedNetworks+1, prerequisites.MaxReservationKeys)
 	}
 }

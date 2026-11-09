@@ -36,11 +36,22 @@ type HostEvidence struct {
 	// directory. A pool carries no ownership metadata, so a same-named pool
 	// targeting another directory is foreign. Evidence without it decodes as
 	// a pool that is not this provider's.
-	PoolOwned     bool              `json:"poolOwned"`
-	Postcondition bool              `json:"postcondition"`
-	Request       string            `json:"request"`
-	Services      []ServiceEvidence `json:"services"`
-	URI           bool              `json:"uri"`
+	PoolOwned     bool                `json:"poolOwned"`
+	Postcondition bool                `json:"postcondition"`
+	Request       string              `json:"request"`
+	Services      []ServiceEvidence   `json:"services"`
+	URI           bool                `json:"uri"`
+	VLANRefusal   VLANRefusalEvidence `json:"vlanRefusal"`
+}
+
+type VLANRefusalEvidence struct {
+	Answered bool     `json:"answered"`
+	Enabled  bool     `json:"enabled"`
+	Name     string   `json:"name"`
+	Owned    bool     `json:"owned"`
+	Present  bool     `json:"present"`
+	Routes   []string `json:"routes"`
+	State    string   `json:"state"`
 }
 
 // FirewallReadyEvidence covers the provider's owned startup barrier, including
@@ -154,6 +165,9 @@ func ValidateHostPresence(data []byte, request HostRequest, digest string) error
 	if request.FirewallReadyUnit != "" && !evidence.FirewallReady.Ready {
 		return refusal("lifecycle.state", "the provider host firewall is not proved enabled and ready",
 			"start firewalld.service, confirm firewall-cmd --state reports running, then repeat the apply")
+	}
+	if err := matchVLANRefusal(evidence.VLANRefusal, request, true); err != nil {
+		return err
 	}
 	if !evidence.URI {
 		return refusal("lifecycle.state", "the declared libvirt connection does not answer", "")
@@ -291,6 +305,9 @@ func ValidateHostAbsence(data []byte, digest string) error {
 	if !ready.Answered || ready.Present || ready.Owned || ready.Enabled || ready.Ready || ready.State != "" {
 		return refusal("lifecycle.state", "the provider host removal evidence does not prove its firewalld readiness unit gone", "")
 	}
+	if vlan := evidence.VLANRefusal; vlan.Present || vlan.Owned || vlan.Enabled || len(vlan.Routes) > 0 || vlan.State != "" || (vlan.Name != "" && !vlan.Answered) {
+		return refusal("lifecycle.state", "the provider host removal evidence does not prove its VLAN refusal unit and routes gone", "")
+	}
 	if evidence.Directory == nil || *evidence.Directory {
 		return refusal("lifecycle.state", "the provider host removal evidence does not prove its pool directory gone", "")
 	}
@@ -369,6 +386,33 @@ func decodeHostRemains(data []byte, digest string) (HostEvidence, error) {
 	return evidence, nil
 }
 
+const vlanRefusalRemedy = "repeat the apply to restore the owned refusing routes; remove any route that overlaps a VLAN subnet it names"
+
+func matchVLANRefusal(observed VLANRefusalEvidence, request HostRequest, running bool) error {
+	if request.VLANRefusalUnit == "" {
+		if observed.Name != "" || observed.Present || observed.Owned || observed.Enabled || len(observed.Routes) > 0 || observed.State != "" {
+			return refusal("lifecycle.state", "the provider host evidence reports an undeclared VLAN refusal unit", "")
+		}
+		return nil
+	}
+	if !observed.Answered || observed.Name != request.VLANRefusalUnit {
+		return refusal("lifecycle.state", "the provider host evidence does not prove its frozen VLAN refusal unit", vlanRefusalRemedy)
+	}
+	if len(request.RefusedPrefixes) == 0 {
+		if observed.Present || observed.Owned || observed.Enabled || len(observed.Routes) > 0 || observed.State != "" {
+			return refusal("lifecycle.state", "the provider host still holds a VLAN refusal unit or route its request no longer declares", vlanRefusalRemedy)
+		}
+		return nil
+	}
+	if !observed.Present || !observed.Owned || !observed.Enabled || (running && observed.State != "active") {
+		return refusal("lifecycle.state", "the provider's VLAN refusal unit is not owned, active and enabled", vlanRefusalRemedy)
+	}
+	if !slices.Equal(observed.Routes, request.RefusedPrefixes) {
+		return refusal("lifecycle.state", "the provider host does not hold exactly the unreachable routes for the VLAN subnets it refuses", vlanRefusalRemedy)
+	}
+	return nil
+}
+
 func matchFirewallHeld(observed FirewallReadyEvidence, name string) error {
 	if name == "" {
 		return matchFirewallReady(observed, name)
@@ -384,6 +428,9 @@ func matchFirewallHeld(observed FirewallReadyEvidence, name string) error {
 
 func unremoved(evidence HostEvidence, request HostRequest) error {
 	if err := matchFirewallHeld(evidence.FirewallReady, request.FirewallReadyUnit); err != nil {
+		return err
+	}
+	if err := matchVLANRefusal(evidence.VLANRefusal, request, false); err != nil {
 		return err
 	}
 	if !evidence.URI {
@@ -435,7 +482,11 @@ func holdsOwned(evidence HostEvidence) error {
 	if ready.Present && (!ready.Answered || !ready.Owned) {
 		return refusal("lifecycle.state", "a firewalld readiness unit exists without this provider's ownership", "")
 	}
-	present := evidence.Pool != "" || (evidence.Directory != nil && *evidence.Directory) || (ready.Answered && ready.Present && ready.Owned)
+	if vlan := evidence.VLANRefusal; vlan.Present && (!vlan.Answered || !vlan.Owned) {
+		return refusal("lifecycle.state", "a VLAN refusal unit exists without this provider's ownership", "")
+	}
+	vlan := evidence.VLANRefusal
+	present := evidence.Pool != "" || (evidence.Directory != nil && *evidence.Directory) || (ready.Answered && ready.Present && ready.Owned) || (vlan.Answered && vlan.Present && vlan.Owned)
 	for _, network := range evidence.Networks {
 		if !network.Managed || (network.State == "" && !network.Owned) {
 			continue

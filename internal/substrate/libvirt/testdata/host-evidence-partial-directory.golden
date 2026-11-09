@@ -46,5 +46,14 @@
       "state": "active"
     }
   ],
-  "uri": true
+  "uri": true,
+  "vlanRefusal": {
+    "answered": true,
+    "enabled": false,
+    "name": "bootwright-lab-lab-libvirt-vlan-refusal.service",
+    "owned": false,
+    "present": false,
+    "routes": null,
+    "state": ""
+  }
 }

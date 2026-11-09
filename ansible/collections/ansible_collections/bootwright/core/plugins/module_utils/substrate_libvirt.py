@@ -15,6 +15,7 @@ import sys
 from xml.etree import ElementTree
 
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_firewall_ready import observe as observe_firewall_ready
+from ansible_collections.bootwright.core.plugins.module_utils.libvirt_vlan_refusal import observe as observe_vlan_refusal
 
 VIRSH = "/usr/bin/virsh"
 QEMU_IMG = "/usr/bin/qemu-img"
@@ -769,7 +770,9 @@ def observe_host(runner, request):
     Each managed network answered for reports `autostart`, whether it starts
     with the host, and `owned` only when its metadata names this context and
     that network. `poolAutostart` is whether the pool starts with the host and
-    `poolOwned` whether it targets the frozen directory.
+    `poolOwned` whether it targets the frozen directory. `vlanRefusal` covers
+    the unit that holds the unreachable routes of the frozen VLAN subnets and
+    those routes.
     """
     networks, drifted, ours = [], [], set()
     answers = uri_answers(runner, request["uri"])
@@ -816,6 +819,7 @@ def observe_host(runner, request):
         "services": services,
         "shadows": shadows,
         "uri": answers,
+        "vlanRefusal": observe_vlan_refusal(runner, request),
     }
 
 

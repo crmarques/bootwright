@@ -89,8 +89,11 @@ The host block of the provider `providerRef` names defines the network
 [segment](machines.md#machine-profiles-and-segments) of that provider under its
 own name, carrying itself untagged and `taggedNetworkRefs` tagged: a Machine
 NIC's `segmentRef` names it, and a provider segment of the same name refuses at
-`providerRef`. `taggedNetworkRefs` realizes nothing: the bridge carries guest
-VLAN tags.
+`providerRef`. The bridge carries the guest VLAN tags of `taggedNetworkRefs`
+between guests only; the host realizes each such Network's subnet, of each
+family it declares, as a route it refuses, unless the host holds an address in
+it: a managed Network of a provider on that host, or an address the host Machine
+declares there ([provider host realization](../substrates.md#provider-host-realization)).
 
 Between the managed Networks of one host's providers, each refused
 `api.invariant` at the Network, naming both Networks and their providers: no

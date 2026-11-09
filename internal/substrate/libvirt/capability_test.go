@@ -305,7 +305,7 @@ func hostEvidence(request HostRequest, digest string) json.RawMessage {
 		ready.Present, ready.Owned, ready.Enabled, ready.Ready, ready.State = true, true, true, true, "active"
 	}
 	data, _ := json.Marshal(HostEvidence{
-		FirewallReady: ready, Directory: observed(true), Hypervisor: true, Networks: networks, Pool: "active", PoolAnswered: true,
+		FirewallReady: ready, VLANRefusal: VLANRefusalEvidence{Name: request.VLANRefusalUnit, Answered: true}, Directory: observed(true), Hypervisor: true, Networks: networks, Pool: "active", PoolAnswered: true,
 		PoolAutostart: true, PoolOwned: true, Postcondition: true, Request: digest, Services: services, URI: true,
 	})
 	return data
@@ -629,7 +629,7 @@ func silentDrivers(request HostRequest, network, pool bool) HostEvidence {
 		services = append(services, ServiceEvidence{Enabled: true, Name: service, State: "inactive"})
 	}
 	return HostEvidence{
-		Absent: true, FirewallReady: FirewallReadyEvidence{Name: request.FirewallReadyUnit, Answered: true}, Directory: observed(false), Hypervisor: true, Networks: networks, PoolAnswered: !pool,
+		Absent: true, FirewallReady: FirewallReadyEvidence{Name: request.FirewallReadyUnit, Answered: true}, VLANRefusal: VLANRefusalEvidence{Name: request.VLANRefusalUnit, Answered: true}, Directory: observed(false), Hypervisor: true, Networks: networks, PoolAnswered: !pool,
 		Postcondition: true, Request: "digest", Services: services, URI: true,
 	}
 }

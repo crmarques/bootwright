@@ -178,6 +178,18 @@
     msg: 'warning: {{ item }}'
   loop: '{{ substrate_libvirt_host_running.observation.shadows }}'
 
+# A managed bridge carries each tagged Network between guests only, so the host
+# holds no connected route for its subnet and a guest's packet for it would
+# follow the default route out through the NAT. An owned unit holds an
+# unreachable route per subnet instead. A route the host already holds inside
+# or equal to a subnet is foreign and refuses the apply before anything is
+# defined; the frozen request carries no subnet, and the module removes the
+# unit it installed earlier, when nothing is to be refused any more.
+- name: Hold an unreachable route for each VLAN subnet a managed bridge carries
+  bootwright.core.libvirt_vlan_refusal:
+    request: '{{ bootwright_substrate_host_request }}'
+  register: substrate_libvirt_host_vlan_refusal
+
 # A pool carries no ownership metadata, so the directory it targets is what
 # makes it this provider's. A same-named pool targeting another directory is
 # foreign and the apply refuses before it defines, stops or starts anything.
@@ -469,6 +481,7 @@
          if (substrate_libvirt_host_packages is changed
              or substrate_libvirt_host_daemon is changed
              or substrate_libvirt_host_firewall_ready is changed
+             or substrate_libvirt_host_vlan_refusal is changed
              or substrate_libvirt_host_pool_directory is changed
              or substrate_libvirt_host_running.observation.pool != 'active'
              or substrate_libvirt_host_incomplete_networks | length > 0

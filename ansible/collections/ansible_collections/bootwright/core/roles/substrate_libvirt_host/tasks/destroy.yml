@@ -111,6 +111,16 @@
       readiness unit whose files are gone; then repeat{% endif %}
     quiet: true
 
+- name: Refuse to remove a foreign or unknown VLAN refusal unit
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_host_before.observation.vlanRefusal.answered
+      - not substrate_libvirt_host_before.observation.vlanRefusal.present or substrate_libvirt_host_before.observation.vlanRefusal.owned
+    fail_msg: >-
+      The provider VLAN refusal unit {{ bootwright_substrate_host_request.vlanRefusalUnit | default('') }}
+      is unknown or belongs to another owner; restore it before removal
+    quiet: true
+
 - name: Destroy each owned network
   ansible.builtin.command:
     argv:
@@ -227,6 +237,12 @@
     state: absent
   register: substrate_libvirt_host_firewall_ready
 
+- name: Remove only this provider's unreachable routes and their unit
+  bootwright.core.libvirt_vlan_refusal:
+    request: '{{ bootwright_substrate_host_request }}'
+    state: absent
+  register: substrate_libvirt_host_vlan_refusal
+
 - name: Report absence verification
   bootwright.core.substrate_host_protocol:
     phase: group
@@ -255,7 +271,8 @@
              or substrate_libvirt_host_before.observation.pool | length > 0
              or substrate_libvirt_host_owned_networks | length > 0
              or substrate_libvirt_host_parents is changed
-             or substrate_libvirt_host_firewall_ready is changed)
+             or substrate_libvirt_host_firewall_ready is changed
+             or substrate_libvirt_host_vlan_refusal is changed)
          else 'unchanged' }}
     digest: '{{ bootwright_substrate_host_digest }}'
     observation: '{{ substrate_libvirt_host_after.observation }}'

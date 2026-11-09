@@ -219,6 +219,74 @@ network's bridge. A read the host does not answer proves nothing and refuses
 the same way, because libvirt's own collision checks are partial and come only
 once a network starts.
 
+**Refused VLAN subnets.** A managed bridge carries each Network in
+`taggedNetworkRefs` between guests only, so the host holds no connected route
+for its subnet and a guest's packet for it would follow the host's default
+route out through the NAT. For each such Network, in each family it declares,
+whose subnet the host holds no address in (a managed Network of a provider on
+that host has its own connected route, and an address the host Machine declares
+inside the subnet is one), the request freezes the subnet in `refusedPrefixes`,
+canonical and in order, once however many bridges carry it; more than 64
+refuse `api.invariant` at `$.spec.libvirt.taggedNetworkRefs` of the provider
+when the request is planned. The host holds an
+`unreachable` route for each, so the guest is refused with an ICMP unreachable
+and nothing leaves through the uplink. libvirt's network XML cannot express it:
+its `<route>` element needs a gateway and adds a route through that gateway,
+and the host firewall is never reconfigured.
+
+The routes belong to one unit,
+`bootwright-<context>-<provider>-vlan-refusal.service`, set in
+`vlanRefusalUnit` whenever the provider defines a managed network, with or
+without a subnet to refuse, so an apply that stops refusing a subnet removes
+the unit it installed and a removal always finds it. It is a oneshot with
+`RemainAfterExit=yes`, enabled under `multi-user.target.wants` so the routes
+return after a restart, and its file names each route as `ip route add
+unreachable <subnet> proto 251 metric <metric>`, deleted by the same key when
+the unit stops, also after a failed start. Ownership is the unit: a regular
+root-owned file of mode 0644 that starts with the mark line naming its own
+name, a symbolic enablement link pointing at it, no drop-in directory and no
+unit-specific override; anything else of that name refuses, naming it, on apply
+and on destroy before an effect. A route's identity is its `unreachable` type,
+protocol 251, the main table and the unit's metric: 2^30 plus the first four
+bytes of the SHA-256 of the unit name, big-endian, modulo 2^30. The kernel keys
+a route by table, destination, TOS and metric, so two units that refuse one
+subnet, two providers of one context on one host or two contexts, hold two
+routes; a unit adds, deletes and reports only routes of its own metric and
+never removes another's. Each provider refuses every subnet its own managed
+Networks carry, instead of one provider per host holding a shared subnet, so a
+provider's apply or removal never depends on another's and its subnets stay
+refused while any unit holding them runs. Metrics from distinct names are
+distinct unless their hashes collide, and no host-wide registry or extra
+reservation key exists to rule that out; a collision is caught when the second
+unit is applied after the first, as below. An apply
+rewrites the file when the subnets changed, stopping the running unit first so
+its old routes go, and starts it again; a replay over a unit that holds exactly
+its routes changes nothing, and one whose route was deleted restarts the unit.
+Destroy stops and removes the unit and its enablement after the networks, and
+resets a failed unit's state.
+
+Before it installs anything, and before any network is defined, the apply reads
+every IPv4 and IPv6 route of every table, and an unanswered listing refuses.
+A route that is identical to a subnet, nested inside it or broader than it
+refuses `lifecycle.state` naming the route, its type, device and table and the
+subnet, and is never replaced, unless it is the main table's route through a
+gateway on every hop that is strictly broader than the subnet, the default
+route for one, which the refusal exists to override. Another unit's refusing
+route, protocol 251 in the main table under another metric, refuses the same
+traffic under its own key and coexists; a refusing route under this unit's
+metric is exempt only while the unit is owned and running, and otherwise
+refuses, since nothing proves whose it is. The listing is numeric (`ip -N`),
+because `ip` prints a protocol by any name the host's `rt_protos` gives it. This includes the
+host's own `local` and `broadcast` routes, so an address the host holds inside
+a subnet it was to refuse also refuses the apply. The request reserves the unit
+beside the readiness unit. The observation reports `vlanRefusal`: the unit's
+`name`, `answered`, `present`, `owned`, `enabled` and `state` and `routes`, the
+frozen subnets the host holds as an unreachable route of protocol 251 in the
+main table under the unit's metric, in canonical order. Presence evidence requires the unit owned,
+enabled and active and `routes` equal to `refusedPrefixes`, or neither unit nor
+route when there is none; removal evidence requires an answered observation
+with the unit, its enablement and every route gone.
+
 A managed network carries one IPv4 or IPv6 prefix, and its Network's `mtu`
 unless that is 1500, the MTU libvirt and the kernel already give; a Machine's
 NICs attach, each in declared order, to the segment its `nics` entry names

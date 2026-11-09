@@ -329,6 +329,7 @@ func automationIdentities() map[string]automationFormat {
 		"/etc/bootwright/network.yml":              validated("the network document path every installation request must name"),
 		"/etc/bootwright/network-marker.json":      validated("the network marker path every installation request must name"),
 		"bootwright-%s-%s-firewalld-ready.service": validated("the readiness unit name a libvirt host request must carry"),
+		"bootwright-%s-%s-vlan-refusal.service":    validated("the VLAN refusal unit name a libvirt host request must carry"),
 
 		"/var/lib/bootwright/media":  {class: formatController, reason: "the controller's media store; a block reads media by the name its request carries"},
 		"/var/lib/bootwright/media/": {class: formatController, reason: "the controller's media store; a block reads media by the name its request carries"},
@@ -341,6 +342,7 @@ func automationIdentities() map[string]automationFormat {
 		"bootwright_node_%03d":                              transient("the inventory alias the runner gives each node within one run"),
 		".bootwright-":                                      scratch,
 		".bootwright-firewall-":                             scratch,
+		".bootwright-vlan-":                                 scratch,
 		"bootwright-ceph-":                                  scratch,
 		"bootwright-ceph-packages-":                         scratch,
 		"bootwright-host-probe-":                            scratch,
@@ -388,6 +390,8 @@ func automationCapitalized() map[string]automationFormat {
 	kickstart := transient("a placeholder the role replaces in the kickstart it renders in the same run")
 	return map[string]automationFormat{
 		"Bootwright owned readiness barrier":                readiness,
+		"Bootwright owned VLAN refusal":                     fixedBy(kindMark, "the header line of the VLAN refusal unit, which the libvirt host reads to prove the unit its own", libvirt.HostImplementation),
+		"Description=Bootwright refuses host routing":       description,
 		"Description=Bootwright managed network firewall":   readiness,
 		"SSH-2.0-BootwrightRoute":                           transient("the banner the route probe's control channel sends and checks within one call"),
 		"CN=Bootwright ephemeral pull broker":               transient("the subject of the pull broker's certificate, made and discarded within one run"),

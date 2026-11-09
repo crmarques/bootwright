@@ -103,7 +103,7 @@ func TestAManagedAttachmentWiresTheDomainToItsLibvirtNetwork(t *testing.T) {
 func TestHostReservationsClaimEveryManagedNetworkAndThePool(t *testing.T) {
 	requests, _ := HostRequests(labCatalog(), "controller", testContext)
 	want := []string{"bridge:virbr-lab", "libvirt-network:bootwright-lab-lab-guests", "libvirt-pool:bootwright-lab-lab-libvirt-vmedia",
-		"path:/var/lib/libvirt/images/bootwright/lab/providers/lab-libvirt/vmedia", "prefix:198.51.100.0/24", "unit:bootwright-lab-lab-libvirt-firewalld-ready"}
+		"path:/var/lib/libvirt/images/bootwright/lab/providers/lab-libvirt/vmedia", "prefix:198.51.100.0/24", "unit:bootwright-lab-lab-libvirt-firewalld-ready", "unit:bootwright-lab-lab-libvirt-vlan-refusal"}
 	if !slices.Equal(requests[0].ReservationKeys(), want) {
 		t.Fatalf("keys = %v", requests[0].ReservationKeys())
 	}

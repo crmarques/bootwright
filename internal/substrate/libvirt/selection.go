@@ -79,6 +79,18 @@ func hostRequestFor(catalog api.Catalog, provider api.Object, controllerMachine,
 			break
 		}
 	}
+	refused := refusedPrefixes(catalog, provider)
+	if len(refused) > MaxRefusedPrefixes {
+		return HostRequest{}, &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "api.invariant",
+			Message:     fmt.Sprintf("the managed Networks of %s carry %d subnets in spec.libvirt.taggedNetworkRefs that its host holds no address in, and one provider refuses at most %d", provider.Identity(), len(refused), MaxRefusedPrefixes),
+			Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(provider.Kind()), Name: provider.Name()},
+			Field:       "$.spec.libvirt.taggedNetworkRefs",
+			Remediation: fmt.Sprintf("name at most %d such subnets across spec.libvirt.taggedNetworkRefs of the managed Networks of %s, or give the host an address in some of them", MaxRefusedPrefixes, provider.Identity())}}}
+	}
+	refusalUnit := ""
+	if readyUnit != "" {
+		refusalUnit = VLANRefusalUnit(contextName, name)
+	}
 	return HostRequest{
 		FirewallReadyUnit: readyUnit,
 		Identity:          Identity{Block: HostBlockID(name), Context: contextName, Object: name},
@@ -89,10 +101,12 @@ func hostRequestFor(catalog api.Catalog, provider api.Object, controllerMachine,
 		PoolPath:          substrate.PoolPath(contextName, name),
 		// The controller stage installs the closure on the controller, so this
 		// block proves it there and installs it only on a host reached over SSH.
-		Provisioned: !placement.Local(),
-		Services:    ServiceUnits(),
-		URI:         uri,
-		Version:     hostRequestVersion,
+		Provisioned:     !placement.Local(),
+		RefusedPrefixes: refused,
+		Services:        ServiceUnits(),
+		URI:             uri,
+		Version:         hostRequestVersion,
+		VLANRefusalUnit: refusalUnit,
 	}, nil
 }
 

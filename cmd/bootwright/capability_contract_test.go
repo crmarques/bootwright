@@ -1374,10 +1374,14 @@ func contractHostPresence(t *testing.T, execution lifecycle.Execution) map[strin
 	if request.FirewallReadyUnit != "" {
 		ready["present"], ready["owned"], ready["enabled"], ready["ready"], ready["state"] = true, true, true, true, "active"
 	}
+	refusal := map[string]any{"name": request.VLANRefusalUnit, "answered": true, "routes": request.RefusedPrefixes}
+	if len(request.RefusedPrefixes) > 0 {
+		refusal["present"], refusal["owned"], refusal["enabled"], refusal["state"] = true, true, true, "active"
+	}
 	return map[string]any{
 		"postcondition": true, "hypervisor": true, "services": services, "uri": true, "pool": "active", "poolAnswered": true, "networks": networks,
-		"firewallReady": ready,
-		"directory":     true, "poolAutostart": true, "poolOwned": true,
+		"firewallReady": ready, "vlanRefusal": refusal,
+		"directory": true, "poolAutostart": true, "poolOwned": true,
 	}
 }
 

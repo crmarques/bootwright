@@ -1,8 +1,8 @@
 implementation: substrate-host-libvirt-v1
-content-digest: bbd30ba5055a16fa7a5e468637445df1e11741e318806a24fbaef1a30a2a7da9
+content-digest: 8119a6f66d77c14d7cbe8ef2e13e8abe2bd56cf826b7399919f12b6b693d2691
 request-version: substrate-host-libvirt-v1
 automation-formats: https://bootwright.io/substrate/v1
-mark-formats: Bootwright owned readiness barrier, Description=Bootwright managed network firewall, https://bootwright.io/substrate/v1
+mark-formats: Bootwright owned VLAN refusal, Bootwright owned readiness barrier, Description=Bootwright managed network firewall, https://bootwright.io/substrate/v1
 proof-ids: none
 fixed-places: none
 effect-pins:
@@ -11,6 +11,7 @@ effect-pins:
   bootwright
   virtqemud.service,virtnetworkd.service,virtstoraged.service
   bridge-use-claim
+  vlan-refusal-v1
 request-identity:
   identity.context
   identity.object
@@ -21,6 +22,7 @@ request-identity:
   networks[].name
   networks[].bridge
   firewallReadyUnit
+  vlanRefusalUnit
 request-schema:
   firewallReadyUnit string
   identity struct libvirt.Identity
@@ -46,9 +48,11 @@ request-schema:
   poolName string
   poolPath string
   provisioned bool
+  refusedPrefixes []string omitempty
   services []string
   uri string
   version string
+  vlanRefusalUnit string omitempty
 evidence-schema:
   absent bool
   directory *bool
@@ -82,3 +86,11 @@ evidence-schema:
   services[].name string
   services[].state string
   uri bool
+  vlanRefusal struct libvirt.VLANRefusalEvidence
+  vlanRefusal.answered bool
+  vlanRefusal.enabled bool
+  vlanRefusal.name string
+  vlanRefusal.owned bool
+  vlanRefusal.present bool
+  vlanRefusal.routes []string
+  vlanRefusal.state string

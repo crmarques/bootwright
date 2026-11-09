@@ -46,14 +46,16 @@ type HostRequest struct {
 	// the host's own package manager, which it does only on a host reached over
 	// SSH. On the controller the controller stage installs the closure, so this
 	// block proves it present there and installs nothing.
-	Provisioned bool `json:"provisioned"`
+	Provisioned     bool     `json:"provisioned"`
+	RefusedPrefixes []string `json:"refusedPrefixes,omitempty"`
 	// Services are the libvirt driver daemons this provider depends on, in
 	// canonical order. Each is enabled as well as started, because a network
 	// and a pool set to autostart only come back after a restart when the
 	// driver that owns them does.
-	Services []string `json:"services"`
-	URI      string   `json:"uri"`
-	Version  string   `json:"version"`
+	Services        []string `json:"services"`
+	URI             string   `json:"uri"`
+	Version         string   `json:"version"`
+	VLANRefusalUnit string   `json:"vlanRefusalUnit,omitempty"`
 }
 
 // Disk is one qcow2 image a domain owns, at the exact size the profile froze.
@@ -174,6 +176,9 @@ func (r HostRequest) ReservationKeys() []string {
 	keys := []string{"path:" + r.PoolPath, "libvirt-pool:" + r.PoolName}
 	if r.FirewallReadyUnit != "" {
 		keys = append(keys, "unit:"+strings.TrimSuffix(r.FirewallReadyUnit, ".service"))
+	}
+	if r.VLANRefusalUnit != "" {
+		keys = append(keys, "unit:"+strings.TrimSuffix(r.VLANRefusalUnit, ".service"))
 	}
 	for _, network := range r.Networks {
 		if !network.Managed {

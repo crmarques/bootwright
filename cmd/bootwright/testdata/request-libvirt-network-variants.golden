@@ -39,13 +39,17 @@
       "poolName": "bootwright-lab-lab-libvirt-vmedia",
       "poolPath": "/var/lib/libvirt/images/bootwright/lab/providers/lab-libvirt/vmedia",
       "provisioned": false,
+      "refusedPrefixes": [
+        "203.0.113.0/24"
+      ],
       "services": [
         "virtqemud.service",
         "virtnetworkd.service",
         "virtstoraged.service"
       ],
       "uri": "qemu:///system",
-      "version": "substrate-host-libvirt-v1"
+      "version": "substrate-host-libvirt-v1",
+      "vlanRefusalUnit": "bootwright-lab-lab-libvirt-vlan-refusal.service"
     }
   ],
   "libvirtMachines": [
