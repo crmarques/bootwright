@@ -736,9 +736,8 @@ func blockResults(plan reconciliation.Plan, states map[string]reconciliation.Blo
 	return out
 }
 
-// logFault names the context's log directory under the log root, the tree an
-// operator restores, from the operation log directory its store names, or the
-// log root itself when the store names none.
+// logFault names the context's log directory under the log root, which an
+// operator restores, or the log root itself when the store names none.
 func logFault(err error, directory string) error {
 	if err == nil {
 		return nil

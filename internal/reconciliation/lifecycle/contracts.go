@@ -56,12 +56,10 @@ type View interface {
 type RunView interface {
 	View
 	Runs() operationstore.Area
-	// OpenRun makes room among the newest runs the area keeps, removing the
-	// oldest that no live run holds, then creates the next run's file
-	// exclusively, numbered one past the highest the area holds, and holds it
-	// until the callback that received this view returns, so no other run's
-	// retention removes a run still in progress. It returns that file's path
-	// in the area. A failure leaves no file it created.
+	// OpenRun makes room among the newest runs, removing the oldest no live run
+	// holds, then creates the next run's file exclusively, numbered past the
+	// highest, and holds it until the callback returns. It returns that file's
+	// path in the area; a failure leaves no file it created.
 	OpenRun(ctx context.Context) (string, error)
 }
 
@@ -522,8 +520,7 @@ type recordReader interface {
 }
 
 // OperationStoreFactory opens the record set over one held records area and
-// the log area beside it. It is a function capability because an operation
-// opens exactly one per invocation.
+// the log area beside it, once per invocation.
 type OperationStoreFactory func(records, logs operationstore.Area) OperationStore
 
 // InteractiveConfirmer reports whether its input can answer a prompt; one that
@@ -542,14 +539,12 @@ type PlanPresenter interface {
 
 type ProgressReporter interface {
 	ReportProgress(context.Context, ProgressEvent)
-	// ReportLogLocation names where this operation is writing, before its first
-	// effect runs, so an operator can follow the work while it happens rather
-	// than read it afterwards.
+	// ReportLogLocation names where this operation writes, before its first
+	// effect, so an operator can follow the work as it happens.
 	ReportLogLocation(context.Context, LogLocation)
 }
 
-// LogLocation is where an invocation writes: its host path, its context and
-// either its operation or, for a bounded run, its run name.
+// LogLocation is an invocation's host path, context, and operation or run.
 type LogLocation struct {
 	Path      string
 	Context   string
@@ -557,8 +552,7 @@ type LogLocation struct {
 	Run       string
 }
 
-// ContextPaths names where a context keeps its content, reading none of it.
-// A path whose presence the host would not answer is absent with a warning.
+// ContextPaths names where a context keeps content, warning on a path it cannot stat.
 type ContextPaths interface {
 	Paths(ctx context.Context, name string) ([]ContextPath, []diagnostics.Diagnostic, error)
 }
