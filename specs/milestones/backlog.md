@@ -292,6 +292,7 @@ Alias cell.
 | [B1227](#b1227) | new, 2026-11-08 (D244 (5)) | product | CLI | A JSON `apply` or `destroy` can stream its progress events | No machine consumer has asked; it changes the one-document contract of JSON output |
 | [B1229](#b1229) | new, 2026-11-09 (X332's review) | defect | Substrate | A provider host that stops defining managed Networks removes the refusal and firewall-ready units an earlier apply installed | The units stay owned and refuse only the subnets they held; the firewall-ready unit's gap predates X332 |
 | [B1230](#b1230) | new, 2026-11-09 (X331) | product | Machine power, with Substrate | A failed revoke of a lent KubeVirt token reaches the operator of a power command or reading | Power results carry no warning channel; the token still ends at its bounded lifetime and the revoke's adapter output is retained |
+| [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
 
 ### B82
 
@@ -3261,6 +3262,18 @@ adapter output, since power results carry no warning
 **Outcome:** the power result names `substrate.lend-not-revoked`, the Secret
 and the lifetime that still bounds the token. **Exit evidence:** a power
 service test whose revoke fails.
+
+### B1233
+
+**Owner:** Reconciliation, with CLI. **Kind:** product. **Requires:** B1223.
+**Definition:** Candidate, from the X329 plan: an attempt's `outcome` record
+holds only the outcome word, so `bootwright logs` shows that a block failed but
+not why; record a bounded, normalized reason (the refusal code, or the adapter
+failure class and its first diagnostic line) in the attempt log, carrying no
+secret, raw adapter byte or terminal control sequence. **Exit evidence:** an
+attempt log test whose failed outcome record names its reason, and a `logs`
+golden that renders it. **Outcome:** an operator reading a failed block's
+events sees its cause without opening raw output.
 
 ## Audit remediation (2026-10-26)
 
