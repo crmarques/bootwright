@@ -12803,3 +12803,25 @@ provider host's content digest moved with its package set.
 occurred. **Limitations:** a domain an earlier build defined takes the VGA
 display at its next cold boot; nothing installs `podman` on an SSH placement
 host ([B1236](backlog.md#b1236)).
+
+### X338 — The runtime lock carries what the controller imports
+
+**Item:** B559 (2026-11-09, [D248](backlog.md#d248) (1) and (2)), completed
+in-tree and awaiting operator acceptance. The runtime lock drops
+`cryptography`, `cffi`, `pycparser` and `resolvelib`, which ansible-core
+imports only behind an import guard for features no controller playbook uses,
+and the Python 3.13 ABI, which no tested release ships: each ABI now installs
+six wheels plus pip, nine distinct files and 6.3 MB in all, against sixteen and
+12.6 MB before ([the runtime lock](../controller.md#the-runtime-lock)).
+`scripts/runtime-lock generate` leaves its `OMITTED` list out of every pip
+report, and the lock's parse refuses a lock that carries one. The units suite
+runs every playbook and imports every plugin with only the lock's
+distributions importable and requires that confinement to have refused
+`cryptography`; `TestTheCollectionTestsNameTheLockedClosure` holds the
+confined set to the lock. The FIPS statement no longer names a bundled
+OpenSSL, since the runtime carries none.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** the lock's digest moved, so each host runs
+`controller install` once with this build, and a live operation another build
+registered refuses to continue across the closure change.

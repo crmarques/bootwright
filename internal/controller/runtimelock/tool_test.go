@@ -31,7 +31,9 @@ func wheelPath(file File) string {
 }
 
 // newMirror fabricates a wheel for every file of the embedded lock, so the
-// tool resolves exactly the lock's file names with hashes of its own.
+// tool resolves exactly the lock's file names with hashes of its own, and adds
+// each omitted distribution to every report with no wheel to download, so a
+// generated lock parses only when the tool leaves them out.
 func newMirror(t *testing.T) mirror {
 	t.Helper()
 	lock, err := Parse(embeddedLock(t))
@@ -60,6 +62,15 @@ func newMirror(t *testing.T) mirror {
 					"archive_info": map[string]any{"hashes": map[string]any{"sha256": hex.EncodeToString(sum[:])}},
 				},
 				"metadata": map[string]any{"name": strings.ToUpper(file.Name[:1]) + file.Name[1:], "version": file.Version},
+			})
+		}
+		for _, name := range omittedPackages {
+			installs = append(installs, map[string]any{
+				"download_info": map[string]any{
+					"url":          pythonhosted + "/packages/aa/bb/" + name + "-1.0-py3-none-any.whl",
+					"archive_info": map[string]any{"hashes": map[string]any{"sha256": strings.Repeat("0", 64)}},
+				},
+				"metadata": map[string]any{"name": name, "version": "1.0"},
 			})
 		}
 		m.reports[abi] = map[string]any{"version": "1", "install": installs}
@@ -141,7 +152,7 @@ func TestTheRuntimeLockToolRoundTrips(t *testing.T) {
 	m := newMirror(t)
 	output := filepath.Join(t.TempDir(), "lock.json")
 	generate := func(extra ...string) error {
-		args := append([]string{"generate", "--ansible-core", m.locked.AnsibleCore(), "--python", "3.12,3.14,3.13", "--installer", "pip==" + m.locked.Installer().Version,
+		args := append([]string{"generate", "--ansible-core", m.locked.AnsibleCore(), "--python", "3.12,3.14", "--installer", "pip==" + m.locked.Installer().Version,
 			"--output", output, "--report", m.report}, m.sources()...)
 		_, stderr, err := runtimeLockTool(t, append(args, extra...)...)
 		if err != nil {
@@ -193,7 +204,7 @@ func TestTheRuntimeLockToolRoundTrips(t *testing.T) {
 		strings.Contains(outdated, around.nextMinor) || strings.Contains(outdated, around.yanked) || strings.Contains(outdated, "rc1") {
 		t.Fatalf("outdated printed %q (%v), want only the newest unyanked release of the 2.21 line", outdated, err)
 	}
-	changed := mustFiles(t, lock, "3.13")[3]
+	changed := mustFiles(t, lock, "3.14")[3]
 	if err := os.WriteFile(filepath.Join(m.root, "files", wheelPath(changed)), bytes.ToUpper(m.wheels[changed.Filename]), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -169,6 +169,24 @@ class Report(unittest.TestCase):
         self.assertEqual(files[1]["sha256"], hashlib.sha256(b"y").hexdigest())
         self.assertEqual(files[1]["filename"], "pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.whl")
 
+    def test_the_omitted_distributions_leave_the_lock(self):
+        omitted = [
+            entry("Cryptography", "50.0.2", "cryptography-50.0.2-cp311-abi3-manylinux2014_x86_64.whl", b"c"),
+            entry("cffi", "2.1.1", "cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.whl", b"f"),
+            entry("pycparser", "3.11", "pycparser-3.11-py3-none-any.whl", b"p"),
+            entry("resolvelib", "1.2.1", "resolvelib-1.2.1-py3-none-any.whl", b"r"),
+        ]
+        report = {
+            "install": [
+                entry("urllib3", "2.8.0", "urllib3-2.8.0-py3-none-any.whl", b"u"),
+                *omitted,
+                entry("ansible-core", "2.21.4", "ansible_core-2.21.4-py3-none-any.whl", b"a"),
+            ]
+        }
+        files = runtime_lock.report_files(report, "3.12")
+        self.assertEqual([file["name"] for file in files], ["ansible-core", "urllib3"])
+        self.assertEqual(sorted(runtime_lock.normalize(e["metadata"]["name"]) for e in omitted), list(runtime_lock.OMITTED))
+
     def test_a_report_without_the_requested_packages_is_refused(self):
         report = {"install": [entry("urllib3", "2.8.0", "urllib3-2.8.0-py3-none-any.whl", b"u")]}
         with self.assertRaises(ToolError):

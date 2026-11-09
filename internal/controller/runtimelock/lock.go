@@ -65,12 +65,11 @@ type Lock struct {
 	source   []byte
 }
 
-// requiredPackages is ansible-core's declared closure plus the controller's
-// one downloader; the venv installs without dependency resolution.
-var requiredPackages = []string{
-	"ansible-core", "cffi", "cryptography", "jinja2", "markupsafe", "packaging",
-	"pycparser", "pyyaml", "resolvelib", "urllib3",
-}
+// requiredPackages is what the controller imports of ansible-core's closure,
+// plus its one downloader; ansible-core declares omittedPackages unused.
+var requiredPackages = []string{"ansible-core", "jinja2", "markupsafe", "packaging", "pyyaml", "urllib3"}
+
+var omittedPackages = []string{"cffi", "cryptography", "pycparser", "resolvelib"}
 
 var (
 	abiPattern     = regexp.MustCompile(`^3\.[0-9]{1,3}$`)
@@ -248,6 +247,11 @@ func validateABI(doc document, abi string) (int, error) {
 	for _, required := range requiredPackages {
 		if !slices.Contains(names, required) {
 			return 0, fmt.Errorf("%s is missing", required)
+		}
+	}
+	for _, omitted := range omittedPackages {
+		if slices.Contains(names, omitted) {
+			return 0, fmt.Errorf("%s is imported by no controller path and stays out of the runtime", omitted)
 		}
 	}
 	if needed == 0 {

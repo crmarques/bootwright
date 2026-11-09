@@ -3,6 +3,8 @@
 The lock, internal/controller/runtimelock/lock.json, names every wheel the
 controller venv installs, per Python ABI, with its URL, size and sha256.
 Versions are chosen here, when a person regenerates the lock, never at setup.
+The venv installs without dependency resolution, so the lock leaves out the
+distributions ansible-core declares that no controller path imports.
 This tool uses the standard library only; pip runs from its own wheel.
 """
 
@@ -45,6 +47,12 @@ PLATFORMS = (
     "manylinux2014_x86_64",
     *(f"manylinux_2_{minor}_x86_64" for minor in range(5, MAX_GLIBC[1] + 1)),
 )
+# ansible-core imports these only behind an ImportError guard, for vault, an
+# in-memory SSH key, NTLM channel binding and ansible-galaxy, none of which a
+# controller playbook uses; cffi and pycparser come only with cryptography.
+# The collection's units suite runs every playbook and imports every plugin
+# with nothing but the lock's distributions importable.
+OMITTED = ("cffi", "cryptography", "pycparser", "resolvelib")
 PASSED_ENVIRONMENT = (
     "HTTP_PROXY",
     "HTTPS_PROXY",
@@ -247,12 +255,15 @@ def pip_report(wheel: Path, abi: str, requirement: str, area: Path) -> dict:
 
 
 def report_files(report: dict, abi: str) -> list[dict]:
-    """Take each resolved file's identity and hash from a pip report."""
+    """Take each resolved file's identity and hash from a pip report, leaving
+    out the omitted distributions."""
     files = []
     for entry in report.get("install", []):
         info = entry.get("download_info", {})
         sha256 = info.get("archive_info", {}).get("hashes", {}).get("sha256")
         metadata = entry.get("metadata", {})
+        if normalize(metadata.get("name", "")) in OMITTED:
+            continue
         if not sha256 or "url" not in info:
             raise ToolError(f"Python {abi}: {metadata.get('name')} has no hashed archive")
         check_pythonhosted(info["url"])

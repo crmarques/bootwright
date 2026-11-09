@@ -336,7 +336,7 @@ func (s Service) settleHost(ctx context.Context, current *inspection, settle fun
 }
 
 // fipsEnabled is informational (D108 as D152.3 amends it).
-const fipsEnabled = "enabled; the controller runtime's TLS follows the host's crypto policy, while Bootwright itself and cryptography's bundled OpenSSL stay outside this host's FIPS-validated modules"
+const fipsEnabled = "enabled; the controller runtime's TLS follows the host's crypto policy, while Bootwright itself stays outside this host's FIPS-validated modules"
 
 func (s Service) settleRuntime(ctx context.Context, current *inspection, settle func(Check), start func(string, string)) error {
 	start("python-runtime", "selecting the Python interpreter")

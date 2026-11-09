@@ -12,7 +12,9 @@ then they run every playbook's play through ansible-playbook with a request of
 a version its role does not admit, and require the validation to refuse it
 before any task of the entry point runs. A later play of a multi-play playbook
 may import only a declared entry point or a task file the allowance for that
-playbook names.
+playbook names. The run can import only the controller runtime's distributions
+(runtime_closure), so a playbook that needs a distribution the runtime lock
+leaves out fails here.
 
 Loading and running a playbook needs Ansible's controller, which ansible-test
 does not offer to unit tests under tests/unit/plugins, so these checks live
@@ -32,6 +34,7 @@ import yaml
 from ansible.parsing.dataloader import DataLoader
 from ansible.playbook import Playbook
 from ansible.vars.manager import VariableManager
+from ansible_collections.bootwright.core.tests.unit.runtime_closure import closure_environment, refused
 
 COLLECTION = pathlib.Path(__file__).resolve().parents[2]
 COLLECTIONS = COLLECTION.parents[2]
@@ -212,8 +215,10 @@ def printed(tmp_path_factory, once_per_run):
 
 def played(tmp_path_factory):
     """What each play printed, by playbook, run as a runner runs one: the frozen
-    request as extra variables and one target in the play's host group."""
+    request as extra variables, one target in the play's host group and only
+    the runtime closure importable."""
     work = tmp_path_factory.mktemp("entry-points")
+    confined, record = closure_environment(work)
     (work / "request.json").write_text(json.dumps(mismatched()))
     (work / "plays.yml").write_text(json.dumps([guarded(playbook) for playbook in playbooks()], indent=1))
     (work / "inventory.json").write_text(json.dumps({
@@ -232,6 +237,7 @@ def played(tmp_path_factory):
         ANSIBLE_NOCOLOR="1",
         ANSIBLE_FORCE_COLOR="0",
         LC_ALL="C.UTF-8",
+        **confined,
     )
     ran = subprocess.run(
         [sys.executable, "-m", "ansible.cli.playbook", "-i", str(work / "inventory.json"),
@@ -244,6 +250,7 @@ def played(tmp_path_factory):
         name, _banner, body = section.partition("]")
         sections[name] = body.split("PLAY RECAP", 1)[0]
     assert sorted(sections) == playbooks(), output
+    assert "cryptography" in refused(record), "the run was not confined to the runtime closure"
     return sections
 
 

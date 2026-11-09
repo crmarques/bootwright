@@ -71,10 +71,9 @@ applies to every root dnf run. Setup, its dry run and `controller check`
 read it without following a link another account owns; a file they cannot
 read as an ordinary empty or absent one is reported the same way.
 
-Bootwright's own executable uses Go's cryptography, and the `cryptography`
-wheel bundles its own OpenSSL, which Bootwright never uses for TLS; both stay
-outside the host's FIPS-validated modules, while the runtime's Python TLS
-follows the host's OpenSSL and crypto-policy
+Bootwright's own executable uses Go's cryptography, which stays outside the
+host's FIPS-validated modules, while the runtime's Python TLS follows the
+host's OpenSSL and crypto-policy and the runtime carries no OpenSSL of its own
 ([W4](security.md#the-controller-hosts-attacker-model)). Setup,
 `controller check` and the controller checks of `preflight` report the kernel's FIPS mode as the informational
 `fips-mode` check, with that statement when it is enabled; the check never
@@ -91,8 +90,14 @@ format `bootwright.controller.runtime-lock-v1`. It names one `ansible-core`
 release of the qualified minor the collection's `requires_ansible` admits, the
 Python ABIs it serves, newest first, the glibc floor, the tested releases, the
 pip wheel that installs it, and, for each ABI, the exact binary wheel files of
-`ansible-core`'s declared closure and of urllib3 for the one controller
-downloader, each with its URL on `files.pythonhosted.org`, size and SHA-256.
+what the controller imports of `ansible-core`'s declared closure and of urllib3
+for the one controller downloader, each with its URL on
+`files.pythonhosted.org`, size and SHA-256. The closure is `ansible-core`,
+`jinja2`, `markupsafe`, `packaging`, `pyyaml` and `urllib3`. It leaves out
+`cryptography`, with the `cffi` and `pycparser` that come with it, and
+`resolvelib`: ansible-core imports them only behind an import guard, for
+vault, an in-memory SSH key, NTLM channel binding and `ansible-galaxy`, none of
+which a controller playbook uses ([D248](milestones/backlog.md#d248)).
 Its digest is SHA-256 under the domain `bootwright.controller.runtime-lock-v1`
 over its canonical JSON re-encoding, so whitespace in the file never moves it.
 
@@ -102,10 +107,9 @@ publisher metadata. `scripts/runtime-lock` generates and verifies the lock,
 and [development](../docs/development.md#lock-refresh-and-tested-hosts) owns
 refreshing it. Offline `make check` holds the lock to its strict parse, its
 one URL host, its digests, one `ansible-core` release across every ABI, each
-ABI's wheel tags, its floor and that `cryptography` is present.
-
-Not yet met: dropping `cryptography`, `cffi` and `pycparser` from the lock is
-parked as [B559](milestones/backlog.md#b559).
+ABI's wheel tags, its floor and that closure, and the collection's units suite
+runs every playbook and imports every plugin with nothing but the closure
+importable (`TestTheCollectionTestsNameTheLockedClosure`).
 
 ## The controller runtime
 
@@ -125,7 +129,7 @@ for the first locked ABI X.Y whose dnf preview resolves, newest first
 rather than the `python(abi) = X.Y` capability because Fedora's alternative
 interpreters omit that provide, while every supported release's package of a
 locked ABI, the OS's own `python3` included, provides `python3.X`: RHEL 9
-AppStream's `python3.12`, Fedora's `python3.13` and `python3.12`.
+AppStream's `python3.12` and Fedora's `python3.12`.
 
 Not yet met: a standalone CPython for a host whose repositories offer no
 locked ABI is parked as [B561](milestones/backlog.md#b561).
@@ -336,7 +340,7 @@ The plan names each action setup takes, in order:
   host and continues";
 - `native-packages`, with the verbatim dnf preview and its core-package note;
 - `runtime`, for example "Python 3.14 at /usr/bin/python3.14, ansible-core
-  2.21.5: 3 of 10 wheels to download (2.1 MB), 7 cached".
+  2.21.5: 3 of 7 wheels to download (2.1 MB), 4 cached".
 
 A dry run, preflight and an interrupted setup never discover versions: the
 lock decides every wheel and the host's dnf every package. A valid dry run

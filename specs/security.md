@@ -75,10 +75,10 @@ here once:
   changes no package, but it may refresh dnf's metadata cache, as
   `dnf-makecache.timer` does.
 - **W4, the system OpenSSL and crypto-policy.** The runtime's Python TLS
-  follows the host's crypto-policy and FIPS mode. Bootwright's Go binary and
-  cryptography's bundled OpenSSL, which Bootwright never uses for TLS, stay
-  outside the host's FIPS-validated modules
-  ([D108](milestones/backlog.md#d108) as D152 amends it); a
+  follows the host's crypto-policy and FIPS mode, and the runtime carries no
+  OpenSSL of its own. Bootwright's Go binary stays outside the host's
+  FIPS-validated modules
+  ([D108](milestones/backlog.md#d108) as D152 and D248 amend it); a
   FIPS-qualified runtime stays parked as [B331](milestones/backlog.md#b331).
 
 ### Remote principals

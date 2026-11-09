@@ -240,8 +240,9 @@ RHEL 9 and 10 today; a release outside it gets the informational
 controller stage actually ran on.
 
 The controller runtime is ansible-core 2.21 at the patch
-`internal/controller/runtimelock/lock.json` pins, on controller CPython 3.12,
-3.13 or 3.14, the host's own interpreter at `/usr/bin/python3.X`. Managed
+`internal/controller/runtimelock/lock.json` pins, on controller CPython 3.12
+or 3.14, the host's own interpreter at `/usr/bin/python3.X`: RHEL 9 installs
+AppStream's 3.12, RHEL 10 ships it, and Fedora 43 and 44 ship 3.14. Managed
 hosts run Python 3.9 through 3.14, the target versions in ansible-core 2.21's
 [test matrix](https://github.com/ansible/ansible/blob/stable-2.21/test/lib/ansible_test/_util/target/common/constants.py),
 so the collection's modules and module utilities keep to 3.9 grammar, the
@@ -259,12 +260,14 @@ changes all of them in one commit.
 To refresh the lock, run, with network:
 
 ```sh
-scripts/runtime-lock generate --ansible-core 2.21 --python 3.12,3.13,3.14 --installer pip==<version> --output internal/controller/runtimelock/lock.json
+scripts/runtime-lock generate --ansible-core 2.21 --python 3.12,3.14 --installer pip==<version> --output internal/controller/runtimelock/lock.json
 scripts/runtime-lock verify
 ```
 
-`generate` resolves each ABI's binary wheels with the pinned installer,
-downloads every file to confirm its size and SHA-256, computes the glibc floor
+`generate` resolves each ABI's binary wheels with the pinned installer, leaves
+out the distributions its `OMITTED` list names (ansible-core declares them and
+no controller path imports them), downloads every file to confirm its size and
+SHA-256, computes the glibc floor
 from the highest manylinux tag and carries the `tested` list forward; add a
 release to it with `--tested fedora:43,44 --tested rhel:9,10` once it ran.
 Move `scripts/tools/ansible-requirements.txt` to the same ansible-core patch in

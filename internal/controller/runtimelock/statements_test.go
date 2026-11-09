@@ -21,7 +21,37 @@ const (
 	developmentGuide  = "../../../docs/development.md"
 	floorLock         = "../../../scripts/tools/ansible-check-floor-interpreter.json"
 	floorTest         = "../../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_remote_python_floor.py"
+	closureHelper     = "../../../ansible/collections/ansible_collections/bootwright/core/tests/unit/runtime_closure.py"
 )
+
+// The collection's units suite runs every playbook and imports every plugin
+// with only RUNTIME_CLOSURE importable; that is the evidence for leaving the
+// omitted distributions out, so it must name exactly what each ABI installs.
+func TestTheCollectionTestsNameTheLockedClosure(t *testing.T) {
+	lock, err := Embedded()
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := os.ReadFile(closureHelper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stated := regexp.MustCompile(`(?m)^RUNTIME_CLOSURE = \(((?:"[a-z0-9-]+", )*"[a-z0-9-]+")\)$`).FindAllSubmatch(source, -1)
+	if len(stated) != 1 {
+		t.Fatalf("%s states RUNTIME_CLOSURE %d times, want exactly once", closureHelper, len(stated))
+	}
+	closure := strings.Split(strings.ReplaceAll(string(stated[0][1]), `"`, ""), ", ")
+	for _, abi := range lock.PythonABIs() {
+		files, _ := lock.Files(abi)
+		names := []string{}
+		for _, file := range files {
+			names = append(names, file.Name)
+		}
+		if !slices.Equal(names, closure) {
+			t.Errorf("Python %s installs %v, but the collection tests confine playbooks to %v", abi, names, closure)
+		}
+	}
+}
 
 func lockedMinor(t *testing.T) string {
 	t.Helper()

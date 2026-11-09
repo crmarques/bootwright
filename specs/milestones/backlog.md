@@ -129,7 +129,6 @@ Alias cell.
 | [B544](#b544) | new, 2026-10-14 (X85) | defect | Machine | A key offered with `--ssh-id-file` is tried ahead of a Machine's declared password | Found in X85; no milestone depends on it: the password still opens the session, and a borrowed `--ssh-user` account takes the key |
 | [B545](#b545) | new, 2026-10-14 (the X85 review) | defect | Machine, with Workspace | A power batch keeps the retained output of every run its result names | Found by the X85 review; no milestone depends on it: it needs a batch of more than 16 Machines, and every run's outcome is still reported |
 | [B558](#b558) | new, 2026-10-14 (D152) | product | Controller setup | `setup --dry-run` renders the setup receipt without sudo from a readable index outside the store | Owner decision under D152's clause 9: the store stays root 0700, and the dry run lists requirement names without the receipt |
-| [B559](#b559) | new, 2026-10-14 (D152) | enabling | Controller setup | The runtime lock carries no cryptography, cffi or pycparser | D152's clause 5: ansible-core declares cryptography, and no playbook smoke test has yet proved that nothing imports it |
 | [B560](#b560) | new, 2026-10-14 (D152) | enabling | Controller setup | The dnf4 and dnf5 preview fixtures are real captures from RHEL 9 and Fedora 44 | D152's clause 6: the in-tree fixtures follow dnf's documented output, and the captures need the owner's hosts in X90's acceptance |
 | [B561](#b561) | new, 2026-10-14 (D152) | product | Controller setup | A standalone CPython for a host whose repositories offer no locked Python ABI | D152's clause 3: every supported host offers a locked ABI |
 | [B562](#b562) | new, 2026-10-14 (D152) | enabling | Controller setup | CI proposes a lock refresh when a newer ansible-core 2.21 patch or dependency appears | D152's clause 4: `outdated` is advisory and the owner regenerates the lock |
@@ -293,6 +292,7 @@ Alias cell.
 | [B1229](#b1229) | new, 2026-11-09 (X332's review) | defect | Substrate | A provider host that stops defining managed Networks removes the refusal and firewall-ready units an earlier apply installed | The units stay owned and refuse only the subnets they held; the firewall-ready unit's gap predates X332 |
 | [B1230](#b1230) | new, 2026-11-09 (X331) | product | Machine power, with Substrate | A failed revoke of a lent KubeVirt token reaches the operator of a power command or reading | Power results carry no warning channel; the token still ends at its bounded lifetime and the revoke's adapter output is retained |
 | [B1236](#b1236) | new, 2026-11-09 (D247 (4)) | defect | Infrastructure services, with Substrate | An SSH placement host that runs a managed service or a libvirt provider's emulated BMC receives the container runtime | Predates D247; every qualified run places these containers on the controller |
+| [B1237](#b1237) | new, 2026-11-09 (D248 (5)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's default image comes from a Red Hat registry wherever Red Hat publishes one | Red Hat publishes no dnsmasq, chrony or sushy-tools image, and its squid image needs a `registry.redhat.io` login no managed-service pull carries |
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
 
 ### B82
@@ -1221,15 +1221,6 @@ let the dry run render it unprivileged, at the cost of a second, world-readable
 record of the host's packages and paths. **Exit evidence:** the owner's
 decision; if adopted, a test that the dry run renders the table from the index
 without elevating and a test that the index holds no secret or private path.
-
-### B559
-
-The runtime lock keeps cryptography, cffi and pycparser because ansible-core
-declares cryptography, although no controller playbook is known to import it
-(D152's clause 5). Dropping them shrinks the lock and removes the abi3 and
-per-ABI wheels, and is a manifest-only change once proved. **Exit evidence:** a
-playbook smoke test over every controller role that passes without the three
-packages, and the lock regenerated without them.
 
 ### B560
 
@@ -3300,6 +3291,25 @@ roadmap step or batch, and the Not yet met lines in the specs point to them.
 Like every parked item, these authorize nothing: a lane, an item or a set of
 lanes runs on an explicit request, which attaches its items to a slice.
 
+
+### B1237
+
+Under [D248](#d248) (5), no default image moves to a Red Hat registry, because
+not every image has a Red Hat source. Red Hat's catalog publishes `rhel9/squid`
+and `rhel10/squid` for the managed Proxy, served by `registry.redhat.io` only
+after a Customer Portal or registry service-account login, which no
+managed-service pull carries; it publishes no dnsmasq, chrony or sushy-tools
+image. UBI 9's public repositories carry `dnsmasq`, `squid` and `nginx` but not
+`chrony`. The ArtifactServer already pulls
+`registry.access.redhat.com/ubi9/nginx-124`. A managed service's `image.local`
+already points at any digest-pinned image, and the host's `registries.conf`
+mirrors the digest pulls; the emulated BMC's image has no override. Adopting
+the Red Hat squid image needs a pull-credential binding for service images,
+and the other three need images built from Red Hat content or another source
+the owner accepts ([infrastructure services](../api/infrastructure-services.md),
+[emulated BMC](../substrates.md#machine-realization)). **Exit evidence:** the
+owner's decision; if adopted, the catalog defaults, the credential binding's
+custody tests and a qualified run of each moved image.
 ### Audit remediation lanes
 
 A lane is an ordered sequence of items that touch the same code; lanes marked
@@ -7535,3 +7545,45 @@ session, pending the owner's review:
 4. Nothing installs `podman` on an SSH placement host, a managed service's
    other Machine or a remote libvirt provider host; that predates this decision
    and is parked as [B1236](#b1236).
+
+### D248
+
+**owner** (2026-11-09): reviewing Bootwright's dependencies, the owner asked
+that installation download "only packages from SO package manager, which is
+enterprise controlled", that the Python dependencies installation downloads be
+evaluated for inclusion in the binary at build time, and that the process be
+reviewed for security, "avoiding the need for operator to open in proxy
+exception that might be harmful". After the session's review the owner asked:
+"check if all images used by bootwright could be retrieved from red hat
+registries. if do, make it default to use them", "drop the python packages
+that are not being used" and "make python dependencies be included in binary
+and bootwright use them during installation". Asked, the owner chose "Fetch at
+build time" for the wheel files the binary embeds and "Drop 3.13". The owner's
+choices:
+
+1. The runtime lock leaves out `cryptography`, `cffi`, `pycparser` and
+   `resolvelib`, which ansible-core declares and imports only behind an import
+   guard, for vault, an in-memory SSH key, NTLM channel binding and
+   `ansible-galaxy` ([the runtime lock](../controller.md#the-runtime-lock)).
+   This supersedes [D152](#d152) (5)'s "cryptography stays" and completes
+   [B559](m1.md#b559), widened to `resolvelib`.
+2. The lock serves Python 3.12 and 3.14 only, the interpreters RHEL 9's
+   AppStream, RHEL 10 and Fedora 43 and 44 provide; no tested release ships
+   3.13. This amends D152 (3).
+3. The executable carries the locked wheels, fetched at build time into an
+   ignored directory and checked against the lock, and `controller install`
+   builds the runtime from them alone: it downloads no wheel, and
+   `--wheel-mirror` and `--download-only` go
+   ([the controller runtime](../controller.md#the-controller-runtime)). This
+   reverses D152 (3)'s declined "wheels embedded in the binary" and supersedes
+   D152 (10).
+
+This authorizes, out of sequence, X338 (M1: [B559](m1.md#b559)) and X339 (M1:
+[B1238](m1.md#b1238)). Taken by the session, pending the owner's review:
+
+4. A build that did not fetch the wheels still compiles, carrying none, and its
+   `controller install` refuses naming the build step that fetches them;
+   nothing falls back to a download.
+5. Not every image can come from a Red Hat registry, so no default image moves
+   under the owner's condition; what a move would need is parked as
+   [B1237](#b1237).

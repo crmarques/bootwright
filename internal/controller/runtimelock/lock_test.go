@@ -58,7 +58,7 @@ func TestTheEmbeddedLockIsWellFormed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := lock.PythonABIs(), []string{"3.14", "3.13", "3.12"}; !slices.Equal(got, want) {
+	if got, want := lock.PythonABIs(), []string{"3.14", "3.12"}; !slices.Equal(got, want) {
 		t.Fatalf("ABIs = %v, want %v", got, want)
 	}
 	for _, abi := range lock.PythonABIs() {
@@ -66,10 +66,12 @@ func TestTheEmbeddedLockIsWellFormed(t *testing.T) {
 		if !found {
 			t.Fatalf("no file list for %s", abi)
 		}
-		for _, name := range requiredPackages {
-			if fileNamed(files, name) == nil {
-				t.Errorf("%s lacks %s", abi, name)
-			}
+		names := []string{}
+		for _, file := range files {
+			names = append(names, file.Name)
+		}
+		if !slices.Equal(names, requiredPackages) {
+			t.Errorf("%s carries %v, want exactly %v", abi, names, requiredPackages)
 		}
 		if core := fileNamed(files, "ansible-core"); core == nil || core.Version != lock.AnsibleCore() {
 			t.Errorf("%s carries %+v, not ansible-core %s", abi, core, lock.AnsibleCore())
@@ -160,7 +162,7 @@ func TestEveryABICarriesItsOwnBinaryWheels(t *testing.T) {
 		want string
 	}{
 		"another interpreter's wheel":   {retag("pyyaml", "cp312-cp312", "cp313-cp313"), "do not run on Python 3.12"},
-		"a stable ABI from a newer one": {retag("cryptography", "cp311-abi3", "cp313-abi3"), "do not run on Python 3.12"},
+		"a stable ABI from a newer one": {retag("markupsafe", "cp312-cp312", "cp313-abi3"), "do not run on Python 3.12"},
 		"a musl wheel":                  {retag("pyyaml", "manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64", "musllinux_1_2_x86_64"), "not a manylinux x86_64 tag"},
 		"another architecture":          {retag("pyyaml", "x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64", "aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64"), "not a manylinux x86_64 tag"},
 		"a pure wheel with an ABI":      {retag("jinja2", "py3-none-any", "py3-cp312-any"), "are not py3-none-any"},
@@ -172,6 +174,9 @@ func TestEveryABICarriesItsOwnBinaryWheels(t *testing.T) {
 		if err := parseEdited(t, test.edit); err == nil || !strings.Contains(err.Error(), test.want) {
 			t.Errorf("%s: err = %v, want %q", name, err, test.want)
 		}
+	}
+	if err := parseEdited(t, retag("markupsafe", "cp312-cp312", "cp311-abi3")); err != nil {
+		t.Errorf("a stable ABI from an older interpreter is refused: %v", err)
 	}
 }
 
@@ -281,19 +286,25 @@ func TestParseRefusesWhatTheBuildCannotInstall(t *testing.T) {
 		"another format":            {func(doc *document) { doc.Format = "x" }, "lock format"},
 		"a prerelease ansible-core": {func(doc *document) { doc.AnsibleCore = "2.21.4rc1" }, "not a release"},
 		"two ansible-core versions": {func(doc *document) {
-			file := fileNamed(doc.ABIs["3.13"], "ansible-core")
+			file := fileNamed(doc.ABIs["3.14"], "ansible-core")
 			file.URL = strings.Replace(file.URL, file.Version, "2.21.0", 1)
 			file.Version, file.Filename = "2.21.0", "ansible_core-2.21.0-py3-none-any.whl"
 		}, "ansible-core is 2.21.0, not the lock's"},
-		"cryptography missing": {func(doc *document) {
-			doc.ABIs["3.12"] = slices.DeleteFunc(doc.ABIs["3.12"], func(file File) bool { return file.Name == "cryptography" })
-		}, "cryptography is missing"},
+		"cryptography carried": {func(doc *document) {
+			jinja := *fileNamed(doc.ABIs["3.12"], "jinja2")
+			filename := "cryptography-50.0.2-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl"
+			carried := File{Name: "cryptography", Version: "50.0.2", Filename: filename, URL: strings.Replace(jinja.URL, jinja.Filename, filename, 1), SHA256: jinja.SHA256, Size: jinja.Size}
+			doc.ABIs["3.12"] = slices.Insert(doc.ABIs["3.12"], 1, carried)
+		}, "cryptography is imported by no controller path"},
+		"jinja2 missing": {func(doc *document) {
+			doc.ABIs["3.12"] = slices.DeleteFunc(doc.ABIs["3.12"], func(file File) bool { return file.Name == "jinja2" })
+		}, "jinja2 is missing"},
 		"urllib3 missing": {func(doc *document) {
 			doc.ABIs["3.14"] = slices.DeleteFunc(doc.ABIs["3.14"], func(file File) bool { return file.Name == "urllib3" })
 		}, "urllib3 is missing"},
-		"unsorted files": {func(doc *document) { slices.Reverse(doc.ABIs["3.13"]) }, "sorted by name"},
+		"unsorted files": {func(doc *document) { slices.Reverse(doc.ABIs["3.14"]) }, "sorted by name"},
 		"a duplicate file": {func(doc *document) {
-			doc.ABIs["3.13"] = slices.Insert(doc.ABIs["3.13"], 1, doc.ABIs["3.13"][0])
+			doc.ABIs["3.14"] = slices.Insert(doc.ABIs["3.14"], 1, doc.ABIs["3.14"][0])
 		}, "sorted by name"},
 		"an uppercase sha256": {func(doc *document) { doc.ABIs["3.12"][0].SHA256 = strings.ToUpper(doc.ABIs["3.12"][0].SHA256) }, "64 lowercase hex"},
 		"a short sha256":      {func(doc *document) { doc.Installer.SHA256 = "abcd" }, "64 lowercase hex"},
@@ -307,7 +318,7 @@ func TestParseRefusesWhatTheBuildCannotInstall(t *testing.T) {
 		"a repeated ABI":             {func(doc *document) { doc.PythonABIs = append(doc.PythonABIs, "3.12") }, "newest first"},
 		"a python 2 ABI":             {func(doc *document) { doc.PythonABIs[0] = "2.7" }, "not a Python 3 ABI"},
 		"no ABIs":                    {func(doc *document) { doc.PythonABIs = []string{} }, "names no Python ABI"},
-		"an ABI without files":       {func(doc *document) { delete(doc.ABIs, "3.13") }, "has no file list"},
+		"an ABI without files":       {func(doc *document) { delete(doc.ABIs, "3.14") }, "has no file list"},
 		"files for another ABI":      {func(doc *document) { doc.ABIs["3.11"] = doc.ABIs["3.12"] }, "does not name"},
 		"null tested":                {func(doc *document) { doc.Tested = nil }, "tested is null"},
 		"a repeated release":         {func(doc *document) { doc.Tested = append(doc.Tested, doc.Tested[0]) }, "tested release"},

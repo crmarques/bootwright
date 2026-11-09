@@ -49,7 +49,7 @@ type lockDocument struct {
 
 const testAnsibleCore = "2.21.5"
 
-var lockedPackages = []string{"ansible-core", "cffi", "cryptography", "jinja2", "markupsafe", "packaging", "pycparser", "pyyaml", "resolvelib", "urllib3"}
+var lockedPackages = []string{"ansible-core", "jinja2", "markupsafe", "packaging", "pyyaml", "urllib3"}
 
 // wheelBytes stands in for a wheel; a file's bytes depend on its name alone,
 // so a pure wheel every ABI shares has one digest.
@@ -81,8 +81,8 @@ func testLock(t *testing.T, abis ...string) runtimelock.Lock {
 			case "ansible-core":
 				version = testAnsibleCore
 				filename = "ansible_core-" + version + "-py3-none-any.whl"
-			case "cffi":
-				filename = "cffi-1.0-" + tag + "-" + tag + "-manylinux_2_17_x86_64.whl"
+			case "pyyaml":
+				filename = "pyyaml-1.0-" + tag + "-" + tag + "-manylinux_2_17_x86_64.whl"
 			}
 			document.ABIs[abi] = append(document.ABIs[abi], lockedFile(name, version, filename))
 		}

@@ -272,9 +272,9 @@ with `unable to execute` and the refusal names that local copy as the remedy.
 ### A FIPS-mode controller
 
 The controller runtime's Python uses the host's OpenSSL, so its TLS follows
-the host's crypto policy; Bootwright's own executable and the `cryptography`
-wheel's bundled OpenSSL stay outside the host's FIPS-validated modules, so
-running it on a FIPS-mode controller claims no FIPS compliance
+the host's crypto policy, and the runtime carries no OpenSSL of its own;
+Bootwright's own executable stays outside the host's FIPS-validated modules,
+so running it on a FIPS-mode controller claims no FIPS compliance
 ([security](../specs/security.md#the-controller-hosts-attacker-model)).
 `controller check`, like `controller install`, reports the kernel's FIPS mode as its
 `FIPS mode` check with that statement; the check never changes readiness,
