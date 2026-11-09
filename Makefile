@@ -30,22 +30,30 @@ build:
 container-build:
 	@set -eu; \
 	engine='$(or $(CONTAINER_ENGINE),$(error container-build needs podman or docker on PATH, or CONTAINER_ENGINE))'; \
+	out='$(CONTAINER_OUT)'; \
+	mkdir -p -- "$$out"; \
+	if test -d "$$out/bootwright" || { test -e "$$out/bootwright" && ! test -O "$$out/bootwright"; }; then \
+		echo "container-build: $$out/bootwright is a directory or belongs to another user; remove it or choose another CONTAINER_OUT" >&2; exit 1; \
+	fi; \
 	settings="$$(mktemp)"; \
-	trap 'rm -f "$$settings"' EXIT; \
+	stage=; \
+	trap 'rm -f "$$settings"; test -z "$$stage" || rm -rf -- "$$stage"' EXIT; \
 	trap 'exit 130' INT TERM; \
+	stage="$$(mktemp -d "$$out/.container-build.XXXXXX")"; \
 	passed=; \
 	for name in $(CONTAINER_SETTINGS); do \
 		eval "value=\$${$$name-}"; \
 		if test -n "$$value"; then printf '%s=%s\n' "$$name" "$$value" >>"$$settings"; passed="$$passed $$name"; fi; \
 	done; \
 	echo "$$engine build into $(CONTAINER_OUT) with Go $(GO_VERSION); settings passed as a secret:$${passed:- none}"; \
-	"$$engine" build --output type=local,dest='$(CONTAINER_OUT)' \
+	"$$engine" build --output type=local,dest="$$stage" \
 		--build-arg GO_VERSION='$(or $(GO_VERSION),$(error go.mod names no go version))' \
 		--build-arg VERSION='$(VERSION)' --build-arg COMMIT='$(COMMIT)' --build-arg SOURCE='$(SOURCE)' \
 		$(if $(GO_IMAGE),--build-arg GO_IMAGE='$(GO_IMAGE)') \
 		--secret id=build-env,src="$$settings" \
 		$(if $(PROXY_CA),--secret id=proxy-ca$(comma)src='$(PROXY_CA)') \
-		.
+		.; \
+	mv -f -- "$$stage/bootwright" "$$out/bootwright"
 
 test:
 	$(GO) test ./...

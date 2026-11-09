@@ -89,7 +89,11 @@ make container-build CONTAINER_OUT=dist CONTAINER_ENGINE=docker
 ```
 
 It writes `bootwright` into `CONTAINER_OUT`, `bin` by default, with Podman when
-both engines are installed. The result is the same static executable a host
+both engines are installed. The engine exports into a fresh private directory
+inside `CONTAINER_OUT`, and the recipe then moves `bootwright` into place, so a
+shared directory such as `/tmp`, whose other entries the engine's exporter
+would try to read or replace, works as well; a `bootwright` there that is a
+directory or another user's file is refused before the build starts. The result is the same static executable a host
 build makes, for the building host's architecture, stamped with the identity
 `make build` would give the checkout. A host without `make` passes the version
 itself: `docker build --build-arg GO_VERSION=<go.mod version> --output type=local,dest=bin .`;

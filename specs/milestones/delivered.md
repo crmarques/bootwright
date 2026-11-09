@@ -12763,3 +12763,20 @@ through JSON or YAML output or the file itself; a `controller install` that
 starts at the instant of a `logs --setup --follow` probe is refused busy; an
 attempt's log records only its outcome word, not its cause
 ([B1233](backlog.md#b1233)).
+
+### X336 — A container build into a shared output directory
+
+**Item:** B1234 (2026-11-09, owner's request after an operator build failed),
+completed in-tree: `make container-build CONTAINER_OUT=/tmp` failed in the
+engine's local exporter, which reads and replaces entries of its destination,
+first on another user's `/tmp/bootwright` (`operation not permitted`) and then
+on a root-owned `/tmp/.ansible` (`permission denied`). The recipe now exports
+into a fresh private directory inside `CONTAINER_OUT` and moves `bootwright`
+into place, and it refuses a `bootwright` there that is a directory or
+another user's file before the build starts
+([building in a container](../../docs/development.md#building-in-a-container)).
+
+**Commits:** this commit. Gates:
+`TestContainerBuildExportsIntoAPrivateDirectory` and
+`TestContainerBuildRefusesATargetItCannotReplace` fail on the previous recipe
+and pass now; `make check` passed on the integrated branch.

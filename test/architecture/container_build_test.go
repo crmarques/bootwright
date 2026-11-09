@@ -2,6 +2,7 @@ package architecture_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -76,6 +77,81 @@ func TestContainerBuildPassesSettingsOnlyAsASecret(t *testing.T) {
 	}
 	if !strings.Contains(recipe, "--secret id=build-env,src=") {
 		t.Error("the container-build recipe does not pass the build-env secret")
+	}
+}
+
+const exportingEngine = `#!/bin/sh
+set -eu
+for argument in "$@"; do
+	case "$argument" in
+	type=local,dest=*) dest="${argument#type=local,dest=}" ;;
+	esac
+done
+if test -n "$(ls -A "$dest")"; then
+	echo "error from receiver: open $dest: permission denied" >&2
+	exit 1
+fi
+printf 'built\n' >"$dest/bootwright"
+`
+
+func runContainerBuild(t *testing.T, out string) (string, error) {
+	t.Helper()
+	engine := filepath.Join(t.TempDir(), "engine")
+	if err := os.WriteFile(engine, []byte(exportingEngine), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command("make", "-s", "-C", filepath.Join("..", ".."), "container-build", "CONTAINER_ENGINE="+engine, "CONTAINER_OUT="+out)
+	output, err := command.CombinedOutput()
+	return string(output), err
+}
+
+func TestContainerBuildExportsIntoAPrivateDirectory(t *testing.T) {
+	out := t.TempDir()
+	if err := os.WriteFile(filepath.Join(out, "unrelated"), []byte("kept\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(out, "bootwright"), []byte("stale\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := runContainerBuild(t, out); err != nil {
+		t.Fatalf("container-build into a shared, non-empty CONTAINER_OUT failed: %v\n%s", err, output)
+	}
+	for name, want := range map[string]string{"bootwright": "built\n", "unrelated": "kept\n"} {
+		data, err := os.ReadFile(filepath.Join(out, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(data) != want {
+			t.Errorf("%s holds %q, want %q", name, data, want)
+		}
+	}
+	entries, err := os.ReadDir(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("CONTAINER_OUT holds %d entries after the build, want bootwright and unrelated alone", len(entries))
+	}
+}
+
+func TestContainerBuildRefusesATargetItCannotReplace(t *testing.T) {
+	out := t.TempDir()
+	if err := os.Mkdir(filepath.Join(out, "bootwright"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	output, err := runContainerBuild(t, out)
+	if err == nil {
+		t.Fatalf("container-build replaced a directory named bootwright:\n%s", output)
+	}
+	if !strings.Contains(output, "is a directory or belongs to another user") {
+		t.Errorf("the refusal does not name the unreplaceable target:\n%s", output)
+	}
+	entries, err := os.ReadDir(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("the refused build left %d entries in CONTAINER_OUT, want the directory alone", len(entries))
 	}
 }
 
