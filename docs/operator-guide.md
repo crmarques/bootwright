@@ -9,8 +9,10 @@ gate and which build it must match.
 
 ## Prepare a host
 
-`controller install` prepares what every context on the host shares: the host packages
-`openssh-clients` and `podman`, and the controller runtime that runs Ansible.
+`controller install` prepares what every context on the host shares: the host package
+`openssh-clients` and the controller runtime that runs Ansible. A context's
+controller stage adds what its graph places on this host, such as `podman` for a
+managed service or the hypervisor for a hosted libvirt provider.
 [What setup admits and installs](#what-setup-admits-and-installs) says which
 hosts it accepts and what it changes on them. Every command that runs Ansible
 unpacks the automation it embeds beneath /var/lib/bootwright-staging, which
@@ -71,7 +73,7 @@ the exit status. A non-empty /etc/ld.so.preload is reported the same way, as
 
 `controller install` installs only what is missing, and from two places:
 
-- **Host packages,** `openssh-clients` and `podman`, plus the `python3.X`
+- **Host packages,** `openssh-clients`, plus the `python3.X`
   package when no Python the lock serves is installed, come from the
   host's own dnf with its own repositories, signing keys, `proxy=`, mirrors,
   Satellite or RHSM registration, versionlock and excludes

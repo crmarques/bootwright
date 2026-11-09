@@ -346,8 +346,8 @@ Machine that declares no BMC, MAC or physical hint.
 Machine roles are not declared: a Machine is an OpenShift node because an
 `OpenShiftCluster` names it in `spec.nodes[].machineRef`, a Ceph node or the
 arbiter because a `CephCluster` names it in its topology, a container-runtime
-host because it is the Environment's controller or a managed service's
-`machineRef`, and a libvirt host because an `InfraProvider`'s
+host because it is a managed service's `machineRef` or hosts a libvirt
+provider, whose emulated BMC runs as a container, and a libvirt host because an `InfraProvider`'s
 `libvirt.machineRef` names it ([controller](../controller.md#host-packages)).
 
 ### Network configuration

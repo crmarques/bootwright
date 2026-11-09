@@ -33,7 +33,7 @@ const emulatorImage = "quay.io/metal3-io/sushy-tools@sha256:f760343718e1175343f2
 // same set the controller stage installs when the host is the controller.
 var hypervisorPackages = []string{
 	"libvirt-client", "libvirt-daemon", "libvirt-daemon-driver-network", "libvirt-daemon-driver-qemu",
-	"libvirt-daemon-driver-storage-core", "qemu-img", "qemu-kvm", "swtpm", "swtpm-tools",
+	"libvirt-daemon-driver-storage-core", "qemu-img", "qemu-kvm-core", "swtpm", "swtpm-tools",
 }
 
 // HypervisorPackages is the closure a provider host needs, in canonical order.

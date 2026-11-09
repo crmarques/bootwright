@@ -20,8 +20,8 @@ packages already present ([D178](milestones/backlog.md#d178)).
 
 | Scope | Prerequisites | Owner |
 | --- | --- | --- |
-| Host | A [supported](#supported-hosts) OS family and architecture and verified installed-host identity; the fixed root and its [setup subtree](contexts/controller-record.md#the-setup-subtree); the [controller runtime](#the-controller-runtime), a virtual environment on the host's own CPython holding the [locked](#the-runtime-lock) `ansible-core` closure; the baseline [host packages](#host-packages) `openssh-clients` and `podman`. | `controller install` |
-| Context | The target client closure the selected graph needs; the libvirt client closure any Machine a libvirt provider hosts selects, derived from placements with no Machine role declared; the hypervisor closure and the libvirt client a libvirt provider hosted on this Machine selects; the installer-media tooling an Anaconda installation published through an artifact server on this Machine selects; the `nmstate` package an agent-installed OpenShiftCluster node that references a declared Machine selects; the `iputils` package an agent-installed multi-node baremetal OpenShiftCluster selects when one of its OpenShift-sourced IPv4 virtual IPs lies in a managed libvirt network of a provider hosted on this Machine; the binding between this context and this host. | [`apply --stage controller`](#the-controller-stage) |
+| Host | A [supported](#supported-hosts) OS family and architecture and verified installed-host identity; the fixed root and its [setup subtree](contexts/controller-record.md#the-setup-subtree); the [controller runtime](#the-controller-runtime), a virtual environment on the host's own CPython holding the [locked](#the-runtime-lock) `ansible-core` closure; the baseline [host package](#host-packages) `openssh-clients`. | `controller install` |
+| Context | The target client closure the selected graph needs; the container runtime a managed service placed on this Machine or a libvirt provider hosted on it selects; the libvirt client closure any Machine a libvirt provider hosts selects, derived from placements with no Machine role declared; the hypervisor closure and the libvirt client a libvirt provider hosted on this Machine selects; the installer-media tooling an Anaconda installation published through an artifact server on this Machine selects; the `nmstate` package an agent-installed OpenShiftCluster node that references a declared Machine selects; the `iputils` package an agent-installed multi-node baremetal OpenShiftCluster selects when one of its OpenShift-sourced IPv4 virtual IPs lies in a managed libvirt network of a provider hosted on this Machine; the binding between this context and this host. | [`apply --stage controller`](#the-controller-stage) |
 
 A host prepared once therefore serves every context later created on it, and a
 context that selects nothing beyond the baseline needs no controller stage.
@@ -225,16 +225,23 @@ One Go table names the host packages by name or RPM capability:
 
 | Scope | Selected when | Requirements |
 | --- | --- | --- |
-| Baseline (setup) | always | `openssh-clients`, `podman` |
+| Baseline (setup) | always | `openssh-clients` |
 | Baseline (setup) | no locked interpreter installed | `python3.X` |
+| Stage | container runtime | `podman` |
 | Stage | libvirt client | `libvirt-client` |
-| Stage | hypervisor | `libvirt-daemon`, `libvirt-daemon-driver-network`, `libvirt-daemon-driver-qemu`, `libvirt-daemon-driver-storage-core`, `qemu-img`, `qemu-kvm`, `swtpm`, `swtpm-tools` |
+| Stage | hypervisor | `libvirt-daemon`, `libvirt-daemon-driver-network`, `libvirt-daemon-driver-qemu`, `libvirt-daemon-driver-storage-core`, `qemu-img`, `qemu-kvm-core`, `swtpm`, `swtpm-tools` |
 | Stage | installer media | `lorax`, `xorriso` |
 | Stage | agent-installed OpenShiftCluster with a node that references a declared Machine | `nmstate` |
 | Stage | agent-installed multi-node baremetal OpenShiftCluster with an OpenShift-sourced IPv4 virtual IP in a managed libvirt network of a provider hosted on the controller Machine | `iputils` |
 
-`podman` is baseline because the controller Machine always receives the
-container runtime; no Machine declares it ([substrate arm](api/machines.md#substrate-arm)).
+`podman` runs only the containers a context places on the controller Machine:
+a managed service whose `machineRef` names it, and the emulated BMC a libvirt
+provider hosted on it runs. A controller that runs neither never receives it,
+and no Machine declares it ([substrate arm](api/machines.md#substrate-arm),
+[D247](milestones/backlog.md#d247)). The hypervisor closure names
+`qemu-kvm-core`, not the `qemu-kvm` metapackage, which on Fedora also pulls
+every QEMU display, audio and block module, because a guest uses only devices
+the QEMU core builds in ([domain](substrates.md#machine-realization)).
 An entry names no version; the grammar admits `name = EVR` and no entry uses
 it until a specific version issue appears.
 
@@ -297,8 +304,9 @@ context must be ready and have an admitted input revision, and an empty one
 returns `context.input` with the import command. Every check carries the scope that owns it, so a negative
 report names the one command that settles it: `controller install` for a host prerequisite,
 and that context's own `apply --stage controller --context <name>` for anything
-its graph selects. A context whose graph selects no target client, libvirt
-client, hypervisor, installer-media tooling, `nmstate` or `iputils` has no controller stage, so its
+its graph selects. A context whose graph selects no target client, container
+runtime, libvirt client, hypervisor, installer-media tooling, `nmstate` or
+`iputils` has no controller stage, so its
 only context check, the binding, names `apply --context <name>`, whose first
 apply publishes it. The report's next command and the diagnostic's remedy are
 that one decision. An unmet host prerequisite always wins, because the
@@ -311,7 +319,7 @@ SSH flags remain unconsumed by these checks.
 | `bootwright controller install --download-only --dest-dir <dir>` | Write the lock's files into `<dir>` as [Offline and mirrored wheels](#offline-and-mirrored-wheels) defines. It never elevates and admits no host: it reads no setup record, runs no `rpm` or `dnf` and changes nothing outside `<dir>`, so any connected host can run it. |
 | `bootwright controller install` | Elevate, then inspect read-only: admission, the installed host, FIPS mode, the untested release and loader preload (informational), the setup state, the interpreter and its runtime and the baseline package presence. A ready host prints the receipt table and `Nothing to do.`, with no network request, confirmation or write. Otherwise run the preview and present the plan, confirm, take `host/setup/lock`, inspect again and refuse a host that moved, record the pending intent, install with dnf, fetch, build, verify and publish the runtime, and write the receipt, which clears the pending intent. Publish no binding and touch no controller record. |
 | `bootwright controller check` | Read and verify the same host checks as setup with bounded local probes and no dnf preview, and report the host's FIPS mode and the missing package names. May use the verified privilege boundary for private metadata. A ready host names `bootwright context init --name <name> --input-dir <dir>` as its next command. |
-| `bootwright preflight --stage controller --context <name>` | Additionally report that context's own target tools, its libvirt client, hypervisor, installer-media, `nmstate` and `iputils` requirements by `rpm` presence, and its host binding, as context-scoped checks. Contact no publisher and read no repository metadata for them. |
+| `bootwright preflight --stage controller --context <name>` | Additionally report that context's own target tools, its container runtime, libvirt client, hypervisor, installer-media, `nmstate` and `iputils` requirements by `rpm` presence, and its host binding, as context-scoped checks. Contact no publisher and read no repository metadata for them. |
 
 No command here contacts a managed endpoint, creates or repairs shared state
 on behalf of another's scope, or publishes a binding. A check publishes
@@ -539,7 +547,9 @@ selects. It is one block in that context's lifecycle plan, planned by its
 capability from effective state alone and frozen before any effect: the target
 client requirements the graph names, the closures it selects with the
 [host package](#host-packages) requirements each one names, the libvirt
-intent, and the controller Machine's normalized proxy choice. The libvirt
+intent, and the controller Machine's normalized proxy choice. The container
+runtime is selected by a managed service placed on the controller Machine and
+by a libvirt provider hosted on it, whose emulated BMC runs as a container. The libvirt
 client closure is selected by a libvirt
 provider hosted on the controller Machine, or any Machine a libvirt provider
 hosts, and by nothing else; the [hypervisor closure](substrates.md#provider-host-realization)
@@ -743,8 +753,8 @@ area no remaining binding names is then retired. Recovery is idempotent rather t
 dnf installs only what is missing and publication verifies existing bytes
 instead of overwriting them, so an interrupted stage is completed by repeating
 it. `preflight --stage controller --context <name>` reports the same closures by
-presence, one check each for the libvirt client, the hypervisor, the
-installer-media tooling, `nmstate` and `iputils` the context selects, read through the same
+presence, one check each for the container runtime, the libvirt client, the
+hypervisor, the installer-media tooling, `nmstate` and `iputils` the context selects, read through the same
 requirements, and requires every one of them; it names this command when one
 is not yet installed. Setup remains the owner of the host baseline, and this
 stage never installs it, publishes a binding, or claims another context's
@@ -1153,8 +1163,8 @@ stream [long-running progress](cli/output.md#long-running-progress): the
 scope, then one `Checks` row per host check as it is verified, and, after
 confirmation, one `Progress` step per action. The host checks are `host`,
 `installed-host`, `fips-mode`, `state-root`, `setup-state`, `python-runtime`
-and `host-packages`; the context checks are `target-tools`, `libvirt-client`,
-`hypervisor`, `installer-media`, `nmstate`, `iputils`, `controller-binding`
+and `host-packages`; the context checks are `target-tools`, `container-runtime`,
+`libvirt-client`, `hypervisor`, `installer-media`, `nmstate`, `iputils`, `controller-binding`
 and one `listener-firewall` row per declared controller socket.
 
 Context preflight and public `plan` inspect the controller's managed DNS

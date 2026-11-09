@@ -22,7 +22,7 @@
     "libvirt-daemon-driver-qemu",
     "libvirt-daemon-driver-storage-core",
     "qemu-img",
-    "qemu-kvm",
+    "qemu-kvm-core",
     "swtpm",
     "swtpm-tools"
   ],

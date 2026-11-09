@@ -5595,7 +5595,7 @@ it can take, and nothing staged is executable.
 `TestParseRefusesWhatTheBuildCannotInstall`,
 `TestTheRuntimeLockToolRoundTrips` and `TestTheRuntimeLockToolUnitsPass`;
 `internal/controller/prerequisites`:
-`TestTheBaselineNamesSshAndPodmanAndNoNmstate`,
+`TestTheBaselineNamesSshAloneWithoutPodmanOrNmstate`,
 `TestTheStageSelectsOnlyWhatTheCapabilitiesNeed` and
 `TestTheRequirementGrammarAdmitsNamesAndCapabilitiesOnly`;
 `internal/controller/hostdnf`: `TestPresenceIsRpmWhatprovidesWithoutVersions`,
@@ -12780,3 +12780,26 @@ another user's file before the build starts
 `TestContainerBuildExportsIntoAPrivateDirectory` and
 `TestContainerBuildRefusesATargetItCannotReplace` fail on the previous recipe
 and pass now; `make check` passed on the integrated branch.
+
+### X337 — Packages only where they are used
+
+**Item:** B1235 (2026-11-09, [D247](backlog.md#d247)), completed in-tree and
+awaiting operator acceptance. `controller install` no longer installs
+`podman`: a context's controller stage selects it when a managed service is
+placed on the controller Machine or a libvirt provider hosted there runs its
+emulated BMC, and reports it as the `container-runtime` check
+([host packages](../controller.md#host-packages),
+[the controller stage](../controller.md#the-controller-stage)). The
+hypervisor closure installs `qemu-kvm-core` instead of Fedora's `qemu-kvm`
+metapackage, which also pulls every GTK, SDL, audio, SPICE, USB-redirection
+and Gluster, iSCSI, NFS and RBD module, and a libvirt guest's display is
+standard VGA, which the QEMU core builds in
+([domain](../substrates.md#machine-realization)). The controller stage's
+request carries `containerRuntime`, so its version moved
+(`Version` in `internal/controller/clients/requests.go`), and the libvirt
+provider host's content digest moved with its package set.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** a domain an earlier build defined takes the VGA
+display at its next cold boot; nothing installs `podman` on an SSH placement
+host ([B1236](backlog.md#b1236)).

@@ -1,6 +1,6 @@
 implementation: controller-prerequisites
-content-digest: d3a2b16a74e0a6bec87b04a72745a571687edb5caf26414a3c1d119081925714
-request-version: controller-clients-v1
+content-digest: 12861259f12ba6828a41390a1acbe06a50f813a4939f65e9b503d450db7356c7
+request-version: controller-clients-v2
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -11,6 +11,7 @@ request-identity:
   packages
   tools[].kind
 request-schema:
+  containerRuntime bool
   egress struct prerequisites.SetupEgress
   egress.httpProxy string
   egress.httpsProxy string

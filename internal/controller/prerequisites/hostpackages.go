@@ -19,11 +19,12 @@ type HostPackageEvidence struct {
 }
 
 var (
-	baselineHostRequirements = []string{"openssh-clients", "podman"}
-	libvirtHostRequirements  = []string{"libvirt-client"}
-	hypervisorRequirements   = []string{
+	baselineHostRequirements         = []string{"openssh-clients"}
+	containerRuntimeHostRequirements = []string{"podman"}
+	libvirtHostRequirements          = []string{"libvirt-client"}
+	hypervisorRequirements           = []string{
 		"libvirt-daemon", "libvirt-daemon-driver-network", "libvirt-daemon-driver-qemu",
-		"libvirt-daemon-driver-storage-core", "qemu-img", "qemu-kvm", "swtpm", "swtpm-tools",
+		"libvirt-daemon-driver-storage-core", "qemu-img", "qemu-kvm-core", "swtpm", "swtpm-tools",
 	}
 	installerMediaRequirements = []string{"lorax", "xorriso"}
 	hostRequirement            = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]*(\([A-Za-z0-9._+-]+\))?( = [0-9]+:?[A-Za-z0-9._+~^-]*)?$`)
@@ -56,6 +57,9 @@ func PythonRequirementABI(requirement string) (string, bool) {
 
 func StageHostRequirements(selected NativeRequirements) []string {
 	requirements := []string{}
+	if selected.ContainerRuntime {
+		requirements = append(requirements, containerRuntimeHostRequirements...)
+	}
 	if selected.LibvirtClient {
 		requirements = append(requirements, libvirtHostRequirements...)
 	}

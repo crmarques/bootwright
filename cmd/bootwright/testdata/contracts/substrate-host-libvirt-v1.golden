@@ -1,12 +1,12 @@
 implementation: substrate-host-libvirt-v1
-content-digest: 8119a6f66d77c14d7cbe8ef2e13e8abe2bd56cf826b7399919f12b6b693d2691
+content-digest: a76e61d117017004b7289d64b6be5d431bdb02a89462a53a401f0410d0509ed4
 request-version: substrate-host-libvirt-v1
 automation-formats: https://bootwright.io/substrate/v1
 mark-formats: Bootwright owned VLAN refusal, Bootwright owned readiness barrier, Description=Bootwright managed network firewall, https://bootwright.io/substrate/v1
 proof-ids: none
 fixed-places: none
 effect-pins:
-  libvirt-client,libvirt-daemon,libvirt-daemon-driver-network,libvirt-daemon-driver-qemu,libvirt-daemon-driver-storage-core,qemu-img,qemu-kvm,swtpm,swtpm-tools
+  libvirt-client,libvirt-daemon,libvirt-daemon-driver-network,libvirt-daemon-driver-qemu,libvirt-daemon-driver-storage-core,qemu-img,qemu-kvm-core,swtpm,swtpm-tools
   /var/lib/libvirt/images/bootwright
   bootwright
   virtqemud.service,virtnetworkd.service,virtstoraged.service

@@ -19,7 +19,7 @@ const (
 	Kind           = string(api.Environment)
 	Implementation = "controller-prerequisites"
 	BlockID        = "controller-prerequisites"
-	Version        = "controller-clients-v1"
+	Version        = "controller-clients-v2"
 )
 
 // ToolRequest is one declared client requirement, frozen in the plan before
@@ -38,7 +38,8 @@ type ToolRequest struct {
 // here: a tool's latest intent is resolved by the attempt that installs it,
 // and a host package is whatever the host's repositories provide.
 type Request struct {
-	Egress prerequisites.SetupEgress `json:"egress"`
+	ContainerRuntime bool                      `json:"containerRuntime"`
+	Egress           prerequisites.SetupEgress `json:"egress"`
 	// Hypervisor and InstallerMedia are the closures this Machine's own role in
 	// the graph selects: the runtime a libvirt provider hosted here needs, and
 	// the tooling an Anaconda installation published here builds with.
@@ -61,15 +62,16 @@ func NewRequest(selection controller.Selection, requests []controller.ToolReques
 		bypass = []string{}
 	}
 	request := Request{
-		Egress:         prerequisites.SetupEgress{HTTPProxy: route.HTTPProxy(), HTTPSProxy: route.HTTPSProxy(), NoProxy: bypass},
-		Hypervisor:     selection.Hypervisor(),
-		InstallerMedia: selection.InstallerMedia(),
-		NMState:        selection.NMState(),
-		IPUtils:        selection.IPUtils(),
-		LibvirtClient:  selection.LibvirtClient(),
-		Machine:        selection.MachineName(),
-		Tools:          []ToolRequest{},
-		Version:        Version,
+		ContainerRuntime: selection.ContainerRuntime(),
+		Egress:           prerequisites.SetupEgress{HTTPProxy: route.HTTPProxy(), HTTPSProxy: route.HTTPSProxy(), NoProxy: bypass},
+		Hypervisor:       selection.Hypervisor(),
+		InstallerMedia:   selection.InstallerMedia(),
+		NMState:          selection.NMState(),
+		IPUtils:          selection.IPUtils(),
+		LibvirtClient:    selection.LibvirtClient(),
+		Machine:          selection.MachineName(),
+		Tools:            []ToolRequest{},
+		Version:          Version,
 	}
 	// The client and the hypervisor share one libvirt intent, so either
 	// selecting it freezes the same release for both.
@@ -87,7 +89,7 @@ func NewRequest(selection controller.Selection, requests []controller.ToolReques
 // prerequisites.StageNativeOf reads it, so the stage and preflight ask the
 // host for the same requirements.
 func (r Request) native() prerequisites.StageNative {
-	return prerequisites.StageNative{LibvirtClient: r.LibvirtClient, Hypervisor: r.Hypervisor, InstallerMedia: r.InstallerMedia, NMState: r.NMState, IPUtils: r.IPUtils}
+	return prerequisites.StageNative{ContainerRuntime: r.ContainerRuntime, LibvirtClient: r.LibvirtClient, Hypervisor: r.Hypervisor, InstallerMedia: r.InstallerMedia, NMState: r.NMState, IPUtils: r.IPUtils}
 }
 
 // ToolRequests restores the catalog's own request shape from the frozen block.

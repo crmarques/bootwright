@@ -23,7 +23,7 @@ func installerMedia() []api.Object {
 			WithPath(api.StringValue("lab-artifacts"), "installer", "anaconda", "redfishVirtualMedia", "artifactServerEndpoint", "serverRef")),
 		api.NewObject(api.Machine, "node", api.Value{}, api.MapValue().
 			WithPath(api.BoolValue(false), "os", "provided").WithPath(api.StringValue("rhel"), "os", "installProfileRef")),
-		api.NewObject(api.ArtifactServer, "lab-artifacts", api.Value{}, api.MapValue().With("machineRef", api.StringValue("controller"))),
+		api.NewObject(api.ArtifactServer, "lab-artifacts", api.Value{}, api.MapValue().With("management", api.StringValue("managed")).With("machineRef", api.StringValue("controller"))),
 	}
 }
 

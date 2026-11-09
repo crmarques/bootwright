@@ -48,12 +48,12 @@ func TestPreflightIsReadOnlyAndNamesWhatIsMissing(t *testing.T) {
 	f := newSetupFixture(t)
 	f.prepared()
 	f.python.ready = false
-	f.packages.present["podman"] = false
+	f.packages.present["openssh-clients"] = false
 	report, err := f.service.Check(context.Background(), CheckRequest{})
 	if codeOf(err) != "preflight.failed" || report == nil || report.Outcome != "not-ready" || report.Next != setupInvocation {
 		t.Fatalf("Check = %+v, %v", report, err)
 	}
-	if report.Table == nil || report.Table.Packages != "missing podman" || report.Table.Runtime != "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — not prepared" {
+	if report.Table == nil || report.Table.Packages != "missing openssh-clients" || report.Table.Runtime != "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — not prepared" {
 		t.Fatalf("table = %+v", report.Table)
 	}
 	if effects := f.effects(); len(effects) != 0 {

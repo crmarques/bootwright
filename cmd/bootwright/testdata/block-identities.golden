@@ -227,6 +227,7 @@ lab-rhel-external-services:
   substrate-host-lab-libvirt
 lab-services:
   artifact-server-lab-artifacts
+  controller-prerequisites
   dns-lab-dns
   ntp-lab-ntp
   proxy-lab-proxy

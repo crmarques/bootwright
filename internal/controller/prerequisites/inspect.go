@@ -125,6 +125,9 @@ func (i *inspection) declare(host HostInspector, lock RuntimeLock) {
 	if len(i.toolRequests) != 0 {
 		checks = append(checks, Check{"target-tools", i.toolSummary(), "unverified", "unverified", ContextScope, ""})
 	}
+	if i.native.ContainerRuntime {
+		checks = append(checks, Check{"container-runtime", closureRequirement("container-runtime"), "unverified", "unverified", ContextScope, ""})
+	}
 	if i.native.LibvirtClient {
 		checks = append(checks, Check{"libvirt-client", closureRequirement("libvirt-client"), "unverified", "unverified", ContextScope, ""})
 	}
@@ -589,11 +592,13 @@ func (s Service) settleContext(ctx context.Context, current *inspection, settle 
 }
 
 func closureRequirements(id string) NativeRequirements {
-	return NativeRequirements{LibvirtClient: id == "libvirt-client", Hypervisor: id == "hypervisor", InstallerMedia: id == "installer-media", NMState: id == "nmstate", IPUtils: id == "iputils"}
+	return NativeRequirements{ContainerRuntime: id == "container-runtime", LibvirtClient: id == "libvirt-client", Hypervisor: id == "hypervisor", InstallerMedia: id == "installer-media", NMState: id == "nmstate", IPUtils: id == "iputils"}
 }
 
 func closureRequirement(id string) string {
 	switch id {
+	case "container-runtime":
+		return "container runtime (podman)"
 	case "hypervisor":
 		return "hypervisor closure"
 	case "iputils":

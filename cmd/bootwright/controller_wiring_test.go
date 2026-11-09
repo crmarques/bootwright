@@ -23,7 +23,7 @@ func TestComposedBaselineDryRunReadsNoSetupState(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code := runServices(context.Background(), []string{"controller", "install", "--dry-run"}, &out, &errOut, services)
 	if code != 0 || errOut.Len() != 0 || ports.reads == 0 || ports.effects != 0 || stores.effects != 0 || !strings.Contains(out.String(), "Scope     baseline") ||
-		!strings.Contains(out.String(), "Outcome  planned") || !strings.Contains(out.String(), "  podman\n") {
+		!strings.Contains(out.String(), "Outcome  planned") || !strings.Contains(out.String(), "  openssh-clients\n") {
 		t.Fatal(code, out.String(), errOut.String(), ports, stores)
 	}
 }

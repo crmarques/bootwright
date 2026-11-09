@@ -371,8 +371,9 @@ it implicitly. Controller egress belongs to the selected Machine's
 [proxy choice](machines.md#machine-proxy).
 
 The referenced Machine must have effective `os.provided: true`
-and `access.local: true`; it always receives the container runtime, which no
-Machine declares ([substrate arm](machines.md#substrate-arm)).
+and `access.local: true`; it receives the container runtime only when it
+runs a container, which no Machine declares
+([host packages](../controller.md#host-packages)).
 Selection never supplies these values or changes an SSH transport into local
 execution. This is the sole local-access Machine in the
 retained graph and cannot be a node of a selected OpenShiftCluster or
@@ -424,9 +425,9 @@ spec:
 ```
 
 A controller may host a managed service when that service explicitly selects
-its `machineRef`. The controller receives the container runtime even when no
-managed service is selected: `controller install` installs an absent qualified Podman and
-verifies its dependencies.
+its `machineRef`, which makes the controller a container-runtime host: its
+[controller stage](../controller.md#the-controller-stage) then installs an
+absent Podman.
 No service placement defaults to the controller.
 
 Admission checks these declarations without inspecting the invoking host,

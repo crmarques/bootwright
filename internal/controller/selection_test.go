@@ -16,10 +16,41 @@ func selectionObjects() []api.Object {
 	}
 }
 
-func TestAnExplicitControllerAlwaysSelectsTheContainerRuntime(t *testing.T) {
-	selected, err := controller.Select(api.NewCatalog(selectionObjects()))
-	if err != nil || !selected.ContainerRuntime() || selected.MachineName() != "controller" || !selected.Route().Direct() {
-		t.Fatal(selected, err)
+func TestOnlyAContainerTheControllerRunsSelectsTheContainerRuntime(t *testing.T) {
+	service := func(management, machine string) api.Object {
+		spec := api.MapValue().With("management", api.StringValue(management))
+		if machine != "" {
+			spec = spec.With("machineRef", api.StringValue(machine))
+		}
+		return api.NewObject(api.DNSServer, "dns", api.Value{}, spec)
+	}
+	provider := func(host string) api.Object {
+		return api.NewObject(api.InfraProvider, "hypervisor", api.Value{}, api.MapValue().WithPath(api.StringValue(host), "libvirt", "machineRef"))
+	}
+	for _, test := range []struct {
+		name  string
+		extra []api.Object
+		want  bool
+	}{
+		{"nothing", nil, false},
+		{"a managed service placed here", []api.Object{service("managed", "controller")}, true},
+		{"a managed service placed elsewhere", []api.Object{service("managed", "services")}, false},
+		{"an external service", []api.Object{service("external", "")}, false},
+		{"a libvirt provider hosted here", []api.Object{provider("controller")}, true},
+		{"a libvirt provider hosted elsewhere", []api.Object{provider("hypervisor-host")}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			selected, err := controller.Select(api.NewCatalog(append(selectionObjects(), test.extra...)))
+			if err != nil || selected.ContainerRuntime() != test.want || selected.MachineName() != "controller" || !selected.Route().Direct() {
+				t.Fatal(selected, err)
+			}
+			if controller.HasStage(selected, nil) != test.want {
+				t.Fatal("the container runtime alone must decide whether this graph has a controller stage", selected)
+			}
+		})
+	}
+	if controller.Baseline().ContainerRuntime() {
+		t.Fatal("context-free scope invented a container runtime")
 	}
 }
 
@@ -35,7 +66,7 @@ func TestLibvirtClientFollowsTheReferencedProvider(t *testing.T) {
 				}
 			}
 			selection, err := controller.Select(api.NewCatalog(objects))
-			if err != nil || !selection.ContainerRuntime() || selection.LibvirtClient() != (selectedBy != "unused-provider") {
+			if err != nil || selection.ContainerRuntime() || selection.LibvirtClient() != (selectedBy != "unused-provider") {
 				t.Fatal("native client requirement was lost or invented", selection, err)
 			}
 		})

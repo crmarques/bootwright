@@ -41,11 +41,11 @@ func (s Selection) Route() Route                 { return s.route }
 func (s Selection) Versions() DependencyVersions { return s.versions }
 
 // HasStage reports whether a context selecting this graph has a controller
-// stage: only that stage installs a target client, the libvirt client, the
-// hypervisor closure or the installer-media tooling, and a context selecting
-// none of them has nothing for it to run.
+// stage: only that stage installs a target client, the container runtime, the
+// libvirt client, the hypervisor closure or the installer-media tooling, and a
+// context selecting none of them has nothing for it to run.
 func HasStage(selection Selection, tools []ToolRequest) bool {
-	return len(tools) != 0 || selection.LibvirtClient() || selection.Hypervisor() || selection.InstallerMedia() || selection.NMState() || selection.IPUtils()
+	return len(tools) != 0 || selection.ContainerRuntime() || selection.LibvirtClient() || selection.Hypervisor() || selection.InstallerMedia() || selection.NMState() || selection.IPUtils()
 }
 
 // Route contains explicit setup acquisition policy without Secret references or
@@ -68,7 +68,7 @@ func (r Route) NoProxy() []string  { return slices.Clone(r.noProxy) }
 // Baseline selects context-free prerequisites and direct acquisition. It never
 // reads the invoking user's current context or ambient configuration.
 func Baseline() Selection {
-	return Selection{containerRuntime: true, route: Route{direct: true}, versions: DefaultDependencyVersions()}
+	return Selection{route: Route{direct: true}, versions: DefaultDependencyVersions()}
 }
 
 // WithAmbientRoute substitutes the acquisition route of a selection no context
@@ -130,10 +130,26 @@ func Select(catalog api.Catalog) (Selection, error) {
 	}
 	return Selection{
 		environmentName: environment.Name(), machineName: machine.Name(),
-		containerRuntime: true, libvirtClient: requiresLibvirtClient(catalog, machine),
+		containerRuntime: requiresContainerRuntime(catalog, machine), libvirtClient: requiresLibvirtClient(catalog, machine),
 		hypervisor: requiresHypervisor(catalog, machine), installerMedia: requiresInstallerMedia(catalog, machine),
 		route: route, versions: versions, nmstate: requiresNMState(catalog), iputils: requiresIPUtils(catalog, machine.Name()),
 	}, nil
+}
+
+// requiresContainerRuntime reports whether this Machine runs a container: a
+// managed service placed here, or the emulated BMC a libvirt provider hosted
+// here runs beside its guests. Nothing else on the controller needs podman.
+func requiresContainerRuntime(catalog api.Catalog, controllerMachine api.Object) bool {
+	if requiresHypervisor(catalog, controllerMachine) {
+		return true
+	}
+	for _, object := range catalog.Objects() {
+		if infrastructureservices.IsService(object.Kind()) && object.Spec().Get("management").Text() == "managed" &&
+			infrastructureservices.Placement(object) == controllerMachine.Name() {
+			return true
+		}
+	}
+	return false
 }
 
 // requiresHypervisor reports whether a libvirt provider runs its guests on this

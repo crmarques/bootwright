@@ -292,6 +292,7 @@ Alias cell.
 | [B1227](#b1227) | new, 2026-11-08 (D244 (5)) | product | CLI | A JSON `apply` or `destroy` can stream its progress events | No machine consumer has asked; it changes the one-document contract of JSON output |
 | [B1229](#b1229) | new, 2026-11-09 (X332's review) | defect | Substrate | A provider host that stops defining managed Networks removes the refusal and firewall-ready units an earlier apply installed | The units stay owned and refuse only the subnets they held; the firewall-ready unit's gap predates X332 |
 | [B1230](#b1230) | new, 2026-11-09 (X331) | product | Machine power, with Substrate | A failed revoke of a lent KubeVirt token reaches the operator of a power command or reading | Power results carry no warning channel; the token still ends at its bounded lifetime and the revoke's adapter output is retained |
+| [B1236](#b1236) | new, 2026-11-09 (D247 (4)) | defect | Infrastructure services, with Substrate | An SSH placement host that runs a managed service or a libvirt provider's emulated BMC receives the container runtime | Predates D247; every qualified run places these containers on the controller |
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
 
 ### B82
@@ -3274,6 +3275,20 @@ secret, raw adapter byte or terminal control sequence. **Exit evidence:** an
 attempt log test whose failed outcome record names its reason, and a `logs`
 golden that renders it. **Outcome:** an operator reading a failed block's
 events sees its cause without opening raw output.
+
+### B1236
+
+**Owner:** Infrastructure services, with Substrate. **Kind:** defect.
+**Requires:** none. **Definition:** Candidate, from [D247](#d247) (4): a
+managed service's `machineRef` and a libvirt provider's host Machine are
+container-runtime hosts ([substrate arm](../api/machines.md#substrate-arm)),
+but on an SSH Machine no block installs `podman`: the provider host block
+installs only the hypervisor closure, and the managed-service roles run
+`/usr/bin/podman` without proving it. **Exit evidence:** a provider host and a
+managed-service test on an SSH placement whose host lacks `podman`, which
+installs it through the host's own package manager or refuses before any
+effect naming it. **Outcome:** a container placed on an SSH host either gets
+its runtime or refuses with a remedy, never a missing-executable failure.
 
 ## Audit remediation (2026-10-26)
 
@@ -7487,3 +7502,36 @@ Taken by the session, pending the owner's review:
    bare-metal clusters and the `nmstate` and pool-less `metallb` operators, and
    renders no environment interface, bridge, secondary network, pool, hub
    virtual-machine NIC or `ipForwarding`.
+
+### D247
+
+**owner** (2026-11-09): reviewing the packages a controller install added, the
+owner asked whether all of them are required for the controller, "some of them
+i think are just needed if infra services/components are to be installed in
+that machine", and to install those dependencies "just where they are really
+needed". The session found every stage package already selected by the
+graph's placements, `podman` the one host package installed regardless, and
+Fedora's `qemu-kvm` metapackage the bulk of a hypervisor install. Asked, the
+owner chose:
+
+1. `podman` is installed only where a container runs ("Install only when
+   used"): `controller install` installs `openssh-clients` and, when needed,
+   the locked interpreter; a context's controller stage installs `podman` when
+   a managed service is placed on the controller Machine or a libvirt provider
+   hosted on it runs its emulated BMC
+   ([host packages](../controller.md#host-packages)). This supersedes
+   [D152](#d152) (11)'s "podman stays".
+2. The hypervisor closure names `qemu-kvm-core`, and a libvirt guest's display
+   is the standard VGA the QEMU core builds in rather than virtio-vga, which
+   needs a display module package whose name differs between Fedora and RHEL
+   ("Core + plain VGA"; [domain](../substrates.md#machine-realization)).
+
+This authorizes, out of sequence, X337 (M1: [B1235](m1.md#b1235)). Taken by the
+session, pending the owner's review:
+
+3. An earlier install's receipt keeps attributing the `podman` it installed, so
+   `controller uninstall` still removes it; a `podman` a controller stage
+   installs is kept like every other stage package.
+4. Nothing installs `podman` on an SSH placement host, a managed service's
+   other Machine or a remote libvirt provider host; that predates this decision
+   and is parked as [B1236](#b1236).

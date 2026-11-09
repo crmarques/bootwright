@@ -482,8 +482,11 @@ as `qcow2` images beneath
 `/var/lib/libvirt/images/bootwright/<context>/machines/<machine>/`, one interface per
 `hardware.nics` entry, in order, on that NIC's segment, with a locally
 administered MAC derived from the context, Machine and NIC names, an
-emulated TPM 2.0 when the profile declares `tpm`, a serial console, and
-ownership metadata naming the context and Machine. Provider media and machine
+emulated TPM 2.0 when the profile declares `tpm`, a serial console, a
+standard VGA adapter behind a VNC display bound to the loopback address, and
+ownership metadata naming the context and Machine. Every device is one the
+QEMU core builds in, so the host's emulator is `qemu-kvm-core` with no display,
+audio or block module package ([D247](milestones/backlog.md#d247)). Provider media and machine
 disks occupy separate `providers` and `machines` subtrees, including when a
 provider and Machine share a name. X48 retires the former name-collision
 refusal with tests proving disjoint ownership and cleanup. Host and Machine

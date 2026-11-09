@@ -49,7 +49,7 @@ func newSetupFixture(t *testing.T) *setupFixture {
 	}
 	f.host = &releaseHost{owner: f, identity: identity, release: HostRelease{ID: "fedora", VersionID: "44", Architecture: "amd64"}}
 	f.store = &memorySetup{owner: f}
-	f.packages = &hostPackages{owner: f, present: map[string]bool{"openssh-clients": true, "podman": true}, refuse: map[string]bool{}}
+	f.packages = &hostPackages{owner: f, present: map[string]bool{"openssh-clients": true}, refuse: map[string]bool{}}
 	f.python = &osPython{owner: f, installed: true, ready: true}
 	f.service = New(noController{}, noCompiler{}, f.host, Ports{Setup: f.store, Packages: f.packages, Python: f.python, Lock: testLock}, Options{
 		Confirmer: f, Presenter: f, Now: func() time.Time { return time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC) },
@@ -429,8 +429,8 @@ func TestAReadyHostMakesNoRequestAndNoWrite(t *testing.T) {
 func TestThePlanShowsTheDnfPreviewVerbatim(t *testing.T) {
 	f := newSetupFixture(t)
 	f.prepared()
-	f.packages.present["podman"] = false
-	f.packages.preview = "Dependencies resolved.\n Package   Arch    Version   Repository   Size\nInstalling:\n podman    x86_64  5:5.8.1-1.fc44  updates  17 M\n\nOperation aborted.\n"
+	f.packages.present["openssh-clients"] = false
+	f.packages.preview = "Dependencies resolved.\n Package   Arch    Version   Repository   Size\nInstalling:\n openssh-clients    x86_64  10.2p1-1.fc44  updates  1 M\n\nOperation aborted.\n"
 	report, err := f.service.Setup(context.Background(), SetupRequest{})
 	if err != nil || report.Outcome != "changed" {
 		t.Fatalf("Setup = %+v, %v", report, err)
@@ -438,10 +438,10 @@ func TestThePlanShowsTheDnfPreviewVerbatim(t *testing.T) {
 	if f.plan.Preview == nil || f.plan.Preview.Text != f.packages.preview || len(f.plan.Preview.Notes) != 1 {
 		t.Fatalf("the presented plan's preview is %+v", f.plan.Preview)
 	}
-	if !slices.Equal(f.plan.Dependencies, []string{"podman"}) || !slices.Contains(f.plan.Actions, "Install host packages with dnf: podman") {
+	if !slices.Equal(f.plan.Dependencies, []string{"openssh-clients"}) || !slices.Contains(f.plan.Actions, "Install host packages with dnf: openssh-clients") {
 		t.Fatalf("the plan is %v, %v", f.plan.Dependencies, f.plan.Actions)
 	}
-	order := []string{"preview podman", "plan", "confirm", "lock", "record", "install podman"}
+	order := []string{"preview openssh-clients", "plan", "confirm", "lock", "record", "install openssh-clients"}
 	position := 0
 	for _, event := range f.events {
 		if position < len(order) && event == order[position] {
@@ -459,7 +459,7 @@ func TestThePlanShowsTheDnfPreviewVerbatim(t *testing.T) {
 	for _, item := range receipt.Packages {
 		installedBy[item.Requirement] = item.InstalledBy
 	}
-	if installedBy["podman"] != "setup-000043" || installedBy["openssh-clients"] != PresentBeforeBootwright {
+	if installedBy["openssh-clients"] != "setup-000043" || len(installedBy) != 1 {
 		t.Fatalf("the receipt's packages are %+v", receipt.Packages)
 	}
 }
@@ -498,7 +498,7 @@ func TestAFailureBeforeAnyDnfTransactionClearsThePendingIntent(t *testing.T) {
 		pending bool
 	}{
 		"a failed wheel fetch":               {},
-		"a failed wheel fetch after dnf ran": {missing: "podman", pending: true},
+		"a failed wheel fetch after dnf ran": {missing: "openssh-clients", pending: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newSetupFixture(t)

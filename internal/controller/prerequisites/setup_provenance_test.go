@@ -12,6 +12,7 @@ func TestSetupRetainsOriginalPackageProvenanceAcrossProviderUpdates(t *testing.T
 	f := newSetupFixture(t)
 	f.prepared()
 	f.packages.present["python3.14"] = true
+	f.packages.present["podman"] = true
 	f.python.ready = false
 	f.store.view.State.Receipt.Packages = []ReceiptPackage{
 		{Requirement: "podman", Provider: "podman-0:1.0-1.x86_64", InstalledBy: "setup-000042"},
@@ -33,7 +34,7 @@ func TestSetupRetainsOriginalPackageProvenanceAcrossProviderUpdates(t *testing.T
 
 func TestInterruptedSetupKeepsTheOriginalPackageIntentUntilReceipt(t *testing.T) {
 	f := newSetupFixture(t)
-	f.packages.present["podman"] = false
+	f.packages.present["openssh-clients"] = false
 	f.python.ready = false
 	f.python.buildErr = errors.New("injected build failure")
 	if _, err := f.service.Setup(context.Background(), SetupRequest{}); err == nil {
@@ -48,11 +49,11 @@ func TestInterruptedSetupKeepsTheOriginalPackageIntentUntilReceipt(t *testing.T)
 		t.Fatal(err)
 	}
 	owned, _, err := receiptNames(f.store.view, false)
-	if err != nil || !slices.Contains(owned, "podman") {
+	if err != nil || !slices.Contains(owned, "openssh-clients") {
 		t.Fatalf("resumed owned packages = %v (%v)", owned, err)
 	}
 	for _, item := range f.store.view.State.Receipt.Packages {
-		if item.Requirement == "podman" && item.InstalledBy != "setup-000043" {
+		if item.Requirement == "openssh-clients" && item.InstalledBy != "setup-000043" {
 			t.Fatalf("lost original run: %+v", item)
 		}
 	}
@@ -60,18 +61,18 @@ func TestInterruptedSetupKeepsTheOriginalPackageIntentUntilReceipt(t *testing.T)
 
 func TestSetupCanDiscardUnavailableRunOutputWithoutLosingReceipt(t *testing.T) {
 	f := newSetupFixture(t)
-	f.packages.present["podman"] = false
+	f.packages.present["openssh-clients"] = false
 	f.store.runError = errors.New("injected run creation, rotation or exhaustion failure")
 	report, err := f.service.Setup(context.Background(), SetupRequest{})
 	if err != nil || report.Outcome != "changed" || report.LogLocation != "" {
 		t.Fatalf("setup = %+v (%v)", report, err)
 	}
 	owned, _, err := receiptNames(f.store.view, false)
-	if err != nil || !slices.Contains(owned, "podman") {
+	if err != nil || !slices.Contains(owned, "openssh-clients") {
 		t.Fatalf("unlogged receipt lost ownership: %v (%v)", owned, err)
 	}
 	for _, item := range f.store.view.State.Receipt.Packages {
-		if item.Requirement == "podman" && item.InstalledBy != "setup-"+strings.Repeat("a", 32) {
+		if item.Requirement == "openssh-clients" && item.InstalledBy != "setup-"+strings.Repeat("a", 32) {
 			t.Fatalf("injected identity was lost: %+v", item)
 		}
 	}
@@ -79,19 +80,19 @@ func TestSetupCanDiscardUnavailableRunOutputWithoutLosingReceipt(t *testing.T) {
 
 func TestUnsafeRunStateStillRefusesBeforePackages(t *testing.T) {
 	f := newSetupFixture(t)
-	f.packages.present["podman"] = false
+	f.packages.present["openssh-clients"] = false
 	f.store.runError = ErrUnsafeSetupRun
 	if _, err := f.service.Setup(context.Background(), SetupRequest{}); !errors.Is(err, ErrUnsafeSetupRun) {
 		t.Fatalf("unsafe run = %v", err)
 	}
-	if f.packages.present["podman"] {
+	if f.packages.present["openssh-clients"] {
 		t.Fatal("installed through unsafe run state")
 	}
 }
 
 func TestSetupRunCleanupFailureNeverChangesReceipt(t *testing.T) {
 	f := newSetupFixture(t)
-	f.packages.present["podman"] = false
+	f.packages.present["openssh-clients"] = false
 	f.store.runCloseError = errors.New("injected cleanup failure")
 	report, err := f.service.Setup(context.Background(), SetupRequest{})
 	if err != nil || report.Outcome != "changed" || f.store.view.State.Receipt == nil {
@@ -101,14 +102,14 @@ func TestSetupRunCleanupFailureNeverChangesReceipt(t *testing.T) {
 
 func TestUnavailableSetupIdentityRefusesBeforePackageOrStateEffects(t *testing.T) {
 	f := newSetupFixture(t)
-	f.packages.present["podman"] = false
+	f.packages.present["openssh-clients"] = false
 	f.store.runError = errors.New("logging unavailable")
 	expected := errors.New("identity unavailable")
 	f.store.setupIDError = expected
 	if _, err := f.service.Setup(context.Background(), SetupRequest{}); !errors.Is(err, expected) {
 		t.Fatalf("identity failure = %v", err)
 	}
-	if f.packages.present["podman"] || len(f.store.recorded) != 0 {
+	if f.packages.present["openssh-clients"] || len(f.store.recorded) != 0 {
 		t.Fatal("identity failure reached effects")
 	}
 }
@@ -126,7 +127,7 @@ func (n *namedRuns) ReportLogLocation(_ context.Context, location LogLocation) {
 // that precedes the work.
 func TestSetupReportsItsRunID(t *testing.T) {
 	f := newSetupFixture(t)
-	f.packages.present["podman"] = false
+	f.packages.present["openssh-clients"] = false
 	named := &namedRuns{}
 	f.service.options.Progress = named
 	f.store.runID, f.store.runNumber = "setup-"+strings.Repeat("b", 32), 57
@@ -142,7 +143,7 @@ func TestSetupReportsItsRunID(t *testing.T) {
 		t.Fatalf("progress named %+v, want %+v", named.located, want)
 	}
 	f = newSetupFixture(t)
-	f.packages.present["podman"] = false
+	f.packages.present["openssh-clients"] = false
 	f.store.runError = errors.New("no run output")
 	report, err = f.service.Setup(context.Background(), SetupRequest{})
 	if err != nil || report.SetupRun != "" || report.LogLocation != "" {

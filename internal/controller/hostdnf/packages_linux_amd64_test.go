@@ -298,7 +298,7 @@ func TestAFedoraAlternativeInterpreterResolvesByName(t *testing.T) {
 		}
 		return reply{exit: 1, stdout: out, stderr: errText}
 	})
-	preview, err := p.Preview(context.Background(), requirement[2:])
+	preview, err := p.Preview(context.Background(), requirement[1:])
 	if err != nil || preview.Text != out || double.calls[0].args[len(double.calls[0].args)-1] != "python3.12" {
 		t.Fatalf("%+v: %v after %q", preview, err, double.calls)
 	}

@@ -444,8 +444,8 @@ func TestPlanIsDeterministic(t *testing.T) {
 // and the observation that follows proves the closure complete.
 func TestTheStageInstallsMissingClosuresThroughHostDnf(t *testing.T) {
 	hypervisor := []string{
-		"libvirt-client", "libvirt-daemon", "libvirt-daemon-driver-network", "libvirt-daemon-driver-qemu",
-		"libvirt-daemon-driver-storage-core", "qemu-img", "qemu-kvm", "swtpm", "swtpm-tools",
+		"podman", "libvirt-client", "libvirt-daemon", "libvirt-daemon-driver-network", "libvirt-daemon-driver-qemu",
+		"libvirt-daemon-driver-storage-core", "qemu-img", "qemu-kvm-core", "swtpm", "swtpm-tools",
 	}
 	for name, test := range map[string]struct {
 		objects []api.Object
@@ -453,7 +453,7 @@ func TestTheStageInstallsMissingClosuresThroughHostDnf(t *testing.T) {
 		want    []string
 	}{
 		"a provider hosted here":          {objects: []api.Object{environment(), machine(), hostedProvider()}, present: []string{"qemu-img", "swtpm"}, want: hypervisor},
-		"installer-media tooling alone":   {objects: append([]api.Object{environment(), machine()}, installerMedia()...), want: []string{"lorax", "xorriso"}},
+		"installer-media tooling":         {objects: append([]api.Object{environment(), machine()}, installerMedia()...), want: []string{"podman", "lorax", "xorriso"}},
 		"a Machine on a libvirt provider": {objects: append([]api.Object{environment(), machine()}, guestOnLibvirt()...), want: []string{"libvirt-client"}},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -927,7 +927,7 @@ func TestDecodeRefusesPackagesItsClosuresDoNotSelect(t *testing.T) {
 // Every version but the one this build writes refuses, and the refusal names
 // it so the remedy is the executable that registered the operation.
 func TestAFrozenStageRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"controller-clients-v0", "controller-clients-v2", "controller-clients-v3", "controller-clients-v4", "controller-clients-v6"} {
+	for _, version := range []string{"controller-clients-v0", "controller-clients-v1", "controller-clients-v3", "controller-clients-v4", "controller-clients-v6"} {
 		_, err := DecodeRequest([]byte(`{"version":"` + version + `"}`))
 		if err == nil {
 			t.Fatalf("version %q was accepted", version)

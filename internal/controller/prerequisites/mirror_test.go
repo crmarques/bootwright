@@ -133,7 +133,7 @@ func TestDownloadOnlyTouchesNoHostPortAndElevatesNothing(t *testing.T) {
 	if !slices.Equal(f.events, []string{"export"}) || !slices.Equal(f.python.exported, []string{"wheels file:///srv/wheels"}) {
 		t.Fatalf("a download-only setup ran %v (%v)", f.events, f.python.exported)
 	}
-	if len(f.store.recorded) != 0 || len(f.packages.present) != 2 {
+	if len(f.store.recorded) != 0 || len(f.packages.present) != 1 {
 		t.Fatal("a download-only setup changed host or store state")
 	}
 }
