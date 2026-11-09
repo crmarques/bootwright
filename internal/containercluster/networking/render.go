@@ -27,9 +27,13 @@ func crd(name string) co.Check {
 
 // Render returns a create-only program with NNCP readiness before any CUDN.
 func Render(cluster api.Object, catalog api.Catalog) (co.Program, error) {
+	return RenderForwarding(cluster, catalog, nil)
+}
+
+func RenderForwarding(cluster api.Object, catalog api.Catalog, forwarded []string) (co.Program, error) {
 	networks := cluster.Spec().Get("networking", "secondaryNetworks").Items()
 	program := co.Program{Version: co.Version, Steps: []co.Step{}, Checks: []co.Check{}}
-	if len(networks) == 0 {
+	if len(networks) == 0 && len(forwarded) == 0 {
 		return program, nil
 	}
 	policies := co.Phase{Gate: []co.Check{crd("nodenetworkconfigurationpolicies.nmstate.io")}}
@@ -39,11 +43,15 @@ func Render(cluster api.Object, catalog api.Catalog) (co.Program, error) {
 		if bound, found := catalog.Find(api.Machine, node.Get("machineRef").Text()); found {
 			native, _ = machine.ComposeNetwork(bound, catalog)
 		}
-		policy := nodePolicy(node, networks, native)
+		policy := nodePolicy(node, networks, native, forwarded)
 		policies.Objects = append(policies.Objects, policy)
 		check := condition(policy.Ref, "Available")
 		check.Condition.FailOn = []co.Failure{{Type: "Degraded", Status: "True"}, {Type: "Ignored", Status: "True", Reason: "NoMatchingNode"}}
-		networkPhase.Gate = append(networkPhase.Gate, check)
+		if len(networks) == 0 {
+			program.Checks = append(program.Checks, check)
+		} else {
+			networkPhase.Gate = append(networkPhase.Gate, check)
+		}
 	}
 	for _, network := range networks {
 		resource := userNetwork(network)
@@ -52,7 +60,11 @@ func Render(cluster api.Object, catalog api.Catalog) (co.Program, error) {
 		check.Condition.FailOn = []co.Failure{{Type: "NetworkCreated", Status: "False", Reason: "SyncError"}}
 		program.Checks = append(program.Checks, check)
 	}
-	for _, phase := range []co.Phase{policies, networkPhase} {
+	phases := []co.Phase{policies}
+	if len(networks) > 0 {
+		phases = append(phases, networkPhase)
+	}
+	for _, phase := range phases {
 		steps, err := co.CompilePhase(phase)
 		if err != nil {
 			return co.Program{}, err
@@ -64,7 +76,7 @@ func Render(cluster api.Object, catalog api.Catalog) (co.Program, error) {
 	}
 	return program, nil
 }
-func nodePolicy(node api.Value, networks []api.Value, native api.Value) co.Object {
+func nodePolicy(node api.Value, networks []api.Value, native api.Value, forwarded []string) co.Object {
 	interfaces := []api.Value{}
 	mappings := []api.Value{}
 	seen := map[string]bool{}
@@ -83,14 +95,34 @@ func nodePolicy(node api.Value, networks []api.Value, native api.Value) co.Objec
 		}
 		mappings = append(mappings, mapping(field("localnet", network.Get("name")), field("bridge", text(bridge)), field("state", text("present"))))
 	}
+	interfaces = forwardInterfaces(interfaces, native, forwarded)
 	slices.SortFunc(interfaces, func(a, b api.Value) int {
 		return cmp.Or(cmp.Compare(a.Get("name").Text(), b.Get("name").Text()), cmp.Compare(a.Get("type").Text(), b.Get("type").Text()))
 	})
-	desired := mapping(field("ovn", mapping(field("bridge-mappings", api.ListValue(mappings...)))))
+	desired := mapping()
+	if len(mappings) > 0 {
+		desired = desired.With("ovn", mapping(field("bridge-mappings", api.ListValue(mappings...))))
+	}
 	if len(interfaces) > 0 {
 		desired = desired.With("interfaces", api.ListValue(interfaces...))
 	}
 	return object("nmstate.io/v1", "NodeNetworkConfigurationPolicy", "bootwright-"+node.Get("name").Text(), mapping(field("nodeSelector", mapping(field("kubernetes.io/hostname", node.Get("name")))), field("desiredState", desired)))
+}
+
+func forwardInterfaces(interfaces []api.Value, native api.Value, forwarded []string) []api.Value {
+	for _, name := range forwarded {
+		restated := false
+		for i, entry := range interfaces {
+			if entry.Get("name").Text() == name && entry.Get("type").Text() == "ovs-interface" {
+				interfaces[i] = entry.With("ipv4", entry.Get("ipv4").With("forwarding", api.BoolValue(true)))
+				restated = true
+			}
+		}
+		if nic, addressed := addressedInterface(native, name); !restated && addressed {
+			interfaces = append(interfaces, mapping(field("name", nic.Get("name")), field("type", nic.Get("type")), field("state", text("up")), field("ipv4", addressFamily(nic.Get("ipv4", "address"), false).With("forwarding", api.BoolValue(true)))))
+		}
+	}
+	return interfaces
 }
 
 func addressedInterface(native api.Value, name string) (api.Value, bool) {

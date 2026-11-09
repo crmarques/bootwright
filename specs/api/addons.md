@@ -468,9 +468,16 @@ network's workloads, whose routing caveat toward a pool on their own subnet is
 in [knowledge](../../.agents/knowledge/metallb-on-openshift.md).
 
 A cluster whose pool names an interface declares
-`ovnKubernetesConfig.gatewayConfig.routingViaHost: true` and
-`ipForwarding: Global`, the host routing and forwarding MetalLB needs there.
-Bootwright changes neither after installation.
+`ovnKubernetesConfig.gatewayConfig.routingViaHost: true`, the host routing
+MetalLB needs there, which Bootwright never changes after installation. The
+interface also forwards: on every node interface under the cluster's
+`ipForwarding: Global`; otherwise, for an IPv4 pool, on that interface alone,
+which the [cluster network block](../openshift-clusters.md#post-installation-network-configuration)
+enables through `nmstate`. An IPv6 pool needs `Global`, because
+NetworkManager enables IPv6 forwarding on no single interface. A node still
+forwards between every interface that forwards, so keeping two networks apart
+on a node is configuration the estate's GitOps owns, not this package
+([product scope](../project.md#product-scope)).
 
 A pool includes none of these addresses:
 - an endpoint address;
@@ -664,7 +671,8 @@ its own indexed field:
 | Interface missing, unaddressed or split | `api.invariant` | `$.spec.packages.metallb.pools[<i>].l2.interface` | `interface <interface> of pool <pool>`, then `is not declared on node <machine> of OpenShiftCluster/<cluster>`, `carries no <family> address on node <machine>` or `is on <subnet> on node <machine> and on <subnet> on node <machine>` | `declare <interface> on every node of <cluster>, or omit l2.interface`; `assign <declared> an address in the pool's subnet on every node through network.addresses`, `<declared>` the interface or the bridge interface of a bridge carrying its addresses; or `assign every node's <interface> address in one subnet` |
 | Default-route interface | `api.invariant` | as above | `interface <interface> of pool <pool> is the default-route interface of node <machine> or br-ex` | `omit l2.interface to announce a pool on the machine network` |
 | Secondary-network bridge interface | `api.invariant` | as above | `interface <interface> of pool <pool> is the bridge interface of secondary network <network>`, then `, which carries no host address` or `, whose bridge <bridge> carries its node addresses` | `name an interface that carries a node address, or omit l2.interface`, or `set l2.interface to <bridge>` |
-| No host routing or forwarding | `api.invariant` | as above | `pool <pool> announces on <interface>, which needs gatewayConfig.<setting> on OpenShiftCluster/<cluster>`, `<setting>` `routingViaHost: true` or `ipForwarding: Global` | `set spec.networking.ovnKubernetesConfig.gatewayConfig.<setting> on <cluster>, or omit l2.interface` |
+| No host routing | `api.invariant` | as above | `pool <pool> announces on <interface>, which needs gatewayConfig.routingViaHost: true on OpenShiftCluster/<cluster>` | `set spec.networking.ovnKubernetesConfig.gatewayConfig.routingViaHost: true on <cluster>, or omit l2.interface` |
+| IPv6 forwarding | `api.invariant` | as above | `pool <pool> announces IPv6 addresses on <interface>, which needs gatewayConfig.ipForwarding: Global on OpenShiftCluster/<cluster>, because IPv6 forwarding cannot be enabled on one interface` | `set spec.networking.ovnKubernetesConfig.gatewayConfig.ipForwarding: Global on <cluster>, or omit l2.interface` |
 | Interface off the pool's Network | `api.invariant` | as above | `interface <interface> of pool <pool> does not reach Network/<network>, which holds the pool, on node <machine>` | `name an interface that reaches Network/<network> on every node` |
 | Ethernet interface | `api.unverified` | as above | `interface <interface> of pool <pool> is ethernet on node <machine>, which keeps its kernel name after the agent installation` | `use the kernel name node <machine> reports, or a bond, VLAN or bridge its NetworkConfig creates` |
 | Held, network or broadcast address | `api.invariant` | `$.spec.packages.metallb.pools[<i>].addresses[<j>]` | `address <entry> of pool <pool> includes <address>`, then `, held by <holder>` or `, the network or broadcast address of <subnet>` | `exclude <address> from the pool` |

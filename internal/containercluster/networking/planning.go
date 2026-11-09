@@ -8,6 +8,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
 	co "github.com/crmarques/bootwright/internal/addons/clusterobjects"
+	"github.com/crmarques/bootwright/internal/containercluster/openshift"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -36,7 +37,9 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		return plan, fmt.Errorf("cluster network provider selection: %s", issues[0].Issue.Message)
 	}
 	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
-		if cluster.Spec().Get("networking", "secondaryNetworks").Len() == 0 {
+		forwarded := openshift.ForwardedInterfaces(cluster, catalog, c.registry)
+		secondary := cluster.Spec().Get("networking", "secondaryNetworks").Len() > 0
+		if !secondary && len(forwarded) == 0 {
 			continue
 		}
 		controller, err := lifecycle.ControllerMachine(catalog)
@@ -46,7 +49,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		if input.Controller != "" && input.Controller != controller {
 			return plan, fmt.Errorf("cluster network controller differs from operation controller")
 		}
-		request, err := renderRequest(cluster, catalog, controller)
+		request, err := renderRequest(cluster, catalog, controller, forwarded)
 		if err != nil {
 			return plan, err
 		}
@@ -61,9 +64,13 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			}
 		}
 		if len(requires) == 1 {
-			return plan, fmt.Errorf("secondary networks of %s require an executable nmstate package", cluster.Identity())
+			return plan, fmt.Errorf("the node networks of %s require an executable nmstate package", cluster.Identity())
 		}
-		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: BlockID(cluster.Name()), Description: "configure secondary networks on " + cluster.Name(), Stage: reconciliation.StageAddOns, Requires: requires, Impacts: []string{"configure-secondary-networks " + cluster.Name()}, Groups: []reconciliation.Group{{ID: "configure-networks", Description: "apply and check secondary networks", Machines: []string{controller}}}, Kind: Kind, Object: cluster.Name(), Implementation: Implementation, ContentDigest: ContentDigest(), Request: data})
+		description := "configure secondary networks on " + cluster.Name()
+		if !secondary {
+			description = "enable IP forwarding on the MetalLB interfaces of " + cluster.Name()
+		}
+		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: BlockID(cluster.Name()), Description: description, Stage: reconciliation.StageAddOns, Requires: requires, Impacts: []string{"configure-secondary-networks " + cluster.Name()}, Groups: []reconciliation.Group{{ID: "configure-networks", Description: "apply and check secondary networks", Machines: []string{controller}}}, Kind: Kind, Object: cluster.Name(), Implementation: Implementation, ContentDigest: ContentDigest(), Request: data})
 		if input.Verb == reconciliation.Destroy {
 			index := len(plan.Definitions) - 1
 			removal, err := c.Removal(ctx, reconciliation.Block{BlockDefinition: plan.Definitions[index]})
@@ -77,8 +84,8 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	}
 	return plan, nil
 }
-func renderRequest(cluster api.Object, catalog api.Catalog, controller string) (Request, error) {
-	program, err := Render(cluster, catalog)
+func renderRequest(cluster api.Object, catalog api.Catalog, controller string, forwarded []string) (Request, error) {
+	program, err := RenderForwarding(cluster, catalog, forwarded)
 	if err != nil {
 		return Request{}, err
 	}
@@ -94,10 +101,11 @@ func (c Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 	}
 	result := []lifecycle.Refusal{}
 	for _, cluster := range state.Effective().OfKind(api.OpenShiftCluster) {
-		if cluster.Spec().Get("networking", "secondaryNetworks").Len() == 0 {
+		forwarded := openshift.ForwardedInterfaces(cluster, state.Effective(), c.registry)
+		if cluster.Spec().Get("networking", "secondaryNetworks").Len() == 0 && len(forwarded) == 0 {
 			continue
 		}
-		if _, err := Render(cluster, state.Effective()); err != nil {
+		if _, err := RenderForwarding(cluster, state.Effective(), forwarded); err != nil {
 			result = append(result, lifecycle.RefusalOf(cluster, err.Error(), "reduce or correct the secondary-network declarations"))
 		}
 	}

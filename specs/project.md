@@ -60,6 +60,21 @@ existing bridge ([substrates](substrates.md#provider-host-realization)). DNS and
 artifact serving are each a managed service or an external endpoint, as the
 Environment selects.
 
+Bootwright provisions and sets up only what GitOps cannot do or would have to
+undo, and GitOps configures the rest on the operators Bootwright installs
+([D246](milestones/backlog.md#d246)): what only an installer writes, such as
+a node's network configuration, its addresses, the virtual IPs, the cluster
+and service networks and the install-time OVN-Kubernetes settings; what a
+Machine Bootwright provisions needs, such as the host secondary networks a
+hosted cluster's virtual machines attach to; what is disruptive to change
+later; and the checks that keep declared facts consistent, so a network only
+GitOps attaches workloads to is still declared as a `Network`. Workload
+networks and their segregation, ingress shards, egress addresses and network
+policy are GitOps configuration. A cluster's secondary networks and MetalLB
+pools are provisioning features an estate may select, never a segregation
+guarantee; control passes to GitOps when the operator configures the
+[GitOps bootstrap object](add-ons.md#the-gitops-bootstrap-object).
+
 ## Lifecycle and handoff
 
 Bootwright realizes the declared, owned scope of one frozen environment in a

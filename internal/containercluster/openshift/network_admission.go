@@ -462,13 +462,56 @@ func validateNetworkIPAM(n api.Value, base string) []api.Issue {
 }
 
 func ValidateNetworkProviders(o api.Object, c api.Catalog, r addons.Registry) []api.Issue {
-	if o.Kind() != api.OpenShiftCluster || o.Spec().Get("networking", "secondaryNetworks").Len() == 0 {
+	if o.Kind() != api.OpenShiftCluster {
+		return nil
+	}
+	secondary := o.Spec().Get("networking", "secondaryNetworks").Len() > 0
+	forwarded := ForwardedInterfaces(o, c, r)
+	if !secondary && len(forwarded) == 0 || providesNMState(o, c, r) {
+		return nil
+	}
+	if secondary {
+		return []api.Issue{invariantRemediation("$.spec.networking.secondaryNetworks", "secondary networks of OpenShiftCluster/"+o.Name()+" require capability nmstate", "select a package or add-on providing nmstate in a binding for this cluster")}
+	}
+	return []api.Issue{invariantRemediation("$.spec.networking.ovnKubernetesConfig.gatewayConfig", fmt.Sprintf("MetalLB pools of OpenShiftCluster/%s announce on %s, where Bootwright enables IP forwarding through capability nmstate", o.Name(), strings.Join(forwarded, ", ")), "select a package or add-on providing nmstate in a binding for this cluster, or set gatewayConfig.ipForwarding: Global")}
+}
+
+func ForwardedInterfaces(o api.Object, c api.Catalog, r addons.Registry) []string {
+	if o.Kind() != api.OpenShiftCluster || o.Spec().Get("networking", "ovnKubernetesConfig", "gatewayConfig", "ipForwarding").Text() == "Global" {
 		return nil
 	}
 	instances, _ := addons.Instances(c, r)
+	names := []string{}
+	for _, i := range instances {
+		if i.Instance.Cluster != o.Name() || i.Package.Name != "metallb" {
+			continue
+		}
+		for _, pool := range i.Instance.Config.Get("pools").Items() {
+			if iface := pool.Get("l2", "interface").Text(); iface != "" && ipv4Pool(pool) && !slices.Contains(names, iface) {
+				names = append(names, iface)
+			}
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
+func ipv4Pool(pool api.Value) bool {
+	for _, entry := range pool.Get("addresses").Strings() {
+		first, _, _ := strings.Cut(entry, "-")
+		first, _, _ = strings.Cut(first, "/")
+		if a, err := netip.ParseAddr(first); err == nil {
+			return a.Unmap().Is4()
+		}
+	}
+	return false
+}
+
+func providesNMState(o api.Object, c api.Catalog, r addons.Registry) bool {
+	instances, _ := addons.Instances(c, r)
 	for _, i := range instances {
 		if i.Instance.Cluster == o.Name() && slices.Contains(i.Package.Provides, "nmstate") {
-			return nil
+			return true
 		}
 	}
 	for _, b := range c.OfKind(api.ClusterAddonBinding) {
@@ -478,16 +521,16 @@ func ValidateNetworkProviders(o api.Object, c api.Catalog, r addons.Registry) []
 		selected, _ := addons.ExpandBinding(b, c)
 		for _, a := range selected {
 			if slices.Contains(a.Spec().Get("provides").Strings(), "nmstate") {
-				return nil
+				return true
 			}
 		}
 		for _, f := range b.Spec().Get("packages").Fields() {
 			if p, ok := r.Find(f.Name); ok && slices.Contains(p.Provides, "nmstate") {
-				return nil
+				return true
 			}
 		}
 	}
-	return []api.Issue{invariantRemediation("$.spec.networking.secondaryNetworks", "secondary networks of OpenShiftCluster/"+o.Name()+" require capability nmstate", "select a package or add-on providing nmstate in a binding for this cluster")}
+	return false
 }
 
 func reservedOVNInterface(name string) bool {

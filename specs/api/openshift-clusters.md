@@ -376,8 +376,13 @@ MTU-less VLAN on a bond of `mtu: 9000` is admitted. A value above refuses at
 that `mtu`.
 
 A cluster whose [MetalLB pool](addons.md#package-metallb) names an interface
-declares `gatewayConfig.routingViaHost: true` and `ipForwarding: Global`, an
-install-time declaration no add-on changes.
+declares `gatewayConfig.routingViaHost: true`, an install-time declaration no
+add-on changes. Unless it declares `ipForwarding: Global`, the
+[cluster network block](../openshift-clusters.md#post-installation-network-configuration)
+enables IPv4 forwarding on each interface an IPv4 pool names, so a binding of
+the cluster selects a package or add-on providing `nmstate`, refused
+`api.invariant` at `ovnKubernetesConfig.gatewayConfig` naming the interfaces
+otherwise; an IPv6 interface pool needs `Global`.
 
 A cluster's machine networks are the CIDRs, in the install addresses' family,
 of the `machineNetworkRefs` [Networks](networks.md) in order, else of those

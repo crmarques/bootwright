@@ -1126,7 +1126,9 @@ checks refuse `--trust-on-first-use` and borrowed SSH options.
 
 The block `cluster-network-<cluster>`, in the `add-ons` stage, configures what
 only a running cluster accepts: the cluster's
-[secondary networks](api/openshift-clusters.md#networking). It requires the
+[secondary networks](api/openshift-clusters.md#networking) and the IP
+forwarding its [MetalLB interface pools](api/addons.md#package-metallb) need.
+It requires the
 installation block and each add-on instance that provides what its intent
 needs (`nmstate`), and reaches the cluster through the administrator kubeconfig
 custody lends it. MetalLB address pools and advertisements are the MetalLB
@@ -1151,6 +1153,16 @@ it, so neighbours keep the node's hardware address, and restates the bridge
 interface with both families disabled: the shape OpenShift documents for
 `br-ex`; nothing else changes. A node with no address there gets the bridge as
 under `none`, without the internal port.
+
+Unless the cluster declares `ipForwarding: Global`, each node's policy also
+enables IPv4 forwarding (`ipv4.forwarding: true`) on every interface an IPv4
+MetalLB pool's `l2.interface` names: on the bridge's `ovs-interface` the
+policy already holds, or on that interface restated with its type and exactly
+its declared static IPv4 addresses, DHCP off. A cluster with such a pool and no
+secondary network still gets the block, holding only those policies: it
+states no bridge mapping, waits for each policy `Available` and creates no
+ClusterUserDefinedNetwork ([D246](milestones/backlog.md#d246)). No other
+interface forwards because of Bootwright.
 
 Every object is created through the
 [cluster object program](add-ons.md#the-cluster-object-program) under its

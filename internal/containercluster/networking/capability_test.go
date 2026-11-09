@@ -20,7 +20,7 @@ func (r networkRunner) Run(context.Context, lifecycle.RunRequest) (lifecycle.Run
 	return r.result, nil
 }
 func TestNetworkPartialReceiptsSurviveButUnsafeEvidenceDoesNot(t *testing.T) {
-	request, err := renderRequest(clusterFixture(), noMachines, "controller")
+	request, err := renderRequest(clusterFixture(), noMachines, "controller", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

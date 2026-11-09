@@ -11837,8 +11837,8 @@ removed.
    (the controller has no route to either environment, by design), and no VM
    attached to a Localnet network. The egress-IP fact B889 names was not read.
 
-**What stays open.** [B1124](backlog.md#b1124), forwarding between the
-environment networks through the node. The items whose operator gate was
+**What stays open.** B1124, forwarding between the environment networks
+through the node, later retired under [D246](backlog.md#d246). The items whose operator gate was
 B755's, B757's or B729's row, such as [B735](m4.md#b735),
 [B84](m4.md#b84), [B727](m4.md#b727) and [B758](m4.md#b758), keep their
 status until the owner accepts them.

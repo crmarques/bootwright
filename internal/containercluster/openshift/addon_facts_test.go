@@ -211,17 +211,35 @@ func TestMetalLBInterfacePoolUsesDerivedGatewayFacts(t *testing.T) {
 	registry := addonpackages.Builtin()
 	binding := obj(api.ClusterAddonBinding, "load-balancer", m("clusterRef", cluster.Name(), "packages", m("metallb", m("subscription", m("channel", "example-channel", "startingCSV", "metallb-operator.v0.0.0"), "pools", list(m("name", "services", "addresses", api.StringList("203.0.113.128-203.0.113.135"), "l2", m("interface", "eth1")))))))
 	binding, _ = addons.NormalizePackages(binding, registry)
-	for _, forwarding := range []string{"Global", "Restricted"} {
-		cluster = cluster.WithSpec(cluster.Spec().WithPath(api.StringValue(forwarding), "networking", "ovnKubernetesConfig", "gatewayConfig", "ipForwarding"))
+	nmstate := obj(api.ClusterAddonBinding, "node-network", m("clusterRef", cluster.Name(), "packages", m("nmstate", m("subscription", m("channel", "stable", "startingCSV", "kubernetes-nmstate-operator.v0.0.0")))))
+	nmstate, _ = addons.NormalizePackages(nmstate, registry)
+	for _, forwarding := range []string{"Global", "Restricted", ""} {
+		gateway := cluster.Spec().WithPath(api.StringValue(forwarding), "networking", "ovnKubernetesConfig", "gatewayConfig", "ipForwarding")
+		if forwarding == "" {
+			gateway = cluster.Spec().WithPath(m("routingViaHost", true), "networking", "ovnKubernetesConfig", "gatewayConfig")
+		}
+		cluster := cluster.WithSpec(gateway)
 		effective := api.NewCatalog(append(slices.Clone(objects), cluster, binding))
 		issues := addons.ValidateWithRegistry(binding, effective, registry, AddonFacts(effective, cluster.Name()))
-		if forwarding == "Global" && (len(issues) != 1 || issues[0].Code != "api.unverified" || !strings.Contains(issues[0].Message, "interface eth1 of pool services is ethernet on node node-0, which keeps its kernel name")) {
-			t.Fatal(issues)
+		if len(issues) != 1 || issues[0].Code != "api.unverified" || !strings.Contains(issues[0].Message, "interface eth1 of pool services is ethernet on node node-0, which keeps its kernel name") {
+			t.Fatal(forwarding, issues)
 		}
-		if forwarding == "Restricted" && !slices.ContainsFunc(issues, func(issue api.Issue) bool {
-			return issue.Field == "$.spec.packages.metallb.pools[0].l2.interface" && strings.Contains(issue.Message, "ipForwarding: Global")
-		}) {
-			t.Fatalf("forwarding refusal: %+v", issues)
+		forwarded := ForwardedInterfaces(cluster, effective, registry)
+		providers := ValidateNetworkProviders(cluster, effective, registry)
+		if forwarding == "Global" {
+			if len(forwarded) != 0 || len(providers) != 0 {
+				t.Fatalf("a globally forwarding cluster forwards no interface itself: %v %v", forwarded, providers)
+			}
+			continue
+		}
+		if !slices.Equal(forwarded, []string{"eth1"}) {
+			t.Fatalf("%q: forwarded interfaces %v", forwarding, forwarded)
+		}
+		if len(providers) != 1 || providers[0].Field != "$.spec.networking.ovnKubernetesConfig.gatewayConfig" || !strings.Contains(providers[0].Message, "announce on eth1, where Bootwright enables IP forwarding through capability nmstate") || !strings.Contains(providers[0].Remediation, "ipForwarding: Global") {
+			t.Fatalf("%q: nmstate requirement %+v", forwarding, providers)
+		}
+		if providers := ValidateNetworkProviders(cluster, api.NewCatalog(append(slices.Clone(objects), cluster, binding, nmstate)), registry); len(providers) != 0 {
+			t.Fatalf("%q: an nmstate binding meets the requirement: %+v", forwarding, providers)
 		}
 	}
 }

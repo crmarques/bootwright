@@ -264,8 +264,8 @@ func interfaceNetworks(pool api.MetalLBPool, f addons.ClusterFacts, field string
 	if !f.Gateway.RoutingViaHost {
 		add("api.invariant", field, fmt.Sprintf("pool %s announces on %s, which needs gatewayConfig.routingViaHost: true on OpenShiftCluster/%s", pool.Name, iface, f.Name), fmt.Sprintf("set spec.networking.ovnKubernetesConfig.gatewayConfig.routingViaHost: true on %s, or omit l2.interface", f.Name))
 	}
-	if f.Gateway.IPForwarding != "Global" {
-		add("api.invariant", field, fmt.Sprintf("pool %s announces on %s, which needs gatewayConfig.ipForwarding: Global on OpenShiftCluster/%s", pool.Name, iface, f.Name), fmt.Sprintf("set spec.networking.ovnKubernetesConfig.gatewayConfig.ipForwarding: Global on %s, or omit l2.interface", f.Name))
+	if f.Gateway.IPForwarding != "Global" && f.Family == "ipv6" {
+		add("api.invariant", field, fmt.Sprintf("pool %s announces IPv6 addresses on %s, which needs gatewayConfig.ipForwarding: Global on OpenShiftCluster/%s, because IPv6 forwarding cannot be enabled on one interface", pool.Name, iface, f.Name), fmt.Sprintf("set spec.networking.ovnKubernetesConfig.gatewayConfig.ipForwarding: Global on %s, or omit l2.interface", f.Name))
 	}
 	return networks
 }

@@ -66,12 +66,14 @@ func TestSecondaryInterfaceAdmissionAndReservedAddresses(t *testing.T) {
 	f.NodeNetworks[0].Interfaces = append(f.NodeNetworks[0].Interfaces, addons.NodeInterface{Name: "eth1", Addresses: []netip.Prefix{netip.MustParsePrefix("198.51.100.10/24")}, Networks: []string{"tenant"}})
 	p := pool("secondary", "198.51.100.80-198.51.100.90").With("l2", api.MapValue(api.FieldValue{Name: "interface", Value: api.StringValue("eth1")}))
 	i := addons.Instance{Config: config(p)}
-	if len(admitPools(i, f)) != 2 {
-		t.Fatal("missing forwarding and host routing were not refused")
+	if issues := admitPools(i, f); len(issues) != 1 || !strings.Contains(issues[0].Message, "routingViaHost") {
+		t.Fatalf("missing host routing was not refused: %+v", issues)
 	}
-	f.Gateway = addons.OVNGateway{RoutingViaHost: true, IPForwarding: "Global"}
-	if issues := admitPools(i, f); len(issues) > 0 {
-		t.Fatal(issues)
+	for _, forwarding := range []string{"", "Restricted", "Global"} {
+		f.Gateway = addons.OVNGateway{RoutingViaHost: true, IPForwarding: forwarding}
+		if issues := admitPools(i, f); len(issues) > 0 {
+			t.Fatal(forwarding, issues)
+		}
 	}
 	f.Reserved = []addons.AddressHolder{{Addr: netip.MustParseAddr("198.51.100.85"), Holder: "DNSServer/resolver"}}
 	if issues := admitPools(i, f); len(issues) != 1 || !strings.Contains(issues[0].Message, "DNSServer/resolver") {
@@ -252,7 +254,6 @@ func TestPoolInterfaceAndNetworkRefusalFields(t *testing.T) {
 			f.SecondaryNetworks = []addons.SecondaryNetwork{{Name: "tenant", Interface: "eth1", Bridge: "br-tenant", HostAddresses: true}}
 		}, "whose bridge br-tenant carries its node addresses", ".l2.interface"},
 		{"host routing", func(f *addons.ClusterFacts, _ *api.Value) { f.Gateway.RoutingViaHost = false }, "needs gatewayConfig.routingViaHost: true", ".l2.interface"},
-		{"forwarding", func(f *addons.ClusterFacts, _ *api.Value) { f.Gateway.IPForwarding = "Restricted" }, "needs gatewayConfig.ipForwarding: Global", ".l2.interface"},
 		{"endpoint", func(f *addons.ClusterFacts, _ *api.Value) {
 			f.Endpoints = []addons.AddressHolder{{Addr: netip.MustParseAddr("198.51.100.85"), Holder: "the api endpoint"}}
 		}, "held by the api endpoint", ".addresses[0]"},
@@ -326,5 +327,30 @@ func TestPoolNetworkRefusalsNameAReachableRemedy(t *testing.T) {
 				t.Fatalf("%+v", issues)
 			}
 		})
+	}
+}
+
+func TestInterfacePoolForwardingIsGlobalOnlyForIPv6(t *testing.T) {
+	ipv4 := facts()
+	ipv4.Gateway = addons.OVNGateway{RoutingViaHost: true, IPForwarding: "Restricted"}
+	ipv4.NodeNetworks[0].Interfaces = append(ipv4.NodeNetworks[0].Interfaces, addons.NodeInterface{Name: "eth1", Addresses: []netip.Prefix{netip.MustParsePrefix("198.51.100.10/24")}, Networks: []string{"tenant"}})
+	l2 := api.MapValue(api.FieldValue{Name: "interface", Value: api.StringValue("eth1")})
+	if issues := admitPools(addons.Instance{Config: config(pool("secondary", "198.51.100.80-198.51.100.90").With("l2", l2))}, ipv4); len(issues) != 0 {
+		t.Fatalf("an IPv4 interface pool is forwarded on its interface without Global: %+v", issues)
+	}
+	ipv6 := addons.ClusterFacts{Name: "cluster", Family: "ipv6", MachineNetworks: []netip.Prefix{netip.MustParsePrefix("2001:db8::/64")}, Networks: []addons.NetworkFact{{Name: "lan", Prefix: netip.MustParsePrefix("2001:db8::/64")}, {Name: "tenant", Prefix: netip.MustParsePrefix("2001:db8:1::/64")}}, ClusterNetworks: []netip.Prefix{netip.MustParsePrefix("fd01::/48")}, ServiceNetworks: []netip.Prefix{netip.MustParsePrefix("fd02::/112")}, NodeNetworks: []addons.NodeNetwork{{Machine: "node", DefaultRouteInterface: "eth0", Interfaces: []addons.NodeInterface{{Name: "eth0", Addresses: []netip.Prefix{netip.MustParsePrefix("2001:db8::10/64")}, Networks: []string{"lan"}}, {Name: "eth1", Addresses: []netip.Prefix{netip.MustParsePrefix("2001:db8:1::10/64")}, Networks: []string{"tenant"}}}, NextHops: []netip.Addr{netip.MustParseAddr("2001:db8::1")}}}}
+	p := pool("secondary", "2001:db8:1::80-2001:db8:1::90").With("l2", l2)
+	for _, forwarding := range []string{"Global", "Restricted", ""} {
+		ipv6.Gateway = addons.OVNGateway{RoutingViaHost: true, IPForwarding: forwarding}
+		issues := admitPools(addons.Instance{Config: config(p)}, ipv6)
+		if forwarding == "Global" {
+			if len(issues) != 0 {
+				t.Fatalf("passing twin: %+v", issues)
+			}
+			continue
+		}
+		if len(issues) != 1 || issues[0].Code != "api.invariant" || issues[0].Field != ".pools[0].l2.interface" || !strings.Contains(issues[0].Message, "needs gatewayConfig.ipForwarding: Global") || !strings.Contains(issues[0].Remediation, "ipForwarding: Global") {
+			t.Fatalf("%q: %+v", forwarding, issues)
+		}
 	}
 }

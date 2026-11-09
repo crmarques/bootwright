@@ -46,10 +46,13 @@ namespaces, workloads, IngressControllers, EgressFirewalls and NetworkPolicies u
 `workloads/`, which are outside Bootwright's
 [scope](../../specs/project.md#product-scope). One ledger row per item run.
 
-The node forwards between its two environment networks, because MetalLB on a
-secondary network needs `ipForwarding: Global`: a client that routes through
-the node's address could cross. The app containers carry no such route, and
-the gap is [B1124](../../specs/milestones/backlog.md#b1124).
+MetalLB on a secondary network needs IP forwarding on its interface, and
+Bootwright enables IPv4 forwarding on `br-stg` and `br-prd` alone
+([B1231](../../specs/milestones/m4.md#b1231)), never cluster-wide. The node
+still forwards between those two bridges, so a client that routes through the
+node's address could cross; the app containers carry no such route, and
+keeping the environments apart on the node is GitOps configuration, not
+Bootwright's ([D246](../../specs/milestones/backlog.md#d246)).
 
 Steps marked **host** run in one Bash session in the checkout being tested on
 this host. Steps marked **FIPS controller** run in an interactive session on
@@ -500,6 +503,15 @@ admits no environment route:
 oc get route -n staging app -o jsonpath='{range .status.ingress[*]}{.routerName}{"\n"}{end}'      # staging only
 oc get route -n production app -o jsonpath='{range .status.ingress[*]}{.routerName}{"\n"}{end}'   # production only
 curl -sk -o /dev/null -w '%{http_code}\n' "https://console-openshift-console.apps.sno.e2e.example.test/"   # 200
+```
+
+Forwarding is enabled on the two bridges and nowhere else Bootwright
+configures, and the cluster does not forward on every interface:
+
+```sh
+oc get network.operator cluster -o jsonpath='{.spec.defaultNetwork.ovnKubernetesConfig.gatewayConfig.ipForwarding}{"\n"}'   # empty or Restricted
+oc get nncp bootwright-master-0 -o jsonpath='{.status.conditions[?(@.type=="Available")].status}{"\n"}'                      # True
+oc debug node/master-0 -- chroot /host sysctl -n net.ipv4.conf.br-stg.forwarding net.ipv4.conf.br-prd.forwarding               # 1 and 1
 ```
 
 Record each answer. Remove the environments before the destroy, so no

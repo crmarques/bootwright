@@ -8,6 +8,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
+	addonpackages "github.com/crmarques/bootwright/internal/addons/packages"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -59,5 +60,51 @@ func TestAnAuthoredNMStateProviderSatisfiesTheNetworkBlockLikeABuiltInPackage(t 
 	want[1].Object = "cluster.authnet"
 	if got := requirements(binding(field("addonRefs", api.StringList("authnet"))), authoredProvider(t, "authnet")); !slices.Equal(got, want) {
 		t.Fatalf("authored: %v", got)
+	}
+}
+
+func TestAForwardedMetalLBInterfacePlansTheNetworkBlockAlone(t *testing.T) {
+	registry := addonpackages.Builtin()
+	cluster, catalog := addressedFixture("bridge")
+	cluster = cluster.WithSpec(cluster.Spec().With("networking", mapping()))
+	environment := api.NewObject(api.Environment, "env", mapping(), mapping(field("controller", mapping(field("machineRef", text("controller"))))))
+	subscription := func(csv string) api.Value {
+		return mapping(field("subscription", mapping(field("channel", text("stable")), field("startingCSV", text(csv)))))
+	}
+	pool := func(addresses string) api.Value {
+		return mapping(field("name", text("edge")), field("addresses", api.StringList(addresses)), field("l2", mapping(field("interface", text("eth1")))))
+	}
+	plan := func(metallb api.Value, forwarding string) lifecycle.CapabilityPlan {
+		t.Helper()
+		packages := mapping(field("nmstate", subscription("kubernetes-nmstate-operator.v0.0.0")), field("metallb", metallb))
+		binding, _ := addons.NormalizePackages(api.NewObject(api.ClusterAddonBinding, "binding", mapping(), mapping(field("clusterRef", text("cluster")), field("packages", packages))), registry)
+		spec := cluster.Spec()
+		if forwarding != "" {
+			spec = spec.WithPath(text(forwarding), "networking", "ovnKubernetesConfig", "gatewayConfig", "ipForwarding")
+		}
+		state := api.NewCatalog(append(catalog.Objects(), environment, cluster.WithSpec(spec), binding))
+		result, err := New(networkRunner{}, registry).Plan(context.Background(), lifecycle.PlanInput{State: compilation.NewState(state, state, nil), Verb: reconciliation.Apply})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	withPool := subscription("metallb-operator.v0.0.0").With("pools", api.ListValue(pool("198.51.100.80-198.51.100.90")))
+	got := plan(withPool, "Restricted")
+	if len(got.Definitions) != 1 || got.Definitions[0].Description != "enable IP forwarding on the MetalLB interfaces of cluster" || !slices.Contains(got.Definitions[0].Requires, reconciliation.ObjectRef{Kind: "ClusterAddonBinding", Object: "cluster.nmstate"}) {
+		t.Fatalf("%+v", got.Definitions)
+	}
+	for name, metallb := range map[string]api.Value{
+		"global forwarding": withPool,
+		"no interface pool": subscription("metallb-operator.v0.0.0").With("pools", api.ListValue(pool("198.51.100.80-198.51.100.90").With("l2", mapping()))),
+		"an IPv6 pool":      subscription("metallb-operator.v0.0.0").With("pools", api.ListValue(pool("2001:db8:1::80-2001:db8:1::90"))),
+	} {
+		forwarding := "Restricted"
+		if name == "global forwarding" {
+			forwarding = "Global"
+		}
+		if got := plan(metallb, forwarding); len(got.Definitions) != 0 {
+			t.Fatalf("%s plans no network block: %+v", name, got.Definitions)
+		}
 	}
 }

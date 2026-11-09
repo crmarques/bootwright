@@ -76,7 +76,21 @@ check, so it installs on platform `none` (R4:C22, medium confidence).
   documentation difference, not evidence that one mechanism fails on another
   release. B727's driver uses one general mechanism; a version specialization
   is registered only if a run shows it failing where a provable artifact or
-  cluster fact discriminates (D162).
+  cluster fact discriminates (D162). Since B1231 that mechanism is the NNCP
+  `ipv4.forwarding: true` on the pool's interface, written by the cluster
+  network block, and `Global` stays the operator's alternative.
+- Per-interface forwarding exists for IPv4 only. NetworkManager maps
+  `ipv4.forwarding` to `net.ipv4.conf.<interface>.forwarding` and its
+  maintainers decline a per-device IPv6 setting, because IPv6 forwarding is
+  enabled for the whole host
+  ([NetworkManager commit](https://git.uninsane.org/colin/NetworkManager/commit/a8a2e6d727f0bba1d572e41c572ea1e137ac52f4),
+  [RHEL-36429](https://issues.redhat.com/browse/RHEL-36429)); so an IPv6
+  interface pool keeps `Global`. UNVERIFIED on this tree: that the shipped
+  NMState handler accepts `forwarding` before the 4.22 operator, and what
+  OVN-Kubernetes' `Restricted` rules drop between two forwarding interfaces.
+  Linux forwards a packet when its ingress interface forwards, so two
+  forwarding bridges on one node route between each other unless a filter
+  drops it.
 - A MetalLB address must not share a subnet or VLAN with an additional network
   on a source pod on the same node (R4:C14).
 - A pool that no advertisement selects allocates addresses nobody announces

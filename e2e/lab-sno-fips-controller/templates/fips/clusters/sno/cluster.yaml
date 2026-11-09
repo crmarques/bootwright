@@ -39,12 +39,12 @@ spec:
 {{- $trunk := .Values.environments.trunk.interface }}
 
   # MetalLB announces each environment's pool on its bridge, which needs host
-  # routing and forwarding on the node (package metallb).
+  # routing; Bootwright enables IPv4 forwarding on each bridge alone (package
+  # metallb), never on every interface.
   networking:
     ovnKubernetesConfig:
       gatewayConfig:
         routingViaHost: true
-        ipForwarding: Global
 
     secondaryNetworks:
 {{- range $name, $env := dict "staging" .Values.environments.staging "production" .Values.environments.production }}

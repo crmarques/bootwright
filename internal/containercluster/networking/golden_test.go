@@ -132,7 +132,7 @@ func clusterFixture() api.Object {
 	return api.NewObject(api.OpenShiftCluster, "cluster", mapping(), mapping(field("distribution", mapping(field("release", mapping(field("version", text("4.21.15")))))), field("nodes", api.ListValue(mapping(field("name", text("node-a")), field("machineRef", text("machine-a"))), mapping(field("name", text("node-b")), field("machineRef", text("machine-b"))))), field("networking", mapping(field("secondaryNetworks", api.ListValue(network("tenant-a", "10"), network("tenant-b", "20")))))))
 }
 func TestNetworkRequestGolden(t *testing.T) {
-	request, err := renderRequest(clusterFixture(), noMachines, "controller")
+	request, err := renderRequest(clusterFixture(), noMachines, "controller", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func addressedFixture(hostAddresses string) (api.Object, api.Catalog) {
 
 func TestAddressedBridgeRequestGolden(t *testing.T) {
 	cluster, catalog := addressedFixture("bridge")
-	request, err := renderRequest(cluster, catalog, "controller")
+	request, err := renderRequest(cluster, catalog, "controller", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,13 +205,13 @@ func TestAddressedBridgeRequestGolden(t *testing.T) {
 
 func TestHostAddressesNoneRendersTheAddresslessBridge(t *testing.T) {
 	cluster, catalog := addressedFixture("")
-	want, err := renderRequest(cluster, api.NewCatalog(nil), "controller")
+	want, err := renderRequest(cluster, api.NewCatalog(nil), "controller", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, placement := range []string{"", "none"} {
 		cluster, catalog = addressedFixture(placement)
-		got, err := renderRequest(cluster, catalog, "controller")
+		got, err := renderRequest(cluster, catalog, "controller", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -230,7 +230,7 @@ func TestAddressedBridgePolicyShape(t *testing.T) {
 		if len(issues) > 0 {
 			t.Fatal(issues)
 		}
-		return nodePolicy(api.MapValue(field("name", text(machineName)), field("machineRef", text(machineName))), networks, native).Body.Get("spec", "desiredState", "interfaces").Items()
+		return nodePolicy(api.MapValue(field("name", text(machineName)), field("machineRef", text(machineName))), networks, native, nil).Body.Get("spec", "desiredState", "interfaces").Items()
 	}
 	b := policy("machine-b")
 	if len(b) != 1 || b[0].Get("bridge", "port").Len() != 1 {
@@ -284,5 +284,80 @@ func TestABridgeInterfaceOverridesTheClusterInterfaceOnItsNode(t *testing.T) {
 	}
 	if ports["bootwright-node-a"] != "eth1" || ports["bootwright-node-b"] != "ens5" {
 		t.Fatalf("bridge ports = %v", ports)
+	}
+}
+
+func TestForwardedBridgeRequestGolden(t *testing.T) {
+	cluster, catalog := addressedFixture("bridge")
+	request, err := renderRequest(cluster, catalog, "controller", []string{"br-tenant"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	matchesGolden(t, "forwarded-bridge", data, false)
+	program, err := RenderForwarding(cluster, catalog, []string{"br-tenant"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unforwarded, err := Render(cluster, catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(program.Steps) != len(unforwarded.Steps) || len(program.Checks) != len(unforwarded.Checks) {
+		t.Fatal("forwarding on a bridge changes only the bridge interface it restates")
+	}
+}
+
+func TestForwardingOnlyRequestGolden(t *testing.T) {
+	cluster, catalog := addressedFixture("bridge")
+	cluster = cluster.WithSpec(cluster.Spec().With("networking", mapping()))
+	objects := []api.Object{}
+	for _, o := range catalog.Objects() {
+		if o.Kind() == api.Machine && o.Name() == "machine-b" {
+			network := o.Spec().Get("network")
+			addresses := append(network.Get("addresses").Items(), mapping(field("name", text("host-4")), field("address", text("198.51.100.13")), field("interface", text("eth1"))))
+			o = o.WithSpec(o.Spec().With("network", network.With("addresses", api.ListValue(addresses...))))
+		}
+		objects = append(objects, o)
+	}
+	catalog = api.NewCatalog(objects)
+	request, err := renderRequest(cluster, catalog, "controller", []string{"eth1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	matchesGolden(t, "forwarded-interface", data, false)
+	program, err := RenderForwarding(cluster, catalog, []string{"eth1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	creates := []co.ObjectEntry{}
+	for _, step := range program.Steps {
+		if step.Create != nil {
+			creates = append(creates, *step.Create)
+		}
+	}
+	if len(creates) != 2 || creates[0].Kind != "NodeNetworkConfigurationPolicy" || creates[1].Kind != "NodeNetworkConfigurationPolicy" || len(program.Checks) != 2 {
+		t.Fatalf("a forwarding-only program creates one policy per node and checks each: %+v %+v", creates, program.Checks)
+	}
+	var body struct {
+		Spec struct {
+			DesiredState map[string]json.RawMessage `json:"desiredState"`
+		} `json:"spec"`
+	}
+	if err := json.Unmarshal(creates[0].Body, &body); err != nil {
+		t.Fatal(err)
+	}
+	if _, mapped := body.Spec.DesiredState["ovn"]; mapped {
+		t.Fatal("a policy without secondary networks states no bridge mappings")
+	}
+	if empty, err := Render(cluster, catalog); err != nil || len(empty.Steps) != 0 {
+		t.Fatal("no secondary network and no forwarded interface renders nothing", err)
 	}
 }

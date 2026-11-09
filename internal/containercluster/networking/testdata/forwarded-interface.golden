@@ -1,0 +1,174 @@
+{
+  "budgetSeconds": 1800,
+  "cluster": "cluster",
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "producedInputs": [
+    {
+      "kind": "OpenShiftCluster",
+      "object": "cluster",
+      "output": "kubeconfig"
+    }
+  ],
+  "program": {
+    "checks": [
+      {
+        "condition": {
+          "apiVersion": "nmstate.io/v1",
+          "failOn": [
+            {
+              "status": "True",
+              "type": "Degraded"
+            },
+            {
+              "reason": "NoMatchingNode",
+              "status": "True",
+              "type": "Ignored"
+            }
+          ],
+          "kind": "NodeNetworkConfigurationPolicy",
+          "name": "bootwright-node-a",
+          "namespace": "",
+          "namespaced": false,
+          "status": "True",
+          "type": "Available"
+        }
+      },
+      {
+        "condition": {
+          "apiVersion": "nmstate.io/v1",
+          "failOn": [
+            {
+              "status": "True",
+              "type": "Degraded"
+            },
+            {
+              "reason": "NoMatchingNode",
+              "status": "True",
+              "type": "Ignored"
+            }
+          ],
+          "kind": "NodeNetworkConfigurationPolicy",
+          "name": "bootwright-node-b",
+          "namespace": "",
+          "namespaced": false,
+          "status": "True",
+          "type": "Available"
+        }
+      }
+    ],
+    "steps": [
+      {
+        "kind": "wait",
+        "wait": [
+          {
+            "condition": {
+              "apiVersion": "apiextensions.k8s.io/v1",
+              "kind": "CustomResourceDefinition",
+              "name": "nodenetworkconfigurationpolicies.nmstate.io",
+              "namespace": "",
+              "namespaced": false,
+              "status": "True",
+              "type": "Established"
+            }
+          }
+        ]
+      },
+      {
+        "create": {
+          "apiVersion": "nmstate.io/v1",
+          "body": {
+            "apiVersion": "nmstate.io/v1",
+            "kind": "NodeNetworkConfigurationPolicy",
+            "metadata": {
+              "name": "bootwright-node-a"
+            },
+            "spec": {
+              "desiredState": {
+                "interfaces": [
+                  {
+                    "ipv4": {
+                      "address": [
+                        {
+                          "ip": "198.51.100.11",
+                          "prefix-length": 24
+                        }
+                      ],
+                      "dhcp": false,
+                      "enabled": true,
+                      "forwarding": true
+                    },
+                    "name": "eth1",
+                    "state": "up",
+                    "type": "ethernet"
+                  }
+                ]
+              },
+              "nodeSelector": {
+                "kubernetes.io/hostname": "node-a"
+              }
+            }
+          },
+          "desiredDigest": "397e68ede4c3f1d020c7cd903022a271de3fbd5aff3a941bc6532ea36e0ff627",
+          "kind": "NodeNetworkConfigurationPolicy",
+          "name": "bootwright-node-a",
+          "namespace": "",
+          "namespaced": false
+        },
+        "kind": "create"
+      },
+      {
+        "create": {
+          "apiVersion": "nmstate.io/v1",
+          "body": {
+            "apiVersion": "nmstate.io/v1",
+            "kind": "NodeNetworkConfigurationPolicy",
+            "metadata": {
+              "name": "bootwright-node-b"
+            },
+            "spec": {
+              "desiredState": {
+                "interfaces": [
+                  {
+                    "ipv4": {
+                      "address": [
+                        {
+                          "ip": "198.51.100.13",
+                          "prefix-length": 24
+                        }
+                      ],
+                      "dhcp": false,
+                      "enabled": true,
+                      "forwarding": true
+                    },
+                    "name": "eth1",
+                    "state": "up",
+                    "type": "ethernet"
+                  }
+                ]
+              },
+              "nodeSelector": {
+                "kubernetes.io/hostname": "node-b"
+              }
+            }
+          },
+          "desiredDigest": "c40c1d0ec8d71a2f1587899fa102cf10545bcda40e8927400d7512e79caeae8f",
+          "kind": "NodeNetworkConfigurationPolicy",
+          "name": "bootwright-node-b",
+          "namespace": "",
+          "namespaced": false
+        },
+        "kind": "create"
+      }
+    ],
+    "version": "cluster-objects-v1"
+  },
+  "tool": {
+    "compatibility": "openshift",
+    "kind": "openshift-clients",
+    "version": "4.21.15"
+  },
+  "version": "cluster-network-request-v1"
+}

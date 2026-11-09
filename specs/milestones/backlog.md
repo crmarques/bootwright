@@ -263,7 +263,6 @@ Alias cell.
 | [B1097](#b1097) | new, 2026-11-04 (X294's pre-run review) | defect | Substrate | An emulated BMC unit starts after the libvirt daemon the host actually runs, after a reboot too | Matters only after a host reboot; a running BMC is unaffected |
 | [B1098](#b1098) | new, 2026-11-04 (X294's pre-run review) | product | Substrate and Security | One emulated BMC's credential cannot change another domain's virtual media on the same host | Upstream sushy-tools behavior; every domain on a lab host is the operator's own |
 | [B1099](#b1099) | new, 2026-11-04 (B1093) | enabling | Substrate | A remote libvirt host proves an existing allocation's reuse credit, and tolerates an absent runtime directory | Admission runs only while a Machine block starts, so the credit decides only a retried machine block |
-| [B1124](#b1124) | new, 2026-11-04 (D231) | product | Container cluster | A node with addresses on several secondary networks under `ipForwarding: Global` forwards no traffic between them | `MachineConfig` has no typed source ([B719](m3.md#b719)); the case's clients carry no route through the node |
 | [B1165](#b1165) | new, 2026-11-05 (D234) | product | State reconciliation, with Substrate | An additive apply that adds KubeVirt providers, Machines and clusters to a completed apply | Q144; it needs per-namespace access blocks and a proof request without the MAC set |
 | [B1166](#b1166) | new, 2026-11-05 (D234) | product | Substrate and Managed OS | A KubeVirt Machine whose root is cloned from an image and seeded by cloud-init | An alternative to B905 the owner has not chosen (Q148) |
 | [B1168](#b1168) | new, 2026-11-05 (D234) | product | Add-ons | Typed `HyperConverged` fields: boot-image import, live-migration limits and network, workload placement | No profile needs them yet; locations follow the observed CRD, never a CSV (D163) |
@@ -3022,20 +3021,6 @@ an absent runtime directory counts as no running domain; and each unknown fact
 names the command that failed.
 **Exit evidence:** remote tests for each.
 
-### B1124
-
-A MetalLB pool on a secondary network needs the node's address on that
-network and `gatewayConfig.ipForwarding: Global`
-([package metallb](../api/addons.md#package-metallb)), which turns forwarding
-on for every node interface. A node carrying addresses on two isolated
-networks then routes between them for any client that sends through the
-node's address, so the networks stay apart only while their clients carry no
-such route. Found while planning D231's two-VLAN case.
-**Outcome:** a node forwards nothing between its secondary networks, for
-example through node firewall rules a typed `MachineConfig` source renders.
-**Exit evidence:** a run in which a client with a route through the node
-cannot reach the other network.
-
 ### B1165
 
 **Owner:** State reconciliation, with Substrate. **Kind:** product. **Requires:** [B732](m3.md#b732). **Definition:** Needs definition: [Q144](m3.md#m3a-open-decisions) option (c). The apply that adds hosted members to a completed apply needs per-namespace access blocks and a proof request without the MAC set. **Outcome:** A completed apply gains KubeVirt providers, Machines and clusters without a destroy. **Exit evidence:** Planning and replay tests over a completed apply, and an owner-run additive apply.
@@ -3517,6 +3502,7 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | B664 | 2026-11-08 | Delivered in-tree by lane x59-d4 under [B493](m2.md#b493): `ceph.packageRepositoryKey` ([D169](#d169)) keeps the pinned IBM fingerprint; the `el10cp` signer goes to knowledge when such a package is inspected. |
 | B1050 | 2026-11-08 | Delivered by B1144 ([X304](delivered.md#x304--audit-003-foundation-remediation), 98a4e30a4): the MAC pipelines no longer close their producer early under `pipefail`, the recorded cause. |
 | B1169 | 2026-11-08 | Duplicate of [B1187](m3.md#b1187): the same lend-minted host token, revoked when its run returns. |
+| B1124 | 2026-11-09 | Retired under [D246](#d246): keeping a node's networks apart is segregation the estate's GitOps owns; Bootwright's part, forwarding on a pool's own interface alone, is [B1231](m4.md#b1231). |
 
 ## Decisions
 
@@ -6979,7 +6965,7 @@ annotating the router Service, the owner chose `serviceAllocation`, opening
 review: selectors take `matchLabels` only and no `priority`; the case, not
 Bootwright, owns the namespaces, workloads, IngressControllers and
 EgressFirewalls; and node forwarding between the two networks is parked as
-[B1124](#b1124).
+B1124 (retired under [D246](#d246)).
 
 ### D232
 
@@ -7412,3 +7398,45 @@ and X333 (M4: B886). Taken by the session, pending the owner's review:
    each adds, removes and reports only its own routes; a foreign route on a
    refused subnet refuses the apply before any effect
    ([provider host realization](../substrates.md#provider-host-realization)).
+
+### D246
+
+**owner** (2026-11-09; the clauses marked as the session's are pending the
+owner's review): after an audit of OpenShift networking in estates whose nodes
+sit on a private machine network and whose clusters reach several enterprise
+environment VLANs, the owner said that Bootwright "offers all but only the
+features to provision and setup advanced and complex scenarios", that "the
+remaining configuration must be performed by gitops", that "advanced network
+setup and segregation must be in gitops objects, but bootwright must guarantee
+that it would provision and configure all basic setup to allow gitops
+configure the rest", and that the control delivered to GitOps "depends on
+[the operator] specifying it in gitops add-on", then asked to "proceed with
+plan implementation". This authorizes, out of sequence, X334 (M4: B1231) and
+X335 (M3: B1232), and the matching change of the environment-ha input chart.
+
+1. Bootwright owns a setting when only an installer writes it, when a Machine
+   Bootwright provisions needs it, when changing it later is a reinstall or a
+   disruptive cluster-wide rollout, or when it is a check over declared facts;
+   every other cluster object GitOps can create on the operators Bootwright
+   installs is GitOps configuration ([product scope](../project.md#product-scope)).
+2. Workload networks and their segregation, ingress shards, egress addresses
+   and node labels for them, and network policy are GitOps configuration; a
+   cluster's secondary networks and MetalLB pools stay provisioning features.
+3. Control passes to GitOps when the operator declares the `gitops` package's
+   bootstrap; fleet registration ([B781](#b781), [B782](#b782)) stays parked.
+4. B1124 is retired: a node that forwards nothing between its networks is
+   segregation.
+
+Taken by the session, pending the owner's review:
+
+5. B1231: an interface pool needs `routingViaHost: true`; without
+   `ipForwarding: Global` the cluster network block enables IPv4 forwarding on
+   each IPv4 pool's interface through `nmstate`, which the cluster's bindings
+   provide; an IPv6 interface pool still needs `Global`.
+6. B1232: `networkType` admits `OVNKubernetes` alone, the only plugin the
+   networking rules read.
+7. The environment-ha chart declares each environment as a provided `Network`
+   tagged on the OpenShift node segment, renders `routingViaHost: true` on
+   bare-metal clusters and the `nmstate` and pool-less `metallb` operators, and
+   renders no environment interface, bridge, secondary network, pool, hub
+   virtual-machine NIC or `ipForwarding`.
