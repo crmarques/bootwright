@@ -603,7 +603,7 @@ func TestADestroyReleasesWhatAnInterruptedRegistrationLeft(t *testing.T) {
 			if test.reserved {
 				h.workspace.reservations = reservationOf("alpha")
 			}
-			if err := operationstore.New(h.workspace.area, killClock).Claim(context.Background(), "op-"+strings.Repeat("0e", 16), reconciliation.Plan{}); err != nil {
+			if err := operationstore.New(h.workspace.area, h.workspace.logArea, killClock).Claim(context.Background(), "op-"+strings.Repeat("0e", 16), reconciliation.Plan{}); err != nil {
 				t.Fatal(err)
 			}
 			stranded := ""
@@ -792,8 +792,8 @@ func TestAFreshApplyWhoseClaimFailedRestoresTheEvidenceItsDirectoryMayHold(t *te
 				fault.interrupt, want = cancel, context.Canceled
 			}
 			base := h.service.options.Operations
-			h.service.options.Operations = func(area operationstore.Area) OperationStore {
-				return base(claimFaultArea{Area: area, fault: fault})
+			h.service.options.Operations = func(area, logs operationstore.Area) OperationStore {
+				return base(claimFaultArea{Area: area, fault: fault}, logs)
 			}
 			start := h.workspace.mutations
 			h.workspace.beforeMutation = func() {
@@ -900,7 +900,7 @@ func TestAnApplyRefusesWhenAnotherClaimRaisedTheEvidenceAgain(t *testing.T) {
 			t.Fatalf("the destroy = %+v (%v)", result, err)
 		}
 		h.workspace.evidence = slices.Clone(running)
-		if err := operationstore.New(h.workspace.area, killClock).Claim(ctx, "op-"+strings.Repeat("0f", 16), reconciliation.Plan{}); err != nil {
+		if err := operationstore.New(h.workspace.area, h.workspace.logArea, killClock).Claim(ctx, "op-"+strings.Repeat("0f", 16), reconciliation.Plan{}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -920,7 +920,7 @@ func TestAnApplyRefusesWhenAnotherClaimRaisedTheEvidenceAgain(t *testing.T) {
 func TestAnApplyRefusesWhenReclaimsAndNewerClaimsKeepTheCount(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
-	store := operationstore.New(h.workspace.area, killClock)
+	store := operationstore.New(h.workspace.area, h.workspace.logArea, killClock)
 	running := evidenceBytes(t, reconciliation.Apply, reconciliation.OperationRunning)
 	// An apply killed after its claim and its raise left both.
 	h.workspace.evidence = slices.Clone(running)
@@ -1061,14 +1061,13 @@ func TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheLine(t *testing.T) {
 	}
 }
 
-// An apply whose removal's first pass is larger than the entries it keeps for
-// later attempts is admitted only with room for that pass too, so its removal
-// registers and completes beside what the apply left even when the apply was
-// admitted with no entry to spare. Admitted with its own first pass and the
-// kept entries alone, the removal would refuse at its registration.
-func TestTheRemovalOfAnApplyLargerThanTheReserveRegistersAtTheLine(t *testing.T) {
+// An apply of the most blocks a plan holds is admitted only with room for its
+// removal's first pass beside the entries it keeps for later attempts, so its
+// removal registers and completes beside what the apply left even when the
+// apply was admitted with no entry to spare.
+func TestTheRemovalOfTheLargestApplyRegistersAtTheLine(t *testing.T) {
 	ctx := context.Background()
-	blocks := make([]string, 175)
+	blocks := make([]string, reconciliation.MaxBlocks)
 	definitions := make([]reconciliation.BlockDefinition, len(blocks))
 	for index := range blocks {
 		blocks[index] = fmt.Sprintf("block-%03d", index)
@@ -1083,8 +1082,8 @@ func TestTheRemovalOfAnApplyLargerThanTheReserveRegistersAtTheLine(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if operationstore.AdmissionEntries(removal) <= operationstore.ReservedEntries {
-		t.Fatalf("the removal of %d blocks needs %d entries, which the %d kept entries alone would hold", len(blocks), operationstore.AdmissionEntries(removal), operationstore.ReservedEntries)
+	if operationstore.AdmissionEntries(plan) != 2*operationstore.FirstPassEntries(removal)+operationstore.ReservedEntries {
+		t.Fatalf("the apply of %d blocks is admitted with %d entries free, not its removal's first pass twice beside the %d kept", len(blocks), operationstore.AdmissionEntries(plan), operationstore.ReservedEntries)
 	}
 	line := operationstore.MaxEntries - operationstore.AdmissionEntries(plan)
 	for index := range line {
@@ -1419,7 +1418,7 @@ func TestARemovalTheAreaCannotHoldRefusesAtItsRegistration(t *testing.T) {
 	}
 	_, err = h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, SkipConfirmation: true})
 	refused := diagnostics.Of(err)
-	if len(refused) != 1 || refused[0].Code != "lifecycle.state" || !strings.Contains(refused[0].Message, "this removal needs 14 more") {
+	if len(refused) != 1 || refused[0].Code != "lifecycle.state" || !strings.Contains(refused[0].Message, "this removal needs 8 more") {
 		t.Fatalf("a removal the area cannot hold reported %+v (%v), want the lifecycle.state retained-operation refusal", refused, err)
 	}
 	if now, after := operations(t, h.workspace); now != current || !slices.Equal(slices.DeleteFunc(after, func(name string) bool { return name == "filled" }), directories) {
@@ -1474,15 +1473,13 @@ func TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheDirectoryBound(t *testing
 }
 
 // A fresh apply is admitted only while the operation area keeps ReservedBytes
-// free beneath its byte bound, and an attempt's retained output never takes
-// the area into them, so however much its adapter prints, the removal of the
-// last apply admitted registers and completes within the bound. One byte past
-// that line the apply refuses at its claim, before it raises evidence, binds a
-// Secret or runs a block, and adds no directory. At the line, a chain of five
-// blocks whose adapter prints, each time, as much as the area still holds or
-// an attempt keeps, whichever is less, keeps none of it, and the apply and its
-// removal complete. Were output to take the reserve, the fourth block's output
-// would fill the area and its records would refuse.
+// free beneath its byte bound, and an attempt's retained output lies in the
+// log area, so however much its adapter prints, the removal of the last apply
+// admitted registers and completes within the bound. One byte past that line
+// the apply refuses at its claim, before it raises evidence, binds a Secret or
+// runs a block, and adds no directory. At the line, a chain of five blocks
+// whose adapter prints all an attempt keeps, each time, keeps all of it in the
+// log area and none in the records, and the apply and its removal complete.
 func TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheByteBound(t *testing.T) {
 	ctx := context.Background()
 	blocks := []string{"alpha", "bravo", "charlie", "delta", "echo"}
@@ -1496,7 +1493,7 @@ func TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheByteBound(t *testing.T) {
 	h := newPlannedHarness(t, definitions)
 	area := h.workspace.area
 	area.bound = operationstore.MaxBytes
-	h.capability.verbose = func() int { return min(operationstore.MaxAdapterOutputBytes, operationstore.MaxBytes-area.held()) }
+	h.capability.verbose = func() int { return operationstore.MaxAdapterOutputBytes }
 	area.files["filled/output"] = make([]byte, operationstore.MaxBytes-operationstore.ReservedBytes+1)
 	_, err := h.service.Apply(ctx, ApplyRequest{ContextName: testContextName, SkipConfirmation: true})
 	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "lifecycle.state" ||
@@ -1523,8 +1520,17 @@ func TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheByteBound(t *testing.T) {
 	}
 	for name := range area.files {
 		if strings.HasSuffix(name, ".output") {
-			t.Fatalf("an attempt kept %s (%d bytes) past the line", name, len(area.files[name]))
+			t.Fatalf("an attempt kept %s (%d bytes) among the records", name, len(area.files[name]))
 		}
+	}
+	outputs := 0
+	for name, data := range h.workspace.logArea.files {
+		if strings.HasSuffix(name, ".output") && len(data) == operationstore.MaxAdapterOutputBytes {
+			outputs++
+		}
+	}
+	if outputs != 2*len(blocks) {
+		t.Fatalf("the log area kept %d whole outputs, want one for each of the %d attempts", outputs, 2*len(blocks))
 	}
 }
 
@@ -1799,7 +1805,7 @@ func TestADestroyThatSettlesBesideAnIdleClaimReclaimsIt(t *testing.T) {
 				}
 			}
 			current, recorded := operations(t, h.workspace)
-			if err := operationstore.New(h.workspace.area, killClock).Claim(ctx, "op-"+strings.Repeat("0e", 16), reconciliation.Plan{}); err != nil {
+			if err := operationstore.New(h.workspace.area, h.workspace.logArea, killClock).Claim(ctx, "op-"+strings.Repeat("0e", 16), reconciliation.Plan{}); err != nil {
 				t.Fatal(err)
 			}
 			for _, transactions := range []int{1, 0} {
@@ -1823,7 +1829,7 @@ func TestADestroyThatSettlesBesideAnIdleClaimReclaimsIt(t *testing.T) {
 func TestADestroyThatSettlesKeepsIdleClaimsUnderEvidenceRaisedSince(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t, "alpha")
-	store := operationstore.New(h.workspace.area, killClock)
+	store := operationstore.New(h.workspace.area, h.workspace.logArea, killClock)
 	idle, newer := "op-"+strings.Repeat("0e", 16), "op-"+strings.Repeat("0f", 16)
 	if err := store.Claim(ctx, idle, reconciliation.Plan{}); err != nil {
 		t.Fatal(err)

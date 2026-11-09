@@ -178,30 +178,25 @@ func TestARegistrationRacingABoundedRunCollectsNothingOfIt(t *testing.T) {
 }
 
 // A bounded run has no attempt log for its output to sit beside, so it keeps
-// one file of its own under an identity of its own, names it relative to the
-// state root as a structured result does, and points an adapter failure at it.
-// The file exists before the adapter runs, and what the adapter printed is on
-// disk once the call returns.
+// one file of its own, the next its run area numbers, names it relative to
+// the log root as a structured result does, and points an adapter failure at
+// it. The file exists before the adapter runs, and what the adapter printed is
+// on disk once the call returns.
 func TestWithRuntimeRetainsWhatItsAdapterPrinted(t *testing.T) {
 	h := newHarness(t)
-	var identity string
+	const file = "run-000001.output"
 	err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName, RetainOutput: true},
 		func(ctx context.Context, runtime Runtime) error {
-			const runs = "contexts/" + testContextName + "/state/runs/"
-			if len(runtime.Logs) != 1 || !strings.HasPrefix(runtime.Logs[0], runs) || !strings.HasSuffix(runtime.Logs[0], "/"+RunOutputName) {
+			if !slices.Equal(runtime.Logs, []string{"contexts/" + testContextName + "/runs/" + file}) {
 				t.Fatalf("retained paths = %+v", runtime.Logs)
 			}
-			identity = strings.TrimSuffix(strings.TrimPrefix(runtime.Logs[0], runs), "/"+RunOutputName)
-			if !reconciliation.ValidRunID(identity) {
-				t.Fatalf("run identity = %q", identity)
+			if runtime.LogLocation != "/var/log/bootwright/contexts/"+testContextName+"/runs/"+file {
+				t.Fatalf("named location %q is not the run's file", runtime.LogLocation)
 			}
-			if !strings.HasSuffix(runtime.LogLocation, identity) {
-				t.Fatalf("named location %q does not hold %q", runtime.LogLocation, identity)
-			}
-			if runtime.OutputRemediation != "read the adapter output retained in this run's "+RunOutputName {
+			if runtime.OutputRemediation != "read the adapter output retained in this run's Logs file" {
 				t.Fatalf("an adapter failure is pointed at %q", runtime.OutputRemediation)
 			}
-			if _, found, err := h.workspace.runArea.Read(ctx, identity+"/"+RunOutputName, 16); err != nil || !found {
+			if _, found, err := h.workspace.runArea.Read(ctx, file, 16); err != nil || !found {
 				t.Fatalf("the retained file did not exist before the adapter ran: %t (%v)", found, err)
 			}
 			_, _ = runtime.Output.Write([]byte("what the adapter printed\n"))
@@ -210,38 +205,27 @@ func TestWithRuntimeRetainsWhatItsAdapterPrinted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, found, err := h.workspace.runArea.Read(context.Background(), identity+"/"+RunOutputName, 4096)
+	data, found, err := h.workspace.runArea.Read(context.Background(), file, 4096)
 	if err != nil || !found || string(data) != "what the adapter printed\n" {
 		t.Fatalf("retained output = %q %t (%v)", data, found, err)
 	}
-	if h.workspace.area.written(identity) {
-		t.Fatal("a bounded run wrote into the operation records")
+	if len(h.workspace.area.files) != 0 || len(h.workspace.logArea.files) != 0 {
+		t.Fatal("a bounded run wrote into the operation records or logs")
 	}
 }
 
-// A run opens its directory through the run view, which makes room among the
-// runs the area keeps, exactly once and under the identity it allocated,
-// before it creates the file it names.
+// A run opens its file through the run view, which makes room among the runs
+// the area keeps, exactly once, and the runs after it take the next numbers.
 func TestWithRuntimeOpensItsRunThroughTheRunView(t *testing.T) {
 	h := newHarness(t)
-	h.entropy[0] = 0x2a
-	identity := "run-" + strings.Repeat("2a", 16)
-	var openedFirst []string
-	h.workspace.runArea.landing = func(operation, target string, _ map[string][]byte) error {
-		if operation == "write" && target == identity+"/"+RunOutputName {
-			openedFirst = openedRuns(h.workspace.runArea)
+	for range 2 {
+		if err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName, RetainOutput: true},
+			func(context.Context, Runtime) error { return nil }); err != nil {
+			t.Fatal(err)
 		}
-		return nil
 	}
-	if err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName, RetainOutput: true},
-		func(context.Context, Runtime) error { return nil }); err != nil {
-		t.Fatal(err)
-	}
-	if !slices.Equal(openedFirst, []string{identity}) {
-		t.Fatalf("before its file was created the run had opened %v, want only %s", openedFirst, identity)
-	}
-	if opened := openedRuns(h.workspace.runArea); !slices.Equal(opened, []string{identity}) {
-		t.Fatalf("the run opened %v, want only %s", opened, identity)
+	if opened := openedRuns(h.workspace.runArea); !slices.Equal(opened, []string{"run-000001.output", "run-000002.output"}) {
+		t.Fatalf("the runs opened %v, want one file each in sequence", opened)
 	}
 }
 
@@ -292,42 +276,19 @@ func TestARunThatRetainsNoOutputLeavesNoRunFile(t *testing.T) {
 }
 
 // A run that cannot keep its file names none and never reaches its adapter,
-// so what it made for that file goes too, whether opening its directory, the
-// file's creation, the file's publication once its bytes landed or an
-// interrupt before or after the file landed stopped it.
-func TestARunWhoseOutputCannotBeKeptLeavesNoDirectory(t *testing.T) {
-	identity := "run-" + strings.Repeat("2a", 16)
+// and the run view leaves no file it made, whether the file failed once it
+// existed or an interrupt stopped the run before it opened one.
+func TestARunWhoseOutputCannotBeKeptLeavesNoFile(t *testing.T) {
 	injected := errors.New("the retained output could not be created")
 	for _, test := range []struct {
 		name string
 		arm  func(*memoryArea, context.CancelFunc)
 	}{
-		{"its directory fails once it exists", func(area *memoryArea, _ context.CancelFunc) {
-			area.failAfter["open "+identity] = injected
-		}},
-		{"its file cannot be created", func(area *memoryArea, _ context.CancelFunc) {
-			area.fail["write "+identity+"/"+RunOutputName] = injected
-		}},
-		{"its file lands but its publication fails", func(area *memoryArea, _ context.CancelFunc) {
-			area.failAfter["write "+identity+"/"+RunOutputName] = injected
+		{"its file fails once it exists", func(area *memoryArea, _ context.CancelFunc) {
+			area.failAfter["open run-000001.output"] = injected
 		}},
 		{"an interrupt lands before its file", func(area *memoryArea, cancel context.CancelFunc) {
-			area.landing = func(operation, _ string, _ map[string][]byte) error {
-				if operation != "write" {
-					return nil
-				}
-				cancel()
-				return injected
-			}
-		}},
-		{"an interrupt lands after its file", func(area *memoryArea, cancel context.CancelFunc) {
-			area.failAfter["write "+identity+"/"+RunOutputName] = injected
-			area.landing = func(operation, _ string, _ map[string][]byte) error {
-				if operation == "write" {
-					cancel()
-				}
-				return nil
-			}
+			cancel()
 		}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -335,19 +296,18 @@ func TestARunWhoseOutputCannotBeKeptLeavesNoDirectory(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			test.arm(h.workspace.runArea, cancel)
-			h.entropy[0] = 0x2a
 			err := h.service.WithRuntime(ctx, RuntimeRequest{ContextName: testContextName, RetainOutput: true},
 				func(context.Context, Runtime) error {
 					t.Fatal("a run whose output could not be kept reached its adapter")
 					return nil
 				})
-			if !errors.Is(err, injected) {
-				t.Fatalf("the run reported %v, not the injected failure", err)
+			if err == nil {
+				t.Fatal("the run whose output could not be kept succeeded")
 			}
 			h.workspace.runArea.mutex.Lock()
 			defer h.workspace.runArea.mutex.Unlock()
-			if len(h.workspace.runArea.files) != 0 || len(h.workspace.runArea.directories) != 0 {
-				t.Fatalf("a run whose output could not be kept left %v and %v", h.workspace.runArea.files, h.workspace.runArea.directories)
+			if len(h.workspace.runArea.files) != 0 {
+				t.Fatalf("a run whose output could not be kept left %v", h.workspace.runArea.files)
 			}
 		})
 	}

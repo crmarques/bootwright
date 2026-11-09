@@ -392,8 +392,8 @@ func lifecycleOptions(deps lifecycleDependencies, clock systemClock, runner ansi
 }
 
 func operationStores(clock systemClock, executable lifecycle.Executable) lifecycle.OperationStoreFactory {
-	return func(area operationstore.Area) lifecycle.OperationStore {
-		store := operationstore.New(area, clock.Now)
+	return func(records, logs operationstore.Area) lifecycle.OperationStore {
+		store := operationstore.New(records, logs, clock.Now)
 		if !executable.Modified {
 			store.Running(operationstore.Executable{Version: executable.Version, Commit: executable.Commit})
 		}

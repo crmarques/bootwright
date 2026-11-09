@@ -282,7 +282,7 @@ func TestARegistrationKilledAtEachWriteReplaysUnderItsClosure(t *testing.T) {
 		registered bool
 	}{
 		{"write <op>/plan.json#1", false}, {"write <op>/operation.json#1", false}, {"replace index.json#1", false},
-		{"append <op>/logs/operation.jsonl#1", true}, {"replace <op>/blocks/a/state.json#1", true},
+		{"append <op>/operation.jsonl#1", true}, {"replace <op>/blocks/a/state.json#1", true},
 	} {
 		point := test.point
 		for _, move := range []bool{false, true} {
@@ -323,7 +323,7 @@ func TestARegistrationKilledAtEachWriteReplaysUnderItsClosure(t *testing.T) {
 			if failures := killReadBack(snapshot.workspace); len(failures) != 0 {
 				t.Fatalf("killed at %s (moved %t): %v", point, move, failures)
 			}
-			store := operationstore.New(snapshot.workspace.area, killClock)
+			store := operationstore.New(snapshot.workspace.area, snapshot.workspace.logArea, killClock)
 			index, err := store.Index(ctx)
 			if err != nil {
 				t.Fatal(err)

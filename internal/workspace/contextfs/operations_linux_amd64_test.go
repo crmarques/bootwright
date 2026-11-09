@@ -26,7 +26,7 @@ import (
 // plan, and admission counts the area as its entry bound does. Copies of a
 // one-block operation that ran its block fill the area to where it still
 // admits one more such apply beside its removal's first pass and
-// ReservedEntries, but not one of two blocks. The one-block apply claims,
+// ReservedEntries, but not one of three blocks. The one-block apply claims,
 // registers and runs its block, whose later attempt still writes, and the next
 // claim refuses at the retained-operation bound (lifecycle.state) before it
 // creates anything, rather than at the area's storage (context.state). The
@@ -47,7 +47,7 @@ func TestTheOperationAreaAdmitsEveryRetainedOperation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wider, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{block("alpha"), block("beta")})
+	wider, err := reconciliation.NewPlan(reconciliation.Apply, []reconciliation.BlockDefinition{block("alpha"), block("beta"), block("gamma")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestTheOperationAreaAdmitsEveryRetainedOperation(t *testing.T) {
 		return operation, log.Close(ctx)
 	}
 	run := func(tx lifecycle.Transaction, id string, done bool) (*operationstore.Store, error) {
-		operations := operationstore.New(tx.Operations(), clock)
+		operations := operationstore.New(tx.Operations(), tx.Logs(), clock)
 		if _, err := operations.Index(ctx); err != nil {
 			return nil, err
 		}
@@ -152,8 +152,8 @@ func TestTheOperationAreaAdmitsEveryRetainedOperation(t *testing.T) {
 		t.Fatal(err)
 	}
 	cost := operationstore.FirstPassEntries(plan)
-	if held := len(directories) + len(files); held != cost || cost != 13 {
-		t.Fatalf("a one-block operation that ran its block holds %d entries, and FirstPassEntries counts %d, want 13: %v %v", held, cost, directories, slices.Sorted(maps.Keys(files)))
+	if held := len(directories) + len(files); held != cost || cost != 7 {
+		t.Fatalf("a one-block operation that ran its block holds %d entries, and FirstPassEntries counts %d, want 7: %v %v", held, cost, directories, slices.Sorted(maps.Keys(files)))
 	}
 	retained := (operationstore.MaxEntries - operationstore.AdmissionEntries(plan) - 1) / cost
 	for index := 1; index < retained; index++ {
@@ -192,7 +192,7 @@ func TestTheOperationAreaAdmitsEveryRetainedOperation(t *testing.T) {
 		}
 	}
 	err = store.MutateLifecycle(ctx, "example", func(tx lifecycle.Transaction) error {
-		refusedAtTheBound(operationstore.New(tx.Operations(), clock), wide, wider)
+		refusedAtTheBound(operationstore.New(tx.Operations(), tx.Logs(), clock), wide, wider)
 		operations, err := run(tx, last, false)
 		if err != nil {
 			t.Fatalf("the last operation the area admits did not run its block beside %d others: %s", retained, causeText(err))
@@ -235,14 +235,13 @@ func TestTheOperationAreaAdmitsEveryRetainedOperation(t *testing.T) {
 }
 
 // Admission counts the operation area's bytes as its byte bound does, and an
-// attempt's retained output never takes the area into ReservedBytes. With
-// padding one byte past that line a claim refuses at the retained-operation
-// bound (lifecycle.state) and creates nothing. At the line, an apply claims,
+// attempt's retained output lies in the log area, outside them. With padding
+// one byte past ReservedBytes a claim refuses at the retained-operation bound
+// (lifecycle.state) and creates nothing. At the line, an apply claims,
 // registers and runs four attempts of its block whose adapter each time
-// prints as much as the area still holds or an attempt keeps, whichever is
-// less, and keeps none of it; its removal then registers, runs its block and
-// completes within the area's bound. Were output to take the reserve, the
-// fourth attempt would fill the area and its record would refuse.
+// prints all an attempt keeps, and keeps all of it in the log area; its
+// removal then registers, runs its block and completes within the area's
+// bound, which holds no output at all.
 func TestTheOperationAreaKeepsTheReservedBytesForTheLastRemoval(t *testing.T) {
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
@@ -317,13 +316,13 @@ func TestTheOperationAreaKeepsTheReservedBytesForTheLastRemoval(t *testing.T) {
 			return err
 		}
 		output := operations.OpenAdapterOutput(ctx, path)
-		if _, err := output.Write([]byte(strings.Repeat("x", int(min(operationstore.MaxAdapterOutputBytes, operationstore.MaxBytes-held()))))); err != nil {
+		if _, err := output.Write([]byte(strings.Repeat("x", operationstore.MaxAdapterOutputBytes))); err != nil {
 			return err
 		}
 		if err := output.Close(ctx); err != nil {
 			return err
 		}
-		if size, truncated := output.Retained(); size != 0 || !truncated {
+		if size, truncated := output.Retained(); size != operationstore.MaxAdapterOutputBytes || truncated {
 			kept = append(kept, fmt.Sprintf("attempt %d of %s: %d bytes, truncated %t", number, id, size, truncated))
 		}
 		if err := log.Close(ctx); err != nil {
@@ -345,7 +344,7 @@ func TestTheOperationAreaKeepsTheReservedBytesForTheLastRemoval(t *testing.T) {
 		if err := errors.Join(file.Truncate(operationstore.MaxBytes-operationstore.ReservedBytes+1), file.Close()); err != nil {
 			return err
 		}
-		operations := operationstore.New(tx.Operations(), clock)
+		operations := operationstore.New(tx.Operations(), tx.Logs(), clock)
 		if _, err := operations.Index(ctx); err != nil {
 			return err
 		}
@@ -382,7 +381,10 @@ func TestTheOperationAreaKeepsTheReservedBytesForTheLastRemoval(t *testing.T) {
 			t.Fatalf("the removal of the last apply admitted could not complete: %s", causeText(err))
 		}
 		if len(kept) != 0 {
-			t.Fatalf("output past the line was kept: %v", kept)
+			t.Fatalf("output was cut although only the records area was at its line: %v", kept)
+		}
+		if size := held(); size > operationstore.MaxBytes {
+			t.Fatalf("the operation area holds %d bytes past its bound", size)
 		}
 		return nil
 	})

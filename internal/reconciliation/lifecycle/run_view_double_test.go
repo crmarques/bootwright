@@ -3,11 +3,9 @@ package lifecycle
 import (
 	"context"
 	"errors"
-	"strings"
+	"fmt"
 	"sync"
 	"sync/atomic"
-
-	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
 // journeyKeptRuns is how many runs the journey double's run area keeps: few
@@ -24,6 +22,7 @@ const JourneyKeptRuns = journeyKeptRuns
 type runLedger struct {
 	opened  []string
 	holders map[string]*atomic.Bool
+	next    int
 }
 
 // runLedgers keeps each area's ledger beside the double rather than in it, by
@@ -52,96 +51,62 @@ func openedRuns(area *memoryArea) []string {
 }
 
 // OpenRun is the double's run opening: only a bounded run's live view opens a
-// run, under a run identity no entry of the area holds. It first retires the
-// oldest runs no live view holds until fewer than journeyKeptRuns remain, then
-// creates the directory, and one whose creation fails once it exists is
-// removed again.
-func (v *testView) OpenRun(ctx context.Context, identity string) error {
+// run. It first retires the oldest runs no live view holds until fewer than
+// journeyKeptRuns remain, then creates the file numbered one past the highest
+// it ever opened, and one whose creation fails is removed again.
+func (v *testView) OpenRun(ctx context.Context) (string, error) {
 	held, ok := v.runs.(*heldArea)
 	if !ok {
-		return errors.New("a run opens only inside a bounded run")
+		return "", errors.New("a run opens only inside a bounded run")
 	}
 	if err := held.usable(ctx, true); err != nil {
-		return err
-	}
-	if !reconciliation.ValidRunID(identity) {
-		return errors.New("a bounded run's directory requires a run identity")
+		return "", err
 	}
 	area := held.memoryArea
 	area.mutex.Lock()
 	defer area.mutex.Unlock()
-	if err := area.admit(ctx, identity, false); err != nil {
-		return err
-	}
-	if area.directories[identity] || runHolds(area, identity) {
-		return errors.New("the run directory exists")
-	}
 	runLedgers.Lock()
 	defer runLedgers.Unlock()
 	ledger := ledgerOf(area)
 	ledger.retire(area)
-	area.directories[identity] = true
-	if err := area.landed("open " + identity); err != nil {
-		delete(area.directories, identity)
-		return err
+	ledger.next++
+	name := fmt.Sprintf("run-%06d.output", ledger.next)
+	if err := area.admit(ctx, name, true); err != nil {
+		return "", err
 	}
-	ledger.opened = append(ledger.opened, identity)
-	ledger.holders[identity] = v.closed
-	return nil
+	if _, exists := area.files[name]; exists {
+		return "", errors.New("the run file exists")
+	}
+	area.files[name] = []byte{}
+	if err := area.landed("open " + name); err != nil {
+		delete(area.files, name)
+		return "", err
+	}
+	ledger.opened = append(ledger.opened, name)
+	ledger.holders[name] = v.closed
+	return name, nil
 }
 
 // retire forgets runs already gone, then removes the oldest a closed view held
-// until fewer than journeyKeptRuns remain, each only while it holds nothing
-// but its own output.
+// until fewer than journeyKeptRuns remain.
 func (l *runLedger) retire(area *memoryArea) {
 	present := []string{}
-	for _, identity := range l.opened {
-		if area.directories[identity] {
-			present = append(present, identity)
+	for _, name := range l.opened {
+		if _, found := area.files[name]; found {
+			present = append(present, name)
 		} else {
-			delete(l.holders, identity)
+			delete(l.holders, name)
 		}
 	}
 	kept, remaining := []string{}, len(present)
-	for _, identity := range present {
-		if remaining >= journeyKeptRuns && l.holders[identity].Load() && removeRun(area, identity) {
-			delete(l.holders, identity)
+	for _, name := range present {
+		if remaining >= journeyKeptRuns && l.holders[name].Load() {
+			delete(area.files, name)
+			delete(l.holders, name)
 			remaining--
 			continue
 		}
-		kept = append(kept, identity)
+		kept = append(kept, name)
 	}
 	l.opened = kept
-}
-
-// runHolds reports whether anything lies beneath one run's directory.
-func runHolds(area *memoryArea, identity string) bool {
-	for name := range area.files {
-		if strings.HasPrefix(name, identity+"/") {
-			return true
-		}
-	}
-	for name := range area.directories {
-		if strings.HasPrefix(name, identity+"/") {
-			return true
-		}
-	}
-	return false
-}
-
-func removeRun(area *memoryArea, identity string) bool {
-	output := identity + "/" + RunOutputName
-	for name := range area.files {
-		if strings.HasPrefix(name, identity+"/") && name != output {
-			return false
-		}
-	}
-	for name := range area.directories {
-		if strings.HasPrefix(name, identity+"/") {
-			return false
-		}
-	}
-	delete(area.files, output)
-	delete(area.directories, identity)
-	return true
 }

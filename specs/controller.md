@@ -462,8 +462,7 @@ fails after the packages names the packages already removed
 
 `--yes` suppresses the [ordinary confirmation](cli.md#ordinary-confirmation)
 only; decline, noninteractive input without `--yes`, or cancellation removes
-nothing. What dnf prints is kept in no setup run, because the subtree that
-holds runs is what uninstall removes.
+nothing. What dnf prints during an uninstall is kept in no setup run.
 
 ## The controller stage
 
@@ -978,7 +977,7 @@ establishes service ownership or authorizes another context's resources.
 
 Setup's receipt is private durable evidence, separate from lifecycle operation
 state and logs, in the [setup subtree](contexts/controller-record.md#the-setup-subtree).
-What its dnf prints is kept beside it in a
+What its dnf prints is kept under the [log root](contexts.md#log-root) in a
 [setup run](cli/output.md#setup-run-output), which is troubleshooting material
 only: neither keeping one nor failing to changes a setup outcome or its
 receipt. A receipt is no lifecycle operation ID, ownership of the host or
@@ -1027,8 +1026,9 @@ turn, or through the removal that supersedes it.
 **Publication.** A runtime is published only whole, as the
 [setup subtree](contexts/controller-record.md#the-setup-subtree) defines.
 
-**Retention.** Setup's runs are bounded to the newest 8: opening a run removes
-the oldest beyond 7 first. The receipt names the current runtime and the
+**Retention.** Setup's outputs under the log root are bounded to the newest 8:
+opening one removes the oldest beyond 7 first, and its number passes every
+setup ID the receipt names. The receipt names the current runtime and the
 record's `runtimes` the current and the immediately previous distinct one. After
 each setup that writes its receipt, under the same `host/setup/lock` and before it
 reports:
@@ -1153,9 +1153,10 @@ which reads no setup record.
 
 Host fingerprints, credentials, environment dumps and raw native-tool output
 are not public results. The one private path setup names is the directory of
-the [setup run](cli/output.md#setup-run-output) keeping dnf's output, as a
-`Logs` field before dnf starts and again with the result; a failure of dnf
-leads its remedy with the run's `run.output` and that reading it needs root.
+the [setup run](cli/output.md#setup-run-output) file under the
+[log root](contexts.md#log-root) keeping dnf's output, as a `Logs` field
+before dnf starts and again with the result; a failure of dnf leads its remedy
+with that file and that reading it needs root.
 Neither command has a lifecycle receipt or a private operation log.
 
 Each check reports `ready` or `not-ready`, or `unverified` where a dry run

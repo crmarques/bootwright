@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,11 +21,9 @@ const (
 	// maxSetupRunOutput is what a setup run's writer keeps: the bounded run's
 	// own bound, operationstore.MaxAdapterOutputBytes, so every run's output
 	// shares one (D92).
-	maxSetupRunOutput  = 4 << 20
-	setupRunsName      = "runs"
-	setupRunOutputName = "run.output"
-	setupRunPrefix     = "setup-"
-	setupRunDigits     = 6
+	maxSetupRunOutput = 4 << 20
+	setupRunPrefix    = "setup-"
+	setupRunDigits    = 6
 )
 
 func setupRunNumber(name string) (int, bool) {
@@ -45,32 +44,39 @@ func unsafeSetupRun(path, reason string) error {
 	return errors.Join(prerequisites.ErrUnsafeSetupRun, state("controller setup run entry is not this store's own: "+path+": "+reason))
 }
 
-// verifySetupRuns admits a runs container only as this store creates it: at
-// most maxSetupRuns run directories, each empty or holding only its own
-// bounded private output file. A killed run leaves one of those shapes, so
-// nothing else is ever admitted.
-func verifySetupRuns(ctx context.Context, runs *directory) ([]int, error) {
-	names, err := directoryNames(runs, maxSetupRuns)
-	if err != nil {
-		return nil, setupRunAccessError(heldEntry(runs), err)
+// setupLogError makes an unsafe log root entry a setup refusal, since setup
+// keeps its output only where this store created the directories.
+func setupLogError(err error) error {
+	if errors.Is(err, errUnsafeLogEntry) {
+		return errors.Join(prerequisites.ErrUnsafeSetupRun, err)
 	}
-	numbers := make([]int, 0, len(names))
+	return err
+}
+
+// setupRunNumbers lists, in number order, the setup output files the host log
+// directory holds. A name a setup output takes that is no private regular file
+// within its bound refuses; every other name is ignored.
+func setupRunNumbers(ctx context.Context, host *directory) ([]int, error) {
+	names, err := directoryNames(host, maxOperationEntries)
+	if err != nil {
+		return nil, setupRunAccessError(host.path, err)
+	}
+	numbers := []int{}
 	for _, name := range names {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		number, valid := setupRunNumber(name)
+		number, valid := outputNumber(name, setupRunPrefix)
 		if !valid {
-			return nil, unsafeSetupRun(storeEntry(runs, name), "its name is not one a setup run takes")
+			continue
 		}
-		run, err := openDirectory(runs, name)
+		location := filepath.Join(host.path, name)
+		stat, err := listedEntry(host, name)
 		if err != nil {
-			return nil, setupRunAccessError(storeEntry(runs, name), err)
+			return nil, setupRunAccessError(location, err)
 		}
-		_, _, err = setupRunOutput(run)
-		run.file.Close()
-		if err != nil {
-			return nil, err
+		if !private(stat, syscall.S_IFREG, host.identity.Uid, host.identity.Gid) || stat.Dev != host.identity.Dev || stat.Size > maxSetupRunOutput {
+			return nil, unsafeSetupRun(location, "it is not a private regular file within its bound")
 		}
 		numbers = append(numbers, number)
 	}
@@ -78,76 +84,60 @@ func verifySetupRuns(ctx context.Context, runs *directory) ([]int, error) {
 	return numbers, nil
 }
 
-func setupRunOutput(run *directory) (syscall.Stat_t, bool, error) {
-	names, err := directoryNames(run, 1)
-	if err != nil {
-		return syscall.Stat_t{}, false, setupRunAccessError(heldEntry(run), err)
+// recordedSetupNumber is the highest setup-NNNNNN the setup record names, in
+// its pending intent or its receipt, so output retention never frees a number
+// a receipt still attributes.
+func recordedSetupNumber(state prerequisites.SetupState) int {
+	highest := 0
+	if state.Pending != nil {
+		highest, _ = setupRunNumber(state.Pending.ID)
 	}
-	if len(names) == 0 {
-		return syscall.Stat_t{}, false, nil
+	if state.Receipt != nil {
+		for _, item := range state.Receipt.Packages {
+			if number, found := setupRunNumber(item.InstalledBy); found {
+				highest = max(highest, number)
+			}
+		}
 	}
-	path := storeEntry(run, names[0])
-	if names[0] != setupRunOutputName {
-		return syscall.Stat_t{}, false, unsafeSetupRun(path, "it is not the run's own output")
-	}
-	file, err := openRelative(run, setupRunOutputName, pathHandle, 0)
-	if err != nil {
-		return syscall.Stat_t{}, false, setupRunAccessError(path, err)
-	}
-	stat, err := statHandle(file)
-	file.Close()
-	if err != nil {
-		return syscall.Stat_t{}, false, setupRunAccessError(path, err)
-	}
-	if !private(stat, syscall.S_IFREG, run.identity.Uid, run.identity.Gid) || stat.Dev != run.identity.Dev || stat.Size > maxSetupRunOutput {
-		return syscall.Stat_t{}, false, unsafeSetupRun(path, "it is not a private regular file within its bound")
-	}
-	return stat, true, nil
+	return highest
 }
 
-func (s *Store) nextSetupRun(ctx context.Context, runs *directory) (string, prerequisites.SetupRun, error) {
-	numbers, err := verifySetupRuns(ctx, runs)
+func (s *Store) nextSetupRun(ctx context.Context, host *directory, recorded int) (string, prerequisites.SetupRun, error) {
+	numbers, err := setupRunNumbers(ctx, host)
 	if err != nil {
 		return "", nil, err
 	}
-	next := 1
+	next := recorded + 1
 	if len(numbers) != 0 {
-		next = numbers[len(numbers)-1] + 1
+		next = max(next, numbers[len(numbers)-1]+1)
 	}
 	if len(setupRunName(next)) != len(setupRunPrefix)+setupRunDigits {
 		return "", nil, state("setup run numbers are exhausted")
 	}
 	for len(numbers) >= maxSetupRuns {
-		if err := s.removeSetupRun(ctx, runs, setupRunName(numbers[0])); err != nil {
+		if err := s.removeSetupRun(ctx, host, numbers[0]); err != nil {
 			return "", nil, err
 		}
 		numbers = numbers[1:]
 	}
-	run, err := s.createSetupRun(ctx, runs, setupRunName(next))
+	run, err := s.createSetupRun(ctx, host, setupRunName(next)+outputSuffix)
 	return setupRunName(next), run, err
 }
 
-// removeSetupRun unlinks each entry only while it is still the exact one this
+// removeSetupRun unlinks one output only while it is still the exact file this
 // call verified.
-func (s *Store) removeSetupRun(ctx context.Context, runs *directory, name string) error {
-	run, err := openDirectory(runs, name)
+func (s *Store) removeSetupRun(ctx context.Context, host *directory, number int) error {
+	name := setupRunName(number) + outputSuffix
+	location := filepath.Join(host.path, name)
+	stat, err := listedEntry(host, name)
+	if err == nil {
+		err = unlinkVerified(host, name, stat, false)
+	}
 	if err != nil {
-		return setupRunAccessError(storeEntry(runs, name), err)
+		return setupRunAccessError(location, err)
 	}
-	identity := run.identity
-	output, present, err := setupRunOutput(run)
-	if err == nil && present {
-		err = unlinkVerified(run, setupRunOutputName, output, false)
-	}
-	run.file.Close()
-	if err != nil {
-		return setupRunAccessError(storeEntry(runs, name), err)
-	}
-	if err := unlinkVerified(runs, name, identity, true); err != nil {
-		return setupRunAccessError(storeEntry(runs, name), err)
-	}
-	if err := s.syncDirectory(ctx, runs); err != nil {
-		return setupRunAccessError(heldEntry(runs), err)
+	if err := s.syncDirectory(ctx, host); err != nil {
+		return setupRunAccessError(host.path, err)
 	}
 	return nil
 }
@@ -168,37 +158,33 @@ func setupRunAccessError(path string, err error) error {
 	return unsafeSetupRun(path, "private entry identity could not be proved")
 }
 
-// createSetupRun makes both names durable before the run is handed out, so the
-// directory an operator is told about exists whatever the run does next.
-func (s *Store) createSetupRun(ctx context.Context, runs *directory, name string) (prerequisites.SetupRun, error) {
-	run, err := s.newDirectory(ctx, runs, name)
-	if err != nil {
-		return nil, setupRunAccessError(storeEntry(runs, name), err)
-	}
-	defer run.file.Close()
+// createSetupRun makes the file durable before the run is handed out, so the
+// file an operator is told about exists whatever the run does next.
+func (s *Store) createSetupRun(ctx context.Context, host *directory, name string) (prerequisites.SetupRun, error) {
 	if err := s.checkpoint(ctx, checkpointCreateFile); err != nil {
 		return nil, err
 	}
-	file, err := openRelative(run, setupRunOutputName, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, 0600)
+	location := filepath.Join(host.path, name)
+	file, err := openRelative(host, name, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, 0600)
 	if err != nil {
-		return nil, setupRunAccessError(storeEntry(run, setupRunOutputName), err)
+		return nil, setupRunAccessError(location, err)
 	}
 	created, err := statHandle(file)
 	if err != nil {
 		file.Close()
-		return nil, setupRunAccessError(storeEntry(run, setupRunOutputName), err)
+		return nil, setupRunAccessError(location, err)
 	}
-	if !private(created, syscall.S_IFREG, run.identity.Uid, run.identity.Gid) || created.Mode&0777 != 0600 {
+	if !private(created, syscall.S_IFREG, host.identity.Uid, host.identity.Gid) || created.Mode&0777 != 0600 {
 		file.Close()
-		discardCreated(run, setupRunOutputName, created)
-		return nil, unsafeSetupRun(storeEntry(run, setupRunOutputName), "it could not be made durable as a private file")
+		discardCreated(host, name, created)
+		return nil, unsafeSetupRun(location, "it could not be made durable as a private file")
 	}
-	if err := s.syncDirectory(ctx, run); err != nil {
+	if err := s.syncDirectory(ctx, host); err != nil {
 		file.Close()
-		discardCreated(run, setupRunOutputName, created)
-		return nil, setupRunAccessError(storeEntry(run, setupRunOutputName), err)
+		discardCreated(host, name, created)
+		return nil, setupRunAccessError(location, err)
 	}
-	return &setupRun{file: file, location: run.path}, nil
+	return &setupRun{file: file, location: location}, nil
 }
 
 // setupRun writes straight to its file, so what the Ansible prints is readable

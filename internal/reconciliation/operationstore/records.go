@@ -41,12 +41,11 @@ const MaxEntries = 8192
 const ReservedEntries = 1024
 
 // FirstPassEntries is what an operation of plan holds once each of its blocks
-// ran one attempt: its directory, blocks/, logs/, plan.json, operation.json,
-// logs/operation.jsonl and logs/blocks/, and for each block its record
-// directory, block record, attempt record, log directory, attempt log and
-// retained adapter output.
+// ran one attempt: its directory, blocks/, plan.json and operation.json, and
+// for each block its record directory, block record and attempt record. Its
+// logs lie in the log area, which this bound never counts.
 func FirstPassEntries(plan reconciliation.Plan) int {
-	return 7 + 6*len(plan.Blocks)
+	return 4 + 3*len(plan.Blocks)
 }
 
 // AdmissionEntries is what the area must hold free to admit an operation of
@@ -72,16 +71,15 @@ func AdmissionOperations(plan reconciliation.Plan) int {
 	return 2
 }
 
-// MaxBytes bounds the bytes one context's operation area holds in its records,
-// logs and retained adapter output. The Workspace area refuses a write that
-// would take it past them, and admission keeps what a new operation needs
-// within them.
+// MaxBytes bounds the bytes one context's operation area holds in its records.
+// The Workspace area refuses a write that would take it past them, and
+// admission keeps what a new operation needs within them.
 const MaxBytes = 64 << 20
 
 // ReservedBytes is what an apply is admitted with free for its records and
-// logs and those of the removal that takes it back. An attempt's retained
-// adapter output never takes the area into it, so however verbose a run is,
-// only records and logs ever use what that removal needs.
+// those of the removal that takes it back. Logs and retained adapter output
+// lie in the log area, so however verbose a run is, only records ever use
+// what that removal needs.
 const ReservedBytes = 16 << 20
 
 // FirstPassBlockBytes is ReservedBytes shared by two first passes of MaxBlocks.

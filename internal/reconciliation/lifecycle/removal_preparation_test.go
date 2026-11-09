@@ -53,7 +53,7 @@ func TestRemovalReceiptIsDurableBeforeContinuationAndReadOnlyOnResolution(t *tes
 	if _, err := h.service.Destroy(context.Background(), DestroyRequest{ContextName: "lab", SkipConfirmation: true}); err == nil {
 		t.Fatal("unknown removal completed")
 	}
-	store := operationstore.New(h.workspace.area, time.Now)
+	store := operationstore.New(h.workspace.area, h.workspace.logArea, time.Now)
 	index, err := store.Index(context.Background())
 	if err != nil {
 		t.Fatal(err)

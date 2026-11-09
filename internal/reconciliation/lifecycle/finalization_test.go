@@ -134,7 +134,7 @@ func (k killedRun) repairing() (Service, *consumingHost) {
 func operations(t *testing.T, w *testWorkspace) (string, []string) {
 	t.Helper()
 	ctx := context.Background()
-	index, err := operationstore.New(w.area, killClock).Index(ctx)
+	index, err := operationstore.New(w.area, w.logArea, killClock).Index(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,8 +274,8 @@ func interruptOnceDone(t *testing.T, service *Service) context.Context {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	base := service.options.Operations
-	service.options.Operations = func(area operationstore.Area) OperationStore {
-		return doneInterrupts{OperationStore: base(area), interrupt: cancel}
+	service.options.Operations = func(area, logs operationstore.Area) OperationStore {
+		return doneInterrupts{OperationStore: base(area, logs), interrupt: cancel}
 	}
 	return ctx
 }
@@ -344,7 +344,7 @@ func TestARemovalWhoseBindingReleaseFailsReportsIncompleteFinalization(t *testin
 				t.Fatal(err)
 			}
 			if faulted {
-				h.capability.destroyHold = failDuring(h, path.Join("op-"+strings.Repeat("02", 16), "logs", "blocks", "alpha", "attempt-000001.jsonl"))
+				h.capability.destroyHold = failDuring(h, path.Join("op-"+strings.Repeat("02", 16), "blocks", "alpha", "attempt-000001.jsonl"))
 			}
 			h.binder.releaseErr = errors.New("the custody store refused the release")
 			result, err := h.service.Destroy(ctx, DestroyRequest{ContextName: testContextName, Authorizations: dataLoss(), SkipConfirmation: true})
@@ -532,7 +532,7 @@ func requireRunningWithEveryBlockDone(t *testing.T, run killedRun, verb reconcil
 		t.Fatalf("the kill left %s", rest)
 	}
 	ctx := context.Background()
-	store := operationstore.New(run.snapshot.workspace.area, killClock)
+	store := operationstore.New(run.snapshot.workspace.area, run.snapshot.workspace.logArea, killClock)
 	current, _ := operations(t, run.snapshot.workspace)
 	plan, err := store.ReadPlan(ctx, current)
 	if err != nil {

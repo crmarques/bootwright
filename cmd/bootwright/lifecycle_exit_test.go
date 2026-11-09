@@ -93,7 +93,7 @@ func writeRecords(t *testing.T, repository *contextfs.Store, write func(context.
 	t.Helper()
 	ctx := context.Background()
 	if err := repository.MutateLifecycle(ctx, "alpha", func(tx lifecycle.Transaction) error {
-		write(ctx, operationstore.New(tx.Operations(), exitStamp))
+		write(ctx, operationstore.New(tx.Operations(), tx.Logs(), exitStamp))
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -217,7 +217,7 @@ func TestAnUpdateOverACompletedApplyWarnsAndTheNextApplyRefuses(t *testing.T) {
 	contextRun(t, services, 0, "context", "init", "--name", "alpha", "--input-dir", input)
 	ctx := context.Background()
 	if err := repository.MutateLifecycle(ctx, "alpha", func(tx lifecycle.Transaction) error {
-		registerDoneUnder(ctx, t, operationstore.New(tx.Operations(), exitStamp), tx.Identity().Revision, inputDigestOf(tx.Inputs()),
+		registerDoneUnder(ctx, t, operationstore.New(tx.Operations(), tx.Logs(), exitStamp), tx.Identity().Revision, inputDigestOf(tx.Inputs()),
 			"op-"+strings.Repeat("01", 16), "", exitPlan(t), "alpha")
 		return nil
 	}); err != nil {

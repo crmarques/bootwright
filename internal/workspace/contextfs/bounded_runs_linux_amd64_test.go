@@ -9,51 +9,45 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
+	"sync"
 	"testing"
-	"time"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 )
 
-func boundedRunName(number int) string { return fmt.Sprintf("run-%032x", number) }
+func boundedRunName(number int) string { return fmt.Sprintf("run-%06d.output", number) }
 
 // runsRoot is where this store keeps one context's bounded runs. A test plants
 // runs there as earlier runs left them.
 func runsRoot(t *testing.T, store *Store, name string) string {
 	t.Helper()
-	root := filepath.Join(store.options.Root, "contexts", name, "state", "runs")
+	root := filepath.Join(store.options.Root+logsSuffix, logContexts, name, runsSubtree)
 	if err := os.MkdirAll(root, 0700); err != nil {
 		t.Fatal(err)
 	}
 	return root
 }
 
-// plantBoundedRun leaves one run as a finished bounded run leaves it: its
-// directory holding only its output, last changed at modified.
-func plantBoundedRun(t *testing.T, root, name string, modified time.Time) string {
+func plantBoundedRun(t *testing.T, root string, number int) string {
 	t.Helper()
-	run := filepath.Join(root, name)
-	if err := os.Mkdir(run, 0700); err != nil {
-		t.Fatal(err)
-	}
-	writePrivate(t, filepath.Join(run, lifecycle.RunOutputName), []byte("what the adapter printed\n"))
-	if err := os.Chtimes(run, modified, modified); err != nil {
-		t.Fatal(err)
-	}
+	run := filepath.Join(root, boundedRunName(number))
+	writePrivate(t, run, []byte("what the adapter printed\n"))
 	return run
 }
 
-func openRun(t *testing.T, store *Store, identity string) {
+func openRun(t *testing.T, store *Store) string {
 	t.Helper()
 	ctx := context.Background()
+	var opened string
 	if err := store.RunLifecycle(ctx, "example", func(view lifecycle.RunView) error {
-		return view.OpenRun(ctx, identity)
+		name, err := view.OpenRun(ctx)
+		opened = name
+		return err
 	}); err != nil {
-		t.Fatalf("run %s did not open: %#v", identity, diagnostics.Of(err))
+		t.Fatalf("a run did not open: %#v", diagnostics.Of(err))
 	}
+	return opened
 }
 
 func heldNamesOf(t *testing.T, root string) []string {
@@ -70,97 +64,88 @@ func heldNamesOf(t *testing.T, root string) []string {
 	return names
 }
 
-func TestBoundedRunRetentionFitsTheByteBound(t *testing.T) {
-	if maxBoundedRuns*operationstore.MaxAdapterOutputBytes > operationstore.MaxBytes {
-		t.Fatalf("%d runs of %d output bytes each exceed the runs area's %d bytes", maxBoundedRuns, operationstore.MaxAdapterOutputBytes, operationstore.MaxBytes)
-	}
-}
-
-// Before a run opens, the oldest runs make room, by when each last changed and
-// never by its random identity, and an entry that is no run is neither counted
-// nor removed, even one older than every run and shaped exactly like one.
+// Before a run opens, the lowest-numbered runs make room, the new run takes
+// the number past the highest, and an entry that is no run is neither counted
+// nor removed.
 func TestABoundedRunKeepsTheNewestRuns(t *testing.T) {
 	store, _ := lifecycleFixture(t)
 	root := runsRoot(t, store, "example")
-	base := time.Now().Add(-48 * time.Hour)
-	planted := []string{}
-	for index := range 20 {
-		name := boundedRunName(100 - index)
-		plantBoundedRun(t, root, name, base.Add(time.Duration(index)*time.Hour))
-		planted = append(planted, name)
+	for number := 1; number <= 20; number++ {
+		plantBoundedRun(t, root, number)
 	}
-	plantBoundedRun(t, root, "notes", base.Add(-time.Hour))
-	opened := boundedRunName(1)
-	openRun(t, store, opened)
-	want := append(slices.Clone(planted[20-(maxBoundedRuns-1):]), opened, "notes")
+	writePrivate(t, filepath.Join(root, "notes"), []byte("an operator's notes\n"))
+	if opened := openRun(t, store); opened != boundedRunName(21) {
+		t.Fatalf("the run opened %s, want %s", opened, boundedRunName(21))
+	}
+	want := []string{"notes"}
+	for number := 21 - maxBoundedRuns + 1; number <= 21; number++ {
+		want = append(want, boundedRunName(number))
+	}
 	slices.Sort(want)
 	if held := heldNamesOf(t, root); !slices.Equal(held, want) {
-		t.Fatalf("the runs area holds %v, want the new run, the %d newest planted and the notes: %v", held, maxBoundedRuns-1, want)
-	}
-	if kept := heldNamesOf(t, filepath.Join(root, "notes")); !slices.Equal(kept, []string{lifecycle.RunOutputName}) {
-		t.Fatalf("the notes hold %v, want them untouched", kept)
+		t.Fatalf("the runs area holds %v, want the %d newest runs and the notes: %v", held, maxBoundedRuns, want)
 	}
 }
 
-// An area filled to its entry bound with power runs does not stop the next
-// one: it opens, keeps its output and leaves only the newest runs.
-func TestBoundedRunsKeepWorkingPastTheEntryBound(t *testing.T) {
-	ctx := context.Background()
+// Runs opened together under the shared lease take distinct numbers, from
+// one upward with no gap.
+func TestConcurrentBoundedRunsTakeDistinctSequentialNumbers(t *testing.T) {
+	store, _ := lifecycleFixture(t)
+	const runs = maxBoundedRuns - 1
+	opened := make([]string, runs)
+	var group sync.WaitGroup
+	for index := range runs {
+		group.Go(func() { opened[index] = openRun(t, store) })
+	}
+	group.Wait()
+	want := []string{}
+	for number := 1; number <= runs; number++ {
+		want = append(want, boundedRunName(number))
+	}
+	if slices.Sort(opened); !slices.Equal(opened, want) {
+		t.Fatalf("concurrent runs opened %v, want %v", opened, want)
+	}
+}
+
+// However many runs an area holds, the next one opens past them and leaves
+// only the newest, so machine power commands keep working however many ran
+// before.
+func TestBoundedRunsKeepWorkingHoweverManyRan(t *testing.T) {
 	store, _ := lifecycleFixture(t)
 	root := runsRoot(t, store, "example")
-	base := time.Now().Add(-time.Hour)
-	for number := 1; number <= maxOperationEntries/2; number++ {
-		plantBoundedRun(t, root, boundedRunName(number), base)
+	for number := 1; number <= 2*maxOperationEntries/8; number++ {
+		plantBoundedRun(t, root, number)
 	}
-	opened := boundedRunName(maxOperationEntries)
-	target := opened + "/" + lifecycle.RunOutputName
-	if err := store.RunLifecycle(ctx, "example", func(view lifecycle.RunView) error {
-		if err := view.OpenRun(ctx, opened); err != nil {
-			return err
-		}
-		if err := view.Runs().WriteExclusive(ctx, target, nil); err != nil {
-			return err
-		}
-		return view.Runs().Append(ctx, target, []byte("powered on\n"))
-	}); err != nil {
-		t.Fatalf("a power run past the old entry bound failed: %#v", diagnostics.Of(err))
-	}
-	held := heldNamesOf(t, root)
-	if len(held) != maxBoundedRuns || !slices.Contains(held, opened) {
-		t.Fatalf("the runs area holds %d runs (%t the new one), want %d with it", len(held), slices.Contains(held, opened), maxBoundedRuns)
-	}
-	if data, err := os.ReadFile(filepath.Join(root, target)); err != nil || string(data) != "powered on\n" {
-		t.Fatalf("the new run kept %q (%v)", data, err)
+	opened := openRun(t, store)
+	if held := heldNamesOf(t, root); len(held) != maxBoundedRuns || opened != boundedRunName(2*maxOperationEntries/8+1) || held[len(held)-1] != opened {
+		t.Fatalf("the runs area holds %d runs ending %v after opening %s", len(held), held[len(held)-1:], opened)
 	}
 }
 
-// A run another live run holds is never retired, however old: it keeps its
-// directory and everything already in it while newer runs come and go, and is
-// retired only once its own callback returned.
+// A run another live run holds is never retired, however low its number: it
+// keeps everything written to it while newer runs come and go, and is retired
+// only once its own callback returned.
 func TestARunInProgressIsNeverRetired(t *testing.T) {
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	root := runsRoot(t, store, "example")
-	progress := boundedRunName(0x100)
-	target := progress + "/" + lifecycle.RunOutputName
+	var progress string
 	err := store.RunLifecycle(ctx, "example", func(view lifecycle.RunView) error {
-		if err := view.OpenRun(ctx, progress); err != nil {
+		name, err := view.OpenRun(ctx)
+		if err != nil {
 			return err
 		}
-		if err := view.Runs().Append(ctx, target, []byte("before\n")); err != nil {
+		progress = name
+		if err := view.Runs().Append(ctx, name, []byte("before\n")); err != nil {
 			return err
 		}
-		old := time.Now().Add(-24 * time.Hour)
-		if err := os.Chtimes(filepath.Join(root, progress), old, old); err != nil {
+		for range maxBoundedRuns + 1 {
+			openRun(t, store)
+		}
+		if err := view.Runs().Append(ctx, name, []byte("after\n")); err != nil {
 			return err
 		}
-		for number := 1; number <= maxBoundedRuns+1; number++ {
-			openRun(t, store, boundedRunName(number))
-		}
-		if err := view.Runs().Append(ctx, target, []byte("after\n")); err != nil {
-			return err
-		}
-		data, found, err := view.Runs().Read(ctx, target, 64)
+		data, found, err := view.Runs().Read(ctx, name, 64)
 		if err != nil || !found || string(data) != "before\nafter\n" {
 			t.Fatalf("the run in progress holds %q %t (%v), want everything it wrote", data, found, err)
 		}
@@ -169,37 +154,37 @@ func TestARunInProgressIsNeverRetired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the run in progress failed: %#v", diagnostics.Of(err))
 	}
-	openRun(t, store, boundedRunName(0x200))
+	openRun(t, store)
 	if _, err := os.Lstat(filepath.Join(root, progress)); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("the oldest run outlived its callback and newer runs (%v)", err)
+		t.Fatalf("the lowest run outlived its callback and newer runs (%v)", err)
 	}
 }
 
-// Retention removes a run only in the shape a bounded run leaves it: empty or
-// holding its own private output. A run holding anything else, or whose output
-// is a link or is linked elsewhere, is left exactly as it is, and the new run
-// still opens beside it.
+// Retention removes a run only as the store left it: a private, singly linked
+// regular file. A run that is a link, is linked elsewhere or holds another
+// mode is left exactly as it is, and the new run still opens beside it.
 func TestARetiredRunIsRemovedOnlyAsTheStoreLeftIt(t *testing.T) {
 	for _, test := range []struct {
 		name  string
 		leave func(t *testing.T, run string)
 	}{
-		{"a run holding another file", func(t *testing.T, run string) {
-			writePrivate(t, filepath.Join(run, "extra"), []byte("something else\n"))
-		}},
-		{"a run whose output is a link", func(t *testing.T, run string) {
-			output := filepath.Join(run, lifecycle.RunOutputName)
+		{"a run that is a link", func(t *testing.T, run string) {
 			target := filepath.Join(t.TempDir(), "elsewhere")
 			writePrivate(t, target, []byte("not the run's own\n"))
-			if err := os.Remove(output); err != nil {
+			if err := os.Remove(run); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.Symlink(target, output); err != nil {
+			if err := os.Symlink(target, run); err != nil {
 				t.Fatal(err)
 			}
 		}},
-		{"a run whose output is linked elsewhere", func(t *testing.T, run string) {
-			if err := os.Link(filepath.Join(run, lifecycle.RunOutputName), filepath.Join(t.TempDir(), "linked")); err != nil {
+		{"a run linked elsewhere", func(t *testing.T, run string) {
+			if err := os.Link(run, filepath.Join(filepath.Dir(run), "linked")); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"a run of another mode", func(t *testing.T, run string) {
+			if err := os.Chmod(run, 0644); err != nil {
 				t.Fatal(err)
 			}
 		}},
@@ -207,173 +192,55 @@ func TestARetiredRunIsRemovedOnlyAsTheStoreLeftIt(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			store, _ := lifecycleFixture(t)
 			root := runsRoot(t, store, "example")
-			base := time.Now().Add(-48 * time.Hour)
-			for number := 1; number < maxBoundedRuns; number++ {
-				plantBoundedRun(t, root, boundedRunName(number), base.Add(time.Duration(number)*time.Hour))
+			left := plantBoundedRun(t, root, 1)
+			for number := 2; number <= maxBoundedRuns; number++ {
+				plantBoundedRun(t, root, number)
 			}
-			left := boundedRunName(0x100)
-			run := plantBoundedRun(t, root, left, base)
-			test.leave(t, run)
-			if err := os.Chtimes(run, base, base); err != nil {
+			test.leave(t, left)
+			before, err := os.Lstat(left)
+			if err != nil {
 				t.Fatal(err)
 			}
-			before := runShape(t, run)
-			opened := boundedRunName(0x200)
-			openRun(t, store, opened)
-			if after := runShape(t, run); after != before {
-				t.Fatalf("the run was changed from %q to %q", before, after)
+			opened := openRun(t, store)
+			after, err := os.Lstat(left)
+			if err != nil || !os.SameFile(before, after) || before.Mode() != after.Mode() {
+				t.Fatalf("the run was changed (%v)", err)
 			}
 			held := heldNamesOf(t, root)
-			if slices.Contains(held, boundedRunName(1)) || !slices.Contains(held, opened) || len(held) != maxBoundedRuns {
-				t.Fatalf("the runs area holds %v, want the left run, the new one and all but the oldest planted", held)
+			if slices.Contains(held, boundedRunName(2)) || !slices.Contains(held, opened) || opened != boundedRunName(maxBoundedRuns+1) {
+				t.Fatalf("the runs area holds %v after opening %s, want the left run, the new one and all but the lowest store-made", held, opened)
 			}
 		})
 	}
 }
 
-// runShape describes what a run directory holds: each entry's name, type,
-// size, link count and link target.
-func runShape(t *testing.T, run string) string {
-	t.Helper()
-	entries, err := os.ReadDir(run)
-	if err != nil {
-		t.Fatalf("the run is gone: %v", err)
-	}
-	shape := []string{}
-	for _, entry := range entries {
-		info, err := os.Lstat(filepath.Join(run, entry.Name()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		link, _ := os.Readlink(filepath.Join(run, entry.Name()))
-		shape = append(shape, fmt.Sprintf("%s %v %d %s", entry.Name(), info.Mode(), info.Size(), link))
-	}
-	return strings.Join(shape, "; ")
-}
-
-// The runs area is written beside other runs of its context under the shared
-// lock, so it measures every write: a run sees what a run beside it wrote
-// since its own last write.
-func TestTheRunsAreaMeasuresEveryWrite(t *testing.T) {
+// The highest number a run takes is the last: an area holding it refuses the
+// next run, naming the directory to remove.
+func TestBoundedRunNumbersRefuseOnceExhausted(t *testing.T) {
 	ctx := context.Background()
 	store, _ := lifecycleFixture(t)
 	root := runsRoot(t, store, "example")
-	planted := filepath.Join(root, "notes")
-	writePrivate(t, planted, nil)
-	if err := os.Truncate(planted, maxOperationBytes-100); err != nil {
-		t.Fatal(err)
-	}
-	outer, inner := boundedRunName(1), boundedRunName(2)
+	plantBoundedRun(t, root, 999999)
 	err := store.RunLifecycle(ctx, "example", func(view lifecycle.RunView) error {
-		if err := view.OpenRun(ctx, outer); err != nil {
-			return err
-		}
-		if err := view.Runs().Append(ctx, outer+"/"+lifecycle.RunOutputName, make([]byte, 10)); err != nil {
-			return err
-		}
-		if err := store.RunLifecycle(ctx, "example", func(beside lifecycle.RunView) error {
-			if err := beside.OpenRun(ctx, inner); err != nil {
-				return err
-			}
-			return beside.Runs().Append(ctx, inner+"/"+lifecycle.RunOutputName, make([]byte, 85))
-		}); err != nil {
-			t.Fatalf("the run beside it failed: %#v", diagnostics.Of(err))
-		}
-		return view.Runs().Append(ctx, outer+"/"+lifecycle.RunOutputName, make([]byte, 10))
+		_, err := view.OpenRun(ctx)
+		return err
 	})
-	expectRefusal(t, err, "bounded run storage has reached its bounds")
-}
-
-// A run that leaves its name while a write's measure walks inside it, as one
-// another run's retention removes does, is absent from that measure, as a run
-// gone before the walk reached it is, so the write goes on. A run replaced at
-// its name meanwhile still refuses.
-func TestARunGoneWhileTheRunsAreaIsMeasuredIsAbsent(t *testing.T) {
-	injected := errors.New("the walk inside the run failed")
-	moveAway := func(t *testing.T, run string) {
-		if err := os.Rename(run, filepath.Join(filepath.Dir(run), "moved")); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, test := range []struct {
-		name  string
-		leave func(t *testing.T, run string) error
-		want  string
-	}{
-		{"removed", func(t *testing.T, run string) error {
-			if err := os.RemoveAll(run); err != nil {
-				t.Fatal(err)
-			}
-			return injected
-		}, ""},
-		{"moved away", func(t *testing.T, run string) error {
-			moveAway(t, run)
-			return nil
-		}, ""},
-		{"replaced at its name", func(t *testing.T, run string) error {
-			moveAway(t, run)
-			if err := os.Mkdir(run, 0700); err != nil {
-				t.Fatal(err)
-			}
-			return nil
-		}, "lifecycle operation storage cannot be measured"},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			ctx := context.Background()
-			store, _ := lifecycleFixture(t)
-			gone := plantBoundedRun(t, runsRoot(t, store, "example"), boundedRunName(1), time.Now().Add(-time.Hour))
-			if err := os.Mkdir(filepath.Join(gone, "nested"), 0700); err != nil {
-				t.Fatal(err)
-			}
-			opened := boundedRunName(2)
-			target := opened + "/" + lifecycle.RunOutputName
-			left := false
-			err := store.RunLifecycle(ctx, "example", func(view lifecycle.RunView) error {
-				if err := view.OpenRun(ctx, opened); err != nil {
-					return err
-				}
-				reached := 0
-				store.fail = func(point string) error {
-					if point != string(checkpointMeasureOperationEntry) {
-						return nil
-					}
-					if reached++; reached != 2 {
-						return nil
-					}
-					left = true
-					return test.leave(t, gone)
-				}
-				defer func() { store.fail = nil }()
-				return view.Runs().WriteExclusive(ctx, target, nil)
-			})
-			if !left {
-				t.Fatal("the measure never walked inside the planted run")
-			}
-			if test.want != "" {
-				expectRefusal(t, err, test.want)
-				return
-			}
-			if err != nil {
-				t.Fatalf("the write beside a run that went failed: %v %#v", err, diagnostics.Of(err))
-			}
-			if _, err := os.Lstat(filepath.Join(runsRoot(t, store, "example"), target)); err != nil {
-				t.Fatalf("the write beside a run that went kept nothing: %v", err)
-			}
-		})
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Remediation != "remove "+root+", then repeat the command" {
+		t.Fatalf("an exhausted runs area reported %v %#v", err, reported)
 	}
 }
 
-// A run whose directory exists but cannot be handed out, because making it
-// durable failed or the run was interrupted, leaves no directory behind.
-func TestARunThatCannotOpenLeavesNoDirectory(t *testing.T) {
+// A run whose file exists but cannot be handed out, because making it durable
+// failed or the run was interrupted, leaves no file behind.
+func TestARunThatCannotOpenLeavesNoFile(t *testing.T) {
 	injected := errors.New("the runs area could not be made durable")
 	for _, test := range []struct {
 		name string
 		fail func(cancel context.CancelFunc) error
 		want error
 	}{
-		{"its directory cannot be made durable", func(context.CancelFunc) error { return injected }, injected},
-		{"an interrupt once its directory exists", func(cancel context.CancelFunc) error {
+		{"its file cannot be made durable", func(context.CancelFunc) error { return injected }, injected},
+		{"an interrupt once its file exists", func(cancel context.CancelFunc) error {
 			cancel()
 			return context.Canceled
 		}, context.Canceled},
@@ -388,7 +255,7 @@ func TestARunThatCannotOpenLeavesNoDirectory(t *testing.T) {
 			_ = store.RunLifecycle(ctx, "example", func(view lifecycle.RunView) error {
 				store.fail = func(point string) error {
 					switch {
-					case point == string(checkpointMkdir):
+					case point == string(checkpointCreateFile):
 						created = true
 					case created && point == string(checkpointSyncDirectory):
 						created = false
@@ -399,14 +266,14 @@ func TestARunThatCannotOpenLeavesNoDirectory(t *testing.T) {
 					return nil
 				}
 				defer func() { store.fail = nil }()
-				err = view.OpenRun(ctx, filepath.Base(run))
+				_, err = view.OpenRun(ctx)
 				return err
 			})
 			if !errors.Is(err, test.want) || !existed {
-				t.Fatalf("the run = %v, its directory there when it failed %t; want %v once it existed", err, existed, test.want)
+				t.Fatalf("the run = %v, its file there when it failed %t; want %v once it existed", err, existed, test.want)
 			}
 			if _, err := os.Lstat(run); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("the run that could not open left its directory (%v)", err)
+				t.Fatalf("the run that could not open left its file (%v)", err)
 			}
 		})
 	}

@@ -451,7 +451,7 @@ var replacementID = "op-" + strings.Repeat("e7", 16)
 func registerReplacement(t *testing.T, h *harness, id string) {
 	t.Helper()
 	ctx := context.Background()
-	store := operationstore.New(h.workspace.area, func() time.Time { return time.Unix(0, 0) })
+	store := operationstore.New(h.workspace.area, h.workspace.logArea, func() time.Time { return time.Unix(0, 0) })
 	failed, _ := durableOperation(t, h)
 	if failed.Verb != reconciliation.Destroy || failed.State != reconciliation.OperationFailed {
 		t.Fatalf("the current operation is a %s %s, want a failed removal", failed.State, failed.Verb)

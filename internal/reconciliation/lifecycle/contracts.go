@@ -41,24 +41,27 @@ type View interface {
 	Controller() prerequisites.StorageView
 	Evidence() []byte
 	Operations() operationstore.Area
+	// Logs is the context's operation log area, outside the store: written
+	// only inside a transaction, and read by every view.
+	Logs() operationstore.Area
 }
 
 // RunView is what a bounded operation outside the lifecycle reads. It adds
 // exactly two things an inspection has no use for: the controller's
 // tool areas, which the adapter call runs against, and a writable area
-// holding what that adapter printed, in run directories it opens itself.
+// holding what that adapter printed, in run files it opens itself.
 // Neither is desired state, ownership or a continuation cursor, so a bounded
 // run still registers no operation.
 type RunView interface {
 	View
 	Runs() operationstore.Area
 	// OpenRun makes room among the newest runs the area keeps, removing the
-	// oldest that no live run holds, each only while it holds nothing but its
-	// own RunOutputName. It then creates identity's directory exclusively and
-	// holds it until the callback that received this view returns, so no
-	// other run's retention removes a run still in progress. A failure leaves
-	// no directory it created.
-	OpenRun(ctx context.Context, identity string) error
+	// oldest that no live run holds, then creates the next run's file
+	// exclusively, numbered one past the highest the area holds, and holds it
+	// until the callback that received this view returns, so no other run's
+	// retention removes a run still in progress. It returns that file's path
+	// in the area. A failure leaves no file it created.
+	OpenRun(ctx context.Context) (string, error)
 }
 
 // Transaction adds the publications an operation performs. The context lease
@@ -516,9 +519,10 @@ type recordReader interface {
 	LastResolution(context.Context, string, string, int) (operationstore.Attempt, bool, error)
 }
 
-// OperationStoreFactory opens the record set over one held area. It is a
-// function capability because an operation opens exactly one per invocation.
-type OperationStoreFactory func(operationstore.Area) OperationStore
+// OperationStoreFactory opens the record set over one held records area and
+// the log area beside it. It is a function capability because an operation
+// opens exactly one per invocation.
+type OperationStoreFactory func(records, logs operationstore.Area) OperationStore
 
 // InteractiveConfirmer reports whether its input can answer a prompt; one that
 // cannot makes the invocation unattended.

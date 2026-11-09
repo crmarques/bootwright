@@ -97,7 +97,7 @@ func TestARotatedAccessCredentialIsRemovedOnlyThroughTheRebindExit(t *testing.T)
 			t.Fatalf("released = %v, want %s released by the completed removal", h.binder.released, binding)
 		}
 	}
-	log := string(h.workspace.area.files[path.Join(currentOperation(t, h), "logs", "operation.jsonl")])
+	log := string(h.workspace.logArea.files[path.Join(currentOperation(t, h), "operation.jsonl")])
 	if !strings.Contains(log, `"event":"rebind"`) || !strings.Contains(log, applied.Bindings[0]+" rebound as "+rebound+" at the current version of bmc") {
 		t.Fatalf("operation log = %s, want the rebind recorded", log)
 	}

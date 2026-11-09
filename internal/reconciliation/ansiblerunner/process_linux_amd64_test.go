@@ -236,7 +236,7 @@ func TestAnAdapterFailureNamesTheOutputItsRequestNames(t *testing.T) {
 	} {
 		for index, remediation := range []string{
 			"read the adapter output retained beside this attempt's log",
-			"read the adapter output retained in this run's run.output",
+			"read the adapter output retained in this run's Logs file",
 			"",
 		} {
 			t.Run(fmt.Sprintf("%s/%d", failed.name, index), func(t *testing.T) {

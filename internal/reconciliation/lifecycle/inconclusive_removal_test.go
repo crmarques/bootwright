@@ -45,7 +45,7 @@ func removalLeftUnknown(t *testing.T, replaySafe bool) *harness {
 // recorded, in order.
 func resolutions(t *testing.T, h *harness) []reconciliation.EffectState {
 	t.Helper()
-	store := operationstore.New(h.workspace.area, time.Now)
+	store := operationstore.New(h.workspace.area, h.workspace.logArea, time.Now)
 	operation := currentOperation(t, h)
 	record, err := store.Block(context.Background(), operation, "install")
 	if err != nil {

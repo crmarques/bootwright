@@ -133,7 +133,7 @@ func (s *Store) collectRegistryStages(ctx context.Context, root *directory) erro
 }
 
 // collectContextStages removes the stages in a leased context's state
-// directory and, with subtrees, in its operation, run and trust areas.
+// directory and, with subtrees, in its operation and trust areas.
 func (s *Store) collectContextStages(ctx context.Context, dir *directory, subtrees bool) error {
 	runtime, err := openDirectory(dir, "state")
 	if err != nil {
@@ -146,7 +146,7 @@ func (s *Store) collectContextStages(ctx context.Context, dir *directory, subtre
 	if !subtrees {
 		return nil
 	}
-	for _, name := range []string{"operations", "runs", trustSubtree} {
+	for _, name := range []string{"operations", trustSubtree} {
 		area, err := openDirectory(runtime, name)
 		if err != nil {
 			continue

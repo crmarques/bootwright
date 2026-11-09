@@ -72,8 +72,8 @@ func counted(t *testing.T, h *harness) (context.Context, *startCounter) {
 	t.Cleanup(cancel)
 	counter := &startCounter{starts: map[string]int{}, repeat: cancel, refused: make(chan struct{})}
 	base := h.service.options.Operations
-	h.service.options.Operations = func(area operationstore.Area) OperationStore {
-		return countedStore{OperationStore: base(area), counter: counter}
+	h.service.options.Operations = func(area, logs operationstore.Area) OperationStore {
+		return countedStore{OperationStore: base(area, logs), counter: counter}
 	}
 	return ctx, counter
 }

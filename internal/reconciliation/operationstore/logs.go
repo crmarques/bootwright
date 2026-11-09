@@ -24,6 +24,10 @@ const (
 	maxLogDetail          = 512
 )
 
+// MaxContextLogBytes is where an attempt's retained output is cut short; the
+// JSONL logs keep their own bounds, so capacity alone never faults a log.
+const MaxContextLogBytes = 256 << 20
+
 // LogRecord is the only shape a private operation log accepts. Every field is
 // bounded normalized product vocabulary; raw adapter bytes, terminal control
 // sequences and anything an adapter marked sensitive never reach it.
@@ -55,17 +59,17 @@ func (l *Log) Path() string { return l.path }
 // Failed reports whether a write to this log has failed.
 func (l *Log) Failed() bool { return l != nil && l.failed != nil }
 
-func OperationLogPath(id string) string { return path.Join(id, "logs", "operation.jsonl") }
+func OperationLogPath(id string) string { return path.Join(id, "operation.jsonl") }
 
 // LogDirectory names where one operation's logs are written on the host, so a
 // result can point an operator at work still in flight. It is empty when the
-// area reports no host location.
+// log area reports no host location.
 func (s *Store) LogDirectory(id string) string {
-	location := s.area.Location()
+	location := s.logs.Location()
 	if location == "" || id == "" {
 		return ""
 	}
-	return path.Join(location, id, "logs")
+	return path.Join(location, id)
 }
 
 func AttemptLogPath(id, block string, attempt, resolution int) (string, error) {
@@ -81,7 +85,7 @@ func AttemptLogPath(id, block string, attempt, resolution int) (string, error) {
 		}
 		file += "-resolution-" + suffix
 	}
-	return path.Join(id, "logs", "blocks", block, file+".jsonl"), nil
+	return path.Join(id, "blocks", block, file+".jsonl"), nil
 }
 
 // AdapterOutput retains what one adapter process printed on its own standard
@@ -96,14 +100,14 @@ type AdapterOutput struct {
 	ctx  context.Context
 	area Area
 	path string
-	// store is set for an attempt's output, which shares its area with the
-	// operation records and so takes only the room outputRoom gives it.
+	// store is set for an attempt's output, which takes only the room
+	// outputRoom leaves it beneath MaxContextLogBytes.
 	store   *Store
 	mutex   sync.Mutex
 	pending []byte
 	written int
 	// limit is what this output keeps in all: MaxAdapterOutputBytes, lowered
-	// to what it holds once its area reached the line ReservedBytes keeps.
+	// to what it holds once its area reached MaxContextLogBytes.
 	limit     int
 	truncated bool
 	closed    bool
@@ -111,15 +115,15 @@ type AdapterOutput struct {
 
 // OpenAdapterOutput prepares the retained output beside an already open attempt
 // log, whose own directory it shares. It cannot fail, because retention is not
-// a precondition of the effect it records. An output inside an operation's
-// directory is an attempt's, and never takes the area into ReservedBytes; a
-// bounded run's lies in an area of its own, which holds no records.
+// a precondition of the effect it records, and it is cut short once the log
+// area holds MaxContextLogBytes.
 func (s *Store) OpenAdapterOutput(ctx context.Context, target string) *AdapterOutput {
-	output := &AdapterOutput{ctx: ctx, area: s.area, path: target, limit: MaxAdapterOutputBytes}
-	if operation, _, _ := strings.Cut(target, "/"); reconciliation.ValidOperationID(operation) {
-		output.store = s
-	}
-	return output
+	return &AdapterOutput{ctx: ctx, area: s.logs, path: target, limit: MaxAdapterOutputBytes, store: s}
+}
+
+// OpenRunOutput prepares a bounded run's output in the file its run area made.
+func OpenRunOutput(ctx context.Context, area Area, target string) *AdapterOutput {
+	return &AdapterOutput{ctx: ctx, area: area, path: target, limit: MaxAdapterOutputBytes}
 }
 
 func (o *AdapterOutput) Write(value []byte) (int, error) {
@@ -207,14 +211,14 @@ func AdapterOutputPath(logPath string) (string, error) {
 // OpenLog establishes the logging boundary before its effect or observation
 // runs. A failure here is a durable operation fault, not a warning.
 func (s *Store) OpenLog(ctx context.Context, target string) (*Log, error) {
-	if err := s.area.EnsureDirectory(ctx, path.Dir(target)); err != nil {
+	if err := s.logs.EnsureDirectory(ctx, path.Dir(target)); err != nil {
 		return nil, err
 	}
-	log := &Log{area: s.area, stamp: s.now, path: target, limit: MaxLogBytes}
+	log := &Log{area: s.logs, stamp: s.now, path: target, limit: MaxLogBytes}
 	if attemptLog(target) {
 		log.limit = AttemptLogBytes
 	}
-	entries, err := s.area.Entries(ctx, path.Dir(target))
+	entries, err := s.logs.Entries(ctx, path.Dir(target))
 	if err != nil {
 		return nil, err
 	}
@@ -294,27 +298,27 @@ func (l *Log) Close(ctx context.Context) error {
 
 func attemptLog(target string) bool {
 	parts := strings.Split(target, "/")
-	return len(parts) == 5 && parts[1] == "logs" && parts[2] == "blocks" && strings.HasPrefix(parts[4], "attempt-")
+	return len(parts) == 4 && parts[1] == "blocks" && strings.HasPrefix(parts[3], "attempt-")
 }
 
 // LogPaths lists created logs once, operation log first, then blocks in frozen
 // plan order and their attempts and resolutions in numeric order. Each is named
-// relative to the state root, as a structured result lists it, so an area that
+// relative to the log root, as a structured result lists it, so an area that
 // cannot place itself there names none rather than a path that reads as one.
 func (s *Store) LogPaths(ctx context.Context, id string, plan reconciliation.Plan) ([]string, error) {
-	reference := s.area.Reference()
+	reference := s.logs.Reference()
 	if reference == "" {
 		return nil, nil
 	}
 	var paths []string
-	if _, found, err := s.area.Read(ctx, OperationLogPath(id), 0); err != nil {
+	if _, found, err := s.logs.Read(ctx, OperationLogPath(id), 0); err != nil {
 		return nil, err
 	} else if found {
 		paths = append(paths, path.Join(reference, OperationLogPath(id)))
 	}
 	for _, block := range plan.Blocks {
-		directory := path.Join(id, "logs", "blocks", block.ID)
-		entries, err := s.area.Entries(ctx, directory)
+		directory := path.Join(id, "blocks", block.ID)
+		entries, err := s.logs.Entries(ctx, directory)
 		if err != nil {
 			return nil, err
 		}

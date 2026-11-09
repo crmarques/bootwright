@@ -16,13 +16,13 @@ func TestSettledApplyRestoresALatchedLogFault(t *testing.T) {
 	id := completeApply(t, h)
 	changeOperation(t, h, id, func(record *operationstore.Operation) { record.LogFault = true })
 	logPath := "append " + operationstore.OperationLogPath(id)
-	h.workspace.area.fail[logPath] = errors.New("no space")
+	h.workspace.logArea.fail[logPath] = errors.New("no space")
 	before := untouchedOf(h)
 	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName}); firstCode(err) != "runtime.log" {
 		t.Fatalf("settle with an unrestored log fault: %v", err)
 	}
 	before.require(t, h)
-	delete(h.workspace.area.fail, logPath)
+	delete(h.workspace.logArea.fail, logPath)
 	result, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName})
 	if err != nil || !result.Settled || result.Receipt.Operation != id {
 		t.Fatalf("settle = %+v (%v)", result, err)

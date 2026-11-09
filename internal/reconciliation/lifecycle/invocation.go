@@ -259,7 +259,7 @@ func attemptOutputRemediation(execution Execution) string {
 	if err != nil {
 		return retained
 	}
-	relative, found := strings.CutPrefix(output, execution.Operation+"/logs/")
+	relative, found := strings.CutPrefix(output, execution.Operation+"/")
 	if !found {
 		return retained
 	}

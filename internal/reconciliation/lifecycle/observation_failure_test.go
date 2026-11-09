@@ -95,10 +95,10 @@ func blockUnresolved(t *testing.T, h *harness, block string) Unresolved {
 // a block's first attempt.
 func resolutionLog(t *testing.T, h *harness, block, event string) []operationstore.LogRecord {
 	t.Helper()
-	name := path.Join(firstOperation, "logs", "blocks", block, "attempt-000001-resolution-000001.jsonl")
-	h.workspace.area.mutex.Lock()
-	data := bytes.Clone(h.workspace.area.files[name])
-	h.workspace.area.mutex.Unlock()
+	name := path.Join(firstOperation, "blocks", block, "attempt-000001-resolution-000001.jsonl")
+	h.workspace.logArea.mutex.Lock()
+	data := bytes.Clone(h.workspace.logArea.files[name])
+	h.workspace.logArea.mutex.Unlock()
 	var found []operationstore.LogRecord
 	lines := bufio.NewScanner(bytes.NewReader(data))
 	for lines.Scan() {

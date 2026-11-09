@@ -14,16 +14,17 @@ import (
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
-// A registry written by a format that named contexts by an allocated identity
-// carries records this reader cannot attribute, so every access refuses and
+// A registry of any version but RegistryVersion is another build's, even one
+// whose body this build could otherwise read, so every access refuses and
 // nothing in the store is rewritten.
 func TestSupersededRegistryFormatsRefuseWithoutRewriting(t *testing.T) {
-	for _, version := range []string{"2", "3", "4"} {
+	for _, number := range []int{contexts.RegistryVersion - 1, contexts.RegistryVersion + 1} {
+		version := strconv.Itoa(number)
 		t.Run("v"+version, func(t *testing.T) {
 			store, sources := fixture(t)
 			record := publish(t, store, "example", sources)
 			path := filepath.Join(store.options.Root, "registry.json")
-			before := []byte("{\"version\":" + version + ",\"idNamespace\":\"0123456789abcdef\",\"nextIdentity\":2,\"contexts\":[]}\n")
+			before := []byte("{\"version\":" + version + ",\"contexts\":[]}\n")
 			writePrivate(t, path, before)
 			ctx := context.Background()
 			for _, operation := range []func() error{

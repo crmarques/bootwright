@@ -30,19 +30,18 @@ const (
 // maxContextStateEntries bounds what one context's state directory may hold.
 // It must admit every contextStateEntry below: a layout verification reading
 // fewer would refuse every mutation once the last of them exists.
-const maxContextStateEntries = 5
+const maxContextStateEntries = 4
 
 // contextStateEntry names everything one context's runtime state may hold: its
 // reservation and mutation records, the operations a registered lifecycle
-// operation owns, the runs a bounded operation retains its output in, and the
-// SSH host keys this context trusts.
+// operation owns, and the SSH host keys this context trusts.
 func contextStateEntry(name string) bool {
 	return name == "reservation.json" || name == "mutation.json" ||
-		name == "operations" || name == "runs" || name == trustSubtree
+		name == "operations" || name == trustSubtree
 }
 
 func contextStateDirectory(name string) bool {
-	return name == "operations" || name == "runs" || name == trustSubtree
+	return name == "operations" || name == trustSubtree
 }
 
 // Context traversal accepts only the owned layout. It never follows a link or
@@ -85,11 +84,11 @@ func contextEntryAllowed(path, name string, directory bool) bool {
 		_, err := secretPath(name, 1, 1)
 		return !directory && err == nil
 	}
-	// The operations, runs and trust areas own their own naming and bounds, so
+	// The operations and trust areas own their own naming and bounds, so
 	// deletion admits exactly what those areas were allowed to create. Without
-	// this a context that ever ran one operation, kept one bounded run or
-	// trusted one host key can never be deleted.
-	for _, area := range []string{"state/operations", "state/runs", "state/" + trustSubtree} {
+	// this a context that ever ran one operation or trusted one host key can
+	// never be deleted.
+	for _, area := range []string{"state/operations", "state/" + trustSubtree} {
 		if path == area || strings.HasPrefix(path, area+"/") {
 			return safeOperationName(name)
 		}
@@ -144,7 +143,7 @@ func contextDirectoryLimit(path string) int {
 	if path == "secrets" || strings.HasPrefix(path, "secrets/") {
 		return maxSecretEntries
 	}
-	for _, area := range []string{"state/operations", "state/runs", "state/" + trustSubtree} {
+	for _, area := range []string{"state/operations", "state/" + trustSubtree} {
 		if path == area || strings.HasPrefix(path, area+"/") {
 			return maxOperationEntries
 		}
@@ -345,6 +344,9 @@ func (t *transaction) Delete(ctx context.Context, requested contexts.Record) err
 	}
 	registry := cloneRegistry(t.registry)
 	if err := t.dropContextClaims(ctx, record.Name); err != nil {
+		return err
+	}
+	if err := t.store.removeContextLogs(ctx, record.Name); err != nil {
 		return err
 	}
 	registry.Contexts = slices.DeleteFunc(registry.Contexts, func(item contexts.Record) bool { return item.Name == record.Name })

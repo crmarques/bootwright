@@ -3,247 +3,205 @@
 package contextfs
 
 import (
-	"cmp"
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
 
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
-	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 // maxBoundedRuns is how many bounded runs one context's runs area keeps. Each
-// run's retained output is bounded at operationstore.MaxAdapterOutputBytes, so
-// the output of the runs it keeps never reaches the area's byte bound.
+// run's retained output is bounded at operationstore.MaxAdapterOutputBytes.
 const maxBoundedRuns = 16
 
-const runsSubtree = "runs"
+const (
+	runsSubtree       = "runs"
+	runPrefix         = "run-"
+	outputSuffix      = ".output"
+	maxRunAllocations = 16
+)
+
+func outputNumber(name, prefix string) (int, bool) {
+	digits, found := strings.CutPrefix(name, prefix)
+	if digits, found = strings.CutSuffix(digits, outputSuffix); !found {
+		return 0, false
+	}
+	number, err := reconciliation.ParseNumber(digits)
+	return number, err == nil
+}
+
+func outputName(prefix string, number int) (string, error) {
+	digits, err := reconciliation.FormatNumber(number)
+	return prefix + digits + outputSuffix, err
+}
 
 // OpenRun makes room among the newest runs this context's runs area keeps,
-// then creates identity's directory exclusively and holds it until the
-// callback that received this view returns, so no other run's retention
-// removes a run still in progress. A failure leaves no directory this call
-// created.
-func (r *lifecycleRun) OpenRun(ctx context.Context, identity string) error {
+// then creates the next run's file exclusively and holds it until the callback
+// that received this view returns, so no other run's retention removes a run
+// still in progress. A failure leaves no file this call created.
+func (r *lifecycleRun) OpenRun(ctx context.Context) (string, error) {
 	if err := r.runs.available(ctx, true); err != nil {
-		return err
-	}
-	if !reconciliation.ValidRunID(identity) {
-		return state("a bounded run's directory requires a run identity")
+		return "", err
 	}
 	runs, release, err := r.runs.root(ctx, true)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer release()
-	if err := r.runs.store.retireRuns(ctx, runs); err != nil {
-		return err
-	}
-	run, err := r.runs.store.createRun(ctx, runs, identity)
+	name, run, err := r.runs.store.openNextRun(ctx, runs)
 	if err != nil {
-		return err
+		return "", err
 	}
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	if r.released {
-		run.file.Close()
-		discardRun(runs, identity)
-		return state("bounded lifecycle run capability has closed")
+		discardRun(runs, name, run)
+		return "", state("bounded lifecycle run capability has closed")
 	}
 	r.held = append(r.held, run)
-	return nil
+	return name, nil
 }
 
-// release ends this view's holds on the runs it opened, so a later run's
-// retention may remove them once they are among the oldest.
 func (r *lifecycleRun) release() {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	r.released = true
 	for _, run := range r.held {
-		run.file.Close()
+		run.Close()
 	}
 	r.held = nil
 }
 
-// boundedRun is one run directory as retention first read it.
-type boundedRun struct {
-	name     string
-	identity syscall.Stat_t
+// openNextRun numbers the next run one past the highest the area holds or
+// just retired, so a number is never reused while the area lives.
+func (s *Store) openNextRun(ctx context.Context, runs *directory) (string, *os.File, error) {
+	highest, err := s.retireRuns(ctx, runs)
+	if err != nil {
+		return "", nil, err
+	}
+	for attempt := 1; attempt <= maxRunAllocations; attempt++ {
+		name, err := outputName(runPrefix, highest+attempt)
+		if err != nil {
+			return "", nil, diagnostics.NewFailureWithRemediation("lifecycle.state", "bounded run numbers are exhausted in "+runs.path, "",
+				"remove "+runs.path+", then repeat the command")
+		}
+		run, err := s.createRun(ctx, runs, name)
+		if errors.Is(err, syscall.EEXIST) {
+			continue
+		}
+		return name, run, err
+	}
+	return "", nil, state("bounded run output could not be created exclusively in " + runs.path)
 }
 
-// retireRuns removes the oldest runs no live run holds until fewer than
-// maxBoundedRuns remain, so the run about to open is among the newest the area
-// keeps. It syncs the area once, after every removal, because the first run
-// over an area an interrupted retention left full may remove thousands.
-func (s *Store) retireRuns(ctx context.Context, runs *directory) error {
-	candidates, err := listRuns(ctx, runs)
+// retireRuns removes the lowest-numbered runs no live run holds until fewer
+// than maxBoundedRuns remain, and reports the highest number it listed. Every
+// entry not named as a run is neither counted nor removed.
+func (s *Store) retireRuns(ctx context.Context, runs *directory) (int, error) {
+	names, err := directoryNames(runs, maxOperationEntries)
 	if err != nil {
-		return err
+		return 0, state("bounded run storage cannot be listed: " + runs.path)
 	}
-	removed, remaining := false, len(candidates)
-	for _, candidate := range candidates {
+	numbers := []int{}
+	for _, name := range names {
+		if number, valid := outputNumber(name, runPrefix); valid {
+			numbers = append(numbers, number)
+		}
+	}
+	slices.Sort(numbers)
+	highest, remaining, removed := 0, len(numbers), false
+	if len(numbers) != 0 {
+		highest = numbers[len(numbers)-1]
+	}
+	for _, number := range numbers {
 		if remaining < maxBoundedRuns {
 			break
 		}
 		if err := ctx.Err(); err != nil {
-			return err
+			return 0, err
 		}
-		if retireRun(runs, candidate) {
+		name, _ := outputName(runPrefix, number)
+		if retireRun(runs, name) {
 			removed, remaining = true, remaining-1
 		}
 	}
-	if !removed {
-		return nil
-	}
-	return s.syncDirectory(ctx, runs)
-}
-
-// listRuns lists, oldest first, the private directories named as runs. A run
-// is ordered by its directory's modification time and then by name, never by
-// its random identity alone. Every other entry is left out, and so is never
-// removed or counted.
-func listRuns(ctx context.Context, runs *directory) ([]boundedRun, error) {
-	names, err := directoryNames(runs, maxOperationEntries)
-	if err != nil {
-		return nil, state("bounded run storage cannot be listed: " + heldEntry(runs))
-	}
-	candidates := make([]boundedRun, 0, len(names))
-	for _, name := range names {
-		if err := ctx.Err(); err != nil {
-			return nil, err
+	if removed {
+		if err := s.syncDirectory(ctx, runs); err != nil {
+			return 0, err
 		}
-		if !reconciliation.ValidRunID(name) {
-			continue
-		}
-		run, err := openDirectory(runs, name)
-		if err != nil {
-			continue
-		}
-		candidates = append(candidates, boundedRun{name: name, identity: run.identity})
-		run.file.Close()
 	}
-	slices.SortFunc(candidates, func(x, y boundedRun) int {
-		return cmp.Or(
-			cmp.Compare(x.identity.Mtim.Sec, y.identity.Mtim.Sec),
-			cmp.Compare(x.identity.Mtim.Nsec, y.identity.Mtim.Nsec),
-			strings.Compare(x.name, y.name),
-		)
-	})
-	return candidates, nil
+	return highest, nil
 }
 
 // retireRun removes one run only while this call holds it exclusively and it
-// is still the directory listed, empty or holding only its own private output.
-// A run another live run holds, one holding anything else and one whose output
-// is a link, is linked elsewhere or lies on another device are left as they
-// are. It reports whether the run is gone.
-func retireRun(runs *directory, candidate boundedRun) bool {
-	run, err := openDirectory(runs, candidate.name)
+// is the area's own private, singly linked regular file. It reports whether
+// the run is gone.
+func retireRun(runs *directory, name string) bool {
+	file, err := openRelative(runs, name, syscall.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return false
 	}
-	defer run.file.Close()
-	if !sameIdentity(run.identity, candidate.identity) {
-		return false
-	}
-	if syscall.Flock(int(run.file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
-		return false
-	}
-	names, err := directoryNames(run, 1)
-	if err != nil {
-		return false
-	}
-	if len(names) == 1 {
-		output, kept := runOutput(run, names[0])
-		if !kept || unlinkVerified(run, lifecycle.RunOutputName, output, false) != nil {
-			return false
-		}
-	}
-	return unlinkVerified(runs, candidate.name, run.identity, true) == nil
-}
-
-// runOutput reports the identity of a run's one entry while it is the run's
-// own output: a private, singly linked regular file on the run's device.
-func runOutput(run *directory, name string) (syscall.Stat_t, bool) {
-	if name != lifecycle.RunOutputName {
-		return syscall.Stat_t{}, false
-	}
-	file, err := openRelative(run, name, pathHandle, 0)
-	if err != nil {
-		return syscall.Stat_t{}, false
-	}
+	defer file.Close()
 	stat, err := statHandle(file)
-	file.Close()
-	if err != nil || !private(stat, syscall.S_IFREG, run.identity.Uid, run.identity.Gid) || stat.Dev != run.identity.Dev {
-		return syscall.Stat_t{}, false
+	if err != nil || !private(stat, syscall.S_IFREG, runs.identity.Uid, runs.identity.Gid) || stat.Dev != runs.identity.Dev {
+		return false
 	}
-	return stat, true
+	if syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
+		return false
+	}
+	return unlinkVerified(runs, name, stat, false) == nil
 }
 
-// createRun creates one run's directory exclusively and holds it shared, so a
-// retention running beside it never removes it. A directory another retention
-// removed before the hold was taken refuses, and any failure once the
-// directory exists removes it.
-func (s *Store) createRun(ctx context.Context, runs *directory, identity string) (*directory, error) {
-	if err := s.checkpoint(ctx, checkpointMkdir); err != nil {
+// createRun creates one run's file exclusively and holds it shared, so a
+// retention running beside it never removes it. A file another retention
+// removed before the hold was taken refuses, and any failure once the file
+// exists removes it.
+func (s *Store) createRun(ctx context.Context, runs *directory, name string) (*os.File, error) {
+	if err := s.checkpoint(ctx, checkpointCreateFile); err != nil {
 		return nil, err
 	}
 	if err := runs.verify(); err != nil {
 		return nil, err
 	}
-	if err := syscall.Mkdirat(int(runs.file.Fd()), identity, 0700); err != nil {
-		return nil, state("bounded run directory could not be created exclusively: " + storeEntry(runs, identity))
-	}
-	run, err := s.holdRun(ctx, runs, identity)
-	if err != nil {
-		discardRun(runs, identity)
+	location := filepath.Join(runs.path, name)
+	run, err := openRelative(runs, name, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL, 0600)
+	if errors.Is(err, syscall.EEXIST) {
 		return nil, err
 	}
-	return run, nil
-}
-
-func (s *Store) holdRun(ctx context.Context, runs *directory, identity string) (*directory, error) {
-	location := storeEntry(runs, identity)
-	run, err := openDirectory(runs, identity)
 	if err != nil {
-		return nil, state("bounded run directory is not a private directory: " + location)
+		return nil, state("bounded run output could not be created exclusively: " + location)
 	}
-	if run.identity.Mode&0777 != 0700 {
-		run.file.Close()
-		return nil, state("new state directory does not have private creation permissions")
+	created, err := statHandle(run)
+	if err != nil || !private(created, syscall.S_IFREG, runs.identity.Uid, runs.identity.Gid) || created.Dev != runs.identity.Dev {
+		run.Close()
+		discardCreated(runs, name, created)
+		return nil, state("bounded run output is not a private file: " + location)
 	}
-	if syscall.Flock(int(run.file.Fd()), syscall.LOCK_SH|syscall.LOCK_NB) != nil {
-		run.file.Close()
-		return nil, state("bounded run directory could not be held: " + location)
+	if syscall.Flock(int(run.Fd()), syscall.LOCK_SH|syscall.LOCK_NB) != nil {
+		discardRun(runs, name, run)
+		return nil, state("bounded run output could not be held: " + location)
 	}
-	if run.verify() != nil {
-		run.file.Close()
-		return nil, state("bounded run directory was removed before it was held: " + location)
+	if current, err := listedEntry(runs, name); err != nil || !sameIdentity(current, created) {
+		run.Close()
+		return nil, state("bounded run output was removed before it was held: " + location)
 	}
 	if err := s.syncDirectory(ctx, runs); err != nil {
-		run.file.Close()
+		discardRun(runs, name, run)
 		return nil, err
 	}
 	return run, nil
 }
 
-// discardRun removes a run directory this call created and could not hand
-// out, only while it is still the empty directory it was. It takes no context,
-// so an interrupted run still cleans up, and its own failure is ignored: the
-// refusal that caused it is the one to report.
-func discardRun(runs *directory, identity string) {
-	file, err := openRelative(runs, identity, pathHandle, 0)
-	if err != nil {
-		return
-	}
-	stat, err := statHandle(file)
-	file.Close()
-	if err != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFDIR {
-		return
-	}
-	if unlinkVerified(runs, identity, stat, true) == nil {
-		_ = runs.file.Sync()
+// discardRun takes no context, so an interrupted run still cleans up.
+func discardRun(runs *directory, name string, run *os.File) {
+	stat, err := statHandle(run)
+	run.Close()
+	if err == nil {
+		discardCreated(runs, name, stat)
 	}
 }

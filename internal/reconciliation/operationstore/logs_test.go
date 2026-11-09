@@ -3,6 +3,7 @@ package operationstore
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -16,15 +17,15 @@ func TestLogOpensBeforeItsEffectAndReportsFailure(t *testing.T) {
 	if err != nil || log.Path() != target {
 		t.Fatalf("open = %v (%v)", log, err)
 	}
-	if len(area.files[target]) == 0 {
+	if len(area.logs.files[target]) == 0 {
 		t.Fatal("opening the log wrote no durable record")
 	}
-	area.fail["append "+target] = errors.New("no space")
+	area.logs.fail["append "+target] = errors.New("no space")
 	if err := log.Append(ctx, LogRecord{Event: "started"}); err == nil {
 		t.Fatal("a failed log append reported success")
 	}
-	delete(area.fail, "append "+target)
-	area.fail["ensure "+strings.TrimSuffix(target, "/operation.jsonl")] = errors.New("denied")
+	delete(area.logs.fail, "append "+target)
+	area.logs.fail["ensure "+strings.TrimSuffix(target, "/operation.jsonl")] = errors.New("denied")
 	if _, err := store.OpenLog(ctx, target); err == nil {
 		t.Fatal("a log opened without its directory")
 	}
@@ -36,8 +37,8 @@ func TestLogOpensBeforeItsEffectAndReportsFailure(t *testing.T) {
 func TestAFailedLogWriteIsSticky(t *testing.T) {
 	for name, fail := range map[string]func(log *Log, area *memoryArea) (heal func()){
 		"the area refuses it": func(log *Log, area *memoryArea) func() {
-			area.fail["append "+log.Path()] = errors.New("no space")
-			return func() { delete(area.fail, "append "+log.Path()) }
+			area.logs.fail["append "+log.Path()] = errors.New("no space")
+			return func() { delete(area.logs.fail, "append "+log.Path()) }
 		},
 		"it cannot be stamped": func(log *Log, _ *memoryArea) func() {
 			stamp := log.stamp
@@ -59,15 +60,15 @@ func TestAFailedLogWriteIsSticky(t *testing.T) {
 				t.Fatalf("a failed write = %v, failed %t", err, log.Failed())
 			}
 			heal()
-			written := string(area.files[target])
+			written := string(area.logs.files[target])
 			if err := log.Append(ctx, LogRecord{Event: "after"}); err == nil {
 				t.Fatal("a log accepted a record after a failed write")
 			}
 			if err := log.Close(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if string(area.files[target]) != written {
-				t.Fatalf("a failed log was written past its gap: %s", area.files[target])
+			if string(area.logs.files[target]) != written {
+				t.Fatalf("a failed log was written past its gap: %s", area.logs.files[target])
 			}
 		})
 	}
@@ -84,7 +85,7 @@ func TestLogRecordsAreBoundedAndSanitized(t *testing.T) {
 	if err := log.Append(ctx, LogRecord{Event: "step\x1b[31m", Detail: "a\nb\x00c"}); err != nil {
 		t.Fatal(err)
 	}
-	written := string(area.files[target])
+	written := string(area.logs.files[target])
 	for _, forbidden := range []string{"\x1b", "\x00", `a\nb`} {
 		if strings.Contains(written, forbidden) {
 			t.Fatalf("the log retained %q", forbidden)
@@ -99,7 +100,7 @@ func TestLogRecordsAreBoundedAndSanitized(t *testing.T) {
 	if err := log.Append(ctx, LogRecord{Event: strings.Repeat("x", maxLogDetail+64)}); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(area.files[target]), strings.Repeat("x", maxLogDetail+1)) {
+	if strings.Contains(string(area.logs.files[target]), strings.Repeat("x", maxLogDetail+1)) {
 		t.Fatal("an oversized field was not truncated")
 	}
 }
@@ -118,14 +119,14 @@ func TestLogTruncationIsExplicit(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if strings.Contains(string(area.files[target]), "dropped") {
+	if strings.Contains(string(area.logs.files[target]), "dropped") {
 		t.Fatal("a record was written past the log bound")
 	}
 	if err := log.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(area.files[target]), `{"truncated":true,"dropped":3}`) {
-		t.Fatalf("truncation marker missing: %s", area.files[target])
+	if !strings.Contains(string(area.logs.files[target]), `{"truncated":true,"dropped":3}`) {
+		t.Fatalf("truncation marker missing: %s", area.logs.files[target])
 	}
 	if err := log.Append(ctx, LogRecord{Event: "after close"}); err == nil {
 		t.Fatal("a closed log accepted a record")
@@ -135,11 +136,11 @@ func TestLogTruncationIsExplicit(t *testing.T) {
 func TestAttemptLogPathsAreNumbered(t *testing.T) {
 	id := "op-" + strings.Repeat("ab", 16)
 	attempt, err := AttemptLogPath(id, "alpha", 2, 0)
-	if err != nil || attempt != id+"/logs/blocks/alpha/attempt-000002.jsonl" {
+	if err != nil || attempt != id+"/blocks/alpha/attempt-000002.jsonl" {
 		t.Fatalf("attempt log = %q (%v)", attempt, err)
 	}
 	resolution, err := AttemptLogPath(id, "alpha", 2, 5)
-	if err != nil || resolution != id+"/logs/blocks/alpha/attempt-000002-resolution-000005.jsonl" {
+	if err != nil || resolution != id+"/blocks/alpha/attempt-000002-resolution-000005.jsonl" {
 		t.Fatalf("resolution log = %q (%v)", resolution, err)
 	}
 	if _, err := AttemptLogPath(id, "alpha", 0, 0); err == nil {
@@ -147,14 +148,14 @@ func TestAttemptLogPathsAreNumbered(t *testing.T) {
 	}
 }
 
-// A structured result names each log relative to the state root, so the area's
+// A structured result names each log relative to the log root, so the area's
 // own place under it leads every path, and an area that cannot say where it is
 // names none rather than a path that reads as relative to the state root.
 func TestLogPathsFollowFrozenPlanOrder(t *testing.T) {
 	ctx := context.Background()
 	store, area := newStore(t)
-	const reference = "contexts/lab/state/operations"
-	area.reference = reference
+	const reference = "contexts/lab/operations"
+	area.logs.reference = reference
 	plan := testPlan(t, "bravo", "alpha")
 	id := "op-" + strings.Repeat("ab", 16)
 	if _, err := store.OpenLog(ctx, OperationLogPath(id)); err != nil {
@@ -177,10 +178,10 @@ func TestLogPathsFollowFrozenPlanOrder(t *testing.T) {
 	}
 	want := []string{
 		reference + "/" + OperationLogPath(id),
-		reference + "/" + id + "/logs/blocks/alpha/attempt-000001.jsonl",
-		reference + "/" + id + "/logs/blocks/alpha/attempt-000002.jsonl",
-		reference + "/" + id + "/logs/blocks/bravo/attempt-000001.jsonl",
-		reference + "/" + id + "/logs/blocks/bravo/attempt-000002.jsonl",
+		reference + "/" + id + "/blocks/alpha/attempt-000001.jsonl",
+		reference + "/" + id + "/blocks/alpha/attempt-000002.jsonl",
+		reference + "/" + id + "/blocks/bravo/attempt-000001.jsonl",
+		reference + "/" + id + "/blocks/bravo/attempt-000002.jsonl",
 	}
 	if len(paths) != len(want) {
 		t.Fatalf("log paths = %v", paths)
@@ -190,7 +191,7 @@ func TestLogPathsFollowFrozenPlanOrder(t *testing.T) {
 			t.Fatalf("log paths = %v, want %v", paths, want)
 		}
 	}
-	area.reference = ""
+	area.logs.reference = ""
 	if paths, err := store.LogPaths(ctx, id, plan); err != nil || len(paths) != 0 {
 		t.Fatalf("an area with no place under the state root named %v (%v)", paths, err)
 	}
@@ -203,10 +204,10 @@ func TestAdapterOutputIsRetainedBesideItsAttemptLog(t *testing.T) {
 		t.Fatal(err)
 	}
 	target, err := AdapterOutputPath(attempt)
-	if err != nil || target != id+"/logs/blocks/alpha/attempt-000001.output" {
+	if err != nil || target != id+"/blocks/alpha/attempt-000001.output" {
 		t.Fatalf("adapter output path = %q (%v)", target, err)
 	}
-	if _, err := AdapterOutputPath(id + "/logs/blocks/alpha/attempt-000001"); err == nil {
+	if _, err := AdapterOutputPath(id + "/blocks/alpha/attempt-000001"); err == nil {
 		t.Fatal("a path that is not an attempt log produced an output path")
 	}
 }
@@ -216,13 +217,13 @@ func TestAdapterOutputIsRetainedBesideItsAttemptLog(t *testing.T) {
 func TestAdapterOutputStreamsWhileItRunsAndBoundsWhatItKeeps(t *testing.T) {
 	ctx := context.Background()
 	store, area := newStore(t)
-	target := "op-" + strings.Repeat("ab", 16) + "/logs/blocks/one/attempt-000001.output"
+	target := "op-" + strings.Repeat("ab", 16) + "/blocks/one/attempt-000001.output"
 	output := store.OpenAdapterOutput(ctx, target)
 	if n, err := output.Write([]byte(strings.Repeat("x", (8 << 10)))); n != (8<<10) || err != nil {
 		t.Fatalf("write = %d (%v)", n, err)
 	}
-	if len(area.files[target]) != (8 << 10) {
-		t.Fatalf("a full buffer was not published: %d bytes", len(area.files[target]))
+	if len(area.logs.files[target]) != (8 << 10) {
+		t.Fatalf("a full buffer was not published: %d bytes", len(area.logs.files[target]))
 	}
 	if n, err := output.Write([]byte("tail")); n != 4 || err != nil {
 		t.Fatalf("write = %d (%v)", n, err)
@@ -233,7 +234,7 @@ func TestAdapterOutputStreamsWhileItRunsAndBoundsWhatItKeeps(t *testing.T) {
 	if bytes, truncated := output.Retained(); bytes != (8<<10)+4 || truncated {
 		t.Fatalf("retained = %d bytes, truncated %v", bytes, truncated)
 	}
-	if !strings.HasSuffix(string(area.files[target]), "tail") {
+	if !strings.HasSuffix(string(area.logs.files[target]), "tail") {
 		t.Fatal("closing the output dropped its tail")
 	}
 }
@@ -243,13 +244,13 @@ func TestAdapterOutputStreamsWhileItRunsAndBoundsWhatItKeeps(t *testing.T) {
 func TestAdapterOutputTruncatesAndNeverFailsItsRun(t *testing.T) {
 	ctx := context.Background()
 	store, area := newStore(t)
-	target := "op-" + strings.Repeat("ab", 16) + "/logs/blocks/one/attempt-000001.output"
+	target := "op-" + strings.Repeat("ab", 16) + "/blocks/one/attempt-000001.output"
 	output := store.OpenAdapterOutput(ctx, target)
-	area.fail["append "+target] = errors.New("no space")
+	area.logs.fail["append "+target] = errors.New("no space")
 	if n, err := output.Write([]byte(strings.Repeat("x", (8 << 10)))); n != (8<<10) || err != nil {
 		t.Fatalf("a failed retention reported a short write: %d (%v)", n, err)
 	}
-	delete(area.fail, "append "+target)
+	delete(area.logs.fail, "append "+target)
 	if n, err := output.Write([]byte(strings.Repeat("y", MaxAdapterOutputBytes))); n != MaxAdapterOutputBytes || err != nil {
 		t.Fatalf("write past the bound = %d (%v)", n, err)
 	}
@@ -260,27 +261,26 @@ func TestAdapterOutputTruncatesAndNeverFailsItsRun(t *testing.T) {
 	if bytes != MaxAdapterOutputBytes || !truncated {
 		t.Fatalf("retained = %d bytes, truncated %v", bytes, truncated)
 	}
-	if len(area.files[target]) != MaxAdapterOutputBytes {
-		t.Fatalf("published %d bytes, want the bound", len(area.files[target]))
+	if len(area.logs.files[target]) != MaxAdapterOutputBytes {
+		t.Fatalf("published %d bytes, want the bound", len(area.logs.files[target]))
 	}
 	if n, err := output.Write([]byte("after close")); n != 11 || err != nil {
 		t.Fatalf("a closed output reported a short write: %d (%v)", n, err)
 	}
 }
 
-// An attempt's retained output shares its area with the operation records, so
-// it never takes the area past the line ReservedBytes keeps free beneath the
-// byte bound: it keeps what fits beneath the line and reports itself cut
-// short, and the outputs of one store share what is left, so a later attempt
-// keeps nothing. A bounded run's output lies in an area that holds no records
-// and keeps its own bound.
-func TestAnAttemptsOutputNeverTakesTheReservedBytes(t *testing.T) {
+// An attempt's retained output never takes the context's log area past
+// MaxContextLogBytes: it keeps what fits beneath the bound and reports itself
+// cut short, and the outputs of one store share what is left, so a later
+// attempt keeps nothing. The JSONL logs are never cut by that bound, and a
+// bounded run's output keeps only its own bound.
+func TestAttemptOutputIsCutAtTheContextLogBound(t *testing.T) {
 	ctx := context.Background()
 	store, area := newStore(t)
 	const room = 10
-	area.files["filled/output"] = make([]byte, MaxBytes-ReservedBytes-room)
+	area.logs.files["filled/output"] = make([]byte, MaxContextLogBytes-room)
 	id := "op-" + strings.Repeat("ab", 16)
-	first, second := id+"/logs/blocks/one/attempt-000001.output", id+"/logs/blocks/two/attempt-000001.output"
+	first, second := id+"/blocks/one/attempt-000001.output", id+"/blocks/two/attempt-000001.output"
 	output := store.OpenAdapterOutput(ctx, first)
 	for _, line := range []string{"TASK [serve one]\n", "ok: [controller]\n"} {
 		if n, err := output.Write([]byte(line)); n != len(line) || err != nil {
@@ -290,8 +290,8 @@ func TestAnAttemptsOutputNeverTakesTheReservedBytes(t *testing.T) {
 	if err := output.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if kept, truncated := output.Retained(); kept != room || !truncated || string(area.files[first]) != "TASK [serv" {
-		t.Fatalf("the output kept %d bytes %q, truncated %t, want the %d beneath the line", kept, area.files[first], truncated, room)
+	if kept, truncated := output.Retained(); kept != room || !truncated || string(area.logs.files[first]) != "TASK [serv" {
+		t.Fatalf("the output kept %d bytes %q, truncated %t, want the %d beneath the line", kept, area.logs.files[first], truncated, room)
 	}
 	later := store.OpenAdapterOutput(ctx, second)
 	if _, err := later.Write([]byte("TASK [serve two]\n")); err != nil {
@@ -303,19 +303,27 @@ func TestAnAttemptsOutputNeverTakesTheReservedBytes(t *testing.T) {
 	if kept, truncated := later.Retained(); kept != 0 || !truncated {
 		t.Fatalf("a later attempt kept %d bytes, truncated %t, want nothing past the line", kept, truncated)
 	}
-	if _, found := area.files[second]; found {
-		t.Fatalf("a later attempt published %q past the line", area.files[second])
+	if _, found := area.logs.files[second]; found {
+		t.Fatalf("a later attempt published %q past the line", area.logs.files[second])
 	}
-	run := "run-" + strings.Repeat("ab", 16) + "/run.output"
-	bounded := store.OpenAdapterOutput(ctx, run)
+	log, err := store.OpenLog(ctx, OperationLogPath(id))
+	if err != nil || log.Append(ctx, LogRecord{Event: "group", Detail: "beyond the bound"}) != nil {
+		t.Fatalf("a JSONL log at the bound refused: %v", err)
+	}
+	if !strings.Contains(string(area.logs.files[OperationLogPath(id)]), "beyond the bound") {
+		t.Fatal("the context log bound cut a JSONL log")
+	}
+	runs := emptyArea()
+	run := "run-000001.output"
+	bounded := OpenRunOutput(ctx, runs, run)
 	if _, err := bounded.Write([]byte("TASK [read the power state]\n")); err != nil {
 		t.Fatal(err)
 	}
 	if err := bounded.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if kept, truncated := bounded.Retained(); kept != 28 || truncated || string(area.files[run]) != "TASK [read the power state]\n" {
-		t.Fatalf("a bounded run kept %d bytes %q, truncated %t, want all it printed", kept, area.files[run], truncated)
+	if kept, truncated := bounded.Retained(); kept != 28 || truncated || string(runs.files[run]) != "TASK [read the power state]\n" {
+		t.Fatalf("a bounded run kept %d bytes %q, truncated %t, want all it printed", kept, runs.files[run], truncated)
 	}
 }
 
@@ -325,28 +333,28 @@ func TestAnAttemptsOutputNeverTakesTheReservedBytes(t *testing.T) {
 func TestAdapterOutputPublishesEachWriteWithoutWaitingForAnother(t *testing.T) {
 	ctx := context.Background()
 	area := newArea()
-	store := New(area, time.Now)
-	target := "op-" + strings.Repeat("ab", 16) + "/logs/blocks/one/attempt-000001.output"
+	store := New(area, area.logs, time.Now)
+	target := "op-" + strings.Repeat("ab", 16) + "/blocks/one/attempt-000001.output"
 	output := store.OpenAdapterOutput(ctx, target)
 	if _, err := output.Write([]byte("TASK [boot the machine]\n")); err != nil {
 		t.Fatal(err)
 	}
-	if string(area.files[target]) != "TASK [boot the machine]\n" {
-		t.Fatalf("the first line was not published: %q", area.files[target])
+	if string(area.logs.files[target]) != "TASK [boot the machine]\n" {
+		t.Fatalf("the first line was not published: %q", area.logs.files[target])
 	}
 	for range 50 {
 		if _, err := output.Write([]byte("ok: [rhel-01]\n")); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if !strings.HasSuffix(string(area.files[target]), "ok: [rhel-01]\n") {
+	if !strings.HasSuffix(string(area.logs.files[target]), "ok: [rhel-01]\n") {
 		t.Fatal("the final line is buffered until another write")
 	}
 	if _, err := output.Write([]byte("TASK [eject the media]\n")); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasSuffix(string(area.files[target]), "TASK [eject the media]\n") {
-		t.Fatalf("the final write was not published: %d writes, %q", area.appends, area.files[target])
+	if !strings.HasSuffix(string(area.logs.files[target]), "TASK [eject the media]\n") {
+		t.Fatalf("the final write was not published: %d writes, %q", area.logs.appends, area.logs.files[target])
 	}
 }
 
@@ -380,7 +388,7 @@ func TestEachLogKeepsItsMarkerWithinItsBound(t *testing.T) {
 		if err := log.Close(ctx); err != nil {
 			t.Fatal(err)
 		}
-		written := area.files[target]
+		written := area.logs.files[target]
 		filled, filledArea := newStore(t)
 		last, err := filled.OpenLog(ctx, target)
 		if err != nil {
@@ -407,7 +415,7 @@ func TestAReopenedLogKeepsItsBoundAcrossInvocations(t *testing.T) {
 	ctx := context.Background()
 	store, area := newStore(t)
 	target := OperationLogPath("op-" + strings.Repeat("ab", 16))
-	area.files[target] = []byte(strings.Repeat("x", MaxLogBytes-100) + "\n")
+	area.logs.files[target] = []byte(strings.Repeat("x", MaxLogBytes-100) + "\n")
 	log, err := store.OpenLog(ctx, target)
 	if err != nil {
 		t.Fatal(err)
@@ -420,7 +428,7 @@ func TestAReopenedLogKeepsItsBoundAcrossInvocations(t *testing.T) {
 	if err := log.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if written := area.files[target]; len(written) > MaxLogBytes || !strings.HasSuffix(string(written), `"dropped":4}`+"\n") {
+	if written := area.logs.files[target]; len(written) > MaxLogBytes || !strings.HasSuffix(string(written), `"dropped":4}`+"\n") {
 		t.Fatalf("the reopened log holds %d bytes ending %q, want at most %d with its marker", len(written), written[max(len(written)-40, 0):], MaxLogBytes)
 	}
 }
@@ -453,8 +461,61 @@ func TestTheRecordsThatEndAnAttemptLogOutliveItsProgress(t *testing.T) {
 	if err := log.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
-	written := string(area.files[target])
+	written := string(area.logs.files[target])
 	if len(written) > AttemptLogBytes || !strings.Contains(written, `"event":"outcome"`) || !strings.Contains(written, `"event":"custody-failed"`) {
 		t.Fatalf("the attempt log holds %d bytes, its outcome %t, want at most %d with the records that end it", len(written), strings.Contains(written, `"event":"outcome"`), AttemptLogBytes)
+	}
+}
+
+// retainingArea records what a registration asks its log area to retain and
+// name current.
+type retainingArea struct {
+	*memoryArea
+	kept    [][]string
+	current []string
+}
+
+func (a *retainingArea) Retain(_ context.Context, keep []string) { a.kept = append(a.kept, keep) }
+
+func (a *retainingArea) MarkCurrent(_ context.Context, id string) {
+	a.current = append(a.current, id)
+}
+
+// A registration asks a log area that retains to keep the logs of the
+// operation the index named and of the one registering, and to name the new
+// one current, only once the index names it; an area that does not retain
+// is left as it is.
+func TestRegistrationRetainsTheLogsOfTheCurrentOperations(t *testing.T) {
+	ctx := context.Background()
+	area := newArea()
+	logs := &retainingArea{memoryArea: area.logs}
+	store := New(area, logs, fixedClock())
+	plan := testPlan(t, "alpha")
+	first := testOperation(t, plan)
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	area.fail["replace "+indexPath] = errors.New("interrupted")
+	if err := store.Register(ctx, first, plan); err == nil || len(logs.kept) != 0 || len(logs.current) != 0 {
+		t.Fatalf("an interrupted registration = %v, retained %v and marked %v", err, logs.kept, logs.current)
+	}
+	delete(area.fail, "replace "+indexPath)
+	store = New(area, logs, fixedClock())
+	if _, err := store.Index(ctx); err != nil {
+		t.Fatal(err)
+	}
+	second := first
+	second.ID = "op-" + strings.Repeat("cd", 16)
+	if err := store.Register(ctx, second, plan); err != nil {
+		t.Fatal(err)
+	}
+	third := first
+	third.ID = "op-" + strings.Repeat("ef", 16)
+	if err := store.Register(ctx, third, plan); err != nil {
+		t.Fatal(err)
+	}
+	if len(logs.kept) != 2 || !slices.Equal(logs.kept[0], []string{second.ID}) || !slices.Equal(logs.kept[1], []string{second.ID, third.ID}) ||
+		!slices.Equal(logs.current, []string{second.ID, third.ID}) {
+		t.Fatalf("registrations retained %v and marked %v", logs.kept, logs.current)
 	}
 }

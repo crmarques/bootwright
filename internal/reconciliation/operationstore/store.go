@@ -18,8 +18,8 @@ import (
 
 const indexPath = "index.json"
 
-// Store publishes the operation subtree through one held Workspace area. It is
-// invocation-scoped: the exclusive coordination its area was opened under is
+// Store publishes the operation subtree and its logs through two held Workspace
+// areas. It is invocation-scoped: the exclusive coordination they were opened under is
 // what makes a remembered expectation a safe replacement guard.
 //
 // Blocks of one operation publish their own records at the same time, so the
@@ -27,14 +27,15 @@ const indexPath = "index.json"
 // guard protects the map rather than serializing the writes.
 type Store struct {
 	area     Area
+	logs     Area
 	clock    func() time.Time
 	running  *Executable
 	mutex    sync.Mutex
 	expected map[string][]byte
-	// outputs guards what the attempts' retained output may still take of the
-	// area beneath the line ReservedBytes keeps free, which is measured once,
-	// at the first flush: a record or log written since only adds to what
-	// that reserve holds, never to what output may take.
+	// outputs guards what the attempts' retained output may still add to the
+	// log area beneath MaxContextLogBytes, which is measured once, at the
+	// first flush: a JSONL log written since is never cut by that bound, so
+	// it never takes what output may take.
 	outputs  sync.Mutex
 	measured bool
 	room     int64
@@ -43,8 +44,8 @@ type Store struct {
 	reserves map[string]reservation
 }
 
-func New(area Area, clock func() time.Time) *Store {
-	return &Store{area: area, clock: clock, expected: map[string][]byte{}}
+func New(records, logs Area, clock func() time.Time) *Store {
+	return &Store{area: records, logs: logs, clock: clock, expected: map[string][]byte{}}
 }
 
 // Running names the unmodified executable that reads the store.
@@ -143,6 +144,7 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 	if err != nil {
 		return err
 	}
+	previous := retainedIndex.Current
 	retainedIndex.Current = operation.ID
 	index, err := encode(retainedIndex, MaxIndexBytes)
 	if err != nil {
@@ -166,6 +168,10 @@ func (s *Store) Register(ctx context.Context, operation Operation, plan reconcil
 		return err
 	}
 	s.remember(indexPath, slices.Clone(index))
+	if retention, retains := s.logs.(LogRetention); retains {
+		retention.Retain(ctx, slices.DeleteFunc([]string{previous, operation.ID}, func(id string) bool { return id == "" }))
+		retention.MarkCurrent(ctx, operation.ID)
+	}
 	return nil
 }
 
@@ -271,12 +277,12 @@ func (s *Store) admit(ctx context.Context, id string, plan reconciliation.Plan, 
 	if plan.Verb == reconciliation.Destroy {
 		return refuseAtTheBound(fmt.Sprintf("%s, and this removal needs %d more for the records its registration writes", holds, needed))
 	}
-	return refuseAtTheBound(fmt.Sprintf("%s, and this apply needs the %d it keeps for its records and logs and those of the removal that takes it back", holds, needed))
+	return refuseAtTheBound(fmt.Sprintf("%s, and this apply needs the %d it keeps for its records and those of the removal that takes it back", holds, needed))
 }
 
-const AttemptEntries = 6
+const AttemptEntries = 3
 
-const AttemptBytes = 2*MaxAttemptBytes + AttemptLogBytes
+const AttemptBytes = 2 * MaxAttemptBytes
 
 type reserveRefusal struct{ error }
 
@@ -461,22 +467,43 @@ func (s *Store) held(ctx context.Context, target, skip string) (int, int64, erro
 }
 
 // outputRoom takes up to wanted bytes of what an attempt's retained output
-// may still add to the area beneath the line ReservedBytes keeps free, and
-// reports how many it took. Output that the area then refuses gives them
-// back with returnRoom.
+// may still add to the log area beneath MaxContextLogBytes, and reports how
+// many it took. Output that the area then refuses gives them back with
+// returnRoom.
 func (s *Store) outputRoom(ctx context.Context, wanted int) (int, error) {
 	s.outputs.Lock()
 	defer s.outputs.Unlock()
 	if !s.measured {
-		_, size, err := s.held(ctx, "", "")
+		size, err := s.logBytes(ctx, "")
 		if err != nil {
 			return 0, err
 		}
-		s.measured, s.room = true, max(MaxBytes-ReservedBytes-size, 0)
+		s.measured, s.room = true, max(MaxContextLogBytes-size, 0)
 	}
 	taken := min(int64(wanted), s.room)
 	s.room -= taken
 	return int(taken), nil
+}
+
+// logBytes is what the log area holds beneath target, in every file.
+func (s *Store) logBytes(ctx context.Context, target string) (int64, error) {
+	entries, err := s.logs.Entries(ctx, target)
+	if err != nil {
+		return 0, err
+	}
+	size := int64(0)
+	for _, entry := range entries {
+		if !entry.Directory {
+			size += entry.Size
+			continue
+		}
+		nested, err := s.logBytes(ctx, path.Join(target, entry.Name))
+		if err != nil {
+			return 0, err
+		}
+		size += nested
+	}
+	return size, nil
 }
 
 func (s *Store) returnRoom(size int) {
@@ -503,7 +530,7 @@ func (s *Store) Claimed(ctx context.Context) ([]string, error) {
 }
 
 // Reclaim removes every operation directory that holds nothing but the empty
-// blocks/ and logs/ a claim creates, which a fresh apply that never registered
+// blocks/ a claim creates, which a fresh apply that never registered
 // leaves, as does a registration stopped before its plan landed. Children go
 // before their directory, so one reclaimed part way still holds nothing and
 // goes with the next reclaim. The index's current operation and every
@@ -572,14 +599,14 @@ func (s *Store) eachIdle(ctx context.Context, visit func(string, []string) error
 }
 
 // holdsNothing reports whether an operation directory holds at most an empty
-// blocks/ and an empty logs/, and names the ones it holds.
+// blocks/, and names it when it does.
 func (s *Store) holdsNothing(ctx context.Context, id string) ([]string, bool, error) {
 	entries, err := s.area.Entries(ctx, id)
 	if err != nil {
 		return nil, false, err
 	}
 	for _, entry := range entries {
-		if !entry.Directory || entry.Name != "blocks" && entry.Name != "logs" {
+		if !entry.Directory || entry.Name != "blocks" {
 			return nil, false, nil
 		}
 	}
@@ -604,7 +631,7 @@ func (s *Store) Started(ctx context.Context, id string) (bool, error) {
 }
 
 func (s *Store) ensureOperation(ctx context.Context, id string) error {
-	for _, directory := range []string{id, path.Join(id, "blocks"), path.Join(id, "logs")} {
+	for _, directory := range []string{id, path.Join(id, "blocks")} {
 		if err := s.area.EnsureDirectory(ctx, directory); err != nil {
 			return err
 		}

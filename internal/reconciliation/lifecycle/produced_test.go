@@ -35,7 +35,7 @@ func changedWithKubeconfig() Result {
 func blockState(t *testing.T, h *harness, block string) reconciliation.BlockState {
 	t.Helper()
 	ctx := context.Background()
-	store := operationstore.New(h.workspace.area, time.Now)
+	store := operationstore.New(h.workspace.area, h.workspace.logArea, time.Now)
 	index, err := store.Index(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -403,8 +403,8 @@ func reports(err, refusal error) bool {
 }
 
 func logHas(h *harness, event string) bool {
-	for name, data := range h.workspace.area.clone().files {
-		if strings.Contains(name, "/logs/") && bytes.Contains(data, []byte(`"event":"`+event+`"`)) {
+	for name, data := range h.workspace.logArea.clone().files {
+		if strings.HasSuffix(name, ".jsonl") && bytes.Contains(data, []byte(`"event":"`+event+`"`)) {
 			return true
 		}
 	}
@@ -519,9 +519,9 @@ func TestApplyReceiptAndRunLogCarryNoProducedMaterial(t *testing.T) {
 		t.Fatalf("the receipt carries %q", form)
 	}
 	logs := 0
-	for _, area := range []*memoryArea{h.workspace.area, h.workspace.runArea} {
+	for _, area := range []*memoryArea{h.workspace.area, h.workspace.logArea, h.workspace.runArea} {
 		for name, data := range area.clone().files {
-			if strings.Contains(name, "/logs/") {
+			if area == h.workspace.logArea {
 				logs++
 			}
 			if form := carriesForm(data, forms); form != "" {

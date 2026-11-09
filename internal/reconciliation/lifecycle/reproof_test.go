@@ -314,7 +314,7 @@ func TestAContinuationRefusesWhenABlockWasRetriedBeforeMutation(t *testing.T) {
 			requireContextChanged(t, err, "apply", "it was planned from "+held+", and the context now holds "+held+
 				" with block attempts recorded since it was read")
 			before.require(t, h)
-			attempts, err := operationstore.New(h.workspace.area, killClock).LastAttempt(ctx, continued, block)
+			attempts, err := operationstore.New(h.workspace.area, h.workspace.logArea, killClock).LastAttempt(ctx, continued, block)
 			if err != nil || attempts != 2 {
 				t.Fatalf("the block counts %d attempts (%v)", attempts, err)
 			}

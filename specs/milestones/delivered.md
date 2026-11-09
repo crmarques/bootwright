@@ -11148,8 +11148,8 @@ changed.
 - `areadouble.IsDirectory` built `target + "/"` once per record it compared,
   which made a double filled to the operation area's entry bound allocate a
   string per record per call.
-  `TestTheRemovalOfAnApplyLargerThanTheReserveRegistersAtTheLine` fell from
-  52 s to 27 s, and its package from 78 s to 46 s run alone.
+  `TestTheRemovalOfTheLargestApplyRegistersAtTheLine`, then named for an
+  apply larger than the reserve, fell from 52 s to 27 s, and its package from 78 s to 46 s run alone.
 - `ansible.Digest` hashed the whole embedded automation on each call, and
   every command run builds its version information from it. It is computed
   once per process: the embedded files cannot change while it runs.

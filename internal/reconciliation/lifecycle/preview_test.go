@@ -904,7 +904,7 @@ func agreeOnPlan(t *testing.T, h *harness, preview *PlanResult, result *Operatio
 	if !reflect.DeepEqual(presented, shown) {
 		t.Fatalf("apply presented %+v, plan previewed %+v", presented, shown)
 	}
-	store := operationstore.New(h.workspace.area, time.Now)
+	store := operationstore.New(h.workspace.area, h.workspace.logArea, time.Now)
 	frozen, err := store.ReadPlan(context.Background(), result.Receipt.Operation)
 	if err != nil {
 		t.Fatal(err)

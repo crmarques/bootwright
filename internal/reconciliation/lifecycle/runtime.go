@@ -7,16 +7,10 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
-	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 )
-
-// RunOutputName is what one bounded run retains beside nothing else: it
-// publishes no structured events, so there is no log for its output to sit
-// next to.
-const RunOutputName = "run.output"
 
 // RuntimeRequest names the context whose controller runtime a bounded operation
 // runs inside, and the Secret declarations that operation reads.
@@ -37,8 +31,8 @@ type Runtime struct {
 	Launch   prerequisites.PythonLaunch
 	Material map[string]secrets.Material
 	// Output retains what this run's adapter prints. LogLocation names the
-	// directory holding it on this host, and Logs names the same file relative
-	// to the state root. A caller hands Output to the adapter and names both in
+	// file holding it on this host, and Logs names the same file relative to
+	// the log root. A caller hands Output to the adapter and names both in
 	// its result; nothing reads them back, and a retention fault never changes
 	// what the run reports. OutputRemediation is what an adapter failure its
 	// output explains tells an operator to read, for a caller that names the
@@ -101,56 +95,27 @@ func (s Service) WithRuntime(ctx context.Context, request RuntimeRequest, call f
 
 // runOutputRemediation points an adapter failure at the one file a bounded run
 // keeps, which has no attempt log to sit beside.
-const runOutputRemediation = "read the adapter output retained in this run's " + RunOutputName
+const runOutputRemediation = "read the adapter output retained in this run's Logs file"
 
-// retain opens the file this run's adapter output is kept in, under an
-// identity of its own, and names it relative to the state root. The run view
-// opens the run's directory, making room among the runs the area keeps, and
-// that directory exists before the call, so the path a result names is one an
-// operator can open while the run is still going.
+// retain opens the file this run's adapter output is kept in, the next one its
+// run area numbers, and names it relative to the log root. The run view
+// creates the file, making room among the runs the area keeps, so the path a
+// result names is one an operator can open while the run is still going.
 func (s Service) retain(ctx context.Context, view RunView) (*operationstore.AdapterOutput, []string, string, error) {
 	area := view.Runs()
-	identity, err := reconciliation.AllocateRunID(s.options.Entropy, func(candidate string) bool {
-		_, found, _ := area.Read(ctx, path.Join(candidate, RunOutputName), 1)
-		return found
-	})
+	target, err := view.OpenRun(ctx)
 	if err != nil {
 		return nil, nil, "", err
 	}
-	target := path.Join(identity, RunOutputName)
-	if err := view.OpenRun(ctx, identity); err != nil {
-		return nil, nil, "", err
-	}
-	// Exclusive creation is what proves the name is this run's own, and it
-	// leaves the file an operator was told about already there to open.
-	if err := area.WriteExclusive(ctx, target, nil); err != nil {
-		return nil, nil, "", abandonRun(ctx, area, identity, target, err)
-	}
-	directory := area.Location()
-	if directory != "" {
-		directory = path.Join(directory, identity)
+	location := area.Location()
+	if location != "" {
+		location = path.Join(location, target)
 	}
 	logs := []string{}
 	if reference := area.Reference(); reference != "" {
 		logs = append(logs, path.Join(reference, target))
 	}
-	return s.options.Operations(area).OpenAdapterOutput(ctx, target), logs, directory, nil
-}
-
-// abandonRun removes what a run made for a file it could not keep, since no
-// result names either, and reports the failure that stopped the run. A file
-// whose bytes landed before its publication failed goes first, and only while
-// it is still as empty as this run wrote it, so the directory can go after it.
-// The removals outlive an interrupt, which can land between the directory and
-// its file or once the file landed; a removal that fails leaves that failure as
-// it was.
-func abandonRun(ctx context.Context, area operationstore.Area, identity, file string, err error) error {
-	unstoppable := context.WithoutCancel(ctx)
-	if file != "" {
-		_ = area.RemoveRecord(unstoppable, file, nil)
-	}
-	_ = area.RemoveDirectory(unstoppable, identity)
-	return err
+	return operationstore.OpenRunOutput(ctx, area, target), logs, location, nil
 }
 
 // MaterialRequest names the context whose Secret declarations one bounded

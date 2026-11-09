@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -45,11 +44,11 @@ type lender struct {
 func (l *lender) WithRuntime(ctx context.Context, request lifecycle.RuntimeRequest, call func(context.Context, lifecycle.Runtime) error) error {
 	l.mu.Lock()
 	l.entered++
-	run := "run-" + strconv.Itoa(l.entered)
+	run := fmt.Sprintf("run-%06d.output", l.entered)
 	l.mu.Unlock()
 	return call(ctx, lifecycle.Runtime{
 		Context: lifecycle.ContextIdentity{Name: request.ContextName}, Material: map[string]secrets.Material{}, Output: &retained{},
-		LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/" + run, Logs: []string{"contexts/lab/state/runs/" + run + "/run.output"},
+		LogLocation: "/var/log/bootwright/contexts/lab/runs/" + run, Logs: []string{"contexts/lab/runs/" + run},
 		OutputRemediation: lentRemediation,
 	})
 }

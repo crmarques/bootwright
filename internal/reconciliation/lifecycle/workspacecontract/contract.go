@@ -49,7 +49,7 @@ func Verify(t *testing.T, within Within) {
 		{"each entry point refuses a missing callback", eachEntryPointRefusesAMissingCallback},
 		{"an inspection writes nothing", anInspectionWritesNothing},
 		{"a bounded run writes only its run area", aBoundedRunWritesOnlyItsRunArea},
-		{"a run opens its directory once and the oldest runs make room", aRunOpensItsDirectoryOnce},
+		{"each run opens a file of its own and the oldest runs make room", eachRunOpensAFileOfItsOwn},
 		{"a transaction's records are what a later view reads", aTransactionsRecordsAreWhatALaterViewReads},
 		{"evidence is published whole and read back as a copy", evidenceIsPublishedWholeAndReadBackAsACopy},
 		{"a capability ends with its callback", aCapabilityEndsWithItsCallback},
@@ -107,6 +107,7 @@ func eachEntryPointRefusesAMissingCallback(t *testing.T, s Subject) {
 func anInspectionWritesNothing(t *testing.T, s Subject) {
 	read(t, s, func(view lifecycle.View) {
 		refusesEveryWrite(t, view.Operations(), "an inspection")
+		refusesEveryWrite(t, view.Logs(), "an inspection's log area")
 		lists(t, view.Operations())
 	})
 }
@@ -115,6 +116,7 @@ func aBoundedRunWritesOnlyItsRunArea(t *testing.T, s Subject) {
 	ctx := context.Background()
 	run(t, s, func(view lifecycle.RunView) {
 		refusesEveryWrite(t, view.Operations(), "a bounded run's operation area")
+		refusesEveryWrite(t, view.Logs(), "a bounded run's log area")
 		succeeds(t, view.Runs().WriteExclusive(ctx, "r.json", []byte("output\n")), "a bounded run's output")
 		holds(t, view.Runs(), "r.json", "output\n")
 	})
@@ -124,28 +126,35 @@ func aBoundedRunWritesOnlyItsRunArea(t *testing.T, s Subject) {
 	})
 }
 
-// A run opens its own directory once, never through an escaped view or under
-// a name that is no run identity, and the runs before it make room: the
-// oldest goes once the area holds as many as it keeps.
-func aRunOpensItsDirectoryOnce(t *testing.T, s Subject) {
+// Each run opens a file of its own, never through an escaped view, and the
+// runs before it make room: the oldest goes once the area holds as many as it
+// keeps.
+func eachRunOpensAFileOfItsOwn(t *testing.T, s Subject) {
 	ctx := context.Background()
 	var escaped lifecycle.RunView
 	run(t, s, func(view lifecycle.RunView) {
 		escaped = view
-		refuses(t, view.OpenRun(ctx, "notes"), "a run named by no run identity")
-		succeeds(t, view.OpenRun(ctx, runIdentity(1)), "opening a run")
-		refuses(t, view.OpenRun(ctx, runIdentity(1)), "opening the same run again")
-		runDirectories(t, view.Runs(), runIdentity(1))
+		first, err := view.OpenRun(ctx)
+		succeeds(t, err, "opening a run")
+		second, err := view.OpenRun(ctx)
+		succeeds(t, err, "opening a second run")
+		if first == second {
+			t.Fatalf("two runs opened the same file %q", first)
+		}
+		holds(t, view.Runs(), first, "")
+		runFiles(t, view.Runs(), first, second)
 	})
-	refuses(t, escaped.OpenRun(ctx, runIdentity(2)), "opening a run after its callback returned")
+	_, err := escaped.OpenRun(ctx)
+	refuses(t, err, "opening a run after its callback returned")
 	kept := []string{}
-	for number := 2; number <= s.KeptRuns+1; number++ {
+	for range s.KeptRuns {
 		run(t, s, func(view lifecycle.RunView) {
-			succeeds(t, view.OpenRun(ctx, runIdentity(number)), "opening run "+runIdentity(number))
+			name, err := view.OpenRun(ctx)
+			succeeds(t, err, "opening a later run")
+			kept = append(kept, name)
 		})
-		kept = append(kept, runIdentity(number))
 	}
-	run(t, s, func(view lifecycle.RunView) { runDirectories(t, view.Runs(), kept...) })
+	run(t, s, func(view lifecycle.RunView) { runFiles(t, view.Runs(), kept...) })
 }
 
 func aTransactionsRecordsAreWhatALaterViewReads(t *testing.T, s Subject) {
@@ -153,11 +162,13 @@ func aTransactionsRecordsAreWhatALaterViewReads(t *testing.T, s Subject) {
 	mutate(t, s, func(tx lifecycle.Transaction) {
 		succeeds(t, tx.Operations().WriteExclusive(ctx, "r.json", []byte("record\n")), "an operation record")
 		succeeds(t, tx.Operations().Append(ctx, "log.jsonl", []byte("one\n")), "an operation log")
+		succeeds(t, tx.Logs().Append(ctx, "op/operation.jsonl", []byte("two\n")), "a log in the log area")
 		holds(t, tx.Operations(), "r.json", "record\n")
 	})
 	read(t, s, func(view lifecycle.View) {
 		holds(t, view.Operations(), "r.json", "record\n")
 		holds(t, view.Operations(), "log.jsonl", "one\n")
+		holds(t, view.Logs(), "op/operation.jsonl", "two\n")
 	})
 	run(t, s, func(view lifecycle.RunView) {
 		holds(t, view.Operations(), "r.json", "record\n")
@@ -193,10 +204,12 @@ func aCapabilityEndsWithItsCallback(t *testing.T, s Subject) {
 	ctx := context.Background()
 	escaped := map[string]operationstore.Area{}
 	var client prerequisites.BundleArea
-	read(t, s, func(view lifecycle.View) { escaped["an inspection's operation area"] = view.Operations() })
+	read(t, s, func(view lifecycle.View) {
+		escaped["an inspection's operation area"], escaped["an inspection's log area"] = view.Operations(), view.Logs()
+	})
 	run(t, s, func(view lifecycle.RunView) { escaped["a bounded run's run area"] = view.Runs() })
 	mutate(t, s, func(tx lifecycle.Transaction) {
-		escaped["a transaction's operation area"] = tx.Operations()
+		escaped["a transaction's operation area"], escaped["a transaction's log area"] = tx.Operations(), tx.Logs()
 		client = clientArea(t, tx, closure)
 	})
 	for name, area := range escaped {
@@ -608,12 +621,8 @@ func holds(t *testing.T, area operationstore.Area, target, want string) {
 
 // runIdentity is the run identity numbered number, so identities sort in the
 // order the suite opens them.
-func runIdentity(number int) string {
-	return fmt.Sprintf("run-%032x", number)
-}
-
-// runDirectories requires the area to hold exactly the run directories named.
-func runDirectories(t *testing.T, area operationstore.Area, want ...string) {
+// runFiles requires the area to hold exactly the run files named.
+func runFiles(t *testing.T, area operationstore.Area, want ...string) {
 	t.Helper()
 	entries, err := area.Entries(context.Background(), "")
 	if err != nil {
@@ -621,10 +630,11 @@ func runDirectories(t *testing.T, area operationstore.Area, want ...string) {
 	}
 	held := []string{}
 	for _, entry := range entries {
-		if entry.Directory {
+		if !entry.Directory {
 			held = append(held, entry.Name)
 		}
 	}
+	want = slices.Sorted(slices.Values(want))
 	slices.Sort(held)
 	if !slices.Equal(held, want) {
 		t.Fatalf("the run area holds %v, want %v", held, want)

@@ -84,7 +84,7 @@ func TestAnUnqualifiedRouteRefusesOnlyContextFreeAcquisition(t *testing.T) {
 // the same command in text mode names that location as its own field.
 func TestAJSONInvocationWritesNoProgress(t *testing.T) {
 	ctx := context.Background()
-	const location = "/var/lib/bootwright/contexts/lab/state/runs/run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9a"
+	const location = "/var/log/bootwright/contexts/lab/runs/run-000001.output"
 	start := []string{"machine", "start", "--name", "rhel-01"}
 	classification := cli.ClassifyInvocation(append(slices.Clone(start), "--output", "json"))
 	if !classification.JSON {

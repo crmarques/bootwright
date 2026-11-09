@@ -84,8 +84,8 @@ type Report struct {
 	// never change Outcome.
 	Warnings []diagnostics.Diagnostic
 	Table    *ReceiptTable
-	// LogLocation names on this host the directory of the setup run that kept
-	// what this invocation's controller Ansible printed. It is empty when no
+	// LogLocation names on this host the output file of the setup run that
+	// kept what this invocation's controller Ansible printed. It is empty when no
 	// Ansible started or its output could not be retained, and never changes
 	// Outcome.
 	LogLocation string

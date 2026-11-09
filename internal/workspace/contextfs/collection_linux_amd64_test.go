@@ -26,10 +26,6 @@ import (
 // A planted stage is exactly what a killed publication leaves: a private file
 // named pending- and 32 hexadecimal digits beside its target. The checkpoint
 // harness supplies the real kills.
-
-// collectedRun is the bounded run whose area the tests plant a stage in.
-var collectedRun = "run-" + strings.Repeat("a", 32)
-
 func plantedStageName(index int, suffix string) string {
 	return fmt.Sprintf("pending-%032x%s", index, suffix)
 }
@@ -59,11 +55,6 @@ func layOutEveryStateEntry(t *testing.T, store *Store) {
 		return tx.Operations().EnsureDirectory(ctx, "op-1")
 	}); err != nil {
 		t.Fatalf("operation directory: %#v", diagnostics.Of(err))
-	}
-	if err := store.RunLifecycle(ctx, checkpointContext, func(view lifecycle.RunView) error {
-		return view.Runs().EnsureDirectory(ctx, collectedRun)
-	}); err != nil {
-		t.Fatalf("run directory: %#v", diagnostics.Of(err))
 	}
 	if err := store.ReplaceHostKeys(ctx, checkpointContext, []byte(trustRecords), nil); err != nil {
 		t.Fatalf("trust records: %#v", diagnostics.Of(err))
@@ -98,7 +89,7 @@ func expectRefusal(t *testing.T, err error, message string) {
 }
 
 // A kill leaves complete and torn stages in the state directory and in the
-// operation, run and trust areas; the next command that takes the lease
+// operation and trust areas; the next command that takes the lease
 // removes every one before it verifies the layout.
 func TestTheNextLeaseCollectsWhatAKilledPublicationLeft(t *testing.T) {
 	store, _ := lifecycleFixture(t)
@@ -111,14 +102,13 @@ func TestTheNextLeaseCollectsWhatAKilledPublicationLeft(t *testing.T) {
 	for index, area := range []struct{ directory, suffix string }{
 		{runtime, ".json"},
 		{filepath.Join(runtime, "operations", "op-1"), ""},
-		{filepath.Join(runtime, "runs", collectedRun), ""},
 		{filepath.Join(runtime, trustSubtree), ".json"},
 	} {
 		plantStage(t, filepath.Join(area.directory, plantedStageName(2*index, area.suffix)), complete)
 		plantStage(t, filepath.Join(area.directory, plantedStageName(2*index+1, area.suffix)), complete[:len(complete)/2])
 	}
-	if planted := stagesBeneath(t, runtime); len(planted) != 8 {
-		t.Fatalf("planted %d stages, want 8", len(planted))
+	if planted := stagesBeneath(t, runtime); len(planted) != 6 {
+		t.Fatalf("planted %d stages, want 6", len(planted))
 	}
 	if err := collectingLease(context.Background(), store); err != nil {
 		t.Fatalf("the lease refused what a killed publication left: %#v", diagnostics.Of(err))

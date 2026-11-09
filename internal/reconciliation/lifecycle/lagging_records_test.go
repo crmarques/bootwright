@@ -152,7 +152,7 @@ func TestAFailedApplyWhoseBlocksAreAllDoneIsReplacedByARemovalOfItsWholePlan(t *
 	if !bytes.Equal(h.workspace.evidence, killPristine(t)) || len(h.workspace.reservations) != 0 || !slices.Contains(h.binder.released, "bind-1") {
 		t.Fatalf("the removal left evidence %q and reservations %v, and released %v", h.workspace.evidence, h.workspace.reservations, h.binder.released)
 	}
-	source, err := operationstore.New(h.workspace.area, func() time.Time { return time.Unix(0, 0) }).ReadOperation(ctx, applied)
+	source, err := operationstore.New(h.workspace.area, h.workspace.logArea, func() time.Time { return time.Unix(0, 0) }).ReadOperation(ctx, applied)
 	if err != nil || source.State != reconciliation.OperationFailed {
 		t.Fatalf("the replaced apply reads %s (%v)", source.State, err)
 	}

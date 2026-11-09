@@ -23,7 +23,7 @@ func NewJourneyWorkspace(host controller.InstalledHostIdentity) (Workspace, stri
 		return nil, "", err
 	}
 	return &testWorkspace{
-		area: newArea(), runArea: newArea(), evidence: pristine, revision: testRevision,
+		area: newArea(), logArea: newArea(), runArea: newArea(), evidence: pristine, revision: testRevision,
 		controller: prerequisites.StorageView{Exists: true, Initialized: true, Prepared: true, State: prerequisites.HostState{Host: host}},
 	}, testContextName, nil
 }

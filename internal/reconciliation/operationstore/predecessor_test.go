@@ -74,7 +74,7 @@ func TestAnAdditiveApplyRecordMatchesItsGolden(t *testing.T) {
 	}
 	matchesGolden(t, "operation-additive", area.files[path.Join(operation.ID, "operation.json")], true)
 	matchesGolden(t, "plan-additive", area.files[path.Join(operation.ID, "plan.json")], true)
-	fresh := New(area, fixedClock())
+	fresh := New(area, area.logs, fixedClock())
 	if stored, err := fresh.ReadOperation(ctx, operation.ID); err != nil || !reflect.DeepEqual(stored, operation) {
 		t.Fatalf("the addition read back as %+v (%v)", stored, err)
 	}
@@ -189,7 +189,7 @@ func TestPrerequisitesRefuseBesideARecordThatNamesNoPredecessor(t *testing.T) {
 	}
 	record := string(area.files[path.Join(operation.ID, "operation.json")])
 	area.files[path.Join(operation.ID, "operation.json")] = []byte(strings.Replace(record, `"predecessor":"`+applied.ID+`",`, "", 1))
-	if _, err := New(area, fixedClock()).ReadPlan(ctx, operation.ID); !slices.Equal(diagnostics.Of(err), diagnostics.Of(want)) {
+	if _, err := New(area, area.logs, fixedClock()).ReadPlan(ctx, operation.ID); !slices.Equal(diagnostics.Of(err), diagnostics.Of(want)) {
 		t.Fatalf("reading prerequisites beside a record without a predecessor: %v", diagnostics.Of(err))
 	}
 }

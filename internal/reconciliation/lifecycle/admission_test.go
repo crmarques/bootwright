@@ -68,7 +68,7 @@ func TestApplyRechecksAdmissionUnderTheExclusiveTransaction(t *testing.T) {
 	if calls != 2 || len(h.capability.applies) != 0 {
 		t.Fatalf("admission calls=%d, effects=%v", calls, h.capability.applies)
 	}
-	index, err := h.service.options.Operations(h.workspace.area).Index(context.Background())
+	index, err := h.service.options.Operations(h.workspace.area, h.workspace.logArea).Index(context.Background())
 	if err != nil || index.Current != "" {
 		t.Fatalf("refused capacity registered operation: %+v, %v", index, err)
 	}

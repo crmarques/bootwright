@@ -90,7 +90,7 @@ func TestEvidenceCarriesAFailedAttemptWithItsState(t *testing.T) {
 // through the store's own reader.
 func settlingResolution(t *testing.T, h *harness, block string) operationstore.Attempt {
 	t.Helper()
-	record, found, err := operationstore.New(h.workspace.area, time.Now).LastResolution(context.Background(), firstOperation, block, 1)
+	record, found, err := operationstore.New(h.workspace.area, h.workspace.logArea, time.Now).LastResolution(context.Background(), firstOperation, block, 1)
 	if err != nil || !found {
 		t.Fatalf("the resolution of %s cannot be read (%t, %v)", block, found, err)
 	}

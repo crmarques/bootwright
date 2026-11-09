@@ -21,11 +21,11 @@ func (j *CapabilityJourney) ResolutionLog(t *testing.T, block, event string) []o
 // operation of the context, holds.
 func (j *CapabilityJourney) BlockLog(t *testing.T, block, event string) []operationstore.LogRecord {
 	t.Helper()
-	area := j.harness.workspace.area
+	area := j.harness.workspace.logArea
 	area.mutex.Lock()
 	logs := map[string][]byte{}
 	for name, data := range area.files {
-		if strings.Contains(name, "/logs/blocks/"+block+"/") {
+		if strings.Contains(name, "/blocks/"+block+"/") {
 			logs[name] = bytes.Clone(data)
 		}
 	}

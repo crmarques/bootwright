@@ -297,7 +297,7 @@ func buildOf(h *harness, contentDigest string) operationstore.Build {
 }
 
 func recordsOf(h *harness) *operationstore.Store {
-	return operationstore.New(h.workspace.area, func() time.Time { return time.Unix(0, 0) })
+	return operationstore.New(h.workspace.area, h.workspace.logArea, func() time.Time { return time.Unix(0, 0) })
 }
 
 // attemptBuilds is the build each attempt of one block names, in order.

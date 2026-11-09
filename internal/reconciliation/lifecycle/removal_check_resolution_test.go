@@ -49,7 +49,7 @@ func TestARemovalResolvesAnUnknownApplyBlockByTheRemovalsCheck(t *testing.T) {
 			if len(h.capability.calls) < 2 || !slices.Equal(h.capability.calls[:2], []string{"observe:alpha", "observe-removal:alpha"}) {
 				t.Fatalf("the removal's resolution asked %v, want the apply's observation and then the removal's", h.capability.calls)
 			}
-			store := operationstore.New(h.workspace.area, time.Now)
+			store := operationstore.New(h.workspace.area, h.workspace.logArea, time.Now)
 			resolution, found, err := store.LastResolution(context.Background(), firstOperation, "alpha", 1)
 			if err != nil || !found || resolution.Effect != tc.recorded || resolution.Outcome != reconciliation.OutcomeFailed {
 				t.Fatalf("the resolution recorded %+v (%t, %v), want %s", resolution, found, err, tc.recorded)
@@ -201,7 +201,7 @@ func TestARemovalResolvesAnApplyBlockItsApplyObservationProvesDone(t *testing.T)
 	if slices.Contains(h.capability.calls, "observe-removal:alpha") || len(h.capability.calls) == 0 || h.capability.calls[0] != "observe:alpha" {
 		t.Fatalf("the removal's resolution asked %v, want only the apply's observation", h.capability.calls)
 	}
-	store := operationstore.New(h.workspace.area, time.Now)
+	store := operationstore.New(h.workspace.area, h.workspace.logArea, time.Now)
 	if record, err := store.Block(context.Background(), firstOperation, "alpha"); err != nil || record.State != reconciliation.BlockDone {
 		t.Fatalf("the apply's block reads %+v (%v), want done", record, err)
 	}

@@ -18,7 +18,7 @@ implemented or authorized.
 | Copying files or directories to and from Machines | [machine file copies](cli/machine-copy.md) |
 | Command behavior and journeys | [cli](cli.md); flags: [commands](cli/commands.md); streams, JSON, diagnostics: [output](cli/output.md) |
 | Host prerequisites, install and uninstall, the controller stage | [controller](controller.md) |
-| Contexts, frozen input, storage, locking, deletion | [contexts](contexts.md); controller record format: [controller record](contexts/controller-record.md) |
+| Contexts, frozen input, storage, locking, deletion | [contexts](contexts.md); [controller record](contexts/controller-record.md); [log root](contexts/log-root.md) |
 | Secret custody, bindings and reveal | [secrets](secrets.md) |
 | Apply, destroy, continuation, ownership, mutation safety, GitOps readiness | [state reconciliation](state-reconciliation.md) |
 | Managed services, host reservations, publication | [infrastructure services](infrastructure-services.md) |

@@ -77,7 +77,7 @@ var testBuild = Build{
 func newStore(t *testing.T) (*Store, *memoryArea) {
 	t.Helper()
 	area := newArea()
-	return New(area, fixedClock()), area
+	return New(area, area.logs, fixedClock()), area
 }
 
 func TestRegisterPublishesThePlanBeforeTheIndexNamesIt(t *testing.T) {
@@ -95,13 +95,13 @@ func TestRegisterPublishesThePlanBeforeTheIndexNamesIt(t *testing.T) {
 	if _, ok := area.files[operation.ID+"/plan.json"]; !ok {
 		t.Fatal("the plan was not published before the index commit")
 	}
-	fresh := New(area, fixedClock())
+	fresh := New(area, area.logs, fixedClock())
 	index, err := fresh.Index(ctx)
 	if err != nil || index.Current != "" {
 		t.Fatalf("an uncommitted registration became current: %+v (%v)", index, err)
 	}
 	delete(area.fail, "replace "+indexPath)
-	store, _ = New(area, fixedClock()), area
+	store, _ = New(area, area.logs, fixedClock()), area
 	if _, err := store.Index(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestRegisterRoundTripsItsRecords(t *testing.T) {
 	if err := store.Register(ctx, operation, plan); err != nil {
 		t.Fatal(err)
 	}
-	fresh := New(area, fixedClock())
+	fresh := New(area, area.logs, fixedClock())
 	index, err := fresh.Index(ctx)
 	if err != nil || index.Current != operation.ID {
 		t.Fatalf("index = %+v (%v)", index, err)
@@ -269,7 +269,7 @@ func TestAReplacingRemovalNamesWhatItReplaces(t *testing.T) {
 		if !strings.Contains(encoded, want) {
 			t.Fatalf("operation.json = %s, want it to carry %s", encoded, want)
 		}
-		read, err := New(area, fixedClock()).ReadOperation(ctx, operation.ID)
+		read, err := New(area, area.logs, fixedClock()).ReadOperation(ctx, operation.ID)
 		if err != nil || read.Replaces != replaces {
 			t.Fatalf("the record reads back replacing %q (%v), want %q", read.Replaces, err, replaces)
 		}
@@ -304,7 +304,7 @@ func TestStoredRecordsMustBeCanonical(t *testing.T) {
 		t.Fatal(err)
 	}
 	area.files[operation.ID+"/operation.json"] = []byte(`{"version":3}` + "\n")
-	if _, err := New(area, fixedClock()).ReadOperation(ctx, operation.ID); err == nil {
+	if _, err := New(area, area.logs, fixedClock()).ReadOperation(ctx, operation.ID); err == nil {
 		t.Fatal("an unsupported operation version decoded")
 	}
 }
@@ -350,7 +350,7 @@ func TestOnlyTheCurrentOperationRecordVersionReads(t *testing.T) {
 				t.Fatal(err)
 			}
 			area.files[target] = append(data, '\n')
-			_, err = New(area, fixedClock()).ReadOperation(ctx, current.ID)
+			_, err = New(area, area.logs, fixedClock()).ReadOperation(ctx, current.ID)
 			if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.state" {
 				t.Fatalf("the record read back (%v)", err)
 			}
@@ -371,7 +371,7 @@ func TestStoredPlanMustBeReproducible(t *testing.T) {
 	}
 	stored := area.files[operation.ID+"/plan.json"]
 	area.files[operation.ID+"/plan.json"] = []byte(strings.Replace(string(stored), `"verb":"apply"`, `"verb":"adopt"`, 1))
-	if _, err := New(area, fixedClock()).ReadPlan(ctx, operation.ID); err == nil {
+	if _, err := New(area, area.logs, fixedClock()).ReadPlan(ctx, operation.ID); err == nil {
 		t.Fatal("a plan with an unrecognized verb was accepted")
 	}
 }
@@ -407,7 +407,7 @@ func TestAFrozenPlanThatIsNotItsOperationsRefuses(t *testing.T) {
 	}
 	refused := func(t *testing.T, area *memoryArea, id, message string) {
 		t.Helper()
-		_, err := New(area, fixedClock()).ReadPlan(ctx, id)
+		_, err := New(area, area.logs, fixedClock()).ReadPlan(ctx, id)
 		reported := diagnostics.Of(err)
 		if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Message != message {
 			t.Fatalf("the read = %+v (%v)", reported, err)
@@ -439,14 +439,14 @@ func TestAFrozenPlanThatIsNotItsOperationsRefuses(t *testing.T) {
 	})
 	t.Run("the registered plan", func(t *testing.T) {
 		area, operation, plan := registered(t)
-		read, err := New(area, fixedClock()).ReadPlan(ctx, operation.ID)
+		read, err := New(area, area.logs, fixedClock()).ReadPlan(ctx, operation.ID)
 		if err != nil || !reflect.DeepEqual(read, plan) {
 			t.Fatalf("the registered plan read back as %+v (%v)", read, err)
 		}
 	})
 	t.Run("a record replaced after it was read", func(t *testing.T) {
 		area, operation, _ := registered(t)
-		store := New(area, fixedClock())
+		store := New(area, area.logs, fixedClock())
 		read, err := store.ReadOperation(ctx, operation.ID)
 		if err != nil {
 			t.Fatal(err)
@@ -555,11 +555,11 @@ func TestAStartInterruptedBetweenItsWritesIsAdoptedByTheNext(t *testing.T) {
 			if !exists {
 				t.Fatal("the interruption did not fall between the two writes")
 			}
-			if reread, err := New(area, fixedClock()).Block(ctx, operation.ID, "alpha"); err != nil || reread != before {
+			if reread, err := New(area, area.logs, fixedClock()).Block(ctx, operation.ID, "alpha"); err != nil || reread != before {
 				t.Fatalf("the interrupted start moved the block record from %+v to %+v (%v)", before, reread, err)
 			}
 
-			next := New(area, fixedClock())
+			next := New(area, area.logs, fixedClock())
 			started, err := next.StartAttempt(ctx, operation.ID, "alpha", testBuild)
 			if err != nil || started != want {
 				t.Fatalf("the start after the interruption = %d (%v), want %d", started, err, want)
@@ -672,7 +672,7 @@ func TestAStartAdoptsNothingButAnInterruptedStart(t *testing.T) {
 			for target, data := range area.files {
 				snapshot[target] = slices.Clone(data)
 			}
-			if number, err := New(area, fixedClock()).StartAttempt(ctx, operation.ID, "alpha", testBuild); err == nil {
+			if number, err := New(area, area.logs, fixedClock()).StartAttempt(ctx, operation.ID, "alpha", testBuild); err == nil {
 				t.Fatalf("a start adopted a record no interrupted start left, as attempt %d", number)
 			}
 			if !maps.EqualFunc(area.files, snapshot, bytes.Equal) {
@@ -703,7 +703,7 @@ func TestAnAttemptAndItsResolutionNameTheBuildTheyRanUnder(t *testing.T) {
 	}
 	named := func(when string, want Build) {
 		t.Helper()
-		record, err := New(store.area, fixedClock()).Attempt(ctx, operation.ID, "alpha", 1)
+		record, err := New(store.area, store.logs, fixedClock()).Attempt(ctx, operation.ID, "alpha", 1)
 		if err != nil || record.Build != want {
 			t.Fatalf("%s the attempt names %+v (%v), want %+v", when, record.Build, err, want)
 		}
@@ -723,7 +723,7 @@ func TestAnAttemptAndItsResolutionNameTheBuildTheyRanUnder(t *testing.T) {
 	if err := store.CompleteResolution(ctx, operation.ID, "alpha", 1, 1, reconciliation.OutcomeChanged, reconciliation.EffectCompleted, reconciliation.BlockDone, json.RawMessage(`{}`), nil); err != nil {
 		t.Fatal(err)
 	}
-	resolution, found, err := New(store.area, fixedClock()).LastResolution(ctx, operation.ID, "alpha", 1)
+	resolution, found, err := New(store.area, store.logs, fixedClock()).LastResolution(ctx, operation.ID, "alpha", 1)
 	if err != nil || !found || resolution.Build != other {
 		t.Fatalf("the resolution names %+v (%v)", resolution.Build, err)
 	}
@@ -759,10 +759,10 @@ func TestAnAdoptedStartNamesTheBuildThatAdoptsIt(t *testing.T) {
 			}
 			area.files[operation.ID+"/blocks/alpha/state.json"] = pending
 			area.files[operation.ID+"/blocks/alpha/attempt-000001.json"] = running
-			if number, err := New(area, fixedClock()).StartAttempt(ctx, operation.ID, "alpha", adopting); err != nil || number != 1 {
+			if number, err := New(area, area.logs, fixedClock()).StartAttempt(ctx, operation.ID, "alpha", adopting); err != nil || number != 1 {
 				t.Fatalf("the adopting start = %d (%v)", number, diagnostics.Of(err))
 			}
-			record, err := New(area, fixedClock()).Attempt(ctx, operation.ID, "alpha", 1)
+			record, err := New(area, area.logs, fixedClock()).Attempt(ctx, operation.ID, "alpha", 1)
 			if err != nil || record.Build != adopting || record.Phase != "running" || record.Started != "2026-09-11T12:00:00Z" || record.Updated == record.Started {
 				t.Fatalf("the adopted start reads back as %+v (%v)", record, err)
 			}
@@ -771,7 +771,7 @@ func TestAnAdoptedStartNamesTheBuildThatAdoptsIt(t *testing.T) {
 				t.Fatal(err)
 			}
 			area.files[operation.ID+"/blocks/alpha/attempt-000002.json"] = bytes.Replace(adopted, []byte(`"number":1`), []byte(`"number":2`), 1)
-			if _, err := New(area, fixedClock()).StartAttempt(ctx, operation.ID, "alpha", adopting); err != nil {
+			if _, err := New(area, area.logs, fixedClock()).StartAttempt(ctx, operation.ID, "alpha", adopting); err != nil {
 				t.Fatal(err)
 			}
 			if kept := area.files[operation.ID+"/blocks/alpha/attempt-000002.json"]; !bytes.Equal(kept, bytes.Replace(adopted, []byte(`"number":1`), []byte(`"number":2`), 1)) {
@@ -919,7 +919,7 @@ func TestLostBlockRecordsNamesOnlyAbsentRecordsBesideAnAttempt(t *testing.T) {
 				area.directories[operation.ID+"/blocks/"+directory] = true
 			}
 			snapshot := maps.Clone(area.files)
-			lost, err := New(area, fixedClock()).LostBlockRecords(ctx, operation.ID, plan)
+			lost, err := New(area, area.logs, fixedClock()).LostBlockRecords(ctx, operation.ID, plan)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1122,12 +1122,12 @@ func TestOperationUpdateRequiresItsReadExpectation(t *testing.T) {
 	if err := store.UpdateOperation(ctx, operation); err != nil {
 		t.Fatal(err)
 	}
-	blind := New(area, fixedClock())
+	blind := New(area, area.logs, fixedClock())
 	operation.State = reconciliation.OperationFailed
 	if err := blind.UpdateOperation(ctx, operation); err == nil {
 		t.Fatal("an operation was replaced without its read expectation")
 	}
-	reread := New(area, fixedClock())
+	reread := New(area, area.logs, fixedClock())
 	if _, err := reread.ReadOperation(ctx, operation.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -1170,7 +1170,7 @@ func TestAClaimedOperationRegistersIntoItsDirectory(t *testing.T) {
 	if err := store.Claim(ctx, operation.ID, plan); err != nil {
 		t.Fatal(err)
 	}
-	for _, directory := range []string{operation.ID, operation.ID + "/blocks", operation.ID + "/logs"} {
+	for _, directory := range []string{operation.ID, operation.ID + "/blocks"} {
 		if !area.directories[directory] {
 			t.Fatalf("the claim did not create %s", directory)
 		}
@@ -1244,10 +1244,10 @@ func TestAReclaimRemovesOnlyClaimsThatHoldNothing(t *testing.T) {
 	delete(area.files, current.ID+"/plan.json")
 	delete(area.files, current.ID+"/operation.json")
 	empty, partial := claim("01"), claim("02")
-	delete(area.directories, partial+"/logs")
+	delete(area.directories, partial+"/blocks")
 	interrupted, logged, blocked := claim("03"), claim("04"), claim("05")
 	area.files[interrupted+"/plan.json"] = []byte("{}\n")
-	area.files[logged+"/logs/operation.jsonl"] = []byte("{}\n")
+	area.files[logged+"/operation.json"] = []byte("{}\n")
 	area.directories[blocked+"/blocks/alpha"] = true
 	for index := range MaxOperations - 6 {
 		area.directories["slot-"+FormatIndex(index)] = true
@@ -1303,11 +1303,11 @@ func TestAdmissionKeepsTheFirstPassWithinTheAreaEntries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if FirstPassEntries(plan) != 13 || FirstPassEntries(testPlan(t, "alpha", "bravo")) != 19 {
-		t.Fatalf("first passes of one and two blocks count %d and %d entries, want 13 and 19", FirstPassEntries(plan), FirstPassEntries(testPlan(t, "alpha", "bravo")))
+	if FirstPassEntries(plan) != 7 || FirstPassEntries(testPlan(t, "alpha", "bravo")) != 10 {
+		t.Fatalf("first passes of one and two blocks count %d and %d entries, want 7 and 10", FirstPassEntries(plan), FirstPassEntries(testPlan(t, "alpha", "bravo")))
 	}
-	if AdmissionEntries(plan) != 2*13+ReservedEntries || AdmissionEntries(removalPlan) != 13+1 {
-		t.Fatalf("a one-block apply and its removal are admitted with %d and %d entries free, want %d and 14", AdmissionEntries(plan), AdmissionEntries(removalPlan), 2*13+ReservedEntries)
+	if AdmissionEntries(plan) != 2*7+ReservedEntries || AdmissionEntries(removalPlan) != 7+1 {
+		t.Fatalf("a one-block apply and its removal are admitted with %d and %d entries free, want %d and 8", AdmissionEntries(plan), AdmissionEntries(removalPlan), 2*7+ReservedEntries)
 	}
 	for index := range MaxEntries - ReservedEntries - 2*FirstPassEntries(plan) - 1 {
 		area.files["retained/record-"+FormatIndex(index)] = []byte("{}\n")
@@ -1336,20 +1336,20 @@ func TestAdmissionKeepsTheFirstPassWithinTheAreaEntries(t *testing.T) {
 	other.ID = "op-" + strings.Repeat("cd", 16)
 	err = store.Register(ctx, other, plan)
 	refusedAtTheBound(err, other.ID)
-	if message := diagnostics.Of(err)[0].Message; !strings.Contains(message, "holds 7148 of its 8192 entries") ||
-		!strings.Contains(message, "this apply needs 1050 more: 26 for its first attempts and those of the removal that takes it back, and the 1024") {
+	if message := diagnostics.Of(err)[0].Message; !strings.Contains(message, "holds 7159 of its 8192 entries") ||
+		!strings.Contains(message, "this apply needs 1038 more: 14 for its first attempts and those of the removal that takes it back, and the 1024") {
 		t.Fatalf("the refusal reads %q, want what the area holds and what the apply needs", message)
 	}
 	removal := testOperation(t, removalPlan)
 	removal.ID, removal.Source = other.ID, operation.ID
-	held := 7148
+	held := 7159
 	for index := range MaxEntries - AdmissionEntries(removalPlan) - held {
 		area.files["filled/record-"+FormatIndex(index)] = []byte("{}\n")
 	}
 	err = store.Register(ctx, removal, removalPlan)
 	refusedAtTheBound(err, removal.ID)
-	if message := diagnostics.Of(err)[0].Message; !strings.Contains(message, "holds 8179 of its 8192 entries") ||
-		!strings.Contains(message, "this removal needs 14 more for its first attempts and the writes that complete them") {
+	if message := diagnostics.Of(err)[0].Message; !strings.Contains(message, "holds 8185 of its 8192 entries") ||
+		!strings.Contains(message, "this removal needs 8 more for its first attempts and the writes that complete them") {
 		t.Fatalf("the refusal reads %q, want what the area holds and what the removal needs", message)
 	}
 	delete(area.files, "filled/record-0")
@@ -1419,7 +1419,7 @@ func TestAdmissionKeepsTheReservedBytesFree(t *testing.T) {
 	}
 	err := store.Claim(ctx, operation.ID, plan)
 	if refused := diagnostics.Of(err); len(refused) != 1 || refused[0].Code != "lifecycle.state" ||
-		!strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations: its operation area holds 50331649 of its 67108864 bytes, and this apply needs the 16777216 it keeps for its records and logs and those of the removal that takes it back") {
+		!strings.Contains(refused[0].Message, "retained the maximum number of lifecycle operations: its operation area holds 50331649 of its 67108864 bytes, and this apply needs the 16777216 it keeps for its records and those of the removal that takes it back") {
 		t.Fatalf("an apply one byte past the line reported %+v (%v)", refused, err)
 	}
 	if areadouble.IsDirectory(area.files, area.directories, operation.ID) {
@@ -1842,7 +1842,7 @@ func TestAdmitAttemptKeepsTheRemovalReserve(t *testing.T) {
 	}
 	_, err = store.AdmitAttempt(ctx, operation, plan, "alpha", false)
 	if refused := diagnostics.Of(err); !IntoTheReserve(err) || len(refused) != 1 || refused[0].Code != "lifecycle.state" ||
-		!strings.Contains(refused[0].Message, "this attempt needs 18 more beside the 20 that removal keeps") {
+		!strings.Contains(refused[0].Message, "this attempt needs 9 more beside the 11 that removal keeps") {
 		t.Fatalf("a third attempt running beside two reported %+v (%v)", refused, err)
 	}
 	first()
@@ -1865,7 +1865,7 @@ func TestAdmitAttemptKeepsTheRemovalReserve(t *testing.T) {
 	_, err = store.AdmitAttempt(ctx, operation, plan, "alpha", true)
 	if refused := diagnostics.Of(err); !IntoTheReserve(err) || len(refused) != 1 ||
 		!strings.Contains(refused[0].Message, "cannot hold another resolution before this removal registers") ||
-		!strings.Contains(refused[0].Message, fmt.Sprintf("needs 7 more beside the %d its registration keeps", AdmissionEntries(removal))) {
+		!strings.Contains(refused[0].Message, fmt.Sprintf("needs 4 more beside the %d its registration keeps", AdmissionEntries(removal))) {
 		t.Fatalf("a fresh removal's resolution one entry into its registration's reserve reported %+v (%v)", refused, err)
 	}
 	for index := range AdmissionEntries(removal) - 1 {
@@ -1877,8 +1877,8 @@ func TestAdmitAttemptKeepsTheRemovalReserve(t *testing.T) {
 		t.Fatalf("a removal's attempt with its writes and one entry free refused: %+v", diagnostics.Of(err))
 	}
 	_, err = store.AdmitAttempt(ctx, removing, removal, "beta", false)
-	if refused := diagnostics.Of(err); !IntoTheReserve(err) || len(refused) != 1 || !strings.Contains(refused[0].Message, "and it needs 13 more") {
-		t.Fatalf("a second removal attempt beside one in flight with 7 entries free reported %+v (%v)", refused, err)
+	if refused := diagnostics.Of(err); !IntoTheReserve(err) || len(refused) != 1 || !strings.Contains(refused[0].Message, "and it needs 7 more") {
+		t.Fatalf("a second removal attempt beside one in flight with 4 entries free reported %+v (%v)", refused, err)
 	}
 	removed()
 	area.files["filled/last"] = []byte("{}\n")

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -30,6 +31,7 @@ type lifecycleView struct {
 	controller prerequisites.StorageView
 	evidence   []byte
 	operations *operationArea
+	logs       operationstore.Area
 	revision   func(context.Context, string) (desiredstate.Sources, error)
 }
 
@@ -38,6 +40,7 @@ func (v *lifecycleView) Inputs() desiredstate.Sources          { return v.inputs
 func (v *lifecycleView) Controller() prerequisites.StorageView { return v.controller }
 func (v *lifecycleView) Evidence() []byte                      { return slices.Clone(v.evidence) }
 func (v *lifecycleView) Operations() operationstore.Area       { return v.operations }
+func (v *lifecycleView) Logs() operationstore.Area             { return v.logs }
 
 func (v *lifecycleView) Revision(ctx context.Context, id string) (desiredstate.Sources, error) {
 	if v.revision == nil {
@@ -66,12 +69,12 @@ func retainedReader(root *directory, record contexts.Record, inputs desiredstate
 // It adds the area its adapter output is retained in and nothing else: it
 // publishes no evidence and registers no operation. Its shared context lease
 // excludes lifecycle mutation. held are
-// the run directories it opened, each held shared until its callback returns.
+// the run files it opened, each held shared until its callback returns.
 type lifecycleRun struct {
 	*lifecycleView
 	runs     *operationArea
 	mutex    sync.Mutex
-	held     []*directory
+	held     []*os.File
 	released bool
 }
 
@@ -262,9 +265,10 @@ func (s *Store) readLifecycle(ctx context.Context, name string, bounded bool, ca
 		controller: controllerView,
 		evidence:   evidence,
 		operations: &operationArea{store: s, subtree: "operations", context: dir, name: record.Name, active: live, readOnly: true},
+		logs:       &operationArea{store: s, subtree: operationLogs, context: dir, name: record.Name, active: live, readOnly: true, logged: true},
 		revision:   retainedReader(root, record, inputs, live),
 	}
-	runs := &operationArea{store: s, subtree: runsSubtree, context: dir, name: record.Name, active: live, readOnly: !bounded}
+	runs := &operationArea{store: s, subtree: runsSubtree, context: dir, name: record.Name, active: live, readOnly: !bounded, logged: true}
 	if bounded {
 		if err := syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN); err != nil {
 			return err
@@ -341,6 +345,7 @@ func (s *Store) MutateLifecycle(ctx context.Context, name string, callback func(
 				controller: controllerView,
 				evidence:   evidence,
 				operations: &operationArea{store: s, subtree: "operations", context: dir, name: record.Name, active: func() bool { return active }, cached: true},
+				logs:       &operationLogArea{&operationArea{store: s, subtree: operationLogs, context: dir, name: record.Name, active: func() bool { return active }, logged: true}},
 			},
 			base: t, stored: stored, context: dir, record: record,
 		}

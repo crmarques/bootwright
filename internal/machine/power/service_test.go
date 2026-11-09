@@ -62,15 +62,15 @@ func (b *boundary) WithRuntime(ctx context.Context, request lifecycle.RuntimeReq
 	}
 	return call(ctx, lifecycle.Runtime{
 		Context: identity, Material: map[string]secrets.Material{}, Output: &retained{},
-		LogLocation:       "/var/lib/bootwright/contexts/lab/state/runs/run-" + strings.Repeat("a", 32),
-		Logs:              []string{"contexts/lab/state/runs/run-" + strings.Repeat("a", 32) + "/run.output"},
+		LogLocation:       "/var/log/bootwright/contexts/lab/runs/run-000001.output",
+		Logs:              []string{"contexts/lab/runs/run-000001.output"},
 		OutputRemediation: lentRemediation,
 	})
 }
 
 // lentRemediation stands in for what the lender says a run's output failure
 // asks an operator to read.
-const lentRemediation = "read the adapter output retained in this run's run.output"
+const lentRemediation = "read the adapter output retained in this run's Logs file"
 
 // retained stands in for the file a bounded run keeps its adapter output in.
 type retained struct{ written []byte }
@@ -272,14 +272,14 @@ func TestAPowerRunRetainsItsAdapterOutputAndNamesWhereFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	location := "/var/lib/bootwright/contexts/lab/state/runs/run-" + strings.Repeat("a", 32)
+	location := "/var/log/bootwright/contexts/lab/runs/run-000001.output"
 	if len(reporter.locations) != 1 || reporter.locations[0] != location {
 		t.Fatalf("announced locations = %+v", reporter.locations)
 	}
 	if runner.seen.Output == nil {
 		t.Fatal("the adapter was run with nothing to retain its output in")
 	}
-	if row := result.Machines[0]; row.LogLocation != location || !slices.Equal(row.Logs, []string{"contexts/lab/state/runs/run-" + strings.Repeat("a", 32) + "/run.output"}) {
+	if row := result.Machines[0]; row.LogLocation != location || !slices.Equal(row.Logs, []string{"contexts/lab/runs/run-000001.output"}) {
 		t.Fatalf("result logs = %q %+v", row.LogLocation, row.Logs)
 	}
 	refusing := &adapter{err: errors.New("the adapter operation did not complete")}
@@ -420,8 +420,8 @@ func TestOnlyARunThatNamesItsOutputAsksToRetainIt(t *testing.T) {
 // invocation reports no progress, so the refusal itself must carry where that
 // output is. A refusal before the runtime is lent names no file.
 func TestARefusedRunReturnsOnlyWhereItsOutputIs(t *testing.T) {
-	location := "/var/lib/bootwright/contexts/lab/state/runs/run-" + strings.Repeat("a", 32)
-	logs := []string{"contexts/lab/state/runs/run-" + strings.Repeat("a", 32) + "/run.output"}
+	location := "/var/log/bootwright/contexts/lab/runs/run-000001.output"
+	logs := []string{"contexts/lab/runs/run-000001.output"}
 	for _, test := range []struct {
 		name   string
 		runner *adapter

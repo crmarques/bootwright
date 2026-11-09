@@ -784,8 +784,10 @@ substitutes an update silently; recovery follows
 
 ## Logs, output, and diagnostics
 
-Output and private logging follow [the CLI contract](cli.md). Logs use the
-operation-owned `0700`/`0600` tree and contain only bounded normalized records.
+Output and private logging follow [the CLI contract](cli.md). Logs live under
+the [log root](contexts.md#log-root), `/var/log/bootwright`, outside the store,
+in a `root:root` `0700`/`0600` tree reached without following a link, and
+contain only bounded normalized records; nothing there is evidence.
 Raw callback bytes, terminal control sequences, secret values or digests,
 credential-bearing values, environment dumps, and any field protected by
 `no_log` are forbidden. Attacker-controlled text is escaped; redaction is

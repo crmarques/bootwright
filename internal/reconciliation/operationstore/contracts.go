@@ -10,7 +10,8 @@ type Entry struct {
 
 // Area is the Workspace-held filesystem capability this store publishes
 // through. It is valid only inside its owning callback, confines every path to
-// the context's operation subtree, and performs no interpretation of content.
+// one subtree, the context's operation records or one of its log directories,
+// and performs no interpretation of content.
 // Read reports whether the object exists rather than treating absence as an
 // error, because absence is ordinary evidence during recovery.
 type Area interface {
@@ -42,9 +43,18 @@ type Area interface {
 	// It is presentation material only: nothing resolves a path through it, and
 	// an implementation with no host location reports the empty string.
 	Location() string
-	// Reference is this subtree's slash-separated path relative to the state
-	// root, which is how a structured result names a log. Like Location it is
-	// presentation material only, and an implementation that cannot place the
-	// subtree under the state root reports the empty string.
+	// Reference is this subtree's slash-separated path relative to the root
+	// it lies under, the log root for a log area, which is how a structured
+	// result names a log. Like Location it is presentation material only, and
+	// an implementation that cannot place the subtree under its root reports
+	// the empty string.
 	Reference() string
+}
+
+// LogRetention is what a log area keeping many operations' logs also offers.
+// Register calls both once the index names the new operation, best effort:
+// logs are troubleshooting material, so neither changes a registration.
+type LogRetention interface {
+	Retain(ctx context.Context, keep []string)
+	MarkCurrent(ctx context.Context, id string)
 }

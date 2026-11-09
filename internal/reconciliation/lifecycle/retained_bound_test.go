@@ -67,7 +67,7 @@ func boundStates() map[string]struct {
 		"an apply beside a claim an interrupted apply left": {reconciliation.Apply, func(t *testing.T) *harness {
 			h := newHarness(t, "alpha")
 			retainedDirectories(h, operationstore.MaxOperations-2)
-			if err := operationstore.New(h.workspace.area, killClock).Claim(context.Background(), interruptedClaim, reconciliation.Plan{}); err != nil {
+			if err := operationstore.New(h.workspace.area, h.workspace.logArea, killClock).Claim(context.Background(), interruptedClaim, reconciliation.Plan{}); err != nil {
 				t.Fatal(err)
 			}
 			return h

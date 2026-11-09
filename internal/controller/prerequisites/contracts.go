@@ -148,8 +148,8 @@ type StateRootInspection struct {
 // outcome or its receipt.
 type SetupRun interface {
 	RunOutput
-	// Location names the run's own directory on this host, for an operator to
-	// open; it is built for reading, never opened through.
+	// Location names the run's own output file on this host, for an operator
+	// to open; it is built for reading, never opened through.
 	Location() string
 	Close() error
 }

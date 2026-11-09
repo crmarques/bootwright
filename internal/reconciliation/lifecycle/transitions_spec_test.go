@@ -819,7 +819,7 @@ func blockStep(t *testing.T, state reconciliation.BlockState) string {
 func startedFrom(t *testing.T, state reconciliation.BlockState) reconciliation.BlockState {
 	t.Helper()
 	ctx := context.Background()
-	store := operationstore.New(newArea(), func() time.Time { return time.Unix(0, 0) })
+	store := operationstore.New(newArea(), newArea(), func() time.Time { return time.Unix(0, 0) })
 	id := "op-" + strings.Repeat("01", 16)
 	if state != reconciliation.BlockPending {
 		reached := false

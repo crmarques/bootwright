@@ -180,7 +180,7 @@ func appliedDone(t *testing.T, repository interface {
 		if err := tx.PublishEvidence(ctx, published); err != nil {
 			return err
 		}
-		registerDoneUnder(ctx, t, operationstore.New(tx.Operations(), exitStamp), tx.Identity().Revision, inputDigestOf(tx.Inputs()),
+		registerDoneUnder(ctx, t, operationstore.New(tx.Operations(), tx.Logs(), exitStamp), tx.Identity().Revision, inputDigestOf(tx.Inputs()),
 			"op-"+strings.Repeat("01", 16), "", plan, runs...)
 		return nil
 	}); err != nil {

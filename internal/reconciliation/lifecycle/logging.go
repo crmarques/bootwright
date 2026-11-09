@@ -37,7 +37,7 @@ func (b *logBoundary) fail(ctx context.Context, err error) error {
 	if b.fault != nil {
 		return b.fault
 	}
-	b.fault = logFault(err)
+	b.fault = logFault(err, b.store.LogDirectory(b.operation))
 	if b.cancel != nil {
 		b.cancel()
 	}

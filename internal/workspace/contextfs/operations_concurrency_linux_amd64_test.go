@@ -33,9 +33,9 @@ func TestConcurrentWritersShareTheDirectoriesTheyCreate(t *testing.T) {
 				go func() {
 					defer group.Done()
 					<-start
-					target := fmt.Sprintf("op-%02d/logs/blocks/block-%02d", round, writer)
+					target := fmt.Sprintf("op-%02d/blocks/block-%02d", round, writer)
 					if writer%2 == 0 {
-						target = fmt.Sprintf("op-%02d/logs/blocks", round)
+						target = fmt.Sprintf("op-%02d/blocks", round)
 					}
 					failures[writer] = area.EnsureDirectory(ctx, target)
 				}()
@@ -59,7 +59,7 @@ func TestConcurrentWritersShareTheDirectoriesTheyCreate(t *testing.T) {
 	}
 	for round := range rounds {
 		for writer := 1; writer < writers; writer += 2 {
-			stat, err := os.Stat(filepath.Join(root, "contexts", "example", "state", "operations", fmt.Sprintf("op-%02d/logs/blocks/block-%02d", round, writer)))
+			stat, err := os.Stat(filepath.Join(root, "contexts", "example", "state", "operations", fmt.Sprintf("op-%02d/blocks/block-%02d", round, writer)))
 			if err != nil || !stat.IsDir() || stat.Mode().Perm() != 0700 {
 				t.Fatalf("round %d writer %d left %v (%v)", round, writer, stat, err)
 			}

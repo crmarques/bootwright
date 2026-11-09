@@ -11,7 +11,6 @@ import (
 const (
 	MaxAttempt          = 999999
 	operationIDPrefix   = "op-"
-	runIDPrefix         = "run-"
 	allocationAttempts  = 16
 	operationEntropy    = 16
 	numberDigits        = 6
@@ -47,14 +46,6 @@ func AllocateOperationID(entropy Entropy, taken func(string) bool) (string, erro
 	return allocateIdentity(operationIDPrefix, entropy, taken)
 }
 
-// AllocateRunID names one bounded run outside the lifecycle. It is allocated
-// the same way and from the same entropy, and carries its own prefix because a
-// run is never an operation: nothing continues, resumes or claims ownership
-// through it.
-func AllocateRunID(entropy Entropy, taken func(string) bool) (string, error) {
-	return allocateIdentity(runIDPrefix, entropy, taken)
-}
-
 func allocateIdentity(prefix string, entropy Entropy, taken func(string) bool) (string, error) {
 	if entropy == nil || taken == nil {
 		return "", stateError("operation identity allocation is not configured")
@@ -73,8 +64,6 @@ func allocateIdentity(prefix string, entropy Entropy, taken func(string) bool) (
 }
 
 func ValidOperationID(value string) bool { return validIdentity(operationIDPrefix, value) }
-
-func ValidRunID(value string) bool { return validIdentity(runIDPrefix, value) }
 
 func validIdentity(prefix, value string) bool {
 	if !strings.HasPrefix(value, prefix) || len(value) != len(prefix)+2*operationEntropy {

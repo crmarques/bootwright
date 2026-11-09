@@ -247,7 +247,7 @@ providers to that ID. A subsequent setup carries forward every still-installed
 provider attributed to an earlier setup, including its Python interpreter,
 matching the requirement and package name across NEVRA updates. If no log run
 can be retained, the durable setup ID instead uses `setup-` followed by a
-random 32-digit hexadecimal token; it names no log directory.
+random 32-digit hexadecimal token; it names no output file.
 `runtimes` names the current and the previous
 runtime digest. A record that cannot be read, or that carries another format,
 is another build's: a launch refuses `controller.state`, "the controller setup
@@ -277,20 +277,20 @@ verified for size and digest before it is renamed into place.
 Which runtimes and cached wheels a setup keeps and retires follows its
 [retention](../controller.md#publication-and-interrupted-setup).
 
-`runs/` keeps what setup's dnf printed, as
-[setup run output](../cli/output.md#setup-run-output) describes. A run is a
-directory named `setup-` and six digits, from `setup-000001` upward, holding at
-most one file, `run.output`, which is bounded at 4 MiB. That is the
-[bounded run](../cli/output.md#bounded-run-output)'s bound, so every run's
-output shares one ([D92](../milestones/backlog.md#d92)). Directories are
-`0700` and the file `0600`. There are at most 8 runs:
-the next is numbered one past the newest, the oldest are removed before it is
-created, and a setup whose next number would need a seventh digit keeps no
-run. Its directory and file are created exclusively beneath the held setup
-directory handle without following a link, and made durable before the run is
-named. A runs directory holding anything else, more than 8 runs, a run holding
-anything but its private `run.output` or an output past its bound refuses.
-Nothing reads a run back.
+What setup's dnf prints is kept outside this subtree, under the
+[log root](../contexts.md#log-root), as
+[setup run output](../cli/output.md#setup-run-output) describes: one private
+file `host/setup-NNNNNN.output` per run, named by the run's setup ID from
+`setup-000001` upward, written under `host/setup/lock` and bounded at 4 MiB.
+That is the [bounded run](../cli/output.md#bounded-run-output)'s bound, so
+every run's output shares one ([D92](../milestones/backlog.md#d92)).
+There are at most 8 outputs: the next is numbered past both the newest output and every
+setup ID this record's receipt or pending intent names, the oldest are removed
+before it is created, and a setup whose next number would need a seventh
+digit keeps no output. Its file is created exclusively beneath the held log
+directory handle without following a link, and made durable before it is
+named. A name a setup output takes that is no private regular file within its
+bound refuses; other names are ignored. Nothing reads an output back.
 
 ## Publication and recovery
 

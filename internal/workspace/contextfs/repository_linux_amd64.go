@@ -1360,6 +1360,9 @@ func (t *transaction) Commit(ctx context.Context, registry contexts.Registry) er
 		}
 		if next != prior {
 			if prior.Mode == contexts.Initializing {
+				if err := t.store.removeContextLogs(ctx, next.Name); err != nil {
+					return err
+				}
 				if err := t.store.checkpoint(ctx, checkpointBeforeContextReady); err != nil {
 					return err
 				}

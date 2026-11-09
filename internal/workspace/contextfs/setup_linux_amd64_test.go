@@ -175,7 +175,7 @@ func TestPendingIntentIsDurableBeforeEffects(t *testing.T) {
 			return err
 		}
 		defer run.Close()
-		if id != "setup-000001" || filepath.Base(run.Location()) != id {
+		if id != "setup-000001" || run.Location() != filepath.Join(root+logsSuffix, logHost, id+outputSuffix) {
 			t.Fatalf("run %q at %q, want setup-000001", id, run.Location())
 		}
 		pending := prerequisites.PendingSetup{ID: id, PlanDigest: setupDigest(4), Actions: []string{"native-packages", "runtime"}, StartedAt: "2026-10-14T09:00:00Z"}
@@ -536,9 +536,40 @@ func TestSetupKeepsTheNewestEightRuns(t *testing.T) {
 		}
 		return nil
 	})
-	names := setupEntries(t, store, setupRunsName)
-	if len(names) != maxSetupRuns || names[0] != "setup-000002" || names[len(names)-1] != "setup-000009" {
+	names := heldNamesOf(t, filepath.Join(store.options.Root+logsSuffix, logHost))
+	if len(names) != maxSetupRuns || names[0] != "setup-000002.output" || names[len(names)-1] != "setup-000009.output" {
 		t.Fatalf("runs kept %q", names)
+	}
+}
+
+// A setup's output takes a number past every setup ID its record names, so
+// output retention never lets a later setup reuse an ID a receipt or pending
+// intent still attributes; a name no setup output takes is left alone.
+func TestSetupOutputNumbersPastTheReceiptsIDs(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "state")
+	store := New(testOptions(root))
+	host := filepath.Join(root+logsSuffix, logHost)
+	mkdirs(t, 0700, root+logsSuffix, host)
+	writePrivate(t, filepath.Join(host, "setup-000002.output"), nil)
+	writePrivate(t, filepath.Join(host, "notes"), nil)
+	mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
+		state := setupReceiptState()
+		state.Receipt.Packages[0].InstalledBy = "setup-000007"
+		if err := tx.Record(context.Background(), state); err != nil {
+			return err
+		}
+		id, run, err := tx.OpenRun(context.Background())
+		if err != nil {
+			return err
+		}
+		defer run.Close()
+		if id != "setup-000008" || run.Location() != filepath.Join(host, "setup-000008.output") {
+			t.Fatalf("the setup output opened %s at %s, want setup-000008 past the receipt's setup-000007", id, run.Location())
+		}
+		return nil
+	})
+	if names := heldNamesOf(t, host); !slices.Equal(names, []string{"notes", "setup-000002.output", "setup-000008.output"}) {
+		t.Fatalf("the host log directory holds %v", names)
 	}
 }
 

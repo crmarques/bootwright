@@ -32,6 +32,7 @@ type Ownership struct{ UID, GID uint32 }
 type Options struct {
 	Root    string
 	Staging string
+	Logs    string
 	Owner   *Ownership
 }
 

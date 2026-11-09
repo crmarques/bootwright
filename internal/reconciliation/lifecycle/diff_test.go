@@ -112,7 +112,7 @@ func (f diffFixture) diff(t *testing.T) *DiffResult {
 
 func currentID(t *testing.T, f diffFixture) string {
 	t.Helper()
-	index, err := operationstore.New(f.workspace.area, func() time.Time { return time.Time{} }).Index(context.Background())
+	index, err := operationstore.New(f.workspace.area, f.workspace.logArea, func() time.Time { return time.Time{} }).Index(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -436,7 +436,7 @@ func killCloneSources(sources desiredstate.Sources) desiredstate.Sources {
 // and both areas.
 func killCloneWorkspace(w *testWorkspace, live *memoryArea, files map[string][]byte) *testWorkspace {
 	copied := &testWorkspace{
-		area: killCloneArea(w.area, live, files), runArea: killCloneArea(w.runArea, live, files),
+		area: killCloneArea(w.area, live, files), logArea: killCloneArea(w.logArea, live, files), runArea: killCloneArea(w.runArea, live, files),
 		evidence: slices.Clone(w.evidence), reservations: killCloneReservations(w.reservations),
 		controller: w.controller, inputs: killCloneSources(w.inputs),
 		mutations: w.mutations, runs: w.runs, binds: w.binds,
@@ -504,7 +504,7 @@ func (k *killPoints) keep(snapshot *killSnapshot) {
 // withdrawal it performs.
 func (r *killRig) arm(points *killPoints) {
 	w := r.harness.workspace
-	for _, area := range []*memoryArea{w.area, w.runArea} {
+	for _, area := range []*memoryArea{w.area, w.logArea, w.runArea} {
 		area.landing = func(operation, target string, files map[string][]byte) error {
 			fire, dead := points.next(operation + " " + killElide(target))
 			if fire {
@@ -628,7 +628,7 @@ func killUnreleased(binder *testBinder) int {
 // operation or a completed removal), or holding an incomplete operation.
 func killRest(w *testWorkspace) string {
 	ctx := context.Background()
-	store := operationstore.New(w.area, killClock)
+	store := operationstore.New(w.area, w.logArea, killClock)
 	index, err := store.Index(ctx)
 	if err != nil {
 		return "unreadable index"
@@ -653,7 +653,7 @@ func killRest(w *testWorkspace) string {
 // and the operation it replaced, as a later invocation would.
 func killReadBack(w *testWorkspace) []string {
 	ctx := context.Background()
-	store := operationstore.New(w.area, killClock)
+	store := operationstore.New(w.area, w.logArea, killClock)
 	index, err := store.Index(ctx)
 	if err != nil {
 		return []string{"the index does not read back: " + err.Error()}
@@ -744,7 +744,7 @@ func killInvariants(snapshot *killSnapshot, pristine []byte) []string {
 // attempts every operation of that verb recorded for the block.
 func killUnrecordedEffects(snapshot *killSnapshot) []string {
 	ctx := context.Background()
-	store := operationstore.New(snapshot.workspace.area, killClock)
+	store := operationstore.New(snapshot.workspace.area, snapshot.workspace.logArea, killClock)
 	entries, err := snapshot.workspace.area.Entries(ctx, "")
 	if err != nil {
 		return []string{"the operation area does not list: " + err.Error()}
@@ -812,7 +812,7 @@ const killUnraised = "publish evidence#1"
 // killReclaim is every write of a reclaim of one claim, children before the
 // claim (specs/state-reconciliation.md, Context mutation evidence).
 func killReclaim() []string {
-	return []string{"remove <op>/blocks#1", "remove <op>/logs#1", "remove <op>#1"}
+	return []string{"remove <op>/blocks#1", "remove <op>#1"}
 }
 
 // killApplyAt makes what an apply killed at point left the rig's own.
@@ -900,7 +900,7 @@ func killJourneys() []killJourney {
 func killRemovalResolution() []string {
 	return []string{
 		"write <op>/blocks/b/attempt-000001-resolution-000001.json#1",
-		"append <op>/logs/blocks/b/attempt-000001-resolution-000001.jsonl#1",
+		"append <op>/blocks/b/attempt-000001-resolution-000001.jsonl#1",
 		"replace <op>/blocks/b/attempt-000001-resolution-000001.json#1",
 		"replace <op>/blocks/b/state.json#1",
 		"replace <op>/operation.json#1",
@@ -993,7 +993,7 @@ func killJourneyOutcomes(ctx context.Context, t *testing.T, journey killJourney,
 	if err := killInvoke(ctx, rig.harness.service, journey.run); err != nil {
 		t.Fatalf("the uninterrupted journey failed: %v", err)
 	}
-	rig.harness.workspace.area.landing, rig.harness.workspace.runArea.landing, rig.harness.workspace.kill = nil, nil, nil
+	rig.harness.workspace.area.landing, rig.harness.workspace.logArea.landing, rig.harness.workspace.runArea.landing, rig.harness.workspace.kill = nil, nil, nil, nil
 	rig.harness.binder.kill = nil
 	if journey.finish != "" {
 		if err := killInvoke(ctx, rig.harness.service, journey.finish); err != nil {

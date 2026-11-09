@@ -760,7 +760,7 @@ func ReadUnfinished(ctx context.Context, workspace Workspace, operations Operati
 	var found UnfinishedOperation
 	var unfinished bool
 	err := workspace.ReadLifecycle(ctx, name, func(view View) error {
-		store := operations(view.Operations())
+		store := operations(view.Operations(), view.Logs())
 		index, err := store.Index(ctx)
 		if err != nil || index.Current == "" {
 			return err

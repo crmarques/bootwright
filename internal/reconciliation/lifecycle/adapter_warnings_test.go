@@ -124,7 +124,7 @@ func TestAdapterWarningsReachTheRunAndStatusOncePerAttempt(t *testing.T) {
 			t.Fatalf("a warning moved block %s to %s", block.ID, block.State)
 		}
 	}
-	record, err := operationstore.New(h.workspace.area, time.Now).Attempt(context.Background(), firstOperation, "charlie", 1)
+	record, err := operationstore.New(h.workspace.area, h.workspace.logArea, time.Now).Attempt(context.Background(), firstOperation, "charlie", 1)
 	if err != nil || !slices.Equal(record.Warnings, []operationstore.Warning{shadowed("charlie shadows")}) {
 		t.Fatalf("the attempt recorded %+v (%v)", record.Warnings, err)
 	}

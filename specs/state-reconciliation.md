@@ -279,8 +279,7 @@ re-proof rather than register it. The releases are made even once the
 invocation is interrupted. A listing that fails collects nothing, because
 collection is housekeeping no transition may be refused for.
 
-A claim that holds nothing, only the empty `blocks/` and `logs/` a claim
-creates, is what a fresh apply that never registered leaves, as does a
+A claim that holds nothing, only the empty `blocks/` a claim creates, is what a fresh apply that never registered leaves, as does a
 registration stopped before its plan landed. Reclaiming such a claim removes
 its directory and nothing else: it changes no evidence, reservation, Secret
 binding or ownership, so it is not the reclaim of ownership the
@@ -360,7 +359,7 @@ Context-free read-only commands do not access the root except available
 may read shared host metadata without selecting a context. Context-backed reads
 acquire the existing store's shared lock and never create, repair or migrate
 state. A bounded run takes the same shared lock and creates at most one thing:
-the file its own adapter output is
+the file under the [log root](contexts.md#log-root) its own adapter output is
 [retained](cli/output.md#bounded-run-output) in, once its private runtime is
 admitted and only for a run whose result names it, so a reading creates
 nothing. That file is troubleshooting material, never state, so a run still
@@ -378,7 +377,7 @@ resolution-attempt numbers. The identity contract is:
 | --- | --- |
 | `<name>` | The context name: unique within `<state-root>` for one lifecycle unit under the [context identity contract](contexts.md#identity-and-selection). |
 | `<operation-id>` | Immutable and unique within one context; allocated before its operation record. |
-| `<run-id>` | Immutable and unique within one context; allocated before the bounded run it names, and never an operation identity. |
+| `<run-number>` | Sequential within one context's runs directory under the [log root](contexts.md#log-root), from `1` through `999999`, rendered as six decimal digits in `run-NNNNNN.output`; allocated as the bounded run's file is created, and never an operation identity. |
 | `<block-id>` | Immutable and unique within one operation's frozen plan. |
 | `<attempt-number>` | Monotonic within one block, from `1` through `999999`, never reused, and rendered as six decimal digits. |
 | `<resolution-number>` | Monotonic within one effect attempt, from `1` through `999999`, never reused, and rendered as six decimal digits. |
@@ -412,8 +411,9 @@ A context is identified by its name alone, under the
 [context identity contract](contexts.md#identity-and-selection); Workspace
 reserves it at creation, before input or operations exist.
 State reconciliation allocates operation IDs as `op-` followed by 32 lowercase
-hexadecimal characters from 128 OS cryptographically secure random bits, and
-run IDs the same way under `run-`, so no identity can be read as the other's.
+hexadecimal characters from 128 OS cryptographically secure random bits. A
+bounded run is numbered instead, under `run-`, so no identity can be read as
+the other's.
 
 Reserve operation candidates exclusively, checking existing identities; a
 collision retries with fresh entropy at most 16 times. Random failure has no
@@ -436,8 +436,10 @@ contexts/<name>/state/operations/
     blocks/<block-id>/state.json
     blocks/<block-id>/attempt-NNNNNN.json
     blocks/<block-id>/attempt-NNNNNN-resolution-NNNNNN.json
-    logs/
 ```
+
+Its logs lie outside the store, under the
+[log root](contexts.md#log-root) at `contexts/<name>/operations/<operation-id>/`.
 
 `index.json` names at most one current operation. An index of another version,
 or one carrying `qualification`, is unreadable evidence: it refuses every
@@ -456,8 +458,8 @@ lineage of an apply is that apply and the predecessors its records name, read
 back oldest first through each one's own `predecessor`; a record that is missing,
 is no apply, repeats one already read, or lies beyond that bound refuses
 `lifecycle.state`, so no walk ever reads its head as a root. A
-fresh apply's `<operation-id>/` exists, holding only its empty `blocks/` and
-`logs/`, from the transaction that raises its
+fresh apply's `<operation-id>/` exists, holding only its empty `blocks/`, from
+the transaction that raises its
 [evidence](#context-mutation-evidence); its identity is allocated against every
 operation directory, and its registration fills that directory without
 counting it against the bound a second time. A claim that never registered
@@ -512,8 +514,8 @@ when they would not hold or fit the record's bound, and never on a
 resolution's record. They are presentation:
 the run reports them once and `status` reports the latest attempt's, and
 neither moves the attempt's outcome or its block's state.
-[The output contract](cli/output.md#private-operation-logs) owns the `logs/`
-tree.
+[The output contract](cli/output.md#private-operation-logs) owns the log
+tree, which [the log root](contexts.md#log-root) places and bounds.
 
 `replaces`, `predecessor`, `prerequisites`, `failure`, `warnings` and `removal`
 are optional members: adding one does not move its record's version, because a

@@ -256,8 +256,6 @@ setup:
       state.json
       runtimes/<runtime-digest>/
       cache/wheels/<sha256>/<file>
-      runs/setup-NNNNNN/
-        run.output
     record/
       state.json
       tools/<tool-closure-digest>/
@@ -276,7 +274,6 @@ setup:
       reservation.json
       mutation.json
       operations/
-      runs/
       trust/hosts.json
     secrets/
       store.json
@@ -291,15 +288,14 @@ setup:
 | `media/` | Host-wide installer media under the [Managed OS media contract](managed-os.md#media-store): each image's exact bytes beside its canonical record, created by the first `media add`, shared read-only by every context and frozen through shared reservations rather than copied. An image is [acquired](#media-acquisition) into a private stage in this directory while no root lock is held, then published exclusively and atomically with its record; a pinned stage whose publication met another command's lock is kept beside its record for the command's repetition; deletion is guarded by the reservation record. |
 | `host/` | The host-wide state no context owns, in a plain container no descriptor attributes, created with the setup subtree and, if missing, by the first binding. It holds only `setup/` and `record/`, each a private directory; any other entry, either of them of another type, or a `record/` no descriptor declares refuses the store (`TestTheStoreAdmitsHostWithOnlySetupAndRecord`). |
 | `host/record/` | The [Controller record](contexts/controller-record.md), its tool areas and its publication stages, in the directory the descriptor's device and inode name. |
-| `host/setup/` | Setup's own [subtree](contexts/controller-record.md#the-setup-subtree), independently versioned and outside the registry: its lock, its `prerequisites.SetupStateFormat` record with the pending intent and receipt, the published runtimes, the locked wheel cache and the newest setup runs. |
+| `host/setup/` | Setup's own [subtree](contexts/controller-record.md#the-setup-subtree), independently versioned and outside the registry: its lock, its `prerequisites.SetupStateFormat` record with the pending intent and receipt, the published runtimes and the locked wheel cache. What setup's dnf prints is kept under the [log root](#log-root). |
 | `contexts/<name>/context.yaml` | Canonical immutable Context configuration; keeps the authored configuration contract separate from runtime metadata. |
 | `desired-state/revisions/<revision-id>/` | Immutable input snapshot, so publication and protected recovery can retain a complete selected revision. Collect unselected revisions only with disposal proof. |
 | `manifest.json` | Original input provenance, blob mapping, sizes and hashes needed to verify and replay the snapshot. |
 | `file-NNNN` | Exact acquired descriptor or marker bytes; authored filenames never become storage paths. |
 | `state/reservation.json` | Durable name-ownership evidence for interrupted creation and guarded deletion. |
 | `state/mutation.json` | Lifecycle ownership and operation evidence; missing or unknown evidence prevents destructive cleanup. |
-| `state/operations/` | [Reconciliation-owned operation records and logs](state-reconciliation.md#operation-records). Workspace supplies the held area and its publication primitives; it never interprets their content. |
-| `state/runs/` | Retained adapter output of [bounded runs](cli/output.md#bounded-run-output), in an area Workspace supplies and never interprets. The area keeps the newest runs the bounds table below states: before a run creates its directory, the oldest runs no live run holds are removed, each only while it holds nothing but its own `run.output`, and an entry not named as a run is neither counted nor removed. A run that cannot hold the directory it created removes it (`TestARunThatCannotOpenLeavesNoDirectory`). Runs are removed with the context. |
+| `state/operations/` | [Reconciliation-owned operation records](state-reconciliation.md#operation-records). Workspace supplies the held area and its publication primitives; it never interprets their content. The operations' logs and every run's output lie under the [log root](#log-root), never in the store. |
 | `state/trust/hosts.json` | The context-managed SSH host-key trust an [SSH session](cli.md#machine-ssh-sessions) proves a Machine against when it declares no `knownHostsRef` and Bootwright did not install it: one public-key record per Machine, and one key per address. Written only by `machine trust` and by an explicitly confirmed first use, published atomically against its exact prior content, and removed with the context. A write that takes over the endpoint of a Machine the context no longer declares, or that no longer uses the context's SSH trust, removes that Machine's record in the same write. It holds no confidential material. |
 | `secrets/` | Context-bound encrypted custody with its own independently versioned [storage contract](secrets.md#local-keyring). |
 
@@ -590,9 +586,11 @@ Secrets limits additionally bound their trees.
 | Host [reservation](contexts/controller-record.md#record) entries the controller record holds | 256 | `maxControllerReservations` in `internal/workspace/contextfs/controller_records.go` |
 | Retained [controller bundle namespaces](contexts/controller-record.md#bounds), the tool areas | 16 | `maxControllerBundles` in `internal/workspace/contextfs/controller_records.go` |
 | Lifecycle operations one context retains | 1024 | `MaxOperations` in `internal/reconciliation/operationstore/records.go` |
-| Entries in one context's lifecycle operation area, and in each of its runs and SSH-trust areas | 8192 | `MaxEntries` in `internal/reconciliation/operationstore/records.go` |
-| Bytes in one context's lifecycle operation area, and in each of its runs and SSH-trust areas | 64 MiB | `MaxBytes` in `internal/reconciliation/operationstore/records.go` |
+| Entries in one context's lifecycle operation area, and in its SSH-trust area | 8192 | `MaxEntries` in `internal/reconciliation/operationstore/records.go` |
+| Bytes in one context's lifecycle operation area, and in its SSH-trust area | 64 MiB | `MaxBytes` in `internal/reconciliation/operationstore/records.go` |
 | Bytes in one lifecycle attempt log | 128 KiB | `AttemptLogBytes` in `internal/reconciliation/operationstore/logs.go` |
+| Operation log directories one context's [log area](#log-root) keeps | 64 | `maxOperationLogs` in `internal/workspace/contextfs/logs_linux_amd64.go` |
+| Bytes one context's operation log area holds before an attempt's retained output is cut short | 256 MiB | `MaxContextLogBytes` in `internal/reconciliation/operationstore/logs.go` |
 | One lifecycle adapter invocation whose request states no deadline | 2 hours | `invocationTimeout` in `internal/reconciliation/ansiblerunner/process_linux_amd64.go` |
 | The longest deadline a fixed-budget lifecycle request may state | 6 hours | `MaxDeadline` in `internal/reconciliation/lifecycle/invocation.go` |
 | One controller Ansible run: the base of a controller-stage tool publication | 10 minutes | `runTimeout` in `internal/controller/ansiblelocal/runner_linux_amd64.go` |
@@ -601,7 +599,7 @@ Secrets limits additionally bound their trees.
 | Installer media images one host holds | 64 | `MaxMediaEntries` in `internal/managedos/media.go` |
 | Bytes in an installer media name | 250 | `MaxMediaName` in `internal/managedos/media.go` |
 | Installer media stages at once, live, retained or abandoned | 16 | `maxStagedMedia` in `internal/workspace/contextfs/media_linux_amd64.go` |
-| [Setup runs](contexts/controller-record.md#the-setup-subtree) the setup subtree keeps | 8 | `maxSetupRuns` in `internal/workspace/contextfs/setup_runs_linux_amd64.go` |
+| [Setup outputs](#log-root) the log root keeps | 8 | `maxSetupRuns` in `internal/workspace/contextfs/setup_runs_linux_amd64.go` |
 | [Bounded runs](cli/output.md#bounded-run-output) one context's runs area keeps | 16 | `maxBoundedRuns` in `internal/workspace/contextfs/runs_linux_amd64.go` |
 | In-operation root lock wait | 1 minute | `rootLockWait` in `internal/workspace/contextfs/files_linux_amd64.go` |
 
@@ -624,8 +622,10 @@ apply admitted still registers and completes at that bound
 (`TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheDirectoryBound`). A first
 pass is what an
 [operation directory](state-reconciliation.md#operation-records) holds once
-each block of its frozen plan ran one attempt: seven entries of its own and six
-for each block. A fresh apply needs its own first pass and the first pass of
+each block of its frozen plan ran one attempt: four entries of its own, its
+directory, `blocks/`, `plan.json` and `operation.json`, and three for each
+block, its record directory, block record and attempt record. Its logs lie
+under the [log root](#log-root), which no admission counts. A fresh apply needs its own first pass and the first pass of
 the removal that takes it back, which carries at most the blocks the apply
 froze, and must still keep 1024 entries free. A removal needs its own first
 pass and one entry more. A write needs only the entries it creates and the
@@ -639,56 +639,43 @@ while the removal of the last apply admitted still registers and completes
 hold the index and the later attempts and resolutions of the current apply and
 of its removal, the only operations that write again. The removal's first
 pass at 32 KiB a block, its one entry more, its registration's bytes, a
-resolution per apply block unknown, running or in flight, and the opening
-record that
-restores a latched log fault are its reserve, which only that removal writes
+resolution per apply block unknown, running or in flight are its reserve,
+which only that removal writes
 (`TestARemovalResolvesWhatTheApplyLeftUnknownWithinTheReserve`). Before an
-attempt, retry or resolution of the apply writes, it counts six
+attempt, retry or resolution of the apply writes, it counts three
 entries, what an attempt creates at most, and the bytes of its record,
-started and done, and log, for itself and for every other one
+started and done, for itself and for every other one
 the same invocation runs beside it. One whose writes would cut into the
 reserve refuses `lifecycle.state` before its effect, naming
 `bootwright destroy --context <name>`, which is then that apply's only way on,
 and its result names no continuation beside it; the removal then
 registers and completes (`TestApplyRetriesNeverTakeTheRemovalReserve`). An
 attempt, retry or resolution of the removal, or the removal's observation of
-the apply it takes back, counts the same six entries and bytes for itself and
+the apply it takes back, counts the same three entries and bytes for itself and
 for every one in flight, and one entry more, and keeps its
 registration and first pass until registered; one that would pass the
 bound refuses before its effect and leaves its block as it was, naming the
 deletion the guard admits (`TestAdmitAttemptKeepsTheRemovalReserve`).
 
 The area's bytes are admitted the same way, as its byte bound counts them. A
-fresh apply needs 16 MiB of them free, which hold its records and logs and
-those of the removal that takes it back, and a removal needs the bytes its
+fresh apply needs 16 MiB of them free, which hold its records and those of
+the removal that takes it back, and a removal needs the bytes its
 registration writes: its plan, its operation record and the index. An
-attempt's retained adapter output never takes the area into those 16 MiB: it
-keeps what fits beneath them and is then cut short, as its own bound cuts it,
-and the outputs of one invocation share what is left. However much an adapter
-prints, only records and logs use them, so the removal of the last apply
-admitted registers and completes within the bound
+attempt's log and retained adapter output lie under the
+[log root](#log-root), so however much an adapter prints, only records use
+those bytes, and the removal of the last apply admitted registers and
+completes within the bound
 (`TestTheRemovalOfTheLastAdmittedApplyRegistersAtTheByteBound`,
 `TestTheOperationAreaKeepsTheReservedBytesForTheLastRemoval`). Those bytes
-belong to the removal's reserve above, so the apply's later records and logs
-never use them. A bounded run's
-output lies in an area of its own, which holds no records, and only its own
-bound cuts it. A record or log write that would take the area past its entries
-or its 64 MiB refuses `context.state`, naming the lifecycle operation, bounded
-run or SSH trust storage it would overfill. The operation area, which only its
-transaction writes, and the SSH-trust area, which only its trust mutation
-writes, measure their subtree at their first write and then count their own
-writes; a write that fails may still have landed, so the next one measures
-again (`TestTheOperationAreaMeasuresItsSubtreeOncePerTransaction`,
-`TestAFailedOperationWriteMeasuresAgain`). Every bounded run of the context
-writes the runs area beside the others under the shared lock, so it measures
-every write (`TestTheRunsAreaMeasuresEveryWrite`). A run that leaves its name
-while that measure walks inside it, as one another run's retention removes
-does, is absent from it, as a run gone before the walk reached it is, while
-one replaced at its name still refuses
-(`TestARunGoneWhileTheRunsAreaIsMeasuredIsAbsent`). The area's retention keeps
-the runs it holds within its byte bound and far below its entry bound, so
-`machine` power commands keep working however many ran before
-(`TestBoundedRunsKeepWorkingPastTheEntryBound`).
+belong to the removal's reserve above, so the apply's later records never use
+them. A record write that would take the area past its entries or its 64 MiB
+refuses `context.state`, naming the lifecycle operation or SSH trust storage
+it would overfill. The operation area, which only its transaction writes, and
+the SSH-trust area, which only its trust mutation writes, measure their
+subtree at their first write and then count their own writes; a write that
+fails may still have landed, so the next one measures again
+(`TestTheOperationAreaMeasuresItsSubtreeOncePerTransaction`,
+`TestAFailedOperationWriteMeasuresAgain`).
 
 No command prunes the operations a context retains, so a refusal at the
 retained-operation bound names the exits that exist, from what a `destroy`
@@ -706,7 +693,7 @@ refused beside pristine evidence and no such claim names
 `bootwright context init --name <name>` from the context's original
 configuration and input. Since an apply's own attempts keep its removal's
 entries, a removal refuses at its registration only over an area something
-else filled, or that the log records or resolutions above took
+else filled, or that the resolutions above took
 (`TestARemovalTheAreaCannotHoldRefusesAtItsRegistration`). It has
 no destroy left to name, so it names the deletion the guard admits, with
 `--allow-orphans`, which abandons what the context may still own, and then the
@@ -822,6 +809,14 @@ temporary files named `pending-<32 lowercase hexadecimal digits>` that only an
 exclusive holder writes. At most 16 stages exist at once, live, retained or
 abandoned; a claim beyond them refuses until another `media add` finishes or
 `media delete` removes a retained stage.
+
+### Log root
+
+Troubleshooting output lives under the log root, `/var/log/bootwright`, never
+in the store: operation logs, retained adapter output, bounded-run output and
+setup output. Nothing there is evidence, ownership or a continuation cursor,
+and losing it changes no outcome. Its layout, modes, writers, bounds,
+retention and lifetime are the [log root contract](contexts/log-root.md).
 
 ## Format and restore boundary
 

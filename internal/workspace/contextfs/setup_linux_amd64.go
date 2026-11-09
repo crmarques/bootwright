@@ -274,7 +274,7 @@ func recognizedSetup(ctx context.Context, dir *directory) (bool, error) {
 	for _, name := range names {
 		switch name {
 		case setupLockName, setupStateName:
-		case setupRuntimesName, setupCacheName, setupRunsName:
+		case setupRuntimesName, setupCacheName:
 			child, err := openDirectory(dir, name)
 			if err != nil {
 				return false, ctx.Err()
@@ -420,17 +420,17 @@ func (t *setupTransaction) OpenRun(ctx context.Context) (string, prerequisites.S
 	if err := t.owned(ctx); err != nil {
 		return "", nil, err
 	}
-	runs, err := openDirectory(t.dir, setupRunsName)
-	if errors.Is(err, syscall.ENOENT) {
-		runs, err = t.store.ensureDirectory(ctx, t.dir, setupRunsName)
-		if err != nil {
-			return "", nil, setupRunAccessError(storeEntry(t.dir, setupRunsName), err)
-		}
-	} else if err != nil {
-		return "", nil, setupRunAccessError(storeEntry(t.dir, setupRunsName), err)
+	root, err := t.store.openLogRoot(ctx, true)
+	if err != nil {
+		return "", nil, setupLogError(err)
 	}
-	defer runs.file.Close()
-	return t.store.nextSetupRun(ctx, runs)
+	defer root.file.Close()
+	host, err := t.store.logDirectory(ctx, root, logHost, true)
+	if err != nil {
+		return "", nil, setupLogError(err)
+	}
+	defer host.file.Close()
+	return t.store.nextSetupRun(ctx, host, recordedSetupNumber(t.view.State))
 }
 
 func (t *setupTransaction) WheelPath(ctx context.Context, sha256, filename string) (string, error) {

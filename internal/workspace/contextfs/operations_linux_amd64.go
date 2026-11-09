@@ -187,6 +187,9 @@ type operationArea struct {
 	// shared lock.
 	cached  bool
 	measure operationMeasure
+	// logged places the subtree under the context's directory of the log
+	// root, which no area bound measures.
+	logged bool
 }
 
 // operationMeasure is what a caching area last measured of its subtree, and
@@ -272,13 +275,10 @@ func (a *operationArea) child(ctx context.Context, parent *directory, name strin
 	return a.store.concurrentDirectory(ctx, parent, name)
 }
 
-// storage names this area's subtree in a refusal at its bounds, since three
+// storage names this area's subtree in a refusal at its bounds, since two
 // areas share them.
 func (a *operationArea) storage() string {
-	switch a.subtree {
-	case runsSubtree:
-		return "bounded run storage"
-	case trustSubtree:
+	if a.subtree == trustSubtree {
 		return "SSH trust storage"
 	}
 	return "lifecycle operation storage"
@@ -288,18 +288,31 @@ func (a *operationArea) storage() string {
 // read, never opened through: every access still descends from the held,
 // verified handles above.
 func (a *operationArea) Location() string {
+	if a.name == "" || a.subtree == "" {
+		return ""
+	}
+	if a.logged {
+		logs, err := a.store.logsPath()
+		if err != nil {
+			return ""
+		}
+		return filepath.Join(logs, logContexts, a.name, a.subtree)
+	}
 	root, err := a.store.rootPath()
-	if err != nil || a.name == "" || a.subtree == "" {
+	if err != nil {
 		return ""
 	}
 	return filepath.Join(root, "contexts", a.name, "state", a.subtree)
 }
 
-// Reference names the same subtree relative to the state root, the form a
-// structured result names a log in.
+// Reference names the same subtree relative to the root it lies under, the
+// form a structured result names a log in.
 func (a *operationArea) Reference() string {
 	if a.name == "" || a.subtree == "" {
 		return ""
+	}
+	if a.logged {
+		return path.Join(logContexts, a.name, a.subtree)
 	}
 	return path.Join("contexts", a.name, "state", a.subtree)
 }
@@ -322,6 +335,9 @@ func (a *operationArea) available(ctx context.Context, mutation bool) error {
 func (a *operationArea) root(ctx context.Context, create bool) (*directory, func(), error) {
 	if !safeOperationName(a.subtree) {
 		return nil, nil, state("lifecycle area subtree is unsafe")
+	}
+	if a.logged {
+		return a.logRoot(ctx, create)
 	}
 	runtime, err := openDirectory(a.context, "state")
 	if err != nil {
@@ -765,6 +781,9 @@ func (a *operationArea) Sync(ctx context.Context, target string) error {
 // creates an entry refuses there. It reports the measurement the write it
 // admits counts its change into.
 func (a *operationArea) capacity(ctx context.Context, added, additional int) (uint64, error) {
+	if a.logged {
+		return 0, nil
+	}
 	entries, bytes, generation, err := a.measured(ctx)
 	if errors.Is(err, syscall.ENOENT) {
 		return generation, nil

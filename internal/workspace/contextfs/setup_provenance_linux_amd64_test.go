@@ -47,8 +47,8 @@ func TestSetupSequenceExhaustionKeepsReceiptWithoutAStoredRun(t *testing.T) {
 		}
 		return run.Close()
 	})
-	root := filepath.Join(store.options.Root, hostContainer, setupSubtree, setupRunsName)
-	if err := os.Rename(filepath.Join(root, "setup-000001"), filepath.Join(root, "setup-999999")); err != nil {
+	root := filepath.Join(store.options.Root+logsSuffix, logHost)
+	if err := os.Rename(filepath.Join(root, "setup-000001.output"), filepath.Join(root, "setup-999999.output")); err != nil {
 		t.Fatal(err)
 	}
 	identity, err := controller.NewInstalledHostIdentity(controller.LinuxInstalledIdentityV1, strings.Repeat("1", 32), "11111111-2222-4333-8444-555555555555", "22222222-3333-4444-8555-666666666666")
@@ -74,20 +74,23 @@ func TestSetupRunOperationalCreationFaultsRemainOptional(t *testing.T) {
 		point      string
 		occurrence int
 		cause      error
+		primed     bool
 	}{
-		{"mkdir", 1, syscall.ENOSPC}, {"create-file", 1, syscall.ENOSPC},
-		{"sync-directory", 1, syscall.ENOSPC}, {"sync-directory", 2, syscall.EIO},
+		{"mkdir", 1, syscall.ENOSPC, false}, {"create-file", 1, syscall.ENOSPC, true},
+		{"sync-directory", 1, syscall.ENOSPC, true}, {"sync-directory", 1, syscall.EIO, true},
 	} {
 		point := fault.point
 		t.Run(point+"-"+fault.cause.Error(), func(t *testing.T) {
 			store := New(testOptions(filepath.Join(t.TempDir(), "state")))
-			mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
-				_, run, err := tx.OpenRun(context.Background())
-				if err != nil {
-					return err
-				}
-				return run.Close()
-			})
+			if fault.primed {
+				mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
+					_, run, err := tx.OpenRun(context.Background())
+					if err != nil {
+						return err
+					}
+					return run.Close()
+				})
+			}
 			mutateSetup(t, store, func(tx prerequisites.SetupTransaction) error {
 				reached := false
 				occurrences := 0
@@ -131,7 +134,7 @@ func TestSetupRunAccessFailureClassification(t *testing.T) {
 		{"collision", syscall.EEXIST, true}, {"permissions", state("unsafe permissions"), true},
 	} {
 		t.Run(item.name, func(t *testing.T) {
-			err := setupRunAccessError("runs/synthetic", item.err)
+			err := setupRunAccessError("host/synthetic", item.err)
 			if errors.Is(err, prerequisites.ErrUnsafeSetupRun) != item.unsafe {
 				t.Fatalf("classification = %v, unsafe want %v", err, item.unsafe)
 			}
@@ -153,8 +156,7 @@ func TestSetupLogInspectionWithUnavailableStatIsOptional(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, inspect := range []func() error{
-		func() error { _, err := verifySetupRuns(context.Background(), run); return err },
-		func() error { _, _, err := setupRunOutput(run); return err },
+		func() error { _, err := setupRunNumbers(context.Background(), run); return err },
 	} {
 		err := inspect()
 		if err == nil || errors.Is(err, prerequisites.ErrUnsafeSetupRun) {

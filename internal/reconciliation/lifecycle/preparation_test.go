@@ -91,7 +91,7 @@ func TestApplyAttemptRecordsItsPreparation(t *testing.T) {
 	if err := applyOnce(h); err != nil {
 		t.Fatalf("an apply that published its before-state: %v", err)
 	}
-	attempt, err := operationstore.New(h.workspace.area, time.Now).Attempt(context.Background(), firstOperation, "alpha", 1)
+	attempt, err := operationstore.New(h.workspace.area, h.workspace.logArea, time.Now).Attempt(context.Background(), firstOperation, "alpha", 1)
 	if err != nil || string(attempt.Preparation) != `{"attempt":1}` {
 		t.Fatalf("the attempt recorded %s (%v)", attempt.Preparation, err)
 	}
@@ -106,7 +106,7 @@ func TestRemovalReceivesItsOwnApplyPreparationsInAttemptOrder(t *testing.T) {
 			t.Fatal("a failing attempt completed the apply")
 		}
 	}
-	never, err := applyPreparations(context.Background(), operationstore.New(h.workspace.area, time.Now), firstOperation, "bravo")
+	never, err := applyPreparations(context.Background(), operationstore.New(h.workspace.area, h.workspace.logArea, time.Now), firstOperation, "bravo")
 	if err != nil || never != nil {
 		t.Fatalf("a block the apply never started was handed %q (%v)", never, err)
 	}

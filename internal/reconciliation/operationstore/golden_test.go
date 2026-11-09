@@ -177,7 +177,7 @@ func goldenPlan(t *testing.T) reconciliation.Plan {
 func TestOperationRecordsMatchTheirGoldens(t *testing.T) {
 	ctx := context.Background()
 	store, area := newStore(t)
-	fresh := func() *Store { return New(area, fixedClock()) }
+	fresh := func() *Store { return New(area, area.logs, fixedClock()) }
 	published := func(name, target string) []byte {
 		t.Helper()
 		data, found := area.files[target]
@@ -352,7 +352,7 @@ func TestOperationLogsMatchTheirGoldens(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		data := area.files[test.target]
+		data := area.logs.files[test.target]
 		matchesTextGolden(t, test.name, data)
 		lines := strings.SplitAfter(string(data), "\n")
 		if lines[len(lines)-1] != "" || len(lines)-1 != test.opens*(1+len(test.records)) {

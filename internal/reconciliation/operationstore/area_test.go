@@ -27,6 +27,8 @@ type memoryArea struct {
 	syncs       []string
 	location    string
 	reference   string
+	// logs is the log area a store over this area writes its logs to.
+	logs *memoryArea
 	// landed, when set, runs once a write or replacement has landed and
 	// before the call returns, still holding the area, so a test can fail the
 	// next write exactly where a kill between the two would fall.
@@ -34,6 +36,12 @@ type memoryArea struct {
 }
 
 func newArea() *memoryArea {
+	area := emptyArea()
+	area.logs = emptyArea()
+	return area
+}
+
+func emptyArea() *memoryArea {
 	return &memoryArea{files: map[string][]byte{}, directories: map[string]bool{"": true}, fail: map[string]error{}}
 }
 

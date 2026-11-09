@@ -47,6 +47,8 @@ func documentedBounds() []documentedBound {
 		bundles          = "internal/workspace/contextfs/controller_records.go"
 		setupRuns        = "internal/workspace/contextfs/setup_runs_linux_amd64.go"
 		boundedRuns      = "internal/workspace/contextfs/runs_linux_amd64.go"
+		logRoot          = "internal/workspace/contextfs/logs_linux_amd64.go"
+		logRootSpec      = "specs/contexts/log-root.md"
 		operations       = "internal/reconciliation/operationstore/records.go"
 		lifecycleRun     = "internal/reconciliation/ansiblerunner/process_linux_amd64.go"
 		lifecycleRequest = "internal/reconciliation/lifecycle/invocation.go"
@@ -73,16 +75,21 @@ func documentedBounds() []documentedBound {
 		{contexts, "| Retained [controller bundle namespaces](contexts/controller-record.md#bounds), the tool areas | %s |", bundles, "maxControllerBundles", nil, false},
 		{contexts, "| Host [reservation](contexts/controller-record.md#record) entries the controller record holds | %s |", bundles, "maxControllerReservations", nil, false},
 		{"specs/contexts/controller-record.md", "There are at most %s tool areas", bundles, "maxControllerBundles", nil, false},
-		{contexts, "| [Setup runs](contexts/controller-record.md#the-setup-subtree) the setup subtree keeps | %s |", setupRuns, "maxSetupRuns", nil, false},
-		{"specs/contexts/controller-record.md", "There are at most %s runs:", setupRuns, "maxSetupRuns", nil, false},
-		{"specs/contexts/controller-record.md", "`run.output`, which is bounded at %s.", setupRuns, "maxSetupRunOutput", nil, true},
+		{contexts, "| [Setup outputs](#log-root) the log root keeps | %s |", setupRuns, "maxSetupRuns", nil, false},
+		{"specs/contexts/controller-record.md", "There are at most %s outputs:", setupRuns, "maxSetupRuns", nil, false},
+		{"specs/contexts/controller-record.md", "`host/setup/lock` and bounded at %s.", setupRuns, "maxSetupRunOutput", nil, true},
 		{contexts, "| [Bounded runs](cli/output.md#bounded-run-output) one context's runs area keeps | %s |", boundedRuns, "maxBoundedRuns", nil, false},
 		{contexts, "| In-operation root lock wait | %s |", "internal/workspace/contextfs/files_linux_amd64.go", "rootLockWait", &application{runner: "awaitRoot"}, false},
 		{contexts, "| Lifecycle operations one context retains | %s |", operations, "MaxOperations", nil, false},
-		{contexts, "| Entries in one context's lifecycle operation area, and in each of its runs and SSH-trust areas | %s |", operations, "MaxEntries", nil, false},
+		{contexts, "| Entries in one context's lifecycle operation area, and in its SSH-trust area | %s |", operations, "MaxEntries", nil, false},
 		{contexts, "and must still keep %s entries free", operations, "ReservedEntries", nil, false},
-		{contexts, "| Bytes in one context's lifecycle operation area, and in each of its runs and SSH-trust areas | %s |", operations, "MaxBytes", nil, true},
+		{contexts, "| Bytes in one context's lifecycle operation area, and in its SSH-trust area | %s |", operations, "MaxBytes", nil, true},
 		{contexts, "| Bytes in one lifecycle attempt log | %s |", "internal/reconciliation/operationstore/logs.go", "AttemptLogBytes", nil, true},
+		{contexts, "| Operation log directories one context's [log area](#log-root) keeps | %s |", logRoot, "maxOperationLogs", nil, false},
+		{logRootSpec, "fewer than %s remain", logRoot, "maxOperationLogs", nil, false},
+		{logRootSpec, "they hold at most %s.", logRoot, "retainedLogBytes", nil, true},
+		{contexts, "| Bytes one context's operation log area holds before an attempt's retained output is cut short | %s |", "internal/reconciliation/operationstore/logs.go", "MaxContextLogBytes", nil, true},
+		{logRootSpec, "area holds %s, measured", "internal/reconciliation/operationstore/logs.go", "MaxContextLogBytes", nil, true},
 		{contexts, "fresh apply needs %s of them free", operations, "ReservedBytes", nil, true},
 		{contexts, "| One lifecycle adapter invocation whose request states no deadline | %s |", lifecycleRun, "invocationTimeout", &application{runner: "execute"}, false},
 		{contexts, "| The longest deadline a fixed-budget lifecycle request may state | %s |", lifecycleRequest, "MaxDeadline", &application{runner: "execute", source: lifecycleRun, budget: true}, false},

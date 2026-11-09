@@ -84,7 +84,7 @@ func registerUnknownApply(t *testing.T, repository *contextfs.Store) {
 	}
 	ctx := context.Background()
 	if err := repository.MutateLifecycle(ctx, "alpha", func(tx lifecycle.Transaction) error {
-		store := operationstore.New(tx.Operations(), exitStamp)
+		store := operationstore.New(tx.Operations(), tx.Logs(), exitStamp)
 		if err := tx.PublishEvidence(ctx, published); err != nil {
 			return err
 		}

@@ -53,7 +53,7 @@ func (f *lineageFixture) complete(t *testing.T) {
 }
 
 func lineageReader(h *harness) *operationstore.Store {
-	return operationstore.New(h.workspace.area, func() time.Time { return time.Unix(0, 0) })
+	return operationstore.New(h.workspace.area, h.workspace.logArea, func() time.Time { return time.Unix(0, 0) })
 }
 
 func newLineageFixture(t *testing.T, h *harness, added ...reconciliation.BlockDefinition) *lineageFixture {

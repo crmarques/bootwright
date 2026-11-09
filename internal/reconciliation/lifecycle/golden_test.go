@@ -136,7 +136,7 @@ func lineDiff(want, got string) string {
 // read through the view a transaction presents.
 func TestInputDigestMatchesItsGolden(t *testing.T) {
 	workspace := &testWorkspace{
-		revision: testRevision,
+		logArea: newArea(), revision: testRevision,
 		inputs: desiredstate.Sources{
 			Roots: []string{"/synthetic"},
 			Files: []desiredstate.SourceFile{

@@ -102,7 +102,7 @@ func (s Service) resolve(ctx context.Context, name string) (string, error) {
 }
 
 func (s Service) store(view View) OperationStore {
-	return s.options.Operations(view.Operations())
+	return s.options.Operations(view.Operations(), view.Logs())
 }
 
 func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, error) {
