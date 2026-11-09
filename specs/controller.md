@@ -374,7 +374,7 @@ host, which no uninstall reaches. Like install it selects no context, refuses
 | --- | --- |
 | `bootwright controller uninstall` | Elevate, take the exclusive root lock and [`host/setup/lock`](contexts/controller-record.md#the-setup-subtree), each refused as busy rather than awaited, and inspect read-only. A host where every root is absent and no tree an interrupted uninstall renamed remains prints `Nothing to do.` and changes nothing. A root without a setup subtree has no receipt, so it names no package to remove. Otherwise run the owned-object proof below, present the plan, confirm, inspect and prove again under the same locks and refuse a host that moved, remove the packages, then remove every root, and report what it removed and what it kept. |
 | `bootwright controller uninstall --keep-packages` | The same, without the package action: no `rpm` erase test, dnf preview or dnf removal, and no refusal that only package removal needs. |
-| `bootwright controller uninstall --discard-unreadable` | Discard what this build cannot read or attribute ([B1216](milestones/m1.md#b1216)): accepted when the store refuses as another build's (a registry of another version, unsupported root state, or state without a registry), or when the store is readable and holds no context; it then also takes the guest disks under the libvirt image prefix. It takes the same locks, a held `host/setup/lock` included when one stands there, runs the same owned-object proof, and removes every root and the image prefix whole. It never removes a package, and reads no receipt of a store it cannot read, so it runs no `rpm` or dnf and reads no egress route. A malformed registry of this build, an I/O, busy or permission refusal, and a readable store holding any context or image still refuse as the plain uninstall does. With `--keep-packages` it is a usage error. It knows no path an earlier build used. |
+| `bootwright controller uninstall --discard-unreadable` | Discard what this build cannot read or attribute ([B1216](milestones/m1.md#b1216)): accepted when the store refuses as another build's (a registry of another version, or state without a registry), when this build's registry stands beside an entry it cannot attribute and names no context, or when the store is readable and holds no context; it then also takes the guest disks under the libvirt image prefix. It takes the same locks, a held `host/setup/lock` included when one stands there, runs the same owned-object proof, and removes every root and the image prefix whole. It never removes a package, and reads no receipt of a store it cannot read, so it runs no `rpm` or dnf and reads no egress route. A malformed registry of this build, a store listing that fails, changes while read or outgrows its bound, an I/O, busy or permission refusal, and a registry this build decodes that names any context or a media store holding any image, beside an unattributed entry too, still refuse as the plain uninstall does (`TestADiscardBesideAnUnattributedEntryStillRefusesContextsAndMedia`, `TestADiscardRefusesAListingOrReadFailureOfTheStore`). With `--keep-packages` it is a usage error. It knows no path an earlier build used. |
 
 **Refusals before any effect.** Each refuses `controller.uninstall` with the
 remedy named, unless it names another code:
@@ -457,7 +457,10 @@ beyond its bound refuses. `virsh`, `systemctl` and `podman` are qualified as
 and writable by no group or other, run with a fixed environment and a
 bounded output. Its limits: it sees only what those tools list now, so it
 cannot see a process of an older build that holds no lock, nor anything on an
-SSH placement host, whose hosted content stays
+SSH placement host, whose hosted content stays. A command of another build is
+detected only through the locks this build takes, the root lock and
+`host/setup/lock`, and a discard reads no context lease of a store it cannot
+read, so stop every other build's command before a discard
 (`TestEveryOwnedObjectKindIsFound`, `TestTheProofRefusesWhatItCannotRead`).
 
 **State.** After the packages, uninstall renames each root that exists aside
@@ -470,12 +473,18 @@ to `/var/lib/.bootwright-hosted-uninstall-<32 hex>`, `/var/log/bootwright` to
 `/var/lib/libvirt/images/bootwright` to
 `/var/lib/libvirt/images/.bootwright-uninstall-<32 hex>`. It then syncs each
 parent and removes each renamed tree without following a link or crossing a
-device. Each root must first be a directory its owner (`root`) owns, writable
+device. Each root must first be a directory `root:root` owns, writable
 by no group or other, not a link, not a mount point and on its parent's
-device, or uninstall refuses naming it. Once the store is renamed no command
-finds a store, so every one reports a missing install. An uninstall or
-discard interrupted after a rename is finished by the next one, which removes
-every directory of those names it finds in `/var/lib`, `/var/log` and
+device, or uninstall refuses naming it. Each parent uninstall renames or
+removes a tree within must be root's and writable by no group or other unless
+its sticky bit is set, or uninstall refuses naming that parent before any
+effect (`TestAnUninstallRefusesAParentAnotherUserMayWrite`). A renamed tree
+that no longer reads as the one inspected is renamed back, never replacing an
+entry, and refuses
+(`TestAnUninstallRenamesBackATreeThatChangedAcrossItsRename`). Once the store
+is renamed no command finds a store, so every one reports a missing install.
+An uninstall or discard interrupted after a rename is finished by the next
+one, which removes every directory of those names it finds in `/var/lib`, `/var/log` and
 `/var/lib/libvirt/images`, owned by `root:root`, and reports them
 (`TestTheNextUninstallFinishesAnInterruptedDiscard`). Install ignores them.
 

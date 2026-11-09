@@ -125,6 +125,17 @@ func (s *Store) View(ctx context.Context) (contexts.Registry, error) {
 }
 
 func readRegistry(ctx context.Context, root *directory) (contexts.Registry, bool, error) {
+	registry, exists, err := decodeStoredRegistry(ctx, root)
+	if err != nil || !exists {
+		return registry, exists, err
+	}
+	if err := verifyRootEntries(ctx, root, registry); err != nil {
+		return contexts.Registry{}, false, err
+	}
+	return registry, true, nil
+}
+
+func decodeStoredRegistry(ctx context.Context, root *directory) (contexts.Registry, bool, error) {
 	data, err := readBounded(ctx, root, "registry.json", maxRegistry, false)
 	if errors.Is(err, syscall.ENOENT) {
 		held, listErr := rootHoldsEntries(root)
@@ -138,10 +149,13 @@ func readRegistry(ctx context.Context, root *directory) (contexts.Registry, bool
 		if canceled := ctx.Err(); canceled != nil {
 			return contexts.Registry{}, false, canceled
 		}
-		if inspectErr == nil && recoverable {
+		if inspectErr != nil {
+			return contexts.Registry{}, false, &missingRegistryError{failure: missingRegistryState()}
+		}
+		if recoverable {
 			return contexts.Registry{}, false, pendingInitialRegistry()
 		}
-		return contexts.Registry{}, false, missingRegistry()
+		return contexts.Registry{}, false, &missingRegistryError{failure: anotherBuilds(missingRegistryState())}
 	}
 	if err != nil {
 		return contexts.Registry{}, false, err
@@ -153,24 +167,22 @@ func readRegistry(ctx context.Context, root *directory) (contexts.Registry, bool
 	if err := validateRegistry(registry); err != nil {
 		return contexts.Registry{}, false, err
 	}
-	if err := verifyRootEntries(ctx, root, registry); err != nil {
-		return contexts.Registry{}, false, err
-	}
 	return registry, true, nil
 }
 
-func missingRegistry() error {
-	return &missingRegistryError{failure: anotherBuilds(contexts.StateErrorWithRemediation(
-		missingRegistryMessage,
-		storeRecoveryRemediation,
-	))}
+func missingRegistryState() error {
+	return contexts.StateErrorWithRemediation(missingRegistryMessage, storeRecoveryRemediation)
 }
 
 func unsupportedRootState() error {
-	return anotherBuilds(contexts.StateErrorWithRemediation(
+	return contexts.StateErrorWithRemediation(
 		unsupportedRootStateMessage,
 		storeRecoveryRemediation,
-	))
+	)
+}
+
+func unattributedRootEntry() error {
+	return &unattributedEntryState{failure: unsupportedRootState()}
 }
 
 func pendingInitialRegistry() error {
@@ -273,6 +285,7 @@ func verifyRootEntries(ctx context.Context, root *directory, registry contexts.R
 	if err != nil {
 		return unsupportedRootState()
 	}
+	var unattributed error
 	for _, name := range names {
 		switch name {
 		case "registry.json":
@@ -283,7 +296,9 @@ func verifyRootEntries(ctx context.Context, root *directory, registry contexts.R
 			}
 			dir.file.Close()
 		case hostContainer:
-			if err := verifyHostEntries(root, registry); err != nil {
+			if err := verifyHostEntries(root, registry); isUnattributedEntry(err) {
+				unattributed = err
+			} else if err != nil {
 				return err
 			}
 		case mediaContainer:
@@ -294,7 +309,8 @@ func verifyRootEntries(ctx context.Context, root *directory, registry contexts.R
 			dir.file.Close()
 		default:
 			if !pendingInitialRegistryName(name) {
-				return unsupportedRootState()
+				unattributed = unattributedRootEntry()
+				continue
 			}
 			if err := verifyIgnoredRegistryStage(ctx, root, name); err != nil {
 				if canceled := ctx.Err(); canceled != nil {
@@ -308,7 +324,10 @@ func verifyRootEntries(ctx context.Context, root *directory, registry contexts.R
 	if err != nil || !slices.Equal(names, current) {
 		return unsupportedRootState()
 	}
-	return root.verify()
+	if err := root.verify(); err != nil {
+		return err
+	}
+	return unattributed
 }
 
 func verifyHostEntries(root *directory, registry contexts.Registry) error {
@@ -317,10 +336,11 @@ func verifyHostEntries(root *directory, registry contexts.Registry) error {
 		return err
 	}
 	defer host.file.Close()
-	names, err := directoryNames(host, 2)
+	names, err := directoryNames(host, maxContexts+1)
 	if err != nil {
 		return unsupportedRootState()
 	}
+	var unattributed error
 	for _, name := range names {
 		switch name {
 		case setupSubtree:
@@ -334,10 +354,13 @@ func verifyHostEntries(root *directory, registry contexts.Registry) error {
 				return err
 			}
 		default:
-			return unsupportedRootState()
+			unattributed = unattributedRootEntry()
 		}
 	}
-	return host.verify()
+	if err := host.verify(); err != nil {
+		return err
+	}
+	return unattributed
 }
 
 func verifyControllerEntry(host *directory, registry contexts.Registry) error {

@@ -27,6 +27,17 @@ func isAnotherBuilds(err error) bool {
 	return errors.As(err, &another)
 }
 
+type unattributedEntryState struct{ failure error }
+
+func (e *unattributedEntryState) Error() string { return e.failure.Error() }
+
+func (e *unattributedEntryState) Unwrap() error { return e.failure }
+
+func isUnattributedEntry(err error) bool {
+	var unattributed *unattributedEntryState
+	return errors.As(err, &unattributed)
+}
+
 const (
 	missingRegistryMessage   = "the state root holds state but no registry.json this build can read"
 	storeRecoveryRemediation = otherBuildGuidance + "; a store this build created is restored whole from a matching backup"

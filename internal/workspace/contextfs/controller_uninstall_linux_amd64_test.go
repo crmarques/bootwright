@@ -4,9 +4,11 @@ package contextfs
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -424,10 +426,11 @@ func TestAnUninstallNamesGuestDisksAndRefusesForeignRoots(t *testing.T) {
 	uninstallDiagnostic(t, err, "controller.uninstall", hosted+" is not a directory Bootwright owns")
 }
 
-// A registry of another version, unsupported root state and state without a
-// registry are another build's store, handed to the service as Unreadable
-// under the same locks; a malformed registry of this version, a held root
-// lock and a held setup lock refuse instead.
+// A registry of another version and state without a registry are another
+// build's store, and an entry this build cannot attribute beside its own
+// registry is unreadable too, each handed to the service as Unreadable under
+// the same locks; a malformed registry of this version, a held root lock and a
+// held setup lock refuse instead.
 func TestAnUninstallHandsAnotherBuildsStoreToTheService(t *testing.T) {
 	unreadable := map[string]func(root string){
 		"another registry version": func(root string) {
@@ -536,4 +539,196 @@ func TestTheNextUninstallFinishesAnInterruptedDiscard(t *testing.T) {
 	if view, err := uninstallView(t, store); err != nil || len(view.Leftovers) != 0 || view.RootExists {
 		t.Fatalf("a final inspection = %+v (%v)", view, err)
 	}
+}
+
+type noOwnedObjects struct{ proofs *int }
+
+func (o noOwnedObjects) OwnedObjects(context.Context) ([]prerequisites.OwnedObject, error) {
+	*o.proofs++
+	return nil, nil
+}
+
+type refusingPresenter struct{}
+
+func (refusingPresenter) PresentUninstallPlan(context.Context, prerequisites.UninstallPlan) error {
+	return errors.New("a refused discard reached its plan")
+}
+
+func (refusingPresenter) RemovalOutput() prerequisites.RunOutput { return nil }
+
+func (refusingPresenter) PresentControllerScope(context.Context, string, prerequisites.Report) error {
+	return errors.New("a discard presented a controller scope")
+}
+
+func (refusingPresenter) PresentControllerPlan(context.Context, prerequisites.Report) error {
+	return errors.New("a discard presented a controller plan")
+}
+
+// An entry this build cannot attribute beside a registry it decodes never
+// hides what that registry names: the discard still refuses each context and
+// each image, after the inspection read both under the root lock.
+func TestADiscardBesideAnUnattributedEntryStillRefusesContextsAndMedia(t *testing.T) {
+	store, sources := fixture(t)
+	publish(t, store, "lab", sources)
+	for name, stray := range map[string]string{"in the root": filepath.Join(store.options.Root, "notes.txt"), "in the host container": filepath.Join(store.options.Root, hostContainer, "notes.txt")} {
+		t.Run(name, func(t *testing.T) {
+			mkdirs(t, 0700, filepath.Join(store.options.Root, hostContainer))
+			writePrivate(t, stray, nil)
+			defer os.Remove(stray)
+			view, err := uninstallView(t, store)
+			if err != nil || !slices.Equal(view.Contexts, []string{"lab"}) {
+				t.Fatalf("view = %+v (%#v)", view, diagnostics.Of(err))
+			}
+			uninstallDiagnostic(t, view.Unreadable, "context.state", unsupportedRootStateMessage)
+			proofs := 0
+			service := prerequisites.New(store, nil, nil, prerequisites.Ports{Owned: noOwnedObjects{&proofs}}, prerequisites.Options{Presenter: refusingPresenter{}})
+			_, err = service.Uninstall(context.Background(), prerequisites.UninstallRequest{DiscardUnreadable: true})
+			uninstallDiagnostic(t, err, "controller.uninstall", "this host holds contexts: lab")
+			if proofs != 0 {
+				t.Fatal("a refused discard ran the owned-object proof")
+			}
+		})
+	}
+	t.Run("media", func(t *testing.T) {
+		store, base := everyRootStore(t)
+		media := filepath.Join(base, "bootwright", "media")
+		mkdirs(t, 0700, media)
+		writePrivate(t, filepath.Join(media, "rhel.iso.json"), nil)
+		writePrivate(t, filepath.Join(base, "bootwright", "notes.txt"), nil)
+		view, err := uninstallView(t, store)
+		if err != nil || view.Unreadable == nil || !slices.Equal(view.Media, []string{"rhel.iso"}) {
+			t.Fatalf("view = %+v (%#v)", view, diagnostics.Of(err))
+		}
+	})
+}
+
+// A listing that fails or outgrows its bound is no unreadable store: it
+// refuses as itself, never as Unreadable, even where the entries listed would
+// each be unattributable, and a pending registry stage that cannot be read
+// beside no registry refuses rather than reads as another build's.
+func TestADiscardRefusesAListingOrReadFailureOfTheStore(t *testing.T) {
+	for name, directory := range map[string]string{"the root": "", "the host container": hostContainer} {
+		t.Run(name, func(t *testing.T) {
+			store, base := everyRootStore(t)
+			parent := filepath.Join(base, "bootwright", directory)
+			writePrivate(t, filepath.Join(parent, "stray"), nil)
+			if view, err := uninstallView(t, store); err != nil || view.Unreadable == nil {
+				t.Fatalf("one stray entry: view = %+v (%#v)", view, diagnostics.Of(err))
+			}
+			for i := range maxContexts + 1 {
+				writePrivate(t, filepath.Join(parent, "stray-"+strconv.Itoa(i)), nil)
+			}
+			view, err := uninstallView(t, store)
+			if view.Unreadable != nil || isUnattributedEntry(err) || isAnotherBuilds(err) {
+				t.Fatalf("an over-bound listing read as unreadable: %+v (%v)", view, err)
+			}
+			uninstallDiagnostic(t, err, "context.state", unsupportedRootStateMessage)
+		})
+	}
+	t.Run("an unsafe registry stage", func(t *testing.T) {
+		store, base := everyRootStore(t)
+		root := filepath.Join(base, "bootwright")
+		if err := os.RemoveAll(filepath.Join(root, hostContainer)); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Remove(filepath.Join(root, "registry.json")); err != nil {
+			t.Fatal(err)
+		}
+		stage := filepath.Join(root, "pending-"+strings.Repeat("a", 32)+".json")
+		writePrivate(t, stage, []byte("{}\n"))
+		if view, err := uninstallView(t, store); err != nil || !isAnotherBuilds(view.Unreadable) {
+			t.Fatalf("a readable foreign stage: view = %+v (%#v)", view, diagnostics.Of(err))
+		}
+		if err := os.Chmod(stage, 0644); err != nil {
+			t.Fatal(err)
+		}
+		view, err := uninstallView(t, store)
+		if view.Unreadable != nil || err == nil || isAnotherBuilds(err) {
+			t.Fatalf("an unsafe stage read as another build's: %+v (%v)", view, err)
+		}
+		uninstallDiagnostic(t, err, "context.state", missingRegistryMessage)
+	})
+}
+
+// A root whose parent a group or other user may write refuses before any
+// effect unless that parent is sticky and the owner's, while such a parent
+// with nothing in it to act on refuses nothing.
+func TestAnUninstallRefusesAParentAnotherUserMayWrite(t *testing.T) {
+	store := New(testOptions(filepath.Join(t.TempDir(), "bootwright")))
+	base := filepath.Dir(store.options.Root)
+	mkdirs(t, 0777, base)
+	if view, err := uninstallView(t, store); err != nil || view.RootExists || len(view.Leftovers) != 0 {
+		t.Fatalf("an empty writable parent: view = %+v (%v)", view, err)
+	}
+	store, base = installedStore(t)
+	for _, mode := range []os.FileMode{0770, 0757} {
+		mkdirs(t, mode, base)
+		_, err := uninstallView(t, store)
+		uninstallDiagnostic(t, err, "controller.uninstall", base+" may be written by a user other than root")
+	}
+	mkdirs(t, 0777|os.ModeSticky, base)
+	if view, err := uninstallView(t, store); err != nil || !view.RootExists {
+		t.Fatalf("a sticky parent: view = %+v (%#v)", view, diagnostics.Of(err))
+	}
+	mkdirs(t, 0755, base)
+	leftover := filepath.Join(base, ".bootwright-uninstall-"+strings.Repeat("a", 32))
+	mkdirs(t, 0700, leftover)
+	mkdirs(t, 0775, base)
+	_, err := uninstallView(t, store)
+	uninstallDiagnostic(t, err, "controller.uninstall", base+" may be written by a user other than root")
+	if _, err := os.Lstat(leftover); err != nil {
+		t.Fatalf("a refused uninstall removed the leftover (%v)", err)
+	}
+}
+
+// A tree whose renamed name no longer reads as the tree uninstall inspected
+// is renamed back, so no leftover a later run would remove remains, and the
+// uninstall refuses.
+func TestAnUninstallRenamesBackATreeThatChangedAcrossItsRename(t *testing.T) {
+	store, base := installedStore(t)
+	fired := 0
+	store.uninstallEntry = func(parent, name string) (syscall.Stat_t, error) {
+		var stat syscall.Stat_t
+		err := syscall.Lstat(filepath.Join(parent, name), &stat)
+		if strings.HasPrefix(name, ".bootwright-uninstall-") {
+			fired++
+			stat.Ino++
+		}
+		return stat, err
+	}
+	err := store.Uninstall(context.Background(), func(tx prerequisites.UninstallTransaction) error {
+		_, err := tx.RemoveState(context.Background())
+		return err
+	})
+	if fired != 1 {
+		t.Fatalf("the renamed name was read %d times", fired)
+	}
+	uninstallDiagnostic(t, err, "context.state", "renamed it back: "+filepath.Join(base, "bootwright"))
+	entries, err := os.ReadDir(base)
+	if err != nil || len(entries) != 1 || entries[0].Name() != "bootwright" {
+		t.Fatalf("the parent holds %v (%v)", entries, err)
+	}
+	if _, err := store.ReadSetup(context.Background()); err != nil {
+		t.Fatalf("the restored store does not read: %#v", diagnostics.Of(err))
+	}
+}
+
+// A root of the store's owner but another group is not Bootwright's, as a
+// leftover of that group is not, so no renamed copy of it is ever skipped.
+func TestAnUninstallRefusesARootOfAnotherGroup(t *testing.T) {
+	groups, err := os.Getgroups()
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := slices.IndexFunc(groups, func(group int) bool { return group != os.Getegid() })
+	if other < 0 {
+		t.Skip("the test user belongs to no second group")
+	}
+	store, base := everyRootStore(t)
+	hosted := filepath.Join(base, "bootwright-hosted")
+	if err := os.Lchown(hosted, -1, groups[other]); err != nil {
+		t.Fatal(err)
+	}
+	_, err = uninstallView(t, store)
+	uninstallDiagnostic(t, err, "controller.uninstall", hosted+" is not a directory Bootwright owns")
 }
