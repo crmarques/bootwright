@@ -796,10 +796,10 @@ records are explicit.
 
 Retained adapter output is the one bounded exception to that rule. Each
 attempt's and bounded run's [retained output](cli/output.md#private-operation-logs)
-is raw, private and bounded, and no decision reads it back. Only `bootwright
-logs` presents it: the text output escapes every line with the [display
-escaping](cli/output.md#json-output), and raw bytes leave only through the
-base64 structured export or the file itself. Its
+is raw, private and bounded, and no decision reads it back. Only [`bootwright
+logs`](cli/output.md#reading-and-following-logs) presents it: the text output
+escapes every line with the display escaping, and raw bytes leave only through
+the structured export, base64 when they hold a control byte, or the file itself. Its
 secrecy depends on `no_log`: every task that receives bound material sets it,
 so the material never reaches the adapter's own streams. ansible-core censors
 such a task's result but keeps the error, warnings and deprecations the task

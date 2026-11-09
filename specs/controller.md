@@ -1224,7 +1224,8 @@ Host fingerprints, credentials, environment dumps and raw native-tool output
 are not public results. The one private path setup names is the directory of
 the [setup run](cli/output.md#setup-run-output) file under the
 [log root](contexts.md#log-root) keeping dnf's output, as a `Logs` field
-before dnf starts and again with the result; a failure of dnf leads its remedy
+before dnf starts and again with the result, each with the `Follow` command
+that reads it; a failure of dnf leads its remedy
 with that file and that reading it needs root.
 Neither command has a lifecycle receipt or a private operation log.
 

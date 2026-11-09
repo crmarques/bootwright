@@ -352,13 +352,14 @@ which of these roots it holds on this host.
 | --- | --- | --- | --- |
 | `/var/lib/bootwright` | The store: contexts, registry, secrets, media; `host/setup` (runtimes, wheel cache, receipt) and `host/record` | `controller install` and `context init` | Control only |
 | `/var/lib/bootwright-staging` | The embedded automation unpacked for each run | The first command that runs Ansible | Control only |
-| `/var/log/bootwright` | `host/setup-NNNNNN.output`; per context `operations/<op>/`, `runs/run-NNNNNN.output` and `current` | The first command that writes a log | Control only |
+| `/var/log/bootwright` | `host/setup-NNNNNN.output`; per context under `contexts/<context>/`, `operations/<op>/`, `runs/run-NNNNNN.output` and `current` | The first command that writes a log | Control only |
 | `/var/lib/bootwright-hosted/<context>/services/<kind>/<service>` | A hosted service's content root, configuration and certificate | `apply` of an artifact server or managed service | Hosting services |
 | `/var/lib/bootwright-hosted/<context>/machines/<machine>/install`, `.../erase/<operation>` and `clusters/<cluster>` | An installation image built before it is served; a physical erase's custody; a cluster installer's work area | `apply` of the installation, the erase or the cluster | Serving installations |
 | `/var/lib/bootwright-hosted/<context>/machines/<machine>/bmc` and `/var/lib/libvirt/images/bootwright/<context>` | The emulated BMC's state; guest disks and the virtual-media pool | `apply` of the libvirt provider and its Machines | Libvirt provider host |
 | `/var/lib/bootwright-hosted/<context>/...` on the placement host | The same hosted content, on the host the graph names | The same `apply`, over SSH | SSH placement host: not read by `status`, and left in place by `controller uninstall` |
 
-Logs are troubleshooting output only: no decision reads them. The hosted and
+Logs are troubleshooting output only: no decision reads them, and
+[`bootwright logs`](#following-an-apply-or-destroy) is what presents them. The hosted and
 image roots hold what an `apply` realized; `destroy` removes each emptied
 directory but never a root, and `controller uninstall` refuses while a context
 remains ([the contexts spec](../specs/contexts.md#roots-beside-the-store)).
@@ -366,25 +367,40 @@ remains ([the contexts spec](../specs/contexts.md#roots-beside-the-store)).
 ### Following an apply or destroy
 
 Start the operation in one terminal and follow it from a second. The log root
-is private to root, so `logs` asks for authorization as other commands do:
+is private to root, so `logs` asks for authorization as other commands do.
+Every `Logs` line an `apply`, `destroy`, `status`, machine power command or
+`controller install` prints is followed by a `Follow` line holding the exact
+command that reads it: the `--follow` form while it runs, and afterwards one
+pinned to that operation, run or setup:
 
-- `bootwright logs --context <name> --follow` follows the context's
-  current operation, block by block, and ends when the operation does.
+- `bootwright logs --context <name> --follow` prints the context's current
+  operation so far and the last 10 lines of each running block's output, then
+  streams new events and output, block by block, and ends when the operation
+  does. `--block <block>` narrows it to one block.
 - `bootwright status --context <name>` shows, in its Live section, each running
-  block's newest output.
-- `bootwright logs --context <name> --block <block> --raw --follow` shows
-  an adapter's own output for one block; `--attempt <n>` picks an earlier
-  attempt.
+  block's newest output file and the bytes written so far; `--paths` lists the
+  roots that hold the context's data on this host.
+- `bootwright logs --context <name> --block <block> --raw` prints one block's
+  whole newest adapter output; `--attempt <n>` picks an earlier attempt.
+  `--raw` cannot be followed: use `--block <block> --follow`.
 - `bootwright logs --context <name> --run run-NNNNNN` shows a bounded
   run, such as a machine power command, and `--follow` follows one still
   running.
 - `bootwright logs --setup` shows the newest `controller install` output,
-  `--setup=setup-NNNNNN` a named one.
+  `--setup=setup-NNNNNN` a named one (write the `=`), and `--follow` follows
+  one still running.
 - `--operation <id>` reads an earlier operation than the current one.
 
-A follow holds no lease, so it does not keep the operation it watches from finishing or the next one from starting. In the
-instant a `--setup --follow` probes whether the install still runs, a
-`controller install` that starts can be refused as busy; repeat it.
+Text output escapes every line, so a tab prints as `\t` and a terminal sequence
+never runs, and `--detail full` prints each event's full UTC timestamp. For the
+exact bytes use `-o json`, which cannot be followed. A follow ends with a
+warning when the operation still reads `running` but no `apply` or `destroy`
+holds the context; the warning names the command that continues it. A follow
+holds no lease, so it does not keep the operation it watches from finishing or
+the next one from starting. In the instant a `--setup --follow` probes whether
+the install still runs, a `controller install` that starts can be refused as
+busy; repeat it. The full contract is
+[reading and following logs](../specs/cli/output.md#reading-and-following-logs).
 
 ## Network exposure
 

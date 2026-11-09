@@ -19,6 +19,7 @@ output.
 | Explicit sensitive result in default text mode | exact requested bytes, with no added LF | diagnostics only on failure | `0` or `1` |
 | Completion script in default text mode | exact script with its required final LF | empty | `0` |
 | Access handoff | one bounded, escaped descriptor followed by one LF | ordered diagnostics only | `0` or `1` |
+| [`logs`](#reading-and-following-logs) in text mode | event or output lines, each escaped and LF-terminated; a `--follow` writes them as they are written | ordered warnings, and diagnostics on failure | `0`, `1`, `2` or `130` |
 | [SSH session](../cli.md#machine-ssh-sessions) | the remote process's own bytes | Bootwright diagnostics and the host-key confirmation before the connection, then the remote process's own bytes | the SSH client's exit status, even after an interrupt; `255` for a Bootwright refusal before the session opens |
 | [Several SSH sessions](../cli.md#machine-ssh-sessions) | each session's standard output as whole lines prefixed `<machine>: ` | Bootwright diagnostics and the host-key confirmations before any connection, then each session's standard error as whole lines prefixed the same way, then one `access.exit` warning for each nonzero status | the highest status any session returned, even after an interrupt; `255` for a Bootwright refusal before any session opens |
 | [Machine file copy](../cli/machine-copy.md) | per-Machine outcomes, including an executed partial result; one document in structured mode | ordered human diagnostics; empty in structured mode | `0`, `1`, `2` or `130` |
@@ -137,7 +138,7 @@ failure checks; completion evidence remains the authority for block success.
 
 An authorized step that can exceed the heartbeat interval opens a running row
 before it starts. Effects appear under `Progress`, after the private `Logs`
-location when one exists. Read-only proofs appear under `Checks`; a machine
+location and its `Follow` command when one exists. Read-only proofs appear under `Checks`; a machine
 power reading and a media checksum check retain no log. Plain local machine
 and media listings report no progress. Setup and controller readiness retain
 the headings their results define. `media add` reports acquisition (or the
@@ -795,8 +796,8 @@ The human result of `plan`, `apply` and `destroy` composes the
 whose steps are the frozen blocks in plan order, each naming its stage and
 carrying its own impacts as indented lines, a `Checks` section for what the
 operation proves before it registers, a `Progress` section while effects run, a
-`Result` section of status rows, the `Logs` reference when an operation log
-exists, a `Next` field naming the exact command, with `--context`, that
+`Result` section of status rows, the `Logs` and `Follow` fields when an
+operation log exists, a `Next` field naming the exact command, with `--context`, that
 continues a `paused`, `failed`, `unknown` or `running` operation, and the
 receipt as the final four lines.
 
@@ -926,11 +927,30 @@ Its Lifecycle section also names the build that registered the operation, as
 `version` spells it, `<version> (<commit>)`, or `devel (<commit>)` for a build
 stamped with no version, followed by `, another build than this one` when
 `anotherBuild` is true (alone, as `another build than this one`, when the
-record names no executable), and the host directory of its logs, which JSON
-leaves out, and an `Unresolved <block>` section follows it for each block that
+record names no executable), the host directory of its logs, which JSON
+leaves out, and the `Follow` command that reads them, in the running form
+while the operation is `running` and otherwise pinned to the operation, as the
+[`Logs`](#private-operation-logs) field states. A `Live` section follows,
+omitted when no block runs, with a row for each block the records hold
+`running`, in plan order: `Block`, `Attempt` (`2`, or `2 resolution 1`),
+`Output`, its newest output relative to the operation's log directory, and
+`Written`, the bytes it holds floored to the largest whole unit, as `812 B`,
+`184 KiB` or `3 MiB`, or `none yet` while the file is not written. A block an
+interrupted invocation left running is listed too, because `status` probes no
+process and says what the records hold. Where the width cannot hold the four
+columns the section shows one stacked record per block, as every table does.
+An `Unresolved <block>` section follows for each block that
 carries `unresolved`, with its
 `Reason` and `Remedy`. A `Lineage` section follows the Lifecycle fields when
 `lineage` is present, one `Operation` row of the id, verb and state of each apply.
+
+With `--paths`, a last `Paths` section follows `Handoff`: `Kind`, `Path` and
+`State`, `present` or `absent`, for each root in JSON order. Each path is
+examined with one no-follow existence test on this host, reading nothing and
+contacting no managed target, so it is no probe; hosted content on an SSH
+placement host lives on that host and is not examined. A path the host will not
+answer for, other than by reporting it missing, reads `absent` and adds a
+`context.state` warning naming the path and the kernel's answer.
 
 An `apply` or `destroy` reports each warning its attempts' adapters returned
 with a completed result ([adapter warnings](../architecture.md#the-adapter-result-protocol))
@@ -1129,6 +1149,7 @@ contexts/<context-name>/operations/<operation-id>/
     attempt-000001.output
     attempt-000002.jsonl
     attempt-000002-resolution-000001.jsonl
+    attempt-000002-resolution-000001.output
 ```
 
 The [log root](../contexts/log-root.md) owns this layout, its modes, how it is
@@ -1167,7 +1188,7 @@ even when the adapter produces nothing more. The file is bounded and truncated a
 marker, or sooner where the context's operation log area holds
 `operationstore.MaxContextLogBytes`, which leaves no file once nothing fits
 beneath it. It is troubleshooting material only: nothing reads it back for a
-decision, it is never product output, ownership evidence or a continuation cursor, and its attempt log
+decision, only [`bootwright logs`](#reading-and-following-logs) presents it, it is never product output, ownership evidence or a continuation cursor, and its attempt log
 records the file by name with the bytes it holds and whether the bound cut it
 short. Neither retaining it nor failing to ever changes the outcome the
 operation records.
@@ -1190,7 +1211,13 @@ it survives in the scrollback. A check that precedes registration precedes the
 field as well, because the directory belongs to an operation that does not
 exist until the check admits it. Both name the same directory, which is where a
 run still in flight is writing; that directory and its files are private to
-`root`, so reading them is a privileged action. JSON `logs` names safe paths
+`root`, so reading them is a privileged action. Each `Logs` field is followed by
+a `Follow` field, aligned with it as one group, naming the
+[`logs`](#reading-and-following-logs) command that reads what the field names:
+`bootwright logs --context <name> --follow` while the operation is `running`,
+and once it settled `bootwright logs --context <name> --operation <id>`,
+pinned to that operation so old scrollback never names a newer one. No field
+is named `Read`. JSON `logs` names safe paths
 relative to the log root, such as
 `contexts/<context-name>/operations/<operation-id>/operation.jsonl`, and lists
 created paths once: operation log first, then blocks in frozen plan order, effect
@@ -1224,7 +1251,10 @@ printed and points no remediation at output.
 
 Human output names the run's own file as the same `Logs` field, before the
 adapter runs and again after the result, for the same reason an operation names
-its log directory twice. Naming it first is what a refused run depends on, because a
+its log directory twice, each time with a `Follow` field of `bootwright logs
+--context <name> --run run-NNNNNN`, plus `--follow` while the run is in flight.
+A batch's table keeps its `LOGS` column alone, and `--run` reads each file.
+Naming it first is what a refused run depends on, because a
 run that fails reports a diagnostic instead of a result. JSON `logs` names the
 retained file relative to the log root, as an operation's logs are named. A JSON invocation
 reports no progress, so a run that fails once the controller admits its private
@@ -1264,7 +1294,7 @@ and never over an existing name. It exists before dnf
 starts and keeps dnf's standard output and error, raw and unparsed, while it
 runs. It is truncated at its bound without a marker. Like every retained
 output it is troubleshooting material only: the receipt never names it and
-nothing reads it back for a decision.
+nothing reads it back for a decision; only `bootwright logs` presents it.
 
 A dry run and a no-op setup create no output. Neither creating, writing nor
 removing one ever changes a setup outcome or its receipt: an output that cannot
@@ -1272,8 +1302,89 @@ be created leaves dnf's output discarded, exactly as a setup kept none.
 
 Human setup output names the file on this host as the same `Logs`
 field, once before dnf starts and once with the result, for the reason an
-operation names its log directory twice. A dry run's JSON output starts nothing, so
+operation names its log directory twice, each time with a `Follow` field of
+`bootwright logs --setup=setup-NNNNNN`, plus `--follow` before dnf finishes. A dry run's JSON output starts nothing, so
 no `logs` member names it.
+
+### Reading and following logs
+
+`bootwright logs` is the one reader of the retained logs. It is privileged as
+`status` is, reads what the [log root](../contexts/log-root.md) holds and
+never writes. Its [flags and refusals](commands.md) select one of three things:
+a context's operation, the current one unless `--operation` names another, as
+events, or with `--raw --block` one block's newest retained output, `--attempt`
+naming an earlier attempt; a context's bounded run, `--run`; or the host's
+setup, `--setup` for the newest or `--setup=setup-NNNNNN`. `--block` keeps one
+block's events. `--detail full` prints each time as the full RFC 3339 UTC stamp.
+
+**Event lines.** An event is `HH:MM:SS  <block>  <event>  <detail>`: the
+record's UTC time, its block or `-`, the event and its detail, separated by two
+spaces, never wrapped. Block and event columns align to the widest shown, and a
+follow aligns the block to the widest frozen block id and leaves the event
+unpadded. The operation log's `opened` reads `opened`, detail `<verb> <id>`;
+an attempt or resolution log's `opened` reads `started`, detail `attempt N` or
+`attempt N resolution M`; a `group` event's detail starts with its group; a
+truncation marker reads `truncated`, `N records dropped`; a line that is no
+log record reads `unreadable`, `a line of <path> is not a log record`; both
+print time `-`. Everything else prints as recorded. The operation log is merged with
+every attempt and resolution log by time; ties go to the operation log, then
+blocks in frozen plan order (by name when no plan survives), attempt,
+resolution and line. A missing attempt log adds nothing; a missing operation
+log refuses `logs.not-found`.
+
+**Following.** `--follow` pins the operation it resolved and never follows
+`current`. It prints the merged history, then the last 10 complete lines of the
+newest output of each block the records hold `running`, and then once a second
+reads what was appended: the operation log's events, then each block in frozen
+order, its events before its output, a new attempt or a block that starts
+running picked up as it appears, and a block that started and settled between
+two polls still has its output for that attempt streamed once, then flushed. A
+`--run` or `--setup` follow streams the whole file. It ends with exit `0`, after
+draining what was written, when the operation leaves `running`; when it is no
+longer the context's current operation, checked at every poll; or after two
+polls in which no `apply` or `destroy` holds the context although the operation
+still reads `running`, with the `logs.detached` warning on standard error and
+the command that continues it. An operation that is not current, or was not
+running, when the follow starts ends it after the history. A run or setup
+follow ends when its writer no longer holds the file. Whether a writer holds it
+is a non-blocking lock test released at once: a follow takes no lease, and an
+install starting at the instant a setup is probed is refused as
+[busy](../contexts.md#storage-locking-and-publication).
+
+**Busy polls.** Each read, initial or a poll, takes the shared root lock
+without waiting, opens its files under it and reads their bytes after releasing
+it, so a command that needs the exclusive root lock waits for that short hold
+and a follow never makes another command fail
+([locking](../contexts.md#storage-locking-and-publication)). An initial read
+that finds the lock busy refuses `lifecycle.lease`; a busy poll is skipped, and
+60 consecutive busy polls refuse `lifecycle.lease`, exit `1`.
+
+**Lines.** Lines split on LF and lose one trailing CR. A partial line waits for
+its LF and is written when the follow ends; a followed line past 16 KiB is cut
+there and its rest dropped.
+
+**Text output.** Every line, event or output, passes through the safe display
+escaper even into a pipe: backslash, tab, CR and LF print as `\\`, `\t`, `\r`
+and `\n`, other control characters as `\uNNNN` and invalid UTF-8 as `\xNN`, so
+output cannot drive the terminal. With `--raw`, `--run`, `--setup` and a follow,
+each output line is prefixed `[<block>] `, `[run-NNNNNN] ` or `[setup-NNNNNN] `.
+The exact bytes leave only through the structured export or the file itself.
+
+**Structured output.** JSON and YAML write one document whose envelope `logs` is
+`[]`. Events: `context`, `operation`, `verb`, `state` and `events`, each
+`{time, block, attempt, resolution, event, group, detail}`, with block `""` and
+attempt `0` for operation-log rows. Raw, run and setup: `source` (`kind` of
+`attempt`, `run` or `setup`, with the operation, block, attempt, resolution, run
+or setup it names), `path` relative to the log root, `bytes`, `truncated` for
+an attempt's output alone, and `output`, the export `{mediaType, encoding,
+content}` of the exact bytes, encoded as the [export rule](#json-output) says. `--follow`
+with either format is a `cli.usage` refusal, as is `--follow --raw`.
+
+**Exit and diagnostics.** `0` when rendered or a follow ended; `1` for
+`logs.not-found`, `lifecycle.lease`, an unsafe log file (`context.state`) or a
+failed write to standard output; `2` for usage; `130` for an interrupt, which
+stops only the reader. `logs.not-found`, `logs.detached` and `logs.truncated`
+are in the [taxonomy](#diagnostic-taxonomy-and-order).
 
 ## Multi-machine presentation
 

@@ -618,7 +618,8 @@ operation precedes them and presents nothing, as does a `destroy`'s release of
 what an interrupted registration left. During execution they report
 [progress](cli/output.md#long-running-progress) per block, with its
 [presentation groups](cli/output.md#multi-machine-presentation) as sub-steps,
-and they close with the ordered result, the safe log reference, `Next` (the
+and they close with the ordered result, the safe log reference with its
+`Follow` command, `Next` (the
 exact command, with `--context`, that continues a `paused`, `failed`,
 `unknown` or `running` operation) and the [receipt](#lifecycle-receipt). An
 interrupt after registration writes that result and receipt, then

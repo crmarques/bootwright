@@ -147,11 +147,11 @@ func TestADeletionNamesEachInstallerWorkAreaAndItsMachine(t *testing.T) {
 		}
 	}
 	reserve(record.Name,
-		claim(record.Name, prerequisites.ClusterMediaReservation, "sno", "path:/var/lib/bootwright-clusters/"+record.Name+"/sno", "path:/srv/artifacts/private/sno"),
-		claim(record.Name, prerequisites.ClusterMediaReservation, "compact", "path:/var/lib/bootwright-clusters/"+record.Name+"/compact"),
+		claim(record.Name, prerequisites.ClusterMediaReservation, "sno", "path:/var/lib/bootwright-hosted/"+record.Name+"/clusters/sno", "path:/srv/artifacts/private/sno"),
+		claim(record.Name, prerequisites.ClusterMediaReservation, "compact", "path:/var/lib/bootwright-hosted/"+record.Name+"/clusters/compact"),
 		claim(record.Name, prerequisites.OSInstallReservation, "rhel-01", "path:/srv/artifacts/private/rhel-01"),
 		claim(record.Name, "substrate-machine", "rhel-01", "unit:bootwright-bmc-rhel-01"))
-	reserve("second", claim("second", prerequisites.ClusterMediaReservation, "other", "path:/var/lib/bootwright-clusters/second/other"))
+	reserve("second", claim("second", prerequisites.ClusterMediaReservation, "other", "path:/var/lib/bootwright-hosted/second/clusters/other"))
 	if err := store.MutateLifecycle(ctx, record.Name, func(tx lifecycle.Transaction) error {
 		return tx.Bind(ctx, "controller", syntheticHost(t))
 	}); err != nil {
