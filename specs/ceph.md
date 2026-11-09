@@ -2089,7 +2089,7 @@ a later one. A stretched gateway publishes each data site's ingress on that
 site's hosts; a cluster without an ingress publishes none. SMB and CTDB public
 addresses are not VRRP ingresses and publish nothing.
 
-`preflight storage-cluster` probes every ingress host live and read-only, with
+The clusters stage of `preflight` probes every ingress host live and read-only, with
 the same interface selection and grant rules, which one shared fixture corpus
 holds the Go and the worker's tests to. It reads `systemctl show
 --property=ActiveState firewalld.service` (an inactive or failed firewalld

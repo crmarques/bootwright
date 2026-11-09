@@ -235,8 +235,17 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 				return message
 			}
 		}
-	case "render":
+	case "render effective":
+		if boolValue(flags, "origins") && stringValue(flags, "output-dir") != "" {
+			return "--origins conflicts with --output-dir"
+		}
 		return validateRenderDirectories(flags)
+	case "preflight":
+		if stages := normalizeNames(stringValue(flags, "stage")); flags.Changed("stage") && len(stages) == 0 {
+			return "--stage must name at least one stage"
+		} else if len(stages) != 0 && !slices.Contains(stages, "clusters") && stringValue(flags, "clusters") != "" {
+			return "--clusters requires the clusters stage"
+		}
 	case "diff":
 		return validateDiffFlags(command)
 	case "machine list":
@@ -314,7 +323,9 @@ func validateRenderDirectories(flags *pflag.FlagSet) string {
 			return "--input-dir conflicts with --sensitive"
 		}
 	} else if output != "" && !boolValue(flags, "sensitive") {
-		return "context-backed render requires --sensitive"
+		return "context-backed --output-dir requires --sensitive"
+	} else if output == "" && boolValue(flags, "sensitive") {
+		return "--sensitive requires --output-dir"
 	}
 	return ""
 }

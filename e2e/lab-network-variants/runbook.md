@@ -193,7 +193,7 @@ FIREWALL_PORTS=(53/tcp 53/udp 123/udp 3128/tcp 8080/tcp 8443/tcp)
 Continue only when the following preflight reports `ready`:
 
 ```sh
-./bin/bootwright preflight controller --context "$CONTEXT"
+./bin/bootwright preflight --context "$CONTEXT" --stage controller
 ./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services --yes
 ```
 
@@ -556,7 +556,7 @@ if [ "$REGISTER" = true ]; then
 fi
 ./bin/bootwright secret check --context "$CUTOFF_CONTEXT"
 ./bin/bootwright apply --context "$CUTOFF_CONTEXT" --stage controller --yes
-./bin/bootwright preflight controller --context "$CUTOFF_CONTEXT"
+./bin/bootwright preflight --context "$CUTOFF_CONTEXT" --stage controller
 ./bin/bootwright apply --context "$CUTOFF_CONTEXT" --stage infrastructure-services --yes
 ```
 

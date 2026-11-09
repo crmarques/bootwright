@@ -1,11 +1,11 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "preflight storage-cluster",
+  "command": "preflight",
   "ok": false,
   "exitCode": 1,
   "result": {
     "context": "synthetic",
-    "target": "storage-cluster",
+    "target": "clusters",
     "checks": [
       {
         "id": "host.prerequisites",
@@ -41,8 +41,8 @@
     {
       "severity": "error",
       "code": "preflight.unknown",
-      "message": "storage readiness is not proved",
-      "remediation": "resolve the reported prerequisites"
+      "message": "cluster readiness is not proved; inspect the failed, unknown and pending checks",
+      "remediation": "resolve the reported prerequisites and repeat bootwright preflight --context synthetic --stage clusters --clusters ceph"
     }
   ],
   "logs": []

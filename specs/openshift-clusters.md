@@ -1085,7 +1085,7 @@ key remain differences.
 
 ## Preflight
 
-`bootwright preflight container-cluster` reports, for each selected
+The clusters stage of [`bootwright preflight`](cli/output.md#preflight) reports, for each selected
 OpenShiftCluster, the checks an apply of its installation would otherwise meet
 only after its image is built, with no effect on any host. Every check carries
 `id`, `target`, `status`, `reason` and `next`, as storage preflight's do; its

@@ -31,7 +31,7 @@ func TestRunnerDispatchesEveryApplicationCommand(t *testing.T) {
 		"context init --name demo -f input", "context update --name demo -f input", "context use --name demo", "context list", "context current", "context delete --name demo --purge",
 		"add-ons list", "add-ons info --name demo",
 		"secret set --name demo --value-file secret.bin", "secret generate", "secret check", "secret list", "secret show --name demo --part value", "secret delete --name demo", "secret encryption init", "secret encryption status", "secret encryption rotate",
-		"media add --name demo.iso --from-file image.iso", "media list", "media delete --name demo.iso", "validate", "preflight controller", "preflight infra", "preflight clusters", "preflight container-cluster", "preflight storage-cluster", "preflight add-ons", "preflight all", "plan", "status", "render --output-dir artifacts --sensitive", "render effective", "render installer", "render storage", "apply", "destroy",
+		"media add --name demo.iso --from-file image.iso", "media list", "media delete --name demo.iso", "validate", "controller check", "preflight", "preflight --stage clusters --clusters demo", "plan", "status", "render effective --output-dir artifacts --sensitive", "render effective", "render installer", "render storage", "apply", "destroy",
 		"machine list", "machine rsh --name demo", "machine exec --name demo echo", "machine trust", "controller install", "cluster list", "cluster info", "cluster rsh --name demo", "cluster exec --name demo echo", "cluster oc --name demo get", "cluster kubectl --name demo get", "cluster kubeconfig --name demo", "cluster keyring --name demo --client vm-disks",
 	}
 	for _, invocation := range cases {
@@ -61,7 +61,7 @@ func TestHelpPrecedenceAndClosedSyntax(t *testing.T) {
 	}{
 		{"", 0}, {"help", 0}, {"completion", 0}, {"context", 2}, {"secret encryption", 2}, {"context --help", 0}, {"--help context init", 0}, {"help context init", 0},
 		{"context init --name= --help", 0}, {"context init -f a -f b --help", 0}, {"secret show --part invalid --help", 0}, {"status --output invalid --help", 0}, {"machine list --short --output json --help", 0}, {"machine list --help --output invalid", 0},
-		{"render --output json", 0}, {"render --sensitive --output json", 0}, {"render --output invalid", 2}, {"render --input-dir= --help", 0},
+		{"render --output json", 2}, {"render --sensitive --output json", 2}, {"render --output invalid", 2}, {"render effective --input-dir= --help", 0},
 		{"version --help=false", 0}, {"version --help=invalid", 2}, {"render effective --input-dir input", 2},
 		{"example --help", 2}, {"help example", 2}, {"container-cluster --help", 2}, {"help container-cluster", 2}, {"clu list", 2}, {"VERSION", 2}, {"--version", 2}, {"version --format json", 2}, {"__complete", 2}, {"__completeNoDesc", 2}, {"help __bootwright_complete", 2},
 		{"version --", 2}, {"version --help --bad", 2}, {"machine list --short invalid --help", 0}, {"machine list --short=invalid --help", 2}, {"version -vh", 2},
@@ -90,7 +90,6 @@ func TestResolutionFailuresExplainOnlyTrustedReasons(t *testing.T) {
 		{"unknown-flag", []string{"version", "--" + privateArgument}, "unknown flag"},
 		{"missing-value", []string{"context", "init", "--name"}, "flag value is missing"},
 		{"command", []string{privateArgument}, "unknown command"},
-		{"flag-owner", []string{"render", "--input-dir", "input", "effective"}, "flag does not apply to the selected subcommand"},
 		{"help-command", []string{"help", privateArgument}, "unknown help command"},
 	}
 	for _, test := range tests {
@@ -135,7 +134,7 @@ func TestWithdrawnFlagsAreUsageErrors(t *testing.T) {
 	for _, args := range [][]string{
 		{"status", "--watch"}, {"status", "--watch=false"}, {"status", "--watch-interval", "5s"}, {"status", "--watch", "--help"},
 		{"apply", "--verbose"}, {"apply", "-v"}, {"apply", "--yes", "--verbose=false"}, {"destroy", "--verbose"}, {"destroy", "-v", "--help"},
-		{"preflight", "infra", "--verbose"}, {"preflight", "clusters", "-v"}, {"preflight", "container-cluster", "--verbose"}, {"preflight", "storage-cluster", "--verbose"}, {"preflight", "all", "-v"},
+		{"preflight", "--verbose"}, {"preflight", "-v"}, {"controller", "check", "--verbose"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			code, out, errOut, record := runRecorded(args)

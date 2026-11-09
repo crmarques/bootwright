@@ -14,9 +14,7 @@ var (
 	allSSHFlags       = []string{"ssh-id-file", "ssh-user", "ssh-ask-sudo-password", "ssh-user-for-provisioned"}
 	accountSSHFlags   = []string{"ssh-id-file", "ssh-user"}
 	sshFlagsByCommand = map[string][]string{
-		"preflight clusters": allSSHFlags, "preflight container-cluster": allSSHFlags,
-		"preflight storage-cluster": allSSHFlags, "preflight add-ons": allSSHFlags, "preflight all": allSSHFlags,
-		"apply": allSSHFlags, "destroy": allSSHFlags,
+		"preflight": allSSHFlags, "apply": allSSHFlags, "destroy": allSSHFlags,
 		"machine rsh": accountSSHFlags, "machine exec": accountSSHFlags, "machine cp": accountSSHFlags,
 		"cluster rsh": accountSSHFlags, "cluster exec": accountSSHFlags,
 	}
@@ -26,7 +24,7 @@ var contextFreeCommands = map[string]bool{
 	"context init": true, "context update": true, "context use": true, "context list": true,
 	"context current": true, "context delete": true, "add-ons list": true, "add-ons info": true,
 	"media add": true, "media list": true, "media delete": true,
-	"controller install": true, "controller rebind": true, "controller uninstall": true,
+	"controller install": true, "controller check": true, "controller rebind": true, "controller uninstall": true,
 	"version": true, "schema": true, "help": true,
 	"completion bash": true, "completion zsh": true, "completion fish": true, "completion powershell": true,
 }

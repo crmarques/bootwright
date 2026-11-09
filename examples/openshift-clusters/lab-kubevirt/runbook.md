@@ -70,7 +70,7 @@ export INPUT_DIR=examples/openshift-clusters/lab-kubevirt
 ./bin/bootwright plan --context "$CONTEXT"
 ./bin/bootwright apply --context "$CONTEXT" --stage controller --yes
 ./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services --yes
-./bin/bootwright preflight container-cluster --context "$CONTEXT"
+./bin/bootwright preflight --context "$CONTEXT" --stage clusters
 ```
 
 ## 3. Run

@@ -300,6 +300,9 @@ func TestStatusRendersTextAndJSON(t *testing.T) {
 			t.Fatalf("status text = %q, missing next step %q", text.String(), step)
 		}
 	}
+	if strings.Contains(text.String(), "  Next       ") {
+		t.Fatalf("the lifecycle section of status text names a next token: %q", text.String())
+	}
 	var encoded bytes.Buffer
 	if err := writeLifecycleStatus(&encoded, result, true); err != nil {
 		t.Fatal(err)
@@ -590,7 +593,7 @@ func TestStatusTextEscapesOnce(t *testing.T) {
 		"  [UNKNOWN]   " + shown("vkind") + "/" + shown("vname") + "   " + shown("machine") + "\n", "  " + shown("step") + "\n",
 		"  [UNKNOWN]   " + shown("rkind") + "/" + shown("rname") + "   " + shown("sname") + "\n",
 		"  Operation  " + shown("operation") + "\n", "  Verb       " + shown("verb") + "\n",
-		"  State      " + shown("opstate") + "\n", "  Next       " + shown("next") + "\n",
+		"  State      " + shown("opstate") + "\n",
 		"    [FAIL] " + shown("description") + "\n",
 		"  Registered by  " + shown("build") + "\n", "  Logs           " + shown("location") + "\n",
 		"Contradictions\n    " + shown("contradiction") + "\n",
@@ -599,6 +602,9 @@ func TestStatusTextEscapesOnce(t *testing.T) {
 		if !strings.Contains(text.String(), want) {
 			t.Fatalf("status text = %q, missing %q", text.String(), want)
 		}
+	}
+	if strings.Contains(text.String(), "  Next       ") {
+		t.Fatalf("the lifecycle section of status text names a next token: %q", text.String())
 	}
 	var encoded bytes.Buffer
 	if err := writeLifecycleStatus(&encoded, result, true); err != nil {

@@ -394,7 +394,7 @@ ingress also its internal port 29443 that Prometheus service discovery dials,
 as a [host requirement](managed-os.md#host-firewall-requirements) that the
 managed OS realizes on a Machine it installs with the firewall enabled;
 otherwise it refuses `ingress-firewall` before effects when an ingress host's
-active firewalld would drop any of them, and `preflight storage-cluster`
+active firewalld would drop any of them, and `preflight --stage clusters`
 reports the same verdict live
 ([ingress host firewall](ceph.md#ingress-host-firewall)).
 Readiness then proves each virtual IP has exactly one holder, since dropped

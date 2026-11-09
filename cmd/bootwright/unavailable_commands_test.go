@@ -14,7 +14,6 @@ import (
 // stubCommands names, for each service wireStubs binds, the commands that
 // service backs and the arguments that reach it.
 var stubCommands = map[string]map[string][]string{
-	"AddOnPreflight":   {"preflight add-ons": {"preflight", "add-ons"}},
 	"Installer":        {"render installer": {"render", "installer"}},
 	"StorageArtifacts": {"render storage": {"render", "storage"}},
 }
@@ -45,7 +44,7 @@ func TestUnavailableCommandsMatchTheStubWiring(t *testing.T) {
 	}
 	slices.Sort(derived)
 	listed := documentedUnavailableCommands(t)
-	if !slices.Equal(derived, listed) || len(derived) != 3 {
+	if !slices.Equal(derived, listed) || len(derived) != 2 {
 		t.Fatalf("wireStubs backs %q; specs/cli/commands.md lists %q", derived, listed)
 	}
 }
@@ -70,11 +69,11 @@ func documentedUnavailableCommands(t *testing.T) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, rest, found := strings.Cut(string(data), "\nNot yet met: `preflight add-ons`")
+	_, rest, found := strings.Cut(string(data), "\nNot yet met: `render installer`")
 	if !found {
 		t.Fatal("specs/cli/commands.md has no Not yet met line listing the unavailable commands")
 	}
-	paragraph, _, _ := strings.Cut("`preflight add-ons`"+rest, "\n\n")
+	paragraph, _, _ := strings.Cut("`render installer`"+rest, "\n\n")
 	listed, _, _ := strings.Cut(paragraph, " run no use case")
 	var commands []string
 	for index, part := range strings.Split(listed, "`") {

@@ -60,7 +60,7 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 	if err != nil {
 		return nil, err
 	}
-	return Assemble(selected, "clusters", "cluster", "clusters", reports...)
+	return Assemble(selected, "clusters", "bootwright preflight --context "+selected+" --stage clusters", reports...)
 }
 
 func RefuseUnreachedSSH(ssh machine.SSHOptions, storageSelected bool) error {

@@ -169,7 +169,7 @@ func validControllerReport(report *prerequisites.Report) bool {
 }
 
 func successfulControllerReport(command string, report *prerequisites.Report) bool {
-	if command == "preflight controller" {
+	if command == "controller check" {
 		return report.Outcome == "ready" && !report.DryRun
 	}
 	return report.DryRun && report.Outcome == "planned" || !report.DryRun && (report.Outcome == "unchanged" || report.Outcome == "changed")
@@ -178,7 +178,7 @@ func successfulControllerReport(command string, report *prerequisites.Report) bo
 // controllerHeadline names what the reader is looking at. Readiness inspection
 // never presents a plan, so only setup announces one.
 func controllerHeadline(command string, report *prerequisites.Report) string {
-	if command == "preflight controller" {
+	if command == "controller check" {
 		return "Controller readiness"
 	}
 	if report.PlanPresented || !report.DryRun {
@@ -309,29 +309,22 @@ func controllerOutcomeFields(command string, report *prerequisites.Report) []fie
 
 // controllerNextCommand offers the one command that settles what is missing.
 // The command the service decided always wins, never one re-derived here: a
-// not-ready preflight's, and the one a refused or failed setup's remediation
+// not-ready check's, and the one a refused or failed setup's remediation
 // names, such as the purge after a retirement that failed once its setup
 // completed. Otherwise a completed setup moves the operator on to
-// verification, a context whose readiness holds moves on to its plan, and a
-// ready host names no next command, because which context to plan is the
-// operator's choice. Any other outcome names none, as for a remediation that
-// names no command or a selection the platform cannot realize.
+// verification and a ready host to creating a context, whose name and input
+// are the operator's to choose. Any other outcome names none, as for a
+// remediation that names no command or a selection the platform cannot
+// realize.
 func controllerNextCommand(command string, report *prerequisites.Report) string {
 	if report.Next != "" {
 		return report.Next
 	}
-	if report.Outcome == "ready" {
-		if command == "preflight controller" && report.ContextName != "" {
-			return "bootwright plan --context " + report.ContextName
-		}
-		return ""
+	if report.Outcome == "ready" && command == "controller check" {
+		return "bootwright context init --name <name> --input-dir <dir>"
 	}
 	if report.Outcome == "changed" || report.Outcome == "unchanged" {
-		next := "bootwright preflight controller"
-		if report.ContextName != "" {
-			next += " --context " + report.ContextName
-		}
-		return next
+		return "bootwright controller check"
 	}
 	return ""
 }
@@ -395,7 +388,7 @@ func controllerScopeText(text *display, report *prerequisites.Report) {
 }
 
 func showReceiptTable(command string, report *prerequisites.Report) bool {
-	return report.Table != nil && (command == "preflight controller" || report.Outcome == "unchanged")
+	return report.Table != nil && (command == "controller check" || report.Outcome == "unchanged")
 }
 
 // controllerPlanText writes the plan body. The scope and checks are skipped

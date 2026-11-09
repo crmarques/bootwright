@@ -160,7 +160,7 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 		if result.Summary.Failed > 0 {
 			code = "preflight.failed"
 		}
-		return result, diagnostics.NewFailureWithRemediation(code, "storage readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat preflight storage-cluster")
+		return result, diagnostics.NewFailureWithRemediation(code, "storage readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright preflight --stage clusters")
 	}
 	return result, nil
 }

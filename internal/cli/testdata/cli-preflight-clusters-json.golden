@@ -1,12 +1,18 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "preflight storage-cluster",
+  "command": "preflight",
   "ok": true,
   "exitCode": 0,
   "result": {
     "context": "synthetic",
-    "target": "storage-cluster",
+    "target": "clusters",
     "checks": [
+      {
+        "id": "resolution.api",
+        "target": "api.sno.example.test",
+        "status": "passed",
+        "reason": "api.sno.example.test resolves to 192.0.2.10"
+      },
       {
         "id": "capacity.memory",
         "target": "controller",
@@ -24,7 +30,7 @@
       }
     ],
     "summary": {
-      "passed": 1,
+      "passed": 2,
       "failed": 0,
       "unknown": 0,
       "pending": 0

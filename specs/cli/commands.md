@@ -8,10 +8,9 @@ The tables define the complete public command tree, operands, flags and defaults
 Every command accepts and parses the presentation flags below. `--context`
 and the `--ssh-*` flags are accepted only by the commands whose use case reads
 them; any other command refuses them as flags it does not accept. The
-context-free commands, which refuse `--context`, are `controller install`, `controller
-rebind`, `controller uninstall`, `context` (every subcommand), `media` (every subcommand), `add-ons` (every subcommand), `help`, `completion`, `version` and `schema`; only `apply`, `destroy`,
-`machine rsh`, `machine exec`, `machine cp`, `cluster rsh`, `cluster exec` and every
-`preflight` check but `preflight controller` and `preflight infra` accept
+context-free commands, which refuse `--context`, are `controller install`,
+`controller check`, `controller rebind`, `controller uninstall`, `context` (every subcommand), `media` (every subcommand), `add-ons` (every subcommand), `help`, `completion`, `version` and `schema`; only `apply`, `destroy`,
+`machine rsh`, `machine exec`, `machine cp`, `cluster rsh`, `cluster exec` and `preflight` accept
 `--ssh-*`; `machine rsh`,
 `machine exec`, `machine cp`, `cluster rsh` and `cluster exec` accept only `--ssh-id-file`
 and `--ssh-user`, refuse the other two, and omit them from help and
@@ -30,7 +29,7 @@ completion to them.
 | `--detail compact\|full` | enum; `compact` | Select concise human facts or the available detailed evidence and access templates. Structured results retain every documented field. |
 | `--ascii[=<bool>]` | Boolean; `false` | Use ASCII presentation markers instead of Unicode markers. Raw exports remain byte-exact. |
 | `--width <columns>` | integer; `0` | Use automatic width at `0`, or an explicit bound from `24` through `500`, capped by an injected terminal width when available. Wrapping measures terminal cells. |
-| `--context <name>` | context name; current context | Select the named context for a context-backed command. `preflight controller` consumes it as the [Controller journeys](../controller.md#the-setup-flow) define, and the [flag relationships](#flag-relationships-and-safeguards) below restrict it. |
+| `--context <name>` | context name; current context | Select the named context for a context-backed command. The [flag relationships](#flag-relationships-and-safeguards) below restrict it. |
 | `--ssh-id-file <path>` | path; none | Offer this private key first for an SSH operation; a declared credential remains the fallback. A leading `~` resolves from the invoking account database, not an untrusted `HOME`; the opened file must satisfy the private-file rules in [security](../security.md). |
 | `--ssh-user <name>` | POSIX user name; none | Use one explicitly borrowed account for eligible OS-ready machines. On [`machine rsh` and `machine exec`](../cli.md#machine-ssh-sessions) it reaches any account under the session's credential rules. It does not alter desired state or the managed identity Bootwright installs. |
 | `--ssh-ask-sudo-password[=<bool>]` | Boolean; `false` | Prompt once for the borrowed account's sudo password, hold it only in bounded memory for this invocation, and never place it in arguments, environment, state, output, or logs. It conflicts with JSON or YAML output and non-interactive execution, and is not consumed by `machine rsh` or `machine exec`. |
@@ -113,28 +112,23 @@ The three `media` commands follow the host-wide
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
 | `bootwright validate` | repeatable `-f, --file <file-or-dir>` | validation summary with admission counts, exclusions and advisories | read the supplied input, or the selected context's input when `-f` is omitted; no write |
-| `bootwright preflight controller` | none | [baseline or explicit-context controller readiness](../controller.md#the-setup-flow), including the acquisition route it resolved | bounded local observation; no state publication |
-| `bootwright preflight infra` | `--dry-run` false | [controller and host capacity checks](output.md#infrastructure-and-environment-preflight) | observe unless `--dry-run`, which is local-only |
-| `bootwright preflight clusters` | `--clusters <list>` default all; `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | container and storage cluster checks | observe unless `--dry-run` |
-| `bootwright preflight container-cluster` | `--clusters`, `--dry-run`, with OpenShiftCluster-only selection | container-cluster readiness checks | observe unless `--dry-run` |
-| `bootwright preflight storage-cluster` | same flags as `preflight clusters`, with CephCluster-only selection | storage-cluster readiness checks | observe unless `--dry-run` |
-| `bootwright preflight add-ons` | `--clusters <list>` default all OpenShiftClusters | add-on prerequisite checks | bounded observation |
-| `bootwright preflight all` | `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | the checks of `preflight infra` and `preflight clusters`, [one report](output.md#infrastructure-and-environment-preflight); add-on checks join with [B770](../milestones/backlog.md#b770) | observe unless `--dry-run` |
+| `bootwright preflight` | `--stage <list>` default every stage but `add-ons`; `--clusters <list>` default all; `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | [one report](output.md#preflight) of the checks of each selected stage: `controller` the controller host and this context's controller-stage prerequisites, `infrastructure-services` the firewall admission of the controller's managed service sockets, `substrates` the capacity of the hosts that hold its Machines, `machines` none, `clusters` the selected OpenShiftClusters and CephClusters | observe unless `--dry-run`, which is local-only |
 | `bootwright plan` | `--stage <list>` default all stages; `--until <cluster>.<package>` | next legal full-context plan, the additive plan or exact continuation point, with the steps each block waits for, how wide the plan is and how many blocks it starts at a time, and the blocks a stage or `--until` selection would start | none |
 | `bootwright status` | none | controller setup readiness, lifecycle state of the lineage, and next safe commands; beside no operation it also names each declared Secret whose material is missing or stale and each named installer image the media store lacks, with the remedy command ahead of `plan`, from keyring metadata and media records alone; it checks neither Secret material nor image bytes, which `secret check` and `media list --checksums` report | read local state, keyring metadata and media records under shared locks |
 | `bootwright diff` | `--observe`, `--exit-code` false; `--output-dir <dir>` or `--tool <program>` | desired files beside what the apply lineage realized, from records or, with `--observe`, read live, as a [comparison](../cli.md#desired-and-realized-state-comparison) | read local state; `--output-dir`, `--tool` write files outside the store; `--observe` reads each block the lineage realized, read-only, on the host it froze, after the [cache-only rebuild](../controller.md#the-controller-runtime) of a missing runtime |
-| `bootwright render` | `--input-dir <file-or-dir>`; `--output-dir <dir>`; `--sensitive` false | the [effective-state file](../cli.md#validation-preflight-and-rendering) written to `--output-dir` and its path, or render help when neither path flag is supplied | local artifact writes only |
-| `bootwright render effective` | `--origins` false | normalized effective desired state and object counts; with `--origins`, the [origin of each effective field](../cli.md#effective-field-origins) instead of the YAML | none |
+| `bootwright render effective` | `--origins` false; `--input-dir <file-or-dir>`; `--output-dir <dir>`; `--sensitive` false | normalized effective desired state and object counts; with `--origins`, the [origin of each effective field](../cli.md#effective-field-origins) instead of the YAML; with `--output-dir`, the [effective-state file](../cli.md#validation-preflight-and-rendering) written there and its path | none without `--output-dir`; with it, local artifact writes only |
 | `bootwright render installer` | `--clusters <list>` default all OpenShiftClusters; `--sensitive` false | installer artifact manifest | local placeholder files and optional sensitive files |
 | `bootwright render storage` | `--clusters <list>` default all CephClusters | storage artifact manifest | local native files or scripts only; never execution |
 | `bootwright apply` | repeatable `--authorize <token>[=<digest>][,<token>...]`; `--stage <list>` default all stages; `--until <cluster>.<package>`; `--yes` false | completed full apply or additive apply of instances, a pause at the selected stage boundary or after the named add-on instance, exact continued state, or a settled result when the declared state is realized | complete planned mutation, or none when it settles, beyond completing an operation's interrupted finalization |
 | `bootwright destroy` | repeatable `--authorize <token>[=<digest>][,<token>...]`; repeatable `--unregistered <machine>[,<machine>...]`; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles, beyond the same interrupted finalization or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back |
 
-Not yet met: `preflight add-ons`, `render installer` and `render storage` run no use case
+Not yet met: `render installer` and `render storage` run no use case
 and answer `cli.not-implemented`; their contracts are intent, tracked as
-[B770](../milestones/backlog.md#b770), [B52](../milestones/m7.md#b52) and
-[B55](../milestones/m7.md#b55). Every other command here is available.
+[B52](../milestones/m7.md#b52) and [B55](../milestones/m7.md#b55). Every other command here is available.
 `TestUnavailableCommandsMatchTheStubWiring` holds this list.
+
+Not yet met: `preflight --stage add-ons` runs no add-on prerequisite check and answers
+`cli.not-implemented`; tracked as [B770](../milestones/backlog.md#b770).
 
 ### Resource, access, and general commands
 
@@ -150,6 +144,7 @@ and answer `cli.not-implemented`; their contracts are intent, tracked as
 | `bootwright machine stop` | required `--name <list>`; `--force` false; `--yes` false | same, after the operating system is asked to shut down | same |
 | `bootwright machine restart` | required `--name <list>`; `--force` false; `--yes` false | same, after a proved stop and a proved start | same |
 | `bootwright controller install` | `--dry-run` false; `--yes` false; `--wheel-mirror <file:///dir or https://base>` default none; `--download-only` false; `--dest-dir <dir>` default none | [context-independent controller prerequisite plan or completed setup](../controller.md#the-setup-flow); with `--dry-run --output json`, the plan and every locked wheel; with `--download-only`, the [files written for an offline host](../controller.md#offline-and-mirrored-wheels) | host packages through the host's own dnf after its verbatim preview, and the controller runtime from locked wheels over the [context-free route](../controller.md#the-context-free-acquisition-route), or from `--wheel-mirror`; a ready host makes no request and no change; dry-run only lists requirement names; `--download-only` requires `--dest-dir`, conflicts with `--dry-run`, never elevates, reads no setup state and writes only the directory |
+| `bootwright controller check` | none | [baseline controller readiness](../controller.md#the-setup-flow), including the acquisition route it resolved, and `context init` as the next step of a ready host | bounded local observation; no state publication |
 | `bootwright controller rebind` | `--yes` false; `--recorded-host-retired` false, required with `--yes`; `--machine-id <id>`, `--product-uuid <uuid>` and `--root-uuid <uuid>` default none, all three this host's and required with `--yes`, and a remedy repeating the command names them by placeholder | the outcome and the counts of the bindings and reservations it kept | [host identity rewrite](../contexts.md#controller-relationship-and-host-binding) of the controller record, once, under the exclusive root lock, after a confirmation naming the recorded and the new identity and affirming that the recorded host no longer runs this store; refuses a store whose directories are not the ones its registry attributed and an unchanged identity, and cannot tell a byte-for-byte clone from the store |
 | `bootwright controller uninstall` | `--keep-packages` false; `--yes` false | what it removed and kept or `Nothing to do.` | host packages and state by the [uninstall flow](../controller.md#the-uninstall-flow) |
 | `bootwright cluster list` | none | container and storage cluster names and kinds in canonical order | read local state |
@@ -207,7 +202,14 @@ values of each enum flag, and the refusal of an enum value lists them. A command
 that is recognized but unavailable says so in its own help, and an unavailable
 cluster command offers no execution example. The root listing marks a command
 group unavailable only when neither it nor any command under it is available, so
-`render` is unmarked while `render effective` works. A usage refusal for a flag
+`render` is unmarked while `render effective` works. The root listing groups
+commands by what they act on: Host (`controller`, `media`), Context (`context`,
+`secret`, `validate`, `preflight`, `plan`, `apply`, `destroy`, `status`,
+`diff`), Resources (`machine`, `cluster`, `add-ons`, `render`) and Tools
+(`version`, `schema`, `completion`, `help`). A command group's help offers only
+the inherited flags its commands accept: a group whose every command is
+context-free lists no `--context`, and one none of whose commands reads an SSH
+override names none (`TestGroupHelpOffersOnlyTheFlagsItsCommandsAccept`). A usage refusal for a flag
 that belongs to another command names only a descendant's flag. Goldens hold the
 root help and the help of every command (`TestHelpGolden`,
 `TestHelpMarksUnavailableCommands`,
@@ -431,10 +433,20 @@ applies only to the render rows that list it. Sensitive installer artifacts use
 the exact verified destination boundary, mode `0600` beneath `0700`
 directories, atomic publication, and bounded cleanup in [security](../security.md).
 It never permits a secret in an effective-state artifact, manifest, diagnostic,
-log, command argument, or path. `render --input-dir` always uses placeholders
+log, command argument, or path. `render effective --input-dir` always uses placeholders
 and requires `--output-dir`. A non-empty `--context` or
-`--sensitive=true` conflicts with `--input-dir`. Context-backed whole render
-requires `--output-dir` and `--sensitive`.
+`--sensitive=true` conflicts with `--input-dir`. A context-backed
+`render effective --output-dir` requires `--sensitive`, `--sensitive` requires
+`--output-dir`, and `--origins` conflicts with `--output-dir`.
+
+`preflight --stage` takes the stage names of `apply --stage`, follows the same
+list rules and selects the checks the [preflight report](output.md#preflight)
+assigns each stage. A supplied `--clusters` requires the `clusters` stage when
+`--stage` is supplied; otherwise it is a usage error. A selection that includes
+`add-ons` answers `cli.not-implemented` as an
+[unavailable command](../cli.md#recognized-but-unavailable-commands) does,
+naming `preflight --stage add-ons`, before any context, privilege or
+observation.
 
 `machine list --short=true` emits only sorted names as text and conflicts
 with resolved JSON or YAML output and with `--power-status`, because a reading it

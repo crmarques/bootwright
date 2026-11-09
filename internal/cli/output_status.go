@@ -333,7 +333,6 @@ func writeStatusLifecycle(text *display, result *lifecycle.StatusResult) {
 		field{Label: "Operation", Value: displayValue(summary.Operation)},
 		field{Label: "Verb", Value: displayValue(summary.Verb)},
 		field{Label: "State", Value: displayValue(summary.State)},
-		field{Label: "Next", Value: displayValue(summary.Next)},
 	)
 	if len(summary.Lineage) != 0 {
 		text.section("Lineage")

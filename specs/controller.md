@@ -2,7 +2,7 @@
 
 Controller owns inspection and preparation of the local host on which
 Bootwright runs. This contract defines `controller install`, `controller uninstall`,
-`preflight controller` and the controller stage. Setup never provisions an operating system or executes a
+`controller check`, the controller checks of `preflight` and the controller stage. Setup never provisions an operating system or executes a
 managed service's lifecycle.
 
 Prerequisites divide by what selects them. **Host prerequisites** are
@@ -67,7 +67,7 @@ A non-empty `/etc/ld.so.preload` is reported as the informational
 `controller.loader-preload` line, for example "/etc/ld.so.preload is not empty,
 so it loads libraries into every process, root dnf runs included; setup
 continues", and is no refusal anywhere: that file is root-owned and already
-applies to every root dnf run. Setup, its dry run and `preflight controller`
+applies to every root dnf run. Setup, its dry run and `controller check`
 read it without following a link another account owns; a file they cannot
 read as an ordinary empty or absent one is reported the same way.
 
@@ -75,8 +75,8 @@ Bootwright's own executable uses Go's cryptography, and the `cryptography`
 wheel bundles its own OpenSSL, which Bootwright never uses for TLS; both stay
 outside the host's FIPS-validated modules, while the runtime's Python TLS
 follows the host's OpenSSL and crypto-policy
-([W4](security.md#the-controller-hosts-attacker-model)). Setup and
-`preflight controller` report the kernel's FIPS mode as the informational
+([W4](security.md#the-controller-hosts-attacker-model)). Setup,
+`controller check` and the controller checks of `preflight` report the kernel's FIPS mode as the informational
 `fips-mode` check, with that statement when it is enabled; the check never
 changes readiness, the plan or the next command while the kernel's flag reads
 0 or 1 or is absent; a flag that cannot be read as 0 or 1 refuses with
@@ -289,11 +289,12 @@ profile selects inputs. Its acquisition route is the
 [invoking environment's](#the-context-free-acquisition-route), and direct
 access when that environment names none.
 
-`preflight controller` uses a named context **only when `--context` is explicit
-and nonempty**. An explicitly empty value is omission. Nonempty names follow
-the existing context-name grammar. An explicit context must be ready and have
-an admitted input revision; an empty one returns `context.input` with the
-import command. Every check carries the scope that owns it, so a negative
+`controller check` selects no context either and refuses `--context`, so it
+reports the host baseline alone. A context's controller readiness is the
+[controller stage of `preflight`](cli/output.md#preflight), which reads the
+selected context, the current one unless `--context` names another; that
+context must be ready and have an admitted input revision, and an empty one
+returns `context.input` with the import command. Every check carries the scope that owns it, so a negative
 report names the one command that settles it: `controller install` for a host prerequisite,
 and that context's own `apply --stage controller --context <name>` for anything
 its graph selects. A context whose graph selects no target client, libvirt
@@ -302,19 +303,19 @@ only context check, the binding, names `apply --context <name>`, whose first
 apply publishes it. The report's next command and the diagnostic's remedy are
 that one decision. An unmet host prerequisite always wins, because the
 prerequisites a context adds cannot be prepared on an unprepared host. Global
-SSH flags remain unconsumed.
+SSH flags remain unconsumed by these checks.
 
 | Invocation | Required behavior |
 | --- | --- |
 | `bootwright controller install --dry-run` | Admit the host as setup does, select the interpreter and list by name the host package requirements setup would install, through unprivileged `rpm` presence queries and without a dnf preview. No setup record is read, so this stays below the privilege boundary. No network, Secret read, privilege escalation or write. Runtime readiness and the setup state are explicitly unverified. With `--output json`, which setup accepts only with `--dry-run`, the result also lists every locked wheel's ABI, file, URL and SHA-256. The `state-root` check reports, from an unprivileged look at the state root, an absent root, which setup creates, or a `root:root` `0700` directory on a local filesystem, whose contents setup verifies. A root of another type, owner or mode, one on an unqualified filesystem, and, when the root's owner runs the dry run, one holding state this build cannot read, are not ready: the dry run reports the check beside the store's own refusal and remedy, and exits 1. The check reaches the root as the store opens it, every ancestor without following a link and on a qualified local filesystem. A root behind a symbolic link in its path is not ready, and the dry run reports the store's own refusal beside the check (`TestTheStateRootInspectionReachesTheRootAsTheStoreOpensIt`). |
 | `bootwright controller install --download-only --dest-dir <dir>` | Write the lock's files into `<dir>` as [Offline and mirrored wheels](#offline-and-mirrored-wheels) defines. It never elevates and admits no host: it reads no setup record, runs no `rpm` or `dnf` and changes nothing outside `<dir>`, so any connected host can run it. |
 | `bootwright controller install` | Elevate, then inspect read-only: admission, the installed host, FIPS mode, the untested release and loader preload (informational), the setup state, the interpreter and its runtime and the baseline package presence. A ready host prints the receipt table and `Nothing to do.`, with no network request, confirmation or write. Otherwise run the preview and present the plan, confirm, take `setup/lock`, inspect again and refuse a host that moved, record the pending intent, install with dnf, fetch, build, verify and publish the runtime, and write the receipt, which clears the pending intent. Publish no binding and touch no controller record. |
-| `bootwright preflight controller` | Read and verify the same host checks as setup with bounded local probes and no dnf preview, and report the host's FIPS mode and the missing package names. May use the verified privilege boundary for private metadata. |
-| `bootwright preflight controller --context <name>` | Additionally report that context's own target tools, its libvirt client, hypervisor, installer-media, `nmstate` and `iputils` requirements by `rpm` presence, and its host binding, as context-scoped checks. Contact no publisher and read no repository metadata for them. |
+| `bootwright controller check` | Read and verify the same host checks as setup with bounded local probes and no dnf preview, and report the host's FIPS mode and the missing package names. May use the verified privilege boundary for private metadata. A ready host names `bootwright context init --name <name> --input-dir <dir>` as its next command. |
+| `bootwright preflight --stage controller --context <name>` | Additionally report that context's own target tools, its libvirt client, hypervisor, installer-media, `nmstate` and `iputils` requirements by `rpm` presence, and its host binding, as context-scoped checks. Contact no publisher and read no repository metadata for them. |
 
-Neither command contacts a managed endpoint, creates or repairs shared state
-on behalf of the other's scope, or publishes a binding. Preflight publishes
-nothing at all, and neither preflight nor a dry run runs dnf, downloads a
+No command here contacts a managed endpoint, creates or repairs shared state
+on behalf of another's scope, or publishes a binding. A check publishes
+nothing at all, and neither a check nor a dry run runs dnf, downloads a
 wheel or refreshes repository metadata.
 
 The plan names each action setup takes, in order:
@@ -674,7 +675,7 @@ always its completion. Only deleting the context drops its binding, and the
 area no remaining binding names is then retired. Recovery is idempotent rather than compensating:
 dnf installs only what is missing and publication verifies existing bytes
 instead of overwriting them, so an interrupted stage is completed by repeating
-it. `preflight controller --context <name>` reports the same closures by
+it. `preflight --stage controller --context <name>` reports the same closures by
 presence, one check each for the libvirt client, the hypervisor, the
 installer-media tooling, `nmstate` and `iputils` the context selects, read through the same
 requirements, and requires every one of them; it names this command when one
@@ -687,7 +688,7 @@ catalog, its publisher metadata, transport, acquisition or trust, the host's
 dnf, or the controller Ansible run) keeps its own diagnostic code and names
 this stage's own `bootwright apply --stage controller --context <name>` as
 what settles it, never `controller install`, which installs nothing a context selects.
-`preflight controller --context <name>` names the same command for the same
+`preflight --stage controller --context <name>` names the same command for the same
 failures it meets while it recovers that context's clients by presence. That
 remedy offers the correction alone, even for a publisher the host could not
 reach or resolve: the block froze the controller Machine's proxy choice it
@@ -830,10 +831,10 @@ a route from, so it reads one from the environment that invoked it. An admitted
 invocation's parsed flags decide this, never its command path alone, and
 exactly four shapes read it: `controller install`, whose `--dry-run` preview reports the
 route setup would take; `controller uninstall` without `--keep-packages`, whose
-dnf may refresh repository metadata; `preflight controller` while its final `--context` is
-omitted or empty, which reports the host's route; and `media add --from-url`.
+dnf may refresh repository metadata; `controller check`, which reports the
+host's route; and `media add --from-url`.
 Every context-backed shape, including `apply --stage controller`,
-`preflight controller --context <name>` and every lifecycle block, continues to
+`preflight` and every lifecycle block, continues to
 take its Machine's normalized proxy choice alone, so one context never acquires
 over two routes. A local shape, such as `media add --from-file`, and an
 invocation that is not admitted read no route, so neither refuses over nor
@@ -1126,7 +1127,7 @@ requirement. The native queries use the runtime semantics documented by
 [firewall-cmd](https://firewalld.org/documentation/man-pages/firewall-cmd.html)
 and [zone targets](https://firewalld.org/documentation/man-pages/firewalld.zone.html).
 
-Setup's ready path and `preflight controller` render the same short receipt
+Setup's ready path and `controller check` render the same short receipt
 table, for example:
 
 ```text
@@ -1142,13 +1143,12 @@ list. `Runtime` names the interpreter, its path and the ansible-core version,
 then `ready` or `not prepared`. `Packages` names each receipt package as its
 provider's name and version with the repository it came from, or `present
 before bootwright` for one setup did not install, and names what is missing
-instead when a package is. `preflight controller` renders the table in every
+instead when a package is. `controller check` renders the table in every
 result that reached it, ready or not, in place of the host's ready check
-rows; a host check that is not ready, such as an interrupted setup, and the
-context's check rows remain. Both end a ready result with `Nothing to
+rows; a host check that is not ready, such as an interrupted setup, remains. Both end a ready result with `Nothing to
 do.`. Setup renders the table only on its ready path, and never in its dry run,
 which reads no setup record.
-`preflight controller` stays read-only and runs no dnf preview.
+`controller check` stays read-only and runs no dnf preview.
 
 Host fingerprints, credentials, environment dumps and raw native-tool output
 are not public results. The one private path setup names is the directory of

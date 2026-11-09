@@ -7,8 +7,8 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 )
 
-func controllerPreflightCommand() commandSpec {
-	return available(commandSpec{path: "preflight controller", short: "Check controller prerequisites", long: "Verify local controller prerequisites without installing or changing state. Omit --context for the host baseline; only an explicit nonempty --context adds that context's own target tools, the native closures its controller stage selects (the libvirt client, the hypervisor and the installer-media tooling) and its host binding."})
+func controllerCheckCommand() commandSpec {
+	return available(commandSpec{path: "controller check", short: "Check what controller install prepares on this host", long: "Verify, without installing or changing anything, the context-independent controller prerequisites controller install prepares on this host: its host packages, the controller runtime and the state root. It selects no context; the prerequisites a context adds are checked by preflight --stage controller and installed by the controller stage of apply."})
 }
 
 func controllerSetupCommand() commandSpec {
@@ -46,8 +46,8 @@ func (s Services) invokeController(ctx context.Context, path string, values *req
 	var result commandResult
 	var err error
 	switch path {
-	case "preflight controller":
-		result.controller, err = invokeResult(ctx, values, prerequisites.CheckRequest{ContextName: values.text("context")}, s.Controller.Check)
+	case "controller check":
+		result.controller, err = invokeResult(ctx, values, prerequisites.CheckRequest{}, s.Controller.Check)
 	case "controller install":
 		result.controller, err = invokeResult(ctx, values, prerequisites.SetupRequest{
 			DryRun:           values.boolean("dry-run"),

@@ -86,7 +86,6 @@ Alias cell.
 | [B369](#b369) | new, 2026-10-06 (X40) | enabling | Each spec's owner | Wording X40 left | Found in X40; parked under D48 (D116) |
 | [B374](#b374) | new, 2026-10-06 (X40) | enabling | State reconciliation | Status names a keyring listing that fails for any reason | Found in X40; parked under D48 (D116) |
 | [B375](#b375) | new, 2026-10-06 (X40) | enabling | State reconciliation, with Controller setup | Status over a failed setup receipt that has no execution definition | Found in X40; parked under D48 (D116) |
-| [B376](#b376) | new, 2026-10-06 (X40) | enabling | Controller and CLI | A ready baseline readiness names its next step | Found in X40; parked under D48 (D116) |
 | [B385](#b385) | split from B94 on 2026-10-06 (X41) | enabling | Workspace, with Controller setup | Setup's receipt and controller mutation drop the context they never use | Found in X41; parked under D48 (D116); dropping the receipt member moves the setup plan digest |
 | [B386](#b386) | new, 2026-10-06 (X41) | enabling | Controller, with Environment and Container cluster | Dead code X41 left | Found in X41; parked under D48 (D116) |
 | [B387](#b387) | new, 2026-10-06 (X41) | enabling | Managed OS | The installation request, its digest and its role drop what D82 retired | Found in X41; parked under D48 (D116); it moves every installation plan digest and the automation digest |
@@ -224,7 +223,7 @@ Alias cell.
 | [B747](#b747) | new, 2026-10-20 (D172) | product | Container cluster and Substrate | A cluster whose nodes span KubeVirt or vSphere and another arm | No run qualifies it, and the media block would both publish and push; it needs B88 or B733 and a qualifying run |
 | [B748](#b748) | new, 2026-10-20 (D172) | product | Container cluster | OKD clusters through the agent installer | M3's coverage is OpenShift; OKD's release, client and image sources need their own definition, and its refusal row stays |
 | [B769](#b769) | new, 2026-10-20 (D173) | product | Add-ons | One add-on instance removed online from a cluster that stays | M4 retires instances with their cluster; [D153](#d153) refuses changing a completed apply's selection |
-| [B770](#b770) | new, 2026-10-20 (D173) | product | Add-ons | `preflight add-ons` reports add-on prerequisites before an apply | No check is provable before the cluster exists; apply-time gates name their failures |
+| [B770](#b770) | new, 2026-10-20 (D173) | product | Add-ons | `preflight --stage add-ons` reports add-on prerequisites before an apply | No check is provable before the cluster exists; apply-time gates name their failures |
 | [B988](#b988) | new, 2026-10-30 (D210; audit 002 F11) | product | Add-ons, with API | A `ClusterAddonProfile` carries built-in packages as a named preset | No repeated consumer; Q26 (a) chose profiles without packages |
 | [B990](#b990) | new, 2026-10-30 (D211; B90 first slice) | product | Add-ons | An authored add-on creates a cluster-scoped custom resource once a program check proves the kind's scope | No consumer; the first slice admits only namespaced resources in the add-on's own namespace |
 | [B998](#b998) | new, 2026-10-30 (X234) | enabling | State reconciliation | A resolution of a predecessor's block reserves the room of the lineage's removal | Found in X234 review; the reserve rule reads one apply today and holds in the shipped cases |
@@ -309,6 +308,7 @@ Alias cell.
 | [B1215](#b1215) | new, 2026-11-08 (lab-5-nodes-ceph-networks run) | product | Substrate | A managed libvirt network does not route the CIDR of a tagged Network it carries with no host address | Only a misdirected guest probe left through NAT; no Ceph traffic routes there |
 | [B1216](#b1216) | new, 2026-11-08 (owner's host cleanup) | product | Controller, with Workspace | A controller store an older build wrote has a named, cheap exit | D241 makes the refusal rare; the owner recovered by hand once |
 | [B1217](#b1217) | new, 2026-11-08 (X326 review) | defect | Substrate, with Managed OS | The capacity gate attributes each publication to its own filesystem and reads a stage-scoped apply's completed installs | A mount below a per-context content root is unusual, and the owner's staged applies continue one operation |
+| [B1219](#b1219) | new, 2026-11-08 (X327 review) | safety | CLI, with agent guidance | Every grouped ask pattern also matches global flags written between the group and its command | Predates X327, which fixes only the `render` patterns; `TestDocsAskRuleCatchesGlobalFlagsBetweenAGroupAndItsCommand` holds that case |
 
 ### B82
 
@@ -707,10 +707,6 @@ Since X40 `status` reads a keyring listing that fails as corrupt or undecryptabl
 ### B375
 
 A fresh destroy over a failed setup receipt is proved to decide only in the lifecycle harness, whose receipt keeps an execution definition. The execution closure refuses a receipt that has none, naming `bootwright setup`, so the setup-gated steps `status` offers may have to name setup there in place of destroy; nobody checked what a failed receipt the context store writes holds (found in X40). X46 saw `status` report its `execution-bundle` setup check as ready over a receipt that holds no execution definition (found in X46). **Exit evidence:** a failed receipt written through the context store, with `status` and `destroy` agreeing on the step, and that check not ready.
-
-### B376
-
-A ready `preflight controller` run without `--context` names no next step, such as the `context init` that follows setup: X40 offers `bootwright plan --context` for a context's readiness and deliberately nothing for the baseline (found in X40). **Exit evidence:** the owner's choice, and under it the baseline golden.
 
 ### B385
 
@@ -2531,7 +2527,7 @@ removed by removing the operator.
 
 ### B770
 
-`bootwright preflight add-ons` reporting, with no effect, the cluster API
+`bootwright preflight --stage add-ons` reporting, with no effect, the cluster API
 answering through the lent kubeconfig, a named CatalogSource `READY` and the
 declared `startingCSV` in its channel. Parked on 2026-10-20 (D173): no check
 is provable before the cluster exists, and apply-time gates name their
@@ -3452,6 +3448,21 @@ again. **Exit evidence:** a test of each case failing on X326's source.
 **Outcome:** a publication is gated on the filesystem it lands on, and an
 installed Machine's media are never counted twice.
 
+### B1219
+
+**Owner:** CLI, with agent guidance. **Kind:** safety. **Requires:** X327.
+**Definition:** `Specified`, from the review of X327: the parser accepts
+inherited flags between a command group and its command, so
+`bootwright machine --context lab exec --name m -- id` runs `machine exec`, and
+an ask pattern of `.claude/settings.json` spelled `*machine exec*` does not
+match it; `secret show`, `cluster info --secrets`, the session, power and trust
+commands and `controller rebind` share the gap. Spell each grouped pattern with
+a wildcard between the group and its command, as X327 does for `render`, and
+list every grouped command in `askRuleGroupFlagCommands`. **Exit evidence:**
+`TestDocsAskRulesCoverEveryEffectfulCommand` checking the group-position form of
+every grouped command with effects. **Outcome:** no effectful command escapes
+its ask rule through a flag written after its group.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/001-spec/report-final.md) ordered its
@@ -3762,6 +3773,7 @@ holding such a clause, the clauses pending and the work they enable.
   and the version reset (X325).
 - [D242](#d242): clauses (1) to (4), what the capacity admission counts
   beside the guests' disks (X326).
+- [D243](#d243): clauses (6) to (11), the CLI command structure (X327).
 
 ### D1
 
@@ -7490,3 +7502,41 @@ review:
 
 The [capacity admission](../substrates.md#capacity-admission) section owns
 each rule.
+
+### D243
+
+**session-pending** (2026-11-08, the owner's request; clauses (1) to (5) are
+the owner's acceptance of the session's recommendations, and the clauses after
+them are taken by the session, pending the owner's review): "audit cli in
+terms of command structure and ux; i think the commands controller, validate,
+status, plan and preflight is a little bit confusing and repeatetive; check
+user experience a propose a new organized strutucture", then, on the
+session's proposal, "Proceed implementation of proposal. I accept
+recommendations". This opens X327, out of sequence, with B1218 and B376.
+
+1. The seven `preflight` subcommands become one `preflight` command whose
+   `--stage` takes the stage names of `apply --stage`; the word `preflight`
+   stays.
+2. The host baseline of `preflight controller` becomes `controller check`,
+   beside `controller install`, and a ready host names `context init` as its
+   next step, which settles B376.
+3. A stage with no checks, `machines` today, gives an empty, passing report
+   rather than a refusal.
+4. `add-ons` keeps its plural.
+5. Human `status` keeps its `Next steps` commands and drops the Lifecycle
+   section's `Next` token line; JSON keeps `lifecycle.next`.
+6. The controller stage holds every controller check but the
+   `listener-firewall` rows, which are the infrastructure-services stage's;
+   the substrates stage holds the capacity checks; `add-ons` answers
+   `cli.not-implemented` until B770.
+7. `--clusters` requires the `clusters` stage when `--stage` is given.
+8. Bare `render` no longer executes; its path flags move to
+   `render effective`, where `--output-dir` writes the file, `--origins`
+   conflicts with it and `--sensitive` requires it.
+9. Root help groups commands as Host, Context, Resources and Tools, and lists
+   `schema`; each command group has a real purpose line, and a group's help
+   offers only the inherited flags its commands accept.
+10. No alias or compatibility handler keeps a removed path; history,
+    knowledge pages, audits and acceptance rows keep the names they recorded.
+11. The per-kind preflight services leave the CLI's services, and the unused
+    add-on preflight stub package is deleted.

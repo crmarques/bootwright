@@ -29,8 +29,8 @@ before output or ambient access.
 The [catalog](cli/commands.md#command-and-flag-catalog) is the sole list of
 command paths. With no arguments, the root prints root help and succeeds.
 Bare `help` prints root help; bare `completion` prints completion help. Both
-succeed. `render` is the only domain parent that also executes; every other
-incomplete domain parent prints help and fails with a usage error.
+succeed. Every incomplete domain parent, `render` included, prints help and
+fails with a usage error.
 
 The former root groups `example` and `container-cluster` are absent, with no
 aliases or hidden compatibility handlers. Their paths, including explicit help
@@ -56,14 +56,15 @@ Every invocation admitted by that boundary follows this precedence:
 3. honor an explicit help request;
 4. validate semantic operands, presence, cardinality, enums, formats, defaults,
    and flag relationships, including context-independent inherited flags;
-5. apply the bare-`render` help special case; and
-6. decide whether the resolved use case is available.
+5. decide whether the resolved use case, or the part of its selection that
+   [preflight --stage](cli/commands.md#flag-relationships-and-safeguards)
+   names, is available.
 
 Explicit help therefore outranks required-value, enum, cardinality, and
 relationship validation only after the raw bounds and command/flag syntax are
 valid. It continues to follow the no-effect contract under
-[Global flags](cli/commands.md#global-flags). Root help, explicit help requests, bare
-`render`, bare `completion`, completion scripts, and the private completion
+[Global flags](cli/commands.md#global-flags). Root help, explicit help requests,
+bare `completion`, completion scripts, and the private completion
 protocol retain their defined behavior; malformed or incomplete usage remains
 `cli.usage` with exit status `2`.
 
@@ -129,10 +130,9 @@ positional operand, not its value. Boolean values use Go's case-sensitive
 A command-local flag is recognized only after its complete owning command path
 has been resolved and is not inherited by descendants. Before the complete
 path is resolved, only inherited global flags and `-h`/`--help` are recognized.
-At runnable `render`, a non-flag token that is not a declared subcommand starts
-the operand list; later tokens do not extend the command path. These unexpected
-operands fail semantic validation after explicit-help precedence, as on other
-runnable commands. An explicit `help` path still requires exact subcommands.
+A non-flag token that is not a declared subcommand of an incomplete parent
+fails command resolution. An explicit `help` path still requires exact
+subcommands.
 
 Scalar flags follow command-line order and the last occurrence wins, including
 the scalar comma-list flags `--clusters`, `--replace`, `--stage`,
@@ -454,10 +454,11 @@ completion, or context initialization without input. Context-free validation
 can run away from the declared controller; it checks input relationships and
 never verifies the invoking host.
 
-`controller install` and `preflight controller` follow the
+`controller install` and `controller check` follow the
 [Controller journeys](controller.md#the-setup-flow), including
-preparation before context creation or Environment import and the context each
-consumes. Which invocations read the invoking environment's proxy route is
+preparation before context creation or Environment import; neither selects a
+context. `preflight --stage controller` checks what a context's controller
+stage adds. Which invocations read the invoking environment's proxy route is
 owned by the [context-free acquisition route](controller.md#the-context-free-acquisition-route).
 Controller selection alone does not cause setup, install a container runtime or
 start services.
@@ -479,27 +480,26 @@ successful exit; an invalid input set exits `1`. After the CLI has resolved the
 input universe, discovery and Environment selection are defined by
 [the API contract](api.md).
 
-Preflight reports current readiness but grants no mutation authority and never
-replaces a fresh lifecycle operation's effect-boundary probes. A live
+`preflight` reports current readiness, stage by stage, as
+[its report](cli/output.md#preflight) assigns checks to stages, but grants no
+mutation authority and never replaces a fresh lifecycle operation's
+effect-boundary probes. A live
 preflight may perform bounded read-only observation through
 qualified adapters but allocates no lifecycle identity or log. Failed,
 unavailable, forbidden, malformed, or contradictory observation is an explicit
 failed or unknown check, never success or absence.
 
-Any otherwise syntactically and semantically valid `render` invocation prints
-render help and succeeds when neither `--input-dir` nor `--output-dir` is
-supplied. It uses the selected human, JSON or YAML help representation and
-performs no command work. The path flags
-otherwise follow their [relationships](cli/commands.md#flag-relationships-and-safeguards).
+The path flags of `render effective` follow their
+[relationships](cli/commands.md#flag-relationships-and-safeguards).
 
-With a path flag `render` writes `effective-state.yaml`, the canonical YAML
-`render effective` prints, into `--output-dir` instead of standard output and
+With `--output-dir`, `render effective` writes `effective-state.yaml`, the
+canonical YAML it otherwise prints, into that directory instead of standard output and
 reports `inputDir` (context-free only), `outputDir`, `effectiveStatePath` and
 the `objects` count. Context-free it reads `--input-dir`, a file or directory
 as `validate -f` does; context-backed it reads the selected context's input and
 requires `--sensitive`. A compile failure writes nothing. Publication runs
 with the invoking account's credentials, including when a
-context-backed read needs root. Context-free `render --input-dir` does not
+context-backed read needs root. Context-free `render effective --input-dir` does not
 elevate. An absent output directory is created and owned by the invoking
 account, mode `0755`, or `0700` with `--sensitive`, and may be a
 link to a directory. Every later step works through one held handle on that
@@ -507,7 +507,7 @@ directory, never a path walked again: the file is published atomically, a
 synced temporary file created exclusively beside it and renamed, mode `0644`,
 or `0600` with `--sensitive`, and replaces an earlier regular file of that name;
 the directory is synced and a failed sync is a failure. The effective state
-holds no secret value (`render effective` prints the same bytes), so
+holds no secret value (printing it gives the same bytes), so
 `--sensitive` changes the modes and one check until the sensitive installer
 artifacts of [B52](milestones/m7.md#b52) exist: with it the output directory
 must be owned by the invoking account and not be group- or other-writable
@@ -526,7 +526,7 @@ storage members of the manifest return with B52 and
 [B55](milestones/m7.md#b55). What those two renderers write, and the Environment
 preflight families' dry-run and host-key detail, are
 [deferred](deferred/cli-access-and-rendering.md).
-`render effective` is the read-only exception: text mode emits canonical
+Without `--output-dir`, `render effective` is read-only: text mode emits canonical
 effective YAML, and either structured mode places the complete canonical effective-state
 array in `result.effectiveState`, alongside admission `counts`; neither mode
 writes an artifact.

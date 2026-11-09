@@ -147,7 +147,7 @@ Complete [Prepare listener firewall](../README.md#prepare-listener-firewall)
 in this shell, then:
 
 ```sh
-./bin/bootwright preflight controller --context "$CTX_BOOT"
+./bin/bootwright preflight --context "$CTX_BOOT" --stage controller
 ./bin/bootwright apply --context "$CTX_BOOT" --stage infrastructure-services --yes
 ./bin/bootwright apply --context "$CTX_BOOT" --yes
 ./bin/bootwright machine exec --context "$CTX_BOOT" --name fips-controller -- cat /proc/sys/crypto/fips_enabled
@@ -199,7 +199,7 @@ umask 077
 RUN_DIR=$(mktemp -d)
 bootwright version
 bootwright controller install --yes
-bootwright preflight controller                # the FIPS mode check reports 1
+bootwright controller check                     # the FIPS mode check reports 1
 bootwright validate -f ~/fips
 bootwright context init --name "$CTX_FIPS" --input-dir ~/fips
 bootwright secret set --context "$CTX_FIPS" --name openshift-pull-secret --value-file ~/openshift-pull-secret --yes
@@ -279,7 +279,7 @@ in this session with interface `enp1s0`. Then build the services and the
 substrate on `libvirt-host`:
 
 ```sh
-bootwright preflight controller --context "$CTX_FIPS"
+bootwright preflight --context "$CTX_FIPS" --stage controller
 bootwright apply --context "$CTX_FIPS" --stage infrastructure-services,substrates --yes
 dig @198.51.100.10 +short api.sno.e2e.example.test test.apps.sno.e2e.example.test   # both 198.51.100.31
 dig @198.51.100.10 +short mirror.openshift.com                                       # forwarded through CTX_BOOT
@@ -296,7 +296,7 @@ printf 'dns-resolver:\n  config:\n    search:\n    - e2e.example.test\n    serve
 sudo nmstatectl apply "$RUN_DIR/dns.yml"
 grep nameserver /etc/resolv.conf                                    # 198.51.100.10
 getent hosts api.sno.e2e.example.test
-bootwright preflight container-cluster --context "$CTX_FIPS"
+bootwright preflight --context "$CTX_FIPS" --stage clusters
 ```
 
 Every `resolution.*` and `capacity.*` check must be `passed`.

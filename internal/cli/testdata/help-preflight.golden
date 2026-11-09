@@ -1,18 +1,27 @@
   bootwright / preflight
-      Manage preflight
+      Check, without changing anything, whether the selected context is ready for the stages
+      apply runs, in one report. controller checks the controller host's prerequisites, the
+      target tools this context's controller stage selects and its host binding;
+      infrastructure-services checks the firewall admission of the controller's managed service
+      sockets; substrates checks the capacity of the hosts that hold the context's Machines;
+      machines has no checks; clusters checks the OpenShiftClusters and CephClusters that
+      --clusters selects, or all of them. add-ons has no checks yet and is refused. It reports
+      only what it observes: external services, a Registry or LoadBalancer and managed services
+      on other Machines are not checked, and apply checks them itself. The SSH and
+      trust-on-first-use options apply to the CephCluster checks. --dry-run runs no process and
+      reports every check pending. For the controller host alone, before any context exists,
+      run controller check.
 
   Usage
     bootwright preflight [flags]
 
-  Commands
-  COMMAND             PURPOSE
-  add-ons             Check add-on prerequisites (unavailable)
-  all                 Check all prerequisites
-  clusters            Check selected cluster readiness
-  container-cluster   Check OpenShiftCluster readiness
-  controller          Check controller prerequisites
-  infra               Check infrastructure readiness
-  storage-cluster     Check CephCluster readiness
+  Command flags
+      --clusters            Select comma-separated cluster names (default: all)
+      --dry-run             Limit work to the command's dry-run boundary
+      --stage               Select comma-separated stages to check (default: every stage but
+                            add-ons) (values: controller, infrastructure-services, substrates,
+                            machines, clusters, add-ons)
+      --trust-on-first-use  Observe unknown SSH keys without accepting them · default true
 
   Common flags
       --ascii       Use ASCII status markers
@@ -26,3 +35,6 @@
 
   More detail
     Use --help --detail full to include SSH overrides.
+
+  Examples
+    bootwright preflight --context lab --stage controller,substrates

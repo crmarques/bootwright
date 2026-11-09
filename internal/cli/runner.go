@@ -124,11 +124,40 @@ func newCommandTree(r *Runner) (*cobra.Command, error) {
 		}
 		parent.RunE = func(*cobra.Command, []string) error { return nil }
 	}
+	annotateGroups(root)
 	catalog := completionCatalog{paths: r.config.CompletionPaths}
 	if err := configureCompletion(root, catalog); err != nil {
 		return nil, err
 	}
 	return root, nil
+}
+
+// annotateGroups gives each command group the inherited-flag scope its
+// commands share: context-free when every command under it is, and the union
+// of the SSH overrides they read, so its help offers only what they accept.
+func annotateGroups(command *cobra.Command) (contextFree bool, sshFlags []string) {
+	if path, leaf := command.Annotations["bootwright.command"]; leaf {
+		contextFree, sshFlags = inheritedFlagScope(path)
+		return contextFree, sshFlags
+	}
+	contextFree = command.HasSubCommands()
+	for _, child := range command.Commands() {
+		childFree, childFlags := annotateGroups(child)
+		contextFree = contextFree && childFree
+		for _, flag := range childFlags {
+			if !slices.Contains(sshFlags, flag) {
+				sshFlags = append(sshFlags, flag)
+			}
+		}
+	}
+	if command.HasParent() {
+		slices.Sort(sshFlags)
+		command.Annotations = map[string]string{sshFlagsAnnotation: strings.Join(sshFlags, ",")}
+		if contextFree {
+			command.Annotations[contextFreeAnnotation] = "true"
+		}
+	}
+	return contextFree, sshFlags
 }
 
 func hasAvailableSubcommand(path string) bool {
@@ -201,7 +230,7 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 	if message := r.diffToolRefusal(command, path); message != "" {
 		return r.failure(command, path, "cli.usage", message, 2, selectedJSON(command))
 	}
-	if path == "" || path == "completion" || renderHelp(path, command.Flags()) {
+	if path == "" || path == "completion" {
 		if err := r.writeSelectedHelp(command); err != nil {
 			return 1
 		}
@@ -227,6 +256,9 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 			return 1
 		}
 		return 0
+	}
+	if selection := unavailableSelection(path, command.Flags()); selection != "" {
+		return r.unavailableSelection(path, selection, selectedStructured(command))
 	}
 	return r.execute(ctx, command, path)
 }
@@ -261,8 +293,8 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 	if err == nil && result.session != nil {
 		return result.session.ExitCode
 	}
-	setupJSON := (path == "controller install" || path == "preflight controller") && selectedJSON(command)
-	if err != nil && !setupJSON && (path == "controller install" || path == "preflight controller") && validControllerReport(result.controller) {
+	setupJSON := (path == "controller install" || path == "controller check") && selectedJSON(command)
+	if err != nil && !setupJSON && (path == "controller install" || path == "controller check") && validControllerReport(result.controller) {
 		if presentErr := writeControllerReport(r.config.Out, r.config.ErrOut, path, result.controller); presentErr != nil {
 			return 1
 		}
@@ -326,7 +358,7 @@ func (r *Runner) writeServiceDiagnostics(command *cobra.Command, path string, re
 	if usage {
 		exitCode = 2
 	}
-	if (path == "controller install" || path == "preflight controller") && selectedStructured(command) && validControllerReport(result.controller) {
+	if (path == "controller install" || path == "controller check") && selectedStructured(command) && validControllerReport(result.controller) {
 		if path == "controller install" && result.controller.DryRun {
 			return r.setupPlanFailure(path, result.controller, reported, exitCode)
 		}
@@ -382,6 +414,14 @@ func (r *Runner) unavailable(path string, exitCode int, jsonMode bool) int {
 		return 1
 	}
 	return exitCode
+}
+
+func (r *Runner) unavailableSelection(path, selection string, jsonMode bool) int {
+	d := diagnostic{Severity: "error", Code: "cli.not-implemented", Message: "bootwright " + selection + " is not implemented", Remediation: "run bootwright " + path + " without that selection"}
+	if err := writeDiagnostics(r.config.Out, r.config.ErrOut, path, []diagnostic{d}, 1, jsonMode, nil); err != nil {
+		return 1
+	}
+	return 1
 }
 
 func (r *Runner) failure(command *cobra.Command, path, code, message string, exitCode int, jsonMode bool) int {

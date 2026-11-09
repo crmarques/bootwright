@@ -118,11 +118,11 @@ func TestOneCodeNamesAMissingInput(t *testing.T) {
 			requireContextRefusal(t, services, missingEmptyInput, args...)
 		})
 	}
-	t.Run("preflight controller --context empty", func(t *testing.T) {
+	t.Run("preflight --context empty --stage controller", func(t *testing.T) {
 		controllerServices, _, _ := labContextServices(t)
-		requireContextRefusal(t, controllerServices, absentEmpty, "preflight", "controller", "--context", "empty")
+		requireContextRefusal(t, controllerServices, absentEmpty, "preflight", "--context", "empty", "--stage", "controller")
 		contextRun(t, controllerServices, 0, "context", "init", "--name", "empty")
-		requireContextRefusal(t, controllerServices, missingEmptyInput, "preflight", "controller", "--context", "empty")
+		requireContextRefusal(t, controllerServices, missingEmptyInput, "preflight", "--context", "empty", "--stage", "controller")
 	})
 }
 

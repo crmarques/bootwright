@@ -144,7 +144,7 @@ func TestComposedControllerSuppliesEveryPort(t *testing.T) {
 
 func TestUnsuppliedControllerPortsRemainUnavailable(t *testing.T) {
 	services := assembleServices(serviceDependencies{})
-	for _, args := range [][]string{{"controller", "install"}, {"controller", "install", "--dry-run"}, {"preflight", "controller"}} {
+	for _, args := range [][]string{{"controller", "install"}, {"controller", "install", "--dry-run"}, {"controller", "check"}} {
 		var out, errOut bytes.Buffer
 		code := runServices(context.Background(), args, &out, &errOut, services)
 		if code != 1 || out.Len() != 0 || !strings.HasPrefix(errOut.String(), "  error  cli.not-implemented\n    bootwright ") {

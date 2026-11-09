@@ -5,14 +5,11 @@ import (
 	"io"
 
 	addoncatalog "github.com/crmarques/bootwright/internal/addons/catalog"
-	addonpreflight "github.com/crmarques/bootwright/internal/addons/preflight"
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/containercluster/installation"
-	containerpreflight "github.com/crmarques/bootwright/internal/containercluster/preflight"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
-	"github.com/crmarques/bootwright/internal/environment/clusterpreflight"
 	"github.com/crmarques/bootwright/internal/environment/inspection"
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -24,7 +21,6 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/encryption"
-	storagepreflight "github.com/crmarques/bootwright/internal/storage/preflight"
 	storagerendering "github.com/crmarques/bootwright/internal/storage/rendering"
 	"github.com/crmarques/bootwright/internal/trust/enrollment"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -171,7 +167,7 @@ func (s desiredStateSpy) RenderEffective(ctx context.Context, request compilatio
 type controllerSpy struct{ record *dispatchRecord }
 
 func (s controllerSpy) Check(ctx context.Context, request prerequisites.CheckRequest) (*prerequisites.Report, error) {
-	return s.record.result.controller, s.record.called(ctx, "preflight controller", request)
+	return s.record.result.controller, s.record.called(ctx, "controller check", request)
 }
 
 func (s controllerSpy) Setup(ctx context.Context, request prerequisites.SetupRequest) (*prerequisites.Report, error) {
@@ -188,12 +184,8 @@ func (s controllerSpy) Uninstall(ctx context.Context, request prerequisites.Unin
 
 type environmentSpy struct{ record *dispatchRecord }
 
-func (s environmentSpy) PreflightInfrastructure(ctx context.Context, request environmentpreflight.InfrastructurePreflightRequest) (*environmentpreflight.Report, error) {
-	return s.record.result.storagePreflight, s.record.called(ctx, "preflight infra", request)
-}
-
-func (s environmentSpy) PreflightAll(ctx context.Context, request environmentpreflight.AllPreflightRequest) (*environmentpreflight.Report, error) {
-	return s.record.result.storagePreflight, s.record.called(ctx, "preflight all", request)
+func (s environmentSpy) Preflight(ctx context.Context, request environmentpreflight.PreflightRequest) (*environmentpreflight.Report, error) {
+	return s.record.result.storagePreflight, s.record.called(ctx, "preflight", request)
 }
 
 func (s environmentSpy) ListClusters(ctx context.Context, request inspection.ListClustersRequest) (*inspection.ListResult, error) {
@@ -214,30 +206,6 @@ func (s environmentSpy) ClusterRsh(ctx context.Context, request environmentacces
 
 func (s environmentSpy) ClusterExec(ctx context.Context, request environmentaccess.ClusterExecRequest) (*machine.SessionResult, error) {
 	return s.record.result.session, s.record.called(ctx, "cluster exec", request)
-}
-
-type clustersPreflightSpy struct{ record *dispatchRecord }
-
-func (s clustersPreflightSpy) Check(ctx context.Context, request clusterpreflight.PreflightRequest) (*clusterpreflight.Report, error) {
-	return s.record.result.storagePreflight, s.record.called(ctx, "preflight clusters", request)
-}
-
-type containerPreflightSpy struct{ record *dispatchRecord }
-
-func (s containerPreflightSpy) Check(ctx context.Context, request containerpreflight.PreflightRequest) (*containerpreflight.Report, error) {
-	return s.record.result.storagePreflight, s.record.called(ctx, "preflight container-cluster", request)
-}
-
-type storagePreflightSpy struct{ record *dispatchRecord }
-
-func (s storagePreflightSpy) Check(ctx context.Context, request storagepreflight.PreflightRequest) (*storagepreflight.Report, error) {
-	return s.record.result.storagePreflight, s.record.called(ctx, "preflight storage-cluster", request)
-}
-
-type addOnPreflightSpy struct{ record *dispatchRecord }
-
-func (s addOnPreflightSpy) Check(ctx context.Context, request addonpreflight.PreflightRequest) error {
-	return s.record.called(ctx, "preflight add-ons", request)
 }
 
 type lifecycleSpy struct{ record *dispatchRecord }
@@ -265,7 +233,7 @@ func (s lifecycleSpy) Destroy(ctx context.Context, request lifecycle.DestroyRequ
 type artifactsSpy struct{ record *dispatchRecord }
 
 func (s artifactsSpy) Render(ctx context.Context, request artifactrendering.RenderRequest) (*artifactrendering.Result, error) {
-	return s.record.result.rendered, s.record.called(ctx, "render", request)
+	return s.record.result.rendered, s.record.called(ctx, "render effective", request)
 }
 
 type installerSpy struct{ record *dispatchRecord }
@@ -344,12 +312,8 @@ func dispatchSpies(record *dispatchRecord) Services {
 		DesiredState:          desiredStateSpy{record},
 		Controller:            controllerSpy{record},
 		EnvironmentPreflight:  environmentSpy{record},
-		ClustersPreflight:     clustersPreflightSpy{record},
 		EnvironmentInspection: environmentSpy{record},
 		EnvironmentAccess:     environmentSpy{record},
-		ContainerPreflight:    containerPreflightSpy{record},
-		StoragePreflight:      storagePreflightSpy{record},
-		AddOnPreflight:        addOnPreflightSpy{record},
 		Lifecycle:             lifecycleSpy{record},
 		Artifacts:             artifactsSpy{record},
 		Installer:             installerSpy{record},

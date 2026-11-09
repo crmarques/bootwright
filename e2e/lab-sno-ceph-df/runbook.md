@@ -190,7 +190,7 @@ Complete [Prepare listener firewall](../README.md#prepare-listener-firewall)
 in this shell, then require controller preflight to report `ready`:
 
 ```sh
-./bin/bootwright preflight controller --context "$CONTEXT"
+./bin/bootwright preflight --context "$CONTEXT" --stage controller
 ./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services,substrates --yes
 ```
 
@@ -226,8 +226,7 @@ Create the four guests, install RHEL on the Ceph guests and check them:
 ./bin/bootwright machine list --context "$CONTEXT" --power-status
 ./bin/bootwright machine exec --context "$CONTEXT" --name rhel-01,rhel-02,rhel-03 -- lsblk -b -o NAME,TYPE,SIZE,SERIAL,ROTA,FSTYPE,MOUNTPOINTS
 ./bin/bootwright machine exec --context "$CONTEXT" --name rhel-01,rhel-02,rhel-03 -- getent hosts cp.icr.io public.dhe.ibm.com
-./bin/bootwright preflight storage-cluster --context "$CONTEXT"
-./bin/bootwright preflight container-cluster --context "$CONTEXT"
+./bin/bootwright preflight --context "$CONTEXT" --stage clusters
 ```
 
 Every `resolution.*` and `capacity.*` check must be `passed`. Each OSD disk is

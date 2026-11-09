@@ -110,15 +110,8 @@ func commandCatalog() []commandSpec {
 	catalog = append(catalog, secretCommands()...)
 	catalog = append(catalog, mediaCommands()...)
 	catalog = append(catalog, validationCommand())
-	catalog = append(catalog, controllerPreflightCommand())
-	catalog = append(catalog, infrastructurePreflightCommand())
-	catalog = append(catalog, clustersPreflightCommand())
-	catalog = append(catalog, containerPreflightCommand())
-	catalog = append(catalog, storagePreflightCommand())
-	catalog = append(catalog, addOnPreflightCommand())
-	catalog = append(catalog, allPreflightCommand())
+	catalog = append(catalog, preflightCommand())
 	catalog = append(catalog, lifecycleInspectionCommands()...)
-	catalog = append(catalog, nativeArtifactCommand())
 	catalog = append(catalog, effectiveStateCommand())
 	catalog = append(catalog, installerRenderCommand())
 	catalog = append(catalog, storageRenderCommand())
@@ -126,6 +119,7 @@ func commandCatalog() []commandSpec {
 	catalog = append(catalog, machineCommands()...)
 	catalog = append(catalog, machineTrustCommand())
 	catalog = append(catalog, controllerSetupCommand())
+	catalog = append(catalog, controllerCheckCommand())
 	catalog = append(catalog, controllerRebindCommand())
 	catalog = append(catalog, controllerUninstallCommand())
 	catalog = append(catalog, environmentClusterCommands()...)
@@ -191,10 +185,6 @@ func trustFlag() flagSpec {
 	flag := boolFlag("trust-on-first-use", "Observe unknown SSH keys without accepting them")
 	flag.defaultValue = "true"
 	return flag
-}
-
-func preflightFlags() []flagSpec {
-	return []flagSpec{clustersFlag(), dryRunFlag(), trustFlag()}
 }
 
 const payloadHelp = " Bootwright flags go before the command." +

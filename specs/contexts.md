@@ -362,7 +362,7 @@ retained beside it.
 
 | Root lock | Lease | Commands |
 | --- | --- | --- |
-| shared | none | Every read: `context list` and `current`, `plan`, `status`, `preflight controller`, `secret check`, `list` and `show`, `secret encryption status`, `media list`, including the opening of each image `--checksums` then reads, the admission a `media add` or `media delete` without `--yes` reviews before its confirmation, the store check a `secret set` from standard input makes before it reads, the plan a `context update` or `context delete` without `--yes` presents before its confirmation, SSH-trust and input reads, and the reads that precede `apply` and `destroy`. |
+| shared | none | Every read: `context list` and `current`, `plan`, `status`, `preflight`, `controller check`, `secret check`, `list` and `show`, `secret encryption status`, `media list`, including the opening of each image `--checksums` then reads, the admission a `media add` or `media delete` without `--yes` reviews before its confirmation, the store check a `secret set` from standard input makes before it reads, the plan a `context update` or `context delete` without `--yes` presents before its confirmation, SSH-trust and input reads, and the reads that precede `apply` and `destroy`. |
 | exclusive | none | Every other command that may publish, such as `context use`, a `context update` that imports no input, `media delete`, the admission and publication of `media add`, the SSH trust that `machine trust` or a confirmed first use records, and the registry transaction in which `controller install` creates a missing setup subtree. |
 | none | none | The [acquisition](#media-acquisition) of `media add` between those two holds: its copy or download, or its re-read of a stage it adopts, its digest verification, and the record it retains beside a stage whose publication met another's lock; the full read of each image by `media list --checksums`, through the descriptor its shared hold opened; the confirmation prompt of `media add`, `media delete`, `context update` and `context delete`; the [read of standard input](secrets.md#acquisition-and-commands) by `secret set --value-stdin` or `--password-stdin`, including its terminal prompt; and every other part of `controller install`, which holds only [`setup/lock`](contexts/controller-record.md#the-setup-subtree). |
 | exclusive | held | `context init`; a `context update` that imports input; `context delete` of a ready context; `secret set` (from standard input, only to write what it read), `generate` and `delete`, `secret encryption init` and `rotate`, and the Secret binding `apply` and `destroy` take before they execute; and the short shared-state publications of `apply` and `destroy`. |
@@ -1036,7 +1036,7 @@ plan presenter refuses with `context.state` rather than ask.
 
 Every context-backed command that needs desired state (validate, render,
 declaration-dependent secret commands, plan, status, apply, destroy, the
-machine commands and `preflight controller --context`) rejects a missing input
+machine commands and `preflight`) rejects a missing input
 revision with `context.input`, naming the context, and the remedy
 `bootwright context update --name <name> --input-dir <dir>`. An absent store or
 an absent named context refuses with `context.state`, naming that context, with

@@ -103,28 +103,23 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 		return s.invokeEncryption(ctx, path, &values, args)
 	case "media add", "media list", "media delete":
 		return s.invokeMedia(ctx, path, &values, args)
-	case "validate", "render effective":
+	case "render effective":
+		if values.text("output-dir") != "" {
+			return s.invokeArtifacts(ctx, path, &values, args)
+		}
 		return s.invokeDesiredState(ctx, path, &values, args)
-	case "preflight controller", "controller install", "controller rebind", "controller uninstall":
+	case "validate":
+		return s.invokeDesiredState(ctx, path, &values, args)
+	case "controller install", "controller check", "controller rebind", "controller uninstall":
 		return s.invokeController(ctx, path, &values, args)
-	case "preflight clusters":
-		return s.invokeClustersPreflight(ctx, path, &values, args)
-	case "preflight infra", "preflight all":
-		return s.invokeEnvironmentPreflight(ctx, path, &values, args)
+	case "preflight":
+		return s.invokeEnvironmentPreflight(ctx, &values)
 	case "cluster list", "cluster info", "cluster keyring":
 		return s.invokeEnvironmentInspection(ctx, path, &values, args)
 	case "cluster rsh", "cluster exec":
 		return s.invokeEnvironmentAccess(ctx, path, &values, args)
-	case "preflight container-cluster":
-		return s.invokeContainerPreflight(ctx, path, &values, args)
-	case "preflight storage-cluster":
-		return s.invokeStoragePreflight(ctx, path, &values, args)
-	case "preflight add-ons":
-		return commandResult{}, s.invokeAddOnPreflight(ctx, path, &values, args)
 	case "plan", "status", "diff", "apply", "destroy":
 		return s.invokeLifecycle(ctx, path, &values, args)
-	case "render":
-		return s.invokeArtifacts(ctx, path, &values, args)
 	case "render installer":
 		return commandResult{}, s.invokeInstaller(ctx, path, &values, args)
 	case "render storage":

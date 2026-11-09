@@ -194,7 +194,7 @@ FIREWALL_PORTS=(53/tcp 53/udp 123/udp 3128/tcp 8080/tcp 8443/tcp)
 Require controller preflight to report `ready` before starting services:
 
 ```sh
-./bin/bootwright preflight controller --context "$CONTEXT"
+./bin/bootwright preflight --context "$CONTEXT" --stage controller
 ./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services,substrates --yes
 ```
 
@@ -212,7 +212,7 @@ chronyd -Q -t 10 "server $CONTROLLER_ADDRESS iburst port 123"
 ./bin/bootwright machine list --context "$CONTEXT" --power-status
 ./bin/bootwright machine exec --context "$CONTEXT" --name rhel-01,rhel-02,rhel-03 -- lsblk -b -o NAME,TYPE,SIZE,SERIAL,ROTA,FSTYPE,MOUNTPOINTS
 ./bin/bootwright machine exec --context "$CONTEXT" --name rhel-01,rhel-02,rhel-03 -- getent hosts cp.icr.io public.dhe.ibm.com
-./bin/bootwright preflight storage-cluster --context "$CONTEXT"
+./bin/bootwright preflight --context "$CONTEXT" --stage clusters
 ```
 
 The IBM hosts must resolve on every guest, and each OSD disk is nonrotational

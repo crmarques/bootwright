@@ -182,7 +182,7 @@ func writeAdditionalStructuredResult(out io.Writer, command *cobra.Command, path
 			Type: escapeDisplayLine(i.Type), Store: componentStatus{ID: escapeDisplayLine(i.Store.ID), InterfaceVersion: i.Store.InterfaceVersion, StateVersion: i.Store.StateVersion, ConfigVersion: i.Store.ConfigVersion},
 			KeyCustody: componentStatus{ID: escapeDisplayLine(i.KeyCustody.ID), InterfaceVersion: i.KeyCustody.InterfaceVersion, StateVersion: i.KeyCustody.StateVersion, ConfigVersion: i.KeyCustody.ConfigVersion},
 		}, ActiveKey: escapeDisplayLine(m.ActiveKey), Changed: m.Changed, RetiredKeys: displayNames(m.RetiredKeys), ReencryptedVersions: m.ReencryptedVersions, ReencryptedParts: m.ReencryptedParts}
-	case path == "render" && validRender(result.rendered):
+	case path == "render effective" && validRender(result.rendered):
 		shown = displayRender(result.rendered)
 	case path == "controller install" && validSetupDownload(result.controller):
 		r := result.controller
@@ -191,7 +191,7 @@ func writeAdditionalStructuredResult(out io.Writer, command *cobra.Command, path
 			download.Files = append(download.Files, downloadFilePresentation{Filename: escapeDisplayLine(f.Filename), SHA256: escapeDisplayLine(f.SHA256), Size: f.Size, Origin: escapeDisplayLine(f.Origin)})
 		}
 		shown, reported = download, r.Warnings
-	case (path == "preflight controller" || path == "controller install" && result.controller != nil && !result.controller.DryRun) && validControllerReport(result.controller):
+	case (path == "controller check" || path == "controller install" && result.controller != nil && !result.controller.DryRun) && validControllerReport(result.controller):
 		return true, writeStructuredController(out, path, result.controller, nil, 0)
 	case path == "plan" && result.lifecyclePlan != nil:
 		shown, reported = displayPlan(result.lifecyclePlan), result.lifecyclePlan.Warnings
@@ -303,9 +303,6 @@ func (r *Runner) writeSelectedHelp(command *cobra.Command) error {
 	command.Flags().VisitAll(func(flag *pflag.Flag) {
 		if !flag.Hidden && acceptsFlag(command.Annotations, flag.Name) {
 			description := flag.Usage
-			if usage, ok := controllerContextUsage(path); ok && flag.Name == "context" {
-				description = usage
-			}
 			shown.Flags = append(shown.Flags, helpFlagPresentation{Name: flag.Name, Shorthand: flag.Shorthand, Type: flag.Value.Type(), Default: escapeDisplayLine(flag.DefValue), Description: escapeDisplayLine(description)})
 		}
 	})

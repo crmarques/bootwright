@@ -12,13 +12,10 @@ import (
 
 type Report = clusterpreflight.Report
 
-type InfrastructurePreflightRequest struct {
-	ContextName string
-	DryRun      bool
-}
-
-type AllPreflightRequest struct {
+type PreflightRequest struct {
 	ContextName     string
+	Stages          []string
+	Clusters        []string
 	DryRun          bool
 	TrustOnFirstUse bool
 	SSH             machine.SSHOptions

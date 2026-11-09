@@ -9,16 +9,6 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// controllerContextUsage describes --context for the command that never falls
-// back to the current context.
-func controllerContextUsage(path string) (string, bool) {
-	switch path {
-	case "preflight controller":
-		return "Select explicit Environment requirements (default: baseline)", true
-	}
-	return "", false
-}
-
 func writeHelp(w io.Writer, command *cobra.Command) error {
 	var text display
 	text.headline("", strings.ReplaceAll(command.CommandPath(), "bootwright ", "bootwright / "))
@@ -31,10 +21,10 @@ func writeHelp(w io.Writer, command *cobra.Command) error {
 	text.lines([]string{command.UseLine()})
 	if command == command.Root() {
 		for _, group := range []struct{ title, names string }{
-			{"Start", "context controller validate preflight"},
-			{"Lifecycle", "plan apply destroy status diff"},
-			{"Resources", "machine cluster media secret add-ons render"},
-			{"Tools", "version completion help"},
+			{"Host", "controller media"},
+			{"Context", "context secret validate preflight plan apply destroy status diff"},
+			{"Resources", "machine cluster add-ons render"},
+			{"Tools", "version schema completion help"},
 		} {
 			var rows [][]string
 			for _, name := range strings.Fields(group.names) {
@@ -66,11 +56,6 @@ func writeHelp(w io.Writer, command *cobra.Command) error {
 				label = "-" + flag.Shorthand + ", " + label
 			}
 			usage := flag.Usage
-			if flag.Name == "context" {
-				if contextual, ok := controllerContextUsage(command.Annotations["bootwright.command"]); ok {
-					usage = contextual
-				}
-			}
 			if flag.DefValue != "" && flag.DefValue != "false" && flag.DefValue != "[]" {
 				usage += " · default " + flag.DefValue
 			}
@@ -118,7 +103,7 @@ func helpExample(path string) string {
 		"context init": "--name lab --input-dir ./input", "context update": "--name lab --input-dir ./input", "context use": "--name lab", "context list": "", "context current": "--short", "context delete": "--name lab --purge",
 		"secret set": "--name token --value-file ./token --yes", "secret generate": "--name ssh-key", "secret check": "--output json", "secret list": "--output json", "secret show": "--name token --part value", "secret delete": "--name token", "secret encryption init": "", "secret encryption status": "", "secret encryption rotate": "",
 		"controller rebind": "", "controller uninstall": "", "media add": "--name installer.iso --from-file ./installer.iso", "media list": "--checksums", "media delete": "--name installer.iso",
-		"validate": "--file ./input --output json", "preflight controller": "--context lab", "preflight storage-cluster": "--context lab --output json", "preflight clusters": "--context lab --output json", "preflight infra": "--context lab --output json", "preflight all": "--context lab --output json", "preflight container-cluster": "--context lab --output json", "plan": "--context lab --stage machines", "status": "--context lab", "diff": "--context lab --observe", "render": "--input-dir ./input --output-dir ./artifacts", "render effective": "--context lab --output json", "apply": "--context lab --stage machines", "destroy": "--context lab",
+		"validate": "--file ./input --output json", "preflight": "--context lab --stage controller,substrates", "controller check": "", "plan": "--context lab --stage machines", "status": "--context lab", "diff": "--context lab --observe", "render effective": "--input-dir ./input --output-dir ./artifacts", "apply": "--context lab --stage machines", "destroy": "--context lab",
 		"machine cp": "--context lab --name node local:./config.yaml remote:config.yaml", "machine list": "--context lab --power-status", "machine rsh": "--context lab --name node", "machine exec": "--context lab --name node -- uname -a", "machine start": "--context lab --name node", "machine stop": "--context lab --name node", "machine restart": "--context lab --name node", "machine trust": "--context lab --dry-run", "controller install": "--dry-run", "cluster kubeconfig": "--context lab --name cluster", "cluster keyring": "--context lab --name storage --client vm-disks",
 		"cluster list": "--context lab", "cluster info": "--context lab --name storage", "cluster rsh": "--context lab --name storage --node node-1", "cluster exec": "--context lab --name storage -- uname -a",
 		"version": "", "schema": "--format json-schema", "help": "context init", "completion bash": "", "completion zsh": "", "completion fish": "", "completion powershell": "",

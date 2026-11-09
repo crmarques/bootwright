@@ -1,11 +1,11 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "preflight container-cluster",
+  "command": "preflight",
   "ok": true,
   "exitCode": 0,
   "result": {
     "context": "synthetic",
-    "target": "container-cluster",
+    "target": "clusters",
     "checks": [
       {
         "id": "resolution.api",

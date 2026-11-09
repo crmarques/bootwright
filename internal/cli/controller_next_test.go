@@ -7,31 +7,29 @@ import (
 	"testing"
 )
 
-// A context whose readiness holds moves on to its plan. A ready host with no
-// context names no next command, because the context to plan is the
-// operator's to choose.
-func TestReadyReadinessNamesThePlanOnlyForAContext(t *testing.T) {
-	for _, test := range []struct {
-		args []string
-		name string
-		want string
-	}{
-		{args: []string{"preflight", "controller"}},
-		{args: []string{"preflight", "controller", "--context", "lab"}, name: "lab", want: "    Next     bootwright plan --context lab\n"},
-	} {
-		report := controllerReport("ready", false)
-		report.Actions = nil
-		if test.name != "" {
-			report.ContextName, report.Machine = test.name, "controller"
-		}
-		record := &dispatchRecord{result: commandResult{controller: report}}
-		var out, errOut bytes.Buffer
-		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), test.args)
-		if code != 0 || errOut.Len() != 0 {
-			t.Fatalf("%v: exit %d, stderr %q", test.args, code, errOut.String())
-		}
-		if !strings.HasSuffix(out.String(), "    Outcome  ready\n"+test.want) {
-			t.Errorf("%v ended %q, want the outcome followed by %q", test.args, out.String(), test.want)
-		}
+// A ready host names creating a context as its next command, because the name
+// and the input directory are the operator's to choose.
+func TestAReadyControllerCheckNamesContextInit(t *testing.T) {
+	report := controllerReport("ready", false)
+	report.Actions = nil
+	record := &dispatchRecord{result: commandResult{controller: report}}
+	var out, errOut bytes.Buffer
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"controller", "check"})
+	if code != 0 || errOut.Len() != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errOut.String())
+	}
+	if want := "    Outcome  ready\n    Next     bootwright context init --name <name> --input-dir <dir>\n"; !strings.HasSuffix(out.String(), want) {
+		t.Errorf("controller check ended %q, want the outcome followed by %q", out.String(), want)
+	}
+}
+
+// The controller check is context-free: it accepts no --context, so the
+// readiness of a context is asked of preflight --stage controller instead.
+func TestControllerCheckRefusesContext(t *testing.T) {
+	record := &dispatchRecord{}
+	var out, errOut bytes.Buffer
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"controller", "check", "--context", "lab"})
+	if code != 2 || out.Len() != 0 || !strings.Contains(errOut.String(), "cli.usage") || record.calls != 0 {
+		t.Fatalf("exit %d, stdout %q, stderr %q, calls %d", code, out.String(), errOut.String(), record.calls)
 	}
 }

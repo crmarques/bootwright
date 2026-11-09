@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
 )
 
 func validationCommand() commandSpec {
@@ -12,9 +13,12 @@ func validationCommand() commandSpec {
 }
 
 func effectiveStateCommand() commandSpec {
-	return available(commandSpec{path: "render effective", short: "Show normalized effective desired state",
-		long:  "Show normalized effective desired state. --origins lists, instead of the YAML, where each effective field's value came from: authored, defaults.<Kind> (the Environment's kind defaults), built-in (a schema default) or derived (normalization).",
-		flags: []flagSpec{boolFlag("origins", "Mark where each effective field's value came from")}})
+	return available(commandSpec{path: "render effective", short: "Show or write normalized effective desired state",
+		long: "Show normalized effective desired state. --origins lists, instead of the YAML, where each effective field's value came from: authored, defaults.<Kind> (the Environment's kind defaults), built-in (a schema default) or derived (normalization)." +
+			" --output-dir writes " + artifactrendering.EffectiveStateFile + " into that directory instead of standard output, creating it when it is absent, and prints where it wrote; it replaces an earlier file of that name only when that is a regular file, and conflicts with --origins." +
+			" Context-free, --input-dir reads a file or directory as validate --file does, requires --output-dir and conflicts with --context and --sensitive. Context-backed, --output-dir requires --sensitive," +
+			" which writes mode 0600 under a 0700 directory it creates and refuses an existing output directory another account owns or that its group or others can write.",
+		flags: []flagSpec{boolFlag("origins", "Mark where each effective field's value came from"), directoryFlag("input-dir", "Read a context-free input file or directory (requires --output-dir)"), directoryFlag("output-dir", "Write effective-state.yaml to this directory instead of standard output"), sensitiveFlag()}})
 }
 
 type DesiredStateService interface {

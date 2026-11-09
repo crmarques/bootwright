@@ -7,14 +7,11 @@ import (
 	"testing"
 
 	addoncatalog "github.com/crmarques/bootwright/internal/addons/catalog"
-	addonpreflight "github.com/crmarques/bootwright/internal/addons/preflight"
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/containercluster/installation"
-	containerpreflight "github.com/crmarques/bootwright/internal/containercluster/preflight"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
-	"github.com/crmarques/bootwright/internal/environment/clusterpreflight"
 	"github.com/crmarques/bootwright/internal/environment/inspection"
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -26,7 +23,6 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/encryption"
-	storagepreflight "github.com/crmarques/bootwright/internal/storage/preflight"
 	storagerendering "github.com/crmarques/bootwright/internal/storage/rendering"
 	"github.com/crmarques/bootwright/internal/trust/enrollment"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -61,25 +57,19 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 		{"media list", media.ListMediaRequest{Checksums: true}},
 		{"media delete", media.DeleteMediaRequest{Name: "demo", SkipConfirmation: true}},
 		{"validate", compilation.ValidateRequest{ContextName: "", Files: []string{"inputs"}}},
-		{"render effective", compilation.EffectiveRequest{ContextName: "example", Origins: true}},
-		{"preflight controller", prerequisites.CheckRequest{ContextName: "example"}},
+		{"controller check", prerequisites.CheckRequest{}},
 		{"controller install", prerequisites.SetupRequest{DryRun: true, SkipConfirmation: true, WheelMirror: "file:///srv/wheels", DownloadOnly: true, Destination: "/srv/wheels-out"}},
-		{"preflight infra", environmentpreflight.InfrastructurePreflightRequest{ContextName: "example", DryRun: true}},
-		{"preflight clusters", clusterpreflight.PreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
-		{"preflight all", environmentpreflight.AllPreflightRequest{ContextName: "example", DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
+		{"preflight", environmentpreflight.PreflightRequest{ContextName: "example", Stages: []string{"infrastructure-services", "substrates"}, Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
 		{"cluster list", inspection.ListClustersRequest{ContextName: "example"}},
 		{"cluster info", inspection.ClusterInfoRequest{ContextName: "example", Names: []string{"demo"}, Secrets: true}},
 		{"cluster rsh", environmentaccess.ClusterRshRequest{ContextName: "example", Name: "demo", Node: "node-a", SSH: account}},
 		{"cluster exec", environmentaccess.ClusterExecRequest{ContextName: "example", Names: []string{"demo"}, Nodes: []string{"node-a"}, SSH: account, Command: []string{"get", "--help", ""}}},
-		{"preflight container-cluster", containerpreflight.PreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
-		{"preflight storage-cluster", storagepreflight.PreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, DryRun: true, TrustOnFirstUse: true, SSH: ssh}},
-		{"preflight add-ons", addonpreflight.PreflightRequest{ContextName: "example", Clusters: []string{"first", "second"}, SSH: ssh}},
 		{"plan", lifecycle.PlanRequest{ContextName: "example", Stages: []string{"infrastructure-services", "substrates"}, Until: "compact.gitops"}},
 		{"status", lifecycle.StatusRequest{ContextName: "example"}},
 		{"diff", lifecycle.DiffRequest{ContextName: "example", Observe: true}},
 		{"apply", lifecycle.ApplyRequest{ContextName: "example", Stages: []string{"infrastructure-services", "substrates"}, Until: "compact.gitops", Authorizations: []string{"data-loss"}, SkipConfirmation: true, Unattended: true, SSH: ssh}},
 		{"destroy", lifecycle.DestroyRequest{ContextName: "example", Authorizations: []string{"data-loss"}, Unregistered: []string{"rhel-01", "rhel-02", "rhel-03"}, SkipConfirmation: true, Unattended: true, SSH: ssh}},
-		{"render", artifactrendering.RenderRequest{ContextName: "example", InputPath: "inputs", OutputDirectory: "artifacts", Sensitive: true}},
+		{"render effective", artifactrendering.RenderRequest{ContextName: "example", InputPath: "inputs", OutputDirectory: "artifacts", Sensitive: true}},
 		{"render installer", installation.RenderInstallerRequest{ContextName: "example", Clusters: []string{"first", "second"}, Sensitive: true}},
 		{"render storage", storagerendering.RenderArtifactsRequest{ContextName: "example", Clusters: []string{"first", "second"}}},
 		{"machine list", inventory.ListRequest{ContextName: "example", Clusters: []string{"first", "second"}, Power: true}},
@@ -112,6 +102,23 @@ func TestDispatchEveryApplicationCommand(t *testing.T) {
 
 type dispatchContextKey struct{}
 
+func TestRenderEffectiveWritesAFileOnlyWithAnOutputDirectory(t *testing.T) {
+	record := &dispatchRecord{}
+	flags := dispatchFlags()
+	if err := flags.Set("output-dir", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (Services{DesiredState: desiredStateSpy{record}}).invoke(context.Background(), "render effective", flags, nil); err != nil {
+		t.Fatal(err)
+	}
+	if want := (compilation.EffectiveRequest{ContextName: "example", Origins: true}); !reflect.DeepEqual(record.request, want) || record.calls != 1 {
+		t.Fatalf("request %#v, calls %d", record.request, record.calls)
+	}
+	if _, err := (Services{DesiredState: desiredStateSpy{&dispatchRecord{}}}).invoke(context.Background(), "render effective", dispatchFlags(), nil); !errors.Is(err, errMissingService) {
+		t.Fatalf("an output directory must reach the artifact writer, not the printer: %v", err)
+	}
+}
+
 func TestDispatchPreservesTypedValidationResult(t *testing.T) {
 	want := &compilation.Report{Counts: compilation.Counts{FilesSeen: 2, ObjectsDecoded: 3}}
 	record := &dispatchRecord{report: want}
@@ -127,11 +134,8 @@ func TestEnvironmentCapabilitiesAreIndependent(t *testing.T) {
 		commands []string
 		wire     func(*dispatchRecord) Services
 	}{
-		{"preflight", []string{"preflight infra", "preflight all"}, func(record *dispatchRecord) Services {
+		{"preflight", []string{"preflight"}, func(record *dispatchRecord) Services {
 			return Services{EnvironmentPreflight: environmentSpy{record}}
-		}},
-		{"clusters preflight", []string{"preflight clusters"}, func(record *dispatchRecord) Services {
-			return Services{ClustersPreflight: clustersPreflightSpy{record}}
 		}},
 		{"inspection", []string{"cluster list", "cluster info", "cluster keyring"}, func(record *dispatchRecord) Services {
 			return Services{EnvironmentInspection: environmentSpy{record}}

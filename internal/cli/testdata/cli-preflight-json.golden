@@ -1,17 +1,23 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "preflight clusters",
+  "command": "preflight",
   "ok": true,
   "exitCode": 0,
   "result": {
     "context": "synthetic",
-    "target": "clusters",
+    "target": "controller,infrastructure-services,substrates,machines,clusters",
     "checks": [
       {
-        "id": "resolution.api",
-        "target": "api.sno.example.test",
+        "id": "controller.host-packages",
+        "target": "controller",
         "status": "passed",
-        "reason": "api.sno.example.test resolves to 192.0.2.10"
+        "reason": "podman, nmstate"
+      },
+      {
+        "id": "controller.listener-firewall",
+        "target": "DNSServer/dns 192.0.2.53:53/udp",
+        "status": "passed",
+        "reason": "DNSServer/dns 192.0.2.53:53/udp: open (interface virbr0, zone libvirt); the zone admits the socket"
       },
       {
         "id": "capacity.memory",
@@ -27,10 +33,16 @@
           "deficit": 0,
           "observed": true
         }
+      },
+      {
+        "id": "resolution.api",
+        "target": "api.sno.example.test",
+        "status": "passed",
+        "reason": "api.sno.example.test resolves to 192.0.2.10"
       }
     ],
     "summary": {
-      "passed": 2,
+      "passed": 4,
       "failed": 0,
       "unknown": 0,
       "pending": 0

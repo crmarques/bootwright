@@ -273,7 +273,7 @@ func firewallCheck(ctx context.Context, read firewallReader, target string, requ
 		check.Status = capacity.Failed
 		check.Reason = strings.Join(clauses, "; ")
 		check.Next = "either permit them, for example with " + strings.Join(commands, " and ") + " and " + firewallCmd + " --reload, " +
-			"or let Bootwright realize them by installing this Machine with customizations.security.firewall.enabled: true, then repeat preflight storage-cluster"
+			"or let Bootwright realize them by installing this Machine with customizations.security.firewall.enabled: true, then repeat bootwright preflight --stage clusters"
 	}
 	return check
 }

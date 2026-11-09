@@ -9,12 +9,8 @@ type Services struct {
 	DesiredState          DesiredStateService
 	Controller            ControllerService
 	EnvironmentPreflight  EnvironmentPreflightService
-	ClustersPreflight     ClustersPreflightService
 	EnvironmentInspection EnvironmentInspectionService
 	EnvironmentAccess     EnvironmentAccessService
-	ContainerPreflight    ContainerPreflightService
-	StoragePreflight      StoragePreflightService
-	AddOnPreflight        AddOnPreflightService
 	Lifecycle             LifecycleService
 	Artifacts             ArtifactService
 	Installer             InstallerService

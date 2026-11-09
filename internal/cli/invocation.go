@@ -2,6 +2,7 @@ package cli
 
 import (
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -53,7 +54,10 @@ func ClassifyInvocation(args []string) InvocationClass {
 	if path == "validate" && len(arrayValue(command.Flags(), "file")) != 0 {
 		return classification
 	}
-	if renderHelp(path, command.Flags()) || (path == "render" && stringValue(command.Flags(), "input-dir") != "") {
+	if path == "render effective" && stringValue(command.Flags(), "input-dir") != "" {
+		return classification
+	}
+	if unavailableSelection(path, command.Flags()) != "" {
 		return classification
 	}
 	ambient := contextFreeAcquisition(path, command.Flags())
@@ -67,8 +71,14 @@ func ClassifyInvocation(args []string) InvocationClass {
 	return classification
 }
 
-func renderHelp(path string, flags *pflag.FlagSet) bool {
-	return path == "render" && stringValue(flags, "input-dir") == "" && stringValue(flags, "output-dir") == ""
+// unavailableSelection names the part of an available command's selection
+// that this build does not run, so the invocation is refused as unavailable
+// before any privilege, context or observation.
+func unavailableSelection(path string, flags *pflag.FlagSet) string {
+	if path == "preflight" && slices.Contains(normalizeNames(stringValue(flags, "stage")), "add-ons") {
+		return "preflight --stage add-ons"
+	}
+	return ""
 }
 
 func secretStdin(path string, flags *pflag.FlagSet) string {
@@ -89,8 +99,8 @@ func contextFreeAcquisition(path string, flags *pflag.FlagSet) bool {
 		return true
 	case "controller uninstall":
 		return !boolValue(flags, "keep-packages")
-	case "preflight controller":
-		return stringValue(flags, "context") == ""
+	case "controller check":
+		return true
 	case "media add":
 		return stringValue(flags, "from-url") != "" || stringValue(flags, "from-url-file") != ""
 	}

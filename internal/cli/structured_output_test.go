@@ -74,7 +74,7 @@ func TestStructuredPresentationAndUsageAreSingleDocuments(t *testing.T) {
 		{[]string{"version", "-oyaml"}, 0},
 		{[]string{"help", "context", "init", "-o=json"}, 0},
 		{[]string{"completion", "bash", "--output", "yaml"}, 0},
-		{[]string{"render", "-o", "yaml"}, 0},
+		{[]string{"render", "-o", "yaml"}, 2},
 		{[]string{"--output", "yaml", "unknown"}, 2},
 		{[]string{"version", "--bad", "-o", "yaml"}, 2},
 		{[]string{"context", "init", "-o", "yaml"}, 2},
@@ -309,13 +309,16 @@ func TestYAMLKeepsRawDocumentStringsAndKeysExact(t *testing.T) {
 
 func TestStructuredControllerRetainsNextAndExecutionEvidence(t *testing.T) {
 	for _, format := range []string{"json", "yaml"} {
-		for _, path := range []string{"controller install", "preflight controller"} {
+		for _, path := range []string{"controller install", "controller check"} {
 			for _, failed := range []bool{false, true} {
 				report := controllerReport("ready", false)
 				if path == "controller install" {
 					report.Outcome = "unchanged"
 				}
-				report.ContextName, report.Machine, report.Route, report.Next = "demo", "controller", "direct", "bootwright plan --context demo"
+				report.Route, report.Next = "direct", "bootwright controller install"
+				if path == "controller install" {
+					report.ContextName, report.Machine = "demo", "controller"
+				}
 				report.Progress = []prerequisites.ActionProgress{{ID: "python-runtime", Phase: "observed", Outcome: "unchanged"}}
 				report.LogLocation = "/private/operator/setup-log"
 				record := &dispatchRecord{result: commandResult{controller: report}}
@@ -331,7 +334,7 @@ func TestStructuredControllerRetainsNextAndExecutionEvidence(t *testing.T) {
 					t.Fatalf("%v: %d %s %q", args, code, out, errOut)
 				}
 				shown := structuredDocument(t, out)["result"].(map[string]any)
-				if shown["next"] != report.Next || shown["context"] != "demo" || len(shown["progress"].([]any)) != 1 {
+				if shown["next"] != report.Next || shown["context"] != report.ContextName && !(report.ContextName == "" && shown["context"] == nil) || len(shown["progress"].([]any)) != 1 {
 					t.Fatal(shown)
 				}
 			}

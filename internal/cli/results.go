@@ -45,11 +45,11 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		if handled, err := writeAddOnResult(out, path, result, selectedStructured(command)); handled {
 			return true, err
 		}
-	case "preflight storage-cluster", "preflight container-cluster", "preflight clusters", "preflight infra", "preflight all":
+	case "preflight":
 		if result.storagePreflight != nil {
 			return true, writeStoragePreflight(out, errOut, path, result.storagePreflight, nil, 0, selectedJSON(command))
 		}
-	case "controller install", "preflight controller", "controller rebind", "controller uninstall":
+	case "controller install", "controller check", "controller rebind", "controller uninstall":
 		return writeControllerOutcome(out, errOut, path, result, selectedJSON(command))
 	case "plan", "status", "diff":
 		return r.writeLifecycleInspection(ctx, command, path, result)
@@ -118,11 +118,10 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		if validEncryptionStatus(result.encryptionStatus) {
 			return true, writeEncryptionStatus(out, path, result.encryptionStatus, selectedJSON(command))
 		}
-	case "render":
+	case "render effective":
 		if validRender(result.rendered) {
 			return true, writeRender(out, result.rendered)
 		}
-	case "render effective":
 		if result.effective != nil {
 			encoder := r.config.EncodeEffectiveYAML
 			if selectedJSON(command) {

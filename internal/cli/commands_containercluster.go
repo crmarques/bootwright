@@ -7,12 +7,7 @@ import (
 
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/containercluster/installation"
-	containerpreflight "github.com/crmarques/bootwright/internal/containercluster/preflight"
 )
-
-func containerPreflightCommand() commandSpec {
-	return available(commandSpec{path: "preflight container-cluster", short: "Check OpenShiftCluster readiness", flags: []flagSpec{clustersFlag(), dryRunFlag()}})
-}
 
 func installerRenderCommand() commandSpec {
 	return commandSpec{path: "render installer", short: "Render container-cluster installer artifacts", flags: []flagSpec{clustersFlag(), sensitiveFlag()}}
@@ -26,10 +21,6 @@ func containerAccessCommands() []commandSpec {
 	}
 }
 
-type ContainerPreflightService interface {
-	Check(context.Context, containerpreflight.PreflightRequest) (*containerpreflight.Report, error)
-}
-
 type InstallerService interface {
 	Render(context.Context, installation.RenderInstallerRequest) error
 }
@@ -38,25 +29,6 @@ type ClusterAccessService interface {
 	OC(context.Context, containeraccess.OCRequest) error
 	Kubectl(context.Context, containeraccess.KubectlRequest) error
 	Kubeconfig(context.Context, containeraccess.KubeconfigRequest) (*containeraccess.KubeconfigResult, error)
-}
-
-func (s Services) invokeContainerPreflight(ctx context.Context, path string, values *requestValues, args []string) (commandResult, error) {
-	if s.ContainerPreflight == nil {
-		return commandResult{}, errMissingService
-	}
-	switch path {
-	case "preflight container-cluster":
-		report, err := invokeResult(ctx, values, containerpreflight.PreflightRequest{
-			ContextName:     values.text("context"),
-			Clusters:        values.names("clusters"),
-			DryRun:          values.boolean("dry-run"),
-			TrustOnFirstUse: values.optionalBoolean("trust-on-first-use"),
-			SSH:             values.ssh(),
-		}, s.ContainerPreflight.Check)
-		return commandResult{storagePreflight: report}, err
-	default:
-		return commandResult{}, errors.New("command has no application dispatch")
-	}
 }
 
 func (s Services) invokeInstaller(ctx context.Context, path string, values *requestValues, args []string) error {

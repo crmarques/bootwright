@@ -1,9 +1,10 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "render",
+  "command": "render effective",
   "ok": true,
   "exitCode": 0,
   "result": {
+    "inputDir": "/work/inputs",
     "outputDir": "/work/artifacts",
     "effectiveStatePath": "/work/artifacts/effective-state.yaml",
     "objects": 4

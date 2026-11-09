@@ -92,8 +92,16 @@ func writeAddOnResult(out io.Writer, path string, result commandResult, structur
 }
 
 func groupShort(part string) string {
-	if part == "add-ons" {
-		return "Inspect built-in add-on packages"
-	}
-	return "Manage " + part
+	return map[string]string{
+		"add-ons":    "Inspect built-in add-on packages",
+		"cluster":    "Inspect and reach a context's clusters",
+		"completion": "Generate shell completion scripts",
+		"context":    "Create, select, update and delete contexts",
+		"controller": "Prepare, check and remove this host's controller",
+		"encryption": "Initialize, inspect and rotate the Secret store's key",
+		"machine":    "Inspect, reach, trust and power a context's Machines",
+		"media":      "Store installer images on this host",
+		"render":     "Render effective desired state and external-tool artifacts",
+		"secret":     "Set, generate, check and reveal a context's Secrets",
+	}[part]
 }

@@ -42,4 +42,4 @@
     Outcome    changed
     Readiness  all required prerequisites verified
     Logs       /var/lib/bootwright/setup/runs/setup-000003
-    Next       bootwright preflight controller
+    Next       bootwright controller check

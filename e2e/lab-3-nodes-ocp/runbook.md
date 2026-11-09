@@ -125,7 +125,7 @@ Complete [Prepare listener firewall](../README.md#prepare-listener-firewall)
 in this shell, then require controller preflight to report `ready`:
 
 ```sh
-./bin/bootwright preflight controller --context "$CONTEXT"
+./bin/bootwright preflight --context "$CONTEXT" --stage controller
 command -v arping                         # B709: iputils, installed by the controller stage
 ./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services --yes
 ```
@@ -151,7 +151,7 @@ check must succeed so an existing file is never overwritten:
     printf '[Resolve]\nDNS=%s\nDomains=~e2e.example.test\n' "$CONTROLLER_ADDRESS" | sudo tee /etc/systemd/resolved.conf.d/bootwright-e2e.conf
     sudo systemctl restart systemd-resolved
 )
-./bin/bootwright preflight container-cluster --context "$CONTEXT"
+./bin/bootwright preflight --context "$CONTEXT" --stage clusters
 ```
 
 Every `resolution.*` and `capacity.*` check must be `passed`.
@@ -193,9 +193,9 @@ context, input, secrets and run records:
 ./bin/bootwright machine stop --context "$CONTEXT" --name compact-01,compact-02,compact-03 --yes
 ./bin/bootwright destroy --context "$CONTEXT" --authorize data-loss
 ./bin/bootwright apply --context "$CONTEXT" --stage controller --yes
-./bin/bootwright preflight controller --context "$CONTEXT"
+./bin/bootwright preflight --context "$CONTEXT" --stage controller
 ./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services --yes
-./bin/bootwright preflight container-cluster --context "$CONTEXT"
+./bin/bootwright preflight --context "$CONTEXT" --stage clusters
 ```
 
 Require controller readiness and passing resolution/capacity checks again.

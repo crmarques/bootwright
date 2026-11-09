@@ -61,8 +61,8 @@ func TestUsageJSONRespectsLocalFlagOwnership(t *testing.T) {
 		{[]string{"render", "--output=json", "effective", "--output-dir", "demo"}, true},
 		{[]string{"render", "--output", "json", "effective", "--output", "text", "--unknown"}, false},
 		{[]string{"render", "--output", "text", "effective", "--output", "json", "--unknown"}, true},
-		{[]string{"render", "--output-dir", "--output=json", "effective"}, false},
-		{[]string{"render", "--output-dir", "demo", "--output=json", "effective"}, true},
+		{[]string{"render", "--context", "--output=json", "effective", "--unknown"}, false},
+		{[]string{"render", "--context", "demo", "--output=json", "effective", "--unknown"}, true},
 	} {
 		code, out, errOut, record := runRecorded(test.args)
 		if code != 2 || record.calls != 0 {
@@ -80,16 +80,15 @@ func TestUsageJSONRespectsLocalFlagOwnership(t *testing.T) {
 
 func TestRenderOperandsFollowHelpPrecedence(t *testing.T) {
 	for _, args := range [][]string{
-		{"render", "extra", "--help"},
-		{"render", "extra", "effective", "--help"},
-		{"render", "--input-dir", "inputs", "--output-dir", "artifacts", "extra", "--help"},
+		{"render", "effective", "extra", "--help"},
+		{"render", "effective", "--input-dir", "inputs", "--output-dir", "artifacts", "extra", "--help"},
 	} {
 		code, out, errOut, record := runRecorded(args)
-		if code != 0 || errOut != "" || record.calls != 0 || !strings.Contains(out, "Context-free rendering") {
+		if code != 0 || errOut != "" || record.calls != 0 || !strings.Contains(out, "bootwright / render") {
 			t.Fatalf("%q: code=%d out=%q stderr=%q calls=%d", args, code, out, errOut, record.calls)
 		}
 	}
-	for _, args := range [][]string{{"render", "extra"}, {"render", "extra", "effective"}, {"help", "render", "extra"}, {"context", "extra", "--help"}} {
+	for _, args := range [][]string{{"render", "extra"}, {"render", "extra", "--help"}, {"render", "extra", "effective"}, {"help", "render", "extra"}, {"context", "extra", "--help"}} {
 		code, out, errOut, record := runRecorded(args)
 		if code != 2 || out != "" || record.calls != 0 || !strings.Contains(errOut, "cli.usage") {
 			t.Fatalf("%q: code=%d out=%q stderr=%q calls=%d", args, code, out, errOut, record.calls)

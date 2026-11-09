@@ -1,13 +1,23 @@
   bootwright / render effective
       Show normalized effective desired state. --origins lists, instead of the YAML, where each
       effective field's value came from: authored, defaults.<Kind> (the Environment's kind
-      defaults), built-in (a schema default) or derived (normalization).
+      defaults), built-in (a schema default) or derived (normalization). --output-dir writes
+      effective-state.yaml into that directory instead of standard output, creating it when it
+      is absent, and prints where it wrote; it replaces an earlier file of that name only when
+      that is a regular file, and conflicts with --origins. Context-free, --input-dir reads a
+      file or directory as validate --file does, requires --output-dir and conflicts with
+      --context and --sensitive. Context-backed, --output-dir requires --sensitive, which
+      writes mode 0600 under a 0700 directory it creates and refuses an existing output
+      directory another account owns or that its group or others can write.
 
   Usage
     bootwright render effective [flags]
 
   Command flags
-      --origins  Mark where each effective field's value came from
+      --input-dir   Read a context-free input file or directory (requires --output-dir)
+      --origins     Mark where each effective field's value came from
+      --output-dir  Write effective-state.yaml to this directory instead of standard output
+      --sensitive   Authorize sensitive artifact materialization
 
   Common flags
       --ascii       Use ASCII status markers
@@ -20,4 +30,4 @@
       --width       Set presentation width (0: automatic) · default 0
 
   Examples
-    bootwright render effective --context lab --output json
+    bootwright render effective --input-dir ./input --output-dir ./artifacts

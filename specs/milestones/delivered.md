@@ -12514,3 +12514,38 @@ counted; and the local filesystem identity is the statfs `f_fsid`, which btrfs
 gives each subvolume its own, so a write on another subvolume of the guests'
 btrfs filesystem is not gated, as guest disks on two subvolumes already form
 two checks.
+
+### X327 — One preflight command and the command groups
+
+**Items:** B1218 and B376, completed in-tree (2026-11-08), under
+[D243](backlog.md#d243). B1218: the seven `preflight` subcommands are one
+[`preflight`](../cli/output.md#preflight) whose `--stage` takes the stage names
+of `apply --stage`: the controller stage holds every controller check but the
+listener firewall rows, which are the infrastructure-services stage's; the
+substrates stage holds the capacity checks; machines has none; clusters holds
+both cluster kinds, narrowed by `--clusters`; and `add-ons` answers
+`cli.not-implemented` before any effect. The host baseline is
+`controller check`; bare `render` is an ordinary group and
+`render effective --output-dir` writes the effective-state file; root help
+groups commands as Host, Context, Resources and Tools with real group
+purposes, and a group's help offers only the inherited flags its commands
+accept; human `status` drops its Lifecycle `Next` token line. B376: a ready
+`controller check` names `bootwright context init --name <name> --input-dir
+<dir>`. No alias keeps a removed path. The per-kind preflight services leave
+the CLI's services and the add-on preflight stub package is deleted. No
+request, evidence, contract version or content digest moved.
+
+**Commits:** the commit carrying this record. An independent review found that
+splitting the `render ... --sensitive` ask pattern of `.claude/settings.json`
+into `render effective` and `render installer` patterns let
+`render --context <name> effective --output-dir <dir> --sensitive` run without
+the ask the old pattern gave, and that the catalog no longer required the
+pattern; both are fixed before integration, with the patterns spelled
+`render *effective` and `render *installer` and
+`TestDocsAskRuleCatchesGlobalFlagsBetweenAGroupAndItsCommand`. The same gap in
+the other grouped ask patterns predates this slice and is parked as
+[B1219](backlog.md#b1219). Gates: `make check` and `make race` passed on the
+branch before the review fix, and `make check` again on the final commit; no
+live run or push occurred. **Limitations:** a `preflight` limited to
+`infrastructure-services` reports the listener rows even when the controller
+check behind them is not ready, whose rows only the controller stage shows.

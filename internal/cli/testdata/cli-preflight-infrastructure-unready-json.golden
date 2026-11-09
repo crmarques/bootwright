@@ -1,11 +1,11 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "preflight infra",
+  "command": "preflight",
   "ok": false,
   "exitCode": 1,
   "result": {
     "context": "synthetic",
-    "target": "infra",
+    "target": "controller,infrastructure-services,substrates",
     "checks": [
       {
         "id": "controller.host-packages",
@@ -48,7 +48,7 @@
       "severity": "error",
       "code": "preflight.failed",
       "message": "infrastructure readiness is not proved; inspect the failed, unknown and pending checks",
-      "remediation": "resolve the reported prerequisites and repeat preflight infra"
+      "remediation": "resolve the reported prerequisites and repeat bootwright preflight --context synthetic --stage controller,infrastructure-services,substrates"
     }
   ],
   "logs": []

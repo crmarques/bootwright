@@ -267,15 +267,14 @@ Successful result objects have stable top-level fields:
 | `secret encryption status` | `initialized`, `implementation`, `activeKey`, `keys`, `items` |
 | `media list` | `media` |
 | `validate` | `counts`, `excludedContainerClusters`, `excludedStorageClusters`, `advisories` |
-| `preflight infra`, `preflight clusters`, `preflight container-cluster`, `preflight storage-cluster`, `preflight add-ons`, `preflight all` | `context`, `target`, `checks`, `summary` |
+| `preflight` | `context`, `target`, `checks`, `summary` |
 | `status` | `context`, `setupChecks`, `desired`, `clusters`, `storageClusters`, `shared`, `secrets`, `readiness`, `nextSteps`, `lifecycle`, `handoff`, `contradictions` |
 | `diff` | `context`, `operation`, `input`, optional `adds`, `plan`, `observed`, `blocks`, `objects`, `summary` |
-| `render` | optional `inputDir`, `outputDir`, `effectiveStatePath`, `objects` |
-| `render effective` | `counts`, `effectiveState`, and with `--origins` `origins` |
+| `render effective` | `counts`, `effectiveState`, and with `--origins` `origins`; with `--output-dir`, optional `inputDir`, `outputDir`, `effectiveStatePath`, `objects` instead |
 | `render installer` | `clusters` |
 | `render storage` | `clusters` |
 | `controller install` (with `--download-only`) | `directory`, `outcome`, `files`, `next` |
-| `controller install` (mutation), `preflight controller` | optional `context`, optional `machine`, optional `route`, `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files`, optional `preview`, `progress`, optional `receipt`, `next` |
+| `controller install` (mutation), `controller check` | optional `context`, optional `machine`, optional `route`, `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files`, optional `preview`, `progress`, optional `receipt`, `next` |
 | `controller install` (with `--dry-run`) | `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files` |
 | `machine list`, `machine info` | `context`, `machines`, `powerRead` |
 | `machine trust` | `context`, `dryRun`, `pending`, `recorded`, `hosts` |
@@ -363,28 +362,6 @@ host's resolver does not answer. Anonymous key observation under
 context does not trust reports its `host.trust` check `unknown` with the
 observed fingerprint and the `machine trust` request that enrolls it, and
 without the flag the check names no fingerprint.
-
-`preflight clusters` runs the checks of `preflight container-cluster` and of
-`preflight storage-cluster` at once and reports them as one storage-preflight
-report with `target` `clusters`. `--clusters` names OpenShiftClusters and
-CephClusters; each name goes to the checks of its kind, those of a kind no name
-selects do not run, and a name of neither kind is the `access.target` refusal
-before any check. The checks of both kinds are listed together in target and
-check order. Two checks are the same when their `target` and `id` both match;
-the same check from both kinds, such as the capacity of a host that holds nodes
-of both, appears once at its worse status, ordered passed, pending, unknown,
-failed, and the container-side check is kept at equal severity. The summary
-counts the merged list, and one diagnostic stands for the whole report:
-`preflight.failed` when any check failed, otherwise `preflight.unknown` when any
-is unknown or pending, naming `preflight clusters` in its remediation. An error
-that stops either set of checks before it reports is the command's only output,
-with no partial report; it also stops the other set, and when both stop, the
-container checks' error is the one reported. `--trust-on-first-use` and the SSH
-overrides reach the CephCluster checks alone: the OpenShiftCluster checks
-observe the controller and take neither, as
-[openshift-clusters](../openshift-clusters.md#preflight) states, so SSH overrides
-with no CephCluster selected, named or declared, are the `cli.usage` refusal
-`preflight container-cluster` gives.
 
 A `controller install --dry-run --output json` that the host or the state root refuses
 writes the same fields with `ok` `false` and the refusal in `diagnostics`,
@@ -587,60 +564,83 @@ adds `Retained`, and one that removes only such a stage shows its name and
 before it prompts. The result of `media delete` names the image and, when its
 record could be read, the size and digest that record stated.
 
-## Infrastructure and environment preflight
+## Preflight
 
-`preflight infra` reports, as one storage-preflight report with `target`
-`infra`, the readiness of the selected context's shared infrastructure from
-observation the other checks already make; it takes no `--clusters`, no
-`--trust-on-first-use` and no SSH overrides, because it observes the controller
-and its local hosts only. Its checks are:
+`preflight` reports, as one storage-preflight report, the checks of each stage
+`--stage` selects, by default every stage but `add-ons`. `target` is the
+selected stages in canonical order, joined by commas, and human output heads
+the report `Preflight  <context>` with a `Stages` line. Each stage holds these
+checks:
 
-- every check `preflight controller` reports for the selected context, as
-  `controller.<check>` with target `controller`: `ready` is `passed`,
-  `not-ready` is `failed` and any other status is `unknown`, and a failed or
-  unknown one carries the command that settles it in `next`. The context's
-  `listener-firewall` rows are the services' checks: the runtime firewall
-  admission of each non-loopback socket of a managed Proxy, DNSServer, NTPServer
-  or ArtifactServer the controller hosts, and of each local emulated
-  management-controller socket, each with the typed target
+- `controller`: every check the controller's readiness reports for the
+  selected context, the host prerequisites of
+  [`controller check`](../controller.md#the-setup-flow) and the target tools,
+  native closures and host binding its controller stage selects, except the
+  `listener-firewall` rows, as `controller.<check>` with target `controller`:
+  `ready` is `passed`, `not-ready` is `failed` and any other status is
+  `unknown`, and a failed or unknown one carries the command that settles it
+  in `next`;
+- `infrastructure-services`: the context's `listener-firewall` rows, the
+  runtime firewall admission of each non-loopback socket of a managed Proxy,
+  DNSServer, NTPServer or ArtifactServer the controller hosts, and of each
+  local emulated management-controller socket, each with the typed target
   `<Kind>/<name> <address>:<port>/<protocol>` so two sockets of one object stay
   two checks;
-- the `capacity.*` checks of the host capacity budget for every Machine the
-  context's substrates project, the same checks `preflight container-cluster`
-  and `preflight storage-cluster` report for the hosts of their nodes;
+- `substrates`: the `capacity.*` checks of the host capacity budget for every
+  Machine the context's substrates project, the same checks the clusters stage
+  reports for the hosts of their nodes;
+- `machines`: none, so a selection of it alone reports no check and passes;
+- `clusters`: the OpenShiftCluster checks of
+  [openshift-clusters](../openshift-clusters.md#preflight) and the CephCluster
+  checks of [ceph](../ceph.md#plan-and-prerequisites). `--clusters` names
+  clusters of either kind; each name goes to the checks of its kind, those of a
+  kind no name selects do not run, and a name of neither kind is the
+  `access.target` refusal before any check;
+- `add-ons`: not implemented
+  ([flag relationships](commands.md#flag-relationships-and-safeguards)).
 
-It reports only what it observes. Observed: the controller's checks, including
-the sockets of the managed Proxy, DNSServer, NTPServer and ArtifactServer the
-controller hosts and of local emulated management controllers, and the capacity
-of the hosts that hold Machines. Not observed, and so neither passed nor listed:
-an external service, a Registry or LoadBalancer, and a managed service placed on
-a Machine other than the controller. `apply` checks those at its own effect
-boundary, as it does whether a service's port is free and what an artifact
-server's host holds; no preflight check probes them. With `--dry-run` no
-process runs: the controller checks collapse into one pending
-`controller.readiness` check and every capacity check is pending.
+The controller and infrastructure-services stages read the controller's
+readiness once. It reports only what it observes. Observed: the controller's
+checks, including the sockets of the managed Proxy, DNSServer, NTPServer and
+ArtifactServer the controller hosts and of local emulated management
+controllers, the capacity of the hosts that hold Machines, and the cluster
+checks. Not observed, and so neither passed nor listed: an external service, a
+Registry or LoadBalancer, and a managed service placed on a Machine other than
+the controller. `apply` checks those at its own effect boundary, as it does
+whether a service's port is free and what an artifact server's host holds; no
+preflight check probes them. With `--dry-run` no process runs: the controller
+checks collapse into one pending `controller.readiness` check, the listener
+checks into one pending `controller.listener-firewall` check, and every
+capacity and cluster check is pending.
 
-`preflight all` reports, with `target` `all`, the checks of `preflight infra`,
-which include those of `preflight controller`, and of `preflight clusters` with
-no cluster selection. The add-on checks of `preflight add-ons` join
-it with [B770](../milestones/backlog.md#b770). `preflight infra` and
-`preflight clusters` merge, and the two reports of each follow the rules of
-[`preflight clusters`](#json-output): one list in target and check order; a check both
-report once, at its worse status, the infrastructure one kept at equal
-severity; the summary counts the merged list; one diagnostic,
-`preflight.failed` or `preflight.unknown`, naming the command in its
-remediation. Errors come in this order, each the command's only output: the
-selected context, its effective graph, and for `preflight all` the SSH rule
-below, all before any check runs; then an error that stops a set of checks
-before it reports, which stops the other sets, and when several stop, the first
-in the order controller checks, capacity checks, cluster checks is the one
-reported; a controller check that is not ready is its rows, and one that errors
-with every row ready is the error. `--trust-on-first-use` and the SSH overrides
-reach the CephCluster checks alone, with the same `cli.usage` refusal, given
-before any check runs, when no CephCluster is declared
-(`TestInfrastructureReportsTheControllerAndCapacityChecksAndNothingItDoesNotObserve`,
-`TestAllRefusesSSHOverridesNoCephClusterReachesBeforeAnyCheckRuns`,
-`TestAllMergesInfrastructureAndClusterChecks`).
+The checks of every selected stage merge into one list in target and check
+order. Two checks are the same when their `target` and `id` both match; the
+same check from two sets, such as the capacity of a host that holds nodes of
+both cluster kinds and Machines, appears once at its worse status, ordered
+passed, pending, unknown, failed, and the one found first is kept at equal
+severity, the controller and capacity checks before the cluster checks and the
+OpenShiftCluster checks before the CephCluster checks. The summary counts the
+merged list, and one diagnostic stands for the whole report:
+`preflight.failed` when any check failed, otherwise `preflight.unknown` when
+any is unknown or pending, whose remediation repeats
+`bootwright preflight --context <context>` with the invocation's own
+`--stage` and `--clusters`. Errors come in this order, each the command's
+only output: the stage selection, the selected context, its effective graph
+and the SSH rule below, all before any check runs; then an error that stops a
+set of checks before it reports, which stops the other sets, and when several
+stop, the first in the order controller checks, capacity checks, cluster
+checks, and within the cluster checks the OpenShiftCluster checks', is the one
+reported; a controller check that is not ready is its rows, and one that
+errors with every row ready is the error. `--trust-on-first-use` and the SSH
+overrides reach the CephCluster checks alone, because the OpenShiftCluster
+checks observe the controller and take neither: SSH overrides when the
+clusters stage is not selected, or no CephCluster is declared or named, are a
+`cli.usage` refusal given before any check runs
+(`TestTheControllerAndSubstrateStagesReportTheControllerAndCapacityChecksAndNothingTheyDoNotObserve`,
+`TestTheListenerRowsAreTheInfrastructureServicesStageAndTheOthersTheControllerStage`,
+`TestPreflightRefusesSSHOverridesNoCephClusterReachesBeforeAnyCheckRuns`,
+`TestEveryStageMergesInfrastructureAndClusterChecks`,
+`TestClustersRunsBothChecksAndReportsTheirUnion`).
 
 ## Cluster discovery
 

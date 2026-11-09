@@ -25,7 +25,7 @@ type Check struct {
 	Observation Observation
 }
 
-const ManualRemedy = "verify the controller interface's runtime firewall permits the declared port from every BMC, installer and service client; configure the operator-owned firewall, then repeat preflight"
+const ManualRemedy = "verify the controller interface's runtime firewall permits the declared port from every BMC, installer and service client; configure the operator-owned firewall, then repeat bootwright preflight --stage infrastructure-services"
 
 func (c Check) Summary() string {
 	address := c.Socket.Address

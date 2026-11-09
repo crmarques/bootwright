@@ -1,11 +1,11 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "preflight all",
+  "command": "preflight",
   "ok": false,
   "exitCode": 1,
   "result": {
     "context": "synthetic",
-    "target": "all",
+    "target": "controller,infrastructure-services,substrates,machines,clusters",
     "checks": [
       {
         "id": "controller.host-packages",
@@ -53,7 +53,7 @@
       "severity": "error",
       "code": "preflight.unknown",
       "message": "environment readiness is not proved; inspect the failed, unknown and pending checks",
-      "remediation": "resolve the reported prerequisites and repeat preflight all"
+      "remediation": "resolve the reported prerequisites and repeat bootwright preflight --context synthetic"
     }
   ],
   "logs": []

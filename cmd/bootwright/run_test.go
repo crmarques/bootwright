@@ -28,8 +28,8 @@ func proxyEnvironment(t *testing.T, values map[string]string) {
 var (
 	routeFromURL      = []string{"media", "add", "--name", "image.iso", "--from-url", "https://images.example/image.iso", "--sha256", strings.Repeat("a1", 32)}
 	routeFromFile     = []string{"media", "add", "--name", "image.iso", "--from-file", "/images/image.iso"}
-	routeHostPreview  = []string{"preflight", "controller"}
-	routeContextCheck = []string{"preflight", "controller", "--context", "lab"}
+	routeHostPreview  = []string{"controller", "check"}
+	routeContextCheck = []string{"preflight", "--context", "lab", "--stage", "controller"}
 )
 
 // A local import or a context-backed preflight takes nothing from the invoking

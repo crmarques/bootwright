@@ -1,11 +1,11 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "preflight all",
+  "command": "preflight",
   "ok": true,
   "exitCode": 0,
   "result": {
     "context": "synthetic",
-    "target": "all",
+    "target": "controller,infrastructure-services,substrates",
     "checks": [
       {
         "id": "controller.host-packages",
@@ -33,16 +33,10 @@
           "deficit": 0,
           "observed": true
         }
-      },
-      {
-        "id": "resolution.api",
-        "target": "api.sno.example.test",
-        "status": "passed",
-        "reason": "api.sno.example.test resolves to 192.0.2.10"
       }
     ],
     "summary": {
-      "passed": 4,
+      "passed": 3,
       "failed": 0,
       "unknown": 0,
       "pending": 0

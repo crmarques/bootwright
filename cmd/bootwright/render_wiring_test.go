@@ -62,7 +62,7 @@ func TestComposedRenderWritesTheEffectiveStateToThePathInsteadOfStandardOutput(t
 		t.Fatal(err)
 	}
 	output := filepath.Join(root, "artifacts")
-	code, out, errOut := renderRun(t, "render", "--input-dir", input, "--output-dir", output)
+	code, out, errOut := renderRun(t, "render", "effective", "--input-dir", input, "--output-dir", output)
 	written := filepath.Join(output, "effective-state.yaml")
 	data, readErr := os.ReadFile(written)
 	if code != 0 || errOut != "" || readErr != nil || !bytes.Equal(data, want) || strings.Contains(out, "kind:") || !strings.Contains(out, written) {
@@ -71,7 +71,7 @@ func TestComposedRenderWritesTheEffectiveStateToThePathInsteadOfStandardOutput(t
 	if info, err := os.Stat(written); err != nil || info.Mode().Perm() != 0o644 {
 		t.Fatalf("mode %v, error %v", info, err)
 	}
-	code, out, errOut = renderRun(t, "render", "--input-dir", input, "--output-dir", output, "--output", "json")
+	code, out, errOut = renderRun(t, "render", "effective", "--input-dir", input, "--output-dir", output, "--output", "json")
 	var envelope struct {
 		OK     bool
 		Result struct {
@@ -108,7 +108,7 @@ func TestComposedRenderRefusesALinkedTargetAndAnOutputInsideTheInput(t *testing.
 		t.Fatal(err)
 	}
 	for _, row := range []struct{ name, output string }{{"linked target", output}, {"inside the input", filepath.Join(directory, "out")}} {
-		code, out, errOut := renderRun(t, "render", "--input-dir", directory, "--output-dir", row.output)
+		code, out, errOut := renderRun(t, "render", "effective", "--input-dir", directory, "--output-dir", row.output)
 		if code != 1 || out != "" || !strings.Contains(errOut, "render.publish") {
 			t.Fatalf("%s: exit %d, stdout %q, stderr %q", row.name, code, out, errOut)
 		}

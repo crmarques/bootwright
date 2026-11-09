@@ -4,34 +4,35 @@
   Usage
     bootwright [flags]
 
-  Start
+  Host
   COMMAND      PURPOSE
-  context      Manage context
-  controller   Manage controller
-  validate     Validate a complete desired-state input universe
-  preflight    Manage preflight
+  controller   Prepare, check and remove this host's controller
+  media        Store installer images on this host
 
-  Lifecycle
-  COMMAND   PURPOSE
-  plan      Preview the next complete lifecycle operation
-  apply     Apply the complete selected lifecycle unit
-  destroy   Destroy the complete selected lifecycle unit
-  status    Show context readiness and lifecycle state
-  diff      Compare desired state with what this context realized
+  Context
+  COMMAND     PURPOSE
+  context     Create, select, update and delete contexts
+  secret      Set, generate, check and reveal a context's Secrets
+  validate    Validate a complete desired-state input universe
+  preflight   Check the selected context's readiness for apply, stage by stage
+  plan        Preview the next complete lifecycle operation
+  apply       Apply the complete selected lifecycle unit
+  destroy     Destroy the complete selected lifecycle unit
+  status      Show context readiness and lifecycle state
+  diff        Compare desired state with what this context realized
 
   Resources
   COMMAND   PURPOSE
-  machine   Manage machine
-  cluster   Manage cluster
-  media     Manage media
-  secret    Manage secret
+  machine   Inspect, reach, trust and power a context's Machines
+  cluster   Inspect and reach a context's clusters
   add-ons   Inspect built-in add-on packages
-  render    Render external-tool artifacts
+  render    Render effective desired state and external-tool artifacts
 
   Tools
   COMMAND      PURPOSE
   version      Show executable and dependency build identities
-  completion   Manage completion
+  schema       Export the advisory schema of every desired-state kind
+  completion   Generate shell completion scripts
   help         Show help for an exact command path
 
   Common flags

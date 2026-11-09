@@ -35,20 +35,20 @@ func TestAReadySetupStreamedItsChecksAndEndsWithTheTable(t *testing.T) {
 	report := tableReport("unchanged")
 	report.ProgressPresented = true
 	want := "\n    Host      Fedora Linux 44 (amd64), glibc 2.43 — tested\n    Runtime   Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — ready\n" +
-		"    Packages  podman 5:5.8.1-1.fc44 (updates)\n    Nothing to do.\n\n    Outcome  unchanged\n    Next     bootwright preflight controller\n"
+		"    Packages  podman 5:5.8.1-1.fc44 (updates)\n    Nothing to do.\n\n    Outcome  unchanged\n    Next     bootwright controller check\n"
 	if got := runControllerResult(t, report, nil, "controller", "install"); got != want {
 		t.Fatalf("result = %q, want %q", got, want)
 	}
 }
 
-// A not-ready preflight shows the table with what is missing, keeps the host
+// A not-ready controller check shows the table with what is missing, keeps the host
 // check that is not ready and plans nothing.
-func TestANotReadyPreflightShowsTheTableAndNoPlan(t *testing.T) {
+func TestANotReadyControllerCheckShowsTheTableAndNoPlan(t *testing.T) {
 	report := tableReport("not-ready")
 	report.Table.Packages = "missing podman"
 	report.Table.Runtime = "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5 — not prepared"
 	report.Next = "bootwright controller install"
-	got := runControllerResult(t, report, diagnostics.NewFailureWithRemediation("preflight.failed", "required controller prerequisites are not ready", "", "run bootwright controller install"), "preflight", "controller")
+	got := runControllerResult(t, report, diagnostics.NewFailureWithRemediation("preflight.failed", "required controller prerequisites are not ready", "", "run bootwright controller install"), "controller", "check")
 	for _, want := range []string{"    Packages  missing podman\n", "    Outcome  not-ready\n", "[FAIL]  Controller runtime"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("result %q lacks %q", got, want)

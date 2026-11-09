@@ -47,7 +47,7 @@ func TestLifecycleOperationKeepsLogsAndNextOnOneLine(t *testing.T) {
 	requireWholeLine(t, lines, next)
 }
 
-func TestStatusLifecycleKeepsNextAndLogsOnOneLine(t *testing.T) {
+func TestStatusLifecycleKeepsLogsOnOneLineAndShowsNoNextToken(t *testing.T) {
 	logs := "/var/lib/example/contexts/lab/state/operations/op-abc/logs"
 	next := "bootwright apply --context lab --stage controller --name cluster-one"
 	var text display
@@ -60,8 +60,10 @@ func TestStatusLifecycleKeepsNextAndLogsOnOneLine(t *testing.T) {
 	})
 	lines := renderNarrow(t, &text)
 	requireWholeLine(t, lines, logs)
-	requireWholeLine(t, lines, next)
 	requireWholeLine(t, lines, "/opt/example/bootwright-build-0123456789abcdef, another build than this one")
+	if strings.Contains(strings.Join(lines, "\n"), "Next") {
+		t.Fatalf("the lifecycle section shows a next token:\n%s", strings.Join(lines, "\n"))
+	}
 }
 
 func TestAccessCommandsKeepEachTemplateOnOneLine(t *testing.T) {

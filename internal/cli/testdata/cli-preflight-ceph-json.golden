@@ -1,24 +1,12 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "preflight infra",
+  "command": "preflight",
   "ok": true,
   "exitCode": 0,
   "result": {
     "context": "synthetic",
-    "target": "infra",
+    "target": "clusters",
     "checks": [
-      {
-        "id": "controller.host-packages",
-        "target": "controller",
-        "status": "passed",
-        "reason": "podman, nmstate"
-      },
-      {
-        "id": "controller.listener-firewall",
-        "target": "DNSServer/dns 192.0.2.53:53/udp",
-        "status": "passed",
-        "reason": "DNSServer/dns 192.0.2.53:53/udp: open (interface virbr0, zone libvirt); the zone admits the socket"
-      },
       {
         "id": "capacity.memory",
         "target": "controller",
@@ -36,7 +24,7 @@
       }
     ],
     "summary": {
-      "passed": 3,
+      "passed": 1,
       "failed": 0,
       "unknown": 0,
       "pending": 0

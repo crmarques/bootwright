@@ -41,7 +41,7 @@ func RunTogether(ctx context.Context, parts ...Part) ([]*Report, error) {
 	return reports, nil
 }
 
-func Assemble(contextName, target, subject, command string, reports ...*Report) (*Report, error) {
+func Assemble(contextName, target, repeat string, reports ...*Report) (*Report, error) {
 	result := &Report{Context: contextName, Target: target, Checks: []capacity.Check{}}
 	for _, part := range reports {
 		if part != nil {
@@ -66,7 +66,7 @@ func Assemble(contextName, target, subject, command string, reports ...*Report) 
 		if result.Summary.Failed > 0 {
 			code = "preflight.failed"
 		}
-		return result, diagnostics.NewFailureWithRemediation(code, subject+" readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat preflight "+command)
+		return result, diagnostics.NewFailureWithRemediation(code, "readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat "+repeat)
 	}
 	return result, nil
 }

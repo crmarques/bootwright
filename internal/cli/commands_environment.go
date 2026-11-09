@@ -6,31 +6,24 @@ import (
 	"slices"
 
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
-	"github.com/crmarques/bootwright/internal/environment/clusterpreflight"
 	"github.com/crmarques/bootwright/internal/environment/inspection"
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	"github.com/crmarques/bootwright/internal/machine"
 )
 
-func infrastructurePreflightCommand() commandSpec {
-	return available(commandSpec{path: "preflight infra", short: "Check infrastructure readiness", flags: []flagSpec{dryRunFlag()},
-		long: "Check the readiness of the infrastructure the Environment declares: the controller checks of preflight controller for the selected context, including the firewall admission of the controller's managed service sockets, and the capacity of the hosts that hold the context's Machines." +
+func preflightCommand() commandSpec {
+	stage := stringFlag("stage", "Select comma-separated stages to check (default: every stage but add-ons)")
+	stage.enum, stage.enumList = stageFlag().enum, true
+	return available(commandSpec{path: "preflight", short: "Check the selected context's readiness for apply, stage by stage", flags: []flagSpec{stage, clustersFlag(), dryRunFlag(), trustFlag()},
+		long: "Check, without changing anything, whether the selected context is ready for the stages apply runs, in one report." +
+			" controller checks the controller host's prerequisites, the target tools this context's controller stage selects and its host binding;" +
+			" infrastructure-services checks the firewall admission of the controller's managed service sockets;" +
+			" substrates checks the capacity of the hosts that hold the context's Machines;" +
+			" machines has no checks; clusters checks the OpenShiftClusters and CephClusters that --clusters selects, or all of them." +
+			" add-ons has no checks yet and is refused." +
 			" It reports only what it observes: external services, a Registry or LoadBalancer and managed services on other Machines are not checked, and apply checks them itself." +
-			" It takes no cluster selection and no SSH or trust options, because it observes the controller and the local hosts only."})
-}
-
-func clustersPreflightCommand() commandSpec {
-	return available(commandSpec{path: "preflight clusters", short: "Check selected cluster readiness", flags: preflightFlags(),
-		long: "Check the readiness of the selected OpenShiftClusters and CephClusters: the checks of preflight container-cluster and of preflight storage-cluster, reported together." +
-			" --clusters takes names of either kind, and a cluster of neither kind is refused." +
-			" The SSH and trust-on-first-use options apply to the CephCluster checks; the OpenShiftCluster checks observe the controller and take none."})
-}
-
-func allPreflightCommand() commandSpec {
-	return available(commandSpec{path: "preflight all", short: "Check all prerequisites", flags: []flagSpec{dryRunFlag(), trustFlag()},
-		long: "Check the readiness of the whole selected context in one report: the checks of preflight infra, which include those of preflight controller, and of preflight clusters." +
-			" The SSH and trust-on-first-use options apply to the CephCluster checks; the other checks take none." +
-			" The add-on prerequisite checks of preflight add-ons are not part of it."})
+			" The SSH and trust-on-first-use options apply to the CephCluster checks. --dry-run runs no process and reports every check pending." +
+			" For the controller host alone, before any context exists, run controller check."})
 }
 
 func environmentClusterCommands() []commandSpec {
@@ -70,12 +63,7 @@ func clusterExecCommand() commandSpec {
 }
 
 type EnvironmentPreflightService interface {
-	PreflightInfrastructure(context.Context, environmentpreflight.InfrastructurePreflightRequest) (*environmentpreflight.Report, error)
-	PreflightAll(context.Context, environmentpreflight.AllPreflightRequest) (*environmentpreflight.Report, error)
-}
-
-type ClustersPreflightService interface {
-	Check(context.Context, clusterpreflight.PreflightRequest) (*clusterpreflight.Report, error)
+	Preflight(context.Context, environmentpreflight.PreflightRequest) (*environmentpreflight.Report, error)
 }
 
 type EnvironmentInspectionService interface {
@@ -89,41 +77,18 @@ type EnvironmentAccessService interface {
 	ClusterExec(context.Context, environmentaccess.ClusterExecRequest) (*machine.SessionResult, error)
 }
 
-func (s Services) invokeEnvironmentPreflight(ctx context.Context, path string, values *requestValues, args []string) (commandResult, error) {
+func (s Services) invokeEnvironmentPreflight(ctx context.Context, values *requestValues) (commandResult, error) {
 	if s.EnvironmentPreflight == nil {
 		return commandResult{}, errMissingService
 	}
-	switch path {
-	case "preflight infra":
-		report, err := invokeResult(ctx, values, environmentpreflight.InfrastructurePreflightRequest{
-			ContextName: values.text("context"),
-			DryRun:      values.boolean("dry-run"),
-		}, s.EnvironmentPreflight.PreflightInfrastructure)
-		return commandResult{storagePreflight: report}, err
-	case "preflight all":
-		report, err := invokeResult(ctx, values, environmentpreflight.AllPreflightRequest{
-			ContextName:     values.text("context"),
-			DryRun:          values.boolean("dry-run"),
-			TrustOnFirstUse: values.boolean("trust-on-first-use"),
-			SSH:             values.ssh(),
-		}, s.EnvironmentPreflight.PreflightAll)
-		return commandResult{storagePreflight: report}, err
-	default:
-		return commandResult{}, errors.New("command has no application dispatch")
-	}
-}
-
-func (s Services) invokeClustersPreflight(ctx context.Context, path string, values *requestValues, args []string) (commandResult, error) {
-	if s.ClustersPreflight == nil {
-		return commandResult{}, errMissingService
-	}
-	report, err := invokeResult(ctx, values, clusterpreflight.PreflightRequest{
+	report, err := invokeResult(ctx, values, environmentpreflight.PreflightRequest{
 		ContextName:     values.text("context"),
+		Stages:          values.names("stage"),
 		Clusters:        values.names("clusters"),
 		DryRun:          values.boolean("dry-run"),
 		TrustOnFirstUse: values.boolean("trust-on-first-use"),
 		SSH:             values.ssh(),
-	}, s.ClustersPreflight.Check)
+	}, s.EnvironmentPreflight.Preflight)
 	return commandResult{storagePreflight: report}, err
 }
 

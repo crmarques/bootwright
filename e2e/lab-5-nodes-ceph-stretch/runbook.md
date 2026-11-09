@@ -135,7 +135,7 @@ FIREWALL_PORTS=(53/tcp 53/udp 123/udp 3128/tcp 8080/tcp 8081/tcp 8443/tcp 8444/t
 Require controller preflight to report `ready`:
 
 ```sh
-./bin/bootwright preflight controller --context "$CTX_ARB"
+./bin/bootwright preflight --context "$CTX_ARB" --stage controller
 ./bin/bootwright apply --context "$CTX_ARB" --stage infrastructure-services --yes
 dig @"$CONTROLLER_ADDRESS" +short arbiter-01.e2e.example.test
 ./bin/bootwright apply --context "$CTX_ARB" --yes
@@ -175,13 +175,13 @@ and repeat the same apply until it completes:
 ./bin/bootwright secret check --context "$CTX_CEPH"
 ./bin/bootwright plan --context "$CTX_CEPH"
 ./bin/bootwright apply --context "$CTX_CEPH" --stage controller --yes
-./bin/bootwright preflight controller --context "$CTX_CEPH"
+./bin/bootwright preflight --context "$CTX_CEPH" --stage controller
 ./bin/bootwright apply --context "$CTX_CEPH" --stage infrastructure-services,substrates --yes
 ./bin/bootwright apply --context "$CTX_CEPH" --stage machines --yes      # Ctrl-C once during the installations
 ./bin/bootwright status --context "$CTX_CEPH"
 ./bin/bootwright apply --context "$CTX_CEPH" --stage machines --yes
 ./bin/bootwright machine exec --context "$CTX_CEPH" --name ceph-01,ceph-02,ceph-03,ceph-04 -- getent hosts cp.icr.io public.dhe.ibm.com
-./bin/bootwright preflight storage-cluster --context "$CTX_CEPH"
+./bin/bootwright preflight --context "$CTX_CEPH" --stage clusters
 ./bin/bootwright apply --context "$CTX_CEPH" --stage clusters --yes
 ```
 

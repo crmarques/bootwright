@@ -34,7 +34,7 @@ make build
 ./bin/bootwright version
 ./bin/bootwright controller install --dry-run
 ./bin/bootwright controller install
-./bin/bootwright preflight controller
+./bin/bootwright controller check
 ```
 
 `make build` stamps `bin/bootwright` with the commit and source state of the
@@ -44,7 +44,7 @@ Linux/amd64 workstation and copy `bin/bootwright`, a static executable that
 embeds its automation, to the controller, for example to /usr/local/bin;
 `bootwright version` prints the same `Commit` there. `controller install`
 prepares the foundation every context on the host shares and reads no desired
-state; the dry run previews it, and `preflight controller` reports what it
+state; the dry run previews it, and `controller check` reports what it
 proved. Each context's first `apply` then binds the context to this host
 ([binding](../specs/contexts.md#controller-relationship-and-host-binding)), and
 its `controller` stage installs the clients its graph selects
@@ -104,7 +104,7 @@ the install's output and the versions setup records are the truth.
 A ready host is reported in under a second with the receipt table, which
 names the host, the runtime and where each package came from, and
 `Nothing to do.`, with no network request, confirmation or write;
-`preflight controller` prints the same table
+`controller check` prints the same table
 ([results](../specs/controller.md#results-and-qualification)). A new
 Bootwright build with the same lock, and an operating-system upgrade that keeps
 the interpreter, need no setup at all; a build whose lock changed needs one
@@ -143,7 +143,7 @@ repository, a DVD or a Satellite mirror included.
 
 ### On a proxied network
 
-`controller install`, `preflight controller` without `--context` and `media add --from-url`
+`controller install`, `controller check` and `media add --from-url`
 run before any Environment exists, so they take their route from the invoking
 environment. Export `HTTPS_PROXY`, and `NO_PROXY` when internal hosts must be
 reached directly, before running them; the
@@ -162,7 +162,7 @@ variables to its elevated child on the sudo command line; a sudoers rule that
 grants neither `ALL` nor `SETENV` refuses that, and running as root avoids it.
 `bootwright controller install --dry-run` never elevates, so the route it prints under
 `Route` in its scope block shows only how the values parse.
-`bootwright preflight controller` elevates and prints the same `Route` field,
+`bootwright controller check` elevates and prints the same `Route` field,
 which confirms that the variables crossed sudo.
 
 #### Destinations to allow
@@ -273,10 +273,10 @@ the host's crypto policy; Bootwright's own executable and the `cryptography`
 wheel's bundled OpenSSL stay outside the host's FIPS-validated modules, so
 running it on a FIPS-mode controller claims no FIPS compliance
 ([security](../specs/security.md#the-controller-hosts-attacker-model)).
-`preflight controller`, like `controller install`, reports the kernel's FIPS mode as its
+`controller check`, like `controller install`, reports the kernel's FIPS mode as its
 `FIPS mode` check with that statement; the check never changes readiness,
 except that a FIPS flag that cannot be read as 0 or 1 refuses `controller install` and
-preflight with `controller.unsupported`.
+`controller check` with `controller.unsupported`.
 
 Under the FIPS crypto policy (`update-crypto-policies --show` prints `FIPS`),
 OpenSSH accepts no Ed25519 key. Declare `remoteMachinesAccessKey` and every SSH

@@ -24,7 +24,7 @@ func TestOperationBoundaryIsLazyForInformationalMalformedAndUnavailablePaths(t *
 		"validate --output json --unknown", "render effective -f input", "render --output json",
 		"add-ons list",
 		"add-ons info --name metallb",
-		"preflight add-ons",
+		"preflight --stage add-ons",
 		"cluster oc --name example get pods",
 		"render installer", "render storage",
 	} {
@@ -45,12 +45,12 @@ func TestOperationBoundaryIsLazyForInformationalMalformedAndUnavailablePaths(t *
 
 func TestOperationBoundaryOwnsContextAndCleanupForEveryImplementedPath(t *testing.T) {
 	invocations := append(contextInvocations(),
-		[]string{"validate", "-f", "input"}, []string{"validate", "--context", "example"}, []string{"render", "effective"},
+		[]string{"validate", "-f", "input"}, []string{"validate", "--context", "example"}, []string{"render", "effective"}, []string{"render", "effective", "--input-dir", "input", "--output-dir", "artifacts"},
 		[]string{"secret", "set", "--name", "example", "--value-file", "value"}, []string{"secret", "generate"}, []string{"secret", "check"}, []string{"secret", "list"},
 		[]string{"secret", "show", "--name", "example", "--part", "value"}, []string{"secret", "delete", "--name", "example"},
 		[]string{"secret", "encryption", "init"}, []string{"secret", "encryption", "status"}, []string{"secret", "encryption", "rotate"},
 		[]string{"media", "add", "--name", "example.iso", "--from-file", "image.iso"}, []string{"media", "list"}, []string{"media", "delete", "--name", "example.iso"},
-		[]string{"controller", "install"}, []string{"controller", "install", "--dry-run"}, []string{"preflight", "controller"}, []string{"preflight", "storage-cluster"}, []string{"preflight", "container-cluster"}, []string{"preflight", "clusters"}, []string{"preflight", "infra"}, []string{"preflight", "all"},
+		[]string{"controller", "install"}, []string{"controller", "install", "--dry-run"}, []string{"controller", "check"}, []string{"preflight"}, []string{"preflight", "--stage", "clusters"}, []string{"preflight", "--stage", "controller,infrastructure-services,substrates"},
 		[]string{"plan"}, []string{"status"}, []string{"apply", "--yes"}, []string{"destroy", "--yes"},
 		[]string{"machine", "list"}, []string{"cluster", "list"}, []string{"cluster", "info"}, []string{"machine", "rsh", "--name", "example"},
 		[]string{"machine", "exec", "--name", "example", "uptime"},

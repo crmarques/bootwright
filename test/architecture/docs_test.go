@@ -882,11 +882,8 @@ var askRuleNoAsk = map[string]string{
 	"secret encryption init": "idempotent initialization", "secret encryption status": "read confidential metadata",
 	"secret encryption rotate": "local key rotation", "media list": "read local media",
 	"media delete": "local media deletion", "validate": "no write",
-	"preflight controller": "bounded local observation", "preflight infra": "observe unless",
-	"preflight clusters": "observe unless", "preflight container-cluster": "observe unless",
-	"preflight storage-cluster": "observe unless", "preflight add-ons": "bounded observation",
-	"preflight all": "observe unless", "plan": "none", "status": "read local state",
-	"diff": "read local state", "render effective": "none", "render storage": "never execution",
+	"controller check": "bounded local observation", "preflight": "observe unless", "plan": "none", "status": "read local state",
+	"diff": "read local state", "render storage": "never execution",
 	"machine list": "read local state", "machine info": "read local inventory",
 	"cluster list": "read local state", "cluster oc": "read context-owned access metadata",
 	"cluster kubectl": "read context-owned access metadata", "version": "none", "help": "none",
@@ -903,6 +900,11 @@ var askRuleInvocations = []string{
 	"/home/user/projects/bootwright/bin/bootwright %s",
 	"bin/bootwright --context c -o json %s",
 }
+
+// askRuleGroupFlagCommands are the grouped commands whose ask pattern must
+// also match global flags written between the group and the subcommand, as in
+// "render --context c effective"; B1219 extends this to every grouped command.
+var askRuleGroupFlagCommands = []string{"render effective", "render installer"}
 
 // catalogCommand is one command row of the catalog: its local flags and its
 // Effects cell with a "same" cell replaced by the cell it repeats.
@@ -985,16 +987,22 @@ func askRuleViolations(commands map[string]catalogCommand, patterns []string, no
 				parts = append(parts, part)
 			}
 		}
-		name := ""
+		name, words := "", 0
 		if len(parts) > 0 {
-			name = parts[0]
+			name, words = parts[0], 1
+		}
+		for count := len(parts); count > 1; count-- {
+			if joined := strings.Join(parts[:count], " "); commands[joined].effects != "" {
+				name, words = joined, count
+				break
+			}
 		}
 		command, listed := commands[name]
 		if !listed || name == "" {
 			violations = append(violations, fmt.Sprintf("the ask pattern %q names bootwright %q, which specs/cli/commands.md does not list", pattern, name))
 			continue
 		}
-		for _, flag := range parts[1:] {
+		for _, flag := range parts[words:] {
 			if !strings.Contains(command.flags, "`"+flag) {
 				violations = append(violations, fmt.Sprintf("the ask pattern %q names %s, which bootwright %s does not list", pattern, flag, name))
 			}
@@ -1023,6 +1031,11 @@ func askRuleViolations(commands map[string]catalogCommand, patterns []string, no
 			forms := []string{name}
 			if marker.flag != "" {
 				forms = []string{name + " " + marker.flag, name + " " + marker.flag + "=true", name + " --name x " + marker.flag}
+			}
+			if group, sub, grouped := strings.Cut(name, " "); grouped && slices.Contains(askRuleGroupFlagCommands, name) {
+				for _, form := range slices.Clone(forms) {
+					forms = append(forms, group+" --context c -o json "+sub+strings.TrimPrefix(form, name))
+				}
 			}
 			for _, form := range forms {
 				for _, shape := range askRuleInvocations {
@@ -1074,6 +1087,19 @@ func TestDocsAskRulesCoverEveryEffectfulCommand(t *testing.T) {
 	}
 	for _, violation := range askRuleViolations(commands, settings.Permissions.Ask, askRuleNoAsk) {
 		t.Error(violation)
+	}
+}
+
+func TestDocsAskRuleCatchesGlobalFlagsBetweenAGroupAndItsCommand(t *testing.T) {
+	commands := map[string]catalogCommand{"render effective": {flags: "`--sensitive` false", effects: "none without `--output-dir`; with it, local artifact writes only"}}
+	narrow := askRuleViolations(commands, []string{"Bash(*bootwright *render effective*--sensitive*)"}, nil)
+	if !slices.ContainsFunc(narrow, func(violation string) bool {
+		return strings.Contains(violation, `"bootwright render --context c -o json effective --sensitive"`)
+	}) {
+		t.Fatalf("a pattern that misses global flags after the group passed: %v", narrow)
+	}
+	if wide := askRuleViolations(commands, []string{"Bash(*bootwright *render *effective*--sensitive*)"}, nil); len(wide) != 0 {
+		t.Fatalf("a pattern that admits global flags after the group failed: %v", wide)
 	}
 }
 

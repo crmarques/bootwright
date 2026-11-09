@@ -1,6 +1,6 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "preflight clusters",
+  "command": "preflight",
   "ok": false,
   "exitCode": 1,
   "result": {
@@ -42,7 +42,7 @@
       "severity": "error",
       "code": "preflight.unknown",
       "message": "cluster readiness is not proved; inspect the failed, unknown and pending checks",
-      "remediation": "resolve the reported prerequisites and repeat preflight clusters"
+      "remediation": "resolve the reported prerequisites and repeat bootwright preflight --context synthetic --stage clusters"
     }
   ],
   "logs": []

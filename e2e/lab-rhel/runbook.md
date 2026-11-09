@@ -111,7 +111,7 @@ match the address in the rendered input.
 Then check controller readiness:
 
 ```sh
-./bin/bootwright preflight controller --context "$CONTEXT"
+./bin/bootwright preflight --context "$CONTEXT" --stage controller
 ```
 
 Require `Outcome ready` before step 6.
@@ -372,7 +372,7 @@ if [ "$REGISTER" = true ]; then
   ./bin/bootwright secret check --context "$CONTEXT"
   ./bin/bootwright plan --context "$CONTEXT"
   ./bin/bootwright apply --context "$CONTEXT" --stage controller --yes
-  ./bin/bootwright preflight controller --context "$CONTEXT"
+  ./bin/bootwright preflight --context "$CONTEXT" --stage controller
 fi
 ```
 

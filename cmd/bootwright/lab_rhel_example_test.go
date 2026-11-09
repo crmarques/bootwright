@@ -519,20 +519,25 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 			t.Fatalf("context-free setup planned %q:\n%s", refused, plan)
 		}
 	}
-	// Preflight keeps the context arm: it reports what the example still needs
-	// on this host, including the binding its first apply publishes.
-	report, diagnostics := contextRun(t, services, 1, "preflight", "controller", "--context", "lab-rhel")
-	for _, expected := range []string{"Scope       context lab-rhel", "Controller  controller", "[FAIL]  Controller binding  required controller", "Outcome  not-ready"} {
+	// Preflight's controller stage keeps the context arm: it reports what the
+	// example still needs on this host, including the binding its first apply
+	// publishes, and the baseline check names the host's own readiness.
+	report, diagnostics := contextRun(t, services, 1, "preflight", "--context", "lab-rhel", "--stage", "controller")
+	for _, expected := range []string{"Preflight  lab-rhel", "Stages  controller", "controller.controller-binding", "required controller"} {
 		if !strings.Contains(report, expected) {
 			t.Fatalf("context preflight lacks %q:\n%s", expected, report)
 		}
 	}
 	// The host itself is unprepared, so the one actionable next command is
 	// setup rather than the context's own controller stage.
-	if !strings.Contains(diagnostics, "preflight.failed") || !strings.Contains(diagnostics, "run bootwright controller install") {
-		t.Fatalf("preflight before setup must fail with setup guidance:\nstdout=%s\nstderr=%s", report, diagnostics)
+	if !strings.Contains(diagnostics, "preflight.failed") {
+		t.Fatalf("preflight before setup must fail:\nstdout=%s\nstderr=%s", report, diagnostics)
 	}
-	_, diagnostics = contextRun(t, services, 1, "preflight", "controller", "--context", "missing")
+	baseline, baselineDiagnostics := contextRun(t, services, 1, "controller", "check")
+	if !strings.Contains(baseline, "Scope     baseline") || !strings.Contains(baselineDiagnostics, "run bootwright controller install") {
+		t.Fatalf("controller check before setup must name setup:\nstdout=%s\nstderr=%s", baseline, baselineDiagnostics)
+	}
+	_, diagnostics = contextRun(t, services, 1, "preflight", "--context", "missing", "--stage", "controller")
 	if !strings.Contains(diagnostics, "context") {
 		t.Fatal("unknown explicit context was not refused", diagnostics)
 	}

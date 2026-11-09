@@ -1,21 +1,20 @@
-  bootwright / preflight add-ons
-      Check add-on prerequisites. This command is recognized but not implemented.
+  bootwright / controller check
+      Verify, without installing or changing anything, the context-independent controller
+      prerequisites controller install prepares on this host: its host packages, the controller
+      runtime and the state root. It selects no context; the prerequisites a context adds are
+      checked by preflight --stage controller and installed by the controller stage of apply.
 
   Usage
-    bootwright preflight add-ons [flags]
-
-  Command flags
-      --clusters  Select comma-separated cluster names (default: all)
+    bootwright controller check [flags]
 
   Common flags
       --ascii       Use ASCII status markers
       --color       Select terminal colors (values: auto, always, never) · default auto
-      --context     Select a context (default: current context)
       --detail      Select human detail (values: compact, full) · default compact
       -h, --help    Show help for this command
       -o, --output  Select output mode (values: text, json, yaml) · default text
       --progress    Select progress animation (values: auto, always, never) · default auto
       --width       Set presentation width (0: automatic) · default 0
 
-  More detail
-    Use --help --detail full to include SSH overrides.
+  Examples
+    bootwright controller check

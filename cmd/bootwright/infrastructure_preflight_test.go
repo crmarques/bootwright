@@ -7,6 +7,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/environment/clusterpreflight"
 	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
 )
@@ -21,13 +22,19 @@ func (c staticController) Check(context.Context, prerequisites.CheckRequest) (*p
 	return c.report, nil
 }
 
+type staticClusters struct{}
+
+func (staticClusters) Check(context.Context, clusterpreflight.PreflightRequest) (*clusterpreflight.Report, error) {
+	return &clusterpreflight.Report{}, nil
+}
+
 type staticCapacity struct{}
 
 func (staticCapacity) CheckCapacity(context.Context, api.Catalog, string, bool) ([]capacity.Check, error) {
 	return nil, nil
 }
 
-func TestInfrastructurePreflightKeepsEveryControllerSocketAsItsOwnCheck(t *testing.T) {
+func TestInfrastructureServicesStageKeepsEveryControllerSocketAsItsOwnCheck(t *testing.T) {
 	state, _ := compileAcceptance(t, exampleDirectory(t, "libvirt-3-nodes-ceph"))
 	catalog := state.Effective()
 	rows, err := firewallPreflight(&firewallProbe{status: "closed"})(context.Background(), catalog, "lab")
@@ -36,9 +43,12 @@ func TestInfrastructurePreflightKeepsEveryControllerSocketAsItsOwnCheck(t *testi
 	}
 	service := environmentpreflight.Service{
 		Graph: staticGraph{catalog}, Selection: func(context.Context) (string, error) { return "lab", nil },
-		Controller: staticController{&prerequisites.Report{Checks: rows}}, Capacity: staticCapacity{},
+		Controller: staticController{&prerequisites.Report{Checks: rows}}, Capacity: staticCapacity{}, Clusters: staticClusters{},
 	}
-	report, _ := service.PreflightInfrastructure(context.Background(), environmentpreflight.InfrastructurePreflightRequest{})
+	report, preflightErr := service.Preflight(context.Background(), environmentpreflight.PreflightRequest{Stages: []string{"infrastructure-services"}})
+	if report == nil {
+		t.Fatal(preflightErr)
+	}
 	var listeners int
 	seen := map[string]bool{}
 	for _, check := range report.Checks {

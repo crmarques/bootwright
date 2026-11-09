@@ -109,15 +109,12 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 		{"media", "list"},
 		{"media", "delete", "--name", "example.iso"},
 		{"validate"},
-		{"preflight", "infra"},
-		{"preflight", "clusters"},
-		{"preflight", "container-cluster"},
-		{"preflight", "storage-cluster"},
-		{"preflight", "add-ons"},
-		{"preflight", "all"},
+		{"preflight"},
+		{"preflight", "--stage", "clusters"},
+		{"preflight", "--stage", "add-ons"},
 		{"plan"},
 		{"status"},
-		{"render", "--input-dir", "inputs", "--output-dir", "artifacts"},
+		{"render", "effective", "--input-dir", "inputs", "--output-dir", "artifacts"},
 		{"render", "effective"},
 		{"render", "installer"},
 		{"render", "storage"},
@@ -144,9 +141,9 @@ func TestCompositionWiresEveryApplicationCommand(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			code := runServices(context.Background(), args, &stdout, &stderr, services)
 			prefix := "  error  cli.not-implemented\n    bootwright "
-			if args[0] == "validate" && len(args) > 1 || args[0] == "context" && (args[1] == "init" || args[1] == "update") || args[0] == "render" && args[1] == "--input-dir" {
+			if args[0] == "validate" && len(args) > 1 || args[0] == "context" && (args[1] == "init" || args[1] == "update") || args[0] == "render" && args[1] == "effective" && len(args) > 2 && args[2] == "--input-dir" {
 				prefix = "  error  input.not-found\n"
-			} else if args[0] == "context" || args[0] == "secret" || args[0] == "validate" || args[0] == "preflight" && (args[1] == "storage-cluster" || args[1] == "container-cluster" || args[1] == "clusters" || args[1] == "infra" || args[1] == "all") ||
+			} else if args[0] == "context" || args[0] == "secret" || args[0] == "validate" || args[0] == "preflight" && (len(args) == 1 || args[2] == "clusters") ||
 				args[0] == "plan" || args[0] == "status" || args[0] == "apply" || args[0] == "destroy" ||
 				args[0] == "machine" || args[0] == "cluster" && (args[1] == "kubeconfig" || args[1] == "rsh" || args[1] == "exec" || args[1] == "list" || args[1] == "info") ||
 				args[0] == "render" && len(args) > 1 && args[1] == "effective" {

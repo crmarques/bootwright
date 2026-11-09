@@ -24,50 +24,40 @@ func controllerReport(outcome string, dryRun bool) *prerequisites.Report {
 		Checks: []prerequisites.Check{{ID: "python-runtime", Required: "qualified Python and Ansible", Observed: observed, Status: status}}, Actions: []string{"Prepare the qualified controller runtime"}, Dependencies: []string{"qualified-source.tar.gz"}}
 }
 
-// Only preflight consumes a context. Setup prepares the prerequisites every
-// context shares, so it refuses an explicit --context.
+// Neither controller install nor controller check consumes a context: they
+// prepare and inspect what every context shares, so each refuses an explicit
+// --context.
 func TestControllerReportsAndExplicitContextDispatch(t *testing.T) {
-	for _, command := range [][]string{{"controller", "install", "--dry-run"}, {"preflight", "controller"}} {
-		for _, flag := range []string{"", "--context=", "--context=example"} {
-			args := append([]string{}, command...)
-			if flag != "" && command[0] == "controller" {
-				_, out, errOut, record := runRecorded(append(args, flag))
-				if record.calls != 0 || out != "" || !strings.Contains(errOut, "flag is not accepted by this command") {
-					t.Fatal(args, flag, out, errOut)
-				}
-				continue
+	for _, command := range [][]string{{"controller", "install", "--dry-run"}, {"controller", "check"}} {
+		for _, flag := range []string{"--context=", "--context=example"} {
+			args := append(append([]string{}, command...), flag)
+			_, out, errOut, record := runRecorded(args)
+			if record.calls != 0 || out != "" || !strings.Contains(errOut, "flag is not accepted by this command") {
+				t.Fatal(args, out, errOut)
 			}
-			if flag != "" {
-				args = append(args, flag)
+		}
+		dryRun := command[1] == "install"
+		outcome := "ready"
+		if dryRun {
+			outcome = "planned"
+		}
+		record := &dispatchRecord{result: commandResult{controller: controllerReport(outcome, dryRun)}}
+		var out, errOut bytes.Buffer
+		code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), command)
+		if code != 0 || errOut.Len() != 0 || !strings.Contains(out.String(), "Outcome  "+outcome) {
+			t.Fatal(command, code, out.String(), errOut.String())
+		}
+		switch request := record.request.(type) {
+		case prerequisites.CheckRequest:
+			if request.ContextName != "" {
+				t.Fatal(request)
 			}
-			dryRun := command[0] == "controller"
-			outcome := "ready"
-			if dryRun {
-				outcome = "planned"
+		case prerequisites.SetupRequest:
+			if !request.DryRun {
+				t.Fatal(request)
 			}
-			report := controllerReport(outcome, dryRun)
-			name := ""
-			if flag == "--context=example" && !dryRun {
-				name, report.ContextName, report.Machine = "example", "example", "controller"
-			}
-			record := &dispatchRecord{result: commandResult{controller: report}}
-			var out, errOut bytes.Buffer
-			code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), args)
-			if code != 0 || errOut.Len() != 0 || !strings.Contains(out.String(), "Outcome  "+outcome) {
-				t.Fatal(args, code, out.String(), errOut.String())
-			}
-			switch request := record.request.(type) {
-			case prerequisites.CheckRequest:
-				if request.ContextName != name {
-					t.Fatal(request)
-				}
-			case prerequisites.SetupRequest:
-				if !request.DryRun {
-					t.Fatal(request)
-				}
-			default:
-				t.Fatal("unexpected request", record.request)
-			}
+		default:
+			t.Fatal("unexpected request", record.request)
 		}
 	}
 }
@@ -75,7 +65,7 @@ func TestControllerReportsAndExplicitContextDispatch(t *testing.T) {
 func TestControllerNegativeReportPreservesStreamsAndSafeDiagnostics(t *testing.T) {
 	record := &dispatchRecord{result: commandResult{controller: controllerReport("not-ready", false)}, err: diagnostics.NewFailure("controller.prerequisites", "required prerequisites are missing", "")}
 	var out, errOut bytes.Buffer
-	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"preflight", "controller"})
+	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"controller", "check"})
 	if code != 1 || !strings.Contains(out.String(), "Outcome  not-ready") || !strings.Contains(errOut.String(), "controller.prerequisites") {
 		t.Fatal(code, out.String(), errOut.String())
 	}
@@ -144,22 +134,14 @@ func TestControllerInvocationPrivilegeAndHelp(t *testing.T) {
 			t.Fatal("setup download-only requested privilege or lost the ambient route", args, class)
 		}
 	}
-	for _, args := range [][]string{{"controller", "install", "--wheel-mirror", "file:///srv/wheels"}, {"controller", "install"}, {"preflight", "controller"}, {"preflight", "controller", "--context=example"}} {
+	for _, args := range [][]string{{"controller", "install", "--wheel-mirror", "file:///srv/wheels"}, {"controller", "install"}, {"controller", "check"}, {"preflight"}, {"preflight", "--stage", "controller"}} {
 		if !ClassifyInvocation(args).RequiresRoot {
 			t.Fatal("effectful invocation omitted privilege", args)
 		}
 	}
-	for _, testCase := range []struct {
-		args  []string
-		usage string
-	}{
-		{args: []string{"preflight", "controller", "--help"}, usage: "Select explicit Environment requirements (default: baseline)"},
-	} {
-		var out bytes.Buffer
-		code := New(Config{Out: &out}).Run(context.Background(), testCase.args)
-		if code != 0 || strings.Contains(out.String(), "default: current") || !strings.Contains(out.String(), testCase.usage) {
-			t.Fatal(code, out.String())
-		}
+	var out bytes.Buffer
+	if code := New(Config{Out: &out}).Run(context.Background(), []string{"controller", "check", "--help"}); code != 0 || strings.Contains(out.String(), "--context") {
+		t.Fatal(code, out.String())
 	}
 }
 
@@ -396,7 +378,7 @@ func TestRunnerFinishesProgressBeforeTheReadyResult(t *testing.T) {
 	var out bytes.Buffer
 	config := Config{Out: &out, Services: dispatchSpies(record), FinishProgress: func() { out.WriteString("<finished>") }}
 	code := New(config).Run(context.Background(), []string{"controller", "install"})
-	want := "<finished>\n  Planned changes\n    none\n\n    Outcome  unchanged\n    Next     bootwright preflight controller\n"
+	want := "<finished>\n  Planned changes\n    none\n\n    Outcome  unchanged\n    Next     bootwright controller check\n"
 	if code != 0 || out.String() != want {
 		t.Fatalf("code=%d result=%q, want %q", code, out.String(), want)
 	}
@@ -598,7 +580,7 @@ func TestControllerSuppressedProgressStillPresentsChecks(t *testing.T) {
 	}
 	out.Reset()
 	report.ProgressPresented = true
-	if err := writeControllerReport(stream, io.Discard, "preflight controller", report); err != nil {
+	if err := writeControllerReport(stream, io.Discard, "controller check", report); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "Checks") || !strings.Contains(out.String(), "Controller runtime") {

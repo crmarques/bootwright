@@ -139,7 +139,7 @@ Complete [Prepare listener firewall](../README.md#prepare-listener-firewall),
 then require `ready` before starting services:
 
 ```sh
-./bin/bootwright preflight controller --context "$CONTEXT"
+./bin/bootwright preflight --context "$CONTEXT" --stage controller
 ./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services,substrates --yes
 sudo virsh --connect qemu:///system net-list --all
 for n in ceph-public app-users; do sudo virsh --connect qemu:///system net-dumpxml "bootwright-$CONTEXT-$n"; done
@@ -157,7 +157,7 @@ Networks. Then the guests and the cluster:
 ./bin/bootwright machine list --context "$CONTEXT" --power-status
 ./bin/bootwright machine exec --context "$CONTEXT" --name ceph-01,ceph-02,ceph-03,app-01,client-01 -- ip -4 -br address
 ./bin/bootwright machine exec --context "$CONTEXT" --name ceph-01,ceph-02,ceph-03,app-01,client-01 -- getent hosts cp.icr.io public.dhe.ibm.com
-./bin/bootwright preflight storage-cluster --context "$CONTEXT"
+./bin/bootwright preflight --context "$CONTEXT" --stage clusters
 ./bin/bootwright plan --context "$CONTEXT" --stage clusters
 ./bin/bootwright apply --context "$CONTEXT" --stage clusters --yes
 ./bin/bootwright status --context "$CONTEXT"

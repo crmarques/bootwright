@@ -1,11 +1,11 @@
 {
   "schemaVersion": "v1alpha1",
-  "command": "preflight container-cluster",
+  "command": "preflight",
   "ok": false,
   "exitCode": 1,
   "result": {
     "context": "synthetic",
-    "target": "container-cluster",
+    "target": "clusters",
     "checks": [
       {
         "id": "resolution.api",
@@ -26,8 +26,8 @@
     {
       "severity": "error",
       "code": "preflight.unknown",
-      "message": "container-cluster readiness is not proved",
-      "remediation": "resolve the unknown and pending checks and repeat the preflight"
+      "message": "cluster readiness is not proved; inspect the failed, unknown and pending checks",
+      "remediation": "resolve the reported prerequisites and repeat bootwright preflight --context synthetic --stage clusters --clusters sno"
     }
   ],
   "logs": []

@@ -99,7 +99,7 @@ func packageRoles() map[string]packageRole {
 		"internal/reconciliation/operationstore/areadouble": applicationRole,
 	}
 	for _, capability := range []string{
-		"addons/catalog", "addons/preflight",
+		"addons/catalog",
 		"infrastructureservices/artifactserver", "infrastructureservices/managedservice",
 		"infrastructureservices/dnsserver", "infrastructureservices/ntpserver", "infrastructureservices/proxy",
 		"containercluster/access", "containercluster/agentinstall",

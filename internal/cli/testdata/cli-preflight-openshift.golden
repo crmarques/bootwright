@@ -1,3 +1,4 @@
-Container-cluster preflight  synthetic
+Preflight  synthetic
+  Stages  clusters
   passed  api.sno.example.test  resolution.api: api.sno.example.test resolves to 192.0.2.10
   Summary  1 passed, 0 failed, 0 unknown, 0 pending
