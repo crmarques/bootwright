@@ -386,10 +386,12 @@ in full, neither `media add`, `media delete`, `context update` nor
 `context delete` holds one while it prompts, and a `secret set` from
 standard input holds none while it reads, then takes the exclusive root lock
 and the lease to write and re-proves its
-[replacement decision](secrets.md#acquisition-and-commands) there. A command
-that cannot take the lock or lease refuses with `lifecycle.lease` and a retry
-remedy; no lock or lease is ever taken over. A `logs --follow` takes no
-lease, and `logs --setup` no root lock, so it lists `host/` unlocked:
+[replacement decision](secrets.md#acquisition-and-commands) there. Every
+mutator except `controller uninstall` waits, unlocked, for a shorter holder of
+the exclusive root lock up to the root lock wait or cancellation, then refuses
+`lifecycle.lease`; uninstall, a reader's shared hold and a lease refuse at
+once with a retry remedy; no lock or lease is ever taken over. A `logs --follow` takes no lease,
+and `logs --setup` no root lock, so it lists `host/` unlocked:
 whether a writer still holds the operation, run or setup it follows is a
 non-blocking lock test released at once. That probe of the setup lock is a
 shared test, and `controller install` takes the setup lock without waiting, so
@@ -432,8 +434,8 @@ exclusive root lock, then retains the context's exclusive lease throughout its
 effects. Readers and other contexts may proceed. Context identity, inputs and
 mutation evidence remain scoped to that lease; short root transactions refresh
 the registry and shared controller state before reservation, binding, secret
-or tool publication. Only those transactions and its bundle reads wait for the
-root lock, each up to the bound below and ending on cancellation; one
+or tool publication. Those transactions and its bundle reads also wait for the
+root lock, each up to the bound below or cancellation; one
 operation's waits queue, so its Nth concurrent wait may last N bounds. No root
 holder waits for a lock, so none deadlocks. Past the bound they refuse
 `lifecycle.lease`. The block it served then records `failed` when none of its
@@ -611,7 +613,7 @@ Secrets limits additionally bound their trees.
 | Installer media stages at once, live, retained or abandoned | 16 | `maxStagedMedia` in `internal/workspace/contextfs/media_linux_amd64.go` |
 | [Setup outputs](#log-root) the log root keeps | 8 | `maxSetupRuns` in `internal/workspace/contextfs/setup_runs_linux_amd64.go` |
 | [Bounded runs](cli/output.md#bounded-run-output) one context's runs area keeps | 16 | `maxBoundedRuns` in `internal/workspace/contextfs/runs_linux_amd64.go` |
-| In-operation root lock wait | 1 minute | `rootLockWait` in `internal/workspace/contextfs/files_linux_amd64.go` |
+| Root lock wait of a mutator | 1 minute | `rootLockWait` in `internal/workspace/contextfs/files_linux_amd64.go` |
 
 `TestDocumentedBoundsMatchCode` compares each value with its code, and each
 deadline with the one its runner passes to `context.WithTimeout`: the lifecycle

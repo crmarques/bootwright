@@ -395,9 +395,11 @@ Text output escapes every line, so a tab prints as `\t` and a terminal sequence
 never runs, and `--detail full` prints each event's full UTC timestamp. For the
 exact bytes use `-o json`, which cannot be followed. A follow ends with a
 warning when the operation still reads `running` but no `apply` or `destroy`
-holds the context; the warning names the command that continues it. A follow
+holds the context; the warning names the command that continues it, and ends
+quietly once a newer operation becomes current. A follow
 holds no lease, so it does not keep the operation it watches from finishing or
-the next one from starting. In the instant a `--setup --follow` probes whether
+the next one from starting; a command that writes the store waits out its
+short read instead of failing. In the instant a `--setup --follow` probes whether
 the install still runs, a `controller install` that starts can be refused as
 busy; repeat it. The full contract is
 [reading and following logs](../specs/cli/output.md#reading-and-following-logs).

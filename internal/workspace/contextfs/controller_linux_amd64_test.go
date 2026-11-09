@@ -516,7 +516,7 @@ func TestToolAreaRejectsUnknownSubstitutionAndSymlinks(t *testing.T) {
 }
 
 func TestControllerReadAndMutationShareRootCoordination(t *testing.T) {
-	store := boundFixture(t)
+	store := impatient(boundFixture(t))
 	ctx := context.Background()
 	err := store.ReadController(ctx, "", func(prerequisites.StorageView) error {
 		if err := store.MutateLifecycle(ctx, "example", func(lifecycle.Transaction) error { t.Fatal("mutator acquired held shared root"); return nil }); err == nil {

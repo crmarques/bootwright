@@ -66,7 +66,7 @@ func (s Service) Follow(ctx context.Context, selection Selection, sink Sink) (*S
 			return nil, err
 		}
 		summary.State = string(session.state)
-		if session.state != reconciliation.OperationRunning {
+		if session.state != reconciliation.OperationRunning || !session.current {
 			return summary, follower.drain()
 		}
 		detached++

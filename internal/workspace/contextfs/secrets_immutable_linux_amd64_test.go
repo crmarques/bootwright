@@ -138,6 +138,7 @@ func TestSecretImmutableWriteDoesNotReplaceExistingFinalName(t *testing.T) {
 
 func TestSecretReadSessionPreventsConcurrentMutation(t *testing.T) {
 	store, sources := fixture(t)
+	impatient(store)
 	record := publish(t, store, "example", sources)
 	token := secretToken(record)
 	implementation := initializeImmutableTestStore(t, store, token)

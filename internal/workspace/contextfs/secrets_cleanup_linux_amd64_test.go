@@ -285,6 +285,7 @@ func TestSecretPruneRejectsUncertainPublication(t *testing.T) {
 
 func TestSecretPruneRunsUnderExclusiveRootLock(t *testing.T) {
 	store, token, _ := secretCleanupFixture(t)
+	impatient(store)
 	ctx := context.Background()
 	root, err := os.Open(store.options.Root)
 	if err != nil {

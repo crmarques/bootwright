@@ -101,6 +101,13 @@ func expectBusy(t *testing.T, err error) {
 	}
 }
 
+// impatient shortens the root lock wait of a store whose test holds the
+// root itself, so a mutator beside it refuses without waiting the minute.
+func impatient(store *Store) *Store {
+	store.rootWait = 20 * time.Millisecond
+	return store
+}
+
 func expectMissingRegistry(t *testing.T, err error) {
 	t.Helper()
 	diagnostics := diagnostics.Of(err)
@@ -775,6 +782,7 @@ func TestRegistryStrictnessAndManifestPaths(t *testing.T) {
 
 func TestMutationGuardLayoutAndLeases(t *testing.T) {
 	store, sources := fixture(t)
+	impatient(store)
 	record := publish(t, store, "example", sources)
 	contextDir := filepath.Join(store.options.Root, "contexts", record.Name)
 	writePrivate(t, filepath.Join(contextDir, "future-operation.json"), []byte("{}\n"))
@@ -935,6 +943,7 @@ func TestPublicationFailurePoints(t *testing.T) {
 
 func TestConcurrentReadersSeeCompleteRevisions(t *testing.T) {
 	store, sources := fixture(t)
+	impatient(store)
 	publish(t, store, "example", sources)
 	var group sync.WaitGroup
 	failures := make(chan error, 4)

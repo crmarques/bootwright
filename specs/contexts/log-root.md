@@ -46,7 +46,12 @@ shared lease, each holding its own file under an advisory lock; and `host/`
 under `host/setup/lock`. A reader of a context's logs holds only the shared root
 lock, released before it reads a byte of any file it opened, and takes no
 lease; a reader of `host/` takes no root lock; a directory not yet created
-lists nothing. A reader opens each file through the same no-follow descent and
+lists nothing. Each poll of a follow re-reads the record and re-lists the
+directory only of a block that was not `done` at its previous poll, so its hold
+shrinks as blocks settle, and a mutator's registry transaction waits that hold
+out ([lock rules](../contexts.md#storage-locking-and-publication)). A reader
+opens each file through the same no-follow descent, refusing a symbolic link
+anywhere on it (`TestLogOpenRefusesASymlinkedDirectoryInItsDescent`), and
 refuses a file that is not a regular, singly linked file of the directory's
 owner that no group or other may read (`context.state`, naming the file,
 `TestLogOpenRefusesALinkASecondLinkAGroupReadableFileOrANonRegularOne`).

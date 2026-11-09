@@ -6,13 +6,17 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets/secretstore"
+	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
 const rootHold = 150 * time.Millisecond
@@ -163,4 +167,61 @@ func TestACancelledRootWaitTakesNoLock(t *testing.T) {
 		t.Fatalf("a cancelled root wait over a free root lock returned %v, want context.Canceled", err)
 	}
 	holdRoot(t, store, syscall.LOCK_EX)()
+}
+
+func TestAMutatorWaitsOutALogReadersHoldThenRefusesPastTheBound(t *testing.T) {
+	ctx := context.Background()
+	store := rootWaitFixture(t)
+	release := holdRoot(t, store, syscall.LOCK_SH)
+	timer := time.AfterFunc(rootHold, release)
+	defer timer.Stop()
+	started := time.Now()
+	entered := false
+	if err := store.MutateLifecycle(ctx, "example", func(lifecycle.Transaction) error { entered = true; return nil }); err != nil || !entered {
+		t.Fatalf("a mutator beside a reader's short hold = %v, entered %t", err, entered)
+	}
+	if waited := time.Since(started); waited < rootHold {
+		t.Fatalf("the mutator entered after %v, while the reader still held the root", waited)
+	}
+	store.rootWait = rootHold
+	held := holdRoot(t, store, syscall.LOCK_SH)
+	defer held()
+	started = time.Now()
+	expectBusy(t, store.Transact(ctx, false, nil, func(contexts.Transaction) error { t.Fatal("a mutator entered a held root"); return nil }))
+	if waited := time.Since(started); waited < rootHold {
+		t.Fatalf("the transaction refused after %v, before its %v bound", waited, rootHold)
+	}
+	canceled, cancel := context.WithCancel(ctx)
+	time.AfterFunc(rootHold/3, cancel)
+	store.rootWait = time.Hour
+	if err := store.Transact(canceled, false, nil, func(contexts.Transaction) error { return nil }); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled registry transaction wait = %v, want context.Canceled", err)
+	}
+}
+
+func waitsOutAReader(t *testing.T, store *Store, name string, mutate func() error) {
+	t.Helper()
+	release := holdRoot(t, store, syscall.LOCK_SH)
+	timer := time.AfterFunc(rootHold, release)
+	defer timer.Stop()
+	started := time.Now()
+	if err := mutate(); err != nil {
+		t.Fatalf("%s beside a reader's short hold = %#v", name, diagnostics.Of(err))
+	}
+	if waited := time.Since(started); waited < rootHold {
+		t.Fatalf("%s ran after %v, while the reader still held the root", name, waited)
+	}
+}
+
+func TestASecretWriteAndAMediaPublicationWaitOutAReadersHold(t *testing.T) {
+	store, record := lifecycleFixture(t)
+	waitsOutAReader(t, store, "a secret write", func() error {
+		return store.MutateSecrets(context.Background(), secretToken(record), func(secretstore.Area) error { return nil })
+	})
+	const data = "installer image"
+	stage := fillStage(t, store, "demo.iso", data)
+	waitsOutAReader(t, store, "a media publication", func() error { return publishStage(store, "demo.iso", data, stage, false) })
+	if _, err := os.Stat(filepath.Join(store.options.Root, "media", "demo.iso")); err != nil {
+		t.Fatalf("the publication that waited published nothing: %v", err)
+	}
 }

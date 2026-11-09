@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -88,7 +89,11 @@ func newUninitializedIntegrationStore(t *testing.T) *integrationStore {
 }
 
 func (h *integrationStore) mutate(callback func(secretstore.StoreSession) error) error {
-	return h.workspace.MutateSecrets(context.Background(), h.context, func(area secretstore.Area) error {
+	return h.mutateWithin(context.Background(), callback)
+}
+
+func (h *integrationStore) mutateWithin(ctx context.Context, callback func(secretstore.StoreSession) error) error {
+	return h.workspace.MutateSecrets(ctx, h.context, func(area secretstore.Area) error {
 		selector := readTestSelector(h.t, area)
 		session, err := h.implementation.Open(context.Background(), h.context, area, selector, nil)
 		if err != nil {
@@ -376,12 +381,14 @@ func TestReaderBlocksPublicationAndRotationUntilSessionCloses(t *testing.T) {
 	if err := h.view(func(reader secretstore.StoreSession) error {
 		for _, mutation := range mutations {
 			entered := false
-			err := h.mutate(func(current secretstore.StoreSession) error {
+			waiting, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			err := h.mutateWithin(waiting, func(current secretstore.StoreSession) error {
 				entered = true
 				return mutation(current)
 			})
-			if entered || failureCode(err) != "lifecycle.lease" {
-				t.Fatalf("mutation during read session: entered=%v error=%v", entered, err)
+			cancel()
+			if entered || !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("mutation during read session: entered=%v error=%v, want it to wait out the session", entered, err)
 			}
 			if _, err := reader.Inspect(context.Background()); err != nil {
 				return err

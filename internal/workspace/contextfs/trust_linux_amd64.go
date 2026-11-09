@@ -68,7 +68,7 @@ func (s *Store) withTrustArea(ctx context.Context, name string, mutation bool, c
 	}
 	defer root.file.Close()
 	if mutation {
-		if err := lock(root); err != nil {
+		if err := awaitRoot(ctx, s, root, syscall.LOCK_EX); err != nil {
 			return err
 		}
 	} else if err := lockShared(root); err != nil {

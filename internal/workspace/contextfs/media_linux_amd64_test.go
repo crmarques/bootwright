@@ -508,7 +508,7 @@ func addMeetingALock(t *testing.T, store *Store, name, data, pin string) error {
 // An unpinned add whose publication meets another command's lock refuses with
 // that lock's lifecycle.lease, removes its stage and publishes nothing.
 func TestMediaAddThatCannotRetakeTheRootLockPublishesNothing(t *testing.T) {
-	store := mediaFixture(t)
+	store := impatient(mediaFixture(t))
 	err := addMeetingALock(t, store, "demo.iso", "installer bytes", "")
 	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.lease" {
 		t.Fatalf("publication under a held root lock = %#v", reported)
@@ -803,7 +803,7 @@ func TestAStageRewrittenInPlaceAfterItWasFilledIsNeverPublished(t *testing.T) {
 // size is removed, and the lock's refusal stands alone, never promising that a
 // repetition publishes it without acquiring it again.
 func TestAPinnedAddNeverRetainsAStageRewrittenInPlaceAfterItWasFilled(t *testing.T) {
-	store := mediaFixture(t)
+	store := impatient(mediaFixture(t))
 	acquirer := &mediaAcquirer{source: func() media.Payload { return mediaPayload("installer bytes") }}
 	rewritten := &rewrittenPublication{Store: store, t: t, name: "demo.iso", data: "INSTALLER BYTES", locked: true}
 	_, err := media.New(rewritten, acquirer, nil, mediaClock{}).Add(context.Background(), pinnedAdd("demo.iso", "installer bytes"))
@@ -1068,7 +1068,7 @@ func TestADamagedImageStaysReplaceableAndDeletableWithConfirmation(t *testing.T)
 // never list it.
 func TestAPinnedAddThatCannotRetakeTheRootLockRetainsItsStage(t *testing.T) {
 	ctx := context.Background()
-	store := mediaFixture(t)
+	store := impatient(mediaFixture(t))
 	err := addMeetingALock(t, store, "demo.iso", "installer bytes", mediaDigest("installer bytes"))
 	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.lease" ||
 		!strings.Contains(reported[0].Remediation, "without acquiring it again") {
@@ -1104,7 +1104,7 @@ func TestAPinnedAddThatCannotRetakeTheRootLockRetainsItsStage(t *testing.T) {
 // refusal promised.
 func TestARetentionThatFinishesDuringAPruneKeepsItsPair(t *testing.T) {
 	ctx := context.Background()
-	store := mediaFixture(t)
+	store := impatient(mediaFixture(t))
 	started, proceed, added := make(chan struct{}), make(chan struct{}), make(chan error, 1)
 	acquirer := &mediaAcquirer{source: func() media.Payload {
 		return &mediaSource{data: bytes.NewReader([]byte("installer bytes")), first: func() {
@@ -1183,7 +1183,7 @@ func TestARepeatedAddPublishesARetainedStageWithoutAcquiring(t *testing.T) {
 // stage it adopted, so a later repetition still publishes it.
 func TestARepeatedAddWhosePublicationMeetsALockAgainKeepsTheRetainedStage(t *testing.T) {
 	ctx := context.Background()
-	store := mediaFixture(t)
+	store := impatient(mediaFixture(t))
 	retainStage(t, store, "demo.iso", "installer bytes")
 	record, err := os.ReadFile(filepath.Join(store.options.Root, "media", mediaStageName("demo.iso")+".json"))
 	if err != nil {

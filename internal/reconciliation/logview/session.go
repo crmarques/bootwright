@@ -109,6 +109,7 @@ type session struct {
 	files     map[string][]*tracked
 	outputs   map[string]*tracked
 	retiring  map[string][]*tracked
+	seen      map[string]string
 	records   map[string]operationstore.BlockRecord
 	state     reconciliation.OperationState
 	current   bool
@@ -117,7 +118,7 @@ type session struct {
 
 func newSession(service Service, name string, selection Selection) *session {
 	return &session{service: service, name: name, selection: selection, files: map[string][]*tracked{},
-		outputs: map[string]*tracked{}, retiring: map[string][]*tracked{}, records: map[string]operationstore.BlockRecord{}}
+		outputs: map[string]*tracked{}, retiring: map[string][]*tracked{}, seen: map[string]string{}, records: map[string]operationstore.BlockRecord{}}
 }
 
 func (s *session) close() {
@@ -173,12 +174,15 @@ func (s *session) poll(ctx context.Context, first, follow bool) error {
 				"run bootwright status --context "+s.name+" to see the operation's blocks")
 		}
 		for _, block := range s.selected() {
+			if s.records[block].State == reconciliation.BlockDone {
+				continue
+			}
 			record, err := store.Block(ctx, s.operation, block)
 			if err != nil {
 				return err
 			}
 			s.records[block] = record
-			if err := s.open(ctx, view, block, follow); err != nil {
+			if err := s.open(ctx, view, block, first, follow); err != nil {
 				return err
 			}
 		}
@@ -252,7 +256,7 @@ func (s *session) order(block string) int {
 	return slices.Index(s.blocks, block) + 1
 }
 
-func (s *session) open(ctx context.Context, view View, block string, follow bool) error {
+func (s *session) open(ctx context.Context, view View, block string, first, follow bool) error {
 	directory := path.Join(s.operation, "blocks", block)
 	entries, err := view.Logs().Entries(ctx, directory)
 	if err != nil {
@@ -290,10 +294,15 @@ func (s *session) open(ctx context.Context, view View, block string, follow bool
 		}
 		return x.resolution - y.resolution
 	})
-	if !follow || record.State != reconciliation.BlockRunning || latestName == "" {
+	if !follow || latestName == "" {
 		return nil
 	}
 	target := path.Join(directory, latestName)
+	fresh := s.seen[block] != target
+	s.seen[block] = target
+	if record.State != reconciliation.BlockRunning && (first || !fresh) {
+		return nil
+	}
 	if known := s.outputs[block]; known != nil {
 		if known.path == target {
 			return nil

@@ -17,6 +17,7 @@ import (
 func TestAnInspectionHoldsTheSharedLockAndWritesNothing(t *testing.T) {
 	ctx := context.Background()
 	store, sources := fixture(t)
+	impatient(store)
 	record := publish(t, store, "alpha", sources)
 	for _, scope := range []string{"", "alpha"} {
 		err := store.Inspect(ctx, scope, func(tx contexts.Transaction) error {

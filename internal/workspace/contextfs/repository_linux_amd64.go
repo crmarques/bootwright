@@ -848,8 +848,8 @@ func (s *Store) TransactDeletion(ctx context.Context, name string, callback func
 	})
 }
 
-// transact holds the exclusive root lock across one registry transaction.
-// scope names the one context a deletion transaction admits unverified.
+// transact waits out a shorter root holder, then holds the exclusive root lock
+// across one registry transaction. scope names a deletion's unverified context.
 func (s *Store) transact(ctx context.Context, create bool, inputs []string, scope string, callback func(*transaction) error) error {
 	return s.transactHeld(ctx, create, false, inputs, scope, callback)
 }
@@ -866,7 +866,7 @@ func (s *Store) transactHeld(ctx context.Context, create, shared bool, inputs []
 		return safeError(err)
 	}
 	defer root.file.Close()
-	hold := lock
+	hold := func(dir *directory) error { return awaitRoot(ctx, s, dir, syscall.LOCK_EX) }
 	if shared {
 		hold = lockShared
 	}

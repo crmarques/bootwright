@@ -184,7 +184,7 @@ func (s *Store) MutateSecrets(ctx context.Context, expected secretstore.Context,
 		return safeError(err)
 	}
 	defer root.file.Close()
-	if err := lock(root); err != nil {
+	if err := awaitRoot(ctx, s, root, syscall.LOCK_EX); err != nil {
 		return secretLockFailure(ctx, "secret storage is held by another mutator", err)
 	}
 	defer syscall.Flock(int(root.file.Fd()), syscall.LOCK_UN)

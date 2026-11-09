@@ -75,7 +75,7 @@ func (s *Store) withMedia(ctx context.Context, write bool, callback func(*mediaA
 	defer root.file.Close()
 	mode := lockShared
 	if write {
-		mode = lock
+		mode = func(dir *directory) error { return awaitRoot(ctx, s, dir, syscall.LOCK_EX) }
 	}
 	if err := mode(root); err != nil {
 		var held *busyError

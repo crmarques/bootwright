@@ -10,7 +10,6 @@ import (
 	"strings"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -180,6 +179,35 @@ func TestLogOpenRefusesALinkASecondLinkAGroupReadableFileOrANonRegularOne(t *tes
 	}
 }
 
+func TestLogOpenRefusesASymlinkedDirectoryInItsDescent(t *testing.T) {
+	ctx := context.Background()
+	store, _ := lifecycleFixture(t)
+	appendLog(t, store, logOperation+"/blocks/network/attempt-000001.jsonl", "{}\n")
+	logs := filepath.Join(contextLogsPath(store, "example"), operationLogs)
+	const linked = "op-fedcba9876543210fedcba9876543210"
+	if err := os.Symlink(logOperation, filepath.Join(logs, linked)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("blocks", filepath.Join(logs, logOperation, "linked")); err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []string{linked + "/blocks/network/attempt-000001.jsonl", logOperation + "/linked/network/attempt-000001.jsonl"} {
+		err := store.ReadLogs(ctx, "example", func(view logview.View) error {
+			file, found, err := view.Open(ctx, target)
+			if file != nil {
+				file.Close()
+			}
+			if found {
+				t.Fatalf("%s was opened through a symbolic link", target)
+			}
+			return err
+		})
+		if code := diagnosticCode(err); code != "context.state" {
+			t.Fatalf("opening %s = %#v, want context.state", target, diagnostics.Of(err))
+		}
+	}
+}
+
 func holdWhile(t *testing.T, run func(held func()) error) (release func()) {
 	t.Helper()
 	ready, done, finished := make(chan struct{}), make(chan struct{}), make(chan error, 1)
@@ -282,6 +310,22 @@ func TestRunLivenessFollowsItsRunsSharedLock(t *testing.T) {
 	}
 }
 
+// retryObserver is the context holdRun consults only after a hold met
+// EWOULDBLOCK; its first consultation releases the probe.
+type retryObserver struct {
+	context.Context
+	retried bool
+	release func()
+}
+
+func (o *retryObserver) Done() <-chan struct{} {
+	if !o.retried {
+		o.retried = true
+		o.release()
+	}
+	return o.Context.Done()
+}
+
 func TestARunStillHoldsItsFileBesideAnInstantProbe(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "run-000001.output")
 	writePrivate(t, path, nil)
@@ -298,16 +342,9 @@ func TestARunStillHoldsItsFileBesideAnInstantProbe(t *testing.T) {
 	if err := syscall.Flock(int(probe.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		t.Fatal(err)
 	}
-	released := make(chan struct{})
-	go func() {
-		defer close(released)
-		time.Sleep(3 * time.Millisecond)
-		syscall.Flock(int(probe.Fd()), syscall.LOCK_UN)
-	}()
-	err = holdRun(context.Background(), run)
-	<-released
-	if err != nil {
-		t.Fatalf("a run meeting a probe's instant hold = %v", err)
+	observer := &retryObserver{Context: context.Background(), release: func() { syscall.Flock(int(probe.Fd()), syscall.LOCK_UN) }}
+	if err := holdRun(observer, run); err != nil || !observer.retried {
+		t.Fatalf("a run meeting a probe's instant hold = %v, retried %t", err, observer.retried)
 	}
 	if err := syscall.Flock(int(probe.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); !errors.Is(err, syscall.EWOULDBLOCK) {
 		t.Fatalf("the run does not hold its file: %v", err)

@@ -2084,6 +2084,7 @@ func checkpointMediaRetainScenario() checkpointScenario {
 		return store
 	})
 	scenario.operate = func(_ *testing.T, ctx context.Context, store *Store) error {
+		impatient(store)
 		var holder *os.File
 		var held error
 		release := func() {

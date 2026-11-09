@@ -1341,7 +1341,8 @@ running picked up as it appears, and a block that started and settled between
 two polls still has its output for that attempt streamed once, then flushed. A
 `--run` or `--setup` follow streams the whole file. It ends with exit `0`, after
 draining what was written, when the operation leaves `running`; when it is no
-longer the context's current operation, checked at every poll; or after two
+longer the context's current operation, checked at every poll, with no
+warning; or after two
 polls in which no `apply` or `destroy` holds the context although the operation
 still reads `running`, with the `logs.detached` warning on standard error and
 the command that continues it. An operation that is not current, or was not
@@ -1354,7 +1355,8 @@ install starting at the instant a setup is probed is refused as
 **Busy polls.** Each read, initial or a poll, takes the shared root lock
 without waiting, opens its files under it and reads their bytes after releasing
 it, so a command that needs the exclusive root lock waits for that short hold
-and a follow never makes another command fail
+and a follow never makes another command fail, except `controller uninstall`,
+which refuses at once while anything holds the store
 ([locking](../contexts.md#storage-locking-and-publication)). An initial read
 that finds the lock busy refuses `lifecycle.lease`; a busy poll is skipped, and
 60 consecutive busy polls refuse `lifecycle.lease`, exit `1`.
