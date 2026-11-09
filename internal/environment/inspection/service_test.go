@@ -122,6 +122,10 @@ func (f *fixture) ObjectUserGateway(user api.Object) string {
 	return user.Spec().Get("objectGatewayRef").Text()
 }
 
+func bootstrapNode(cluster api.Object) string {
+	return cluster.Spec().Get("cephadm", "bootstrap", "nodeRef").Text()
+}
+
 func storageMembers(object api.Object) (environment.Membership, bool) {
 	if object.Kind() != api.CephCluster {
 		return environment.Membership{}, false
@@ -167,7 +171,7 @@ func (f *fixture) ObjectUserProved(context.Context, string, api.Catalog, api.Obj
 }
 
 func (f *fixture) service(current string) Service {
-	return New(f, f, f, f, func(context.Context) (string, error) { return current, nil }, f).WithMembers(storageMembers)
+	return New(f, f, f, f, func(context.Context) (string, error) { return current, nil }, f).WithMembers(storageMembers).WithAdministrator(bootstrapNode)
 }
 
 func (f *fixture) untouched() {
@@ -599,5 +603,39 @@ func TestSecretsRevealsOneClusterNeverSeveral(t *testing.T) {
 	result, err = f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{" storage", "storage"}, Secrets: true})
 	if err != nil || len(result.Storage) != 1 || !result.Storage[0].Ceph.Dashboard.Revealed || !slices.Equal(f.custody, []string{"lab/storage"}) {
 		t.Fatalf("one member twice with --secrets: %+v (%v), custody %v", result, err, f.custody)
+	}
+}
+
+func TestSessionAccessNamesTheAdministratorNodeNotTheFirstInNameOrder(t *testing.T) {
+	f := newFixture(t)
+	f.catalog = api.NewCatalog([]api.Object{storageCluster("storage", "managed", "rhel-03",
+		node("rhel-03", "rhel-03.lab.test", "machine-c"), node("rhel-01", "rhel-01.lab.test", "machine-a"))})
+	f.proved = map[string]bool{"machine-c": true}
+	result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, command := range result.Storage[0].AccessCommands {
+		if (command.Command == CommandExec || command.Command == CommandRsh) && (command.Status != StatusReady || command.Node != "rhel-03") {
+			t.Fatalf("%s = %+v, want ready on the administrator node rhel-03", command.Command, command)
+		}
+	}
+}
+
+func TestSessionAccessIsUnavailableWhenNoDeclaredNodeIsTheAdministrator(t *testing.T) {
+	f := newFixture(t)
+	f.catalog = api.NewCatalog([]api.Object{storageCluster("storage", "managed", "rhel-09", node("rhel-01", "rhel-01.lab.test", "machine-a"))})
+	result, err := f.service("lab").ClusterInfo(context.Background(), ClusterInfoRequest{Names: []string{"storage"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, command := range result.Storage[0].AccessCommands {
+		if (command.Command == CommandExec || command.Command == CommandRsh) &&
+			(command.Status != StatusUnavailable || command.Node != "" || !strings.Contains(command.Reason, "has no administrator node")) {
+			t.Fatalf("%s = %+v", command.Command, command)
+		}
+	}
+	if f.keyReads != 0 {
+		t.Fatalf("host key reads = %d, want none", f.keyReads)
 	}
 }

@@ -149,8 +149,8 @@ Not yet met: `preflight --stage add-ons` runs no add-on prerequisite check and a
 | `bootwright controller uninstall` | `--keep-packages` false; `--yes` false | what it removed and kept or `Nothing to do.` | host packages and state by the [uninstall flow](../controller.md#the-uninstall-flow) |
 | `bootwright cluster list` | none | container and storage cluster names and kinds in canonical order | read local state |
 | `bootwright cluster info` | `--name <list>` default all unless `--secrets` or `--object-user`, which require exactly one cluster; `--secrets` false; `--object-user <name>` none | cluster kinds, endpoints, access-command applicability and availability, artifact availability, for a managed Ceph cluster its release, FSID, frozen image, monitors, administrator command and dashboard access, and optional explicit sensitive values | read local state and optional confidential material |
-| `bootwright cluster rsh` | required `--name <cluster>` (one cluster); `--node <node>` default first node in canonical name order (at most one) | an interactive SSH session on the resolved node's Machine under the [cluster session contract](../cli.md#cluster-sessions); the client's exit status is the result | same as `machine rsh` |
-| `bootwright cluster exec` | required `--name <list>`; `--node <list>` default each cluster's first node in canonical name order; required `<command>...` | the exact argument vector runs on the resolved node's Machine, or on every resolved Machine concurrently, at most the lifecycle bound at a time, with [each line prefixed by its Machine](../cli.md#several-clusters-and-nodes), under the [cluster session contract](../cli.md#cluster-sessions); the remote command's exit status is the result, the highest of them for several | same as `machine exec` |
+| `bootwright cluster rsh` | required `--name <cluster>` (one cluster); `--node <node>` default the cluster's administrator node (at most one) | an interactive SSH session on the resolved node's Machine under the [cluster session contract](../cli.md#cluster-sessions); the client's exit status is the result | same as `machine rsh` |
+| `bootwright cluster exec` | required `--name <list>`; `--node <list>` default each cluster's administrator node; required `<command>...` | the exact argument vector runs on the resolved node's Machine, or on every resolved Machine concurrently, at most the lifecycle bound at a time, with [each line prefixed by its Machine](../cli.md#several-clusters-and-nodes), under the [cluster session contract](../cli.md#cluster-sessions); the remote command's exit status is the result, the highest of them for several | same as `machine exec` |
 | `bootwright cluster oc` | required `--name <cluster>` and non-empty `<command>...` | bounded `oc` handoff descriptor | read context-owned access metadata only |
 | `bootwright cluster kubectl` | required `--name <cluster>` and non-empty `<command>...` | bounded `kubectl` handoff descriptor | read context-owned access metadata only |
 | `bootwright cluster kubeconfig` | required `--name <cluster>` | kubeconfig through the explicit sensitive-output boundary | read and reveal one context-owned credential artifact |
@@ -230,7 +230,7 @@ The short description and detailed help for `machine rsh`, `machine exec`,
 for a cluster the resolved node's, as its resolved identity, that an unproved
 host key is confirmed interactively or refused, and that the exit status is the
 client's. The cluster commands also state how `--node` selects: by node name,
-then by FQDN, defaulting to the first node in name order.
+then by FQDN, defaulting to the cluster's administrator node.
 
 The detailed help of `cluster exec` states that `--name` and `--node` take
 comma-separated lists and that the command runs on every resolved Machine at

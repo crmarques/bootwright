@@ -16,6 +16,8 @@ type Service struct {
 	sessions  Sessions
 	selection CurrentSelection
 	members   roster
+
+	administrator func(api.Object) string
 }
 
 func New(graph Graph, sessions Sessions, selection CurrentSelection) Service {
@@ -24,6 +26,11 @@ func New(graph Graph, sessions Sessions, selection CurrentSelection) Service {
 
 func (s Service) WithMembers(members func(api.Object) (environment.Membership, bool)) Service {
 	s.members = members
+	return s
+}
+
+func (s Service) WithAdministrator(administrator func(api.Object) string) Service {
+	s.administrator = administrator
 	return s
 }
 
@@ -69,7 +76,7 @@ func (s Service) resolve(ctx context.Context, command, contextName string, names
 	if err != nil {
 		return "", nil, err
 	}
-	machines, err := selectMachines(clusters, selected, selectors, s.members)
+	machines, err := selectMachines(clusters, selected, selectors, s.members, s.administrator)
 	if err != nil {
 		return "", nil, err
 	}

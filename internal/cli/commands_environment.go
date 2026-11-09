@@ -41,10 +41,10 @@ func environmentClusterCommands() []commandSpec {
 }
 
 func clusterSessionCommand(spec commandSpec) commandSpec {
-	spec.flags = []flagSpec{nameFlag(), stringFlag("node", "Select a declared node by name, then FQDN (default: the first node in name order)")}
+	spec.flags = []flagSpec{nameFlag(), stringFlag("node", "Select a declared node by name, then FQDN (default: the cluster's administrator node)")}
 	spec = sessionCommand(spec)
 	spec.long += " The session opens on the Machine behind one node of a managed CephCluster: --node selects" +
-		" the node by name, then by FQDN, and defaults to the first node in name order." +
+		" the node by name, then by FQDN, and defaults to the administrator node that cluster info names." +
 		clusterSessionLimits
 	return spec
 }
@@ -54,8 +54,8 @@ const clusterSessionLimits = " External CephClusters are inapplicable, and sessi
 func clusterExecCommand() commandSpec {
 	spec := sessionCommand(commandSpec{path: "cluster exec", short: "Run a command over SSH on cluster nodes' Machines", payload: true,
 		flags: []flagSpec{requiredFlag("name", "Select comma-separated cluster names"),
-			stringFlag("node", "Select declared nodes by comma-separated name, then FQDN (default: each cluster's first node in name order)")}})
-	spec.long += " --name takes a comma-separated list, and each cluster runs the command on the Machine behind its first node in name order." +
+			stringFlag("node", "Select declared nodes by comma-separated name, then FQDN (default: each cluster's administrator node)")}})
+	spec.long += " --name takes a comma-separated list, and each cluster runs the command on the Machine behind its administrator node." +
 		" --node takes a comma-separated list and selects those nodes, by name then by FQDN, in every listed cluster that declares them." +
 		" The command runs on every resolved Machine concurrently, at most eight at a time, each output line is prefixed by its Machine, and the exit status is the highest any client returned." +
 		clusterSessionLimits

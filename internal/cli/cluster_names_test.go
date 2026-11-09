@@ -15,11 +15,11 @@ func TestOnlyTheClusterCommandsThatSelectSeveralTakeLists(t *testing.T) {
 		"cluster info": {"name": "Select comma-separated cluster names (default: all)"},
 		"cluster exec": {
 			"name": "Select comma-separated cluster names",
-			"node": "Select declared nodes by comma-separated name, then FQDN (default: each cluster's first node in name order)",
+			"node": "Select declared nodes by comma-separated name, then FQDN (default: each cluster's administrator node)",
 		},
 		"cluster rsh": {
 			"name": "Select the exact object name",
-			"node": "Select a declared node by name, then FQDN (default: the first node in name order)",
+			"node": "Select a declared node by name, then FQDN (default: the cluster's administrator node)",
 		},
 	}
 	seen := 0

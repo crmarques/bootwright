@@ -109,7 +109,7 @@ func TestHostKeyProofsCountsEverySourceASessionProvesWithoutFirstUse(t *testing.
 	}
 }
 
-func stretchSessions(t *testing.T, machines []api.Object, records trustRecords) (map[string]inspection.AccessCommand, string) {
+func stretchSessions(t *testing.T, machines []api.Object, records trustRecords, administrator string) (map[string]inspection.AccessCommand, string) {
 	t.Helper()
 	nodes := make([]api.Value, 0, len(machines))
 	for _, m := range machines {
@@ -117,12 +117,13 @@ func stretchSessions(t *testing.T, machines []api.Object, records trustRecords) 
 	}
 	cluster := api.NewObject(api.CephCluster, "stretch", api.Value{}, api.MapValue(
 		fieldOf("management", text("managed")),
+		fieldOf("cephadm", api.MapValue(fieldOf("bootstrap", api.MapValue(fieldOf("nodeRef", text(administrator)))))),
 		fieldOf("topology", api.MapValue(fieldOf("nodes", api.ListValue(nodes...))))))
 	reader := &readerFake{resources: &lifecycle.StorageResourcesResult{}}
 	service := inspection.New(catalogGraph{catalog: api.NewCatalog(append([]api.Object{cluster}, machines...))},
 		cephInspection{reconciler: reader}, installProofs{reconciler: reader},
 		hostKeyProofs{keys: machineHostKeys{reconciler: reader}, records: records},
-		func(context.Context) (string, error) { return "lab", nil }, inspectionCustody{reader: &producedFake{}}).WithMembers(clusterMembers())
+		func(context.Context) (string, error) { return "lab", nil }, inspectionCustody{reader: &producedFake{}}).WithMembers(clusterMembers()).WithAdministrator(clusterAdministrator)
 	result, err := service.ClusterInfo(context.Background(), inspection.ClusterInfoRequest{Names: []string{"stretch"}})
 	if err != nil || len(result.Storage) != 1 {
 		t.Fatalf("info = %+v (%v)", result, err)
@@ -134,44 +135,46 @@ func stretchSessions(t *testing.T, machines []api.Object, records trustRecords) 
 	return commands, strings.Join(reader.reads, ",")
 }
 
-// arbiter-01 sorts before ceph-01, so it is the default node of the cluster.
-func TestClusterInfoTreatsAPinnedProvidedTiebreakerAsProved(t *testing.T) {
+// arbiter-01 sorts before ceph-01 but holds no administrator keyring, so the
+// session template names the administrator node, ceph-01, a provided Machine
+// whose pinned key proves it.
+func TestClusterInfoTreatsAPinnedProvidedNodeAsProved(t *testing.T) {
 	machines := []api.Object{
-		sshMachine("ceph-01", "192.0.2.11", "", true),
-		sshMachine("arbiter-01", "192.0.2.50", "arbiter-known-hosts", false),
+		sshMachine("ceph-01", "192.0.2.11", "ceph-known-hosts", false),
+		sshMachine("arbiter-01", "192.0.2.50", "", true),
 		sshMachine("ceph-02", "192.0.2.12", "", true),
 	}
-	commands, _ := stretchSessions(t, machines, nil)
+	commands, _ := stretchSessions(t, machines, nil, "ceph-01")
 	for _, name := range []string{inspection.CommandExec, inspection.CommandRsh} {
-		if command := commands[name]; command.Status != inspection.StatusReady || command.Node != "arbiter-01" || command.Reason != "" {
-			t.Fatalf("%s = %+v, want ready on arbiter-01", name, command)
+		if command := commands[name]; command.Status != inspection.StatusReady || command.Node != "ceph-01" || command.Reason != "" {
+			t.Fatalf("%s = %+v, want ready on ceph-01", name, command)
 		}
 	}
 }
 
 func TestClusterInfoRemedyForAnUnprovedProvidedMachineNamesMachineTrust(t *testing.T) {
 	machines := []api.Object{
-		sshMachine("arbiter-01", "192.0.2.50", "", false),
-		sshMachine("ceph-01", "192.0.2.11", "", true),
+		sshMachine("arbiter-01", "192.0.2.50", "", true),
+		sshMachine("ceph-01", "192.0.2.11", "", false),
 	}
-	commands, _ := stretchSessions(t, machines, &recordsFake{})
+	commands, _ := stretchSessions(t, machines, &recordsFake{}, "ceph-01")
 	for _, name := range []string{inspection.CommandExec, inspection.CommandRsh} {
 		command := commands[name]
-		if command.Status != inspection.StatusUnavailable || command.Node != "arbiter-01" ||
-			!strings.Contains(command.Reason, "bootwright machine trust --context lab --name arbiter-01") ||
+		if command.Status != inspection.StatusUnavailable || command.Node != "ceph-01" ||
+			!strings.Contains(command.Reason, "bootwright machine trust --context lab --name ceph-01") ||
 			!strings.Contains(command.Reason, "access.ssh.knownHostsRef") || strings.Contains(command.Reason, "--stage machines") {
 			t.Fatalf("%s = %+v", name, command)
 		}
 	}
-	commands, _ = stretchSessions(t, machines, &recordsFake{data: trustRecord(t, "arbiter-01", "192.0.2.50", 22)})
-	if command := commands[inspection.CommandExec]; command.Status != inspection.StatusReady || command.Node != "arbiter-01" {
+	commands, _ = stretchSessions(t, machines, &recordsFake{data: trustRecord(t, "ceph-01", "192.0.2.11", 22)}, "ceph-01")
+	if command := commands[inspection.CommandExec]; command.Status != inspection.StatusReady || command.Node != "ceph-01" {
 		t.Fatalf("after machine trust, exec = %+v", command)
 	}
 }
 
 func TestClusterInfoKeepsTheMachinesStageRemedyForAnInstalledMachine(t *testing.T) {
 	machines := []api.Object{sshMachine("ceph-01", "192.0.2.11", "", true)}
-	commands, reads := stretchSessions(t, machines, &recordsFake{data: trustRecord(t, "ceph-01", "192.0.2.11", 22)})
+	commands, reads := stretchSessions(t, machines, &recordsFake{data: trustRecord(t, "ceph-01", "192.0.2.11", 22)}, "ceph-01")
 	command := commands[inspection.CommandExec]
 	if command.Status != inspection.StatusUnavailable || !strings.Contains(command.Reason, "bootwright apply --context lab --stage machines") ||
 		strings.Contains(command.Reason, "machine trust") {

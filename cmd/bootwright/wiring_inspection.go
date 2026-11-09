@@ -38,7 +38,7 @@ type trustRecords interface {
 
 func wireInspection(state inventory.EffectiveState, reconciler lifecycle.Service, binder *custody.Service, selection contexts.SelectionStore, records trustRecords) inspection.Service {
 	return inspection.New(effectiveGraph{state: state}, cephInspection{reconciler: reconciler}, installProofs{reconciler: reconciler},
-		hostKeyProofs{keys: machineHostKeys{reconciler: reconciler}, records: records}, currentSelection(selection), inspectionCustody{reader: producedReader{binder: binder}}).WithMembers(clusterMembers())
+		hostKeyProofs{keys: machineHostKeys{reconciler: reconciler}, records: records}, currentSelection(selection), inspectionCustody{reader: producedReader{binder: binder}}).WithMembers(clusterMembers()).WithAdministrator(clusterAdministrator)
 }
 
 type producedEntries interface {
@@ -138,6 +138,8 @@ func (c cephInspection) Resources(ctx context.Context, contextName string, catal
 	}
 	return rows, nil
 }
+
+func clusterAdministrator(cluster api.Object) string { return ceph.ClusterAdministration(cluster).Node }
 
 func (cephInspection) ObjectUserGateway(user api.Object) string { return ceph.ObjectUserGateway(user) }
 

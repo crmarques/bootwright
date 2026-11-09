@@ -14,8 +14,9 @@ func severalCatalog() api.Catalog {
 	return api.NewCatalog([]api.Object{
 		storageCluster("beta", "managed", node("b2", "b2.lab.test", "machine-b2"), node("b1", "b1.lab.test", "machine-b1"), node("shared", "s.beta.test", "machine-bs")),
 		storageCluster("alpha", "managed", node("a2", "a2.lab.test", "machine-a2"), node("a1", "a1.lab.test", "machine-a1"), node("shared", "s.alpha.test", "machine-as")),
-		storageCluster("gamma", "managed", node("g1", "g1.lab.test", "machine-a1")),
+		storageCluster("gamma", "managed", node("g1", "g1.lab.test", "machine-a2")),
 		storageCluster("empty", "managed"),
+		storageClusterAdministeredBy("noadmin", "managed", "", node("n1", "n1.lab.test", "machine-n1")),
 		storageCluster("dup", "managed", node("d1", "same.lab.test", "machine-d1"), node("d2", "same.lab.test", "machine-d2")),
 		storageCluster("outside", "external"),
 		storageCluster("outside2", "external"),
@@ -26,7 +27,7 @@ func severalCatalog() api.Catalog {
 func execSeveral(t *testing.T, names, nodes []string) (*recordingSessions, error) {
 	t.Helper()
 	sessions := &recordingSessions{}
-	service := New(&fixedGraph{catalog: severalCatalog()}, sessions, nil).WithMembers(storageMembers)
+	service := New(&fixedGraph{catalog: severalCatalog()}, sessions, nil).WithMembers(storageMembers).WithAdministrator(administrator)
 	_, err := service.ClusterExec(context.Background(), ClusterExecRequest{ContextName: "lab", Names: names, Nodes: nodes, Command: []string{"uptime"}})
 	return sessions, err
 }
@@ -37,12 +38,12 @@ func TestClusterExecHandsEveryResolvedMachineToOneSessionCall(t *testing.T) {
 		names, nodes []string
 		want         []string
 	}{
-		{name: "several clusters run on their first nodes", names: []string{"beta", "alpha"}, want: []string{"machine-a1", "machine-b1"}},
+		{name: "several clusters run on their administrator nodes", names: []string{"beta", "alpha"}, want: []string{"machine-a2", "machine-b2"}},
 		{name: "one cluster, several nodes by name and FQDN", names: []string{"alpha"}, nodes: []string{"a2.lab.test", "a1"}, want: []string{"machine-a1", "machine-a2"}},
 		{name: "several clusters split the node members they declare", names: []string{"alpha", "beta"}, nodes: []string{"a1", "b1", "b2"}, want: []string{"machine-a1", "machine-b1", "machine-b2"}},
 		{name: "a node name two clusters declare runs in both", names: []string{"alpha", "beta"}, nodes: []string{"shared"}, want: []string{"machine-as", "machine-bs"}},
-		{name: "a Machine two nodes share runs once", names: []string{"gamma", "alpha"}, want: []string{"machine-a1"}},
-		{name: "a Machine two selected nodes share runs once", names: []string{"gamma", "alpha"}, nodes: []string{"g1", "a1"}, want: []string{"machine-a1"}},
+		{name: "a Machine two administrator nodes share runs once", names: []string{"gamma", "alpha"}, want: []string{"machine-a2"}},
+		{name: "a Machine two selected nodes share runs once", names: []string{"gamma", "alpha"}, nodes: []string{"g1", "a2"}, want: []string{"machine-a2"}},
 		{name: "names and nodes are trimmed and deduplicated", names: []string{" alpha ", "alpha", ""}, nodes: []string{"a2", " a2", ""}, want: []string{"machine-a2"}},
 		{name: "one cluster and one node is today's session", names: []string{"beta"}, nodes: []string{"b2"}, want: []string{"machine-b2"}},
 	}
@@ -91,8 +92,10 @@ func TestClusterExecRefusesOnceNamingEveryOffender(t *testing.T) {
 			contains: []string{"declares a node named nope"}},
 		{name: "a shared FQDN selects none", names: []string{"alpha", "dup"}, nodes: []string{"same.lab.test"}, code: "access.target",
 			contains: []string{"FQDN same.lab.test names several nodes of CephCluster dup"}},
-		{name: "a cluster with no node and no selector", names: []string{"alpha", "empty"}, code: "access.target",
+		{name: "a cluster with no node and no selector", names: []string{"empty", "alpha"}, code: "access.target",
 			contains: []string{"CephCluster empty declares no node"}},
+		{name: "a cluster with no administrator node and no selector", names: []string{"noadmin", "alpha"}, code: "access.target",
+			contains: []string{"CephCluster noadmin has no administrator node to open without --node"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -142,7 +145,7 @@ func TestClusterExecSingleRefusalsKeepTheirMessages(t *testing.T) {
 
 func TestClusterRshStaysOneSessionOnTheSelectedNode(t *testing.T) {
 	sessions := &recordingSessions{}
-	service := New(&fixedGraph{catalog: severalCatalog()}, sessions, nil).WithMembers(storageMembers)
+	service := New(&fixedGraph{catalog: severalCatalog()}, sessions, nil).WithMembers(storageMembers).WithAdministrator(administrator)
 	if _, err := service.ClusterRsh(context.Background(), ClusterRshRequest{ContextName: "lab", Name: "beta", Node: "b2"}); err != nil {
 		t.Fatal(err)
 	}

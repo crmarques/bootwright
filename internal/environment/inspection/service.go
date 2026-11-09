@@ -3,6 +3,7 @@ package inspection
 import (
 	"context"
 	"slices"
+	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -20,10 +21,17 @@ type Service struct {
 	selection CurrentSelection
 	custody   Custody
 	members   func(api.Object) (environment.Membership, bool)
+
+	administrator func(api.Object) string
 }
 
 func New(graph Graph, storage StorageEvidence, installs InstallEvidence, keys HostKeys, selection CurrentSelection, custody Custody) Service {
 	return Service{graph: graph, storage: storage, installs: installs, keys: keys, selection: selection, custody: custody}
+}
+
+func (s Service) WithAdministrator(administrator func(api.Object) string) Service {
+	s.administrator = administrator
+	return s
 }
 
 func (s Service) WithMembers(members func(api.Object) (environment.Membership, bool)) Service {
@@ -327,8 +335,16 @@ func (s Service) sessionAccess(ctx context.Context, selected string, catalog api
 	if len(nodes) == 0 {
 		return AccessCommand{Status: StatusUnavailable, Reason: "the " + string(cluster.Kind()) + " " + cluster.Name() + " declares no node to open a session on"}, nil
 	}
-	slices.SortStableFunc(nodes, func(a, b environment.Member) int { return strings.Compare(a.Name, b.Name) })
-	node, host := nodes[0].Name, nodes[0].Machine
+	var administrator string
+	if s.administrator != nil {
+		administrator = s.administrator(cluster)
+	}
+	index := slices.IndexFunc(nodes, func(n environment.Member) bool { return administrator != "" && n.Name == administrator })
+	if index < 0 {
+		return AccessCommand{Status: StatusUnavailable, Reason: "the " + string(cluster.Kind()) + " " + cluster.Name() + " has no administrator node to open a session on: its bootstrap node " +
+			strconv.Quote(administrator) + " is not one of its declared nodes"}, nil
+	}
+	node, host := nodes[index].Name, nodes[index].Machine
 	object, declared := catalog.Find(api.Machine, host)
 	proved, err := s.keys.HostKeyProved(ctx, selected, host, object)
 	if err != nil {

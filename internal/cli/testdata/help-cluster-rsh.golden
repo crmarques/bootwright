@@ -5,15 +5,16 @@
       before any credential is offered; an unproved key is confirmed interactively or refused.
       The exit status is the client's. The session opens on the Machine behind one node of a
       managed CephCluster: --node selects the node by name, then by FQDN, and defaults to the
-      first node in name order. External CephClusters are inapplicable, and sessions on
-      OpenShiftClusters are not yet available.
+      administrator node that cluster info names. External CephClusters are inapplicable, and
+      sessions on OpenShiftClusters are not yet available.
 
   Usage
     bootwright cluster rsh [flags]
 
   Command flags
       --name  Select the exact object name (required)
-      --node  Select a declared node by name, then FQDN (default: the first node in name order)
+      --node  Select a declared node by name, then FQDN (default: the cluster's administrator
+              node)
 
   Common flags
       --ascii       Use ASCII status markers

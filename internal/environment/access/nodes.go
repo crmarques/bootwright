@@ -2,6 +2,7 @@ package access
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -71,15 +72,24 @@ func matchNode(nodes []environment.Member, selector string) (environment.Member,
 	return environment.Member{}, nodeShared
 }
 
-func firstNode(cluster api.Object, contextName string, nodesOf roster) (environment.Member, error) {
+func administratorNode(cluster api.Object, contextName string, nodesOf roster, administrator func(api.Object) string) (environment.Member, error) {
 	nodes := nodesOf.sorted(cluster)
 	if len(nodes) == 0 {
 		return environment.Member{}, failure("access.target", string(cluster.Kind())+" "+cluster.Name()+" declares no node", nodeRemedy(cluster, contextName, nodes))
 	}
-	return nodes[0], nil
+	var name string
+	if administrator != nil {
+		name = administrator(cluster)
+	}
+	if index := slices.Index(nodeNames(nodes), name); name != "" && index >= 0 {
+		return nodes[index], nil
+	}
+	return environment.Member{}, failure("access.target",
+		string(cluster.Kind())+" "+cluster.Name()+" has no administrator node to open without --node: its bootstrap node "+strconv.Quote(name)+" is not one of its declared nodes",
+		nodeRemedy(cluster, contextName, nodes))
 }
 
-func selectMachines(clusters []api.Object, contextName string, selectors []string, nodesOf roster) ([]string, error) {
+func selectMachines(clusters []api.Object, contextName string, selectors []string, nodesOf roster, administrator func(api.Object) string) ([]string, error) {
 	var machines []string
 	add := func(node environment.Member) {
 		if ref := node.Machine; !slices.Contains(machines, ref) {
@@ -88,7 +98,7 @@ func selectMachines(clusters []api.Object, contextName string, selectors []strin
 	}
 	if len(selectors) == 0 {
 		for _, cluster := range clusters {
-			node, err := firstNode(cluster, contextName, nodesOf)
+			node, err := administratorNode(cluster, contextName, nodesOf, administrator)
 			if err != nil {
 				return nil, err
 			}

@@ -1295,9 +1295,10 @@ result. `cluster rsh` accepts no command tail.
 `--node` resolves only within the cluster's declared node roster,
 `CephCluster.spec.topology.nodes`. Canonical node order is ascending
 bytewise order of node `name`, independent of declaration or map order.
-Omission selects the first node in that order. An explicitly empty value is a
-usage error under the scalar input rules. A supplied value selects the node
-whose `name` it equals exactly, and failing that the node whose effective FQDN,
+Omission selects the administrator node, the `spec.cephadm.bootstrap.nodeRef`
+`cluster info` reports, not the first in canonical order, which may be a MON-only
+tiebreaker without the administrator keyring. An explicitly empty value is a
+usage error under the scalar input rules. A supplied value selects the node whose `name` it equals exactly, and failing that the node whose effective FQDN,
 including an authored override, it equals exactly. There is no further tier: a
 role is not a selector, because topology nodes carry no role. A node name wins
 over a FQDN that spells it. Node selection changes no desired state, canonical
@@ -1311,7 +1312,7 @@ The checks run in this order, each before the next, and every refusal exits
 | No selected OpenShiftCluster or CephCluster has the name, including one the cluster lists exclude | `access.target`, naming the context and the name | name a cluster the context selects; `bootwright cluster info --context <context>` lists them |
 | The name is an external CephCluster, which declares no node roster | `cluster.not-applicable`, naming the command, the cluster, its kind and the applicable target, a managed CephCluster | `bootwright cluster info --context <context>` lists the clusters the context selects and their kinds |
 | The name is an OpenShiftCluster | `access.unavailable`, naming the cluster and saying sessions are not available for its kind | none; the cluster is reached through `cluster kubeconfig` |
-| `--node` matches no node, or its FQDN match is shared by several nodes | `access.target`, naming the requested selector and the cluster | choose one declared node name; `bootwright cluster info --context <context> --name <cluster>` lists the nodes |
+| `--node` matches no node, or its FQDN match is shared by several nodes, or is omitted and no declared node is the administrator node | `access.target`, naming the requested selector, or the missing administrator node, and the cluster | choose one declared node name; `bootwright cluster info --context <context> --name <cluster>` lists the nodes |
 
 The Machine behind the selected node then resolves as a `machine rsh` or
 `machine exec` target does, and refuses as that section states. Every refusal
@@ -1319,20 +1320,16 @@ before the session opens reads no credential bytes, and the payload tail of
 `cluster exec` never selects the node or retargets the session. Help describes
 a session, not a descriptor.
 
-Sessions on OpenShiftClusters are
-[deferred](deferred/cli-access-and-rendering.md#openshiftcluster-access-handoffs-and-sessions)
-to the parked item [B101](milestones/backlog.md#b101).
-
 #### Several clusters and nodes
 
 `cluster exec` takes a comma-separated `--name` and a comma-separated `--node`
 under the [list rules](#parsing-and-input-conventions); `cluster rsh` names one
 cluster and at most one node. One cluster and one node is the session above,
 unchanged. Otherwise each listed cluster runs the command on the Machine behind
-its first node in canonical order, or, with `--node`, on the Machine behind
+its administrator node, or, with `--node`, on the Machine behind
 every `--node` member it declares, each member matched in each listed cluster by
 exact node `name` and then by exact effective FQDN as above. A node name two
-listed clusters both declare selects a node in each.
+listed clusters declare selects a node in each.
 
 Every resolved node's `machineRef` joins one list, deduplicated, and that list
 is run as [`machine exec`](#machine-ssh-sessions) runs it. A list of one
@@ -1340,7 +1337,7 @@ Machine, which two nodes or clusters sharing that Machine also yield, is the
 single session above. Several run as `machine exec` runs several Machines: the
 sessions are concurrent under the same bound, take no standard input and never prompt, and the
 prefix of each output line is the Machine name, not the cluster or the node.
-Two nodes that share a Machine run it once. The invocation's status is the
+The invocation's status is the
 highest status any session returned, and a refusal before a session opens exits
 `255`.
 
@@ -1357,7 +1354,7 @@ below applies across every listed cluster before the next one runs:
 
 A FQDN shared by several nodes of one cluster refuses as above, for the first
 cluster and member in canonical order, after the cluster checks and before the
-two node rows. Without `--node`, a listed cluster that declares no node refuses
+two node rows. Without `--node`, a listed cluster with no administrator node refuses
 `access.target` as above. Each Machine then resolves, and refuses, as the
 [`machine exec`](#machine-ssh-sessions) section states for one or for several,
 so among several Machines one whose identity is a password refuses the whole

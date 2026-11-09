@@ -51,15 +51,36 @@ func node(name, fqdn, machineRef string) api.Value {
 }
 
 func storageCluster(name, management string, nodes ...api.Value) api.Object {
+	administrator := ""
+	if len(nodes) > 0 {
+		administrator = nodes[0].Get("name").Text()
+	}
+	return storageClusterAdministeredBy(name, management, administrator, nodes...)
+}
+
+func storageClusterAdministeredBy(name, management, administrator string, nodes ...api.Value) api.Object {
 	return api.NewObject(api.CephCluster, name, api.Value{}, api.MapValue(
 		field("management", text(management)),
+		field("cephadm", api.MapValue(field("bootstrap", api.MapValue(field("nodeRef", text(administrator)))))),
 		field("topology", api.MapValue(field("nodes", api.ListValue(nodes...)))),
 	))
 }
 
+func administrator(cluster api.Object) string {
+	return cluster.Spec().Get("cephadm", "bootstrap", "nodeRef").Text()
+}
+
 func sessionCatalog(nodes ...api.Value) api.Catalog {
+	return sessionCatalogAdministeredBy("", nodes...)
+}
+
+func sessionCatalogAdministeredBy(administrator string, nodes ...api.Value) api.Catalog {
+	ceph := storageCluster("ceph", "managed", nodes...)
+	if administrator != "" {
+		ceph = storageClusterAdministeredBy("ceph", "managed", administrator, nodes...)
+	}
 	return api.NewCatalog([]api.Object{
-		storageCluster("ceph", "managed", nodes...),
+		ceph,
 		storageCluster("outside", "external"),
 		api.NewObject(api.OpenShiftCluster, "ocp", api.Value{}, api.MapValue(field("type", text("openshift")))),
 	})
@@ -78,7 +99,7 @@ func TestClusterSessionsOpenTheSelectedNodesMachine(t *testing.T) {
 		name, node, want string
 		nodes            []api.Value
 	}{
-		{name: "default is the first node in name order", want: "machine-a", nodes: labNodes()},
+		{name: "default is the administrator node, not the first in name order", want: "machine-c", nodes: labNodes()},
 		{name: "exact node name", node: "rhel-02", want: "machine-b", nodes: labNodes()},
 		{name: "FQDN", node: "c.lab.test", want: "machine-c", nodes: labNodes()},
 		{name: "a node name wins over a FQDN that spells it", node: "rhel-02", want: "machine-b",
@@ -87,7 +108,7 @@ func TestClusterSessionsOpenTheSelectedNodesMachine(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			graph, sessions := &fixedGraph{catalog: sessionCatalog(tt.nodes...)}, &recordingSessions{}
-			service := New(graph, sessions, func(context.Context) (string, error) { return "lab", nil }).WithMembers(storageMembers)
+			service := New(graph, sessions, func(context.Context) (string, error) { return "lab", nil }).WithMembers(storageMembers).WithAdministrator(administrator)
 			result, err := service.ClusterExec(context.Background(), ClusterExecRequest{Names: []string{"ceph"}, Nodes: []string{tt.node}, Command: []string{"hostname", "--node", "rhel-03"}})
 			if err != nil {
 				t.Fatal(err)
@@ -129,7 +150,7 @@ func TestClusterSessionRefusalsOpenNothing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			sessions := &recordingSessions{}
-			service := New(&fixedGraph{catalog: sessionCatalog(tt.nodes...)}, sessions, nil).WithMembers(storageMembers)
+			service := New(&fixedGraph{catalog: sessionCatalog(tt.nodes...)}, sessions, nil).WithMembers(storageMembers).WithAdministrator(administrator)
 			_, err := service.ClusterExec(context.Background(), ClusterExecRequest{ContextName: "lab", Names: []string{tt.cluster}, Nodes: []string{tt.node}, Command: []string{"true"}})
 			if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != tt.code {
 				t.Fatalf("exec refusal = %v, want %s", err, tt.code)
@@ -145,22 +166,52 @@ func TestClusterSessionRefusalsOpenNothing(t *testing.T) {
 	}
 }
 
-// A stretch cluster's provided tiebreaker sorts first, so it is the default
-// node; a data node named by --node still opens its own Machine.
-func TestClusterExecReachesADataNodeOfAStretchClusterWithAProvidedTiebreaker(t *testing.T) {
+// A stretch cluster's provided tiebreaker sorts first, but it holds no
+// administrator keyring: without --node the session opens the administrator
+// node, and a node named by --node, the tiebreaker included, opens its own Machine.
+func TestClusterSessionsOfAStretchClusterWithAProvidedTiebreaker(t *testing.T) {
 	nodes := []api.Value{
 		node("ceph-02", "ceph-02.lab.test", "ceph-02"),
 		node("arbiter-01", "arbiter-01.lab.test", "arbiter-01"),
 		node("ceph-01", "ceph-01.lab.test", "ceph-01"),
 	}
-	for name, want := range map[string]string{"ceph-01": "ceph-01", "ceph-02.lab.test": "ceph-02", "": "arbiter-01"} {
-		graph, sessions := &fixedGraph{catalog: sessionCatalog(nodes...)}, &recordingSessions{}
-		service := New(graph, sessions, func(context.Context) (string, error) { return "lab", nil }).WithMembers(storageMembers)
+	for name, want := range map[string]string{"": "ceph-01", "ceph-02.lab.test": "ceph-02", "arbiter-01": "arbiter-01", "arbiter-01.lab.test": "arbiter-01"} {
+		graph, sessions := &fixedGraph{catalog: sessionCatalogAdministeredBy("ceph-01", nodes...)}, &recordingSessions{}
+		service := New(graph, sessions, func(context.Context) (string, error) { return "lab", nil }).WithMembers(storageMembers).WithAdministrator(administrator)
 		if _, err := service.ClusterExec(context.Background(), ClusterExecRequest{Names: []string{"ceph"}, Nodes: []string{name}, Command: []string{"ceph", "status"}}); err != nil {
-			t.Fatalf("node %q: %v", name, err)
+			t.Fatalf("exec node %q: %v", name, err)
 		}
-		if len(sessions.opened) != 1 || !slices.Equal(sessions.opened[0].machines, []string{want}) {
+		if _, err := service.ClusterRsh(context.Background(), ClusterRshRequest{Name: "ceph", Node: name}); err != nil {
+			t.Fatalf("rsh node %q: %v", name, err)
+		}
+		if len(sessions.opened) != 2 || !slices.Equal(sessions.opened[0].machines, []string{want}) || sessions.opened[1].machine != want {
 			t.Fatalf("node %q opened %+v, want %s", name, sessions.opened, want)
 		}
+	}
+}
+
+func TestClusterSessionWithoutNodeRefusesWhenNoNodeCanBeTheAdministrator(t *testing.T) {
+	tests := map[string]string{"no bootstrap node": "", "a bootstrap node the roster does not declare": "ceph-09"}
+	for name, bootstrap := range tests {
+		t.Run(name, func(t *testing.T) {
+			catalog := api.NewCatalog([]api.Object{storageClusterAdministeredBy("ceph", "managed", bootstrap,
+				node("arbiter-01", "arbiter-01.lab.test", "arbiter-01"), node("ceph-01", "ceph-01.lab.test", "ceph-01"))})
+			sessions := &recordingSessions{}
+			service := New(&fixedGraph{catalog: catalog}, sessions, nil).WithMembers(storageMembers).WithAdministrator(administrator)
+			_, err := service.ClusterExec(context.Background(), ClusterExecRequest{ContextName: "lab", Names: []string{"ceph"}, Command: []string{"true"}})
+			found := diagnostics.Of(err)
+			if len(found) != 1 || found[0].Code != "access.target" || !strings.Contains(found[0].Message, "has no administrator node") || !strings.Contains(found[0].Remediation, "arbiter-01, ceph-01") {
+				t.Fatalf("exec refusal = %v", err)
+			}
+			if _, err = service.ClusterRsh(context.Background(), ClusterRshRequest{ContextName: "lab", Name: "ceph"}); len(diagnostics.Of(err)) != 1 {
+				t.Fatalf("rsh refusal = %v", err)
+			}
+			if _, err = service.ClusterRsh(context.Background(), ClusterRshRequest{ContextName: "lab", Name: "ceph", Node: "arbiter-01"}); err != nil {
+				t.Fatalf("an explicit node opens regardless: %v", err)
+			}
+			if len(sessions.opened) != 1 || sessions.opened[0].machine != "arbiter-01" {
+				t.Fatalf("opened %+v, want only the explicit node's Machine", sessions.opened)
+			}
+		})
 	}
 }

@@ -6,8 +6,8 @@
       The exit status is the client's. Bootwright flags go before the command. Use -- before a
       flag-shaped first payload value to preserve it as data. After the first payload value,
       all remaining tokens belong to the payload. --name takes a comma-separated list, and each
-      cluster runs the command on the Machine behind its first node in name order. --node takes
-      a comma-separated list and selects those nodes, by name then by FQDN, in every listed
+      cluster runs the command on the Machine behind its administrator node. --node takes a
+      comma-separated list and selects those nodes, by name then by FQDN, in every listed
       cluster that declares them. The command runs on every resolved Machine concurrently, at
       most eight at a time, each output line is prefixed by its Machine, and the exit status is
       the highest any client returned. External CephClusters are inapplicable, and sessions on
@@ -19,7 +19,7 @@
   Command flags
       --name  Select comma-separated cluster names (required)
       --node  Select declared nodes by comma-separated name, then FQDN (default: each cluster's
-              first node in name order)
+              administrator node)
 
   Common flags
       --ascii       Use ASCII status markers

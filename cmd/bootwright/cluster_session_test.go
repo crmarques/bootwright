@@ -96,6 +96,18 @@ func withCephNodes(edit func([]api.Value) []api.Value) func(api.Catalog) api.Cat
 	}
 }
 
+func withBootstrapNode(name string) func(api.Catalog) api.Catalog {
+	return func(catalog api.Catalog) api.Catalog {
+		objects := catalog.Objects()
+		for i, object := range objects {
+			if object.Kind() == api.CephCluster && object.Name() == "ceph-lab" {
+				objects[i] = object.WithSpec(object.Spec().WithPath(api.StringValue(name), "cephadm", "bootstrap", "nodeRef"))
+			}
+		}
+		return api.NewCatalog(objects)
+	}
+}
+
 func withFQDN(name, fqdn string) func([]api.Value) []api.Value {
 	return func(nodes []api.Value) []api.Value {
 		for i, node := range nodes {
@@ -115,8 +127,17 @@ func TestClusterSessionsReachTheSelectedCephNode(t *testing.T) {
 		machine string
 		command []string
 	}{
-		{name: "the default node is the first in name order", machine: "rhel-01", command: []string{"true"},
+		{name: "the default node is the administrator node", machine: "rhel-01", command: []string{"true"},
 			args: []string{"cluster", "exec", "--context", "lab", "--name", "ceph-lab", "true"}},
+		{name: "the default node follows the bootstrap node, not the name order", machine: "rhel-03", command: []string{"true"},
+			edit: withBootstrapNode("rhel-03"),
+			args: []string{"cluster", "exec", "--context", "lab", "--name", "ceph-lab", "true"}},
+		{name: "rsh opens the administrator node by default", machine: "rhel-02",
+			edit: withBootstrapNode("rhel-02"),
+			args: []string{"cluster", "rsh", "--context", "lab", "--name", "ceph-lab"}},
+		{name: "an explicit node opens a node other than the administrator", machine: "rhel-01", command: []string{"true"},
+			edit: withBootstrapNode("rhel-03"),
+			args: []string{"cluster", "exec", "--context", "lab", "--name", "ceph-lab", "--node", "rhel-01", "true"}},
 		{name: "a node name selects its node", machine: "rhel-02", command: []string{"true"},
 			args: []string{"cluster", "exec", "--context", "lab", "--name", "ceph-lab", "--node", "rhel-02", "true"}},
 		{name: "a FQDN selects its node", machine: "rhel-03", command: []string{"true"},
@@ -199,6 +220,7 @@ func TestClusterExecOnSeveralNodesRunsEachMachineOnceTogether(t *testing.T) {
 		first := requireObject(t, catalog, api.CephCluster, "ceph-lab")
 		nodes := first.Spec().Get("topology", "nodes").Items()
 		spec := api.MapValue(api.FieldValue{Name: "management", Value: api.StringValue("managed")},
+			api.FieldValue{Name: "cephadm", Value: first.Spec().Get("cephadm")},
 			api.FieldValue{Name: "topology", Value: api.MapValue(api.FieldValue{Name: "nodes", Value: api.ListValue(nodes[:1]...)})})
 		return api.NewCatalog(append(catalog.Objects(), api.NewObject(api.CephCluster, "ceph-twin", api.Value{}, spec)))
 	}
