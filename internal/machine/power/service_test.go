@@ -64,6 +64,7 @@ func (b *boundary) WithRuntime(ctx context.Context, request lifecycle.RuntimeReq
 		Context: identity, Material: map[string]secrets.Material{}, Output: &retained{},
 		LogLocation:       "/var/log/bootwright/contexts/lab/runs/run-000001.output",
 		Logs:              []string{"contexts/lab/runs/run-000001.output"},
+		Run:               "run-000001",
 		OutputRemediation: lentRemediation,
 	})
 }
@@ -84,12 +85,14 @@ func (r *retained) Write(value []byte) (int, error) {
 // log location as "logs" and each progress event as "progress".
 type announced struct {
 	locations []string
+	named     []lifecycle.LogLocation
 	events    []lifecycle.ProgressEvent
 	order     []string
 }
 
-func (a *announced) ReportLogLocation(_ context.Context, location string) {
-	a.locations = append(a.locations, location)
+func (a *announced) ReportLogLocation(_ context.Context, location lifecycle.LogLocation) {
+	a.locations = append(a.locations, location.Path)
+	a.named = append(a.named, location)
 	a.order = append(a.order, "logs")
 }
 
@@ -279,8 +282,11 @@ func TestAPowerRunRetainsItsAdapterOutputAndNamesWhereFirst(t *testing.T) {
 	if runner.seen.Output == nil {
 		t.Fatal("the adapter was run with nothing to retain its output in")
 	}
-	if row := result.Machines[0]; row.LogLocation != location || !slices.Equal(row.Logs, []string{"contexts/lab/runs/run-000001.output"}) {
-		t.Fatalf("result logs = %q %+v", row.LogLocation, row.Logs)
+	if row := result.Machines[0]; row.LogLocation != location || !slices.Equal(row.Logs, []string{"contexts/lab/runs/run-000001.output"}) || row.Run != "run-000001" {
+		t.Fatalf("result logs = %q %+v run %q", row.LogLocation, row.Logs, row.Run)
+	}
+	if want := (lifecycle.LogLocation{Path: location, Context: "lab", Run: "run-000001"}); len(reporter.named) != 1 || reporter.named[0] != want {
+		t.Fatalf("announced %+v, want %+v", reporter.named, want)
 	}
 	refusing := &adapter{err: errors.New("the adapter operation did not complete")}
 	reporter = &announced{}

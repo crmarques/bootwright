@@ -50,6 +50,7 @@ type Options struct {
 	Setup   SetupReader
 	Lock    RuntimeLock
 	Rebuild RuntimeRebuilder
+	Paths   ContextPaths
 }
 
 type Service struct {

@@ -84,11 +84,12 @@ type Report struct {
 	// never change Outcome.
 	Warnings []diagnostics.Diagnostic
 	Table    *ReceiptTable
-	// LogLocation names on this host the output file of the setup run that
-	// kept what this invocation's controller Ansible printed. It is empty when no
-	// Ansible started or its output could not be retained, and never changes
-	// Outcome.
+	// LogLocation names the output file of the setup run that kept what the
+	// controller Ansible printed, empty if none; it never changes Outcome.
 	LogLocation string
+	// SetupRun is that run's name, setup-NNNNNN, by the number its output file
+	// carries, which a resumed setup's ID does not share.
+	SetupRun string
 }
 
 // PendingScope names the narrowest scope that has an unmet check, so a result

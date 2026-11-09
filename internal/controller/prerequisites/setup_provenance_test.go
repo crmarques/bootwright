@@ -112,3 +112,40 @@ func TestUnavailableSetupIdentityRefusesBeforePackageOrStateEffects(t *testing.T
 		t.Fatal("identity failure reached effects")
 	}
 }
+
+type namedRuns struct{ located []LogLocation }
+
+func (n *namedRuns) ReportProgress(context.Context, ProgressEvent) {}
+func (n *namedRuns) ReportLogLocation(_ context.Context, location LogLocation) {
+	n.located = append(n.located, location)
+}
+
+// A resumed setup keeps the ID of the setup it resumes, but its output file
+// carries the number the run area allocated, so the run an operator reads back
+// is named by the file and not by the ID, in the report and in the progress
+// that precedes the work.
+func TestSetupReportsItsRunID(t *testing.T) {
+	f := newSetupFixture(t)
+	f.packages.present["podman"] = false
+	named := &namedRuns{}
+	f.service.options.Progress = named
+	f.store.runID, f.store.runNumber = "setup-"+strings.Repeat("b", 32), 57
+	report, err := f.service.Setup(context.Background(), SetupRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const path = "/var/log/bootwright/host/setup-000057.output"
+	if report.LogLocation != path || report.SetupRun != "setup-000057" {
+		t.Fatalf("report names %q and %q, want %q and setup-000057", report.LogLocation, report.SetupRun, path)
+	}
+	if want := (LogLocation{Path: path, Setup: "setup-000057"}); len(named.located) != 1 || named.located[0] != want {
+		t.Fatalf("progress named %+v, want %+v", named.located, want)
+	}
+	f = newSetupFixture(t)
+	f.packages.present["podman"] = false
+	f.store.runError = errors.New("no run output")
+	report, err = f.service.Setup(context.Background(), SetupRequest{})
+	if err != nil || report.SetupRun != "" || report.LogLocation != "" {
+		t.Fatalf("a setup that retained nothing names %q (%v)", report.SetupRun, err)
+	}
+}

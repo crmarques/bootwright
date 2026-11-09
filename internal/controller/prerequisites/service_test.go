@@ -3,6 +3,7 @@ package prerequisites
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -262,6 +263,7 @@ type memorySetup struct {
 	runError      error
 	runCloseError error
 	runID         string
+	runNumber     int
 	owner         *setupFixture
 	view          SetupView
 	refusal       error
@@ -298,11 +300,16 @@ type memoryStage string
 
 func (s memoryStage) Path() string { return string(s) }
 
-type memoryRun struct{ closeError error }
+type memoryRun struct {
+	closeError error
+	number     int
+}
 
 func (memoryRun) Write(data []byte) (int, error) { return len(data), nil }
-func (memoryRun) Location() string               { return "/var/lib/bootwright/host/setup/runs/setup-000043" }
 func (r memoryRun) Close() error                 { return r.closeError }
+func (r memoryRun) Location() string {
+	return fmt.Sprintf("/var/log/bootwright/host/setup-%06d.output", max(r.number, 43))
+}
 
 func (t memoryTransaction) View() SetupView { return t.m.view }
 
@@ -335,7 +342,7 @@ func (t memoryTransaction) OpenRun(context.Context) (string, SetupRun, error) {
 		return "", nil, t.m.runError
 	}
 	if t.m.runID != "" {
-		return t.m.runID, memoryRun{closeError: t.m.runCloseError}, nil
+		return t.m.runID, memoryRun{closeError: t.m.runCloseError, number: t.m.runNumber}, nil
 	}
 	return "setup-000043", memoryRun{closeError: t.m.runCloseError}, nil
 }

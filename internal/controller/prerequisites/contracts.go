@@ -228,7 +228,12 @@ type ProgressReporter interface {
 	ReportProgress(context.Context, ProgressEvent)
 	// ReportLogLocation names where a setup run keeps what its Ansible prints,
 	// before that Ansible starts, so the run can be followed while it happens.
-	ReportLogLocation(context.Context, string)
+	ReportLogLocation(context.Context, LogLocation)
+}
+
+type LogLocation struct {
+	Path  string
+	Setup string
 }
 
 type ListenerChecks func(context.Context, api.Catalog, string) ([]Check, error)

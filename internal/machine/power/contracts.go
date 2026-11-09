@@ -86,7 +86,7 @@ type ContextConfirmer interface {
 // carries the run as one progress step whose sub-steps are the adapter's
 // groups, so a stop that waits on a guest is never silent.
 type Reporter interface {
-	ReportLogLocation(context.Context, string)
+	ReportLogLocation(context.Context, lifecycle.LogLocation)
 	ReportProgress(context.Context, lifecycle.ProgressEvent)
 }
 

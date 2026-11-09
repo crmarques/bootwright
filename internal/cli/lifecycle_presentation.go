@@ -186,7 +186,7 @@ func selectedProgressColumns(out io.Writer, columns func() int) func() int {
 type quietInvocationProgress struct{ presenter *LifecycleProgressPresenter }
 
 func (quietInvocationProgress) ReportProgress(context.Context, lifecycle.ProgressEvent) {}
-func (p quietInvocationProgress) ReportLogLocation(ctx context.Context, location string) {
+func (p quietInvocationProgress) ReportLogLocation(ctx context.Context, location lifecycle.LogLocation) {
 	p.presenter.ReportLogLocation(ctx, location)
 }
 func (p quietInvocationProgress) Finish() { p.presenter.Finish() }

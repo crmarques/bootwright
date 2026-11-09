@@ -535,7 +535,7 @@ func TestControllerSetupShowsThePreviewAndNamesItsRunGolden(t *testing.T) {
 		if err := presenter.PresentControllerPlan(ctx, *report); err != nil {
 			t.Fatal(err)
 		}
-		presenter.ReportLogLocation(ctx, location)
+		presenter.ReportLogLocation(ctx, prerequisites.LogLocation{Path: location, Setup: "setup-000003"})
 		for _, event := range []prerequisites.ProgressEvent{
 			{Action: "native-packages", Status: "running", Step: 1, Steps: 2}, {Action: "native-packages", Status: "changed", Step: 1, Steps: 2},
 			{Action: "receipt", Status: "running", Step: 2, Steps: 2}, {Action: "receipt", Status: "changed", Step: 2, Steps: 2},

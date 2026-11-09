@@ -193,6 +193,9 @@ func TestWithRuntimeRetainsWhatItsAdapterPrinted(t *testing.T) {
 			if runtime.LogLocation != "/var/log/bootwright/contexts/"+testContextName+"/runs/"+file {
 				t.Fatalf("named location %q is not the run's file", runtime.LogLocation)
 			}
+			if runtime.Run != "run-000001" {
+				t.Fatalf("the run is named %q, want run-000001", runtime.Run)
+			}
 			if runtime.OutputRemediation != "read the adapter output retained in this run's Logs file" {
 				t.Fatalf("an adapter failure is pointed at %q", runtime.OutputRemediation)
 			}

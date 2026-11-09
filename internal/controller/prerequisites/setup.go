@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 )
@@ -190,8 +191,9 @@ func (s Service) apply(ctx context.Context, tx SetupTransaction, current *inspec
 	}
 	defer run.Close()
 	current.report.LogLocation = run.Location()
+	current.report.SetupRun = setupRunName(current.report.LogLocation)
 	if s.options.Progress != nil && ctx.Err() == nil && current.report.LogLocation != "" {
-		s.options.Progress.ReportLogLocation(ctx, current.report.LogLocation)
+		s.options.Progress.ReportLogLocation(ctx, LogLocation{Path: current.report.LogLocation, Setup: current.report.SetupRun})
 	}
 	steps := current.steps()
 	state.Format = SetupStateFormat
@@ -380,6 +382,14 @@ type discardedSetupRun struct{}
 func (discardedSetupRun) Write(data []byte) (int, error) { return len(data), nil }
 func (discardedSetupRun) Close() error                   { return nil }
 func (discardedSetupRun) Location() string               { return "" }
+
+func setupRunName(location string) string {
+	name, found := strings.CutSuffix(path.Base(location), ".output")
+	if !found || !strings.HasPrefix(name, "setup-") {
+		return ""
+	}
+	return name
+}
 
 func setupOutput(ctx context.Context, tx SetupTransaction) (string, SetupRun, error) {
 	id, run, err := tx.OpenRun(ctx)

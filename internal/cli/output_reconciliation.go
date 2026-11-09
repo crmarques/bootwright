@@ -119,11 +119,11 @@ func lifecyclePhaseHeading(phase string) string {
 // ReportLogLocation names where the operation writes, before its first effect.
 // It is a field of its own so it survives the progress rows a terminal redraws
 // over each other, and an operator can follow the work as it happens.
-func (p *LifecycleProgressPresenter) ReportLogLocation(ctx context.Context, location string) {
-	if p == nil || p.progress.out == nil || ctx.Err() != nil || location == "" {
+func (p *LifecycleProgressPresenter) ReportLogLocation(ctx context.Context, location lifecycle.LogLocation) {
+	if p == nil || p.progress.out == nil || ctx.Err() != nil || location.Path == "" {
 		return
 	}
-	p.progress.field(logLocationLabel, location)
+	p.progress.field(logLocationLabel, location.Path)
 }
 
 func lifecycleHeadline(result lifecycle.PlanResult) string {

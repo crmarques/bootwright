@@ -1905,6 +1905,7 @@ type testProgress struct {
 	mutex          sync.Mutex
 	rows           []string
 	location       string
+	named          LogLocation
 	rowsAtLocation int
 }
 
@@ -1921,10 +1922,10 @@ func (p *testProgress) ReportProgress(_ context.Context, event ProgressEvent) {
 	p.rows = append(p.rows, row)
 }
 
-func (p *testProgress) ReportLogLocation(_ context.Context, location string) {
+func (p *testProgress) ReportLogLocation(_ context.Context, location LogLocation) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-	p.location = location
+	p.location, p.named = location.Path, location
 	p.rowsAtLocation = len(p.rows)
 }
 
@@ -4616,7 +4617,7 @@ type progressFunc func(context.Context, ProgressEvent)
 
 func (f progressFunc) ReportProgress(ctx context.Context, event ProgressEvent) { f(ctx, event) }
 
-func (progressFunc) ReportLogLocation(context.Context, string) {}
+func (progressFunc) ReportLogLocation(context.Context, LogLocation) {}
 
 // The log location is named before the first effect runs, because an operator
 // who reads it afterwards cannot follow the work it was written for.

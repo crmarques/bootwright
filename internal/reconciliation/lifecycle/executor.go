@@ -207,7 +207,7 @@ func (s Service) run(ctx context.Context, tx Transaction, decided operationPlan,
 	// is to be followed while the work runs.
 	result.LogLocation = store.LogDirectory(operation.ID)
 	if s.options.Progress != nil && result.LogLocation != "" {
-		s.options.Progress.ReportLogLocation(ctx, result.LogLocation)
+		s.options.Progress.ReportLogLocation(ctx, LogLocation{Path: result.LogLocation, Context: result.Context.Name, Operation: operation.ID})
 	}
 	states, err := store.BlockStates(ctx, operation.ID, plan)
 	if err != nil {

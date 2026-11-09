@@ -294,7 +294,7 @@ func (r *orderRecorder) ReportProgress(_ context.Context, event ProgressEvent) {
 	}
 }
 
-func (r *orderRecorder) ReportLogLocation(context.Context, string) { r.note("register") }
+func (r *orderRecorder) ReportLogLocation(context.Context, LogLocation) { r.note("register") }
 
 // A destroy confirms the plan it presents, and only then takes the proofs that
 // need the exclusive lock or a remote observation: the resolution of every

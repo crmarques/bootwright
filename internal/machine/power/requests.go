@@ -63,11 +63,12 @@ type Result struct {
 	Power    string
 	Previous string
 	Changed  bool
-	// LogLocation and Logs name where this run's adapter output was retained:
-	// the directory on this host, and the file inside the context's own state.
-	// They are troubleshooting material, never evidence of what happened.
+	// LogLocation and Logs name this run's retained adapter output on this host
+	// and in the log root: troubleshooting material, never evidence.
 	LogLocation string
 	Logs        []string
+	// Run is the bounded run's name, such as run-000003; empty if none.
+	Run string
 }
 
 // Results holds a row per admitted Machine, in ascending name order.

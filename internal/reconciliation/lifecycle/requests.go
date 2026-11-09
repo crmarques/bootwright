@@ -16,6 +16,8 @@ type PlanRequest struct {
 
 type StatusRequest struct {
 	ContextName string
+	// Paths asks status to also name where the context keeps its content.
+	Paths bool
 }
 
 type DiffRequest struct {
@@ -374,11 +376,32 @@ type LifecycleSummary struct {
 	Blocks    []BlockResult
 	Logs      []string
 	Lineage   []LineageEntry
+	// Live lists each block the records hold running, in plan order; it is read
+	// from records and the log area alone and proves no process.
+	Live []LiveBlock
 	// Executable is the identity of the build that registered this operation.
 	// A removal is planned from what that build froze, so an operator reads the
 	// remedy for a request this one cannot read before meeting the refusal.
 	Executable   string
 	AnotherBuild bool
+}
+
+// LiveBlock is a running block and its newest attempt's output, named relative
+// to the log root; one not yet written names its file and is not Present.
+type LiveBlock struct {
+	Block      string
+	Attempt    int
+	Resolution int
+	Output     string
+	Present    bool
+	Bytes      int64
+}
+
+// ContextPath is a place a context keeps content, of a Kind such as store.
+type ContextPath struct {
+	Kind    string
+	Path    string
+	Present bool
 }
 
 type StatusResult struct {
@@ -396,6 +419,8 @@ type StatusResult struct {
 	// Contradictions names what the context's records contradict, in the
 	// words a refusal that points at status names each of them.
 	Contradictions []string
+	// Paths is set only when asked: store, logs, hosted, libvirt-images.
+	Paths []ContextPath
 	// LogLocation is the host path of the reported operation's logs, presented
 	// to a human and absent from the structured result.
 	LogLocation string

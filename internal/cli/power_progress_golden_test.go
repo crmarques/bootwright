@@ -23,7 +23,7 @@ func TestPowerStopProgressPastTheHeartbeatGolden(t *testing.T) {
 		return lifecycle.ProgressEvent{Block: "power", Description: "Stop Machine/rhel-01", Group: group, Detail: detail,
 			Status: status, Position: 1, Total: 1}
 	}
-	presenter.ReportLogLocation(ctx, "/var/lib/bootwright/contexts/lab-rhel/state/runs/run-"+strings.Repeat("a", 32))
+	presenter.ReportLogLocation(ctx, lifecycle.LogLocation{Path: "/var/lib/bootwright/contexts/lab-rhel/state/runs/run-" + strings.Repeat("a", 32)})
 	presenter.ReportProgress(ctx, event("", "", "running"))
 	presenter.ReportProgress(ctx, event("read-state", "read the power state", "running"))
 	clock.advance(time.Second)

@@ -214,7 +214,7 @@ func (p *resolutionProgress) ReportProgress(ctx context.Context, event ProgressE
 	})
 }
 
-func (p *resolutionProgress) ReportLogLocation(context.Context, string) {}
+func (p *resolutionProgress) ReportLogLocation(context.Context, LogLocation) {}
 
 // reportResolution settles the resolution proof as one row. It runs before the
 // operation exists, so it belongs to no block and counts against no frozen

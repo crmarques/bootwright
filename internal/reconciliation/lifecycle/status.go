@@ -32,6 +32,11 @@ func (s Service) Status(ctx context.Context, request StatusRequest) (*StatusResu
 		if err != nil {
 			return err
 		}
+		if request.Paths {
+			if result.Paths, err = s.contextPaths(ctx, name); err != nil {
+				return err
+			}
+		}
 		frozen, err = frozenReopenOf(ctx, s.store(view))
 		return err
 	})
@@ -43,6 +48,18 @@ func (s Service) Status(ctx context.Context, request StatusRequest) (*StatusResu
 		s.nameReadiness(ctx, name, result, *desired)
 	}
 	return result, nil
+}
+
+// contextPaths refuses a build wired with no source rather than answer empty.
+func (s Service) contextPaths(ctx context.Context, name string) ([]ContextPath, error) {
+	if s.options.Paths == nil {
+		return nil, failure("runtime.internal", "context paths are not configured", "")
+	}
+	paths, err := s.options.Paths.Paths(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return append([]ContextPath{}, paths...), nil
 }
 
 // ObjectOwnership is what the context's current operation proves about one API
@@ -256,6 +273,9 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, *api.Cat
 	if err != nil {
 		return nil, nil, err
 	}
+	if summary.Live, err = liveBlocks(ctx, store, view.Logs().Reference(), operation.ID, plan, states, attempts); err != nil {
+		return nil, nil, err
+	}
 	result.Lifecycle = summary
 	result.Warnings, result.LogLocation = attemptWarnings(ctx, store, operation.ID, plan, attempts), store.LogDirectory(operation.ID)
 	if result.Secrets.Bindings, err = bindingsHeld(view, operation); err != nil {
@@ -277,7 +297,7 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, *api.Cat
 func (s Service) lifecycleSummary(ctx context.Context, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, states map[string]reconciliation.BlockState, blocks []BlockResult, logs []string) (*LifecycleSummary, error) {
 	summary := &LifecycleSummary{
 		Operation: operation.ID, Verb: string(operation.Verb), State: string(operation.State),
-		Next: nextAction(operation, plan, states), Blocks: blocks, Logs: logs,
+		Next: nextAction(operation, plan, states), Blocks: blocks, Logs: logs, Live: []LiveBlock{},
 		Executable: buildIdentity(operation.Executable), AnotherBuild: s.otherBuild(operation),
 	}
 	if summary.Logs == nil {

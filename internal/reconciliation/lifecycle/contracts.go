@@ -507,6 +507,7 @@ type OperationStore interface {
 	OpenAdapterOutput(context.Context, string) *operationstore.AdapterOutput
 	LogPaths(context.Context, string, reconciliation.Plan) ([]string, error)
 	LogDirectory(string) string
+	LatestOutput(ctx context.Context, id, block string, attempt int) (operationstore.OutputFile, bool, error)
 }
 
 type recordReader interface {
@@ -543,7 +544,21 @@ type ProgressReporter interface {
 	// ReportLogLocation names where this operation is writing, before its first
 	// effect runs, so an operator can follow the work while it happens rather
 	// than read it afterwards.
-	ReportLogLocation(context.Context, string)
+	ReportLogLocation(context.Context, LogLocation)
+}
+
+// LogLocation is where an invocation writes: its host path, its context and
+// either its operation or, for a bounded run, its run name.
+type LogLocation struct {
+	Path      string
+	Context   string
+	Operation string
+	Run       string
+}
+
+// ContextPaths names where a context keeps its content, reading none of it.
+type ContextPaths interface {
+	Paths(ctx context.Context, name string) ([]ContextPath, error)
 }
 
 type Clock interface {

@@ -32,9 +32,9 @@ func NewInvocationProgress(out io.Writer, columns func() int, jsonMode bool) Inv
 
 type silentProgress struct{}
 
-func (silentProgress) ReportProgress(context.Context, lifecycle.ProgressEvent) {}
-func (silentProgress) ReportLogLocation(context.Context, string)               {}
-func (silentProgress) Finish()                                                 {}
+func (silentProgress) ReportProgress(context.Context, lifecycle.ProgressEvent)  {}
+func (silentProgress) ReportLogLocation(context.Context, lifecycle.LogLocation) {}
+func (silentProgress) Finish()                                                  {}
 
 // NewMediaProgress reports a media command's progress through the invocation's
 // progress reporter, so it takes the same output-mode selection: a check

@@ -457,7 +457,7 @@ type interruptAtLocation struct{ cancel context.CancelFunc }
 
 func (interruptAtLocation) ReportProgress(context.Context, ProgressEvent) {}
 
-func (p interruptAtLocation) ReportLogLocation(context.Context, string) { p.cancel() }
+func (p interruptAtLocation) ReportLogLocation(context.Context, LogLocation) { p.cancel() }
 
 // registeredAndInterrupted leaves a registered apply that started nothing
 // running, as an invocation interrupted right after its registration does.

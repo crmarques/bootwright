@@ -138,10 +138,10 @@ type heard struct {
 	events    []lifecycle.ProgressEvent
 }
 
-func (h *heard) ReportLogLocation(_ context.Context, location string) {
+func (h *heard) ReportLogLocation(_ context.Context, location lifecycle.LogLocation) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.locations = append(h.locations, location)
+	h.locations = append(h.locations, location.Path)
 }
 
 func (h *heard) ReportProgress(_ context.Context, event lifecycle.ProgressEvent) {

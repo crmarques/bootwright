@@ -19,7 +19,7 @@ func (r *recordedLifecycleProgress) ReportProgress(_ context.Context, event life
 	r.events = append(r.events, event)
 }
 
-func (*recordedLifecycleProgress) ReportLogLocation(context.Context, string) {}
+func (*recordedLifecycleProgress) ReportLogLocation(context.Context, lifecycle.LogLocation) {}
 
 // A media check reports in the check phase and every other step in the effect
 // phase, carrying its step, label, detail, status and place unchanged; no

@@ -671,7 +671,7 @@ func TestProgressNamesTheLogLocationBeforeItsFirstRow(t *testing.T) {
 	var out bytes.Buffer
 	presenter := NewLifecycleProgressPresenter(&out, nil)
 	ctx := context.Background()
-	presenter.ReportLogLocation(ctx, "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs")
+	presenter.ReportLogLocation(ctx, lifecycle.LogLocation{Path: "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs"})
 	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{
 		Block: "artifact-server-lab", Description: "serve artifacts on lab", Status: "running", Position: 1, Total: 1,
 	})
@@ -705,7 +705,7 @@ func TestQuiescenceChecksSettleAsOneRowBeforeTheEffects(t *testing.T) {
 		Phase: lifecycle.CheckPhase, Block: "quiescence",
 		Description: "prove nothing this removal takes back is still in use", Status: "ok",
 	})
-	presenter.ReportLogLocation(ctx, "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs")
+	presenter.ReportLogLocation(ctx, lifecycle.LogLocation{Path: "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs"})
 	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{
 		Block: "machine-rhel-01", Description: "remove the virtual machine rhel-01", Status: "done", Position: 1, Total: 2,
 	})
@@ -812,7 +812,7 @@ func TestTerminalLogLocationSurvivesTheRedrawnRow(t *testing.T) {
 	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{
 		Block: "one", Description: "serve artifacts", Status: "running", Position: 1, Total: 2,
 	})
-	presenter.ReportLogLocation(ctx, "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs")
+	presenter.ReportLogLocation(ctx, lifecycle.LogLocation{Path: "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs"})
 	rendered := out.String()
 	location := "\n  Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n"
 	if !strings.HasSuffix(rendered, location) {

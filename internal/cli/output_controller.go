@@ -117,11 +117,11 @@ func (p *ControllerPresenter) ReportProgress(ctx context.Context, event prerequi
 
 // ReportLogLocation names the setup run its Ansible is about to write, as its
 // own field so a terminal redrawing the running row never overwrites it.
-func (p *ControllerPresenter) ReportLogLocation(ctx context.Context, location string) {
-	if p == nil || p.progress.out == nil || ctx.Err() != nil || location == "" {
+func (p *ControllerPresenter) ReportLogLocation(ctx context.Context, location prerequisites.LogLocation) {
+	if p == nil || p.progress.out == nil || ctx.Err() != nil || location.Path == "" {
 		return
 	}
-	p.progress.field(logLocationLabel, location)
+	p.progress.field(logLocationLabel, location.Path)
 }
 
 // Finish terminates a row a terminal is still rewriting. The runner calls it

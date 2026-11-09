@@ -130,7 +130,7 @@ func TestLifecycleProgressNeverRetainsLogReference(t *testing.T) {
 	var out bytes.Buffer
 	_, reporter := NewLifecyclePresenters(WithPresentation(&out, PresentationOptions{Progress: "never"}), func() int { return 80 }, false)
 	reporter.ReportProgress(context.Background(), lifecycle.ProgressEvent{Block: "one", Description: "Work", Status: "running"})
-	reporter.ReportLogLocation(context.Background(), "operation/logs")
+	reporter.ReportLogLocation(context.Background(), lifecycle.LogLocation{Path: "operation/logs"})
 	reporter.Finish()
 	if strings.Contains(out.String(), "RUNNING") || !strings.Contains(out.String(), "operation/logs") {
 		t.Fatalf("suppressed progress = %q", out.String())

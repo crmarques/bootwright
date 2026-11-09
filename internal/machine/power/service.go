@@ -290,9 +290,9 @@ func (s Service) execute(ctx context.Context, name string, resolved target, posi
 	references := append(credentialReferences(frozen.Controller), frozen.Placement.SecretReferences()...)
 	var result, retained *Result
 	err = s.runtime.WithRuntime(ctx, lifecycle.RuntimeRequest{ContextName: name, Secrets: references, RetainOutput: true}, func(inner context.Context, runtime lifecycle.Runtime) error {
-		retained = &Result{Machine: frozen.Identity.Object, LogLocation: runtime.LogLocation, Logs: slices.Clone(runtime.Logs)}
+		retained = &Result{Machine: frozen.Identity.Object, LogLocation: runtime.LogLocation, Logs: slices.Clone(runtime.Logs), Run: runtime.Run}
 		if s.reporter != nil && total == 1 {
-			s.reporter.ReportLogLocation(inner, runtime.LogLocation)
+			s.reporter.ReportLogLocation(inner, lifecycle.LogLocation{Path: runtime.LogLocation, Context: name, Run: runtime.Run})
 		}
 		step := powerStep(frozen, position, total)
 		s.progress(inner, step, "running", "")
@@ -305,7 +305,7 @@ func (s Service) execute(ctx context.Context, name string, resolved target, posi
 		result = &Result{
 			Context: name, Machine: frozen.Identity.Object, Verb: frozen.Verb,
 			Power: evidence.Power, Previous: evidence.Previous, Changed: evidence.Changed,
-			LogLocation: runtime.LogLocation, Logs: slices.Clone(runtime.Logs),
+			LogLocation: runtime.LogLocation, Logs: slices.Clone(runtime.Logs), Run: runtime.Run,
 		}
 		return nil
 	})

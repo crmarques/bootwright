@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path"
+	"strings"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
@@ -37,11 +38,13 @@ type Runtime struct {
 	// what the run reports. OutputRemediation is what an adapter failure its
 	// output explains tells an operator to read, for a caller that names the
 	// file; one that names none leaves it out of its request. All four are
-	// empty for a run whose request retains nothing.
+	// empty for a run whose request retains nothing. Run is its name, such as
+	// run-000003.
 	Output            prerequisites.RunOutput
 	LogLocation       string
 	Logs              []string
 	OutputRemediation string
+	Run               string
 }
 
 // WithRuntime lends the controller's approved execution boundary to one
@@ -82,12 +85,12 @@ func (s Service) WithRuntime(ctx context.Context, request RuntimeRequest, call f
 			if !request.RetainOutput {
 				return call(ctx, runtime)
 			}
-			output, logs, directory, err := s.retain(ctx, view)
+			output, logs, directory, run, err := s.retain(ctx, view)
 			if err != nil {
 				return err
 			}
 			defer func() { _ = output.Close(ctx) }()
-			runtime.Output, runtime.LogLocation, runtime.Logs, runtime.OutputRemediation = output, directory, logs, runOutputRemediation
+			runtime.Output, runtime.LogLocation, runtime.Logs, runtime.OutputRemediation, runtime.Run = output, directory, logs, runOutputRemediation, run
 			return call(ctx, runtime)
 		})
 	})
@@ -101,11 +104,11 @@ const runOutputRemediation = "read the adapter output retained in this run's Log
 // run area numbers, and names it relative to the log root. The run view
 // creates the file, making room among the runs the area keeps, so the path a
 // result names is one an operator can open while the run is still going.
-func (s Service) retain(ctx context.Context, view RunView) (*operationstore.AdapterOutput, []string, string, error) {
+func (s Service) retain(ctx context.Context, view RunView) (*operationstore.AdapterOutput, []string, string, string, error) {
 	area := view.Runs()
 	target, err := view.OpenRun(ctx)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, "", "", err
 	}
 	location := area.Location()
 	if location != "" {
@@ -115,7 +118,7 @@ func (s Service) retain(ctx context.Context, view RunView) (*operationstore.Adap
 	if reference := area.Reference(); reference != "" {
 		logs = append(logs, path.Join(reference, target))
 	}
-	return operationstore.OpenRunOutput(ctx, area, target), logs, location, nil
+	return operationstore.OpenRunOutput(ctx, area, target), logs, location, strings.TrimSuffix(path.Base(target), ".output"), nil
 }
 
 // MaterialRequest names the context whose Secret declarations one bounded
