@@ -281,18 +281,17 @@ Alias cell.
 | [B1182](#b1182) | new, 2026-11-06 (X312 review) | product | Substrate | Derived MAC addresses are unique across libvirt and KubeVirt Machines that share one network | The KubeVirt check covers the KubeVirt arm alone; no profile bridges both arms onto one network |
 | [B1185](#b1185) | new, 2026-11-06 (X314 review) | product | Add-ons | A partial instance over an owner-upgraded operator continues through `apply` | D235 (8) authorized observation only; an attempt over a reached chain still refuses that its approval proof differs |
 | [B1186](#b1186) | new, 2026-11-06 (X314 review) | enabling | Add-ons and Container cluster | A test ties each Ansible role's quoted evidence version to its Go constant | X314 updated the literals by hand; every gate passed with them mismatched |
-| [B1187](#b1187) | new, 2026-11-06 (X313 review); B1169 folded into it on 2026-11-08 | safety | Substrate | A lent KubeVirt host token is revoked when its run returns | The token is unbound and lives until it expires, now the run's deadline plus ten minutes, which the specs accept |
 | [B1188](#b1188) | new, 2026-11-06 (X313 review) | safety | Container cluster | An installation whose derived deadline passes the installer's own credential lifetimes is refused or reported | Unverified: bootstrap certificates last 24 h and agent tokens may expire; derived deadlines pass 24 h only past about 88 KubeVirt or 236 emulated nodes |
 | [B1207](#b1207) | new, 2026-11-06 (D240 (5)) | product | Substrate | Predictable guest interface names through libvirt `acpi index` and KubeVirt `acpiIndex` | Agent-path ethernet names are admitted with a warning (D240 (5)); no consumer needs fixed guest names yet |
 | [B1208](#b1208) | new, 2026-11-06 (D240 (10)) | product | Storage | A Ceph MON address chosen separately from the cephadm SSH address | `cephadm.addressRef` serves both today; separating them moves the CephCluster request (D240 (10)) |
 | [B1209](#b1209) | new, 2026-11-06 (D240 (13)) | enabling | Substrate | One lifecycle block per managed `Network` | The provider host block realizes managed Networks without a request change; a block of its own is needed only past 20 managed Networks per host or for a fabric arm (D240 (13)) |
 | [B1211](#b1211) | new, 2026-11-07 (X323) | product | Machine and Substrate | A NIC's segment derived from the Networks its stack carries | Explicit `segmentRef` with the sole-segment default covers every input; derivation only saves authoring on multi-segment providers |
 | [B1212](#b1212) | new, 2026-11-07 (X323 review) | product | Network | Several subnets of one family on one Network | One subnet per family and one untagged Network per segment (D240 (1)) refuse two subnets on one untagged L2 domain; no tracked input needs it since libvirt-6-nodes-ceph-pools moved to VLAN 140 |
-| [B1214](#b1214) | new, 2026-11-08 (lab-5-nodes-ceph-networks run) | product | Infrastructure services | A managed DNS name answers only the addresses its clients reach | Every client of this run dialed IPs; cephadm takes each host's address explicitly |
-| [B1215](#b1215) | new, 2026-11-08 (lab-5-nodes-ceph-networks run) | product | Substrate | A managed libvirt network does not route the CIDR of a tagged Network it carries with no host address | Only a misdirected guest probe left through NAT; no Ceph traffic routes there |
 | [B1216](#b1216) | new, 2026-11-08 (owner's host cleanup) | product | Controller, with Workspace | A controller store an older build wrote has a named, cheap exit | D241 makes the refusal rare; the owner recovered by hand once |
 | [B1217](#b1217) | new, 2026-11-08 (X326 review) | defect | Substrate, with Managed OS | The capacity gate attributes each publication to its own filesystem and reads a stage-scoped apply's completed installs | A mount below a per-context content root is unusual, and the owner's staged applies continue one operation |
 | [B1219](#b1219) | new, 2026-11-08 (X327 review) | safety | CLI, with agent guidance | Every grouped ask pattern also matches global flags written between the group and its command | Predates X327, which fixes only the `render` patterns; `TestDocsAskRuleCatchesGlobalFlagsBetweenAGroupAndItsCommand` holds that case |
+| [B1229](#b1229) | new, 2026-11-09 (X332's review) | defect | Substrate | A provider host that stops defining managed Networks removes the refusal and firewall-ready units an earlier apply installed | The units stay owned and refuse only the subnets they held; the firewall-ready unit's gap predates X332 |
+| [B1230](#b1230) | new, 2026-11-09 (X331) | product | Machine power, with Substrate | A failed revoke of a lent KubeVirt token reaches the operator of a power command or reading | Power results carry no warning channel; the token still ends at its bounded lifetime and the revoke's adapter output is retained |
 
 ### B82
 
@@ -3144,16 +3143,6 @@ equal the Go evidence version constants, and no test compares them.
 **Outcome:** a mismatch fails a gate. **Exit evidence:** that test, seen
 failing on a mismatched literal.
 
-### B1187
-
-**Owner:** Substrate. **Kind:** safety. **Requires:** none. **Definition:**
-Needs definition: bind each lent token to an object the lend creates and
-deletes when the run returns, such as a per-lend Secret named in the
-TokenRequest's `boundObjectRef`, so the host revokes it early
-([KubeVirt machine realization](../substrates.md#kubevirt-machine-realization)).
-**Outcome:** a lent token stops working when its run ends. **Exit evidence:**
-lend tests and a live revocation check.
-
 ### B1188
 
 **Owner:** Container cluster. **Kind:** safety. **Requires:** none.
@@ -3209,35 +3198,6 @@ assignment, gateway and client-set rules read them ([Network](../api/networks.md
 **Outcome:** an L2 domain that carries two subnets untagged is declared as it
 is built.
 
-### B1214
-
-**Owner:** Infrastructure services. **Kind:** product. **Requires:** owner
-decision. **Definition:** Candidate, needs an owner decision: which addresses a
-managed `DNSServer` name answers. Today a Machine's name answers every declared
-address ([managed services](../infrastructure-services.md)); on
-lab-5-nodes-ceph-networks each Ceph host's name also answered its address on the
-unrouted cluster VLAN, which only the Ceph hosts reach. Options: (a) keep every
-address; (b) answer only addresses on Networks with a gateway and the Machine's
-install address, publishing an unrouted Network's address under no name; (c) an
-authored per-address opt-out. Recommendation (b): a name answers what its
-resolver's clients can dial, and members of an unrouted Network address each
-other explicitly, as cephadm does.
-**Outcome:** a name never resolves to an address its clients cannot reach.
-
-### B1215
-
-**Owner:** Substrate. **Kind:** product. **Requires:** owner decision.
-**Definition:** Candidate, needs an owner decision: whether the provider host
-block that realizes a [managed Network](../api/networks.md#libvirt-arm) refuses to
-route the CIDR of each `taggedNetworkRefs` Network that holds no host address,
-for example with an unreachable route it owns and removes with the network.
-On lab-5-nodes-ceph-networks a guest's probe of the cluster VLAN left through
-the host's NAT to the internet instead of being refused; no Ceph traffic took
-that path. Recommendation: refuse locally, since the host already owns the
-network that carries the VLAN.
-**Outcome:** traffic for a VLAN carried on a managed bridge never leaves the
-host through its uplink.
-
 ### B1216
 
 **Owner:** Controller, with Workspace. **Kind:** product. **Requires:** owner
@@ -3288,6 +3248,30 @@ list every grouped command in `askRuleGroupFlagCommands`. **Exit evidence:**
 `TestDocsAskRulesCoverEveryEffectfulCommand` checking the group-position form of
 every grouped command with effects. **Outcome:** no effectful command escapes
 its ask rule through a flag written after its group.
+
+
+### B1229
+
+**Owner:** Substrate. **Kind:** defect. **Requires:** none. **Definition:**
+Candidate: the provider host request names its VLAN-refusal unit and its
+firewall-ready unit only while the provider defines a managed Network, so a
+provider whose last managed Network a later apply removes leaves both units,
+and the refusal unit's unreachable routes, installed
+([provider host realization](../substrates.md#provider-host-realization)).
+**Outcome:** an apply or removal of a provider host takes back every unit an
+earlier apply of that provider installed. **Exit evidence:** a role test over
+a provider that drops its last managed Network.
+
+### B1230
+
+**Owner:** Machine power, with Substrate. **Kind:** product. **Requires:**
+none. **Definition:** Candidate: a power command or reading that lends
+KubeVirt host access reports a failed revoke only in the revoke run's retained
+adapter output, since power results carry no warning
+([lent KubeVirt access revocation](../substrates.md#lent-kubevirt-access-revocation)).
+**Outcome:** the power result names `substrate.lend-not-revoked`, the Secret
+and the lifetime that still bounds the token. **Exit evidence:** a power
+service test whose revoke fails.
 
 ## Audit remediation (2026-10-26)
 
@@ -3532,7 +3516,7 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | B660 | 2026-11-08 | Delivered in-tree by [X61](delivered.md#x61--ceph-transport-crypto-policy)'s x61-ceph-fips lane; operator FIPS acceptance stays with [B484](m2.md#b484). |
 | B664 | 2026-11-08 | Delivered in-tree by lane x59-d4 under [B493](m2.md#b493): `ceph.packageRepositoryKey` ([D169](#d169)) keeps the pinned IBM fingerprint; the `el10cp` signer goes to knowledge when such a package is inspected. |
 | B1050 | 2026-11-08 | Delivered by B1144 ([X304](delivered.md#x304--audit-003-foundation-remediation), 98a4e30a4): the MAC pipelines no longer close their producer early under `pipefail`, the recorded cause. |
-| B1169 | 2026-11-08 | Duplicate of [B1187](#b1187): the same lend-minted host token, revoked when its run returns. |
+| B1169 | 2026-11-08 | Duplicate of [B1187](m3.md#b1187): the same lend-minted host token, revoked when its run returns. |
 
 ## Decisions
 
@@ -5548,7 +5532,7 @@ HyperConverged carries no spec field: persistent vTPM backend storage stays
 with [B87](m1.md#b87)'s question 7 and the KubeVirt provider namespace with
 B732's question 3. (3) Its operator gate is the nested host of B732's run, so
 it adds no acceptance profile. (4) The review's other findings are recorded,
-not implemented: [B884](delivered.md#x227--add-on-discovery-and-operator-journey), [B885](m3.md#b885), [B886](m4.md#b886),
+not implemented: [B884](delivered.md#x227--add-on-discovery-and-operator-journey), [B885](m3.md#b885), [B886](delivered.md#x333--a-packaged-nmstate-counts-beside-an-unresolved-reference),
 [B887](m2.md#b887) and [B888](m2.md#b888). (5) The existing items the review
 found blocking keep
 their definitions, and this request closes none of their questions:
@@ -5615,7 +5599,7 @@ P1's physical shape with three disks per host), the frozen request (about
 22 KiB of 256 KiB) and the ready cluster evidence (about 24 KiB of 60 KiB). The review found the fixed 600 s ingress and
 single sign-on proof windows of a service unit serial over its placed hosts,
 so they can end a run `not-ready` from six placed hosts; that is recorded as
-[B891](m2.md#b891), not taken here.
+[B891](delivered.md#x330--ceph-administration-past-the-seed-mon-the-default-administrator-node-and-concurrent-proofs), not taken here.
 The physical retirement policy's decoding bound, six before, follows the
 cluster bound. (4) A CephFilesystem whose data pools and subvolume groups put
 its own apply past the ceiling, which at eleven hosts is more than six pools,
@@ -6473,7 +6457,7 @@ authored OLM definition compiled by the existing capability, after X229.
 B987 and B90 are complex; the other slices are routine, X230 with a
 complex-tier review of its registry rules.
 (4) [B770](#b770) and [B769](#b769) stay parked; [B884](delivered.md#x227--add-on-discovery-and-operator-journey) and
-[B886](m4.md#b886) keep their definitions, and B884 may land as X227's first
+[B886](delivered.md#x333--a-packaged-nmstate-counts-beside-an-unresolved-reference) keep their definitions, and B884 may land as X227's first
 commit.
 (5) The audit reports stay as written; each item names the audit finding it
 closes in its Alias cell, and the consolidated report's delivery sequence is
@@ -7382,3 +7366,49 @@ recommendations". This opens X327, out of sequence, with B1218 and B376.
     knowledge pages, audits and acceptance rows keep the names they recorded.
 11. The per-kind preflight services leave the CLI's services, and the unused
     add-on preflight stub package is deleted.
+
+### D245
+
+**owner** (2026-11-08): after the review that retired sixteen parked items,
+the owner asked to "check the most important ones, prepare a plan a start
+implementation", weighting real scenarios: bare metal, OpenShift
+Virtualization, stretched Ceph, advanced networking, hub clusters and the
+Data Foundation add-ons. Asked about two findings of the
+lab-5-nodes-ceph-networks run, the owner chose:
+
+1. [B1214](delivered.md#x332--reachable-dns-answers-and-refused-vlan-subnets): a Machine's managed DNS name answers only
+   addresses its clients can dial, those on a Network that declares a gateway
+   in their family and its installation address; an address on a Network
+   without a gateway is published under no name ("Reachable only").
+2. [B1215](m1.md#b1215): the provider host refuses locally the subnet of each
+   tagged Network a managed bridge carries without a host address ("Refuse
+   locally").
+
+This authorizes, out of sequence, X330 (M2: B1020, B1090, B891), X331 (M3:
+B1187, attached from parked), X332 (M1: B1214, B1215, attached from parked)
+and X333 (M4: B886). Taken by the session, pending the owner's review:
+
+3. B1020: every admin client names its monitors with `-m`, the request's seed
+   `monIP` and then the canonical public-network address of each host the MON
+   service places, and passes `--auth_client_required=cephx`; the retained
+   bootstrap configuration is never rewritten and no MON map is retained
+   ([cluster execution](../ceph.md)).
+4. B1090: without `--node`, a Ceph cluster session opens the administrator
+   node `cluster info` names (`spec.cephadm.bootstrap.nodeRef`), and a cluster
+   with none refuses `access.target`; an explicit `--node` is unchanged
+   ([cluster sessions](../cli.md#cluster-sessions)).
+5. B891: the ingress firewall proof and the single sign-on proof call every
+   placed host in one concurrent round, so their window no longer grows with
+   the host count.
+6. B1187: each lend creates an empty marked Secret, binds the TokenRequest to
+   it with `boundObjectRef`, and a `revoke` operation deletes it by UID when
+   the run returns; a failed revoke warns `substrate.lend-not-revoked` and
+   never changes the run's result; only a recorded, mutating attempt sweeps
+   marked Secrets whose lifetime has passed
+   ([lent KubeVirt access revocation](../substrates.md#lent-kubevirt-access-revocation)).
+7. B1215: a Bootwright-owned systemd unit per provider holds one
+   `unreachable` route per refused subnet with protocol 251 and a metric
+   derived from the unit's name, so units refusing one subnet coexist and
+   each adds, removes and reports only its own routes; a foreign route on a
+   refused subnet refuses the apply before any effect
+   ([provider host realization](../substrates.md#provider-host-realization)).

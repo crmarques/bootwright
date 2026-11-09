@@ -645,7 +645,7 @@ one the Machine's network selects) wherever it lies. Any other interface
 address, one on a Network without a gateway, is published under no name, and a
 Machine left with no address publishes no record. Members of an unrouted
 Network address each other by address, as cephadm does with each host's
-`addr` ([B1214](milestones/backlog.md#b1214)).
+`addr`.
 
 A `DNSServer` with no authored forwarder answers only its own records rather
 than reaching an ambient upstream. A managed `NTPServer` serves time without

@@ -888,15 +888,13 @@ capture proves both bootstrap outputs root's own single-link files closed to
 writes by others and makes them private before recording their identities;
 observation never changes them. Every admin client (`ceph`, `rbd`, `rados`,
 `radosgw-admin`) runs on those retained outputs and names its monitors with
-`-m`: the request's seed `monIP`, then the canonical IP address of each host
-the MON service places, by host name, that lies inside a public network. The
-retained configuration's `mon_host` names only the seed, so the list overrides
-it and never rewrites the file, whose byte proof is unchanged; one MON outage
-with quorum held therefore leaves administration available. The list only
-routes: every admin call also passes `--auth_client_required=cephx`, since
-the retained file sets no client authentication and Ceph's client default also
-admits `none`, so only a MON that completes CephX's mutual authentication with
-the retained admin keyring is answered. A phase that restarts the manager waits, bounded and inside its
+`-m`: the seed `monIP`, then the canonical public-network IP of each host the
+MON service places, by name. It overrides the retained file's seed-only
+`mon_host` without rewriting it, so one MON outage with quorum held leaves
+administration available. Each call also passes
+`--auth_client_required=cephx`, as the file sets no client authentication and
+the client default admits `none`, so only a MON completing CephX with the
+retained admin keyring answers. A phase that restarts the manager waits, bounded and inside its
 worker budget, for the MON to report an available
 manager whose orchestrator answers. Orchestrator reads, and the idempotent IBM enable-call-home and accept-license declarations, repeat while the active manager restarts. Per-host enrollment
 and label attempts and per-service apply attempts, including each document of

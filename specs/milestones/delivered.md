@@ -12184,7 +12184,7 @@ Container cluster and Substrate, with Reconciliation.
 
 **Delivery commit:** 5b5d28877. No request or evidence version moves. An independent
 Opus review approved after fixes, all made in the slice; its other points are
-parked as [B1187](backlog.md#b1187) and [B1188](backlog.md#b1188).
+parked as [B1187](m3.md#b1187) and [B1188](backlog.md#b1188).
 
 **Verification:** each regression failed before its fix; `make check` and
 `make race` passed on the commit.
@@ -12549,3 +12549,104 @@ branch before the review fix, and `make check` again on the final commit; no
 live run or push occurred. **Limitations:** a `preflight` limited to
 `infrastructure-services` reports the listener rows even when the controller
 check behind them is not ready, whose rows only the controller stage shows.
+
+### X330 — Ceph administration past the seed MON, the default administrator node and concurrent proofs
+
+**Items:** B1090 and B891, completed in-tree (2026-11-09), under the session
+clauses of [D245](backlog.md#d245) (4) and (5). **Awaiting operator
+acceptance:** B1020, delivered in-tree under clause (3). B1020: every admin client (`ceph`,
+`rbd`, `rados`, `radosgw-admin`) names its monitors with `-m` from the frozen
+request and requires CephX of the client, so one MON outage with quorum held
+leaves administration available while the retained configuration and its byte
+proof are unchanged. B1090: a [cluster session](../cli.md#cluster-sessions)
+without `--node` opens the administrator node `cluster info` names, never the
+first node in canonical order, which on a stretch cluster is often the MON-only
+tiebreaker; `cluster info`'s session templates name the same node. B891: the
+ingress firewall proof and the single sign-on proof call every placed host in
+one concurrent round, so a placement at the cluster bound fits their window.
+No request, evidence, contract version or content digest moved.
+
+**Commits:** 24ec479f5 (B1020), c7163da9b (B1090) and 4ac313f3a (B891), then
+this record. An independent review of B1020 found that the retained file sets
+no client authentication and Ceph's client default also admits `none`, so a
+listener on a listed address could answer and receive secrets sent on stdin;
+`--auth_client_required=cephx` closes it, with a regression test that fails
+without it, and the reviewer confirmed the fix. B1090's change renamed the inspection test B1087's evidence names to
+`TestClusterInfoTreatsAPinnedProvidedNodeAsProved`. Gates: `make focus` passed on each commit; `make check` and `make race`
+passed on the integrated branch; no live run or push occurred.
+**Limitations:** the `-m` and CephX options are qualified by argument parsing
+and a scripted harness, not a live cluster; a MON whose address differs from
+its host's request address is not listed; the virtual IP holder's readiness
+proof stays serial inside its readiness wait.
+
+### X331 — Lent KubeVirt tokens revoked when their run returns
+
+**Item:** B1187, delivered in-tree (2026-11-09), awaiting operator acceptance,
+under the session clause of [D245](backlog.md#d245) (6); B1169 was folded into
+it. Each lend creates an empty Secret marked `bootwright.io/lend`, binds its
+TokenRequest to it with `boundObjectRef`, and refuses a token the host answers
+unbound or a Secret it did not create. After the run returns, done, failed or
+canceled, a `revoke` operation of `substrate-host-kubevirt-v1` deletes the
+Secret by UID under its own bound; a failed revoke warns
+`substrate.lend-not-revoked` and never changes the run's result. A recorded
+attempt that may change its host also sweeps marked Secrets whose lifetime has
+passed; read-only and unrecorded executions never sweep, and the runner admits
+only that exact revoke beside `observe` and `lend` there
+([state reconciliation](../state-reconciliation.md)). The content digests of
+`substrate-host-kubevirt-v1`, `machine-kubevirt-v1` and
+`cluster-install-agent-v1` moved.
+
+**Commits:** 33fabac85 and this record. An independent review found that the
+state-reconciliation spec still said a lend creates no object, that the
+revoke's delete was not retried, that the sweep could exhaust the lend's bound,
+and that a lend refused before its job started still revoked; each is fixed
+with a test, and the reviewer confirmed the fixes. Gates: `make focus` passed;
+`make check` and `make race` passed on the integrated branch; no live run or
+push occurred. **Limitations:** the API server stops accepting the token
+within seconds of the Secret's deletion, not at once; a power command or
+reading reports a failed revoke only in the retained adapter output
+([B1230](backlog.md#b1230)); the sweep reads one page of 64.
+
+### X332 — Reachable DNS answers and refused VLAN subnets
+
+**Items:** B1214, completed in-tree (2026-11-09), under the owner's answer (1)
+of [D245](backlog.md#d245). **Awaiting operator acceptance:** B1215, delivered
+in-tree under answer (2) and clause (7). Both were found on the
+lab-5-nodes-ceph-networks run. B1214: a managed `DNSServer` answers a Machine's
+name only at an address no Network holds, one on a Network with a gateway in
+its family, and its installation address
+([managed services](../infrastructure-services.md)); no consumer resolved an
+unrouted address by name. B1215: the provider host request freezes, in
+`refusedPrefixes`, the subnet of each tagged Network a managed bridge carries
+that the host holds no address in, and a Bootwright-owned unit holds an
+`unreachable` route of its own metric for each; a foreign route on a refused
+subnet refuses before any effect, and a provider refusing more than 64 subnets
+refuses at planning ([provider host realization](../substrates.md#provider-host-realization)).
+The content digest of `substrate-host-libvirt-v1` moved; the DNS server's did
+not.
+
+**Commits:** 24310f05c (B1214), 853fd519e (B1215) and this record. An
+independent review of B1215 found that two units refusing one subnet could
+delete each other's routes, that planning did not bound the subnet count, and
+that a named route protocol hid the unit's own routes; the per-unit metric,
+the planning bound and numeric listing fix them, and the reviewer confirmed the
+fixes. Integration trimmed B1214's comments under the production-comment
+ceiling. Gates: `make focus` passed on each commit; `make check` and
+`make race` passed on the integrated branch; no live run or push occurred.
+**Limitations:** the route and unit behavior is unit-tested against a fake
+host, not a live kernel; two unit names whose 30-bit metrics collide could
+still share a route; a provider that drops its last managed Network leaves its
+units installed ([B1229](backlog.md#b1229)).
+
+### X333 — A packaged nmstate counts beside an unresolved reference
+
+**Item:** B886, completed in-tree (2026-11-09), under
+[D245](backlog.md#d245). [Secondary-network admission](../api/openshift-clusters.md#secondary-networks)
+counts the packages a cluster's bindings select whatever their other
+references resolve to, so a packaged `nmstate` beside an unresolved add-on
+reference reports only the reference; a cluster with no `nmstate` provider
+still refuses. No request, evidence, contract version or content digest moved.
+
+**Commits:** c5b2974bb and this record. Gates: the admission test failed on the
+previous source; `make focus` passed; `make check` and `make race` passed on
+the integrated branch; no live run or push occurred.
