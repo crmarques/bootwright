@@ -294,6 +294,7 @@ Alias cell.
 | [B1236](#b1236) | new, 2026-11-09 (D247 (4)) | defect | Infrastructure services, with Substrate | An SSH placement host that runs a managed service or a libvirt provider's emulated BMC receives the container runtime | Predates D247; every qualified run places these containers on the controller |
 | [B1237](#b1237) | new, 2026-11-09 (D248 (5)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's default image comes from a Red Hat registry wherever Red Hat publishes one | Red Hat publishes no dnsmasq, chrony or sushy-tools image, and its squid image needs a `registry.redhat.io` login no managed-service pull carries |
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
+| [B1240](#b1240) | new, 2026-11-09 (X340 gate) | defect | Controller | The native supervisor test reads its task's PID only from a complete record | It failed once in `make check` beside the other lanes and passed when run again alone; the cause is a test-side race, not the supervisor |
 
 ### B82
 
@@ -3280,6 +3281,20 @@ managed-service test on an SSH placement whose host lacks `podman`, which
 installs it through the host's own package manager or refuses before any
 effect naming it. **Outcome:** a container placed on an SSH host either gets
 its runtime or refuses with a remedy, never a missing-executable failure.
+
+### B1240
+
+**Owner:** Controller. **Kind:** defect. **Requires:** none.
+**Definition:** Candidate, from X340's gate:
+`test_real_ansible_leaves_no_worker_or_command[normal-exit]` in
+`ansible/collections/ansible_collections/bootwright/core/tests/unit/test_controller_supervisor_native.py`
+failed once with `ValueError: invalid literal for int() with base 10: ''`.
+Its disposable task opens its PID record and then writes it, while the test
+waits only for the file to exist and parses it at once, so a check between the
+two reads an empty file. Writing the record under a temporary name and
+renaming it, or waiting until the record holds a PID, closes the window.
+**Exit evidence:** the test parses the PID only from a complete record.
+**Outcome:** the controller units lane no longer fails on this race.
 
 ## Audit remediation (2026-10-26)
 
