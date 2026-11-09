@@ -1356,8 +1356,8 @@ install starting at the instant a setup is probed is refused as
 without waiting, opens its files under it and reads their bytes after releasing
 it, so a command that needs the exclusive root lock waits for that short hold
 and a follow never makes another command fail, except `controller uninstall`,
-which refuses at once while anything holds the store
-([locking](../contexts.md#storage-locking-and-publication)). An initial read
+which refuses at once while anything holds the store, and the setup probe's
+instant above ([locking](../contexts.md#storage-locking-and-publication)). An initial read
 that finds the lock busy refuses `lifecycle.lease`; a busy poll is skipped, and
 60 consecutive busy polls refuse `lifecycle.lease`, exit `1`.
 

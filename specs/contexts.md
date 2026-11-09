@@ -387,10 +387,10 @@ in full, neither `media add`, `media delete`, `context update` nor
 standard input holds none while it reads, then takes the exclusive root lock
 and the lease to write and re-proves its
 [replacement decision](secrets.md#acquisition-and-commands) there. Every
-mutator except `controller uninstall` waits, unlocked, for a shorter holder of
-the exclusive root lock up to the root lock wait or cancellation, then refuses
-`lifecycle.lease`; uninstall, a reader's shared hold and a lease refuse at
-once with a retry remedy; no lock or lease is ever taken over. A `logs --follow` takes no lease,
+mutator except `controller uninstall` waits, unlocked, while anything holds
+the root lock, shared or exclusive, up to the root lock wait or cancellation,
+then refuses `lifecycle.lease`; uninstall, a reader taking its shared hold and
+a lease refuse at once with a retry remedy; no lock or lease is ever taken over. A `logs --follow` takes no lease,
 and `logs --setup` no root lock, so it lists `host/` unlocked:
 whether a writer still holds the operation, run or setup it follows is a
 non-blocking lock test released at once. That probe of the setup lock is a
