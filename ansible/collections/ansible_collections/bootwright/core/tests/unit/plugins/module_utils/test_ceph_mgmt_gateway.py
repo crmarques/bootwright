@@ -397,7 +397,7 @@ def test_gateway_frontend_is_the_gateway_port_on_the_virtual_ip(tmp_path, monkey
     monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     transport = MaterialTransport(request, {"certificateSHA256": LEAF_SHA256, "reachable": True})
     ceph_core.execute(request, "apply", "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)
-    assert transport.calls[1:3] == [("node-1", "ingress_firewall"), ("node-2", "ingress_firewall")]
+    assert sorted(transport.calls[1:3]) == [("node-1", "ingress_firewall"), ("node-2", "ingress_firewall")]
     transport = MaterialTransport(gateway_request(None), {"certificateSHA256": LEAF_SHA256, "reachable": True})
     transport.observed["daemons"] = transport.observed["daemons"][:1]
     ceph_core.execute(gateway_request(None), "apply", "d" * 64, transport, now=lambda: 0, pause=lambda seconds: None)

@@ -27,6 +27,7 @@ import binascii
 import copy
 import json
 import os
+import threading
 
 import pytest
 
@@ -295,12 +296,13 @@ def test_sso_enable_runs_once_after_the_proof(tmp_path, monkeypatch):
     result = ceph_core.execute(request, "apply", "d" * 64, transport, now=lambda: 0, pause=pauses.append)
     assert result["evidence"]["ready"] is True and result["evidence"]["sso"] == "oauth2" and pauses[0] == ceph_core.SSO_PAUSE
     phases = [(name, phase) for name, phase, unused in transport.private]
-    assert phases[:9] == [("node-1", "prerequisites"), ("node-1", "ingress_firewall"), ("node-2", "ingress_firewall"), ("node-1", "unit"),
-                          ("node-1", "sso_config"), ("node-2", "sso_config"), ("node-1", "sso_config"), ("node-2", "sso_config"), ("node-1", "sso")]
+    assert phases[0] == ("node-1", "prerequisites") and phases[3] == ("node-1", "unit")
+    assert sorted(phases[1:3]) == [("node-1", "ingress_firewall"), ("node-2", "ingress_firewall")]
+    assert sorted(phases[4:6]) == sorted(phases[6:8]) == [("node-1", "sso_config"), ("node-2", "sso_config")] and phases[8] == ("node-1", "sso")
     assert ("node-1", "sso_config", ["oauth2ProxyCABundle"]) in transport.private and ("node-1", "sso", []) in transport.private
     for proofs in ([ceph_native.RemoteRefusal("sso-unverified")], [one, dict(one, proved=False)] * 40):
         transport = SSOTransport(request, proofs)
-        clock = iter(range(0, 10000, 7))
+        clock = iter(range(0, 10000, 31))
         with pytest.raises(ceph_native.Refusal):
             ceph_core.execute(request, "apply", "d" * 64, transport, now=lambda: next(clock), pause=lambda seconds: None)
         assert "sso" not in [phase for unused, phase, unused_private in transport.private]
@@ -435,3 +437,38 @@ def test_a_line_naming_the_skip_that_is_not_its_bare_assignment_is_unproved():
                  "ssl-insecure-skip-verify = true", "ssl_insecure_skip_verify true", "[ssl_insecure_skip_verify]",
                  "ssl_insecure_skip_verify_x = false", "ssl_insecure_skip_verify = true # comment"):
         assert observability.rendered_skip('provider = "oidc"\n' + line + "\n") == "unproved", line
+
+
+class Concurrent(SSOTransport):
+    """An SSO transport whose every proof call waits for the others of its round: a round that is not concurrent breaks the barrier."""
+
+    def __init__(self, request, size, results):
+        super().__init__(request, [])
+        self.barrier, self.results, self.timeouts, self.lock = threading.Barrier(size, timeout=10), results, [], threading.Lock()
+
+    def call(self, host, phase, private=None, *, timeout=None):
+        assert phase == "sso_config"
+        self.barrier.wait()
+        with self.lock:
+            self.timeouts.append(timeout)
+            return dict(self.results)
+
+
+def test_the_proof_of_the_largest_placement_is_one_concurrent_round_within_the_window():
+    # The cluster execution budget's largest cluster, cluster.go's maxClusterHosts.
+    bound = 11
+    request = sso_request()
+    names = ["node-" + str(number) for number in range(1, bound + 1)]
+    request["hosts"] = [dict(request["hosts"][0], name=name) for name in names]
+    proxy = observability.gateway_documents(request["service"])[2]
+    proxy["placement"] = {"count": bound, "hosts": names}
+    one = {"changed": False, "daemons": 1, "proved": True}
+    transport = Concurrent(request, bound, one)
+    deadline = ceph_core.sso_proof(request, transport, lambda: 0, lambda seconds: pytest.fail("a proved round pauses"))
+    assert deadline == ceph_core.SSO_WINDOW and transport.timeouts == [ceph_core.SSO_CALL] * bound
+    assert bound * ceph_core.SSO_CALL > ceph_core.SSO_WINDOW >= ceph_core.SSO_CALL
+    unproved = Concurrent(request, bound, dict(one, proved=False))
+    clock = iter(range(0, 10000, 150))
+    with pytest.raises(ceph_native.Refusal, match="^not-ready$"):
+        ceph_core.sso_proof(request, unproved, lambda: next(clock), lambda seconds: None)
+    assert len(unproved.timeouts) % bound == 0 and len(unproved.timeouts) >= bound

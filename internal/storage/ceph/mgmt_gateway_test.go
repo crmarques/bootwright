@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -290,6 +291,22 @@ func TestOAuth2ProxyPlansWithItsSelectedImage(t *testing.T) {
 				t.Fatalf("the gateway %s deadline is %v (%v), want %v", operation, got, err, want)
 			}
 		}
+	}
+}
+
+func TestSSOProofWindowIsOneNativeCallWhateverTheHostCount(t *testing.T) {
+	r := ssoRequest(t)
+	base, err := cephDeadline(r, "apply")
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	r.Hosts = make([]Host, maxClusterHosts)
+	for i := range r.Hosts {
+		r.Hosts[i].Name = "host-" + strconv.Itoa(i+1)
+	}
+	got, err := cephDeadline(r, "apply")
+	if err != nil || got != base || got != time.Duration((3+2)*nativeCall+readinessWait+60)*time.Second {
+		t.Fatalf("the SSO gateway apply deadline at %d hosts is %v (%v), want the %v of one proof call and one write call", maxClusterHosts, got, err, base)
 	}
 }
 

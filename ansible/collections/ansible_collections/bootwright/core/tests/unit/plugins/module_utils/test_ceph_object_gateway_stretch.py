@@ -203,8 +203,8 @@ def test_the_firewall_check_covers_every_per_site_ingress_host_in_one_window(mon
     monkeypatch.setattr(ceph_native, "supported_transport", lambda value: True)
     request = stretch_gateway(per_site())
     transport = gw.Transport(request, ready_after=1)
-    ceph_core.ingress_firewall(request, transport, ceph_native_object.frontends(request), lambda: 0)
-    assert [call for call in transport.calls if call[1] == "ingress_firewall"] == [(host, "ingress_firewall") for host in SITE_A + SITE_B]
+    ceph_core.ingress_firewall(request, transport, ceph_native_object.frontends(request))
+    assert sorted(call for call in transport.calls if call[1] == "ingress_firewall") == sorted((host, "ingress_firewall") for host in SITE_A + SITE_B)
     hosts = {host["name"]: host for host in request["hosts"]}
     for name, document in (("node-2", per_site()[0]), ("node-3", per_site()[1])):
         native = ceph_native_object.ObjectWorker(request, name, run=lambda argv, data=b"", timeout=60: (0, b"[]"), markers=None)

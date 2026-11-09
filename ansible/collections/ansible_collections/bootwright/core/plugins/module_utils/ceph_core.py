@@ -32,12 +32,11 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 SPECIALIZATION_IDS = frozenset(record.id for record in native_specializations.SPECIALIZATIONS)
 READINESS_TIMEOUT = 900
 READINESS_INTERVAL = 5
-# Each ingress host's read-only firewall check, all within one native call of the block's Go deadline.
+# Each ingress host's read-only firewall check: every host in one concurrent round, within one native call of the block's Go deadline.
 FIREWALL_CALL = 120
-FIREWALL_WINDOW = 600
 HOLDER_CALL = 60
-# The rendered-configuration proof of a management gateway's oauth2-proxy: one call per host per round, rounds within one native call
-# of the block's Go deadline.
+# The rendered-configuration proof of a management gateway's oauth2-proxy: every host in one concurrent round, rounds within a window of
+# one native call of the block's Go deadline.
 SSO_CALL = 120
 SSO_WINDOW = 600
 SSO_PAUSE = 10
@@ -886,15 +885,16 @@ def recovery_preparations(request, values):
     return stages
 
 
-def host_round(transport, hosts, phase, private=None):
-    """Join the whole bounded round before returning the first refusal in host order."""
+def host_round(transport, hosts, phase, private=None, *, timeout=None):
+    """Join the whole bounded round before returning the first refusal in host order; every call of it has the one ``timeout`` when given."""
     if not hosts:
         return []
     prepare = getattr(transport, "prepare_round", None)
     if prepare is not None:
         prepare()
+    args, options = ((private,), {}) if timeout is None else ((), dict({} if private is None else {"private": private}, timeout=timeout))
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(hosts)) as executor:
-        calls = [executor.submit(transport.call, host, phase, private) for host in hosts]
+        calls = [executor.submit(transport.call, host, phase, *args, **options) for host in hosts]
         concurrent.futures.wait(calls)
         return [call.result() for call in calls]
 
@@ -1293,25 +1293,30 @@ def wait_unit(request, request_digest, bootstrap, transport, now, pause, *, priv
         pause(min(READINESS_INTERVAL, remaining))
 
 
-def ingress_firewall(request, transport, fronts, now):
+def ingress_firewall(request, transport, fronts):
     """Before the first effect of an apply: each host of each ingress, one per data site on a stretch cluster, proves, read-only, that an
-    active firewall passes VRRP and the client port. One native call of the block's Go deadline covers every host's check."""
+    active firewall passes VRRP and the client port. The hosts answer in one concurrent round of calls of at most FIREWALL_CALL, so the
+    check lasts one call whatever the host count, within the block's one native call of its Go deadline."""
     hosts = {host["name"]: host for host in request["hosts"]}
-    deadline = now() + FIREWALL_WINDOW
-    for name in [name for found in fronts for name in found[0]["placement"]["hosts"]]:
-        remaining = deadline - now()
-        ceph_native.require(remaining > 0, "not-ready")
-        result = transport.call(hosts[name], "ingress_firewall", timeout=min(FIREWALL_CALL, remaining))
-        ceph_native.require(result == {"changed": False}, "evidence")
+    names = list(dict.fromkeys(name for found in fronts for name in found[0]["placement"]["hosts"]))
+    results = host_round(transport, [hosts[name] for name in names], "ingress_firewall", timeout=FIREWALL_CALL)
+    ceph_native.require(all(result == {"changed": False} for result in results), "evidence")
+
+
+def window_call(call, deadline, now):
+    """The timeout of one concurrent round's calls: the call bound, or what the window has left; an exhausted window refuses not-ready."""
+    remaining = deadline - now()
+    ceph_native.require(remaining > 0, "not-ready")
+    return min(call, remaining)
 
 
 def sso_round(proxy, hosts, held, transport, deadline, now):
-    """One read-only proof round over the proxy's hosts: the running proxy containers counted, and whether each one proved."""
+    """One read-only proof round over the proxy's hosts, all called concurrently: the running proxy containers counted, and whether each
+    one proved."""
     daemons, proved = 0, True
-    for name in proxy["placement"]["hosts"]:
-        remaining = deadline - now()
-        ceph_native.require(remaining > 0, "not-ready")
-        result = transport.call(hosts[name], "sso_config", held, timeout=min(SSO_CALL, remaining))
+    results = host_round(transport, [hosts[name] for name in proxy["placement"]["hosts"]], "sso_config", held,
+                         timeout=window_call(SSO_CALL, deadline, now))
+    for result in results:
         ceph_native.require(isinstance(result, dict) and set(result) == {"changed", "daemons", "proved"} and result["changed"] is False
                             and type(result["daemons"]) is int and result["daemons"] >= 0 and type(result["proved"]) is bool, "evidence")
         daemons += result["daemons"]
@@ -1321,8 +1326,9 @@ def sso_round(proxy, hosts, held, transport, deadline, now):
 
 def sso_proof(request, transport, now, pause):
     """After the unit's apply, before the dashboard's single sign-on is enabled: every proxy host proves, read-only, that each running
-    oauth2-proxy container of this cluster verifies its identity provider's certificate and mounts the bound CA bundle. Rounds repeat
-    until the placed count runs proved; one native call of the block's Go deadline covers the window, which the proof returns."""
+    oauth2-proxy container of this cluster verifies its identity provider's certificate and mounts the bound CA bundle. Each round calls
+    every host concurrently, so a round lasts one call whatever the host count; rounds repeat until the placed count runs proved, and one
+    native call of the block's Go deadline covers the window, which the proof returns."""
     proxy = ceph_native_observability.gateway_documents(request["service"])[2]
     hosts = {host["name"]: host for host in request["hosts"]}
     held = transport.unit_material("sso_config")
@@ -1416,7 +1422,7 @@ def execute_unit(request, operation, request_digest, transport, bootstrap, *, no
     if operation == "apply":
         transport.call(bootstrap, "prerequisites")
         if request["action"] == "service":
-            ingress_firewall(request, transport, ingress_fronts(request), now)
+            ingress_firewall(request, transport, ingress_fronts(request))
         bound = transport.unit_material("unit") if bound_unit else {}
         for phase in phases:
             produced = transport.call(bootstrap, phase, bound) if bound and phase == "unit" else transport.call(bootstrap, phase)
@@ -1497,7 +1503,7 @@ def execute_gateway(request, operation, request_digest, transport, bootstrap, *,
     changed, pending = False, []
     if operation == "apply":
         transport.call(bootstrap, "prerequisites")
-        ingress_firewall(request, transport, ingress_fronts(request), now)
+        ingress_firewall(request, transport, ingress_fronts(request))
         for phase in ceph_native_object.APPLY_PHASES:
             private = transport.gateway_material(True) if seen and phase == "gateway_service" else None
             produced = transport.call(bootstrap, phase, private) if private else transport.call(bootstrap, phase)

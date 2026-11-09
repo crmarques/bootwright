@@ -87,7 +87,7 @@ func TestServiceUnitBlocksFollowClusterBlock(t *testing.T) {
 }
 
 func TestServiceUnitDeadlineIndependentOfHostCount(t *testing.T) {
-	for _, hosts := range []int{3, 6} {
+	for _, hosts := range []int{3, 6, maxClusterHosts} {
 		catalog := planCatalog(hosts, hosts, func(spec api.Value) api.Value {
 			return spec.WithPath(api.ListValue(append(spec.Get("services").Items(), nfsService("files"))...), "services")
 		})

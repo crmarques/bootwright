@@ -23,6 +23,7 @@ import ipaddress
 import json
 import os
 import pathlib
+import threading
 
 import pytest
 
@@ -227,6 +228,44 @@ class Calls:
         return self.transport.call(host, phase, private, timeout=timeout)
 
 
+def settled(calls):
+    """The recorded calls with each concurrent firewall round's host order normalized."""
+    firewall = iter(sorted(call for call in calls if call[1] == "ingress_firewall"))
+    return [next(firewall) if call[1] == "ingress_firewall" else call for call in calls]
+
+
+class Concurrent:
+    """A recording transport whose every call waits for the others of its round: a round that is not concurrent breaks the barrier."""
+
+    def __init__(self, size, answer):
+        self.barrier = threading.Barrier(size, timeout=10)
+        self.answer, self.calls, self.lock = answer, [], threading.Lock()
+
+    def call(self, host, phase, private=None, *, timeout=None):
+        self.barrier.wait()
+        with self.lock:
+            self.calls.append((host["name"], phase, private, timeout))
+        return self.answer
+
+
+# The cluster execution budget's largest cluster, cluster.go's maxClusterHosts.
+CLUSTER_BOUND = 11
+
+
+def test_the_firewall_check_of_the_largest_placement_is_one_concurrent_round():
+    names = ["node-" + str(number) for number in range(1, CLUSTER_BOUND + 1)]
+    request = {"hosts": [{"name": name} for name in names]}
+    transport = Concurrent(CLUSTER_BOUND, {"changed": False})
+    ceph_core.ingress_firewall(request, transport, [({"placement": {"hosts": names}}, 2049)])
+    assert sorted(transport.calls) == [(name, "ingress_firewall", None, ceph_core.FIREWALL_CALL) for name in sorted(names)]
+    # Called in turn, the same placement would need more than the 600 s window the check once had.
+    assert CLUSTER_BOUND * ceph_core.FIREWALL_CALL > 600 >= ceph_core.FIREWALL_CALL
+    refusing = Concurrent(CLUSTER_BOUND, {"changed": True})
+    with pytest.raises(ceph_native.Refusal, match="^evidence$"):
+        ceph_core.ingress_firewall(request, refusing, [({"placement": {"hosts": names}}, 2049)])
+    assert len(refusing.calls) == CLUSTER_BOUND
+
+
 def execute(request, transport, now=lambda: 0):
     return ceph_core.execute(request, "apply", "d" * 64, transport, now=now, pause=lambda seconds: None)
 
@@ -241,13 +280,13 @@ def test_inactive_firewalld_plans_and_applies(monkeypatch, state):
     request = nfs_request()
     transport = Calls(units.Transport(request))
     execute(request, transport)
-    assert transport.calls == [("node-1", "prerequisites"), ("node-1", "ingress_firewall"), ("node-2", "ingress_firewall"), ("node-1", "unit"),
-                               ("node-1", "observe"), ("node-1", "vip_holder"), ("node-2", "vip_holder")]
+    assert settled(transport.calls) == [("node-1", "prerequisites"), ("node-1", "ingress_firewall"), ("node-2", "ingress_firewall"), ("node-1", "unit"),
+                                        ("node-1", "observe"), ("node-1", "vip_holder"), ("node-2", "vip_holder")]
     assert transport.timeouts == [120, 120]
     request = plain_ingress()
     transport = Calls(gateways.Transport(request))
     execute(request, transport)
-    assert transport.calls == [("node-1", "prerequisites")] + [(name, "ingress_firewall") for name in gateways.HOSTS] + [
+    assert settled(transport.calls) == [("node-1", "prerequisites")] + [(name, "ingress_firewall") for name in sorted(gateways.HOSTS)] + [
         ("node-1", "gateway_zone"), ("node-1", "gateway_placement"), ("node-1", "gateway_service"), ("node-1", "observe")] + [
         (name, "vip_holder") for name in gateways.HOSTS]
     assert transport.timeouts == [120, 120, 120]
@@ -357,17 +396,12 @@ def test_core_skips_the_firewall_check_without_an_ingress(monkeypatch):
     execute(request, transport)
     assert transport.calls == [("node-1", "prerequisites"), ("node-1", "gateway_zone"), ("node-1", "gateway_placement"),
                                ("node-1", "gateway_service"), ("node-1", "observe")]
-    for request, make in ((nfs_request(), units.Transport), (plain_ingress(), gateways.Transport)):
+    for request, make, placed in ((nfs_request(), units.Transport, ["node-1", "node-2"]), (plain_ingress(), gateways.Transport, sorted(gateways.HOSTS))):
         transport = Calls(make(request), refuse="node-2")
         with pytest.raises(ceph_native.RemoteRefusal) as caught:
             execute(request, transport)
-        assert transport.calls == [("node-1", "prerequisites"), ("node-1", "ingress_firewall"), ("node-2", "ingress_firewall")]
+        assert settled(transport.calls) == [("node-1", "prerequisites")] + [(name, "ingress_firewall") for name in placed]
         assert ceph_core.refusal(caught.value, ceph_core.CLUSTER_REASONS)[0] == "ingress-firewall"
-        clock = iter([0, 0, 601])
-        transport = Calls(make(request))
-        with pytest.raises(ceph_native.Refusal, match="^not-ready$"):
-            execute(request, transport, now=lambda: next(clock))
-        assert transport.calls == [("node-1", "prerequisites"), ("node-1", "ingress_firewall")]
 
 
 GRANTS = json.loads((pathlib.Path(__file__).resolve().parents[2] / "goldens" / "ingress_firewall_grants.json").read_text(encoding="utf-8"))

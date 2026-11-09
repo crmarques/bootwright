@@ -1645,8 +1645,9 @@ mounts at `/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem`; no plan, record,
 argument, evidence or diagnostic carries a bundle or secret byte or a hash of
 one. After the apply, and before any dashboard write, each host of the proxy's
 placement proves read-only, within one native call of the block's deadline
-(calls of at most 120 s, rounds 10 s apart, a 600 s window), that every
-running oauth2-proxy container of this cluster there skips no identity
+(each round calls every proxy host concurrently, so a round lasts one call of
+at most 120 s whatever the host count; rounds 10 s apart, a 600 s window), that
+every running oauth2-proxy container of this cluster there skips no identity
 provider certificate verification: neither its arguments
 (`--ssl-insecure-skip-verify`) nor its environment
 (`OAUTH2_PROXY_SSL_INSECURE_SKIP_VERIFY`) nor the configuration file its
@@ -2072,9 +2073,11 @@ naming its state; a host with no such interface passes, because cephadm reports
 that itself. cephadm opens a deployed daemon's TCP ports only in the default
 zone, after this check, and never opens VRRP, so the check assumes neither.
 It changes no firewall ([D220](milestones/backlog.md#d220)) and runs on every
-apply, since a later firewall change drops VRRP the same. Each
-host's check is bounded by 120 s, all of them within a 600 s window that one
-native call of the block's deadline covers.
+apply, since a later firewall change drops VRRP the same. Every
+host's check runs in one concurrent round, each call bounded by 120 s, so the
+check lasts one call whatever the placement's host count, within the one
+native call of the block's deadline that covers it; every host answers before
+the first refusal in host order is returned.
 
 Storage publishes the same requirements as
 [host firewall requirements](managed-os.md#host-firewall-requirements),
