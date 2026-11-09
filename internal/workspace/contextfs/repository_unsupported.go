@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/reconciliation/logview"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
@@ -93,4 +94,16 @@ func (*Store) RunLifecycle(ctx context.Context, _ string, _ func(lifecycle.RunVi
 
 func (*Store) MutateLifecycle(ctx context.Context, _ string, _ func(lifecycle.Transaction) error) error {
 	return unsupported(ctx)
+}
+
+func (*Store) ReadLogs(ctx context.Context, _ string, _ func(logview.View) error) error {
+	return unsupported(ctx)
+}
+
+func (*Store) OpenRun(ctx context.Context, _, _ string) (logview.Stream, bool, error) {
+	return nil, false, unsupported(ctx)
+}
+
+func (*Store) OpenSetup(ctx context.Context, _ string) (logview.Stream, bool, error) {
+	return nil, false, unsupported(ctx)
 }

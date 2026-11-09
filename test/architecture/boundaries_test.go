@@ -67,6 +67,7 @@ func packageRoles() map[string]packageRole {
 		"internal/secrets/material":                adapterRole,
 		"internal/reconciliation/contextguard":     applicationRole,
 		"internal/reconciliation/operationstore":   applicationRole,
+		"internal/reconciliation/logview":          applicationRole,
 		"cmd/bootwright":                           compositionRole,
 		"internal/cli":                             cliRole,
 		"internal/availability":                    technicalRole,
@@ -126,6 +127,9 @@ func applicationDependencies() map[string][]string {
 		"internal/containercluster/networking":  {"internal/reconciliation/lifecycle", "internal/desiredstate/compilation", "internal/addons/clusterobjects/driver"},
 		"internal/addons/instance":              {"internal/reconciliation/lifecycle", "internal/desiredstate/compilation", "internal/addons/clusterobjects/driver"},
 		"internal/addons/clusterobjects/driver": {"internal/reconciliation/lifecycle"},
+		// The log reader presents the operation records and logs the store
+		// publishes, through the store's own readers.
+		"internal/reconciliation/logview": {"internal/reconciliation/operationstore"},
 		// The engine coordinates the contexts an operation crosses.
 		"internal/reconciliation/lifecycle": {
 			"internal/controller/prerequisites", "internal/desiredstate/compilation",

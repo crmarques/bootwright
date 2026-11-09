@@ -365,7 +365,7 @@ retained beside it.
 
 | Root lock | Lease | Commands |
 | --- | --- | --- |
-| shared | none | Every read: `context list` and `current`, `plan`, `status`, `preflight`, `controller check`, `secret check`, `list` and `show`, `secret encryption status`, `media list`, including the opening of each image `--checksums` then reads, the admission a `media add` or `media delete` without `--yes` reviews before its confirmation, the store check a `secret set` from standard input makes before it reads, the plan a `context update` or `context delete` without `--yes` presents before its confirmation, SSH-trust and input reads, and the reads that precede `apply` and `destroy`. |
+| shared | none | Every read: `context list` and `current`, `plan`, `status`, `logs` at each poll of an operation and as it opens a run's output, `preflight`, `controller check`, `secret check`, `list` and `show`, `secret encryption status`, `media list`, including the opening of each image `--checksums` then reads, the admission a `media add` or `media delete` without `--yes` reviews before its confirmation, the store check a `secret set` from standard input makes before it reads, the plan a `context update` or `context delete` without `--yes` presents before its confirmation, SSH-trust and input reads, and the reads that precede `apply` and `destroy`. |
 | exclusive | none | Every other command that may publish, such as `context use`, a `context update` that imports no input, `media delete`, the admission and publication of `media add`, the SSH trust that `machine trust` or a confirmed first use records, and the registry transaction in which `controller install` creates a missing setup subtree. |
 | none | none | The [acquisition](#media-acquisition) of `media add` between those two holds: its copy or download, or its re-read of a stage it adopts, its digest verification, and the record it retains beside a stage whose publication met another's lock; the full read of each image by `media list --checksums`, through the descriptor its shared hold opened; the confirmation prompt of `media add`, `media delete`, `context update` and `context delete`; the [read of standard input](secrets.md#acquisition-and-commands) by `secret set --value-stdin` or `--password-stdin`, including its terminal prompt; and every other part of `controller install`, which holds only [`host/setup/lock`](contexts/controller-record.md#the-setup-subtree). |
 | exclusive | held | `context init`; a `context update` that imports input; `context delete` of a ready context; `secret set` (from standard input, only to write what it read), `generate` and `delete`, `secret encryption init` and `rotate`, and the Secret binding `apply` and `destroy` take before they execute; and the short shared-state publications of `apply` and `destroy`. |
@@ -384,7 +384,10 @@ standard input holds none while it reads, then takes the exclusive root lock
 and the lease to write and re-proves its
 [replacement decision](secrets.md#acquisition-and-commands) there. A command
 that cannot take the lock or lease refuses with `lifecycle.lease` and a retry
-remedy; no lock or lease is ever taken over. A lease is held
+remedy; no lock or lease is ever taken over. A `logs --follow` takes no
+lease, and `logs --setup` no root lock: whether a writer still holds the
+operation, run or setup it follows is a non-blocking lock test released at
+once. A lease is held
 only once its stage collection, layout verification and reservation check
 succeed; a lease that refuses is released at once. `controller install`
 [selects no context](controller.md#the-setup-flow), so it
@@ -833,7 +836,8 @@ root, which [the uninstall flow](controller.md#the-uninstall-flow) owns.
 Troubleshooting output lives under the log root, `/var/log/bootwright`, never
 in the store: operation logs, retained adapter output, bounded-run output and
 setup output. Nothing there is evidence, ownership or a continuation cursor,
-and losing it changes no outcome. Its layout, modes, writers, bounds,
+and losing it changes no outcome. No lifecycle decision reads it; `bootwright
+logs` and `status` read it under the shared root lock. Its layout, modes, writers, bounds,
 retention and lifetime are the [log root contract](contexts/log-root.md).
 
 ## Format and restore boundary

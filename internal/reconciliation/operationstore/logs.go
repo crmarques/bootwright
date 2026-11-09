@@ -9,6 +9,7 @@ import (
 	"sync"
 	"unicode/utf8"
 
+	"github.com/crmarques/bootwright/internal/canonicaljson"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -365,4 +366,95 @@ func safeLogText(value string, limit int) string {
 		}
 		return c
 	}, value)
+}
+
+type LogLine struct {
+	Record    LogRecord
+	Truncated bool
+	Dropped   int
+}
+
+func DecodeLogLine(line []byte) (LogLine, bool) {
+	var marker struct {
+		Truncated bool `json:"truncated"`
+		Dropped   int  `json:"dropped"`
+	}
+	if canonicaljson.DecodeClosed(line, &marker) == nil && marker.Truncated && marker.Dropped > 0 {
+		return LogLine{Truncated: true, Dropped: marker.Dropped}, true
+	}
+	var record LogRecord
+	if canonicaljson.DecodeClosed(line, &record) != nil || record.Event == "" || validateTimestamps(record.Time) != nil {
+		return LogLine{}, false
+	}
+	for _, field := range []string{record.Event, record.Block, record.Group, record.Detail} {
+		if safeLogText(field, maxLogDetail) != field {
+			return LogLine{}, false
+		}
+	}
+	return LogLine{Record: record}, true
+}
+
+type AttemptFile struct {
+	Attempt    int
+	Resolution int
+	Output     bool
+}
+
+func ParseAttemptFile(name string) (AttemptFile, bool) {
+	rest, found := strings.CutPrefix(name, "attempt-")
+	if !found {
+		return AttemptFile{}, false
+	}
+	file := AttemptFile{}
+	switch {
+	case strings.HasSuffix(rest, ".output"):
+		rest, file.Output = strings.TrimSuffix(rest, ".output"), true
+	case strings.HasSuffix(rest, ".jsonl"):
+		rest = strings.TrimSuffix(rest, ".jsonl")
+	default:
+		return AttemptFile{}, false
+	}
+	attempt, resolution, resolved := strings.Cut(rest, "-resolution-")
+	number, err := reconciliation.ParseNumber(attempt)
+	if err != nil {
+		return AttemptFile{}, false
+	}
+	file.Attempt = number
+	if resolved {
+		if file.Resolution, err = reconciliation.ParseNumber(resolution); err != nil {
+			return AttemptFile{}, false
+		}
+	}
+	return file, true
+}
+
+type OutputFile struct {
+	Path       string
+	Attempt    int
+	Resolution int
+	Size       int64
+}
+
+func (s *Store) LatestOutput(ctx context.Context, id, block string, attempt int) (OutputFile, bool, error) {
+	if !reconciliation.ValidOperationID(id) || !reconciliation.ValidSegment(block) {
+		return OutputFile{}, false, recordError("a retained output is named by its operation and block")
+	}
+	directory := path.Join(id, "blocks", block)
+	entries, err := s.logs.Entries(ctx, directory)
+	if err != nil {
+		return OutputFile{}, false, err
+	}
+	latest, found := OutputFile{}, false
+	for _, entry := range entries {
+		file, valid := ParseAttemptFile(entry.Name)
+		if entry.Directory || !valid || !file.Output || attempt > 0 && file.Attempt != attempt {
+			continue
+		}
+		if found && (file.Attempt < latest.Attempt || file.Attempt == latest.Attempt && file.Resolution < latest.Resolution) {
+			continue
+		}
+		latest = OutputFile{Path: path.Join(directory, entry.Name), Attempt: file.Attempt, Resolution: file.Resolution, Size: entry.Size}
+		found = true
+	}
+	return latest, found, nil
 }

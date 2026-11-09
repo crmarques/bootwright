@@ -1068,6 +1068,9 @@ it to a variable.
 | `substrate.lend-not-revoked` | A warning a block's attempt reports when the return of a KubeVirt host access it was lent could not delete the per-lend Secret its token is bound to; it names the host cluster, the Secret and the lifetime that still bounds the token, and a later lend sweeps the Secret once that lifetime has passed ([lent KubeVirt access revocation](../substrates.md#lent-kubevirt-access-revocation)). Never a refusal, and it changes no block's state. |
 | `lifecycle.surviving-consumer` | Informational: a `plan` of an apply names a consumer whose cluster would outlive a destroy of the context while consuming an effect that destroy retires, so that destroy refuses with `lifecycle.live`. Never a refusal. |
 | `lifecycle.adapter-running` | An adapter of the same context, or one whose record names no context, still holds its job lock, so no adapter of that context starts until it ends. |
+| `logs.not-found` | `bootwright logs` names an operation, block, attempt, bounded run or setup whose records or retained log no longer exist, or the context has no operation; the remedy names what retention keeps and the `status` that shows the durable records. |
+| `logs.detached` | A warning that ends a `bootwright logs --follow`: the followed operation is still `running`, but no `apply` or `destroy` holds its context, so nothing will write to it until one continues it; the remedy names that command. |
+| `logs.truncated` | A warning after `bootwright logs --raw`: the attempt's retained output was cut short at its bound, so it holds less than the adapter printed. |
 | `trust.identity` | SSH identity is missing, changed, contradictory, or not authorized. |
 | `access.unavailable` | An applicable access request lacks required local access metadata or an available credential artifact. |
 | `access.unproved` | A revealed credential was kept from an effect never proved complete, so the access it grants was not proved; a warning. |

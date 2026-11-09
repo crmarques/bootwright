@@ -80,6 +80,7 @@ var defaultRemediations = map[string]string{
 	"lifecycle.unknown":         "resolve the unknown effect with the command bootwright status --context <context> names",
 	"lifecycle.live":            "stop what still uses the state and repeat the removal",
 	"lifecycle.adapter-running": "wait for the adapter the message names to end and repeat the command",
+	"logs.not-found":            "run bootwright status --context <context> to see the operation records that remain",
 
 	"trust.identity":     "review the SSH identity the message names and enroll it with bootwright machine trust --context <context>",
 	"access.unavailable": "provide the access metadata or credential the message names and repeat the command",

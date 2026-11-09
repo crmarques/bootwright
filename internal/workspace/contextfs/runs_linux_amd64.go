@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -24,6 +25,8 @@ const (
 	runPrefix         = "run-"
 	outputSuffix      = ".output"
 	maxRunAllocations = 16
+	runHoldAttempts   = 16
+	runHoldPoll       = time.Millisecond
 )
 
 func outputNumber(name, prefix string) (int, bool) {
@@ -182,7 +185,7 @@ func (s *Store) createRun(ctx context.Context, runs *directory, name string) (*o
 		discardCreated(runs, name, created)
 		return nil, state("bounded run output is not a private file: " + location)
 	}
-	if syscall.Flock(int(run.Fd()), syscall.LOCK_SH|syscall.LOCK_NB) != nil {
+	if holdRun(ctx, run) != nil {
 		discardRun(runs, name, run)
 		return nil, state("bounded run output could not be held: " + location)
 	}
@@ -195,6 +198,23 @@ func (s *Store) createRun(ctx context.Context, runs *directory, name string) (*o
 		return nil, err
 	}
 	return run, nil
+}
+
+// holdRun waits out a liveness probe's or a retention's instant exclusive hold.
+func holdRun(ctx context.Context, run *os.File) error {
+	for attempt := 1; ; attempt++ {
+		err := syscall.Flock(int(run.Fd()), syscall.LOCK_SH|syscall.LOCK_NB)
+		if !errors.Is(err, syscall.EWOULDBLOCK) || attempt == runHoldAttempts {
+			return err
+		}
+		timer := time.NewTimer(runHoldPoll)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 // discardRun takes no context, so an interrupted run still cleans up.

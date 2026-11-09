@@ -34,7 +34,7 @@ func commentLineCeilings() map[string]int {
 		"internal/managedos/media/storecontract": 16, "internal/managedos/medialocal": 43,
 		"internal/nativeartifacts/rendering": 0, "internal/nativeartifacts/renderlocal": 0, "internal/nativeartifacts/comparisonlocal": 0, "internal/reconciliation": 139,
 		"internal/reconciliation/ansiblerunner": 213, "internal/reconciliation/contextguard": 8,
-		"internal/reconciliation/lifecycle": 1790, "internal/reconciliation/lifecycle/workspacecontract": 20,
+		"internal/reconciliation/lifecycle": 1790, "internal/reconciliation/logview": 10, "internal/reconciliation/lifecycle/workspacecontract": 20,
 		"internal/reconciliation/operationstore": 287, "internal/reconciliation/operationstore/areacontract": 12,
 		"internal/reconciliation/operationstore/areadouble": 16, "internal/secrets": 39,
 		"internal/secrets/custody": 81, "internal/secrets/encryption": 11, "internal/secrets/localkeyring": 26,

@@ -519,3 +519,60 @@ func TestRegistrationRetainsTheLogsOfTheCurrentOperations(t *testing.T) {
 		t.Fatalf("registrations retained %v and marked %v", logs.kept, logs.current)
 	}
 }
+
+func TestLatestOutputPicksTheHighestAttemptThenResolution(t *testing.T) {
+	ctx := context.Background()
+	store, area := newStore(t)
+	id := "op-" + strings.Repeat("ab", 16)
+	for name, data := range map[string]string{
+		"attempt-000001.output": "1", "attempt-000002.output": "22", "attempt-000002-resolution-000001.output": "333",
+		"attempt-000002.jsonl": "{}\n", "attempt-02.output": "x", "notes.output": "x",
+	} {
+		area.logs.files[id+"/blocks/dns/"+name] = []byte(data)
+	}
+	newest, found, err := store.LatestOutput(ctx, id, "dns", 0)
+	if err != nil || !found || newest != (OutputFile{Path: id + "/blocks/dns/attempt-000002-resolution-000001.output", Attempt: 2, Resolution: 1, Size: 3}) {
+		t.Fatalf("newest = %+v %t %v", newest, found, err)
+	}
+	first, found, err := store.LatestOutput(ctx, id, "dns", 1)
+	if err != nil || !found || first.Path != id+"/blocks/dns/attempt-000001.output" || first.Resolution != 0 {
+		t.Fatalf("attempt 1 = %+v %t %v", first, found, err)
+	}
+	if _, found, err := store.LatestOutput(ctx, id, "dns", 3); found || err != nil {
+		t.Fatalf("attempt 3 = %t %v, want none", found, err)
+	}
+	if _, found, err := store.LatestOutput(ctx, id, "web", 0); found || err != nil {
+		t.Fatalf("a block with no directory = %t %v, want none", found, err)
+	}
+}
+
+func TestDecodeLogLineAcceptsOnlyARecordOrTheTruncationMarker(t *testing.T) {
+	record, valid := DecodeLogLine([]byte(`{"time":"2026-11-08T09:00:00Z","event":"group","group":"install","detail":"ok"}`))
+	if !valid || record != (LogLine{Record: LogRecord{Time: "2026-11-08T09:00:00Z", Event: "group", Group: "install", Detail: "ok"}}) {
+		t.Fatalf("record = %+v %t", record, valid)
+	}
+	if marker, valid := DecodeLogLine([]byte(`{"truncated":true,"dropped":4}`)); !valid || marker != (LogLine{Truncated: true, Dropped: 4}) {
+		t.Fatalf("marker = %+v %t", marker, valid)
+	}
+	for _, line := range []string{
+		``, `not json`, `{"time":"2026-11-08T09:00:00Z"}`, `{"time":"2026-11-08 09:00:00","event":"opened"}`,
+		`{"time":"2026-11-08T09:00:00Z","event":"opened","extra":true}`, `{"time":"2026-11-08T09:00:00Z","event":"opened"} {}`,
+		`{"time":"2026-11-08T09:00:00Z","event":"opened","detail":"\u001b[2J"}`, `{"truncated":false,"dropped":4}`, `{"truncated":true,"dropped":0}`,
+	} {
+		if decoded, valid := DecodeLogLine([]byte(line)); valid {
+			t.Errorf("%q decoded as %+v", line, decoded)
+		}
+	}
+	for name, want := range map[string]AttemptFile{
+		"attempt-000003.jsonl": {Attempt: 3}, "attempt-000003-resolution-000002.output": {Attempt: 3, Resolution: 2, Output: true},
+	} {
+		if got, valid := ParseAttemptFile(name); !valid || got != want {
+			t.Errorf("%s = %+v %t", name, got, valid)
+		}
+	}
+	for _, name := range []string{"attempt-3.jsonl", "attempt-000003.json", "attempt-000000.output", "attempt-000003-resolution-.output"} {
+		if got, valid := ParseAttemptFile(name); valid {
+			t.Errorf("%s parsed as %+v", name, got)
+		}
+	}
+}
