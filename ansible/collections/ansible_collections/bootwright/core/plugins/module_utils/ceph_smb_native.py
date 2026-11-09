@@ -25,7 +25,6 @@ import contextlib
 import copy
 import ipaddress
 import json
-import os
 import re
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_nfs, ceph_native_resources
@@ -308,8 +307,7 @@ class SMBWorker(ceph_native_resources.ResourceWorker):
             return super().ceph(*args, data=data, json_result=json_result)
         proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
         with proof:
-            return self.command(["/usr/bin/ceph", "--conf", os.path.join(self.markers.path, "ceph.conf"),
-                                 "--keyring", os.path.join(self.markers.path, "ceph.client.admin.keyring"), "--format", "json", *args],
+            return self.command([*self.admin_argv("/usr/bin/ceph"), "--format", "json", *args],
                                 data=data, json_result=json_result, recover=recover)
 
     def name(self, resource_type=None, identity=None):

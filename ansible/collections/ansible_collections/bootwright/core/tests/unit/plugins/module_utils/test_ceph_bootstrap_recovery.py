@@ -612,8 +612,9 @@ def admin_cli(native, stored):
 
     def run(argv, data=b"", timeout=60):
         del timeout
-        assert argv[:5] == ["/usr/bin/ceph", "--conf", native.bootstrap_sources()["config"], "--keyring", native.bootstrap_sources()["keyring"]]
-        arguments = argv[5:]
+        assert argv[:8] == ["/usr/bin/ceph", "--conf", native.bootstrap_sources()["config"], "-m", ceph_native.admin_monitors(native.request),
+                            "--auth_client_required=cephx", "--keyring", native.bootstrap_sources()["keyring"]]
+        arguments = argv[8:]
         formatted = arguments[:2] == ["--format", "json"]
         arguments = arguments[2:] if formatted else arguments
         calls.append((formatted, arguments))

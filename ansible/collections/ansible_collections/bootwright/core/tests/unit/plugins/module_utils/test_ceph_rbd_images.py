@@ -29,7 +29,8 @@ IMAGE_ID = "10226b8b4567"
 DEFAULTS = ["layering", "exclusive-lock", "object-map", "fast-diff", "deep-flatten"]
 BIT_ORDER = ("layering", "striping", "exclusive-lock", "object-map", "fast-diff", "deep-flatten", "journaling", "data-pool")
 FORBIDDEN = ("rm", "remove", "trash", "resize", "--allow-shrink", "feature", "migration", "flatten", "--force")
-PREFIX = ["/usr/bin/rbd", "--conf", "/private/cluster/ceph.conf", "--keyring", "/private/cluster/ceph.client.admin.keyring"]
+PREFIX = ["/usr/bin/rbd", "--conf", "/private/cluster/ceph.conf", "-m", "192.0.2.1,192.0.2.2,192.0.2.3",
+          "--auth_client_required=cephx", "--keyring", "/private/cluster/ceph.client.admin.keyring"]
 
 
 def cluster(count=3):
@@ -100,8 +101,8 @@ class World:
             assert command == ("osd", "pool", "ls", "detail"), command
             self.log.append(command)
             return 0, json.dumps(self.pools).encode()
-        assert argv[:5] == PREFIX, argv
-        command = tuple(argv[5:])
+        assert argv[:8] == PREFIX, argv
+        command = tuple(argv[8:])
         self.log.append(command)
         self.argvs.append(list(argv))
         if command[:3] == ("ls", "--format", "json"):
@@ -176,7 +177,7 @@ def observe(native):
 
 
 def creates(world):
-    return [argv for argv in world.argvs if argv[5] == "create"]
+    return [argv for argv in world.argvs if argv[len(PREFIX)] == "create"]
 
 
 @pytest.mark.parametrize("data_pool", ["", "ec-data"])

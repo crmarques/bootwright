@@ -16,7 +16,6 @@ import contextlib
 import functools
 import hashlib
 import json
-import os
 import re
 
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native
@@ -366,8 +365,7 @@ class ResourceWorker(ceph_native.Worker):
                 self.markers.write(attempt_name, init)
                 proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
                 with proof:
-                    self.command(["/usr/bin/rbd", "--conf", os.path.join(self.markers.path, "ceph.conf"), "--keyring",
-                                  os.path.join(self.markers.path, "ceph.client.admin.keyring"), "pool", "init", name], json_result=False)
+                    self.command([*self.admin_argv("/usr/bin/rbd"), "pool", "init", name], json_result=False)
                 require("rbd" in self.owned_pool(pool["name"]).get("application_metadata", {}), "not-ready")
                 self.markers.write(complete_name, init)
             changed = completed is None or changed
@@ -975,8 +973,7 @@ class ResourceWorker(ceph_native.Worker):
         """One rbd command with the operation's own admin custody, under the bootstrap hold as every native call."""
         proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
         with proof:
-            return self.command(["/usr/bin/rbd", "--conf", os.path.join(self.markers.path, "ceph.conf"), "--keyring",
-                                 os.path.join(self.markers.path, "ceph.client.admin.keyring"), *args], json_result=json_result)
+            return self.command([*self.admin_argv("/usr/bin/rbd"), *args], json_result=json_result)
 
     def rbd_names(self, pool):
         result = self.rbd_cli("ls", "--format", "json", pool)

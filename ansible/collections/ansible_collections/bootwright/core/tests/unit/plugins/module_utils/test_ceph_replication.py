@@ -78,7 +78,7 @@ class Monitor:
 
     def run(self, argv, data=b"", timeout=60):
         self.calls.append((list(argv), data, timeout))
-        args = [arg for arg in argv[5:] if arg not in native.QUIET]
+        args = [arg for arg in argv[8:] if arg not in native.QUIET]
         if args[:2] == ["--format", "json"]:
             args = args[2:]
         assert SECRET not in str(argv)

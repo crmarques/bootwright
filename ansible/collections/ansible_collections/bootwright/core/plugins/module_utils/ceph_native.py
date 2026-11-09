@@ -727,6 +727,24 @@ def bootstrap_config(request):
     return content.encode()
 
 
+def admin_monitors(request):
+    """The MONs an admin command names: the seed's monIP, then each MON-placed host's canonical IP inside a public network, by name.
+
+    The retained bootstrap configuration names only the seed, so the list overrides its mon_host and never rewrites the file; it routes
+    only: admin_argv requires CephX of the client, so a listener on a listed address that is not the cluster's MON is refused."""
+    networks = [ipaddress.ip_network(network) for network in request["publicNetworks"]]
+    placed = next(service["placement"]["hosts"] for service in request["services"] if service["service_type"] == "mon")
+    result = [str(ipaddress.ip_address(request["monIP"]))]
+    for host in sorted((h for h in request["hosts"] if h["name"] in placed), key=lambda h: h["name"]):
+        try:
+            address = ipaddress.ip_address(host["address"])
+        except ValueError:
+            continue
+        if str(address) == host["address"] and str(address) not in result and any(address in network for network in networks):
+            result.append(str(address))
+    return ",".join("[" + address + "]" if ":" in address else address for address in result)
+
+
 def validate_hosts(request):
     """Bind every eligible host and disk to one explicit identity."""
     hosts = request["hosts"]
@@ -1425,14 +1443,17 @@ class Worker:
     def manager_label(self):
         return self.runtime_profile()["label"]
 
+    def admin_argv(self, program):
+        """A native admin client on the retained bootstrap configuration and keyring, reaching any MON admin_monitors names and
+        accepting only a CephX-authenticated one: the retained file sets no client auth, whose default also admits none."""
+        return [program, "--conf", os.path.join(self.markers.path, "ceph.conf"), "-m", admin_monitors(self.request),
+                "--auth_client_required=cephx", "--keyring", os.path.join(self.markers.path, "ceph.client.admin.keyring")]
+
     def ceph(self, *args, data=b"", json_result=True, secrets=(), timeout=60):
         proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
         with proof:
-            return self.command([
-                "/usr/bin/ceph", "--conf", os.path.join(self.markers.path, "ceph.conf"),
-                "--keyring", os.path.join(self.markers.path, "ceph.client.admin.keyring"),
-                "--format", "json", *args,
-            ], data=data, json_result=json_result, secrets=secrets, timeout=timeout)
+            return self.command([*self.admin_argv("/usr/bin/ceph"), "--format", "json", *args],
+                                data=data, json_result=json_result, secrets=secrets, timeout=timeout)
 
     def recovery_enabled(self):
         return self.request["clusterSSHTransport"] == "verifiedTunnel" and self.markers.read("bootstrap-scope.json") is not None
@@ -1441,8 +1462,7 @@ class Worker:
         """Primitive native output still holds the same original admin custody."""
         proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
         with proof:
-            return self.command(["/usr/bin/ceph", "--conf", os.path.join(self.markers.path, "ceph.conf"),
-                                 "--keyring", os.path.join(self.markers.path, "ceph.client.admin.keyring"), *args], json_result=False)
+            return self.command([*self.admin_argv("/usr/bin/ceph"), *args], json_result=False)
 
     @contextlib.contextmanager
     def manager_served(self):
@@ -3832,8 +3852,7 @@ class Worker:
         """Only the exit status: no native output, and no input it echoes, leaves this call."""
         proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
         with proof:
-            code, unused = self.run(["/usr/bin/ceph", "--conf", os.path.join(self.markers.path, "ceph.conf"),
-                                     "--keyring", os.path.join(self.markers.path, "ceph.client.admin.keyring"), *args], data=data, timeout=60)
+            code, unused = self.run([*self.admin_argv("/usr/bin/ceph"), *args], data=data, timeout=60)
         return code
 
     def dashboard_settings(self):

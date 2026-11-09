@@ -133,8 +133,7 @@ class ExportWorker(ceph_native_resources.ResourceWorker):
 
     def rgw(self, *args):
         gateway = self.export["gateway"]
-        argv = ["/usr/bin/radosgw-admin", "--conf", os.path.join(self.markers.path, "ceph.conf"),
-                "--keyring", os.path.join(self.markers.path, "ceph.client.admin.keyring"), "--format", "json", *args,
+        argv = [*self.admin_argv("/usr/bin/radosgw-admin"), "--format", "json", *args,
                 "--rgw-realm", gateway["realm"], "--rgw-zonegroup", gateway["zoneGroup"], "--rgw-zone", gateway["zone"]]
         with self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext():
             code, output = self.run(argv, timeout=60)
