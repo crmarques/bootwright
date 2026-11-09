@@ -1,11 +1,13 @@
 package managedservice
 
 import (
+	"net/netip"
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/containercluster"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/network"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -96,16 +98,20 @@ func Clients(catalog api.Catalog) []string {
 }
 
 // MachineRecords names every retained Machine by its effective fully qualified
-// name and the addresses it declares, so a managed resolver answers the graph
-// it was planned from.
+// name and the addresses routed reports its clients can reach, so a managed
+// resolver answers the graph it was planned from.
 func MachineRecords(catalog api.Catalog) []Record {
 	var records []Record
-	for _, machine := range catalog.OfKind(api.Machine) {
+	for _, bound := range catalog.OfKind(api.Machine) {
 		name, addresses := "", []string{}
-		for _, address := range machine.Spec().Get("network", "addresses").Items() {
+		install, _ := machine.InstallAddress(bound, catalog)
+		for _, address := range bound.Spec().Get("network", "addresses").Items() {
 			value := address.Get("address").Text()
 			if address.Get("name").Text() == "fqdn" {
 				name = value
+				continue
+			}
+			if !routed(bound, catalog, address, install) {
 				continue
 			}
 			if host := hostAddress(value); host != "" && !slices.Contains(addresses, host) {
@@ -119,6 +125,24 @@ func MachineRecords(catalog api.Catalog) []Record {
 		records = append(records, Record{Addresses: addresses, Name: name})
 	}
 	return sortRecords(records)
+}
+
+// routed admits an address no Network holds, one on a Network with a gateway
+// of its family, and the installation address wherever it lies.
+func routed(bound api.Object, catalog api.Catalog, address, install api.Value) bool {
+	held, ok := machine.AssignedNetwork(bound, catalog, address)
+	if !ok {
+		return true
+	}
+	if install.Present() && address.Get("name").Equal(install.Get("name")) {
+		return true
+	}
+	parsed, err := netip.ParseAddr(address.Get("address").Text())
+	if err != nil {
+		return true
+	}
+	_, gateway := network.Gateway(held.Network, network.Family(parsed))
+	return gateway
 }
 
 // ClusterRecords names every container cluster the graph selects: the two API

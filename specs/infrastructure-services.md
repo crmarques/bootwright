@@ -626,7 +626,7 @@ graph, never from authored daemon syntax:
 | Kind | Derived from the graph | Authored |
 | --- | --- | --- |
 | `Proxy` | The client set below, as the only addresses it serves. Before it admits a client it refuses every request whose destination is a loopback or unspecified address (`127.0.0.0/8`, `0.0.0.0/32`, `::1/128`, `::/128`) or a link-local one (`169.254.0.0/16`, `fe80::/10`), and every request for its cache manager; `CONNECT` is not restricted further (`test_the_proxy_refuses_local_link_local_and_manager_destinations_before_it_admits_a_client`). Caching and authentication are disabled. | `bindAddress`, `port` |
-| `DNSServer` | One name per retained Machine, from its effective `fqdn` contact, answering every declared IPv4 and IPv6 address of that Machine as its own record, with the reverse record on the first address only, and the records each selected container cluster answers at. | `bindAddress`, `port`, `forwarders[]` |
+| `DNSServer` | One name per retained Machine, from its effective `fqdn` contact, answering the addresses of that Machine its clients can reach, by the rule below, each as its own record, with the reverse record on the first address only, and the records each selected container cluster answers at. | `bindAddress`, `port`, `forwarders[]` |
 | `NTPServer` | The client set below, as the only addresses it answers. | `bindAddress`, `port`, `upstreamSources[]` |
 
 The client set is loopback, the CIDR of each [`Network`](api/networks.md)
@@ -635,6 +635,17 @@ retained Machine IP address as a single-host prefix, sorted and deduplicated
 ([D240](milestones/backlog.md#d240) (8)). Other Networks, which can hold hosts
 outside the graph, and VIPs add nothing, so a managed proxy or time service is
 never planned open to the world.
+
+A Machine's name answers an address only when its clients can dial it: an
+address held by no Network (a contact), an interface address on a
+[`Network`](api/networks.md) that declares a gateway in the address's family,
+and the Machine's installation address
+([`network.installAddressRef`](api/machines.md#addresses-and-access), else the
+one the Machine's network selects) wherever it lies. Any other interface
+address, one on a Network without a gateway, is published under no name, and a
+Machine left with no address publishes no record. Members of an unrouted
+Network address each other by address, as cephadm does with each host's
+`addr` ([B1214](milestones/backlog.md#b1214)).
 
 A `DNSServer` with no authored forwarder answers only its own records rather
 than reaching an ambient upstream. A managed `NTPServer` serves time without
@@ -669,7 +680,7 @@ or container-cluster package.
 service serves: the declared bind address, or every declared endpoint address
 when the bind address is a wildcard, for which admission requires an endpoint
 (`TestPresenceRequiresEveryDeclaredAnswer`). A proxy
-answers a bounded HTTP request with a well-formed status line; a resolver answers every declared address of every one of its records over
+answers a bounded HTTP request with a well-formed status line; a resolver answers every address of every one of its records over
 UDP, and over TCP as well; a time service returns a server-mode reply, whose stratum may
 show it unsynchronized without being a failure. Readiness therefore proves that
 the service answers, not that it is synchronized to an upstream source, and a
