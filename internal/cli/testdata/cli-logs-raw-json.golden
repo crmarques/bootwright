@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "logs",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "source": {
+      "kind": "attempt",
+      "operation": "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a",
+      "block": "machine-rhel-01",
+      "attempt": 2
+    },
+    "path": "contexts/lab/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/blocks/machine-rhel-01/attempt-000002.output",
+    "bytes": 56,
+    "truncated": true,
+    "output": {
+      "mediaType": "text/plain",
+      "encoding": "base64",
+      "content": "VEFTSyBbZGVmaW5lIHRoZSBkb21haW5dDQobWzMxbWZhdGFsOiBubyBzdWNoIHBvb2wbWzBtCm9rCg=="
+    }
+  },
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "logs.truncated",
+      "message": "the retained output contexts/lab/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/blocks/machine-rhel-01/attempt-000002.output was cut short at its bound; what the adapter printed after it is not retained"
+    }
+  ],
+  "logs": []
+}

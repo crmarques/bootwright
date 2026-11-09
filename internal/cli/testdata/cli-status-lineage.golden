@@ -35,7 +35,8 @@
     [DONE] install the add-on metallb on ocp-01
 
       Registered by  1.4.0 (9f2c1ab)
-      Logs           /var/lib/bootwright/contexts/lab/state/operations/op-0a4b8c2d6e1f3a5b7c9d0e2f4a6b8c1d/logs
+      Logs           /var/log/bootwright/contexts/lab/operations/op-0a4b8c2d6e1f3a5b7c9d0e2f4a6b8c1d
+      Follow         bootwright logs --context lab --operation op-0a4b8c2d6e1f3a5b7c9d0e2f4a6b8c1d
 
   Handoff
     ready

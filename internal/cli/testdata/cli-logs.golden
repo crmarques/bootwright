@@ -1,0 +1,6 @@
+14:02:11  -                              opened     apply op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
+14:02:12  artifact-server-lab-artifacts  started    attempt 1
+14:02:40  artifact-server-lab-artifacts  group      pull-image done
+14:03:05  artifact-server-lab-artifacts  outcome    changed
+14:03:06  machine-rhel-01                started    attempt 2 resolution 1
+-         machine-rhel-01                truncated  3 records dropped

@@ -1,9 +1,16 @@
   bootwright / status
-      Report context readiness, desired state and lifecycle progress from durable records. It
+      Report context readiness, desired state and lifecycle progress from durable records.
+      While an operation runs it lists each running block's newest output file and the bytes
+      written so far. With --paths it also lists the store, log, hosted and guest-image paths
+      of the context on this host and whether each is present, examining no content. It
       performs no probe.
 
   Usage
     bootwright status [flags]
+
+  Command flags
+      --paths  Also list where this host keeps the context's data and whether each path is
+               present
 
   Common flags
       --ascii       Use ASCII status markers

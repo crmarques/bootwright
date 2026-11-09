@@ -3,4 +3,5 @@
     Machine   rhel-01
     Power     on
     Previous  off
-    Logs      /var/lib/bootwright/contexts/lab/state/runs/run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9a
+    Logs      /var/log/bootwright/contexts/lab/runs/run-000003.output
+    Follow    bootwright logs --context lab --run run-000003

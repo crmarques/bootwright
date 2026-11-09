@@ -275,7 +275,9 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 		}
 		ctx = operationContext
 	}
-	result, err := r.config.Services.invoke(ctx, path, command.Flags(), command.Flags().Args())
+	services := r.config.Services
+	services.logOutput = r.config.Out
+	result, err := services.invoke(ctx, path, command.Flags(), command.Flags().Args())
 	defer result.clearSensitive()
 	if handled, status := r.writeCopyOutcome(ctx, command, path, result, err); handled {
 		return status
@@ -286,7 +288,8 @@ func (r *Runner) execute(ctx context.Context, command *cobra.Command, path strin
 	}
 	var controllerOutput *controllerOutputFailure
 	var lifecycleOutput *lifecycleOutputFailure
-	if errors.As(err, &controllerOutput) || errors.As(err, &lifecycleOutput) {
+	var logsOutput *logsOutputFailure
+	if errors.As(err, &controllerOutput) || errors.As(err, &lifecycleOutput) || errors.As(err, &logsOutput) {
 		return 1
 	}
 	// Remote sessions own their streams and status, including interruptions.

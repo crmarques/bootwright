@@ -37,6 +37,7 @@ type flagSpec struct {
 	path     string
 	// undisclosed marks a value no output repeats.
 	undisclosed bool
+	bare        string
 }
 
 func stringFlag(name, help string) flagSpec { return flagSpec{name: name, help: help, kind: "string"} }
@@ -60,6 +61,12 @@ func directoryFlag(name, help string) flagSpec {
 func fileFlag(name, help string) flagSpec {
 	f := stringFlag(name, help)
 	f.path = "file"
+	return f
+}
+
+func optionalValueFlag(name, bare, help string) flagSpec {
+	f := stringFlag(name, help)
+	f.bare = bare
 	return f
 }
 

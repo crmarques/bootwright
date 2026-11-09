@@ -109,8 +109,8 @@ func TestOperationResultLeadsWithItsOutcomeAndNamesItsLog(t *testing.T) {
 			result := &lifecycle.OperationResult{
 				Context: lifecycle.ContextIdentity{Name: "lab"}, Verb: "apply",
 				Blocks:      []lifecycle.BlockResult{{ID: "artifact-server-lab", Description: "serve artifacts", State: state}},
-				Logs:        []string{"op-abc/logs/operation.jsonl"},
-				LogLocation: "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs",
+				Logs:        []string{"contexts/lab/operations/op-abc/operation.jsonl"},
+				LogLocation: "/var/log/bootwright/contexts/lab/operations/op-abc",
 				Receipt:     lifecycle.Receipt{Operation: "op-abc", Verb: "apply", State: state, Next: "destroy"},
 			}
 			if err := writeLifecycleOperation(&out, result); err != nil {
@@ -120,7 +120,7 @@ func TestOperationResultLeadsWithItsOutcomeAndNamesItsLog(t *testing.T) {
 			if !strings.HasPrefix(rendered, token+" Apply "+state) {
 				t.Fatalf("headline = %q, want prefix %q", rendered, token)
 			}
-			if !strings.Contains(rendered, "Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n") {
+			if !strings.Contains(rendered, "Logs  /var/log/bootwright/contexts/lab/operations/op-abc\n") {
 				t.Fatalf("the result did not name where its logs are: %q", rendered)
 			}
 			if !strings.HasSuffix(rendered, "next: destroy\n") {
@@ -487,8 +487,8 @@ func TestFailedOperationKeepsItsResultLogAndReceipt(t *testing.T) {
 					{ID: "artifact-server-lab", Description: "serve artifacts for lab-artifacts", State: "failed"},
 					{ID: "dns-lab", Description: "resolve names for lab-dns", State: "pending"},
 				},
-				Logs:        []string{"op-abc/logs/blocks/artifact-server-lab/attempt-000001.jsonl"},
-				LogLocation: "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs",
+				Logs:        []string{"contexts/lab/operations/op-abc/blocks/artifact-server-lab/attempt-000001.jsonl"},
+				LogLocation: "/var/log/bootwright/contexts/lab/operations/op-abc",
 				Receipt:     lifecycle.Receipt{Operation: "op-abc", Verb: path, State: "failed", Next: "continue-" + path},
 			}
 			failure := &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "lifecycle.state", Message: "the operation did not complete"}}}
@@ -502,7 +502,7 @@ func TestFailedOperationKeepsItsResultLogAndReceipt(t *testing.T) {
 			if !strings.Contains(rendered, "serve artifacts for lab-artifacts") {
 				t.Fatalf("result rows missing: %q", rendered)
 			}
-			if !strings.Contains(rendered, "Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n") {
+			if !strings.Contains(rendered, "Logs  /var/log/bootwright/contexts/lab/operations/op-abc\n") {
 				t.Fatalf("the failure did not name where its logs are: %q", rendered)
 			}
 			if !strings.HasSuffix(rendered, "next: continue-"+path+"\n") {
@@ -535,15 +535,15 @@ func TestStatusNamesTheLogOfAnIncompleteOperation(t *testing.T) {
 		Lifecycle: &lifecycle.LifecycleSummary{
 			Operation: "op-abc", Verb: "apply", State: "failed", Next: "continue-apply",
 			Blocks: []lifecycle.BlockResult{{ID: "artifact-server-lab", Description: "serve artifacts", State: "failed"}},
-			Logs:   []string{"op-abc/logs/blocks/artifact-server-lab/attempt-000001.jsonl"},
+			Logs:   []string{"contexts/lab/operations/op-abc/blocks/artifact-server-lab/attempt-000001.jsonl"},
 		},
-		LogLocation: "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs",
+		LogLocation: "/var/log/bootwright/contexts/lab/operations/op-abc",
 	}
 	var text bytes.Buffer
 	if err := writeLifecycleStatus(&text, result, false); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(text.String(), "Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n") {
+	if !strings.Contains(text.String(), "Logs  /var/log/bootwright/contexts/lab/operations/op-abc\n") {
 		t.Fatalf("status did not name where the operation logs are: %q", text.String())
 	}
 	if !strings.Contains(text.String(), "bootwright apply") {
@@ -671,11 +671,11 @@ func TestProgressNamesTheLogLocationBeforeItsFirstRow(t *testing.T) {
 	var out bytes.Buffer
 	presenter := NewLifecycleProgressPresenter(&out, nil)
 	ctx := context.Background()
-	presenter.ReportLogLocation(ctx, lifecycle.LogLocation{Path: "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs"})
+	presenter.ReportLogLocation(ctx, lifecycle.LogLocation{Path: "/var/log/bootwright/contexts/lab/operations/op-abc"})
 	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{
 		Block: "artifact-server-lab", Description: "serve artifacts on lab", Status: "running", Position: 1, Total: 1,
 	})
-	want := "\n  Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n" +
+	want := "\n  Logs  /var/log/bootwright/contexts/lab/operations/op-abc\n" +
 		"\n  Progress\n" +
 		"  [RUNNING]  [1/1] serve artifacts on lab\n"
 	if out.String() != want {
@@ -705,7 +705,7 @@ func TestQuiescenceChecksSettleAsOneRowBeforeTheEffects(t *testing.T) {
 		Phase: lifecycle.CheckPhase, Block: "quiescence",
 		Description: "prove nothing this removal takes back is still in use", Status: "ok",
 	})
-	presenter.ReportLogLocation(ctx, lifecycle.LogLocation{Path: "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs"})
+	presenter.ReportLogLocation(ctx, lifecycle.LogLocation{Path: "/var/log/bootwright/contexts/lab/operations/op-abc"})
 	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{
 		Block: "machine-rhel-01", Description: "remove the virtual machine rhel-01", Status: "done", Position: 1, Total: 2,
 	})
@@ -713,7 +713,7 @@ func TestQuiescenceChecksSettleAsOneRowBeforeTheEffects(t *testing.T) {
 		"  [RUNNING]  prove nothing this removal takes back is still in use: Machine/rhel-01 - 0%\n" +
 		"  [RUNNING]  prove nothing this removal takes back is still in use: ArtifactServer/lab - 50%\n" +
 		"  [OK]       prove nothing this removal takes back is still in use\n" +
-		"\n  Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n" +
+		"\n  Logs  /var/log/bootwright/contexts/lab/operations/op-abc\n" +
 		"\n  Progress\n" +
 		"  [DONE]     [1/2] remove the virtual machine rhel-01\n"
 	if out.String() != want {
@@ -812,9 +812,9 @@ func TestTerminalLogLocationSurvivesTheRedrawnRow(t *testing.T) {
 	presenter.ReportProgress(ctx, lifecycle.ProgressEvent{
 		Block: "one", Description: "serve artifacts", Status: "running", Position: 1, Total: 2,
 	})
-	presenter.ReportLogLocation(ctx, lifecycle.LogLocation{Path: "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs"})
+	presenter.ReportLogLocation(ctx, lifecycle.LogLocation{Path: "/var/log/bootwright/contexts/lab/operations/op-abc"})
 	rendered := out.String()
-	location := "\n  Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n"
+	location := "\n  Logs  /var/log/bootwright/contexts/lab/operations/op-abc\n"
 	if !strings.HasSuffix(rendered, location) {
 		t.Fatalf("progress = %q, want it to end with %q", rendered, location)
 	}

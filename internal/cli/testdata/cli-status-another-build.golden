@@ -50,7 +50,8 @@
     [PENDING] install the operating system of rhel-01
 
       Registered by  1.4.0 (9f2c1ab), another build than this one
-      Logs           /var/lib/bootwright/contexts/lab/state/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/logs
+      Logs           /var/log/bootwright/contexts/lab/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
+      Follow         bootwright logs --context lab --operation op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
 
   Handoff
     not ready

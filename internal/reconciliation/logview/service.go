@@ -85,6 +85,8 @@ func usage(message string) error {
 	return &diagnostics.Failure{Usage: true, Diagnostics: []diagnostics.Diagnostic{{Severity: "error", Code: "cli.usage", Message: message}}}
 }
 
+func Validate(selection Selection) error { return validate(selection) }
+
 func validate(selection Selection) error {
 	stream := selection.Run != "" || selection.Setup != ""
 	switch {

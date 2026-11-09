@@ -19,6 +19,7 @@
   apply       Apply the complete selected lifecycle unit
   destroy     Destroy the complete selected lifecycle unit
   status      Show context readiness and lifecycle state
+  logs        Show a context's operation events and retained adapter output
   diff        Compare desired state with what this context realized
 
   Resources

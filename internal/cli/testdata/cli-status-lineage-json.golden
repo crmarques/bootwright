@@ -67,8 +67,9 @@
         }
       ],
       "logs": [
-        "contexts/lab/state/operations/op-0a4b8c2d6e1f3a5b7c9d0e2f4a6b8c1d/logs/operation.jsonl"
-      ]
+        "contexts/lab/operations/op-0a4b8c2d6e1f3a5b7c9d0e2f4a6b8c1d/operation.jsonl"
+      ],
+      "live": []
     },
     "handoff": {
       "ready": true,

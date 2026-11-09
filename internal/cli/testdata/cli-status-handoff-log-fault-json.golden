@@ -50,7 +50,8 @@
           "attempts": 1
         }
       ],
-      "logs": []
+      "logs": [],
+      "live": []
     },
     "handoff": {
       "ready": false,

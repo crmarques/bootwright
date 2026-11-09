@@ -28,6 +28,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/ansiblerunner"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/reconciliation/logview"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/material"
@@ -62,6 +63,8 @@ type lifecycleDependencies struct {
 	// Media is the host media store a plan freezes installation media from.
 	Media    media.Store
 	Capacity capacity.CapacityChecker
+	Paths    lifecycle.ContextPaths
+	Logs     logview.Workspace
 }
 
 // storeMediaRecords reads the host media store's records for the installation
@@ -388,17 +391,31 @@ func lifecycleOptions(deps lifecycleDependencies, clock systemClock, runner ansi
 		Executable: deps.Executable,
 		Operations: operationStores(clock, deps.Executable),
 		Setup:      deps.Setup,
+		Paths:      deps.Paths,
 	}
+}
+
+func wireLogs(deps lifecycleDependencies) logview.Service {
+	return logview.New(deps.Logs, logview.Options{
+		Operations: func(records, logs operationstore.Area) logview.OperationStore {
+			return operationStore(systemClock{}, deps.Executable, records, logs)
+		},
+		Selection: currentSelection(deps.Selection),
+	})
 }
 
 func operationStores(clock systemClock, executable lifecycle.Executable) lifecycle.OperationStoreFactory {
 	return func(records, logs operationstore.Area) lifecycle.OperationStore {
-		store := operationstore.New(records, logs, clock.Now)
-		if !executable.Modified {
-			store.Running(operationstore.Executable{Version: executable.Version, Commit: executable.Commit})
-		}
-		return store
+		return operationStore(clock, executable, records, logs)
 	}
+}
+
+func operationStore(clock systemClock, executable lifecycle.Executable, records, logs operationstore.Area) *operationstore.Store {
+	store := operationstore.New(records, logs, clock.Now)
+	if !executable.Modified {
+		store.Running(operationstore.Executable{Version: executable.Version, Commit: executable.Commit})
+	}
+	return store
 }
 
 // currentSelection resolves an omitted context name through the invoking

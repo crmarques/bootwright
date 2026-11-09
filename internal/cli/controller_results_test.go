@@ -503,7 +503,7 @@ func TestControllerScopeNamesTheAcquisitionRoute(t *testing.T) {
 // through the plan, whose dnf preview is shown verbatim, to the result.
 func TestControllerSetupShowsThePreviewAndNamesItsRunGolden(t *testing.T) {
 	ctx := context.Background()
-	const location = "/var/lib/bootwright/setup/runs/setup-000003"
+	const location = "/var/log/bootwright/host/setup-000003.output"
 	var out, errOut bytes.Buffer
 	presenter := &ControllerPresenter{progress: progressPresenter{out: &out, clock: newManualClock().clock()}}
 	report := &prerequisites.Report{
@@ -549,7 +549,7 @@ func TestControllerSetupShowsThePreviewAndNamesItsRunGolden(t *testing.T) {
 		Checks:      []prerequisites.Check{report.Checks[0], report.Checks[1], {ID: "host-packages", Required: "openssh-clients, podman", Observed: "openssh-clients, podman", Status: "ready", Scope: prerequisites.HostScope}, report.Checks[3]},
 		Actions:     report.Actions,
 		Progress:    []prerequisites.ActionProgress{{ID: "native-packages", Phase: "observed", Outcome: "changed"}, {ID: "receipt", Phase: "observed", Outcome: "changed"}},
-		LogLocation: location,
+		LogLocation: location, SetupRun: "setup-000003",
 	}
 	code := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record), FinishProgress: presenter.Finish}).Run(ctx, []string{"controller", "install", "--yes"})
 	if code != 0 || errOut.Len() != 0 {

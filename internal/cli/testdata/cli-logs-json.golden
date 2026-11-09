@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "logs",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "context": "lab",
+    "operation": "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a",
+    "verb": "apply",
+    "state": "running",
+    "events": [
+      {
+        "time": "2026-11-08T14:02:11Z",
+        "block": "",
+        "attempt": 0,
+        "resolution": 0,
+        "event": "opened",
+        "group": "",
+        "detail": "apply op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a"
+      },
+      {
+        "time": "2026-11-08T14:02:12Z",
+        "block": "artifact-server-lab-artifacts",
+        "attempt": 1,
+        "resolution": 0,
+        "event": "started",
+        "group": "",
+        "detail": "attempt 1"
+      },
+      {
+        "time": "2026-11-08T14:02:40Z",
+        "block": "artifact-server-lab-artifacts",
+        "attempt": 1,
+        "resolution": 0,
+        "event": "group",
+        "group": "pull-image",
+        "detail": "done"
+      },
+      {
+        "time": "2026-11-08T14:03:05Z",
+        "block": "artifact-server-lab-artifacts",
+        "attempt": 1,
+        "resolution": 0,
+        "event": "outcome",
+        "group": "",
+        "detail": "changed"
+      },
+      {
+        "time": "2026-11-08T14:03:06Z",
+        "block": "machine-rhel-01",
+        "attempt": 2,
+        "resolution": 1,
+        "event": "started",
+        "group": "",
+        "detail": "attempt 2 resolution 1"
+      },
+      {
+        "time": "",
+        "block": "machine-rhel-01",
+        "attempt": 2,
+        "resolution": 1,
+        "event": "truncated",
+        "group": "",
+        "detail": "3 records dropped"
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

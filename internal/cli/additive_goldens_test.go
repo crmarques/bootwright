@@ -50,14 +50,14 @@ func additiveStatus() *lifecycle.StatusResult {
 		NextSteps:   []string{"bootwright destroy --context lab"},
 		Lifecycle: &lifecycle.LifecycleSummary{
 			Operation: additiveHead, Verb: "apply", State: "done", Next: "none", Blocks: blocks,
-			Logs: []string{"contexts/lab/state/operations/" + additiveHead + "/logs/operation.jsonl"}, Executable: "1.4.0 (9f2c1ab)",
+			Logs: []string{"contexts/lab/operations/" + additiveHead + "/operation.jsonl"}, Executable: "1.4.0 (9f2c1ab)",
 			Lineage: []lifecycle.LineageEntry{
 				{Operation: additiveRoot, Verb: "apply", State: "done"},
 				{Operation: additiveHead, Verb: "apply", State: "done"},
 			},
 		},
 		Contradictions: []string{},
-		LogLocation:    "/var/lib/bootwright/contexts/lab/state/operations/" + additiveHead + "/logs",
+		LogLocation:    "/var/log/bootwright/contexts/lab/operations/" + additiveHead,
 	}
 }
 

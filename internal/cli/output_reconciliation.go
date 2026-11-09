@@ -123,7 +123,7 @@ func (p *LifecycleProgressPresenter) ReportLogLocation(ctx context.Context, loca
 	if p == nil || p.progress.out == nil || ctx.Err() != nil || location.Path == "" {
 		return
 	}
-	p.progress.field(logLocationLabel, location.Path)
+	p.progress.fields(logFields(location.Path, logsHint{Context: location.Context, Operation: location.Operation, Run: location.Run, Running: true})...)
 }
 
 func lifecycleHeadline(result lifecycle.PlanResult) string {
@@ -340,10 +340,7 @@ func writeLifecycleOperation(out io.Writer, result *lifecycle.OperationResult) e
 		text.section("Result")
 		text.lifecycleOutcomes(result.Blocks)
 	}
-	var closing []field
-	if result.LogLocation != "" {
-		closing = append(closing, field{Label: logLocationLabel, Value: result.LogLocation})
-	}
+	closing := logFields(result.LogLocation, logsHint{Context: result.Context.Name, Operation: result.Receipt.Operation, Running: result.Receipt.State == "running"})
 	if result.NextCommand != "" {
 		closing = append(closing, field{Label: "Next", Value: result.NextCommand})
 	}

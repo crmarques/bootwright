@@ -124,9 +124,7 @@ func writeSingleMachinePower(out io.Writer, result power.Result) error {
 		{Label: "Power", Value: result.Power},
 		{Label: "Previous", Value: displayValue(result.Previous)},
 	}
-	if result.LogLocation != "" {
-		fields = append(fields, field{Label: logLocationLabel, Value: result.LogLocation})
-	}
+	fields = append(fields, logFields(result.LogLocation, logsHint{Context: result.Context, Run: result.Run})...)
 	text.fields(fields...)
 	return text.writeTo(out)
 }

@@ -1,0 +1,49 @@
+  ✓ Context lab
+
+      Mode  ready
+
+  Setup
+  [OK]   Controller binding
+
+  Desired
+      Revision         rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f
+      Environment      lab
+      Files seen       6
+      Objects decoded  6
+
+  Secrets
+    Declared  1
+    Bindings  1
+
+  Next steps
+    bootwright apply --context lab
+
+  Lifecycle
+    Operation  op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
+    Verb       apply
+    State      running
+
+  Infrastructure
+    [DONE] serve artifacts for lab-artifacts on controller
+  Machines
+    [RUNNING] realize the virtual machine rhel-01 and its emulated BMC
+    [RUNNING] realize the virtual machine rhel-02 and its emulated BMC
+
+      Registered by  1.4.0 (9f2c1ab)
+      Logs           /var/log/bootwright/contexts/lab/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
+      Follow         bootwright logs --context lab --follow
+
+  Live
+  ○ block | machine-rhel-01
+      Attempt  2 resolution 1
+      Output   blocks/machine-rhel-01/attempt-000002-resolution-000001.output
+      Written  184 KiB
+
+  ○ block | machine-rhel-02
+      Attempt  1
+      Output   blocks/machine-rhel-02/attempt-000001.output
+      Written  none yet
+
+  Handoff
+    not ready
+    the apply is running, not done

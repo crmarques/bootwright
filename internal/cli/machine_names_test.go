@@ -134,8 +134,8 @@ func TestSeveralMachinesHeadlineTheirChange(t *testing.T) {
 
 func failedBatch(record *dispatchRecord) {
 	record.result.power = batchOf(
-		power.Result{Context: "lab", Machine: "a", Verb: "stop", Power: "off", Previous: "on", Changed: true, LogLocation: "/runs/a", Logs: []string{"runs/a/run.output"}},
-		power.Result{Machine: "b", LogLocation: "/runs/b", Logs: []string{"runs/b/run.output"}},
+		power.Result{Context: "lab", Machine: "a", Verb: "stop", Power: "off", Previous: "on", Changed: true, LogLocation: "/var/log/bootwright/contexts/lab/runs/run-000001.output", Logs: []string{"contexts/lab/runs/run-000001.output"}},
+		power.Result{Machine: "b", LogLocation: "/var/log/bootwright/contexts/lab/runs/run-000002.output", Logs: []string{"contexts/lab/runs/run-000002.output"}},
 	)
 	record.err = diagnostics.NewFailure("lifecycle.state", "the adapter operation did not complete", "")
 }
@@ -178,7 +178,7 @@ func TestAFailedBatchIsOneEnvelopeWithItsResult(t *testing.T) {
 		t.Fatalf("stdout is not one document: %q: %v", out.String(), err)
 	}
 	if code != 1 || errOut.Len() != 0 || envelope.OK || envelope.ExitCode != 1 || len(envelope.Diagnostics) != 1 ||
-		!slices.Equal(envelope.Logs, []string{"runs/a/run.output", "runs/b/run.output"}) || len(envelope.Result.Machines) != 2 {
+		!slices.Equal(envelope.Logs, []string{"contexts/lab/runs/run-000001.output", "contexts/lab/runs/run-000002.output"}) || len(envelope.Result.Machines) != 2 {
 		t.Fatalf("code=%d out=%q err=%q", code, out.String(), errOut.String())
 	}
 	if unsettled := envelope.Result.Machines[1]; unsettled.Machine != "b" || unsettled.Power != "" || unsettled.Changed {
@@ -196,7 +196,7 @@ func TestAFailureWithNoSettledBatchWritesDiagnosticsOnly(t *testing.T) {
 		args   string
 		result *power.Results
 	}{
-		"one machine":       {"machine stop --name a --yes", batchOf(power.Result{Machine: "a", Logs: []string{"runs/a/run.output"}})},
+		"one machine":       {"machine stop --name a --yes", batchOf(power.Result{Machine: "a", Logs: []string{"contexts/lab/runs/run-000001.output"}})},
 		"no admitted run":   {"machine stop --name a,b --yes", nil},
 		"empty result":      {"machine stop --name a,b --yes", &power.Results{Context: "lab", Verb: "stop"}},
 		"no result at all":  {"machine start --name a,b", nil},
@@ -232,7 +232,7 @@ func TestACanceledBatchNamesEveryRunsOutputInItsFailureEnvelope(t *testing.T) {
 	}
 	if err := json.Unmarshal(out.Bytes(), &envelope); err != nil || code != 1 || envelope.Result != nil ||
 		len(envelope.Diagnostics) != 1 || envelope.Diagnostics[0].Code != "runtime.canceled" ||
-		!slices.Equal(envelope.Logs, []string{"runs/a/run.output", "runs/b/run.output"}) {
+		!slices.Equal(envelope.Logs, []string{"contexts/lab/runs/run-000001.output", "contexts/lab/runs/run-000002.output"}) {
 		t.Fatalf("code=%d out=%q err=%q: %v", code, out.String(), errOut.String(), err)
 	}
 }

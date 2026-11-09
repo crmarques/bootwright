@@ -1,5 +1,6 @@
 
-  Logs  /var/lib/bootwright/contexts/lab-rhel/state/runs/run-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  Logs    /var/log/bootwright/contexts/lab-rhel/runs/run-000003.output
+  Follow  bootwright logs --context lab-rhel --run run-000003 --follow
 
   Progress
   [RUNNING]  [1/1] Stop Machine/rhel-01

@@ -62,7 +62,7 @@ state but contacts no managed target. “Observe” permits bounded read-only
 process or network access, and one local write: the store-internal
 [cache-only rebuild](../controller.md#the-controller-runtime) of this build's
 controller runtime when its directory is missing, for the commands whose cell
-names it. That rebuild waits for `setup/lock`, uses no network and changes no
+names it. That rebuild waits for `host/setup/lock`, uses no network and changes no
 setup record. “Mutate” permits only the named, planned effects.
 
 The Effects column is the only owner of what a command may do. Another page
@@ -114,7 +114,8 @@ The three `media` commands follow the host-wide
 | `bootwright validate` | repeatable `-f, --file <file-or-dir>` | validation summary with admission counts, exclusions and advisories | read the supplied input, or the selected context's input when `-f` is omitted; no write |
 | `bootwright preflight` | `--stage <list>` default every stage but `add-ons`; `--clusters <list>` default all; `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | [one report](output.md#preflight) of the checks of each selected stage: `controller` the controller host and this context's controller-stage prerequisites, `infrastructure-services` the firewall admission of the controller's managed service sockets, `substrates` the capacity of the hosts that hold its Machines, `machines` none, `clusters` the selected OpenShiftClusters and CephClusters | observe unless `--dry-run`, which is local-only |
 | `bootwright plan` | `--stage <list>` default all stages; `--until <cluster>.<package>` | next legal full-context plan, the additive plan or exact continuation point, with the steps each block waits for, how wide the plan is and how many blocks it starts at a time, and the blocks a stage or `--until` selection would start | none |
-| `bootwright status` | none | controller setup readiness, lifecycle state of the lineage, and next safe commands; beside no operation it also names each declared Secret whose material is missing or stale and each named installer image the media store lacks, with the remedy command ahead of `plan`, from keyring metadata and media records alone; it checks neither Secret material nor image bytes, which `secret check` and `media list --checksums` report | read local state, keyring metadata and media records under shared locks |
+| `bootwright status` | `--paths` false | controller setup readiness, lifecycle state of the lineage, each running block's newest output and the bytes it holds, and next safe commands; with `--paths`, each root that holds the context's data on this host and whether it is present; beside no operation it also names each declared Secret whose material is missing or stale and each named installer image the media store lacks, with the remedy command ahead of `plan`, from keyring metadata and media records alone; it checks neither Secret material nor image bytes, which `secret check` and `media list --checksums` report | read local state, keyring metadata and media records under shared locks; `--paths` examines whether each root's entry exists and reads none |
+| `bootwright logs` | `--operation <op-id>` default the current operation; `--block <block-id>`; `--raw` false; `--attempt <N>`; `--follow` false; `--run <run-NNNNNN>`; `--setup` the newest setup, or `--setup=<setup-NNNNNN>` | an operation's events as lines, one block's newest retained adapter output with `--raw`, a bounded run's or setup's output, or, with `--follow`, those lines streamed until the operation, run or setup ends | read local state under short shared root locks and the log root through no-follow handles; never a lease, never a write |
 | `bootwright diff` | `--observe`, `--exit-code` false; `--output-dir <dir>` or `--tool <program>` | desired files beside what the apply lineage realized, from records or, with `--observe`, read live, as a [comparison](../cli.md#desired-and-realized-state-comparison) | read local state; `--output-dir`, `--tool` write files outside the store; `--observe` reads each block the lineage realized, read-only, on the host it froze, after the [cache-only rebuild](../controller.md#the-controller-runtime) of a missing runtime |
 | `bootwright render effective` | `--origins` false; `--input-dir <file-or-dir>`; `--output-dir <dir>`; `--sensitive` false | normalized effective desired state and object counts; with `--origins`, the [origin of each effective field](../cli.md#effective-field-origins) instead of the YAML; with `--output-dir`, the [effective-state file](../cli.md#validation-preflight-and-rendering) written there and its path | none without `--output-dir`; with it, local artifact writes only |
 | `bootwright render installer` | `--clusters <list>` default all OpenShiftClusters; `--sensitive` false | installer artifact manifest | local placeholder files and optional sensitive files |
@@ -205,7 +206,7 @@ group unavailable only when neither it nor any command under it is available, so
 `render` is unmarked while `render effective` works. The root listing groups
 commands by what they act on: Host (`controller`, `media`), Context (`context`,
 `secret`, `validate`, `preflight`, `plan`, `apply`, `destroy`, `status`,
-`diff`), Resources (`machine`, `cluster`, `add-ons`, `render`) and Tools
+`logs`, `diff`), Resources (`machine`, `cluster`, `add-ons`, `render`) and Tools
 (`version`, `schema`, `completion`, `help`). A command group's help offers only
 the inherited flags its commands accept: a group whose every command is
 context-free lists no `--context`, and one none of whose commands reads an SSH
@@ -398,6 +399,14 @@ confirmation authority either: it neither replaces nor implies
 requires the token, what it acknowledges and the refusal of a token it does not
 require are owned by
 [state reconciliation](../state-reconciliation.md#confirmation-and-authorization).
+
+`logs` refuses as usage errors, before privilege: `--block`, `--raw` or
+`--attempt` with `--run` or `--setup`; `--run` with `--setup`; `--operation`
+with either; `--setup` with `--context`; `--raw` without `--block`;
+`--attempt` without `--raw` or outside 1 to 999999; `--follow` with `--raw`
+or with JSON or YAML output; and a malformed operation, block, run or setup
+name. `--setup` takes a value only after `=`, so `--setup setup-000003` is
+refused with the remedy `write --setup=setup-000003`.
 
 `--unregistered` names a Machine whose subscription consumer the operator
 removed with the subscription service's own tools, and is accepted only on

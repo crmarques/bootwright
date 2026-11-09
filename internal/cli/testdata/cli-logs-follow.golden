@@ -1,0 +1,4 @@
+14:03:06  machine-rhel-01  started  attempt 2 resolution 1
+[machine-rhel-01] TASK [define the domain]
+[machine-rhel-01] \u001b[31mfatal: no such pool\u001b[0m
+14:03:30  machine-rhel-01  outcome  failed

@@ -135,7 +135,7 @@ func localServiceDependencies(process processDependencies) (serviceDependencies,
 			Host: hostlinux.New(), HostKeys: hostlinux.New(), Guard: runtimeGuard(controllerPorts.Python), Setup: controllerPorts.Setup, Selection: account,
 			Presenter: process.LifecyclePresenter, Progress: process.LifecycleProgress,
 			Confirmer: process.Confirmer, Executable: process.Executable,
-			Media: repository,
+			Media: repository, Paths: repository, Logs: repository,
 		},
 	}, release
 }
@@ -158,6 +158,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	}
 	reconciler = wireLifecycle(deps.Lifecycle, deps.Controller, compiler, secrets.binder)
 	services.Lifecycle = reconciler
+	services.Logs = wireLogs(deps.Lifecycle)
 	machine := wireMachine(machineDependencies{
 		State: services.DesiredState, Lifecycle: reconciler, Trust: deps.Trust,
 		Confirmer: deps.Confirmer, Session: deps.SessionConfirmer, Reporter: deps.Reporter,

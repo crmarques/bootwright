@@ -57,6 +57,8 @@ var cliResults = []reflect.Type{
 	reflect.TypeFor[clusterInfoPresentation](),
 	reflect.TypeFor[machineInfoPresentation](),
 	reflect.TypeFor[secretInfoResult](),
+	reflect.TypeFor[logsResult](),
+	reflect.TypeFor[logsOutputResult](),
 }
 
 // sharedResultLeaves are the only types from outside this package a result may

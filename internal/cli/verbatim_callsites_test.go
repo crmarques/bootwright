@@ -31,7 +31,7 @@ func requireWholeLine(t *testing.T, lines []string, want string) {
 }
 
 func TestLifecycleOperationKeepsLogsAndNextOnOneLine(t *testing.T) {
-	logs := "/var/lib/example/contexts/lab/state/operations/op-abc/logs"
+	logs := "/var/log/example/contexts/lab/operations/op-abc"
 	next := "bootwright apply --context lab --stage controller --name cluster-one"
 	var out bytes.Buffer
 	result := &lifecycle.OperationResult{
@@ -48,7 +48,7 @@ func TestLifecycleOperationKeepsLogsAndNextOnOneLine(t *testing.T) {
 }
 
 func TestStatusLifecycleKeepsLogsOnOneLineAndShowsNoNextToken(t *testing.T) {
-	logs := "/var/lib/example/contexts/lab/state/operations/op-abc/logs"
+	logs := "/var/log/example/contexts/lab/operations/op-abc"
 	next := "bootwright apply --context lab --stage controller --name cluster-one"
 	var text display
 	writeStatusLifecycle(&text, &lifecycle.StatusResult{

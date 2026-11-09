@@ -37,6 +37,9 @@ func validateInvocation(command *cobra.Command, path string) string {
 			return "a non-empty command argument vector is required"
 		}
 	} else if len(flags.Args()) != 0 {
+		if remedy := logsOperandRemedy(path, flags); remedy != "" {
+			return remedy
+		}
 		return "this command accepts no positional operands"
 	}
 	if message := validateFlagValues(flags, path, spec); message != "" {
@@ -44,6 +47,9 @@ func validateInvocation(command *cobra.Command, path string) string {
 	}
 	if message := validateSharedFlags(command, path); message != "" {
 		return message
+	}
+	if path == "logs" {
+		return validateLogsFlags(command)
 	}
 	return validateCommandFlags(command, path)
 }

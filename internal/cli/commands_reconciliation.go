@@ -10,7 +10,8 @@ import (
 func lifecycleInspectionCommands() []commandSpec {
 	return []commandSpec{
 		available(commandSpec{path: "plan", short: "Preview the next complete lifecycle operation", flags: []flagSpec{stageFlag(), untilFlag()}, long: "Preview the next legal full-context operation, or the exact continuation point of an incomplete one. It reads durable state and changes nothing. With --stage or --until it also shows which blocks that selection would start."}),
-		available(commandSpec{path: "status", short: "Show context readiness and lifecycle state", long: "Report context readiness, desired state and lifecycle progress from durable records. It performs no probe."}),
+		available(commandSpec{path: "status", short: "Show context readiness and lifecycle state", flags: []flagSpec{boolFlag("paths", "Also list where this host keeps the context's data and whether each path is present")}, long: "Report context readiness, desired state and lifecycle progress from durable records. While an operation runs it lists each running block's newest output file and the bytes written so far. With --paths it also lists the store, log, hosted and guest-image paths of the context on this host and whether each is present, examining no content. It performs no probe."}),
+		logsCommandSpec(),
 		available(commandSpec{path: "diff", short: "Compare desired state with what this context realized", flags: []flagSpec{boolFlag("observe", "Read each realized block's target through its read-only observation"), boolFlag("exit-code", "Exit 3 when any object differs, is unmanaged or is unknown"), directoryFlag("output-dir", "Write both sides as files into a directory that does not exist or is empty"), stringFlag("tool", "Show each listed file pair with a comparison program")}, long: "Compare the context's desired state with what its apply realized, object by object, file by file. Each side is shown as the input files that declare its objects, desired/<path> beside applied/<path>, or real/<path> with --observe. Without --observe it reads durable records only and contacts no host; with --observe it reads each realized block's target through that block's read-only observation. It exits 0 whenever it renders a comparison; with --exit-code it exits 3 instead when any object differs, is unmanaged or is unknown. --color selects terminal colors. --output-dir also writes both sides as trees of files, with notes.txt, so a directory comparison tool can show them side by side. --tool runs a program over each listed file pair, with the desired file first, once the result is written; it needs a terminal and text output and conflicts with --output-dir."}),
 	}
 }
@@ -46,6 +47,7 @@ func (s Services) invokeLifecycle(ctx context.Context, path string, values *requ
 	case "status":
 		result.lifecycleStatus, err = invokeResult(ctx, values, lifecycle.StatusRequest{
 			ContextName: values.text("context"),
+			Paths:       values.optionalBoolean("paths"),
 		}, s.Lifecycle.Status)
 	case "diff":
 		result.lifecycleDiff, err = invokeResult(ctx, values, lifecycle.DiffRequest{

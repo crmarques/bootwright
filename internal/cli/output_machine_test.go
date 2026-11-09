@@ -245,20 +245,20 @@ func TestPowerResultNamesWhereItsAdapterOutputWasRetained(t *testing.T) {
 	var out bytes.Buffer
 	result := batchOf(power.Result{
 		Context: "lab", Machine: "guest", Verb: "stop", Power: "off", Previous: "on", Changed: true,
-		LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/run-abc",
-		Logs:        []string{"run-abc/run.output"},
+		LogLocation: "/var/log/bootwright/contexts/lab/runs/run-000003.output",
+		Logs:        []string{"contexts/lab/runs/run-000003.output"},
 	})
 	if err := writeMachinePower(&out, "machine stop", result, false); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "Logs      /var/lib/bootwright/contexts/lab/state/runs/run-abc\n") {
+	if !strings.Contains(out.String(), "Logs      /var/log/bootwright/contexts/lab/runs/run-000003.output\n") {
 		t.Fatalf("the result did not name where its output is: %q", out.String())
 	}
 	var encoded bytes.Buffer
 	if err := writeMachinePower(&encoded, "machine stop", result, true); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(encoded.String(), `"logs":["run-abc/run.output"]`) {
+	if !strings.Contains(encoded.String(), `"logs":["contexts/lab/runs/run-000003.output"]`) {
 		t.Fatalf("JSON = %q", encoded.String())
 	}
 }
@@ -326,7 +326,7 @@ func TestPowerRefusesToPresentAStateItCannotName(t *testing.T) {
 // a canceled or interrupted run, and one whose service answered nothing
 // presentable.
 func TestAFailedPowerRunNamesItsOutputInEveryFailureEnvelope(t *testing.T) {
-	const retained = "run-abc/run.output"
+	const retained = "contexts/lab/runs/run-000003.output"
 	for _, test := range []struct {
 		name      string
 		err       error
@@ -342,7 +342,7 @@ func TestAFailedPowerRunNamesItsOutputInEveryFailureEnvelope(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			var cancel context.CancelCauseFunc
 			record := &dispatchRecord{err: test.err}
-			record.result.power = batchOf(power.Result{Machine: "guest", LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/run-abc", Logs: []string{retained}})
+			record.result.power = batchOf(power.Result{Machine: "guest", LogLocation: "/var/log/bootwright/contexts/lab/runs/run-000003.output", Logs: []string{retained}})
 			if test.interrupt {
 				record.afterCall = func() { cancel(ErrInterrupted) }
 			}

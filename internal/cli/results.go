@@ -51,7 +51,7 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		}
 	case "controller install", "controller check", "controller rebind", "controller uninstall":
 		return writeControllerOutcome(out, errOut, path, result, selectedJSON(command))
-	case "plan", "status", "diff":
+	case "plan", "status", "diff", "logs":
 		return r.writeLifecycleInspection(ctx, command, path, result)
 	case "apply", "destroy":
 		if result.lifecycleOperation != nil {
@@ -175,6 +175,10 @@ func (r *Runner) writeLifecycleInspection(ctx context.Context, command *cobra.Co
 			}
 		}
 		return true, writeLifecycleStatus(out, result.lifecycleStatus, selectedJSON(command))
+	case path == "logs" && result.logsFollow != nil:
+		return true, writeLogsFollowed(r.config.ErrOut, result.logsFollow)
+	case path == "logs" && result.logs != nil:
+		return true, writeLogs(out, r.config.ErrOut, result.logs, selectedStructured(command))
 	case path == "diff" && result.lifecycleDiff != nil:
 		flags := command.Flags()
 		status, err := writeDiffStatus(ctx, out, result.lifecycleDiff, diffOptions{

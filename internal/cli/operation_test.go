@@ -234,7 +234,7 @@ func TestAnInterruptedRegisteredOperationKeepsItsResultAndReceipt(t *testing.T) 
 					{ID: "artifact-server-lab", Description: "serve artifacts for lab-artifacts", State: "done"},
 					{ID: "dns-lab", Description: "resolve names for lab-dns", State: "pending"},
 				},
-				LogLocation: "/var/lib/bootwright/contexts/lab/state/operations/op-abc/logs",
+				LogLocation: "/var/log/bootwright/contexts/lab/operations/op-abc",
 				NextCommand: next,
 				Receipt:     lifecycle.Receipt{Operation: "op-abc", Verb: path, State: "running", Next: "continue-" + path},
 			}
@@ -243,8 +243,9 @@ func TestAnInterruptedRegisteredOperationKeepsItsResultAndReceipt(t *testing.T) 
 			want := "  ! " + verb + " running\n\n  Result\n" +
 				"    [DONE] serve artifacts for lab-artifacts\n" +
 				"    [PENDING] resolve names for lab-dns\n\n" +
-				"    Logs  /var/lib/bootwright/contexts/lab/state/operations/op-abc/logs\n" +
-				"    Next  " + next + "\n" +
+				"    Logs    /var/log/bootwright/contexts/lab/operations/op-abc\n" +
+				"    Follow  bootwright logs --context lab --follow\n" +
+				"    Next    " + next + "\n" +
 				"operation: op-abc\nverb: " + path + "\nstate: running\nnext: continue-" + path + "\n"
 			if code != 130 || out != want || errOut != "  error  runtime.interrupted\n    operation interrupted\n    Next: "+next+"\n" {
 				t.Fatalf("exit %d\nstdout %q\nwant   %q\nstderr %q", code, out, want, errOut)

@@ -882,7 +882,7 @@ var askRuleNoAsk = map[string]string{
 	"secret encryption init": "idempotent initialization", "secret encryption status": "read confidential metadata",
 	"secret encryption rotate": "local key rotation", "media list": "read local media",
 	"media delete": "local media deletion", "validate": "no write",
-	"controller check": "bounded local observation", "preflight": "observe unless", "plan": "none", "status": "read local state",
+	"controller check": "bounded local observation", "preflight": "observe unless", "plan": "none", "status": "read local state", "logs": "read local state",
 	"diff": "read local state", "render storage": "never execution",
 	"machine list": "read local state", "machine info": "read local inventory",
 	"cluster list": "read local state", "cluster oc": "read context-owned access metadata",

@@ -16,6 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/reconciliation/logview"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/encryption"
 	storagepreflight "github.com/crmarques/bootwright/internal/storage/preflight"
@@ -48,6 +49,9 @@ type commandResult struct {
 	lifecycleStatus    *lifecycle.StatusResult
 	lifecycleDiff      *lifecycle.DiffResult
 	lifecycleOperation *lifecycle.OperationResult
+
+	logs       *logview.Result
+	logsFollow *logview.Summary
 
 	mediaMutation *media.MutationResult
 	mediaList     *media.ListResult
@@ -120,6 +124,8 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 		return s.invokeEnvironmentAccess(ctx, path, &values, args)
 	case "plan", "status", "diff", "apply", "destroy":
 		return s.invokeLifecycle(ctx, path, &values, args)
+	case "logs":
+		return s.invokeLogs(ctx, &values)
 	case "render installer":
 		return commandResult{}, s.invokeInstaller(ctx, path, &values, args)
 	case "render storage":

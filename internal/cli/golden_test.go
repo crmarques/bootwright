@@ -211,10 +211,10 @@ func cliGoldens() []cliGolden {
 	const (
 		operationID = "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a"
 		revision    = "rev-3b8d0f5a9c1e4d7b2a6f8c0e1d3b5a7f"
-		runID       = "run-9d2e4f6a8b0c1d3e5f7a9b1c3d5e7f9a"
+		runID       = "run-000003"
 		retiredKey  = "key-fixture-1"
 		activeKey   = "key-fixture-2"
-		logs        = "/var/lib/bootwright/contexts/lab/state/operations/" + operationID + "/logs"
+		logs        = "/var/log/bootwright/contexts/lab/operations/" + operationID
 	)
 	platform := prerequisites.Platform{OS: "fedora", Release: "43", Architecture: "amd64"}
 	ready := func(id, observed string) prerequisites.Check {
@@ -253,7 +253,7 @@ func cliGoldens() []cliGolden {
 	operation := func(state string) *lifecycle.OperationResult {
 		result := &lifecycle.OperationResult{
 			Context: lifecycle.ContextIdentity{Name: "lab", Revision: revision}, Verb: "apply", Blocks: blocks(state),
-			Logs: []string{"contexts/lab/state/operations/" + operationID + "/logs/operation.jsonl"}, LogLocation: logs,
+			Logs: []string{"contexts/lab/operations/" + operationID + "/operation.jsonl"}, LogLocation: logs,
 			NextCommand: "bootwright apply --context lab",
 			Receipt:     lifecycle.Receipt{Operation: operationID, Verb: "apply", State: state, Next: "continue-apply"},
 		}
@@ -299,7 +299,7 @@ func cliGoldens() []cliGolden {
 			NextSteps: []string{},
 			Lifecycle: &lifecycle.LifecycleSummary{
 				Operation: operationID, Verb: "apply", State: "failed", Next: "continue-apply", Blocks: attempted,
-				Logs: []string{"contexts/lab/state/operations/" + operationID + "/logs/operation.jsonl"}, Executable: "1.4.0 (9f2c1ab)",
+				Logs: []string{"contexts/lab/operations/" + operationID + "/operation.jsonl"}, Executable: "1.4.0 (9f2c1ab)",
 			},
 			// The pending block reads so because its record was lost beside
 			// the attempt that started it.
@@ -372,7 +372,7 @@ func cliGoldens() []cliGolden {
 			// A build stamped with a commit and no version registered it.
 			Lifecycle: &lifecycle.LifecycleSummary{
 				Operation: operationID, Verb: "destroy", State: "done", Next: "none", Blocks: removed,
-				Logs: []string{"contexts/lab/state/operations/" + operationID + "/logs/operation.jsonl"}, Executable: "devel (9f2c1ab)",
+				Logs: []string{"contexts/lab/operations/" + operationID + "/operation.jsonl"}, Executable: "devel (9f2c1ab)",
 			},
 			Contradictions: []string{},
 			LogLocation:    logs,
@@ -496,18 +496,18 @@ func cliGoldens() []cliGolden {
 		}
 		return result
 	}
-	retainedBy := func(name string) (string, []string) {
+	retainedBy := func(name string) (string, []string, string) {
 		id := runID
 		if name != "rhel-01" {
-			id = "run-0a1b2c3d4e5f60718293a4b5c6d7e8f9"
+			id = "run-000004"
 		}
-		return "/var/lib/bootwright/contexts/lab/state/runs/" + id, []string{"contexts/lab/state/runs/" + id + "/run.output"}
+		return "/var/log/bootwright/contexts/lab/runs/" + id + ".output", []string{"contexts/lab/runs/" + id + ".output"}, id
 	}
 	powerRow := func(name, verb, now, previous string, changed bool) power.Result {
-		location, logs := retainedBy(name)
+		location, logs, run := retainedBy(name)
 		return power.Result{
 			Context: "lab", Machine: name, Verb: verb, Power: now, Previous: previous, Changed: changed,
-			LogLocation: location, Logs: logs,
+			LogLocation: location, Logs: logs, Run: run,
 		}
 	}
 	powered := func(verb, now, previous string, changed bool) *power.Results {
@@ -519,12 +519,12 @@ func cliGoldens() []cliGolden {
 		}}
 	}
 	failedSeveral := func(r *dispatchRecord) {
-		location, logs := retainedBy("rhel-02")
-		unsettled := power.Result{Machine: "rhel-02", LogLocation: location, Logs: logs}
+		location, logs, run := retainedBy("rhel-02")
+		unsettled := power.Result{Machine: "rhel-02", LogLocation: location, Logs: logs, Run: run}
 		r.result.power = &power.Results{Context: "lab", Verb: "stop", Machines: []power.Result{powerRow("rhel-01", "stop", "off", "on", true), unsettled}}
 		r.err = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
 			Severity: "error", Code: "lifecycle.state", Message: "the adapter operation did not complete",
-			Remediation: "read the adapter output retained in this run's run.output",
+			Remediation: "read the adapter output retained in this run's Logs file",
 			Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.Machine), Name: "rhel-02"},
 		}}}
 	}
@@ -536,9 +536,9 @@ func cliGoldens() []cliGolden {
 	refusedRun := func(r *dispatchRecord) {
 		r.result.power = &power.Results{Context: "lab", Verb: "stop", Machines: []power.Result{{
 			Machine:     "rhel-01",
-			LogLocation: "/var/lib/bootwright/contexts/lab/state/runs/" + runID, Logs: []string{"contexts/lab/state/runs/" + runID + "/run.output"},
+			LogLocation: "/var/log/bootwright/contexts/lab/runs/" + runID + ".output", Logs: []string{"contexts/lab/runs/" + runID + ".output"},
 		}}}
-		r.err = diagnostics.NewFailureWithRemediation("lifecycle.state", "the adapter operation did not complete", "", "read the adapter output retained in this run's run.output")
+		r.err = diagnostics.NewFailureWithRemediation("lifecycle.state", "the adapter operation did not complete", "", "read the adapter output retained in this run's Logs file")
 	}
 	trusted := func() *enrollment.Report {
 		return &enrollment.Report{Context: "lab", Pending: 2, Recorded: 2, Hosts: []enrollment.HostReport{
@@ -638,7 +638,7 @@ func cliGoldens() []cliGolden {
 				Platform: platform, Route: "direct", Outcome: "changed", PlanPresented: true,
 				Checks:      []prerequisites.Check{ready("host", "fedora 43/amd64"), ready("python-runtime", "Python 3.14.8 (/usr/bin/python3.14), ansible-core 2.21.5"), ready("host-packages", "openssh-clients, podman"), ready("setup-state", "complete")},
 				Actions:     []string{"Install host packages with dnf: podman"},
-				LogLocation: "/var/lib/bootwright/setup/runs/setup-000003",
+				LogLocation: "/var/log/bootwright/host/setup-000003.output", SetupRun: "setup-000003",
 			}
 		}},
 		// Refused setups: a confirmation refusal's remedy repeats the
@@ -1106,7 +1106,7 @@ func cliGoldens() []cliGolden {
 			args: "machine stop --name rhel-01 --yes", code: 1, record: refusedRun,
 			stderr: "  error  lifecycle.state\n" +
 				"    the adapter operation did not complete\n" +
-				"    Next: read the adapter output retained in this run's run.output\n",
+				"    Next: read the adapter output retained in this run's Logs file\n",
 		},
 		{golden: "cli-machine-stop-refused-json", args: "machine stop --name rhel-01 --yes --output json", code: 1, record: refusedRun},
 		{golden: "cli-machine-stop-several", args: "machine stop --name rhel-02,rhel-01 --yes", record: poweredSeveral},
@@ -1115,7 +1115,7 @@ func cliGoldens() []cliGolden {
 			stderr: "  error  Machine/rhel-02\n" +
 				"    lifecycle.state\n" +
 				"    the adapter operation did not complete\n" +
-				"    Next: read the adapter output retained in this run's run.output\n"},
+				"    Next: read the adapter output retained in this run's Logs file\n"},
 		{golden: "cli-machine-stop-several-failed-json", args: "machine stop --name rhel-01,rhel-02 --yes --output json", code: 1, record: failedSeveral},
 		{golden: "cli-machine-trust", args: "machine trust --replace db-01 --yes", record: func(r *dispatchRecord) { r.result.trust = trusted() }},
 		{golden: "cli-machine-trust-json", args: "machine trust --replace db-01 --yes --output json", record: func(r *dispatchRecord) { r.result.trust = trusted() }},
@@ -1137,7 +1137,7 @@ func cliGoldens() []cliGolden {
 				"    Next: run bootwright help <command> to see which forms this build runs\n",
 		},
 		{golden: "cli-not-implemented-json", args: "status --output json", code: 1, record: func(r *dispatchRecord) { r.err = availability.ErrNotImplemented }},
-	}, append(append(append(clusterGoldens(), diffGoldens()...), handoffGoldens()...), additiveGoldens()...)...)
+	}, append(append(append(clusterGoldens(), diffGoldens()...), handoffGoldens()...), append(additiveGoldens(), logsGoldens()...)...)...)
 }
 
 // storedImage is the record a media confirmation shows before its prompt.
@@ -1290,7 +1290,7 @@ func TestPausedFailedUnknownAndRunningResultsNameTheNextCommand(t *testing.T) {
 			test.record(record)
 			var out bytes.Buffer
 			New(Config{Out: &out, Services: dispatchSpies(record)}).Run(context.Background(), strings.Fields(test.args))
-			named := strings.Contains(out.String(), "/logs\n    Next  bootwright apply --context lab\noperation: ")
+			named := strings.Contains(out.String(), "\n    Next    bootwright apply --context lab\noperation: ")
 			if named != want || strings.Contains(out.String(), "Next ") != want {
 				t.Fatalf("the result names a next command: %t, want %t: %q", named, want, out.String())
 			}
@@ -1326,7 +1326,7 @@ func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 	}
 	jsonContracts := []string{
 		"add-ons list", "add-ons info",
-		"validate", "preflight", "render effective", "status", "diff",
+		"validate", "preflight", "render effective", "status", "logs", "diff",
 		"secret check", "secret list", "secret info", "secret encryption status", "machine trust", "controller install",
 		"machine cp", "machine list", "machine info", "machine start", "machine stop", "machine restart", "media list", "cluster list", "cluster info",
 	}

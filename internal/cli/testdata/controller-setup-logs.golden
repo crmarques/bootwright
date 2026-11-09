@@ -31,7 +31,8 @@
   Planned changes
     ○ Install host packages with dnf: podman
 
-  Logs  /var/lib/bootwright/setup/runs/setup-000003
+  Logs    /var/log/bootwright/host/setup-000003.output
+  Follow  bootwright logs --setup=setup-000003 --follow
 
   Progress
   [RUNNING]  [1/2] Host packages
@@ -41,5 +42,6 @@
 
     Outcome    changed
     Readiness  all required prerequisites verified
-    Logs       /var/lib/bootwright/setup/runs/setup-000003
+    Logs       /var/log/bootwright/host/setup-000003.output
+    Follow     bootwright logs --setup=setup-000003
     Next       bootwright controller check

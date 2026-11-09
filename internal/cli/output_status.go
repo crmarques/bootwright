@@ -21,6 +21,7 @@ type statusResult struct {
 	Lifecycle       *statusLifecycle       `json:"lifecycle"`
 	Handoff         statusHandoff          `json:"handoff"`
 	Contradictions  []string               `json:"contradictions"`
+	Paths           []statusPath           `json:"paths,omitempty"`
 }
 
 func (statusResult) documentedResult() {}
@@ -90,6 +91,7 @@ type statusLifecycle struct {
 	Lineage      []statusLineage `json:"lineage,omitempty"`
 	Blocks       []statusBlock   `json:"blocks"`
 	Logs         []string        `json:"logs"`
+	Live         []statusLive    `json:"live"`
 }
 
 type statusLineage struct {
@@ -128,6 +130,7 @@ func displayStatus(result *lifecycle.StatusResult) statusResult {
 		NextSteps:       displayLines(result.NextSteps),
 		Handoff:         statusHandoff{Ready: result.Handoff.Ready, Reasons: displayLines(result.Handoff.Reasons)},
 		Contradictions:  displayLines(result.Contradictions),
+		Paths:           displayPaths(result.Paths),
 	}
 	for _, check := range result.SetupChecks {
 		out.SetupChecks = append(out.SetupChecks, statusCheck{ID: escapeDisplayLine(check.ID), Status: escapeDisplayLine(check.Status)})
@@ -153,7 +156,7 @@ func displayStatus(result *lifecycle.StatusResult) statusResult {
 		out.Lifecycle = &statusLifecycle{
 			Operation: escapeDisplayLine(summary.Operation), Verb: escapeDisplayLine(summary.Verb),
 			State: escapeDisplayLine(summary.State), Next: escapeDisplayLine(summary.Next),
-			AnotherBuild: summary.AnotherBuild, Blocks: blocks, Logs: displayLines(summary.Logs),
+			AnotherBuild: summary.AnotherBuild, Blocks: blocks, Logs: displayLines(summary.Logs), Live: displayLive(summary.Live),
 		}
 		for _, entry := range summary.Lineage {
 			out.Lifecycle.Lineage = append(out.Lifecycle.Lineage, statusLineage{
@@ -239,6 +242,7 @@ func writeLifecycleStatus(out io.Writer, result *lifecycle.StatusResult, jsonMod
 		text.section("Contradictions")
 		text.lines(result.Contradictions)
 	}
+	writeStatusPaths(&text, result.Paths)
 	return text.writeTo(out)
 }
 
@@ -355,13 +359,12 @@ func writeStatusLifecycle(text *display, result *lifecycle.StatusResult) {
 	case summary.AnotherBuild:
 		tail = append(tail, field{Label: "Registered by", Value: "another build than this one"})
 	}
-	if result.LogLocation != "" {
-		tail = append(tail, field{Label: logLocationLabel, Value: result.LogLocation})
-	}
+	tail = append(tail, logFields(result.LogLocation, logsHint{Context: result.Context.Name, Operation: summary.Operation, Running: summary.State == "running"})...)
 	if len(tail) != 0 {
 		text.section("")
 		text.mutedVerbatimFields(tail...)
 	}
+	writeStatusLive(text, summary, result.Context.Name)
 	for _, block := range summary.Blocks {
 		if block.Unresolved == nil {
 			continue

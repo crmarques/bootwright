@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"io"
 
 	addoncatalog "github.com/crmarques/bootwright/internal/addons/catalog"
@@ -19,6 +20,7 @@ import (
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/reconciliation/logview"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 	"github.com/crmarques/bootwright/internal/secrets/encryption"
 	storagerendering "github.com/crmarques/bootwright/internal/storage/rendering"
@@ -40,6 +42,13 @@ type dispatchRecord struct {
 	// answers, as the service does before its confirmation.
 	mediaChange *media.Change
 	out         io.Writer
+	// followed is what a logs spy streams into the follow's sink.
+	followed []followedLine
+}
+
+type followedLine struct {
+	logview.Line
+	event bool
 }
 
 func (r *dispatchRecord) called(ctx context.Context, path string, request any) error {
@@ -302,6 +311,24 @@ func (s clusterAccessSpy) Kubeconfig(ctx context.Context, request containeracces
 	return s.record.result.kubeconfig, s.record.called(ctx, "cluster kubeconfig", request)
 }
 
+type logsSpy struct{ record *dispatchRecord }
+
+func (s logsSpy) Show(ctx context.Context, selection logview.Selection) (*logview.Result, error) {
+	return s.record.result.logs, s.record.called(ctx, "logs", selection)
+}
+
+func (s logsSpy) Follow(ctx context.Context, selection logview.Selection, sink logview.Sink) (*logview.Summary, error) {
+	err := s.record.called(ctx, "logs", selection)
+	for _, line := range s.record.followed {
+		if line.event {
+			err = errors.Join(err, sink.Event(line.Line))
+		} else {
+			err = errors.Join(err, sink.Output(line.Line))
+		}
+	}
+	return s.record.result.logsFollow, err
+}
+
 func dispatchSpies(record *dispatchRecord) Services {
 	return Services{
 		Contexts:              contextsSpy{record},
@@ -324,6 +351,7 @@ func dispatchSpies(record *dispatchRecord) Services {
 		MachinePower:          machinePowerSpy{record},
 		MachineTrust:          machineTrustSpy{record},
 		ClusterAccess:         clusterAccessSpy{record},
+		Logs:                  logsSpy{record},
 	}
 }
 
@@ -339,6 +367,7 @@ func dispatchFlags() *pflag.FlagSet {
 		"private-key-file": "", "public-key-file": "", "type": "local-keyring",
 		"username": "", "input-dir": "inputs", "output-dir": "artifacts",
 		"stage": "infrastructure-services,substrates", "until": "compact.gitops", "wheel-mirror": "file:///srv/wheels", "dest-dir": "/srv/wheels-out",
+		"operation": "", "block": "", "attempt": "", "run": "", "setup": "",
 	} {
 		flags.String(name, value, "")
 	}
@@ -350,6 +379,8 @@ func dispatchFlags() *pflag.FlagSet {
 		flags.Bool(name, true, "")
 	}
 	flags.Bool("password-stdin", false, "")
+	flags.Bool("raw", false, "")
+	flags.Bool("follow", false, "")
 	flags.Bool("value-stdin", false, "")
 	flags.StringArray("file", []string{"inputs"}, "")
 	flags.StringArray("authorize", []string{"data-loss"}, "")

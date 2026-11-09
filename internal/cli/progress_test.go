@@ -477,7 +477,7 @@ func TestAppendedProgressSettlesOutcomesInPositionOrder(t *testing.T) {
 // and no finishing line. Text mode names the log location as its own field.
 func TestJSONModeProgressWritesNothing(t *testing.T) {
 	ctx := context.Background()
-	const location = "/var/lib/bootwright/contexts/lab/state/runs/run-abc"
+	const location = "/var/log/bootwright/contexts/lab/runs/run-000003.output"
 	var out bytes.Buffer
 	silent := NewInvocationProgress(&out, func() int { return 80 }, true)
 	silent.ReportLogLocation(ctx, lifecycle.LogLocation{Path: location})

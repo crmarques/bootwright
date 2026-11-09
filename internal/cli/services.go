@@ -1,5 +1,7 @@
 package cli
 
+import "io"
+
 type Services struct {
 	Contexts              ContextService
 	AddOnCatalog          AddOnCatalogService
@@ -22,4 +24,7 @@ type Services struct {
 	MachineTrust          MachineTrustService
 	ClusterAccess         ClusterAccessService
 	Comparison            ComparisonService
+	Logs                  LogsService
+	// logOutput is the invocation's stdout, where a followed log streams.
+	logOutput io.Writer
 }

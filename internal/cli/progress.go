@@ -287,14 +287,25 @@ func (p *progressPresenter) stopHeartbeat() {
 	}
 }
 
-// field writes one labeled line into the stream, terminating the block the
-// terminal is still rewriting first so it is never overwritten by a redraw.
-func (p *progressPresenter) field(label, value string) {
+// fields writes one aligned field group, first ending the row a terminal is
+// still rewriting so a redraw never overwrites it.
+func (p *progressPresenter) fields(values ...field) {
+	if len(values) == 0 {
+		return
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.closeLine()
-	io.WriteString(p.out, "\n"+displayIndent+escapeDisplayLine(label)+
-		strings.Repeat(" ", displayGap)+escapeDisplayLine(value)+"\n")
+	width := 0
+	for _, value := range values {
+		width = max(width, displayCellWidth(escapeDisplayLine(value.Label)))
+	}
+	group := "\n"
+	for _, value := range values {
+		label := escapeDisplayLine(value.Label)
+		group += displayIndent + label + strings.Repeat(" ", width-displayCellWidth(label)+displayGap) + escapeDisplayLine(value.Value) + "\n"
+	}
+	io.WriteString(p.out, group)
 }
 
 // openHeading prints a heading the first time it is needed. The blank line

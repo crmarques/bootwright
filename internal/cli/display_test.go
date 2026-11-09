@@ -57,7 +57,7 @@ func TestResourceHeadingNeverSplitsTheName(t *testing.T) {
 }
 
 func TestOverlongTokensKeepTheirFullTextOnOneLine(t *testing.T) {
-	path := "/var/lib/example/contexts/lab/state/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/logs"
+	path := "/var/log/example/contexts/lab/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a"
 	command := "ceph --conf /etc/ceph/ceph.conf --keyring /etc/ceph/ceph.client.admin.keyring status"
 	var text display
 	text.verbatimFields(field{Label: "Logs", Value: path}, field{Label: "Next", Value: command})
@@ -94,8 +94,9 @@ func TestOverlongTokensKeepTheirFullTextOnOneLine(t *testing.T) {
 
 func TestHumanGoldensKeepPathsAndCommandsOnOneLine(t *testing.T) {
 	for _, test := range []struct{ golden, want string }{
-		{"cli-apply-failed", "Logs  /var/lib/bootwright/contexts/lab/state/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/logs"},
-		{"cli-status", "/var/lib/bootwright/contexts/lab/state/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a/logs"},
+		{"cli-apply-failed", "Logs    /var/log/bootwright/contexts/lab/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a"},
+		{"cli-apply-failed", "Follow  bootwright logs --context lab --operation op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a"},
+		{"cli-status", "/var/log/bootwright/contexts/lab/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a"},
 		{"cli-cluster-info", "Ceph command  bootwright cluster exec --context lab --name storage --node rhel-01 -- sudo -n ceph --conf " +
 			"/var/lib/bootwright/ceph/6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b/ceph.conf --keyring " +
 			"/var/lib/bootwright/ceph/6b8f1c2e-4d7a-5e3f-9a1b-0c2d4e6f8a1b/ceph.client.admin.keyring"},
