@@ -56,7 +56,7 @@ func (s Service) lend(ctx context.Context, runtime lifecycle.Runtime, access Acc
 	if s.access == nil {
 		return nil, func() {}, failure("access.unavailable", "the access of host cluster "+access.HostCluster+" cannot be lent by this executable", "")
 	}
-	lent, err := s.access.LendHostAccess(ctx, HostLend{
+	lent, back, err := s.access.LendHostAccess(ctx, HostLend{
 		Runtime: runtime, Cluster: access.HostCluster, Namespace: hostedNamespace(access), Machine: object,
 		Placement: placement, Digest: digest, Deadline: deadline,
 	})
@@ -69,5 +69,5 @@ func (s Service) lend(ctx context.Context, runtime lifecycle.Runtime, access Acc
 		material = map[string]secrets.Material{}
 	}
 	material[lentKubeconfig] = lent
-	return material, lent.Clear, nil
+	return material, back, nil
 }

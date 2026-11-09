@@ -62,7 +62,7 @@ func wireMachine(deps machineDependencies) cli.Services {
 	selection := currentSelection(deps.Selection)
 	evidence := machineOwnership{reconciler: deps.Lifecycle}
 	client := sshlocal.New(deps.Home, deps.Owner, sessionFiles(deps.Files))
-	runner := ansiblerunner.New(operationPlaybook(), deps.Stager)
+	runner := ansiblerunner.New(operationPlaybook(), deps.Stager).AdmitReadOnly(readOnlyOperations()...)
 	powered := power.New(deps.State, machineRealization{reconciler: deps.Lifecycle}, machineIdentities{reconciler: deps.Lifecycle},
 		deps.Lifecycle, runner, runner.BeginInvocation, deps.Confirmer, deps.Reporter, selection).
 		WithHostAccess(hostedAccess{lender: kubevirt.NewLender(runner), custody: deps.Custody})
@@ -310,7 +310,7 @@ type hostedAccess struct {
 	custody hostCustody
 }
 
-func (a hostedAccess) LendHostAccess(ctx context.Context, lend power.HostLend) (secrets.Material, error) {
+func (a hostedAccess) LendHostAccess(ctx context.Context, lend power.HostLend) (secrets.Material, func(), error) {
 	execution := kubevirt.UtilityExecution(lifecycle.Execution{
 		Context: lend.Runtime.Context.Name, Launch: lend.Runtime.Launch, Output: lend.Runtime.Output,
 		Block: reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Kind: string(api.Machine), Object: lend.Machine}, RequestDigest: lend.Digest},

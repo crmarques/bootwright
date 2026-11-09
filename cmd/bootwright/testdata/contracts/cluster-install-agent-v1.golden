@@ -1,8 +1,8 @@
 implementation: cluster-install-agent-v1
-content-digest: 05d268ae6774d7db62c4c0510bb9c7a1ca03cc5c1311bc705615cc7bd172a2ba
+content-digest: 4d4d690e47c94e4ee2b23e7fdbcac273f98160690932368afc71ab78364ddfcd
 request-version: cluster-install-agent-v1
 automation-formats: none
-mark-formats: none
+mark-formats: bootwright.io/lend
 proof-ids: .bootwright-booted, /.bootwright-booted, bootwright/containercluster/identity/v1
 fixed-places: .bootwright-kubeconfig, /.bootwright-kubeconfig, bootwright-, bootwright-cluster-install
 effect-pins:
@@ -12,6 +12,7 @@ effect-pins:
   openshift-install
   openshift-clients
   substrate-access-kubevirt-v1
+  lend-bound-secret
 request-identity:
   identity.context
   identity.cluster

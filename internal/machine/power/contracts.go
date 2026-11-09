@@ -54,9 +54,9 @@ type Runner interface {
 	Run(context.Context, lifecycle.RunRequest) (lifecycle.RunResult, error)
 }
 
-// HostAccess mints through a lend run one run's hosted KubeVirt access.
+// HostAccess mints one run's hosted KubeVirt access and the call that revokes it.
 type HostAccess interface {
-	LendHostAccess(context.Context, HostLend) (secrets.Material, error)
+	LendHostAccess(context.Context, HostLend) (secrets.Material, func(), error)
 }
 
 type HostLend struct {

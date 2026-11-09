@@ -66,14 +66,14 @@ func MachineBlockID(machine string) string { return reconciliation.BlockIdentity
 // VirtualMachine the arm creates.
 func HostContentDigest() string {
 	return contentDigest("bootwright.substrate.kubevirt.host-v1", HostImplementation, hostRequestVersion, hostEvidenceVersion,
-		"access-reviews", "root-class-rwx", "kube-system-uid", "ingress-ca", lendVersion, lendEvidence,
+		"access-reviews", "root-class-rwx", "kube-system-uid", "ingress-ca", lendVersion, lendEvidence, lendBound,
 		"root-class-first-set", "schedulable-kvm-node", "attachment-kind", "cdi-and-kube-system-present", "one-default-class")
 }
 
 func MachineContentDigest() string {
 	return contentDigest("bootwright.substrate.kubevirt.machine-v1", MachineImplementation, machineRequestVersion, machineEvidence,
 		"run-strategy-manual", "efi-no-secure-boot", "evict-live-migrate", "bridge-binding", "root-template-blank", "owner-annotation-mark",
-		lendVersion, lendEvidence, "spread-preferred-anti-affinity")
+		lendVersion, lendEvidence, "spread-preferred-anti-affinity", lendBound)
 }
 
 func contentDigest(parts ...string) string {

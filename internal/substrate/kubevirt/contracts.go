@@ -10,9 +10,9 @@ import (
 )
 
 // HostAccess mints the access one run on a host cluster of this context is
-// lent, which the caller clears.
+// lent, and the call that clears and revokes it once that run returns.
 type HostAccess interface {
-	LendHostAccess(ctx context.Context, execution lifecycle.Execution, cluster, namespace string, placement machineref.Placement, deadline time.Duration) (secrets.Material, error)
+	LendHostAccess(ctx context.Context, execution lifecycle.Execution, cluster, namespace string, placement machineref.Placement, deadline time.Duration) (secrets.Material, func(), error)
 }
 
 // Runner performs one authorized operation through the fixed Ansible

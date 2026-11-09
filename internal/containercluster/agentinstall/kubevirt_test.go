@@ -300,11 +300,15 @@ func kubevirtTool() prerequisites.ToolDefinition {
 		Files: []prerequisites.ToolFile{{Member: "virtctl", Path: "tools/virtctl/kubevirt/v1.6.2/virtctl"}}}
 }
 
-type recordedLends struct{ lends []string }
+type recordedLends struct {
+	lends    []string
+	returned int
+}
 
-func (r *recordedLends) LendHostAccess(_ context.Context, _ lifecycle.Execution, cluster, namespace string, _ machine.Placement, deadline time.Duration) (secrets.Material, error) {
+func (r *recordedLends) LendHostAccess(_ context.Context, _ lifecycle.Execution, cluster, namespace string, _ machine.Placement, deadline time.Duration) (secrets.Material, func(), error) {
 	r.lends = append(r.lends, cluster+"/"+namespace+"/"+deadline.String())
-	return secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("minted")}), nil
+	material := secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("minted")})
+	return material, func() { r.returned++; material.Clear() }, nil
 }
 
 func hostedCatalog() api.Catalog { return hostedCatalogOf(3, 0) }
@@ -351,6 +355,9 @@ func lendsOf(t *testing.T, catalog api.Catalog) (InstallRequest, []string) {
 		t.Fatal(diagnostics.Of(err))
 	}
 	release()
+	if lends.returned != len(lends.lends) {
+		t.Fatalf("%d of %d lent tokens were returned for revocation", lends.returned, len(lends.lends))
+	}
 	return requests[0], lends.lends
 }
 

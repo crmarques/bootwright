@@ -281,6 +281,7 @@ func automationIdentities() map[string]automationFormat {
 		"bootwright.io/context":                   fixedBy(kindMark, "the label naming the context a VirtualMachine was realized for", kubevirt.MachineImplementation),
 		"bootwright.io/machine":                   fixedBy(kindMark, "the label naming the Machine a VirtualMachine realizes", kubevirt.MachineImplementation),
 		"bootwright.io/media-identity":            fixedBy(kindProof, "the annotation naming the media an upload DataVolume holds", kubevirt.MachineImplementation),
+		"bootwright.io/lend":                      fixedBy(kindMark, "the label marking a per-lend Secret a lent host token is bound to, whose value is that token's lifetime", kubevirt.HostImplementation, kubevirt.MachineImplementation, install),
 		"bootwright.io/spread":                    fixedBy(kindPlace, "the template label one cluster role's VirtualMachines prefer distinct host nodes by", kubevirt.MachineImplementation),
 		"bootwright-":                             fixedBy(kindPlace, "the prefix of the server-side apply field manager and of the install's wildcard DNS label", addon, network, install),
 		"bootwright-cluster-install":              fixedBy(kindPlace, "the field manager of the JSON patch that places a completed cluster's node labels and taints", install),

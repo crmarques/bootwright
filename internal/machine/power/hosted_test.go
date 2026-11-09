@@ -48,23 +48,29 @@ var vmPin = machine.HardwareIdentity{UUID: "9a1f2c3d-0000-4000-8000-00000000c1a5
 // hostLender mints the token-only kubeconfig a hosted run is lent, recording each
 // lend, or fails as a host that cannot be reached.
 type hostLender struct {
-	lends []HostLend
-	lent  []secrets.Material
-	err   error
+	lends    []HostLend
+	lent     []secrets.Material
+	returned int
+	err      error
 }
 
-func (l *hostLender) LendHostAccess(_ context.Context, lend HostLend) (secrets.Material, error) {
+func (l *hostLender) LendHostAccess(_ context.Context, lend HostLend) (secrets.Material, func(), error) {
 	l.lends = append(l.lends, lend)
 	if l.err != nil {
-		return secrets.Material{}, l.err
+		return secrets.Material{}, func() {}, l.err
 	}
 	material := secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(token)})
 	l.lent = append(l.lent, material)
-	return material, nil
+	return material, func() { l.returned++; material.Clear() }, nil
 }
 
+// cleared proves every lent token was returned, so its revoke ran, once its
+// run returned.
 func (l *hostLender) cleared(t *testing.T) {
 	t.Helper()
+	if l.returned != len(l.lent) {
+		t.Fatalf("%d of %d lent tokens were returned for revocation", l.returned, len(l.lent))
+	}
 	for _, material := range l.lent {
 		if value, _ := material.Part(secrets.ValuePart); !bytes.Equal(value, make([]byte, len(token))) {
 			t.Fatal("a lent token outlived the run it was lent to")

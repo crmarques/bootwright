@@ -112,9 +112,18 @@ const ObserveOperation = "observe"
 
 const LendOperation = "lend"
 
+// RevokeOperation ends a lend: it removes the object the lent credential is
+// bound to, so the credential stops authenticating before it expires.
+const RevokeOperation = "revoke"
+
 const UnrecordedMaterialRefusal = "an invocation no operation records may take over no material, so this observation cannot run outside an operation"
 
 func Recorded(e Execution) bool { return e.Attempt != 0 || e.Resolution != 0 }
+
+// ReadOnlyRun reports whether a run of the execution may change only what its
+// own operation creates: an observation, a quiescence probe, a comparison or a
+// resolution.
+func ReadOnlyRun(e Execution) bool { return e.ReadOnly || e.Attempt == 0 || e.Resolution != 0 }
 
 // MaxDeadline is the longest deadline the families that hold their own budgets
 // to it may derive: add-on instances, cluster networking and Ceph refuse a
@@ -129,6 +138,9 @@ type RunResult struct {
 	Outcome  string
 	Evidence json.RawMessage
 	Produced []Produced
+	// NotStarted reports a run the runner refused before it launched any job,
+	// so nothing it would do reached a host; false leaves that unknown.
+	NotStarted bool
 }
 
 // Invocation is what a capability supplies to turn one authorized attempt into
@@ -162,7 +174,7 @@ type Invocation struct {
 // substitute an identity the attempt did not freeze.
 func RunFor(execution Execution, invocation Invocation) RunRequest {
 	materials := append(slices.Clone(invocation.Materials), Materials(invocation.Placement)...)
-	readOnly := execution.ReadOnly || execution.Attempt == 0 || execution.Resolution != 0
+	readOnly := ReadOnlyRun(execution)
 	var prepare func(context.Context, json.RawMessage) error
 	if execution.Prepare != nil && invocation.Preparation != nil && !readOnly {
 		prepare = func(ctx context.Context, preparation json.RawMessage) error {

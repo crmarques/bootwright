@@ -1077,19 +1077,30 @@ installation's administrator kubeconfig: before each run the substrate's
 lend, implementation `substrate-host-kubevirt-v1` operation `lend` with
 request `substrate-access-kubevirt-v1`, borrows that kubeconfig as the
 [produced input](state-reconciliation.md#produced-material-custody) of the
-host's installation block, posts one `TokenRequest` for the ServiceAccount
-`bootwright-kubevirt` of the provider's namespace with an `expirationSeconds`
-of the consuming run's deadline plus 600 seconds (600 at least) under no
-fixed cap, so a cluster installation's lend outlives its derived deadline
-however many nodes it counts, and leaves,
+host's installation block, creates in the provider's namespace one per-lend
+Secret, named by the request (`bootwright-kubevirt-lend-` and 16 hex digits
+of a digest of the context, the run's request digest, the moment and a
+counter, so no two lends share one), holding no data and labelled `bootwright.io/lend` with the token's
+lifetime in seconds, and posts one `TokenRequest` for the ServiceAccount
+`bootwright-kubevirt` of that namespace, bound to that Secret by
+`boundObjectRef` (kind `Secret`, its name and UID), with an
+`expirationSeconds` of the consuming run's deadline plus 600 seconds (600 at
+least) under no fixed cap, so a cluster installation's lend outlives its
+derived deadline however many nodes it counts, and leaves,
 as its one output, a kubeconfig of the same server and authority carrying
 that token alone, which is lent to that one run as its kubeconfig and cleared
-when it returns. A granted `spec.expirationSeconds` shorter than requested
-refuses, so no run outlives its access. The token is never evidence,
+when it returns. A Secret of that name already present refuses and is never
+adopted, and a token the host answers unbound to it refuses. A granted
+`spec.expirationSeconds` shorter than requested
+refuses, so no run outlives its access. When the run returns, done, failed or
+cancelled, the lend's return deletes that Secret, so the host stops accepting
+the token within seconds ([lent access revocation](#lent-kubevirt-access-revocation)). The
+token is never evidence,
 custody, a record or a log, and every continuation, observation, probe and
 removal that reaches the host mints again, the proof's removal reaching
 nothing; the evidence (`substrate-access-kubevirt-evidence-v1`)
-names the server and the granted lifetime. A host the lend cannot reach leaves
+names the server, the per-lend Secret and the granted lifetime. A host the
+lend cannot reach leaves
 the block unknown, never absent, as every unanswered host does.
 
 A [power command or the power reading](#identity-and-power-operations) on
@@ -1100,8 +1111,8 @@ runs the same `lend` as an unrecorded, read-only execution bound to that run's
 request digest, borrowing the host installation's administrator kubeconfig
 from the context's custody (block `cluster-install-<cluster>`, output
 `kubeconfig`, read under custody's shared lock as `diff --observe` reads it),
-and lends the minted kubeconfig to that one run, clearing it when the run
-returns. Only a proved entry is lent; a missing or unproved one refuses a
+and lends the minted kubeconfig to that one run, clearing it and revoking its
+token when the run returns. Only a proved entry is lent; a missing or unproved one refuses a
 power command `access.unavailable`, naming the apply that completes the host.
 Custody keeps the entry until the host installation's removal completes,
 which follows the removal of every Machine the host runs, so the entry stays
@@ -1334,6 +1345,48 @@ because it deletes the disks. The namespace and every network object are the
 operator's, or the host's `kubevirt` instance's and its cluster network
 block's, and the arm never writes them. A host that cannot be read, refuses the
 request or answers what is not the expected object is unknown, never absent.
+
+## Lent KubeVirt access revocation
+
+The return of a [lend](#kubevirt-machine-realization) runs operation `revoke`
+of `substrate-host-kubevirt-v1` with the lend's own request, again borrowing
+the host installation's administrator kubeconfig: it reads the per-lend Secret
+and deletes it by its UID only when it carries the `bootwright.io/lend` mark,
+one already gone proving the revoke too, by a delete it sends again when the
+host's answer is transient, since the UID precondition makes a repeat find the
+Secret gone or another in its place. The API server then stops accepting the
+token bound to it within seconds: it remembers a successful token check for
+about ten seconds, and a Secret another controller holds with a finalizer
+keeps binding its token for up to a minute after its deletion began, while
+the lend's Secret carries none. Only the runner's admission of this
+implementation's `revoke` lets it run in a read-only or unrecorded execution
+([produced material custody](state-reconciliation.md#produced-material-custody)).
+It runs once the consuming run returns, done, failed
+or cancelled, under its own 180-second bound and outside the caller's
+cancellation. A lend that fails after its run started, or whose runner cannot say that its
+job never started, revokes the same way before it answers, and its adapter deletes a Secret it created before it
+refuses.
+
+A revoke that fails changes no run's result. A block's attempt reports it as
+the warning `substrate.lend-not-revoked`, naming the Secret and the lifetime
+that still bounds the token, which then expires at that lifetime as an
+unbound token would; a power command or reading, which has no warning channel,
+leaves it in the revoke run's retained adapter output.
+
+A Secret a crashed controller or a failed revoke left behind is found by its
+mark. A lend whose request sets `sweep`, which only a recorded attempt that
+may change its host does, never a read-only, resolution or unrecorded
+execution such as a power command or reading, after creating its own Secret, lists the namespace's marked Secrets
+(at most 64, one page) and deletes, by UID, each whose creation time plus its
+labelled lifetime precedes its own Secret's creation time, so the host's clock
+alone decides that the token bound to it has expired; it keeps one with no
+readable lifetime. The sweep is bounded so it never spends the lend's own
+bound: it stops at the first delete the host does not answer and issues none
+once 30 seconds have passed since it began, leaving the rest for a later
+lend. The namespace's removal with the host's `kubevirt` instance
+removes any still left. Creating, listing and deleting Secrets there is the
+administrator kubeconfig's right, never the ServiceAccount's, so the provider
+proof's access reviews do not check it.
 
 ## vSphere machine realization
 

@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
@@ -167,26 +168,50 @@ func TestTheNodesOfOneRoleShareASpreadAndOtherRolesDoNot(t *testing.T) {
 	}
 }
 
+// lendingRunner answers a lend as the access role does, a revoke with its
+// proof, and any other run as an observation that holds; fail names the
+// operations it fails, and cancelled the context of each run.
 type lendingRunner struct {
-	runs    []lifecycle.RunRequest
-	granted int64
-	lost    bool
+	runs      []lifecycle.RunRequest
+	cancelled []bool
+	granted   int64
+	lost      bool
+	fail      map[string]bool
+	refuse    map[string]bool
 }
 
-func (r *lendingRunner) Run(_ context.Context, run lifecycle.RunRequest) (lifecycle.RunResult, error) {
+func (r *lendingRunner) Run(ctx context.Context, run lifecycle.RunRequest) (lifecycle.RunResult, error) {
 	r.runs = append(r.runs, run)
+	r.cancelled = append(r.cancelled, ctx.Err() != nil)
+	if r.fail[run.Operation] {
+		return lifecycle.RunResult{}, refusal("lifecycle.state", "the host did not answer the "+run.Operation, "")
+	}
+	if r.refuse[run.Operation] {
+		return lifecycle.RunResult{NotStarted: true}, refusal("lifecycle.state", "the runner refused the "+run.Operation+" before its job", "")
+	}
 	var request LendRequest
 	_ = json.Unmarshal(run.Canonical, &request)
 	granted := request.ExpirationSeconds
 	if r.granted != 0 {
 		granted = r.granted
 	}
-	evidence, _ := json.Marshal(LendEvidence{ExpirationSeconds: granted, Postcondition: true, Request: run.Digest, Server: "https://api.host.example.test:6443", Version: lendEvidence})
+	if run.Operation == "revoke" {
+		granted = 0
+	}
+	evidence, _ := json.Marshal(LendEvidence{ExpirationSeconds: granted, Postcondition: true, Request: run.Digest, Secret: request.Secret, Server: "https://api.host.example.test:6443", Version: lendEvidence})
 	result := lifecycle.RunResult{Outcome: "unchanged", Evidence: evidence}
-	if !r.lost {
+	if !r.lost && run.Operation == "lend" {
 		result.Produced = []lifecycle.Produced{{Name: "kubeconfig", Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("token-kubeconfig")})}}
 	}
 	return result, nil
+}
+
+func (r *lendingRunner) operations() []string {
+	var operations []string
+	for _, run := range r.runs {
+		operations = append(operations, run.Operation)
+	}
+	return operations
 }
 
 func lendExecution(lent *[]secrets.Material) lifecycle.Execution {
@@ -203,8 +228,11 @@ func nestedBlockDefinition() reconciliation.Block {
 
 func TestALendHandsTheAdministratorKubeconfigToItsOwnRunAloneAndOutlivesTheConsumer(t *testing.T) {
 	var lent []secrets.Material
+	var warned []operationstore.Warning
 	runner := &lendingRunner{}
-	material, err := NewLender(runner).LendHostAccess(context.Background(), lendExecution(&lent), "host", "guests", hostRequest(t).Placement, 20*time.Minute)
+	execution := lendExecution(&lent)
+	execution.Warn = func(_ context.Context, warnings []operationstore.Warning) { warned = append(warned, warnings...) }
+	material, back, err := NewLender(runner).LendHostAccess(context.Background(), execution, "host", "guests", hostRequest(t).Placement, 20*time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,8 +241,11 @@ func TestALendHandsTheAdministratorKubeconfigToItsOwnRunAloneAndOutlivesTheConsu
 	}
 	run := runner.runs[0]
 	var request LendRequest
-	if err := json.Unmarshal(run.Canonical, &request); err != nil || request != (LendRequest{Cluster: "host", ExpirationSeconds: 1800, Namespace: "guests", ServiceAccount: "bootwright-kubevirt", Version: lendVersion}) {
+	if err := json.Unmarshal(run.Canonical, &request); err != nil || !strings.HasPrefix(request.Secret, lendSecretName) || len(request.Secret) != len(lendSecretName)+16 {
 		t.Fatalf("request %+v, %v", request, err)
+	}
+	if want := (LendRequest{Cluster: "host", ExpirationSeconds: 1800, Namespace: "guests", Secret: request.Secret, ServiceAccount: "bootwright-kubevirt", Version: lendVersion}); request != want {
+		t.Fatalf("request %+v", request)
 	}
 	if run.Operation != "lend" || len(run.Outputs) != 1 || len(run.Materials) != 1 || run.Materials[0].Secret != adminKubeconfig || strings.Contains(string(run.Canonical), adminCanary) {
 		t.Fatalf("the lend run %+v", run)
@@ -222,17 +253,153 @@ func TestALendHandsTheAdministratorKubeconfigToItsOwnRunAloneAndOutlivesTheConsu
 	if value, _ := lent[0].Part(secrets.ValuePart); strings.Contains(string(value), adminCanary) {
 		t.Fatalf("the administrator kubeconfig outlived its lend: %q", value)
 	}
-}
-
-func TestALendThatGrantsTooLittleOrLeavesNothingLendsNothing(t *testing.T) {
-	for name, runner := range map[string]*lendingRunner{"short": {granted: 900}, "lost": {lost: true}} {
-		var lent []secrets.Material
-		if _, err := NewLender(runner).LendHostAccess(context.Background(), lendExecution(&lent), "host", "guests", hostRequest(t).Placement, 20*time.Minute); err == nil {
-			t.Fatalf("%s: a lend was accepted", name)
+	if len(runner.runs) != 1 {
+		t.Fatalf("the token was revoked before its run returned: %v", runner.operations())
+	}
+	back()
+	back()
+	if !slices.Equal(runner.operations(), []string{"lend", "revoke"}) || len(warned) != 0 {
+		t.Fatalf("runs %v, warned %+v", runner.operations(), warned)
+	}
+	revoke := runner.runs[1]
+	if string(revoke.Canonical) != string(run.Canonical) || len(revoke.Outputs) != 0 || len(revoke.Materials) != 1 || revoke.Materials[0].Secret != adminKubeconfig ||
+		revoke.Implementation != HostImplementation || revoke.Deadline != revokeDeadline {
+		t.Fatalf("the revoke run %+v", revoke)
+	}
+	if value, _ := material.Part(secrets.ValuePart); strings.Contains(string(value), "token") {
+		t.Fatal("the lent kubeconfig outlived its return")
+	}
+	if len(lent) != 2 {
+		t.Fatalf("the lend and its revoke borrowed %d administrator kubeconfigs", len(lent))
+	}
+	for _, borrowed := range lent {
+		if value, _ := borrowed.Part(secrets.ValuePart); strings.Contains(string(value), adminCanary) {
+			t.Fatal("the administrator kubeconfig outlived its revoke")
 		}
 	}
-	if _, err := NewLender(&lendingRunner{}).LendHostAccess(context.Background(), lifecycle.Execution{}, "host", "guests", hostRequest(t).Placement, time.Minute); err == nil {
-		t.Fatal("a lend outside an operation's custody was accepted")
+}
+
+// A lend that fails once it reached the host revokes before it answers, since
+// its Secret may exist; one that never reached it, outside custody, runs
+// nothing.
+func TestALendThatGrantsTooLittleOrLeavesNothingLendsNothingAndRevokes(t *testing.T) {
+	for name, runner := range map[string]*lendingRunner{"short": {granted: 900}, "lost": {lost: true}, "unanswered": {fail: map[string]bool{"lend": true}}} {
+		var lent []secrets.Material
+		if _, back, err := NewLender(runner).LendHostAccess(context.Background(), lendExecution(&lent), "host", "guests", hostRequest(t).Placement, 20*time.Minute); err == nil {
+			t.Fatalf("%s: a lend was accepted", name)
+		} else {
+			back()
+		}
+		if !slices.Equal(runner.operations(), []string{"lend", "revoke"}) || string(runner.runs[0].Canonical) != string(runner.runs[1].Canonical) {
+			t.Fatalf("%s: runs %v", name, runner.operations())
+		}
+	}
+	none := &lendingRunner{}
+	if _, _, err := NewLender(none).LendHostAccess(context.Background(), lifecycle.Execution{}, "host", "guests", hostRequest(t).Placement, time.Minute); err == nil || len(none.runs) != 0 {
+		t.Fatalf("a lend outside an operation's custody was accepted or ran %v", none.operations())
+	}
+	var warned []operationstore.Warning
+	refused := &lendingRunner{refuse: map[string]bool{"lend": true}}
+	var lent []secrets.Material
+	execution := lendExecution(&lent)
+	execution.Warn = func(_ context.Context, warnings []operationstore.Warning) { warned = append(warned, warnings...) }
+	if _, back, err := NewLender(refused).LendHostAccess(context.Background(), execution, "host", "guests", hostRequest(t).Placement, time.Minute); err == nil {
+		t.Fatal("a lend the runner refused was accepted")
+	} else {
+		back()
+	}
+	if !slices.Equal(refused.operations(), []string{"lend"}) || len(warned) != 0 {
+		t.Fatalf("a lend refused before its job started ran %v and warned %+v", refused.operations(), warned)
+	}
+}
+
+// Only a recorded attempt that may change its host sweeps leftover lend
+// Secrets; a lend of a read-only or unrecorded execution creates its own
+// Secret alone.
+func TestOnlyARecordedMutatingLendSweeps(t *testing.T) {
+	cases := map[string]struct {
+		attempt, resolution int
+		readOnly, sweep     bool
+	}{
+		"apply":      {attempt: 1, sweep: true},
+		"read-only":  {attempt: 1, readOnly: true},
+		"unrecorded": {},
+		"resolution": {attempt: 1, resolution: 1},
+	}
+	for name, c := range cases {
+		var lent []secrets.Material
+		runner := &lendingRunner{}
+		execution := lendExecution(&lent)
+		execution.Attempt, execution.Resolution, execution.ReadOnly = c.attempt, c.resolution, c.readOnly
+		_, back, err := NewLender(runner).LendHostAccess(context.Background(), execution, "host", "guests", hostRequest(t).Placement, time.Minute)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		back()
+		var request LendRequest
+		if err := json.Unmarshal(runner.runs[0].Canonical, &request); err != nil || request.Sweep != c.sweep {
+			t.Fatalf("%s: the lend request sweeps %v (%v), want %v", name, request.Sweep, err, c.sweep)
+		}
+	}
+}
+
+// The return revokes under its own bound when the run it was lent to was
+// cancelled, and each lend binds its token to a Secret of its own.
+func TestACancelledRunStillRevokesItsToken(t *testing.T) {
+	var lent []secrets.Material
+	runner := &lendingRunner{}
+	ctx, cancel := context.WithCancel(context.Background())
+	_, back, err := NewLender(runner).LendHostAccess(ctx, lendExecution(&lent), "host", "guests", hostRequest(t).Placement, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, again, err := NewLender(runner).LendHostAccess(ctx, lendExecution(&lent), "host", "guests", hostRequest(t).Placement, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	back()
+	again()
+	if !slices.Equal(runner.operations(), []string{"lend", "lend", "revoke", "revoke"}) || slices.Contains(runner.cancelled, true) {
+		t.Fatalf("runs %v, cancelled %v", runner.operations(), runner.cancelled)
+	}
+	if string(runner.runs[0].Canonical) == string(runner.runs[1].Canonical) || string(runner.runs[2].Canonical) != string(runner.runs[0].Canonical) {
+		t.Fatal("two lends shared one per-lend Secret, or a return revoked another lend's")
+	}
+}
+
+// A revoke that fails leaves the run's result alone and reports the Secret
+// left behind and the expiry that still bounds its token.
+func TestARevokeThatFailsWarnsAndFailsNothing(t *testing.T) {
+	var lent []secrets.Material
+	var warned []operationstore.Warning
+	runner := &lendingRunner{fail: map[string]bool{"revoke": true}}
+	execution := lendExecution(&lent)
+	execution.Warn = func(_ context.Context, warnings []operationstore.Warning) { warned = append(warned, warnings...) }
+	_, back, err := NewLender(runner).LendHostAccess(context.Background(), execution, "host", "guests", hostRequest(t).Placement, 20*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	back()
+	var request LendRequest
+	_ = json.Unmarshal(runner.runs[0].Canonical, &request)
+	if len(warned) != 1 || warned[0].Code != LendNotRevoked || !strings.Contains(warned[0].Message, "guests/"+request.Secret) || !strings.Contains(warned[0].Message, "30m0s") {
+		t.Fatalf("warned %+v", warned)
+	}
+}
+
+// A capability's run that fails still returns its access, so its token is
+// revoked as on success.
+func TestAFailedHostedRunRevokesItsToken(t *testing.T) {
+	var lent []secrets.Material
+	runner := &lendingRunner{fail: map[string]bool{"observe": true}}
+	execution := lendExecution(&lent)
+	execution.Block = nestedBlock(t, func() HostRequest { r, _ := HostRequests(nestedCatalog(), "controller", testContext); return r[0] }())
+	if _, err := NewHost(runner, hosting).Observe(context.Background(), execution); err == nil {
+		t.Fatal("a failed observation was accepted")
+	}
+	if !slices.Equal(runner.operations(), []string{"lend", "observe", "revoke"}) {
+		t.Fatalf("runs %v", runner.operations())
 	}
 }
 
@@ -243,10 +410,10 @@ func TestEachHostedRunIsLentAFreshTokenAndNeverTheSecret(t *testing.T) {
 	execution.Block = nestedBlock(t, func() HostRequest { r, _ := HostRequests(nestedCatalog(), "controller", testContext); return r[0] }())
 	_, _ = NewHost(runner, hosting).Observe(context.Background(), execution)
 	_, _ = NewHost(runner, hosting).Observe(context.Background(), execution)
-	if len(runner.runs) != 4 || runner.runs[0].Operation != "lend" || runner.runs[2].Operation != "lend" {
-		t.Fatalf("runs %v", runner.runs)
+	if !slices.Equal(runner.operations(), []string{"lend", "observe", "revoke", "lend", "observe", "revoke"}) {
+		t.Fatalf("runs %v", runner.operations())
 	}
-	for _, run := range []lifecycle.RunRequest{runner.runs[1], runner.runs[3]} {
+	for _, run := range []lifecycle.RunRequest{runner.runs[1], runner.runs[4]} {
 		if len(run.Materials) != 1 || run.Materials[0].Secret != lentKubeconfig || run.Materials[0].Variable != "kubeconfig" {
 			t.Fatalf("the proof was lent %+v", run.Materials)
 		}

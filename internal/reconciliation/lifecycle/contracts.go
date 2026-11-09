@@ -651,6 +651,13 @@ type Execution struct {
 	Released bool
 }
 
+// ReportWarning reports one warning through the execution's Warn, when it collects any.
+func ReportWarning(ctx context.Context, execution Execution, code, message string) {
+	if execution.Warn != nil {
+		execution.Warn(ctx, []operationstore.Warning{{Code: code, Message: message}})
+	}
+}
+
 // ControllerStage is what extending the host's prerequisites needs and nothing
 // else does: the evidence setup froze, the shared area a closure is published
 // into with its sealing, the durable identities recorded before any

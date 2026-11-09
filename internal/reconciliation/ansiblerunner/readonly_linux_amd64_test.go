@@ -51,24 +51,24 @@ func assertRefused(t *testing.T, err error, message string) {
 
 // A read-only invocation that names any adapter operation but observation is
 // refused before the runner claims a job, stages scratch or starts its
-// adapter, and one that names observation runs.
+// adapter, and says it started none; one that names observation runs.
 func TestAReadOnlyInvocationRunsOnlyObservation(t *testing.T) {
 	for _, operation := range []string{"apply", "destroy"} {
 		runner, started := readOnlyRunner(t)
 		request := adapterRequest(t, &bytes.Buffer{})
 		request.Operation, request.ReadOnly = operation, true
-		_, err := runner.Run(context.Background(), request)
+		result, err := runner.Run(context.Background(), request)
 		assertRefused(t, err, "a read-only invocation may run only its capability's observation")
 		assertNothingStaged(t, runner)
-		if *started != 0 {
-			t.Fatalf("a read-only %s started its adapter", operation)
+		if *started != 0 || !result.NotStarted {
+			t.Fatalf("a read-only %s started its adapter, or did not say it started none", operation)
 		}
 	}
 	runner, started := readOnlyRunner(t)
 	request := adapterRequest(t, &bytes.Buffer{})
 	request.Operation, request.ReadOnly = lifecycle.ObserveOperation, true
-	if _, err := runner.Run(context.Background(), request); err != nil || *started != 1 {
-		t.Fatalf("a read-only observation started its adapter %d times (%v)", *started, err)
+	if result, err := runner.Run(context.Background(), request); err != nil || *started != 1 || result.NotStarted {
+		t.Fatalf("a read-only observation started its adapter %d times (%v, %+v)", *started, err, result)
 	}
 }
 
@@ -92,21 +92,47 @@ func TestAnUnrecordedInvocationTakesOverNoMaterial(t *testing.T) {
 	}
 }
 
-// A lend mints access for one later run of the same execution and creates no
-// object, so a read-only or unrecorded execution, a quiescence probe or a
-// comparison among them, may run it with its one output; nothing else gains
-// that exemption.
+// A lend mints access for one later run of the same execution and creates only
+// the per-lend object its token is bound to, which its revoke deletes once
+// that run returns, so a read-only or unrecorded execution, a quiescence probe
+// or a comparison among them, may run both, the lend with its one output;
+// nothing else gains that exemption, a revoke takes over no output, and only
+// the implementation whose revoke deletes nothing but its own lend's object
+// runs one.
 func TestALendRunsInsideAReadOnlyOrUnrecordedExecution(t *testing.T) {
 	outputs := []lifecycle.OutputFile{{Name: "kubeconfig", Variable: "kubeconfig"}}
 	lend := lifecycle.RunRequest{Operation: lifecycle.LendOperation, ReadOnly: true, Unrecorded: true, Outputs: outputs}
-	if err := checkReadOnly(lend); err != nil {
+	admitted := Runner{}.AdmitReadOnly("substrate-host-kubevirt-v1/"+lifecycle.RevokeOperation, "artifact-server-nginx-v1/apply")
+	if err := admitted.checkReadOnly(lend); err != nil {
 		t.Fatalf("a lend was refused: %v", err)
 	}
 	for _, operation := range []string{"apply", "destroy", lifecycle.ObserveOperation} {
 		other := lend
 		other.Operation = operation
-		if checkReadOnly(other) == nil {
+		if admitted.checkReadOnly(other) == nil {
 			t.Fatalf("an unrecorded %s took over an output", operation)
 		}
+	}
+	revoke := lifecycle.RunRequest{Implementation: "substrate-host-kubevirt-v1", Operation: lifecycle.RevokeOperation, ReadOnly: true, Unrecorded: true}
+	if err := admitted.checkReadOnly(revoke); err != nil {
+		t.Fatalf("a revoke was refused: %v", err)
+	}
+	if (Runner{}).checkReadOnly(revoke) == nil {
+		t.Fatal("a read-only revoke composition did not admit was admitted")
+	}
+	for _, implementation := range []string{"", "artifact-server-nginx-v1", "machine-kubevirt-v1"} {
+		other := revoke
+		other.Implementation = implementation
+		if admitted.checkReadOnly(other) == nil {
+			t.Fatalf("a read-only revoke of %q was admitted", implementation)
+		}
+	}
+	apply := lifecycle.RunRequest{Implementation: "artifact-server-nginx-v1", Operation: "apply", ReadOnly: true}
+	if admitted.checkReadOnly(apply) == nil {
+		t.Fatal("an admitted operation other than a revoke ran read-only")
+	}
+	revoke.Outputs = outputs
+	if admitted.checkReadOnly(revoke) == nil {
+		t.Fatal("an unrecorded revoke took over an output")
 	}
 }

@@ -111,6 +111,9 @@ type kubevirtHost struct {
 	minted      int
 	tokens      []string
 	lendRefused []string
+	// bound holds each per-lend Secret a lend created and no revoke deleted.
+	bound   map[string]bool
+	revoked int
 }
 
 func newKubevirtHost() *kubevirtHost {
@@ -132,6 +135,9 @@ func (h *kubevirtHost) Run(_ context.Context, run lifecycle.RunRequest) (lifecyc
 	h.calls = append(h.calls, run.Implementation+" "+run.Operation)
 	if run.Operation == "lend" {
 		return h.lend(run)
+	}
+	if run.Operation == "revoke" {
+		return h.revoke(run)
 	}
 	if h.nested && run.Implementation == kubevirt.HostImplementation && run.Operation == "destroy" {
 		if len(run.Materials) != 0 || len(run.Material) != 0 {

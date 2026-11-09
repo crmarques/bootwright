@@ -26,9 +26,19 @@ func (r Runner) playbookFor(request lifecycle.RunRequest) (string, bool) {
 	return playbook, ok
 }
 
-func checkReadOnly(request lifecycle.RunRequest) error {
+// AdmitReadOnly admits read-only each revoke composition keys as playbooks are.
+func (r Runner) AdmitReadOnly(operations ...string) Runner {
+	r.readOnly = make(map[string]bool, len(operations))
+	for _, operation := range operations {
+		r.readOnly[operation] = true
+	}
+	return r
+}
+
+func (r Runner) checkReadOnly(request lifecycle.RunRequest) error {
 	lend := request.Operation == lifecycle.LendOperation
-	if request.ReadOnly && request.Operation != lifecycle.ObserveOperation && !lend {
+	revoke := request.Operation == lifecycle.RevokeOperation && r.readOnly[request.Implementation+"/"+request.Operation]
+	if request.ReadOnly && request.Operation != lifecycle.ObserveOperation && !lend && !revoke {
 		return failure("lifecycle.state", "a read-only invocation may run only its capability's observation", "")
 	}
 	if request.Unrecorded && len(request.Outputs) != 0 && !lend {

@@ -461,10 +461,10 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 
 func (c InstallCapability) lendHosted(ctx context.Context, execution *lifecycle.Execution, request InstallRequest) (map[string]string, func(), error) {
 	names := map[string]string{}
-	var lent []secrets.Material
+	var returns []func()
 	release := func() {
-		for _, material := range lent {
-			material.Clear()
+		for _, back := range returns {
+			back()
 		}
 	}
 	hosts := map[string]bool{}
@@ -483,12 +483,12 @@ func (c InstallCapability) lendHosted(ctx context.Context, execution *lifecycle.
 			release()
 			return nil, func() {}, refusal("lifecycle.state", "the lender of host cluster "+node.Controller.HostCluster+"'s access is not configured", "")
 		}
-		material, err := c.access.LendHostAccess(ctx, *execution, node.Controller.HostCluster, substrate.KubeVirtNamespace(node.Controller.Endpoint), request.Placement, request.Deadline()+later)
+		material, back, err := c.access.LendHostAccess(ctx, *execution, node.Controller.HostCluster, substrate.KubeVirtNamespace(node.Controller.Endpoint), request.Placement, request.Deadline()+later)
 		if err != nil {
 			release()
 			return nil, func() {}, err
 		}
-		lent = append(lent, material)
+		returns = append(returns, back)
 		names[key] = "lent:host-" + strconv.Itoa(len(names))
 		execution.Material = maps.Clone(execution.Material)
 		if execution.Material == nil {

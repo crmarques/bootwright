@@ -132,6 +132,10 @@ func (r capabilityResolver) Resolve(kind, implementation string) (lifecycle.Capa
 // fixed entrypoint, relative to the collection's playbook root. Composition
 // owns the binding, so a capability names no automation of its own and desired
 // state never names a playbook.
+func readOnlyOperations() []string {
+	return []string{kubevirt.HostImplementation + "/" + lifecycle.RevokeOperation}
+}
+
 func operationPlaybook() map[string]string {
 	bindings := map[string]string{
 		networking.Implementation + "/apply":             "containercluster/network_apply.yml",
@@ -154,6 +158,7 @@ func operationPlaybook() map[string]string {
 		kubevirt.HostImplementation + "/observe":         "substrate/kubevirt_host_observe.yml",
 		kubevirt.HostImplementation + "/destroy":         "substrate/kubevirt_host_destroy.yml",
 		kubevirt.HostImplementation + "/lend":            "substrate/kubevirt_host_lend.yml",
+		kubevirt.HostImplementation + "/revoke":          "substrate/kubevirt_host_revoke.yml",
 		kubevirt.MachineImplementation + "/apply":        "substrate/kubevirt_machine_apply.yml",
 		kubevirt.MachineImplementation + "/observe":      "substrate/kubevirt_machine_observe.yml",
 		kubevirt.MachineImplementation + "/destroy":      "substrate/kubevirt_machine_destroy.yml",
@@ -344,7 +349,7 @@ func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies
 		return lifecycle.Service{}
 	}
 	clock := systemClock{}
-	runner := ansiblerunner.New(operationPlaybook(), controller.Stager)
+	runner := ansiblerunner.New(operationPlaybook(), controller.Stager).AdmitReadOnly(readOnlyOperations()...)
 	var capabilities lifecycle.CapabilityResolver = buildCapabilitiesWith(clock, controller, runner, lifecycleMedia(deps))
 	if deps.Capabilities != nil {
 		capabilities = deps.Capabilities

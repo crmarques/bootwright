@@ -195,6 +195,9 @@ func TestEveryRegisteredAdapterWarningCodeIsReported(t *testing.T) {
 			t.Errorf("registered code %s reports %+v (%v)", code, reported, ok)
 		}
 	}
+	if reported, ok := adapterWarning(plan, block, operationstore.Warning{Code: "substrate.lend-not-revoked", Message: "m"}); !ok || reported.Severity != "warning" {
+		t.Errorf("a lent token's failed revoke reports %+v (%v)", reported, ok)
+	}
 	if _, ok := adapterWarning(plan, block, operationstore.Warning{Code: "substrate.unregistered", Message: "m"}); ok {
 		t.Fatal("an unregistered code was reported")
 	}

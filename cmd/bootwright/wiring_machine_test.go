@@ -273,7 +273,7 @@ func lendAnswer(invoked lifecycle.RunRequest) lifecycle.RunResult {
 	var request kubevirt.LendRequest
 	_ = json.Unmarshal(invoked.Canonical, &request)
 	evidence, _ := json.Marshal(kubevirt.LendEvidence{ExpirationSeconds: request.ExpirationSeconds, Postcondition: true, Request: invoked.Digest,
-		Server: "https://api.host.example.test:6443", Version: "substrate-access-kubevirt-evidence-v1"})
+		Secret: request.Secret, Server: "https://api.host.example.test:6443", Version: "substrate-access-kubevirt-evidence-v1"})
 	return lifecycle.RunResult{Outcome: "unchanged", Evidence: evidence, Produced: []lifecycle.Produced{{Name: "kubeconfig",
 		Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("token-kubeconfig")})}}}
 }
@@ -286,7 +286,7 @@ func TestAHostedPowerLendBorrowsOnlyTheHostsProvedKubeconfig(t *testing.T) {
 	lend := power.HostLend{Runtime: lifecycle.Runtime{Context: lifecycle.ContextIdentity{Name: "lab"}}, Cluster: "host", Namespace: "nested",
 		Machine: "node-0", Placement: machine.Placement{Machine: "controller", Connection: "local"}, Digest: strings.Repeat("c", 64), Deadline: 16 * time.Minute}
 	held, runner := &hostCustodyStub{found: true}, &lendRunner{answer: lendAnswer}
-	lent, err := hostedAccess{lender: kubevirt.NewLender(runner), custody: held}.LendHostAccess(context.Background(), lend)
+	lent, back, err := hostedAccess{lender: kubevirt.NewLender(runner), custody: held}.LendHostAccess(context.Background(), lend)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,9 +306,17 @@ func TestAHostedPowerLendBorrowsOnlyTheHostsProvedKubeconfig(t *testing.T) {
 	if value, _ := held.material[0].Part(secrets.ValuePart); strings.Trim(string(value), "\x00") != "" {
 		t.Fatal("the administrator kubeconfig outlived its lend")
 	}
+	back()
+	if len(runner.runs) != 2 || runner.runs[1].Operation != lifecycle.RevokeOperation || runner.runs[1].Digest != lend.Digest ||
+		!runner.runs[1].ReadOnly || !runner.runs[1].Unrecorded || len(runner.runs[1].Outputs) != 0 || len(held.reads) != 2 {
+		t.Fatalf("the return ran %+v after %d custody reads", runner.runs, len(held.reads))
+	}
+	if value, _ := lent.Part(secrets.ValuePart); strings.Trim(string(value), "\x00") != "" {
+		t.Fatal("the lent kubeconfig outlived its return")
+	}
 	for name, stub := range map[string]*hostCustodyStub{"missing": {}, "unproved": {found: true, entry: secretstore.ProducedMaterial{Unproved: true}}} {
 		runner := &lendRunner{answer: lendAnswer}
-		_, err := hostedAccess{lender: kubevirt.NewLender(runner), custody: stub}.LendHostAccess(context.Background(), lend)
+		_, _, err := hostedAccess{lender: kubevirt.NewLender(runner), custody: stub}.LendHostAccess(context.Background(), lend)
 		if found := diagnostics.Of(err); len(found) != 1 || found[0].Code != "access.unavailable" || !strings.Contains(found[0].Remediation, "bootwright apply --context lab") || len(runner.runs) != 0 {
 			t.Fatalf("%s: %+v (%v) after %d runs", name, found, err, len(runner.runs))
 		}

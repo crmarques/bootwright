@@ -97,15 +97,18 @@ def lend(observation, digest):
         "expirationSeconds": seconds,
         "postcondition": bool(observation.get("postcondition")),
         "request": adapter_protocol.request_digest(digest),
+        "secret": text(observation.get("secret"), 253),
         "server": text(observation.get("server")),
         "version": "substrate-access-kubevirt-evidence-v1",
     }
 
 
 def completion(arguments):
-    if arguments.get("subject") == "lend":
+    if arguments.get("subject") in ("lend", "revoke"):
         evidence = lend(arguments.get("observation") or {}, arguments.get("digest"))
-        return evidence, None if evidence["postcondition"] else "the KubeVirt host access was not lent"
+        if evidence["postcondition"]:
+            return evidence, None
+        return evidence, "the KubeVirt host access was not %s" % ("lent" if arguments["subject"] == "lend" else "revoked")
     if arguments.get("subject") == "host" and arguments.get("released"):
         return host({"absent": True, "postcondition": True}, arguments.get("digest")), None
     shape = host if arguments.get("subject") == "host" else machine

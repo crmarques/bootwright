@@ -15,8 +15,14 @@ argument_specs:
           namespace:
             type: str
             required: true
+          secret:
+            type: str
+            required: true
           serviceAccount:
             type: str
+            required: true
+          sweep:
+            type: bool
             required: true
           version:
             type: str
@@ -31,6 +37,45 @@ argument_specs:
         required: true
       bootwright_substrate_kubevirt_lend_output:
         type: dict
+        required: true
+      bootwright_run_scratch:
+        type: path
+        required: true
+  revoke:
+    short_description: Revoke the access one hosted KubeVirt provider's run was lent.
+    options:
+      bootwright_substrate_kubevirt_lend_request:
+        type: dict
+        required: true
+        options:
+          cluster:
+            type: str
+            required: true
+          expirationSeconds:
+            type: int
+            required: true
+          namespace:
+            type: str
+            required: true
+          secret:
+            type: str
+            required: true
+          serviceAccount:
+            type: str
+            required: true
+          sweep:
+            type: bool
+            required: true
+          version:
+            type: str
+            required: true
+            choices:
+              - substrate-access-kubevirt-v1
+      bootwright_substrate_kubevirt_lend_material:
+        type: dict
+        required: true
+      bootwright_substrate_kubevirt_lend_digest:
+        type: str
         required: true
       bootwright_run_scratch:
         type: path

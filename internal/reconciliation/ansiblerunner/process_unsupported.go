@@ -12,6 +12,7 @@ import (
 
 type Runner struct {
 	playbooks map[string]string
+	readOnly  map[string]bool
 }
 
 func New(playbooks map[string]string, _ prerequisites.AutomationStager) Runner {
@@ -23,5 +24,5 @@ func (Runner) BeginInvocation(ctx context.Context) (context.Context, func()) {
 }
 
 func (Runner) Run(context.Context, lifecycle.RunRequest) (lifecycle.RunResult, error) {
-	return lifecycle.RunResult{}, failure("lifecycle.state", "lifecycle adapter execution requires Linux on amd64", "")
+	return lifecycle.RunResult{NotStarted: true}, failure("lifecycle.state", "lifecycle adapter execution requires Linux on amd64", "")
 }

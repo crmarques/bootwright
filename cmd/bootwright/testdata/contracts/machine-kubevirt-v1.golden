@@ -1,8 +1,8 @@
 implementation: machine-kubevirt-v1
-content-digest: 80f4f8d16077f1629365872f4b3026a52ab1abf154c95369f2691514d43a2ede
+content-digest: 51ddb3590eb7ac455201230a9d7cc259fa7373e1ee5b647b9e8b3af828b40b92
 request-version: machine-kubevirt-v1
 automation-formats: none
-mark-formats: bootwright.io/context, bootwright.io/machine, bootwright.io/owner, bootwright.substrate.kubevirt.owner-v1
+mark-formats: bootwright.io/context, bootwright.io/lend, bootwright.io/machine, bootwright.io/owner, bootwright.substrate.kubevirt.owner-v1
 proof-ids: bootwright.io/media-identity
 fixed-places: bootwright.io/spread, bootwright.substrate.kubevirt.name-v1
 effect-pins:
@@ -15,6 +15,7 @@ effect-pins:
   substrate-access-kubevirt-v1
   substrate-access-kubevirt-evidence-v1
   spread-preferred-anti-affinity
+  lend-bound-secret
 request-identity:
   identity.context
   identity.object

@@ -541,9 +541,12 @@ because each would let the host connection run or trust something the
 declaration does not name. A host cluster the context builds is reached the
 same way, through a kubeconfig the arm's lend mints for each run, carrying
 only a token of the ServiceAccount its `kubevirt` instance owns in the
-provider's namespace, requested for that run's deadline plus ten minutes; the
-host installation's administrator kubeconfig
-reaches that lend alone
+provider's namespace, requested for that run's deadline plus ten minutes and
+bound to a per-lend Secret the lend's return deletes when the run returns,
+so the host stops accepting the token within seconds of that deletion
+([lent access revocation](substrates.md#lent-kubevirt-access-revocation))
+and its expiry bounds it only when that revoke fails; the host installation's administrator kubeconfig
+reaches that lend and its revoke alone
 ([KubeVirt machine realization](substrates.md#kubevirt-machine-realization)).
 Its CDI upload proxy is verified against the
 ingress certificate authority read through that verified connection, never with

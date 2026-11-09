@@ -26,7 +26,7 @@ type Identities interface {
 }
 
 type HostAccess interface {
-	LendHostAccess(ctx context.Context, execution lifecycle.Execution, cluster, namespace string, placement machine.Placement, deadline time.Duration) (secrets.Material, error)
+	LendHostAccess(ctx context.Context, execution lifecycle.Execution, cluster, namespace string, placement machine.Placement, deadline time.Duration) (secrets.Material, func(), error)
 }
 
 type AuthorizedKey func(secrets.Material, string) (string, error)

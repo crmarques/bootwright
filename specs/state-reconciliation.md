@@ -807,10 +807,16 @@ A capability whose runs must not hold a produced entry itself borrows it for
 a *lend*: a run of operation `lend` that is handed the entry alone, mints from
 it a narrower access for one later run of the same execution, and leaves that
 access as its one output, which is lent to that run and cleared when it
-returns, never published into custody. A lend creates no object, so a
-read-only or unrecorded execution may run one and take its output, which the
-runner refuses for every other operation; a quiescence probe borrows produced
-entries as the removal it gates does. The KubeVirt arm on a host this context
+returns, never published into custody. A lend creates only the one per-lend
+object its access is bound to, and the `revoke` of the same request deletes
+that object alone, by its UID, once the run returns. So a read-only or
+unrecorded execution may run a lend and take its output, and run that
+revoke, which the runner admits for `substrate-host-kubevirt-v1` alone; it
+refuses every other operation there. A lend deletes the expired leftovers of
+earlier lends only inside a recorded attempt that may change its host, never
+a read-only execution, a resolution or an unrecorded one
+([lent access revocation](substrates.md#lent-kubevirt-access-revocation)). A
+quiescence probe borrows produced entries as the removal it gates does. The KubeVirt arm on a host this context
 builds is the one such consumer
 ([KubeVirt machine realization](substrates.md#kubevirt-machine-realization)),
 and a [machine power command](cli.md#machine-power-operations), which
@@ -1454,8 +1460,11 @@ lost block record reads: starting over an effect that may have begun would skip
 the observation an unproved effect requires.
 
 An invocation that names no attempt of its own, a resolution, or a keep is
-read-only: the runner refuses any adapter operation but `observe` there, before
-it creates a job. An invocation no operation record names, a quiescence probe
+read-only: the runner refuses any adapter operation there but `observe`, a
+`lend`, and the `revoke` of `substrate-host-kubevirt-v1`, which deletes only
+the object that execution's own lend created
+([produced material custody](#produced-material-custody)), before it creates a
+job. An invocation no operation record names, a quiescence probe
 or a comparison, may take over no produced material: the runner refuses one
 whose request declares an output.
 

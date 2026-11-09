@@ -19,7 +19,7 @@ const playbookRoot = "collections/ansible_collections/bootwright/core/playbooks/
 // buildCapabilities lists what this executable can realize, in the API's own
 // kind order, so a plan's block order never depends on wiring order.
 func buildCapabilities(clock systemClock, controller controllerDependencies, records installation.MediaRecords) capabilityResolver {
-	return buildCapabilitiesWith(clock, controller, ansiblerunner.New(operationPlaybook(), controller.Stager), records)
+	return buildCapabilitiesWith(clock, controller, ansiblerunner.New(operationPlaybook(), controller.Stager).AdmitReadOnly(readOnlyOperations()...), records)
 }
 
 // Composition owns the entrypoint each implementation runs, so every binding
@@ -141,5 +141,18 @@ func TestPlaybookNamePatternRefusesAnOffPatternBinding(t *testing.T) {
 	stale := playbookNameViolations(map[string]string{"x/apply": "storage/core_apply.yml"}, map[string]string{"machine/power.yml": "power"})
 	if len(stale) != 1 || !strings.HasPrefix(stale[0], "machine/power.yml is named for its capability alone") {
 		t.Fatalf("a stale capability-only name gave %q", stale)
+	}
+}
+
+// Composition admits exactly one operation besides observe and lend in a
+// read-only or unrecorded invocation: the revoke of a lent KubeVirt host
+// token, which a playbook binds.
+func TestOnlyTheLentAccessRevokeRunsReadOnly(t *testing.T) {
+	admitted := readOnlyOperations()
+	if !slices.Equal(admitted, []string{"substrate-host-kubevirt-v1/revoke"}) {
+		t.Fatalf("read-only operations %v", admitted)
+	}
+	if _, bound := operationPlaybook()[admitted[0]]; !bound {
+		t.Fatalf("%s binds no playbook", admitted[0])
 	}
 }

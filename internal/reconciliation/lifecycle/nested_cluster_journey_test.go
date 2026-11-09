@@ -125,13 +125,37 @@ func (h *kubevirtHost) lend(run lifecycle.RunRequest) (lifecycle.RunResult, erro
 	h.minted++
 	token := fmt.Sprintf("%s%d", nestedTokenCanary, h.minted)
 	h.tokens = append(h.tokens, token)
+	if h.bound == nil {
+		h.bound = map[string]bool{}
+	}
+	h.bound[request.Secret] = true
 	data, err := json.Marshal(kubevirt.LendEvidence{ExpirationSeconds: request.ExpirationSeconds, Postcondition: true, Request: run.Digest,
-		Server: "https://api.host.example.test:6443", Version: "substrate-access-kubevirt-evidence-v1"})
+		Secret: request.Secret, Server: "https://api.host.example.test:6443", Version: "substrate-access-kubevirt-evidence-v1"})
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
 	return lifecycle.RunResult{Outcome: "unchanged", Evidence: data, Produced: []lifecycle.Produced{{Name: "kubeconfig",
 		Material: secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte("users: [{user: {token: " + token + "}}]")})}}}, nil
+}
+
+// revoke deletes the per-lend Secret a lend bound its token to, through the
+// host's administrator kubeconfig alone.
+func (h *kubevirtHost) revoke(run lifecycle.RunRequest) (lifecycle.RunResult, error) {
+	var request kubevirt.LendRequest
+	if err := json.Unmarshal(run.Canonical, &request); err != nil {
+		return lifecycle.RunResult{}, err
+	}
+	if !lentHolds(run, adminAccess) || len(run.Outputs) != 0 {
+		return lifecycle.RunResult{}, fmt.Errorf("the revoke was not handed the host's administrator kubeconfig alone: %+v", request)
+	}
+	delete(h.bound, request.Secret)
+	h.revoked++
+	data, err := json.Marshal(kubevirt.LendEvidence{Postcondition: true, Request: run.Digest, Secret: request.Secret,
+		Server: "https://api.host.example.test:6443", Version: "substrate-access-kubevirt-evidence-v1"})
+	if err != nil {
+		return lifecycle.RunResult{}, err
+	}
+	return lifecycle.RunResult{Outcome: "unchanged", Evidence: data}, nil
 }
 
 func lentHolds(run lifecycle.RunRequest, text string) bool {
@@ -394,11 +418,18 @@ func TestANestedClusterIsAppliedOnAHostThisContextBuildsAndDestroyedFirst(t *tes
 	}
 	interrupted := host.minted
 	holdNestedSecrets(journey)
-	if _, err := journey.Service.Apply(context.Background(), apply); err != nil {
+	continued, err := journey.Service.Apply(context.Background(), apply)
+	if err != nil {
 		t.Fatalf("continuation: %v (calls %v)", diagnostics.Of(err), host.calls)
+	}
+	if slices.ContainsFunc(continued.Warnings, func(warning diagnostics.Diagnostic) bool { return warning.Code == kubevirt.LendNotRevoked }) || host.revoked != host.minted {
+		t.Fatalf("a revoke was not proved: %d of %d minted, warnings %+v", host.revoked, host.minted, continued.Warnings)
 	}
 	if host.failAt != "" || host.minted <= interrupted || len(host.lendRefused) != 0 {
 		t.Fatalf("the continuation did not mint again, or a run was lent other access: minted %d then %d, refused %v", interrupted, host.minted, host.lendRefused)
+	}
+	if len(host.bound) != 0 {
+		t.Fatalf("a lent token outlived its run, interrupted or completed: %v", host.bound)
 	}
 	calls := host.calls
 	if positionOf(t, calls, libvirt.MachineImplementation+" apply") > positionOf(t, calls, nestedHostInstall+" apply") {
@@ -427,7 +458,7 @@ func TestANestedClusterIsAppliedOnAHostThisContextBuildsAndDestroyedFirst(t *tes
 	}
 	destroy := lifecycle.DestroyRequest{ContextName: lifecycle.JourneyContext, Authorizations: []string{reconciliation.AuthorizationDataLoss}, SkipConfirmation: true}
 	holdNestedSecrets(journey)
-	_, err := journey.Service.Destroy(context.Background(), destroy)
+	_, err = journey.Service.Destroy(context.Background(), destroy)
 	if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "lifecycle.live" || !strings.Contains(reported[0].Message, "Machine/"+kubevirtNodes[0]) ||
 		strings.Contains(reported[0].Message, "Machine/host-01") || slices.ContainsFunc(host.calls, func(call string) bool { return strings.HasSuffix(call, " destroy") }) {
 		t.Fatalf("a removal registered while the child runs: %+v (calls %v)", reported, host.calls)
@@ -443,8 +474,8 @@ func TestANestedClusterIsAppliedOnAHostThisContextBuildsAndDestroyedFirst(t *tes
 	if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "lifecycle.live" || !strings.Contains(reported[0].Message, "Machine/host-01") {
 		t.Fatalf("the removal did not pause for the running host: %+v (calls %v)", reported, host.calls)
 	}
-	if host.minted <= beforeRemoval || len(host.lendRefused) != 0 || len(host.machines) != 0 {
-		t.Fatalf("the removal minted nothing, or left the child's Machines: minted %d, refused %v, machines %v", host.minted, host.lendRefused, host.machines)
+	if host.minted <= beforeRemoval || len(host.lendRefused) != 0 || len(host.machines) != 0 || len(host.bound) != 0 {
+		t.Fatalf("the removal minted nothing, left the child's Machines or a lent token: minted %d, refused %v, machines %v, bound %v", host.minted, host.lendRefused, host.machines, host.bound)
 	}
 	if left := domains.left(); !slices.Equal(left, nestedHostMachines) {
 		t.Fatalf("a running host Machine was removed: %v left", left)

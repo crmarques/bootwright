@@ -1,0 +1,45 @@
+---
+# The administrator kubeconfig of the host installation reaches only this
+# task: it deletes the per-lend Secret the lend bound its token to, so the host
+# rejects that token before it expires.
+- name: Validate the frozen lend request
+  ansible.builtin.assert:
+    that:
+      - bootwright_substrate_kubevirt_lend_request.version == 'substrate-access-kubevirt-v1'
+      - bootwright_substrate_kubevirt_lend_digest is match('[0-9a-f]{64}')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.substrate_kubevirt_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Revoke the hosted provider's access
+  bootwright.core.substrate_kubevirt_access:
+    operation: revoke
+    kubeconfig: '{{ bootwright_substrate_kubevirt_lend_material.kubeconfig }}'
+    scratch: '{{ bootwright_run_scratch }}'
+    request: '{{ bootwright_substrate_kubevirt_lend_request }}'
+  register: substrate_kubevirt_access_revoked
+  failed_when: false
+  no_log: true
+
+- name: Stop at a host that does not revoke the access
+  ansible.builtin.assert:
+    that:
+      - substrate_kubevirt_access_revoked.msg is not defined
+    fail_msg: >-
+      revoking the access lent from host cluster {{ bootwright_substrate_kubevirt_lend_request.cluster }}
+      failed: {{ (substrate_kubevirt_access_revoked.msg | default('') | string | bootwright.core.printable)[:512] }}
+    quiet: true
+
+- name: Publish the bounded revoke
+  bootwright.core.substrate_kubevirt_protocol:
+    phase: completed
+    subject: revoke
+    observed: false
+    outcome: unchanged
+    digest: '{{ bootwright_substrate_kubevirt_lend_digest }}'
+    observation: '{{ substrate_kubevirt_access_revoked.observation }}'
+  no_log: true

@@ -1,8 +1,8 @@
 implementation: substrate-host-kubevirt-v1
-content-digest: 2ab42a38047ce4b10303a13df24f31f1956dc16f8c0d3f8c83153151d8a8df4b
+content-digest: 712073aec40ccf2e0e5022b4cda1155858296525dab94bfb77736ff9b8e1c6b9
 request-version: substrate-host-kubevirt-v1
 automation-formats: none
-mark-formats: none
+mark-formats: bootwright.io/lend
 proof-ids: none
 fixed-places: none
 effect-pins:
@@ -12,6 +12,7 @@ effect-pins:
   ingress-ca
   substrate-access-kubevirt-v1
   substrate-access-kubevirt-evidence-v1
+  lend-bound-secret
   root-class-first-set
   schedulable-kvm-node
   attachment-kind

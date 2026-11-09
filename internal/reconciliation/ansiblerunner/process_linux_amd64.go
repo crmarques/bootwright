@@ -48,6 +48,7 @@ type Runner struct {
 	command     func(string, ...string) *exec.Cmd
 	drain       time.Duration
 	playbooks   map[string]string
+	readOnly    map[string]bool
 	invocation  *invocationScope
 	stager      prerequisites.AutomationStager
 }
@@ -60,8 +61,14 @@ func New(playbooks map[string]string, stager prerequisites.AutomationStager) Run
 	return Runner{jobParent: "/run", scratchParent: scratchParent, stagingParent: stagingParent, owner: 0, command: exec.Command, playbooks: maps.Clone(playbooks), stager: stager}
 }
 
-func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycle.RunResult, error) {
-	if err := checkReadOnly(request); err != nil {
+func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (result lifecycle.RunResult, err error) {
+	launched := false
+	defer func() {
+		if err != nil && !launched {
+			result.NotStarted = true
+		}
+	}()
+	if err := r.checkReadOnly(request); err != nil {
 		return lifecycle.RunResult{}, err
 	}
 	playbook, ok := r.playbookFor(request)
@@ -134,7 +141,8 @@ func (r Runner) Run(ctx context.Context, request lifecycle.RunRequest) (lifecycl
 	if err := writeVariables(job, values); err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	result, err := r.execute(ctx, job, scratch, lock, automation, playbook, request)
+	launched = true
+	result, err = r.execute(ctx, job, scratch, lock, automation, playbook, request)
 	if err != nil || len(request.Outputs) == 0 {
 		return result, err
 	}
