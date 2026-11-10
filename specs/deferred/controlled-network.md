@@ -175,7 +175,7 @@ Each step leaves a working product.
    [B1245](../milestones/backlog.md#b1245),
    [B1246](../milestones/backlog.md#b1246),
    [B1247](../milestones/delivered.md#x356--service-and-bmc-images-from-the-image-mirror) and
-   [B1248](../milestones/backlog.md#b1248), with the acceptance of
+   [B1248](../milestones/delivered.md#x357--release-repositories-from-the-image-mirror), with the acceptance of
    [B724](../milestones/m3.md#b724).
 3. Bootwright builds and fills the mirror host:
    [B1236](../milestones/backlog.md#b1236), [B68](../milestones/m1.md#b68)

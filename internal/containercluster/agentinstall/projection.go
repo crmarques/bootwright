@@ -63,17 +63,17 @@ func installConfig(catalog api.Catalog, cluster api.Object, nodes []nodeProjecti
 	if cluster.Spec().Get("security", "fips", "enabled").Bool() {
 		config["fips"] = true
 	}
-	if len(cluster.Spec().Get("install", "additionalTrustBundleRefs").Strings()) != 0 {
+	if len(trustBundleRefs(catalog, cluster)) != 0 {
 		config["additionalTrustBundle"] = placeholderPullToken
 	}
 	if policy := cluster.Spec().Get("install", "additionalTrustBundlePolicy"); policy.Present() {
-		if len(cluster.Spec().Get("install", "additionalTrustBundleRefs").Strings()) == 0 {
+		if len(trustBundleRefs(catalog, cluster)) == 0 {
 			return nil, refusalAt("api.invariant", "$.spec.install.additionalTrustBundlePolicy", "additionalTrustBundlePolicy requires additional trust bundles", "select at least one caBundle Secret in install.additionalTrustBundleRefs, or remove additionalTrustBundlePolicy")
 		}
 		config["additionalTrustBundlePolicy"] = policy.Text()
 	}
-	if sources := cluster.Spec().Get("install", "registries", "imageDigestSources"); sources.Present() {
-		config["imageDigestSources"] = nativeValue(sources)
+	if sources := ImageDigestSources(catalog, cluster); len(sources) != 0 {
+		config["imageDigestSources"] = sources
 	}
 
 	proxy, _, err := installationProxy(catalog, cluster)

@@ -296,7 +296,7 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 		AgentConfig: agent, Budgets: mediaBudgets, DeliveryKind: delivery, Identity: identity(MediaBlockID(name)), Image: image,
 		InstallConfig: install, Manifests: installManifests(cluster), Placement: placement, PullSecretRef: pullSecret,
 		Release: release, SSHKeyRef: sshKey, TLSCertificateRef: certificate, Tool: tool,
-		TrustBundleRefs: cluster.Spec().Get("install", "additionalTrustBundleRefs").Strings(),
+		TrustBundleRefs: trustBundleRefs(catalog, cluster),
 		Version:         mediaRequestVersion, WorkRoot: WorkRoot(contextName, name),
 	}
 	for _, node := range nodes {

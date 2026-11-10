@@ -13157,3 +13157,28 @@ neither a `UUID` nor a serial, and the claim is made from its evidence in Go.
 occurred. **Limitations:** a pin-less power command on a server another
 context holds by `bmc-system:` under another spelling is not refused
 ([B1267](backlog.md#b1267)).
+
+### X357 — Release repositories from the image mirror
+
+**Item:** B1248 (2026-11-10, [D250](backlog.md#d250) (5) and (7),
+[D251](backlog.md#d251) (7)), delivered in-tree, with B724's operator
+acceptance waived by the owner's request. Under the Environment's
+[image mirror](../api/environment.md#image-mirror), a cluster that selects no
+`install.registries.mirror` takes that Registry as its mirror, so its
+credential joins the install pull secret; its trust bundle joins the cluster's
+`additionalTrustBundle`; and `imageDigestSources` gains, for each release
+repository of the distribution the cluster does not map itself, an entry to
+`<registry url>/<repository>` with `NeverContactSource`
+([registry mirrors](../openshift-clusters.md#installation-features)). A cluster
+mirror other than the Environment's refuses before registration. An authored
+source that maps a repository, itself or by a path prefix, keeps it. `render
+acquisitions` lists each derived release mirror and drops a public release row
+the mirror serves with `NeverContactSource`. Without the declaration no
+request or install configuration moves, so no contract moved.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** operator catalogs stay authored; the nodes' default
+time pool stays beside the selected servers ([B1268](backlog.md#b1268)); the
+controller's image build trusts its own store alone ([B1269](backlog.md#b1269)); the
+live proof is [B1250](backlog.md#b1250).
+

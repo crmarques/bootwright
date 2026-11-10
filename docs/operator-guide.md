@@ -218,7 +218,7 @@ runs:
 | A managed service's image | The Machine the service runs on | The registry its compiled default names | `spec.mirror.registry` on the Environment, or `spec.image.local` on the service: see the images below |
 | The emulated BMC's image | The libvirt provider's host | `quay.io` | `spec.mirror.registry` on the Environment |
 | Installation media | The controller | The file or URL you name | `media add --from-file`, or `--from-url` from your own server |
-| An OpenShift release | The controller while it builds the image, then every node | `quay.io`, where the release payload is published | `spec.install.registries` on the cluster |
+| An OpenShift release | The controller while it builds the image, then every node | `quay.io`, where the release payload is published | `spec.mirror.registry` on the Environment, or `spec.install.registries` on the cluster |
 | A cluster's operators | The cluster's nodes | The registries of the catalog each add-on binding names | Nothing to do for a Red Hat catalog or IBM's Data Foundation on `icr.io`, vendor origins; another's repositories are mapped by the same `imageDigestSources` where the cluster pulls them by digest |
 | IBM Ceph images and packages | The controller, which resolves each image's digest, then each Ceph host | `cp.icr.io` and `public.dhe.ibm.com`, vendor origins | Nothing to do |
 
@@ -259,7 +259,19 @@ that pull binds no login or trust anchor of Bootwright's, so it succeeds where
 the registry admits anonymous pulls and the placement host trusts its
 certificate authority.
 
-**An OpenShift release.** `spec.install.registries.mirror` selects a declared
+**An OpenShift release.** With `spec.mirror.registry` on the Environment,
+its Registry serves every cluster's release: Bootwright maps the release
+repositories to `<registry url>/quay.io/openshift-release-dev/...` with
+`NeverContactSource` and adds the Registry's credential and trust to the
+install ([installation features](../specs/openshift-clusters.md#installation-features)).
+Fill it with `oc adm release mirror --from=quay.io/openshift-release-dev/ocp-release:<version>-x86_64
+--to=<registry url>/quay.io/openshift-release-dev/ocp-v4.0-art-dev
+--to-release-image=<registry url>/quay.io/openshift-release-dev/ocp-release:<version>-x86_64`,
+whose two repositories are the two the install maps. The registry must accept
+repository paths that deep, as Docker Distribution, Harbor and Quay do, and
+the controller's own trust store must hold its certificate authority while
+the image build reads from it. Otherwise,
+`spec.install.registries.mirror` selects a declared
 Registry, and `imageDigestSources` maps the release's repositories to it; a
 `sourcePolicy` of `NeverContactSource` keeps a node from falling back to the
 source ([registry policy](../specs/api/openshift-clusters.md#registry-policy)).

@@ -299,7 +299,6 @@ Alias cell.
 | [B1244](#b1244) | new, 2026-11-10 (D250 (2)); partly delivered by X344 on 2026-11-10 | enabling | Architecture | Each pinned client is judged by what its binary holds, and the service and emulated BMC images are scanned on a schedule and in the mirror registry | The build's gate landed (X344); a binary scan downloads every client, and an image scan needs a pinned scanner |
 | [B1245](#b1245) | new, 2026-11-10 (D250 (8)); partly delivered by X345 on 2026-11-10 | product | CLI, with Controller | The acquisition list names each add-on's catalog and operator images and each installed Machine's own package repositories | The list landed (X345); an add-on's images follow from the catalog it selects, which planning does not read |
 | [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355 on 2026-11-10 | product | Controller, with Desired state | Preflight proves the artifact mirror holds every client, a private trust anchor and a managed artifact server may serve it, and one declaration replaces the download mirrors | The declaration landed (X355); a probe needs an HTTP adapter in preflight, and a managed server needs B1249 |
-| [B1248](#b1248) | new, 2026-11-10 (D250 (7)) | product | Container cluster | A cluster's release images are mapped to the declared mirror | D250 parks the controlled-network plan until the owner promotes it; B724's route awaits its acceptance |
 | [B1249](#b1249) | new, 2026-11-10 (D250 (8)) | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | D250 parks the controlled-network plan until the owner promotes it; no capability realizes a managed Registry |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
 | [B1251](#b1251) | new, 2026-11-10 (D250 (10)) | product | Infrastructure services | A managed Proxy admits only the destinations it declares | The network's own firewall is the control in production; this serves a lab or a site without one |
@@ -307,6 +306,8 @@ Alias cell.
 | [B1264](#b1264) | new, 2026-11-10 (D252, session) | product | Storage | Custom CRUSH device classes reach the core OSD projection | The plan refuses them by name until a slice realizes them |
 | [B1265](#b1265) | new, 2026-11-10 (X346 review) | defect | Container clusters | An OpenShift attempt whose every node refused its pre-boot proof after the boot mark stays retryable | Safe as it stands: the block stays unknown and a destroy clears it; recording the boot per node needs a restructured boot play |
 | [B1267](#b1267) | new, 2026-11-10 (X348, audit 004 REC-74) | safety | Substrate and Machine, with Infrastructure services | A context driving a server by its BMC and one reaching it another way, or naming it by a UUID its BMC has not reported yet, conflict | Needs a cross-mechanism machine identity whose byte order is settled first |
+| [B1268](#b1268) | new, 2026-11-10 (D251 (7)) | product | Container cluster | Under the image mirror, a node's default time pool is replaced by the selected time servers | The agent install adds time sources beside the pool, and its manifest path admits only the Network kind, so no MachineConfig replaces it |
+| [B1269](#b1269) | new, 2026-11-10 (X357 review) | product | Container cluster | The controller's image build verifies a mirror against the cluster's selected trust bundles | The installer's own release extraction may read only the controller's trust store; B1250's run shows which |
 
 ### B82
 
@@ -3392,23 +3393,32 @@ ArtifactServer as the mirror once [B1249](#b1249) builds one; and
 preflight test against a mirror missing a file, a private-trust acquisition
 test, and effective-state goldens.
 
-### B1248
+### B1268
 
-**Owner:** Container cluster. **Kind:** product. **Requires:** B1246; the
-operator acceptance of [B724](m3.md#b724). **Definition:** Needs definition,
-from [D250](#d250) (5) and (7): a connected cluster installs through authored
-`imageDigestSources`
-([registry policy](../api/openshift-clusters.md#registry-policy)), and B724
-keeps image sources authored. **Outcome:** with the declaration, a cluster's
-install-config maps the release's repositories to the mirror, its pull secret
-and trust carry the mirror's, and the image build reads the release from the
-mirror. **Open:** derive the mapping, or keep it authored and only check it
-(recommendation: derive it for the release repositories, which every release
-names, and keep operator catalogs authored); whether the installation also
-replaces its nodes' default time pool, which a selected NTPServer is only
-added beside ([installer inputs](../openshift-clusters.md#installer-inputs);
-recommendation: yes, with the declaration). **Exit evidence:** projection
-goldens and a row of [B1250](#b1250)'s profile.
+**Owner:** Container cluster. **Kind:** product. **Requires:** none.
+**Definition:** Candidate, from [D251](#d251) (7): B1248's open question on the
+time pool. Today `agent-config.yaml` adds each selected NTPServer to the
+nodes' time sources beside the operating system's default pool
+([installer inputs](../openshift-clusters.md#installer-inputs)), which a node
+without a route to it simply fails to reach. **Outcome:** under the
+Environment's image mirror, a cluster that selects a time server installs its
+nodes with those servers alone, through a chrony MachineConfig the install's
+manifest path admits beside the Network kind. **Exit evidence:** a projection golden of the
+manifest and a node row of [B1250](#b1250)'s profile.
+
+### B1269
+
+**Owner:** Container cluster. **Kind:** product. **Requires:** none.
+**Definition:** Candidate, from the independent review of
+[X357](delivered.md#x357--release-repositories-from-the-image-mirror): the
+media role hands `openshift-install agent create image` its build egress and
+`PATH` alone, and `additionalTrustBundle` reaches the nodes' image, so whether
+the installer's own release extraction trusts a private-CA mirror is unproved.
+**Outcome:** the build lends the cluster's selected trust bundles to that
+extraction, as a certificate file the build step reads, so a mirror under a
+private authority needs nothing in the controller's trust store. **Exit
+evidence:** a role test that the build step names the lent bundle, and the
+mirror row of [B1250](#b1250)'s profile.
 
 ### B1249
 
@@ -3433,7 +3443,7 @@ placement, a replay that copies nothing, a verification refusal and a row of
 ### B1250
 
 **Owner:** Controller, with each consumer's owner. **Kind:** enabling.
-**Requires:** B1246, B1247, B1248, B1249. **Definition:** Candidate, from
+**Requires:** B1246, B1249. **Definition:** Candidate, from
 [D250](#d250) (10). **Outcome:** a lab profile whose controller and Machines
 have no route but to their package repositories, the vendor origins and the
 mirror host installs an OpenShift cluster and a Ceph cluster, and its evidence
@@ -7963,6 +7973,17 @@ the owner's review:
    origin's copy pulls the same digest once; and the credential and trust
    anchor are lent to each pull rather than written into the host's registry
    configuration.
+7. Taken by the session for B1248 (X357), pending the owner's review. B1248
+   requires the operator acceptance of [B724](m3.md#b724), which is not
+   recorded; the owner's "proceed until all items are done" in (6) is the
+   explicit request that waives it, and [B1250](#b1250)'s run proves both
+   routes. The Environment's image mirror is a cluster's mirror when it
+   selects none, and another selected beside it refuses; its trust bundle
+   joins the cluster's own; each release repository the distribution names
+   and the cluster does not map gains a `NeverContactSource` entry, while
+   operator catalogs stay authored; and replacing the nodes' default time
+   pool is parked as [B1268](#b1268), because the install writes no
+   MachineConfig: its manifest path admits only the Network kind.
 
 ### D252
 

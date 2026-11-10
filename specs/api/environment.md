@@ -418,7 +418,8 @@ directory the pull removes after it, never through an insecure-registry
 setting or the host's registry configuration. A host already holding the
 mirrored reference pulls nothing; one holding only the origin's copy pulls the
 same digest once from the mirror. A pull the mirror cannot serve fails naming
-the reference. A managed Registry refuses as the mirror
+the reference. A cluster's release repositories map to the same mirror
+([registry mirrors](../openshift-clusters.md#installation-features)). A managed Registry refuses as the mirror
 ([refusal table](#refusal-table)). `bootwright render acquisitions` names each
 mirrored reference.
 

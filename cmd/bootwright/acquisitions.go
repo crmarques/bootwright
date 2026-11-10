@@ -7,6 +7,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/acquisition"
 	"github.com/crmarques/bootwright/internal/cli"
+	"github.com/crmarques/bootwright/internal/containercluster/agentinstall"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/bundlelocal"
 	"github.com/crmarques/bootwright/internal/controller/clients"
@@ -140,6 +141,9 @@ func clusterAcquisitions(catalog api.Catalog, controllerMachine string) []cli.Ac
 		release := distribution.Get("release")
 		if distribution.Get("type").Text() == "openshift" {
 			for _, repository := range openShiftReleaseRepositories {
+				if agentinstall.NeverContacted(catalog, cluster, repository) {
+					continue
+				}
 				rows = append(rows, cli.Acquisition{Kind: "release", Artifact: repository, Version: release.Get("version").Text(), Origin: repository, Class: originClass("https://" + repository),
 					Machines: machines, Consumer: cluster.Identity()})
 			}
@@ -147,9 +151,13 @@ func clusterAcquisitions(catalog api.Catalog, controllerMachine string) []cli.Ac
 			rows = append(rows, cli.Acquisition{Kind: "release", Artifact: "the release image its installer names", Version: release.Get("version").Text(), Origin: "quay.io", Class: acquisition.ClassPublic,
 				Machines: machines, Consumer: cluster.Identity()})
 		}
-		for _, source := range cluster.Spec().Get("install", "registries", "imageDigestSources").Items() {
-			for _, mirror := range source.Get("mirrors").Strings() {
-				rows = append(rows, cli.Acquisition{Kind: "release mirror", Artifact: source.Get("source").Text(), Origin: mirror, Class: originClass("https://" + mirror),
+		for _, source := range agentinstall.ImageDigestSources(catalog, cluster) {
+			entry, _ := source.(map[string]any)
+			mirrors, _ := entry["mirrors"].([]any)
+			for _, mirror := range mirrors {
+				location, _ := mirror.(string)
+				origin, _ := entry["source"].(string)
+				rows = append(rows, cli.Acquisition{Kind: "release mirror", Artifact: origin, Origin: location, Class: originClass("https://" + location),
 					Machines: machines, Consumer: cluster.Identity()})
 			}
 		}

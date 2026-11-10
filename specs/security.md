@@ -862,9 +862,6 @@ holds the mirror host, its declaration and how it is filled.
 Not yet met: preflight refuses a client the declared artifact mirror lacks,
 before the stage runs; tracked as [B1246](milestones/backlog.md#b1246).
 
-Not yet met: a cluster's release images are mapped to the declared mirror;
-tracked as [B1248](milestones/backlog.md#b1248).
-
 ## Logs, output, and diagnostics
 
 Output and private logging follow [the CLI contract](cli.md). Logs live under

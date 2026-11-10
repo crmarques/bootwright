@@ -140,7 +140,9 @@ Source entries are unique by `source`. Registry locations contain no inline
 credentials. Defaults can share complete cluster mirror policy; another cluster's
 choice never changes this cluster's route. A mirror selection and its image
 source mapping describe different facts and do not implicitly create each
-other.
+other, except under the Environment's
+[image mirror](environment.md#image-mirror), which derives both for the
+release repositories ([registry mirrors](../openshift-clusters.md#installation-features)).
 
 ### Platform union and derivation
 

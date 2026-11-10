@@ -424,6 +424,26 @@ controller Machine's own proxy choice.
 **Registry mirrors.** `install-config` carries `imageDigestSources` as
 authored. The selected mirror's credentials join the install pull secret as one
 entry for its host, and its trust bundle must be one the cluster selects.
+Under the Environment's [image mirror](api/environment.md#image-mirror), that
+Registry is the cluster's mirror with none selected, its trust bundle joins the
+cluster's own, and each release repository of the distribution that no
+authored `source` maps, itself or by a path prefix, gains an entry naming
+`<registry url>/<repository>` with `NeverContactSource`: for OpenShift
+`quay.io/openshift-release-dev/ocp-release` and `ocp-v4.0-art-dev`, and for
+OKD, once [B748](milestones/backlog.md#b748) admits it, `quay.io/okd/scos-release`
+and `scos-content`. The image build on the controller and every node then read
+the release from the mirror. A cluster mirror other than that Registry
+refuses, because one install pull secret carries one mirror credential. An
+`additionalTrustBundlePolicy` still needs an authored
+`additionalTrustBundleRefs` entry.
+
+Not yet met: the image build on the controller verifies a mirror against the
+trust bundles the cluster selects, rather than the controller's own trust
+store; tracked as [B1269](milestones/backlog.md#b1269).
+
+Not yet met: under the image mirror, a node's default time pool is replaced by
+the selected time servers rather than kept beside them; tracked as
+[B1268](milestones/backlog.md#b1268).
 
 **IPv6.** A cluster whose networks are all IPv6 installs with IPv6 VIPs and
 rendezvous address, and each static IPv6 interface states `dhcp: false` and
