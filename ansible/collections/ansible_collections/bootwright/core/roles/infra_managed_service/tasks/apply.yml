@@ -32,6 +32,34 @@
     path: '{{ infra_managed_service_area }}'
     state: proved
 
+# Nothing installs podman on a Machine reached over SSH, so the service's own
+# host proves the executable it runs its container with before any pull,
+# publication or start. The runner reports the refusal named first as the
+# service's own diagnostic.
+- name: Prove the container runtime the service runs under
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/podman
+      - --version
+  register: infra_managed_service_runtime
+  changed_when: false
+  failed_when: false
+
+- name: Name a missing container runtime to the runner
+  bootwright.core.infra_service_protocol:
+    phase: refused
+    reason: container-runtime
+    port: '{{ bootwright_managed_service_request.port }}'
+  when: (infra_managed_service_runtime.rc | default(127)) != 0
+  no_log: true
+
+- name: Refuse a placement host that cannot run podman
+  ansible.builtin.fail:
+    msg: >-
+      the placement host has no working /usr/bin/podman; install the podman package there;
+      nothing was pulled, published or started
+  when: (infra_managed_service_runtime.rc | default(127)) != 0
+
 # A host reservation compares only the contexts Bootwright coordinates, so a
 # socket another daemon holds is proved here, before anything is pulled,
 # published or started. The runner reports the refusal named first as the

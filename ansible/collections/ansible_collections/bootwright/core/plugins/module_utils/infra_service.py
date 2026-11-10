@@ -55,6 +55,22 @@ def invoke(runner, argv):
     return code, out[:MAX_OUTPUT].strip()
 
 
+def podman(runner, arguments):
+    """Run podman, reading a host that has none as holding no container.
+
+    Nothing installs podman on a Machine reached over SSH, where an apply
+    refuses before it is needed, so a removal or an observation there finds no
+    container instead of failing on the missing executable.
+    """
+    try:
+        code, out, _err = runner(
+            [PODMAN] + arguments, check_rc=False, environ_update=ENVIRONMENT, handle_exceptions=False
+        )
+    except FileNotFoundError:
+        return 127, ""
+    return code, out[:MAX_OUTPUT].strip()
+
+
 def unit_state(runner, unit_path, service):
     """Report the unit's state; a unit with no definition is reported only while systemd still lists it failed, which a removal must take back."""
     _code, shown = invoke(runner, [SYSTEMCTL, "show", "--property=ActiveState", "--value", service])
@@ -65,20 +81,20 @@ def unit_state(runner, unit_path, service):
 
 def container_image(runner, name):
     """Report the exact image a running container was created from."""
-    code, output = invoke(runner, [PODMAN, "inspect", "--type", "container", "--format", "{{.ImageName}}", name])
+    code, output = podman(runner, ["inspect", "--type", "container", "--format", "{{.ImageName}}", name])
     if code != 0 or not output:
         return ""
     return output.splitlines()[0].strip()
 
 
 def container_present(runner, name):
-    code, _output = invoke(runner, [PODMAN, "container", "exists", name])
+    code, _output = podman(runner, ["container", "exists", name])
     return code == 0
 
 
 def container_started(runner, name):
     """Report when the container last started, in nanoseconds, or None when that cannot be read."""
-    code, output = invoke(runner, [PODMAN, "inspect", "--type", "container", "--format", "{{.State.StartedAt.UnixNano}}", name])
+    code, output = podman(runner, ["inspect", "--type", "container", "--format", "{{.State.StartedAt.UnixNano}}", name])
     if code != 0 or not output:
         return None
     try:

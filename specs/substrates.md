@@ -137,13 +137,16 @@ runtime, the managed Networks that name the provider, the bridges its
 segments name, and the pool its emulated BMCs stage virtual media in.
 
 **Hypervisor closure.** The runtime is the libvirt daemon with its QEMU/KVM
-emulator, `qemu-img`, `swtpm` for emulated TPMs, and the libvirt client. On the
+emulator, `qemu-img`, `swtpm` for emulated TPMs, the libvirt client, and `podman`,
+which runs the emulated BMC's container. On the
 controller it is a [context prerequisite](controller.md#the-controller-stage)
 selected by the provider's host reference, so the controller block installs it
 and this block proves presence only, refusing before it defines anything and
 naming the stage that supplies it. On an SSH host this block installs the named
-packages with the host's native package manager, which resolves them when the
-block applies from the repositories that host already configures: versions are
+packages, `podman` among them, with the host's native package manager, which
+resolves them when the block applies from the repositories that host already
+configures; a host holding the hypervisor but not `podman` installs it too
+(`TestAProviderHostOnAnSSHMachineInstallsTheContainerRuntime`): versions are
 not pinned, and no before-state is published or authorized, so this
 installation is not the frozen native transaction the controller stage makes.
 The libvirt driver daemons this provider's own resources

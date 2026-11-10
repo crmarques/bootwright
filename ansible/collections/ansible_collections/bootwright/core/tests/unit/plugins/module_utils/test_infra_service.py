@@ -50,8 +50,9 @@ class Host:
     def __init__(self, start=(0, str(STARTED) + "\n", "")):
         self.start = start
 
-    def __call__(self, argv, check_rc=False, environ_update=None):
+    def __call__(self, argv, check_rc=False, environ_update=None, handle_exceptions=True):
         assert check_rc is False and environ_update == infra_service.ENVIRONMENT
+        assert handle_exceptions is (argv[0] != PODMAN)
         if argv[:2] == [SYSTEMCTL, "show"]:
             return 0, "active\n", ""
         if argv[:3] == [PODMAN, "container", "exists"]:
@@ -293,3 +294,28 @@ def test_dns_tcp_slow_fragments_share_one_deadline(monkeypatch):
     stream.recv = lambda count: b"x"
     with pytest.raises(infra_service.socket.timeout, match="deadline"):
         infra_service.dns_stream_read(stream, 100, 5)
+
+
+def without_podman(argv, check_rc=False, environ_update=None, handle_exceptions=True):
+    """A host with systemctl and no /usr/bin/podman, which the pinned ansible-core reports as FileNotFoundError."""
+    if argv[0] == PODMAN:
+        assert handle_exceptions is False
+        raise FileNotFoundError(2, "No such file or directory", PODMAN)
+    return 0, "inactive\n", ""
+
+
+def test_a_host_without_podman_holds_no_container_and_observes_cleanly(service):
+    request, _files = service
+    assert infra_service.container_image(without_podman, UNIT) == ""
+    assert infra_service.container_present(without_podman, UNIT) is False
+    assert infra_service.container_started(without_podman, UNIT) is None
+    observation = observe(without_podman, request)
+    assert (observation["container"], observation["containerPresent"], observation["startedAfterFiles"]) == ("", False, False)
+
+
+def test_a_podman_that_fails_to_start_is_not_read_as_no_container():
+    def denied(argv, check_rc=False, environ_update=None, handle_exceptions=True):
+        raise PermissionError(13, "Permission denied", PODMAN)
+
+    with pytest.raises(PermissionError):
+        infra_service.container_present(denied, UNIT)

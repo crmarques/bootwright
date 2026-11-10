@@ -24,7 +24,7 @@ IMAGE = "registry.example/nginx@sha256:" + "0" * 64
 
 def state_host(present):
     """podman on a host where the server's container is or is not present."""
-    def run_command(_module, argv, check_rc=False, environ_update=None):
+    def run_command(_module, argv, check_rc=False, environ_update=None, handle_exceptions=True):
         assert check_rc is False and environ_update == artifact_server.ENVIRONMENT
         if argv[:3] == [artifact_server.PODMAN, "container", "exists"]:
             return (0 if present else 1), "", ""

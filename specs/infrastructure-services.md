@@ -314,6 +314,24 @@ Dependency readiness never establishes service ownership, and
 [controller setup](controller.md#host-identity-and-shared-prerequisites)
 reserves nothing.
 
+A managed service's container runs under `podman`, which nothing installs on a
+placement Machine reached over SSH, so the apply first proves
+`/usr/bin/podman --version` runs on its host, before any pull, publication or
+start. A host where it does not (absent or failing) refuses with
+`lifecycle.state` on the service, naming the Machine and the `podman` package;
+its remedy is to install that package there with the host's package manager and
+repeat the apply, or to place the service on a Machine that runs containers
+(`TestAMissingContainerRuntimeRefusalNamesTheMachineAndThePackage`,
+`TestAnApplyOnAnSSHPlacementHandsTheRunnerItsContainerRuntimeRefusal`,
+`test_a_host_without_podman_refuses_before_any_other_task`). A service placed on
+the controller Machine has `podman` from the controller stage
+([host packages](controller.md#host-packages)), and one placed on an SSH Machine
+that hosts a libvirt provider waits for that provider's host block, which
+installs it (`TestAServiceOnAProviderHostMachineReachedOverSSHRequiresTheHostBlock`).
+A removal or an observation on a host without `podman` reads no container and
+removes what the apply left, so a context whose apply refused is destroyed
+without installing it.
+
 Before image acquisition, publication or start, each service with an explicit
 bind address also reads its placement host's assigned addresses through a
 bounded, complete kernel query. An address absent from that observation, or

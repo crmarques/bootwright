@@ -133,6 +133,41 @@ func TestAServerBoundToAManagedBridgeRequiresItsProvider(t *testing.T) {
 	}
 }
 
+// A server on a Machine reached over SSH that also hosts a libvirt provider
+// waits for that provider's host block, which installs the container runtime;
+// one on the controller Machine does not, since the controller stage does.
+func TestAServerOnAProviderHostMachineRequiresTheHostBlock(t *testing.T) {
+	ssh := api.MapValue(
+		text("addressRef", "ip"),
+		field("auth", api.MapValue(text("privateKeyRef", "services-key"))),
+		text("knownHostsRef", "services-host-key"),
+	)
+	remote := api.NewObject(api.Machine, "services", api.Value{},
+		controller().Spec().Without("access").With("access", api.MapValue(field("ssh", ssh))))
+	hosted := func(machine string) api.Object {
+		return api.NewObject(api.InfraProvider, "lab-libvirt", api.Value{}, api.MapValue(
+			field("libvirt", api.MapValue(text("machineRef", machine), text("uri", "qemu:///system"))),
+		))
+	}
+	capability := New(&fakeRunner{}, fixedClock{})
+	for name, test := range map[string]struct {
+		server, provider api.Object
+		want             []reconciliation.ObjectRef
+	}{
+		"an SSH Machine that hosts the provider":      {artifactServer(text("machineRef", "services")), hosted("services"), []reconciliation.ObjectRef{{Kind: "InfraProvider", Object: "lab-libvirt"}}},
+		"an SSH Machine that hosts no provider":       {artifactServer(text("machineRef", "services")), hosted("controller"), nil},
+		"the controller Machine hosting the provider": {artifactServer(), hosted("controller"), nil},
+	} {
+		plan, err := capability.Plan(context.Background(), planInput(t, reconciliation.Apply, controller(), remote, test.provider, test.server))
+		if err != nil || len(plan.Definitions) != 1 {
+			t.Fatalf("%s: plan = %+v (%v)", name, plan, err)
+		}
+		if !slices.Equal(plan.Definitions[0].Requires, test.want) {
+			t.Fatalf("%s requires %+v, want %+v", name, plan.Definitions[0].Requires, test.want)
+		}
+	}
+}
+
 // An SSH placement publishes no controller reservation, but its claims are
 // qualified by its host's Machine and the SSH address and port it is reached
 // at, so its own context compares their sockets there.
@@ -441,8 +476,13 @@ func TestAnApplyHandsTheRunnerItsForeignListenerRefusal(t *testing.T) {
 		t.Fatalf("adapter invocations = %d", len(recorder.requests))
 	}
 	refusals := recorder.requests[0].Refusals
-	if keys := slices.Sorted(maps.Keys(refusals)); !slices.Equal(keys, []string{"certificate-mismatch-8080", "certificate-mismatch-8443", "foreign-listener-8080", "foreign-listener-8443", "listener-failed-8080", "listener-failed-8443", "readiness-timeout-8080", "readiness-timeout-8443", "readiness-unproved-8080", "readiness-unproved-8443", "unassigned-bind-address-8080", "unassigned-bind-address-8443"}) {
+	if keys := slices.Sorted(maps.Keys(refusals)); !slices.Equal(keys, []string{"certificate-mismatch-8080", "certificate-mismatch-8443", "container-runtime-8080", "container-runtime-8443", "foreign-listener-8080", "foreign-listener-8443", "listener-failed-8080", "listener-failed-8443", "readiness-timeout-8080", "readiness-timeout-8443", "readiness-unproved-8080", "readiness-unproved-8443", "unassigned-bind-address-8080", "unassigned-bind-address-8443"}) {
 		t.Fatalf("the runner was handed refusals %v, want foreign and unassigned refusals per listener port", keys)
+	}
+	runtime := diagnostics.Of(refusals["container-runtime-8443"])
+	if len(runtime) != 1 || runtime[0].Object == nil || runtime[0].Object.Kind != Kind || runtime[0].Object.Name != request.Identity.Service ||
+		!strings.Contains(runtime[0].Message, "Machine/"+request.Placement.Machine) || !strings.Contains(runtime[0].Remediation, "podman package") {
+		t.Fatalf("the container runtime refusal = %#v, want one naming the Machine and the package", runtime)
 	}
 	socket := managedservice.HostPort(request.BindAddress, 8443)
 	for _, refused := range []string{"foreign-listener-8443", "unassigned-bind-address-8443"} {

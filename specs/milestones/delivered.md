@@ -12802,7 +12802,7 @@ provider host's content digest moved with its package set.
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** a domain an earlier build defined takes the VGA
 display at its next cold boot; nothing installs `podman` on an SSH placement
-host ([B1236](backlog.md#b1236)).
+host ([B1236](#x358--container-runtime-on-an-ssh-placement-host), delivered by X358).
 
 ### X338 — The runtime lock carries what the controller imports
 
@@ -13226,3 +13226,38 @@ the independent review). Parked: [B1270](backlog.md#b1270) and
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred; no `rpm` or `dnf` ran here, so the snapshot format and the
 `clean_requirements_on_remove` option are proved against fakes only.
+
+### X358 — Container runtime on an SSH placement host
+
+**Item:** B1236 (2026-11-09, [D247](backlog.md#d247) (4)), delivered in-tree.
+A container placed on a Machine reached over SSH either finds its runtime or
+the apply refuses before any effect, never with a missing-executable failure.
+A libvirt provider's host block installs `podman` with its hypervisor closure
+on an SSH host, because the emulated BMC's container runs there; the closure
+(`HypervisorPackages`) now begins with `podman`, the same list the controller
+stage installs for a provider hosted on the controller Machine
+([provider host realization](../substrates.md#provider-host-realization)). A
+managed service has no host-preparation block, and the packages of an SSH
+Machine are not the controller stage's, so its apply, and the artifact
+server's, first prove `/usr/bin/podman --version` runs on the placement host,
+right after the hosted directories, and otherwise name a new `container-runtime`
+refusal to the runner, which reports `lifecycle.state` on the service naming
+the Machine and the `podman` package, with the remedy to install it there or
+place the service on a Machine that runs containers
+([host reservations](../infrastructure-services.md#host-reservations)).
+Installing in the role was rejected: the role has no package-manager path, and
+a Bootwright-owned install is the provider host block's. The libvirt provider
+host's content digest moved with its package set, and
+`bootwright.core.infra_managed_service` and `infra_artifact_server_nginx` gained
+the proof. A removal or an observation on a host without `podman` reads no
+container instead of failing on the missing executable (the roles' inspect
+helpers run podman without the module's exception handling and take a missing
+executable as no container), so a context whose apply refused can still be
+destroyed. A managed service or artifact server on an SSH Machine that also
+hosts a libvirt provider waits for that provider's host block, which installs
+`podman`, so a first apply does not refuse before it.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** the live proof on an SSH host is owed to the
+operator; an executable that exists but fails to run is still an error on a
+removal.

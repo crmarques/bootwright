@@ -832,8 +832,13 @@ func TestAnApplyHandsTheRunnerItsForeignListenerRefusal(t *testing.T) {
 	if _, err := NewCapability(testDefinition(), recorder).Apply(context.Background(), call); err == nil {
 		t.Fatal("a failed run was accepted")
 	}
-	if len(recorder.requests) != 1 || len(recorder.requests[0].Refusals) != 4 || recorder.requests[0].Refusals[reason] == nil || recorder.requests[0].Refusals["unassigned-bind-address-"+FormatPort(request.Port)] == nil {
+	if len(recorder.requests) != 1 || len(recorder.requests[0].Refusals) != 5 || recorder.requests[0].Refusals[reason] == nil || recorder.requests[0].Refusals["unassigned-bind-address-"+FormatPort(request.Port)] == nil {
 		t.Fatalf("the runner was handed refusals %v, want foreign and unassigned socket refusals", recorder.requests[0].Refusals)
+	}
+	runtime := diagnostics.Of(recorder.requests[0].Refusals["container-runtime-"+FormatPort(request.Port)])
+	if len(runtime) != 1 || runtime[0].Object == nil || runtime[0].Object.Name != request.Identity.Service ||
+		!strings.Contains(runtime[0].Message, "Machine/"+request.Placement.Machine) || !strings.Contains(runtime[0].Remediation, "podman package") {
+		t.Fatalf("the container runtime refusal = %#v, want one naming the Machine and the package", runtime)
 	}
 	timeout := recorder.requests[0].Refusals["readiness-timeout-"+FormatPort(request.Port)]
 	if timeout == nil {
@@ -923,5 +928,95 @@ func TestTwoDefinitionsOfOneKindPlanEachObjectExactlyOnce(t *testing.T) {
 	want := map[string][]string{"squid-proxy": {"proxy-squid-v1"}, "other-proxy": {"proxy-other-v1"}}
 	if len(planned) != len(want) || !slices.Equal(planned["squid-proxy"], want["squid-proxy"]) || !slices.Equal(planned["other-proxy"], want["other-proxy"]) {
 		t.Fatalf("planned = %v", planned)
+	}
+}
+
+func TestAnApplyOnAnSSHPlacementHandsTheRunnerItsContainerRuntimeRefusal(t *testing.T) {
+	remote := api.NewObject(api.Machine, "services", api.Value{}, api.MapValue(
+		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("network", api.MapValue(field("addresses", api.ListValue(
+			api.MapValue(text("name", "ip"), text("address", "192.0.2.9")),
+		)))),
+		field("access", api.MapValue(field("ssh", api.MapValue(
+			text("addressRef", "ip"), text("knownHostsRef", "host-key"),
+			field("auth", api.MapValue(text("privateKeyRef", "services-key"))),
+		)))),
+	))
+	placed := api.NewObject(api.Proxy, "lab-proxy", api.Value{}, api.MapValue(
+		text("management", "managed"), text("machineRef", "services"), text("implementation", "squid"),
+		text("bindAddress", "192.0.2.9"), field("port", api.IntegerValue("3128")),
+		field("endpoints", api.ListValue(api.MapValue(text("name", "ip"), text("addressRef", "ip")))),
+	))
+	catalog := catalogOf(controller(), remote, placed)
+	plan, err := NewCapability(testDefinition(), nil).Plan(context.Background(), lifecycle.PlanInput{
+		Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: testContext},
+		State: compilation.NewState(catalog, catalog, nil), Controller: "controller",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	frozen, err := reconciliation.NewPlan(reconciliation.Apply, plan.Definitions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := lifecycle.Execution{Operation: "op-1", Attempt: 1, Block: frozen.Blocks[0]}
+	recorder := &scriptedRunner{err: errors.New("unused")}
+	if _, err := NewCapability(testDefinition(), recorder).Apply(context.Background(), call); err == nil {
+		t.Fatal("a failed run was accepted")
+	}
+	refused := recorder.requests[0].Refusals["container-runtime-3128"]
+	if refused == nil || recorder.requests[0].Placement.Connection == machineref.ConnectionLocal {
+		t.Fatalf("placement = %+v, refusals = %v, want an SSH run handed the container runtime refusal", recorder.requests[0].Placement, recorder.requests[0].Refusals)
+	}
+	result, err := NewCapability(testDefinition(), &scriptedRunner{err: refused}).Apply(context.Background(), call)
+	reported := diagnostics.Of(err)
+	if result.Outcome != reconciliation.OutcomeFailed || len(reported) != 1 || reported[0].Object == nil || reported[0].Object.Name != "lab-proxy" ||
+		!strings.Contains(reported[0].Message, "Machine/services") || !strings.Contains(reported[0].Remediation, "podman package on Machine/services") {
+		t.Fatalf("outcome = %v, refusal = %#v, want a failure naming Machine/services and the package", result.Outcome, reported)
+	}
+}
+
+func TestAServiceOnAProviderHostMachineReachedOverSSHRequiresTheHostBlock(t *testing.T) {
+	remote := api.NewObject(api.Machine, "services", api.Value{}, api.MapValue(
+		field("os", api.MapValue(field("provided", api.BoolValue(true)))),
+		field("network", api.MapValue(field("addresses", api.ListValue(
+			api.MapValue(text("name", "ip"), text("address", "192.0.2.9")),
+		)))),
+		field("access", api.MapValue(field("ssh", api.MapValue(
+			text("addressRef", "ip"), text("knownHostsRef", "host-key"),
+			field("auth", api.MapValue(text("privateKeyRef", "services-key"))),
+		)))),
+	))
+	placed := func(machine string) api.Object {
+		return api.NewObject(api.Proxy, "lab-proxy", api.Value{}, api.MapValue(
+			text("management", "managed"), text("machineRef", machine), text("implementation", "squid"),
+			text("bindAddress", "0.0.0.0"), field("port", api.IntegerValue("3128")),
+			field("endpoints", api.ListValue(api.MapValue(text("name", "ip"), text("addressRef", "ip")))),
+		))
+	}
+	hosted := func(machine string) api.Object {
+		return api.NewObject(api.InfraProvider, "lab-libvirt", api.Value{}, api.MapValue(
+			field("libvirt", api.MapValue(text("machineRef", machine), text("uri", "qemu:///system"))),
+		))
+	}
+	for name, test := range map[string]struct {
+		machine, host string
+		want          []reconciliation.ObjectRef
+	}{
+		"an SSH Machine that hosts the provider":      {"services", "services", []reconciliation.ObjectRef{{Kind: "InfraProvider", Object: "lab-libvirt"}}},
+		"an SSH Machine that hosts no provider":       {"services", "controller", nil},
+		"the controller Machine hosting the provider": {"controller", "controller", nil},
+	} {
+		catalog := catalogOf(controller(), remote, hosted(test.host), placed(test.machine))
+		plan, err := NewCapability(testDefinition(), nil).Plan(context.Background(), lifecycle.PlanInput{
+			Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: testContext},
+			State: compilation.NewState(catalog, catalog, nil), Controller: "controller",
+		})
+		if err != nil || len(plan.Definitions) != 1 {
+			t.Fatalf("%s: plan = %+v (%v)", name, plan, err)
+		}
+		if !slices.Equal(plan.Definitions[0].Requires, test.want) {
+			t.Fatalf("%s requires %+v, want %+v", name, plan.Definitions[0].Requires, test.want)
+		}
 	}
 }

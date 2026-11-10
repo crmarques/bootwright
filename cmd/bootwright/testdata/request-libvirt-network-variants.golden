@@ -22,6 +22,7 @@
         }
       ],
       "packages": [
+        "podman",
         "libvirt-client",
         "libvirt-daemon",
         "libvirt-daemon-driver-network",

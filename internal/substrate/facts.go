@@ -60,6 +60,16 @@ func HostMachine(provider api.Object) string {
 	return provider.Spec().Get(ArmLibvirt, "machineRef").Text()
 }
 
+func ProvidersHostedOn(catalog api.Catalog, machine string) []string {
+	var hosted []string
+	for _, provider := range ProvidersOn(catalog, ArmLibvirt) {
+		if HostMachine(provider) == machine {
+			hosted = append(hosted, provider.Name())
+		}
+	}
+	return hosted
+}
+
 func NeedsHypervisorClient(provider api.Object) bool { return provider.Spec().Has(ArmLibvirt) }
 
 func NamesHostCluster(provider api.Object) bool { return HostCluster(provider) != "" }

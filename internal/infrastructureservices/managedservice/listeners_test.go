@@ -91,3 +91,20 @@ func TestUnassignedBindRefusalNamesTheServiceAndFrozenInputRecovery(t *testing.T
 		}
 	}
 }
+
+func TestAMissingContainerRuntimeRefusalNamesTheMachineAndThePackage(t *testing.T) {
+	for _, kind := range []string{"Proxy", "DNSServer", "NTPServer", "ArtifactServer"} {
+		refusals := ContainerRuntimeRefusals(kind, "svc", "edge-01", []int{80, 443})
+		if keys := slices.Sorted(maps.Keys(refusals)); !slices.Equal(keys, []string{"container-runtime-443", "container-runtime-80"}) {
+			t.Fatalf("%s: refusals = %v, want one per port", kind, keys)
+		}
+		reported := diagnostics.Of(refusals["container-runtime-443"])
+		if len(reported) != 1 || reported[0].Code != "lifecycle.state" || reported[0].Object == nil || reported[0].Object.Kind != kind || reported[0].Object.Name != "svc" {
+			t.Fatalf("%s: refusal = %#v, want lifecycle.state on %s/svc", kind, reported, kind)
+		}
+		if !strings.Contains(reported[0].Message, "Machine/edge-01") || !strings.Contains(reported[0].Message, "/usr/bin/podman") ||
+			!strings.Contains(reported[0].Remediation, "podman package on Machine/edge-01") {
+			t.Fatalf("%s: refusal = %#v, want the Machine and the package", kind, reported[0])
+		}
+	}
+}

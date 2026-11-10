@@ -78,6 +78,17 @@ def test_a_closure_is_present_only_when_every_package_is():
     assert not packages_present(complete, [])
 
 
+def test_a_provider_host_lacking_only_the_container_runtime_is_not_provisioned(tmp_path):
+    """The emulated BMC runs under podman, so a host with every other package still installs the closure."""
+    closure = ["podman", "libvirt-client", "qemu-kvm-core"]
+    request = {"networks": [], "packages": closure, "poolName": "p", "poolPath": str(tmp_path / "pool"), "services": [],
+               "uri": "qemu:///system"}
+    hypervisor_only = runner_for({"--query libvirt-client": (0, "", ""), "--query qemu-kvm-core": (0, "", "")})
+    assert observe_host(hypervisor_only, request)["hypervisor"] is False
+    everything = runner_for({"--query podman": (0, "", ""), "--query libvirt-client": (0, "", ""), "--query qemu-kvm-core": (0, "", "")})
+    assert observe_host(everything, request)["hypervisor"] is True
+
+
 def loaded(state):
     return (0, "LoadState=loaded\nActiveState=%s\n" % state, "")
 

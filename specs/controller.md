@@ -258,6 +258,12 @@ and no Machine declares it ([substrate arm](api/machines.md#substrate-arm),
 `qemu-kvm-core`, not the `qemu-kvm` metapackage, which on Fedora also pulls
 every QEMU display, audio and block module, because a guest uses only devices
 the QEMU core builds in ([domain](substrates.md#machine-realization)).
+A container placed on any other Machine, reached over SSH, gets its runtime
+there: a libvirt provider's host block installs `podman` with its hypervisor
+closure ([hypervisor closure](substrates.md#provider-host-realization)), and a
+managed service's apply proves `/usr/bin/podman` runs and refuses naming the
+Machine and the package when it does not
+([managed service refusals](infrastructure-services.md#host-reservations)).
 An entry names no version; the grammar admits `name = EVR` and no entry uses
 it until a specific version issue appears.
 

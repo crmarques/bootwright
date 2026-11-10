@@ -1,6 +1,7 @@
 package managedservice
 
 import (
+	"maps"
 	"slices"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -35,6 +36,23 @@ func ForeignListenerRefusals(kind, service, bindAddress string, ports []int) map
 		refusals[ForeignListenerReason+"-"+FormatPort(port)] = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
 			Severity: "error", Code: "lifecycle.state", Message: message,
 			Remediation: remedy,
+			Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: service},
+		}}}
+	}
+	return refusals
+}
+
+const ContainerRuntimeReason = "container-runtime"
+
+func ContainerRuntimeRefusals(kind, service, machine string, ports []int) map[string]error {
+	identity := kind + "/" + service
+	refusals := map[string]error{}
+	for _, port := range ports {
+		refusals[ContainerRuntimeReason+"-"+FormatPort(port)] = &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
+			Severity:    "error",
+			Code:        "lifecycle.state",
+			Message:     "Machine/" + machine + " has no working /usr/bin/podman, so " + identity + " cannot run its container; this attempt pulled, published or started nothing",
+			Remediation: "install the podman package on Machine/" + machine + " with its package manager and repeat the apply, or place " + identity + " on a Machine that runs containers",
 			Object:      &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: service},
 		}}}
 	}
@@ -81,8 +99,9 @@ func ReservationKeys(unit, contentRoot string, sockets []string) []string {
 }
 
 // ReadinessRefusals preserves uncertainty only for a silent listener.
-func ReadinessRefusals(kind, service, bindAddress string, ports []int) map[string]error {
+func ReadinessRefusals(kind, service, machine, bindAddress string, ports []int) map[string]error {
 	refusals := ListenerRefusals(kind, service, bindAddress, ports)
+	maps.Copy(refusals, ContainerRuntimeRefusals(kind, service, machine, ports))
 	for _, port := range ports {
 		reasons := []string{"readiness-timeout", "listener-failed"}
 		if kind == string(api.ArtifactServer) {

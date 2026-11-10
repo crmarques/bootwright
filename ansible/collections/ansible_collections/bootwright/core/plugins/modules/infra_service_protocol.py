@@ -30,7 +30,8 @@ options:
         which the runner reports as the service's own diagnostic for the port it
         names. C(foreign-listener) identifies a socket another daemon holds;
         C(unassigned-bind-address) identifies an explicit address the host
-        cannot use. Both are checked before effects. Readiness also names C(readiness-timeout)
+        cannot use; C(container-runtime) identifies a host whose podman does
+        not run. All three are checked before effects. Readiness also names C(readiness-timeout)
         or C(listener-failed).
     type: str
     required: false

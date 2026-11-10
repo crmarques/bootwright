@@ -29,10 +29,11 @@ const (
 // in .agents/knowledge/sushy-tools-emulated-bmc.md.
 const emulatorImage = "quay.io/metal3-io/sushy-tools@sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e"
 
-// hypervisorPackages is the closure a libvirt provider host runs. It is the
-// same set the controller stage installs when the host is the controller.
+// hypervisorPackages is the closure a libvirt provider host runs: the container
+// runtime its emulated BMC runs under and the hypervisor. It is the same set the
+// controller stage installs when the host is the controller.
 var hypervisorPackages = []string{
-	"libvirt-client", "libvirt-daemon", "libvirt-daemon-driver-network", "libvirt-daemon-driver-qemu",
+	"podman", "libvirt-client", "libvirt-daemon", "libvirt-daemon-driver-network", "libvirt-daemon-driver-qemu",
 	"libvirt-daemon-driver-storage-core", "qemu-img", "qemu-kvm-core", "swtpm", "swtpm-tools",
 }
 

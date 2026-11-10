@@ -291,7 +291,6 @@ Alias cell.
 | [B1227](#b1227) | new, 2026-11-08 (D244 (5)) | product | CLI | A JSON `apply` or `destroy` can stream its progress events | No machine consumer has asked; it changes the one-document contract of JSON output |
 | [B1229](#b1229) | new, 2026-11-09 (X332's review) | defect | Substrate | A provider host that stops defining managed Networks removes the refusal and firewall-ready units an earlier apply installed | The units stay owned and refuse only the subnets they held; the firewall-ready unit's gap predates X332 |
 | [B1230](#b1230) | new, 2026-11-09 (X331) | product | Machine power, with Substrate | A failed revoke of a lent KubeVirt token reaches the operator of a power command or reading | Power results carry no warning channel; the token still ends at its bounded lifetime and the revoke's adapter output is retained |
-| [B1236](#b1236) | new, 2026-11-09 (D247 (4)) | defect | Infrastructure services, with Substrate | An SSH placement host that runs a managed service or a libvirt provider's emulated BMC receives the container runtime | Predates D247; every qualified run places these containers on the controller |
 | [B1237](#b1237) | new, 2026-11-09 (D248 (5)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's default image comes from a Red Hat registry wherever Red Hat publishes one | Red Hat publishes no dnsmasq, chrony or sushy-tools image, and its squid image needs a `registry.redhat.io` login no managed-service pull carries |
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
 | [B1240](#b1240) | new, 2026-11-09 (X340 gate) | defect | Controller | The native supervisor test reads its task's PID only from a complete record | It failed once in `make check` beside the other lanes and passed when run again alone; the cause is a test-side race, not the supervisor |
@@ -3284,20 +3283,6 @@ attempt log test whose failed outcome record names its reason, and a `logs`
 golden that renders it. **Outcome:** an operator reading a failed block's
 events sees its cause without opening raw output.
 
-### B1236
-
-**Owner:** Infrastructure services, with Substrate. **Kind:** defect.
-**Requires:** none. **Definition:** Candidate, from [D247](#d247) (4): a
-managed service's `machineRef` and a libvirt provider's host Machine are
-container-runtime hosts ([substrate arm](../api/machines.md#substrate-arm)),
-but on an SSH Machine no block installs `podman`: the provider host block
-installs only the hypervisor closure, and the managed-service roles run
-`/usr/bin/podman` without proving it. **Exit evidence:** a provider host and a
-managed-service test on an SSH placement whose host lacks `podman`, which
-installs it through the host's own package manager or refuses before any
-effect naming it. **Outcome:** a container placed on an SSH host either gets
-its runtime or refuses with a remedy, never a missing-executable failure.
-
 ### B1240
 
 **Owner:** Controller. **Kind:** defect. **Requires:** none.
@@ -3426,7 +3411,7 @@ mirror row of [B1250](#b1250)'s profile.
 ### B1249
 
 **Owner:** Infrastructure services, with State reconciliation. **Kind:**
-product. **Requires:** B1245, B1246, [B68](m1.md#b68), [B1236](#b1236).
+product. **Requires:** B1245, B1246, [B68](m1.md#b68), [B1236](delivered.md#x358--container-runtime-on-an-ssh-placement-host) (delivered).
 **Definition:** Needs definition, from [D250](#d250) (8), (14) and (16): the
 [design](../deferred/controlled-network.md#the-mirror-host). **Outcome:** a
 context that places its mirror Registry and artifact server on a Machine,
@@ -7820,7 +7805,7 @@ session, pending the owner's review:
    installs is kept like every other stage package.
 4. Nothing installs `podman` on an SSH placement host, a managed service's
    other Machine or a remote libvirt provider host; that predates this decision
-   and is parked as [B1236](#b1236).
+   and was parked as B1236, which X358 delivers ([record](delivered.md#x358--container-runtime-on-an-ssh-placement-host)).
 
 ### D248
 
@@ -7944,7 +7929,7 @@ by the session, pending the owner's review:
 10. The work is parked as B1242 to [B1251](#b1251) until the owner
     promotes it, in the
     [design's order](../deferred/controlled-network.md#delivery-order);
-    [B68](m1.md#b68), [B1236](#b1236) and the acceptance of
+    [B68](m1.md#b68), [B1236](delivered.md#x358--container-runtime-on-an-ssh-placement-host) (delivered) and the acceptance of
     [B724](m3.md#b724) join it.
 
 Shown the plan the same day, the owner answered:

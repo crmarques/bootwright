@@ -57,7 +57,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			ID:             request.Identity.Block,
 			Description:    description(input.Verb, request),
 			Stage:          reconciliation.StageInfrastructureServices,
-			Requires:       managedservice.BridgeRequirements(catalog, request.Placement.Machine, probedAddresses(request)),
+			Requires:       managedservice.PlacementRequirements(catalog, request.Placement, probedAddresses(request)),
 			Impacts:        impacts(input.Verb, request),
 			Groups:         groups(input.Verb, request),
 			Kind:           Kind,
@@ -295,7 +295,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: Implementation, Operation: operation, Variable: variablePrefix,
 		Canonical: canonical, Placement: request.Placement, Materials: materials(request, operation), Values: values,
-		Refusals: managedservice.ReadinessRefusals(Kind, request.Identity.Service, request.BindAddress, listenerPorts(request)),
+		Refusals: managedservice.ReadinessRefusals(Kind, request.Identity.Service, request.Placement.Machine, request.BindAddress, listenerPorts(request)),
 	}))
 }
 

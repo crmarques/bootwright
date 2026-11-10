@@ -34,7 +34,7 @@ MINUTE = 60 * 10**9
 HOUR = 3600 * 10**9
 
 
-def host(_module, argv, check_rc=False, environ_update=None):
+def host(_module, argv, check_rc=False, environ_update=None, handle_exceptions=True):
     """systemctl and podman on a host running the service's container."""
     assert check_rc is False and environ_update == infra_service.ENVIRONMENT
     if argv[:2] == [infra_service.SYSTEMCTL, "show"]:
@@ -93,7 +93,7 @@ def run(arguments, capsys):
 
 def state_host(unit, present):
     """systemctl and podman on a host whose unit is in `unit` and whose container is or is not present."""
-    def run_command(_module, argv, check_rc=False, environ_update=None):
+    def run_command(_module, argv, check_rc=False, environ_update=None, handle_exceptions=True):
         assert check_rc is False and environ_update == infra_service.ENVIRONMENT
         if argv[:2] == [infra_service.SYSTEMCTL, "show"]:
             return 0, unit + "\n", ""

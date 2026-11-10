@@ -89,7 +89,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			ID:             request.Identity.Block,
 			Description:    c.definition.describe(input.Verb, request),
 			Stage:          reconciliation.StageInfrastructureServices,
-			Requires:       BridgeRequirements(catalog, request.Placement.Machine, request.ProbeTargets()),
+			Requires:       PlacementRequirements(catalog, request.Placement, request.ProbeTargets()),
 			Impacts:        impacts(input.Verb, request),
 			Groups:         groups(input.Verb, request),
 			Kind:           string(c.definition.Kind),
@@ -198,16 +198,18 @@ func (c Capability) requestFor(catalog api.Catalog, object api.Object, controlle
 	return request, nil
 }
 
-// BridgeRequirements names, in name order, each provider whose managed bridge
-// carries one of addresses on a service's placement Machine, so the service's
-// block waits for the block that creates that bridge. The addresses are the
-// ones readiness probes: the bind address, whose socket cannot open before the
-// bridge exists, or each declared endpoint address of a wildcard bind, which
-// cannot answer before then.
-func BridgeRequirements(catalog api.Catalog, machine string, addresses []string) []reconciliation.ObjectRef {
+// PlacementRequirements names, in name order, each provider the service's block
+// waits for: one whose managed bridge carries a probed address on the placement
+// Machine, whose socket or answer cannot exist before then, and, on a Machine
+// reached over SSH, one hosted there, whose block installs the container runtime.
+func PlacementRequirements(catalog api.Catalog, placement machineref.Placement, addresses []string) []reconciliation.ObjectRef {
+	machine := placement.Machine
 	var providers []string
 	for _, address := range addresses {
 		providers = append(providers, substrate.BridgeProviders(catalog, machine, address)...)
+	}
+	if !placement.Local() {
+		providers = append(providers, substrate.ProvidersHostedOn(catalog, machine)...)
 	}
 	slices.Sort(providers)
 	var references []reconciliation.ObjectRef
@@ -412,7 +414,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: c.definition.Implementation, Operation: operation, Variable: c.definition.Variable,
 		Canonical: canonical, Placement: request.Placement, Materials: materials,
-		Refusals: ReadinessRefusals(request.Kind, request.Identity.Service, request.BindAddress, []int{request.Port}),
+		Refusals: ReadinessRefusals(request.Kind, request.Identity.Service, request.Placement.Machine, request.BindAddress, []int{request.Port}),
 	}))
 }
 

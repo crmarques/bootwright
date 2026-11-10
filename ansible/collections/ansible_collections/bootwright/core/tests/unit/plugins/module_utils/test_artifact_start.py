@@ -42,3 +42,12 @@ def test_artifact_start_covers_only_consumed_files(monkeypatch, https, bad):
     assert observation["startedAfterFiles"] is expected
     if expected:
         assert set(seen) == set(paths)
+
+
+def test_a_host_without_podman_holds_no_artifact_container():
+    def without_podman(argv, check_rc=False, environ_update=None, handle_exceptions=True):
+        assert argv[0] == artifact_server.PODMAN and handle_exceptions is False
+        raise FileNotFoundError(2, "No such file or directory", artifact_server.PODMAN)
+
+    assert artifact_server.container_image(without_podman, "example") == ""
+    assert artifact_server.container_present(without_podman, "example") is False

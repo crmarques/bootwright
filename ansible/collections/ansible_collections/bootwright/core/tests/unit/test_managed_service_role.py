@@ -295,6 +295,35 @@ def test_an_unassigned_bind_address_refuses_before_any_effect(role, protocol):
         assert templar.evaluate_conditional(tasks[failed]["when"]) is not assigned
 
 
+# Nothing installs podman on a Machine reached over SSH, so a placement host
+# without a working podman is refused with the service's own diagnostic right
+# after the hosted directories are proved, before any effect is made. A missing executable and a
+# podman that fails to run both leave a result the refusal reads as not working.
+@pytest.mark.parametrize("role, protocol", APPLIES)
+@pytest.mark.parametrize("result, refused", [
+    ({"rc": 0}, False),
+    ({"rc": 1}, True),
+    ({"rc": 2, "msg": "[Errno 2] No such file or directory: b'/usr/bin/podman'"}, True),
+    ({"msg": "no result"}, True),
+])
+def test_a_host_without_podman_refuses_before_any_other_task(role, protocol, result, refused):
+    tasks = load_tasks(role, "apply.yml")
+    module = "bootwright.core." + protocol
+    handoff = index_of(tasks, lambda task: (task.get(module) or {}).get("phase") == "loaded", "completes the handoff")
+    prove = index_of(tasks, lambda task: argv_of(task) == ["/usr/bin/podman", "--version"], "proves the container runtime")
+    named = index_of(tasks, lambda task: (task.get(module) or {}).get("reason") == "container-runtime", "names the runtime refusal")
+    failed = index_of(tasks, lambda task: "ansible.builtin.fail" in task and "_runtime" in str(task.get("when")), "refuses the host")
+    assert handoff + 2 == prove < named < failed == named + 1
+    assert tasks[prove].get("failed_when") is False and tasks[prove].get("changed_when") is False
+    assert tasks[prove]["register"] == role + "_runtime"
+    assert str(tasks[named]["when"]) == str(tasks[failed]["when"])
+    assert tasks[named].get("no_log") is True
+    assert "podman" in str(tasks[failed]["ansible.builtin.fail"]["msg"]) and "nothing was pulled" in str(tasks[failed]["ansible.builtin.fail"]["msg"])
+    assert prove < min(index for index, task in enumerate(tasks) if effects(task))
+    templar = Templar(loader=LOADER, variables={role + "_runtime": result})
+    assert templar.evaluate_conditional(tasks[failed]["when"]) is refused
+
+
 def refusal_action(protocol):
     module = importlib.import_module("ansible_collections.bootwright.core.plugins.action." + protocol)
     action = module.ActionModule.__new__(module.ActionModule)
@@ -309,6 +338,7 @@ def refusal_action(protocol):
     ({"reason": "foreign-listener", "port": 53}, "foreign-listener-53"),
     ({"reason": "foreign-listener", "port": "8443"}, "foreign-listener-8443"),
     ({"reason": "unassigned-bind-address", "port": 53}, "unassigned-bind-address-53"),
+    ({"reason": "container-runtime", "port": 53}, "container-runtime-53"),
     ({"reason": "other", "port": 53}, None),
     ({"port": 53}, None),
     ({"reason": "foreign-listener"}, None),

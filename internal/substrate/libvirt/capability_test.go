@@ -161,6 +161,38 @@ func TestAProviderOnAnSSHHostClaimsItsKeysThere(t *testing.T) {
 	}
 }
 
+// The emulated BMC runs in a container on the provider host, and nothing else
+// installs the container runtime on a host reached over SSH, so that host's own
+// closure carries podman and the block installs it beside the hypervisor. A
+// controller-hosted provider installs nothing, since its stage does.
+func TestAProviderHostOnAnSSHMachineInstallsTheContainerRuntime(t *testing.T) {
+	arm := provider().Spec().Get("libvirt")
+	remote := provider(field("libvirt", arm.With("machineRef", api.StringValue("hypervisor"))))
+	for name, test := range map[string]struct {
+		objects []api.Object
+		want    bool
+	}{
+		"an SSH host":    {objects: []api.Object{controller(), remoteHost(), remote, networkConfig(), guest("rhel-01")}, want: true},
+		"the controller": {objects: []api.Object{controller(), provider(), networkConfig(), guest("rhel-01")}, want: false},
+	} {
+		catalog := catalogOf(test.objects...)
+		plan, err := NewHost(nil).Plan(context.Background(), lifecycle.PlanInput{
+			Verb: reconciliation.Apply, State: compilation.NewState(catalog, catalog, nil),
+			Controller: "controller", Context: lifecycle.ContextIdentity{Name: testContext},
+		})
+		if err != nil || len(plan.Definitions) != 1 {
+			t.Fatalf("%s: plan = %+v (%v)", name, plan, err)
+		}
+		if got := slices.Contains(plan.Definitions[0].Impacts, "install-package podman"); got != test.want {
+			t.Fatalf("%s: install-package podman = %t in %v, want %t", name, got, plan.Definitions[0].Impacts, test.want)
+		}
+	}
+	requests, err := HostRequests(catalogOf(controller(), remoteHost(), remote, networkConfig(), guest("rhel-01")), "controller", testContext)
+	if err != nil || len(requests) != 1 || !requests[0].Provisioned || requests[0].Packages[0] != "podman" {
+		t.Fatalf("requests = %+v (%v), want a provisioned host whose closure starts with podman", requests, err)
+	}
+}
+
 // An emulated BMC bound to the host address of another provider's managed
 // bridge on its host cannot listen before that provider's host block creates
 // the bridge, so its machine block waits for that block too, and its removal
