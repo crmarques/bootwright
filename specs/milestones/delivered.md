@@ -13577,3 +13577,49 @@ public, so a vendor-only network must allow them, which
 [B1301](backlog.md#b1301) decides; and
 `subscription.rhsm.redhat.com` and `cdn.redhat.com` rest on the shipped
 `subscription-manager` configuration, since no request to them was verified.
+
+
+### X395 — Tagged managed Networks on an owned trunk, routed through an owned table
+
+[B1281](m1.md#b1281), [B1282](m1.md#b1282), [B1283](m1.md#b1283) and
+[B1295](m1.md#b1295) are implemented in-tree (2026-11-10) and stay on the M1
+page awaiting the owner's lab-6-nodes-ceph-network-matrix run, under the
+owner's approval and the session clauses of [D255](backlog.md#d255). B1281: a managed `Network` with `vlan` is
+a VLAN leg holding its `hostAddress` on a trunk bridge Bootwright creates, both
+NetworkManager keyfile connections it owns, marked by four `[user]` keys,
+derived UUIDs and the keyfile path, in firewalld's `trusted` zone; a Machine
+NIC on a leg segment installs over the leg's VLAN and stacks the VLANs the leg
+carries; every trunk and leg reserves its connection name; an owned connection
+the request no longer freezes is removed before any other host network effect
+([trunks and VLAN legs](../substrates.md#trunks-and-vlan-legs)). B1282:
+`routedNetworkRefs` and `forward` freeze one `inet` table per provider, held by
+a unit that loads and reloads it atomically and is never restarted while a leg
+exists; it routes the declared leg pairs, masquerades the `nat` legs to the
+uplink and refuses every other path into a leg, the user network's included
+([routing table](../substrates.md#routing-table)). B1283: the
+lab-6-nodes-ceph-network-matrix case declares every network as a `Network`.
+B1295: the host protocol publishes the VLAN refusal evidence the Go side has
+required since X332, without which no provider with a managed network proved
+its presence. The content digest of `substrate-host-libvirt-v1` moved through
+the effect pins `nm-trunk-legs-v1`, `routing-table-v1` and
+`nm-unfrozen-connections-v1`; a shared request and evidence golden and a
+byte-for-byte spec test hold the Go and Ansible sides to one contract.
+
+**Commits:** the slice's commits from `docs(milestones): record D255` to this
+record. Two independent reviews ran. The first found a dropped leg left up
+outside the table, a unit restart that dropped the table, an unvalidated
+ruleset input that could inject `flush ruleset`, a failed connection read
+taken as absence, unreserved connection names, a dotted trunk Go admitted and
+Python refused, a postcondition that ignored forwarding and runbook claims the
+table did not support; all were fixed with regression tests, and the second
+review confirmed the fixes. Gates: `make check`, `make race` and
+`scripts/check-commits main HEAD` passed on the integrated branch; no live run
+or push occurred. **Limitations:** NetworkManager and kernel behaviour are
+proved only against fakes and an unprivileged nft namespace, never a live
+host; the loaded-table proof compares rule counts, not rule contents
+([B1302](backlog.md#b1302)); the trunk filters no VLAN per guest
+([B1303](backlog.md#b1303)); a routing unit that fails at boot leaves legs up
+without their table ([B1304](backlog.md#b1304)); a leg whose VLAN or trunk
+changes must be deleted by hand ([B1315](backlog.md#b1315)); and a provider
+that drops its last tagged Network keeps its routing unit and table
+([B1229](backlog.md#b1229)).
