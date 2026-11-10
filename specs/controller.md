@@ -803,6 +803,10 @@ binding and reservations and retires the tool area only that binding named
 
 ## Egress and local effects
 
+[Acquisition origins](security.md#acquisition-origins) classes every origin a
+context acquires from and names each artifact's mirror route; this section
+owns the controller's own.
+
 With a context, the controller Machine's normalized
 [proxy choice](api/machines.md#machine-proxy) is the sole route selection: the
 controller stage and context preflight support direct access and qualified

@@ -295,6 +295,16 @@ Alias cell.
 | [B1237](#b1237) | new, 2026-11-09 (D248 (5)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's default image comes from a Red Hat registry wherever Red Hat publishes one | Red Hat publishes no dnsmasq, chrony or sushy-tools image, and its squid image needs a `registry.redhat.io` login no managed-service pull carries |
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
 | [B1240](#b1240) | new, 2026-11-09 (X340 gate) | defect | Controller | The native supervisor test reads its task's PID only from a complete record | It failed once in `make check` beside the other lanes and passed when run again alone; the cause is a test-side race, not the supervisor |
+| [B1242](#b1242) | new, 2026-11-10 (D250 (2)) | product | Controller | Target tools are pinned by the build and acquired without their publisher's metadata | D250 parks the controlled-network plan until the owner promotes it |
+| [B1243](#b1243) | new, 2026-11-10 (D250 (2)) | enabling | Architecture | Each build writes one software bill of materials, and every build input is pinned | D250 parks the controlled-network plan until the owner promotes it |
+| [B1244](#b1244) | new, 2026-11-10 (D250 (2)) | enabling | Architecture | A build fails on a known vulnerability in what it carries or pins | D250 parks the controlled-network plan until the owner promotes it |
+| [B1245](#b1245) | new, 2026-11-10 (D250 (8)) | product | CLI, with Controller | One read-only list names every artifact a context acquires, its origin, its digest and the Machine that reads it | D250 parks the controlled-network plan until the owner promotes it |
+| [B1246](#b1246) | new, 2026-11-10 (D250 (7)) | product | Controller, with Desired state | One mirror declaration routes a context's public-origin tools to its artifact server and refuses an artifact the mirror lacks | D250 parks the controlled-network plan until the owner promotes it |
+| [B1247](#b1247) | new, 2026-11-10 (D250 (7)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's images come from the declared mirror, with its credential and trust | D250 parks the controlled-network plan until the owner promotes it |
+| [B1248](#b1248) | new, 2026-11-10 (D250 (7)) | product | Container cluster | A cluster's release images are mapped to the declared mirror | D250 parks the controlled-network plan until the owner promotes it; B724's route awaits its acceptance |
+| [B1249](#b1249) | new, 2026-11-10 (D250 (8)) | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | D250 parks the controlled-network plan until the owner promotes it; no capability realizes a managed Registry |
+| [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
+| [B1251](#b1251) | new, 2026-11-10 (D250 (10)) | product | Infrastructure services | A managed Proxy admits only the destinations it declares | The network's own firewall is the control in production; this serves a lab or a site without one |
 
 ### B82
 
@@ -3295,6 +3305,166 @@ two reads an empty file. Writing the record under a temporary name and
 renaming it, or waiting until the record holds a PID, closes the window.
 **Exit evidence:** the test parses the PID only from a complete record.
 **Outcome:** the controller units lane no longer fails on this race.
+
+### B1242
+
+**Owner:** Controller. **Kind:** product. **Requires:** none.
+**Definition:** Needs definition, from [D250](#d250) (2): the controller stage
+resolves `latest` and every tool's SHA-256 from its publisher at apply, even
+when a [download mirror](../api/environment.md#download-mirrors) serves the
+bytes, so a context with an OpenShift cluster always reaches a public origin
+for Helm ([the controller stage](../controller.md#the-controller-stage)).
+**Outcome:** a tool lock beside the runtime lock pins the default release,
+size and SHA-256 of every tool no vendor serves; a pinned digest, or one the
+Environment declares beside an explicit release, is acquired with no publisher
+metadata; and every tool has a mirror route. A vendor's own tools keep the
+vendor's checksum file. **Open:** whether `latest` stays an intent
+(recommendation: remove it, so a newer release is a new build or an explicit
+release with its SHA-256), and how an explicit release declares its digest.
+**Exit evidence:** an offline check that holds the lock as the runtime lock is
+held; a stage test that acquires every pinned tool from a mirror with its
+publisher unreachable; a refusal test for an explicit release with no digest.
+
+### B1243
+
+**Owner:** Architecture. **Kind:** enabling. **Requires:** B1242 for the
+tools' entries. **Definition:** Needs definition, from [D250](#d250) (2): no
+build writes a bill of materials, the module list in the executable's build
+information is its only record, and the container build's Go image is named by
+a tag ([building in a container](../../docs/development.md#building-in-a-container)).
+**Outcome:** every build writes one deterministic document beside the
+executable and embeds it, and a read-only command prints it. It lists what the
+executable carries (Go modules, the toolchain, the locked wheels, the
+collection) and what it pins and fetches at use (tools, the managed services'
+and the emulated BMC's images), each with its version, digest, origin and
+license. The Go image is pinned by digest, and a release ships its third-party
+notices ([cryptography and supply chain](../security.md#cryptography-and-supply-chain)).
+**Open:** the format (recommendation: CycloneDX JSON, which the common
+scanners read) and the command's name. **Exit evidence:** a test that holds
+the document to `go.sum`, the runtime lock, the tool lock and the image
+catalogs, and a second build of one commit that writes the same bytes.
+
+### B1244
+
+**Owner:** Architecture. **Kind:** enabling. **Requires:** B1243.
+**Definition:** Needs definition, from [D250](#d250) (2) and (9):
+`make check` runs `govulncheck` over the Go modules and the standard library,
+`make build` runs no vulnerability check, and nothing checks a locked wheel or
+a tool. **Outcome:** `make build` and `make container-build` fail on a known
+vulnerability in a Go module or the standard library, a locked wheel or a
+pinned tool. A reviewed exception naming the advisory, the component, why the
+build is not affected and an expiry date is the only way past, and it ships
+with the bill of materials as a VEX statement. The executable carries the
+verdict and the database's date, which `version` prints; an offline build
+names a local database or is stamped as unchecked, which a release build
+refuses; and a scheduled job checks the newest release and the pinned images
+again. **Open:** whether an advisory in code the build never reaches fails
+without an exception (recommendation: keep `govulncheck`'s reachability for
+Go, and fail a wheel or a tool until it is excepted); whether pinned images
+join the gate (recommendation: not until Bootwright builds them,
+[B1237](#b1237), because a base image always carries findings a build cannot
+fix). **Exit evidence:** a build that fails on a planted advisory of each of
+the three kinds, passes with its exception and fails again once the exception
+expires.
+
+### B1245
+
+**Owner:** CLI, with Controller. **Kind:** product. **Requires:** B1242.
+**Definition:** Needs definition, from [D250](#d250) (8): no command lists
+what a context acquires, and the
+[operator guide](../../docs/operator-guide.md#on-a-controlled-network) keeps
+the destinations and registries by hand. **Outcome:** one read-only result
+lists, for an admitted graph, every artifact it selects with its kind,
+version, origin, [class](../security.md#acquisition-origins), size, digest
+and the Machine that reads it, in human and machine form, registering nothing
+and contacting nothing; a release is named by its repositories. **Open:**
+whether it is a command of its own or a section of `plan`. **Exit evidence:**
+goldens over an OpenShift and a Ceph example, and the guide's hand-kept lists
+replaced by the command.
+
+### B1246
+
+**Owner:** Controller, with Desired state. **Kind:** product. **Requires:**
+B1242, B1245. **Definition:** Needs definition, from [D250](#d250) (4) and
+(7): the [design](../deferred/controlled-network.md#declaration-and-refusal).
+**Outcome:** the Environment names one mirror, a Registry and an artifact
+server endpoint. With it the controller stage acquires every public-origin
+tool from that endpoint by its pinned digest and dials no public origin, and
+preflight refuses an artifact the mirror does not hold, naming it. **Open:**
+the field's name and whether it replaces `spec.downloads` (recommendation: it
+does, before 1.0); an external artifact server as the endpoint, which
+admission refuses today. **Exit evidence:** a stage test with every public
+origin unreachable, the refusal's test and effective-state goldens.
+
+### B1247
+
+**Owner:** Infrastructure services, with Substrate. **Kind:** product.
+**Requires:** B1246. **Definition:** Needs definition, from [D250](#d250) (4)
+and (7): a managed service takes a mirror only through its own
+`spec.image.local`, with no pull credential and the host's trust store alone,
+and the emulated BMC's image has no field ([B1237](#b1237) records the same
+gap). **Outcome:** with the declaration, each managed service's and the
+emulated BMC's image is the mirror's copy of the digest the request froze,
+pulled with the Registry's access credential and verified against its trust
+anchor, and a test holds, for every role, that a host which already holds the
+digest pulls nothing. **Exit evidence:** request goldens, custody tests for
+the credential, and a pull refused when the mirror lacks the digest.
+
+### B1248
+
+**Owner:** Container cluster. **Kind:** product. **Requires:** B1246; the
+operator acceptance of [B724](m3.md#b724). **Definition:** Needs definition,
+from [D250](#d250) (5) and (7): a connected cluster installs through authored
+`imageDigestSources`
+([registry policy](../api/openshift-clusters.md#registry-policy)), and B724
+keeps image sources authored. **Outcome:** with the declaration, a cluster's
+install-config maps the release's repositories to the mirror, its pull secret
+and trust carry the mirror's, and the image build reads the release from the
+mirror. **Open:** derive the mapping, or keep it authored and only check it
+(recommendation: derive it for the release repositories, which every release
+names, and keep operator catalogs authored); whether the installation also
+replaces its nodes' default time pool, which a selected NTPServer is only
+added beside ([installer inputs](../openshift-clusters.md#installer-inputs);
+recommendation: yes, with the declaration). **Exit evidence:** projection
+goldens and a row of [B1250](#b1250)'s profile.
+
+### B1249
+
+**Owner:** Infrastructure services, with State reconciliation. **Kind:**
+product. **Requires:** B1245, B1246, [B68](m1.md#b68), [B1236](#b1236).
+**Definition:** Needs definition, from [D250](#d250) (8): the
+[design](../deferred/controlled-network.md#filling-the-mirror). **Outcome:** a
+context that places its mirror Registry and artifact server on a Machine with
+a provided operating system builds both and copies its acquisition list into
+them on that Machine, each artifact verified before it is published, before
+its controller stage acquires a tool. **Open:** the ordering clause that lets
+the mirror's blocks precede the controller block; whether the controller
+drives the mirror host over SSH or a second Bootwright runs on it
+(recommendation: over SSH first, as every managed Machine is driven); custody
+of a release's pull secret on the mirror host. **Exit evidence:** a test that
+holds the plan's order, a replay that copies nothing, a verification refusal
+and a row of [B1250](#b1250)'s profile.
+
+### B1250
+
+**Owner:** Controller, with each consumer's owner. **Kind:** enabling.
+**Requires:** B1246, B1247, B1248, B1249. **Definition:** Candidate, from
+[D250](#d250) (10). **Outcome:** a lab profile whose controller and Machines
+have no route but to their package repositories, the vendor origins and the
+mirror host installs an OpenShift cluster and a Ceph cluster, and its evidence
+shows each denied attempt. **Exit evidence:** the profile's example, an
+in-tree test in which every public origin refuses, and an owner-accepted run.
+
+### B1251
+
+**Owner:** Infrastructure services. **Kind:** product. **Requires:** none.
+**Definition:** Candidate, from [D250](#d250) (10): the managed Proxy refuses
+local and link-local destinations and restricts `CONNECT` no further
+([managed network services](../infrastructure-services.md#managed-network-services)).
+**Outcome:** a managed Proxy declares the destinations it admits and refuses
+every other, logging the refusal, so a lab or a site without a filtering
+firewall holds its Machines to the vendor origins. **Exit evidence:** a
+configuration test and a refused request.
 
 ## Audit remediation (2026-10-26)
 
@@ -7632,3 +7802,56 @@ pending the owner's review:
    reads ([reading and following logs](../cli/output.md#reading-and-following-logs)).
    Specs and code keep "setup" as the name of the flow `controller install`
    runs, and `controller check` keeps its `setup-state` check ID.
+
+### D250
+
+**owner** (2026-11-10): asked how Bootwright would run where machines may not
+reach arbitrary Internet hosts, the owner said the concern is "not only the
+dependency itself that could be vulnerable, but to require my machines to have
+access to any internet target", because "an attacker could gain access to
+openshift/ceph/controller machine and download malicious code or use
+github/docker hub as a way to extract data from my environment". The owner's
+choices:
+
+1. "keep bootwright include all dependencies it can (for instance, python and
+   ansible)": the executable keeps carrying its runtime closure
+   ([the runtime lock](../controller.md#the-runtime-lock)).
+2. "make dependencies always use pinned versions, improve sbom and add check
+   to always verify during build if the dependencies have any known
+   vulnerability and fails if so".
+3. "keep allowing access to redhat and ibm registry, from bootwright
+   controller and target machines".
+4. "add an option for operators that are concerned about github, docker.io,
+   quay.io, etc to create a intermediate machine that will be used to host a
+   mirrored registry and artifact server", so that "every image from those
+   wide repository or required binaries (helm, kubectl, etc) that can't be
+   installed with rpm or from ibm/red hat directly will be downloaded from
+   that intermediate machine and accessible from bootwright and target
+   machines throught it".
+
+The owner asked for a review, an improved proposal and an implementation plan,
+and for the specs and guides to make clearer what already serves a controlled
+environment. This authorizes that documentation and no implementation. Taken
+by the session, pending the owner's review:
+
+5. An origin is classed by who may publish on its host
+   ([acquisition origins](../security.md#acquisition-origins)). OpenShift's
+   release payload, on `quay.io`, and the images IBM publishes on `icr.io`
+   therefore go through the mirror, while `cp.icr.io` and the vendors' own
+   download hosts stay direct.
+6. The mirror host holds a curated copy and is neither a pull-through cache
+   nor a proxy. Consumers verify digests they already hold, so it is trusted
+   for nothing, and it holds no platform secret
+   ([the mirror host](../deferred/controlled-network.md#the-mirror-host)).
+7. One Environment declaration routes every public-origin artifact to the
+   mirror and refuses a context whose artifact the mirror lacks, in place of
+   one override on each consumer.
+8. One acquisition list names what a context acquires, and Bootwright fills
+   the mirror from it on the mirror host, before the controller stage's tools.
+9. A build's vulnerability gate takes a reviewed, expiring exception as its
+   only way past, and images are scanned on a schedule, not in the build.
+10. The work is parked as [B1242](#b1242) to [B1251](#b1251) until the owner
+    promotes it, in the
+    [design's order](../deferred/controlled-network.md#delivery-order);
+    [B68](m1.md#b68), [B1236](#b1236) and the acceptance of
+    [B724](m3.md#b724) join it.

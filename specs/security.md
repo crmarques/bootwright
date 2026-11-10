@@ -783,6 +783,65 @@ whose publisher offers no such metadata refuses. A frozen operation never
 substitutes an update silently; recovery follows
 [state reconciliation](state-reconciliation.md#dependency-safety-during-recovery).
 
+### Acquisition origins
+
+Every artifact a context acquires, or hands a Machine to acquire, comes from
+one of three kinds of origin. The class follows who may publish on the serving
+host, never who wrote the content:
+
+| Origin | Who publishes there | Who connects |
+| --- | --- | --- |
+| The host's package repositories | Whoever the host's package manager is configured to trust ([W2](#the-controller-hosts-attacker-model)) | Each host's own package manager |
+| A vendor origin | Red Hat or IBM alone, the vendors of the platforms a context installs, as on a client download site or an entitled registry | The Machine that needs the artifact, directly or through its declared proxy |
+| A public origin | Any account, or a project other than those vendors | The same Machine, unless the artifact's mirror route moves it |
+
+OpenShift's release payload is vendor content served from a registry on which
+any account publishes, so its origin is public.
+
+A mirror route changes where the bytes come from. Where the request froze a
+digest, the consumer verifies it and the mirror is trusted for nothing
+([remote principals](#remote-principals)). A storage cluster image authored
+by tag takes its digest from the registry its Entitlement names, so that
+registry, mirror or not, is trusted for that binding. Each artifact's owner
+states its route:
+
+| Artifact | Default origin | Mirror route |
+| --- | --- | --- |
+| Host packages | The host's repositories | The host's own dnf configuration ([host packages](controller.md#host-packages)) |
+| Target tools | Each tool's publisher: a vendor origin for an OpenShift release's clients and installer, a public one for every other tool, an OKD release's included | [Download mirrors](api/environment.md#download-mirrors) serve the bytes of the OpenShift clients and installer, Helm and `virtctl`; the publisher's metadata is still read ([the controller stage](controller.md#the-controller-stage)) |
+| A managed service's image | The executable's compiled default | The service's `spec.image.local` ([management and placement](api/infrastructure-services.md#management-and-placement)) |
+| The emulated BMC's image | The executable's compiled default | None declared: the provider host's container runtime acquires it, and only when the host does not hold it ([Machine realization](substrates.md#machine-realization)) |
+| Operating-system media | The file or URL the operator names | The operator's own choice of source ([media store](managed-os.md#media-store)) |
+| A container cluster's release images | The release's publisher registries | The cluster's [registry policy](api/openshift-clusters.md#registry-policy) |
+| A storage cluster's images and packages | The distribution's vendor origins | The Entitlement's registry namespace and the cluster's package repository ([CephCluster](api/ceph.md#cephcluster)) |
+
+Time and name service are no acquisition and follow the same rule through
+their own selections: a managed resolver forwards only to its declared
+forwarders, and a Machine or cluster with no
+[NTP selection](api/infrastructure-services.md#dns-and-ntp-selection-lists)
+keeps its operating system's default sources.
+
+A context that declares one mirror for its public origins dials none of them
+and hands none to a Machine: every public-origin artifact comes from that
+mirror, vendor origins stay direct, and an artifact the mirror lacks refuses
+before any effect. The [controlled network design](deferred/controlled-network.md)
+holds the mirror host, its declaration and how it is filled.
+
+Not yet met: a target tool is acquired by a digest the build pins or the
+Environment declares, with no publisher metadata; tracked as
+[B1242](milestones/backlog.md#b1242).
+
+Not yet met: one Environment declaration routes a context's public-origin
+tools to its mirror and refuses an artifact the mirror lacks; tracked as
+[B1246](milestones/backlog.md#b1246).
+
+Not yet met: a managed service's and the emulated BMC's images come from the
+declared mirror, with its credential and trust; tracked as
+[B1247](milestones/backlog.md#b1247).
+
+Not yet met: a cluster's release images are mapped to the declared mirror;
+tracked as [B1248](milestones/backlog.md#b1248).
+
 ## Logs, output, and diagnostics
 
 Output and private logging follow [the CLI contract](cli.md). Logs live under

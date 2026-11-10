@@ -95,7 +95,8 @@ the exit status. A non-empty /etc/ld.so.preload is reported the same way, as
 
 Before it asks for confirmation, `controller install` runs `dnf install --assumeno` as root
 for the missing packages and shows dnf's output verbatim in its plan, beside
-how many wheels the runtime downloads and how many it already has. The preview
+how many wheels the runtime copies from the executable and how many its cache
+already holds. The preview
 changes no package, though dnf may refresh its metadata cache as
 `dnf-makecache` does. When the transaction also adds or updates core packages, such as
 glibc, the kernel, systemd, openssl-libs or the selected Python, the plan
@@ -111,7 +112,7 @@ names the host, the runtime and where each package came from, and
 ([results](../specs/controller.md#results-and-qualification)). A new
 Bootwright build with the same lock, and an operating-system upgrade that keeps
 the interpreter, need no setup at all; a build whose lock changed needs one
-setup, which downloads only the wheels it has not cached.
+setup, which copies from the executable only the wheels its cache lacks.
 
 A setup that installs host packages keeps what dnf printed in a
 [setup run](../specs/cli/output.md#setup-run-output),
@@ -176,16 +177,101 @@ authority must be in the host's system trust store, which every acquisition
 verifies against.
 
 - `api.github.com`: release metadata of helm, govc, virtctl and the OKD
-  clients.
+  clients and installer.
 - `cdn.dl.k8s.io`: where `dl.k8s.io` redirects a kubectl download.
 - `dl.k8s.io`: kubectl releases and their stable version.
 - `get.helm.sh`: helm releases.
-- `github.com`: the govc, virtctl and OKD client releases.
+- `github.com`: the govc, virtctl and OKD client and installer releases.
 - `mirror.openshift.com`: OpenShift client and installer releases.
 - `objects.githubusercontent.com`: where `github.com` redirects a release
   download.
 - `release-assets.githubusercontent.com`: where `github.com` redirects a
   release download.
+
+### On a controlled network
+
+A controlled network lets its machines reach the enterprise's own package
+repositories and the vendors of the platforms they run, and nothing else on
+the Internet. A machine an attacker reaches can then neither fetch code from a
+site anyone publishes on nor send data to one.
+[Acquisition origins](../specs/security.md#acquisition-origins) classes what a
+context acquires as host packages, vendor origins (Red Hat and IBM) and public
+origins. This is what each step reaches, and what moves a public origin to a
+registry or file server the enterprise runs:
+
+| Step | What connects | Reaches by default | Keeping it off a public origin |
+| --- | --- | --- | --- |
+| Host packages | Each host's dnf | The repositories dnf is configured with | Nothing to do: a Satellite or a local repository serves, as [setup](#what-setup-admits-and-installs) says |
+| OpenShift clients and installer | The controller | `mirror.openshift.com`, a vendor origin | Nothing to do |
+| Helm, which every OpenShift cluster selects, `virtctl`, `govc` and the OKD clients and installer | The controller | GitHub and `get.helm.sh` | Not possible yet: see the tools below |
+| A managed service's image | The Machine the service runs on | The registry its compiled default names | `spec.image.local` on the service |
+| The emulated BMC's image | The libvirt provider's host | `quay.io` | The host's own container configuration |
+| Installation media | The controller | The file or URL you name | `media add --from-file`, or `--from-url` from your own server |
+| An OpenShift release | The controller while it builds the image, then every node | `quay.io`, where the release payload is published | `spec.install.registries` on the cluster |
+| A cluster's operators | The cluster's nodes | The registries of the catalog each add-on binding names | Nothing to do for a Red Hat catalog; another's repositories, such as `icr.io` for IBM's Data Foundation, are mapped by the same `imageDigestSources` where the cluster pulls them by digest |
+| IBM Ceph images and packages | The controller, which resolves each image's digest, then each Ceph host | `cp.icr.io` and `public.dhe.ibm.com`, vendor origins | Nothing to do |
+
+**Tools.** `spec.downloads` on the Environment names a mirror for the
+OpenShift clients and installer, for `virtctl` and for Helm, and their bytes
+then come from it ([download mirrors](../specs/api/environment.md#download-mirrors)).
+The controller stage still reads each release's metadata and checksum from
+its publisher, so the [destinations above](#destinations-to-allow) stay
+necessary: a context with an OpenShift cluster reaches `api.github.com` and
+`get.helm.sh` for Helm even with `helmMirror` set, and `govc` has no mirror
+field.
+
+**Images.** Each compiled default is pinned by digest: `docker.io` for the
+name resolver, the proxy and the time server, `registry.access.redhat.com`
+for the artifact server and `quay.io` for the emulated BMC. The exact
+references are the `catalog.go` of each kind under
+`internal/infrastructureservices/` and `internal/substrate/libvirt/catalog.go`.
+`spec.image.local` on a service names the copy in your registry, pinned by
+digest ([image pins](../specs/api/infrastructure-services.md#management-and-placement)).
+Bootwright supplies no registry login for that pull and no trust anchor of
+its own: it is the placement host's own `podman pull`, so it succeeds where
+the registry admits anonymous pulls of those repositories, or that host's
+container configuration already holds a login, and where the host trusts the
+registry's certificate authority. The emulated BMC
+has no such field: its host pulls the pinned image only when it does not hold
+it, so a mirror for `quay.io` in that host's `registries.conf`, or the image
+loaded beforehand, serves it.
+
+**An OpenShift release.** `spec.install.registries.mirror` selects a declared
+Registry, and `imageDigestSources` maps the release's repositories to it; a
+`sourcePolicy` of `NeverContactSource` keeps a node from falling back to the
+source ([registry policy](../specs/api/openshift-clusters.md#registry-policy)).
+The Registry's credential joins the install pull secret, and its trust bundle
+is one the cluster selects
+([installation features](../specs/openshift-clusters.md#installation-features)).
+You fill that registry, for example with the release's own
+`oc adm release mirror`, and map every repository the release names: a node
+fetches a component whose repository is not mapped from its source. The live
+acceptance of this route is still owed
+([B724](../specs/milestones/m3.md#b724)).
+
+**Time and names.** A managed DNSServer forwards only to its declared
+`forwarders`, and a managed NTPServer follows only its declared
+`upstreamSources`. A Machine or cluster with no NTP selection keeps its
+operating system's default time sources, a public pool on RHEL and RHCOS
+([DNS and NTP selections](../specs/api/infrastructure-services.md#dns-and-ntp-selection-lists)).
+A Machine Bootwright installs is installed with its selected NTPServers as
+its time sources. A cluster's nodes take theirs as additional sources, so
+their default pool stays configured unless the cluster's own configuration
+replaces it.
+
+**The firewall.** Bootwright filters no destination. Apart from a managed
+libvirt Network declared `forward: none`, which gives its guests no outbound
+route at all, the network's own firewall or proxy holds each machine to its
+package repositories, the hosts its vendor documents for the product and your
+mirror. For OpenShift that vendor list
+names `quay.io` and its content hosts for the release payload; an
+installation from a mirrored release under `NeverContactSource` needs none of
+them.
+
+One declaration that routes every public origin to a mirror host Bootwright
+builds and fills, tools pinned by the build and a software bill of materials
+are designed in [controlled network supply](../specs/deferred/controlled-network.md)
+and parked under [D250](../specs/milestones/backlog.md#d250).
 
 ### The sudo rule
 
