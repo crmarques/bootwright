@@ -80,6 +80,7 @@ func TestAConflictRemedyNamesTheFieldThatChoosesTheKey(t *testing.T) {
 		{"proxy", "Proxy/b", "run bootwright destroy --context alpha first, or change spec.bindAddress or spec.port on Proxy/b", true},
 		{"dns", "DNSServer/b", "run bootwright destroy --context alpha first, or change spec.bindAddress or spec.port on DNSServer/b", true},
 		{"ntp", "NTPServer/b", "run bootwright destroy --context alpha first, or change spec.bindAddress or spec.port on NTPServer/b", true},
+		{"registry", "Registry/b", "run bootwright destroy --context alpha first, or change spec.bindAddress or spec.port on Registry/b", true},
 		{"artifact-server", "ArtifactServer/b", "run bootwright destroy --context alpha first, or change spec.bindAddress or a spec.listeners[].port on ArtifactServer/b", true},
 		{"os-install", "Machine/b", "run bootwright destroy --context alpha first", true},
 		{"substrate-physical", "Machine/b", "run bootwright destroy --context alpha first", true},

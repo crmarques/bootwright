@@ -1,7 +1,7 @@
 package managedservice
 
 // RequestVersion is the one frozen request shape every managed network service writes and reads.
-const RequestVersion = "managed-service-v3"
+const RequestVersion = "managed-service-v4"
 
 // Variable names the one role's request, digest and material variables.
 const Variable = "bootwright_managed_service"
@@ -19,6 +19,11 @@ type Egress struct {
 	HTTPProxy  string   `json:"httpProxy,omitempty"`
 	HTTPSProxy string   `json:"httpsProxy,omitempty"`
 	NoProxy    []string `json:"noProxy"`
+}
+
+type TLS struct {
+	MinVersion string `json:"minVersion"`
+	Secret     string `json:"secret"`
 }
 
 // Endpoint is one named address a consumer selects this service through.

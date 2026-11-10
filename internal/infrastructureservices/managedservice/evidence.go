@@ -1,6 +1,7 @@
 package managedservice
 
 import (
+	"errors"
 	"slices"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -11,10 +12,15 @@ const maxEvidenceBytes = 64 << 10
 // Answer is what one listener proved when it was probed. Its meaning belongs
 // to the kind: an HTTP status line, a resolved address, or a time reply.
 type Answer struct {
-	Address string `json:"address"`
-	Answer  string `json:"answer"`
-	Port    int    `json:"port"`
+	Address     string `json:"address"`
+	Answer      string `json:"answer"`
+	Fingerprint string `json:"fingerprint,omitempty"`
+	Port        int    `json:"port"`
 }
+
+var certificateMismatch = errors.New("managed service certificate mismatch")
+
+const anyCertificate = "*"
 
 // Evidence is the bounded result an adapter returns for one managed service.
 // It never carries secret material, a material digest, or adapter prose.
@@ -39,7 +45,7 @@ func DecodeEvidence(data []byte) (Evidence, error) {
 // owned root present, and every probe target answering. A daemon keeps what it
 // read at its start, so one started before a file was published runs a
 // configuration the frozen request no longer describes.
-func ValidatePresence(data []byte, request Request, digest string) error {
+func ValidatePresence(data []byte, request Request, digest, fingerprint string) error {
 	evidence, err := DecodeEvidence(data)
 	if err != nil {
 		return err
@@ -68,6 +74,13 @@ func ValidatePresence(data []byte, request Request, digest string) error {
 		if answer.Port != request.Port || answer.Answer == "" {
 			return Refusal("lifecycle.state", "a managed service listener did not answer its declared socket", "")
 		}
+		if request.TLS != nil && fingerprint != anyCertificate && (fingerprint == "" || answer.Fingerprint != fingerprint) {
+			return errors.Join(certificateMismatch, Refusal("lifecycle.state", "the managed service presented a different certificate than the operation bound",
+				"restore the certificate of Secret "+request.TLS.Secret+" this operation bound, or destroy this apply and apply again with the new one"))
+		}
+		if request.TLS == nil && answer.Fingerprint != "" {
+			return Refusal("lifecycle.state", "the managed service evidence names a certificate its request serves none of", "")
+		}
 		answered = append(answered, answer.Address)
 	}
 	slices.Sort(answered)
@@ -89,7 +102,7 @@ func ValidatePresence(data []byte, request Request, digest string) error {
 // role that never compared it reports, is read the same way rather than as a
 // contradiction. A partial realization is converged by repeating the
 // operation, so it leaves the block failed rather than unproved.
-func ValidatePartial(data []byte, request Request, digest string) error {
+func ValidatePartial(data []byte, request Request, digest, fingerprint string) error {
 	evidence, err := DecodeEvidence(data)
 	if err != nil {
 		return err
@@ -106,7 +119,7 @@ func ValidatePartial(data []byte, request Request, digest string) error {
 	if evidence.Unit == "" && evidence.Container == "" && !evidence.ContentRoot {
 		return Refusal("lifecycle.state", "the managed service evidence reports nothing this context owns", "")
 	}
-	if ValidatePresence(data, request, digest) == nil {
+	if ValidatePresence(data, request, digest, fingerprint) == nil {
 		return Refusal("lifecycle.state", "the managed service evidence proves it complete, not partial", "")
 	}
 	return nil

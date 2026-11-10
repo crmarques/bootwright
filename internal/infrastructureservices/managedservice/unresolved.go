@@ -21,7 +21,7 @@ func (c Capability) Unresolved(verb reconciliation.Verb, block reconciliation.Bl
 	if err != nil || observed.Request != block.RequestDigest {
 		return lifecycle.Unresolved{}, false
 	}
-	effect, refused := serviceEffect(verb, evidence, request, block.RequestDigest)
+	effect, refused := serviceEffect(verb, evidence, request, block.RequestDigest, anyCertificate)
 	if effect != reconciliation.EffectUnknown {
 		return lifecycle.Unresolved{}, false
 	}

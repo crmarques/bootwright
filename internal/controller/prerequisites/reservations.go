@@ -190,6 +190,7 @@ var conflictKinds = map[string]api.Kind{
 	"proxy":                 api.Proxy,
 	"dns":                   api.DNSServer,
 	"ntp":                   api.NTPServer,
+	"registry":              api.Registry,
 	"artifact-server":       api.ArtifactServer,
 }
 
@@ -297,7 +298,7 @@ func describeKey(key string) string {
 func conflictField(wanted HostReservation, class string) string {
 	object := conflictObject(wanted)
 	switch {
-	case class == "socket" && (wanted.Kind == "proxy" || wanted.Kind == "dns" || wanted.Kind == "ntp"):
+	case class == "socket" && (wanted.Kind == "proxy" || wanted.Kind == "dns" || wanted.Kind == "ntp" || wanted.Kind == "registry"):
 		return ", or change spec.bindAddress or spec.port on " + object
 	case class == "socket" && wanted.Kind == "artifact-server":
 		return ", or change spec.bindAddress or a spec.listeners[].port on " + object

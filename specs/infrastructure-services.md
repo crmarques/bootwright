@@ -40,9 +40,9 @@ or creates a log.
 Each row is one refusal of a managed service capability.
 `TestArtifactServerRefusalTableMatchesUnsupported` holds the artifact server's
 `Unsupported` to every row except the endpoint-address bound, which only a
-Proxy, DNSServer or NTPServer declares, and
-`TestManagedServiceRefusalTableMatchesUnsupported` holds the Proxy, DNSServer
-and NTPServer capabilities' to every row except the artifact socket bound,
+Proxy, DNSServer, NTPServer or Registry declares, and
+`TestManagedServiceRefusalTableMatchesUnsupported` holds the Proxy, DNSServer,
+NTPServer and Registry capabilities' to every row except the artifact socket bound,
 which only an ArtifactServer declares. Reason and
 remedy are the diagnostic's message and remediation (`lifecycle.unsupported` on
 the refused service), in which `<server>` is the refused service, `<machine>`
@@ -58,7 +58,7 @@ rows never refuse a service placed there.
 | Operator SSH identity | `spec.access.ssh.auth.operatorIdentity` on a placement `Machine` other than the controller, the default of a provided Machine without authored access included | `this executable reaches a placement host other than the controller only with a bound SSH private key, and <machine>, where <server> runs, uses spec.access.ssh.auth.operatorIdentity` | `author spec.access.ssh.auth.privateKeyRef and spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
 | Password SSH authentication | `spec.access.ssh.auth.passwordRef` on a placement `Machine` other than the controller | `this executable reaches a placement host other than the controller only with a bound SSH private key, and <machine>, where <server> runs, uses spec.access.ssh.auth.passwordRef` | `author spec.access.ssh.auth.privateKeyRef and spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
 | No bound host key | `spec.access.ssh` without `knownHostsRef` on a placement `Machine` other than the controller | `this executable connects to a placement host other than the controller only against a bound SSH host key, and <machine>, where <server> runs, declares no spec.access.ssh.knownHostsRef` | `author spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
-| Endpoint addresses beyond the host reservation | a managed `Proxy`, `DNSServer` or `NTPServer` bound to a wildcard with more than 61 distinct endpoint addresses | `a managed service bound to a wildcard claims one host reservation key for each distinct endpoint address beside its unit, its content root and its bind socket, within the 64 keys one reservation holds, so it declares at most 61 distinct endpoint addresses` | `declare at most 61 distinct endpoint addresses in spec.endpoints of <server>` |
+| Endpoint addresses beyond the host reservation | a managed `Proxy`, `DNSServer`, `NTPServer` or `Registry` bound to a wildcard with more than 61 distinct endpoint addresses | `a managed service bound to a wildcard claims one host reservation key for each distinct endpoint address beside its unit, its content root and its bind socket, within the 64 keys one reservation holds, so it declares at most 61 distinct endpoint addresses` | `declare at most 61 distinct endpoint addresses in spec.endpoints of <server>` |
 | Artifact sockets beyond the host reservation | a managed `ArtifactServer` whose listeners and, under a wildcard `bindAddress`, distinct endpoint addresses of each listener claim more than 62 sockets | `an artifact server claims one host reservation key for each listener and, under a wildcard bindAddress, for each distinct endpoint address of each listener, beside its unit and its content root, within the 64 keys one reservation holds, so its listeners and endpoints claim at most 62 sockets` | `declare fewer listeners in spec.listeners or fewer endpoints with distinct addresses in spec.endpoints of <server>, so they claim at most 62 sockets` |
 
 ## Placement arms and credentials
@@ -150,7 +150,7 @@ address and port are written, an IPv6 address bracketed, as
 One reservation holds at most 64 keys ([controller
 record](contexts/controller-record.md#bounds)), and a managed service's claim is
 its `unit:` key, its `path:` key and its distinct `socket:` keys, so it claims at
-most 62 sockets. A Proxy, DNSServer or NTPServer bound to a wildcard therefore
+most 62 sockets. A Proxy, DNSServer, NTPServer or Registry bound to a wildcard therefore
 declares at most 61 distinct endpoint addresses beside its bind socket, and an
 ArtifactServer's listeners and, under a wildcard bind, the distinct endpoint
 addresses of each listener claim at most 62 sockets. Admission refuses more with
@@ -606,21 +606,24 @@ specified before it is built.
 
 ## Managed network services
 
-`Proxy`, `DNSServer` and `NTPServer` share one capability: each runs one
-container under the host service manager with host networking, serving one
-declared port on its declared bind address. They differ only in the daemon they
-run, the configuration derived for it, and the answer readiness proves. Their
-plan blocks belong to the
+`Proxy`, `DNSServer`, `NTPServer` and a managed `Registry` share one
+capability: each runs one container under the host service manager with host
+networking, serving one declared port on its declared bind address. They differ
+only in the daemon they run, the configuration derived for it, the material it
+serves from and the answer readiness proves; the [managed registry](#managed-registry)
+states what the Registry adds. Their plan blocks belong to the
 [`infrastructure-services` stage](state-reconciliation.md#stages-and-the-pause-boundary).
 
-One role realizes all three kinds, keyed by the request's frozen
+One role realizes all four kinds, keyed by the request's frozen
 implementation identity: it selects the daemon configuration and unit
-templates for that implementation from a fixed table, and every task is shared.
-Validation admits one implementation per kind, so each kind selects exactly one
-row, and the selection plans only the objects whose `spec.implementation`
-matches its definition. The three kinds freeze one request version, so
-a request of another version refuses by naming its version, and its remedy is
-to destroy the context with the build that applied it.
+templates, and the private directories its content root holds, for that
+implementation from a fixed table, and every task is shared. Validation admits
+one implementation per kind, so each kind selects exactly one row, and the
+selection plans only the objects whose `spec.implementation` matches its
+definition. The four kinds freeze one request version,
+`managedservice.RequestVersion`, so a request of another version refuses by
+naming its version, and its remedy is to destroy the context with the build
+that applied it.
 
 **Implementation.** One container image per kind, selected, pinned and acquired
 exactly as the [artifact server's](#managed-artifact-serving) is. The unit
@@ -779,12 +782,133 @@ with its cause as [an unproved listener](#managed-artifact-serving) is.
 [artifact server's](#managed-artifact-serving) rules above, and live state
 matches the frozen request in full only while the running container started no
 earlier than the last modification of every file it runs from: its daemon
-configuration and its unit definition. A service that started before one of
+configuration and its unit definition, and a registry's certificate, key and
+password file. A service that started before one of
 them was last published, or whose start or files cannot be read, runs what the
 frozen request no longer describes, so its presence proves no postcondition: an
 apply does not complete on it, and an observation reads it as a positive partial
 realization, which the next attempt converges by restarting it. A removal's
 resolution does not read the start.
+
+## Managed registry
+
+A managed `Registry` with `implementation: distribution` is the fourth kind of
+the [shared capability](#managed-network-services), implementation
+`registry-distribution-v1`, block `registry-<name>`. Its declaration is the
+[managed registry API](api/infrastructure-services.md#managed-registry).
+
+**Implementation.** [CNCF Distribution](https://distribution.github.io/distribution/)
+3.1.2, the `registry` image pinned by its multi-architecture index digest as the
+compiled default, selected, pinned and acquired as every managed service's image
+is, through `bootwright.core.image_acquire` and, under a declared
+[image mirror](api/environment.md#image-mirror), from that mirror. Distribution
+serves TLS and password-file authentication natively and accepts the deep
+repository paths of the mirror layout, `<registry>/<origin host>/<repository>`.
+The unit runs `/bin/registry serve` on the derived configuration, never the
+image's entrypoint or its development configuration. That configuration serves
+HTTPS alone at the bind address and port, with `tls.minVersion` as its protocol
+floor; it authenticates every request against the password file; it stores
+pushed content under the content root; and it declares no proxy section, so it
+never pulls through to an origin, no deletion, and no debug or metrics
+listener. No configuration of any Machine names it an insecure registry.
+
+**Owned host state.** Beside the configuration and unit, the content root holds
+three `0700` directories: `tls`, with the serving certificate and private key;
+`auth`, with the password file; and `data`, the registry's storage, mounted at
+`/var/lib/registry`. Each file is `0600` and is written as the
+[artifact server's](#managed-artifact-serving) private files are, atomically
+from a private sibling, never through a link. On a host that enforces SELinux
+the unit pins the container's level, `s0:c<a>,c<b>` with two categories
+derived from the unit name, the apply labels `data` `container_file_t` at that
+level, and `data` is mounted
+without relabeling, so a start never walks a store that may be large and what
+one start wrote the next reads. When any entry of `data` carries another label,
+as after a forced relabel of the host, the apply relabels the whole store,
+recursively, and otherwise never walks it
+(`test_the_storage_is_relabeled_whole_only_when_an_entry_carries_another_label`).
+Two registries on one host share a level only when their unit names draw the
+same two of 1024 categories, about n²/1,000,000 for n registries. The small
+`tls`, `auth` and configuration mounts are relabeled at each start as the other
+services' are.
+
+**Retention.** What clients push is kept across every apply and observation,
+because nothing but the destroy removes the content root, as an
+ArtifactServer's `persistent` retention keeps its published content. The
+destroy removes the content root with everything stored in it; a later apply
+starts an empty registry, and its consumers fill it again.
+
+**TLS.** The serving certificate is proved exactly as an
+[ArtifactServer's](#managed-artifact-serving) HTTPS one, by the same checks
+before registration and again before any connection or installation, against
+every endpoint address, and refuses with the same `secret.part` and
+`secret.store` diagnostics; admission refuses a generated certificate that does
+not name an endpoint's address
+(`TestARegistryProvesItsBoundCertificateAndCredentialBeforeRegistration`,
+`TestAManagedRegistryServesHTTPSFromItsCertificateToItsCredential`).
+
+**Credential.** The `usernamePassword` Secret `credentialsRef` names is proved
+before registration and again by an apply before any effect: a printable ASCII
+username with no colon, which a password file line carries, and a
+password of 1 to 72 bytes with no NUL, which bcrypt reads whole. A failure
+refuses as `secret.part` on `Secret/<name>`, naming the condition, never the
+material, with the remedy `secret set` with `--context`. The password file holds
+one `<username>:<hash>` line, the bcrypt (`$2a$`, cost 12) of the password,
+derived on the controller in Go (`material.BcryptPasswordFile`), with no
+cryptography on the placement host, so
+a FIPS-mode host, whose crypt library offers no bcrypt, serves it too. Its salt
+is random, as bcrypt's own, so nothing in the file can be computed from the
+password and the registry's name, and two contexts with one name and password
+hold different files (`TestThePasswordFileIsARandomlySaltedBcryptLine`); a
+credential no line can carry is refused there too
+(`TestThePasswordFileRefusesACredentialNoLineCanCarry`). Because every
+derivation differs, the running registry is its own verifier: before
+publishing, the apply asks it for `/v2/` with the bound credential, after
+comparing its certificate, and keeps the published file when every probe
+target answers, so a replay publishes nothing and restarts nothing; otherwise,
+a registry not running or a rotated credential, it publishes the file this
+attempt was lent
+(`test_the_password_file_is_published_only_when_the_running_registry_refuses_the_credential`).
+
+**Material.** The certificate, the key, the credential and the derived password
+file reach the host only as [lent material](security.md#sensitive-material)
+inside module arguments, under `no_log`: an apply is lent all five, an
+observation only the credential its readiness authenticates with, and a removal
+none. The frozen request names both Secrets and carries no part of them, and no
+password-derived value reaches a log, the request or the evidence
+(`TestARegistryFreezesItsServingAndClientSecretsAndLendsEachOperationItsParts`).
+Readiness takes the credential as one opaque base64 token, so the masking of a
+hidden argument never alters the evidence it returns
+(`test_a_registry_credential_never_masks_its_evidence`), and its task's output
+is hidden only for a service with a credential. The registry's access log, in
+its unit's journal, names the authenticated username and never the password.
+
+**Readiness.** Each probe target, as the other kinds' are chosen, answers an
+authenticated `GET /v2/` over TLS with status `200` and the
+`Docker-Distribution-Api-Version: registry/2.0` header, presenting a leaf
+certificate whose SHA-256 equals the bound certificate's; the evidence names
+that fingerprint. The probe receives the bound fingerprint and compares the
+presented certificate before it sends anything, so a listener presenting
+another one, such as a host that took a moved address, receives no credential:
+it answers `certificate-mismatch` with what it presented, which fails the
+attempt rather than leaving it unproved, and a probe that holds no bound
+certificate sends nothing
+(`test_a_listener_presenting_another_certificate_receives_no_credential`). Any
+status but `200`, a `401` included, is a definite listener failure that the
+probe never repeats (`test_a_refused_credential_is_definite_and_never_retried`),
+and a socket that never answers in the bounded window is unknown
+(`TestARegistryIsPresentOnlyWhenItPresentsTheBoundCertificate`). An observation
+without bound material proves no presence, so it reads a running registry as a
+partial realization the next apply converges, and an unresolved observation is
+explained without comparing a certificate.
+
+**Consumers.** The cluster
+[registry mirror](openshift-clusters.md#installation-features) and the
+Environment [image mirror](api/environment.md#image-mirror) each refuse a
+managed Registry.
+
+Not yet met: a cluster or the Environment may select a managed Registry as its
+mirror, and Bootwright fills it; tracked as
+[B1249](milestones/backlog.md#b1249).
 
 ## Adapter boundary
 

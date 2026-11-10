@@ -344,7 +344,7 @@ func TestPresenceRequiresEveryDeclaredAnswer(t *testing.T) {
 		StartedAfterFiles: true,
 		Unit:              "active",
 	}
-	if err := ValidatePresence(encode(t, complete), request, digest); err != nil {
+	if err := ValidatePresence(encode(t, complete), request, digest, ""); err != nil {
 		t.Fatal(err)
 	}
 	for name, mutate := range map[string]func(*Evidence){
@@ -363,7 +363,7 @@ func TestPresenceRequiresEveryDeclaredAnswer(t *testing.T) {
 			broken := complete
 			broken.Answers = slices.Clone(complete.Answers)
 			mutate(&broken)
-			if err := ValidatePresence(encode(t, broken), request, digest); err == nil {
+			if err := ValidatePresence(encode(t, broken), request, digest, ""); err == nil {
 				t.Fatal("incomplete evidence proved presence")
 			}
 		})
@@ -438,7 +438,7 @@ func TestPartialRequiresSomethingThisContextOwns(t *testing.T) {
 		"unit and root, no container":       {Answers: []Answer{}, ContentRoot: true, Postcondition: true, Request: digest, Unit: "active"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if err := ValidatePartial(encode(t, evidence), request, digest); err != nil {
+			if err := ValidatePartial(encode(t, evidence), request, digest, ""); err != nil {
 				t.Fatalf("partial evidence was refused: %v", err)
 			}
 		})
@@ -451,7 +451,7 @@ func TestPartialRequiresSomethingThisContextOwns(t *testing.T) {
 		"a postcondition unreported": {Answers: []Answer{}, Container: request.Image, ContentRoot: true, Postcondition: true, Request: digest, Unit: "inactive"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if err := ValidatePartial(encode(t, evidence), request, digest); err == nil {
+			if err := ValidatePartial(encode(t, evidence), request, digest, ""); err == nil {
 				t.Fatal("evidence that proves no partial realization was accepted")
 			}
 		})
@@ -555,7 +555,7 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 		Answers:   []Answer{{Address: "192.0.2.1", Answer: "HTTP/1.1 400 Bad Request", Port: request.Port}},
 		Container: request.Image, ContentRoot: true, Postcondition: true, Request: digest, StartedAfterFiles: true, Unit: "active",
 	}
-	if err := ValidatePresence(encode(t, present), request, digest); err != nil {
+	if err := ValidatePresence(encode(t, present), request, digest, ""); err != nil {
 		t.Fatalf("the presence fixture no longer proves presence: %v", err)
 	}
 	silent := present

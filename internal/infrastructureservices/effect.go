@@ -10,7 +10,7 @@ func EffectBearing(object api.Object) (string, bool) {
 }
 
 func UnclaimedRemedy(object api.Object) string {
-	if object.Kind() != api.Registry && object.Kind() != api.LoadBalancer {
+	if object.Kind() != api.LoadBalancer {
 		return ""
 	}
 	return "declare spec.management: external on " + object.Identity() + " to use a " + string(object.Kind()) + " the operator runs, or remove it from the selected Environment"

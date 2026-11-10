@@ -29,9 +29,9 @@ func Normalize(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 		value = value.Default("retention", api.StringValue("persistent"))
 		listener := api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue("https")}, api.FieldValue{Name: "protocol", Value: api.StringValue("https")}, api.FieldValue{Name: "port", Value: api.IntegerValue("8443")})
 		value = value.Default("listeners", api.ListValue(listener))
-		if value.Has("tls") {
-			value = value.With("tls", value.Get("tls").Default("minVersion", api.StringValue("TLSv1.2")))
-		}
+	}
+	if (o.Kind() == api.ArtifactServer || o.Kind() == api.Registry) && value.Has("tls") {
+		value = value.With("tls", value.Get("tls").Default("minVersion", api.StringValue("TLSv1.2")))
 	}
 	return o.WithSpec(value), nil
 }
@@ -128,13 +128,23 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 		issues = add(issues, validatePlacement(o.Kind(), value, machine)...)
 		issues = add(issues, validateReservationBound(o, machine)...)
 	}
-	if o.Kind() != api.ArtifactServer {
-		return issues
+	if o.Kind() == api.Registry {
+		issues = add(issues, validateRegistryCredential(value, c)...)
 	}
-	if placed {
-		issues = add(issues, validateCertificateCoverage(value, machine, c)...)
+	if placed && (o.Kind() == api.ArtifactServer || o.Kind() == api.Registry) {
+		issues = add(issues, validateCertificateCoverage(o.Kind(), value, machine, c)...)
 	}
 	return issues
+}
+
+func validateRegistryCredential(value api.Value, c api.Catalog) []api.Issue {
+	name := value.Get("credentialsRef").Text()
+	secret, found := c.Find(api.Secret, name)
+	if !found || secret.Spec().Get("type").Text() != "dockerConfigJson" {
+		return nil
+	}
+	return []api.Issue{issue("$.spec.credentialsRef", "a managed Registry authenticates its clients with a username and password, and Secret/"+name+" is a dockerConfigJson",
+		"set spec.credentialsRef to a usernamePassword Secret")}
 }
 
 // validateCertificateCoverage holds a generated serving certificate to every
@@ -146,7 +156,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 // subject alternative name, and a DNS name holds no wildcard, so neither
 // covers anything else. Admission reads no material, so a contextStore
 // certificate is proved when a fresh apply binds it, before registration.
-func validateCertificateCoverage(value api.Value, machine api.Object, c api.Catalog) []api.Issue {
+func validateCertificateCoverage(kind api.Kind, value api.Value, machine api.Object, c api.Catalog) []api.Issue {
 	name := value.Get("tls", "secretRef").Text()
 	secret, found := c.Find(api.Secret, name)
 	if !found || secret.Spec().Get("type").Text() != "tlsCertificate" {
@@ -159,7 +169,7 @@ func validateCertificateCoverage(value api.Value, machine api.Object, c api.Cata
 	issues := []api.Issue{}
 	for index, endpoint := range value.Get("endpoints").Items() {
 		reference := endpoint.Get("addressRef").Text()
-		if listenerProtocol(value, endpoint.Get("listenerRef").Text()) != "https" || !hasNamed(machine.Spec().Get("network", "addresses"), reference) {
+		if !servesHTTPS(kind, value, endpoint) || !hasNamed(machine.Spec().Get("network", "addresses"), reference) {
 			continue
 		}
 		address := machineAddress(machine, reference)
@@ -180,15 +190,15 @@ func validateCertificateCoverage(value api.Value, machine api.Object, c api.Cata
 
 func CertificateNames(c api.Catalog, secret string) []string {
 	var names []string
-	for _, server := range c.OfKind(api.ArtifactServer) {
+	for _, server := range append(c.OfKind(api.ArtifactServer), c.OfKind(api.Registry)...) {
 		value := server.Spec()
 		machine, placed := c.Find(api.Machine, value.Get("machineRef").Text())
-		if !placed || value.Get("tls", "secretRef").Text() != secret {
+		if !placed || value.Get("management").Text() != "managed" || value.Get("tls", "secretRef").Text() != secret {
 			continue
 		}
 		serving := false
 		for _, endpoint := range value.Get("endpoints").Items() {
-			if listenerProtocol(value, endpoint.Get("listenerRef").Text()) == "https" {
+			if servesHTTPS(server.Kind(), value, endpoint) {
 				names = append(names, machineAddress(machine, endpoint.Get("addressRef").Text()))
 				serving = true
 			}
@@ -198,6 +208,10 @@ func CertificateNames(c api.Catalog, secret string) []string {
 		}
 	}
 	return names
+}
+
+func servesHTTPS(kind api.Kind, value api.Value, endpoint api.Value) bool {
+	return kind == api.Registry || listenerProtocol(value, endpoint.Get("listenerRef").Text()) == "https"
 }
 
 // listenerProtocol is the protocol of the one listener named so, or nothing.
@@ -332,6 +346,10 @@ func validateIntrinsic(o api.Object, partial bool) []api.Issue {
 		if o.Kind() != api.ArtifactServer {
 			require("implementation")
 		}
+		if o.Kind() == api.Registry {
+			require("tls")
+			require("credentialsRef")
+		}
 		forbid("connection", "address", "url")
 	case "external":
 		forbid("machineRef", "implementation", "image", "bindAddress", "port", "listeners", "retention", "tls", "forwarders", "upstreamSources", "allowedDestinations")
@@ -416,7 +434,12 @@ func validateAllowedDestinations(value api.Value) []api.Issue {
 }
 
 func requirement(kind api.Kind, field string) string {
-	if field != "implementation" {
+	switch {
+	case kind == api.Registry && field == "tls":
+		return "set spec.tls.secretRef to a tlsCertificate Secret, because a managed Registry serves HTTPS alone"
+	case kind == api.Registry && field == "credentialsRef":
+		return "set spec.credentialsRef to a usernamePassword Secret, because a managed Registry authenticates every push and pull"
+	case field != "implementation":
 		return "set spec." + field
 	}
 	if implementation, ok := api.Schema(kind).Field(field); ok && len(implementation.Shape.Enums) == 1 {

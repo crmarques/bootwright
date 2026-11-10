@@ -12,7 +12,7 @@ func infrastructureServiceSchema(kind Kind) *Shape {
 	external := []string{}
 	fields = append(fields, field("image", record(field("local", image()), field("public", image()))))
 	managed = append(managed, "image")
-	implementation := map[Kind]string{Proxy: "squid", DNSServer: "dnsmasq", NTPServer: "chrony", Registry: "mirror-registry", LoadBalancer: "haproxy"}[kind]
+	implementation := map[Kind]string{Proxy: "squid", DNSServer: "dnsmasq", NTPServer: "chrony", Registry: "distribution", LoadBalancer: "haproxy"}[kind]
 	if implementation != "" {
 		fields = append(fields, field("implementation", enumeration(implementation)))
 		managed = append(managed, "implementation")
@@ -44,7 +44,9 @@ func infrastructureServiceSchema(kind Kind) *Shape {
 		fields = append(fields, field("retention", enumeration("persistent")), field("tls", record(required("secretRef", secret("tlsCertificate")), field("minVersion", enumeration("TLSv1.2", "TLSv1.3")))), field("listeners", nonemptyArray(listener)), field("endpoints", endpoint))
 		managed = append(managed, "retention", "tls", "listeners")
 	case Registry:
+		fields = append(fields, field("tls", record(required("secretRef", secret("tlsCertificate")), field("minVersion", enumeration("TLSv1.2", "TLSv1.3")))))
 		fields = append(fields, field("url", lexical("registry")), field("credentialsRef", secret("usernamePassword", "dockerConfigJson")), field("trustBundleRef", secret("caBundle")))
+		managed = append(managed, "tls")
 		external = append(external, "url")
 	case LoadBalancer:
 		fields = append(fields, required("bindAddresses", nonemptyArray(array(record(required("address", ip()), field("name", nonempty()))))))

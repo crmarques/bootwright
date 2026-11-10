@@ -375,6 +375,7 @@ the date below, before any role was written:
 | `Proxy` | `docker.io/ubuntu/squid` (24.04) | 2026-09-13 |
 | `DNSServer` | `docker.io/4km3/dnsmasq` | 2026-09-13 |
 | `NTPServer` | `docker.io/dockurr/chrony` (chrony 4.9) | 2026-09-13 |
+| `Registry` | `docker.io/library/registry` (Distribution 3.1.2) | not yet; resolved 2026-11-10, its live qualification is [B1250](../specs/milestones/backlog.md#b1250)'s |
 
 Their runtime constraints are recorded in
 [artifact-server knowledge](../.agents/knowledge/artifact-server-nginx-runtime.md)

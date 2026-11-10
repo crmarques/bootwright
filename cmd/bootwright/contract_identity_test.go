@@ -25,6 +25,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/registry"
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
@@ -153,7 +154,7 @@ func contractRecipes() map[string]digestRecipe {
 			partPin(ceph.PhysicalRetirementImplementation)),
 		ceph.ConsumerImplementation: digestOf(partImplementation(ceph.ConsumerImplementation), partRequest(ceph.ConsumerVersion), partVersion(ceph.ConsumerEvidenceVersion)),
 	}
-	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsServerDefinition(), ntpserver.Definition()} {
+	for _, definition := range managedServiceDefinitions() {
 		recipes[definition.Implementation] = digestOf(partDomain("bootwright.infrastructureservices.managed-service-v1"), partImplementation(definition.Implementation),
 			partRequest(definition.Version), partPin(definition.Image), partPin(managedservice.HostedRoot), partPin(managedservice.ServicesArea), partPin(managedservice.UnitPrefix))
 	}
@@ -203,7 +204,7 @@ func requestIdentities() map[string][]string {
 			"secondary.poolObject", "secondary.scope", "images[].name"},
 		ceph.ConsumerImplementation: {"cluster", "name", "scope", "principals"},
 	}
-	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsServerDefinition(), ntpserver.Definition()} {
+	for _, definition := range managedServiceDefinitions() {
 		identities[definition.Implementation] = service
 	}
 	return identities
@@ -241,7 +242,7 @@ func TestCheckCommitsContractPathsCoverEveryImplementation(t *testing.T) {
 			required[strings.TrimPrefix(defined.PkgPath(), module)+"/"] = version.implementation
 		}
 	}
-	for _, definition := range []any{proxy.Definition, dnsserver.Definition, ntpserver.Definition, power.ContentDigest, power.ReadContentDigest} {
+	for _, definition := range []any{proxy.Definition, dnsserver.Definition, ntpserver.Definition, registry.Definition, power.ContentDigest, power.ReadContentDigest} {
 		name := runtime.FuncForPC(reflect.ValueOf(definition).Pointer()).Name()
 		required[strings.TrimPrefix(name[:strings.LastIndex(name, ".")], module)+"/"] = name
 	}

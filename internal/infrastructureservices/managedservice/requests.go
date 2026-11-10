@@ -28,6 +28,7 @@ type Request struct {
 	BindAddress    string            `json:"bindAddress"`
 	Clients        []string          `json:"clients,omitempty"`
 	ContentRoot    string            `json:"contentRoot"`
+	CredentialsRef string            `json:"credentialsRef,omitempty"`
 	Destinations   []Destination     `json:"destinations,omitempty"`
 	Egress         Egress            `json:"egress"`
 	Endpoints      []Endpoint        `json:"endpoints"`
@@ -42,6 +43,7 @@ type Request struct {
 	Port           int               `json:"port"`
 	Records        []Record          `json:"records,omitempty"`
 	Sources        []string          `json:"sources,omitempty"`
+	TLS            *TLS              `json:"tls,omitempty"`
 	Unit           string            `json:"unit"`
 	Version        string            `json:"version"`
 }
@@ -54,6 +56,27 @@ func (r Request) Canonical() ([]byte, error) {
 
 func DecodeRequest(data []byte, version string) (Request, error) {
 	return reconciliation.ThawVersion[Request](data, "managed service", version)
+}
+
+func (r Request) SecretReferences() []string {
+	references := append(r.Placement.SecretReferences(), r.ImageSource.SecretReferences()...)
+	if r.TLS != nil {
+		references = append(references, r.TLS.Secret)
+	}
+	if r.CredentialsRef != "" {
+		references = append(references, r.CredentialsRef)
+	}
+	slices.Sort(references)
+	return slices.Compact(references)
+}
+
+func (r Request) ServedAddresses() []string {
+	addresses := make([]string, 0, len(r.Endpoints))
+	for _, endpoint := range r.Endpoints {
+		addresses = append(addresses, endpoint.Address)
+	}
+	slices.Sort(addresses)
+	return slices.Compact(addresses)
 }
 
 // ReservationKeys are the exclusive host resources this request claims.

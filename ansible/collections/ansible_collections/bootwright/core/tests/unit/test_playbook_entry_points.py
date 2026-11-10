@@ -57,7 +57,7 @@ LATER_PLAY_TASK_FILES = {
 
 # Every playbook the collection ships. Finding fewer means the walk stopped
 # seeing them, which would pass these rules vacuously.
-PLAYBOOK_COUNT = 70
+PLAYBOOK_COUNT = 73
 
 # The version no role admits: each role admits exactly one request version,
 # its own (TestRoleVersionAssertionsMatchTheirArgumentSpecs).

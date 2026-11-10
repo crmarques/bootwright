@@ -50,12 +50,13 @@ def service(kind, slug, name, port, **fields):
         "endpoints": [{"address": "192.0.2.1:%d" % port, "name": name}],
         "identity": {"block": "service-" + name, "context": CONTEXT, "service": name},
         "image": "registry.example.test/%s@sha256:%s" % (slug, DIGEST),
-        "implementation": {"DNSServer": "dns-server-dnsmasq-v1", "NTPServer": "ntp-server-chrony-v1", "Proxy": "proxy-squid-v1"}[kind],
+        "implementation": {"DNSServer": "dns-server-dnsmasq-v1", "NTPServer": "ntp-server-chrony-v1", "Proxy": "proxy-squid-v1",
+                           "Registry": "registry-distribution-v1"}[kind],
         "kind": kind,
         "placement": LOCAL,
         "port": port,
         "unit": "bootwright-%s-%s-%s" % (CONTEXT, slug, name),
-        "version": "managed-service-v3",
+        "version": "managed-service-v4",
     }
     request.update(fields)
     return request
@@ -139,6 +140,10 @@ SCOPES = {
         "Proxy", "proxy-squid", "egress", 3128, clients=["192.0.2.0/24", "2001:db8::/64"])},
     ("infra_managed_service", "squid.container.j2"): {"bootwright_managed_service_request": service(
         "Proxy", "proxy-squid", "egress", 3128)},
+    ("infra_managed_service", "distribution.yml.j2"): {"bootwright_managed_service_request": service(
+        "Registry", "registry", "mirror", 5000, credentialsRef="mirror-push", tls={"minVersion": "TLSv1.3", "secret": "mirror-serving"})},
+    ("infra_managed_service", "distribution.container.j2"): {"bootwright_managed_service_request": service(
+        "Registry", "registry", "mirror", 5000, credentialsRef="mirror-push", tls={"minVersion": "TLSv1.2", "secret": "mirror-serving"})},
     ("substrate_libvirt_host", "network.xml.j2"): {
         "bootwright_substrate_host_request": HOST, "item": NETWORK,
         "substrate_libvirt_host_network_uuids": {NETWORK["name"]: "4c0a4300-aa43-458c-86d7-ac2256d1fc00"}},
@@ -267,7 +272,9 @@ def test_a_managed_service_implementation_selects_the_templates_its_daemon_write
                                        kind["configuration"])
     unit = render(MANAGED_SERVICE, kind["unit_template"], variables)
     volumes = [line[len("Volume="):].split(":", 1)[0] for line in unit.splitlines() if line.startswith("Volume=")]
-    assert volumes == [configuration], "the %s unit mounts %s, not the published %s" % (
+    root = variables["bootwright_managed_service_request"]["contentRoot"]
+    private = [root + "/" + name for name in kind.get("private_directories", [])]
+    assert volumes == [configuration] + private, "the %s unit mounts %s, not the published %s and its private directories" % (
         variables["bootwright_managed_service_request"]["kind"], volumes, configuration)
 
 

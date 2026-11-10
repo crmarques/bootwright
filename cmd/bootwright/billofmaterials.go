@@ -61,6 +61,7 @@ func pinnedImages() []pinnedImage {
 		{"DNSServer", dnsserver.Definition(nil).Image},
 		{"NTPServer", ntpserver.Definition().Image},
 		{"Proxy", proxy.Definition().Image},
+		{"Registry", registryDefinition().Image},
 		{"emulated BMC", libvirt.EmulatorImage()},
 	}
 }

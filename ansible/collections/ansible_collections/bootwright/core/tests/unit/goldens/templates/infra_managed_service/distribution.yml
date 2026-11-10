@@ -1,0 +1,20 @@
+version: 0.1
+log:
+  level: info
+  accesslog:
+    disabled: false
+storage:
+  filesystem:
+    rootdirectory: /var/lib/registry
+  delete:
+    enabled: false
+http:
+  addr: 192.0.2.1:5000
+  tls:
+    certificate: /etc/distribution/tls/tls.crt
+    key: /etc/distribution/tls/tls.key
+    minimumtls: tls1.3
+auth:
+  htpasswd:
+    realm: mirror
+    path: /etc/distribution/auth/htpasswd

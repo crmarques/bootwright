@@ -24,7 +24,7 @@ func validated(t *testing.T, service api.Object, catalog api.Catalog) []api.Issu
 }
 
 func TestAWildcardServiceDeclaresAtMostTheEndpointAddressesItsReservationHolds(t *testing.T) {
-	implementations := map[api.Kind]string{api.Proxy: "squid", api.DNSServer: "dnsmasq", api.NTPServer: "chrony"}
+	implementations := map[api.Kind]string{api.Proxy: "squid", api.DNSServer: "dnsmasq", api.NTPServer: "chrony", api.Registry: "distribution"}
 	for kind, implementation := range implementations {
 		endpoints := func(n, distinct int) api.Value {
 			items := make([]api.Value, n)
@@ -34,7 +34,11 @@ func TestAWildcardServiceDeclaresAtMostTheEndpointAddressesItsReservationHolds(t
 			return list(items...)
 		}
 		service := func(n, distinct int) api.Object {
-			return obj(kind, "service", m("management", "managed", "machineRef", "host", "implementation", implementation, "endpoints", endpoints(n, distinct)))
+			spec := m("management", "managed", "machineRef", "host", "implementation", implementation, "endpoints", endpoints(n, distinct))
+			if kind == api.Registry {
+				spec = spec.With("tls", m("secretRef", "serving")).With("credentialsRef", api.StringValue("push"))
+			}
+			return obj(kind, "service", spec)
 		}
 		catalog := api.NewCatalog([]api.Object{crowdedHost(70)})
 		t.Run(string(kind), func(t *testing.T) {

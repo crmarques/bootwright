@@ -247,7 +247,7 @@ OpenShift clients and installer stay on `mirror.openshift.com`, a vendor
 origin, or on `spec.downloads.openshiftClientsMirror`.
 
 **Images.** Each compiled default is pinned by digest: `docker.io` for the
-name resolver, the proxy and the time server, `registry.access.redhat.com`
+name resolver, the proxy, the time server and the registry, `registry.access.redhat.com`
 for the artifact server and `quay.io` for the emulated BMC. The exact
 references are the `catalog.go` of each kind under
 `internal/infrastructureservices/` and `internal/substrate/libvirt/catalog.go`.
@@ -605,6 +605,7 @@ that address and certificate.
 | Selected Machine networks and controller | `3128/tcp` | Managed HTTP proxy, when selected |
 | Selected Machine/installer networks and controller | `53/udp`, `53/tcp` | Managed DNS |
 | Selected Machine/installer networks and controller | `123/udp` | Managed NTP |
+| Machines and clusters that pull from it, and the controller | `5000/tcp`, or the declared registry port | Managed Registry, HTTPS with authentication |
 | BMC network | `8443/tcp`, or the declared HTTPS artifact port | Installer virtual media |
 | Installer network | `8443/tcp` | Private host-key and image delivery, when declared |
 | Installer network | `8080/tcp`, or the declared public artifact port | Public package tree, when declared |

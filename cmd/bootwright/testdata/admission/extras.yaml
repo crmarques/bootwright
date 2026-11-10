@@ -190,9 +190,36 @@ metadata:
 spec:
   management: managed
 
-  implementation: mirror-registry
+  implementation: distribution
   machineRef: acceptance-hypervisor
   bindAddress: 192.0.2.201
+
+  tls:
+    secretRef: acceptance-registry-tls
+
+  credentialsRef: acceptance-registry-push
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: acceptance-registry-tls
+
+spec:
+  type: tlsCertificate
+
+  source:
+    generated:
+      commonName: registry.acceptance.example.test
+
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: acceptance-registry-push
+
+spec:
+  type: usernamePassword
 
 ---
 apiVersion: bootwright.io/v1alpha1

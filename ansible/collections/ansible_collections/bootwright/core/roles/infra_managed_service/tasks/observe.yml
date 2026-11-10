@@ -4,14 +4,32 @@
     phase: loaded
   no_log: true
 
+# A service with a client credential is probed under no_log, which would also
+# hide every other service's readiness failures, so only it is.
 - name: Observe the managed service without changing it
   bootwright.core.infra_service_inspect:
     request: '{{ bootwright_managed_service_request }}'
-    runs_from:
-      - '{{ infra_managed_service_configuration_path }}'
+    runs_from: '{{ infra_managed_service_runs_from }}'
     readiness: true
     attempts: 1
-  register: infra_managed_service_observation
+  register: infra_managed_service_observation_open
+  when: bootwright_managed_service_request.credentialsRef is not defined
+
+- name: Observe the managed service without changing it with its client credential
+  bootwright.core.infra_service_inspect:
+    request: '{{ bootwright_managed_service_request }}'
+    runs_from: '{{ infra_managed_service_runs_from }}'
+    readiness: true
+    attempts: 1
+    authorization: >-
+      {{ (lookup('ansible.builtin.file', material.clientUsername, rstrip=false) ~ ':'
+          ~ lookup('ansible.builtin.file', material.clientPassword, rstrip=false)) | b64encode }}
+    fingerprint: '{{ material.fingerprint | default("") }}'
+  vars:
+    material: '{{ bootwright_managed_service_material }}'
+  register: infra_managed_service_observation_hidden
+  when: bootwright_managed_service_request.credentialsRef is defined
+  no_log: true
 
 - name: Publish bounded managed service observation evidence
   bootwright.core.infra_service_protocol:
@@ -19,10 +37,14 @@
     observed: true
     outcome: unchanged
     digest: '{{ bootwright_managed_service_digest }}'
-    observation: '{{ infra_managed_service_observation.observation }}'
-    answers: '{{ infra_managed_service_observation.answers }}'
+    observation: '{{ infra_managed_service_observed.observation }}'
+    answers: '{{ infra_managed_service_observed.answers }}'
     removed: >-
-      {{ not infra_managed_service_observation.observation.unit
-         and not infra_managed_service_observation.observation.containerPresent
-         and not infra_managed_service_observation.observation.contentRoot }}
+      {{ not infra_managed_service_observed.observation.unit
+         and not infra_managed_service_observed.observation.containerPresent
+         and not infra_managed_service_observed.observation.contentRoot }}
+  vars:
+    infra_managed_service_observed: >-
+      {{ infra_managed_service_observation_hidden if bootwright_managed_service_request.credentialsRef is defined
+         else infra_managed_service_observation_open }}
   no_log: true

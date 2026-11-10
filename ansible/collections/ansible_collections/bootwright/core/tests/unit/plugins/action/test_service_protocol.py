@@ -121,3 +121,19 @@ def test_artifact_start_freshness_is_required_for_presence_but_not_removal():
         assert evidence["startedAfterFiles"] is False
         assert artifact_server_protocol.unproved(observation) == ["startedAfterFiles"]
         assert artifact_server_protocol.absence(GONE, "1" * 64)["postcondition"] is True
+
+
+# A registry's answer also names the certificate it presented, which Go
+# compares with the one the operation bound; nothing else joins an answer.
+def test_an_answer_carries_a_certificate_fingerprint_only_in_its_own_form():
+    answer = {"address": "192.0.2.5", "answer": "HTTP/1.1 200 OK", "port": 5000}
+    fingerprint = "ab" * 32
+    assert infra_service_protocol.answer_evidence(answer) == answer
+    assert infra_service_protocol.answer_evidence(dict(answer, fingerprint=fingerprint)) == dict(answer, fingerprint=fingerprint)
+    for refused in (dict(answer, fingerprint="AB" * 32), dict(answer, fingerprint="ab"), dict(answer, fingerprint=None),
+                    dict(answer, certificate=fingerprint)):
+        try:
+            infra_service_protocol.answer_evidence(refused)
+        except ValueError:
+            continue
+        raise AssertionError("published %r" % refused)

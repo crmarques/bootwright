@@ -26,7 +26,7 @@ func controllerSockets(catalog api.Catalog, name string) ([]firewall.Socket, err
 	}
 	machine := selected.MachineName()
 	var sockets []firewall.Socket
-	for _, definition := range []managedservice.Definition{dnsServerDefinition(), ntpserver.Definition(), proxy.Definition()} {
+	for _, definition := range []managedservice.Definition{dnsServerDefinition(), ntpserver.Definition(), proxy.Definition(), registryDefinition()} {
 		requests, err := managedservice.NewCapability(definition, nil).Requests(catalog, machine, name)
 		if err != nil {
 			return nil, err

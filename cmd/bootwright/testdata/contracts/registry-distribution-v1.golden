@@ -1,0 +1,83 @@
+implementation: registry-distribution-v1
+content-digest: 27a519ca9d13ead9fb8eb3f0abf373babab1986ee2fcd83c4f4d975c582485f6
+request-version: managed-service-v4
+automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  docker.io/library/registry@sha256:38907510915c3f1604c7e83d6ab602ab3020d092f73bdaed8696773693ff768c
+  /var/lib/bootwright-hosted
+  services
+  bootwright
+request-identity:
+  identity.context
+  identity.service
+  identity.block
+  contentRoot
+  unit
+  bindAddress
+  port
+  placement.machine
+request-schema:
+  bindAddress string
+  clients []string omitempty
+  contentRoot string
+  credentialsRef string omitempty
+  destinations []struct managedservice.Destination omitempty
+  destinations[].address string omitempty
+  destinations[].domain string omitempty
+  destinations[].port int omitempty
+  egress struct managedservice.Egress
+  egress.httpProxy string omitempty
+  egress.httpsProxy string omitempty
+  egress.noProxy []string
+  endpoints []struct managedservice.Endpoint
+  endpoints[].address string
+  endpoints[].name string
+  forwarders []string omitempty
+  identity struct managedservice.Identity
+  identity.block string
+  identity.context string
+  identity.service string
+  image string
+  imageSource *struct managedservice.ImageSource omitempty
+  imageSource.credentialsRef string omitempty
+  imageSource.credentialsType string omitempty
+  imageSource.host string
+  imageSource.trustBundleRef string omitempty
+  implementation string
+  ingressHosts []string omitempty
+  kind string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  port int
+  records []struct managedservice.Record omitempty
+  records[].addresses []string
+  records[].name string
+  records[].subtree bool omitempty
+  sources []string omitempty
+  tls *struct managedservice.TLS omitempty
+  tls.minVersion string
+  tls.secret string
+  unit string
+  version string
+evidence-schema:
+  absent bool
+  answers []struct managedservice.Answer
+  answers[].address string
+  answers[].answer string
+  answers[].fingerprint string omitempty
+  answers[].port int
+  container string
+  contentRoot bool
+  postcondition bool
+  request string
+  startedAfterFiles bool
+  unit string

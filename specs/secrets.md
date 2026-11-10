@@ -264,8 +264,11 @@ compatibility setting for this seam.
 
 SSH parsing and public-key codecs use the selected `golang.org/x/crypto` SSH
 package at the version locked in `go.mod`; its declared module graph is reviewed
-with the selected build graph. The standard library owns AES-GCM, X.509, key
-generation and entropy. Do not import unrelated x/crypto packages.
+with the selected build graph. A managed Registry's bcrypt password file is
+derived in the same package with the selected `golang.org/x/crypto` bcrypt
+package ([managed registry](infrastructure-services.md#managed-registry)). The
+standard library owns AES-GCM, X.509, key generation and entropy. Do not import
+unrelated x/crypto packages.
 
 ## Immutable binding and contexts
 

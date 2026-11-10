@@ -1,0 +1,18 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Registry
+metadata:
+  name: lab-mirror
+
+spec:
+  management: managed
+  machineRef: controller
+  implementation: distribution
+
+  tls:
+    secretRef: lab-mirror-tls
+
+  credentialsRef: lab-mirror-push
+
+  endpoints:
+    - name: ip
+      addressRef: ip

@@ -103,7 +103,7 @@ func packageRoles() map[string]packageRole {
 	for _, capability := range []string{
 		"addons/catalog",
 		"infrastructureservices/artifactserver", "infrastructureservices/managedservice",
-		"infrastructureservices/dnsserver", "infrastructureservices/ntpserver", "infrastructureservices/proxy",
+		"infrastructureservices/dnsserver", "infrastructureservices/ntpserver", "infrastructureservices/proxy", "infrastructureservices/registry",
 		"containercluster/access", "containercluster/agentinstall",
 		"containercluster/installation", "containercluster/preflight",
 		"controller/clients", "controller/prerequisites", "controller/firewall", "desiredstate/compilation",
@@ -187,6 +187,9 @@ func applicationDependencies() map[string][]string {
 		"internal/infrastructureservices/dnsserver": {"internal/infrastructureservices/managedservice"},
 		"internal/infrastructureservices/ntpserver": {"internal/infrastructureservices/managedservice"},
 		"internal/infrastructureservices/proxy":     {"internal/infrastructureservices/managedservice"},
+		// The registry also proves its serving certificate with the artifact
+		// server's own validation, so both HTTPS services refuse alike.
+		"internal/infrastructureservices/registry": {"internal/infrastructureservices/managedservice", "internal/infrastructureservices/artifactserver"},
 		// Each family's preflight shares the capacity port's report, graph,
 		// ownership and projector types, never the other family's preflight.
 		"internal/containercluster/preflight": {"internal/substrate/capacity"},
@@ -730,12 +733,14 @@ func TestEveryEffectClauseRefusesWhatItGuards(t *testing.T) {
 }
 
 func TestSecretImplementationsRemainBehindPorts(t *testing.T) {
-	qualified := false
+	qualified, hashed := false, false
 	neutral := map[string]bool{"internal/secrets/secretstore": false, "internal/secrets/custody": false, "internal/secrets/encryption": false}
 	for _, source := range productionSources(t) {
 		for _, imported := range source.imports {
 			if source.owner == "internal/secrets/material" && imported.path == "golang.org/x/crypto/ssh" {
 				qualified = true
+			} else if source.owner == "internal/secrets/material" && imported.path == "golang.org/x/crypto/bcrypt" {
+				hashed = true
 			} else if strings.HasPrefix(imported.path, "golang.org/x/crypto/") {
 				t.Errorf("%s imports an unqualified cryptographic dependency %s", source.path, imported.path)
 			}
@@ -759,6 +764,9 @@ func TestSecretImplementationsRemainBehindPorts(t *testing.T) {
 	}
 	if !qualified {
 		t.Error("internal/secrets/material no longer imports golang.org/x/crypto/ssh; remove its qualification")
+	}
+	if !hashed {
+		t.Error("internal/secrets/material no longer imports golang.org/x/crypto/bcrypt; remove its qualification")
 	}
 	for _, owner := range sortedKeys(neutral) {
 		if !neutral[owner] {

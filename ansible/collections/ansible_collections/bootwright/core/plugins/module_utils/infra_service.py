@@ -6,9 +6,11 @@ probe differs, because only the answer a daemon gives is kind-specific.
 
 from __future__ import annotations
 
+import hashlib
 import ipaddress
 import os
 import socket
+import ssl
 import struct
 import time
 
@@ -20,12 +22,13 @@ UNIT_DIRECTORY = "/etc/containers/systemd/"
 
 MAX_OUTPUT = 4096
 MAX_STATUS = 128
+MAX_HEADERS = 8192
 PROBE_REASON = 120
 PROBE_TIMEOUT = 5
 DNS_A, DNS_AAAA = 1, 28
 UNIT_STATES = ("active", "activating", "deactivating", "inactive", "failed")
 ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C.UTF-8"}
-TRANSPORTS = {"DNSServer": ("tcp", "udp"), "NTPServer": ("udp",), "Proxy": ("tcp",)}
+TRANSPORTS = {"DNSServer": ("tcp", "udp"), "NTPServer": ("udp",), "Proxy": ("tcp",), "Registry": ("tcp",)}
 
 
 def probe_failure(error):
@@ -181,6 +184,70 @@ def probe_http(address, port):
     if not line.startswith("HTTP/1."):
         raise ValueError("status line")
     return line
+
+
+def registry_head(stream):
+    """The status line and headers of one response, bounded, without its body."""
+    data = bytearray()
+    while b"\r\n\r\n" not in data:
+        if len(data) >= MAX_HEADERS:
+            raise ValueError("response headers")
+        part = stream.recv(MAX_HEADERS - len(data))
+        if not part:
+            raise ValueError("truncated response")
+        data.extend(part)
+    lines = bytes(data).split(b"\r\n\r\n", 1)[0].decode("latin-1").split("\r\n")
+    headers = {}
+    for line in lines[1:]:
+        name, _separator, value = line.partition(":")
+        headers[name.strip().lower()] = value.strip()
+    return "".join(c for c in lines[0] if 0x20 <= ord(c) < 0x7F), headers
+
+
+class Refused(ValueError):
+    """A definite answer that repeating the probe would not change."""
+
+
+CERTIFICATE_MISMATCH = "certificate-mismatch"
+
+
+def probe_registry(address, port, token, expected):
+    """Prove a registry answers its API over TLS to the bound client credential.
+
+    The credential goes only to a listener presenting the certificate the
+    operation bound: its SHA-256 is compared here, before anything is sent, and
+    again in Go. Another certificate answers certificate-mismatch with the one
+    presented, which Go refuses, and a probe given no expected certificate or
+    no credential sends nothing. Only an authenticated 200 with the
+    distribution API header proves the registry serves and accepts the
+    credential; any other status is refused at once, never retried.
+    """
+    if not token or not expected:
+        raise Refused("no bound certificate or credential to prove")
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    host = "[%s]" % address if ":" in address else address
+    with socket.create_connection((address, port), timeout=PROBE_TIMEOUT) as raw:
+        raw.settimeout(PROBE_TIMEOUT)
+        with context.wrap_socket(raw) as secured:
+            presented = secured.getpeercert(binary_form=True) or b""
+            if not presented:
+                raise Refused("no certificate")
+            fingerprint = hashlib.sha256(presented).hexdigest()
+            if fingerprint != expected:
+                return CERTIFICATE_MISMATCH, fingerprint
+            secured.sendall(("GET /v2/ HTTP/1.1\r\nHost: %s:%d\r\nAuthorization: Basic %s\r\nConnection: close\r\n\r\n"
+                             % (host, port, token)).encode("ascii"))
+            status, headers = registry_head(secured)
+    parts = status.split(" ", 2)
+    if len(parts) < 2 or not parts[0].startswith("HTTP/1."):
+        raise ValueError("status line")
+    if parts[1] != "200":
+        raise Refused("status %s" % parts[1][:3])
+    if headers.get("docker-distribution-api-version") != "registry/2.0":
+        raise Refused("not a distribution API")
+    return status, fingerprint
 
 
 def dns_query(name, record_type=1):

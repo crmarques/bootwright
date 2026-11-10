@@ -1,6 +1,6 @@
 implementation: dns-server-dnsmasq-v1
-content-digest: 8ccdd3e8731c134f3f14f690ffae6466daa8b4b93040d721e2233b4863a8dad6
-request-version: managed-service-v3
+content-digest: 9593c199234c8c04753c9891fc35da6fb07a752b68ee1827daf1ea0ad77c3702
+request-version: managed-service-v4
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -23,6 +23,7 @@ request-schema:
   bindAddress string
   clients []string omitempty
   contentRoot string
+  credentialsRef string omitempty
   destinations []struct managedservice.Destination omitempty
   destinations[].address string omitempty
   destinations[].domain string omitempty
@@ -62,6 +63,9 @@ request-schema:
   records[].name string
   records[].subtree bool omitempty
   sources []string omitempty
+  tls *struct managedservice.TLS omitempty
+  tls.minVersion string
+  tls.secret string
   unit string
   version string
 evidence-schema:
@@ -69,6 +73,7 @@ evidence-schema:
   answers []struct managedservice.Answer
   answers[].address string
   answers[].answer string
+  answers[].fingerprint string omitempty
   answers[].port int
   container string
   contentRoot bool

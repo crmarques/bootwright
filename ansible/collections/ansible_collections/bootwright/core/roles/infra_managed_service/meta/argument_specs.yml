@@ -16,6 +16,9 @@ argument_specs:
           contentRoot:
             type: str
             required: true
+          credentialsRef:
+            type: str
+            required: false
           destinations:
             type: list
             elements: dict
@@ -47,6 +50,7 @@ argument_specs:
               - dns-server-dnsmasq-v1
               - ntp-server-chrony-v1
               - proxy-squid-v1
+              - registry-distribution-v1
           ingressHosts:
             type: list
             elements: str
@@ -58,6 +62,7 @@ argument_specs:
               - DNSServer
               - NTPServer
               - Proxy
+              - Registry
           placement:
             type: dict
             required: true
@@ -72,6 +77,19 @@ argument_specs:
             type: list
             elements: str
             required: false
+          tls:
+            type: dict
+            required: false
+            options:
+              minVersion:
+                type: str
+                required: true
+                choices:
+                  - TLSv1.2
+                  - TLSv1.3
+              secret:
+                type: str
+                required: true
           unit:
             type: str
             required: true
@@ -79,7 +97,7 @@ argument_specs:
             type: str
             required: true
             choices:
-              - managed-service-v3
+              - managed-service-v4
       bootwright_managed_service_digest:
         type: str
         required: true

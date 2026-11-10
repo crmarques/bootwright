@@ -19,7 +19,7 @@ func ReservationSockets(service, machine api.Object) int {
 	sockets := map[string]bool{}
 	claim := func(address, port string) { sockets[address+" "+port] = true }
 	switch service.Kind() {
-	case api.Proxy, api.DNSServer, api.NTPServer:
+	case api.Proxy, api.DNSServer, api.NTPServer, api.Registry:
 		port := spec.Get("port").Text()
 		claim(bind, port)
 		if wildcard(bind) {

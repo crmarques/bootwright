@@ -67,6 +67,24 @@ func (s *ImageSource) SecretReferences() []string {
 	return references
 }
 
+func (r Request) Materials(operation string) []lifecycle.MaterialFile {
+	var files []lifecycle.MaterialFile
+	if operation == "apply" {
+		files = append(files, r.ImageSource.Materials()...)
+	}
+	if operation == "apply" && r.TLS != nil {
+		files = append(files,
+			lifecycle.MaterialFile{Name: "tls.crt", Part: secrets.CertificatePart, Secret: r.TLS.Secret, Variable: "certificate"},
+			lifecycle.MaterialFile{Name: "tls.key", Part: secrets.PrivateKeyPart, Secret: r.TLS.Secret, Variable: "privateKey"})
+	}
+	if operation != "destroy" && r.CredentialsRef != "" {
+		files = append(files,
+			lifecycle.MaterialFile{Name: "client-username", Part: secrets.UsernamePart, Secret: r.CredentialsRef, Variable: "clientUsername"},
+			lifecycle.MaterialFile{Name: "client-password", Part: secrets.PasswordPart, Secret: r.CredentialsRef, Variable: "clientPassword"})
+	}
+	return files
+}
+
 func (s *ImageSource) Materials() []lifecycle.MaterialFile {
 	if s == nil {
 		return nil

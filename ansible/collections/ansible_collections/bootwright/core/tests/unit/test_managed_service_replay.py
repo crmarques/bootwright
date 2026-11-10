@@ -30,7 +30,8 @@ IMAGE = "registry.example/service@sha256:" + "0" * 64
 SERVER = "infra_artifact_server_nginx"
 
 MANAGED = "infra_managed_service"
-IMPLEMENTATIONS = {"DNSServer": "dns-server-dnsmasq-v1", "NTPServer": "ntp-server-chrony-v1", "Proxy": "proxy-squid-v1"}
+IMPLEMENTATIONS = {"DNSServer": "dns-server-dnsmasq-v1", "NTPServer": "ntp-server-chrony-v1", "Proxy": "proxy-squid-v1",
+                   "Registry": "registry-distribution-v1"}
 
 # The one managed-service role selects its templates by the frozen implementation.
 MANAGED_SOURCES = {
@@ -51,6 +52,8 @@ SERVICES = {
                       contentRoot="/var/lib/bootwright-hosted/lab/services/dns/resolver", unit="bootwright-lab-dns-resolver"),
     "Proxy": dict(MANAGED_SOURCES, role=MANAGED, kind="Proxy", service="egress",
                   contentRoot="/var/lib/bootwright-hosted/lab/services/proxy/egress", unit="bootwright-lab-proxy-egress"),
+    "Registry": dict(MANAGED_SOURCES, role=MANAGED, kind="Registry", service="mirror",
+                     contentRoot="/var/lib/bootwright-hosted/lab/services/registry/mirror", unit="bootwright-lab-registry-mirror"),
     SERVER: {
         "role": SERVER,
         "request": "bootwright_artifact_server_request", "digest": "bootwright_artifact_server_digest",
@@ -62,9 +65,12 @@ SERVICES = {
 
 RUNS_FROM = {role: ("configuration", "unit") for role in SERVICES}
 RUNS_FROM[SERVER] += ("certificate", "key")
+RUNS_FROM["Registry"] += ("certificate", "key", "password")
 
-# The serving material as the runner lends it: one file per value.
+# The serving material and client credential as the runner lends them: one file per value.
 MATERIAL = {"certificate": "/run/bootwright/material/certificate", "privateKey": "/run/bootwright/material/privateKey"}
+CLIENT = {"clientUsername": "/run/bootwright/material/clientUsername", "clientPassword": "/run/bootwright/material/clientPassword",
+          "passwordFile": "/run/bootwright/material/passwordFile"}
 
 # podman inspect executes its --format template over the container's inspect
 # data, whose State.StartedAt is a time.Time (InspectContainerState in
@@ -139,6 +145,9 @@ def scope(role, tls):
     if role == SERVER:
         request["tls"] = {"minVersion": "TLSv1.2"} if tls else {}
         variables["bootwright_artifact_server_material"] = MATERIAL if tls else {}
+    if role == "Registry":
+        request.update({"tls": {"minVersion": "TLSv1.2", "secret": "mirror-serving"}, "credentialsRef": "mirror-push"})
+        variables["bootwright_managed_service_material"] = dict(MATERIAL, **CLIENT)
     variables.update({service["request"]: request, service["digest"]: DIGEST})
     return variables
 
@@ -148,11 +157,13 @@ def publishers(tasks, role):
     def templating(source):
         return lambda task: (task.get("ansible.builtin.template") or {}).get("src") == source
 
-    def copying(leaf):
-        return lambda task: str((task.get("bootwright.core.private_file") or {}).get("path", "")).endswith(leaf)
+    def copying(leaf, module="bootwright.core.private_file"):
+        return lambda task: str((task.get(module) or {}).get("path", "")).endswith(leaf) and task.get("check_mode") is not True
 
+    served = ("/server.crt", "/server.key") if role == SERVER else ("/tls.crt", "/tls.key")
     predicates = {"configuration": templating(SERVICES[role]["configuration"]), "unit": templating(SERVICES[role]["unitSource"]),
-                  "certificate": copying("/server.crt"), "key": copying("/server.key")}
+                  "certificate": copying(served[0]), "key": copying(served[1]),
+                  "password": copying("/htpasswd")}
     return {file: only(tasks, predicates[file], "publishes the " + file) for file in RUNS_FROM[role]}
 
 
@@ -260,9 +271,12 @@ def published_inspections(role):
                   if isinstance(task, dict)]
         completion = only(loaded, lambda task: (action(task, "_protocol") or {}).get("phase") == "completed",
                           "publishes the completion")
-        published = str(action(completion, "_protocol")["observation"])
-        found.append(only(loaded, lambda task, published=published: action(task, "_inspect") is not None
-                          and "%s.observation" % task.get("register") in published, "is the published inspection"))
+        published = str(action(completion, "_protocol")["observation"]) + str(completion.get("vars", ""))
+        inspections = [task for task in loaded if action(task, "_inspect") is not None and task.get("register")
+                       and ("%s.observation" % task["register"].removesuffix("_open").removesuffix("_hidden") in published
+                            or task["register"] in published)]
+        assert inspections, "no inspection is the published one"
+        found.extend(inspections)
     return found
 
 

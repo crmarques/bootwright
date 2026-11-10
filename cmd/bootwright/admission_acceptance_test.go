@@ -341,7 +341,6 @@ func expandedRefusals() []diagnosticTuple {
 		diagnosticTuple{"api.unrealized", "InfraProvider", "acceptance-vsphere", "$.spec.vsphere"},
 		diagnosticTuple{"api.unrealized", "MachineInstallProfile", "acceptance-clone", "$.spec.installer.templateClone"},
 		diagnosticTuple{"api.unrealized", "LoadBalancer", "acceptance-load-balancer", "$.spec.management"},
-		diagnosticTuple{"api.unrealized", "Registry", "acceptance-registry", "$.spec.management"},
 		diagnosticTuple{"api.unrealized", "OpenShiftCluster", "acceptance-sno", "$.spec.distribution.type"},
 	)
 }
@@ -425,7 +424,7 @@ func TestActualAdmissibleProjectionAdmitsEveryKindButTheRefusedFamilies(t *testi
 			t.Errorf("kind %s has no full-wiring positive admission coverage", kind)
 		}
 	}
-	if report.Counts != (compilation.Counts{FilesSeen: 91, ObjectsDecoded: 128}) {
+	if report.Counts != (compilation.Counts{FilesSeen: 91, ObjectsDecoded: 130}) {
 		t.Errorf("projection counts: %#v", report.Counts)
 	}
 	var warned []diagnostics.Diagnostic

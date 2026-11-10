@@ -148,10 +148,44 @@ def test_definite_readiness_failure_precedes_an_unanswered_address(monkeypatch, 
     monkeypatch.setattr(inspect, "observe", lambda *_: {"unit": "active"})
     monkeypatch.setattr(inspect, "probe_targets", lambda _: ["192.0.2.1", "192.0.2.2"])
 
-    def fail(_request, address):
+    def fail(_request, address, _credential):
         if address.endswith("1"):
             raise socket.timeout()
         raise ConnectionRefusedError()
     monkeypatch.setattr(inspect, "answer_for", fail)
     result = run({"request": {"port": 53}, "readiness": True, "attempts": 1}, capsys)
     assert [failure["reason"] for failure in result["failures"]] == ["listener-failed", "readiness-timeout"]
+
+
+# The registry's credential reaches the module as one opaque token, so the
+# masking Ansible applies to a hidden argument cannot alter the evidence: a
+# username such as "registry" would otherwise mask the image the evidence names.
+def test_a_registry_credential_never_masks_its_evidence(monkeypatch, capsys):
+    image = "docker.io/library/registry@sha256:" + "a" * 64
+    monkeypatch.setattr(inspect, "observe", lambda *_: {"unit": "active", "container": image})
+    monkeypatch.setattr(inspect, "probe_targets", lambda _: ["192.0.2.5"])
+    tokens = []
+
+    def answer(_request, _address, token):
+        tokens.append(token)
+        return "HTTP/1.1 200 OK", "b" * 64
+    monkeypatch.setattr(inspect, "answer_for", answer)
+    token = "cmVnaXN0cnk6c2VjcmV0"
+    result = run({"request": {"port": 5000, "kind": "Registry"}, "readiness": True, "attempts": 1, "authorization": token, "fingerprint": "b" * 64}, capsys)
+    assert tokens == [(token, "b" * 64)] and token not in json.dumps(result)
+    assert result["observation"]["container"] == image
+    assert result["answers"] == [{"address": "192.0.2.5", "answer": "HTTP/1.1 200 OK", "fingerprint": "b" * 64, "port": 5000}]
+
+
+def test_a_definite_refusal_is_not_retried(monkeypatch, capsys):
+    monkeypatch.setattr(inspect, "observe", lambda *_: {"unit": "active"})
+    monkeypatch.setattr(inspect, "probe_targets", lambda _: ["192.0.2.5"])
+    calls = []
+
+    def refuse(*_arguments):
+        calls.append(1)
+        raise infra_service.Refused("status 401")
+    monkeypatch.setattr(inspect, "answer_for", refuse)
+    monkeypatch.setattr(inspect, "RETRY_DELAY", 0)
+    result = run({"request": {"port": 5000}, "readiness": True, "attempts": 5}, capsys)
+    assert calls == [1] and result["failures"] == [{"port": 5000, "reason": "listener-failed"}]

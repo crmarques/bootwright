@@ -4,14 +4,17 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"slices"
 	"strings"
+	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -33,8 +36,12 @@ type Definition struct {
 	Image   string
 	// Extend adds the kind's own frozen intent to a request whose shared
 	// fields are already derived.
-	Extend func(catalog api.Catalog, spec api.Value, request *Request) error
+	Extend       func(catalog api.Catalog, spec api.Value, request *Request) error
+	Certificate  Certificate
+	PasswordFile func(username, password []byte) ([]byte, error)
 }
+
+type Certificate func(material map[string]secrets.Material, secret, contextName string, addresses []string, now time.Time, registered bool) (string, error)
 
 func (d Definition) BlockID(service string) string {
 	return reconciliation.BlockIdentity("", d.Slug+"-"+service)
@@ -56,10 +63,23 @@ func (d Definition) ContentDigest() string {
 type Capability struct {
 	definition Definition
 	runner     Runner
+	clock      lifecycle.Clock
 }
 
 func NewCapability(definition Definition, runner Runner) Capability {
 	return Capability{definition: definition, runner: runner}
+}
+
+func (c Capability) WithClock(clock lifecycle.Clock) Capability {
+	c.clock = clock
+	return c
+}
+
+func (c Capability) now() time.Time {
+	if c.clock == nil {
+		return time.Time{}
+	}
+	return c.clock.Now()
 }
 
 func (c Capability) Kind() string { return string(c.definition.Kind) }
@@ -98,7 +118,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			ContentDigest:  digest,
 			Request:        canonical,
 		})
-		for _, reference := range append(request.Placement.SecretReferences(), request.ImageSource.SecretReferences()...) {
+		for _, reference := range request.SecretReferences() {
 			if !slices.Contains(plan.Secrets, reference) {
 				plan.Secrets = append(plan.Secrets, reference)
 			}
@@ -297,11 +317,11 @@ func (c Capability) Destroy(ctx context.Context, execution lifecycle.Execution) 
 
 func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.Result, error) {
 	unknown := lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}
-	request, err := c.prepare(ctx, execution)
+	request, fingerprint, err := c.prepare(ctx, execution, operation == "apply")
 	if err != nil {
 		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
-	result, err := c.run(ctx, execution, operation, request)
+	result, err := c.run(ctx, execution, operation, request, fingerprint)
 	if err != nil {
 		return lifecycle.Result{Outcome: lifecycle.AttemptOutcome(err)}, err
 	}
@@ -310,9 +330,12 @@ func (c Capability) mutate(ctx context.Context, execution lifecycle.Execution, o
 	}
 	digest := execution.Block.RequestDigest
 	if operation == "apply" {
-		err = ValidatePresence(result.Evidence, request, digest)
+		err = ValidatePresence(result.Evidence, request, digest, fingerprint)
 	} else {
 		err = ValidateAbsence(result.Evidence, digest)
+	}
+	if errors.Is(err, certificateMismatch) {
+		return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
 	}
 	if err != nil {
 		return unknown, err
@@ -351,7 +374,7 @@ func (c Capability) ObserveRemoval(ctx context.Context, execution lifecycle.Exec
 // each in that order. When none accepts the evidence the effect is unknown,
 // and the refusal that decided it comes back with it: the presence check's for
 // an apply, the unfinished removal's for a removal.
-func serviceEffect(verb reconciliation.Verb, evidence []byte, request Request, digest string) (reconciliation.EffectState, error) {
+func serviceEffect(verb reconciliation.Verb, evidence []byte, request Request, digest, fingerprint string) (reconciliation.EffectState, error) {
 	if verb == reconciliation.Destroy {
 		switch {
 		case ValidateAbsence(evidence, digest) == nil:
@@ -364,13 +387,13 @@ func serviceEffect(verb reconciliation.Verb, evidence []byte, request Request, d
 		}
 		return reconciliation.EffectPartial, nil
 	}
-	presence := ValidatePresence(evidence, request, digest)
+	presence := ValidatePresence(evidence, request, digest, fingerprint)
 	switch {
 	case presence == nil:
 		return reconciliation.EffectCompleted, nil
 	case ValidateAbsence(evidence, digest) == nil:
 		return reconciliation.EffectNoEffect, nil
-	case ValidatePartial(evidence, request, digest) == nil:
+	case ValidatePartial(evidence, request, digest, fingerprint) == nil:
 		return reconciliation.EffectPartial, nil
 	}
 	return reconciliation.EffectUnknown, presence
@@ -380,40 +403,92 @@ func serviceEffect(verb reconciliation.Verb, evidence []byte, request Request, d
 // its evidence for the verb the block was frozen for.
 func (c Capability) observe(ctx context.Context, execution lifecycle.Execution, verb reconciliation.Verb) (lifecycle.Observation, error) {
 	unknown := lifecycle.Observation{Effect: reconciliation.EffectUnknown}
-	request, err := c.prepare(ctx, execution)
+	request, fingerprint, err := c.prepare(ctx, execution, false)
 	if err != nil {
 		return unknown, err
 	}
-	result, err := c.run(ctx, execution, "observe", request)
+	result, err := c.run(ctx, execution, "observe", request, fingerprint)
 	if err != nil {
 		return unknown, err
 	}
-	effect, _ := serviceEffect(verb, result.Evidence, request, execution.Block.RequestDigest)
+	effect, _ := serviceEffect(verb, result.Evidence, request, execution.Block.RequestDigest, fingerprint)
 	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence}, nil
 }
 
-func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution) (Request, error) {
+func (c Capability) prepare(ctx context.Context, execution lifecycle.Execution, verify bool) (Request, string, error) {
 	if err := ctx.Err(); err != nil {
-		return Request{}, err
+		return Request{}, "", err
 	}
 	if c.runner == nil {
-		return Request{}, Refusal("lifecycle.state", "the managed service adapter is not configured", "")
+		return Request{}, "", Refusal("lifecycle.state", "the managed service adapter is not configured", "")
 	}
-	return DecodeRequest(execution.Block.Request, c.definition.Version)
+	request, err := DecodeRequest(execution.Block.Request, c.definition.Version)
+	if err != nil {
+		return Request{}, "", err
+	}
+	if request.CredentialsRef != "" && verify {
+		if err := ProveCredential(execution.Material, request.CredentialsRef, execution.Context, true); err != nil {
+			return Request{}, "", err
+		}
+	}
+	if request.TLS == nil {
+		return request, "", nil
+	}
+	if c.definition.Certificate == nil {
+		return Request{}, "", Refusal("lifecycle.state", "the managed service capability proves no serving certificate", "")
+	}
+	fingerprint, err := c.definition.Certificate(execution.Material, request.TLS.Secret, execution.Context, request.ServedAddresses(), c.now(), true)
+	if err != nil && verify {
+		return Request{}, "", err
+	}
+	if err != nil {
+		return request, "", nil
+	}
+	return request, fingerprint, nil
 }
 
-func (c Capability) run(ctx context.Context, execution lifecycle.Execution, operation string, request Request) (lifecycle.RunResult, error) {
+func (c Capability) ProveBinding(ctx context.Context, contextName string, block reconciliation.Block, material map[string]secrets.Material) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	request, err := DecodeRequest(block.Request, c.definition.Version)
+	if err != nil {
+		return err
+	}
+	if request.CredentialsRef != "" {
+		if err := ProveCredential(material, request.CredentialsRef, contextName, false); err != nil {
+			return err
+		}
+	}
+	if request.TLS == nil {
+		return nil
+	}
+	if c.definition.Certificate == nil {
+		return Refusal("lifecycle.state", "the managed service capability proves no serving certificate", "")
+	}
+	_, err = c.definition.Certificate(material, request.TLS.Secret, contextName, request.ServedAddresses(), c.now(), false)
+	return err
+}
+
+func (c Capability) run(ctx context.Context, execution lifecycle.Execution, operation string, request Request, fingerprint string) (lifecycle.RunResult, error) {
 	canonical, err := request.Canonical()
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
-	var materials []lifecycle.MaterialFile
-	if operation == "apply" {
-		materials = request.ImageSource.Materials()
+	materials := request.Materials(operation)
+	if operation == "apply" && request.CredentialsRef != "" {
+		if execution, err = c.passwordFile(execution, request); err != nil {
+			return lifecycle.RunResult{}, err
+		}
+		materials = append(materials, lifecycle.MaterialFile{Name: "htpasswd", Part: secrets.ValuePart, Secret: passwordFileMaterial, Variable: "passwordFile"})
+	}
+	values := map[string]string{}
+	if fingerprint != "" {
+		values["fingerprint"] = fingerprint
 	}
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: c.definition.Implementation, Operation: operation, Variable: c.definition.Variable,
-		Canonical: canonical, Placement: request.Placement, Materials: materials,
+		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
 		Refusals: ReadinessRefusals(request.Kind, request.Identity.Service, request.Placement.Machine, request.BindAddress, []int{request.Port}),
 	}))
 }

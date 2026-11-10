@@ -12,12 +12,14 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/registry"
 	"github.com/crmarques/bootwright/internal/machine"
 )
 
 func definitions() map[string]managedservice.Definition {
 	return map[string]managedservice.Definition{
 		"proxy-squid": proxy.Definition(), "dns-server-dnsmasq": dnsserver.Definition(nil), "ntp-server-chrony": ntpserver.Definition(),
+		"registry-distribution": registry.Definition(nil),
 	}
 }
 
@@ -35,7 +37,7 @@ func refusal(t *testing.T, err error) diagnostics.Diagnostic {
 // declare, refuses by naming its version and the build that can still destroy it.
 func TestAManagedServiceRequestOfAnotherVersionRefusesNamingItsVersion(t *testing.T) {
 	for kind, definition := range definitions() {
-		for _, retired := range []string{kind + "-v1", kind + "-v2", "managed-service-v2", "managed-service-v4"} {
+		for _, retired := range []string{kind + "-v1", kind + "-v2", "managed-service-v3", "managed-service-v5"} {
 			t.Run(retired, func(t *testing.T) {
 				request := managedservice.Request{
 					Kind:      string(definition.Kind),
@@ -90,6 +92,7 @@ func TestEveryManagedServiceKindSharesTheOneRoleContract(t *testing.T) {
 	}
 	want := map[string]string{
 		"proxy-squid": "proxy-squid-v1", "dns-server-dnsmasq": "dns-server-dnsmasq-v1", "ntp-server-chrony": "ntp-server-chrony-v1",
+		"registry-distribution": "registry-distribution-v1",
 	}
 	for kind, implementation := range want {
 		if implementations[kind] != implementation {

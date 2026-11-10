@@ -22,17 +22,22 @@ MAX_ANSWERS = 64
 
 
 def answer_evidence(entry):
-    if set(entry) != {"address", "answer", "port"}:
+    if set(entry) - {"fingerprint"} != {"address", "answer", "port"}:
         raise ValueError("answer evidence")
     if not isinstance(entry["port"], int) or isinstance(entry["port"], bool):
         raise ValueError("answer port")
     if not entry["answer"]:
         raise ValueError("answer")
-    return {
+    evidence = {
         "address": str(entry["address"]),
         "answer": str(entry["answer"]),
         "port": int(entry["port"]),
     }
+    if "fingerprint" in entry:
+        if not isinstance(entry["fingerprint"], str) or len(entry["fingerprint"]) != 64 or entry["fingerprint"].strip("0123456789abcdef"):
+            raise ValueError("answer fingerprint")
+        evidence["fingerprint"] = entry["fingerprint"]
+    return evidence
 
 
 def presence(observation, answers, request_digest):

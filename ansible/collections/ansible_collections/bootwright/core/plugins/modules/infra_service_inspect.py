@@ -44,6 +44,19 @@ options:
     description: Bounded readiness retries before the service is unproved.
     type: int
     default: 30
+  authorization:
+    description:
+      - The base64 C(user:password) token a registry's readiness authenticates
+        with. Never returned or logged; one opaque token, so the masking of a
+        hidden argument cannot reach the evidence the module returns.
+    type: str
+    default: ''
+  fingerprint:
+    description:
+      - The SHA-256 of the certificate a registry must present. A listener
+        presenting another one, or a probe given none, is sent no credential.
+    type: str
+    default: ''
 author:
   - Bootwright contributors (@crmarques)
 """
@@ -66,7 +79,9 @@ observation:
   returned: always
   type: dict
 answers:
-  description: One entry per declared address when readiness was requested.
+  description:
+    - One entry per declared address when readiness was requested; a registry's
+      also names the SHA-256 fingerprint of the certificate it presented.
   returned: when readiness is requested
   type: list
   elements: dict
@@ -100,22 +115,26 @@ from ansible_collections.bootwright.core.plugins.module_utils.infra_service impo
     probe_failure,
     probe_http,
     probe_ntp,
+    probe_registry,
     probe_targets,
+    Refused,
 )
 
 MAX_ATTEMPTS = 120
 RETRY_DELAY = 1
 
 
-def answer_for(request, address):
-    """Prove the one answer this kind of service exists to give."""
+def answer_for(request, address, credential):
+    """Prove the one answer this kind of service exists to give, and the certificate a registry presents."""
     kind, port = request["kind"], int(request["port"])
     if kind == "Proxy":
-        return probe_http(address, port)
+        return probe_http(address, port), None
     if kind == "DNSServer":
-        return probe_dns(address, port, request.get("records") or [])
+        return probe_dns(address, port, request.get("records") or []), None
     if kind == "NTPServer":
-        return probe_ntp(address, port)
+        return probe_ntp(address, port), None
+    if kind == "Registry":
+        return probe_registry(address, port, *credential)
     raise ValueError("kind")
 
 
@@ -128,6 +147,8 @@ def main():
             "foreign": {"type": "bool", "default": False},
             "bind_address": {"type": "bool", "default": False},
             "attempts": {"type": "int", "default": 30},
+            "authorization": {"type": "str", "default": "", "no_log": True},
+            "fingerprint": {"type": "str", "default": ""},
         },
         supports_check_mode=True,
     )
@@ -156,22 +177,28 @@ def main():
         return
     result["failures"] = []
     answers, unproved = [], []
+    credential = (module.params["authorization"], module.params["fingerprint"])
     for address in probe_targets(request):
-        answer, last, cause = None, None, "listener-failed"
+        answer, fingerprint, last, cause = None, None, None, "listener-failed"
         for remaining in range(attempts):
             try:
-                answer = answer_for(request, address)
+                answer, fingerprint = answer_for(request, address, credential)
                 break
             except (OSError, ValueError) as failure:
                 last = probe_failure(failure)
                 cause = "readiness-timeout" if isinstance(failure, socket.timeout) else "listener-failed"
+                if isinstance(failure, Refused):
+                    break
                 if remaining + 1 < attempts:
                     time.sleep(RETRY_DELAY)
         if answer is None:
             result["failures"].append({"port": int(request["port"]), "reason": cause})
             unproved.append("%s:%s (%s)" % (address, request["port"], last))
             continue
-        answers.append({"address": address, "answer": answer, "port": int(request["port"])})
+        entry = {"address": address, "answer": answer, "port": int(request["port"])}
+        if fingerprint is not None:
+            entry["fingerprint"] = fingerprint
+        answers.append(entry)
     result["answers"] = answers
     result["failures"].sort(key=lambda failure: failure["reason"] == "readiness-timeout")
     result["unproved"] = unproved

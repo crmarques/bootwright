@@ -79,7 +79,7 @@ func managedServiceOf(kind api.Kind) func(string) api.Object {
 }
 
 func selectedImplementation(kind api.Kind) api.FieldValue {
-	return text("implementation", map[api.Kind]string{api.Proxy: "squid", api.DNSServer: "dnsmasq", api.NTPServer: "chrony"}[kind])
+	return text("implementation", map[api.Kind]string{api.Proxy: "squid", api.DNSServer: "dnsmasq", api.NTPServer: "chrony", api.Registry: "distribution"}[kind])
 }
 
 func placedArtifactServer(machine string) api.Object {
@@ -91,7 +91,8 @@ func placedArtifactServer(machine string) api.Object {
 // only an ArtifactServer declares refuses its graph with exactly its reason and
 // remedy, and a row with no graph here fails.
 func TestManagedServiceRefusalTableMatchesUnsupported(t *testing.T) {
-	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(nil), ntpserver.Definition()} {
+	registry := managedservice.Definition{Kind: api.Registry, Implementation: "registry-distribution-v1", Selects: "distribution"}
+	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsserver.Definition(nil), ntpserver.Definition(), registry} {
 		capability := managedservice.NewCapability(definition, nil)
 		for _, row := range refusalTable(t) {
 			if artifactOnlyRows[row.name] {
@@ -119,7 +120,7 @@ func TestAServiceOnTheControllerHasNoSSHRow(t *testing.T) {
 		field("local", api.BoolValue(true)),
 		field("ssh", api.MapValue(field("auth", api.MapValue(field("operatorIdentity", api.MapValue()))))),
 	)))
-	for _, kind := range []api.Kind{api.Proxy, api.DNSServer, api.NTPServer, api.ArtifactServer} {
+	for _, kind := range []api.Kind{api.Proxy, api.DNSServer, api.NTPServer, api.Registry, api.ArtifactServer} {
 		service := managedServiceOf(kind)("controller")
 		if kind == api.ArtifactServer {
 			service = placedArtifactServer("controller")

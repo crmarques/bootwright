@@ -364,7 +364,7 @@ to the result.
 ### B100
 
 One managed `LoadBalancer` lifecycle over the shared managed-service capability
-[legacy network services](delivered.md#m1f--managed-controller-network-services) delivered; its `Registry` half is [B68](m1.md#b68). **Exit evidence:** a
+[legacy network services](delivered.md#m1f--managed-controller-network-services) delivered; its `Registry` half is [B68](delivered.md#x360--a-managed-registry-on-its-placement-machine). **Exit evidence:** a
 typed port, the exact implementation, lifecycle evidence, and failure and
 acceptance tests.
 
@@ -3381,7 +3381,7 @@ mirror row of [B1250](#b1250)'s profile.
 ### B1249
 
 **Owner:** Infrastructure services, with State reconciliation. **Kind:**
-product. **Requires:** [B1245](delivered.md#x363--the-rest-of-the-acquisition-list) (delivered), B1246, [B68](m1.md#b68), [B1236](delivered.md#x358--container-runtime-on-an-ssh-placement-host) (delivered).
+product. **Requires:** [B1245](delivered.md#x363--the-rest-of-the-acquisition-list) (delivered), B1246, [B68](delivered.md#x360--a-managed-registry-on-its-placement-machine) (delivered), [B1236](delivered.md#x358--container-runtime-on-an-ssh-placement-host) (delivered).
 **Definition:** Needs definition, from [D250](#d250) (8), (14) and (16): the
 [design](../deferred/controlled-network.md#the-mirror-host). **Outcome:** a
 context that places its mirror Registry and artifact server on a Machine,
@@ -8020,7 +8020,7 @@ by the session, pending the owner's review:
 10. The work is parked as B1242 to [B1251](delivered.md#x359--destinations-a-managed-proxy-admits) until the owner
     promotes it, in the
     [design's order](../deferred/controlled-network.md#delivery-order);
-    [B68](m1.md#b68), [B1236](delivered.md#x358--container-runtime-on-an-ssh-placement-host) (delivered) and the acceptance of
+    [B68](delivered.md#x360--a-managed-registry-on-its-placement-machine), [B1236](delivered.md#x358--container-runtime-on-an-ssh-placement-host) (delivered) and the acceptance of
     [B724](m3.md#b724) join it.
 
 Shown the plan the same day, the owner answered:
@@ -8201,6 +8201,37 @@ the owner's review:
     cannot omit them. The Go image is pinned by tag and digest in the
     Dockerfile alone, `GO_VERSION` is gone, and the digest is the tag's
     manifest list, which every architecture shares.
+12. Taken by the session for B68 (X360), pending the owner's review. B68 is
+    a Candidate whose definition the slice's record supplies: a managed
+    `Registry` on its placement Machine through the shared managed-service
+    capability, its consumers left to [B1249](#b1249). The implementation is
+    CNCF Distribution 3.1.2, the `registry` image pinned by its index digest
+    (`implementation: distribution`, renamed from `mirror-registry`, which no
+    product of that name realized), because it serves TLS and a bcrypt password
+    file natively and stores the deep repository paths the image mirror layout
+    uses; Red Hat's mirror-registry, which installs Quay, was rejected as a
+    multi-container installer with its own lifecycle. It serves HTTPS alone
+    from a declared `tls.secretRef`, as the artifact server does, and the
+    generated certificate of B1249 waits for that item. Every push and pull
+    authenticates with the `usernamePassword` Secret `credentialsRef` names,
+    which a managed Registry now requires and which may not be a registry
+    document. Its bcrypt password file is derived on the controller in Go and
+    lent to the host, with no cryptography there: a host-side derivation would
+    refuse a FIPS-mode host, whose crypt library allows only SHA-crypt, while
+    Distribution reads only bcrypt, and the owner's controllers run in FIPS
+    mode and may be the mirror host. Its salt is random: a salt derived from the
+    password and the public block name would let anyone who reads the file
+    test a guess with one HMAC instead of bcrypt. The running registry decides
+    a replay instead: the apply keeps the published file when the registry
+    already answers the bound credential, so nothing restarts. Pushed
+    content is kept until destroy, which removes it, as the artifact server's
+    `persistent` retention does, and the storage keeps one SELinux label, at a
+    level the unit pins, relabeled whole only when an entry carries another. Readiness proves an
+    authenticated `GET /v2/` over TLS presenting the bound certificate, and the
+    probe sends the credential only after it has compared that certificate. Adding the registry's fields to the one
+    request every managed service freezes moves that request version and so
+    the proxy's, resolver's and time service's content digests, rather than
+    giving the registry a capability of its own.
 
 ### D252
 

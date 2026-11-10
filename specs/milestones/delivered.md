@@ -13760,3 +13760,50 @@ goldens now carry the derived root path beside its `wwn`.
 occurred. **Limitations:** a serial-declared root's erase still compares no
 WWN ([B1275](m1.md#b1275)); the `bootwright-template-inputs` chart still emits
 a physical root `deviceName`, which its owner changes.
+
+### X360 — A managed registry on its placement Machine
+
+**Item:** B68 (2026-11-10, [D251](backlog.md#d251) (6) and (12)), delivered
+in-tree; its LoadBalancer half stays [B100](backlog.md#b100). A managed
+`Registry` with `implementation: distribution` is the fourth kind of the
+shared managed-service capability (`registry-distribution-v1`, block
+`registry-<name>`): CNCF Distribution 3.1.2 on its placement Machine, the
+controller or one reached over SSH, its image pulled through
+`bootwright.core.image_acquire` and mirrored as every managed service's is
+([managed registry](../infrastructure-services.md#managed-registry)). It
+serves HTTPS alone from the `tlsCertificate` Secret `tls.secretRef` names, and
+authenticates every push and pull against a bcrypt password file the
+controller derives in Go, with a random salt, from the `usernamePassword`
+Secret `credentialsRef` names and lends to the host, which keeps the published
+file while the running registry answers that credential,
+which does no cryptography, so a FIPS-mode host serves it; both are required on a
+managed Registry and proved before registration
+([API](../api/infrastructure-services.md#managed-registry)). Pushed content is
+kept under the content root until destroy removes it. Its storage keeps one SELinux label at a level the unit pins,
+so no start relabels it. Readiness proves an authenticated `GET /v2/` over TLS
+presenting the bound certificate, whose fingerprint the evidence now names; the
+probe compares that certificate before it sends the credential. The Registry leaves the unrealized table,
+its sockets join the controller's listener checks and firewall inspection, and
+its image joins `render acquisitions` and the bill of materials.
+
+| Exit evidence | Where |
+| --- | --- |
+| Typed port | `managedservice.Definition` gains `Certificate` and `PasswordFile`; `registry.Definition`; `Request.TLS`, `Request.CredentialsRef`, `Answer.Fingerprint` |
+| Exact implementation | the pinned image and `registry-distribution-v1.golden`; `distribution.yml.j2` and `distribution.container.j2` goldens |
+| Lifecycle evidence | `TestARegistryFreezesItsServingAndClientSecretsAndLendsEachOperationItsParts`, `TestARegistryIsPresentOnlyWhenItPresentsTheBoundCertificate`, the capability contract suite's `lab-rhel+registry` row, the managed-service replay harness |
+| Failure tests | `TestARegistryProvesItsBoundCertificateAndCredentialBeforeRegistration`, `TestAManagedRegistryServesHTTPSFromItsCertificateToItsCredential`, `TestThePasswordFileIsARandomlySaltedBcryptLine`, `test_a_listener_presenting_another_certificate_receives_no_credential`, `test_a_refused_credential_is_definite_and_never_retried` |
+| Acceptance | owed: the live run of [B1250](backlog.md#b1250)'s profile |
+
+Adding the fields to the one request every managed service freezes moved
+`managedservice.RequestVersion` and so the proxy's, resolver's and time
+service's content digests. The plan binds every Secret the request names,
+its own two beside the image mirror's that
+[X362](#x362--the-image-mirrors-secrets-bound-at-plan) bound.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** no consumer selects a managed Registry and the
+certificate is the operator's to declare until [B1249](backlog.md#b1249); the
+Distribution configuration, the pinned SELinux level and storage label on an
+enforcing host and the probe against a real registry are proved against
+goldens and fakes only. A restart in the middle of a push loses that upload,
+because each start draws a new upload secret.

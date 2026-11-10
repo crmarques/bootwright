@@ -616,12 +616,12 @@ Each stage holds these checks:
 
 The controller and infrastructure-services stages read the controller's
 readiness once. It reports only what it observes. Observed: the controller's
-checks, including the sockets of the managed Proxy, DNSServer, NTPServer and
-ArtifactServer the controller hosts and of local emulated management
+checks, including the sockets of the managed Proxy, DNSServer, NTPServer,
+Registry and ArtifactServer the controller hosts and of local emulated management
 controllers, the artifact mirror's files, the capacity of the hosts that hold
 Machines, and the cluster checks. Not observed, and so neither passed nor listed: an external service, a
-Registry or LoadBalancer, and a managed service placed on a Machine other than
-the controller. `apply` checks those at its own effect boundary, as it does
+LoadBalancer, and a managed service placed on a Machine other than the
+controller. `apply` checks those at its own effect boundary, as it does
 whether a service's port is free and what an artifact server's host holds; no
 preflight check probes them. With `--dry-run` no process runs: the controller
 checks collapse into one pending `controller.readiness` check, the artifact

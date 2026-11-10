@@ -10,5 +10,5 @@ func (c Capability) SecretReferences(block reconciliation.Block) ([]string, erro
 	if err != nil {
 		return nil, err
 	}
-	return lifecycle.SecretNames(append(request.Placement.SecretReferences(), request.ImageSource.SecretReferences()...)...), nil
+	return lifecycle.SecretNames(request.SecretReferences()...), nil
 }

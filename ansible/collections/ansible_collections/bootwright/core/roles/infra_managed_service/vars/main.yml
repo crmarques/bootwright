@@ -15,5 +15,13 @@ infra_managed_service_implementations:
     configuration: squid.conf
     configuration_template: squid.conf.j2
     unit_template: squid.container.j2
+  registry-distribution-v1:
+    configuration: config.yml
+    configuration_template: distribution.yml.j2
+    unit_template: distribution.container.j2
+    private_directories:
+      - tls
+      - auth
+      - data
 infra_managed_service_implementation: >-
   {{ infra_managed_service_implementations[bootwright_managed_service_request.implementation] }}

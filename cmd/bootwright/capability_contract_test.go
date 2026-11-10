@@ -42,6 +42,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/registry"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -227,6 +228,8 @@ func contractRows() []contractRow {
 			readiness: "answers", removalPartial: contractStoppedService, drift: contractFailedUnit},
 		{kind: string(ntpserver.Definition().Kind), implementation: ntpserver.Definition().Implementation, example: "lab-rhel", presence: contractServicePresence,
 			readiness: "answers", removalPartial: contractStoppedService, drift: contractFailedUnit},
+		{kind: string(registryDefinition().Kind), implementation: registryDefinition().Implementation, example: "lab-rhel+registry", presence: contractServicePresence,
+			readiness: "answers", removalPartial: contractStoppedService, drift: contractFailedUnit},
 		{kind: artifactserver.Kind, implementation: artifactserver.Implementation, example: "lab-rhel", presence: contractArtifactServerPresence,
 			readiness: "listeners", removalPartial: contractStoppedService, drift: contractFailedUnit},
 	}
@@ -242,6 +245,7 @@ const cephSMBCompletedFrom = "specs/ceph.md, SMB resources: an SMB request takes
 var contractOverlays = map[string][2]string{
 	"lab-baremetal+erase":                {"lab-baremetal", filepath.Join("testdata", "capability-overlays", "physical-erase")},
 	"lab-rhel+firewall":                  {"lab-rhel", filepath.Join("testdata", "capability-overlays", "host-firewall")},
+	"lab-rhel+registry":                  {"lab-rhel", filepath.Join("testdata", "capability-overlays", "managed-registry")},
 	"libvirt-3-nodes-ceph+smb":           {"libvirt-3-nodes-ceph", filepath.Join("testdata", "capability-overlays", "ceph-smb")},
 	"libvirt-3-nodes-ceph-object+user":   {"libvirt-3-nodes-ceph-object", filepath.Join("testdata", "capability-overlays", "ceph-object-user")},
 	"libvirt-3-nodes-ceph-object+bucket": {"libvirt-3-nodes-ceph-object", filepath.Join("testdata", "capability-overlays", "ceph-object-bucket")},
@@ -1416,16 +1420,28 @@ func contractClusterPresence(t *testing.T, execution lifecycle.Execution) map[st
 // contractServicePresence proves a managed network service realized: its unit
 // active, the frozen image running since after every file it runs from was
 // published, its content root present and every probe target answering on the
-// frozen port.
+// frozen port, one that serves TLS presenting the certificate the attempt binds.
 func contractServicePresence(t *testing.T, execution lifecycle.Execution) map[string]any {
 	t.Helper()
 	request, err := managedservice.DecodeRequest(execution.Block.Request, contractServiceVersion(execution.Block.Implementation))
 	if err != nil {
 		t.Fatal(err)
 	}
+	fingerprint := ""
+	if request.TLS != nil {
+		certificate, err := artifactserver.ValidateServingCertificate(execution.Material[request.TLS.Secret], request.TLS.Secret, execution.Context, nil, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		fingerprint = certificate.Fingerprint
+	}
 	answers := []map[string]any{}
 	for _, address := range request.ProbeTargets() {
-		answers = append(answers, map[string]any{"address": address, "answer": "contract answer", "port": request.Port})
+		answer := map[string]any{"address": address, "answer": "contract answer", "port": request.Port}
+		if fingerprint != "" {
+			answer["fingerprint"] = fingerprint
+		}
+		answers = append(answers, answer)
 	}
 	return map[string]any{
 		"postcondition": true, "unit": "active", "container": request.Image, "contentRoot": true, "answers": answers,
@@ -1436,7 +1452,7 @@ func contractServicePresence(t *testing.T, execution lifecycle.Execution) map[st
 // contractServiceVersion is the request version the managed service bound to
 // implementation writes, which is not its implementation's own name.
 func contractServiceVersion(implementation string) string {
-	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsServerDefinition(), ntpserver.Definition()} {
+	for _, definition := range managedServiceDefinitions() {
 		if definition.Implementation == implementation {
 			return definition.Version
 		}
@@ -1589,11 +1605,22 @@ func contractMaterial(t *testing.T, example contractExample, references []string
 }
 
 // contractServedAddresses is every endpoint address the example's artifact
-// servers froze, which a serving certificate must cover.
+// servers and registries froze, which a serving certificate must cover.
 func contractServedAddresses(t *testing.T, example contractExample) []string {
 	t.Helper()
 	var addresses []string
 	for _, block := range example.plan.Blocks {
+		if block.Implementation == registry.Implementation {
+			request, err := managedservice.DecodeRequest(block.Request, managedservice.RequestVersion)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, address := range request.ServedAddresses() {
+				if !slices.Contains(addresses, address) {
+					addresses = append(addresses, address)
+				}
+			}
+		}
 		if block.Implementation != artifactserver.Implementation {
 			continue
 		}

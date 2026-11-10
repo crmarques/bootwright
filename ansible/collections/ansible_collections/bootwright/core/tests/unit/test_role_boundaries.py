@@ -83,6 +83,7 @@ EXECUTABLES = frozenset({
     "/usr/sbin/arping",
     "/usr/bin/chcon",
     "/usr/bin/dnf",
+    "/usr/bin/find",
     "/usr/bin/getent",
     "/usr/bin/mkksiso",
     "/usr/bin/mv",

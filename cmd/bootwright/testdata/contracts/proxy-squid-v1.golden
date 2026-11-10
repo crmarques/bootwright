@@ -1,6 +1,6 @@
 implementation: proxy-squid-v1
-content-digest: c2e5c9ff9a042e45bf8a311f4076934eb7727533c9ca51c849f752181470e2e4
-request-version: managed-service-v3
+content-digest: 08b2733c7de34edb9a92fd49576718d0ca8692388455b7a05adc36efb6cb34e0
+request-version: managed-service-v4
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -23,6 +23,7 @@ request-schema:
   bindAddress string
   clients []string omitempty
   contentRoot string
+  credentialsRef string omitempty
   destinations []struct managedservice.Destination omitempty
   destinations[].address string omitempty
   destinations[].domain string omitempty
@@ -62,6 +63,9 @@ request-schema:
   records[].name string
   records[].subtree bool omitempty
   sources []string omitempty
+  tls *struct managedservice.TLS omitempty
+  tls.minVersion string
+  tls.secret string
   unit string
   version string
 evidence-schema:
@@ -69,6 +73,7 @@ evidence-schema:
   answers []struct managedservice.Answer
   answers[].address string
   answers[].answer string
+  answers[].fingerprint string omitempty
   answers[].port int
   container string
   contentRoot bool

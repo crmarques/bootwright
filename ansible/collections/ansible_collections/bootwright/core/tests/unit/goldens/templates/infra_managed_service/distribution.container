@@ -1,0 +1,25 @@
+[Unit]
+Description=Bootwright managed registry mirror
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=registry.example.test/registry@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+ContainerName=bootwright-lab-rhel-registry-mirror
+Network=host
+User=0
+Entrypoint=/bin/registry
+Exec=serve /etc/distribution/config.yml
+Environment=OTEL_TRACES_EXPORTER=none
+SecurityLabelLevel=s0:c130,c165
+Volume=/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/config/config.yml:/etc/distribution/config.yml:ro,Z
+Volume=/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/tls:/etc/distribution/tls:ro,Z
+Volume=/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/auth:/etc/distribution/auth:ro,Z
+Volume=/var/lib/bootwright-hosted/lab-rhel/services/registry/mirror/data:/var/lib/registry
+
+[Service]
+Restart=always
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

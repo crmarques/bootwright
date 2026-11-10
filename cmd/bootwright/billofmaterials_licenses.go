@@ -62,4 +62,5 @@ var imageLicenses = map[string]imageLicense{
 	"docker.io/dockurr/chrony":                  {"GPL-2.0-only", "chrony's source headers, \"version 2 of the GNU General Public License\""},
 	"docker.io/4km3/dnsmasq":                    {"GPL-2.0-only OR GPL-3.0-only", "dnsmasq's documentation, \"the GPL, version 2 or version 3 at your discretion\""},
 	"quay.io/metal3-io/sushy-tools":             {"Apache-2.0", "openstack/sushy-tools LICENSE"},
+	"docker.io/library/registry":                {"Apache-2.0", "distribution/distribution LICENSE"},
 }

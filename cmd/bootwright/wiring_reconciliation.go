@@ -22,6 +22,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/registry"
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/managedos/media"
@@ -203,7 +204,7 @@ func operationPlaybook() map[string]string {
 	bindings[ceph.ConsumerImplementation+"/apply"] = "storage/export_apply.yml"
 	bindings[ceph.ConsumerImplementation+"/observe"] = "storage/export_observe.yml"
 	for prefix, definition := range map[string]managedservice.Definition{
-		"proxy": proxy.Definition(), "dns_server": dnsServerDefinition(), "ntp_server": ntpserver.Definition(),
+		"proxy": proxy.Definition(), "dns_server": dnsServerDefinition(), "ntp_server": ntpserver.Definition(), "registry": registryDefinition(),
 	} {
 		for _, operation := range []string{"apply", "observe", "destroy"} {
 			bindings[definition.Implementation+"/"+operation] = "infrastructureservices/" + prefix + "_" + operation + ".yml"
@@ -306,10 +307,10 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		capability: ceph.NewPhysicalRetirement().WithProofs(cephDependencyProofs{}).WithErasureProofs(physicalCephEraseProof).WithUninstalledProofs(installation.PhysicalEraseUnstarted)})
 	resolver = append(resolver, boundCapability{kind: string(api.CephSMBResource), implementation: ceph.SMBImplementation, family: "storage-smb", capability: ceph.NewSMB(runner).WithProofs(cephDependencyProofs{})})
 	resolver = append(resolver, boundCapability{kind: string(api.CephReplication), implementation: ceph.ReplicationImplementation, family: "storage-replication", capability: ceph.NewReplication(runner).WithProofs(cephDependencyProofs{})})
-	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsServerDefinition(), ntpserver.Definition()} {
+	for _, definition := range managedServiceDefinitions() {
 		resolver = append(resolver, boundCapability{
 			kind: string(definition.Kind), implementation: definition.Implementation, family: "managed-service",
-			capability: managedservice.NewCapability(definition, runner),
+			capability: managedservice.NewCapability(definition, runner).WithClock(clock),
 		})
 	}
 	resolver = append(resolver, boundCapability{
@@ -476,6 +477,14 @@ func physicalCephEraseProof(applied reconciliation.Block, removed lifecycle.Bloc
 
 func dnsServerDefinition() managedservice.Definition {
 	return dnsserver.Definition(attachedGatewayRecords)
+}
+
+func registryDefinition() managedservice.Definition {
+	return registry.Definition(material.BcryptPasswordFile)
+}
+
+func managedServiceDefinitions() []managedservice.Definition {
+	return []managedservice.Definition{proxy.Definition(), dnsServerDefinition(), ntpserver.Definition(), registryDefinition()}
 }
 
 func attachedGatewayRecords(catalog api.Catalog) ([]managedservice.Record, error) {

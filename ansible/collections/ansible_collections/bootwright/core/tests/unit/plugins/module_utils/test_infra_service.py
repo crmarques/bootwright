@@ -319,3 +319,110 @@ def test_a_podman_that_fails_to_start_is_not_read_as_no_container():
 
     with pytest.raises(PermissionError):
         infra_service.container_present(denied, UNIT)
+
+
+class Secured:
+    """A TLS stream that presents a certificate and answers one response, recording what was sent."""
+
+    def __init__(self, response, certificate=b"certificate-der"):
+        self.response, self.certificate, self.sent = response, certificate, b""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exception):
+        return False
+
+    def getpeercert(self, binary_form=False):
+        assert binary_form is True
+        return self.certificate
+
+    def sendall(self, data):
+        self.sent += data
+
+    def recv(self, size):
+        part, self.response = self.response[:size], self.response[size:]
+        return part
+
+
+class Raw:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exception):
+        return False
+
+    def settimeout(self, _timeout):
+        pass
+
+
+def registry(monkeypatch, secured):
+    """Connect the registry probe to one scripted TLS stream, unverified as the probe asks."""
+    contexts = []
+
+    class Context:
+        def __init__(self, protocol):
+            contexts.append(self)
+
+        def wrap_socket(self, raw):
+            assert isinstance(raw, Raw) and self.verify_mode == infra_service.ssl.CERT_NONE and self.check_hostname is False
+            return secured
+    monkeypatch.setattr(infra_service.socket, "create_connection", lambda address, timeout: Raw())
+    monkeypatch.setattr(infra_service.ssl, "SSLContext", Context)
+    return contexts
+
+
+API = b"Docker-Distribution-Api-Version: registry/2.0\r\n"
+BOUND = infra_service.hashlib.sha256(b"certificate-der").hexdigest()
+
+
+def test_a_registry_answering_its_api_to_the_credential_names_its_certificate(monkeypatch):
+    secured = Secured(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n" + API + b"\r\n{}")
+    registry(monkeypatch, secured)
+    status, fingerprint = infra_service.probe_registry("2001:db8::5", 5000, "bWlycm9yOnNlY3JldA==", BOUND)
+    assert status == "HTTP/1.1 200 OK"
+    assert fingerprint == infra_service.hashlib.sha256(b"certificate-der").hexdigest()
+    assert secured.sent.startswith(b"GET /v2/ HTTP/1.1\r\nHost: [2001:db8::5]:5000\r\n")
+    assert b"Authorization: Basic bWlycm9yOnNlY3JldA==\r\n" in secured.sent
+
+
+@pytest.mark.parametrize("response, credential", [
+    (b"HTTP/1.1 401 Unauthorized\r\n" + API + b"\r\n", "bWlycm9yOnNlY3JldA=="),
+    (b"HTTP/1.1 200 OK\r\n\r\n", "bWlycm9yOnNlY3JldA=="),
+    (b"SSH-2.0-OpenSSH\r\n\r\n", "bWlycm9yOnNlY3JldA=="),
+    (b"HTTP/1.1 200 OK\r\n" + API, "bWlycm9yOnNlY3JldA=="),
+    (b"HTTP/1.1 200 OK\r\n" + b"X: " + b"y" * 9000 + b"\r\n\r\n", "bWlycm9yOnNlY3JldA=="),
+    (b"HTTP/1.1 200 OK\r\n" + API + b"\r\n", ""),
+], ids=["refused credential", "not a distribution API", "not HTTP", "truncated", "unbounded headers", "no credential"])
+def test_a_registry_that_does_not_serve_its_api_to_the_credential_is_unproved(monkeypatch, response, credential):
+    registry(monkeypatch, Secured(response))
+    with pytest.raises(ValueError):
+        infra_service.probe_registry("192.0.2.5", 5000, credential, BOUND)
+
+
+def test_a_registry_presenting_no_certificate_is_unproved(monkeypatch):
+    registry(monkeypatch, Secured(b"HTTP/1.1 200 OK\r\n" + API + b"\r\n", certificate=b""))
+    with pytest.raises(ValueError):
+        infra_service.probe_registry("192.0.2.5", 5000, "bWlycm9yOnNlY3JldA==", BOUND)
+
+
+# The credential goes only to the listener presenting the bound certificate:
+# another one answers certificate-mismatch with what it presented and is sent
+# nothing, and a probe that holds no bound certificate sends nothing either.
+def test_a_listener_presenting_another_certificate_receives_no_credential(monkeypatch):
+    impostor = Secured(b"HTTP/1.1 200 OK\r\n" + API + b"\r\n", certificate=b"another-der")
+    registry(monkeypatch, impostor)
+    answer, presented = infra_service.probe_registry("192.0.2.5", 5000, "bWlycm9yOnNlY3JldA==", BOUND)
+    assert answer == "certificate-mismatch" and presented == infra_service.hashlib.sha256(b"another-der").hexdigest()
+    assert impostor.sent == b""
+    unbound = Secured(b"HTTP/1.1 200 OK\r\n" + API + b"\r\n")
+    registry(monkeypatch, unbound)
+    with pytest.raises(infra_service.Refused):
+        infra_service.probe_registry("192.0.2.5", 5000, "bWlycm9yOnNlY3JldA==", "")
+    assert unbound.sent == b""
+
+
+def test_a_refused_credential_is_definite_and_never_retried(monkeypatch):
+    registry(monkeypatch, Secured(b"HTTP/1.1 401 Unauthorized\r\n" + API + b"\r\n"))
+    with pytest.raises(infra_service.Refused):
+        infra_service.probe_registry("192.0.2.5", 5000, "bWlycm9yOnNlY3JldA==", BOUND)

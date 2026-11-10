@@ -33,7 +33,7 @@ from ansible.template import Templar, trust_as_template
 COLLECTION = pathlib.Path(__file__).resolve().parents[2]
 ROLE = COLLECTION / "roles" / "infra_managed_service"
 PLAYBOOKS = COLLECTION / "playbooks" / "infrastructureservices"
-SERVICES = ("dns_server", "ntp_server", "proxy")
+SERVICES = ("dns_server", "ntp_server", "proxy", "registry")
 OPERATIONS = ("apply", "observe", "destroy")
 ROLES = COLLECTION / "roles"
 SQUID = COLLECTION / "tests" / "unit" / "goldens" / "templates" / "infra_managed_service" / "squid.conf"
@@ -73,10 +73,10 @@ def test_the_argument_spec_keys_the_request_by_its_frozen_implementation():
     options = [specs[operation]["options"] for operation in OPERATIONS]
     assert options[0] == options[1] == options[2]
     request = options[0]["bootwright_managed_service_request"]["options"]
-    assert request["kind"]["choices"] == ["DNSServer", "NTPServer", "Proxy"]
+    assert request["kind"]["choices"] == ["DNSServer", "NTPServer", "Proxy", "Registry"]
     assert request["implementation"]["choices"] == sorted(implementations()) == [
-        "dns-server-dnsmasq-v1", "ntp-server-chrony-v1", "proxy-squid-v1"]
-    assert request["version"]["choices"] == ["managed-service-v3"]
+        "dns-server-dnsmasq-v1", "ntp-server-chrony-v1", "proxy-squid-v1", "registry-distribution-v1"]
+    assert request["version"]["choices"] == ["managed-service-v4"]
 
 
 def test_each_implementation_selects_only_its_own_templates():
@@ -142,7 +142,7 @@ PROXY = {
     "placement": {"connection": "local", "machine": "controller"},
     "port": 3128,
     "unit": "bootwright-lab-proxy-egress",
-    "version": "managed-service-v3",
+    "version": "managed-service-v4",
 }
 
 
@@ -321,7 +321,7 @@ def validate_of(tasks):
 
 
 MANAGED = {
-    "version": "managed-service-v3",
+    "version": "managed-service-v4",
     "kind": "DNSServer",
     "implementation": "dns-server-dnsmasq-v1",
     "unit": "bootwright-lab-dns-resolver",
@@ -551,3 +551,66 @@ def test_readiness_refusal_precedes_stop_and_completion(role, protocol):
     assert args["phase"] == "refused" and ".failures[0].reason" in args["reason"] and ".failures[0].port" in args["port"]
     assert ".failures | length > 0" in tasks[refusal]["when"]
     assert "ansible.builtin.assert" in tasks[stop]
+
+
+MATERIAL_READ = re.compile(r"bootwright_managed_service_material|\bmaterial\.client")
+
+
+@pytest.mark.parametrize("tasks_file", ["apply.yml", "observe.yml"])
+def test_every_task_that_reads_bound_material_hides_its_arguments(tasks_file):
+    tasks = load_tasks("infra_managed_service", tasks_file)
+    reading = [task for task in tasks if MATERIAL_READ.search(str({key: value for key, value in task.items() if key != "when"}))]
+    assert reading, "no task of %s reads bound material" % tasks_file
+    for task in reading:
+        if "ansible.builtin.assert" in task:
+            continue
+        if task.get("no_log") is True:
+            continue
+        hides = Templar(loader=LOADER, variables={"bootwright_managed_service_request": {"credentialsRef": "mirror-push"}})
+        shows = Templar(loader=LOADER, variables={"bootwright_managed_service_request": {}})
+        hidden = str(task.get("no_log"))
+        assert hides.template(trust_as_template(hidden)) is True, "%r reads bound material without no_log" % task.get("name")
+        assert shows.template(trust_as_template(hidden)) is False, "%r hides a service that reads no credential" % task.get("name")
+
+
+# A forced relabel of the host returns every blob a registry stored to the
+# host's own label, so the apply relabels the whole store whenever the probe
+# finds one entry under another label, and never walks it otherwise.
+@pytest.mark.parametrize("found, relabeled", [("", False), ("/var/lib/bootwright-hosted/lab/services/registry/mirror/data/docker\n", True)])
+def test_the_storage_is_relabeled_whole_only_when_an_entry_carries_another_label(found, relabeled):
+    tasks = load_tasks("infra_managed_service", "apply.yml")
+    probe = index_of(tasks, lambda task: argv_of(task)[:1] == ["/usr/bin/find"], "finds a mislabeled entry")
+    label = index_of(tasks, lambda task: argv_of(task)[:2] == ["/usr/bin/chcon", "--recursive"], "relabels the store")
+    assert probe < label and tasks[probe].get("changed_when") is False
+    assert argv_of(tasks[probe])[-4:] == ["-context", "*:container_file_t:{{ infra_managed_service_label_level }}", "-print", "-quit"]
+    templar = Templar(loader=LOADER, variables={"infra_managed_service_selinux": {"stat": {"exists": True}},
+                                                "infra_managed_service_data_mislabeled": {"stdout": found}})
+    assert all(templar.evaluate_conditional(condition) for condition in tasks[label]["when"]) is relabeled
+    unlabeled = Templar(loader=LOADER, variables={"infra_managed_service_selinux": {"stat": {"exists": False}},
+                                                  "infra_managed_service_data_mislabeled": {"stdout": found}})
+    assert not all(unlabeled.evaluate_conditional(condition) for condition in tasks[label]["when"])
+
+
+def role_defaults():
+    return dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
+
+
+# The lent password file carries a fresh salt every apply, so it is published
+# only when the running registry does not already answer the bound credential
+# on every target while presenting the bound certificate.
+@pytest.mark.parametrize("accepted, published", [
+    ({"observation": {"unit": "active"}, "failures": [], "answers": [{"answer": "HTTP/1.1 200 OK"}]}, False),
+    ({"observation": {"unit": "active"}, "failures": [{"reason": "listener-failed"}], "answers": []}, True),
+    ({"observation": {"unit": "active"}, "failures": [], "answers": [{"answer": "certificate-mismatch"}]}, True),
+    ({"observation": {"unit": "inactive"}, "failures": [], "answers": []}, True),
+    ({"changed": False}, True),
+], ids=["accepted", "refused", "another certificate", "not running", "never asked"])
+def test_the_password_file_is_published_only_when_the_running_registry_refuses_the_credential(accepted, published):
+    tasks = load_tasks("infra_managed_service", "apply.yml")
+    ask = index_of(tasks, lambda task: task.get("register") == "infra_managed_service_accepted", "asks the running registry")
+    publish = index_of(tasks, lambda task: str((task.get("bootwright.core.private_file") or {}).get("path", "")).endswith("/htpasswd"),
+                       "publishes the password file")
+    assert ask < publish and tasks[ask].get("no_log") is True
+    variables = dict(role_defaults(), bootwright_managed_service_request={"credentialsRef": "mirror-push"}, infra_managed_service_accepted=accepted)
+    templar = Templar(loader=LOADER, variables=variables)
+    assert all(templar.evaluate_conditional(condition) for condition in tasks[publish]["when"]) is published

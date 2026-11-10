@@ -93,10 +93,10 @@ func controllerAcquisitions(catalog api.Catalog) ([]cli.Acquisition, string, err
 func serviceAcquisitions(catalog api.Catalog) ([]cli.Acquisition, error) {
 	compiled := map[api.Kind]string{
 		api.ArtifactServer: artifactserver.DefaultImage(), api.DNSServer: dnsserver.Definition(nil).Image,
-		api.NTPServer: ntpserver.Definition().Image, api.Proxy: proxy.Definition().Image,
+		api.NTPServer: ntpserver.Definition().Image, api.Proxy: proxy.Definition().Image, api.Registry: registryDefinition().Image,
 	}
 	var rows []cli.Acquisition
-	for _, kind := range []api.Kind{api.ArtifactServer, api.DNSServer, api.NTPServer, api.Proxy} {
+	for _, kind := range []api.Kind{api.ArtifactServer, api.DNSServer, api.NTPServer, api.Proxy, api.Registry} {
 		for _, service := range catalog.OfKind(kind) {
 			if service.Spec().Get("management").Text() != "managed" {
 				continue

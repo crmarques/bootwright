@@ -3,6 +3,7 @@ package infrastructureservices
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -93,5 +94,44 @@ func TestTheSpecStatesTheCoverageRemedyWithEachCommandsContextFlag(t *testing.T)
 	if !ok || !strings.Contains(sentence, "import the change with `context update --name <context>` and then run `secret generate` with `--context`") ||
 		strings.Contains(sentence, "each with `--context`") {
 		t.Fatalf("specs/infrastructure-services.md states the coverage remedy as %q, want context update with --name and secret generate with --context", sentence)
+	}
+}
+
+// A managed Registry serves HTTPS alone, so it needs a serving certificate and
+// a username and password to authenticate with, its minimum TLS version
+// defaults as the artifact server's does, and every one of its endpoints is an
+// HTTPS one a generated certificate must name and derives its names from.
+func TestAManagedRegistryServesHTTPSFromItsCertificateToItsCredential(t *testing.T) {
+	host := consumerHost(true, consumerAddresses()...)
+	bare := managedService(api.Registry, m("implementation", "distribution", "bindAddress", "192.0.2.10"))
+	issues := admit(bare, host)
+	for _, field := range []string{"$.spec.tls", "$.spec.credentialsRef"} {
+		if found := refusalsAt(issues, field); len(found) != 1 || !strings.Contains(found[0].Remediation, "a managed Registry") {
+			t.Errorf("a managed Registry without %s = %#v, want one refusal naming why", field, found)
+		}
+	}
+	registry := managedService(api.Registry, m("implementation", "distribution", "bindAddress", "0.0.0.0", "tls", m("secretRef", "serving"), "credentialsRef", "push",
+		"endpoints", list(m("name", "ip", "addressRef", "ip"), m("name", "name", "addressRef", "fqdn"))))
+	document := obj(api.Secret, "push", m("type", "dockerConfigJson", "source", m("contextStore", m())))
+	found := refusalsAt(admit(registry, host, document), "$.spec.credentialsRef")
+	if len(found) != 1 || !mentionsAll(found[0].Message, "Secret/push", "dockerConfigJson") || !strings.Contains(found[0].Remediation, "usernamePassword") {
+		t.Fatalf("a managed Registry authenticating from a dockerConfigJson = %#v, want one refusal at credentialsRef", found)
+	}
+	external := obj(api.Registry, "service", m("management", "external", "url", "registry.example.test", "credentialsRef", "push"))
+	if issues := admit(external, host, document); len(issues) != 0 {
+		t.Fatalf("an external Registry's dockerConfigJson credential was refused: %v", issues)
+	}
+	normalized, _ := Normalize(registry, api.NewCatalog([]api.Object{host}))
+	if got := normalized.Spec().Get("tls", "minVersion").Text(); got != "TLSv1.2" {
+		t.Fatalf("a managed Registry's minimum TLS version = %q, want TLSv1.2", got)
+	}
+	uncovered := servingSecret(generatedSource([]string{"host.example.test"}, []string{"192.0.2.99"}))
+	found = refusalsAt(admit(registry, host, uncovered), "$.spec.endpoints[0]")
+	if len(found) != 1 || !mentionsAll(found[0].Message, "endpoint ip serves HTTPS at 192.0.2.10", "Secret/serving") {
+		t.Fatalf("a Registry endpoint the generated certificate does not name = %#v, want one refusal at it", found)
+	}
+	catalog := api.NewCatalog([]api.Object{host, registry})
+	if names := CertificateNames(catalog, "serving"); !slices.Equal(names, []string{"192.0.2.10", "host.example.test", "host.example.test"}) {
+		t.Fatalf("a Registry's generated certificate derives %v, want its endpoint addresses and its Machine's name", names)
 	}
 }

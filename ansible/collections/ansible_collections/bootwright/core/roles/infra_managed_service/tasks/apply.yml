@@ -2,7 +2,7 @@
 - name: Validate the frozen managed service request
   ansible.builtin.assert:
     that:
-      - bootwright_managed_service_request.version == 'managed-service-v3'
+      - bootwright_managed_service_request.version == 'managed-service-v4'
       - bootwright_managed_service_request.implementation in infra_managed_service_implementations
       - bootwright_managed_service_request.unit is string
       - bootwright_managed_service_request.contentRoot.startswith('/var/lib/bootwright-hosted/')
@@ -39,6 +39,15 @@
         bootwright_managed_service_request.destinations | default([]) | selectattr('port', 'defined') | map(attribute='port')
         | select('integer') | reject('le', 65535) | list | length == 0
       - bootwright_managed_service_digest is match('[0-9a-f]{64}')
+      - >-
+        bootwright_managed_service_request.tls is not defined
+        or (bootwright_managed_service_material.certificate is defined
+            and bootwright_managed_service_material.privateKey is defined)
+      - >-
+        bootwright_managed_service_request.credentialsRef is not defined
+        or (bootwright_managed_service_material.clientUsername is defined
+            and bootwright_managed_service_material.clientPassword is defined
+            and bootwright_managed_service_material.passwordFile is defined)
     quiet: true
   no_log: true
 
@@ -190,6 +199,107 @@
     - '{{ infra_managed_service_config_dir }}'
   register: infra_managed_service_directories
 
+- name: Create the implementation's private directories
+  ansible.builtin.file:
+    path: '{{ bootwright_managed_service_request.contentRoot }}/{{ item }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  loop: '{{ infra_managed_service_implementation.private_directories | default([]) }}'
+  register: infra_managed_service_private_directories
+
+# A registry's storage keeps one SELinux label for its whole life: the unit
+# pins its level and mounts the directory without relabeling, so a start never
+# walks a store that may be large. The apply relabels it, recursively, only when
+# something in it carries another label, as a forced relabel of the host leaves
+# every blob it held.
+- name: Observe whether the placement host labels files for SELinux
+  ansible.builtin.stat:
+    path: /sys/fs/selinux/enforce
+    get_checksum: false
+  register: infra_managed_service_selinux
+  when: "'data' in (infra_managed_service_implementation.private_directories | default([]))"
+
+- name: Find the first storage entry another label holds
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/find
+      - '{{ infra_managed_service_data_dir }}'
+      - '!'
+      - -context
+      - '*:container_file_t:{{ infra_managed_service_label_level }}'
+      - -print
+      - -quit
+  register: infra_managed_service_data_mislabeled
+  when: infra_managed_service_selinux.stat.exists | default(false)
+  changed_when: false
+
+- name: Label the storage at the level its unit pins
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/chcon
+      - --recursive
+      - --type=container_file_t
+      - --range={{ infra_managed_service_label_level }}
+      - '{{ infra_managed_service_data_dir }}'
+  register: infra_managed_service_data_labeled
+  when:
+    - infra_managed_service_selinux.stat.exists | default(false)
+    - (infra_managed_service_data_mislabeled.stdout | default('')) | length > 0
+  changed_when: true
+
+# The serving material and the client credential reach the placement host
+# inside the module's own argument, so they cross a remote connection only in
+# the pipelined module payload and never in a file transfer.
+- name: Publish the serving certificate
+  bootwright.core.private_file:
+    content: "{{ lookup('ansible.builtin.file', bootwright_managed_service_material.certificate, rstrip=false) }}"
+    path: '{{ infra_managed_service_tls_dir }}/tls.crt'
+  register: infra_managed_service_certificate
+  when: bootwright_managed_service_request.tls is defined
+  no_log: true
+  diff: false
+
+- name: Publish the serving private key
+  bootwright.core.private_file:
+    content: "{{ lookup('ansible.builtin.file', bootwright_managed_service_material.privateKey, rstrip=false) }}"
+    path: '{{ infra_managed_service_tls_dir }}/tls.key'
+  register: infra_managed_service_key
+  when: bootwright_managed_service_request.tls is defined
+  no_log: true
+  diff: false
+
+# bcrypt salts every derivation afresh, so the file the controller lends never
+# equals the published one, and this host does no cryptography. The running
+# registry is its own verifier: when it already answers the bound credential,
+# presenting the bound certificate, its file is kept and nothing restarts.
+- name: Ask the running registry whether it already accepts the bound credential
+  bootwright.core.infra_service_inspect:
+    request: '{{ bootwright_managed_service_request }}'
+    readiness: true
+    attempts: 1
+    authorization: >-
+      {{ (lookup('ansible.builtin.file', material.clientUsername, rstrip=false) ~ ':'
+          ~ lookup('ansible.builtin.file', material.clientPassword, rstrip=false)) | b64encode }}
+    fingerprint: '{{ material.fingerprint | default("") }}'
+  vars:
+    material: '{{ bootwright_managed_service_material }}'
+  register: infra_managed_service_accepted
+  when: bootwright_managed_service_request.credentialsRef is defined
+  no_log: true
+
+- name: Publish the registry's password file
+  bootwright.core.private_file:
+    content: "{{ lookup('ansible.builtin.file', bootwright_managed_service_material.passwordFile, rstrip=false) }}"
+    path: '{{ infra_managed_service_auth_dir }}/htpasswd'
+  register: infra_managed_service_password_publication
+  when:
+    - bootwright_managed_service_request.credentialsRef is defined
+    - not infra_managed_service_credential_accepted
+  no_log: true
+  diff: false
+
 - name: Publish the service configuration
   ansible.builtin.template:
     src: '{{ infra_managed_service_implementation.configuration_template }}'
@@ -244,10 +354,8 @@
   ansible.builtin.stat:
     path: '{{ item }}'
     get_checksum: false
-  loop:
-    - '{{ infra_managed_service_configuration_path }}'
-    - '{{ infra_managed_service_unit_path }}'
-  register: infra_managed_service_runs_from
+  loop: '{{ infra_managed_service_runs_from + [infra_managed_service_unit_path] }}'
+  register: infra_managed_service_runs_from_files
   when: infra_managed_service_before.observation.unit == 'active'
 
 # A start that cannot be read proves nothing, so the service then restarts.
@@ -286,8 +394,10 @@
   when:
     - infra_managed_service_before.observation.unit == 'active'
     - infra_managed_service_configuration is changed or infra_managed_service_unit is changed
+      or infra_managed_service_certificate is changed or infra_managed_service_key is changed
+      or infra_managed_service_password_publication is changed
       or (infra_managed_service_started.stdout | default('') | trim | int)
-      < (infra_managed_service_runs_from.results | map(attribute='stat.mtime') | max) * 1000000000
+      < (infra_managed_service_runs_from_files.results | map(attribute='stat.mtime') | max) * 1000000000
   changed_when: true
 
 - name: Report service start completion
@@ -304,13 +414,36 @@
     status: running
   no_log: true
 
+# A service with a client credential is probed under no_log, which would also
+# hide every other service's readiness failures, so only it is.
 - name: Prove the managed service answers on every declared address
   bootwright.core.infra_service_inspect:
     request: '{{ bootwright_managed_service_request }}'
-    runs_from:
-      - '{{ infra_managed_service_configuration_path }}'
+    runs_from: '{{ infra_managed_service_runs_from }}'
     readiness: true
-  register: infra_managed_service_after
+  register: infra_managed_service_after_open
+  when: bootwright_managed_service_request.credentialsRef is not defined
+
+- name: Prove the managed service answers on every declared address with its client credential
+  bootwright.core.infra_service_inspect:
+    request: '{{ bootwright_managed_service_request }}'
+    runs_from: '{{ infra_managed_service_runs_from }}'
+    readiness: true
+    authorization: >-
+      {{ (lookup('ansible.builtin.file', material.clientUsername, rstrip=false) ~ ':'
+          ~ lookup('ansible.builtin.file', material.clientPassword, rstrip=false)) | b64encode }}
+    fingerprint: '{{ material.fingerprint | default("") }}'
+  vars:
+    material: '{{ bootwright_managed_service_material }}'
+  register: infra_managed_service_after_hidden
+  when: bootwright_managed_service_request.credentialsRef is defined
+  no_log: true
+
+- name: Keep the inspection this service ran
+  ansible.builtin.set_fact:
+    infra_managed_service_after: >-
+      {{ infra_managed_service_after_hidden if bootwright_managed_service_request.credentialsRef is defined
+         else infra_managed_service_after_open }}
 
 - name: Report the classified readiness refusal
   bootwright.core.infra_service_protocol:
@@ -342,6 +475,11 @@
     outcome: >-
       {{ 'changed'
          if (infra_managed_service_directories is changed
+             or infra_managed_service_private_directories is changed
+             or infra_managed_service_data_labeled is changed
+             or infra_managed_service_certificate is changed
+             or infra_managed_service_key is changed
+             or infra_managed_service_password_publication is changed
              or infra_managed_service_configuration is changed
              or infra_managed_service_unit is changed
              or infra_managed_service_restart is changed

@@ -38,7 +38,7 @@ func TestManagedServicesAndPlacement(t *testing.T) {
 		api.Proxy:          m("implementation", "squid", "endpoints", endpoints),
 		api.DNSServer:      m("implementation", "dnsmasq", "endpoints", endpoints),
 		api.NTPServer:      m("implementation", "chrony", "endpoints", endpoints),
-		api.Registry:       m("implementation", "mirror-registry", "endpoints", endpoints),
+		api.Registry:       m("implementation", "distribution", "endpoints", endpoints, "tls", m("secretRef", "serving"), "credentialsRef", "push"),
 	}
 	for kind, spec := range services {
 		t.Run(string(kind), func(t *testing.T) {
@@ -101,7 +101,7 @@ func TestServiceTransportAndLocalReferences(t *testing.T) {
 		{"unnamed bind addresses", api.LoadBalancer, m("implementation", "haproxy", "bindAddresses", list(m("address", "192.0.2.1"), m("address", "192.0.2.2")))},
 		{"DNS port", api.DNSServer, m("implementation", "dnsmasq", "port", api.IntegerValue("5353"))},
 		{"empty image", api.Proxy, m("implementation", "squid", "image", m())},
-		{"managed external URL", api.Registry, m("implementation", "mirror-registry", "url", "registry.example.test")},
+		{"managed external URL", api.Registry, m("implementation", "distribution", "tls", m("secretRef", "serving"), "credentialsRef", "push", "url", "registry.example.test")},
 		{"managed external endpoint", api.ArtifactServer, m("endpoints", list(m("name", "external", "url", "https://artifacts.example.test")))},
 	}
 	for _, tc := range cases {

@@ -2522,9 +2522,13 @@ metadata:
 spec:
   management: managed
   machineRef: acceptance-hypervisor
-  implementation: mirror-registry
+  implementation: distribution
   bindAddress: 192.0.2.201
   port: 5000
+  tls:
+    secretRef: acceptance-registry-tls
+    minVersion: TLSv1.2
+  credentialsRef: acceptance-registry-push
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: LoadBalancer
@@ -3521,6 +3525,24 @@ metadata:
   name: acceptance-provider-credentials
 spec:
   type: usernamePassword
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: acceptance-registry-push
+spec:
+  type: usernamePassword
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: acceptance-registry-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: registry.acceptance.example.test
+      validityDays: 3650
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Secret

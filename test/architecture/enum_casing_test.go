@@ -38,7 +38,7 @@ var nativeEnumFields = map[string]string{
 	"OpenShiftCluster.spec.networking.secondaryNetworks[].ipam.mode":                  "OVN-Kubernetes IPAM modes",
 	"OpenShiftCluster.spec.networking.secondaryNetworks[].topology":                   "OVN-Kubernetes topologies",
 	"OpenShiftCluster.spec.nodes[].taints[].effect":                                   "Kubernetes taint effects",
-	"Registry.spec.implementation":                                                    "the mirror-registry product name",
+	"Registry.spec.tls.minVersion":                                                    "TLS protocol versions",
 }
 
 func enumCasingViolations(path string, shape *api.Shape, exempt map[string]string, used map[string]bool, depth int) []string {

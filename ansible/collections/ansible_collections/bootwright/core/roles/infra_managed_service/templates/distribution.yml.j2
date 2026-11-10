@@ -1,0 +1,27 @@
+{#
+  Distribution configuration for one managed registry. It serves HTTPS alone
+  from the certificate the operation bound, authenticates every request against
+  the password file derived from the bound credential, and stores what it is
+  pushed under its content root. No proxy section exists, so it never pulls
+  through to an origin, and no debug or metrics listener is opened.
+#}
+version: 0.1
+log:
+  level: info
+  accesslog:
+    disabled: false
+storage:
+  filesystem:
+    rootdirectory: /var/lib/registry
+  delete:
+    enabled: false
+http:
+  addr: {{ infra_managed_service_listen }}:{{ bootwright_managed_service_request.port }}
+  tls:
+    certificate: /etc/distribution/tls/tls.crt
+    key: /etc/distribution/tls/tls.key
+    minimumtls: {{ {'TLSv1.2': 'tls1.2', 'TLSv1.3': 'tls1.3'}[bootwright_managed_service_request.tls.minVersion] }}
+auth:
+  htpasswd:
+    realm: {{ bootwright_managed_service_request.identity.service }}
+    path: /etc/distribution/auth/htpasswd

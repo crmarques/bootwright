@@ -182,7 +182,7 @@ Each step leaves a working product.
    [B1248](../milestones/delivered.md#x357--release-repositories-from-the-image-mirror), with the acceptance of
    [B724](../milestones/m3.md#b724).
 3. Bootwright builds and fills the mirror host:
-   [B1236](../milestones/delivered.md#x358--container-runtime-on-an-ssh-placement-host), [B68](../milestones/m1.md#b68)
+   [B1236](../milestones/delivered.md#x358--container-runtime-on-an-ssh-placement-host), [B68](../milestones/delivered.md#x360--a-managed-registry-on-its-placement-machine)
    and [B1249](../milestones/backlog.md#b1249).
 4. Proof: [B1250](../milestones/backlog.md#b1250), with
    [B1251](../milestones/delivered.md#x359--destinations-a-managed-proxy-admits) as the lab's vendor-only gate.

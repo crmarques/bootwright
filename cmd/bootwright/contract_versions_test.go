@@ -25,8 +25,6 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/runtimelock"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
@@ -68,7 +66,7 @@ func contractVersions() []contractVersion {
 		{ceph.ReplicationImplementation, ceph.ReplicationContentDigest(), reflect.TypeFor[ceph.ReplicationRequest](), reflect.TypeFor[ceph.ReplicationEvidence]()},
 		{ceph.ConsumerImplementation, ceph.ConsumerContentDigest(), reflect.TypeFor[ceph.ConsumerRequest](), reflect.TypeFor[ceph.ConsumerEvidence]()},
 	}
-	for _, definition := range []managedservice.Definition{proxy.Definition(), dnsServerDefinition(), ntpserver.Definition()} {
+	for _, definition := range managedServiceDefinitions() {
 		versions = append(versions, contractVersion{definition.Implementation, definition.ContentDigest(),
 			reflect.TypeFor[managedservice.Request](), reflect.TypeFor[managedservice.Evidence]()})
 	}
@@ -245,7 +243,7 @@ func automationFormats() map[string]automationFormat {
 		"cluster-media-agent-v1":                {class: formatMirrored},
 		"cluster-install-agent-v1":              {class: formatMirrored},
 		"artifact-server-nginx-v2":              {class: formatMirrored},
-		"managed-service-v3":                    {class: formatMirrored},
+		"managed-service-v4":                    {class: formatMirrored},
 		// Power is no plan block: each run binds its request to the power
 		// content digest these implementations feed, and nothing is retained.
 		"machine-power-v1":      {class: formatMirrored},
@@ -423,6 +421,7 @@ func automationCapitalized() map[string]automationFormat {
 		"Description=Bootwright managed artifact server":    description,
 		"Description=Bootwright managed name resolution":    description,
 		"Description=Bootwright managed proxy":              description,
+		"Description=Bootwright managed registry":           description,
 		"Description=Bootwright managed time service":       description,
 		"Description=Bootwright management controller for":  description,
 		"Bootwright contributors":                           {class: formatDocumentation, reason: "the author line of galaxy.yml and of each module's documentation"},

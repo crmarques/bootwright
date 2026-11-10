@@ -36,7 +36,10 @@ func consumerSpec(kind api.Kind, endpoints ...api.Value) api.Value {
 	case api.LoadBalancer:
 		return m("implementation", "haproxy", "bindAddresses", list(m("address", "192.0.2.5")))
 	}
-	implementation := map[api.Kind]string{api.Proxy: "squid", api.DNSServer: "dnsmasq", api.NTPServer: "chrony", api.Registry: "mirror-registry"}[kind]
+	if kind == api.Registry {
+		return m("implementation", "distribution", "endpoints", list(endpoints...), "tls", m("secretRef", "serving"), "credentialsRef", "push")
+	}
+	implementation := map[api.Kind]string{api.Proxy: "squid", api.DNSServer: "dnsmasq", api.NTPServer: "chrony"}[kind]
 	return m("implementation", implementation, "endpoints", list(endpoints...))
 }
 

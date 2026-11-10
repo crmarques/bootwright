@@ -17,7 +17,6 @@ type Unrealized struct {
 var unrealized = []Unrealized{
 	{Kind: InfraProvider, Path: "$.spec.vsphere", Item: "B99"},
 	{Kind: MachineInstallProfile, Path: "$.spec.installer.templateClone", Item: "B99"},
-	{Kind: Registry, Path: "$.spec.management", Value: "managed", Item: "B68"},
 	{Kind: LoadBalancer, Path: "$.spec.management", Value: "managed", Item: "B100"},
 	{Kind: OpenShiftCluster, Path: "$.spec.distribution.type", Value: "okd", Item: "B748"},
 	{Kind: OpenShiftCluster, Path: "$.spec.install.mode", Value: "disconnected", Item: "B69"},

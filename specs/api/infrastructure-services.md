@@ -38,7 +38,7 @@ ownership of the external service.
 | `spec.image.public` | string | With `image` | Digest-pinned image reference, used when `local` is absent. |
 
 A managed service plans one lifecycle block, `artifact-server-<name>`,
-`proxy-<name>`, `dns-<name>` or `ntp-<name>`, whose identity
+`proxy-<name>`, `dns-<name>`, `ntp-<name>` or `registry-<name>`, whose identity
 [hashes a tail that overflows](../state-reconciliation.md#durable-identities-and-private-paths)
 63 bytes; an external service plans no block.
 
@@ -70,7 +70,7 @@ Effective service fields emit in this order, omitting inapplicable fields:
 | DNSServer | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `address`, `additionalIngressHosts`, `forwarders`. |
 | NTPServer | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `address`, `upstreamSources`. |
 | ArtifactServer | `management`, `machineRef`, `image`, `bindAddress`, `retention`, `tls`, `listeners`, `endpoints`. |
-| Registry | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `url`, `credentialsRef`, `trustBundleRef`. |
+| Registry | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `tls`, `url`, `credentialsRef`, `trustBundleRef`. |
 | LoadBalancer | `management`, `machineRef`, `image`, `implementation`, `bindAddresses`. |
 
 ## Proxy, DNS, NTP and registry deployment
@@ -82,7 +82,7 @@ The four managed kinds use these deployment defaults:
 | `Proxy` | `squid` | derived | `3128` |
 | `DNSServer` | `dnsmasq` | derived | `53` |
 | `NTPServer` | `chrony` | derived | `123` |
-| `Registry` | `mirror-registry` | derived | `5000` |
+| `Registry` | `distribution` | derived | `5000` |
 
 An omitted `bindAddress` of a managed service, `ArtifactServer` included, is
 derived: when every endpoint names one IP address on the placement Machine, the
@@ -111,7 +111,7 @@ performs no lookup. Every IP endpoint must match a wildcard's family: IPv4
 (including mapped IPv6 literals) for `0.0.0.0`, IPv6 for `::`. Mixed families
 refuse at the endpoint field. A wildcard requires an endpoint, because
 readiness probes the service through its endpoint addresses.
-A managed Proxy, DNSServer or NTPServer bound to a wildcard declares at most 61
+A managed Proxy, DNSServer, NTPServer or Registry bound to a wildcard declares at most 61
 distinct endpoint addresses, its [host reservation's](../infrastructure-services.md#host-reservations)
 bound.
 
@@ -155,7 +155,29 @@ Proxy bypass policy belongs to the consumer's proxy choice, never to
 `usernamePassword` or `dockerConfigJson` Secret and `trustBundleRef` to a
 `caBundle` Secret in either management mode, an access credential and a trust
 anchor of the consumers that reach the registry. Those fields are service facts; consumers do
-not duplicate them.
+not duplicate them. A managed Registry adds the fields of the
+[managed registry](#managed-registry) below.
+
+## Managed registry
+
+A managed Registry runs [CNCF Distribution](https://distribution.github.io/distribution/)
+on its placement Machine and serves HTTPS alone, to clients that authenticate,
+from storage it keeps until destroy
+([realization](../infrastructure-services.md#managed-registry)). Beside the
+common deployment fields above it takes:
+
+| Field | Type | Required | Default or rule |
+| --- | --- | --- | --- |
+| `tls` | object | yes | Forbidden for external. |
+| `tls.secretRef` | string | yes | `tlsCertificate` Secret supplying certificate and key. A [generated](secrets.md#generated-source) Secret derives its `ipAddresses` and `dnsNames` from every endpoint and the `machineRef` Machine's `fqdn`; an authored list names the address of every endpoint, or that endpoint refuses at `$.spec.endpoints[i]` naming the Secret and the address, as an ArtifactServer's HTTPS endpoint does. Effect material: the registry serves it. |
+| `tls.minVersion` | string | no | `TLSv1.2` by default, or `TLSv1.3`. |
+| `credentialsRef` | string | yes | A `usernamePassword` Secret: every push and pull authenticates with it, and the controller derives the registry's password file from it. A `dockerConfigJson` Secret, which an external Registry accepts, refuses at `$.spec.credentialsRef`, because no password file can be derived from a registry document. Effect material: the password file is derived from it. |
+
+A managed Registry without `tls` or `credentialsRef` refuses at that field,
+`api.invariant`, with the remedy naming the Secret type it takes. No field
+selects plain HTTP, an insecure registry, a pull-through cache or deletion.
+`trustBundleRef` stays the trust anchor its consumers dial it with, normally
+the authority that signed `tls.secretRef`.
 
 ## ArtifactServer
 
@@ -213,10 +235,9 @@ endpoint selects it through `source.loadBalancerRef` and optional
 single bind address. [Container endpoints](openshift-clusters.md#endpoints)
 own address, topology and VIP constraints.
 
-No capability realizes a managed LoadBalancer or a managed Registry. Both are
-admitted with an [`api.unrealized`](../api.md#admitted-but-unrealized) warning,
-and a managed one refuses at plan as an unclaimed managed service whose remedy
-names `management: external`
+No capability realizes a managed LoadBalancer. It is admitted with an
+[`api.unrealized`](../api.md#admitted-but-unrealized) warning, and refuses at
+plan as an unclaimed managed service whose remedy names `management: external`
 ([unclaimed objects](../state-reconciliation.md#stages-and-the-pause-boundary));
 declare `management: external` to use one.
 

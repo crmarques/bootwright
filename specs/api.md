@@ -51,7 +51,6 @@ proves each row warned and refused at `plan`.
 | --- | --- | --- |
 | InfraProvider | `spec.vsphere` | [B99](milestones/m1.md#b99) |
 | MachineInstallProfile | `spec.installer.templateClone` | [B99](milestones/m1.md#b99) |
-| Registry | `spec.management: managed` | [B68](milestones/m1.md#b68) |
 | LoadBalancer | `spec.management: managed` | [B100](milestones/backlog.md#b100) |
 | OpenShiftCluster | `spec.distribution.type: okd` | [B748](milestones/backlog.md#b748) |
 | OpenShiftCluster | `spec.install.mode: disconnected` | [B69](milestones/m3.md#b69) |
