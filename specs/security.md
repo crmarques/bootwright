@@ -748,7 +748,14 @@ silent fallback is forbidden.
 
 Use the [dependency selection rule](architecture.md#dependency-selection-and-reuse).
 Release packaging must satisfy the license and notice obligations of shipped
-artifacts before distribution.
+artifacts before distribution. Each build's
+[bill of materials](cli.md#bill-of-materials) names the license of every embedded
+and pinned component but the project's own collection, from a table beside the lock that pins it, which the tool
+that refreshes the lock reads from the component and a check holds to it, so a
+build needs no network to know them; the build writes the third-party notices
+of every embedded component beside the executable and fails without them. The
+container build's Go image is pinned by tag and digest like every other
+artifact, and a test holds its tag to the `go` directive of `go.mod`.
 
 Pin Go modules, `ansible-core`, collections, controller Python packages and
 SDKs, execution-environment images, playbooks, add-on packages and catalog

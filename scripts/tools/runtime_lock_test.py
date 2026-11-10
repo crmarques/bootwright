@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import zipfile
 
 _specification = importlib.util.spec_from_file_location(
     "runtime_lock", Path(__file__).with_name("runtime_lock.py")
@@ -39,8 +40,13 @@ class Mirror:
         self.root = root
         self.wheels: dict[str, bytes] = {}
 
-    def add(self, name: str, version: str, filename: str) -> dict:
-        content = f"wheel {filename}".encode()
+    def add(self, name: str, version: str, filename: str, license_lines: tuple[str, ...] | None = None) -> dict:
+        lines = ("License-Expression: MIT",) if license_lines is None else license_lines
+        metadata = "\n".join(("Metadata-Version: 2.4", f"Name: {name}", f"Version: {version}", *lines)) + "\n\nbody\n"
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr(zipfile.ZipInfo(f"{name.lower()}-{version}.dist-info/METADATA", (2020, 1, 1, 0, 0, 0)), metadata)
+        content = buffer.getvalue()
         self.wheels[filename] = content
         path = self.root / "files/packages/aa/bb" / filename
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -206,6 +212,41 @@ class Report(unittest.TestCase):
                 runtime_lock.report_files({"install": install}, "3.12")
 
 
+class Licenses(unittest.TestCase):
+    def setUp(self):
+        self.area = tempfile.TemporaryDirectory()
+        self.addCleanup(self.area.cleanup)
+        self.mirror = Mirror(Path(self.area.name))
+
+    def declared(self, *lines: str):
+        self.mirror.add("Demo", "1.0", "demo-1.0-py3-none-any.whl", lines)
+        path = self.mirror.root / "files/packages/aa/bb/demo-1.0-py3-none-any.whl"
+        return runtime_lock.wheel_license(path)
+
+    def test_a_license_expression_is_taken_as_declared(self):
+        self.assertEqual(self.declared("License-Expression: Apache-2.0 OR BSD-2-Clause"), ("Apache-2.0 OR BSD-2-Clause", "License-Expression"))
+
+    def test_an_unambiguous_classifier_names_its_license(self):
+        self.assertEqual(self.declared("License: MIT", "Classifier: License :: OSI Approved :: MIT License"), ("MIT", "Classifier"))
+
+    def test_an_ambiguous_conflicting_or_missing_declaration_names_none(self):
+        self.assertIsNone(self.declared("Classifier: License :: OSI Approved :: BSD License"))
+        self.assertIsNone(self.declared("Classifier: License :: OSI Approved :: MIT License", "Classifier: License :: OSI Approved :: Apache Software License"))
+        self.assertIsNone(self.declared("License: Proprietary"))
+        self.assertIsNone(self.declared())
+
+    def test_an_expression_that_is_not_plain_spdx_is_refused(self):
+        for value in ("(MIT OR Apache-2.0)", "MIT; rm", "MIT AND"):
+            with self.assertRaises(ToolError, msg=value):
+                self.declared(f"License-Expression: {value}")
+
+    def test_a_file_that_is_not_a_wheel_is_refused(self):
+        path = self.mirror.root / "not.whl"
+        path.write_bytes(b"plain")
+        with self.assertRaises(ToolError):
+            runtime_lock.wheel_license(path)
+
+
 class Commands(unittest.TestCase):
     def setUp(self):
         self.area = tempfile.TemporaryDirectory()
@@ -243,6 +284,7 @@ class Commands(unittest.TestCase):
         self.report = self.root / "report.json"
         self.report.write_text(json.dumps(reports))
         self.output = self.root / "lock.json"
+        self.licenses = self.root / "licenses.json"
 
     def generate(self, *extra: str) -> tuple[int, str, str]:
         return run(
@@ -280,6 +322,36 @@ class Commands(unittest.TestCase):
         self.assertEqual(lock["abis"]["3.12"][0]["size"], len(self.mirror.wheels["ansible_core-2.21.4-py3-none-any.whl"]))
         self.assertEqual(self.output.read_text(), json.dumps(lock, indent=2) + "\n")
 
+    def test_generate_writes_each_distributions_declared_license_beside_the_lock(self):
+        self.assertEqual(self.generate()[0], 0)
+        table = json.loads(self.licenses.read_text())
+        self.assertEqual(table["format"], "bootwright.controller.runtime-licenses-v1")
+        self.assertEqual(
+            [(entry["name"], entry["version"]) for entry in table["distributions"]],
+            [("ansible-core", "2.21.4"), ("pip", "26.0.1"), ("pyyaml", "6.0.3"), ("urllib3", "2.8.0")],
+        )
+        self.assertTrue(all(entry["license"] == "MIT" and entry["source"] == "License-Expression" for entry in table["distributions"]))
+        self.assertEqual(self.licenses.read_text(), json.dumps(table, indent=2) + "\n")
+
+    def test_a_wheel_that_declares_no_license_needs_a_reviewed_entry_and_keeps_it(self):
+        self.report.write_text(json.dumps({abi: {"install": [
+            self.mirror.add("ansible-core", "2.21.4", "ansible_core-2.21.4-py3-none-any.whl"),
+            self.mirror.add("urllib3", "2.8.0", "urllib3-2.8.0-py3-none-any.whl"),
+            self.mirror.add("Jinja2", "3.1.6", "jinja2-3.1.6-py3-none-any.whl", ("Classifier: License :: OSI Approved :: BSD License",)),
+            self.mirror.add("PyYAML", "6.0.3", f"pyyaml-6.0.3-cp3{abi[2:]}-cp3{abi[2:]}-manylinux_2_28_x86_64.whl"),
+        ]} for abi in ("3.12", "3.13")}))
+        status, _, err = self.generate()
+        self.assertEqual(status, 1)
+        self.assertIn("jinja2-3.1.6-py3-none-any.whl declares no License-Expression", err)
+        self.assertFalse(self.output.exists() or self.licenses.exists())
+        entry = {"name": "jinja2", "version": "3.1.6", "license": "BSD-3-Clause", "source": "reviewed: LICENSE.txt is the BSD 3-clause text"}
+        self.licenses.write_text(json.dumps({"format": "bootwright.controller.runtime-licenses-v1", "distributions": [entry]}))
+        self.assertEqual(self.generate()[0], 0)
+        table = json.loads(self.licenses.read_text())["distributions"]
+        self.assertIn(entry, table)
+        self.assertEqual(self.generate()[0], 0)
+        self.assertEqual(json.loads(self.licenses.read_text())["distributions"], table)
+
     def test_a_rerun_carries_the_tested_releases_forward(self):
         self.assertEqual(self.generate("--tested", "rhel:9")[0], 0)
         first = self.output.read_text()
@@ -312,6 +384,22 @@ class Commands(unittest.TestCase):
         status, _, err = run("verify", "--lock", str(self.output), *self.mirror.args())
         self.assertEqual(status, 1)
         self.assertIn("ansible_core-2.21.4-py3-none-any.whl", err)
+
+    def test_verify_holds_the_license_table_to_the_wheels(self):
+        self.assertEqual(self.generate()[0], 0)
+        good = self.licenses.read_text()
+        table = json.loads(good)
+        table["distributions"][0]["license"] = "GPL-3.0-or-later"
+        table["distributions"].append({"name": "gone", "version": "1.0", "license": "MIT", "source": "License-Expression"})
+        del table["distributions"][2]
+        self.licenses.write_text(json.dumps(table))
+        status, _, err = run("verify", "--lock", str(self.output), *self.mirror.args())
+        self.assertEqual(status, 1)
+        self.assertIn("ansible_core-2.21.4-py3-none-any.whl: declares MIT in License-Expression, the license table has GPL-3.0-or-later", err)
+        self.assertIn("the license table has no entry for pyyaml 6.0.3", err)
+        self.assertIn("gone 1.0 is in the license table and not in the lock", err)
+        self.licenses.write_text(good)
+        self.assertEqual(run("verify", "--lock", str(self.output), *self.mirror.args())[0], 0)
 
     def test_verify_refuses_a_lock_that_names_another_host(self):
         self.assertEqual(self.generate()[0], 0)

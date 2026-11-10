@@ -80,23 +80,25 @@ says what a lock change requires.
 ## Building in a container
 
 A host with only Docker or Podman builds the executable from the
-[Dockerfile](../Dockerfile), which runs `make build` in the Go image of the
-`go` directive of [go.mod](../go.mod):
+[Dockerfile](../Dockerfile), which runs `make build` in a Go image pinned by
+tag and digest, the tag naming the `go` directive of [go.mod](../go.mod):
 
 ```sh
 make container-build
 make container-build CONTAINER_OUT=dist CONTAINER_ENGINE=docker
 ```
 
-It writes `bootwright` into `CONTAINER_OUT`, `bin` by default, with Podman when
-both engines are installed. The engine exports into a fresh private directory
+It writes `bootwright`, its bill of materials `bootwright.cdx.json` and its
+third-party notices `bootwright.notices.txt` into `CONTAINER_OUT`, `bin` by
+default, with Podman when both engines are installed. The engine exports into a fresh private directory
 inside `CONTAINER_OUT`, and the recipe then moves `bootwright` into place, so a
 shared directory such as `/tmp`, whose other entries the engine's exporter
-would try to read or replace, works as well; a `bootwright` there that is a
-directory or another user's file is refused before the build starts. The result is the same static executable a host
+would try to read or replace, works as well; a `bootwright`, bill of materials
+or notices file there that is a directory or another user's file is refused
+before the build starts, and an export that lacks the notices fails the recipe. The result is the same static executable a host
 build makes, for the building host's architecture, stamped with the identity
 `make build` would give the checkout. A host without `make` passes the version
-itself: `docker build --build-arg GO_VERSION=<go.mod version> --output type=local,dest=bin .`;
+itself: `docker build --output type=local,dest=bin .`;
 from a checkout whose `.git` is a directory it then stamps itself in the build.
 
 The build runs `make wheels` while the proxy settings below are set, into a
@@ -135,20 +137,32 @@ one `NAME=value` per line: `--secret id=build-env,src=<file>`.
 
 The engine pulls the base image through the proxy of its caller's
 environment; a Docker daemon also uses its own proxy configuration.
+The default image is `docker.io/library/golang:<go version>-trixie` followed
+by `@sha256:` and the digest the registry serves for that tag, so the build
+trusts the content a reviewer read and not a tag the publisher rebuilds.
 `GO_IMAGE` replaces the image, for example with
 `<mirror>/golang:<tag>@sha256:<digest>` from a registry mirror pinned by
 digest; it is a build argument and so must carry no credential, which an
 engine login supplies instead.
 
-`TestContainerBuildTakesGoFromGoMod` holds the `go` directive to the toolchain
-[scripts/go](../scripts/go) selects, so the image and host builds use the same
-Go.
+`TestTheContainerBuildPinsTheGoImageOfGoMod` holds the `go` directive to the
+toolchain [scripts/go](../scripts/go) selects and to the version in the
+Dockerfile's image tag, and refuses a default that is not pinned by digest, so
+the image and host builds use the same Go. To move Go, change the directive and
+`scripts/go` together, then replace the tag and digest in the Dockerfile with
+those of `golang:<new version>-trixie`: the digest is the
+`Docker-Content-Digest` of the tag's manifest list, which
+`HEAD /v2/library/golang/manifests/<tag>` on `registry-1.docker.io` returns
+with an anonymous pull token, and which `skopeo inspect --format '{{.Digest}}'`
+or `docker buildx imagetools inspect` print as well.
 
 ## Verification tiers
 
 | Command | Result |
 | --- | --- |
-| `make build` | Run `make wheels`, then build `bin/bootwright`, stamped with the version, commit and source state of the checkout it was built from. |
+| `make build` | Run `make wheels`, then build `bin/bootwright`, stamped with the version, commit and source state of the checkout it was built from, and write beside it its bill of materials `bin/bootwright.cdx.json` and its third-party notices `bin/bootwright.notices.txt`; the build fails when a component names no license or has no text to reproduce. |
+| `make licenses` | Read each Go module's license file from the module cache and the toolchain's own, classify it against known texts and write `cmd/bootwright/go-licenses.json`; a text it does not know fails; [license sources](#license-sources-and-notices). |
+| `make licenses-check` | Recompute that table from the module cache and fail when `cmd/bootwright/go-licenses.json` differs; `make check` runs it. |
 | `make wheels` | Place the runtime lock's wheels where the executable embeds them, each checked against the lock, from the shared cache or, on a cold cache, `files.pythonhosted.org`; [carried wheels](../specs/controller.md#the-runtime-lock). |
 | `make container-build` | Build the same executable into `CONTAINER_OUT` with Docker or Podman only; [building in a container](#building-in-a-container). |
 | `make focus` | Run the inner loop: the narrowest checks of the branch's diff, in concurrent lanes. It is no gate; [the tiers](../.agents/skills/code-implementation/references/verification.md#focus) say what it selects and what it leaves to `make check`. |
@@ -274,21 +288,51 @@ scripts/runtime-lock verify
 `generate` resolves each ABI's binary wheels with the pinned installer, leaves
 out the distributions its `OMITTED` list names (ansible-core declares them and
 no controller path imports them), downloads every file to confirm its size and
-SHA-256, computes the glibc floor
+SHA-256, reads each wheel's license into `licenses.json` beside the lock,
+computes the glibc floor
 from the highest manylinux tag and carries the `tested` list forward; add a
 release to it with `--tested fedora:43,44 --tested rhel:9,10` once it ran.
 Move `scripts/tools/ansible-requirements.txt` to the same ansible-core patch in
 the same commit, and run `make wheels`, which replaces the files the build
-carries with the new lock's. `verify` downloads every locked URL and compares it, and
+carries with the new lock's. `verify` downloads every locked URL, compares it and holds `licenses.json` to
+what each wheel declares, and
 `outdated` prints newer 2.21 patches and dependency releases without gating;
 `.github/workflows/runtime-lock.yml` runs `verify` when the lock or the tool
 changes and weekly, with `outdated` as an advisory summary.
 
 `make build` also writes `bin/bootwright.cdx.json`, the CycloneDX bill of
 materials the new executable prints with `bootwright sbom --format
-cyclonedx-json` ([bill of materials](../specs/cli.md#bill-of-materials));
-`make container-build` writes it beside its executable. A scanner reads the
-pinned components from it.
+cyclonedx-json` ([bill of materials](../specs/cli.md#bill-of-materials)), and
+`bin/bootwright.notices.txt`, its [third-party notices](#license-sources-and-notices);
+`make container-build` writes both beside its executable. A scanner reads the
+pinned components from the first.
+
+### License sources and notices
+
+Each component of the bill of materials names its license from a table the
+build holds, so a build offline knows it; the tool that refreshes each table
+reads the license from its owner and a check holds the table to it.
+
+| Component | Table | Read from | Refreshed and checked by |
+| --- | --- | --- | --- |
+| Go modules and the standard library | `cmd/bootwright/go-licenses.json` | Each module's license file in the module cache, matched against the MIT, BSD-2-Clause, BSD-3-Clause, ISC, Apache-2.0 and MPL-2.0 texts; a text that matches none, or two license files, fails until a person reviews it into `reviewedTexts` of `scripts/tools/licenses/classify.go` | `make licenses`, `make licenses-check` |
+| Runtime wheels | `internal/controller/runtimelock/licenses.json` | The wheel's own `License-Expression`, else an unambiguous license classifier; a wheel that declares neither needs an entry a person recorded with a `reviewed:` source | `scripts/runtime-lock generate` and `verify` |
+| The four default clients | `license` of each `internal/controller/tooltable.json` entry | The publisher's repository, which declares its license through the GitHub API | `make tool-table` |
+| Service and emulated BMC images | `imageLicenses` in `cmd/bootwright/billofmaterials_licenses.go` | The license of the project each image runs, with the page that declares it | `TestEveryPinnedImageAndToolNamesItsPublishersLicense` |
+
+`TestEveryThirdPartyComponentNamesAReviewedSPDXLicense` fails when any
+component but the project's own collection names no license, or one outside the
+reviewed list. After a Go dependency moves, run `make licenses` and commit the
+table; `make check` fails until then.
+
+`make build` composes `bin/bootwright.notices.txt` from the bill of materials it
+just wrote: for each component marked `required`, the license text its authors
+published, taken from the Go table or from the `licenses` directory of the wheel
+the executable carries, with a module's `NOTICE`. The tool
+(`scripts/tools/licenses`) fails, and so does the build, when such a component
+names no license, has no text, or is licensed differently in the table than in
+the document. The components a build only names, the clients and images it
+acquires at use, are not redistributed by it and carry no text.
 
 The controller stage's clients follow the tool table
 `internal/controller/tooltable.json` ([controller](../specs/controller.md#the-tool-table)).
@@ -302,7 +346,7 @@ make tool-table-outdated
 
 `make tool-table` reads each default's checksum and size from its publisher
 and fails on any difference, so a hand-edited entry is proved before it is
-committed. `make tool-table-outdated` names each client whose publisher has a
+committed, and each repository's declared license; it sends `GITHUB_TOKEN`, when set, to `api.github.com` alone, which lifts GitHub's anonymous rate limit. `make tool-table-outdated` names each client whose publisher has a
 newer stable release, without gating. Raise a minimum only for an advisory
 that reaches the releases below it, and never above its default.
 `.github/workflows/tool-table.yml` runs `make tool-table` when the table or its

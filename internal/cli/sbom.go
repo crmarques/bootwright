@@ -34,6 +34,7 @@ type BOMComponent struct {
 	Name         string
 	Version      string
 	Scope        string
+	License      string
 	SHA256       string
 	PURL         string
 	Distribution string
@@ -77,15 +78,35 @@ type cycloneMetadata struct {
 }
 
 type cycloneElement struct {
-	Type       string        `json:"type"`
-	Ref        string        `json:"bom-ref"`
-	Name       string        `json:"name"`
-	Version    string        `json:"version,omitempty"`
-	Scope      string        `json:"scope,omitempty"`
-	Hashes     []cycloneHash `json:"hashes,omitempty"`
-	PURL       string        `json:"purl,omitempty"`
-	References []cycloneLink `json:"externalReferences,omitempty"`
-	Properties []BOMProperty `json:"properties,omitempty"`
+	Type       string           `json:"type"`
+	Ref        string           `json:"bom-ref"`
+	Name       string           `json:"name"`
+	Version    string           `json:"version,omitempty"`
+	Scope      string           `json:"scope,omitempty"`
+	Hashes     []cycloneHash    `json:"hashes,omitempty"`
+	Licenses   []cycloneLicense `json:"licenses,omitempty"`
+	PURL       string           `json:"purl,omitempty"`
+	References []cycloneLink    `json:"externalReferences,omitempty"`
+	Properties []BOMProperty    `json:"properties,omitempty"`
+}
+
+type cycloneLicense struct {
+	License    *cycloneLicenseID `json:"license,omitempty"`
+	Expression string            `json:"expression,omitempty"`
+}
+
+type cycloneLicenseID struct {
+	ID string `json:"id"`
+}
+
+func cycloneLicenses(license string) []cycloneLicense {
+	switch {
+	case license == "":
+		return nil
+	case strings.ContainsAny(license, " ()"):
+		return []cycloneLicense{{Expression: license}}
+	}
+	return []cycloneLicense{{License: &cycloneLicenseID{ID: license}}}
 }
 
 type cycloneHash struct {
@@ -111,7 +132,7 @@ func cycloneDX(bom BillOfMaterials) ([]byte, error) {
 			return nil, errors.New("the bill of materials names a component without a unique reference")
 		}
 		seen[component.Ref] = true
-		element := cycloneElement{Type: component.Type, Ref: component.Ref, Name: component.Name, Version: component.Version, Scope: component.Scope, PURL: component.PURL, Properties: slices.Clone(component.Properties)}
+		element := cycloneElement{Type: component.Type, Ref: component.Ref, Name: component.Name, Version: component.Version, Scope: component.Scope, Licenses: cycloneLicenses(component.License), PURL: component.PURL, Properties: slices.Clone(component.Properties)}
 		if component.SHA256 != "" {
 			element.Hashes = []cycloneHash{{Algorithm: "SHA-256", Content: component.SHA256}}
 		}

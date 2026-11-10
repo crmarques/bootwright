@@ -5,6 +5,9 @@ controller venv installs, per Python ABI, with its URL, size and sha256.
 Versions are chosen here, when a person regenerates the lock, never at setup.
 The venv installs without dependency resolution, so the lock leaves out the
 distributions ansible-core declares that no controller path imports.
+The license table beside it, licenses.json, names each locked distribution's
+SPDX license, read from the wheel's own metadata when this tool regenerates the
+lock and held to it again by verify, so a build offline still knows them.
 This tool uses the standard library only; pip runs from its own wheel.
 """
 
@@ -12,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import email.parser
 import hashlib
 import json
 import os
@@ -23,9 +27,11 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from pathlib import Path
 
 FORMAT = "bootwright.controller.runtime-lock-v1"
+LICENSES_FORMAT = "bootwright.controller.runtime-licenses-v1"
 PYPI = "https://pypi.org"
 FILES = "https://files.pythonhosted.org"
 MAX_GLIBC = (2, 34)
@@ -34,6 +40,15 @@ WORKERS = 4
 DEFAULT_LOCK = (
     Path(__file__).resolve().parents[2] / "internal/controller/runtimelock/lock.json"
 )
+# A classifier names a license without ambiguity only when one SPDX id stands
+# for the whole family; "BSD License" does not, so such a wheel is reviewed.
+CLASSIFIERS = {
+    "License :: OSI Approved :: MIT License": "MIT",
+    "License :: OSI Approved :: Apache Software License": "Apache-2.0",
+    "License :: OSI Approved :: ISC License (ISCL)": "ISC",
+    "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)": "MPL-2.0",
+}
+SPDX_EXPRESSION = re.compile(r"[A-Za-z0-9.+-]+( (AND|OR|WITH) [A-Za-z0-9.+-]+)*")
 LEGACY_GLIBC = {
     "manylinux1_x86_64": 5,
     "manylinux2010_x86_64": 12,
@@ -307,12 +322,12 @@ def installer_file(sources: Sources, spec: str, area: Path) -> tuple[dict, Path]
     raise ToolError(f"the index has no {filename}")
 
 
-def confirm(sources: Sources, files: dict[str, dict]) -> dict[str, int]:
-    """Download every file and return its size, refusing a different sha256."""
+def confirm(sources: Sources, files: dict[str, dict], keep: Path) -> dict[str, int]:
+    """Download every file into keep and return its size, refusing a different sha256."""
     sizes = {}
 
     def one(url: str) -> tuple[str, int]:
-        sha256, size = download(sources.file_url(url))
+        sha256, size = download(sources.file_url(url), kept(keep, files[url]))
         if sha256 != files[url]["sha256"]:
             raise ToolError(f"{files[url]['filename']} hashes to {sha256}, not {files[url]['sha256']}")
         return url, size
@@ -321,6 +336,73 @@ def confirm(sources: Sources, files: dict[str, dict]) -> dict[str, int]:
         for url, size in pool.map(one, sorted(files)):
             sizes[url] = size
     return sizes
+
+
+def kept(keep: Path, file: dict) -> Path:
+    """Return where a downloaded file stays while its license is read."""
+    path = keep / file["sha256"] / file["filename"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def wheel_license(wheel: Path) -> tuple[str, str] | None:
+    """Return the SPDX expression a wheel declares and where it says so, or None
+    when its metadata names none without ambiguity."""
+    try:
+        with zipfile.ZipFile(wheel) as archive:
+            names = [name for name in archive.namelist() if name.endswith(".dist-info/METADATA") and name.count("/") == 1]
+            if len(names) != 1:
+                raise ToolError(f"{wheel.name} holds {len(names)} METADATA files, not one")
+            message = email.parser.BytesParser().parsebytes(archive.read(names[0]), headersonly=True)
+    except (OSError, zipfile.BadZipFile) as error:
+        raise ToolError(f"{wheel.name} is no readable wheel: {error}") from error
+    expression = message.get("License-Expression")
+    if expression is not None:
+        if not SPDX_EXPRESSION.fullmatch(expression):
+            raise ToolError(f"{wheel.name} declares the License-Expression {expression!r}, which is no plain SPDX expression")
+        return expression, "License-Expression"
+    declared = [value for value in message.get_all("Classifier", []) if value.startswith("License ::")]
+    named = {CLASSIFIERS[value] for value in declared if value in CLASSIFIERS}
+    if len(named) == 1 and all(value in CLASSIFIERS for value in declared):
+        return named.pop(), "Classifier"
+    return None
+
+
+def read_licenses(path: Path) -> dict[tuple[str, str], dict]:
+    """Read the license table, or an empty one where there is none yet."""
+    if not path.exists():
+        return {}
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+        if document["format"] != LICENSES_FORMAT:
+            raise ToolError(f"{path} is not a {LICENSES_FORMAT} table")
+        return {(entry["name"], entry["version"]): entry for entry in document["distributions"]}
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise ToolError(f"cannot read the license table {path}: {error}") from error
+
+
+def reviewed(entry: dict | None) -> bool:
+    """Say whether a person recorded the entry, as an ambiguous wheel needs."""
+    return bool(entry) and str(entry.get("source", "")).startswith("reviewed:") and bool(entry.get("license"))
+
+
+def license_table(wheels: dict[tuple[str, str], Path], previous: dict[tuple[str, str], dict]) -> str:
+    """Return the table text naming every distribution's license: what its
+    metadata declares, else what a person recorded for that exact release."""
+    entries = []
+    for (name, version), wheel in sorted(wheels.items()):
+        declared = wheel_license(wheel)
+        if declared is not None:
+            entries.append({"name": name, "version": version, "license": declared[0], "source": declared[1]})
+        elif reviewed(previous.get((name, version))):
+            entries.append({key: previous[(name, version)][key] for key in ("name", "version", "license", "source")})
+        else:
+            raise ToolError(
+                f"{wheel.name} declares no License-Expression and no unambiguous license classifier; read its license text, "
+                f'record {{"name": "{name}", "version": "{version}", "license": <SPDX id>, "source": "reviewed: <why>"}} '
+                "in the license table and run again"
+            )
+    return json.dumps({"format": LICENSES_FORMAT, "distributions": entries}, indent=2) + "\n"
 
 
 def parse_tested(values: list[str]) -> list[dict]:
@@ -366,6 +448,7 @@ def generate(arguments: argparse.Namespace) -> int:
     output = Path(arguments.output)
     tested = parse_tested(arguments.tested) if arguments.tested else previous_tested(output)
     recorded = json.loads(Path(arguments.report).read_text(encoding="utf-8")) if arguments.report else None
+    licenses = Path(arguments.licenses) if arguments.licenses else output.with_name("licenses.json")
     with tempfile.TemporaryDirectory(prefix="runtime-lock-") as scratch:
         area = Path(scratch)
         installer, wheel = installer_file(sources, arguments.installer, area)
@@ -378,9 +461,12 @@ def generate(arguments: argparse.Namespace) -> int:
             with concurrent.futures.ThreadPoolExecutor(len(abis)) as pool:
                 resolved = pool.map(lambda abi: pip_report(wheel, abi, requirement, area), abis)
                 reports = dict(zip(abis, resolved))
-    per_abi = {abi: report_files(reports[abi], abi) for abi in abis}
-    unique = {file["url"]: file for files in per_abi.values() for file in files}
-    sizes = confirm(sources, unique)
+        per_abi = {abi: report_files(reports[abi], abi) for abi in abis}
+        unique = {file["url"]: file for files in per_abi.values() for file in files}
+        sizes = confirm(sources, unique, area / "kept")
+        wheels = {(file["name"], file["version"]): kept(area / "kept", file) for file in unique.values()}
+        wheels[(installer["name"], installer["version"])] = wheel
+        table = license_table(wheels, read_licenses(licenses))
     versions = {file["version"] for files in per_abi.values() for file in files if file["name"] == "ansible-core"}
     if len(versions) != 1:
         raise ToolError(f"the ABIs resolve ansible-core to {sorted(versions)}")
@@ -404,6 +490,7 @@ def generate(arguments: argparse.Namespace) -> int:
             for abi in sorted(abis)
         },
     }
+    write_atomically(licenses, table)
     write_atomically(output, json.dumps(lock, indent=2) + "\n")
     return 0
 
@@ -438,27 +525,51 @@ def locked_files(lock: dict) -> list[dict]:
 
 
 def verify(arguments: argparse.Namespace) -> int:
-    """Download every locked file and compare its size and sha256."""
+    """Download every locked file and compare its size, sha256 and license."""
     sources = Sources(arguments.pypi, arguments.files)
+    lock_path = Path(arguments.lock)
     files = {file["url"]: file for file in locked_files(load_lock(arguments.lock))}
-    failures = []
+    licenses = read_licenses(Path(arguments.licenses) if arguments.licenses else lock_path.with_name("licenses.json"))
+    failures = [
+        f"{name} {version} is in the license table and not in the lock"
+        for name, version in sorted(licenses.keys() - {(file["name"], file["version"]) for file in files.values()})
+    ]
 
-    def one(url: str) -> None:
-        file = files[url]
-        try:
-            check_pythonhosted(url)
-            sha256, size = download(sources.file_url(url))
-        except ToolError as error:
-            failures.append(f"{file['filename']}: {error}")
-            return
-        if sha256 != file["sha256"] or size != file["size"]:
-            failures.append(
-                f"{file['filename']}: got {size} bytes with sha256 {sha256}, "
-                f"the lock has {file['size']} and {file['sha256']}"
-            )
+    with tempfile.TemporaryDirectory(prefix="runtime-lock-") as scratch:
+        keep = Path(scratch)
 
-    with concurrent.futures.ThreadPoolExecutor(WORKERS) as pool:
-        list(pool.map(one, sorted(files)))
+        def one(url: str) -> None:
+            file = files[url]
+            try:
+                check_pythonhosted(url)
+                sha256, size = download(sources.file_url(url), kept(keep, file))
+            except ToolError as error:
+                failures.append(f"{file['filename']}: {error}")
+                return
+            if sha256 != file["sha256"] or size != file["size"]:
+                failures.append(
+                    f"{file['filename']}: got {size} bytes with sha256 {sha256}, "
+                    f"the lock has {file['size']} and {file['sha256']}"
+                )
+                return
+            entry = licenses.get((file["name"], file["version"]))
+            try:
+                declared = wheel_license(kept(keep, file))
+            except ToolError as error:
+                failures.append(f"{file['filename']}: {error}")
+                return
+            if entry is None:
+                failures.append(f"{file['filename']}: the license table has no entry for {file['name']} {file['version']}")
+            elif declared is None and not reviewed(entry):
+                failures.append(f"{file['filename']}: declares no license, so the table's entry must be a reviewed one")
+            elif declared is not None and (declared[0], declared[1]) != (entry.get("license"), entry.get("source")):
+                failures.append(
+                    f"{file['filename']}: declares {declared[0]} in {declared[1]}, the license table has "
+                    f"{entry.get('license')} from {entry.get('source')}"
+                )
+
+        with concurrent.futures.ThreadPoolExecutor(WORKERS) as pool:
+            list(pool.map(one, sorted(files)))
     for failure in sorted(failures):
         print(f"runtime-lock: {failure}", file=sys.stderr)
     if failures:
@@ -525,6 +636,7 @@ def parser() -> argparse.ArgumentParser:
     make.add_argument("--installer", required=True, help="pip==X.Y.Z")
     make.add_argument("--tested", action="append", default=[], help="id:v1,v2; repeatable")
     make.add_argument("--output", default=str(DEFAULT_LOCK))
+    make.add_argument("--licenses", help="the license table; beside --output by default")
     make.add_argument("--report", help="JSON of ABI -> pip report, in place of running pip")
     make.set_defaults(run=generate)
     for name, run, summary in (
@@ -534,6 +646,8 @@ def parser() -> argparse.ArgumentParser:
         command = commands.add_parser(name, help=summary)
         sourced(command)
         command.add_argument("--lock", default=str(DEFAULT_LOCK))
+        if name == "verify":
+            command.add_argument("--licenses", help="the license table; beside --lock by default")
         command.set_defaults(run=run)
     return root
 

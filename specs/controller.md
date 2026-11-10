@@ -101,6 +101,12 @@ vault, an in-memory SSH key, NTLM channel binding and `ansible-galaxy`, none of
 which a controller playbook uses ([D248](milestones/backlog.md#d248)).
 Its digest is SHA-256 under the domain `bootwright.controller.runtime-lock-v1`
 over its canonical JSON re-encoding, so whitespace in the file never moves it.
+Beside it, `licenses.json` in the format
+`bootwright.controller.runtime-licenses-v1` names each locked distribution's
+SPDX license, which the generator reads from the wheel's own metadata, or from
+an entry a person recorded with its reason for a wheel that declares none
+unambiguously, and `verify` holds to the wheels; it feeds the
+[bill of materials](cli.md#bill-of-materials) and moves no digest.
 
 Versions are chosen when the lock is generated, never at setup: D10's and
 D20's "latest patch" is the latest at lock generation, and setup reads no
@@ -838,7 +844,8 @@ Each build embeds one tool table, `internal/controller/tooltable.json`, in the
 format `controller.ToolTableFormat`. For `govc`, Helm, a standalone `kubectl`
 and `virtctl`, in that order, it names the minimum release this build accepts
 and the default release it installs when an Environment declares none, with
-that default's size and SHA-256 from its publisher. Releases are
+that default's size and SHA-256 from its publisher, and its SPDX license, which
+`make tool-table` holds to the publisher's repository. Releases are
 `MAJOR.MINOR.PATCH` without a `v`, and the default is at or above the
 minimum (`TestTheEmbeddedToolTablePinsEachClientAtOrAboveItsMinimum`). The
 table moves only with a new build: when an advisory reaches a default or a

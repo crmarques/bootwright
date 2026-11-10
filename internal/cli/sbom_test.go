@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -56,6 +57,47 @@ func TestABillOfMaterialsWithoutUniqueReferencesIsRefused(t *testing.T) {
 	} {
 		if _, err := cycloneDX(bom); err == nil {
 			t.Errorf("%s was rendered", name)
+		}
+	}
+}
+
+func TestAComponentsLicenseIsAnSPDXIdOrAnExpressionAndAbsentWhenNone(t *testing.T) {
+	bom := BillOfMaterials{Name: "bootwright", Components: []BOMComponent{
+		{Ref: "go:a@v1", Type: "library", Name: "a", License: "MIT"},
+		{Ref: "go:b@v1", Type: "library", Name: "b", License: "MIT AND Apache-2.0"},
+		{Ref: "go:c@v1", Type: "library", Name: "c", License: "Apache-2.0 OR BSD-2-Clause"},
+		{Ref: "ansible:d", Type: "library", Name: "d"},
+	}}
+	data, err := cycloneDX(bom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document struct {
+		Components []map[string]json.RawMessage `json:"components"`
+	}
+	if err := json.Unmarshal(data, &document); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"go:a@v1":   `[{"license":{"id":"MIT"}}]`,
+		"go:b@v1":   `[{"expression":"MIT AND Apache-2.0"}]`,
+		"go:c@v1":   `[{"expression":"Apache-2.0 OR BSD-2-Clause"}]`,
+		"ansible:d": "",
+	}
+	for _, component := range document.Components {
+		var ref string
+		if err := json.Unmarshal(component["bom-ref"], &ref); err != nil {
+			t.Fatal(err)
+		}
+		licenses, named := component["licenses"]
+		var compact bytes.Buffer
+		if named {
+			if err := json.Compact(&compact, licenses); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if got := compact.String(); got != want[ref] || (want[ref] == "") == named {
+			t.Errorf("%s names licenses %q, want %q", ref, got, want[ref])
 		}
 	}
 }

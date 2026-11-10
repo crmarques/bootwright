@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -87,6 +88,112 @@ func TestTheBillOfMaterialsNamesEveryCarriedAndPinnedArtifact(t *testing.T) {
 	}
 	if modules == 0 {
 		t.Fatal("the bill of materials names no Go module")
+	}
+}
+
+var reviewedLicenseIDs = []string{"Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "GPL-2.0-only", "GPL-2.0-or-later", "GPL-3.0-only", "GPL-3.0-or-later", "ISC", "MIT", "MPL-2.0"}
+
+func TestEveryThirdPartyComponentNamesAReviewedSPDXLicense(t *testing.T) {
+	stamp, _ := debug.ReadBuildInfo()
+	bom, err := composeBillOfMaterials(cli.BuildInfo{}, stamp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstParty := 0
+	for _, component := range bom.Components {
+		if strings.HasPrefix(component.Ref, "ansible:") {
+			firstParty++
+			if component.License != "" {
+				t.Errorf("%s is the project's own collection, whose license the project has not declared, and names %s", component.Ref, component.License)
+			}
+			continue
+		}
+		if component.License == "" || !runtimelock.SPDXExpression.MatchString(component.License) {
+			t.Errorf("%s names the license %q, not a plain SPDX expression", component.Ref, component.License)
+		}
+		for _, token := range strings.Fields(component.License) {
+			if token != "AND" && token != "OR" && token != "WITH" && !slices.Contains(reviewedLicenseIDs, token) {
+				t.Errorf("%s names %s, which no one has reviewed; add it to reviewedLicenseIDs after reading its terms", component.Ref, token)
+			}
+		}
+	}
+	if firstParty != 1 {
+		t.Errorf("the bill of materials names %d first-party collections, want 1", firstParty)
+	}
+	document, err := runBillOfMaterials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rendered struct {
+		Components []struct {
+			Ref      string            `json:"bom-ref"`
+			Licenses []json.RawMessage `json:"licenses"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal([]byte(document), &rendered); err != nil {
+		t.Fatal(err)
+	}
+	for _, component := range rendered.Components {
+		if len(component.Licenses) == 0 && !strings.HasPrefix(component.Ref, "ansible:") {
+			t.Errorf("the rendered document names no license for %s", component.Ref)
+		}
+	}
+}
+
+func TestTheGoLicenseTableHoldsTheTextOfEveryModuleTheBuildNamesAndNoOther(t *testing.T) {
+	stamp, _ := debug.ReadBuildInfo()
+	table, err := goLicenses()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum, err := os.ReadFile("../../go.sum")
+	if err != nil {
+		t.Fatal(err)
+	}
+	named := map[string]bool{"stdlib@": true}
+	for _, module := range stamp.Deps {
+		named[module.Path+"@"+module.Version] = true
+	}
+	for key, entry := range table {
+		if entry.Text == "" || entry.File == "" || entry.License == "" {
+			t.Errorf("%s names no license text; run make licenses", key)
+		}
+		if !strings.Contains(string(sum), strings.Replace(key, "@", " ", 1)+" h1:") && key != "stdlib@" {
+			t.Errorf("go-licenses.json holds %s, which go.sum does not name; run make licenses", key)
+		}
+	}
+	for key := range named {
+		if _, found := table[key]; !found {
+			t.Errorf("go-licenses.json holds nothing for %s; run make licenses", key)
+		}
+	}
+	if len(table) < 2 {
+		t.Fatal("the Go license table is empty")
+	}
+}
+
+func TestEveryPinnedImageAndToolNamesItsPublishersLicense(t *testing.T) {
+	pinned := map[string]bool{}
+	for _, image := range pinnedImages() {
+		repository, _, _ := strings.Cut(image.reference, "@sha256:")
+		pinned[repository] = true
+		if license := imageLicenses[repository]; license.license == "" || license.source == "" || !runtimelock.SPDXExpression.MatchString(license.license) {
+			t.Errorf("%s's image %s names no license with the source that declares it", image.consumer, repository)
+		}
+	}
+	for repository := range imageLicenses {
+		if !pinned[repository] {
+			t.Errorf("the image license table names %s, which no service pins", repository)
+		}
+	}
+	pins, err := controller.ToolPins()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, pin := range pins {
+		if pin.License == "" {
+			t.Errorf("the tool table names no license for %s", pin.Kind)
+		}
 	}
 }
 

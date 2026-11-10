@@ -1,4 +1,4 @@
-.PHONY: build wheels vulngate tool-table tool-table-outdated container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check focus quick race check-offline check check-go
+.PHONY: build wheels vulngate licenses licenses-check tool-table tool-table-outdated container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check focus quick race check-offline check check-go
 
 GO := ./scripts/go
 VULNDB ?= https://vuln.go.dev
@@ -28,7 +28,8 @@ vulngate:
 		-lock "$(CURDIR)/internal/controller/runtimelock/lock.json" -table "$(CURDIR)/internal/controller/tooltable.json" \
 		-exceptions "$(CURDIR)/cmd/bootwright/vulnerability-exceptions.json" -verdict "$(CURDIR)/bin/vulnerability-check"
 
-# The container build takes its Go from go.mod. Each proxy and module-mirror
+# The container build takes its Go image from the Dockerfile, which pins it by
+# tag and digest. Each proxy and module-mirror
 # setting of the environment or the command line may carry a credential, and an
 # engine records build arguments in image metadata and build history, so the
 # recipe hands them over as a build secret in a private file it removes.
@@ -36,7 +37,6 @@ CONTAINER_ENGINE ?= $(firstword $(shell command -v podman docker 2>/dev/null))
 CONTAINER_OUT ?= bin
 PROXY_CA ?=
 GO_IMAGE ?=
-GO_VERSION = $(shell awk '$$1 == "go" { print $$2; exit }' go.mod)
 CONTAINER_SETTINGS = HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy GOPROXY GOSUMDB GOPRIVATE GONOSUMDB GONOPROXY
 comma := ,
 
@@ -58,20 +58,36 @@ tool-table:
 tool-table-outdated:
 	$(GO) -C scripts/tools run ./tooltable -table "$(TOOL_TABLE)" outdated
 
+# The Go modules' licenses are read from the module cache here and held to it
+# by licenses-check, and the build reads the table alone. The runtime lock's
+# licenses beside it are refreshed and checked by scripts/runtime-lock.
+GO_LICENSES = $(CURDIR)/cmd/bootwright/go-licenses.json
+licenses:
+	$(GO) -C scripts/tools run ./licenses refresh -root "$(CURDIR)" -table "$(GO_LICENSES)"
+
+licenses-check:
+	$(GO) -C scripts/tools run ./licenses check -root "$(CURDIR)" -table "$(GO_LICENSES)"
+
 # The executable composes its own bill of materials, so the document beside it
-# names exactly what that build carries and pins.
+# names exactly what that build carries and pins, and the third-party notices
+# are composed from that document and the license texts it holds: a build that
+# cannot write them fails.
 build: wheels vulngate
-	CGO_ENABLED=0 $(GO) build -trimpath -buildvcs=false -ldflags '$(STAMP)' -o bin/bootwright ./cmd/bootwright
-	rm -f bin/bootwright.cdx.json
-	./bin/bootwright sbom --format cyclonedx-json >bin/bootwright.cdx.json.tmp
+	CGO_ENABLED=0 $(GO) build -trimpath -buildvcs=false -ldflags '$(STAMP)' -o bin/bootwright.tmp ./cmd/bootwright
+	rm -f bin/bootwright.cdx.json bin/bootwright.notices.txt
+	./bin/bootwright.tmp sbom --format cyclonedx-json >bin/bootwright.cdx.json.tmp
 	mv -f bin/bootwright.cdx.json.tmp bin/bootwright.cdx.json
+	$(GO) -C scripts/tools run ./licenses notices -table "$(GO_LICENSES)" -wheels "$(CURDIR)/internal/controller/runtimelock/wheels" \
+		-sbom "$(CURDIR)/bin/bootwright.cdx.json" -out "$(CURDIR)/bin/bootwright.notices.txt.tmp"
+	mv -f bin/bootwright.notices.txt.tmp bin/bootwright.notices.txt
+	mv -f bin/bootwright.tmp bin/bootwright
 
 container-build:
 	@set -eu; \
 	engine='$(or $(CONTAINER_ENGINE),$(error container-build needs podman or docker on PATH, or CONTAINER_ENGINE))'; \
 	out='$(CONTAINER_OUT)'; \
 	mkdir -p -- "$$out"; \
-	for name in bootwright bootwright.cdx.json; do \
+	for name in bootwright bootwright.cdx.json bootwright.notices.txt; do \
 		if test -d "$$out/$$name" || { test -e "$$out/$$name" && ! test -O "$$out/$$name"; }; then \
 			echo "container-build: $$out/$$name is a directory or belongs to another user; remove it or choose another CONTAINER_OUT" >&2; exit 1; \
 		fi; \
@@ -86,20 +102,23 @@ container-build:
 		eval "value=\$${$$name-}"; \
 		if test -n "$$value"; then printf '%s=%s\n' "$$name" "$$value" >>"$$settings"; passed="$$passed $$name"; fi; \
 	done; \
-	echo "$$engine build into $(CONTAINER_OUT) with Go $(GO_VERSION); settings passed as a secret:$${passed:- none}"; \
+	echo "$$engine build into $(CONTAINER_OUT) in the Go image $(or $(GO_IMAGE),the Dockerfile pins); settings passed as a secret:$${passed:- none}"; \
 	"$$engine" build --output type=local,dest="$$stage" \
-		--build-arg GO_VERSION='$(or $(GO_VERSION),$(error go.mod names no go version))' \
 		--build-arg VERSION='$(VERSION)' --build-arg COMMIT='$(COMMIT)' --build-arg SOURCE='$(SOURCE)' --build-arg VULNCHECK='$(VULNCHECK)' \
 		$(if $(GO_IMAGE),--build-arg GO_IMAGE='$(GO_IMAGE)') \
 		--secret id=build-env,src="$$settings" \
 		$(if $(PROXY_CA),--secret id=proxy-ca$(comma)src='$(PROXY_CA)') \
 		.; \
+	for name in bootwright bootwright.cdx.json bootwright.notices.txt; do \
+		test -f "$$stage/$$name" || { echo "container-build: the engine exported no $$name, so $$out keeps what it held" >&2; exit 1; }; \
+	done; \
 	mv -f -- "$$stage/bootwright.cdx.json" "$$out/bootwright.cdx.json"; \
+	mv -f -- "$$stage/bootwright.notices.txt" "$$out/bootwright.notices.txt"; \
 	mv -f -- "$$stage/bootwright" "$$out/bootwright"
 
 test:
 	$(GO) test ./...
-	$(GO) -C scripts/tools test ./runtimewheels/... ./tooltable/... ./vulngate/...
+	$(GO) -C scripts/tools test ./licenses/... ./runtimewheels/... ./tooltable/... ./vulngate/...
 
 vet:
 	$(GO) vet ./...
@@ -157,7 +176,7 @@ race:
 
 # Every gate that needs no network once module caches are warm. Vulnerability
 # data and the Ansible tool bootstrap need network, so they are reported unrun.
-check-offline: fmt-check test vet completion-test
+check-offline: fmt-check licenses-check test vet completion-test
 	@echo 'check-offline: vulncheck, ansible-check and modules-check were not run; they are unrun, not passed.'
 
 # The gate. The Ansible check takes most of its time, so it starts first and
@@ -169,4 +188,4 @@ check:
 	$(MAKE) -k --no-print-directory --output-sync=target -j2 ansible-check check-go
 	git diff --check
 
-check-go: wheels fmt-check modules-check tidy-check test vet completion-test vulncheck vulngate
+check-go: wheels fmt-check modules-check tidy-check licenses-check test vet completion-test vulncheck vulngate

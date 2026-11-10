@@ -172,7 +172,7 @@ skill says.
 Each step leaves a working product.
 
 1. The build: [B1242](../milestones/delivered.md#x342--default-clients-pinned-by-the-build),
-   [B1243](../milestones/backlog.md#b1243) and
+   [B1243](../milestones/delivered.md#x376--component-licenses-notices-and-the-pinned-go-image) and
    [B1244](../milestones/backlog.md#b1244). After the first, a file server the
    operator fills already serves every default tool.
 2. Consuming a mirror the operator fills:

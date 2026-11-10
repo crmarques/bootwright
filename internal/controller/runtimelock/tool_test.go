@@ -1,6 +1,7 @@
 package runtimelock
 
 import (
+	"archive/zip"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
@@ -52,7 +53,7 @@ func newMirror(t *testing.T) mirror {
 	for _, abi := range lock.PythonABIs() {
 		var installs []any
 		for _, file := range mustFiles(t, lock, abi) {
-			content := []byte("wheel " + file.Filename)
+			content := fabricatedWheel(t, file)
 			m.wheels[file.Filename] = content
 			sum := sha256.Sum256(content)
 			write(filepath.Join(m.root, "files", wheelPath(file)), content)
@@ -76,7 +77,7 @@ func newMirror(t *testing.T) mirror {
 		m.reports[abi] = map[string]any{"version": "1", "install": installs}
 	}
 	installer := lock.Installer()
-	content := []byte("wheel " + installer.Filename)
+	content := fabricatedWheel(t, installer)
 	m.wheels[installer.Filename] = content
 	sum := sha256.Sum256(content)
 	write(filepath.Join(m.root, "files", wheelPath(installer)), content)
@@ -107,6 +108,25 @@ func newMirror(t *testing.T) mirror {
 	m.report = filepath.Join(m.root, "reports.json")
 	write(m.report, reports)
 	return m
+}
+
+// fabricatedWheel is a wheel holding nothing but the metadata that names a
+// license, which the tool reads from every file it locks.
+func fabricatedWheel(t *testing.T, file File) []byte {
+	t.Helper()
+	var buffer bytes.Buffer
+	archive := zip.NewWriter(&buffer)
+	member, err := archive.Create(file.Name + "-" + file.Version + ".dist-info/METADATA")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := member.Write([]byte("Metadata-Version: 2.4\nName: " + file.Name + "\nVersion: " + file.Version + "\nLicense-Expression: MIT\n\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buffer.Bytes()
 }
 
 // releases are the index entries around a locked ansible-core: the newest
@@ -173,6 +193,14 @@ func TestTheRuntimeLockToolRoundTrips(t *testing.T) {
 	}
 	if lock.AnsibleCore() != m.locked.AnsibleCore() || lock.GlibcFloor() != "2.17" || !slices.Equal(lock.PythonABIs(), m.locked.PythonABIs()) {
 		t.Fatalf("lock = %s %s %v", lock.AnsibleCore(), lock.GlibcFloor(), lock.PythonABIs())
+	}
+	written, err := os.ReadFile(filepath.Join(filepath.Dir(output), "licenses.json"))
+	if err != nil {
+		t.Fatalf("generate wrote no license table beside the lock: %v", err)
+	}
+	table, err := ParseLicenses(written)
+	if err != nil || len(table) == 0 || table["pip@"+m.locked.Installer().Version].License != "MIT" {
+		t.Fatalf("the license table beside the lock is %v: %v", table, err)
 	}
 	if want := []Release{{ID: "fedora", Versions: []string{"43", "44"}}, {ID: "rhel", Versions: []string{"9"}}}; !slicesEqualReleases(lock.Tested(), want) {
 		t.Fatalf("tested = %v, want %v", lock.Tested(), want)

@@ -294,7 +294,6 @@ Alias cell.
 | [B1237](#b1237) | new, 2026-11-09 (D248 (5)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's default image comes from a Red Hat registry wherever Red Hat publishes one | Red Hat publishes no dnsmasq, chrony or sushy-tools image, and its squid image needs a `registry.redhat.io` login no managed-service pull carries |
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
 | [B1240](#b1240) | new, 2026-11-09 (X340 gate) | defect | Controller | The native supervisor test reads its task's PID only from a complete record | It failed once in `make check` beside the other lanes and passed when run again alone; the cause is a test-side race, not the supervisor |
-| [B1243](#b1243) | new, 2026-11-10 (D250 (2)); partly delivered by X343 on 2026-11-10 | enabling | Architecture | Each build's bill of materials names every component's license, a release ships its notices, and the container build's Go image is pinned | The document itself landed (X343); licenses need a source per component that no build input holds yet |
 | [B1244](#b1244) | new, 2026-11-10 (D250 (2)); partly delivered by X344 on 2026-11-10 | enabling | Architecture | Each pinned client is judged by what its binary holds, and the service and emulated BMC images are scanned on a schedule and in the mirror registry | The build's gate landed (X344); a binary scan downloads every client, and an image scan needs a pinned scanner |
 | [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355 and X361 on 2026-11-10 | product | Controller, with Desired state | A managed artifact server may serve the artifact mirror, and one declaration replaces the download mirrors | The declaration (X355), the preflight probe and the private trust anchor (X361) landed; a managed server needs B1249, and folding `spec.downloads` awaits the owner (D251 (5)) |
 | [B1249](#b1249) | new, 2026-11-10 (D250 (8)) | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | D250 parks the controlled-network plan until the owner promotes it; no capability realizes a managed Registry |
@@ -313,6 +312,8 @@ Alias cell.
 | [B1303](#b1303) | new, 2026-11-10 (X395 review, D255 (17)) | safety | Substrate | Each Machine NIC on a trunk carries only the VLAN tags its segment declares | The trunk filters no VLAN, so a guest can tag any VLAN on it; per-tap filtering needs NetworkManager's bridge VLAN settings on a libvirt tap, unproved on a host |
 | [B1304](#b1304) | new, 2026-11-10 (X395 review, D255 (16)) | safety | Substrate | A routing unit that fails at boot leaves no VLAN leg up without its table | Making NetworkManager wait on the unit stops all host networking when nft fails, which can cut a remote host off; activating the legs only after the table loads changes how they come up and is the owner's choice |
 | [B1315](#b1315) | new, 2026-11-10 (X395 verification review) | defect | Substrate | A tagged managed Network whose `vlan` or trunk `bridge` changes redefines its own leg instead of refusing it as foreign | The refusal comes before any effect, so no isolation is lost; the e2e case never changes a leg, and a redefinition while guests use the old VLAN needs its own drift and quiescence rule |
+| [B1313](#b1313) | new, 2026-11-10 (X376) | enabling | Architecture | Bootwright names its own license, which the bill of materials and the notices carry | An owner decision: no file of the repository declares one |
+| [B1314](#b1314) | new, 2026-11-10 (X376 review) | enabling | Architecture | A release recipe builds, refuses a build that is unchecked or lacks its notices, and ships both documents with the executable | No release recipe exists; `make build` already refuses a build without notices, but nothing releases |
 
 ### B82
 
@@ -3306,27 +3307,6 @@ renaming it, or waiting until the record holds a PID, closes the window.
 **Exit evidence:** the test parses the PID only from a complete record.
 **Outcome:** the controller units lane no longer fails on this race.
 
-### B1243
-
-**Owner:** Architecture. **Kind:** enabling. **Requires:** none.
-**Definition:** Needs definition, from [D250](#d250) (2). **Delivered in-tree
-by X343:** `bootwright sbom --format cyclonedx-json` and the
-`bin/bootwright.cdx.json` every build writes, composed from what the
-executable embeds and held to `go.sum`, the runtime lock, the tool table and
-the image pins ([bill of materials](../cli.md#bill-of-materials)).
-**Remaining:** each component names its license (the Go modules' from their
-module files, the wheels' from their metadata, the tools' and images' from
-their publishers), a release ships the third-party notices the licenses
-require ([cryptography and supply chain](../security.md#cryptography-and-supply-chain)),
-and the container build's Go image is pinned by digest beside its tag, moving
-with the `go` directive
-([building in a container](../../docs/development.md#building-in-a-container)).
-**Open:** where a license is read from when a build is offline
-(recommendation: a license table beside each lock, checked by the tool that
-refreshes it). **Exit evidence:** a test that every component names a license,
-the notices file a release build refuses to omit, and a test that holds the
-Go image's digest to the `go` directive.
-
 ### B1244
 
 **Owner:** Architecture. **Kind:** enabling. **Requires:** none.
@@ -3603,6 +3583,43 @@ a marked keyfile whose device differs from the frozen one reads as owned and
 drifted; the apply redefines it once no domain uses the old device, and
 destroy removes it. **Exit evidence:** module and role tests that change one
 leg's VLAN and its trunk, then destroy, with no hand step.
+
+### B1313
+
+**Owner:** Architecture. **Kind:** enabling. **Requires:** an owner decision.
+**Definition:** Candidate, from the limitations of
+[X376](delivered.md#x376--component-licenses-notices-and-the-pinned-go-image). No file of
+the repository declares the project's license, and the `galaxy.yml` of
+`bootwright.core` lists none, so the
+[bill of materials](../cli.md#bill-of-materials) names no license for the
+first-party collection or the executable and the third-party notices cover the
+embedded third-party components alone. The embedded `ansible-core` is
+GPL-3.0-or-later, which a release's license choice weighs as well, and six
+modules of the collection (`ceph_export`, `ceph_export_protocol`,
+`libvirt_firewall_ready`, `libvirt_vlan_refusal`, `physical_erase` and
+`physical_erase_protocol`) carry Ansible's GPL-3.0-or-later boilerplate
+though the collection ships no `COPYING` file.
+**Outcome:** the owner names the project's license, which a license file and
+the collection's `galaxy.yml` then declare, the bill of materials names for the
+executable and the collection, and the notices state. **Exit evidence:** the
+decision recorded as a clause of [D251](#d251) or its successor, then the
+declared files and a test that every component, the first-party ones included,
+names a license.
+
+### B1314
+
+**Owner:** Architecture. **Kind:** enabling. **Requires:** none.
+**Definition:** Candidate, from the review of
+[X376](delivered.md#x376--component-licenses-notices-and-the-pinned-go-image).
+No release recipe exists: `make build` refuses a build whose components lack a
+license or text, but no step produces a release, so nothing yet refuses a
+release build that is stamped `unchecked`
+([B1244](#b1244)) or that ships without
+`bootwright.notices.txt`. **Outcome:** a release recipe builds with the
+vulnerability gate on, refuses an executable stamped `unchecked` or a build
+without its notices, and ships the executable, its bill of materials and its
+notices together. **Exit evidence:** the recipe, and a test that it refuses each
+of the two builds.
 
 ## Audit remediation (2026-10-26)
 
@@ -8155,6 +8172,35 @@ the owner's review:
     their host, so Red Hat's hosted `cdn.redhat.com` and
     `subscription.rhsm.redhat.com` are vendor origins and a Satellite or a
     configured repository is declared.
+
+11. Taken by the session for B1243 (X376), pending the owner's review: each
+    license comes from a table beside the lock that pins its component, so a
+    build offline names it, and the tool that refreshes the lock reads it from
+    the component. A Go module's is read from its license file in the module
+    cache by `make licenses` and matched against the MIT, BSD-2-Clause,
+    BSD-3-Clause, ISC, Apache-2.0 and MPL-2.0 texts; a text that matches none,
+    or a module with two license files, fails the refresh, and the one composite
+    file of the build, `go.yaml.in/yaml/v3`'s MIT and Apache-2.0, is a reviewed
+    text held by its SHA-256. A wheel's is its own `License-Expression`, else
+    an unambiguous classifier, else an entry a person reviewed; Jinja2, whose
+    only declaration is the ambiguous `BSD License` classifier, is one, read
+    from its license text as BSD-3-Clause. A default client's is a field of its
+    tool-table entry that `make tool-table` holds to the publisher's repository;
+    an image's is the license of the program it runs, from that project's own
+    page, so squid is GPL-2.0-or-later, chrony GPL-2.0-only, nginx
+    BSD-2-Clause, sushy-tools Apache-2.0 and dnsmasq GPL-2.0-only OR
+    GPL-3.0-only, which dnsmasq's documentation gives as the user's choice of
+    version 2 or 3; the license of the rest of an image's content is not
+    claimed. The project's own license is declared nowhere, so the first-party
+    collection names none and the notices cover third-party components alone,
+    parked as [B1313](#b1313). The release recipe that would also refuse an
+    `unchecked` build is parked as [B1314](#b1314). The notices are `bootwright.notices.txt`,
+    composed by `make build` from the bill of materials it just wrote, for each
+    component marked `required`, and the build fails when one has no license
+    or no text; no release recipe exists, so that failure is how a release
+    cannot omit them. The Go image is pinned by tag and digest in the
+    Dockerfile alone, `GO_VERSION` is gone, and the digest is the tag's
+    manifest list, which every architecture shares.
 
 ### D252
 

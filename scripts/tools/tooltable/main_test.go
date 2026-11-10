@@ -27,9 +27,11 @@ func TestVerifyComparesEachDefaultWithItsPublisher(t *testing.T) {
 	answers := map[string]answer{
 		"GET https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz.sha256sum":        {data: digest + "  helm-v4.3.1-linux-amd64.tar.gz\n"},
 		"HEAD https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz":                 {size: 20},
+		"GET https://api.github.com/repos/helm/helm/license":                      {data: `{"license":{"spdx_id":"Apache-2.0"}}`},
+		"GET https://api.github.com/repos/kubevirt/kubevirt/license":              {data: `{"license":{"spdx_id":"Apache-2.0"}}`},
 		"GET https://api.github.com/repos/kubevirt/kubevirt/releases/tags/v1.9.1": {data: `{"assets":[{"browser_download_url":"https://github.com/kubevirt/kubevirt/releases/download/v1.9.1/virtctl-v1.9.1-linux-amd64","size":30,"digest":"sha256:` + digest + `"}]}`},
 	}
-	pins := []pin{{Kind: "helm", Default: release{Version: "4.3.1", Bytes: 20, SHA256: digest}}, {Kind: "virtctl", Default: release{Version: "1.9.1", Bytes: 30, SHA256: digest}}}
+	pins := []pin{{Kind: "helm", License: "Apache-2.0", Default: release{Version: "4.3.1", Bytes: 20, SHA256: digest}}, {Kind: "virtctl", License: "Apache-2.0", Default: release{Version: "1.9.1", Bytes: 30, SHA256: digest}}}
 	var out strings.Builder
 	if err := verify(pins, fake(answers), &out); err != nil {
 		t.Fatalf("a matching table failed: %v\n%s", err, out.String())
@@ -38,6 +40,16 @@ func TestVerifyComparesEachDefaultWithItsPublisher(t *testing.T) {
 	out.Reset()
 	if err := verify(pins, fake(answers), &out); err == nil || !strings.Contains(out.String(), "helm 4.3.1: the publisher names") {
 		t.Fatalf("a size the publisher does not name passed: %v\n%s", err, out.String())
+	}
+	pins[0].Default.Bytes = 20
+	pins[1].License = "MIT"
+	out.Reset()
+	if err := verify(pins, fake(answers), &out); err == nil || !strings.Contains(out.String(), "virtctl: the publisher's repository declares the license Apache-2.0; the table \"MIT\"") {
+		t.Fatalf("a license the publisher does not declare passed: %v\n%s", err, out.String())
+	}
+	answers["GET https://api.github.com/repos/helm/helm/license"] = answer{data: `{"license":{"spdx_id":"NOASSERTION"}}`}
+	if err := verify(pins, fake(answers), &out); err == nil || !strings.Contains(err.Error(), "declares no SPDX license") {
+		t.Fatalf("a repository declaring no license passed: %v", err)
 	}
 }
 

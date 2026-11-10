@@ -28,6 +28,7 @@ type ToolRelease struct {
 type ToolPin struct {
 	Kind    string      `json:"kind"`
 	Minimum string      `json:"minimum"`
+	License string      `json:"license"`
 	Default ToolRelease `json:"default"`
 }
 
@@ -44,6 +45,8 @@ var embeddedPins = sync.OnceValues(func() ([]ToolPin, error) { return ParseToolT
 var releasePattern = regexp.MustCompile(`^v?(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})(.*)$`)
 
 var sha256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+var licensePattern = regexp.MustCompile(`^[A-Za-z0-9.+-]+( (AND|OR|WITH) [A-Za-z0-9.+-]+)*$`)
 
 func ParseToolTable(data []byte) ([]ToolPin, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -63,6 +66,9 @@ func ParseToolTable(data []byte) ([]ToolPin, error) {
 		kinds = append(kinds, pin.Kind)
 		if !stableRelease(pin.Minimum) || !stableRelease(pin.Default.Version) {
 			return nil, fmt.Errorf("the tool table names %s releases that are not MAJOR.MINOR.PATCH without a v", pin.Kind)
+		}
+		if !licensePattern.MatchString(pin.License) {
+			return nil, fmt.Errorf("the tool table names %s no plain SPDX license expression", pin.Kind)
 		}
 		if order, _ := CompareReleases(pin.Default.Version, pin.Minimum); order < 0 {
 			return nil, fmt.Errorf("the tool table's default %s %s is older than its minimum %s", pin.Kind, pin.Default.Version, pin.Minimum)

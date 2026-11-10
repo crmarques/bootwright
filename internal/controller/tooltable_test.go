@@ -27,7 +27,7 @@ func TestTheEmbeddedToolTablePinsEachClientAtOrAboveItsMinimum(t *testing.T) {
 
 func TestATableThatBreaksItsShapeIsRefused(t *testing.T) {
 	entry := func(kind, minimum, version, sha string) string {
-		return `{"kind":"` + kind + `","minimum":"` + minimum + `","default":{"version":"` + version + `","bytes":10,"sha256":"` + sha + `"}}`
+		return `{"kind":"` + kind + `","minimum":"` + minimum + `","license":"Apache-2.0","default":{"version":"` + version + `","bytes":10,"sha256":"` + sha + `"}}`
 	}
 	digest := strings.Repeat("a", 64)
 	table := func(format string, entries ...string) string {
@@ -46,6 +46,8 @@ func TestATableThatBreaksItsShapeIsRefused(t *testing.T) {
 		"a prerelease default":   table(controller.ToolTableFormat, entry("govc", "0.1.0", "0.1.1-rc.1", digest), good[1], good[2], good[3]),
 		"an uppercase digest":    table(controller.ToolTableFormat, entry("govc", "0.1.0", "0.1.0", strings.Repeat("A", 64)), good[1], good[2], good[3]),
 		"a short digest":         table(controller.ToolTableFormat, entry("govc", "0.1.0", "0.1.0", "abc"), good[1], good[2], good[3]),
+		"no license":             strings.Replace(table(controller.ToolTableFormat, good...), `"license":"Apache-2.0"`, `"license":""`, 1),
+		"a license in prose":     strings.Replace(table(controller.ToolTableFormat, good...), `"license":"Apache-2.0"`, `"license":"Apache License 2"`, 1),
 		"an unknown field":       strings.Replace(table(controller.ToolTableFormat, good...), `"tools"`, `"extra":1,"tools"`, 1),
 		"two documents":          table(controller.ToolTableFormat, good...) + "{}",
 		"a size outside a bound": strings.Replace(table(controller.ToolTableFormat, good...), `"bytes":10`, `"bytes":0`, 1),

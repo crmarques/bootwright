@@ -1,6 +1,7 @@
 // Command tooltable checks the controller's tool table against each client's
 // publisher: verify reads the publisher's checksum and size of every default
-// release and fails when either differs from the table, and outdated prints
+// release and its repository's declared license and fails when any differs from
+// the table, and outdated prints
 // each client whose publisher names a newer stable release. Only these
 // commands contact a publisher; a build reads the table alone.
 package main
@@ -30,6 +31,7 @@ type release struct {
 type pin struct {
 	Kind    string  `json:"kind"`
 	Minimum string  `json:"minimum"`
+	License string  `json:"license"`
 	Default release `json:"default"`
 }
 
@@ -41,10 +43,11 @@ type table struct {
 type fetcher func(method, url string) ([]byte, int64, error)
 
 type publisher struct {
-	repository string
-	asset      func(version string) string
-	checksum   func(version, asset string) string
-	latest     string
+	repository        string
+	licenseRepository string
+	asset             func(version string) string
+	checksum          func(version, asset string) string
+	latest            string
 }
 
 var publishers = map[string]publisher{
@@ -56,7 +59,7 @@ var publishers = map[string]publisher{
 	"helm": {repository: "helm/helm", asset: func(v string) string {
 		return "https://get.helm.sh/helm-v" + v + "-linux-amd64.tar.gz"
 	}, checksum: func(_, asset string) string { return asset + ".sha256sum" }},
-	"kubectl": {asset: func(v string) string {
+	"kubectl": {licenseRepository: "kubernetes/kubernetes", asset: func(v string) string {
 		return "https://dl.k8s.io/release/v" + v + "/bin/linux/amd64/kubectl"
 	}, checksum: func(_, asset string) string { return asset + ".sha256" }, latest: "https://dl.k8s.io/release/stable.txt"},
 	"virtctl": {repository: "kubevirt/kubevirt", asset: func(v string) string {
@@ -121,11 +124,40 @@ func verify(pins []pin, fetch fetcher, out io.Writer) error {
 		default:
 			fmt.Fprintf(out, "%s %s: matches its publisher\n", entry.Kind, entry.Default.Version)
 		}
+		declared, err := declaredLicense(entry.Kind, fetch)
+		switch {
+		case err != nil:
+			return fmt.Errorf("%s: %w", entry.Kind, err)
+		case declared != entry.License:
+			failed = true
+			fmt.Fprintf(out, "%s: the publisher's repository declares the license %s; the table %q\n", entry.Kind, declared, entry.License)
+		}
 	}
 	if failed {
 		return errors.New("the tool table differs from its publishers")
 	}
 	return nil
+}
+
+func declaredLicense(kind string, fetch fetcher) (string, error) {
+	source := publishers[kind]
+	repository := source.repository
+	if source.licenseRepository != "" {
+		repository = source.licenseRepository
+	}
+	data, _, err := fetch(http.MethodGet, "https://api.github.com/repos/"+repository+"/license")
+	if err != nil {
+		return "", err
+	}
+	var declared struct {
+		License struct {
+			ID string `json:"spdx_id"`
+		} `json:"license"`
+	}
+	if err := json.Unmarshal(data, &declared); err != nil || declared.License.ID == "" || declared.License.ID == "NOASSERTION" {
+		return "", errors.New("the publisher's repository declares no SPDX license")
+	}
+	return declared.License.ID, nil
 }
 
 func outdated(pins []pin, fetch fetcher, out io.Writer) error {
@@ -241,6 +273,9 @@ func fetchHTTP(client *http.Client, method, url string) ([]byte, int64, error) {
 		return nil, 0, err
 	}
 	request.Header.Set("Accept", "application/vnd.github+json")
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" && request.URL.Host == "api.github.com" {
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
 	response, err := client.Do(request)
 	if err != nil {
 		return nil, 0, err

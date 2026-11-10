@@ -1,0 +1,47 @@
+{
+  "format": "bootwright.controller.runtime-licenses-v1",
+  "distributions": [
+    {
+      "name": "ansible-core",
+      "version": "2.21.5",
+      "license": "GPL-3.0-or-later",
+      "source": "License-Expression"
+    },
+    {
+      "name": "jinja2",
+      "version": "3.1.6",
+      "license": "BSD-3-Clause",
+      "source": "reviewed: the classifier 'BSD License' is ambiguous; dist-info/licenses/LICENSE.txt is the BSD 3-clause text of the Pallets project"
+    },
+    {
+      "name": "markupsafe",
+      "version": "3.0.4",
+      "license": "BSD-3-Clause",
+      "source": "License-Expression"
+    },
+    {
+      "name": "packaging",
+      "version": "26.3",
+      "license": "Apache-2.0 OR BSD-2-Clause",
+      "source": "License-Expression"
+    },
+    {
+      "name": "pip",
+      "version": "26.2.1",
+      "license": "MIT",
+      "source": "License-Expression"
+    },
+    {
+      "name": "pyyaml",
+      "version": "6.0.3",
+      "license": "MIT",
+      "source": "Classifier"
+    },
+    {
+      "name": "urllib3",
+      "version": "2.8.0",
+      "license": "MIT",
+      "source": "License-Expression"
+    }
+  ]
+}

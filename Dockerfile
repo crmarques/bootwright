@@ -1,9 +1,9 @@
-# Builds bin/bootwright on a host that has only Docker or Podman; make
-# container-build fills GO_VERSION from go.mod. docs/development.md#building-in-a-container
+# Builds bin/bootwright on a host that has only Docker or Podman. The Go image
+# is pinned by tag and digest, and TestTheContainerBuildPinsTheGoImageOfGoMod
+# holds its tag to the go directive of go.mod. docs/development.md#building-in-a-container
 # owns the options, proxies and caches included.
 
-ARG GO_VERSION
-ARG GO_IMAGE=docker.io/library/golang:${GO_VERSION}-trixie
+ARG GO_IMAGE=docker.io/library/golang:1.26.10-trixie@sha256:fd9a91f0ece5664556f4851d06dce5e5b505a71166dffd385a03ba9d200b6983
 
 FROM ${GO_IMAGE} AS build
 
@@ -42,3 +42,4 @@ RUN --mount=type=secret,id=build-env \
 FROM scratch AS binary
 COPY --from=build /src/bin/bootwright /bootwright
 COPY --from=build /src/bin/bootwright.cdx.json /bootwright.cdx.json
+COPY --from=build /src/bin/bootwright.notices.txt /bootwright.notices.txt

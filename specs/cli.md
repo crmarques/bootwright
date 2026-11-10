@@ -673,21 +673,37 @@ with scope `optional` and says so. They name what it pins and acquires at use
 with scope `optional`: each default client of the
 [tool table](controller.md#the-tool-table), with its SHA-256, publisher URL
 and minimum, and each managed service's and the emulated BMC's compiled image,
-by its digest, one component per image. Its `vulnerabilities` carry each
+by its digest, one component per image. Every component but the first-party
+collection, whose license the project has not declared, names its
+license, as one SPDX `license.id` or, for a compound license, an `expression`:
+a Go module's and the standard library's from the license file in its module,
+matched against known texts, a wheel's from the `License-Expression` of its
+own metadata, else its one unambiguous license classifier, else an entry a
+person reviewed, which is its declared top-level license while the notices carry
+every license file the wheel holds, a tool's from its publisher's
+repository, and an image's from the project it runs, each from a table the
+executable embeds, so composing it reads no file. A tool's license and an
+image's are those of the program the pin names, not of every package an image
+contains. Its `vulnerabilities` carry each
 reviewed exception of the [vulnerability gate](security.md#the-vulnerability-gate)
 as a VEX statement on its component, and its metadata the build's verdict. An
 executable with no build stamp, a
 local module replacement or an image pinned other than by digest alone
-composes none and refuses. It carries no timestamp or serial number, and
+composes none and refuses, and so does a Go module, wheel or image with no
+license in its table. It carries no timestamp or serial number, and
 `TestTheBillOfMaterialsNamesEveryCarriedAndPinnedArtifact` holds it to the
-lock, the table, the image pins and `go.sum`. `make build` writes it beside
-the executable as `bin/bootwright.cdx.json`, and `make container-build` beside
-its executable. Text mode writes the document; either structured mode places
-it in `result.bom` beside `result.format`.
-
-Not yet met: the bill of materials names each component's license and a
-release ships the third-party notices; tracked as
-[B1243](milestones/backlog.md#b1243).
+lock, the table, the image pins and `go.sum`, and
+`TestEveryThirdPartyComponentNamesAReviewedSPDXLicense` holds every component
+but the first-party collection to a reviewed SPDX license. `make build` writes
+it beside the executable as `bin/bootwright.cdx.json`, and `make container-build`
+beside its executable; each also writes `bootwright.notices.txt`, the
+third-party notices of every component the executable embeds, scope `required`,
+with the license text its authors published and each module's `NOTICE`. The
+notices are composed from the document and fail the build when a component names
+no license or has no text, so a release cannot omit them. They carry nothing for
+a component a build only names, since the executable does not redistribute it.
+Text mode writes the document; either structured mode places it in
+`result.bom` beside `result.format`.
 
 ## Lifecycle behavior
 

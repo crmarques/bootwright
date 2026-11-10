@@ -4,6 +4,7 @@
     {
       "kind": "govc",
       "minimum": "0.56.2",
+      "license": "Apache-2.0",
       "default": {
         "version": "0.56.2",
         "bytes": 18573379,
@@ -13,6 +14,7 @@
     {
       "kind": "helm",
       "minimum": "4.3.1",
+      "license": "Apache-2.0",
       "default": {
         "version": "4.3.1",
         "bytes": 20368240,
@@ -22,6 +24,7 @@
     {
       "kind": "kubectl",
       "minimum": "1.37.2",
+      "license": "Apache-2.0",
       "default": {
         "version": "1.37.2",
         "bytes": 61890722,
@@ -31,6 +34,7 @@
     {
       "kind": "virtctl",
       "minimum": "1.9.1",
+      "license": "Apache-2.0",
       "default": {
         "version": "1.9.1",
         "bytes": 60981410,

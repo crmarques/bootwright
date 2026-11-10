@@ -78,8 +78,12 @@ func composeBillOfMaterials(info cli.BuildInfo, stamp *debug.BuildInfo) (cli.Bil
 	}
 	bom := cli.BillOfMaterials{Name: "bootwright", Version: info.Version, Commit: info.Commit, Source: info.Source, Checked: info.VulnerabilityCheck}
 	toolchain := strings.TrimPrefix(runtime.Version(), "go")
+	stdlibLicense, err := goModuleLicense("stdlib", "")
+	if err != nil {
+		return cli.BillOfMaterials{}, err
+	}
 	bom.Components = append(bom.Components, cli.BOMComponent{Ref: "go:stdlib@" + toolchain, Type: "library", Name: "stdlib", Version: toolchain, Scope: "required",
-		PURL: "pkg:golang/stdlib@" + toolchain, Properties: []cli.BOMProperty{carried}})
+		License: stdlibLicense, PURL: "pkg:golang/stdlib@" + toolchain, Properties: []cli.BOMProperty{carried}})
 	for _, module := range stamp.Deps {
 		if module.Replace != nil {
 			module = module.Replace
@@ -87,13 +91,49 @@ func composeBillOfMaterials(info cli.BuildInfo, stamp *debug.BuildInfo) (cli.Bil
 		if module.Version == "" || module.Sum == "" {
 			return cli.BillOfMaterials{}, errors.New("the Go module " + module.Path + " is a local replacement with no version or go.sum hash")
 		}
-		bom.Components = append(bom.Components, cli.BOMComponent{Ref: "go:" + module.Path + "@" + module.Version, Type: "library", Name: module.Path, Version: module.Version, Scope: "required",
+		license, err := goModuleLicense(module.Path, module.Version)
+		if err != nil {
+			return cli.BillOfMaterials{}, err
+		}
+		bom.Components = append(bom.Components, cli.BOMComponent{Ref: "go:" + module.Path + "@" + module.Version, Type: "library", Name: module.Path, Version: module.Version, Scope: "required", License: license,
 			PURL: "pkg:golang/" + module.Path + "@" + module.Version, Properties: []cli.BOMProperty{carried, {Name: "bootwright:go-sum", Value: module.Sum}}})
 	}
-	lock, err := runtimelock.Embedded()
+	wheels, err := wheelComponents(carried)
 	if err != nil {
 		return cli.BillOfMaterials{}, err
 	}
+	bom.Components = append(bom.Components, wheels...)
+	bom.Components = append(bom.Components, cli.BOMComponent{Ref: "ansible:" + collectionName, Type: "library", Name: collectionName, Scope: "required",
+		Properties: []cli.BOMProperty{carried, {Name: "bootwright:automation-digest", Value: ansible.Digest()}}})
+	pins, err := controller.ToolPins()
+	if err != nil {
+		return cli.BillOfMaterials{}, err
+	}
+	for _, pin := range pins {
+		publisher, err := bundlelocal.PublisherURL(pin)
+		if err != nil {
+			return cli.BillOfMaterials{}, err
+		}
+		bom.Components = append(bom.Components, cli.BOMComponent{Ref: "tool:" + pin.Kind + "@" + pin.Default.Version, Type: "application", Name: pin.Kind, Version: pin.Default.Version, Scope: "optional", License: pin.License,
+			SHA256: pin.Default.SHA256, Distribution: publisher, Properties: []cli.BOMProperty{acquired, {Name: "bootwright:minimum", Value: pin.Minimum}}})
+	}
+	images, err := imageComponents(acquired)
+	if err != nil {
+		return cli.BillOfMaterials{}, err
+	}
+	bom.Components = append(bom.Components, images...)
+	if bom.Vulnerabilities, err = reviewedExceptions(); err != nil {
+		return cli.BillOfMaterials{}, err
+	}
+	return bom, nil
+}
+
+func wheelComponents(carried cli.BOMProperty) ([]cli.BOMComponent, error) {
+	lock, err := runtimelock.Embedded()
+	if err != nil {
+		return nil, err
+	}
+	var components []cli.BOMComponent
 	wheels := map[string][]string{}
 	files := map[string]runtimelock.File{}
 	for _, abi := range lock.PythonABIs() {
@@ -120,23 +160,18 @@ func composeBillOfMaterials(info cli.BuildInfo, stamp *debug.BuildInfo) (cli.Bil
 		if abis := wheels[name]; len(abis) != 0 {
 			properties = append(properties, cli.BOMProperty{Name: "bootwright:python-abi", Value: strings.Join(abis, ",")})
 		}
-		bom.Components = append(bom.Components, cli.BOMComponent{Ref: "pypi:" + file.Filename, Type: "library", Name: file.Name, Version: file.Version, Scope: scope,
+		license, found := runtimelock.LicenseOf(file)
+		if !found {
+			return nil, errors.New("the locked wheel " + file.Filename + " has no license in the runtime license table")
+		}
+		components = append(components, cli.BOMComponent{Ref: "pypi:" + file.Filename, Type: "library", Name: file.Name, Version: file.Version, Scope: scope, License: license,
 			SHA256: file.SHA256, PURL: "pkg:pypi/" + strings.ReplaceAll(strings.ToLower(file.Name), "_", "-") + "@" + file.Version + "?file_name=" + file.Filename, Distribution: file.URL, Properties: properties})
 	}
-	bom.Components = append(bom.Components, cli.BOMComponent{Ref: "ansible:" + collectionName, Type: "library", Name: collectionName, Scope: "required",
-		Properties: []cli.BOMProperty{carried, {Name: "bootwright:automation-digest", Value: ansible.Digest()}}})
-	pins, err := controller.ToolPins()
-	if err != nil {
-		return cli.BillOfMaterials{}, err
-	}
-	for _, pin := range pins {
-		publisher, err := bundlelocal.PublisherURL(pin)
-		if err != nil {
-			return cli.BillOfMaterials{}, err
-		}
-		bom.Components = append(bom.Components, cli.BOMComponent{Ref: "tool:" + pin.Kind + "@" + pin.Default.Version, Type: "application", Name: pin.Kind, Version: pin.Default.Version, Scope: "optional",
-			SHA256: pin.Default.SHA256, Distribution: publisher, Properties: []cli.BOMProperty{acquired, {Name: "bootwright:minimum", Value: pin.Minimum}}})
-	}
+	return components, nil
+}
+
+func imageComponents(acquired cli.BOMProperty) ([]cli.BOMComponent, error) {
+	var components []cli.BOMComponent
 	consumers := map[string][]string{}
 	for _, image := range pinnedImages() {
 		consumers[image.reference] = append(consumers[image.reference], image.consumer)
@@ -151,14 +186,15 @@ func composeBillOfMaterials(info cli.BuildInfo, stamp *debug.BuildInfo) (cli.Bil
 		repository, digest, found := strings.Cut(reference, "@sha256:")
 		name := repository[strings.LastIndex(repository, "/")+1:]
 		if !found || len(digest) != 64 || strings.Contains(name, ":") {
-			return cli.BillOfMaterials{}, errors.New("the image " + reference + " is not pinned by digest alone")
+			return nil, errors.New("the image " + reference + " is not pinned by digest alone")
 		}
-		bom.Components = append(bom.Components, cli.BOMComponent{Ref: "oci:" + reference, Type: "container", Name: repository, Version: "sha256:" + digest, Scope: "optional",
+		image, known := imageLicenses[repository]
+		if !known {
+			return nil, errors.New("the image " + repository + " has no license in the image license table")
+		}
+		components = append(components, cli.BOMComponent{Ref: "oci:" + reference, Type: "container", Name: repository, Version: "sha256:" + digest, Scope: "optional", License: image.license,
 			SHA256: digest, PURL: "pkg:oci/" + name + "@sha256%3A" + digest + "?repository_url=" + repository,
 			Properties: []cli.BOMProperty{acquired, {Name: "bootwright:consumer", Value: strings.Join(consumers[reference], ",")}}})
 	}
-	if bom.Vulnerabilities, err = reviewedExceptions(); err != nil {
-		return cli.BillOfMaterials{}, err
-	}
-	return bom, nil
+	return components, nil
 }

@@ -12953,7 +12953,8 @@ declared non-default release still reads its publisher's metadata.
 ### X343 — The executable's bill of materials
 
 **Item:** B1243 (2026-11-10, [D250](backlog.md#d250) (2),
-[D251](backlog.md#d251)), partly delivered in-tree. `bootwright sbom --format
+[D251](backlog.md#d251)), partly delivered in-tree, completed by
+[X376](#x376--component-licenses-notices-and-the-pinned-go-image). `bootwright sbom --format
 cyclonedx-json` prints one CycloneDX 1.6 document the executable composes from
 what it embeds: the Go standard library and every Go module its build stamp
 names, with the `go.sum` hash; each runtime-lock wheel with its SHA-256 and
@@ -12970,7 +12971,8 @@ contract version or content digest moved.
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** no component names its license yet, no release
 ships the third-party notices, and the container build's Go image is still
-named by its tag ([B1243](backlog.md#b1243)).
+named by its tag; [X376](#x376--component-licenses-notices-and-the-pinned-go-image)
+delivered all three.
 
 ### X344 — The build's vulnerability gate
 
@@ -13652,3 +13654,69 @@ registered finishes, or is destroyed, with that build.
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** a context reaching the server over SSH still holds
 only `ssh/` keys ([B1267](backlog.md#b1267)).
+
+### X376 — Component licenses, notices and the pinned Go image
+
+**Item:** B1243 (2026-11-10, [D250](backlog.md#d250) (2),
+[D251](backlog.md#d251) (6) and (11)), delivered in-tree, so the item leaves
+the backlog. Every component of the bill of materials but the first-party
+collection now names its license, and the build writes the third-party notices
+and pins its Go image by digest.
+
+*Licenses.* Each source is a table the executable embeds, refreshed and checked
+by the tool that owns the lock beside it
+([bill of materials](../cli.md#bill-of-materials),
+[license sources](../../docs/development.md#license-sources-and-notices)). The
+Go modules' and the standard library's are `cmd/bootwright/go-licenses.json`,
+which `make licenses` writes from each module's license file in the module cache
+and the toolchain's, matched against six known texts taken from the SPDX
+license list with a header, bullet or organization name allowed to differ, and
+which `make licenses-check`, a gate of `make check`, recomputes; a text that
+matches none fails, and the one composite file, `go.yaml.in/yaml/v3`'s MIT and
+Apache-2.0, is held by its SHA-256. The wheels' are
+`internal/controller/runtimelock/licenses.json`, written by
+`scripts/runtime-lock generate` from each wheel's `License-Expression` or an
+unambiguous classifier and held to the wheels by `verify`; Jinja2 declares only
+the ambiguous `BSD License` classifier, so its entry is reviewed. The default
+clients' is a `license` field of each tool-table entry, which `make tool-table`
+now holds to the GitHub API's license of the publisher's repository (all four
+declare Apache-2.0; `openshift/oc` and `openshift/installer` do too). The
+images' is `imageLicenses`, keyed by repository with the page that declares each
+license, read from the projects: squid's source headers (GPLv2+), chrony's
+(version 2 only), nginx's license file, sushy-tools' license file and dnsmasq's
+documentation and headers, which grant version 2 or version 3 at the user's
+discretion. Composing the document refuses a module, wheel or image with no
+license, and `TestEveryThirdPartyComponentNamesAReviewedSPDXLicense` fails on a
+component with none, or one outside a reviewed list. The component carries one
+SPDX `license.id` or, for a compound license, an `expression`; no other byte of
+the document moved.
+
+*Notices.* `make build` and `make container-build` write
+`bootwright.notices.txt` beside the executable. `scripts/tools/licenses notices`
+composes it from the bill of materials the build just wrote: for each component
+marked `required`, its license text from the Go table, or from the
+`dist-info/licenses` files of the wheel the executable carries, and a module's
+`NOTICE`. It fails, and so does the build, when such a component names no
+license, has no text or is licensed differently in the table than in the
+document; `TestContainerBuildRefusesAnExportThatOmitsTheNotices` and
+`TestTheBuildRecipeWritesTheNoticesFromTheBillOfMaterials` hold the recipes to
+it. No release recipe exists, so this refusal is how a release cannot omit the
+notices.
+
+*Go image.* The Dockerfile's `GO_IMAGE` default is
+`docker.io/library/golang:1.26.10-trixie@sha256:fd9a91f0…`, the manifest list
+the registry serves for that tag, read from the registry API with an anonymous
+pull token; the linux/amd64 image's `GOLANG_VERSION` is 1.26.10.
+`GO_VERSION` is gone from the Makefile and the Dockerfile, and
+`TestTheContainerBuildPinsTheGoImageOfGoMod` holds the tag to the `go`
+directive and to `scripts/go`. The audit 003 finding BLD-04 is met. No request,
+evidence, contract version or content digest moved.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** the project declares no license of its own, so the
+first-party collection names none and the notices cover third-party components
+alone ([B1313](backlog.md#b1313)); the embedded `ansible-core` is
+GPL-3.0-or-later, which that decision weighs; an image's license is its
+program's, not that of the rest of its content; and no release recipe exists, so
+the notices are refused by the build, not by a release step
+([B1314](backlog.md#b1314)).
