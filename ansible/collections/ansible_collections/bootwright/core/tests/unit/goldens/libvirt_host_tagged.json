@@ -36,6 +36,7 @@
         "zone": "trusted"
       }
     ],
+    "connectionsAnswered": true,
     "directory": true,
     "firewallReady": {
       "answered": true,
@@ -94,6 +95,7 @@
         "state": "active"
       }
     ],
+    "unfrozenConnections": [],
     "uri": true,
     "vlanRefusal": {
       "answered": true,

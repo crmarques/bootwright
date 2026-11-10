@@ -217,6 +217,12 @@ def module_at(tasks, module):
     return index_of(tasks, lambda task: module in task, "runs " + module)
 
 
+def connections_at(tasks, state):
+    """The one task that runs the connections module in that state; present is the module's default."""
+    return index_of(tasks, lambda task: CONNECTIONS in task and (task[CONNECTIONS].get("state") or "present") == state,
+                    "runs %s in state %s" % (CONNECTIONS, state))
+
+
 def asserting(tasks, text, loop=""):
     return index_of(tasks, lambda task: any(text in condition for condition in conditions_of(task)) and loop in str(task.get("loop", "")),
                     "asserts " + text)
@@ -241,9 +247,10 @@ def test_every_trunk_and_leg_refusal_comes_before_the_first_host_effect():
     ]
     for index in refusals[1:]:
         assert "drifted" in str(tasks[index].get("loop"))
-    vlan, connections = module_at(tasks, VLAN_REFUSAL), module_at(tasks, CONNECTIONS)
+    vlan, connections = module_at(tasks, VLAN_REFUSAL), connections_at(tasks, "present")
+    pruned = connections_at(tasks, "pruned")
     network = index_of(tasks, lambda task: (task.get("ansible.builtin.template") or {}).get("src") == "network.xml.j2", "renders a network")
-    assert observed < min(refusals) and max(refusals) < vlan < connections < network
+    assert observed < min(refusals) and max(refusals) < pruned < vlan < connections < network
     assert tasks[connections][CONNECTIONS] == {"request": "{{ bootwright_substrate_host_request }}"} and "when" not in tasks[connections]
     assert "substrate_libvirt_host_connections is changed" in outcome_of(tasks)
 
@@ -280,13 +287,29 @@ def test_the_routing_table_loads_before_any_leg_comes_up():
     ]
     for index in refusals[2:]:
         assert "drifted" in str(tasks[index].get("loop"))
-    vlan, routing, connections = (module_at(tasks, module) for module in (VLAN_REFUSAL, ROUTING, CONNECTIONS))
+    vlan, routing = (module_at(tasks, module) for module in (VLAN_REFUSAL, ROUTING))
+    connections = connections_at(tasks, "present")
     network = index_of(tasks, lambda task: (task.get("ansible.builtin.template") or {}).get("src") == "network.xml.j2", "renders a network")
     assert observed < min(refusals) and max(refusals) < vlan < routing < connections < network
     for index, module in ((routing, ROUTING), (connections, CONNECTIONS)):
         assert tasks[index][module] == {"request": "{{ bootwright_substrate_host_request }}"} and "when" not in tasks[index]
     outcome = outcome_of(tasks)
     assert "substrate_libvirt_host_routing is changed" in outcome and "substrate_libvirt_host_connections is changed" in outcome
+
+
+# An owned trunk or leg the request no longer freezes, such as a dropped
+# Network's leg, is removed before the routing table is rewritten, first of
+# the host network effects, so it never outlives the table that isolated it.
+def test_owned_connections_no_longer_frozen_go_before_the_routing_table_is_rewritten():
+    tasks = apply_tasks()
+    pruned = connections_at(tasks, "pruned")
+    first_effect = min(index for index, task in enumerate(tasks)
+                       if any(module in task for module in (CONNECTIONS, ROUTING, VLAN_REFUSAL, "bootwright.core.libvirt_firewall_ready")))
+    assert pruned == first_effect < module_at(tasks, ROUTING) < connections_at(tasks, "present")
+    assert tasks[pruned][CONNECTIONS] == {"request": "{{ bootwright_substrate_host_request }}", "state": "pruned"} and "when" not in tasks[pruned]
+    assert "substrate_libvirt_host_pruned is changed" in outcome_of(tasks)
+    destroy = destroy_tasks()
+    assert asserting(destroy, "substrate_libvirt_host_before.observation.connectionsAnswered") < connections_at(destroy, "absent")
 
 
 # The removal refuses an unanswered or foreign connection, a foreign table and

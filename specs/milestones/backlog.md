@@ -310,6 +310,7 @@ Alias cell.
 | [B1285](#b1285) | new, 2026-11-10 (D255 (8)) | product | Substrate | A trunk, its legs and the Networks it carries take an MTU other than 1500 | NetworkManager's MTU handling on a bridge and a VLAN is unproved, and no tracked input needs it |
 | [B1287](#b1287) | new, 2026-11-10 (D255 (6)) | product | Substrate | A routed pair reaches an untagged libvirt network or crosses providers, and lab-network-variants' `br-nv` trunk becomes managed Networks | libvirt's reject into its networks cannot be overridden from the owned table, and the case's hand-built trunk still serves it |
 | [B1302](#b1302) | new, 2026-11-10 (X395 review, D255 (16)) | safety | Substrate | The routing observation compares each rule of the owned table with the rule the collection loads, so a rule replaced in place is repaired | `nft -j` renders rule expressions differently across nft releases, and a comparison that misreads a supported host would reload on every apply; the count per chain catches a deleted or added rule |
+| [B1303](#b1303) | new, 2026-11-10 (X395 review, D255 (17)) | safety | Substrate | Each Machine NIC on a trunk carries only the VLAN tags its segment declares | The trunk filters no VLAN, so a guest can tag any VLAN on it; per-tap filtering needs NetworkManager's bridge VLAN settings on a libvirt tap, unproved on a host |
 | [B1304](#b1304) | new, 2026-11-10 (X395 review, D255 (16)) | safety | Substrate | A routing unit that fails at boot leaves no VLAN leg up without its table | Making NetworkManager wait on the unit stops all host networking when nft fails, which can cut a remote host off; activating the legs only after the table loads changes how they come up and is the owner's choice |
 
 ### B82
@@ -3557,6 +3558,19 @@ rule the collection loads, normalized so each supported nft release reads it
 alike. **Exit evidence:** the listing of the frozen ruleset captured from each
 supported nft release as a golden, and a test that a same-count replacement
 reads not loaded and is reloaded.
+
+### B1303
+
+**Owner:** Substrate. **Kind:** safety. **Requires:** none. **Definition:**
+Candidate, from the X395 review ([D255](#d255) (17)): a trunk is an NM bridge
+with `bridge.vlan-filtering no`, so a guest attached to it can send and receive
+any 802.1Q tag and reach every other guest of the trunk in that VLAN, whatever
+its segment declares ([trunks and VLAN legs](../substrates.md#trunks-and-vlan-legs));
+the routing table judges only the host side of each leg. **Outcome:** the trunk
+filters VLANs and each Machine NIC's tap admits only the tags its segment
+carries, and the leg ports only their own. **Exit evidence:** a role test of the
+per-tap VLAN settings and an operator probe in which a guest's frame tagged with
+an undeclared VLAN reaches no other guest.
 
 ### B1304
 
@@ -8344,5 +8358,17 @@ review with the others:
     [B1304](#b1304), and `loaded` counts each chain's rules without comparing
     their expressions, parked as [B1302](#b1302).
 
+17. The trunk filters no VLAN, so a guest on it can tag any VLAN; VLAN
+    filtering per tap is parked as [B1303](#b1303). A connection whose keyfile
+    proves it this context's and provider's (the four user-data keys, and the
+    name, UUID, type and device the derivation gives) but which the request
+    no longer freezes, such as the leg of a dropped Network, is deleted by the
+    apply before the routing table is rewritten and by the removal, and
+    evidence reports it in `unfrozenConnections` beside `connectionsAnswered`,
+    so neither presence nor absence holds while one remains or while a read
+    failed. On destroy only an unanswered read, a foreign profile holding an
+    owned UUID and a foreign file at a frozen keyfile path refuse (10 narrowed),
+    since the removal deletes only what it owns.
+
 **Exit evidence:** each item's in-tree evidence and the operator run of
-[B1283](m1.md#b1283), then the owner's review of (1) to (16).
+[B1283](m1.md#b1283), then the owner's review of (1) to (17).

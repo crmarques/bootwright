@@ -387,7 +387,7 @@ func hostEvidence(request HostRequest, digest string) json.RawMessage {
 	}
 	data, _ := json.Marshal(HostEvidence{
 		Routing:     routing,
-		Connections: connections, FirewallReady: ready, VLANRefusal: refusal, Directory: observed(true), Hypervisor: true, NetworkManager: len(connections) != 0,
+		Connections: connections, ConnectionsAnswered: true, UnfrozenConnections: []string{}, FirewallReady: ready, VLANRefusal: refusal, Directory: observed(true), Hypervisor: true, NetworkManager: len(connections) != 0,
 		Networks: networks, Pool: "active", PoolAnswered: true, PoolAutostart: true, PoolOwned: true, Postcondition: true, Request: digest, Services: services, URI: true,
 	})
 	return data
@@ -457,7 +457,7 @@ func TestObservationMapsEvidenceToTheEffectItProves(t *testing.T) {
 		evidence HostEvidence
 		want     reconciliation.EffectState
 	}{
-		"host absent":         {HostEvidence{Absent: true, FirewallReady: FirewallReadyEvidence{Answered: true}, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true}, reconciliation.EffectNoEffect},
+		"host absent":         {HostEvidence{Absent: true, ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Answered: true}, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true}, reconciliation.EffectNoEffect},
 		"host directory only": {HostEvidence{Directory: observed(true), Hypervisor: true, PoolAnswered: true, Request: "digest", URI: true}, reconciliation.EffectPartial},
 		"host silent":         {HostEvidence{Directory: observed(false), Hypervisor: true, Request: "digest"}, reconciliation.EffectUnknown},
 	} {
@@ -508,11 +508,11 @@ func TestARemovalObservationReadsWhatTheRemovalProves(t *testing.T) {
 			observe: func(runner Runner) func(context.Context, lifecycle.Execution) (lifecycle.Observation, error) {
 				return NewHost(runner).ObserveRemoval
 			},
-			absent:  encode(HostEvidence{Absent: true, FirewallReady: FirewallReadyEvidence{Answered: true}, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true}),
+			absent:  encode(HostEvidence{Absent: true, ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Answered: true}, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true}),
 			present: hostEvidence(hosts[0], "digest"),
 			partial: encode(HostEvidence{Pool: "active", PoolAnswered: true, PoolOwned: true, Request: "digest", URI: true}),
 			silent:  encode(HostEvidence{Directory: observed(false), Hypervisor: true, Request: "digest"}),
-			foreign: encode(HostEvidence{Absent: true, FirewallReady: FirewallReadyEvidence{Answered: true}, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "other", URI: true}),
+			foreign: encode(HostEvidence{Absent: true, ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Answered: true}, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "other", URI: true}),
 		},
 		{
 			name: "machine", execution: block("machine-rhel-01", machineCanonical),
@@ -711,7 +711,7 @@ func silentDrivers(request HostRequest, network, pool bool) HostEvidence {
 		services = append(services, ServiceEvidence{Enabled: true, Name: service, State: "inactive"})
 	}
 	return HostEvidence{
-		Absent: true, FirewallReady: FirewallReadyEvidence{Name: request.FirewallReadyUnit, Answered: true}, VLANRefusal: VLANRefusalEvidence{Name: request.VLANRefusalUnit, Answered: true}, Directory: observed(false), Hypervisor: true, Networks: networks, PoolAnswered: !pool,
+		Absent: true, ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Name: request.FirewallReadyUnit, Answered: true}, VLANRefusal: VLANRefusalEvidence{Name: request.VLANRefusalUnit, Answered: true}, Directory: observed(false), Hypervisor: true, Networks: networks, PoolAnswered: !pool,
 		Postcondition: true, Request: "digest", Services: services, URI: true,
 	}
 }

@@ -156,7 +156,9 @@
             ],
             "uri": true,
             "connections": [],
+            "connectionsAnswered": true,
             "networkManager": false,
+            "unfrozenConnections": [],
             "routing": {
               "name": "",
               "table": "",
@@ -241,7 +243,9 @@
             ],
             "uri": false,
             "connections": [],
+            "connectionsAnswered": true,
             "networkManager": false,
+            "unfrozenConnections": [],
             "routing": {
               "name": "",
               "table": "",
@@ -318,7 +322,9 @@
             ],
             "uri": true,
             "connections": [],
+            "connectionsAnswered": true,
             "networkManager": false,
+            "unfrozenConnections": [],
             "routing": {
               "name": "",
               "table": "",
@@ -427,7 +433,9 @@
             ],
             "uri": true,
             "connections": [],
+            "connectionsAnswered": true,
             "networkManager": false,
+            "unfrozenConnections": [],
             "routing": {
               "name": "",
               "table": "",
@@ -512,7 +520,9 @@
             ],
             "uri": true,
             "connections": [],
+            "connectionsAnswered": true,
             "networkManager": false,
+            "unfrozenConnections": [],
             "routing": {
               "name": "",
               "table": "",
@@ -595,7 +605,9 @@
             ],
             "uri": true,
             "connections": [],
+            "connectionsAnswered": true,
             "networkManager": false,
+            "unfrozenConnections": [],
             "routing": {
               "name": "",
               "table": "",

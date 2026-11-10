@@ -215,7 +215,7 @@ func contractRows() []contractRow {
 		{kind: installation.Kind, implementation: installation.EraseImplementation, example: "lab-baremetal+erase",
 			completedFrom: "specs/state-reconciliation.md, Opt-in physical logical overwrite: erase requires the original physical claim UUID before any adapter or receipt can be trusted"},
 		{kind: libvirt.HostKind, implementation: libvirt.HostImplementation, example: "lab-rhel", presence: contractHostPresence,
-			absence:   map[string]any{"uri": true, "poolAnswered": true, "directory": false, "firewallReady": map[string]any{"answered": true}},
+			absence:   map[string]any{"uri": true, "poolAnswered": true, "directory": false, "firewallReady": map[string]any{"answered": true}, "connectionsAnswered": true},
 			readiness: "services", removalPartial: contractStoppedPool, drift: map[string]any{"poolAutostart": false}},
 		{kind: agentinstall.Kind, implementation: agentinstall.MediaImplementation, example: "lab-sno", presence: contractMediaPresence,
 			drift: map[string]any{"installer": "0.0.0"}},
@@ -1380,7 +1380,7 @@ func contractHostPresence(t *testing.T, execution lifecycle.Execution) map[strin
 	}
 	return map[string]any{
 		"postcondition": true, "hypervisor": true, "services": services, "uri": true, "pool": "active", "poolAnswered": true, "networks": networks,
-		"firewallReady": ready, "vlanRefusal": refusal,
+		"firewallReady": ready, "vlanRefusal": refusal, "connectionsAnswered": true,
 		"directory": true, "poolAutostart": true, "poolOwned": true,
 	}
 }

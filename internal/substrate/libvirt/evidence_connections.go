@@ -59,6 +59,12 @@ func pairConnections(observed []ConnectionEvidence, request HostRequest) ([]Conn
 }
 
 func matchConnections(evidence HostEvidence, request HostRequest) error {
+	if !evidence.ConnectionsAnswered {
+		return refusal("lifecycle.state", "NetworkManager did not answer every read of the provider's trunks and VLAN legs", connectionRemedy)
+	}
+	if len(evidence.UnfrozenConnections) != 0 {
+		return refusal("lifecycle.state", "the provider host still holds owned trunks or VLAN legs its request no longer freezes: "+strings.Join(evidence.UnfrozenConnections, ", "), connectionRemedy)
+	}
 	sorted, err := pairConnections(evidence.Connections, request)
 	if err != nil {
 		return err
@@ -84,8 +90,14 @@ func matchConnections(evidence HostEvidence, request HostRequest) error {
 	return nil
 }
 
-func connectionsAbsent(observed []ConnectionEvidence) error {
-	for _, entry := range observed {
+func connectionsAbsent(evidence HostEvidence) error {
+	if !evidence.ConnectionsAnswered {
+		return refusal("lifecycle.state", "NetworkManager did not answer every read of the provider's trunks and VLAN legs, so their removal is not proved", "")
+	}
+	if len(evidence.UnfrozenConnections) != 0 {
+		return refusal("lifecycle.state", "the provider host removal evidence still reports owned trunks or VLAN legs: "+strings.Join(evidence.UnfrozenConnections, ", "), "")
+	}
+	for _, entry := range evidence.Connections {
 		if !entry.Answered {
 			return refusal("lifecycle.state", "NetworkManager did not answer for an owned trunk or VLAN leg, so its removal is not proved", "")
 		}
@@ -96,8 +108,11 @@ func connectionsAbsent(observed []ConnectionEvidence) error {
 	return nil
 }
 
-func connectionsHeld(observed []ConnectionEvidence, request HostRequest) error {
-	sorted, err := pairConnections(observed, request)
+func connectionsHeld(evidence HostEvidence, request HostRequest) error {
+	if !evidence.ConnectionsAnswered {
+		return refusal("lifecycle.state", "NetworkManager did not answer every read of the provider's trunks and VLAN legs", "")
+	}
+	sorted, err := pairConnections(evidence.Connections, request)
 	if err != nil {
 		return err
 	}
@@ -109,9 +124,9 @@ func connectionsHeld(observed []ConnectionEvidence, request HostRequest) error {
 	return nil
 }
 
-func connectionsOwned(observed []ConnectionEvidence) (bool, error) {
-	held := false
-	for _, entry := range observed {
+func connectionsOwned(evidence HostEvidence) (bool, error) {
+	held := len(evidence.UnfrozenConnections) != 0
+	for _, entry := range evidence.Connections {
 		if !entry.Present {
 			continue
 		}

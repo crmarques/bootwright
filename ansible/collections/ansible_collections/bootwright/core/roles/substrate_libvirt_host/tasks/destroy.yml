@@ -122,10 +122,12 @@
     quiet: true
 
 # A connection read that did not answer proves nothing removed, and a profile
-# holding a frozen UUID that is not this provider's is never deleted.
+# holding a frozen UUID that is not this provider's is never deleted. The
+# removal also takes every owned connection the request no longer freezes.
 - name: Refuse to remove a trunk or VLAN leg that is unknown or foreign
   ansible.builtin.assert:
     that:
+      - substrate_libvirt_host_before.observation.connectionsAnswered
       - substrate_libvirt_host_before.observation.connections | rejectattr('answered') | list | length == 0
       - substrate_libvirt_host_before.observation.connections | selectattr('present') | rejectattr('owned') | list | length == 0
     fail_msg: >-

@@ -11,6 +11,8 @@ version_added: "0.1.0"
 description:
   - Publishes each frozen trunk bridge and VLAN leg as a keyfile NetworkManager loads, activates it, and proves it
     active with its frozen definition in the trusted zone; removes the legs, then the trunks, and proves them gone.
+  - Removes first, legs before trunks, every connection whose keyfile proves it this context's and provider's but which
+    the request no longer freezes, so a dropped Network never leaves its leg up.
   - Refuses before any change when NetworkManager is not ready, a read does not answer, another profile holds a frozen
     name, UUID or device, a host link or route collides, or a domain runs on a trunk it would reactivate or remove.
 options:
@@ -19,10 +21,13 @@ options:
     type: dict
     required: true
   state:
-    description: Whether to hold or remove the owned connections.
+    description:
+      - Whether to hold the frozen connections, to remove only the owned ones the request no longer freezes, or to
+        remove every owned connection.
     type: str
     choices:
       - present
+      - pruned
       - absent
     default: present
 author:
@@ -50,7 +55,7 @@ from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt 
 def main():
     module = AnsibleModule(argument_spec={
         "request": {"type": "dict", "required": True},
-        "state": {"type": "str", "choices": ["present", "absent"], "default": "present"},
+        "state": {"type": "str", "choices": ["present", "pruned", "absent"], "default": "present"},
     }, supports_check_mode=False)
     request = module.params["request"]
     run = module.run_command

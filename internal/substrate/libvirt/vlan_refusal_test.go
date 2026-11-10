@@ -153,7 +153,7 @@ func TestAStoppedRefusalLeavesNoUnitOrRouteBehind(t *testing.T) {
 func TestRemovalProvesTheUnitAndRoutesGone(t *testing.T) {
 	request := refusalRequest(t, controller(), provider(), labNetwork(), vlanNetwork("ceph-cluster", "120", family("ipv4", "203.0.113.0/26")),
 		carrying(managedNetwork("ceph-public", "virbr-ceph", "192.0.2.65/26"), "ceph-cluster"))
-	gone := HostEvidence{Absent: true, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true,
+	gone := HostEvidence{Absent: true, ConnectionsAnswered: true, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true,
 		FirewallReady: FirewallReadyEvidence{Name: request.FirewallReadyUnit, Answered: true},
 		VLANRefusal:   VLANRefusalEvidence{Name: request.VLANRefusalUnit, Answered: true}}
 	if err := ValidateHostAbsence(encode(t, gone), "digest"); err != nil {

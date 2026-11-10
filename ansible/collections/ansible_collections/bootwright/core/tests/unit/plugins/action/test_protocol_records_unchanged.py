@@ -70,7 +70,7 @@ ROUTING = {"name": "", "table": "", "answered": True, "present": False, "owned":
            "loaded": False, "forwarding": False}
 HOST = {"firewallReady": READY, "directory": True, "hypervisor": True, "networks": [NETWORK], "pool": "active", "poolAnswered": True,
         "poolAutostart": True, "poolOwned": True, "services": [SERVICE], "uri": True, "vlanRefusal": VLAN_REFUSAL,
-        "networkManager": False, "connections": [], "routing": ROUTING}
+        "networkManager": False, "connections": [], "connectionsAnswered": True, "unfrozenConnections": [], "routing": ROUTING}
 HOST_GONE = dict(HOST, firewallReady=dict(READY, present=False, owned=False, enabled=False, ready=False, state=""),
                  pool="", networks=[dict(NETWORK, state="", owned=False)], directory=False)
 DISK = {"name": "root", "present": True, "sizeGiB": 60}

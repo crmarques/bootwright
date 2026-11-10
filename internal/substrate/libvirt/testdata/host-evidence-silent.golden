@@ -1,6 +1,7 @@
 {
   "absent": false,
   "connections": [],
+  "connectionsAnswered": true,
   "directory": false,
   "firewallReady": {
     "answered": true,
@@ -59,6 +60,7 @@
       "state": "active"
     }
   ],
+  "unfrozenConnections": [],
   "uri": false,
   "vlanRefusal": {
     "answered": true,

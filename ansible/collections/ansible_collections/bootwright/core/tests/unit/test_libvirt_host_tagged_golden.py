@@ -42,6 +42,9 @@ def test_every_frozen_trunk_and_leg_is_accepted_and_rendered_as_an_owned_keyfile
         groups = nm.parse_keyfile(nm.keyfile(entry))
         assert nm.marked(groups, entry) and nm.carries(groups, entry)
         assert groups["connection"]["uuid"] == entry["uuid"] and groups["user"]["bootwright.io.role"] == entry["role"]
+        # The collection derives the UUID Go froze, which proves an owned connection the request no longer freezes.
+        assert nm.connection_uuid(request["identity"]["context"], entry["name"]) == entry["uuid"]
+        assert nm.owned_identity(groups, request["identity"]["context"], request["identity"]["object"], entry["name"])["device"] == entry["device"]
     assert libvirt_vlan_refusal.unit_name(request) == request["vlanRefusalUnit"]
     assert libvirt_firewall_ready.unit_name(request) == request["firewallReadyUnit"]
 

@@ -242,7 +242,7 @@ func TestHostEvidenceMatchesItsGoldens(t *testing.T) {
 		// and its daemons stay, as the removal leaves them.
 		"removed": {
 			HostEvidence{
-				FirewallReady: FirewallReadyEvidence{Name: request.FirewallReadyUnit, Answered: true}, VLANRefusal: VLANRefusalEvidence{Name: request.VLANRefusalUnit, Answered: true},
+				ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Name: request.FirewallReadyUnit, Answered: true}, VLANRefusal: VLANRefusalEvidence{Name: request.VLANRefusalUnit, Answered: true},
 				Absent: true, Directory: observed(false), Hypervisor: true, Networks: forgotten, PoolAnswered: true,
 				Postcondition: true, Request: evidenceDigest, Services: completed.Services, URI: true,
 			},
@@ -253,7 +253,7 @@ func TestHostEvidenceMatchesItsGoldens(t *testing.T) {
 		// network.
 		"partial-directory": {
 			HostEvidence{
-				FirewallReady: FirewallReadyEvidence{Name: request.FirewallReadyUnit, Answered: true}, VLANRefusal: VLANRefusalEvidence{Name: request.VLANRefusalUnit, Answered: true},
+				ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Name: request.FirewallReadyUnit, Answered: true}, VLANRefusal: VLANRefusalEvidence{Name: request.VLANRefusalUnit, Answered: true},
 				Directory: observed(true), Hypervisor: true, Networks: forgotten, PoolAnswered: true,
 				Request: evidenceDigest, Services: completed.Services, URI: true,
 			},
@@ -264,7 +264,7 @@ func TestHostEvidenceMatchesItsGoldens(t *testing.T) {
 		// its missing state proves nothing, and no validator accepts it.
 		"network-silent": {
 			HostEvidence{
-				FirewallReady: FirewallReadyEvidence{Name: request.FirewallReadyUnit, Answered: true}, VLANRefusal: VLANRefusalEvidence{Name: request.VLANRefusalUnit, Answered: true},
+				ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Name: request.FirewallReadyUnit, Answered: true}, VLANRefusal: VLANRefusalEvidence{Name: request.VLANRefusalUnit, Answered: true},
 				Directory: observed(false), Hypervisor: true, Networks: unread, PoolAnswered: true,
 				Request: evidenceDigest, Services: completed.Services, URI: true,
 			},
@@ -275,7 +275,7 @@ func TestHostEvidenceMatchesItsGoldens(t *testing.T) {
 		// anything, and nothing exists at the pool directory's path.
 		"silent": {
 			HostEvidence{
-				FirewallReady: FirewallReadyEvidence{Name: request.FirewallReadyUnit, Answered: true}, VLANRefusal: VLANRefusalEvidence{Name: request.VLANRefusalUnit, Answered: true},
+				ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Name: request.FirewallReadyUnit, Answered: true}, VLANRefusal: VLANRefusalEvidence{Name: request.VLANRefusalUnit, Answered: true},
 				Directory: observed(false), Hypervisor: true, Networks: unread, Request: evidenceDigest,
 				Services: completed.Services,
 			},
@@ -285,6 +285,9 @@ func TestHostEvidenceMatchesItsGoldens(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if test.evidence.Connections == nil {
 				test.evidence.Connections = []ConnectionEvidence{}
+			}
+			if test.evidence.UnfrozenConnections == nil {
+				test.evidence.UnfrozenConnections = []string{}
 			}
 			canonical, err := reconciliation.Freeze(test.evidence, "provider host evidence")
 			if err != nil {

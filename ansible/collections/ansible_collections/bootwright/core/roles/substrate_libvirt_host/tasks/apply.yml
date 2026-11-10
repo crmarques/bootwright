@@ -313,14 +313,22 @@
   loop_control:
     label: '{{ item.bridge }}'
 
-# The first host effects, in order: the VLAN refusal unit, the routing table,
-# the trunks, the legs, then the libvirt networks and the pool, so a leg never
-# comes up without the table that isolates it. A managed bridge carries each
+# The first host effects, in order: the removal of every owned trunk and leg
+# the request no longer freezes, the VLAN refusal unit, the routing table, the
+# trunks, the legs, then the libvirt networks and the pool, so a leg never
+# comes up without the table that isolates it and a dropped Network's leg never
+# outlives the table that held it. A managed bridge carries each
 # tagged Network between guests only, so the host holds no connected route for
 # its subnet and a guest's packet for it would follow the default route out
 # through the NAT; an owned unit holds an unreachable route per subnet instead.
 # The frozen request carries no subnet, and the module removes the unit it
 # installed earlier, when nothing is to be refused any more.
+- name: Remove each owned trunk and VLAN leg the request no longer freezes
+  bootwright.core.libvirt_nm_connections:
+    request: '{{ bootwright_substrate_host_request }}'
+    state: pruned
+  register: substrate_libvirt_host_pruned
+
 - name: Hold an unreachable route for each VLAN subnet a managed bridge carries
   bootwright.core.libvirt_vlan_refusal:
     request: '{{ bootwright_substrate_host_request }}'
@@ -552,6 +560,7 @@
              or substrate_libvirt_host_vlan_refusal is changed
              or substrate_libvirt_host_routing is changed
              or substrate_libvirt_host_connections is changed
+             or substrate_libvirt_host_pruned is changed
              or substrate_libvirt_host_pool_directory is changed
              or substrate_libvirt_host_running.observation.pool != 'active'
              or substrate_libvirt_host_incomplete_networks | length > 0

@@ -14,8 +14,9 @@ const maxEvidenceBytes = 64 << 10
 // Go validates it strictly, so an adapter cannot widen a postcondition or
 // report a network the operation did not freeze.
 type HostEvidence struct {
-	Absent      bool                 `json:"absent"`
-	Connections []ConnectionEvidence `json:"connections"`
+	Absent              bool                 `json:"absent"`
+	Connections         []ConnectionEvidence `json:"connections"`
+	ConnectionsAnswered bool                 `json:"connectionsAnswered"`
 	// Directory is whether anything exists at the pool directory's path, read
 	// whether or not the URI answered. Evidence without it proves the
 	// directory neither present nor absent.
@@ -38,13 +39,14 @@ type HostEvidence struct {
 	// directory. A pool carries no ownership metadata, so a same-named pool
 	// targeting another directory is foreign. Evidence without it decodes as
 	// a pool that is not this provider's.
-	PoolOwned     bool                `json:"poolOwned"`
-	Postcondition bool                `json:"postcondition"`
-	Request       string              `json:"request"`
-	Routing       RoutingEvidence     `json:"routing"`
-	Services      []ServiceEvidence   `json:"services"`
-	URI           bool                `json:"uri"`
-	VLANRefusal   VLANRefusalEvidence `json:"vlanRefusal"`
+	PoolOwned           bool                `json:"poolOwned"`
+	Postcondition       bool                `json:"postcondition"`
+	Request             string              `json:"request"`
+	Routing             RoutingEvidence     `json:"routing"`
+	Services            []ServiceEvidence   `json:"services"`
+	UnfrozenConnections []string            `json:"unfrozenConnections"`
+	URI                 bool                `json:"uri"`
+	VLANRefusal         VLANRefusalEvidence `json:"vlanRefusal"`
 }
 
 type VLANRefusalEvidence struct {
@@ -320,7 +322,7 @@ func ValidateHostAbsence(data []byte, digest string) error {
 	if evidence.Directory == nil || *evidence.Directory {
 		return refusal("lifecycle.state", "the provider host removal evidence does not prove its pool directory gone", "")
 	}
-	if err := connectionsAbsent(evidence.Connections); err != nil {
+	if err := connectionsAbsent(evidence); err != nil {
 		return err
 	}
 	if err := routingAbsent(evidence.Routing); err != nil {
@@ -466,7 +468,7 @@ func unremoved(evidence HostEvidence, request HostRequest) error {
 			return refusal("lifecycle.state", "the provider host no longer holds every managed network it owns active", "")
 		}
 	}
-	return connectionsHeld(evidence.Connections, request)
+	return connectionsHeld(evidence, request)
 }
 
 // ValidateHostPartial accepts evidence only when it positively proves this
@@ -503,7 +505,7 @@ func holdsOwned(evidence HostEvidence) error {
 	if vlan := evidence.VLANRefusal; vlan.Present && (!vlan.Answered || !vlan.Owned) {
 		return refusal("lifecycle.state", "a VLAN refusal unit exists without this provider's ownership", "")
 	}
-	held, err := connectionsOwned(evidence.Connections)
+	held, err := connectionsOwned(evidence)
 	if err != nil {
 		return err
 	}

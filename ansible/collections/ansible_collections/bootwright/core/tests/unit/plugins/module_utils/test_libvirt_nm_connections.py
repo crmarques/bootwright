@@ -14,8 +14,7 @@ from ansible_collections.bootwright.core.plugins.module_utils.substrate_libvirt 
 TRUNK = "bootwright-lab-host-trunk-br-lab"
 PUBLIC = "bootwright-lab-ceph-public"
 ARBITER = "bootwright-lab-ceph-arbiter"
-UUIDS = {TRUNK: "0b1c2d3e-0000-8000-8000-000000000001", PUBLIC: "0b1c2d3e-0000-8000-8000-000000000002",
-         ARBITER: "0b1c2d3e-0000-8000-8000-000000000003"}
+UUIDS = {name: nm.connection_uuid("lab", name) for name in (TRUNK, PUBLIC, ARBITER)}
 REQUEST = {
     "identity": {"context": "lab", "object": "host"},
     "uri": "qemu:///system",
@@ -30,7 +29,7 @@ REQUEST = {
 
 TRUNK_KEYFILE = """[connection]
 id=bootwright-lab-host-trunk-br-lab
-uuid=0b1c2d3e-0000-8000-8000-000000000001
+uuid=%s
 type=bridge
 interface-name=br-lab
 autoconnect=true
@@ -52,11 +51,11 @@ bootwright.io.context=lab
 bootwright.io.network=br-lab
 bootwright.io.provider=host
 bootwright.io.role=trunk
-"""
+""" % UUIDS[TRUNK]
 
 PUBLIC_KEYFILE = """[connection]
 id=bootwright-lab-ceph-public
-uuid=0b1c2d3e-0000-8000-8000-000000000002
+uuid=%s
 type=vlan
 interface-name=br-lab.110
 autoconnect=true
@@ -79,7 +78,7 @@ bootwright.io.context=lab
 bootwright.io.network=ceph-public
 bootwright.io.provider=host
 bootwright.io.role=leg
-"""
+""" % UUIDS[PUBLIC]
 
 # How nmcli reports a keyfile value it loaded: booleans as yes and no, the
 # address as ipv4.addresses.
@@ -415,3 +414,104 @@ def test_a_request_that_does_not_match_the_provider_is_refused_unobserved(host, 
 
 def test_a_terse_line_splits_only_on_unescaped_colons():
     assert nm.split_terse("a\\:b:c\\\\:d") == ["a:b", "c\\", "d"]
+
+
+def test_the_connection_uuid_is_the_one_go_derives():
+    assert nm.connection_uuid("lab", "bootwright-lab-ceph-public") == nm.connection_uuid("lab", "bootwright-lab-ceph-public")
+    assert nm.connection_uuid("lab", PUBLIC)[14] == "8" and nm.connection_uuid("lab", PUBLIC) != nm.connection_uuid("lab-b", PUBLIC)
+
+
+def without_arbiter():
+    request = copy.deepcopy(REQUEST)
+    request["legs"] = request["legs"][:1]
+    return request
+
+
+def test_a_dropped_network_leaves_no_leg_up_once_the_apply_prunes_it(host):
+    manage(host, "present")
+    dropped = without_arbiter()
+    observed = observe(host, dropped)
+    assert observed["unfrozenConnections"] == [ARBITER] and observed["connectionsAnswered"]
+    assert "br-lab.150" in observed["devices"] and [entry["name"] for entry in observed["connections"]] == [TRUNK, PUBLIC]
+    host.calls.clear()
+    assert manage(host, "pruned", dropped)
+    assert [call[-1] for call in host.effects()] == [UUIDS[ARBITER]]
+    assert UUIDS[ARBITER] not in host.profiles and not (host.root / (ARBITER + ".nmconnection")).exists()
+    assert not (host.net / "br-lab.150").exists() and (host.net / "br-lab.110").exists()
+    assert observe(host, dropped)["unfrozenConnections"] == []
+    assert not manage(host, "present", dropped)
+
+
+def test_a_dropped_last_network_removes_its_trunk_and_legs_once_no_machine_runs_on_the_trunk(host):
+    manage(host, "present")
+    plain = {"identity": REQUEST["identity"], "uri": "qemu:///system", "networks": []}
+    assert observe(host, plain)["unfrozenConnections"] == sorted([TRUNK, PUBLIC, ARBITER])
+    host.calls.clear()
+    with pytest.raises(ValueError, match="Machine rhel-01"):
+        manage(host, "present", plain, guests={"br-lab": ["Machine rhel-01"]})
+    assert host.effects() == []
+    assert manage(host, "present", plain)
+    assert [call[-1] for call in host.effects()] == [UUIDS[ARBITER], UUIDS[PUBLIC], UUIDS[TRUNK]]
+    assert host.profiles == {} and os.listdir(host.root) == [] and os.listdir(host.net) == []
+
+
+def test_a_removal_takes_the_owned_connections_its_request_no_longer_freezes_too(host):
+    manage(host, "present")
+    dropped = without_arbiter()
+    host.calls.clear()
+    assert manage(host, "absent", dropped)
+    assert [call[-1] for call in host.effects()] == [UUIDS[PUBLIC], UUIDS[ARBITER], UUIDS[TRUNK]]
+    observed = observe(host, dropped)
+    assert observed["unfrozenConnections"] == [] and observed["connectionsAnswered"]
+    assert os.listdir(host.root) == [] and os.listdir(host.net) == []
+
+
+def test_an_unfrozen_keyfile_is_this_providers_only_with_its_full_identity(host):
+    manage(host, "present")
+    path = host.root / (ARBITER + ".nmconnection")
+    original = path.read_text()
+    for change in (("bootwright.io.provider=host", "bootwright.io.provider=other"), ("uuid=" + UUIDS[ARBITER], "uuid=" + UUIDS[PUBLIC]),
+                   ("interface-name=br-lab.150", "interface-name=br-lab.151"), ("type=vlan", "type=bridge")):
+        path.write_text(original.replace(*change))
+        assert observe(host, without_arbiter())["unfrozenConnections"] == [], change
+    path.write_text(original)
+    host.profiles[UUIDS[ARBITER]]["filename"] = "/run/NetworkManager/system-connections/x.nmconnection"
+    host.calls.clear()
+    with pytest.raises(ValueError, match="not this provider's"):
+        manage(host, "pruned", without_arbiter())
+    assert host.effects() == [] and path.exists()
+    assert "not this provider's" in " ".join(observe(host, without_arbiter())["refusals"])
+
+
+def test_an_unfrozen_keyfile_nothing_answers_for_refuses_its_removal(host):
+    manage(host, "present")
+    host.calls.clear()
+    host.fail = "NAME,UUID,TYPE,DEVICE,ACTIVE,FILENAME"
+    observed = observe(host, {"identity": REQUEST["identity"], "networks": []})
+    assert observed["connectionsAnswered"] is False and observed["unfrozenConnections"] == sorted(UUIDS)
+    with pytest.raises(ValueError, match="did not answer"):
+        manage(host, "pruned", {"identity": REQUEST["identity"], "networks": []})
+    assert host.effects() == []
+
+
+def test_a_failed_observation_reports_every_frozen_connection_unanswered(host, monkeypatch):
+    def broken(*_arguments):
+        raise OSError("unreadable")
+
+    monkeypatch.setattr(nm, "read_path", broken)
+    observed = observe(host)
+    assert observed["connectionsAnswered"] is False and observed["unfrozenConnections"] == []
+    assert [(entry["name"], entry["answered"], entry["present"]) for entry in observed["connections"]] == [
+        (TRUNK, False, False), (PUBLIC, False, False), (ARBITER, False, False)]
+
+
+def test_a_removal_refuses_a_foreign_keyfile_at_a_frozen_path_before_any_effect(host):
+    manage(host, "present")
+    path = host.root / (ARBITER + ".nmconnection")
+    nm.require(host.run, [nm.NMCLI, "-w", nm.WAIT, "connection", "delete", "uuid", UUIDS[ARBITER]], "delete")
+    path.write_text("[connection]\nid=someone-else\n")
+    path.chmod(0o600)
+    host.calls.clear()
+    with pytest.raises(ValueError, match="keyfile of " + ARBITER):
+        manage(host, "absent")
+    assert host.effects() == [] and path.exists()

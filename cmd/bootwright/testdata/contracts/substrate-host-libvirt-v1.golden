@@ -1,8 +1,8 @@
 implementation: substrate-host-libvirt-v1
-content-digest: 812f1dd4e04ddd0795b677a32832be53321ebaec50962ca5a78d31e4dd1d5ce1
+content-digest: 18e2d51ac58bef078e9b30298bf549c03ea24ef63adb5b58cfbf4341de001e97
 request-version: substrate-host-libvirt-v1
 automation-formats: https://bootwright.io/substrate/v1
-mark-formats: Bootwright owned VLAN refusal, Bootwright owned readiness barrier, Bootwright owned routing, Description=Bootwright managed network firewall, bootwright.io.context, bootwright.io.network, bootwright.io.provider, bootwright.io.role, https://bootwright.io/substrate/v1
+mark-formats: Bootwright owned VLAN refusal, Bootwright owned readiness barrier, Bootwright owned routing, Description=Bootwright managed network firewall, bootwright.io.context, bootwright.io.network, bootwright.io.provider, bootwright.io.role, bootwright.substrate.libvirt.connection-v1, https://bootwright.io/substrate/v1
 proof-ids: none
 fixed-places: none
 effect-pins:
@@ -14,6 +14,7 @@ effect-pins:
   vlan-refusal-v1
   nm-trunk-legs-v1
   routing-table-v1
+  nm-unfrozen-connections-v1
 request-identity:
   identity.context
   identity.object
@@ -97,6 +98,7 @@ evidence-schema:
   connections[].present bool
   connections[].role string
   connections[].zone string
+  connectionsAnswered bool
   directory *bool
   firewallReady struct libvirt.FirewallReadyEvidence
   firewallReady.answered bool
@@ -138,6 +140,7 @@ evidence-schema:
   services[].enabled bool
   services[].name string
   services[].state string
+  unfrozenConnections []string
   uri bool
   vlanRefusal struct libvirt.VLANRefusalEvidence
   vlanRefusal.answered bool

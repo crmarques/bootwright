@@ -141,6 +141,7 @@ def host_scope(observed, restarts=(), pool_autostart=True):
         substrate_libvirt_host_vlan_refusal={"changed": False},
         substrate_libvirt_host_routing={"changed": False},
         substrate_libvirt_host_connections={"changed": False},
+        substrate_libvirt_host_pruned={"changed": False},
         substrate_libvirt_host_packages={"changed": False, "skipped": True},
         substrate_libvirt_host_daemon={"changed": False, "skipped": True},
         substrate_libvirt_host_pool_directory={"changed": False},

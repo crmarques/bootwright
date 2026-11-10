@@ -124,6 +124,8 @@ func TestHostPresenceRequiresEveryOwnedConnection(t *testing.T) {
 		"an inactive leg":         func(e *HostEvidence) { e.Connections[0].Active = false },
 		"another zone":            func(e *HostEvidence) { e.Connections[2].Zone = "public" },
 		"a connection never made": func(e *HostEvidence) { e.Connections[1].Present = false },
+		"an unanswered scan":      func(e *HostEvidence) { e.ConnectionsAnswered = false },
+		"a dropped leg left":      func(e *HostEvidence) { e.UnfrozenConnections = []string{"bootwright-lab-dropped"} },
 	} {
 		if err := ValidateHostPresence(evidenceOf(t, request, change), request, evidenceDigest); err == nil {
 			t.Errorf("presence accepted %s", name)
@@ -193,6 +195,43 @@ func TestAnOwnedConnectionAloneIsAPartialRealization(t *testing.T) {
 		if err := ValidateHostAbsence(data, evidenceDigest); err == nil {
 			t.Errorf("absence accepted %s", name)
 		}
+	}
+}
+
+// An owned connection the request no longer freezes, such as the leg of a
+// dropped Network, is still this provider's: it refuses presence and absence,
+// and alone it is a partial realization, so a provider that dropped its last
+// tagged Network neither completes nor reads removed while the leg is up. A
+// NetworkManager read that failed proves neither.
+func TestAnOwnedConnectionNoLongerFrozenRefusesPresenceAndAbsence(t *testing.T) {
+	plain := hostRequest(t)
+	left := func(e *HostEvidence) { e.UnfrozenConnections = []string{"bootwright-lab-ceph-public"} }
+	if err := ValidateHostPresence(evidenceOf(t, plain, left), plain, evidenceDigest); err == nil {
+		t.Error("presence accepted a provider still holding a leg its request dropped")
+	}
+	if err := ValidateHostPresence(evidenceOf(t, plain, func(e *HostEvidence) { e.ConnectionsAnswered = false }), plain, evidenceDigest); err == nil {
+		t.Error("presence accepted a NetworkManager scan that did not answer")
+	}
+	gone := HostEvidence{Absent: true, ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Answered: true}, Directory: observed(false),
+		PoolAnswered: true, Postcondition: true, Request: "digest", URI: true}
+	if err := ValidateHostAbsence(encode(t, gone), "digest"); err != nil {
+		t.Fatalf("removal evidence was refused: %v", diagnostics.Of(err))
+	}
+	for name, change := range map[string]func(*HostEvidence){
+		"a dropped leg left":   left,
+		"an unanswered scan":   func(e *HostEvidence) { e.ConnectionsAnswered = false },
+		"a failed observation": func(e *HostEvidence) { e.ConnectionsAnswered, e.Connections = false, nil },
+	} {
+		evidence := gone
+		change(&evidence)
+		if err := ValidateHostAbsence(encode(t, evidence), "digest"); err == nil {
+			t.Errorf("absence accepted %s", name)
+		}
+	}
+	partial := HostEvidence{ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Answered: true}, Directory: observed(false),
+		PoolAnswered: true, Request: "digest", URI: true, UnfrozenConnections: []string{"bootwright-lab-ceph-public"}}
+	if err := ValidateHostPartial(encode(t, partial), "digest"); err != nil {
+		t.Errorf("an owned leg its request dropped was not a partial realization: %v", diagnostics.Of(err))
 	}
 }
 

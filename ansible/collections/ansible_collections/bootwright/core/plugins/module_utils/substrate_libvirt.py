@@ -778,7 +778,9 @@ def observe_host(runner, request):
     the unit that holds the unreachable routes of the frozen VLAN subnets and
     those routes. `networkManager`, `connections` and `routing` are the
     evidence of the trunks, the VLAN legs and the routing table that holds
-    them, and `routingForwarding` whether that table needs IPv4 forwarding,
+    them, `connectionsAnswered` whether NetworkManager answered every read and
+    `unfrozenConnections` each owned trunk or leg the request no longer
+    freezes, and `routingForwarding` whether that table needs IPv4 forwarding,
     which the evidence never carries; `connectionRefusals` and `routingRefusals` say why an apply would
     refuse them before any effect, and `trunks` names, for each trunk the host
     holds, whether it drifted and the domains plugged into it, which neither a
@@ -824,6 +826,7 @@ def observe_host(runner, request):
         "collisionsAnswered": probed,
         "connectionRefusals": connections["refusals"],
         "connections": connections["connections"],
+        "connectionsAnswered": connections["connectionsAnswered"],
         "directory": os.path.lexists(request["poolPath"]),
         "firewallReady": observe_firewall_ready(runner, request),
         "drifted": drifted,
@@ -840,6 +843,7 @@ def observe_host(runner, request):
         "services": services,
         "shadows": shadows,
         "trunks": trunk_guests(runner, request, connections["trunks"], answers, context),
+        "unfrozenConnections": connections["unfrozenConnections"],
         "uri": answers,
         "vlanRefusal": observe_vlan_refusal(runner, request),
     }

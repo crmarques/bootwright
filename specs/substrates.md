@@ -428,7 +428,7 @@ the provider's owned readiness resources proved as above, every managed
 network active with its ownership metadata, running and keeping
 the frozen definition and set to autostart, every external bridge present,
 the pool active, set to autostart and targeting the frozen directory, and the trunks and legs as
-[their evidence](#trunks-and-vlan-legs) requires. Replay
+[their evidence](#connection-lifecycle-and-evidence) requires. Replay
 reports `completed` with no change when live state matches. The differences it
 converges, each reported as a change, are an owned network whose definition
 differs, which is redefined under the identity it already holds and restarted
@@ -543,38 +543,83 @@ one libvirt makes for its bridges; firewalld's configuration is never changed.
 The trunk carries the guest VLAN tags of each of its legs and of each leg's
 `taggedNetworkRefs`; a Machine NIC on a leg's segment is an `<interface
 type='bridge'>` on the trunk with no libvirt network
-(`TestAMachineNICOnALegSegmentAttachesToTheTrunkBridge`).
+(`TestAMachineNICOnALegSegmentAttachesToTheTrunkBridge`). The trunk filters
+no VLAN (`bridge.vlan-filtering no`), so a guest on it can send and receive any
+802.1Q tag, not only those its segment declares, and reach every other guest
+on that trunk in that VLAN; isolation between the trunk's guests is the guests'
+own configuration, and only the host side of each leg is judged by the
+[routing table](#routing-table). Not yet met: VLAN filtering per tap, which
+would admit only the declared tags on each Machine NIC; tracked as
+[B1303](milestones/backlog.md#b1303).
+
+### Connection lifecycle and evidence
+
+The [trunks and VLAN legs](#trunks-and-vlan-legs) are held, pruned, removed
+and proved as follows.
+
+A connection the request does not freeze is still this context's when its
+keyfile `/etc/NetworkManager/system-connections/<name>.nmconnection`, read as
+above, has a `[user]` group of exactly the four keys naming this context and
+provider, and its `[connection]` `id`, `uuid` and `type` and its device are the
+ones the same derivation gives that name and role: a trunk named
+`bootwright-<context>-<provider>-trunk-<network>` of type `bridge` whose
+`interface-name` is `<network>`, or a leg named `bootwright-<context>-<network>`
+of type `vlan` whose `interface-name` is `<vlan.parent>.<vlan.id>`; the profile
+holding its UUID, if any, must have its name, type, keyfile and interface name.
+Such a connection, the leg of a Network the provider no longer declares or the
+trunk of its last one, is deleted as below by the apply and by the removal, so
+it never stays up outside the table the apply rewrites
+(`test_a_dropped_network_leaves_no_leg_up_once_the_apply_prunes_it`).
 
 A provider with a leg requires `NetworkManager.service` active and
 `/usr/bin/nmcli` present; the host block proves both and never installs,
 enables or starts them, and their absence refuses before any effect, as
-firewall readiness does. Before any effect, on apply and on destroy, each of
-these refuses `lifecycle.state`, naming it: a profile of a frozen connection's
+firewall readiness does. Before any effect on apply each of these refuses
+`lifecycle.state`, naming it: a profile of a frozen connection's
 name with another UUID; a profile of its UUID this context does not own; any
 other profile whose `connection.interface-name` is the trunk or a leg device; a
 link of the trunk's or a leg device's name that no owned active connection
 holds; a route that the [managed-network route rules](#provider-host-realization) refuse for a leg's
 prefix, read with the leg device as its bridge; a file at a frozen keyfile path
-that is not this connection's keyfile; and an `nmcli` read that does not
-answer. The apply writes the keyfile of an absent connection or of an owned one
+that is not this connection's keyfile; a profile holding the UUID of an owned
+connection the request no longer freezes that does not have its name, type,
+keyfile and interface name; and an `nmcli` read that does not answer. Before
+any effect on destroy, only an `nmcli` read that does not answer, a profile
+holding a frozen or owned UUID that is not this context's, and a file at a
+frozen keyfile path that is not this connection's keyfile, whose absence the
+removal could never prove, refuse
+(`test_a_removal_refuses_a_foreign_keyfile_at_a_frozen_path_before_any_effect`);
+the removal deletes only what this context owns, so another profile of a frozen
+name or device leaves it unaffected. The apply first deletes each owned
+connection the request no longer freezes, legs before trunks, refusing while a
+domain is plugged into such a trunk, and proves each profile, keyfile and
+device gone; it reads NetworkManager for that only while such a keyfile exists,
+so a provider without a leg on a host without one reads nothing. The apply writes the keyfile of an absent connection or of an owned one
 whose definition differs and loads it, then activates it with `nmcli -w 60
 connection up uuid <uuid>`, and activates one that is down the same way; a
 trunk whose definition differs while a domain is plugged into it refuses as a
 network restart does. `nmcli` only reads, loads, activates and deletes. The
-apply runs, in order, the VLAN refusal unit, the routing unit, each trunk, its
-legs (read again once the trunks are up), the libvirt networks and the pool.
-The removal refuses while a domain is plugged into a trunk or a profile holding
-a frozen UUID is foreign, then removes the legs, the trunks (each with `nmcli
+apply runs, in order, the removal of each owned connection the request no
+longer freezes, the VLAN refusal unit, the routing unit, each trunk, its legs
+(read again once the trunks are up), the libvirt networks and the pool.
+The removal refuses as above or while a domain is plugged into a trunk, then
+removes the legs, the trunks, frozen or no longer frozen (each with `nmcli
 -w 60 connection delete uuid <uuid>` and its keyfile, proving every profile,
 keyfile and device gone), the libvirt networks, the pool, the firewall
 barrier, the routing unit and the VLAN refusal unit, so isolation is never
 absent while a leg exists.
 
-With a leg, presence evidence requires
-`networkManager` true and `connections[]` covering exactly the frozen
+Presence evidence requires `connectionsAnswered` true and
+`unfrozenConnections` empty and, with a leg, `networkManager` true and
+`connections[]` covering exactly the frozen
 trunks and legs, each answered, present, owned, carrying its frozen definition,
 active and in zone `trusted`
-(`TestHostPresenceRequiresEveryOwnedConnection`). `networkManager` is whether
+(`TestHostPresenceRequiresEveryOwnedConnection`). `connectionsAnswered` is
+whether every NetworkManager read of the observation answered, and
+`unfrozenConnections` names each owned connection the request no longer
+freezes; an observation that fails reports each frozen connection unanswered
+and `connectionsAnswered` false, never an empty `connections[]` that reads as
+absent (`test_a_failed_observation_reports_every_frozen_connection_unanswered`). `networkManager` is whether
 `NetworkManager.service` is active and `/usr/bin/nmcli` present. Each
 `connections[]` entry is `{name, role, device, answered, present, owned,
 active, definition, zone}`, one per frozen trunk and leg: whether `nmcli`
@@ -583,11 +628,15 @@ it is owned as above, whether it is active on its device, whether its keyfile
 carries every value above and `nmcli` reports each of its properties as above
 (no gateway on a leg), and the zone NetworkManager reports for it. A host with
 neither the `NetworkManager.service` unit nor `/usr/bin/nmcli` holds no
-profile, which answers each as absent. Removal evidence requires each answered and neither present, owned nor
-active; positive no effect of a removal requires each present, owned and
-active; an owned connection present without the whole is a positive partial
-realization, and one present without this context's ownership is foreign and
-stays unknown (`TestAnOwnedConnectionAloneIsAPartialRealization`).
+profile, which answers each as absent. Removal evidence requires
+`connectionsAnswered` true, `unfrozenConnections` empty and each entry answered
+and neither present, owned nor active; positive no effect of a removal requires
+`connectionsAnswered` and each entry present, owned and active; an owned
+connection present without the whole, or one the request no longer freezes,
+is a positive partial realization, and one present without this context's
+ownership is foreign and stays unknown
+(`TestAnOwnedConnectionAloneIsAPartialRealization`,
+`TestAnOwnedConnectionNoLongerFrozenRefusesPresenceAndAbsence`).
 
 ### Routing table
 

@@ -45,6 +45,8 @@ def host_observation(**overrides):
     observation.update(overrides)
     observation.setdefault("networkManager", False)
     observation.setdefault("connections", [])
+    observation.setdefault("connectionsAnswered", True)
+    observation.setdefault("unfrozenConnections", [])
     observation.setdefault("routing", dict(ROUTING_ABSENT))
     observation.setdefault("vlanRefusal", dict(VLAN_REFUSAL_ABSENT))
     if "firewallReady" not in observation:

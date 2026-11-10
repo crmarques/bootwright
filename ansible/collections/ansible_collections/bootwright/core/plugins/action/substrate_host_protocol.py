@@ -139,15 +139,23 @@ def flagged(entry, keys, flags, what):
 
 
 def connections_of(observation):
-    """The trunk and VLAN leg evidence, each exactly the fields Go validates, and NetworkManager's readiness."""
+    """The trunk and VLAN leg evidence, each exactly the fields Go validates, and NetworkManager's readiness.
+
+    `connectionsAnswered` is whether every NetworkManager read answered and
+    `unfrozenConnections` names each owned connection the request no longer
+    freezes; an observation without either is never published.
+    """
     connections = observation.get("connections") or []
     if not isinstance(connections, list) or len(connections) > MAX_CONNECTIONS:
         raise ValueError("connection count")
-    ready = observation.get("networkManager")
-    if not isinstance(ready, bool):
+    ready, answered = observation.get("networkManager"), observation.get("connectionsAnswered")
+    if not isinstance(ready, bool) or not isinstance(answered, bool):
         raise ValueError("NetworkManager readiness")
+    unfrozen = observation.get("unfrozenConnections")
+    if not isinstance(unfrozen, list) or len(unfrozen) > MAX_CONNECTIONS or not all(isinstance(name, str) for name in unfrozen):
+        raise ValueError("unfrozen connections")
     return {"connections": [flagged(entry, OBSERVED_CONNECTION, CONNECTION_FLAGS, "connection evidence") for entry in connections],
-            "networkManager": ready}
+            "connectionsAnswered": answered, "networkManager": ready, "unfrozenConnections": list(unfrozen)}
 
 
 def connection_realized(entry):
@@ -156,11 +164,12 @@ def connection_realized(entry):
 
 def connections_realized(evidence):
     connections = evidence["connections"]
-    return (not connections or evidence["networkManager"]) and all(connection_realized(entry) for entry in connections)
+    return (evidence["connectionsAnswered"] and not evidence["unfrozenConnections"] and (not connections or evidence["networkManager"])
+            and all(connection_realized(entry) for entry in connections))
 
 
 def connections_left(evidence):
-    return any(entry["present"] or entry["active"] or entry["owned"] for entry in evidence["connections"])
+    return bool(evidence["unfrozenConnections"]) or any(entry["present"] or entry["active"] or entry["owned"] for entry in evidence["connections"])
 
 
 def routing_of(observation):
@@ -223,7 +232,7 @@ def vlan_refusal_left(evidence):
 Held = namedtuple("Held", ("name", "read", "realized", "left", "answered"))
 HELD = (
     Held("connections", connections_of, connections_realized, connections_left,
-         lambda evidence: all(entry["answered"] for entry in evidence["connections"])),
+         lambda evidence: evidence["connectionsAnswered"] and all(entry["answered"] for entry in evidence["connections"])),
     Held("routing table", routing_of, routing_realized, routing_left, lambda evidence: evidence["routing"]["answered"]),
     Held("VLAN refusal", vlan_refusal_of, vlan_refusal_realized, vlan_refusal_left,
          lambda evidence: evidence["vlanRefusal"]["answered"]),

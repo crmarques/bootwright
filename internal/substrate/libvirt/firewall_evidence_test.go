@@ -75,7 +75,7 @@ func TestAFailedBootBarrierIsNoRemovalEffect(t *testing.T) {
 
 func TestHostFirewallBarrierAbsenceAndInterruptedCleanup(t *testing.T) {
 	request := hostRequest(t)
-	gone := HostEvidence{Absent: true, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true,
+	gone := HostEvidence{Absent: true, ConnectionsAnswered: true, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true,
 		FirewallReady: FirewallReadyEvidence{Name: request.FirewallReadyUnit, Answered: true}, VLANRefusal: VLANRefusalEvidence{Name: request.VLANRefusalUnit, Answered: true}}
 	if err := ValidateHostAbsence(encode(t, gone), "digest"); err != nil {
 		t.Fatalf("positive absence refused: %v", err)

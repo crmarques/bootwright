@@ -29,6 +29,13 @@ def pytest_configure():
         _AnsibleCollectionFinder(paths=[str(COLLECTIONS)])._install()
 
 
+@pytest.fixture(autouse=True)
+def no_host_network_manager_keyfiles(tmp_path_factory, monkeypatch):
+    """Keep an observation from reading this machine's NetworkManager keyfiles: a test names its own directory."""
+    from ansible_collections.bootwright.core.plugins.module_utils import libvirt_nm_connections
+    monkeypatch.setattr(libvirt_nm_connections, "CONNECTIONS", str(tmp_path_factory.getbasetemp() / "no-system-connections"))
+
+
 @pytest.fixture(scope="session")
 def once_per_run(tmp_path_factory):
     """once_per_run(name, compute) is compute()'s JSON result, once per run."""
