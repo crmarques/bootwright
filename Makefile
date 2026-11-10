@@ -42,17 +42,24 @@ tool-table:
 tool-table-outdated:
 	$(GO) -C scripts/tools run ./tooltable -table "$(TOOL_TABLE)" outdated
 
+# The executable composes its own bill of materials, so the document beside it
+# names exactly what that build carries and pins.
 build: wheels
 	CGO_ENABLED=0 $(GO) build -trimpath -buildvcs=false -ldflags '$(STAMP)' -o bin/bootwright ./cmd/bootwright
+	rm -f bin/bootwright.cdx.json
+	./bin/bootwright sbom --format cyclonedx-json >bin/bootwright.cdx.json.tmp
+	mv -f bin/bootwright.cdx.json.tmp bin/bootwright.cdx.json
 
 container-build:
 	@set -eu; \
 	engine='$(or $(CONTAINER_ENGINE),$(error container-build needs podman or docker on PATH, or CONTAINER_ENGINE))'; \
 	out='$(CONTAINER_OUT)'; \
 	mkdir -p -- "$$out"; \
-	if test -d "$$out/bootwright" || { test -e "$$out/bootwright" && ! test -O "$$out/bootwright"; }; then \
-		echo "container-build: $$out/bootwright is a directory or belongs to another user; remove it or choose another CONTAINER_OUT" >&2; exit 1; \
-	fi; \
+	for name in bootwright bootwright.cdx.json; do \
+		if test -d "$$out/$$name" || { test -e "$$out/$$name" && ! test -O "$$out/$$name"; }; then \
+			echo "container-build: $$out/$$name is a directory or belongs to another user; remove it or choose another CONTAINER_OUT" >&2; exit 1; \
+		fi; \
+	done; \
 	settings="$$(mktemp)"; \
 	stage=; \
 	trap 'rm -f "$$settings"; test -z "$$stage" || rm -rf -- "$$stage"' EXIT; \
@@ -71,6 +78,7 @@ container-build:
 		--secret id=build-env,src="$$settings" \
 		$(if $(PROXY_CA),--secret id=proxy-ca$(comma)src='$(PROXY_CA)') \
 		.; \
+	mv -f -- "$$stage/bootwright.cdx.json" "$$out/bootwright.cdx.json"; \
 	mv -f -- "$$stage/bootwright" "$$out/bootwright"
 
 test:

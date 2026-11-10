@@ -44,7 +44,11 @@ checkout, which `version` prints as its `Commit` and `Source` lines. A
 controller needs no checkout or Go toolchain: run `make build` on a
 Linux/amd64 workstation and copy `bin/bootwright`, a static executable that
 embeds its automation, to the controller, for example to /usr/local/bin;
-`bootwright version` prints the same `Commit` there. `controller install`
+`bootwright version` prints the same `Commit` there. Copy
+`bin/bootwright.cdx.json` beside it: the executable's bill of materials,
+which `bootwright sbom --format cyclonedx-json` prints again, names every
+component it carries and every client and image it pins, for the host's
+security tooling. `controller install`
 prepares the foundation every context on the host shares and reads no desired
 state; the dry run previews it, and `controller check` reports what it
 proved. Each context's first `apply` then binds the context to this host

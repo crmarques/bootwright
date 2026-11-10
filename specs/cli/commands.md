@@ -9,7 +9,7 @@ Every command accepts and parses the presentation flags below. `--context`
 and the `--ssh-*` flags are accepted only by the commands whose use case reads
 them; any other command refuses them as flags it does not accept. The
 context-free commands, which refuse `--context`, are `controller install`,
-`controller check`, `controller rebind`, `controller uninstall`, `context` (every subcommand), `media` (every subcommand), `add-ons` (every subcommand), `help`, `completion`, `version` and `schema`; only `apply`, `destroy`,
+`controller check`, `controller rebind`, `controller uninstall`, `context` (every subcommand), `media` (every subcommand), `add-ons` (every subcommand), `help`, `completion`, `version`, `schema` and `sbom`; only `apply`, `destroy`,
 `machine rsh`, `machine exec`, `machine cp`, `cluster rsh`, `cluster exec` and `preflight` accept
 `--ssh-*`; `machine rsh`,
 `machine exec`, `machine cp`, `cluster rsh` and `cluster exec` accept only `--ssh-id-file`
@@ -158,6 +158,7 @@ Not yet met: `preflight --stage add-ons` runs no add-on prerequisite check and a
 | `bootwright cluster keyring` | required `--name <cluster>`; required `--client <client>` | the Ceph keyring of one CephClient through the explicit sensitive-output boundary | read and reveal one context-owned credential artifact |
 | `bootwright version` | none | version, commit, source state, Go runtime and target, and embedded dependency-bundle identity | none |
 | `bootwright schema` | required `--format json-schema` | the advisory [JSON Schema export](../cli.md#schema-export) of every registered kind | none |
+| `bootwright sbom` | required `--format cyclonedx-json` | this executable's [bill of materials](../cli.md#bill-of-materials) | none |
 | `bootwright help [command ...]` | no local flags | help for the exact resolved command, human or structured | none |
 | `bootwright completion bash` | `--no-descriptions` false | Bash completion script | none |
 | `bootwright completion zsh` | `--no-descriptions` false | Zsh completion script | none |
@@ -207,7 +208,7 @@ group unavailable only when neither it nor any command under it is available, so
 commands by what they act on: Host (`controller`, `media`), Context (`context`,
 `secret`, `validate`, `preflight`, `plan`, `apply`, `destroy`, `status`,
 `logs`, `diff`), Resources (`machine`, `cluster`, `add-ons`, `render`) and Tools
-(`version`, `schema`, `completion`, `help`). A command group's help offers only
+(`version`, `schema`, `sbom`, `completion`, `help`). A command group's help offers only
 the inherited flags its commands accept: a group whose every command is
 context-free lists no `--context`, and one none of whose commands reads an SSH
 override names none (`TestGroupHelpOffersOnlyTheFlagsItsCommandsAccept`). A usage refusal for a flag

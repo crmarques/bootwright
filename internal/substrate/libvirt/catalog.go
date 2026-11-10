@@ -85,3 +85,5 @@ func contentDigest(parts ...string) string {
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return hex.EncodeToString(digest[:])
 }
+
+func EmulatorImage() string { return emulatorImage }

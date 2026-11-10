@@ -20,6 +20,7 @@ type Config struct {
 	Out                 io.Writer
 	ErrOut              io.Writer
 	BuildInfo           BuildInfo
+	BillOfMaterials     func() (BillOfMaterials, error)
 	Services            Services
 	EncodeEffectiveYAML func(context.Context, api.Catalog) ([]byte, error)
 	EncodeEffectiveJSON func(context.Context, api.Catalog) ([]byte, error)
@@ -248,6 +249,12 @@ func (r *Runner) run(ctx context.Context, args []string) int {
 	if path == "schema" {
 		if err := r.writeSelectedSchema(); err != nil {
 			return r.failure(command, path, "runtime.encode", "the schema could not be encoded", 1, selectedStructured(command))
+		}
+		return 0
+	}
+	if path == "sbom" {
+		if err := r.writeSelectedBillOfMaterials(); err != nil {
+			return r.failure(command, path, "runtime.encode", "the bill of materials could not be composed: "+err.Error(), 1, selectedStructured(command))
 		}
 		return 0
 	}

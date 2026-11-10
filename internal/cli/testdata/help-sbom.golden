@@ -1,0 +1,24 @@
+  bootwright / sbom
+      Export this executable's software bill of materials as one CycloneDX JSON document: what
+      the executable carries (its Go modules and toolchain, the controller runtime's wheels and
+      the embedded automation) and what it pins and acquires at use (the default target clients
+      and the managed services' and emulated BMC's images), each with its version and digest.
+      It reads no context and contacts nothing.
+
+  Usage
+    bootwright sbom [flags]
+
+  Command flags
+      --format  Select the bill of materials format (values: cyclonedx-json) (required)
+
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
+
+  Examples
+    bootwright sbom --format cyclonedx-json

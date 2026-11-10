@@ -187,6 +187,7 @@ func TestOnlyContextFreeAcquisitionConsumesTheInvokingEnvironment(t *testing.T) 
 		{"cluster keyring", []string{"--name", "demo", "--client", "vm-disks"}, ignoresRoute},
 		{"version", nil, notAdmitted},
 		{"schema", []string{"--format", "json-schema"}, notAdmitted},
+		{"sbom", []string{"--format", "cyclonedx-json"}, notAdmitted},
 		{"help", nil, notAdmitted},
 		{"completion bash", nil, notAdmitted},
 		{"completion zsh", nil, notAdmitted},

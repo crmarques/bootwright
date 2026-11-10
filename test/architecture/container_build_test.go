@@ -92,6 +92,7 @@ if test -n "$(ls -A "$dest")"; then
 	exit 1
 fi
 printf 'built\n' >"$dest/bootwright"
+printf '{}\n' >"$dest/bootwright.cdx.json"
 `
 
 func runContainerBuild(t *testing.T, out string) (string, error) {
@@ -116,7 +117,7 @@ func TestContainerBuildExportsIntoAPrivateDirectory(t *testing.T) {
 	if output, err := runContainerBuild(t, out); err != nil {
 		t.Fatalf("container-build into a shared, non-empty CONTAINER_OUT failed: %v\n%s", err, output)
 	}
-	for name, want := range map[string]string{"bootwright": "built\n", "unrelated": "kept\n"} {
+	for name, want := range map[string]string{"bootwright": "built\n", "bootwright.cdx.json": "{}\n", "unrelated": "kept\n"} {
 		data, err := os.ReadFile(filepath.Join(out, name))
 		if err != nil {
 			t.Fatal(err)
@@ -129,8 +130,8 @@ func TestContainerBuildExportsIntoAPrivateDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 2 {
-		t.Errorf("CONTAINER_OUT holds %d entries after the build, want bootwright and unrelated alone", len(entries))
+	if len(entries) != 3 {
+		t.Errorf("CONTAINER_OUT holds %d entries after the build, want bootwright, its bill of materials and unrelated alone", len(entries))
 	}
 }
 

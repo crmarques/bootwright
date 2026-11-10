@@ -22,7 +22,7 @@ func TestPublicCatalog(t *testing.T) {
 		"machine list": "clusters power-status short", "machine info": "name", "machine rsh": "name", "machine cp": "name overwrite",
 		"machine exec": "name", "machine start": "name", "machine stop": "force name yes", "machine restart": "force name yes", "machine trust": "dry-run expect name replace yes", "controller install": "dry-run yes", "controller check": "", "controller rebind": "machine-id product-uuid recorded-host-retired root-uuid yes", "controller uninstall": "discard-unreadable keep-packages yes",
 		"cluster list": "", "cluster info": "name object-user secrets", "cluster rsh": "name node", "cluster exec": "name node", "cluster oc": "name", "cluster kubectl": "name", "cluster kubeconfig": "name", "cluster keyring": "client name",
-		"version": "", "schema": "format", "help": "", "completion bash": "no-descriptions", "completion zsh": "no-descriptions", "completion fish": "no-descriptions", "completion powershell": "no-descriptions",
+		"version": "", "schema": "format", "sbom": "format", "help": "", "completion bash": "no-descriptions", "completion zsh": "no-descriptions", "completion fish": "no-descriptions", "completion powershell": "no-descriptions",
 	}
 	root, err := newCommandTree(New(Config{}))
 	if err != nil {

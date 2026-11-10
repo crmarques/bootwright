@@ -478,3 +478,34 @@ func TestSchemaWritesTheAdvisoryExport(t *testing.T) {
 		t.Fatalf("schema without --format exited %d, want the usage refusal", code)
 	}
 }
+
+// sbom writes the CycloneDX document itself in text mode and places it in
+// result.bom beside result.format in JSON mode, calling no service; an
+// executable that composes none refuses rather than writing an empty one.
+func TestBillOfMaterialsWritesTheCycloneDXDocument(t *testing.T) {
+	compose := func() (BillOfMaterials, error) {
+		return BillOfMaterials{Name: "bootwright", Components: []BOMComponent{{Ref: "go:stdlib@1.26.10", Type: "library", Name: "stdlib", Version: "1.26.10"}}}, nil
+	}
+	run := func(config Config, args ...string) (int, string) {
+		var out, errOut bytes.Buffer
+		config.Out, config.ErrOut = &out, &errOut
+		return New(config).Run(context.Background(), args), out.String()
+	}
+	code, out := run(Config{BillOfMaterials: compose}, "sbom", "--format", "cyclonedx-json")
+	var document map[string]any
+	if code != 0 || json.Unmarshal([]byte(out), &document) != nil || document["bomFormat"] != "CycloneDX" {
+		t.Fatalf("sbom: code %d stdout %.200s", code, out)
+	}
+	code, out = run(Config{BillOfMaterials: compose}, "sbom", "--format", "cyclonedx-json", "-o", "json")
+	result, _ := structuredDocument(t, out)["result"].(map[string]any)
+	bom, _ := result["bom"].(map[string]any)
+	if code != 0 || result["format"] != "cyclonedx-json" || bom["bomFormat"] != "CycloneDX" {
+		t.Fatalf("sbom -o json: code %d stdout %.300s", code, out)
+	}
+	if code, _ := run(Config{}, "sbom", "--format", "cyclonedx-json"); code != 1 {
+		t.Fatalf("an executable with no bill of materials exited %d", code)
+	}
+	if code, _ := run(Config{BillOfMaterials: compose}, "sbom"); code != 2 {
+		t.Fatalf("sbom without --format exited %d, want the usage refusal", code)
+	}
+}

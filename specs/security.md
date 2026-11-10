@@ -784,7 +784,9 @@ file, read over verified HTTPS from the publisher even when a mirror serves the
 bytes. No publisher signature is verified, so a publisher compromised at the
 table's refresh, or at a declared release's first acquisition, is trusted
 from then on: the digest and size recorded then pin every later use. A tool
-whose publisher offers no such metadata refuses. A frozen operation never
+whose publisher offers no such metadata refuses. Each build names every one of
+these pinned artifacts, with its version and digest, in its
+[bill of materials](cli.md#bill-of-materials). A frozen operation never
 substitutes an update silently; recovery follows
 [state reconciliation](state-reconciliation.md#dependency-safety-during-recovery).
 

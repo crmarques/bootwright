@@ -486,3 +486,12 @@ func toolChecksum(data []byte, filename string) (string, error) {
 }
 
 func sourcePath(source prerequisites.DependencySource) string { return path.Join("sources", source.ID) }
+
+func PublisherURL(pin controller.ToolPin) (string, error) {
+	request := controller.ToolRequest{Kind: pin.Kind, Version: withV(pin.Default.Version)}
+	if pin.Kind == "virtctl" {
+		request.Compatibility = "kubevirt"
+	}
+	url, _, err := sourceURL(request, request.Version)
+	return url, err
+}

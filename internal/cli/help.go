@@ -24,7 +24,7 @@ func writeHelp(w io.Writer, command *cobra.Command) error {
 			{"Host", "controller media"},
 			{"Context", "context secret validate preflight plan apply destroy status logs diff"},
 			{"Resources", "machine cluster add-ons render"},
-			{"Tools", "version schema completion help"},
+			{"Tools", "version schema sbom completion help"},
 		} {
 			var rows [][]string
 			for _, name := range strings.Fields(group.names) {
@@ -93,7 +93,7 @@ func writeConciseHelp(w io.Writer, command *cobra.Command) error {
 }
 
 func presentationCommand(path string) bool {
-	return path == "help" || path == "version" || path == "schema" || strings.HasPrefix(path, "completion ")
+	return path == "help" || path == "version" || path == "schema" || path == "sbom" || strings.HasPrefix(path, "completion ")
 }
 
 func helpExample(path string) string {
@@ -106,7 +106,7 @@ func helpExample(path string) string {
 		"validate": "--file ./input --output json", "preflight": "--context lab --stage controller,substrates", "controller check": "", "plan": "--context lab --stage machines", "status": "--context lab", "logs": "--context lab --follow", "diff": "--context lab --observe", "render effective": "--input-dir ./input --output-dir ./artifacts", "apply": "--context lab --stage machines", "destroy": "--context lab",
 		"machine cp": "--context lab --name node local:./config.yaml remote:config.yaml", "machine list": "--context lab --power-status", "machine rsh": "--context lab --name node", "machine exec": "--context lab --name node -- uname -a", "machine start": "--context lab --name node", "machine stop": "--context lab --name node", "machine restart": "--context lab --name node", "machine trust": "--context lab --dry-run", "controller install": "--dry-run", "cluster kubeconfig": "--context lab --name cluster", "cluster keyring": "--context lab --name storage --client vm-disks",
 		"cluster list": "--context lab", "cluster info": "--context lab --name storage", "cluster rsh": "--context lab --name storage --node node-1", "cluster exec": "--context lab --name storage -- uname -a",
-		"version": "", "schema": "--format json-schema", "help": "context init", "completion bash": "", "completion zsh": "", "completion fish": "", "completion powershell": "",
+		"version": "", "schema": "--format json-schema", "sbom": "--format cyclonedx-json", "help": "context init", "completion bash": "", "completion zsh": "", "completion fish": "", "completion powershell": "",
 	}
 	suffix, ok := examples[path]
 	if !ok {

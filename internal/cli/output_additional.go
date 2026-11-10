@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"slices"
 	"strings"
@@ -335,6 +336,32 @@ func (r *Runner) writeSelectedSchema() error {
 		return err
 	}
 	return writeStructuredResult(r.config.Out, "schema", schemaPresentation{Format: "json-schema", Schema: json.RawMessage(bytes.TrimSpace(data))}, nil, nil, 0)
+}
+
+type billOfMaterialsPresentation struct {
+	Format string          `json:"format"`
+	BOM    json.RawMessage `json:"bom"`
+}
+
+func (billOfMaterialsPresentation) documentedResult() {}
+
+func (r *Runner) writeSelectedBillOfMaterials() error {
+	if r.config.BillOfMaterials == nil {
+		return errors.New("this executable composes no bill of materials")
+	}
+	bom, err := r.config.BillOfMaterials()
+	if err != nil {
+		return err
+	}
+	data, err := cycloneDX(bom)
+	if err != nil {
+		return err
+	}
+	if !structuredFormat(r.config.Presentation.Format) {
+		_, err = r.config.Out.Write(data)
+		return err
+	}
+	return writeStructuredResult(r.config.Out, "sbom", billOfMaterialsPresentation{Format: "cyclonedx-json", BOM: json.RawMessage(bytes.TrimSpace(data))}, nil, nil, 0)
 }
 
 func (r *Runner) writeSelectedCompletion(root *cobra.Command, path string, noDescriptions bool) error {

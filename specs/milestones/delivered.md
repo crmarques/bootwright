@@ -12933,3 +12933,25 @@ continue at its controller stage; a host's earlier `latest` sources are
 not reused, so each context's next apply acquires the defaults once; a
 declared non-default release still reads its publisher's metadata.
 
+### X343 — The executable's bill of materials
+
+**Item:** B1243 (2026-11-10, [D250](backlog.md#d250) (2),
+[D251](backlog.md#d251)), partly delivered in-tree. `bootwright sbom --format
+cyclonedx-json` prints one CycloneDX 1.6 document the executable composes from
+what it embeds: the Go standard library and every Go module its build stamp
+names, with the `go.sum` hash; each runtime-lock wheel with its SHA-256 and
+URL; the embedded collection with its automation digest; each default client
+of the tool table with its SHA-256, publisher and minimum; and each compiled
+service and emulated BMC image by digest
+([bill of materials](../cli.md#bill-of-materials)). It reads no context and
+carries no timestamp, so one build always prints the same bytes. `make build`
+writes it to `bin/bootwright.cdx.json`, and `make container-build` beside its
+executable. `artifactserver.DefaultImage`, `libvirt.EmulatorImage` and
+`bundlelocal.PublisherURL` expose the pins it reads; no request, evidence,
+contract version or content digest moved.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** no component names its license yet, no release
+ships the third-party notices, and the container build's Go image is still
+named by its tag ([B1243](backlog.md#b1243)).
+

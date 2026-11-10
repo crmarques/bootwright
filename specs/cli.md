@@ -565,6 +565,35 @@ or provider, launches no managed
 operation, and creates no ownership evidence. Generated native scripts are
 artifacts only and are never executed by render.
 
+#### Bill of materials
+
+`bootwright sbom --format cyclonedx-json` writes one CycloneDX 1.6 JSON
+document that this executable composes from what it embeds, so it reads no
+context, contacts nothing and is the same for every run of one build. Its
+metadata names `bootwright` with the version, commit and source state
+`version` reports. Its components, sorted by `bom-ref`, name what the
+executable carries with scope `required`: the Go standard library of its
+toolchain and each Go module its build stamp names, with the `go.sum` hash;
+each wheel of the [runtime lock](controller.md#the-runtime-lock) the
+executable carries, with its SHA-256 and URL; and the embedded collection,
+with the automation digest. A locked wheel a build does not carry is named
+with scope `optional` and says so. They name what it pins and acquires at use
+with scope `optional`: each default client of the
+[tool table](controller.md#the-tool-table), with its SHA-256, publisher URL
+and minimum, and each managed service's and the emulated BMC's compiled image,
+by its digest, one component per image. An executable with no build stamp, a
+local module replacement or an image pinned other than by digest alone
+composes none and refuses. It carries no timestamp or serial number, and
+`TestTheBillOfMaterialsNamesEveryCarriedAndPinnedArtifact` holds it to the
+lock, the table, the image pins and `go.sum`. `make build` writes it beside
+the executable as `bin/bootwright.cdx.json`, and `make container-build` beside
+its executable. Text mode writes the document; either structured mode places
+it in `result.bom` beside `result.format`.
+
+Not yet met: the bill of materials names each component's license and a
+release ships the third-party notices; tracked as
+[B1243](milestones/backlog.md#b1243).
+
 ## Lifecycle behavior
 
 `plan`, `apply`, and `destroy` act on the complete selected lifecycle unit.

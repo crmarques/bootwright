@@ -295,7 +295,7 @@ Alias cell.
 | [B1237](#b1237) | new, 2026-11-09 (D248 (5)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's default image comes from a Red Hat registry wherever Red Hat publishes one | Red Hat publishes no dnsmasq, chrony or sushy-tools image, and its squid image needs a `registry.redhat.io` login no managed-service pull carries |
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
 | [B1240](#b1240) | new, 2026-11-09 (X340 gate) | defect | Controller | The native supervisor test reads its task's PID only from a complete record | It failed once in `make check` beside the other lanes and passed when run again alone; the cause is a test-side race, not the supervisor |
-| [B1243](#b1243) | new, 2026-11-10 (D250 (2)) | enabling | Architecture | Each build writes one software bill of materials, and every build input is pinned | D250 parks the controlled-network plan until the owner promotes it |
+| [B1243](#b1243) | new, 2026-11-10 (D250 (2)); partly delivered by X343 on 2026-11-10 | enabling | Architecture | Each build's bill of materials names every component's license, a release ships its notices, and the container build's Go image is pinned | The document itself landed (X343); licenses need a source per component that no build input holds yet |
 | [B1244](#b1244) | new, 2026-11-10 (D250 (2)) | enabling | Architecture | A build fails on a known vulnerability in what it carries or pins | D250 parks the controlled-network plan until the owner promotes it |
 | [B1245](#b1245) | new, 2026-11-10 (D250 (8)) | product | CLI, with Controller | One read-only list names every artifact a context acquires, its origin, its digest and the Machine that reads it | D250 parks the controlled-network plan until the owner promotes it |
 | [B1246](#b1246) | new, 2026-11-10 (D250 (7)) | product | Controller, with Desired state | One mirror declaration routes a context's public-origin tools to its artifact server and refuses an artifact the mirror lacks | D250 parks the controlled-network plan until the owner promotes it |
@@ -3307,22 +3307,24 @@ renaming it, or waiting until the record holds a PID, closes the window.
 
 ### B1243
 
-**Owner:** Architecture. **Kind:** enabling. **Requires:** none; its tools'
-entries come from the tool table X342 delivered. **Definition:** Needs definition, from [D250](#d250) (2): no
-build writes a bill of materials, the module list in the executable's build
-information is its only record, and the container build's Go image is named by
-a tag ([building in a container](../../docs/development.md#building-in-a-container)).
-**Outcome:** every build writes one deterministic document beside the
-executable and embeds it, and a read-only command prints it. It lists what the
-executable carries (Go modules, the toolchain, the locked wheels, the
-collection) and what it pins and fetches at use (tools, the managed services'
-and the emulated BMC's images), each with its version, digest, origin and
-license. The Go image is pinned by digest, and a release ships its third-party
-notices ([cryptography and supply chain](../security.md#cryptography-and-supply-chain)).
-**Open:** the format (recommendation: CycloneDX JSON, which the common
-scanners read) and the command's name. **Exit evidence:** a test that holds
-the document to `go.sum`, the runtime lock, the tool lock and the image
-catalogs, and a second build of one commit that writes the same bytes.
+**Owner:** Architecture. **Kind:** enabling. **Requires:** none.
+**Definition:** Needs definition, from [D250](#d250) (2). **Delivered in-tree
+by X343:** `bootwright sbom --format cyclonedx-json` and the
+`bin/bootwright.cdx.json` every build writes, composed from what the
+executable embeds and held to `go.sum`, the runtime lock, the tool table and
+the image pins ([bill of materials](../cli.md#bill-of-materials)).
+**Remaining:** each component names its license (the Go modules' from their
+module files, the wheels' from their metadata, the tools' and images' from
+their publishers), a release ships the third-party notices the licenses
+require ([cryptography and supply chain](../security.md#cryptography-and-supply-chain)),
+and the container build's Go image is pinned by digest beside its tag, moving
+with the `go` directive
+([building in a container](../../docs/development.md#building-in-a-container)).
+**Open:** where a license is read from when a build is offline
+(recommendation: a license table beside each lock, checked by the tool that
+refreshes it). **Exit evidence:** a test that every component names a license,
+the notices file a release build refuses to omit, and a test that holds the
+Go image's digest to the `go` directive.
 
 ### B1244
 

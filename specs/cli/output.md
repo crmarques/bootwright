@@ -252,6 +252,7 @@ Successful result objects have stable top-level fields:
 | `help` and explicit help | `command`, `usage`, `description`, `commands`, `flags` |
 | `version` | `version`, `commit`, `source`, `go`, `target`, `dependencyBundle` |
 | `schema` | `format`, `schema` |
+| `sbom` | `format`, `bom` |
 | `completion <shell>`, `secret show`, `cluster kubeconfig`, `cluster keyring` | `export` |
 | `context init`, `context update` | `context`, `counts`, `filesCopied`, `inputChanged` |
 | `context use`, `context current` | `context` |
@@ -1125,7 +1126,7 @@ duplicates only when every present or absent member is equal.
 
 ## Private operation logs
 
-Help, completion, `version`, `schema`, every `validate`, `render effective`, `plan`, and
+Help, completion, `version`, `schema`, `sbom`, every `validate`, `render effective`, `plan`, and
 local list/current/status reads create no cache, temporary file, state record,
 output path, or log. Other render commands create only their declared
 artifacts. Preflight, local setup, sensitive export, and access handoff allocate

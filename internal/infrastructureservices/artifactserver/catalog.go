@@ -44,3 +44,5 @@ func ContentDigest() string {
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }
+
+func DefaultImage() string { return defaultImage }

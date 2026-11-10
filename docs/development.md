@@ -280,6 +280,12 @@ carries with the new lock's. `verify` downloads every locked URL and compares it
 `.github/workflows/runtime-lock.yml` runs `verify` when the lock or the tool
 changes and weekly, with `outdated` as an advisory summary.
 
+`make build` also writes `bin/bootwright.cdx.json`, the CycloneDX bill of
+materials the new executable prints with `bootwright sbom --format
+cyclonedx-json` ([bill of materials](../specs/cli.md#bill-of-materials));
+`make container-build` writes it beside its executable. A scanner reads the
+pinned components from it.
+
 The controller stage's clients follow the tool table
 `internal/controller/tooltable.json` ([controller](../specs/controller.md#the-tool-table)).
 To move a default, edit its version, size and SHA-256 in the table and run,

@@ -39,3 +39,4 @@ RUN --mount=type=secret,id=build-env \
 
 FROM scratch AS binary
 COPY --from=build /src/bin/bootwright /bootwright
+COPY --from=build /src/bin/bootwright.cdx.json /bootwright.cdx.json
