@@ -10,6 +10,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -328,12 +329,12 @@ func (c HostCapability) prove(ctx context.Context, execution lifecycle.Execution
 	}))
 }
 
-func (HostCapability) AccessCredentials(block reconciliation.Block) ([]string, error) {
+func (HostCapability) SecretClasses(block reconciliation.Block) (secrets.Classes, error) {
 	request, err := DecodeHostRequest(block.Request)
 	if err != nil {
 		return nil, err
 	}
-	return accessCredentials(request.KubeconfigRef), nil
+	return secretClasses(request.Placement, request.KubeconfigRef), nil
 }
 
 func (HostCapability) ProducedInputs(block reconciliation.Block) ([]lifecycle.ProducedInput, error) {
@@ -351,11 +352,8 @@ func hostInputs(cluster string) []lifecycle.ProducedInput {
 	return []lifecycle.ProducedInput{HostProducedInput(cluster)}
 }
 
-func accessCredentials(reference string) []string {
-	if reference == "" {
-		return []string{}
-	}
-	return []string{reference}
+func secretClasses(placement machineref.Placement, kubeconfig string) secrets.Classes {
+	return placement.SecretClasses().Add(secrets.AccessCredential, kubeconfig)
 }
 
 func (HostCapability) SecretReferences(block reconciliation.Block) ([]string, error) {
@@ -712,12 +710,12 @@ func (MachineCapability) RemovesHost(reconciliation.Block) bool { return true }
 
 func (MachineCapability) DeletesMachine(reconciliation.Block) bool { return true }
 
-func (MachineCapability) AccessCredentials(block reconciliation.Block) ([]string, error) {
+func (MachineCapability) SecretClasses(block reconciliation.Block) (secrets.Classes, error) {
 	request, err := DecodeMachineRequest(block.Request)
 	if err != nil {
 		return nil, err
 	}
-	return accessCredentials(request.KubeconfigRef), nil
+	return secretClasses(request.Placement, request.KubeconfigRef), nil
 }
 
 func (MachineCapability) ProducedInputs(block reconciliation.Block) ([]lifecycle.ProducedInput, error) {

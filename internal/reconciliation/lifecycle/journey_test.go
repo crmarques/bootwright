@@ -1005,6 +1005,11 @@ type testCapability struct {
 	// it was handed answers.
 	access     map[string][]string
 	presenting func(Execution) bool
+	// anchors names, per block, the Secrets it reads as trust anchors, and
+	// unclassified those it references without naming a class; every other
+	// reference is effect material.
+	anchors      map[string][]string
+	unclassified map[string][]string
 	// identity names the identity a produced output presents; nil names none.
 	identity func(string, secrets.Material) string
 }
@@ -1020,11 +1025,27 @@ func (c *testCapability) ProducedIdentity(_ reconciliation.Block, name string, m
 	return identity(name, material), nil
 }
 
-// AccessCredentials answers from the fixture.
-func (c *testCapability) AccessCredentials(block reconciliation.Block) ([]string, error) {
+// SecretClasses answers from the fixture.
+func (c *testCapability) SecretClasses(block reconciliation.Block) (secrets.Classes, error) {
+	references, err := c.SecretReferences(block)
+	if err != nil {
+		return nil, err
+	}
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	return slices.Clone(c.access[block.ID]), nil
+	classes := secrets.Classes{}
+	for _, reference := range references {
+		switch {
+		case slices.Contains(c.unclassified[block.ID], reference):
+		case slices.Contains(c.access[block.ID], reference):
+			classes.Add(secrets.AccessCredential, reference)
+		case slices.Contains(c.anchors[block.ID], reference):
+			classes.Add(secrets.TrustAnchor, reference)
+		default:
+			classes.Add(secrets.EffectMaterial, reference)
+		}
+	}
+	return classes, nil
 }
 
 // SecretReferences answers as a capability does from its own request: the

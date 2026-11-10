@@ -137,8 +137,8 @@ type SecretBinder interface {
 	Withdraw(context.Context, secretstore.Context, secretstore.Area) (bool, error)
 }
 
-type AccessCredentialReader interface {
-	AccessCredentials(reconciliation.Block) ([]string, error)
+type SecretClassifier interface {
+	SecretClasses(reconciliation.Block) (secrets.Classes, error)
 }
 
 type SecretReferencer interface {

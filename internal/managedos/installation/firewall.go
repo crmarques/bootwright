@@ -144,6 +144,14 @@ func (FirewallCapability) SecretReferences(block reconciliation.Block) ([]string
 	return request.SecretReferences(), nil
 }
 
+func (FirewallCapability) SecretClasses(block reconciliation.Block) (secrets.Classes, error) {
+	request, err := DecodeFirewallRequest(block.Request)
+	if err != nil {
+		return nil, err
+	}
+	return request.Placement.SecretClasses().Add(secrets.EffectMaterial, request.FleetKeyRef), nil
+}
+
 func (FirewallCapability) RequiresOnlineRemoval(reconciliation.Block) bool { return true }
 
 func (FirewallCapability) HostMachines(block reconciliation.Block) ([]string, error) {

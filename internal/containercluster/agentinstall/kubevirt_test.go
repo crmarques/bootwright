@@ -425,8 +425,8 @@ func TestAHostedClustersNodesAreLentOneMintedTokenPerHostNamespace(t *testing.T)
 	if err != nil || !slices.Equal(inputs, []lifecycle.ProducedInput{{Kind: "OpenShiftCluster", Object: "host", Output: KubeconfigOutput}}) {
 		t.Fatalf("produced inputs %v, %v", inputs, err)
 	}
-	if access, _ := NewInstall(nil).AccessCredentials(block); len(access) != 0 {
-		t.Fatalf("access credentials %v", access)
+	if classes, _ := NewInstall(nil).SecretClasses(block); len(classes.Named(secrets.AccessCredential)) != 0 {
+		t.Fatalf("access credentials %v", classes)
 	}
 	for _, operation := range []string{"apply", "destroy", "observe"} {
 		lends := &recordedLends{}

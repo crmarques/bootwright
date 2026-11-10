@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -280,15 +281,21 @@ func TestOnlyABareMetalControllerCredentialIsAnAccessCredential(t *testing.T) {
 	if request.Target.Substrate != substrate.ArmLibvirt || request.Target.Controller.CredentialsRef == "" {
 		t.Fatalf("the fixture target = %+v, want a libvirt controller with credentials", request.Target)
 	}
-	access, err := New(nil).AccessCredentials(registeringBlock(t, request))
+	access, err := controllerAccess(t, request)
 	if err != nil || len(access) != 0 {
 		t.Fatalf("a libvirt installation reads %v (%v) as access credentials", access, err)
 	}
 	request.Target.Substrate = substrate.ArmBaremetal
-	access, err = New(nil).AccessCredentials(registeringBlock(t, request))
+	access, err = controllerAccess(t, request)
 	if err != nil || !slices.Equal(access, []string{request.Target.Controller.CredentialsRef}) {
 		t.Fatalf("a bare-metal installation reads %v (%v), want only %s", access, err, request.Target.Controller.CredentialsRef)
 	}
+}
+
+func controllerAccess(t *testing.T, request Request) ([]string, error) {
+	t.Helper()
+	classes, err := New(nil).SecretClasses(registeringBlock(t, request))
+	return slices.DeleteFunc(classes.Named(secrets.AccessCredential), func(name string) bool { return name == request.Placement.PrivateKeyRef }), err
 }
 
 // The removal declares itself replay-safe, so the inconclusive reading of a

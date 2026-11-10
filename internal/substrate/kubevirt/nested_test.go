@@ -72,13 +72,14 @@ func TestAHostedProviderNamesItsHostAndAccountAndNoSecret(t *testing.T) {
 	}
 	for _, block := range []reconciliation.Block{nestedBlock(t, hosts[0]), nestedBlock(t, machines[0])} {
 		var capability interface {
-			lifecycle.AccessCredentialReader
+			lifecycle.SecretClassifier
 			lifecycle.ProducedInputConsumer
 		} = NewHost(nil, hosting)
 		if block.Implementation == MachineImplementation {
 			capability = NewMachine(nil)
 		}
-		access, _ := capability.AccessCredentials(block)
+		classes, _ := capability.SecretClasses(block)
+		access := classes.Named(secrets.AccessCredential)
 		inputs, err := capability.ProducedInputs(block)
 		if err != nil || len(access) != 0 || !slices.Equal(inputs, []lifecycle.ProducedInput{{Kind: "OpenShiftCluster", Object: "host", Output: "kubeconfig"}}) {
 			t.Fatalf("%s: access %v, inputs %v, %v", block.Implementation, access, inputs, err)

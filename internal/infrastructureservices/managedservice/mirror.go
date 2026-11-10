@@ -85,6 +85,13 @@ func (r Request) Materials(operation string) []lifecycle.MaterialFile {
 	return files
 }
 
+func (s *ImageSource) SecretClasses() secrets.Classes {
+	if s == nil {
+		return secrets.Classes{}
+	}
+	return secrets.Classes{}.Add(secrets.AccessCredential, s.CredentialsRef).Add(secrets.TrustAnchor, s.TrustBundleRef)
+}
+
 func (s *ImageSource) Materials() []lifecycle.MaterialFile {
 	if s == nil {
 		return nil

@@ -438,7 +438,8 @@ func TestAMachineReadsOnlyItsControllerCredentialsAsAccessCredentials(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	access, err := NewMachine(nil).AccessCredentials(reconciliation.Block{BlockDefinition: definition})
+	classes, err := NewMachine(nil).SecretClasses(reconciliation.Block{BlockDefinition: definition})
+	access := slices.DeleteFunc(classes.Named(secrets.AccessCredential), func(name string) bool { return name == request.Placement.PrivateKeyRef })
 	if err != nil || !slices.Equal(access, []string{request.Controller.CredentialsRef}) || request.Controller.CredentialsRef == "" {
 		t.Fatalf("access credentials = %v (%v), want only %q", access, err, request.Controller.CredentialsRef)
 	}

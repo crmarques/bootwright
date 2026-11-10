@@ -9,6 +9,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
+	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
 )
 
@@ -103,13 +104,13 @@ func (s Service) presentedOnly(decided operationPlan, secret, remedy string) err
 		if !used {
 			continue
 		}
-		var access []string
-		if reader, ok := capability.(AccessCredentialReader); ok {
-			if access, err = reader.AccessCredentials(block); err != nil {
+		var classes secrets.Classes
+		if classifier, ok := capability.(SecretClassifier); ok {
+			if classes, err = classifier.SecretClasses(block); err != nil {
 				return err
 			}
 		}
-		if slices.Contains(access, secret) {
+		if classes.Of(secret) == secrets.AccessCredential {
 			presented = append(presented, step)
 		} else {
 			refused = append(refused, step)

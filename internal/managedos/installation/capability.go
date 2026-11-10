@@ -741,18 +741,3 @@ func (Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 func (Capability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiescence, error) {
 	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its machine is probed in this removal"}, nil
 }
-
-func (c Capability) AccessCredentials(block reconciliation.Block) ([]string, error) {
-	request, err := DecodeRequest(block.Request)
-	if err != nil {
-		return nil, err
-	}
-	return controllerAccessCredentials(request.Target), nil
-}
-
-func controllerAccessCredentials(target Target) []string {
-	if !substrate.ControllerCredentialIsAccess(target.Substrate) || target.Controller.CredentialsRef == "" {
-		return nil
-	}
-	return []string{target.Controller.CredentialsRef}
-}

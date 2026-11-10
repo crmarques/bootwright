@@ -4,6 +4,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
+	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -37,6 +38,10 @@ func (p Placement) SecretReferences() []string {
 		}
 	}
 	return references
+}
+
+func (p Placement) SecretClasses() secrets.Classes {
+	return secrets.Classes{}.Add(secrets.AccessCredential, p.PrivateKeyRef).Add(secrets.TrustAnchor, p.KnownHostsRef)
 }
 
 // PlacementFor selects the arm one block runs through. The controller is

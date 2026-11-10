@@ -314,6 +314,7 @@ Alias cell.
 | [B1313](#b1313) | new, 2026-11-10 (X376) | enabling | Architecture | Bootwright names its own license, which the bill of materials and the notices carry | An owner decision: no file of the repository declares one |
 | [B1314](#b1314) | new, 2026-11-10 (X376 review) | enabling | Architecture | A release recipe builds, refuses a build that is unchecked or lacks its notices, and ships both documents with the executable | No release recipe exists; `make build` already refuses a build without notices, but nothing releases |
 | [B1317](#b1317) | new, 2026-11-10 (X400 review) | enabling | Architecture | A default client whose binary names no Go module has its third-party dependencies judged | virtctl 1.9.1 is built so its build information holds only the toolchain; the gate judges its Go dependencies by its top-level module alone |
+| [B1316](#b1316) | new, 2026-11-10 (X370 review) | defect | Storage, with Secrets | A storage consumer or replication block names every Secret its binding pins | Safe as it stands: the hold walks the applied lineage, whose cluster and host blocks class those keys as effect material |
 
 ### B82
 
@@ -3618,6 +3619,19 @@ release tag, pinned by digest like the release file, or a build of the tag
 whose binary names them. **Exit evidence:** a test in which a client whose
 binary names no module has its dependencies judged, and a gate run that names
 them.
+
+### B1316
+
+**Owner:** Storage, with Secrets. **Kind:** defect. **Requires:** none.
+**Definition:** Candidate, from the independent review of
+[X370](delivered.md#x370--secret-classes): a Ceph consumer block's plan binds
+every host's `sshKeyRef`, `hostKeyRef` and `knownHostsRef`, but its
+`SecretReferences` names only the gateway certificate, and a replication block
+names none, so the [effect-material hold](../secrets.md#effect-material-under-a-live-binding)
+reads them only through the cluster and host blocks of the applied lineage.
+**Outcome:** a block names, and classes, every Secret its binding pins, or the
+hold covers any pinned Secret no block references. **Exit evidence:** a hold
+test over a consumer binding alone.
 
 ## Audit remediation (2026-10-26)
 
@@ -8309,7 +8323,7 @@ answered "B1267: proceed with a", then, told why the typed field is the better
 design for one WWN root form, "B1274: go with b", and "go for other parked
 items you listed". This authorizes, out of sequence for implementation, X368
 (M1, [B1298](delivered.md#x368--mac-claims)), X369 (M1, [B1274](delivered.md#x369--wwn-root)), X370 (M1,
-[B1270](m1.md#b1270)), X371 (M1, [B1271](m1.md#b1271) and
+[B1270](delivered.md#x370--secret-classes)), X371 (M1, [B1271](m1.md#b1271) and
 [B1272](m1.md#b1272)), X372 (M1, [B1275](m1.md#b1275)), X373 (M1,
 [B1263](m1.md#b1263)), X374 (M2, [B1264](m2.md#b1264)) and X375 (M3,
 [B1265](m3.md#b1265)), no more than two active at once. The owner's answers:

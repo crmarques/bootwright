@@ -106,11 +106,12 @@ func TestPlansAProofBlockAndAMachineBlockThatRequiresIt(t *testing.T) {
 
 func TestBothBlocksReadTheKubeconfigAsAnAccessCredential(t *testing.T) {
 	for _, block := range []reconciliation.Block{hostBlock(t), machineBlock(t)} {
-		var capability lifecycle.AccessCredentialReader = NewHost(nil, nil)
+		var capability lifecycle.SecretClassifier = NewHost(nil, nil)
 		if block.Implementation == MachineImplementation {
 			capability = NewMachine(nil)
 		}
-		access, err := capability.AccessCredentials(block)
+		classes, err := capability.SecretClasses(block)
+		access := classes.Named(secrets.AccessCredential)
 		if err != nil || !slices.Equal(access, []string{"host-kubeconfig"}) {
 			t.Fatalf("%s reads %q as access credentials, %v", block.Implementation, access, err)
 		}

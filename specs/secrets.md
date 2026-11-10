@@ -334,7 +334,18 @@ the operator owns, as a management controller's password or a provider's
 kubeconfig is, and no ownership proof rests on it. A trust anchor is only
 verified against, as a `caBundle` that anchors a TLS leg or the `known_hosts`
 entry that pins an SSH host key is: it is never presented to an endpoint and
-never rebound. Each field that references a Secret names its class. All three
+never rebound. Each field that references a Secret names its class, and each
+capability names, for every Secret its block references, the class that
+field gives it: an SSH placement's `privateKeyRef` is an access credential and
+its `knownHostsRef` a trust anchor, while the
+[fleet key](api/environment.md#remote-machine-access-and-install-defaults) is
+effect material wherever it is named, and so is a `known_hosts` pin an effect
+writes, as a storage host's pin in its cluster's tunnel
+([storage](api/ceph.md)). A Secret two fields of one block name
+under different classes is effect material, and a reference the capability
+leaves unclassified counts as effect material (fail closed); a contract-suite
+test fails when a capability this build offers references a Secret without
+classifying it (`TestEveryReferencedSecretIsClassified`). All three
 classes follow the binding rule above: a continuation or removal presents the
 version its operation bound. An access credential rotated at its endpoint is
 presented at its current version only through the recorded
@@ -368,11 +379,13 @@ unnamed generation skips such a Secret and reports it unchanged.
 
 The lifecycle names the holds: each binding that the current operation, and
 the lineage it applies or takes back, names; and as its effect material every
-Secret a block of that operation references other than as an access
-credential it presents, the classes the
+Secret a block of that operation references that its capability classes as
+effect material or leaves unclassified, the classes the
 [access-credential rebind](state-reconciliation.md#access-credential-rebind)
-reads. A block whose capability cannot name its Secrets holds every version
-its binding pins, and a `caBundle` is always a trust anchor. A binding no
+reads. An access credential and a trust anchor are never held, so a libvirt
+host's SSH key and `known_hosts` entry renew and are replaced while it stays
+applied. A block whose capability cannot name or classify its Secrets holds
+every version its binding pins, and a `caBundle` is always a trust anchor. A binding no
 registered operation names holds every version it pins while an apply has
 raised its running evidence and is not yet registered, when the keyring did
 not list it yet as the command read the holds, before any prompt or input
@@ -380,7 +393,9 @@ read, and whenever the lifecycle records cannot be read; beside a context at
 rest it holds nothing
 (`TestRenewRefusesALiveEffectMaterialBinding`,
 `TestAnUnnamedBindingHoldsWhileAnApplyRegisters`,
-`TestSecretHoldsNameTheEffectMaterialACompletedApplyBound`).
+`TestSecretHoldsNameTheEffectMaterialACompletedApplyBound`,
+`TestSecretHoldsCoverEffectMaterialAlone`,
+`TestALibvirtHostBindingHoldsNeitherItsSSHKeyNorItsKnownHosts`).
 
 ## Produced material
 

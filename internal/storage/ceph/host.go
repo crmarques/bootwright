@@ -754,14 +754,6 @@ func preparedHostProof(proofs []lifecycle.BlockEvidence, cluster, machineName st
 	return request, *found, nil
 }
 
-func (c HostCapability) AccessCredentials(block reconciliation.Block) ([]string, error) {
-	r, err := DecodeHostRequest(block.Request)
-	if err != nil {
-		return nil, err
-	}
-	return []string{r.Cluster.RegistryRef}, nil
-}
-
 func (c HostCapability) cleanupPhysicalHost(ctx context.Context, e lifecycle.Execution, observe bool) (lifecycle.Result, error) {
 	r, err := c.prepare(ctx, e)
 	if err != nil {

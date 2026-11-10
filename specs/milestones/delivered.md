@@ -13241,7 +13241,7 @@ The audit's unnamed-binding case is narrowed: a binding no registered
 operation names holds its versions only while an apply is registering or the
 records cannot be read, so a context at rest renews freely; a binding the
 keyring did not list when the command read the holds is held too (found by
-the independent review). Parked: [B1270](m1.md#b1270) and
+the independent review). Parked: [B1270](#x370--secret-classes) and
 [B1271](m1.md#b1271).
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
@@ -13880,3 +13880,34 @@ workflow. **Limitations:** the scanner's own database is the one it downloads
 at each run, unpinned by nature; an image's finding is not judged by an
 exception; and no release recipe refuses an `unchecked` executable
 ([B1314](backlog.md#b1314)).
+
+### X370 — Secret classes
+
+**Item:** B1270 (2026-11-10, [D253](backlog.md#d253)), delivered in-tree,
+from the [X349](#x349--holds-uninstall) hold. **Kind:** defect. **Owners:**
+Secrets, with State reconciliation. Each capability this build offers names
+the class of every Secret its block references through
+`lifecycle.SecretClassifier` (`secrets.Classes`), which replaces the
+access-credential reader
+([immutable binding and contexts](../secrets.md#immutable-binding-and-contexts)).
+The [effect-material hold](../secrets.md#effect-material-under-a-live-binding)
+holds a reference only when its capability classes it as effect material or
+leaves it unclassified, so an SSH placement's `privateKeyRef` (an access
+credential) and its `knownHostsRef` (a trust anchor) renew and are replaced
+while bound, a libvirt host's among them. The
+[access-credential rebind](../state-reconciliation.md#access-credential-rebind)
+reads the same classes, so a placement's `privateKeyRef` and an image
+source's registry login may now be rebound. The fleet key stays effect
+material wherever it is named (D204): the managed-OS installation and host
+firewall, and each Ceph host's `sshKeyRef`. A Secret one block names under two
+classes is effect material.
+
+| Finding | Change |
+| --- | --- |
+| REC-12 (B1270, the X349 follow-up) | `secrets.Classes`, `lifecycle.SecretClassifier` and `lifecycle.EffectMaterial`; `SecretClasses` on every capability, `AccessCredentials` removed; the rebind reads the classes; `TestSecretHoldsCoverEffectMaterialAlone`, `TestALibvirtHostBindingHoldsNeitherItsSSHKeyNorItsKnownHosts`, `TestEveryReferencedSecretIsClassified`; secrets.md, state-reconciliation.md and api/ceph.md |
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** the unclassified-reference test covers the
+references the contract examples plan; the Ceph consumer and replication
+blocks bind host keys their `SecretReferences` do not name (reported, not
+changed).

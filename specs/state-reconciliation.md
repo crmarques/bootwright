@@ -2747,11 +2747,15 @@ token:
   access credential, rests on the bound version as effect material and refuses
   the rebind, naming the step.
 
+Each capability reads the class from the
+[classes its block's Secrets carry](secrets.md#immutable-binding-and-contexts).
 Today the bare-metal Machine, the managed-OS installation and its physical
 erase of a bare-metal target, and the agent installation's bare-metal nodes
 present their management controller's `credentialsRef`, the KubeVirt blocks
-their `kubeconfigRef`, and the Ceph cluster, host and image blocks the
-registry login. An emulated BMC's
+their `kubeconfigRef`, the Ceph cluster, host and image blocks the
+registry login, a managed service, an artifact server and a libvirt
+Machine's emulated BMC the registry login of their image source, and every
+block placed on an SSH host that host's `privateKeyRef`. An emulated BMC's
 credentials are effect material its libvirt host gave the emulator, and a
 trust anchor (`trustBundleRef`, `knownHostsRef`) is never presented, so neither
 is rebound. A vSphere arm will name its vCenter login likewise.

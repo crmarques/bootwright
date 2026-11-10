@@ -1727,6 +1727,43 @@ func TestEveryBindingNamesTheSecretsItsRequestReferences(t *testing.T) {
 		if _, named := capability.(lifecycle.SecretReferencer); !found || !named {
 			t.Errorf("%s/%s is offered by this build but cannot name the Secrets its request references", binding.Kind, binding.Implementation)
 		}
+		if _, classifies := capability.(lifecycle.SecretClassifier); !found || !classifies {
+			t.Errorf("%s/%s is offered by this build but cannot name the class of the Secrets its request references", binding.Kind, binding.Implementation)
+		}
+	}
+}
+
+// TestEveryReferencedSecretIsClassified keeps a live binding's hold to effect
+// material: every Secret a block of a contract example references has its
+// class named by its capability, so none is held only because it was left
+// unclassified.
+func TestEveryReferencedSecretIsClassified(t *testing.T) {
+	runner := &contractRunner{}
+	resolver := withContractHostPorts(buildCapabilitiesWith(systemClock{}, exampleControllerPorts(t), runner, exampleMediaRecords{}), runner)
+	offered := buildCapabilities(systemClock{}, controllerDependencies{}, nil)
+	examples := map[string]contractExample{}
+	for _, row := range contractRows() {
+		example, built := examples[row.example]
+		if !built {
+			example = contractExampleOf(t, resolver, runner, row.example)
+			examples[row.example] = example
+		}
+		capability, _ := offered.Resolve(row.kind, row.implementation)
+		for _, block := range example.frozen(row.binding()) {
+			references, err := capability.(lifecycle.SecretReferencer).SecretReferences(block)
+			if err != nil {
+				t.Fatalf("%s: %v", block.ID, err)
+			}
+			classes, err := capability.(lifecycle.SecretClassifier).SecretClasses(block)
+			if err != nil {
+				t.Fatalf("%s: %v", block.ID, err)
+			}
+			for _, reference := range references {
+				if classes.Of(reference) == "" {
+					t.Errorf("%s/%s block %s references Secret %s without naming its class", row.kind, row.implementation, block.ID, reference)
+				}
+			}
+		}
 	}
 }
 

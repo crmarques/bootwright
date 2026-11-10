@@ -483,11 +483,3 @@ func authoredAuxiliary(c api.Catalog, cluster api.Object) ([]AuxiliaryImage, err
 	}
 	return out, nil
 }
-
-func (c ImageCapability) AccessCredentials(block reconciliation.Block) ([]string, error) {
-	r, err := DecodeImageRequest(block.Request)
-	if err != nil {
-		return nil, err
-	}
-	return []string{r.RegistryRef}, nil
-}

@@ -70,9 +70,11 @@ on the already selected Machine.
 | key, certificate, password, client-secret, cookie-secret, and external-detail refs | `Secret` |
 
 Every Secret a realized field of this page references is effect material under
-[binding](../secrets.md#immutable-binding-and-contexts): the cluster SSH key,
-each service binding's secret and the package repository trust bundle are
-placed on the hosts or in the cluster, and none is an access credential. The `externalDetails` secret belongs to an arm that
+[binding](../secrets.md#immutable-binding-and-contexts), except a trust bundle,
+which is a trust anchor: the cluster SSH key and each service binding's secret
+are placed on the hosts or in the cluster, a host's `knownHostsRef` pin is
+written into the cluster's tunnel `known_hosts`, the package repository trust
+bundle anchors their package fetches, and none is an access credential. The `externalDetails` secret belongs to an arm that
 refuses.
 
 Storage children select their owner through `spec.clusterRef`; they do not

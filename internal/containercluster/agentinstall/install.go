@@ -588,20 +588,6 @@ func (c InstallCapability) ProducedOutputs(block reconciliation.Block) ([]string
 	return []string{KubeconfigOutput}, nil
 }
 
-func (c InstallCapability) AccessCredentials(block reconciliation.Block) ([]string, error) {
-	request, err := DecodeInstallRequest(block.Request)
-	if err != nil {
-		return nil, err
-	}
-	var access []string
-	for _, node := range request.Nodes {
-		if substrate.ControllerCredentialIsAccess(node.Substrate) && node.Controller.CredentialsRef != "" {
-			access = append(access, node.Controller.CredentialsRef)
-		}
-	}
-	return sortedUnique(access), nil
-}
-
 func (c InstallCapability) ProducedIdentity(_ reconciliation.Block, name string, material secrets.Material) (string, error) {
 	if name != KubeconfigOutput {
 		return "", nil
