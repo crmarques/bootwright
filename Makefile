@@ -1,4 +1,4 @@
-.PHONY: build wheels tool-table tool-table-outdated container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check focus quick race check-offline check check-go
+.PHONY: build wheels vulngate tool-table tool-table-outdated container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check focus quick race check-offline check check-go
 
 GO := ./scripts/go
 VULNDB ?= https://vuln.go.dev
@@ -10,7 +10,23 @@ VULNDB ?= https://vuln.go.dev
 VERSION ?= $(shell git describe --tags --dirty 2>/dev/null)
 COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null)
 SOURCE ?= $(if $(COMMIT),$(if $(shell git status --porcelain --untracked-files=no 2>/dev/null),modified,clean))
-STAMP = -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.source=$(SOURCE)
+STAMP = -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.source=$(SOURCE) -X main.vulnerabilityCheck=$(VULNERABILITY_CHECK)
+
+# The vulnerability gate runs before every build, and the build stamps its
+# verdict. VULNCHECK=skip builds offline and stamps the executable unchecked.
+VULNCHECK ?= on
+VULNERABILITY_CHECK = $(shell cat bin/vulnerability-check 2>/dev/null)
+vulngate:
+	@set -eu; mkdir -p bin; rm -f bin/vulnerability-check; \
+	if test '$(VULNCHECK)' = skip; then \
+		echo unchecked >bin/vulnerability-check; \
+		echo 'vulngate: VULNCHECK=skip, so this build is stamped unchecked'; \
+		exit 0; \
+	fi; \
+	CGO_ENABLED=0 ./scripts/govulncheck -db "$(VULNDB)" -format json ./cmd/bootwright >bin/govulncheck.json; \
+	$(GO) -C scripts/tools run ./vulngate -govulncheck "$(CURDIR)/bin/govulncheck.json" \
+		-lock "$(CURDIR)/internal/controller/runtimelock/lock.json" -table "$(CURDIR)/internal/controller/tooltable.json" \
+		-exceptions "$(CURDIR)/cmd/bootwright/vulnerability-exceptions.json" -verdict "$(CURDIR)/bin/vulnerability-check"
 
 # The container build takes its Go from go.mod. Each proxy and module-mirror
 # setting of the environment or the command line may carry a credential, and an
@@ -44,7 +60,7 @@ tool-table-outdated:
 
 # The executable composes its own bill of materials, so the document beside it
 # names exactly what that build carries and pins.
-build: wheels
+build: wheels vulngate
 	CGO_ENABLED=0 $(GO) build -trimpath -buildvcs=false -ldflags '$(STAMP)' -o bin/bootwright ./cmd/bootwright
 	rm -f bin/bootwright.cdx.json
 	./bin/bootwright sbom --format cyclonedx-json >bin/bootwright.cdx.json.tmp
@@ -73,7 +89,7 @@ container-build:
 	echo "$$engine build into $(CONTAINER_OUT) with Go $(GO_VERSION); settings passed as a secret:$${passed:- none}"; \
 	"$$engine" build --output type=local,dest="$$stage" \
 		--build-arg GO_VERSION='$(or $(GO_VERSION),$(error go.mod names no go version))' \
-		--build-arg VERSION='$(VERSION)' --build-arg COMMIT='$(COMMIT)' --build-arg SOURCE='$(SOURCE)' \
+		--build-arg VERSION='$(VERSION)' --build-arg COMMIT='$(COMMIT)' --build-arg SOURCE='$(SOURCE)' --build-arg VULNCHECK='$(VULNCHECK)' \
 		$(if $(GO_IMAGE),--build-arg GO_IMAGE='$(GO_IMAGE)') \
 		--secret id=build-env,src="$$settings" \
 		$(if $(PROXY_CA),--secret id=proxy-ca$(comma)src='$(PROXY_CA)') \
@@ -83,7 +99,7 @@ container-build:
 
 test:
 	$(GO) test ./...
-	$(GO) -C scripts/tools test ./runtimewheels/... ./tooltable/...
+	$(GO) -C scripts/tools test ./runtimewheels/... ./tooltable/... ./vulngate/...
 
 vet:
 	$(GO) vet ./...
@@ -153,4 +169,4 @@ check:
 	$(MAKE) -k --no-print-directory --output-sync=target -j2 ansible-check check-go
 	git diff --check
 
-check-go: wheels fmt-check modules-check tidy-check test vet completion-test vulncheck
+check-go: wheels fmt-check modules-check tidy-check test vet completion-test vulncheck vulngate

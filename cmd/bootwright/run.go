@@ -222,13 +222,14 @@ var buildStamp = debug.ReadBuildInfo
 func buildInformation() cli.BuildInfo {
 	stamp, _ := buildStamp()
 	return stampedBuildInformation(cli.BuildInfo{
-		Version:          version,
-		Commit:           commit,
-		Source:           source,
-		GoVersion:        runtime.Version(),
-		GOOS:             runtime.GOOS,
-		GOARCH:           runtime.GOARCH,
-		DependencyBundle: "sha256:" + ansible.Digest(),
+		Version:            version,
+		Commit:             commit,
+		Source:             source,
+		GoVersion:          runtime.Version(),
+		GOOS:               runtime.GOOS,
+		GOARCH:             runtime.GOARCH,
+		DependencyBundle:   "sha256:" + ansible.Digest(),
+		VulnerabilityCheck: vulnerabilityCheck,
 	}, stamp)
 }
 

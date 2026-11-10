@@ -1,6 +1,8 @@
 package main
 
 import (
+	_ "embed"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"runtime"
@@ -21,6 +23,35 @@ import (
 )
 
 const collectionName = "bootwright.core"
+
+//go:embed vulnerability-exceptions.json
+var vulnerabilityExceptions []byte
+
+func reviewedExceptions() ([]cli.BOMVulnerability, error) {
+	var document struct {
+		Format     string `json:"format"`
+		Exceptions []struct {
+			ID            string   `json:"id"`
+			Aliases       []string `json:"aliases"`
+			Component     string   `json:"component"`
+			State         string   `json:"state"`
+			Justification string   `json:"justification"`
+			Reason        string   `json:"reason"`
+			Expires       string   `json:"expires"`
+		} `json:"exceptions"`
+	}
+	if err := json.Unmarshal(vulnerabilityExceptions, &document); err != nil || document.Format != "bootwright.vulnerability-exceptions-v1" {
+		return nil, errors.New("the embedded vulnerability exceptions are no bootwright.vulnerability-exceptions-v1 document")
+	}
+	exceptions := make([]cli.BOMVulnerability, 0, len(document.Exceptions))
+	for _, entry := range document.Exceptions {
+		if entry.State != "not_affected" && entry.State != "no_fix" || entry.State == "not_affected" && entry.Justification == "" {
+			return nil, errors.New("the embedded vulnerability exception " + entry.ID + " states neither not_affected with a justification nor no_fix")
+		}
+		exceptions = append(exceptions, cli.BOMVulnerability{ID: entry.ID, Aliases: entry.Aliases, Ref: entry.Component, State: entry.State, Justification: entry.Justification, Reason: entry.Reason, Expires: entry.Expires})
+	}
+	return exceptions, nil
+}
 
 type pinnedImage struct{ consumer, reference string }
 
@@ -45,7 +76,7 @@ func composeBillOfMaterials(info cli.BuildInfo, stamp *debug.BuildInfo) (cli.Bil
 	if stamp == nil {
 		return cli.BillOfMaterials{}, errors.New("the executable carries no build stamp naming its Go modules")
 	}
-	bom := cli.BillOfMaterials{Name: "bootwright", Version: info.Version, Commit: info.Commit, Source: info.Source}
+	bom := cli.BillOfMaterials{Name: "bootwright", Version: info.Version, Commit: info.Commit, Source: info.Source, Checked: info.VulnerabilityCheck}
 	toolchain := strings.TrimPrefix(runtime.Version(), "go")
 	bom.Components = append(bom.Components, cli.BOMComponent{Ref: "go:stdlib@" + toolchain, Type: "library", Name: "stdlib", Version: toolchain, Scope: "required",
 		PURL: "pkg:golang/stdlib@" + toolchain, Properties: []cli.BOMProperty{carried}})
@@ -125,6 +156,9 @@ func composeBillOfMaterials(info cli.BuildInfo, stamp *debug.BuildInfo) (cli.Bil
 		bom.Components = append(bom.Components, cli.BOMComponent{Ref: "oci:" + reference, Type: "container", Name: repository, Version: "sha256:" + digest, Scope: "optional",
 			SHA256: digest, PURL: "pkg:oci/" + name + "@sha256%3A" + digest + "?repository_url=" + repository,
 			Properties: []cli.BOMProperty{acquired, {Name: "bootwright:consumer", Value: strings.Join(consumers[reference], ",")}}})
+	}
+	if bom.Vulnerabilities, err = reviewedExceptions(); err != nil {
+		return cli.BillOfMaterials{}, err
 	}
 	return bom, nil
 }

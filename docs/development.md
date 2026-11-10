@@ -104,7 +104,10 @@ cache mount of its own, so a warm cache fetches no wheel. Go's module and
 build caches are cache mounts the engine keeps between builds:
 on the reference host a cold build took 31 seconds, a rebuild after a source
 change 8, and a build that leaves go.mod unchanged downloads nothing. The
-compile runs with `GOPROXY=off`. `podman image prune --build-cache` or
+compile runs with `GOPROXY=off`; its vulnerability gate still reaches
+`vuln.go.dev` and `api.osv.dev` through the same proxy settings and CA, and
+`make container-build VULNCHECK=skip` builds without them, stamped
+`unchecked`. `podman image prune --build-cache` or
 `docker builder prune` empties the caches.
 
 Behind a proxy, set it in the environment or on the command line:
@@ -122,7 +125,8 @@ records build arguments: Podman in the build stage's image metadata, Docker
 in the build record that `docker buildx history inspect` shows, values
 included. The recipe therefore writes them to a file only its user can read,
 passes it as the `build-env` build secret and removes it, and echoes only
-their names; the build reads them for the module and wheel downloads, and no image,
+their names; the build reads them for the module and wheel downloads and the
+vulnerability gate, and no image,
 cache or build record keeps them. `PROXY_CA` names the CA certificate of a
 proxy that intercepts TLS, passed the same way as the `proxy-ca` secret.
 `TestContainerBuildPassesSettingsOnlyAsASecret` keeps every other value out
@@ -304,6 +308,17 @@ that reaches the releases below it, and never above its default.
 `.github/workflows/tool-table.yml` runs `make tool-table` when the table or its
 tool changes and weekly, with `make tool-table-outdated` as an advisory
 summary.
+
+`make build` first runs `make vulngate`, the
+[vulnerability gate](../specs/security.md#the-vulnerability-gate): it needs
+`vuln.go.dev` and `api.osv.dev`, fails on a finding no reviewed exception in
+`cmd/bootwright/vulnerability-exceptions.json` covers, and stamps its verdict,
+which `bootwright version` prints. `make check` runs it too, and
+`.github/workflows/vulnerability.yml` runs it daily, so a new advisory against
+an unchanged build fails within a day. Without a route to those databases, run
+`make build VULNCHECK=skip`, which stamps the executable `unchecked`. The
+[verification tiers](../.agents/skills/code-implementation/references/verification.md#vulnerability-findings)
+say how a finding is settled.
 
 Each managed service runs one container image pinned by content digest in its
 capability's `catalog.go`. All four were resolved from their publisher's

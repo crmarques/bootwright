@@ -12955,3 +12955,37 @@ occurred. **Limitations:** no component names its license yet, no release
 ships the third-party notices, and the container build's Go image is still
 named by its tag ([B1243](backlog.md#b1243)).
 
+### X344 — The build's vulnerability gate
+
+**Item:** B1244 (2026-11-10, [D250](backlog.md#d250) (2), (9) and (15),
+[D251](backlog.md#d251)), partly delivered in-tree. `make vulngate`, run first
+by `make build` and by `make check`, fails on a known vulnerability in what the
+build carries or pins ([vulnerability gate](../security.md#the-vulnerability-gate)):
+`govulncheck` over the executable's packages, failing only where a finding's
+trace reaches a function, and OSV for every locked wheel and every default
+client by its Go module. A reviewed exception in
+`cmd/bootwright/vulnerability-exceptions.json`, expiring within 90 days, is the
+only way past; an expired, too distant or unused exception fails as well. The
+executable embeds the exceptions, which `bootwright sbom` carries as VEX
+statements, and stamps the verdict `version` now prints as its seventh field.
+`VULNCHECK=skip` stamps `unchecked`. `.github/workflows/vulnerability.yml`
+runs the gate daily, and the code-implementation skill's
+[finding procedure](../../.agents/skills/code-implementation/references/verification.md#vulnerability-findings)
+lets a coding agent raise a release or write the exception and continue.
+
+The first run found eleven advisories against the default `kubectl` 1.37.2 and
+`virtctl` 1.9.1, each in a server component the client binaries do not hold
+(kube-apiserver, the kubelet's gitRepo volume, and KubeVirt's virt-api,
+virt-handler, virt-exportserver and guest agent handling) or, for
+GO-2024-2816, in KubeVirt 1.2.0 and earlier. The Go records name no fixed
+stable release; the GHSA aliases of five bound them below 1.9.1, and one is
+fixed only in the 1.10.0-rc.0 prerelease. Ten exceptions, one covering two
+aliases, record them as `not_affected` until 2027-02-08. Bootwright's own code reaches no advisory, and
+no locked wheel has one.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** a pinned client is judged by its top-level Go module alone,
+not by the toolchain and modules its binary holds; the images are not scanned
+yet; and no release recipe refuses an `unchecked` executable
+([B1244](backlog.md#b1244)).
+

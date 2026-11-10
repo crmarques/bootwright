@@ -250,7 +250,7 @@ Successful result objects have stable top-level fields:
 | Command | Result fields |
 | --- | --- |
 | `help` and explicit help | `command`, `usage`, `description`, `commands`, `flags` |
-| `version` | `version`, `commit`, `source`, `go`, `target`, `dependencyBundle` |
+| `version` | `version`, `commit`, `source`, `go`, `target`, `dependencyBundle`, `vulnerabilityCheck` |
 | `schema` | `format`, `schema` |
 | `sbom` | `format`, `bom` |
 | `completion <shell>`, `secret show`, `cluster kubeconfig`, `cluster keyring` | `export` |

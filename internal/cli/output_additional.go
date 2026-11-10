@@ -288,12 +288,13 @@ func (r *Runner) writeSelectedHelp(command *cobra.Command) error {
 }
 
 type versionPresentation struct {
-	Version          string `json:"version"`
-	Commit           string `json:"commit"`
-	Source           string `json:"source"`
-	Go               string `json:"go"`
-	Target           string `json:"target"`
-	DependencyBundle string `json:"dependencyBundle"`
+	Version            string `json:"version"`
+	Commit             string `json:"commit"`
+	Source             string `json:"source"`
+	Go                 string `json:"go"`
+	Target             string `json:"target"`
+	DependencyBundle   string `json:"dependencyBundle"`
+	VulnerabilityCheck string `json:"vulnerabilityCheck"`
 }
 
 func (versionPresentation) documentedResult() {}
@@ -315,7 +316,7 @@ func (r *Runner) writeSelectedVersion() error {
 	if len(bundle) != 71 || !strings.HasPrefix(bundle, "sha256:") || !isHex(bundle[7:]) || bundle != strings.ToLower(bundle) {
 		bundle = "none"
 	}
-	shown := versionPresentation{Version: escapeDisplayLine(buildValue(i.Version, "devel")), Commit: commit, Source: source, Go: escapeDisplayLine(buildValue(i.GoVersion, "unknown")), Target: escapeDisplayLine(buildValue(i.GOOS, "unknown") + "/" + buildValue(i.GOARCH, "unknown")), DependencyBundle: bundle}
+	shown := versionPresentation{Version: escapeDisplayLine(buildValue(i.Version, "devel")), Commit: commit, Source: source, Go: escapeDisplayLine(buildValue(i.GoVersion, "unknown")), Target: escapeDisplayLine(buildValue(i.GOOS, "unknown") + "/" + buildValue(i.GOARCH, "unknown")), DependencyBundle: bundle, VulnerabilityCheck: vulnerabilityVerdict(i.VulnerabilityCheck)}
 	return writeStructuredResult(r.config.Out, "version", shown, nil, nil, 0)
 }
 

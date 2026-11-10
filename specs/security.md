@@ -790,6 +790,28 @@ these pinned artifacts, with its version and digest, in its
 substitutes an update silently; recovery follows
 [state reconciliation](state-reconciliation.md#dependency-safety-during-recovery).
 
+### The vulnerability gate
+
+`make build` and `make check` fail on a known vulnerability in what a build
+carries or pins: `govulncheck` over the executable's packages, failing only on
+a finding whose trace reaches a function, and OSV for every
+[locked wheel](controller.md#the-runtime-lock) and for every default client of
+the [tool table](controller.md#the-tool-table) by its top-level Go module. The only way past
+a finding is a reviewed exception in `cmd/bootwright/vulnerability-exceptions.json`
+naming the advisory and its aliases, the component's `bom-ref`, `not_affected`
+with a CycloneDX justification or `no_fix`, a reason, and an expiry at most 90
+days ahead. An expired exception, one further ahead, and one that matches no
+finding fail too, so every exception is decided anew at least every 90 days
+(`TestAnExceptionThatIsExpiredTooDistantOrIncompleteFails`). The executable
+embeds the exceptions, which its bill of materials carries as VEX, and the
+build stamps the verdict `version` prints. `VULNCHECK=skip` builds without the
+databases and stamps the executable `unchecked`.
+
+Not yet met: the service and emulated BMC images are scanned on a schedule and
+in the mirror registry, and each pinned client is judged by the modules and
+toolchain its binary holds rather than by its top-level module alone; tracked
+as [B1244](milestones/backlog.md#b1244).
+
 ### Acquisition origins
 
 Every artifact a context acquires, or hands a Machine to acquire, comes from

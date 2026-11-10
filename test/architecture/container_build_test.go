@@ -41,7 +41,7 @@ func TestContainerBuildTakesGoFromGoMod(t *testing.T) {
 	if !strings.Contains(dockerfile, "\nARG GO_IMAGE=docker.io/library/golang:${GO_VERSION}-") {
 		t.Error("the Dockerfile GO_IMAGE default does not take its tag from GO_VERSION")
 	}
-	if !strings.Contains(dockerfile, " make build;") {
+	if !strings.Contains(dockerfile, " make build VULNCHECK=\"$VULNCHECK\";") {
 		t.Error("the Dockerfile compiles outside the Makefile build recipe, which owns the flags and the stamp")
 	}
 }
@@ -49,7 +49,7 @@ func TestContainerBuildTakesGoFromGoMod(t *testing.T) {
 // buildArguments are the only values the container build takes as build
 // arguments, which an engine records in image metadata and build history;
 // every other setting may carry a credential and travels as a build secret.
-var buildArguments = []string{"GO_VERSION", "GO_IMAGE", "VERSION", "COMMIT", "SOURCE"}
+var buildArguments = []string{"GO_VERSION", "GO_IMAGE", "VERSION", "COMMIT", "SOURCE", "VULNCHECK"}
 
 func TestContainerBuildPassesSettingsOnlyAsASecret(t *testing.T) {
 	root := filepath.Join("..", "..")

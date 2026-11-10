@@ -296,7 +296,7 @@ Alias cell.
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
 | [B1240](#b1240) | new, 2026-11-09 (X340 gate) | defect | Controller | The native supervisor test reads its task's PID only from a complete record | It failed once in `make check` beside the other lanes and passed when run again alone; the cause is a test-side race, not the supervisor |
 | [B1243](#b1243) | new, 2026-11-10 (D250 (2)); partly delivered by X343 on 2026-11-10 | enabling | Architecture | Each build's bill of materials names every component's license, a release ships its notices, and the container build's Go image is pinned | The document itself landed (X343); licenses need a source per component that no build input holds yet |
-| [B1244](#b1244) | new, 2026-11-10 (D250 (2)) | enabling | Architecture | A build fails on a known vulnerability in what it carries or pins | D250 parks the controlled-network plan until the owner promotes it |
+| [B1244](#b1244) | new, 2026-11-10 (D250 (2)); partly delivered by X344 on 2026-11-10 | enabling | Architecture | Each pinned client is judged by what its binary holds, and the service and emulated BMC images are scanned on a schedule and in the mirror registry | The build's gate landed (X344); a binary scan downloads every client, and an image scan needs a pinned scanner |
 | [B1245](#b1245) | new, 2026-11-10 (D250 (8)) | product | CLI, with Controller | One read-only list names every artifact a context acquires, its origin, its digest and the Machine that reads it | D250 parks the controlled-network plan until the owner promotes it |
 | [B1246](#b1246) | new, 2026-11-10 (D250 (7)) | product | Controller, with Desired state | One mirror declaration routes a context's public-origin tools to its artifact server and refuses an artifact the mirror lacks | D250 parks the controlled-network plan until the owner promotes it |
 | [B1247](#b1247) | new, 2026-11-10 (D250 (7)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's images come from the declared mirror, with its credential and trust | D250 parks the controlled-network plan until the owner promotes it |
@@ -3328,29 +3328,27 @@ Go image's digest to the `go` directive.
 
 ### B1244
 
-**Owner:** Architecture. **Kind:** enabling. **Requires:** B1243.
-**Definition:** Needs definition, from [D250](#d250) (2), (9) and (15), for the
-reachability question below: `make check` runs `govulncheck` over the Go
-modules and the standard library, `make build` runs no vulnerability check,
-and nothing checks a locked wheel or a tool. **Outcome:** `make build` and
-`make container-build` fail on a known vulnerability in a Go module or the
-standard library, a locked wheel or a default tool. A reviewed exception
-naming the advisory, the component, why the build is not affected or why no
-fix exists, and an expiry at most 90 days away is the only way past, and it
-ships with the bill of materials as a VEX statement. The executable carries
-the verdict and the database's date, which `version` prints; an offline build
-names a local database or is stamped as unchecked, which a release build
-refuses; and a scheduled job checks the newest release and the service images
-again, reporting without failing a build. The
-[code-implementation](../../.agents/skills/code-implementation/SKILL.md) skill
-gains the [finding procedure](../deferred/controlled-network.md#handling-a-finding),
-so a coding agent that meets the gate raises a release or writes the
-exception and continues its task. **Open:** whether an advisory in code the
-build never reaches fails without an exception (recommendation: keep
-`govulncheck`'s reachability for Go, and fail a wheel or a tool until it is
-excepted). **Exit evidence:** a build that fails on a planted advisory of each
-of the three kinds, passes with its exception and fails again once the
-exception expires; the skill's procedure and a docs check that cites it.
+**Owner:** Architecture. **Kind:** enabling. **Requires:** none.
+**Definition:** Needs definition, from [D250](#d250) (2), (9) and (15).
+**Delivered in-tree by X344:** the
+[vulnerability gate](../security.md#the-vulnerability-gate) of `make build`
+and `make check`, its reviewed exceptions carried as VEX, the stamped verdict
+`version` prints, a daily run, and the
+[finding procedure](../../.agents/skills/code-implementation/references/verification.md#vulnerability-findings)
+coding agents follow. Go findings fail only where their trace reaches a
+function, and every wheel and client finding fails until excepted.
+**Remaining:** each default client is judged by the Go toolchain and modules
+its binary's build information names (`govulncheck -mode binary` over the
+pinned artifact, or OSV over that list), not only by its top-level module,
+whose records mostly name server components; the managed services' and the
+emulated BMC's images are scanned on a schedule, reporting without failing a
+build, and in the mirror registry
+once [B1249](#b1249) builds it; a release build refuses an executable stamped
+`unchecked` once a release recipe exists. **Open:** the scanner and its pin
+(recommendation: one pinned by digest in the workflow, reading the images'
+digests from the bill of materials). **Exit evidence:** a scheduled job whose
+report names each image's findings, and a registry scan in
+[B1250](#b1250)'s profile.
 
 ### B1245
 

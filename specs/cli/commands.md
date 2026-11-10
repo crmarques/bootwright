@@ -156,7 +156,7 @@ Not yet met: `preflight --stage add-ons` runs no add-on prerequisite check and a
 | `bootwright cluster kubectl` | required `--name <cluster>` and non-empty `<command>...` | bounded `kubectl` handoff descriptor | read context-owned access metadata only |
 | `bootwright cluster kubeconfig` | required `--name <cluster>` | kubeconfig through the explicit sensitive-output boundary | read and reveal one context-owned credential artifact |
 | `bootwright cluster keyring` | required `--name <cluster>`; required `--client <client>` | the Ceph keyring of one CephClient through the explicit sensitive-output boundary | read and reveal one context-owned credential artifact |
-| `bootwright version` | none | version, commit, source state, Go runtime and target, and embedded dependency-bundle identity | none |
+| `bootwright version` | none | version, commit, source state, Go runtime and target, embedded dependency-bundle identity and the build's vulnerability verdict | none |
 | `bootwright schema` | required `--format json-schema` | the advisory [JSON Schema export](../cli.md#schema-export) of every registered kind | none |
 | `bootwright sbom` | required `--format cyclonedx-json` | this executable's [bill of materials](../cli.md#bill-of-materials) | none |
 | `bootwright help [command ...]` | no local flags | help for the exact resolved command, human or structured | none |
@@ -250,18 +250,24 @@ to hide or enable commands. Target-aware discovery belongs to `cluster info`.
 
 `version` writes the build identity to standard output in the
 [shared human layout](output.md#shared-human-layout) and nothing to standard
-error: the `Bootwright` headline, then exactly these six fields in this order.
+error: the `Bootwright` headline, then exactly these seven fields in this order.
 
 ```text
   Bootwright
 
-    Version            v0.4.0
-    Commit             9f2c1d0e3b5a7c8d9e0f1a2b3c4d5e6f70819293
-    Source             clean
-    Go                 go1.26.10
-    Target             linux/amd64
-    Dependency bundle  sha256:<64 hexadecimal digits>
+    Version              v0.4.0
+    Commit               9f2c1d0e3b5a7c8d9e0f1a2b3c4d5e6f70819293
+    Source               clean
+    Go                   go1.26.10
+    Target               linux/amd64
+    Dependency bundle    sha256:<64 hexadecimal digits>
+    Vulnerability check  passed 2026-11-10
 ```
+
+`Vulnerability check` is the verdict the build's
+[vulnerability gate](../security.md#the-vulnerability-gate) stamped: `passed`
+and the date it ran, or `unchecked` for a build that skipped it or carries no
+stamp (`TestVersionReportsTheStampedVulnerabilityCheck`).
 
 The composition root supplies every value. It obtains the Go runtime, GOOS, and
 GOARCH from the linked Go runtime, the dependency bundle as the digest of the

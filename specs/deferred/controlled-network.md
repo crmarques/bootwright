@@ -159,19 +159,9 @@ elsewhere, usually on the controller.
 ### Handling a finding
 
 A coding agent that meets the gate handles the finding itself and continues
-its task; the
-[code-implementation](../../.agents/skills/code-implementation/SKILL.md)
-skill takes on this procedure with the gate:
-
-1. A fixed release exists: raise the default, and the minimum when the
-   advisory reaches it, to the first fixed release, in its own commit.
-2. No fixed release exists, or Bootwright never reaches the affected code: add
-   one exception naming the advisory, the component and release, why the build
-   is not affected or why no fix exists, and an expiry no more than 90 days
-   away, in its own commit whose body carries that reasoning.
-3. Continue the task that met the gate, and name each exception in the task's
-   reported outcome. An expired exception fails the gate again, so it is
-   decided anew.
+its task, as the
+[code-implementation](../../.agents/skills/code-implementation/references/verification.md#vulnerability-findings)
+skill says.
 
 ## Delivery order
 

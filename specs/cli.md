@@ -581,7 +581,10 @@ with scope `optional` and says so. They name what it pins and acquires at use
 with scope `optional`: each default client of the
 [tool table](controller.md#the-tool-table), with its SHA-256, publisher URL
 and minimum, and each managed service's and the emulated BMC's compiled image,
-by its digest, one component per image. An executable with no build stamp, a
+by its digest, one component per image. Its `vulnerabilities` carry each
+reviewed exception of the [vulnerability gate](security.md#the-vulnerability-gate)
+as a VEX statement on its component, and its metadata the build's verdict. An
+executable with no build stamp, a
 local module replacement or an image pinned other than by digest alone
 composes none and refuses. It carries no timestamp or serial number, and
 `TestTheBillOfMaterialsNamesEveryCarriedAndPinnedArtifact` holds it to the

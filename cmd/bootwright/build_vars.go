@@ -1,7 +1,8 @@
 package main
 
 var (
-	version string
-	commit  string
-	source  string
+	version            string
+	commit             string
+	source             string
+	vulnerabilityCheck string
 )

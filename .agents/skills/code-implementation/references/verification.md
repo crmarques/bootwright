@@ -102,6 +102,33 @@ linked page owns the rule.
 - Milestone bookkeeping:
   [milestones-and-knowledge](../../milestones-and-knowledge/SKILL.md).
 
+## Vulnerability findings
+
+`make build` and `make check` run the
+[vulnerability gate](../../../../specs/security.md#the-vulnerability-gate).
+When it fails, handle each finding it names yourself, then continue the task
+that met it ([D250](../../../../specs/milestones/backlog.md#d250) (15)):
+
+1. Read the advisory (`https://api.osv.dev/v1/vulns/<id>`): what code it
+   affects, its aliases and its fixed releases.
+2. A fixed release exists: raise the component to it, in its own commit. For a
+   client, move the default in `internal/controller/tooltable.json`, and the
+   minimum too when the advisory reaches it, then run `make tool-table`; for a
+   wheel, refresh the runtime lock; for a Go module, `./scripts/go get` it.
+3. No fixed release exists, or the build does not contain or reach the
+   affected code: add one entry to `cmd/bootwright/vulnerability-exceptions.json`
+   with the advisory, its aliases, the component's `bom-ref` from
+   `bootwright sbom`, `not_affected` with the CycloneDX justification that
+   holds or `no_fix`, the reason in one or two sentences an owner can check,
+   and an expiry at most 90 days ahead, in its own commit whose body repeats
+   the reasoning.
+4. Rerun the gate, continue the task, and name every exception added or
+   renewed in the task's reported outcome. An expired exception is decided
+   anew the same way; remove one the gate reports as matching no finding.
+
+`VULNCHECK=skip` is for a build with no route to the databases, never a way
+past a finding.
+
 ## Recording
 
 A commit body names the tier commands that ran and their results. An

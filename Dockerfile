@@ -10,6 +10,7 @@ FROM ${GO_IMAGE} AS build
 ARG VERSION=
 ARG COMMIT=
 ARG SOURCE=
+ARG VULNCHECK=on
 
 WORKDIR /src
 COPY . .
@@ -28,13 +29,14 @@ RUN --mount=type=secret,id=build-env \
         export SSL_CERT_FILE=/tmp/ca-bundle.pem GIT_SSL_CAINFO=/tmp/ca-bundle.pem; \
     fi; \
     ./scripts/go mod download; \
+    ./scripts/go -C scripts/tools mod download; \
     export WHEELS_CACHE=/root/.cache/bootwright-runtime-wheels; \
     make wheels; \
-    rm -f /tmp/ca-bundle.pem; \
     test -n "$VERSION" || unset VERSION; \
     test -n "$COMMIT" || unset COMMIT; \
     test -n "$SOURCE" || unset SOURCE; \
-    GOPROXY=off GOFLAGS=-mod=readonly make build; \
+    GOPROXY=off GOFLAGS=-mod=readonly make build VULNCHECK="$VULNCHECK"; \
+    rm -f /tmp/ca-bundle.pem; \
     ./bin/bootwright version
 
 FROM scratch AS binary

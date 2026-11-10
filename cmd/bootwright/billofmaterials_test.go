@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"io/fs"
 	"os"
 	"reflect"
@@ -115,4 +117,41 @@ func TestEveryLockedWheelIsNamedCarriedOnlyWhenTheExecutableCarriesIt(t *testing
 			t.Errorf("%s is %s while the executable carries it: %t", filename, component.Scope, statErr == nil)
 		}
 	}
+}
+
+func TestEveryReviewedExceptionNamesAComponentAndTravelsAsVEX(t *testing.T) {
+	stamp, _ := debug.ReadBuildInfo()
+	bom, err := composeBillOfMaterials(cli.BuildInfo{}, stamp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	refs := map[string]bool{}
+	for _, component := range bom.Components {
+		refs[component.Ref] = true
+	}
+	if len(bom.Vulnerabilities) == 0 {
+		t.Fatal("the embedded exceptions are empty or were not read")
+	}
+	for _, vulnerability := range bom.Vulnerabilities {
+		if !refs[vulnerability.Ref] {
+			t.Errorf("the exception for %s names %s, which the bill of materials does not", vulnerability.ID, vulnerability.Ref)
+		}
+		if vulnerability.State == "not_affected" && vulnerability.Justification == "" || strings.TrimSpace(vulnerability.Reason) == "" || len(vulnerability.Expires) != 10 {
+			t.Errorf("the exception for %s lacks its justification, reason or expiry", vulnerability.ID)
+		}
+	}
+	if _, err := runBillOfMaterials(); err != nil {
+		t.Fatalf("the bill of materials with its exceptions did not render: %v", err)
+	}
+}
+
+func runBillOfMaterials() (string, error) {
+	var stdout, stderr strings.Builder
+	if code := run(context.Background(), []string{"sbom", "--format", "cyclonedx-json"}, &stdout, &stderr); code != 0 {
+		return "", errors.New(stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"vulnerabilities"`) {
+		return "", errors.New("the document carries no vulnerabilities")
+	}
+	return stdout.String(), nil
 }
