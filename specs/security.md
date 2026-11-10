@@ -796,7 +796,10 @@ host, never who wrote the content:
 | A public origin | Any account, or a project other than those vendors | The same Machine, unless the artifact's mirror route moves it |
 
 OpenShift's release payload is vendor content served from a registry on which
-any account publishes, so its origin is public.
+any account publishes, so its origin is public. IBM's `icr.io`, which serves
+IBM's operator catalogs and images and on which IBM's cloud customers also
+publish, is a vendor origin by the owner's choice, so a cluster keeps taking
+its operators' later updates from it ([D250](milestones/backlog.md#d250)).
 
 A mirror route changes where the bytes come from. Where the request froze a
 digest, the consumer verifies it and the mirror is trusted for nothing

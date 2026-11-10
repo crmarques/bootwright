@@ -3309,21 +3309,24 @@ renaming it, or waiting until the record holds a PID, closes the window.
 ### B1242
 
 **Owner:** Controller. **Kind:** product. **Requires:** none.
-**Definition:** Needs definition, from [D250](#d250) (2): the controller stage
-resolves `latest` and every tool's SHA-256 from its publisher at apply, even
-when a [download mirror](../api/environment.md#download-mirrors) serves the
-bytes, so a context with an OpenShift cluster always reaches a public origin
-for Helm ([the controller stage](../controller.md#the-controller-stage)).
-**Outcome:** a tool lock beside the runtime lock pins the default release,
-size and SHA-256 of every tool no vendor serves; a pinned digest, or one the
-Environment declares beside an explicit release, is acquired with no publisher
-metadata; and every tool has a mirror route. A vendor's own tools keep the
-vendor's checksum file. **Open:** whether `latest` stays an intent
-(recommendation: remove it, so a newer release is a new build or an explicit
-release with its SHA-256), and how an explicit release declares its digest.
-**Exit evidence:** an offline check that holds the lock as the runtime lock is
-held; a stage test that acquires every pinned tool from a mirror with its
-publisher unreachable; a refusal test for an explicit release with no digest.
+**Definition:** Specified by [D250](#d250) (2), (12), (13) and (17): the controller
+stage resolves `latest` and every tool's SHA-256 from its publisher at apply,
+even when a [download mirror](../api/environment.md#download-mirrors) serves
+the bytes, so a context with an OpenShift cluster always reaches a public
+origin for Helm ([the controller stage](../controller.md#the-controller-stage)).
+**Outcome:** the [build's tool table](../deferred/controlled-network.md#the-build)
+holds, for Helm, `kubectl`, `virtctl` and `govc`, a minimum release and a
+default release with its size and SHA-256. A context that names no release
+acquires the default by that digest with no publisher metadata; a declared
+release at or above the minimum takes its SHA-256 from its publisher, read by
+the Machine that downloads it; one below the minimum refuses at plan; the next
+apply replaces a retained release below a raised minimum; `latest` is removed
+from `dependencyVersions`; and every one of the four tools has a mirror route.
+The OpenShift clients and installer keep following the cluster's release and
+the vendor's checksum file. **Exit evidence:** an offline check that holds the
+table as the runtime lock is held; a stage test that acquires every default
+tool from a mirror with its publisher unreachable; a refusal test below the
+minimum; a replacement test after a raised minimum.
 
 ### B1243
 
@@ -3347,25 +3350,28 @@ catalogs, and a second build of one commit that writes the same bytes.
 ### B1244
 
 **Owner:** Architecture. **Kind:** enabling. **Requires:** B1243.
-**Definition:** Needs definition, from [D250](#d250) (2) and (9):
-`make check` runs `govulncheck` over the Go modules and the standard library,
-`make build` runs no vulnerability check, and nothing checks a locked wheel or
-a tool. **Outcome:** `make build` and `make container-build` fail on a known
-vulnerability in a Go module or the standard library, a locked wheel or a
-pinned tool. A reviewed exception naming the advisory, the component, why the
-build is not affected and an expiry date is the only way past, and it ships
-with the bill of materials as a VEX statement. The executable carries the
-verdict and the database's date, which `version` prints; an offline build
+**Definition:** Needs definition, from [D250](#d250) (2), (9) and (15), for the
+reachability question below: `make check` runs `govulncheck` over the Go
+modules and the standard library, `make build` runs no vulnerability check,
+and nothing checks a locked wheel or a tool. **Outcome:** `make build` and
+`make container-build` fail on a known vulnerability in a Go module or the
+standard library, a locked wheel or a default tool. A reviewed exception
+naming the advisory, the component, why the build is not affected or why no
+fix exists, and an expiry at most 90 days away is the only way past, and it
+ships with the bill of materials as a VEX statement. The executable carries
+the verdict and the database's date, which `version` prints; an offline build
 names a local database or is stamped as unchecked, which a release build
-refuses; and a scheduled job checks the newest release and the pinned images
-again. **Open:** whether an advisory in code the build never reaches fails
-without an exception (recommendation: keep `govulncheck`'s reachability for
-Go, and fail a wheel or a tool until it is excepted); whether pinned images
-join the gate (recommendation: not until Bootwright builds them,
-[B1237](#b1237), because a base image always carries findings a build cannot
-fix). **Exit evidence:** a build that fails on a planted advisory of each of
-the three kinds, passes with its exception and fails again once the exception
-expires.
+refuses; and a scheduled job checks the newest release and the service images
+again, reporting without failing a build. The
+[code-implementation](../../.agents/skills/code-implementation/SKILL.md) skill
+gains the [finding procedure](../deferred/controlled-network.md#handling-a-finding),
+so a coding agent that meets the gate raises a release or writes the
+exception and continues its task. **Open:** whether an advisory in code the
+build never reaches fails without an exception (recommendation: keep
+`govulncheck`'s reachability for Go, and fail a wheel or a tool until it is
+excepted). **Exit evidence:** a build that fails on a planted advisory of each
+of the three kinds, passes with its exception and fails again once the
+exception expires; the skill's procedure and a docs check that cites it.
 
 ### B1245
 
@@ -3388,9 +3394,12 @@ replaced by the command.
 B1242, B1245. **Definition:** Needs definition, from [D250](#d250) (4) and
 (7): the [design](../deferred/controlled-network.md#declaration-and-refusal).
 **Outcome:** the Environment names one mirror, a Registry and an artifact
-server endpoint. With it the controller stage acquires every public-origin
-tool from that endpoint by its pinned digest and dials no public origin, and
-preflight refuses an artifact the mirror does not hold, naming it. **Open:**
+server endpoint, placed on any Machine, the controller included, or external
+([deployment choices](../deferred/controlled-network.md#deployment-choices)).
+With it the controller stage acquires every public-origin tool from that
+endpoint and dials no public origin, and preflight refuses an artifact the
+mirror does not hold, naming it; without it every route stays as it is.
+**Open:**
 the field's name and whether it replaces `spec.downloads` (recommendation: it
 does, before 1.0); an external artifact server as the endpoint, which
 admission refuses today. **Exit evidence:** a stage test with every public
@@ -3405,9 +3414,10 @@ and (7): a managed service takes a mirror only through its own
 and the emulated BMC's image has no field ([B1237](#b1237) records the same
 gap). **Outcome:** with the declaration, each managed service's and the
 emulated BMC's image is the mirror's copy of the digest the request froze,
-pulled with the Registry's access credential and verified against its trust
-anchor, and a test holds, for every role, that a host which already holds the
-digest pulls nothing. **Exit evidence:** request goldens, custody tests for
+pulled over HTTPS with the Registry's access credential and verified against
+its trust anchor, never through an insecure-registry setting, and a test
+holds, for every role, that a host which already holds the digest pulls
+nothing. **Exit evidence:** request goldens, custody tests for
 the credential, and a pull refused when the mirror lacks the digest.
 
 ### B1248
@@ -3432,18 +3442,21 @@ goldens and a row of [B1250](#b1250)'s profile.
 
 **Owner:** Infrastructure services, with State reconciliation. **Kind:**
 product. **Requires:** B1245, B1246, [B68](m1.md#b68), [B1236](#b1236).
-**Definition:** Needs definition, from [D250](#d250) (8): the
-[design](../deferred/controlled-network.md#filling-the-mirror). **Outcome:** a
-context that places its mirror Registry and artifact server on a Machine with
-a provided operating system builds both and copies its acquisition list into
-them on that Machine, each artifact verified before it is published, before
-its controller stage acquires a tool. **Open:** the ordering clause that lets
-the mirror's blocks precede the controller block; whether the controller
-drives the mirror host over SSH or a second Bootwright runs on it
-(recommendation: over SSH first, as every managed Machine is driven); custody
-of a release's pull secret on the mirror host. **Exit evidence:** a test that
-holds the plan's order, a replay that copies nothing, a verification refusal
-and a row of [B1250](#b1250)'s profile.
+**Definition:** Needs definition, from [D250](#d250) (8), (14) and (16): the
+[design](../deferred/controlled-network.md#the-mirror-host). **Outcome:** a
+context that places its mirror Registry and artifact server on a Machine,
+whose operating system is provided or installed by Bootwright and which may be
+the controller, drives that Machine as any other, over SSH or locally, builds
+both services serving HTTPS with a generated certificate whose authority every
+consumer trusts, and copies its acquisition list into them on that Machine,
+each artifact verified before it is published, before its controller stage
+acquires a tool. **Open:** the ordering clauses (the mirror's blocks before
+the controller stage's tools, the stage split in two when the mirror is on the
+controller, and a managed service on a Machine whose installation is still to
+run, which admission refuses today); custody of a release's pull secret on the
+mirror host. **Exit evidence:** a test that holds the plan's order for each
+placement, a replay that copies nothing, a verification refusal and a row of
+[B1250](#b1250)'s profile.
 
 ### B1250
 
@@ -7855,3 +7868,38 @@ by the session, pending the owner's review:
     [design's order](../deferred/controlled-network.md#delivery-order);
     [B68](m1.md#b68), [B1236](#b1236) and the acceptance of
     [B724](m3.md#b724) join it.
+
+Shown the plan the same day, the owner answered:
+
+11. "let's keep icr.io direct access for now", being concerned "about impacts
+    on day two operations for updating fdf in the future": `icr.io` is a
+    direct vendor origin. This amends (5) for `icr.io` alone.
+12. "let's create a standard that bootwright build abcde accepts dependencies
+    versions x.y.z or newer. and when a vulnerability on x.y.z is found, new
+    bootwright build will required x'.y'.z' version or newer", for Helm,
+    `kubectl`, `virtctl` and `govc` alone ("ok for your recommendation"): each
+    build holds a minimum and a default release of each
+    ([the build](../deferred/controlled-network.md#the-build)).
+13. A declared release newer than the build's default takes its SHA-256 from
+    its publisher, read by the Machine that downloads it ("B").
+14. "bootwright will control this intermediate machine as any other machines
+    (could be os provided or os managed). then it will install the registry
+    and artifact server on it, download the dependencies and store on those
+    services", which the controller and target machines read over HTTPS
+    ("https").
+15. The vulnerability gate fails "with reviewed exception", which accepts (9),
+    and "add to specs/skill that coding agent can handle those exceptions and
+    proceed with project setup to allow build with those cases handled"
+    ([handling a finding](../deferred/controlled-network.md#handling-a-finding)).
+
+Asked whether an operator unconcerned by these risks is served, the session
+took, pending the owner's review:
+
+16. The mirror is optional and its placement free: no mirror keeps today's
+    direct routes, and the mirror's services may run on the controller, on
+    another Machine or outside as the enterprise's own
+    ([deployment choices](../deferred/controlled-network.md#deployment-choices)).
+17. `latest` goes; the next apply replaces a retained release below a raised
+    minimum; an exception expires within 90 days; and the skill takes the
+    finding procedure with the gate, because a procedure for a gate and an
+    exception file that do not exist yet cannot be followed.

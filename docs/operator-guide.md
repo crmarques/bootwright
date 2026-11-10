@@ -208,7 +208,7 @@ registry or file server the enterprise runs:
 | The emulated BMC's image | The libvirt provider's host | `quay.io` | The host's own container configuration |
 | Installation media | The controller | The file or URL you name | `media add --from-file`, or `--from-url` from your own server |
 | An OpenShift release | The controller while it builds the image, then every node | `quay.io`, where the release payload is published | `spec.install.registries` on the cluster |
-| A cluster's operators | The cluster's nodes | The registries of the catalog each add-on binding names | Nothing to do for a Red Hat catalog; another's repositories, such as `icr.io` for IBM's Data Foundation, are mapped by the same `imageDigestSources` where the cluster pulls them by digest |
+| A cluster's operators | The cluster's nodes | The registries of the catalog each add-on binding names | Nothing to do for a Red Hat catalog or IBM's Data Foundation on `icr.io`, vendor origins; another's repositories are mapped by the same `imageDigestSources` where the cluster pulls them by digest |
 | IBM Ceph images and packages | The controller, which resolves each image's digest, then each Ceph host | `cp.icr.io` and `public.dhe.ibm.com`, vendor origins | Nothing to do |
 
 **Tools.** `spec.downloads` on the Environment names a mirror for the
