@@ -571,9 +571,15 @@ record could be read, the size and digest that record stated.
 
 `preflight` reports, as one storage-preflight report, the checks of each stage
 `--stage` selects, by default every stage but `add-ons`. `target` is the
-selected stages in canonical order, joined by commas, and human output heads
-the report `Preflight  <context>` with a `Stages` line. Each stage holds these
-checks:
+selected stages in canonical order, joined by commas. Human output uses the
+[shared layout](#shared-human-layout): a `Preflight <context>` headline marked
+`✓` when every check passed, `!` when any failed or is unknown and `○` when
+the rest are pending; a `Stages` field; a `Checks` section with one resource
+heading per check, its `id` as identity and its status as state, over grey
+`Target`, `Reason`, `Capacity` and `Next` details, the last two only when the
+check has them; and a closing `Summary` field
+(`TestPreflightHumanOutputStylesStatusIdentityAndStateThroughTheSharedRenderer`).
+Each stage holds these checks:
 
 - `controller`: every check the controller's readiness reports for the
   selected context, the host prerequisites of

@@ -612,6 +612,11 @@ func cliGoldens() []cliGolden {
 
 		{golden: "cli-preflight-infrastructure", args: "preflight --context synthetic --stage controller,infrastructure-services,substrates", record: func(r *dispatchRecord) { r.result.storagePreflight = infraPreflightReport(false) }},
 		{golden: "cli-preflight-infrastructure-json", args: "preflight --context synthetic --stage controller,infrastructure-services,substrates --output json", record: func(r *dispatchRecord) { r.result.storagePreflight = infraPreflightReport(false) }},
+		{golden: "cli-preflight-infrastructure-unready", args: "preflight --context synthetic --stage controller,infrastructure-services,substrates", code: 1,
+			stderr: "  error  preflight.failed\n    controller readiness is not proved; inspect the failed checks\n    Next: resolve the reported prerequisites and repeat bootwright preflight --context\n    synthetic --stage controller,infrastructure-services,substrates\n", record: func(r *dispatchRecord) {
+				r.result.storagePreflight = infraPreflightReport(true)
+				r.err = diagnostics.NewFailureWithRemediation("preflight.failed", "controller readiness is not proved; inspect the failed checks", "", "resolve the reported prerequisites and repeat bootwright preflight --context synthetic --stage controller,infrastructure-services,substrates")
+			}},
 		{golden: "cli-preflight-infrastructure-unready-json", args: "preflight --context synthetic --stage controller,infrastructure-services,substrates --output json", code: 1, record: func(r *dispatchRecord) {
 			r.result.storagePreflight = infraPreflightReport(true)
 			r.err = diagnostics.NewFailureWithRemediation("preflight.failed", "infrastructure readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright preflight --context synthetic --stage controller,infrastructure-services,substrates")

@@ -54,7 +54,7 @@ func TestClusterStagePreflightHumanFailureKeepsBothKindsOfChecksUnderOneDiagnost
 	record := &dispatchRecord{result: commandResult{storagePreflight: report}, err: diagnostics.NewFailureWithRemediation("preflight.unknown", "cluster readiness is not proved; inspect the failed, unknown and pending checks", "", "resolve the reported prerequisites and repeat bootwright preflight --stage clusters")}
 	var out, errOut bytes.Buffer
 	exit := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), []string{"preflight", "--stage", "clusters", "--dry-run"})
-	if exit != 1 || !strings.HasPrefix(out.String(), "Preflight  synthetic\n  Stages  clusters\n") || !strings.Contains(out.String(), "resolution.api") || !strings.Contains(out.String(), "capacity.memory") || strings.Count(errOut.String(), "preflight.unknown") != 1 {
+	if exit != 1 || !strings.HasPrefix(out.String(), "  ○ Preflight synthetic\n    Stages  clusters\n") || !strings.Contains(out.String(), "resolution.api") || !strings.Contains(out.String(), "capacity.memory") || strings.Count(errOut.String(), "preflight.unknown") != 1 {
 		t.Fatalf("%d %q %q", exit, out.String(), errOut.String())
 	}
 }
@@ -65,14 +65,39 @@ func TestInfrastructureStagesAndDefaultPreflightHumanFailureKeepEveryCheckUnderO
 		report      *storagepreflight.Report
 		code        string
 	}{
-		{"preflight --stage controller,infrastructure-services,substrates", "Preflight  synthetic\n  Stages  controller, infrastructure-services, substrates\n", infraPreflightReport(true), "preflight.failed"},
-		{"preflight --dry-run", "Preflight  synthetic\n  Stages  controller, infrastructure-services, substrates, machines, clusters\n", allPreflightReport(true), "preflight.unknown"},
+		{"preflight --stage controller,infrastructure-services,substrates", "  ! Preflight synthetic\n    Stages  controller, infrastructure-services, substrates\n", infraPreflightReport(true), "preflight.failed"},
+		{"preflight --dry-run", "  ○ Preflight synthetic\n    Stages  controller, infrastructure-services, substrates, machines, clusters\n", allPreflightReport(true), "preflight.unknown"},
 	} {
 		record := &dispatchRecord{result: commandResult{storagePreflight: row.report}, err: diagnostics.NewFailureWithRemediation(row.code, "readiness is not proved", "", "resolve the reported prerequisites")}
 		var out, errOut bytes.Buffer
 		exit := New(Config{Out: &out, ErrOut: &errOut, Services: dispatchSpies(record)}).Run(context.Background(), strings.Fields(row.args))
-		if exit != 1 || !strings.HasPrefix(out.String(), row.title) || strings.Count(out.String(), "\n  ") < len(row.report.Checks) || strings.Count(errOut.String(), row.code) != 1 {
+		if exit != 1 || !strings.HasPrefix(out.String(), row.title) || strings.Count(out.String(), "\n  ○ ") != len(row.report.Checks) || strings.Count(errOut.String(), row.code) != 1 {
 			t.Fatalf("%s: %d %q %q", row.args, exit, out.String(), errOut.String())
 		}
+	}
+}
+
+func TestPreflightHumanOutputStylesStatusIdentityAndStateThroughTheSharedRenderer(t *testing.T) {
+	var out bytes.Buffer
+	if err := writeStoragePreflightText(WithPresentation(&out, PresentationOptions{Color: "always"}), infraPreflightReport(true)); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"  \x1b[38;5;160m!\x1b[0m Preflight synthetic",
+		"\x1b[1;97mcontroller.listener-firewall\x1b[0m",
+		"\x1b[38;5;160mfailed\x1b[0m",
+		"\x1b[38;5;35mpassed\x1b[0m",
+		"\x1b[1;38;5;69mChecks\x1b[0m",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("preflight text lacks %q:\n%q", want, out.String())
+		}
+	}
+	out.Reset()
+	if err := writeStoragePreflightText(WithPresentation(&out, PresentationOptions{Color: "never", ASCII: true}), allPreflightReport(true)); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out.String(), "\x1b") || !strings.HasPrefix(out.String(), "  o Preflight synthetic\n") || strings.Contains(out.String(), "·") {
+		t.Fatalf("plain ASCII preflight text = %q", out.String())
 	}
 }

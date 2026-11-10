@@ -1,0 +1,20 @@
+  ! Preflight synthetic
+    Stages  controller, infrastructure-services, substrates
+
+  Checks
+  ○ controller.host-packages · passed
+      Target  controller
+      Reason  podman, nmstate
+
+  ○ controller.listener-firewall · failed
+      Target  DNSServer/dns 192.0.2.53:53/udp
+      Reason  required DNSServer/dns inbound socket; observed DNSServer/dns 192.0.2.53:53/udp:
+              closed (interface virbr0, zone libvirt)
+      Next    run bootwright apply --context synthetic --stage controller
+
+  ○ capacity.memory · passed
+      Target    controller
+      Reason    available capacity covers declared guests and reserve
+      Capacity  required 1024 bytes; available 4096; reserve 1024; deficit 0
+
+    Summary  2 passed, 1 failed, 0 unknown, 0 pending

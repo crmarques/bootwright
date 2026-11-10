@@ -124,7 +124,7 @@ func stateStyleCode(value string) string {
 		state = word
 	}
 	switch state {
-	case "ok", "done", "ready", "success", "complete", "completed", "verified", "available", "on", "current", "unchanged", "reused", "trusted", "applied":
+	case "ok", "done", "ready", "passed", "success", "complete", "completed", "verified", "available", "on", "current", "unchanged", "reused", "trusted", "applied":
 		code = "38;5;35"
 	case "running", "active", "working", "create", "update", "observe", "preview":
 		code = "38;5;69"

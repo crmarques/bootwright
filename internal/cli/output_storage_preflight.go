@@ -53,32 +53,51 @@ func writeStoragePreflight(out, errOut io.Writer, command string, report *prefli
 	if jsonMode {
 		return writeEnvelope(out, commandEnvelope{SchemaVersion: "v1alpha1", Command: command, OK: exitCode == 0, ExitCode: exitCode, Result: result, Diagnostics: displayDiagnostics(diagnostics), Logs: []string{}})
 	}
-	if _, err := fmt.Fprintf(out, "Preflight  %s\n  Stages  %s\n", result.Context, strings.ReplaceAll(result.Target, ",", ", ")); err != nil {
+	if err := writeStoragePreflightText(out, report); err != nil {
 		return err
 	}
-	for _, check := range result.Checks {
-		if _, err := fmt.Fprintf(out, "  %s  %s  %s: %s\n", check.Status, check.Target, check.ID, check.Reason); err != nil {
-			return err
+	return writeHumanDiagnostics(errOut, displayDiagnostics(diagnostics))
+}
+
+func writeStoragePreflightText(out io.Writer, report *preflight.Report) error {
+	var text display
+	text.headline(storagePreflightHeadlineStatus(report.Summary), "Preflight "+report.Context)
+	text.fields(field{Label: "Stages", Value: strings.ReplaceAll(report.Target, ",", ", ")})
+	for n, check := range report.Checks {
+		if n == 0 {
+			text.section("Checks")
+		} else {
+			text.separate()
 		}
+		text.resourceHeading("", check.ID, check.Status)
+		details := []field{{Label: "Target", Value: check.Target}, {Label: "Reason", Value: check.Reason}}
 		if c := check.Capacity; c != nil {
 			available := "unknown"
 			if c.Observed {
 				available = fmt.Sprint(c.Available)
 			}
-			if _, err := fmt.Fprintf(out, "    Required %d %s; available %s; reserve %d; deficit %d\n", c.Required, c.Unit, available, c.Reserve, c.Deficit); err != nil {
-				return err
-			}
+			details = append(details, field{Label: "Capacity", Value: fmt.Sprintf("required %d %s; available %s; reserve %d; deficit %d", c.Required, c.Unit, available, c.Reserve, c.Deficit)})
 		}
 		if check.Next != "" {
-			if _, err := fmt.Fprintf(out, "    Next: %s\n", check.Next); err != nil {
-				return err
-			}
+			details = append(details, field{Label: "Next", Value: check.Next})
 		}
+		text.mutedFields(details...)
 	}
-	if _, err := fmt.Fprintf(out, "  Summary  %d passed, %d failed, %d unknown, %d pending\n", result.Summary.Passed, result.Summary.Failed, result.Summary.Unknown, result.Summary.Pending); err != nil {
-		return err
+	text.section("")
+	text.fields(field{Label: "Summary", Value: fmt.Sprintf("%d passed, %d failed, %d unknown, %d pending", report.Summary.Passed, report.Summary.Failed, report.Summary.Unknown, report.Summary.Pending)})
+	return text.writeTo(out)
+}
+
+func storagePreflightHeadlineStatus(summary preflight.Summary) string {
+	switch {
+	case summary.Failed > 0:
+		return "FAIL"
+	case summary.Unknown > 0:
+		return "UNKNOWN"
+	case summary.Pending > 0:
+		return "PENDING"
 	}
-	return writeHumanDiagnostics(errOut, displayDiagnostics(diagnostics))
+	return "OK"
 }
 
 func (r *Runner) writeNegativeReadinessResults(command *cobra.Command, path string, result commandResult, diagnostics []diagnostic) (bool, error) {

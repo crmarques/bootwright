@@ -523,7 +523,7 @@ func TestLabRHELExampleContextAndControllerPreparationJourney(t *testing.T) {
 	// example still needs on this host, including the binding its first apply
 	// publishes, and the baseline check names the host's own readiness.
 	report, diagnostics := contextRun(t, services, 1, "preflight", "--context", "lab-rhel", "--stage", "controller")
-	for _, expected := range []string{"Preflight  lab-rhel", "Stages  controller", "controller.controller-binding", "required controller"} {
+	for _, expected := range []string{"Preflight lab-rhel", "Stages  controller", "controller.controller-binding", "required controller"} {
 		if !strings.Contains(report, expected) {
 			t.Fatalf("context preflight lacks %q:\n%s", expected, report)
 		}

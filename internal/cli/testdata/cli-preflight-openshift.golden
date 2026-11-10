@@ -1,4 +1,9 @@
-Preflight  synthetic
-  Stages  clusters
-  passed  api.sno.example.test  resolution.api: api.sno.example.test resolves to 192.0.2.10
-  Summary  1 passed, 0 failed, 0 unknown, 0 pending
+  ✓ Preflight synthetic
+    Stages  clusters
+
+  Checks
+  ○ resolution.api · passed
+      Target  api.sno.example.test
+      Reason  api.sno.example.test resolves to 192.0.2.10
+
+    Summary  1 passed, 0 failed, 0 unknown, 0 pending

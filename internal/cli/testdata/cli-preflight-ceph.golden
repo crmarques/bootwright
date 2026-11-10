@@ -1,5 +1,10 @@
-Preflight  synthetic
-  Stages  clusters
-  passed  controller  capacity.memory: available capacity covers declared guests and reserve
-    Required 1024 bytes; available 4096; reserve 1024; deficit 0
-  Summary  1 passed, 0 failed, 0 unknown, 0 pending
+  ✓ Preflight synthetic
+    Stages  clusters
+
+  Checks
+  ○ capacity.memory · passed
+      Target    controller
+      Reason    available capacity covers declared guests and reserve
+      Capacity  required 1024 bytes; available 4096; reserve 1024; deficit 0
+
+    Summary  1 passed, 0 failed, 0 unknown, 0 pending

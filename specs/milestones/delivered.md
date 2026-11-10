@@ -12875,6 +12875,21 @@ CLI refuses; it is corrected. Gates: the new proof test failed on the previous
 source; `make focus`, `make quick`, `make check` and `make race` passed; no
 live run or push occurred.
 
+### X367 — Preflight in the shared human layout
+
+**Item:** B1296 (2026-11-10, the owner's report), Kind defect, Owner: CLI,
+completed in-tree at the owner's explicit request. `preflight` wrote its human
+report with raw formatted lines that bypassed the shared renderer, so it
+showed no status mark, identity, state color or wrapping. It now composes the
+[shared layout](../cli/output.md#preflight): a headline marked by the worst
+check status, a `Stages` field, a `Checks` section of one resource heading per
+check over grey `Target`, `Reason`, `Capacity` and `Next` details, and a
+`Summary` field. `passed` joins the green state words. The JSON result, the
+diagnostic and the exit status keep their bytes.
+
+**Commits:** this record's commit. Gates: listed in its message. No live run
+or push occurred.
+
 ### X341 — The controller's state named for `controller install`
 
 **Item:** B1241 (2026-11-09, [D249](backlog.md#d249)), completed in-tree. The
