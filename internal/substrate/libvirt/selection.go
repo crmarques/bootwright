@@ -105,6 +105,7 @@ func hostRequestFor(catalog api.Catalog, provider api.Object, controllerMachine,
 		// block proves it there and installs it only on a host reached over SSH.
 		Provisioned:     !placement.Local(),
 		RefusedPrefixes: refused,
+		Routing:         routingFor(catalog, provider, contextName, networks, legs, trunks, refused),
 		Services:        ServiceUnits(),
 		Trunks:          trunks,
 		URI:             uri,

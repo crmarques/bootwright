@@ -41,6 +41,7 @@ type HostEvidence struct {
 	PoolOwned     bool                `json:"poolOwned"`
 	Postcondition bool                `json:"postcondition"`
 	Request       string              `json:"request"`
+	Routing       RoutingEvidence     `json:"routing"`
 	Services      []ServiceEvidence   `json:"services"`
 	URI           bool                `json:"uri"`
 	VLANRefusal   VLANRefusalEvidence `json:"vlanRefusal"`
@@ -183,6 +184,9 @@ func ValidateHostPresence(data []byte, request HostRequest, digest string) error
 	if !evidence.PoolAutostart {
 		return refusal("lifecycle.state", "the provider's virtual-media pool does not start with the host", "")
 	}
+	if err := matchRouting(evidence.Routing, request, true); err != nil {
+		return err
+	}
 	if err := matchConnections(evidence, request); err != nil {
 		return err
 	}
@@ -319,6 +323,9 @@ func ValidateHostAbsence(data []byte, digest string) error {
 	if err := connectionsAbsent(evidence.Connections); err != nil {
 		return err
 	}
+	if err := routingAbsent(evidence.Routing); err != nil {
+		return err
+	}
 	if !evidence.PoolAnswered {
 		return refusal("lifecycle.state", "the provider host's storage driver did not answer for its pool, so its removal is not proved", "")
 	}
@@ -441,6 +448,9 @@ func unremoved(evidence HostEvidence, request HostRequest) error {
 	if err := matchVLANRefusal(evidence.VLANRefusal, request, false); err != nil {
 		return err
 	}
+	if err := matchRouting(evidence.Routing, request, false); err != nil {
+		return err
+	}
 	if !evidence.URI {
 		return refusal("lifecycle.state", "the declared libvirt connection does not answer", "")
 	}
@@ -497,6 +507,11 @@ func holdsOwned(evidence HostEvidence) error {
 	if err != nil {
 		return err
 	}
+	routed, err := routingOwned(evidence.Routing)
+	if err != nil {
+		return err
+	}
+	held = held || routed
 	vlan := evidence.VLANRefusal
 	present := held || evidence.Pool != "" || (evidence.Directory != nil && *evidence.Directory) || (ready.Answered && ready.Present && ready.Owned) || (vlan.Answered && vlan.Present && vlan.Owned)
 	for _, network := range evidence.Networks {

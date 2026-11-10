@@ -204,6 +204,7 @@ def test_shadowed_routes_reach_the_completion_as_warnings():
 
 
 VLAN_REFUSAL = "bootwright.core.libvirt_vlan_refusal"
+ROUTING = "bootwright.core.libvirt_routing"
 CONNECTIONS = "bootwright.core.libvirt_nm_connections"
 
 
@@ -262,3 +263,55 @@ def test_trunks_and_legs_are_removed_before_the_libvirt_networks():
     assert max(refusals) < first_effect == connections < network
     assert tasks[connections][CONNECTIONS]["state"] == "absent"
     assert "substrate_libvirt_host_connections is changed" in outcome_of(tasks)
+
+
+# Clause 11 of D255: the VLAN refusal unit, the routing table, the trunks, the
+# legs, then the libvirt networks, so no leg ever comes up without the table
+# that isolates it. Every refusal over a trunk, a leg or the table reads the
+# observation taken once the drivers run and comes before the first of them.
+def test_the_routing_table_loads_before_any_leg_comes_up():
+    tasks = apply_tasks()
+    observed = index_of(tasks, lambda task: task.get("register") == "substrate_libvirt_host_running", "observes once the drivers run")
+    refusals = [
+        asserting(tasks, "substrate_libvirt_host_running.observation.connectionRefusals | length == 0"),
+        asserting(tasks, "substrate_libvirt_host_running.observation.routingRefusals | length == 0"),
+        asserting(tasks, "item.guestsAnswered", "observation.trunks"),
+        asserting(tasks, "item.guests | length == 0", "observation.trunks"),
+    ]
+    for index in refusals[2:]:
+        assert "drifted" in str(tasks[index].get("loop"))
+    vlan, routing, connections = (module_at(tasks, module) for module in (VLAN_REFUSAL, ROUTING, CONNECTIONS))
+    network = index_of(tasks, lambda task: (task.get("ansible.builtin.template") or {}).get("src") == "network.xml.j2", "renders a network")
+    assert observed < min(refusals) and max(refusals) < vlan < routing < connections < network
+    for index, module in ((routing, ROUTING), (connections, CONNECTIONS)):
+        assert tasks[index][module] == {"request": "{{ bootwright_substrate_host_request }}"} and "when" not in tasks[index]
+    outcome = outcome_of(tasks)
+    assert "substrate_libvirt_host_routing is changed" in outcome and "substrate_libvirt_host_connections is changed" in outcome
+
+
+# The removal refuses an unanswered or foreign connection, a foreign table and
+# a trunk a domain still runs on before its first effect; the legs and trunks
+# go before the libvirt networks, and the routing table only after them and
+# the firewall barrier, just before the VLAN refusal unit, so isolation is
+# never absent while a leg exists. Legs before trunks is the module's own
+# order.
+def test_legs_are_removed_before_the_trunk_and_the_table_last():
+    tasks = destroy_tasks()
+    refusals = [
+        asserting(tasks, "observation.connections | rejectattr('answered')"),
+        asserting(tasks, "observation.routingRefusals | length == 0"),
+        asserting(tasks, "item.guestsAnswered", "observation.trunks"),
+    ]
+    assert "selectattr(\"present\")" in str(tasks[refusals[2]].get("loop"))
+    connections, routing, vlan = (module_at(tasks, module) for module in (CONNECTIONS, ROUTING, VLAN_REFUSAL))
+    first_effect = min(index for index, task in enumerate(tasks)
+                       if CONNECTIONS in task or (argv_of(task)[:1] == ["/usr/bin/virsh"] and argv_of(task)[-1:] != ["version"]))
+    network = index_of(tasks, lambda task: "net-destroy" in argv_of(task), "destroys a network")
+    pool = index_of(tasks, lambda task: "pool-destroy" in argv_of(task), "destroys the pool")
+    barrier = module_at(tasks, "bootwright.core.libvirt_firewall_ready")
+    proof = index_of(tasks, lambda task: task.get("register") == "substrate_libvirt_host_after", "proves absence")
+    assert max(refusals) < first_effect == connections < network < pool < barrier < routing < vlan < proof
+    for index, module in ((connections, CONNECTIONS), (routing, ROUTING)):
+        assert tasks[index][module]["state"] == "absent"
+    outcome = outcome_of(tasks)
+    assert "substrate_libvirt_host_routing is changed" in outcome and "substrate_libvirt_host_connections is changed" in outcome

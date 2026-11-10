@@ -380,7 +380,13 @@ func hostEvidence(request HostRequest, digest string) json.RawMessage {
 	if len(request.RefusedPrefixes) != 0 {
 		refusal.Present, refusal.Owned, refusal.Enabled, refusal.State, refusal.Routes = true, true, true, "active", request.RefusedPrefixes
 	}
+	routing := RoutingEvidence{}
+	if request.Routing != nil {
+		routing = RoutingEvidence{Answered: true, Enabled: true, Forwarding: request.Routing.Forwarding, Loaded: true, Name: request.Routing.Unit, Owned: true,
+			Present: true, State: "active", Table: RoutingTable(*request.Routing)}
+	}
 	data, _ := json.Marshal(HostEvidence{
+		Routing:     routing,
 		Connections: connections, FirewallReady: ready, VLANRefusal: refusal, Directory: observed(true), Hypervisor: true, NetworkManager: len(connections) != 0,
 		Networks: networks, Pool: "active", PoolAnswered: true, PoolAutostart: true, PoolOwned: true, Postcondition: true, Request: digest, Services: services, URI: true,
 	})

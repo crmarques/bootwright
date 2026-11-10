@@ -134,6 +134,15 @@
       NetworkManager or remove that profile, then repeat the removal
     quiet: true
 
+- name: Refuse to remove a routing table that is not this provider's
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_host_before.observation.routingRefusals | length == 0
+    fail_msg: >-
+      the routing table refuses removal:
+      {{ substrate_libvirt_host_before.observation.routingRefusals | join('; ') }}
+    quiet: true
+
 # Removing a trunk takes its bridge from under every domain plugged into it,
 # so the removal refuses before its first effect while one runs there or while
 # the hypervisor does not answer which do.
@@ -153,7 +162,8 @@
   loop_control:
     label: '{{ item.bridge }}'
 
-# The legs go first and the trunks after them, before the libvirt networks.
+# The legs go first and the trunks after them, before the libvirt networks;
+# the routing table that isolates the legs goes only once no leg exists.
 - name: Remove each VLAN leg and then each trunk this provider owns
   bootwright.core.libvirt_nm_connections:
     request: '{{ bootwright_substrate_host_request }}'
@@ -276,6 +286,12 @@
     state: absent
   register: substrate_libvirt_host_firewall_ready
 
+- name: Remove only this provider's routing table and its unit
+  bootwright.core.libvirt_routing:
+    request: '{{ bootwright_substrate_host_request }}'
+    state: absent
+  register: substrate_libvirt_host_routing
+
 - name: Remove only this provider's unreachable routes and their unit
   bootwright.core.libvirt_vlan_refusal:
     request: '{{ bootwright_substrate_host_request }}'
@@ -312,6 +328,7 @@
              or substrate_libvirt_host_parents is changed
              or substrate_libvirt_host_firewall_ready is changed
              or substrate_libvirt_host_connections is changed
+             or substrate_libvirt_host_routing is changed
              or substrate_libvirt_host_vlan_refusal is changed)
          else 'unchanged' }}
     digest: '{{ bootwright_substrate_host_digest }}'

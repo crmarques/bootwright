@@ -67,6 +67,7 @@ type HostRequest struct {
 	// block proves it present there and installs nothing.
 	Provisioned     bool     `json:"provisioned"`
 	RefusedPrefixes []string `json:"refusedPrefixes,omitempty"`
+	Routing         *Routing `json:"routing,omitempty"`
 	// Services are the libvirt driver daemons this provider depends on, in
 	// canonical order. Each is enabled as well as started, because a network
 	// and a pool set to autostart only come back after a restart when the
@@ -209,6 +210,9 @@ func (r HostRequest) ReservationKeys() []string {
 		if prefix, err := netip.ParsePrefix(network.Address); err == nil {
 			keys = append(keys, "prefix:"+prefix.Masked().String())
 		}
+	}
+	if r.Routing != nil {
+		keys = append(keys, "unit:"+RoutingTable(*r.Routing))
 	}
 	for _, trunk := range r.Trunks {
 		keys = append(keys, "bridge:"+trunk.Bridge)

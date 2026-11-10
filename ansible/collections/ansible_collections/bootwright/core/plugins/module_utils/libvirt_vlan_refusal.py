@@ -108,11 +108,22 @@ def inspect_files(name, networks, root=SYSTEMD, owner=0):
     set of subnets), whether it holds exactly the frozen set, and whether it is
     enabled.
     """
+    return unit_files(name, MARK, unit_content(name, networks), root, owner)
+
+
+def unit_files(name, mark, expected, root=SYSTEMD, owner=0):
+    """What one owned unit's files prove: present, owned by its mark, holding `expected`, and enabled.
+
+    Every owned oneshot unit of a provider host shares these rules: a regular
+    root file of mode 0644 starting with the mark line naming the unit, a
+    symbolic enablement link under multi-user.target.wants pointing at it, and
+    no drop-in directory.
+    """
     for directory in (root, os.path.join(root, WANTS)):
         if os.path.lexists(directory):
             info = os.lstat(directory)
             if not stat.S_ISDIR(info.st_mode) or info.st_uid != owner or stat.S_IMODE(info.st_mode) & 0o022:
-                raise ValueError("unsafe VLAN refusal unit directory")
+                raise ValueError("unsafe systemd unit directory")
     path = os.path.join(root, name)
     present, owned, current = False, True, False
     try:
@@ -123,10 +134,10 @@ def inspect_files(name, networks, root=SYSTEMD, owner=0):
         try:
             info = os.fstat(fd)
             present = True
-            content = os.read(fd, 16385)
+            content = os.read(fd, max(16385, len(expected) + 1))
             owned = (stat.S_ISREG(info.st_mode) and info.st_uid == owner and info.st_nlink == 1
-                     and stat.S_IMODE(info.st_mode) == 0o644 and content.startswith((MARK + name + "\n").encode()))
-            current = owned and content == unit_content(name, networks)
+                     and stat.S_IMODE(info.st_mode) == 0o644 and content.startswith((mark + name + "\n").encode()))
+            current = owned and content == expected
         finally:
             os.close(fd)
     link = os.path.join(root, WANTS, name)

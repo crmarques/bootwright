@@ -28,6 +28,8 @@ OBSERVED_SERVICE = {"enabled", "name", "state"}
 MAX_CONNECTIONS = 64
 OBSERVED_CONNECTION = {"active", "answered", "definition", "device", "name", "owned", "present", "role", "zone"}
 CONNECTION_FLAGS = ("active", "answered", "definition", "owned", "present")
+OBSERVED_ROUTING = {"answered", "enabled", "forwarding", "loaded", "name", "owned", "present", "state", "table"}
+ROUTING_FLAGS = ("answered", "enabled", "forwarding", "loaded", "owned", "present")
 OBSERVED_VLAN_REFUSAL = {"answered", "enabled", "name", "owned", "present", "routes", "state"}
 VLAN_REFUSAL_FLAGS = ("answered", "enabled", "owned", "present")
 
@@ -161,6 +163,38 @@ def connections_left(evidence):
     return any(entry["present"] or entry["active"] or entry["owned"] for entry in evidence["connections"])
 
 
+def routing_of(observation):
+    return {"routing": flagged(observation.get("routing"), OBSERVED_ROUTING, ROUTING_FLAGS, "routing evidence")}
+
+
+def routing_realized(evidence):
+    """Whether the frozen table is held by its owned unit, or no table is frozen and none is held."""
+    routing = evidence["routing"]
+    if not routing["name"]:
+        return routing["answered"] and not routing_left(evidence)
+    return (routing["answered"] and routing["present"] and routing["owned"] and routing["enabled"]
+            and routing["state"] == "active" and routing["loaded"])
+
+
+def forwarding_proved(observation, evidence):
+    """Whether IPv4 forwarding is on wherever the frozen table needs it.
+
+    The observation reads the need from the frozen request; the evidence
+    carries only what the host reported, which Go compares with the request.
+    """
+    needed = observation.get("routingForwarding", False)
+    if not isinstance(needed, bool):
+        raise ValueError("routing forwarding")
+    return not needed or evidence["routing"]["forwarding"]
+
+
+def routing_left(evidence):
+    """Whether anything of the routing unit or its table remains; nft names the table only while it lists one."""
+    routing = evidence["routing"]
+    return bool(routing["present"] or routing["enabled"] or routing["owned"] or routing["loaded"] or routing["state"]
+                or routing["table"])
+
+
 def vlan_refusal_of(observation):
     entry = flagged(observation.get("vlanRefusal"), OBSERVED_VLAN_REFUSAL, VLAN_REFUSAL_FLAGS, "VLAN refusal evidence")
     if not isinstance(entry["routes"], list) or not all(isinstance(route, str) for route in entry["routes"]):
@@ -190,6 +224,7 @@ Held = namedtuple("Held", ("name", "read", "realized", "left", "answered"))
 HELD = (
     Held("connections", connections_of, connections_realized, connections_left,
          lambda evidence: all(entry["answered"] for entry in evidence["connections"])),
+    Held("routing table", routing_of, routing_realized, routing_left, lambda evidence: evidence["routing"]["answered"]),
     Held("VLAN refusal", vlan_refusal_of, vlan_refusal_realized, vlan_refusal_left,
          lambda evidence: evidence["vlanRefusal"]["answered"]),
 )
@@ -236,7 +271,7 @@ def presence(observation, request_digest):
     }
     evidence.update(held_evidence(observation))
     complete = (evidence["hypervisor"] and evidence["uri"] and pool_realized(evidence) and firewall_realized(evidence)
-                and held_realized(evidence))
+                and held_realized(evidence) and forwarding_proved(observation, evidence))
     for entry in evidence["services"]:
         complete = complete and entry["state"] == "active" and entry["enabled"]
     for entry in evidence["networks"]:
@@ -269,7 +304,7 @@ def remaining(observation):
     return names + [held.name for held in HELD if held.left(evidence)]
 
 
-def unproved(evidence):
+def unproved(evidence, observation=None):
     """What a presence proof still lacks, named for the same reason."""
     names = []
     if not evidence["hypervisor"]:
@@ -288,7 +323,10 @@ def unproved(evidence):
         if not entry["bridge"] or (entry["managed"] and not realized(entry)):
             names.append("networks")
             break
-    return names + held_unproved(evidence)
+    names += held_unproved(evidence)
+    if "routing table" not in names and not forwarding_proved(observation or {}, evidence):
+        names.append("routing table")
+    return names
 
 
 def unanswered(evidence):
@@ -370,7 +408,7 @@ def completion(arguments):
         if evidence["postcondition"]:
             return evidence, [], "still present"
     evidence = presence(observation, request_digest)
-    return evidence, unproved(evidence), "not proved"
+    return evidence, unproved(evidence, observation), "not proved"
 
 
 def concluded(arguments):

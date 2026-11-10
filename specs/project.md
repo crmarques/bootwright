@@ -51,12 +51,13 @@ what is delivered.
 Bootwright owns the provider-host virtual networks that a managed
 [`Network`](api/networks.md#libvirt-arm) declares, among them the
 NetworkManager trunk and VLAN leg of a
-[tagged one](api/networks.md#tagged-managed-networks), the network configuration it installs on machines and
+[tagged one](api/networks.md#tagged-managed-networks) with the nftables table
+that routes, translates and isolates its provider's legs, the network configuration it installs on machines and
 nodes, the secondary networks of a cluster, and the managed infrastructure
 services. It only verifies, and never changes, the physical fabric (switches,
 VLAN trunking and routing), an external bridge, the host firewall's
 configuration beyond the trusted-zone membership of a managed network's bridge
-and of its own NetworkManager connections,
+and of its own NetworkManager connections and its own nftables table,
 and an external DHCP or DNS service; a provider's
 [segment](api/machines.md#machine-profiles-and-segments) still names its
 existing bridge ([substrates](substrates.md#provider-host-realization)). DNS and

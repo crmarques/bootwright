@@ -1,0 +1,50 @@
+# Bootwright owned routing: bootwright-lab-lab-libvirt-routing.service
+[Unit]
+Description=Bootwright routes and isolates the VLAN legs on owned trunks
+Before=network-pre.target NetworkManager.service
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+StandardInput=data
+StandardInputText=table inet bootwright-lab-lab-libvirt-routing
+StandardInputText=delete table inet bootwright-lab-lab-libvirt-routing
+StandardInputText=table inet bootwright-lab-lab-libvirt-routing {
+StandardInputText=comment "Bootwright owned routing: bootwright-lab-lab-libvirt-routing.service"
+StandardInputText=set trunks { type ifname; elements = { "br-trunk" }; }
+StandardInputText=set legs { type ifname; elements = { "br-trunk.150", "br-trunk.140" }; }
+StandardInputText=set nat_legs { type ifname; elements = { "br-trunk.140" }; }
+StandardInputText=set managed { type ifname; elements = { "br-trunk", "br-trunk.140", "br-trunk.150", "virbr-lab" }; }
+StandardInputText=set routed { type ifname . ifname; elements = { "br-trunk.140" . "br-trunk.150", "br-trunk.150" . "br-trunk.140" }; }
+StandardInputText=set nat_prefixes { type ipv4_addr; flags interval; auto-merge; elements = { 203.0.113.64/26 }; }
+StandardInputText=set kept_prefixes { type ipv4_addr; flags interval; auto-merge; elements = { 198.51.100.0/24, 203.0.113.0/26, 203.0.113.64/26, 203.0.113.128/26 }; }
+StandardInputText=chain input {
+StandardInputText=type filter hook input priority filter - 10; policy accept;
+StandardInputText=iifname @trunks drop
+StandardInputText=}
+StandardInputText=chain forward {
+StandardInputText=type filter hook forward priority filter - 10; policy accept;
+StandardInputText=iifname @trunks drop
+StandardInputText=oifname @trunks drop
+StandardInputText=meta nfproto ipv6 iifname @legs reject
+StandardInputText=meta nfproto ipv6 oifname @legs reject
+StandardInputText=ct state established,related accept
+StandardInputText=iifname . oifname @routed accept
+StandardInputText=oifname @legs reject
+StandardInputText=iifname @nat_legs oifname != @managed ip daddr != @kept_prefixes accept
+StandardInputText=iifname @legs reject
+StandardInputText=}
+StandardInputText=chain postrouting {
+StandardInputText=type nat hook postrouting priority srcnat - 10; policy accept;
+StandardInputText=ip saddr @nat_prefixes ip daddr != @kept_prefixes oifname != @managed masquerade
+StandardInputText=}
+StandardInputText=}
+ExecStart=/usr/sbin/nft -f -
+ExecStartPost=/usr/sbin/sysctl -w net.ipv4.ip_forward=1
+ExecReload=/usr/sbin/nft -f -
+ExecReload=/usr/sbin/sysctl -w net.ipv4.ip_forward=1
+ExecStopPost=-/usr/sbin/nft delete table inet bootwright-lab-lab-libvirt-routing
+
+[Install]
+WantedBy=multi-user.target

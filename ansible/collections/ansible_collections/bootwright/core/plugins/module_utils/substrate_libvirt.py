@@ -16,6 +16,8 @@ from xml.etree import ElementTree
 
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_firewall_ready import observe as observe_firewall_ready
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_nm_connections import observe as observe_connections
+from ansible_collections.bootwright.core.plugins.module_utils.libvirt_routing import forwarding_required
+from ansible_collections.bootwright.core.plugins.module_utils.libvirt_routing import observe as observe_routing
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_vlan_refusal import observe as observe_vlan_refusal
 
 VIRSH = "/usr/bin/virsh"
@@ -774,8 +776,10 @@ def observe_host(runner, request):
     that network. `poolAutostart` is whether the pool starts with the host and
     `poolOwned` whether it targets the frozen directory. `vlanRefusal` covers
     the unit that holds the unreachable routes of the frozen VLAN subnets and
-    those routes. `networkManager` and `connections` are the evidence of the
-    trunks and the VLAN legs; `connectionRefusals` says why an apply would
+    those routes. `networkManager`, `connections` and `routing` are the
+    evidence of the trunks, the VLAN legs and the routing table that holds
+    them, and `routingForwarding` whether that table needs IPv4 forwarding,
+    which the evidence never carries; `connectionRefusals` and `routingRefusals` say why an apply would
     refuse them before any effect, and `trunks` names, for each trunk the host
     holds, whether it drifted and the domains plugged into it, which neither a
     reactivation nor a removal may disconnect. A trunk or leg device is a link
@@ -812,6 +816,7 @@ def observe_host(runner, request):
             "enabled": unit_enabled(runner, service),
         })
     connections = observe_connections(runner, request)
+    routing, routing_refusals = observe_routing(runner, request)
     collided, shadows, probed = host_conflicts(
         runner, (request.get("networks") or []) + connections["pseudo"], ours | set(connections["devices"]))
     return {
@@ -829,6 +834,9 @@ def observe_host(runner, request):
         "poolAnswered": pool["answered"],
         "poolAutostart": pool["autostart"],
         "poolOwned": pool["owned"],
+        "routing": routing,
+        "routingForwarding": forwarding_required(request),
+        "routingRefusals": routing_refusals,
         "services": services,
         "shadows": shadows,
         "trunks": trunk_guests(runner, request, connections["trunks"], answers, context),

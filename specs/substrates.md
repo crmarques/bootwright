@@ -303,7 +303,8 @@ specifies.
 requires firewalld already enabled and running. Bootwright never enables
 firewalld or changes its configuration: on the host firewall it owns only its
 own NetworkManager connections, whose trusted-zone binding NetworkManager
-makes when it activates them.
+makes when it activates them, and its own nftables
+[routing table](#routing-table).
 It owns one readiness unit named
 `bootwright-<context>-<provider>-firewalld-ready.service` and exactly its
 enablement link under `virtnetworkd.service.wants`. The oneshot unit runs after
@@ -393,14 +394,18 @@ and `bridge:<device>` and `prefix:<masked prefix>` for every leg, because a
 link name and a connected route are host-global; and `unit:<name>` without the
 `.service` suffix for the provider's
 firewall readiness unit and for its VLAN-refusal unit when it has managed
-networks or legs
-(`TestHostReservationsClaimEveryManagedNetworkAndThePool`). One host defines
+networks or legs, and for its routing unit, whose name is also its table's
+(`TestHostReservationsClaimEveryManagedNetworkAndThePool`,
+`TestTheHostReservationClaimsTheTrunkLegsAndRoutingUnit`). One host defines
 at most 20 managed Networks across its providers, a host-wide rule of the
 [Libvirt arm](api/networks.md#libvirt-arm), so a provider's reservation uses at
-most 64 of the 64 keys one reservation holds: 20 × 3 network keys, two pool
-keys and two unit keys, the readiness unit's and the VLAN-refusal unit's
+most 64 keys, all one reservation holds: 20 × 3 network keys, two pool keys
+and the readiness and VLAN-refusal unit keys. Each trunk counts as a managed
+Network and claims one key, each leg two and the routing unit one, so k legs on
+t trunks leave at most 65 − k − 2t ≤ 62 keys
 ([controller record](contexts/controller-record.md#bounds),
-`TestTheManagedNetworkBoundKeepsTheHostReservationWithinItsKeys`).
+`TestTheManagedNetworkBoundKeepsTheHostReservationWithinItsKeys`,
+`TestTheManagedNetworkBoundWithATrunkKeepsTheHostReservationWithinItsKeys`).
 
 Each provider segment claims the shared key `bridge-use:<name>` for the
 bridge it names, so a bridge another context defines is known to be in
@@ -555,14 +560,15 @@ answer. The apply writes the keyfile of an absent connection or of an owned one
 whose definition differs and loads it, then activates it with `nmcli -w 60
 connection up uuid <uuid>`, and activates one that is down the same way; a
 trunk whose definition differs while a domain is plugged into it refuses as a
-network restart does. `nmcli` only reads, loads, activates and deletes. It
-brings each trunk up before its legs, reading the legs again after, both after
-the VLAN refusal unit and before any libvirt network; the removal refuses while
-a domain is plugged into a trunk or a profile holding a frozen UUID is foreign,
-then deletes the legs, then the trunks, each with `nmcli -w 60 connection
-delete uuid <uuid>` and its keyfile, before the libvirt networks, so the
-refused VLAN subnets stay refused while any leg exists, and proves every
-profile, keyfile and device gone.
+network restart does. `nmcli` only reads, loads, activates and deletes. The
+apply runs, in order, the VLAN refusal unit, the routing unit, each trunk, its
+legs (read again once the trunks are up), the libvirt networks and the pool.
+The removal refuses while a domain is plugged into a trunk or a profile holding
+a frozen UUID is foreign, then removes the legs, the trunks (each with `nmcli
+-w 60 connection delete uuid <uuid>` and its keyfile, proving every profile,
+keyfile and device gone), the libvirt networks, the pool, the firewall
+barrier, the routing unit and the VLAN refusal unit, so isolation is never
+absent while a leg exists.
 
 With a leg, presence evidence requires
 `networkManager` true and `connections[]` covering exactly the frozen
@@ -582,6 +588,145 @@ active; positive no effect of a removal requires each present, owned and
 active; an owned connection present without the whole is a positive partial
 realization, and one present without this context's ownership is foreign and
 stays unknown (`TestAnOwnedConnectionAloneIsAPartialRealization`).
+
+### Routing table
+
+A provider with a leg owns one nftables table `inet <table>` that routes the
+pairs its tagged managed Networks declare in
+[`routedNetworkRefs`](api/networks.md#tagged-managed-networks), masquerades the
+legs whose `forward` is `nat` to the uplink, and refuses every other pair; the
+request freezes it in `routing` `{forwarding, keptPrefixes, managedDevices,
+natPrefixes, routed[]{from, to}, unit}`, absent without a leg
+(`TestTheRoutingRequestFreezesEveryDeclaredPairAndNoOther`). `unit` is
+`bootwright-<context>-<provider>-routing.service` and `<table>` its name
+without `.service`. `managedDevices` holds every trunk, leg device and managed
+libvirt bridge of the provider; `routed` each pair of leg devices one of the two
+Networks names, in both directions, ordered by `from` then `to`; `natPrefixes`
+the masked prefix of each `nat` leg; `keptPrefixes` every IPv4 managed and
+refused prefix of the provider, canonical and in order; `forwarding` whether a
+`nat` leg or a routed pair exists. The uplink is every interface outside
+`managedDevices`. Every value reaches the ruleset only once the collection
+proves it against the frozen trunks, legs and networks: `managedDevices` must
+be exactly the sorted trunk bridges, leg devices and managed network bridges of
+the request, each an interface name of at most 15 bytes of `A-Za-z0-9_.-`, so
+no element can carry a quote or a statement
+(`test_a_managed_device_that_would_inject_a_statement_never_reaches_the_ruleset`).
+
+The unit holds the table as the VLAN refusal unit holds its routes, with the
+same ownership mark rule (mark `# Bootwright owned routing: <unit>`),
+enablement under `multi-user.target.wants`, drop-in and override refusals and
+removal. Its file is exactly:
+
+```text
+# Bootwright owned routing: <unit>
+[Unit]
+Description=Bootwright routes and isolates the VLAN legs on owned trunks
+Before=network-pre.target NetworkManager.service
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+StandardInput=data
+StandardInputText=<one line per ruleset line, in order>
+ExecStart=/usr/sbin/nft -f -
+ExecStartPost=/usr/sbin/sysctl -w net.ipv4.ip_forward=1
+ExecReload=/usr/sbin/nft -f -
+ExecReload=/usr/sbin/sysctl -w net.ipv4.ip_forward=1
+ExecStopPost=-/usr/sbin/nft delete table inet <table>
+
+[Install]
+WantedBy=multi-user.target
+```
+
+The `ExecStartPost=` line and the second `ExecReload=` line are present only
+with `forwarding`. Every process of the unit reads the ruleset as its standard
+input, so a reload loads it in place. Forwarding is the
+one host setting outside its NetworkManager connections and table that
+Bootwright sets, as libvirt's network driver does, and it is never reset. The
+ruleset replaces the table atomically, each line one `StandardInputText=`:
+
+```text
+table inet <table>
+delete table inet <table>
+table inet <table> {
+comment "Bootwright owned routing: <unit>"
+set trunks { type ifname; elements = { <trunks> }; }
+set legs { type ifname; elements = { <legs> }; }
+set nat_legs { type ifname; elements = { <nat legs> }; }
+set managed { type ifname; elements = { <managedDevices> }; }
+set routed { type ifname . ifname; elements = { <routed> }; }
+set nat_prefixes { type ipv4_addr; flags interval; auto-merge; elements = { <natPrefixes> }; }
+set kept_prefixes { type ipv4_addr; flags interval; auto-merge; elements = { <keptPrefixes> }; }
+chain input {
+type filter hook input priority filter - 10; policy accept;
+iifname @trunks drop
+}
+chain forward {
+type filter hook forward priority filter - 10; policy accept;
+iifname @trunks drop
+oifname @trunks drop
+meta nfproto ipv6 iifname @legs reject
+meta nfproto ipv6 oifname @legs reject
+ct state established,related accept
+iifname . oifname @routed accept
+oifname @legs reject
+iifname @nat_legs oifname != @managed ip daddr != @kept_prefixes accept
+iifname @legs reject
+}
+chain postrouting {
+type nat hook postrouting priority srcnat - 10; policy accept;
+ip saddr @nat_prefixes ip daddr != @kept_prefixes oifname != @managed masquerade
+}
+}
+```
+
+Elements are written `, `-separated in request order: `<trunks>` each
+`trunks[].bridge` and `<legs>` each `legs[].device`, quoted, `<nat legs>` the
+quoted devices of the `nat` legs, `<managedDevices>` quoted, `<routed>` each
+pair as `"<from>" . "<to>"`, and the prefixes unquoted; a set with none omits
+its `elements = { ... };` clause. The chains run before libvirt's (priority 0
+and `srcnat`) and firewalld's (`filter + 10`), and a drop or reject in any base
+chain is final, so traffic into a leg is refused before libvirt's own rules
+would accept it. Traffic into a libvirt NAT or isolated network stays refused
+by libvirt.
+
+The chains judge routed traffic. Bootwright assumes `br_netfilter` does not
+pass bridged frames to the inet hooks, as on a host where libvirt's bridges
+carry guest traffic, and it neither loads nor configures that module; where it
+does pass them, a frame bridged between two ports of one trunk meets these
+chains with the trunk as its interfaces, which no in-tree test proves.
+
+Before any effect, on apply and on destroy, a table of the name while the unit
+is not owned and running, and an `nft` read that does not answer, refuse
+`lifecycle.state`; `/usr/sbin/nft` must be present. An apply rewrites the unit
+when its content differs and reloads systemd, starts the unit while it does
+not run, and otherwise reloads it while its content differed, its loaded
+table differs or, with `forwarding`, `net.ipv4.ip_forward` is not 1; it never
+restarts or stops it, because only a stop deletes the table. `nft -f -`
+applies the ruleset in one transaction, so a ruleset it refuses on a reload
+leaves the table it would replace loaded and the unit active, and the apply
+refuses; one it refuses on a start leaves no table and the unit failed
+(`test_a_failed_reload_keeps_the_table_it_would_replace_and_a_replay_converges`).
+Not yet met: a unit that fails at boot leaves no table while NetworkManager
+still brings the legs up, which then reach whatever firewalld's trusted zone
+and libvirt's rules admit; tracked as
+[B1304](milestones/backlog.md#b1304). The observation reports `routing` `{name, table,
+answered, present, owned, enabled, state, loaded, forwarding}`: the unit, the
+table's name when `nft` lists one of it, whether systemd and `nft` answered,
+the unit's ownership, enablement and state, whether the live table carries
+exactly the frozen comment, chains, hooks, priorities, policies, set elements
+and each chain's rule count, and whether `net.ipv4.ip_forward` is 1. Not yet
+met: `loaded` counts each chain's rules without comparing their expressions,
+so a rule replaced by another in the same chain still reads loaded and is
+never repaired; tracked as [B1302](milestones/backlog.md#b1302). Presence
+requires the unit owned, enabled and active, the table loaded and, with
+`forwarding`, forwarding on, in the collection's postcondition as in Go's
+judgment, or nothing reported without `routing`; removal
+requires an answered observation with unit, enablement and table gone; a
+removal took nothing back while the unit is owned and enabled; and a table or
+unit of the name without this provider's ownership is foreign
+(`TestTheRoutingTableIsProvedOwnedLoadedAndForwarding`).
 
 ## Machine realization
 

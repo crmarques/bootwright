@@ -1,8 +1,8 @@
 implementation: substrate-host-libvirt-v1
-content-digest: 27bd832625fef6022d9eb884e323edafd80730d0eca3d8a5cfc71d49d483246a
+content-digest: 812f1dd4e04ddd0795b677a32832be53321ebaec50962ca5a78d31e4dd1d5ce1
 request-version: substrate-host-libvirt-v1
 automation-formats: https://bootwright.io/substrate/v1
-mark-formats: Bootwright owned VLAN refusal, Bootwright owned readiness barrier, Description=Bootwright managed network firewall, bootwright.io.context, bootwright.io.network, bootwright.io.provider, bootwright.io.role, https://bootwright.io/substrate/v1
+mark-formats: Bootwright owned VLAN refusal, Bootwright owned readiness barrier, Bootwright owned routing, Description=Bootwright managed network firewall, bootwright.io.context, bootwright.io.network, bootwright.io.provider, bootwright.io.role, https://bootwright.io/substrate/v1
 proof-ids: none
 fixed-places: none
 effect-pins:
@@ -13,6 +13,7 @@ effect-pins:
   bridge-use-claim
   vlan-refusal-v1
   nm-trunk-legs-v1
+  routing-table-v1
 request-identity:
   identity.context
   identity.object
@@ -30,6 +31,7 @@ request-identity:
   legs[].name
   legs[].device
   legs[].uuid
+  routing.unit
 request-schema:
   firewallReadyUnit string
   identity struct libvirt.Identity
@@ -65,6 +67,15 @@ request-schema:
   poolPath string
   provisioned bool
   refusedPrefixes []string omitempty
+  routing *struct libvirt.Routing omitempty
+  routing.forwarding bool
+  routing.keptPrefixes []string
+  routing.managedDevices []string
+  routing.natPrefixes []string
+  routing.routed []struct libvirt.RoutedPair
+  routing.routed[].from string
+  routing.routed[].to string
+  routing.unit string
   services []string
   trunks []struct libvirt.Trunk omitempty
   trunks[].bridge string
@@ -113,6 +124,16 @@ evidence-schema:
   poolOwned bool
   postcondition bool
   request string
+  routing struct libvirt.RoutingEvidence
+  routing.answered bool
+  routing.enabled bool
+  routing.forwarding bool
+  routing.loaded bool
+  routing.name string
+  routing.owned bool
+  routing.present bool
+  routing.state string
+  routing.table string
   services []struct libvirt.ServiceEvidence
   services[].enabled bool
   services[].name string

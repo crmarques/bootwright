@@ -183,6 +183,18 @@
       {{ substrate_libvirt_host_running.observation.connectionRefusals | join('; ') }}
     quiet: true
 
+# The routing table is only ever this provider's while its owned unit holds
+# it, so a foreign unit, a table of its name the unit does not hold, nft
+# missing and an unanswered read each refuse before any effect.
+- name: Refuse a routing table that is not this provider's
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_host_running.observation.routingRefusals | length == 0
+    fail_msg: >-
+      the routing table refuses:
+      {{ substrate_libvirt_host_running.observation.routingRefusals | join('; ') }}
+    quiet: true
+
 # A broader route through a gateway is admitted; the completion reports it as
 # a warning of the run. It is also written here, so an apply that fails before
 # its completion still shows it in the attempt output.
@@ -301,8 +313,9 @@
   loop_control:
     label: '{{ item.bridge }}'
 
-# The first host effects, in order: the VLAN refusal unit, the trunks, the
-# legs, then the libvirt networks and the pool. A managed bridge carries each
+# The first host effects, in order: the VLAN refusal unit, the routing table,
+# the trunks, the legs, then the libvirt networks and the pool, so a leg never
+# comes up without the table that isolates it. A managed bridge carries each
 # tagged Network between guests only, so the host holds no connected route for
 # its subnet and a guest's packet for it would follow the default route out
 # through the NAT; an owned unit holds an unreachable route per subnet instead.
@@ -312,6 +325,11 @@
   bootwright.core.libvirt_vlan_refusal:
     request: '{{ bootwright_substrate_host_request }}'
   register: substrate_libvirt_host_vlan_refusal
+
+- name: Hold the routing table of the VLAN legs before any leg comes up
+  bootwright.core.libvirt_routing:
+    request: '{{ bootwright_substrate_host_request }}'
+  register: substrate_libvirt_host_routing
 
 - name: Hold each trunk and then each VLAN leg as a NetworkManager connection
   bootwright.core.libvirt_nm_connections:
@@ -532,6 +550,7 @@
              or substrate_libvirt_host_daemon is changed
              or substrate_libvirt_host_firewall_ready is changed
              or substrate_libvirt_host_vlan_refusal is changed
+             or substrate_libvirt_host_routing is changed
              or substrate_libvirt_host_connections is changed
              or substrate_libvirt_host_pool_directory is changed
              or substrate_libvirt_host_running.observation.pool != 'active'

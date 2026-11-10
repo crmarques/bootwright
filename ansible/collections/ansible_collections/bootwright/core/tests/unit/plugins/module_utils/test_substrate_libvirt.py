@@ -1121,3 +1121,27 @@ def test_networkmanager_that_is_not_ready_refuses_before_any_effect(tmp_path, in
     observation = observe_host(stopped, dict(TAGGED, poolPath=str(tmp_path / "pool")))
     assert observation["networkManager"] is False
     assert observation["connectionRefusals"][0].startswith("a tagged managed Network needs NetworkManager.service active")
+
+
+@pytest.fixture
+def nft_installed(monkeypatch, installed):
+    from ansible_collections.bootwright.core.plugins.module_utils import libvirt_routing
+
+    monkeypatch.setattr(libvirt_routing, "executable", lambda path: True)
+
+
+def test_the_host_observation_carries_the_routing_table(tmp_path, nft_installed):
+    observation = observe_host(tagged_answers(), dict(TAGGED, poolPath=str(tmp_path / "pool")))
+    assert observation["routing"] == {"name": "bootwright-lab-host-routing.service", "table": "", "answered": True,
+                                      "present": False, "owned": False, "enabled": False, "state": "", "loaded": False,
+                                      "forwarding": observation["routing"]["forwarding"]}
+    assert observation["routingRefusals"] == []
+
+
+def test_a_foreign_table_of_the_routing_units_name_refuses_before_any_effect(tmp_path, nft_installed):
+    foreign = tagged_answers(**{"/usr/sbin/nft -j list tables": (
+        0, '{"nftables": [{"table": {"family": "inet", "name": "bootwright-lab-host-routing"}}]}', ""),
+        "list table inet bootwright-lab-host-routing": (0, '{"nftables": []}', "")})
+    observation = observe_host(foreign, dict(TAGGED, poolPath=str(tmp_path / "pool")))
+    assert observation["routing"]["present"] and not observation["routing"]["owned"]
+    assert "nft delete table inet bootwright-lab-host-routing" in observation["routingRefusals"][0]

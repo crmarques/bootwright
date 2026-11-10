@@ -22,8 +22,10 @@ DIGEST = "a" * 64
 CARRIED = {"answered": True, "autostart": True, "bridge": True, "definition": True, "managed": True, "name": "n", "owned": True, "state": "active", "uuid": "u"}
 
 
-# A provider with no VLAN subnet to refuse has its VLAN refusal unit answered
-# for and absent.
+# A provider with no tagged managed Network and no VLAN subnet to refuse holds
+# no routing table, and its VLAN refusal unit is answered for and absent.
+ROUTING_ABSENT = {"name": "", "table": "", "answered": True, "present": False, "owned": False, "enabled": False,
+                  "state": "", "loaded": False, "forwarding": False}
 VLAN_REFUSAL_ABSENT = {"name": "bootwright-lab-host-vlan-refusal.service", "answered": True, "present": False, "owned": False,
                        "enabled": False, "state": "", "routes": []}
 
@@ -43,6 +45,7 @@ def host_observation(**overrides):
     observation.update(overrides)
     observation.setdefault("networkManager", False)
     observation.setdefault("connections", [])
+    observation.setdefault("routing", dict(ROUTING_ABSENT))
     observation.setdefault("vlanRefusal", dict(VLAN_REFUSAL_ABSENT))
     if "firewallReady" not in observation:
         removed = not observation["directory"] and not observation["pool"]
@@ -764,6 +767,53 @@ def test_a_removal_proves_every_trunk_and_leg_gone():
 def test_malformed_trunk_or_leg_evidence_is_never_published(overrides):
     with pytest.raises(ValueError):
         substrate_host_protocol.presence(with_legs(**overrides), DIGEST)
+
+
+ROUTING_HELD = {"name": "bootwright-lab-host-routing.service", "table": "bootwright-lab-host-routing", "answered": True, "present": True,
+                "owned": True, "enabled": True, "state": "active", "loaded": True, "forwarding": True}
+ROUTING_GONE = dict(ROUTING_HELD, table="", present=False, owned=False, enabled=False, state="", loaded=False)
+
+
+def test_the_routing_table_is_published_as_evidence_and_held_by_its_owned_unit():
+    evidence = substrate_host_protocol.presence(host_observation(routing=dict(ROUTING_HELD)), DIGEST)
+    assert evidence["postcondition"] and evidence["routing"] == ROUTING_HELD
+    for broken in ({"loaded": False}, {"state": "failed"}, {"enabled": False}, {"owned": False}, {"answered": False}):
+        evidence = substrate_host_protocol.presence(host_observation(routing=dict(ROUTING_HELD, **broken)), DIGEST)
+        assert not evidence["postcondition"] and "routing table" in substrate_host_protocol.unproved(evidence), broken
+    for stray in ({"present": True}, {"table": "bootwright-lab-host-routing"}, {"state": "failed"}):
+        assert not substrate_host_protocol.presence(host_observation(routing=dict(ROUTING_ABSENT, **stray)), DIGEST)["postcondition"], stray
+
+
+def test_a_table_that_needs_forwarding_is_unproved_while_the_host_does_not_forward():
+    held = host_observation(routing=dict(ROUTING_HELD, forwarding=False), routingForwarding=True)
+    evidence = substrate_host_protocol.presence(held, DIGEST)
+    assert not evidence["postcondition"] and "routing table" in substrate_host_protocol.unproved(evidence, held)
+    assert "routingForwarding" not in evidence
+    _published, unmet, _verb = substrate_host_protocol.completion({"digest": DIGEST, "observation": held})
+    assert "routing table" in unmet
+    quiet = host_observation(routing=dict(ROUTING_HELD, forwarding=False), routingForwarding=False)
+    assert substrate_host_protocol.presence(quiet, DIGEST)["postcondition"]
+    with pytest.raises(ValueError):
+        substrate_host_protocol.presence(host_observation(routing=dict(ROUTING_HELD), routingForwarding="yes"), DIGEST)
+
+
+def test_a_removal_proves_the_routing_table_and_its_unit_gone():
+    assert substrate_host_protocol.absence(removed_host(routing=dict(ROUTING_GONE)), DIGEST)["postcondition"]
+    for left in ({"present": True}, {"loaded": True}, {"enabled": True}, {"state": "failed"}, {"table": "bootwright-lab-host-routing"}):
+        observation = removed_host(routing=dict(ROUTING_GONE, **left))
+        assert not substrate_host_protocol.absence(observation, DIGEST)["postcondition"], left
+        assert "routing table" in substrate_host_protocol.remaining(observation), left
+    evidence = substrate_host_protocol.absence(removed_host(routing=dict(ROUTING_GONE, answered=False)), DIGEST)
+    assert not evidence["postcondition"] and "routing table" in substrate_host_protocol.unanswered(evidence)
+
+
+@pytest.mark.parametrize("routing", [None, {key: value for key, value in ROUTING_HELD.items() if key != "loaded"},
+                                     dict(ROUTING_HELD, forwarding="1"), dict(ROUTING_HELD, table=None)])
+def test_malformed_routing_evidence_is_never_published(routing):
+    observation = host_observation()
+    observation["routing"] = routing
+    with pytest.raises(ValueError):
+        substrate_host_protocol.presence(observation, DIGEST)
 
 
 def test_a_provider_with_only_vlan_legs_needs_its_firewall_barrier():

@@ -157,6 +157,17 @@
             "uri": true,
             "connections": [],
             "networkManager": false,
+            "routing": {
+              "name": "",
+              "table": "",
+              "answered": true,
+              "present": false,
+              "owned": false,
+              "enabled": false,
+              "state": "",
+              "loaded": false,
+              "forwarding": false
+            },
             "vlanRefusal": {
               "name": "bootwright-lab-host-vlan-refusal.service",
               "answered": true,
@@ -231,6 +242,17 @@
             "uri": false,
             "connections": [],
             "networkManager": false,
+            "routing": {
+              "name": "",
+              "table": "",
+              "answered": true,
+              "present": false,
+              "owned": false,
+              "enabled": false,
+              "state": "",
+              "loaded": false,
+              "forwarding": false
+            },
             "vlanRefusal": {
               "name": "bootwright-lab-host-vlan-refusal.service",
               "answered": true,
@@ -297,6 +319,17 @@
             "uri": true,
             "connections": [],
             "networkManager": false,
+            "routing": {
+              "name": "",
+              "table": "",
+              "answered": true,
+              "present": false,
+              "owned": false,
+              "enabled": false,
+              "state": "",
+              "loaded": false,
+              "forwarding": false
+            },
             "vlanRefusal": {
               "name": "bootwright-lab-host-vlan-refusal.service",
               "answered": true,
@@ -395,6 +428,17 @@
             "uri": true,
             "connections": [],
             "networkManager": false,
+            "routing": {
+              "name": "",
+              "table": "",
+              "answered": true,
+              "present": false,
+              "owned": false,
+              "enabled": false,
+              "state": "",
+              "loaded": false,
+              "forwarding": false
+            },
             "vlanRefusal": {
               "name": "bootwright-lab-host-vlan-refusal.service",
               "answered": true,
@@ -469,6 +513,17 @@
             "uri": true,
             "connections": [],
             "networkManager": false,
+            "routing": {
+              "name": "",
+              "table": "",
+              "answered": true,
+              "present": false,
+              "owned": false,
+              "enabled": false,
+              "state": "",
+              "loaded": false,
+              "forwarding": false
+            },
             "vlanRefusal": {
               "name": "bootwright-lab-host-vlan-refusal.service",
               "answered": true,
@@ -541,6 +596,17 @@
             "uri": true,
             "connections": [],
             "networkManager": false,
+            "routing": {
+              "name": "",
+              "table": "",
+              "answered": true,
+              "present": false,
+              "owned": false,
+              "enabled": false,
+              "state": "",
+              "loaded": false,
+              "forwarding": false
+            },
             "vlanRefusal": {
               "name": "bootwright-lab-host-vlan-refusal.service",
               "answered": true,

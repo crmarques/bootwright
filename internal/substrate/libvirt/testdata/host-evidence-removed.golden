@@ -31,6 +31,17 @@
   "poolOwned": false,
   "postcondition": true,
   "request": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "routing": {
+    "answered": false,
+    "enabled": false,
+    "forwarding": false,
+    "loaded": false,
+    "name": "",
+    "owned": false,
+    "present": false,
+    "state": "",
+    "table": ""
+  },
   "services": [
     {
       "enabled": true,

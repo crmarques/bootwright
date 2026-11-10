@@ -99,9 +99,9 @@ func hostDescription(verb reconciliation.Verb, request HostRequest) string {
 }
 
 func hostImpacts(verb reconciliation.Verb, request HostRequest) []string {
-	path, pool, network, bridge, link := "create-path", "create-libvirt-pool", "create-libvirt-network", "create-bridge", "create-vlan-link"
+	path, pool, network, bridge, link, table := "create-path", "create-libvirt-pool", "create-libvirt-network", "create-bridge", "create-vlan-link", "create-nft-table"
 	if verb == reconciliation.Destroy {
-		path, pool, network, bridge, link = "remove-path", "remove-libvirt-pool", "remove-libvirt-network", "remove-bridge", "remove-vlan-link"
+		path, pool, network, bridge, link, table = "remove-path", "remove-libvirt-pool", "remove-libvirt-network", "remove-bridge", "remove-vlan-link", "remove-nft-table"
 	}
 	impacts := []string{path + " " + request.PoolPath, pool + " " + request.PoolName}
 	if request.Provisioned && verb != reconciliation.Destroy {
@@ -113,6 +113,9 @@ func hostImpacts(verb reconciliation.Verb, request HostRequest) []string {
 		if declared.Managed {
 			impacts = append(impacts, network+" "+declared.Name, bridge+" "+declared.Bridge)
 		}
+	}
+	if request.Routing != nil {
+		impacts = append(impacts, table+" inet "+RoutingTable(*request.Routing))
 	}
 	for _, trunk := range request.Trunks {
 		impacts = append(impacts, bridge+" "+trunk.Bridge)

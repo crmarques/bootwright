@@ -65,6 +65,17 @@
   "poolOwned": true,
   "postcondition": true,
   "request": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "routing": {
+    "answered": true,
+    "enabled": true,
+    "forwarding": true,
+    "loaded": true,
+    "name": "bootwright-lab-lab-libvirt-routing.service",
+    "owned": true,
+    "present": true,
+    "state": "active",
+    "table": "bootwright-lab-lab-libvirt-routing"
+  },
   "services": [
     {
       "enabled": true,

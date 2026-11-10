@@ -41,6 +41,9 @@ argument_specs:
             type: list
             elements: str
             required: false
+          routing:
+            type: dict
+            required: false
           services:
             type: list
             elements: str

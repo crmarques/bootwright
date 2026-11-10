@@ -81,6 +81,7 @@ network defined on a provider's host. Its fields, in emitted order:
 | `forward` | `nat` or `none` | `nat` | The libvirt forward mode; with `spec.vlan`, whether the leg's traffic is masqueraded to the uplink. |
 | `hostAddress` | IP | the IPv4 gateway, else the IPv6 gateway | The host's address on the bridge, or with `spec.vlan` on its leg: a host address inside the CIDR of its family, under the rules a gateway follows. Required when the Network declares no gateway. |
 | `taggedNetworkRefs` | set of `Network` references | none | The VLAN networks guests may stack on this bridge. Each declares `vlan` and is not the Network itself. |
+| `routedNetworkRefs` | set of `Network` references | none | With `spec.vlan`, the [tagged managed Networks](#tagged-managed-networks) of the same provider the host routes this one to and from. |
 
 The host block of the provider `providerRef` names defines the network
 ([provider host realization](../substrates.md#provider-host-realization)) as
@@ -143,6 +144,18 @@ provider segment or another provider's Network naming a trunk is refused at
 - A leg device `<bridge>.<vlan>` longer than the 15 bytes of a Linux interface
   name, at `$.spec.libvirt.bridge`, naming the longest bridge that fits
   (`TestALegDeviceFitsTheInterfaceNameBound`).
+
+The host routes between two legs only when one names the other in
+`routedNetworkRefs`, one side being enough, and masquerades a leg whose
+`forward` is `nat` to every interface outside the provider's trunks, legs and
+managed bridges; every other pair stays refused
+([routing table](../substrates.md#routing-table)). Each entry is
+refused `api.invariant` at its index when it names the Network itself, or a
+Network that is not a tagged managed Network of the same provider; routing to
+an untagged libvirt network or across providers is not yet admitted
+([B1287](../milestones/backlog.md#b1287)), and `routedNetworkRefs` on an
+untagged managed Network is refused at the field
+(`TestRoutedNetworkRefsNameTaggedManagedNetworksOfTheSameProvider`).
 
 ## Cross-kind checks
 

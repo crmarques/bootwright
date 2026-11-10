@@ -84,7 +84,37 @@ func validateNetworkArm(o api.Object, c api.Catalog) []api.Issue {
 				Remediation: fmt.Sprintf("set spec.mtu of %s to %d, or remove it from spec.libvirt.taggedNetworkRefs of %s", tagged.Identity(), defaultMTU, o.Identity())})
 		}
 	}
-	return add(issues, validateLeg(o)...)
+	issues = add(issues, validateLeg(o)...)
+	return add(issues, validateRoutedNetworks(o, c)...)
+}
+
+func validateRoutedNetworks(o api.Object, c api.Catalog) []api.Issue {
+	const path = "$.spec.libvirt.routedNetworkRefs"
+	refs := o.Spec().Get(ArmLibvirt, "routedNetworkRefs").Strings()
+	if len(refs) == 0 {
+		return nil
+	}
+	if _, leg := TaggedManagedNetwork(o); !leg {
+		return []api.Issue{{Code: "api.invariant", Field: path,
+			Message:     "untagged managed " + o.Identity() + " is a libvirt network whose own firewall rules refuse forwarding to any other network, and routing to an untagged libvirt network is not yet admitted (B1287)",
+			Remediation: "remove spec.libvirt.routedNetworkRefs from " + o.Identity() + ", or set spec.vlan on it to realize it as a host VLAN leg"}}
+	}
+	var issues []api.Issue
+	for i, name := range refs {
+		field := fmt.Sprintf("%s[%d]", path, i)
+		peer, found := c.Find(api.Network, name)
+		_, tagged := TaggedManagedNetwork(peer)
+		switch {
+		case name == o.Name():
+			issues = add(issues, api.Issue{Code: "api.invariant", Field: field, Message: o.Identity() + " cannot be routed to itself",
+				Remediation: "remove " + name + " from spec.libvirt.routedNetworkRefs of " + o.Identity()})
+		case found && (!tagged || ManagedNetworkProvider(peer) != ManagedNetworkProvider(o)):
+			issues = add(issues, api.Issue{Code: "api.invariant", Field: field,
+				Message:     o.Identity() + " routes only to tagged managed Networks of its own provider InfraProvider/" + ManagedNetworkProvider(o) + ", and " + peer.Identity() + " is not one; routing to an untagged libvirt network or across providers is not yet admitted (B1287)",
+				Remediation: "remove " + name + " from spec.libvirt.routedNetworkRefs of " + o.Identity() + ", or make " + peer.Identity() + " a managed Network with spec.vlan naming InfraProvider/" + ManagedNetworkProvider(o)})
+		}
+	}
+	return issues
 }
 
 func TaggedManagedNetwork(o api.Object) (int, bool) {

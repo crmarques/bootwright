@@ -58,6 +58,35 @@
   "refusedPrefixes": [
     "203.0.113.0/26"
   ],
+  "routing": {
+    "forwarding": true,
+    "keptPrefixes": [
+      "198.51.100.0/24",
+      "203.0.113.0/26",
+      "203.0.113.64/26",
+      "203.0.113.128/26"
+    ],
+    "managedDevices": [
+      "br-trunk",
+      "br-trunk.140",
+      "br-trunk.150",
+      "virbr-lab"
+    ],
+    "natPrefixes": [
+      "203.0.113.64/26"
+    ],
+    "routed": [
+      {
+        "from": "br-trunk.140",
+        "to": "br-trunk.150"
+      },
+      {
+        "from": "br-trunk.150",
+        "to": "br-trunk.140"
+      }
+    ],
+    "unit": "bootwright-lab-lab-libvirt-routing.service"
+  },
   "services": [
     "virtqemud.service",
     "virtnetworkd.service",

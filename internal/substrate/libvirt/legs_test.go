@@ -23,7 +23,7 @@ func legNetwork(name, address, vlan string, fields ...api.FieldValue) api.Object
 func taggedObjects() []api.Object {
 	cluster := api.NewObject(api.Network, "ceph-cluster", api.Value{}, api.MapValue(field("provided", api.BoolValue(true)), number("vlan", "120"),
 		field("ipv4", api.MapValue(text("cidr", "203.0.113.0/26")))))
-	public := legNetwork("ceph-public", "203.0.113.65/26", "140", field("taggedNetworkRefs", api.StringList("ceph-cluster")))
+	public := legNetwork("ceph-public", "203.0.113.65/26", "140", field("taggedNetworkRefs", api.StringList("ceph-cluster")), field("routedNetworkRefs", api.StringList("ceph-arbiter")))
 	arbiter := legNetwork("ceph-arbiter", "203.0.113.129/26", "150", text("forward", "none"))
 	g := guest("ceph-01")
 	g = g.WithSpec(g.Spec().WithPath(api.ListValue(api.MapValue(text("nicRef", "enp1s0"), text("segmentRef", "ceph-public"))), "substrate", "libvirt", "nics"))
@@ -144,6 +144,7 @@ func TestAnOwnedConnectionAloneIsAPartialRealization(t *testing.T) {
 		e.Postcondition, e.Pool, e.PoolOwned, e.Directory = false, "", false, observed(false)
 		e.FirewallReady = FirewallReadyEvidence{Name: request.FirewallReadyUnit, Answered: true}
 		e.VLANRefusal = VLANRefusalEvidence{Name: request.VLANRefusalUnit, Answered: true}
+		e.Routing = RoutingEvidence{Name: request.Routing.Unit, Answered: true}
 		e.Networks = []NetworkEvidence{{Answered: true, Managed: true, Name: request.Networks[0].Name}}
 		for index := range e.Connections {
 			if e.Connections[index].Role == roleLeg {

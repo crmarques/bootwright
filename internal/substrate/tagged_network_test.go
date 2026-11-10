@@ -163,3 +163,23 @@ func TestTheManagedNetworkBoundCountsEachTrunk(t *testing.T) {
 		t.Fatalf("refused = %v", refused)
 	}
 }
+
+func TestRoutedNetworkRefsNameTaggedManagedNetworksOfTheSameProvider(t *testing.T) {
+	const field = "$.spec.libvirt.routedNetworkRefs"
+	lab, other := topologyProvider("lab", "host", "8000", topologyProfile()), topologyProvider("other", "host", "8001", topologyProfile())
+	arbiter := taggedNetwork("ceph-arbiter", "lab", "br-trunk", "203.0.113.1/24", 150)
+	public := withArm(taggedNetwork("ceph-public", "lab", "br-trunk", "192.0.2.1/24", 140), "routedNetworkRefs", api.StringList("ceph-arbiter"))
+	objects := []api.Object{topologyHost("host"), lab, other, public, arbiter}
+	if issues := Validate(public, api.NewCatalog(objects)); len(issues) != 0 {
+		t.Fatalf("a declared pair was refused: %v", issues)
+	}
+	guests := managedNetwork("guests", "lab", "virbr-guests", "198.51.100.1/24")
+	foreign := taggedNetwork("foreign", "other", "br-other", "198.18.0.1/24", 160)
+	refs := withArm(public, "routedNetworkRefs", api.StringList("ceph-public", "guests", "foreign"))
+	issues := Validate(refs, api.NewCatalog(append(objects, guests, foreign)))
+	requireArmIssue(t, issues, field+"[0]", "cannot be routed to itself")
+	requireArmIssue(t, issues, field+"[1]", "and Network/guests is not one; routing to an untagged libvirt network or across providers is not yet admitted (B1287)")
+	requireArmIssue(t, issues, field+"[2]", "and Network/foreign is not one")
+	untagged := withArm(guests, "routedNetworkRefs", api.StringList("ceph-public"))
+	requireArmIssue(t, Validate(untagged, api.NewCatalog(append(objects, untagged))), field, "routing to an untagged libvirt network is not yet admitted (B1287)")
+}

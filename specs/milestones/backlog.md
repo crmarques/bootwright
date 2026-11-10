@@ -309,6 +309,8 @@ Alias cell.
 | [B1284](#b1284) | new, 2026-11-10 (D255 (8)) | product | Substrate | A tagged managed Network carries an IPv6 prefix on its leg | A leg is IPv4 only and the owned table rejects IPv6 to and from a leg; no tracked input needs it |
 | [B1285](#b1285) | new, 2026-11-10 (D255 (8)) | product | Substrate | A trunk, its legs and the Networks it carries take an MTU other than 1500 | NetworkManager's MTU handling on a bridge and a VLAN is unproved, and no tracked input needs it |
 | [B1287](#b1287) | new, 2026-11-10 (D255 (6)) | product | Substrate | A routed pair reaches an untagged libvirt network or crosses providers, and lab-network-variants' `br-nv` trunk becomes managed Networks | libvirt's reject into its networks cannot be overridden from the owned table, and the case's hand-built trunk still serves it |
+| [B1302](#b1302) | new, 2026-11-10 (X395 review, D255 (16)) | safety | Substrate | The routing observation compares each rule of the owned table with the rule the collection loads, so a rule replaced in place is repaired | `nft -j` renders rule expressions differently across nft releases, and a comparison that misreads a supported host would reload on every apply; the count per chain catches a deleted or added rule |
+| [B1304](#b1304) | new, 2026-11-10 (X395 review, D255 (16)) | safety | Substrate | A routing unit that fails at boot leaves no VLAN leg up without its table | Making NetworkManager wait on the unit stops all host networking when nft fails, which can cut a remote host off; activating the legs only after the table loads changes how they come up and is the owner's choice |
 
 ### B82
 
@@ -3539,6 +3541,39 @@ hand-built `br-nv` trunk
 of another provider, and lab-network-variants declares its networks as managed
 Networks on a trunk Bootwright owns. **Exit evidence:** a ruleset test of each
 admitted pair and an owner-accepted run of the migrated case.
+
+### B1302
+
+**Owner:** Substrate. **Kind:** safety. **Requires:** none. **Definition:**
+Candidate, from the X395 review ([D255](#d255) (16)): the routing observation's
+`loaded` proves the owned table's mark, sets, chains, hooks, priorities and
+policies and each chain's rule count, not each rule's expressions
+([routing table](../substrates.md#routing-table)), so a rule another root tool
+replaces by one of the same chain reads loaded and is never repaired. The
+expressions `nft -j` lists differ between nft releases, and a comparison that
+misreads one supported host would reload the unit on every apply and fail its
+postcondition there. **Outcome:** the observation compares every rule with the
+rule the collection loads, normalized so each supported nft release reads it
+alike. **Exit evidence:** the listing of the frozen ruleset captured from each
+supported nft release as a golden, and a test that a same-count replacement
+reads not loaded and is reloaded.
+
+### B1304
+
+**Owner:** Substrate. **Kind:** safety. **Requires:** none. **Definition:**
+Candidate, from the X395 review ([D255](#d255) (16)): the routing unit runs
+before NetworkManager, but nothing makes NetworkManager wait for it, so when
+`nft -f -` fails at boot the host has no owned table while NetworkManager still
+activates each leg, which then reaches whatever firewalld's trusted zone and
+libvirt's rules admit ([routing table](../substrates.md#routing-table)). A
+dependency from `NetworkManager.service` on the unit would stop every host
+connection when the table fails to load, which can cut a remote provider host
+off; activating the legs only once the table is loaded, for example with
+`autoconnect=false` and the unit bringing them up, changes how the legs come
+up and is the owner's choice. **Outcome:** a leg never comes up at boot
+without its table, and a failed table load leaves the host's other connections
+up. **Exit evidence:** a boot of a provider host whose ruleset fails to load,
+showing every leg down and the other connections up.
 
 ## Audit remediation (2026-10-26)
 
@@ -8292,5 +8327,22 @@ pending the owner's review:
     attached to the trunk bridge with no libvirt network. No provider segment
     ever names a bridge Bootwright creates.
 
+Added by the session after X395's independent review, pending the owner's
+review with the others:
+
+15. The table judges routed traffic only. The design assumes `br_netfilter`
+    does not pass bridged frames to the inet hooks, and Bootwright neither
+    loads nor configures that module; where it does, a frame bridged between
+    two ports of a trunk meets the chains with the trunk as its interfaces,
+    which no in-tree test proves.
+16. A changed or drifted table is reloaded in place (`ExecReload=/usr/sbin/nft
+    -f -` on the same input, and the forwarding line again with `forwarding`),
+    never restarted, because the stop deletes the table: `nft -f -` applies a
+    ruleset in one transaction, so one it refuses leaves the table it would
+    replace (verified in a scratch network namespace and a user unit). A unit
+    that fails at boot still leaves the legs up without their table, parked as
+    [B1304](#b1304), and `loaded` counts each chain's rules without comparing
+    their expressions, parked as [B1302](#b1302).
+
 **Exit evidence:** each item's in-tree evidence and the operator run of
-[B1283](m1.md#b1283), then the owner's review of (1) to (14).
+[B1283](m1.md#b1283), then the owner's review of (1) to (16).
