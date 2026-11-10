@@ -306,6 +306,9 @@ Alias cell.
 | [B1299](#b1299) | new, 2026-11-10 (split from B1263, D253) | product | Controller, with State reconciliation | A running environment takes a raised client minimum without a destroy | An open owner question: a completed apply settles (D153), so replacing a client is a fresh apply today |
 | [B1300](#b1300) | new, 2026-11-10 (X363) | product | CLI | The acquisition list names `cp.icr.io`'s blob delivery host | The list landed (X363); the host answers only an entitled client, which this session could not use |
 | [B1301](#b1301) | new, 2026-11-10 (X363 review) | product | Controller, with Infrastructure services and Container clusters | A vendor registry's delivery hosts are admitted as fetch-only exceptions, or vendor images get a mirror route | A controlled network that denies public origins breaks a vendor image pull today; the owner decides how |
+| [B1284](#b1284) | new, 2026-11-10 (D255 (8)) | product | Substrate | A tagged managed Network carries an IPv6 prefix on its leg | A leg is IPv4 only and the owned table rejects IPv6 to and from a leg; no tracked input needs it |
+| [B1285](#b1285) | new, 2026-11-10 (D255 (8)) | product | Substrate | A trunk, its legs and the Networks it carries take an MTU other than 1500 | NetworkManager's MTU handling on a bridge and a VLAN is unproved, and no tracked input needs it |
+| [B1287](#b1287) | new, 2026-11-10 (D255 (6)) | product | Substrate | A routed pair reaches an untagged libvirt network or crosses providers, and lab-network-variants' `br-nv` trunk becomes managed Networks | libvirt's reject into its networks cannot be overridden from the owned table, and the case's hand-built trunk still serves it |
 
 ### B82
 
@@ -3256,8 +3259,11 @@ provider whose last managed Network a later apply removes leaves both units,
 and the refusal unit's unreachable routes, installed
 ([provider host realization](../substrates.md#provider-host-realization)).
 **Outcome:** an apply or removal of a provider host takes back every unit an
-earlier apply of that provider installed. **Exit evidence:** a role test over
-a provider that drops its last managed Network.
+earlier apply of that provider installed. A provider that drops its last
+tagged managed Network also leaves its routing unit and table behind
+([D255](#d255) (5)). **Exit evidence:** a role test over a provider that drops
+its last managed Network, and one over a provider that drops its last tagged
+managed Network.
 
 ### B1230
 
@@ -3496,6 +3502,43 @@ images a mirror route; the rule, the origin class and
 [B1250](#b1250)'s profile then follow the choice. **Exit evidence:** the
 decision recorded as a clause of [D251](#d251) or its successor, and the
 profile's example.
+
+### B1284
+
+**Owner:** Substrate. **Kind:** product. **Requires:** none. **Definition:**
+Candidate, from [D255](#d255) (8): a tagged managed Network refuses an IPv6
+prefix at `$.spec.ipv6` because a leg is IPv4 only and the owned table rejects
+IPv6 to and from a leg
+([Libvirt arm](../api/networks.md#libvirt-arm)). **Outcome:** a tagged managed
+Network carries one IPv6 prefix on its leg, as an untagged managed Network does
+([B703](m1.md#b703)), with its forwarding rules. **Exit evidence:** an
+admission test of a tagged Network with an IPv6 prefix and a ruleset test of
+its IPv6 pairs.
+
+### B1285
+
+**Owner:** Substrate. **Kind:** product. **Requires:** none. **Definition:**
+Candidate, from [D255](#d255) (8): an MTU other than 1500 on a tagged managed
+Network, or on a Network its trunk carries, refuses because how NetworkManager
+sets an MTU on a bridge and a VLAN leg is unproved
+([Libvirt arm](../api/networks.md#libvirt-arm)). **Outcome:** a trunk and each
+leg take the MTU their Networks declare, with a guest's MTU still authored, never
+derived. **Exit evidence:** a request test of a leg and trunk MTU and a
+live run that shows the link MTU.
+
+### B1287
+
+**Owner:** Substrate. **Kind:** product. **Requires:** none. **Definition:**
+Candidate, from [D255](#d255) (6): `routedNetworkRefs` names only tagged
+managed Networks of one provider, because libvirt's reject into an untagged
+libvirt network cannot be overridden from the owned table, and the case
+[lab-network-variants](../../e2e/lab-network-variants/runbook.md) keeps its
+hand-built `br-nv` trunk
+([provider host realization](../substrates.md#provider-host-realization)).
+**Outcome:** a routed pair may reach an untagged libvirt network or a Network
+of another provider, and lab-network-variants declares its networks as managed
+Networks on a trunk Bootwright owns. **Exit evidence:** a ruleset test of each
+admitted pair and an owner-accepted run of the migrated case.
 
 ## Audit remediation (2026-10-26)
 
@@ -3844,6 +3887,10 @@ holding such a clause, the clauses pending and the work they enable.
 - [D242](#d242): clauses (1) to (4), what the capacity admission counts
   beside the guests' disks (X326).
 - [D243](#d243): clauses (6) to (11), the CLI command structure (X327).
+- [D255](#d255): clauses (1) to (14), managed VLAN networks on a
+  Bootwright-owned NetworkManager trunk and one owned nftables routing table
+  per provider (X395); (7), turning on `net.ipv4.ip_forward`, is outside the
+  approved boundary.
 
 ### D1
 
@@ -8114,3 +8161,131 @@ Implementation choices do not authorize a live command, a push or a release.
 **Exit evidence:** each item's in-tree evidence, and `make check` on each
 integration tree, with an independent review and `make race` for each safety
 slice. No push.
+
+### D255
+
+**session-pending** (2026-11-10, the owner's request; the clauses after the
+owner's approval): reviewing
+[lab-6-nodes-ceph-network-matrix](../../e2e/lab-6-nodes-ceph-network-matrix/runbook.md),
+whose runbook builds an operator trunk by hand (a NetworkManager bridge
+`br-nm`, legs `br-nm.110` and `br-nm.150`, VLAN 120 with no leg, and the
+nftables table `bw-e2e-trunk`), the owner asked "shouldn't/can't the networks
+be described as bootwright api objects? if if possible, it must use it", chose
+"Extend the API first", and approved the design:
+
+- API: a managed `Network` (`provided: false`, `spec.libvirt`) may declare
+  `spec.vlan`; its `spec.libvirt.bridge` then names a trunk Bootwright creates
+  without an address, and the Network is realized as a host VLAN leg holding
+  `hostAddress`. A new `spec.libvirt.routedNetworkRefs` declares which managed
+  Networks the host forwards between; `forward: nat` adds NAT to the uplink;
+  every undeclared pair stays refused. A tagged Network with no arm (such as
+  VLAN 120 on that trunk) stays refused on the host as
+  [B1215](m1.md#b1215)/X332 does today.
+- Host: the trunk and legs are NetworkManager connections Bootwright owns
+  (named `bootwright-<context>-<network>`, marked with NM user data), which NM
+  places in firewalld's trusted zone as libvirt does for its bridges;
+  routing, NAT and isolation are one Bootwright-owned nftables table per
+  provider held by a unit like the existing VLAN-refusal unit, with the same
+  ownership, collision and destroy proofs. Firewalld's own configuration stays
+  untouched; the rule "never reconfigures the host firewall" narrows to "owns
+  only its own NM connections and its own nft table".
+
+This authorizes, out of sequence, X395 (M1: [B1281](m1.md#b1281),
+[B1282](m1.md#b1282), [B1283](m1.md#b1283)). No push. Taken by the session,
+pending the owner's review:
+
+1. Legs are NetworkManager VLAN connections. NetworkManager is not part of the
+   supported hosts, so a provider with a tagged managed Network requires
+   `NetworkManager.service` active and `/usr/bin/nmcli`, and `/usr/sbin/nft`
+   present; Bootwright proves each and never installs or enables any, and a
+   missing one refuses before any effect, as firewall readiness does.
+2. The trunk is an NM bridge, not an addressless libvirt network: one daemon
+   owns parent and legs, with one boot order and autoconnect path, whereas NM
+   legs on a libvirt-owned bridge would race `virtnetworkd` at boot and NM
+   treats libvirt bridges as externally managed. It sets `bridge.stp no`,
+   IPv4 and IPv6 disabled, VLAN filtering off, and a `bridge.mac-address`
+   derived like `InterfaceMAC`, so a tap never changes its MAC. Guests attach
+   as `<interface type='bridge'>` like provider segments.
+3. A leg is connection `bootwright-<context>-<network>` on device
+   `<bridge>.<vlan>`, the bridge name bounded so the device fits 15 bytes; the
+   trunk is `bootwright-<context>-<provider>-trunk-<bridge>`. Each connection
+   has a UUID derived like `DomainUUID` (domain
+   `bootwright.substrate.libvirt.connection-v1`) and NM `user.data` keys
+   `bootwright.io.context`, `bootwright.io.provider`, `bootwright.io.network`
+   and `bootwright.io.role` (`trunk` or `leg`). A connection is owned only when
+   its UUID, name, type, device and every user-data key match.
+4. Trunk and legs set `connection.zone trusted`, a runtime binding NM makes
+   while firewalld's configuration stays untouched. The trunk gains nothing
+   from it, because the table drops untagged traffic on the trunk (6).
+5. One `inet bootwright-<context>-<provider>-routing` table exists per provider
+   with a tagged managed Network, held by the oneshot
+   `bootwright-<context>-<provider>-routing.service` under the VLAN-refusal
+   unit's ownership, enablement and drop-in rules. The ruleset sits inside the
+   unit (`StandardInput=data`, `StandardInputText=`); `ExecStart=/usr/sbin/nft
+   -f -` replaces the table atomically and `ExecStopPost=-/usr/sbin/nft delete
+   table inet <table>` removes it. `Before=network-pre.target
+   NetworkManager.service` and `Wants=network-pre.target` put the table in
+   place before any leg exists. The table comment carries the mark
+   `Bootwright owned routing: <unit>`.
+6. Chains: `filter hook input priority filter - 10`, `filter hook forward
+   priority filter - 10` and `nat hook postrouting priority srcnat - 10`, so
+   they run before libvirt's filter 0 and srcnat and firewalld's filter + 10,
+   and a drop or reject is final in any base chain. Sets: `trunks`, `legs`,
+   `nat_legs`, `managed` (every trunk, leg and libvirt managed bridge of the
+   provider), `routed` (`ifname . ifname` pairs, both directions),
+   `nat_prefixes` and `kept_prefixes` (every managed and refused prefix of the
+   provider). Input: `iifname @trunks drop`. Forward, in order: drop
+   `iifname @trunks` or `oifname @trunks`; reject IPv6 to or from a leg;
+   `ct state established,related accept`; `iifname . oifname @routed accept`;
+   `oifname @legs reject` (refuses anything new into a leg, including a
+   `virbr-user` guest that libvirt's `guest_output` accepts); `iifname
+   @nat_legs oifname != @managed ip daddr != @kept_prefixes accept`;
+   `iifname @legs reject`. Postrouting: `ip saddr @nat_prefixes ip daddr !=
+   @kept_prefixes oifname != @managed masquerade`. Traffic into libvirt NAT
+   and isolated networks stays refused by libvirt's `guest_input`.
+   `routedNetworkRefs` is symmetric (one side is enough and both directions are
+   admitted) and names only tagged managed Networks of the same provider; an
+   untagged libvirt network is refused there, because libvirt's reject cannot
+   be overridden. "NAT to the uplink" means every interface outside the
+   provider's `managed` set.
+7. With a `forward: nat` leg or a routed pair, the unit's
+   `ExecStartPost=/usr/sbin/sysctl -w net.ipv4.ip_forward=1` turns forwarding
+   on and never resets it, as libvirt's network driver does. Turning on
+   `net.ipv4.ip_forward` is outside the approved boundary (NM connections and
+   an nft table) and is flagged for the owner's review.
+8. IPv6 on a tagged managed Network refuses (`api.invariant` at
+   `$.spec.ipv6`), parked as [B1284](backlog.md#b1284). An MTU other than 1500
+   on a tagged managed Network, or on a Network its trunk carries, refuses,
+   parked as [B1285](backlog.md#b1285).
+9. There is no DNS or DHCP on a leg: legs set `ipv4.method manual` and
+   `never-default`. A managed DNSServer may bind a leg address under its
+   existing rules.
+10. These collisions refuse before any effect: a profile with our name and
+    another UUID; one with our UUID that we do not own; any other profile
+    whose `connection.interface-name` is our trunk or a leg device; a link
+    named like our trunk or a leg that no owned active connection holds; a
+    route matching a leg prefix (the existing `host_conflicts`, with the leg
+    device as the bridge); an existing table of our name while the unit is not
+    owned and running; and an unanswered `nmcli` or `nft` read.
+11. Apply order: VLAN-refusal unit, routing unit (the table), trunk, legs,
+    libvirt networks, pool. Destroy order: quiescence of the domains plugged
+    into the trunk, legs, trunk, libvirt networks, pool, firewall barrier,
+    routing unit, VLAN-refusal unit, so isolation is never absent while a leg
+    exists.
+12. Each trunk counts as one of the 20 managed Networks a host defines. The
+    reservation keys are `bridge:<device>` and `prefix:` for a leg,
+    `bridge:<trunk>` for a trunk and `unit:` for the routing unit, whose name
+    is also the table's. With at least one tagged Network the worst case is
+    65 - k - 2t <= 62; otherwise 64.
+13. Tagged managed Networks of one provider may name one bridge, the trunk;
+    their `vlan`s are distinct on one trunk whatever their sites. An untagged
+    managed Network, a provider segment, or another provider's Network naming
+    that bridge refuses at `$.spec.libvirt.bridge`. One 802.1Q domain per site
+    is unchanged.
+14. A tagged managed Network stays a segment under its own name, carrying
+    itself tagged plus its `taggedNetworkRefs`, with no `untaggedNetworkRef`,
+    attached to the trunk bridge with no libvirt network. No provider segment
+    ever names a bridge Bootwright creates.
+
+**Exit evidence:** each item's in-tree evidence and the operator run of
+[B1283](m1.md#b1283), then the owner's review of (1) to (14).
