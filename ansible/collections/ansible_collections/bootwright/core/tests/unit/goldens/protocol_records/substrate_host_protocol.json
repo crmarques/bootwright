@@ -155,6 +155,8 @@
               }
             ],
             "uri": true,
+            "connections": [],
+            "networkManager": false,
             "vlanRefusal": {
               "name": "bootwright-lab-host-vlan-refusal.service",
               "answered": true,
@@ -227,6 +229,8 @@
               }
             ],
             "uri": false,
+            "connections": [],
+            "networkManager": false,
             "vlanRefusal": {
               "name": "bootwright-lab-host-vlan-refusal.service",
               "answered": true,
@@ -291,6 +295,8 @@
               }
             ],
             "uri": true,
+            "connections": [],
+            "networkManager": false,
             "vlanRefusal": {
               "name": "bootwright-lab-host-vlan-refusal.service",
               "answered": true,
@@ -387,6 +393,8 @@
               }
             ],
             "uri": true,
+            "connections": [],
+            "networkManager": false,
             "vlanRefusal": {
               "name": "bootwright-lab-host-vlan-refusal.service",
               "answered": true,
@@ -459,6 +467,8 @@
               }
             ],
             "uri": true,
+            "connections": [],
+            "networkManager": false,
             "vlanRefusal": {
               "name": "bootwright-lab-host-vlan-refusal.service",
               "answered": true,
@@ -529,6 +539,8 @@
               }
             ],
             "uri": true,
+            "connections": [],
+            "networkManager": false,
             "vlanRefusal": {
               "name": "bootwright-lab-host-vlan-refusal.service",
               "answered": true,

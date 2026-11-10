@@ -41,6 +41,8 @@ def host_observation(**overrides):
         "uri": True,
     }
     observation.update(overrides)
+    observation.setdefault("networkManager", False)
+    observation.setdefault("connections", [])
     observation.setdefault("vlanRefusal", dict(VLAN_REFUSAL_ABSENT))
     if "firewallReady" not in observation:
         removed = not observation["directory"] and not observation["pool"]
@@ -710,3 +712,65 @@ def test_malformed_vlan_refusal_evidence_is_never_published(vlan):
     observation["vlanRefusal"] = vlan
     with pytest.raises(ValueError):
         substrate_host_protocol.presence(observation, DIGEST)
+
+
+TRUNK_HELD = {"name": "bootwright-lab-host-trunk-br-lab", "role": "trunk", "device": "br-lab", "answered": True, "present": True,
+              "owned": True, "active": True, "definition": True, "zone": "trusted"}
+LEG_HELD = dict(TRUNK_HELD, name="bootwright-lab-ceph-public", role="leg", device="br-lab.110")
+TRUNK_GONE = dict(TRUNK_HELD, present=False, owned=False, active=False, definition=False, zone="")
+LEG_GONE = dict(LEG_HELD, present=False, owned=False, active=False, definition=False, zone="")
+
+
+def with_legs(**overrides):
+    return host_observation(**dict({"networkManager": True, "connections": [dict(TRUNK_HELD), dict(LEG_HELD)]}, **overrides))
+
+
+def test_the_trunks_and_legs_are_published_as_evidence():
+    evidence = substrate_host_protocol.presence(with_legs(), DIGEST)
+    assert evidence["postcondition"]
+    assert (evidence["networkManager"], evidence["connections"]) == (True, [TRUNK_HELD, LEG_HELD])
+
+
+@pytest.mark.parametrize("overrides", [
+    {"networkManager": False},
+    {"connections": [dict(TRUNK_HELD), dict(LEG_HELD, active=False)]},
+    {"connections": [dict(TRUNK_HELD, definition=False), dict(LEG_HELD)]},
+    {"connections": [dict(TRUNK_HELD), dict(LEG_HELD, zone="public")]},
+    {"connections": [dict(TRUNK_HELD, owned=False), dict(LEG_HELD)]},
+    {"connections": [dict(TRUNK_HELD, answered=False), dict(LEG_HELD)]},
+])
+def test_a_trunk_or_leg_that_is_not_held_as_frozen_leaves_the_postcondition_unmet(overrides):
+    evidence = substrate_host_protocol.presence(with_legs(**overrides), DIGEST)
+    assert not evidence["postcondition"] and "connections" in substrate_host_protocol.unproved(evidence)
+
+
+def test_a_removal_proves_every_trunk_and_leg_gone():
+    gone = removed_host(networkManager=True, connections=[dict(TRUNK_GONE), dict(LEG_GONE)])
+    assert substrate_host_protocol.absence(gone, DIGEST)["postcondition"]
+    left = removed_host(networkManager=True, connections=[dict(TRUNK_GONE), dict(LEG_HELD)])
+    assert not substrate_host_protocol.absence(left, DIGEST)["postcondition"]
+    assert "connections" in substrate_host_protocol.remaining(left)
+    silent = removed_host(networkManager=True, connections=[dict(TRUNK_GONE), dict(LEG_GONE, answered=False)])
+    evidence = substrate_host_protocol.absence(silent, DIGEST)
+    assert not evidence["postcondition"] and "connections" in substrate_host_protocol.unanswered(evidence)
+
+
+@pytest.mark.parametrize("overrides", [
+    {"connections": [dict(TRUNK_HELD, uuid="u")]},
+    {"connections": [dict(TRUNK_HELD, active="yes")]},
+    {"connections": "none"},
+    {"networkManager": "yes"},
+])
+def test_malformed_trunk_or_leg_evidence_is_never_published(overrides):
+    with pytest.raises(ValueError):
+        substrate_host_protocol.presence(with_legs(**overrides), DIGEST)
+
+
+def test_a_provider_with_only_vlan_legs_needs_its_firewall_barrier():
+    legged = dict(TRUNK_HELD)
+    proved = host_observation(networks=[], networkManager=True, connections=[legged])
+    assert substrate_host_protocol.presence(proved, DIGEST)["postcondition"]
+    missing = host_observation(networks=[], networkManager=True, connections=[legged],
+                               firewallReady={"name": "", "answered": True, "present": False, "owned": False, "enabled": False,
+                                              "ready": False, "state": ""})
+    assert not substrate_host_protocol.presence(missing, DIGEST)["postcondition"]

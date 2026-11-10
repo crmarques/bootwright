@@ -22,7 +22,7 @@ POLL = (
 def unit_name(request):
     name = request.get("firewallReadyUnit", "")
     expected = ""
-    if any(network.get("managed") for network in request.get("networks", [])):
+    if any(network.get("managed") for network in request.get("networks", [])) or request.get("legs"):
         identity = request["identity"]
         for value in (identity["context"], identity["object"]):
             if not isinstance(value, str) or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", value):

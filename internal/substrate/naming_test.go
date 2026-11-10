@@ -186,3 +186,22 @@ func TestSafeSegmentRefusesWhatCannotNameAHostObject(t *testing.T) {
 		}
 	}
 }
+
+func TestTrunkAndLegIdentitiesAreDerivedAndDistinct(t *testing.T) {
+	leg := ConnectionUUID("lab", LegConnectionName("lab", "ceph-public"))
+	if leg != ConnectionUUID("lab", "bootwright-lab-ceph-public") || leg == ConnectionUUID("other", "bootwright-lab-ceph-public") {
+		t.Fatalf("leg uuid = %q", leg)
+	}
+	if leg[14] != '8' || !strings.ContainsRune("89ab", rune(leg[19])) || leg == DomainUUID("lab", "bootwright-lab-ceph-public") {
+		t.Fatalf("leg uuid is not a version 8 value of its own domain: %q", leg)
+	}
+	if name := TrunkConnectionName("lab", "p", "br-trunk"); name != "bootwright-lab-p-trunk-br-trunk" {
+		t.Fatalf("trunk = %q", name)
+	}
+	if mac := TrunkMAC("lab", "p", "br-trunk"); !strings.HasPrefix(mac, "52:54:00:") || len(mac) != 17 || mac == TrunkMAC("lab", "p", "br-other") {
+		t.Fatalf("trunk mac = %q", mac)
+	}
+	if LegDevice("br-trunk", 140) != "br-trunk.140" || RoutingUnit("lab", "p") != "bootwright-lab-p-routing.service" || RoutingTable("lab", "p") != "bootwright-lab-p-routing" {
+		t.Fatal("leg device or routing names moved")
+	}
+}

@@ -201,3 +201,64 @@ def test_shadowed_routes_reach_the_completion_as_warnings():
     )
     arguments = tasks[completed]["bootwright.core.substrate_host_protocol"]
     assert arguments["shadows"] == "{{ substrate_libvirt_host_running.observation.shadows }}"
+
+
+VLAN_REFUSAL = "bootwright.core.libvirt_vlan_refusal"
+CONNECTIONS = "bootwright.core.libvirt_nm_connections"
+
+
+def destroy_tasks():
+    parsed = yaml.safe_load((ROLE / "tasks" / "destroy.yml").read_text()) or []
+    return list(flattened(parsed))
+
+
+def module_at(tasks, module):
+    return index_of(tasks, lambda task: module in task, "runs " + module)
+
+
+def asserting(tasks, text, loop=""):
+    return index_of(tasks, lambda task: any(text in condition for condition in conditions_of(task)) and loop in str(task.get("loop", "")),
+                    "asserts " + text)
+
+
+def outcome_of(tasks):
+    completed = index_of(
+        tasks, lambda task: (task.get("bootwright.core.substrate_host_protocol") or {}).get("phase") == "completed", "publishes its completion")
+    return tasks[completed]["bootwright.core.substrate_host_protocol"]["outcome"]
+
+
+# Every refusal over a trunk or leg reads the observation taken once the
+# drivers run and comes before the VLAN refusal unit, the first host effect;
+# the trunks and legs come up after it and before any libvirt network.
+def test_every_trunk_and_leg_refusal_comes_before_the_first_host_effect():
+    tasks = apply_tasks()
+    observed = index_of(tasks, lambda task: task.get("register") == "substrate_libvirt_host_running", "observes once the drivers run")
+    refusals = [
+        asserting(tasks, "substrate_libvirt_host_running.observation.connectionRefusals | length == 0"),
+        asserting(tasks, "item.guestsAnswered", "observation.trunks"),
+        asserting(tasks, "item.guests | length == 0", "observation.trunks"),
+    ]
+    for index in refusals[1:]:
+        assert "drifted" in str(tasks[index].get("loop"))
+    vlan, connections = module_at(tasks, VLAN_REFUSAL), module_at(tasks, CONNECTIONS)
+    network = index_of(tasks, lambda task: (task.get("ansible.builtin.template") or {}).get("src") == "network.xml.j2", "renders a network")
+    assert observed < min(refusals) and max(refusals) < vlan < connections < network
+    assert tasks[connections][CONNECTIONS] == {"request": "{{ bootwright_substrate_host_request }}"} and "when" not in tasks[connections]
+    assert "substrate_libvirt_host_connections is changed" in outcome_of(tasks)
+
+
+# A removal refuses an unanswered or foreign connection and a trunk a domain
+# still runs on before its first effect, then takes the trunks and legs before
+# any libvirt network; legs before trunks is the module's own order.
+def test_trunks_and_legs_are_removed_before_the_libvirt_networks():
+    tasks = destroy_tasks()
+    refusals = [asserting(tasks, "observation.connections | rejectattr('answered')"),
+                asserting(tasks, "item.guestsAnswered", "observation.trunks")]
+    assert "selectattr(\"present\")" in str(tasks[refusals[1]].get("loop"))
+    connections = module_at(tasks, CONNECTIONS)
+    first_effect = min(index for index, task in enumerate(tasks)
+                       if CONNECTIONS in task or (argv_of(task)[:1] == ["/usr/bin/virsh"] and argv_of(task)[-1:] != ["version"]))
+    network = index_of(tasks, lambda task: "net-destroy" in argv_of(task), "destroys a network")
+    assert max(refusals) < first_effect == connections < network
+    assert tasks[connections][CONNECTIONS]["state"] == "absent"
+    assert "substrate_libvirt_host_connections is changed" in outcome_of(tasks)

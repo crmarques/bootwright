@@ -43,10 +43,10 @@ IDENTIFIER = re.compile(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\Z")
 
 
 def unit_name(request):
-    """The frozen unit, or the empty string when the provider defines no managed network."""
+    """The frozen unit, or the empty string when the provider defines no managed network and no VLAN leg."""
     name = request.get("vlanRefusalUnit", "")
     expected = ""
-    if any(network.get("managed") for network in request.get("networks", [])):
+    if any(network.get("managed") for network in request.get("networks", [])) or request.get("legs"):
         identity = request["identity"]
         for value in (identity["context"], identity["object"]):
             if not isinstance(value, str) or not IDENTIFIER.match(value):

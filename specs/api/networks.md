@@ -77,9 +77,9 @@ network defined on a provider's host. Its fields, in emitted order:
 | Path | Type | Default | Rule |
 | --- | --- | --- | --- |
 | `providerRef` | `InfraProvider` reference | required | An `InfraProvider` with a `libvirt` arm. |
-| `bridge` | bridge name | required | The bridge-name grammar of a provider's libvirt segment. |
-| `forward` | `nat` or `none` | `nat` | The libvirt forward mode. |
-| `hostAddress` | IP | the IPv4 gateway, else the IPv6 gateway | The host's address on the bridge: a host address inside the CIDR of its family, under the rules a gateway follows. Required when the Network declares no gateway. |
+| `bridge` | bridge name | required | The bridge-name grammar of a provider's libvirt segment. With `spec.vlan`, the [trunk](#tagged-managed-networks) the leg rides on, short enough that `<bridge>.<vlan>` fits 15 bytes. |
+| `forward` | `nat` or `none` | `nat` | The libvirt forward mode; with `spec.vlan`, whether the leg's traffic is masqueraded to the uplink. |
+| `hostAddress` | IP | the IPv4 gateway, else the IPv6 gateway | The host's address on the bridge, or with `spec.vlan` on its leg: a host address inside the CIDR of its family, under the rules a gateway follows. Required when the Network declares no gateway. |
 | `taggedNetworkRefs` | set of `Network` references | none | The VLAN networks guests may stack on this bridge. Each declares `vlan` and is not the Network itself. |
 
 The host block of the provider `providerRef` names defines the network
@@ -98,11 +98,51 @@ declares there ([provider host realization](../substrates.md#provider-host-reali
 Between the managed Networks of one host's providers, each refused
 `api.invariant` at the Network, naming both Networks and their providers: no
 other managed Network or provider segment on that host names its `bridge`,
-and no other managed Network's prefix overlaps its own, IPv4 or IPv6, unless
+except that the [tagged managed Networks](#tagged-managed-networks) of one
+provider share the trunk they name, and no other managed Network's prefix
+overlaps its own, IPv4 or IPv6, unless
 [one 802.1Q domain per site](#one-8021q-domain-per-site) already refuses the
-pair. One host defines at most 20 managed Networks, refused once (`api.value`)
-at the first by name past the bound, naming each Network over it. A managed
+pair. One host defines at most 20 managed Networks, each trunk counting as one
+more, refused once (`api.value`) at the first by name past the bound, naming
+each Network from it on (`TestTheManagedNetworkBoundCountsEachTrunk`). A managed
 Network's `cidr` is shorter than /32 or /128, leaving guests an address.
+
+### Tagged managed Networks
+
+A managed Network that declares `spec.vlan` is not a libvirt network. Its
+`bridge` names a trunk, a bridge the host block creates with no address of its
+own, and the Network is a host VLAN leg `<bridge>.<vlan>` on that trunk holding
+`hostAddress` with its CIDR's prefix
+([trunks and VLAN legs](../substrates.md#provider-host-realization)). It is a
+[segment](machines.md#machine-profiles-and-segments) of its provider under its
+own name carrying itself and `taggedNetworkRefs` tagged and no Network
+untagged, so a Machine NIC naming it attaches to the trunk and reaches the
+Network through a VLAN of `vlan`
+(`TestATaggedManagedNetworkIsASegmentCarryingItselfTagged`): it may install
+over that VLAN and stack beside it the VLANs of `taggedNetworkRefs`, while an
+untagged assignment on it refuses under carriage, since the trunk drops
+untagged traffic (`TestAMachineOnALegSegmentStacksTheVLANsItCarries`). A Network its
+`taggedNetworkRefs` name that no host leg holds is refused on the host as on a
+managed bridge, above.
+
+The tagged managed Networks of one provider may name one `bridge`, their trunk
+(`TestTaggedManagedNetworksOfOneProviderShareATrunk`); on one trunk their
+`vlan`s are distinct whatever their sites, refused at `$.spec.vlan`
+(`TestATrunkRefusesTwoNetworksOfOneVLAN`). An untagged managed Network, a
+provider segment or another provider's Network naming a trunk is refused at
+`$.spec.libvirt.bridge`, as is any bridge on the host named like a leg's device
+(`TestATrunkRefusesAnUntaggedOwnerOrAProviderSegment`). Each is
+`api.invariant`, as are these refusals of a tagged managed Network:
+
+- `spec.ipv6`, at `$.spec.ipv6`: a leg holds one IPv4 address; IPv6 on a leg is
+  not yet admitted ([B1284](../milestones/backlog.md#b1284)).
+- An `mtu` other than 1500, at `$.spec.mtu`, or on a Network its
+  `taggedNetworkRefs` name, at that entry: not yet admitted on a trunk or leg
+  ([B1285](../milestones/backlog.md#b1285))
+  (`TestATaggedManagedNetworkRefusesIPv6AndAnMTUOtherThan1500`).
+- A leg device `<bridge>.<vlan>` longer than the 15 bytes of a Linux interface
+  name, at `$.spec.libvirt.bridge`, naming the longest bridge that fits
+  (`TestALegDeviceFitsTheInterfaceNameBound`).
 
 ## Cross-kind checks
 

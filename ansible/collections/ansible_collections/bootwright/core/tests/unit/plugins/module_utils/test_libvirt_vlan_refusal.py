@@ -405,3 +405,14 @@ def test_numeric_types_and_tables_read_as_their_names():
     routes = refusal.host_routes(lambda argv, **kwargs: (0, json.dumps(listing if "-4" in argv else []), ""))
     assert [(item["type"], item["table"], item["metric"]) for item in routes] == [("unreachable", "main", 5), ("local", "local", 0), ("unicast", "main", 0)]
     assert refusal.held(routes, refusal.prefixes(REQUEST), 5) == [refusal.prefixes(REQUEST)[0]]
+
+
+def test_a_provider_with_only_a_vlan_leg_freezes_both_units():
+    from ansible_collections.bootwright.core.plugins.module_utils import libvirt_firewall_ready as ready
+
+    legged = {"identity": REQUEST["identity"], "networks": [], "legs": [{"name": "bootwright-lab-ceph-public"}],
+              "vlanRefusalUnit": NAME, "firewallReadyUnit": "bootwright-lab-host-firewalld-ready.service"}
+    assert refusal.unit_name(legged) == NAME
+    assert ready.unit_name(legged) == "bootwright-lab-host-firewalld-ready.service"
+    with pytest.raises(ValueError):
+        refusal.unit_name(dict(legged, vlanRefusalUnit=""))

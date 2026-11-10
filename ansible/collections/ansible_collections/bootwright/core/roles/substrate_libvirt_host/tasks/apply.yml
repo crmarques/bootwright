@@ -170,6 +170,19 @@
       {{ substrate_libvirt_host_running.observation.collisions | join('; ') }}
     quiet: true
 
+# NetworkManager owns each trunk and VLAN leg, so it must already run: the apply
+# never installs or enables it. A profile holding a frozen name, UUID or device
+# that is not this provider's, a keyfile at a frozen path that is not its own,
+# and an unanswered nmcli read each refuse before any effect.
+- name: Refuse a trunk or VLAN leg NetworkManager cannot hold as frozen
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_host_running.observation.connectionRefusals | length == 0
+    fail_msg: >-
+      the trunks and VLAN legs refuse:
+      {{ substrate_libvirt_host_running.observation.connectionRefusals | join('; ') }}
+    quiet: true
+
 # A broader route through a gateway is admitted; the completion reports it as
 # a warning of the run. It is also written here, so an apply that fails before
 # its completion still shows it in the attempt output.
@@ -177,18 +190,6 @@
   ansible.builtin.debug:
     msg: 'warning: {{ item }}'
   loop: '{{ substrate_libvirt_host_running.observation.shadows }}'
-
-# A managed bridge carries each tagged Network between guests only, so the host
-# holds no connected route for its subnet and a guest's packet for it would
-# follow the default route out through the NAT. An owned unit holds an
-# unreachable route per subnet instead. A route the host already holds inside
-# or equal to a subnet is foreign and refuses the apply before anything is
-# defined; the frozen request carries no subnet, and the module removes the
-# unit it installed earlier, when nothing is to be refused any more.
-- name: Hold an unreachable route for each VLAN subnet a managed bridge carries
-  bootwright.core.libvirt_vlan_refusal:
-    request: '{{ bootwright_substrate_host_request }}'
-  register: substrate_libvirt_host_vlan_refusal
 
 # A pool carries no ownership metadata, so the directory it targets is what
 # makes it this provider's. A same-named pool targeting another directory is
@@ -267,6 +268,55 @@
   loop: '{{ substrate_libvirt_host_restarted }}'
   loop_control:
     label: '{{ item.name }}'
+
+# Reactivating a trunk to apply its frozen definition takes its bridge from
+# under every domain plugged into it, so a drifted trunk refuses while one runs
+# there or while the hypervisor does not answer which do.
+- name: Refuse to reactivate a trunk nothing proves idle
+  ansible.builtin.assert:
+    that:
+      - item.guestsAnswered
+    fail_msg: >-
+      trunk {{ item.bridge }} runs a definition other than the one the request
+      froze, and the hypervisor at {{ bootwright_substrate_host_request.uri }}
+      did not answer which domains run on it; restore that connection and
+      repeat the apply
+    quiet: true
+  loop: '{{ substrate_libvirt_host_running.observation.trunks | selectattr("drifted") | list }}'
+  loop_control:
+    label: '{{ item.bridge }}'
+
+- name: Refuse to reactivate a trunk a Machine still runs on
+  ansible.builtin.assert:
+    that:
+      - item.guests | length == 0
+    fail_msg: >-
+      trunk {{ item.bridge }} runs a definition other than the one the request
+      froze, and reactivating it would disconnect {{ item.guests | join(', ') }};
+      stop each Machine with bootwright machine stop --context
+      {{ bootwright_substrate_host_request.identity.context }} --name <machine>,
+      and any other domain named, then repeat the apply
+    quiet: true
+  loop: '{{ substrate_libvirt_host_running.observation.trunks | selectattr("drifted") | list }}'
+  loop_control:
+    label: '{{ item.bridge }}'
+
+# The first host effects, in order: the VLAN refusal unit, the trunks, the
+# legs, then the libvirt networks and the pool. A managed bridge carries each
+# tagged Network between guests only, so the host holds no connected route for
+# its subnet and a guest's packet for it would follow the default route out
+# through the NAT; an owned unit holds an unreachable route per subnet instead.
+# The frozen request carries no subnet, and the module removes the unit it
+# installed earlier, when nothing is to be refused any more.
+- name: Hold an unreachable route for each VLAN subnet a managed bridge carries
+  bootwright.core.libvirt_vlan_refusal:
+    request: '{{ bootwright_substrate_host_request }}'
+  register: substrate_libvirt_host_vlan_refusal
+
+- name: Hold each trunk and then each VLAN leg as a NetworkManager connection
+  bootwright.core.libvirt_nm_connections:
+    request: '{{ bootwright_substrate_host_request }}'
+  register: substrate_libvirt_host_connections
 
 - name: Prepare the owned firewall readiness barrier for host restart
   bootwright.core.libvirt_firewall_ready:
@@ -482,6 +532,7 @@
              or substrate_libvirt_host_daemon is changed
              or substrate_libvirt_host_firewall_ready is changed
              or substrate_libvirt_host_vlan_refusal is changed
+             or substrate_libvirt_host_connections is changed
              or substrate_libvirt_host_pool_directory is changed
              or substrate_libvirt_host_running.observation.pool != 'active'
              or substrate_libvirt_host_incomplete_networks | length > 0

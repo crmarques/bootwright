@@ -72,12 +72,13 @@ func hostRequestFor(catalog api.Catalog, provider api.Object, controllerMachine,
 	if uri == "" {
 		return HostRequest{}, refusal("api.required", "the libvirt provider declares no connection URI", "set spec.libvirt.uri on "+provider.Identity())
 	}
+	legs, trunks, err := legsFor(catalog, provider, contextName)
+	if err != nil {
+		return HostRequest{}, err
+	}
 	readyUnit := ""
-	for _, network := range networks {
-		if network.Managed {
-			readyUnit = "bootwright-" + contextName + "-" + name + "-firewalld-ready.service"
-			break
-		}
+	if len(legs) != 0 || slices.ContainsFunc(networks, func(network Network) bool { return network.Managed }) {
+		readyUnit = "bootwright-" + contextName + "-" + name + "-firewalld-ready.service"
 	}
 	refused := refusedPrefixes(catalog, provider)
 	if len(refused) > MaxRefusedPrefixes {
@@ -94,6 +95,7 @@ func hostRequestFor(catalog api.Catalog, provider api.Object, controllerMachine,
 	return HostRequest{
 		FirewallReadyUnit: readyUnit,
 		Identity:          Identity{Block: HostBlockID(name), Context: contextName, Object: name},
+		Legs:              legs,
 		Networks:          networks,
 		Packages:          HypervisorPackages(),
 		Placement:         placement,
@@ -104,6 +106,7 @@ func hostRequestFor(catalog api.Catalog, provider api.Object, controllerMachine,
 		Provisioned:     !placement.Local(),
 		RefusedPrefixes: refused,
 		Services:        ServiceUnits(),
+		Trunks:          trunks,
 		URI:             uri,
 		Version:         hostRequestVersion,
 		VLANRefusalUnit: refusalUnit,
@@ -129,6 +132,9 @@ func networksFor(catalog api.Catalog, provider api.Object, contextName string) (
 			return nil, refusal("api.required", "the "+name+" segment of "+provider.Identity()+" declares no bridge", "set spec.libvirt.bridge on Network/"+name+" or spec.segments[].libvirt.bridge on "+provider.Identity())
 		}
 		managed, isManaged := substrate.ManagedSegmentNetwork(segment)
+		if managed.Tagged() {
+			continue
+		}
 		if !isManaged {
 			networks = append(networks, network)
 			continue
@@ -277,7 +283,7 @@ func interfacesFor(catalog api.Catalog, provider, machine api.Object, contextNam
 			return nil, refusal("api.reference", "NIC "+nic.Name+" of the Machine selects no libvirt segment of its provider", "add a spec.substrate.libvirt.nics entry for NIC "+nic.Name+" naming a libvirt segment of "+provider.Identity()+" on "+machine.Identity())
 		}
 		defined := ""
-		if _, managed := substrate.ManagedSegmentNetwork(segment); managed {
+		if network, managed := substrate.ManagedSegmentNetwork(segment); managed && !network.Tagged() {
 			defined = substrate.NetworkName(contextName, reference)
 		}
 		interfaces = append(interfaces, Interface{

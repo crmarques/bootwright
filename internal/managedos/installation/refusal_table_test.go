@@ -126,6 +126,9 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 		"A VLAN install interface on a managed libvirt network": {labCatalog(vlan, networkWith(
 			declaredInterface("enp1s0", "ethernet"), vlanInterface("enp1s0.100", "enp1s0", "100"),
 		)), "Machine/rhel-01", map[string]string{"<machine>": "Machine/rhel-01", "<bridge>": "virbr-lab", "<id>": "100"}},
+		"A VLAN install interface on another VLAN than a leg's": {labCatalog(legNetwork("110"), installingOn("enp1s0.120"), networkWith(
+			declaredInterface("enp1s0", "ethernet"), vlanInterface("enp1s0.120", "enp1s0", "120"),
+		)), "Machine/rhel-01", map[string]string{"<machine>": "Machine/rhel-01", "<network>": "Network/lab-guests", "<vlan>": "110", "<bridge>": "virbr-lab", "<id>": "120"}},
 		"Two owners of the installed name servers": {labCatalog(dnsOwned), "Machine/rhel-01", onGuest},
 		"An installer image server off the controller": {labCatalog(servicesHost(), onServices, providerOnServices), "Machine/rhel-01", map[string]string{
 			"<server>": "ArtifactServer/lab-artifacts", "<server host>": "Machine/services", "<profile>": "MachineInstallProfile/rhel-9-8",

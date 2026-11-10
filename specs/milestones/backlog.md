@@ -8211,10 +8211,14 @@ pending the owner's review:
    `<bridge>.<vlan>`, the bridge name bounded so the device fits 15 bytes; the
    trunk is `bootwright-<context>-<provider>-trunk-<bridge>`. Each connection
    has a UUID derived like `DomainUUID` (domain
-   `bootwright.substrate.libvirt.connection-v1`) and NM `user.data` keys
+   `bootwright.substrate.libvirt.connection-v1`) and the user-data keys
    `bootwright.io.context`, `bootwright.io.provider`, `bootwright.io.network`
    and `bootwright.io.role` (`trunk` or `leg`). A connection is owned only when
-   its UUID, name, type, device and every user-data key match.
+   its UUID, name, type, device and every user-data key match. Integration
+   found that `nmcli` cannot set or show user data, so each connection is a
+   keyfile Bootwright writes and loads, whose `[user]` group carries the keys,
+   and ownership also requires `nmcli` to report that keyfile as the profile's
+   file ([trunks and VLAN legs](../substrates.md#trunks-and-vlan-legs)).
 4. Trunk and legs set `connection.zone trusted`, a runtime binding NM makes
    while firewalld's configuration stays untouched. The trunk gains nothing
    from it, because the table drops untagged traffic on the trunk (6).

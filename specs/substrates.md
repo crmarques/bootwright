@@ -133,8 +133,9 @@ The vSphere arm is not realized and has no row.
 ## Provider host realization
 
 The block `substrate-host-<provider>` realizes the host's virtualization
-runtime, the managed Networks that name the provider, the bridges its
-segments name, and the pool its emulated BMCs stage virtual media in.
+runtime, the managed Networks that name the provider, with the trunks and
+VLAN legs of its tagged ones, the bridges its segments name, and the pool its
+emulated BMCs stage virtual media in.
 
 **Hypervisor closure.** The runtime is the libvirt daemon with its QEMU/KVM
 emulator, `qemu-img`, `swtpm` for emulated TPMs, the libvirt client, and `podman`,
@@ -166,7 +167,7 @@ once its driver runs. A managed network or the pool whose driver still does not
 answer refuses before anything is defined.
 
 **Managed networks.** Each [managed `Network`](api/networks.md#libvirt-arm)
-naming the provider becomes one persistent libvirt network named
+without `vlan` naming the provider becomes one persistent libvirt network named
 `bootwright-<context>-<network>`, owning its `bridge`, which the
 definition writes as an XML-escaped attribute value, carrying its
 `hostAddress` with its CIDR's prefix, forwarding as `forward` selects, with the
@@ -234,12 +235,12 @@ when the request is planned. The host holds an
 `unreachable` route for each, so the guest is refused with an ICMP unreachable
 and nothing leaves through the uplink. libvirt's network XML cannot express it:
 its `<route>` element needs a gateway and adds a route through that gateway,
-and the host firewall is never reconfigured.
+and the host firewall's configuration is never changed.
 
 The routes belong to one unit,
 `bootwright-<context>-<provider>-vlan-refusal.service`, set in
-`vlanRefusalUnit` whenever the provider defines a managed network, with or
-without a subnet to refuse, so an apply that stops refusing a subnet removes
+`vlanRefusalUnit` whenever the provider defines a managed network or a VLAN
+leg, with or without a subnet to refuse, so an apply that stops refusing a subnet removes
 the unit it installed and a removal always finds it. It is a oneshot with
 `RemainAfterExit=yes`, enabled under `multi-user.target.wants` so the routes
 return after a restart, and its file names each route as `ip route add
@@ -294,8 +295,15 @@ unless that is 1500, the MTU libvirt and the kernel already give; a Machine's
 NICs attach, each in declared order, to the segment its `nics` entry names
 ([machines](api/machines.md#machine-profiles-and-segments)).
 
-**Firewall readiness.** A provider with a managed network requires firewalld
-already enabled and running; it never enables or reconfigures the host firewall.
+A [tagged managed `Network`](api/networks.md#tagged-managed-networks) is a
+VLAN leg on a trunk instead, as [trunks and VLAN legs](#trunks-and-vlan-legs)
+specifies.
+
+**Firewall readiness.** A provider with a managed network or a VLAN leg
+requires firewalld already enabled and running. Bootwright never enables
+firewalld or changes its configuration: on the host firewall it owns only its
+own NetworkManager connections, whose trusted-zone binding NetworkManager
+makes when it activates them.
 It owns one readiness unit named
 `bootwright-<context>-<provider>-firewalld-ready.service` and exactly its
 enablement link under `virtnetworkd.service.wants`. The oneshot unit runs after
@@ -380,9 +388,12 @@ this context's Machines and observes no domain on the host; tracked as
 bridge name is host-global; `prefix:<masked prefix>` for every managed
 Network, because the host routes its prefix to that bridge;
 `libvirt-network:<name>` for every managed network; `libvirt-pool:<name>` for
-the pool and `path:` for its directory; and `unit:<name>` without the `.service`
-suffix for the provider's firewall readiness unit and for its VLAN-refusal unit
-when it has managed networks
+the pool and `path:` for its directory; `bridge:<bridge>` for every trunk,
+and `bridge:<device>` and `prefix:<masked prefix>` for every leg, because a
+link name and a connected route are host-global; and `unit:<name>` without the
+`.service` suffix for the provider's
+firewall readiness unit and for its VLAN-refusal unit when it has managed
+networks or legs
 (`TestHostReservationsClaimEveryManagedNetworkAndThePool`). One host defines
 at most 20 managed Networks across its providers, a host-wide rule of the
 [Libvirt arm](api/networks.md#libvirt-arm), so a provider's reservation uses at
@@ -410,8 +421,9 @@ removal only while the using context exists.
 driver daemon active and enabled to start with the host, the `uri` answering,
 the provider's owned readiness resources proved as above, every managed
 network active with its ownership metadata, running and keeping
-the frozen definition and set to autostart, every external bridge present, and
-the pool active, set to autostart and targeting the frozen directory. Replay
+the frozen definition and set to autostart, every external bridge present,
+the pool active, set to autostart and targeting the frozen directory, and the trunks and legs as
+[their evidence](#trunks-and-vlan-legs) requires. Replay
 reports `completed` with no change when live state matches. The differences it
 converges, each reported as a change, are an owned network whose definition
 differs, which is redefined under the identity it already holds and restarted
@@ -466,6 +478,110 @@ directory is a positive partial realization.
 The readiness unit's active state is no part of positive no effect: a unit that
 failed at boot but is still owned and enabled is held, so the removal has taken
 nothing back.
+
+## Provider host trunks and routing
+
+The [provider host block](#provider-host-realization) realizes its tagged
+managed Networks on trunks it owns.
+
+### Trunks and VLAN legs
+
+Each
+[tagged managed `Network`](api/networks.md#tagged-managed-networks) naming the
+provider is a host VLAN leg on a trunk; both are NetworkManager connections
+this block owns, frozen in the request's `trunks` and `legs`, and neither is a
+libvirt network (`TestATaggedManagedNetworkFreezesALegAndItsTrunk`). The
+provider has one trunk per distinct `bridge` of its tagged managed Networks, a
+`trunks[]` entry `{bridge, mac, name, uuid}` in name order: the connection
+`bootwright-<context>-<provider>-trunk-<bridge>` of type `bridge` with
+`connection.interface-name` `<bridge>`, `bridge.stp no`,
+`bridge.vlan-filtering no`, `bridge.mac-address` `<mac>`, `ipv4.method
+disabled`, `ipv6.method disabled`, `connection.autoconnect yes` and
+`connection.zone trusted`. Its `mac` is `52:54:00:` followed by the first three
+bytes of the SHA-256 of `bootwright.substrate.libvirt.trunk-v1`, NUL, the
+context, NUL, the provider, NUL, the bridge, in lowercase hexadecimal pairs, so
+a tap that joins or leaves never changes the bridge's address. Each leg is a
+`legs[]` entry `{address, device, forward, name, network, trunk, uuid, vlan}` in
+name order: the connection `bootwright-<context>-<network>` of type `vlan` with
+`connection.interface-name` `<device>`, which is `<trunk>.<vlan>`, `vlan.parent`
+`<trunk>`, `vlan.id` `<vlan>`, `ipv4.method manual`, `ipv4.addresses`
+`<address>` (the host address with its CIDR's prefix), `ipv4.never-default
+yes`, `ipv6.method disabled`, `connection.autoconnect yes` and `connection.zone
+trusted`, with no gateway, DNS or DHCP, so a managed `DNSServer` may bind the
+leg's address under the existing rules. Each connection's `connection.uuid` is
+`uuid`, derived as a domain's is: the version-8 UUID of the SHA-256 of
+`bootwright.substrate.libvirt.connection-v1`, NUL, the context, NUL, the
+connection name. `nmcli` can neither set nor show a profile's user data, so
+each connection is the keyfile
+`/etc/NetworkManager/system-connections/<name>.nmconnection`, a regular root
+file of mode `0600` written atomically (a hidden `.bootwright-` staging name in
+that directory, synced, then renamed) and loaded with `nmcli connection load
+<path>`. It holds, in order, the groups and keys `[connection]` `id=<name>`,
+`uuid=<uuid>`, `type=bridge` or `type=vlan`, `interface-name=<bridge>` or
+`<device>`, `autoconnect=true`, `zone=trusted`; for a trunk `[bridge]`
+`mac-address=<mac in uppercase>`, `stp=false`, `vlan-filtering=false` and
+`[ipv4]` `method=disabled`; for a leg `[vlan]` `id=<vlan>`, `parent=<trunk>`
+and `[ipv4]` `address1=<address>`, `method=manual`, `never-default=true`; then
+`[ipv6]` `method=disabled`; and `[user]` with exactly the four keys, sorted,
+`bootwright.io.context` (the context), `bootwright.io.network` (a leg's Network,
+a trunk's bridge), `bootwright.io.provider` (the provider) and
+`bootwright.io.role` (`trunk` or `leg`); each line is `key=value`, each group
+ends with an empty line. A connection is this context's only when the profile
+holding its UUID has its name, type and interface name, `nmcli` reports its
+keyfile as the profile's `FILENAME`, and that keyfile, read without following
+links, is a regular root file of mode `0600` with one link whose
+`[connection]` `id`, `uuid` and `type` are the frozen ones and whose `[user]`
+group is exactly the four keys with their frozen values; any other profile of
+its name or UUID is foreign. NetworkManager binds both to
+firewalld's trusted zone when it activates them, a runtime binding like the
+one libvirt makes for its bridges; firewalld's configuration is never changed.
+The trunk carries the guest VLAN tags of each of its legs and of each leg's
+`taggedNetworkRefs`; a Machine NIC on a leg's segment is an `<interface
+type='bridge'>` on the trunk with no libvirt network
+(`TestAMachineNICOnALegSegmentAttachesToTheTrunkBridge`).
+
+A provider with a leg requires `NetworkManager.service` active and
+`/usr/bin/nmcli` present; the host block proves both and never installs,
+enables or starts them, and their absence refuses before any effect, as
+firewall readiness does. Before any effect, on apply and on destroy, each of
+these refuses `lifecycle.state`, naming it: a profile of a frozen connection's
+name with another UUID; a profile of its UUID this context does not own; any
+other profile whose `connection.interface-name` is the trunk or a leg device; a
+link of the trunk's or a leg device's name that no owned active connection
+holds; a route that the [managed-network route rules](#provider-host-realization) refuse for a leg's
+prefix, read with the leg device as its bridge; a file at a frozen keyfile path
+that is not this connection's keyfile; and an `nmcli` read that does not
+answer. The apply writes the keyfile of an absent connection or of an owned one
+whose definition differs and loads it, then activates it with `nmcli -w 60
+connection up uuid <uuid>`, and activates one that is down the same way; a
+trunk whose definition differs while a domain is plugged into it refuses as a
+network restart does. `nmcli` only reads, loads, activates and deletes. It
+brings each trunk up before its legs, reading the legs again after, both after
+the VLAN refusal unit and before any libvirt network; the removal refuses while
+a domain is plugged into a trunk or a profile holding a frozen UUID is foreign,
+then deletes the legs, then the trunks, each with `nmcli -w 60 connection
+delete uuid <uuid>` and its keyfile, before the libvirt networks, so the
+refused VLAN subnets stay refused while any leg exists, and proves every
+profile, keyfile and device gone.
+
+With a leg, presence evidence requires
+`networkManager` true and `connections[]` covering exactly the frozen
+trunks and legs, each answered, present, owned, carrying its frozen definition,
+active and in zone `trusted`
+(`TestHostPresenceRequiresEveryOwnedConnection`). `networkManager` is whether
+`NetworkManager.service` is active and `/usr/bin/nmcli` present. Each
+`connections[]` entry is `{name, role, device, answered, present, owned,
+active, definition, zone}`, one per frozen trunk and leg: whether `nmcli`
+answered for its profile, whether a profile holding its UUID exists, whether
+it is owned as above, whether it is active on its device, whether its keyfile
+carries every value above and `nmcli` reports each of its properties as above
+(no gateway on a leg), and the zone NetworkManager reports for it. A host with
+neither the `NetworkManager.service` unit nor `/usr/bin/nmcli` holds no
+profile, which answers each as absent. Removal evidence requires each answered and neither present, owned nor
+active; positive no effect of a removal requires each present, owned and
+active; an owned connection present without the whole is a positive partial
+realization, and one present without this context's ownership is foreign and
+stays unknown (`TestAnOwnedConnectionAloneIsAPartialRealization`).
 
 ## Machine realization
 

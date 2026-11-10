@@ -371,9 +371,18 @@ func hostEvidence(request HostRequest, digest string) json.RawMessage {
 	if ready.Name != "" {
 		ready.Present, ready.Owned, ready.Enabled, ready.Ready, ready.State = true, true, true, true, "active"
 	}
+	connections := []ConnectionEvidence{}
+	for _, connection := range request.connections() {
+		connections = append(connections, ConnectionEvidence{Active: true, Answered: true, Definition: true, Device: connection.device, Name: connection.name,
+			Owned: true, Present: true, Role: connection.role, Zone: legZone})
+	}
+	refusal := VLANRefusalEvidence{Name: request.VLANRefusalUnit, Answered: true}
+	if len(request.RefusedPrefixes) != 0 {
+		refusal.Present, refusal.Owned, refusal.Enabled, refusal.State, refusal.Routes = true, true, true, "active", request.RefusedPrefixes
+	}
 	data, _ := json.Marshal(HostEvidence{
-		FirewallReady: ready, VLANRefusal: VLANRefusalEvidence{Name: request.VLANRefusalUnit, Answered: true}, Directory: observed(true), Hypervisor: true, Networks: networks, Pool: "active", PoolAnswered: true,
-		PoolAutostart: true, PoolOwned: true, Postcondition: true, Request: digest, Services: services, URI: true,
+		Connections: connections, FirewallReady: ready, VLANRefusal: refusal, Directory: observed(true), Hypervisor: true, NetworkManager: len(connections) != 0,
+		Networks: networks, Pool: "active", PoolAnswered: true, PoolAutostart: true, PoolOwned: true, Postcondition: true, Request: digest, Services: services, URI: true,
 	})
 	return data
 }

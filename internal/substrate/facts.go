@@ -81,14 +81,27 @@ func HostCluster(provider api.Object) string {
 	return provider.Spec().Get(ArmKubeVirt, "hostClusterRef").Text()
 }
 
-type ManagedNetwork struct{ Prefix, Bridge, Forward string }
+type ManagedNetwork struct {
+	Prefix, Bridge, Forward string
+	VLAN                    int
+}
+
+func (n ManagedNetwork) Tagged() bool { return n.VLAN != 0 }
+
+func (n ManagedNetwork) HostDevice() string {
+	if n.Tagged() {
+		return LegDevice(n.Bridge, n.VLAN)
+	}
+	return n.Bridge
+}
 
 func ManagedSegmentNetwork(segment api.Value) (ManagedNetwork, bool) {
 	managed := segment.Get("managed")
 	if !managed.Present() {
 		return ManagedNetwork{}, false
 	}
-	return ManagedNetwork{Prefix: managed.Get("address").Text(), Bridge: segment.Get(ArmLibvirt, "bridge").Text(), Forward: managed.Get("forward").Text()}, true
+	vlan, _ := managed.Get("vlan").Int64()
+	return ManagedNetwork{Prefix: managed.Get("address").Text(), Bridge: segment.Get(ArmLibvirt, "bridge").Text(), Forward: managed.Get("forward").Text(), VLAN: int(vlan)}, true
 }
 
 func SegmentMTU(segment api.Value) int64 {

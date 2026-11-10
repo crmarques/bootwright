@@ -34,9 +34,28 @@ type Network struct {
 // HostRequest is the complete frozen intent for one libvirt provider host: the
 // closure it runs, the networks its segments declare and the pool its
 // emulated controllers stage media in. It carries no secret value.
+type Trunk struct {
+	Bridge string `json:"bridge"`
+	MAC    string `json:"mac"`
+	Name   string `json:"name"`
+	UUID   string `json:"uuid"`
+}
+
+type Leg struct {
+	Address string `json:"address"`
+	Device  string `json:"device"`
+	Forward string `json:"forward"`
+	Name    string `json:"name"`
+	Network string `json:"network"`
+	Trunk   string `json:"trunk"`
+	UUID    string `json:"uuid"`
+	VLAN    int    `json:"vlan"`
+}
+
 type HostRequest struct {
 	FirewallReadyUnit string               `json:"firewallReadyUnit"`
 	Identity          Identity             `json:"identity"`
+	Legs              []Leg                `json:"legs,omitempty"`
 	Networks          []Network            `json:"networks"`
 	Packages          []string             `json:"packages"`
 	Placement         machineref.Placement `json:"placement"`
@@ -53,6 +72,7 @@ type HostRequest struct {
 	// and a pool set to autostart only come back after a restart when the
 	// driver that owns them does.
 	Services        []string `json:"services"`
+	Trunks          []Trunk  `json:"trunks,omitempty"`
 	URI             string   `json:"uri"`
 	Version         string   `json:"version"`
 	VLANRefusalUnit string   `json:"vlanRefusalUnit,omitempty"`
@@ -187,6 +207,15 @@ func (r HostRequest) ReservationKeys() []string {
 		}
 		keys = append(keys, "bridge:"+network.Bridge, "libvirt-network:"+network.Name)
 		if prefix, err := netip.ParsePrefix(network.Address); err == nil {
+			keys = append(keys, "prefix:"+prefix.Masked().String())
+		}
+	}
+	for _, trunk := range r.Trunks {
+		keys = append(keys, "bridge:"+trunk.Bridge)
+	}
+	for _, leg := range r.Legs {
+		keys = append(keys, "bridge:"+leg.Device)
+		if prefix, err := netip.ParsePrefix(leg.Address); err == nil {
 			keys = append(keys, "prefix:"+prefix.Masked().String())
 		}
 	}

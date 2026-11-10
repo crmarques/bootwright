@@ -217,3 +217,24 @@ func TestRemediesNameTheFieldsTheOperatorAdds(t *testing.T) {
 		t.Fatalf("issue = %+v (found %v)", issue, found)
 	}
 }
+
+func TestAMachineOnALegSegmentStacksTheVLANsItCarries(t *testing.T) {
+	interfaces := list(m("name", "enp1s0", "type", "ethernet"),
+		m("name", "enp1s0.110", "type", "vlan", "vlan", m("base-iface", "enp1s0", "id", api.IntegerValue("110"))),
+		m("name", "enp1s0.120", "type", "vlan", "vlan", m("base-iface", "enp1s0", "id", api.IntegerValue("120"))))
+	lab := libvirtLab(interfaces)
+	leg := managedNet("net", "lab", "192.0.2.0/24", "192.0.2.1")
+	leg = leg.WithSpec(leg.Spec().With("vlan", api.IntegerValue("110")).With("libvirt", leg.Spec().Get("libvirt").With("taggedNetworkRefs", api.StringList("cluster"))))
+	lab[len(lab)-1] = leg
+	cluster := object(api.Network, "cluster", m("provided", true, "vlan", api.IntegerValue("120"), "ipv4", m("cidr", "203.0.113.0/24")))
+	stacked := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(
+		m("name", "ip", "address", "192.0.2.11", "interface", "enp1s0.110"), m("name", "storage", "address", "203.0.113.11", "interface", "enp1s0.120"))))
+	if issues := admission(stacked, append(lab, cluster)...); len(issues) != 0 {
+		t.Fatalf("a VLAN stack on a leg segment was refused: %v", issues)
+	}
+	untagged := guest(m("configRef", "net", "installAddressRef", "ip", "addresses", list(m("name", "ip", "address", "192.0.2.11", "interface", "enp1s0"))))
+	if _, found := issueWith(admission(untagged, append(lab, cluster)...), "$.spec.network.addresses[0].interface",
+		"interface enp1s0 of Machine/guest reaches Network/net untagged on NIC enp1s0, and segment net (tagged managed Network/net on trunk virbr-lab of InfraProvider/lab) carries no Network untagged"); !found {
+		t.Fatalf("an untagged address on a leg segment was admitted: %+v", admission(untagged, append(lab, cluster)...))
+	}
+}

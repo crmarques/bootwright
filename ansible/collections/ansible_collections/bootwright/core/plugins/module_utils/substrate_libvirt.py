@@ -15,6 +15,7 @@ import sys
 from xml.etree import ElementTree
 
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_firewall_ready import observe as observe_firewall_ready
+from ansible_collections.bootwright.core.plugins.module_utils.libvirt_nm_connections import observe as observe_connections
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_vlan_refusal import observe as observe_vlan_refusal
 
 VIRSH = "/usr/bin/virsh"
@@ -301,10 +302,11 @@ def attaches(root, network, bridge):
     names the bridge the network gave it; an interface bridged to the LAN
     names the bridge alone (https://libvirt.org/formatdomain.html#virtual-network
     and #bridge-to-lan). Stopping the network removes that bridge from under
-    either.
+    either. A trunk has no libvirt network, so its `network` is empty and only
+    the bridge is matched.
     """
     for source in root.findall("./devices/interface/source"):
-        if source.get("network") == network or (bridge and source.get("bridge") == bridge):
+        if (network and source.get("network") == network) or (bridge and source.get("bridge") == bridge):
             return True
     return False
 
@@ -772,7 +774,13 @@ def observe_host(runner, request):
     that network. `poolAutostart` is whether the pool starts with the host and
     `poolOwned` whether it targets the frozen directory. `vlanRefusal` covers
     the unit that holds the unreachable routes of the frozen VLAN subnets and
-    those routes.
+    those routes. `networkManager` and `connections` are the evidence of the
+    trunks and the VLAN legs; `connectionRefusals` says why an apply would
+    refuse them before any effect, and `trunks` names, for each trunk the host
+    holds, whether it drifted and the domains plugged into it, which neither a
+    reactivation nor a removal may disconnect. A trunk or leg device is a link
+    the host collision check reads too, and a leg's prefix a route, so both
+    reach `collisions`.
     """
     networks, drifted, ours = [], [], set()
     answers = uri_answers(runner, request["uri"])
@@ -803,14 +811,19 @@ def observe_host(runner, request):
             "state": unit_state(runner, service),
             "enabled": unit_enabled(runner, service),
         })
-    collided, shadows, probed = host_conflicts(runner, request.get("networks") or [], ours)
+    connections = observe_connections(runner, request)
+    collided, shadows, probed = host_conflicts(
+        runner, (request.get("networks") or []) + connections["pseudo"], ours | set(connections["devices"]))
     return {
         "collisions": collided,
         "collisionsAnswered": probed,
+        "connectionRefusals": connections["refusals"],
+        "connections": connections["connections"],
         "directory": os.path.lexists(request["poolPath"]),
         "firewallReady": observe_firewall_ready(runner, request),
         "drifted": drifted,
         "hypervisor": packages_present(runner, request.get("packages") or []),
+        "networkManager": connections["networkManager"],
         "networks": networks,
         "pool": pool["state"],
         "poolAnswered": pool["answered"],
@@ -818,9 +831,23 @@ def observe_host(runner, request):
         "poolOwned": pool["owned"],
         "services": services,
         "shadows": shadows,
+        "trunks": trunk_guests(runner, request, connections["trunks"], answers, context),
         "uri": answers,
         "vlanRefusal": observe_vlan_refusal(runner, request),
     }
+
+
+def trunk_guests(runner, request, trunks, answers, context):
+    """Each trunk the host holds, whether it drifted, and the domains plugged into it, or unanswered."""
+    found = []
+    for trunk in trunks:
+        entry = {"name": trunk["name"], "bridge": trunk["bridge"], "present": trunk["present"], "drifted": trunk["drifted"],
+                 "guests": [], "guestsAnswered": True}
+        if trunk["present"]:
+            guests = network_guests(runner, request["uri"], "", trunk["bridge"], context) if answers else None
+            entry["guests"], entry["guestsAnswered"] = guests or [], guests is not None
+        found.append(entry)
+    return found
 
 
 def observe_machine(runner, request, read=None):

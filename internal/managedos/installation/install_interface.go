@@ -234,7 +234,14 @@ func vlanRefusal(catalog api.Catalog, machine api.Object, template, declared api
 	for _, leaf := range leaves {
 		reference := substrate.NICSegment(catalog, provider, machine, substrate.InterfaceNIC(machine, leaf))
 		segment, attached := findNamed(substrate.Segments(catalog, provider), "name", reference)
-		if network, managed := substrate.ManagedSegmentNetwork(segment); attached && managed {
+		network, managed := substrate.ManagedSegmentNetwork(segment)
+		switch {
+		case !attached || !managed || network.VLAN == int(id):
+		case network.Tagged():
+			return "tagged managed Network/" + reference + " gives its host an address only on VLAN " + strconv.Itoa(network.VLAN) + " of trunk " + network.Bridge +
+					", so the controller cannot reach the VLAN " + strconv.FormatInt(id, 10) + " install address of " + identity,
+				"install " + identity + " over a VLAN " + strconv.Itoa(network.VLAN) + " interface on that trunk, or attach it to a segment whose host carries VLAN " + strconv.FormatInt(id, 10)
+		default:
 			return "a managed libvirt network gives its host an untagged address on " + network.Bridge +
 					", so the controller cannot reach the VLAN install address of " + identity,
 				"attach " + identity + " to an existing-bridge segment whose host carries VLAN " + strconv.FormatInt(id, 10) + ", or install over an untagged interface"

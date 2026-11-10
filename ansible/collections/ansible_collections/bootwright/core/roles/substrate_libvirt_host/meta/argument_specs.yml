@@ -13,6 +13,10 @@ argument_specs:
           identity:
             type: dict
             required: true
+          legs:
+            type: list
+            elements: dict
+            required: false
           networks:
             type: list
             elements: dict
@@ -41,6 +45,10 @@ argument_specs:
             type: list
             elements: str
             required: true
+          trunks:
+            type: list
+            elements: dict
+            required: false
           uri:
             type: str
             required: true

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"slices"
+	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -60,11 +61,7 @@ func ControllerUnitName(contextName, machine string) string {
 // its bits are derived, not random, which is what a deterministic identity
 // needs.
 func DomainUUID(contextName, machine string) string {
-	sum := sha256.Sum256([]byte("bootwright.substrate.libvirt.domain-v1\x00" + contextName + "\x00" + machine))
-	sum[6] = sum[6]&0x0f | 0x80
-	sum[8] = sum[8]&0x3f | 0x80
-	value := hex.EncodeToString(sum[:16])
-	return strings.Join([]string{value[0:8], value[8:12], value[12:16], value[16:20], value[20:32]}, "-")
+	return derivedUUID("bootwright.substrate.libvirt.domain-v1", contextName, machine)
 }
 
 // InterfaceMAC derives one interface's hardware address from the context,
@@ -171,4 +168,44 @@ func FormatPort(value int) string {
 func DataDiskSerial(contextName, machine, disk string) string {
 	digest := sha256.Sum256([]byte("bootwright.libvirt.data-disk-v1\x00" + contextName + "\x00" + machine + "\x00" + disk))
 	return "bw" + hex.EncodeToString(digest[:9])
+}
+
+const MaxInterfaceName = 15
+
+func LegDevice(bridge string, vlan int) string {
+	return bridge + "." + strconv.Itoa(vlan)
+}
+
+func LegConnectionName(contextName, network string) string {
+	return Prefix + "-" + contextName + "-" + network
+}
+
+func TrunkConnectionName(contextName, provider, bridge string) string {
+	return Prefix + "-" + contextName + "-" + provider + "-trunk-" + bridge
+}
+
+func ConnectionUUID(contextName, connection string) string {
+	return derivedUUID("bootwright.substrate.libvirt.connection-v1", contextName, connection)
+}
+
+func TrunkMAC(contextName, provider, bridge string) string {
+	sum := sha256.Sum256([]byte("bootwright.substrate.libvirt.trunk-v1\x00" + contextName + "\x00" + provider + "\x00" + bridge))
+	value := hex.EncodeToString(sum[:3])
+	return "52:54:00:" + value[0:2] + ":" + value[2:4] + ":" + value[4:6]
+}
+
+func RoutingUnit(contextName, provider string) string {
+	return Prefix + "-" + contextName + "-" + provider + "-routing.service"
+}
+
+func RoutingTable(contextName, provider string) string {
+	return Prefix + "-" + contextName + "-" + provider + "-routing"
+}
+
+func derivedUUID(domain string, parts ...string) string {
+	sum := sha256.Sum256([]byte(domain + "\x00" + strings.Join(parts, "\x00")))
+	sum[6] = sum[6]&0x0f | 0x80
+	sum[8] = sum[8]&0x3f | 0x80
+	value := hex.EncodeToString(sum[:16])
+	return strings.Join([]string{value[0:8], value[8:12], value[12:16], value[16:20], value[20:32]}, "-")
 }

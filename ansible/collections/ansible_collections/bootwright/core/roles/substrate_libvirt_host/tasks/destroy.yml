@@ -121,6 +121,45 @@
       is unknown or belongs to another owner; restore it before removal
     quiet: true
 
+# A connection read that did not answer proves nothing removed, and a profile
+# holding a frozen UUID that is not this provider's is never deleted.
+- name: Refuse to remove a trunk or VLAN leg that is unknown or foreign
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_host_before.observation.connections | rejectattr('answered') | list | length == 0
+      - substrate_libvirt_host_before.observation.connections | selectattr('present') | rejectattr('owned') | list | length == 0
+    fail_msg: >-
+      NetworkManager did not answer for a trunk or VLAN leg of this provider,
+      or a profile holding its frozen UUID is not this provider's; restore
+      NetworkManager or remove that profile, then repeat the removal
+    quiet: true
+
+# Removing a trunk takes its bridge from under every domain plugged into it,
+# so the removal refuses before its first effect while one runs there or while
+# the hypervisor does not answer which do.
+- name: Refuse to remove a trunk nothing proves idle
+  ansible.builtin.assert:
+    that:
+      - item.guestsAnswered
+      - item.guests | length == 0
+    fail_msg: >-
+      trunk {{ item.bridge }} still carries
+      {{ item.guests | join(', ') if item.guests else 'domains the hypervisor did not answer for' }};
+      stop each Machine with bootwright machine stop --context
+      {{ bootwright_substrate_host_request.identity.context }} --name <machine>,
+      and any other domain named, then repeat the removal
+    quiet: true
+  loop: '{{ substrate_libvirt_host_before.observation.trunks | selectattr("present") | list }}'
+  loop_control:
+    label: '{{ item.bridge }}'
+
+# The legs go first and the trunks after them, before the libvirt networks.
+- name: Remove each VLAN leg and then each trunk this provider owns
+  bootwright.core.libvirt_nm_connections:
+    request: '{{ bootwright_substrate_host_request }}'
+    state: absent
+  register: substrate_libvirt_host_connections
+
 - name: Destroy each owned network
   ansible.builtin.command:
     argv:
@@ -272,6 +311,7 @@
              or substrate_libvirt_host_owned_networks | length > 0
              or substrate_libvirt_host_parents is changed
              or substrate_libvirt_host_firewall_ready is changed
+             or substrate_libvirt_host_connections is changed
              or substrate_libvirt_host_vlan_refusal is changed)
          else 'unchanged' }}
     digest: '{{ bootwright_substrate_host_digest }}'

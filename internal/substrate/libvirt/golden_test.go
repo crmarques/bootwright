@@ -283,6 +283,9 @@ func TestHostEvidenceMatchesItsGoldens(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
+			if test.evidence.Connections == nil {
+				test.evidence.Connections = []ConnectionEvidence{}
+			}
 			canonical, err := reconciliation.Freeze(test.evidence, "provider host evidence")
 			if err != nil {
 				t.Fatalf("encoding: %v", diagnostics.Of(err))

@@ -1,0 +1,77 @@
+{
+  "firewallReadyUnit": "bootwright-lab-lab-libvirt-firewalld-ready.service",
+  "identity": {
+    "block": "substrate-host-lab-libvirt",
+    "context": "lab",
+    "object": "lab-libvirt"
+  },
+  "legs": [
+    {
+      "address": "203.0.113.129/26",
+      "device": "br-trunk.150",
+      "forward": "none",
+      "name": "bootwright-lab-ceph-arbiter",
+      "network": "ceph-arbiter",
+      "trunk": "br-trunk",
+      "uuid": "90514379-d140-8cc3-8b87-5db788329ba5",
+      "vlan": 150
+    },
+    {
+      "address": "203.0.113.65/26",
+      "device": "br-trunk.140",
+      "forward": "nat",
+      "name": "bootwright-lab-ceph-public",
+      "network": "ceph-public",
+      "trunk": "br-trunk",
+      "uuid": "586e682f-f33a-8239-b792-14ecedb4994f",
+      "vlan": 140
+    }
+  ],
+  "networks": [
+    {
+      "address": "198.51.100.1/24",
+      "bridge": "virbr-lab",
+      "forward": "nat",
+      "managed": true,
+      "name": "bootwright-lab-lab-guests"
+    }
+  ],
+  "packages": [
+    "podman",
+    "libvirt-client",
+    "libvirt-daemon",
+    "libvirt-daemon-driver-network",
+    "libvirt-daemon-driver-qemu",
+    "libvirt-daemon-driver-storage-core",
+    "qemu-img",
+    "qemu-kvm-core",
+    "swtpm",
+    "swtpm-tools"
+  ],
+  "placement": {
+    "connection": "local",
+    "machine": "controller"
+  },
+  "poolName": "bootwright-lab-lab-libvirt-vmedia",
+  "poolPath": "/var/lib/libvirt/images/bootwright/lab/providers/lab-libvirt/vmedia",
+  "provisioned": false,
+  "refusedPrefixes": [
+    "203.0.113.0/26"
+  ],
+  "services": [
+    "virtqemud.service",
+    "virtnetworkd.service",
+    "virtstoraged.service"
+  ],
+  "trunks": [
+    {
+      "bridge": "br-trunk",
+      "mac": "52:54:00:95:a6:be",
+      "name": "bootwright-lab-lab-libvirt-trunk-br-trunk",
+      "uuid": "bf590047-15c5-88f5-8c0a-e8b911aac3c0"
+    }
+  ],
+  "uri": "qemu:///system",
+  "version": "substrate-host-libvirt-v1",
+  "vlanRefusalUnit": "bootwright-lab-lab-libvirt-vlan-refusal.service"
+}

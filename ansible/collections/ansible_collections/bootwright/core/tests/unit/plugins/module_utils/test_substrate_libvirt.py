@@ -1039,3 +1039,85 @@ def test_policy_and_on_link_defaults_collide_but_main_gateway_defaults_do_not():
             route = '{"dst": "%s", "dev": "tun0"%s}' % (destination, extra)
             found, shadows = conflicts(routes_with(route), "10.1.0.1/24")
             assert len(found) == count and shadows == []
+
+
+TRUNK_DOMAIN = """<domain type="kvm"><name>bootwright-lab-ceph-01</name>
+  <metadata><bw:owner xmlns:bw="https://bootwright.io/substrate/v1"><bw:context>lab</bw:context><bw:machine>ceph-01</bw:machine></bw:owner></metadata>
+  <devices><interface type="bridge"><source bridge="br-lab"/></interface></devices>
+</domain>"""
+
+LIBVIRT_DOMAIN = """<domain type="kvm"><name>other</name>
+  <devices><interface type="network"><source network="default" bridge="virbr0"/></interface></devices>
+</domain>"""
+
+
+def test_a_trunk_has_no_libvirt_network_so_only_its_bridge_is_matched():
+    runner = runner_for({
+        "list --name": (0, "bootwright-lab-ceph-01\nother\n", ""),
+        "dumpxml bootwright-lab-ceph-01": (0, TRUNK_DOMAIN, ""),
+        "dumpxml other": (0, LIBVIRT_DOMAIN, ""),
+    })
+    assert network_guests(runner, "qemu:///system", "", "br-lab", "lab") == ["Machine ceph-01"]
+    assert network_guests(runner, "qemu:///system", "", "br-other", "lab") == []
+
+
+TAGGED = {
+    "identity": {"context": "lab", "object": "host"},
+    "networks": [], "packages": [], "poolName": "p", "services": [], "uri": "qemu:///system",
+    "trunks": [{"bridge": "br-lab", "mac": "52:54:00:aa:bb:01", "name": "bootwright-lab-host-trunk-br-lab",
+                "uuid": "0b1c2d3e-0000-8000-8000-000000000001"}],
+    "legs": [{"address": "198.51.100.1/26", "device": "br-lab.110", "forward": "nat", "name": "bootwright-lab-ceph-public",
+              "network": "ceph-public", "trunk": "br-lab", "uuid": "0b1c2d3e-0000-8000-8000-000000000002", "vlan": 110}],
+    "routing": {"forwarding": True, "keptPrefixes": ["198.51.100.0/26"], "managedDevices": ["br-lab", "br-lab.110"],
+                "natPrefixes": ["198.51.100.0/26"], "unit": "bootwright-lab-host-routing.service"},
+}
+
+
+def tagged_answers(**replaced):
+    answers = {
+        "version": (0, "", ""),
+        "connection show": (0, "", ""),
+        "NetworkManager.service": (0, "LoadState=loaded\nActiveState=active\n", ""),
+        "bootwright-lab-host-routing.service": (0, "LoadState=not-found\nActiveState=inactive\nFragmentPath=\nDropInPaths=\n", ""),
+        "/usr/sbin/nft -j list tables": (0, '{"nftables": [{"metainfo": {}}]}', ""),
+        "/usr/sbin/ip -json link show": (0, LINKS, ""),
+        "/usr/sbin/ip -json -4 route show table all": (0, ROUTES4, ""),
+        "/usr/sbin/ip -json -6 route show table all": (0, ROUTES6, ""),
+    }
+    answers.update(replaced)
+    return runner_for(answers)
+
+
+@pytest.fixture
+def installed(monkeypatch):
+    from ansible_collections.bootwright.core.plugins.module_utils import libvirt_nm_connections
+
+    monkeypatch.setattr(libvirt_nm_connections, "executable", lambda path: True)
+
+
+def test_the_host_observation_carries_the_trunks_and_legs(tmp_path, installed):
+    observation = observe_host(tagged_answers(), dict(TAGGED, poolPath=str(tmp_path / "pool")))
+    assert observation["networkManager"] is True
+    assert [(entry["name"], entry["role"], entry["device"], entry["answered"], entry["present"]) for entry in observation["connections"]] == [
+        ("bootwright-lab-host-trunk-br-lab", "trunk", "br-lab", True, False),
+        ("bootwright-lab-ceph-public", "leg", "br-lab.110", True, False)]
+    assert (observation["connectionRefusals"], observation["collisions"]) == ([], [])
+    assert observation["trunks"] == [{"name": "bootwright-lab-host-trunk-br-lab", "bridge": "br-lab", "present": False, "drifted": False,
+                                      "guests": [], "guestsAnswered": True}]
+
+
+def test_a_route_or_link_a_leg_would_take_reaches_the_host_collisions(tmp_path, installed):
+    request = dict(TAGGED, poolPath=str(tmp_path / "pool"))
+    route = tagged_answers(**{"/usr/sbin/ip -json -4 route show table all": (0, '[{"dst": "198.51.100.0/24", "dev": "eth1"}]', "")})
+    assert observe_host(route, request)["collisions"] == [
+        "route 198.51.100.0/24 dev eth1, which overlaps 198.51.100.0/26: change the address of attachment ceph-public"]
+    link = tagged_answers(**{"/usr/sbin/ip -json link show": (0, '[{"ifname": "br-lab"}]', "")})
+    assert observe_host(link, request)["collisions"] == [
+        "link br-lab, which no network of this context runs: change the bridge of attachment bootwright-lab-host-trunk-br-lab"]
+
+
+def test_networkmanager_that_is_not_ready_refuses_before_any_effect(tmp_path, installed):
+    stopped = tagged_answers(**{"NetworkManager.service": (0, "LoadState=loaded\nActiveState=inactive\n", "")})
+    observation = observe_host(stopped, dict(TAGGED, poolPath=str(tmp_path / "pool")))
+    assert observation["networkManager"] is False
+    assert observation["connectionRefusals"][0].startswith("a tagged managed Network needs NetworkManager.service active")

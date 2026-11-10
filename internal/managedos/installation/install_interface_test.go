@@ -423,6 +423,29 @@ func TestAVLANInstallOnAManagedLibvirtNetworkRefuses(t *testing.T) {
 	expectNoRefusal(t, metal)
 }
 
+func legNetwork(vlan string) api.Object {
+	leg := labNetwork()
+	return leg.WithSpec(leg.Spec().With("vlan", api.IntegerValue(vlan)))
+}
+
+func TestAVLANInstallOnALegSegmentIsReachedThroughTheLeg(t *testing.T) {
+	leg := legNetwork("110")
+	cluster := api.NewObject(api.Network, "ceph-cluster", api.Value{}, api.MapValue(field("provided", api.BoolValue(true)), number("vlan", "120"),
+		field("ipv4", api.MapValue(text("cidr", "203.0.113.0/24")))))
+	leg = leg.WithSpec(leg.Spec().With("libvirt", leg.Spec().Get("libvirt").With("taggedNetworkRefs", api.StringList("ceph-cluster"))))
+	network := []api.Value{declaredInterface("enp1s0", "ethernet"), vlanInterface("enp1s0.110", "enp1s0", "110"), vlanInterface("enp1s0.120", "enp1s0", "120")}
+	catalog := labCatalog(leg, cluster, installingOn("enp1s0.110"), networkWith(network...))
+	expectNoRefusal(t, catalog)
+	if line := networkLineOf(t, requestOf(t, catalog, "rhel-01")); !strings.Contains(line, "--vlanid=110") {
+		t.Fatalf("network line = %s", line)
+	}
+	bonded := []api.Value{bondPort("enp1s0", "bond0"), bondPort("enp2s0", "bond0"), activeBackup("bond0", "enp1s0", "enp2s0"), vlanInterface("bond0.110", "bond0", "110")}
+	expectNoRefusal(t, labCatalog(leg, cluster, installingOn("bond0.110"), networkWith(bonded...)))
+	expectNetworkRefusal(t, labCatalog(leg, cluster, installingOn("enp1s0.120"), networkWith(network...)),
+		"tagged managed Network/lab-guests gives its host an address only on VLAN 110 of trunk virbr-lab, so the controller cannot reach the VLAN 120 install address of Machine/rhel-01",
+		"install Machine/rhel-01 over a VLAN 110 interface on that trunk, or attach it to a segment whose host carries VLAN 120")
+}
+
 func TestTwoOwnersOfTheNameServersRefuse(t *testing.T) {
 	servers := func(config api.Object, listed ...string) api.Object {
 		return config.WithSpec(config.Spec().WithPath(api.MapValue(field("config", api.MapValue(field("server", api.StringList(listed...))))), "nmstate", "dns-resolver"))

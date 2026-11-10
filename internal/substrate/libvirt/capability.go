@@ -99,9 +99,9 @@ func hostDescription(verb reconciliation.Verb, request HostRequest) string {
 }
 
 func hostImpacts(verb reconciliation.Verb, request HostRequest) []string {
-	path, pool, network, bridge := "create-path", "create-libvirt-pool", "create-libvirt-network", "create-bridge"
+	path, pool, network, bridge, link := "create-path", "create-libvirt-pool", "create-libvirt-network", "create-bridge", "create-vlan-link"
 	if verb == reconciliation.Destroy {
-		path, pool, network, bridge = "remove-path", "remove-libvirt-pool", "remove-libvirt-network", "remove-bridge"
+		path, pool, network, bridge, link = "remove-path", "remove-libvirt-pool", "remove-libvirt-network", "remove-bridge", "remove-vlan-link"
 	}
 	impacts := []string{path + " " + request.PoolPath, pool + " " + request.PoolName}
 	if request.Provisioned && verb != reconciliation.Destroy {
@@ -113,6 +113,12 @@ func hostImpacts(verb reconciliation.Verb, request HostRequest) []string {
 		if declared.Managed {
 			impacts = append(impacts, network+" "+declared.Name, bridge+" "+declared.Bridge)
 		}
+	}
+	for _, trunk := range request.Trunks {
+		impacts = append(impacts, bridge+" "+trunk.Bridge)
+	}
+	for _, leg := range request.Legs {
+		impacts = append(impacts, link+" "+leg.Device)
 	}
 	slices.Sort(impacts)
 	return slices.Compact(impacts)

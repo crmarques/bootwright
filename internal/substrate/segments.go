@@ -30,6 +30,9 @@ func SegmentLabel(c api.Catalog, provider api.Object, name string) string {
 		}
 	}
 	if o, found := c.Find(api.Network, name); found && IsManagedNetwork(o) {
+		if _, leg := TaggedManagedNetwork(o); leg {
+			return "segment " + name + " (tagged managed " + o.Identity() + " on trunk " + o.Spec().Get(ArmLibvirt, "bridge").Text() + " of " + provider.Identity() + ")"
+		}
 		return "segment " + name + " (managed " + o.Identity() + " of " + provider.Identity() + ")"
 	}
 	return "segment " + name + " of " + provider.Identity()

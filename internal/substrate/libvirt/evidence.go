@@ -14,15 +14,17 @@ const maxEvidenceBytes = 64 << 10
 // Go validates it strictly, so an adapter cannot widen a postcondition or
 // report a network the operation did not freeze.
 type HostEvidence struct {
-	Absent bool `json:"absent"`
+	Absent      bool                 `json:"absent"`
+	Connections []ConnectionEvidence `json:"connections"`
 	// Directory is whether anything exists at the pool directory's path, read
 	// whether or not the URI answered. Evidence without it proves the
 	// directory neither present nor absent.
-	Directory     *bool                 `json:"directory"`
-	FirewallReady FirewallReadyEvidence `json:"firewallReady"`
-	Hypervisor    bool                  `json:"hypervisor"`
-	Networks      []NetworkEvidence     `json:"networks"`
-	Pool          string                `json:"pool"`
+	Directory      *bool                 `json:"directory"`
+	FirewallReady  FirewallReadyEvidence `json:"firewallReady"`
+	Hypervisor     bool                  `json:"hypervisor"`
+	NetworkManager bool                  `json:"networkManager"`
+	Networks       []NetworkEvidence     `json:"networks"`
+	Pool           string                `json:"pool"`
 	// PoolAnswered is whether the storage driver answered for the pool: it
 	// returned the pool, or completed a listing that does not name it. The
 	// URI answering proves only that the hypervisor did, and a storage driver
@@ -181,6 +183,9 @@ func ValidateHostPresence(data []byte, request HostRequest, digest string) error
 	if !evidence.PoolAutostart {
 		return refusal("lifecycle.state", "the provider's virtual-media pool does not start with the host", "")
 	}
+	if err := matchConnections(evidence, request); err != nil {
+		return err
+	}
 	return matchNetworks(evidence.Networks, request.Networks)
 }
 
@@ -310,6 +315,9 @@ func ValidateHostAbsence(data []byte, digest string) error {
 	}
 	if evidence.Directory == nil || *evidence.Directory {
 		return refusal("lifecycle.state", "the provider host removal evidence does not prove its pool directory gone", "")
+	}
+	if err := connectionsAbsent(evidence.Connections); err != nil {
+		return err
 	}
 	if !evidence.PoolAnswered {
 		return refusal("lifecycle.state", "the provider host's storage driver did not answer for its pool, so its removal is not proved", "")
@@ -448,7 +456,7 @@ func unremoved(evidence HostEvidence, request HostRequest) error {
 			return refusal("lifecycle.state", "the provider host no longer holds every managed network it owns active", "")
 		}
 	}
-	return nil
+	return connectionsHeld(evidence.Connections, request)
 }
 
 // ValidateHostPartial accepts evidence only when it positively proves this
@@ -485,8 +493,12 @@ func holdsOwned(evidence HostEvidence) error {
 	if vlan := evidence.VLANRefusal; vlan.Present && (!vlan.Answered || !vlan.Owned) {
 		return refusal("lifecycle.state", "a VLAN refusal unit exists without this provider's ownership", "")
 	}
+	held, err := connectionsOwned(evidence.Connections)
+	if err != nil {
+		return err
+	}
 	vlan := evidence.VLANRefusal
-	present := evidence.Pool != "" || (evidence.Directory != nil && *evidence.Directory) || (ready.Answered && ready.Present && ready.Owned) || (vlan.Answered && vlan.Present && vlan.Owned)
+	present := held || evidence.Pool != "" || (evidence.Directory != nil && *evidence.Directory) || (ready.Answered && ready.Present && ready.Owned) || (vlan.Answered && vlan.Present && vlan.Owned)
 	for _, network := range evidence.Networks {
 		if !network.Managed || (network.State == "" && !network.Owned) {
 			continue

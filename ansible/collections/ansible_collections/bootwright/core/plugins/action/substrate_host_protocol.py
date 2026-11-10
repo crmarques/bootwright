@@ -25,6 +25,9 @@ MAX_SERVICES = 16
 OBSERVED_NETWORK = {"answered", "autostart", "bridge", "definition", "managed", "name", "owned", "state", "uuid"}
 OPTIONAL_NETWORK = {"mtu"}
 OBSERVED_SERVICE = {"enabled", "name", "state"}
+MAX_CONNECTIONS = 64
+OBSERVED_CONNECTION = {"active", "answered", "definition", "device", "name", "owned", "present", "role", "zone"}
+CONNECTION_FLAGS = ("active", "answered", "definition", "owned", "present")
 OBSERVED_VLAN_REFUSAL = {"answered", "enabled", "name", "owned", "present", "routes", "state"}
 VLAN_REFUSAL_FLAGS = ("answered", "enabled", "owned", "present")
 
@@ -109,7 +112,8 @@ def firewall_ready(observation):
 
 def firewall_realized(evidence):
     entry = evidence["firewallReady"]
-    if not any(network["managed"] for network in evidence["networks"]):
+    # A VLAN leg needs the trusted zone as a managed network does, so either freezes the barrier.
+    if not any(network["managed"] for network in evidence["networks"]) and not evidence.get("connections"):
         return entry["answered"] and not entry["name"] and not entry["present"] and not entry["enabled"]
     return (entry["answered"] and bool(entry["name"]) and entry["present"] and entry["owned"]
             and entry["enabled"] and entry["ready"] and entry["state"] == "active")
@@ -130,6 +134,31 @@ def flagged(entry, keys, flags, what):
         if key not in flags and key != "routes" and not isinstance(entry[key], str):
             raise ValueError(what)
     return dict(entry)
+
+
+def connections_of(observation):
+    """The trunk and VLAN leg evidence, each exactly the fields Go validates, and NetworkManager's readiness."""
+    connections = observation.get("connections") or []
+    if not isinstance(connections, list) or len(connections) > MAX_CONNECTIONS:
+        raise ValueError("connection count")
+    ready = observation.get("networkManager")
+    if not isinstance(ready, bool):
+        raise ValueError("NetworkManager readiness")
+    return {"connections": [flagged(entry, OBSERVED_CONNECTION, CONNECTION_FLAGS, "connection evidence") for entry in connections],
+            "networkManager": ready}
+
+
+def connection_realized(entry):
+    return entry["answered"] and entry["present"] and entry["owned"] and entry["active"] and entry["definition"] and entry["zone"] == "trusted"
+
+
+def connections_realized(evidence):
+    connections = evidence["connections"]
+    return (not connections or evidence["networkManager"]) and all(connection_realized(entry) for entry in connections)
+
+
+def connections_left(evidence):
+    return any(entry["present"] or entry["active"] or entry["owned"] for entry in evidence["connections"])
 
 
 def vlan_refusal_of(observation):
@@ -159,6 +188,8 @@ def vlan_refusal_left(evidence):
 # realized, whether anything of it is left, and whether it was answered for.
 Held = namedtuple("Held", ("name", "read", "realized", "left", "answered"))
 HELD = (
+    Held("connections", connections_of, connections_realized, connections_left,
+         lambda evidence: all(entry["answered"] for entry in evidence["connections"])),
     Held("VLAN refusal", vlan_refusal_of, vlan_refusal_realized, vlan_refusal_left,
          lambda evidence: evidence["vlanRefusal"]["answered"]),
 )

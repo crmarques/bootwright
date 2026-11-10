@@ -1,8 +1,8 @@
 implementation: substrate-host-libvirt-v1
-content-digest: 638535e5177641f8e9b8e0381b853cb295aeae3aecfb059308f8c8a2ec650c5e
+content-digest: 27bd832625fef6022d9eb884e323edafd80730d0eca3d8a5cfc71d49d483246a
 request-version: substrate-host-libvirt-v1
 automation-formats: https://bootwright.io/substrate/v1
-mark-formats: Bootwright owned VLAN refusal, Bootwright owned readiness barrier, Description=Bootwright managed network firewall, https://bootwright.io/substrate/v1
+mark-formats: Bootwright owned VLAN refusal, Bootwright owned readiness barrier, Description=Bootwright managed network firewall, bootwright.io.context, bootwright.io.network, bootwright.io.provider, bootwright.io.role, https://bootwright.io/substrate/v1
 proof-ids: none
 fixed-places: none
 effect-pins:
@@ -12,6 +12,7 @@ effect-pins:
   virtqemud.service,virtnetworkd.service,virtstoraged.service
   bridge-use-claim
   vlan-refusal-v1
+  nm-trunk-legs-v1
 request-identity:
   identity.context
   identity.object
@@ -23,12 +24,27 @@ request-identity:
   networks[].bridge
   firewallReadyUnit
   vlanRefusalUnit
+  trunks[].bridge
+  trunks[].name
+  trunks[].uuid
+  legs[].name
+  legs[].device
+  legs[].uuid
 request-schema:
   firewallReadyUnit string
   identity struct libvirt.Identity
   identity.block string
   identity.context string
   identity.object string
+  legs []struct libvirt.Leg omitempty
+  legs[].address string
+  legs[].device string
+  legs[].forward string
+  legs[].name string
+  legs[].network string
+  legs[].trunk string
+  legs[].uuid string
+  legs[].vlan int
   networks []struct libvirt.Network
   networks[].address string omitempty
   networks[].bridge string
@@ -50,11 +66,26 @@ request-schema:
   provisioned bool
   refusedPrefixes []string omitempty
   services []string
+  trunks []struct libvirt.Trunk omitempty
+  trunks[].bridge string
+  trunks[].mac string
+  trunks[].name string
+  trunks[].uuid string
   uri string
   version string
   vlanRefusalUnit string omitempty
 evidence-schema:
   absent bool
+  connections []struct libvirt.ConnectionEvidence
+  connections[].active bool
+  connections[].answered bool
+  connections[].definition bool
+  connections[].device string
+  connections[].name string
+  connections[].owned bool
+  connections[].present bool
+  connections[].role string
+  connections[].zone string
   directory *bool
   firewallReady struct libvirt.FirewallReadyEvidence
   firewallReady.answered bool
@@ -65,6 +96,7 @@ evidence-schema:
   firewallReady.ready bool
   firewallReady.state string
   hypervisor bool
+  networkManager bool
   networks []struct libvirt.NetworkEvidence
   networks[].answered bool
   networks[].autostart bool

@@ -1,5 +1,6 @@
 {
   "absent": false,
+  "connections": [],
   "directory": false,
   "firewallReady": {
     "answered": true,
@@ -11,6 +12,7 @@
     "state": ""
   },
   "hypervisor": true,
+  "networkManager": false,
   "networks": [
     {
       "answered": false,

@@ -178,12 +178,15 @@ arm matching the provider's substrate. The `vsphere` arm is
 | `taggedNetworkRefs` | set of `Network` references | none | The 802.1Q allow-list: each declares `vlan` and is not `untaggedNetworkRef`. Refused on a `kubevirt` or `vsphere` segment until [B1172](../milestones/backlog.md#b1172). |
 | `mtu` | integer 576 to 65536 | `1500`, materialized | The largest frame the segment carries, never derived into an interface MTU. A hosted KubeVirt segment naming a typed host `secondaryNetworks[]` entry takes that entry's `mtu`, 1500 when it has none, and an authored one refuses. |
 | `baremetal` | `{}` | | A physical network. |
-| `libvirt.bridge` | string | required | An existing bridge, proved present and never created: 1 to 15 bytes of letters, digits, `_`, `.` or `-`, neither `.` nor `..`; `+` refuses because firewalld reads it as an interface wildcard and a managed network puts its bridge in zone `trusted` (`TestABridgeNameRefusesFirewalldsWildcard`). |
+| `libvirt.bridge` | string | required | An existing bridge, proved present and never created, so never a trunk or leg device a [tagged managed Network](networks.md#tagged-managed-networks) creates: 1 to 15 bytes of letters, digits, `_`, `.` or `-`, neither `.` nor `..`; `+` refuses because firewalld reads it as an interface wildcard and a managed network puts its bridge in zone `trusted` (`TestABridgeNameRefusesFirewalldsWildcard`). |
 
 A [managed `Network`](networks.md#libvirt-arm) whose `libvirt.providerRef`
 names the provider is one of its segments under the Network's name, carrying
 itself untagged and its `libvirt.taggedNetworkRefs` tagged, with its `mtu` as
-capacity; it owns the host-wide rules. Only a managed Network configures a
+capacity; it owns the host-wide rules. A tagged one carries itself and its
+`libvirt.taggedNetworkRefs` tagged and nothing untagged, and a NIC on it
+attaches to its trunk bridge with no libvirt network
+(`TestAMachineNICOnALegSegmentAttachesToTheTrunkBridge`). Only a managed Network configures a
 network: carriage and capacity name and check the fabric, never change it
 ([product scope](../project.md#product-scope)). A libvirt vNIC's `<mtu>` and a
 managed network's MTU carry the capacity only when it is not 1500.
