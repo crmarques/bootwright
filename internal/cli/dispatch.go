@@ -112,7 +112,7 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 			return s.invokeArtifacts(ctx, path, &values, args)
 		}
 		return s.invokeDesiredState(ctx, path, &values, args)
-	case "validate":
+	case "validate", "render acquisitions":
 		return s.invokeDesiredState(ctx, path, &values, args)
 	case "controller install", "controller check", "controller rebind", "controller uninstall":
 		return s.invokeController(ctx, path, &values, args)

@@ -21,6 +21,7 @@ type Config struct {
 	ErrOut              io.Writer
 	BuildInfo           BuildInfo
 	BillOfMaterials     func() (BillOfMaterials, error)
+	Acquisitions        AcquisitionList
 	Services            Services
 	EncodeEffectiveYAML func(context.Context, api.Catalog) ([]byte, error)
 	EncodeEffectiveJSON func(context.Context, api.Catalog) ([]byte, error)

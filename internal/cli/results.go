@@ -118,17 +118,25 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		if validEncryptionStatus(result.encryptionStatus) {
 			return true, writeEncryptionStatus(out, path, result.encryptionStatus, selectedJSON(command))
 		}
-	case "render effective":
-		if validRender(result.rendered) {
-			return true, writeRender(out, result.rendered)
+	case "render effective", "render acquisitions":
+		return r.writeRenderResult(ctx, command, path, result)
+	}
+	return false, nil
+}
+
+func (r *Runner) writeRenderResult(ctx context.Context, command *cobra.Command, path string, result commandResult) (bool, error) {
+	out := r.config.Out
+	switch {
+	case path == "render acquisitions" && result.effective != nil:
+		return true, writeAcquisitions(out, path, r.config.Acquisitions, result.effective.Effective, selectedStructured(command))
+	case path == "render effective" && validRender(result.rendered):
+		return true, writeRender(out, result.rendered)
+	case path == "render effective" && result.effective != nil:
+		encoder := r.config.EncodeEffectiveYAML
+		if selectedJSON(command) {
+			encoder = r.config.EncodeEffectiveJSON
 		}
-		if result.effective != nil {
-			encoder := r.config.EncodeEffectiveYAML
-			if selectedJSON(command) {
-				encoder = r.config.EncodeEffectiveJSON
-			}
-			return true, writeEffective(ctx, out, path, result.effective, selectedJSON(command), encoder)
-		}
+		return true, writeEffective(ctx, out, path, result.effective, selectedJSON(command), encoder)
 	}
 	return false, nil
 }

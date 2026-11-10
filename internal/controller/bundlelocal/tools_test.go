@@ -377,3 +377,36 @@ func TestFIPSInstallerUsesVerifiedExactReleaseArchiveAndRetainedIdentity(t *test
 		}
 	}
 }
+
+func TestContactsNameEveryHostAClientsAcquisitionReaches(t *testing.T) {
+	hosts := func(request controller.ToolRequest) map[string]string {
+		t.Helper()
+		contacts, err := Contacts(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := map[string]string{}
+		for _, contact := range contacts {
+			found[contact.Host+" "+contact.Purpose] = contact.Purpose
+		}
+		return found
+	}
+	pinned := hosts(controller.ToolRequest{Kind: "virtctl", Version: "v1.9.1", Compatibility: "kubevirt", SHA256: strings.Repeat("a", 64), Bytes: 10})
+	if len(pinned) != 3 || pinned["github.com download"] == "" || pinned["release-assets.githubusercontent.com download redirect"] == "" || pinned["objects.githubusercontent.com download redirect"] == "" {
+		t.Fatalf("a pinned virtctl reaches %v", pinned)
+	}
+	mirrored := hosts(controller.ToolRequest{Kind: "helm", Version: "v4.2.0", Mirror: "https://mirror.example.test/tools"})
+	for _, want := range []string{"mirror.example.test download", "get.helm.sh release metadata", "api.github.com release metadata"} {
+		if mirrored[want] == "" {
+			t.Errorf("a mirrored helm of another release does not name %s: %v", want, mirrored)
+		}
+	}
+	installer := hosts(controller.ToolRequest{Kind: "openshift-install", Version: "4.21.15", Compatibility: "openshift"})
+	if installer["mirror.openshift.com download"] == "" || installer["mirror.openshift.com release metadata"] == "" || installer["api.github.com release metadata"] != "" {
+		t.Fatalf("the installer reaches %v", installer)
+	}
+	kubectl := hosts(controller.ToolRequest{Kind: "kubectl", Version: "v1.37.2", SHA256: strings.Repeat("a", 64), Bytes: 10})
+	if kubectl["cdn.dl.k8s.io download redirect"] == "" {
+		t.Fatalf("kubectl reaches %v", kubectl)
+	}
+}

@@ -54,7 +54,7 @@ func ClassifyInvocation(args []string) InvocationClass {
 	if path == "validate" && len(arrayValue(command.Flags(), "file")) != 0 {
 		return classification
 	}
-	if path == "render effective" && stringValue(command.Flags(), "input-dir") != "" {
+	if (path == "render effective" || path == "render acquisitions") && stringValue(command.Flags(), "input-dir") != "" {
 		return classification
 	}
 	if unavailableSelection(path, command.Flags()) != "" {

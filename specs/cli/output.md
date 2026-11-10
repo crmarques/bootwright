@@ -253,6 +253,7 @@ Successful result objects have stable top-level fields:
 | `version` | `version`, `commit`, `source`, `go`, `target`, `dependencyBundle`, `vulnerabilityCheck` |
 | `schema` | `format`, `schema` |
 | `sbom` | `format`, `bom` |
+| `render acquisitions` | `acquisitions` |
 | `completion <shell>`, `secret show`, `cluster kubeconfig`, `cluster keyring` | `export` |
 | `context init`, `context update` | `context`, `counts`, `filesCopied`, `inputChanged` |
 | `context use`, `context current` | `context` |

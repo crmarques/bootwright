@@ -1,0 +1,29 @@
+  bootwright / render acquisitions
+      List every artifact the selected desired state acquires or hands a Machine to acquire:
+      the host packages and clients of the controller stage, each managed service's and the
+      emulated BMC's image, each container cluster's release and declared mirrors, each storage
+      cluster's images and package repository, and the installation media of the media store.
+      Each row names the artifact, its version, its origin and that origin's class (vendor,
+      public, declared, host repositories or media store), its SHA-256 and size where the build
+      or the desired state pins them, the Machines that read it and the object that selects it.
+      It reads the selected context's input, or with --input-dir a context-free input file or
+      directory, registers nothing and contacts nothing.
+
+  Usage
+    bootwright render acquisitions [flags]
+
+  Command flags
+      --input-dir  Read a context-free input file or directory instead of a context
+
+  Common flags
+      --ascii       Use ASCII status markers
+      --color       Select terminal colors (values: auto, always, never) · default auto
+      --context     Select a context (default: current context)
+      --detail      Select human detail (values: compact, full) · default compact
+      -h, --help    Show help for this command
+      -o, --output  Select output mode (values: text, json, yaml) · default text
+      --progress    Select progress animation (values: auto, always, never) · default auto
+      --width       Set presentation width (0: automatic) · default 0
+
+  Examples
+    bootwright render acquisitions --input-dir ./input

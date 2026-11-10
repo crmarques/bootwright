@@ -12989,3 +12989,26 @@ not by the toolchain and modules its binary holds; the images are not scanned
 yet; and no release recipe refuses an `unchecked` executable
 ([B1244](backlog.md#b1244)).
 
+### X345 — The acquisition list
+
+**Item:** B1245 (2026-11-10, [D250](backlog.md#d250) (8),
+[D251](backlog.md#d251) (4)), partly delivered in-tree. `bootwright render
+acquisitions` lists every artifact the selected desired state acquires or
+hands a Machine to acquire, from a context's input or a context-free
+`--input-dir`, with its version, origin, origin class, pinned SHA-256 and size,
+the Machines that read it and the object that selects it
+([acquisition list](../cli.md#acquisition-list)): the controller stage's host
+packages and clients with every publisher and redirect host an unpinned
+client reaches, each managed service's and the emulated BMC's image, each
+OpenShiftCluster's release repositories and its declared mirrors, each CephCluster's images and package repository, and
+each MachineImage. `acquisition.OriginClass` holds the vendor and public hosts
+the [acquisition origins](../security.md#acquisition-origins) class, and every
+other host is `declared`. The operator guide points a firewall's owner at it.
+No request, evidence, contract version or content digest moved.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** add-on catalogs and their operator images, a connected
+cluster's default catalogs and update service, registries' token and blob
+delivery hosts, and an installed Machine's own package repositories, are not
+listed yet ([B1245](backlog.md#b1245)).
+

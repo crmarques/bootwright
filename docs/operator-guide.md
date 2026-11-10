@@ -201,8 +201,13 @@ the Internet. A machine an attacker reaches can then neither fetch code from a
 site anyone publishes on nor send data to one.
 [Acquisition origins](../specs/security.md#acquisition-origins) classes what a
 context acquires as host packages, vendor origins (Red Hat and IBM) and public
-origins. This is what each step reaches, and what moves a public origin to a
-registry or file server the enterprise runs:
+origins. `bootwright render acquisitions --input-dir <dir>`, or
+`--context <name>` for a context's input, lists each artifact your desired
+state acquires, its origin and class, its digest and the Machines that read
+it ([acquisition list](../specs/cli.md#acquisition-list)), which gives a
+firewall's owner each Machine's destinations. This is what each step reaches,
+and what moves a public origin to a registry or file server the enterprise
+runs:
 
 | Step | What connects | Reaches by default | Keeping it off a public origin |
 | --- | --- | --- | --- |

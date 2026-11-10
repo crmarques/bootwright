@@ -5,10 +5,11 @@
     bootwright render [flags]
 
   Commands
-  COMMAND     PURPOSE
-  effective   Show or write normalized effective desired state
-  installer   Render container-cluster installer artifacts (unavailable)
-  storage     Render storage artifacts (unavailable)
+  COMMAND        PURPOSE
+  acquisitions   List every artifact the selected desired state acquires
+  effective      Show or write normalized effective desired state
+  installer      Render container-cluster installer artifacts (unavailable)
+  storage        Render storage artifacts (unavailable)
 
   Common flags
       --ascii       Use ASCII status markers

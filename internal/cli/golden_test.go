@@ -922,6 +922,8 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-validate-failed-json", args: "validate -f inputs --output json", code: 1, record: func(r *dispatchRecord) { r.report, r.err = validation(), invalid }},
 		{golden: "cli-render-effective", args: "render effective", record: func(r *dispatchRecord) { r.result.effective = effective() }},
 		{golden: "cli-render-effective-json", args: "render effective --output json", record: func(r *dispatchRecord) { r.result.effective = effective() }},
+		{golden: "cli-render-acquisitions", args: "render acquisitions", record: func(r *dispatchRecord) { r.result.effective = effective() }},
+		{golden: "cli-render-acquisitions-json", args: "render acquisitions --output json", record: func(r *dispatchRecord) { r.result.effective = effective() }},
 
 		// Contexts.
 		{
@@ -1228,7 +1230,7 @@ func TestCommandOutputMatchesItsGoldens(t *testing.T) {
 			record.out = &out
 			code := New(Config{
 				Out: &out, ErrOut: &errOut, Services: dispatchSpies(record),
-				EncodeEffectiveYAML: stateencoding.YAML, EncodeEffectiveJSON: stateencoding.JSON,
+				EncodeEffectiveYAML: stateencoding.YAML, EncodeEffectiveJSON: stateencoding.JSON, Acquisitions: goldenAcquisitions,
 			}).Run(context.Background(), strings.Fields(test.args))
 			if code != test.code {
 				t.Errorf("exit status %d, want %d", code, test.code)
@@ -1323,7 +1325,7 @@ func TestEveryAvailableCommandHasAGolden(t *testing.T) {
 	}
 	jsonContracts := []string{
 		"add-ons list", "add-ons info",
-		"validate", "preflight", "render effective", "status", "logs", "diff",
+		"validate", "preflight", "render effective", "render acquisitions", "status", "logs", "diff",
 		"secret check", "secret list", "secret info", "secret encryption status", "machine trust", "controller install",
 		"machine cp", "machine list", "machine info", "machine start", "machine stop", "machine restart", "media list", "cluster list", "cluster info",
 	}
@@ -1501,4 +1503,11 @@ func shadowedRoute() diagnostics.Diagnostic {
 	return diagnostics.Diagnostic{Severity: "warning", Code: "substrate.shadowed-route",
 		Message: "route 10.0.0.0/8 via 192.0.2.1 dev eth0 covers 10.20.0.0/24: the connected route of attachment lab wins by longest prefix, so the hosts of 10.20.0.0/24 are no longer reached through 192.0.2.1",
 		Object:  &diagnostics.ObjectIdentity{APIVersion: "bootwright.io/v1alpha1", Kind: "InfraProvider", Name: "lab-libvirt"}}
+}
+
+func goldenAcquisitions(api.Catalog) ([]Acquisition, error) {
+	return []Acquisition{
+		{Kind: "client", Artifact: "helm", Version: "4.3.1", Origin: "https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz", Class: "public", SHA256: strings.Repeat("0", 64), Bytes: 20368240, Machines: []string{"controller"}, Consumer: "Environment/lab"},
+		{Kind: "host package", Artifact: "podman", Class: "host repositories", Origin: "the controller's dnf repositories", Machines: []string{"controller"}, Consumer: "Environment/lab"},
+	}, nil
 }

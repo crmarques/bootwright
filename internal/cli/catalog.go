@@ -120,6 +120,7 @@ func commandCatalog() []commandSpec {
 	catalog = append(catalog, preflightCommand())
 	catalog = append(catalog, lifecycleInspectionCommands()...)
 	catalog = append(catalog, effectiveStateCommand())
+	catalog = append(catalog, acquisitionsCommand())
 	catalog = append(catalog, installerRenderCommand())
 	catalog = append(catalog, storageRenderCommand())
 	catalog = append(catalog, lifecycleMutationCommands()...)

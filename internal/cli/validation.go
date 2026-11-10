@@ -240,11 +240,8 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 				return message
 			}
 		}
-	case "render effective":
-		if boolValue(flags, "origins") && stringValue(flags, "output-dir") != "" {
-			return "--origins conflicts with --output-dir"
-		}
-		return validateRenderDirectories(flags)
+	case "render effective", "render acquisitions":
+		return validateRenderFlags(path, flags)
 	case "preflight":
 		if stages := normalizeNames(stringValue(flags, "stage")); flags.Changed("stage") && len(stages) == 0 {
 			return "--stage must name at least one stage"
@@ -475,4 +472,17 @@ func authorizationDigest(value string) bool {
 		}
 	}
 	return true
+}
+
+func validateRenderFlags(path string, flags *pflag.FlagSet) string {
+	if path == "render acquisitions" {
+		if stringValue(flags, "input-dir") != "" && flags.Changed("context") {
+			return "--input-dir conflicts with --context"
+		}
+		return ""
+	}
+	if boolValue(flags, "origins") && stringValue(flags, "output-dir") != "" {
+		return "--origins conflicts with --output-dir"
+	}
+	return validateRenderDirectories(flags)
 }

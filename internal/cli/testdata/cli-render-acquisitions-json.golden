@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "render acquisitions",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "acquisitions": [
+      {
+        "kind": "client",
+        "artifact": "helm",
+        "version": "4.3.1",
+        "origin": "https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz",
+        "class": "public",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "bytes": 20368240,
+        "machines": [
+          "controller"
+        ],
+        "consumer": "Environment/lab"
+      },
+      {
+        "kind": "host package",
+        "artifact": "podman",
+        "version": "",
+        "origin": "the controller's dnf repositories",
+        "class": "host repositories",
+        "sha256": "",
+        "bytes": 0,
+        "machines": [
+          "controller"
+        ],
+        "consumer": "Environment/lab"
+      }
+    ]
+  },
+  "diagnostics": [],
+  "logs": []
+}

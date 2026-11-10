@@ -276,6 +276,7 @@ func runServices(ctx context.Context, args []string, stdout, stderr io.Writer, s
 			ErrOut:              stderr,
 			BuildInfo:           buildInformation(),
 			BillOfMaterials:     billOfMaterials,
+			Acquisitions:        listAcquisitions,
 			Services:            services,
 			Presentation:        hook.presentation,
 			ErrorColumns:        hook.errorColumns,

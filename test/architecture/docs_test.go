@@ -887,7 +887,7 @@ var askRuleNoAsk = map[string]string{
 	"machine list": "read local state", "machine info": "read local inventory",
 	"cluster list": "read local state", "cluster oc": "read context-owned access metadata",
 	"cluster kubectl": "read context-owned access metadata", "version": "none", "help": "none",
-	"schema": "none", "sbom": "none", "completion bash": "none", "completion zsh": "none", "completion fish": "none",
+	"schema": "none", "sbom": "none", "render acquisitions": "none", "completion bash": "none", "completion zsh": "none", "completion fish": "none",
 	"completion powershell": "none",
 }
 

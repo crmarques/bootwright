@@ -32,7 +32,7 @@ func TestCommandModesComeFromTheCatalog(t *testing.T) {
 		"secret set": true, "secret generate": true, "secret check": true,
 		"secret list": true, "secret info": true, "secret show": true, "secret delete": true,
 		"secret encryption init": true, "secret encryption status": true,
-		"secret encryption rotate": true, "validate": true, "render effective": true,
+		"secret encryption rotate": true, "validate": true, "render effective": true, "render acquisitions": true,
 		"media add": true, "media list": true, "media delete": true,
 		"controller install": true, "controller rebind": true, "controller uninstall": true, "controller check": true, "preflight": true,
 		"plan": true, "status": true, "logs": true, "diff": true, "apply": true, "destroy": true,

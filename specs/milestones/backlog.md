@@ -297,7 +297,7 @@ Alias cell.
 | [B1240](#b1240) | new, 2026-11-09 (X340 gate) | defect | Controller | The native supervisor test reads its task's PID only from a complete record | It failed once in `make check` beside the other lanes and passed when run again alone; the cause is a test-side race, not the supervisor |
 | [B1243](#b1243) | new, 2026-11-10 (D250 (2)); partly delivered by X343 on 2026-11-10 | enabling | Architecture | Each build's bill of materials names every component's license, a release ships its notices, and the container build's Go image is pinned | The document itself landed (X343); licenses need a source per component that no build input holds yet |
 | [B1244](#b1244) | new, 2026-11-10 (D250 (2)); partly delivered by X344 on 2026-11-10 | enabling | Architecture | Each pinned client is judged by what its binary holds, and the service and emulated BMC images are scanned on a schedule and in the mirror registry | The build's gate landed (X344); a binary scan downloads every client, and an image scan needs a pinned scanner |
-| [B1245](#b1245) | new, 2026-11-10 (D250 (8)) | product | CLI, with Controller | One read-only list names every artifact a context acquires, its origin, its digest and the Machine that reads it | D250 parks the controlled-network plan until the owner promotes it |
+| [B1245](#b1245) | new, 2026-11-10 (D250 (8)); partly delivered by X345 on 2026-11-10 | product | CLI, with Controller | The acquisition list names each add-on's catalog and operator images and each installed Machine's own package repositories | The list landed (X345); an add-on's images follow from the catalog it selects, which planning does not read |
 | [B1246](#b1246) | new, 2026-11-10 (D250 (7)) | product | Controller, with Desired state | One mirror declaration routes a context's public-origin tools to its artifact server and refuses an artifact the mirror lacks | D250 parks the controlled-network plan until the owner promotes it |
 | [B1247](#b1247) | new, 2026-11-10 (D250 (7)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's images come from the declared mirror, with its credential and trust | D250 parks the controlled-network plan until the owner promotes it |
 | [B1248](#b1248) | new, 2026-11-10 (D250 (7)) | product | Container cluster | A cluster's release images are mapped to the declared mirror | D250 parks the controlled-network plan until the owner promotes it; B724's route awaits its acceptance |
@@ -3353,17 +3353,24 @@ report names each image's findings, and a registry scan in
 ### B1245
 
 **Owner:** CLI, with Controller. **Kind:** product. **Requires:** none.
-**Definition:** Needs definition, from [D250](#d250) (8): no command lists
-what a context acquires, and the
-[operator guide](../../docs/operator-guide.md#on-a-controlled-network) keeps
-the destinations and registries by hand. **Outcome:** one read-only result
-lists, for an admitted graph, every artifact it selects with its kind,
-version, origin, [class](../security.md#acquisition-origins), size, digest
-and the Machine that reads it, in human and machine form, registering nothing
-and contacting nothing; a release is named by its repositories. **Open:**
-whether it is a command of its own or a section of `plan`. **Exit evidence:**
-goldens over an OpenShift and a Ceph example, and the guide's hand-kept lists
-replaced by the command.
+**Definition:** Needs definition, from [D250](#d250) (8) and
+[D251](#d251) (4). **Delivered in-tree by X345:** `bootwright render
+acquisitions` lists, for an admitted graph, the controller stage's host
+packages and clients, each managed service's and the emulated BMC's image,
+each container cluster's release repositories and declared mirrors, each
+storage cluster's images and package repository, and the media store's
+images, with origin, [class](../security.md#acquisition-origins), digest and
+Machines ([acquisition list](../cli.md#acquisition-list)). **Remaining:**
+each add-on binding's catalog image and the operator images that catalog
+names; a connected cluster's default OperatorHub catalogs on
+`registry.redhat.io` and its update service; each registry's token service
+and blob delivery host; and each installed Machine's own package
+repositories, its registration or `repositories.configure`. **Open:** whether an add-on's images
+come from the catalog the operator authors or from a catalog read live
+(recommendation: name the catalog image alone, which the desired state holds,
+and leave its contents to the cluster's mirror tooling). **Exit evidence:**
+rows for an add-on example's catalog and for a managed Machine's
+repositories.
 
 ### B1246
 
@@ -7898,3 +7905,6 @@ the owner's review:
 3. `spec.downloads.govcMirror` joins the three mirrors, so every pinned client
    has a mirror route before [B1246](#b1246) replaces them with one
    declaration.
+4. B1245's list is `bootwright render acquisitions`, a command of its own
+   beside `render effective` rather than a section of `plan`, so it needs no
+   context and reads a context-free input as well.

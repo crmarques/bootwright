@@ -545,6 +545,47 @@ per leaf in document order; either structured mode keeps `effectiveState` and
 adds `result.origins`, one `{object, field, origin}` entry per leaf in the same
 order (`TestRenderEffectiveOriginsMarkEachLeaf`).
 
+#### Acquisition list
+
+`bootwright render acquisitions` lists every artifact the selected desired
+state acquires or hands a Machine to acquire, from the selected context's
+input or, with `--input-dir`, a context-free input as `validate --file` reads
+it; `--input-dir` conflicts with `--context`. It registers nothing, contacts
+nothing and reads no host. Each row names its kind, the artifact, its
+version, its origin and that origin's
+[class](security.md#acquisition-origins) (`vendor`, `public`, `declared`,
+`host repositories` or `media store`), the SHA-256 and size the build or the
+desired state pins, the Machines that read it and the object that selects it.
+The rows, sorted by kind, artifact and selecting object, cover:
+
+- the controller stage's host packages and clients, each client from its
+  publisher or its declared download mirror, and for a release the build does
+  not pin, each publisher host its metadata is read from; and the redirect
+  hosts a `github.com` or `dl.k8s.io` download follows
+  ([the controller stage](controller.md#the-controller-stage));
+- each managed service's image as it selects it, and the emulated BMC's image
+  for each libvirt provider a Machine references;
+- each container cluster's release repositories, which the installer of its
+  release names whether or not a `release.image` is authored, read by the
+  controller and the cluster's nodes; and each declared `imageDigestSources`
+  mirror;
+- each storage cluster's image and auxiliary images, read by the controller
+  and its hosts, and its package repository;
+- each MachineImage of the media store.
+
+A registry row names the registry's authority; its token service and the
+host it redirects blob downloads to are further destinations the list does
+not name. A row names the origin a Machine reads, and a Machine with a
+declared proxy reaches it through that proxy.
+`TestTheAcquisitionListNamesWhatEachOwnerAcquiresWithItsOrigin` holds the
+list to an example. The text mode writes one table; either structured mode
+places the rows in `result.acquisitions`.
+
+Not yet met: the list names what each add-on's catalog and operator pull, a
+connected cluster's default operator catalogs and update service, each
+registry's token and blob delivery hosts, and each installed Machine's own
+package repositories; tracked as [B1245](milestones/backlog.md#b1245).
+
 #### Schema export
 
 `bootwright schema --format json-schema` writes one advisory JSON Schema

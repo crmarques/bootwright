@@ -495,3 +495,53 @@ func PublisherURL(pin controller.ToolPin) (string, error) {
 	url, _, err := sourceURL(request, request.Version)
 	return url, err
 }
+
+func SourceURL(request controller.ToolRequest) (string, error) {
+	url, _, err := sourceURL(request, request.Version)
+	return url, err
+}
+
+type Contact struct{ Host, Purpose string }
+
+func Contacts(request controller.ToolRequest) ([]Contact, error) {
+	source, _, err := sourceURL(request, request.Version)
+	if err != nil {
+		return nil, err
+	}
+	locations := [][2]string{{source, "download"}}
+	if request.SHA256 == "" {
+		publisherRequest := request
+		publisherRequest.Mirror = ""
+		publisher, _, err := sourceURL(publisherRequest, request.Version)
+		if err != nil {
+			return nil, err
+		}
+		locations = append(locations, [2]string{publisher, "release metadata"})
+		if request.Kind == "helm" || request.Kind == "govc" || request.Kind == "virtctl" || request.Compatibility == "okd" {
+			locations = append(locations, [2]string{"https://api.github.com/", "release metadata"})
+		}
+	}
+	seen := map[string]bool{}
+	var contacts []Contact
+	add := func(host, purpose string) {
+		if !seen[host+"\x00"+purpose] {
+			seen[host+"\x00"+purpose] = true
+			contacts = append(contacts, Contact{Host: host, Purpose: purpose})
+		}
+	}
+	for _, location := range locations {
+		parsed, err := url.Parse(location[0])
+		if err != nil {
+			return nil, err
+		}
+		add(parsed.Hostname(), location[1])
+		switch parsed.Hostname() {
+		case "github.com":
+			add("objects.githubusercontent.com", "download redirect")
+			add("release-assets.githubusercontent.com", "download redirect")
+		case "dl.k8s.io":
+			add("cdn.dl.k8s.io", "download redirect")
+		}
+	}
+	return contacts, nil
+}

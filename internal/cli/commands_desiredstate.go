@@ -47,6 +47,13 @@ func (s Services) invokeDesiredState(ctx context.Context, path string, values *r
 			Origins:     values.boolean("origins"),
 		}, s.DesiredState.RenderEffective)
 		return commandResult{effective: result}, err
+	case "render acquisitions":
+		request := compilation.EffectiveRequest{ContextName: values.text("context")}
+		if input := values.text("input-dir"); input != "" {
+			request = compilation.EffectiveRequest{Files: []string{input}}
+		}
+		result, err := invokeResult(ctx, values, request, s.DesiredState.RenderEffective)
+		return commandResult{effective: result}, err
 	default:
 		return commandResult{}, errors.New("command has no application dispatch")
 	}
