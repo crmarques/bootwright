@@ -49,9 +49,20 @@ func (a *admission) replicationCoverage(ceph api.Value, nodes []api.Value) {
 		return
 	}
 	listed := strings.Join(cidrs, ", ")
+	osdHosts := map[string]bool{}
+	for _, service := range ceph.Get("services").Items() {
+		if textOf(service, "service_type") != "osd" {
+			continue
+		}
+		names, _ := ResolveServicePlacement(a.object, service)
+		for _, name := range names {
+			osdHosts[name] = true
+		}
+	}
 	tiebreaker := textOf(ceph, "topology", "stretch", "tiebreaker", "node")
 	for i, node := range nodes {
-		if tiebreaker != "" && textOf(node, "name") == tiebreaker {
+		name := textOf(node, "name")
+		if !osdHosts[name] || (tiebreaker != "" && name == tiebreaker) {
 			continue
 		}
 		m, found := a.catalog.Find(api.Machine, textOf(node, "machineRef"))

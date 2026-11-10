@@ -450,8 +450,8 @@ checks:
   `network.addresses` (an IP contact of a provided host, such as a stretch
   tiebreaker, counts; a DNS contact does not), and no `clusterCIDRs` entry
   overlaps a `publicCIDRs` one, each refused at the entry;
-- with `networks.clusterCIDRs` declared, every topology node's Machine but
-  the stretch tiebreaker, which holds no OSD, declares an IP address inside
+- with `networks.clusterCIDRs` declared, every topology node's Machine that
+  an `osd` service's placement selects declares an IP address inside
   one of them, a Machine whose addresses are assigned at runtime included,
   refused at the node's
   `machineRef` as `Ceph host <host> (Machine <machine>) has no address inside

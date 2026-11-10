@@ -79,6 +79,24 @@ func TestReplicationCoverageIsAdmittedAndExemptsTheTiebreaker(t *testing.T) {
 	}
 }
 
+func TestReplicationCoverageExemptsAHostNoOSDServicePlaces(t *testing.T) {
+	catalog := withReplicationHosts(fixtureCatalog(), "1", "2")
+	cluster := find(t, catalog, api.CephCluster, "storage")
+	nodes := cluster.Spec().Get("topology", "nodes").Items()
+	nodes[2] = nodes[2].With("labels", api.StringList("mon"))
+	spec := cluster.Spec().WithPath(api.ListValue(nodes...), "topology", "nodes").WithPath(api.StringList("203.0.113.0/24"), "networks", "clusterCIDRs")
+	cluster = cluster.WithSpec(spec)
+	catalog = replace(catalog, cluster)
+	if issues := issuesUnder(Validate(cluster, catalog), "$.spec.topology"); len(issues) != 0 {
+		t.Fatalf("a MON-only host without a replication address refused: %#v", issues)
+	}
+	nodes[2] = nodes[2].With("labels", api.StringList("mon", "storage"))
+	cluster = cluster.WithSpec(spec.WithPath(api.ListValue(nodes...), "topology", "nodes"))
+	catalog = replace(catalog, cluster)
+	requireOnlyIssue(t, issuesUnder(Validate(cluster, catalog), "$.spec.topology"), "$.spec.topology.nodes[2].machineRef",
+		"Ceph host node-3.storage.example.test (Machine machine-3) has no address inside the replication networks 203.0.113.0/24")
+}
+
 func TestEveryIngressHostIsOnTheVirtualIPSubnet(t *testing.T) {
 	catalog := bindingCatalog()
 	moved, _ := catalog.Find(api.Machine, "machine-2")
