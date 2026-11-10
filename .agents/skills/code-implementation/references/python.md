@@ -43,6 +43,7 @@ Each file runs at exactly one site; know which before editing it.
 - Validate the frozen request before any effect: closed key sets, exact types
   and bounds. Check a JSON integer with `type(value) is int`, because
   `isinstance` admits `True`; check a Boolean with `type(value) is bool`.
+  A pattern that admits a whole value ends as [the Ansible reference](ansible.md#implementation) says.
 - Start a process only with an absolute executable and an argv list, never a
   shell; bound its output and its time, and reap it. A remote command string
   carries only literals and validated tokens, joined by

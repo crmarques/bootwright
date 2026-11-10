@@ -14153,3 +14153,29 @@ owner decision.
 
 **Commits:** this record's commit. Gates: listed in its message. No push
 occurred.
+
+### X385 — Exact end anchors in request validation
+
+**Item:** B1318 (defect, owner Ansible collection; found 2026-11-10 in the
+follow-up review of the lab-6-nodes-ceph-network-matrix run), completed. The
+collection's role tasks validated frozen request fields with `match` and
+`search` patterns ending in a bare `$`, which also matches before a trailing
+newline, so "lab\n" passed a check meant to admit only "lab"; the digest
+checks of the container cluster, machine power, managed service, artifact
+server and Managed OS roles named no end anchor at all, and three Python
+validators (the KubeVirt lend Secret name, the Redfish hardware address and the
+installer file's entry line) had the same bare `$`. Every role pattern now ends
+`$(?!\n)`, the digest patterns are anchored at both ends, and the Python
+validators end `\Z`. The values come from requests the Go side already
+validates, so this is defence in depth, not a reachable path.
+`test_role_pattern_anchors.py` scans every YAML file of the roles and playbooks
+and every role template, reads either quote and a pattern passed through a
+variable, and fails on a bare `$` or an unanchored digest pattern;
+`test_python_pattern_anchors.py` scans the Python plugins the same way and
+proves each fixed validator refuses a trailing newline. No request, contract
+version or spec moved; the collection's content digest did. See the
+[Ansible reference](../../.agents/skills/code-implementation/references/ansible.md#implementation)
+for the spelling.
+
+**Commits:** this record's commit. Gates: listed in its message. No live run or
+push occurred.

@@ -3,7 +3,7 @@
   ansible.builtin.assert:
     that:
       - bootwright_ceph_replication_request.version == 'ceph-replication-v1'
-      - bootwright_ceph_replication_digest is match('^[0-9a-f]{64}$')
+      - bootwright_ceph_replication_digest is match('^[0-9a-f]{64}$(?!\n)')
       - ansible_connection == 'local'
     quiet: true
   no_log: true

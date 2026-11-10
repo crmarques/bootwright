@@ -3,13 +3,13 @@
   ansible.builtin.assert:
     that:
       - bootwright_substrate_machine_request.version == 'machine-libvirt-v3'
-      - bootwright_substrate_machine_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
-      - bootwright_substrate_machine_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
+      - bootwright_substrate_machine_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
+      - bootwright_substrate_machine_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
       - bootwright_substrate_machine_request.directory == '/var/lib/libvirt/images/bootwright/'
         ~ bootwright_substrate_machine_request.identity.context ~ '/machines/' ~ bootwright_substrate_machine_request.identity.object
-      - bootwright_substrate_machine_request.controller.image is search('@sha256:[0-9a-f]{64}$')
+      - bootwright_substrate_machine_request.controller.image is search('@sha256:[0-9a-f]{64}$(?!\n)')
       - bootwright_substrate_machine_request.controller.port | int > 0
-      - bootwright_substrate_machine_digest is match('[0-9a-f]{64}')
+      - bootwright_substrate_machine_digest is match('^[0-9a-f]{64}$(?!\n)')
     quiet: true
   no_log: true
 

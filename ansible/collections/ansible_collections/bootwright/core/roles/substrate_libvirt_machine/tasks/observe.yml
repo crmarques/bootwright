@@ -3,7 +3,7 @@
   ansible.builtin.assert:
     that:
       - bootwright_substrate_machine_request.version == 'machine-libvirt-v3'
-      - bootwright_substrate_machine_digest is match('[0-9a-f]{64}')
+      - bootwright_substrate_machine_digest is match('^[0-9a-f]{64}$(?!\n)')
     quiet: true
   no_log: true
 

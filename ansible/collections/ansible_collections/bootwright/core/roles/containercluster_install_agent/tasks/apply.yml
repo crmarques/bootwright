@@ -8,7 +8,7 @@
         bootwright_cluster_install_request.workRoot
         == '/var/lib/bootwright-hosted/' ~ bootwright_cluster_install_request.identity.context
            ~ '/clusters/' ~ bootwright_cluster_install_request.identity.cluster
-      - bootwright_cluster_install_digest is match('[0-9a-f]{64}')
+      - bootwright_cluster_install_digest is match('^[0-9a-f]{64}$(?!\n)')
     quiet: true
   no_log: true
 

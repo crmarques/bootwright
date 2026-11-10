@@ -9,7 +9,7 @@
       - bootwright_machine_power_request.version == 'machine-power-v1'
       - bootwright_machine_power_request.arm is string
       - bootwright_machine_power_request.verb in ['start', 'stop', 'restart']
-      - bootwright_machine_power_digest is match('[0-9a-f]{64}')
+      - bootwright_machine_power_digest is match('^[0-9a-f]{64}$(?!\n)')
     quiet: true
   no_log: true
 

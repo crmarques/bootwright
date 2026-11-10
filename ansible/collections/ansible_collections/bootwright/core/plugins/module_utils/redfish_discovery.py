@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from urllib.parse import urlsplit, urlunsplit
 
-MAC = re.compile(r"^[0-9a-f]{2}(:[0-9a-f]{2}){5}$")
+MAC = re.compile(r"^[0-9a-f]{2}(:[0-9a-f]{2}){5}\Z")
 MEDIA_NAMES = re.compile(r"(?i)/(cd|cd1|dvd|dvd1|virtualcd|virtualdvd|[0-9]+)$")
 # Reset types that turn a machine on, in the order they are preferred. ForceOn
 # is first because a controller that offers it applies power without waiting on

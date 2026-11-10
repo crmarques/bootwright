@@ -29,7 +29,7 @@ MIN_SECONDS = 600
 # of the token bound to it, so a later lend can tell an expired leftover from
 # a Secret another run's live token is bound to.
 MARK = "bootwright.io/lend"
-NAME = re.compile(r"^[a-z0-9]([-a-z0-9]{0,251}[a-z0-9])?$")
+NAME = re.compile(r"^[a-z0-9]([-a-z0-9]{0,251}[a-z0-9])?\Z")
 SWEEP_LIMIT = 64
 # A sweep stops issuing deletes once this many seconds have passed since it
 # began, or at the first delete the host does not answer, so leftovers never

@@ -193,7 +193,7 @@ KEYS = frozenset((
 # admitted together or not at all, each once, at the top level, with exactly
 # the values the codec writes.
 TYPED = {"apiVersion": "v1", "kind": "Config"}
-ENTRY = re.compile(r'^( *)(- )?([a-z][A-Za-z-]*):(?: ([A-Za-z0-9+/=:._-]+|"[A-Za-z0-9._-]+"|\{\}))?$')
+ENTRY = re.compile(r'^( *)(- )?([a-z][A-Za-z-]*):(?: ([A-Za-z0-9+/=:._-]+|"[A-Za-z0-9._-]+"|\{\}))?\Z')
 SINGLE = ("clusters", "contexts", "users")
 AUTHORITY = "certificate-authority-data"
 CLIENT = "client-certificate-data"

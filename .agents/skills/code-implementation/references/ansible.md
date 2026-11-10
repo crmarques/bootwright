@@ -35,6 +35,14 @@ records the answer.
   variables/results. Write `when`, `until`, `changed_when`, and `failed_when` as native
   Boolean expressions without Jinja delimiters. Never re-evaluate input/output
   as Jinja. Disable implicit facts; gather only contract-required facts.
+- End a pattern that must admit exactly one whole value at the value's end,
+  never with a bare `$`: `re.match` and `re.search`, which Ansible's `match` and
+  `search` tests and filters and a Python plugin's compiled patterns use, let
+  `$` also match before a trailing newline. A role task writes `$(?!\n)`, keeping
+  the two characters `\n` in the Jinja string literal for the lexer to turn into
+  the newline the guard refuses (`\Z` is deprecated there). A Python plugin
+  ends the pattern with `\Z` or calls `re.fullmatch`. The scans in
+  `test_role_pattern_anchors.py` and `test_python_pattern_anchors.py` hold both.
 - For a selected native executable, use `ansible.builtin.command` with its
   absolute identity and `argv`. Set `expand_argument_vars: false` for literal
   arguments when supported; otherwise prevent expansion by validated

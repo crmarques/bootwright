@@ -15,20 +15,20 @@
       - >-
         (bootwright_managed_service_request.contentRoot | dirname | dirname | dirname)
         == '/var/lib/bootwright-hosted/' ~ bootwright_managed_service_request.identity.context
-      - bootwright_managed_service_request.image is search('@sha256:[0-9a-f]{64}$')
+      - bootwright_managed_service_request.image is search('@sha256:[0-9a-f]{64}$(?!\n)')
       - bootwright_managed_service_request.port | int > 0
       - >-
         bootwright_managed_service_request.destinations | default([]) | to_json(separators=[',', ':'])
-        is match('^[][{}a-z0-9.:,"-]*$')
+        is match('^[][{}a-z0-9.:,"-]*$(?!\n)')
       - >-
         bootwright_managed_service_request.destinations | default([]) | map('dict2items') | map('map', attribute='key')
         | map('sort') | map('join', ',') | reject('in', ['address', 'address,port', 'domain', 'domain,port']) | list | length == 0
       - >-
         bootwright_managed_service_request.destinations | default([]) | selectattr('address', 'defined') | map(attribute='address')
-        | reject('match', '^(([0-9]{1,3}[.]){3}[0-9]{1,3}|[0-9a-f.]*:[0-9a-f:.]*)$') | list | length == 0
+        | reject('match', '^(([0-9]{1,3}[.]){3}[0-9]{1,3}|[0-9a-f.]*:[0-9a-f:.]*)$(?!\n)') | list | length == 0
       - >-
         bootwright_managed_service_request.destinations | default([]) | selectattr('domain', 'defined') | map(attribute='domain')
-        | reject('match', '^[.]?[a-z0-9]([a-z0-9-]*[a-z0-9])?([.][a-z0-9]([a-z0-9-]*[a-z0-9])?)*$') | list | length == 0
+        | reject('match', '^[.]?[a-z0-9]([a-z0-9-]*[a-z0-9])?([.][a-z0-9]([a-z0-9-]*[a-z0-9])?)*$(?!\n)') | list | length == 0
       - >-
         bootwright_managed_service_request.destinations | default([]) | selectattr('port', 'defined') | map(attribute='port')
         | reject('integer') | list | length == 0
@@ -38,7 +38,7 @@
       - >-
         bootwright_managed_service_request.destinations | default([]) | selectattr('port', 'defined') | map(attribute='port')
         | select('integer') | reject('le', 65535) | list | length == 0
-      - bootwright_managed_service_digest is match('[0-9a-f]{64}')
+      - bootwright_managed_service_digest is match('^[0-9a-f]{64}$(?!\n)')
       - >-
         bootwright_managed_service_request.tls is not defined
         or (bootwright_managed_service_material.certificate is defined

@@ -3,11 +3,11 @@
   ansible.builtin.assert:
     that:
       - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v1'
-      - bootwright_substrate_host_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
-      - bootwright_substrate_host_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
+      - bootwright_substrate_host_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
+      - bootwright_substrate_host_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
       - bootwright_substrate_host_request.poolPath == '/var/lib/libvirt/images/bootwright/'
         ~ bootwright_substrate_host_request.identity.context ~ '/providers/' ~ bootwright_substrate_host_request.identity.object ~ '/vmedia'
-      - bootwright_substrate_host_digest is match('[0-9a-f]{64}')
+      - bootwright_substrate_host_digest is match('^[0-9a-f]{64}$(?!\n)')
     quiet: true
   no_log: true
 

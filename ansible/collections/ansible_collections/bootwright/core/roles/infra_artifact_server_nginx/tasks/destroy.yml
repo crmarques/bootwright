@@ -13,7 +13,7 @@
       - >-
         (bootwright_artifact_server_request.contentRoot | dirname | dirname | dirname)
         == '/var/lib/bootwright-hosted/' ~ bootwright_artifact_server_request.identity.context
-      - bootwright_artifact_server_digest is match('[0-9a-f]{64}')
+      - bootwright_artifact_server_digest is match('^[0-9a-f]{64}$(?!\n)')
     quiet: true
   no_log: true
 

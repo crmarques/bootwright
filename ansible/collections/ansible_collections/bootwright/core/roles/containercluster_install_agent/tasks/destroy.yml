@@ -3,7 +3,7 @@
   ansible.builtin.assert:
     that:
       - bootwright_cluster_install_request.version == 'cluster-install-agent-v1'
-      - bootwright_cluster_install_digest is match('[0-9a-f]{64}')
+      - bootwright_cluster_install_digest is match('^[0-9a-f]{64}$(?!\n)')
     quiet: true
   no_log: true
 

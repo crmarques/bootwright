@@ -9,9 +9,9 @@
   ansible.builtin.assert:
     that:
       - bootwright_os_firewall_request.version == 'os-host-firewall-v1'
-      - bootwright_os_firewall_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
-      - bootwright_os_firewall_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
-      - bootwright_os_firewall_digest is match('^[0-9a-f]{64}$')
+      - bootwright_os_firewall_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
+      - bootwright_os_firewall_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
+      - bootwright_os_firewall_digest is match('^[0-9a-f]{64}$(?!\n)')
       - bootwright_os_firewall_request.services is sequence
       - bootwright_os_firewall_request.services is not string
       - bootwright_os_firewall_request.services | length > 0

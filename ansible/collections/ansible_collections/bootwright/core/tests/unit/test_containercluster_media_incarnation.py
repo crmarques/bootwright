@@ -85,10 +85,11 @@ def test_the_hand_over_refuses_naming_an_area_another_incarnation_built():
 
 
 def test_every_entry_point_reads_the_incarnation_in_the_form_the_controller_derives():
-    form = "^[0-9]+:[0-9]+:(b[0-9]+[.][0-9]+|g[0-9]+)$"
+    form = "^[0-9]+:[0-9]+:(b[0-9]+[.][0-9]+|g[0-9]+)$(?!\\n)"
     for name in ("apply.yml", "destroy.yml"):
         validation = tasks(name)[0]["ansible.builtin.assert"]["that"]
         assert "bootwright_cluster_media_material.incarnation | default('') is match('%s')" % form in validation, name
     templar = scope(None)
-    for value, valid in ((OWN, True), ("64768:1234:g42", True), ("64768:1234", False), ("", False)):
+    for value, valid in ((OWN, True), ("64768:1234:g42", True), ("64768:1234", False), ("", False),
+                         (OWN + "\\n", False)):
         assert holds(templar, "'%s' is match('%s')" % (value, form)) is valid, value

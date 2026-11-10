@@ -3,15 +3,15 @@
   ansible.builtin.assert:
     that:
       - bootwright_os_install_request.version == 'os-install-anaconda-v2'
-      - bootwright_os_install_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
-      - bootwright_os_install_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
+      - bootwright_os_install_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
+      - bootwright_os_install_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
       - managedos_install_anaconda_work == '/var/lib/bootwright-hosted/'
         ~ bootwright_os_install_request.identity.context ~ '/machines/' ~ bootwright_os_install_request.identity.object ~ '/install'
       - (bootwright_os_install_request.image is defined) != (bootwright_os_install_request.private is defined)
       - (bootwright_os_install_request.image.path if bootwright_os_install_request.image is defined
          else bootwright_os_install_request.private.path).startswith(
            '/var/lib/bootwright-hosted/' ~ bootwright_os_install_request.identity.context ~ '/services/')
-      - bootwright_os_install_digest is match('[0-9a-f]{64}')
+      - bootwright_os_install_digest is match('^[0-9a-f]{64}$(?!\n)')
       - bootwright_os_install_request.registration is not defined
         or bootwright_os_install_material.unregister | default('') in ['guest', 'skip']
     quiet: true

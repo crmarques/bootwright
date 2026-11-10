@@ -3,7 +3,7 @@
   ansible.builtin.assert:
     that:
       - bootwright_cluster_media_request.version == 'cluster-media-agent-v1'
-      - bootwright_cluster_media_digest is match('[0-9a-f]{64}')
+      - bootwright_cluster_media_digest is match('^[0-9a-f]{64}$(?!\n)')
     quiet: true
   no_log: true
 

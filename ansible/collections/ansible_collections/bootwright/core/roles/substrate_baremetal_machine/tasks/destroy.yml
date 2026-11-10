@@ -7,7 +7,7 @@
   ansible.builtin.assert:
     that:
       - bootwright_substrate_physical_request.version == 'machine-baremetal-v1'
-      - bootwright_substrate_physical_digest is match('[0-9a-f]{64}')
+      - bootwright_substrate_physical_digest is match('^[0-9a-f]{64}$(?!\n)')
     quiet: true
   no_log: true
 

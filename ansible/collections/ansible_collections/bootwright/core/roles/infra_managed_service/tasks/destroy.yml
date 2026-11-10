@@ -14,7 +14,7 @@
       - >-
         (bootwright_managed_service_request.contentRoot | dirname | dirname | dirname)
         == '/var/lib/bootwright-hosted/' ~ bootwright_managed_service_request.identity.context
-      - bootwright_managed_service_digest is match('[0-9a-f]{64}')
+      - bootwright_managed_service_digest is match('^[0-9a-f]{64}$(?!\n)')
     quiet: true
   no_log: true
 

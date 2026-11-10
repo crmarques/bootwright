@@ -8,7 +8,7 @@
     that:
       - bootwright_machine_power_read_request.version == 'machine-power-read-v1'
       - bootwright_machine_power_read_request.targets | length > 0
-      - bootwright_machine_power_read_digest is match('[0-9a-f]{64}')
+      - bootwright_machine_power_read_digest is match('^[0-9a-f]{64}$(?!\n)')
     quiet: true
   no_log: true
 
