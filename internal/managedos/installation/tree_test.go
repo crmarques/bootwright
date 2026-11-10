@@ -118,9 +118,9 @@ func TestTreeContinuationClassifiesPartialAndInterruptedRemoval(t *testing.T) {
 	}
 }
 
-// A tree apply refuses a source image changed after the plan froze it, and a
-// tree another image published at its path, before it extracts anything, and
-// each refusal reaches the operator naming the profile, what changed and the
+// A tree apply refuses a source image changed after the plan froze it, a
+// tree another image published at its path, and an artifact server that is not
+// applied, before it extracts anything, and each refusal reaches the operator naming the profile, what changed and the
 // way back. Neither is named outside an apply.
 func TestATreeApplyNamesItsRefusalsWithTheirRemedy(t *testing.T) {
 	execution, request := treeFixture(t)
@@ -135,6 +135,11 @@ func TestATreeApplyNamesItsRefusalsWithTheirRemedy(t *testing.T) {
 			"the package tree at " + request.Publication.Path + " was extracted from another image than the " + dvdImageName +
 				" this operation froze, so it was left unchanged and nothing was published",
 			"take this context back with bootwright destroy --context lab-b, which removes that tree, then run bootwright apply --context lab-b",
+		},
+		"artifact-server-not-applied": {
+			"the artifact server that serves the package tree at " + request.Publication.Path +
+				" is not applied on this host: its private directories or its content root are missing, or the content root is not a root-owned directory only root may change, so nothing was published",
+			"apply the artifact server with bootwright apply --context lab-b --stage infrastructure-services, then repeat this apply",
 		},
 	} {
 		t.Run(reason, func(t *testing.T) {
@@ -161,7 +166,7 @@ func TestATreeApplyNamesItsRefusalsWithTheirRemedy(t *testing.T) {
 	for _, sent := range runner.requests {
 		named[sent.Operation] = len(sent.Refusals)
 	}
-	if want := map[string]int{"apply": 2, "destroy": 0, "observe": 0}; len(runner.requests) != 3 || !maps.Equal(named, want) {
+	if want := map[string]int{"apply": 3, "destroy": 0, "observe": 0}; len(runner.requests) != 3 || !maps.Equal(named, want) {
 		t.Fatalf("refusals named by operation = %v, want %v", named, want)
 	}
 }

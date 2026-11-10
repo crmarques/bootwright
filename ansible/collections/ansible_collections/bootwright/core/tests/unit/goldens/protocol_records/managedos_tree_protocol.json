@@ -132,6 +132,21 @@
     }
   },
   {
+    "case": "refused artifact-server-not-applied",
+    "records": [
+      [
+        {
+          "phase": "refused",
+          "reason": "artifact-server-not-applied"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
     "case": "refused unnamed",
     "records": [],
     "result": {

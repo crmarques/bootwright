@@ -315,7 +315,6 @@ Alias cell.
 | [B1314](#b1314) | new, 2026-11-10 (X376 review) | enabling | Architecture | A release recipe builds, refuses a build that is unchecked or lacks its notices, and ships both documents with the executable | No release recipe exists; `make build` already refuses a build without notices, but nothing releases |
 | [B1317](#b1317) | new, 2026-11-10 (X400 review) | enabling | Architecture | A default client whose binary names no Go module has its third-party dependencies judged | virtctl 1.9.1 is built so its build information holds only the toolchain; the gate judges its Go dependencies by its top-level module alone |
 | [B1316](#b1316) | new, 2026-11-10 (X370 review) | defect | Storage, with Secrets | A storage consumer or replication block names every Secret its binding pins | Safe as it stands: the hold walks the applied lineage, whose cluster and host blocks class those keys as effect material |
-| [B1294](#b1294) | new, 2026-11-10 (X366 review) | defect | Managed OS | The shared package tree requires its proved area to exist and its publication path in the artifact server's normal form | Safe as it stands: the artifact server's block precedes the tree, and only a request Go froze names the path |
 
 ### B82
 
@@ -3633,20 +3632,6 @@ reads them only through the cluster and host blocks of the applied lineage.
 **Outcome:** a block names, and classes, every Secret its binding pins, or the
 hold covers any pinned Secret no block references. **Exit evidence:** a hold
 test over a consumer binding alone.
-### B1294
-
-**Owner:** Managed OS. **Kind:** defect. **Requires:** none. **Definition:**
-Candidate, from the independent review of
-[X366](delivered.md#x366--the-package-trees-proved-area): the package tree's
-hosted-area proof never reads whether `services/artifact-server` exists, so on
-a host where it is missing the tree's own directory creation makes it with the
-default mode and the artifact server's next apply refuses it; and its request
-check takes the publication path by prefix and suffix alone, without the
-depth, kind and component checks the artifact server applies to its content
-root. **Outcome:** the tree refuses a missing area before any effect and
-refuses a publication path that is not
-`<content root>/public/os/<profile>/tree` in normal form. **Exit evidence:**
-tree role tests over a missing area and a path with extra components.
 
 ## Audit remediation (2026-10-26)
 

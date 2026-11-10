@@ -25,7 +25,7 @@ def run(args, monkeypatch):
     return module.run(task_vars={}), published
 
 
-@pytest.mark.parametrize("reason", ["media-changed-tree", "tree-source-drift"])
+@pytest.mark.parametrize("reason", ["media-changed-tree", "tree-source-drift", "artifact-server-not-applied"])
 def test_each_tree_refusal_is_named_to_the_runner(reason, monkeypatch):
     result, published = run({"phase": "refused", "reason": reason}, monkeypatch)
     assert result == {"changed": False}

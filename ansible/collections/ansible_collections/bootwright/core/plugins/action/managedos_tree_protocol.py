@@ -26,9 +26,10 @@ def completion(arguments):
 # The refusals this publication names to its runner before the run fails, each
 # one the runner reports as the publication's own diagnostic for its profile
 # (internal/managedos/installation, tree.go): a source image that no longer has
-# the size and SHA-256 the operation froze, and a published tree another image
-# was extracted into.
-REFUSALS = ("media-changed-tree", "tree-source-drift")
+# the size and SHA-256 the operation froze, a published tree another image was
+# extracted into, and an artifact server that is not applied on the host, which
+# serves the tree and owns the directories it is published beneath.
+REFUSALS = ("media-changed-tree", "tree-source-drift", "artifact-server-not-applied")
 
 CAPABILITY = adapter_protocol.Capability(
     "package-tree",

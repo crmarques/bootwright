@@ -14090,3 +14090,30 @@ routes are exactly the ones this removal deletes.
 
 **Commits:** this record's commit. Gates: listed in its message. No push
 occurred.
+
+### X381 — The package tree's missing area and path form
+
+**Item:** B1294, delivered in-tree (2026-11-10) and awaiting operator
+acceptance; the independent review of [X366](#x366--the-package-trees-proved-area)
+found two gaps. The tree's apply read nothing from its hosted-area proof, so on
+a host without `services/artifact-server` its own directory creation made that
+private parent with the default mode and the artifact server's next apply
+refused it; it now refuses the missing area before any effect and names the
+artifact server to apply first, while its removal and observation of a host
+without the area create nothing and refuse nothing. Every entry point's request
+check also took the publication path by prefix and suffix alone; it now takes
+the artifact server's own normal form
+([artifact server owned host state](../infrastructure-services.md#managed-artifact-serving)):
+exact depth, hosted root, context, `services`, `artifact-server`, a valid
+server name, `public/os/<profile>/tree`, and no empty, `.` or `..` component,
+which is every path Go freezes for a package tree. The refusal of a missing or
+unsafe artifact server is named, `artifact-server-not-applied`, and reaches the
+operator with the remedy `bootwright apply --context <context> --stage
+infrastructure-services`; it also covers the server's own content root, which
+the apply never creates. The
+[shared package-tree publication](../managed-os.md#shared-package-tree-publication)
+names it among the apply's refusals and the path form. No request version
+moved.
+
+**Commits:** this record's commit. Gates: listed in its message. No push
+occurred.

@@ -199,7 +199,8 @@ func (c TreeCapability) run(ctx context.Context, execution lifecycle.Execution, 
 
 // treeRefusals are the diagnostics an apply names before it extracts anything:
 // a source image that no longer has the size and SHA-256 the operation froze,
-// and a tree already published at the path from another image.
+// a tree already published at the path from another image, and an artifact
+// server that is not applied, whose content root the tree is published beneath.
 func treeRefusals(contextName string, request TreeRequest) map[string]error {
 	profile := diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: string(api.MachineInstallProfile), Name: request.Identity.Profile}
 	return map[string]error{
@@ -210,6 +211,14 @@ func treeRefusals(contextName string, request TreeRequest) map[string]error {
 				" this operation froze, so it was left unchanged and nothing was published",
 			Remediation: "take this context back with bootwright destroy --context " + contextName +
 				", which removes that tree, then run bootwright apply --context " + contextName,
+			Object: &profile,
+		}}},
+		"artifact-server-not-applied": &diagnostics.Failure{Diagnostics: []diagnostics.Diagnostic{{
+			Severity: "error", Code: "lifecycle.state",
+			Message: "the artifact server that serves the package tree at " + request.Publication.Path +
+				" is not applied on this host: its private directories or its content root are missing, or the content root is not a root-owned directory only root may change, so nothing was published",
+			Remediation: "apply the artifact server with bootwright apply --context " + contextName +
+				" --stage infrastructure-services, then repeat this apply",
 			Object: &profile,
 		}}},
 	}

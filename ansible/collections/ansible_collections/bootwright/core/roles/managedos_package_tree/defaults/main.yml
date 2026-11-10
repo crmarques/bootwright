@@ -3,6 +3,20 @@
 # server's content root beneath them is its own 0755 directory, which only root
 # can create or change inside the private parent.
 managedos_package_tree_area: "{{ bootwright_os_tree_request.publication.path.split('/')[5:7] }}"
+# The server's own content root, the publication path's first eight components:
+# the artifact server creates it, so a tree never does.
+managedos_package_tree_server: "{{ bootwright_os_tree_request.publication.path.split('/')[:8] | join('/') }}"
+# Whether the artifact server is applied on the host: its private directories
+# exist and its content root is a root-owned directory that is not a link and
+# that neither group nor others can write.
+managedos_package_tree_server_applied: >-
+  {{ (managedos_package_tree_hosted.exists | default(false))
+     and (managedos_package_tree_server_root.stat.exists | default(false))
+     and (managedos_package_tree_server_root.stat.isdir | default(false))
+     and not (managedos_package_tree_server_root.stat.islnk | default(true))
+     and (managedos_package_tree_server_root.stat.uid | default(-1)) == 0
+     and not (managedos_package_tree_server_root.stat.wgrp | default(true))
+     and not (managedos_package_tree_server_root.stat.woth | default(true)) }}
 managedos_package_tree_staging: '{{ bootwright_os_tree_request.publication.path }}.staging'
 managedos_package_tree_media: '/var/lib/bootwright/media/{{ bootwright_os_tree_request.media.name }}'
 managedos_package_tree_served_root: '{{ bootwright_os_tree_request.publication.path | dirname | dirname | dirname }}'

@@ -1832,9 +1832,21 @@ failure or the last attempt's failure fails the block with its cause.
 An apply refuses, before it extracts or changes anything, through a named
 refusal for its `MachineInstallProfile`: `media-changed-tree` when the DVD is
 no longer a regular file of the frozen size and SHA-256, whose remedy is the
-[media store's](#media-store); and `tree-source-drift` when a tree at the
+[media store's](#media-store); `tree-source-drift` when a tree at the
 path names another source identity, whose remedy takes the context back,
-which withdraws that tree, then applies.
+which withdraws that tree, then applies; and `artifact-server-not-applied`
+when the artifact server's private directories, `services/artifact-server`
+beneath the context's hosted directory, or its content root are missing, or
+the content root is not a root-owned directory that is not a link and that
+neither group nor others can write, whose remedy applies the
+`infrastructure-services` stage, then repeats. The tree never creates those
+directories: the
+[artifact server owns them](infrastructure-services.md#managed-artifact-serving).
+A removal or observation of a host without them has published nothing and
+creates and refuses nothing. Every entry point also refuses a publication
+path that is not exactly
+`/var/lib/bootwright-hosted/<context>/services/artifact-server/<server>/public/os/<profile>/tree`
+with no empty, `.` or `..` component.
 
 **Evidence and continuation.** The evidence version
 (`TreeEvidenceVersion` in `internal/managedos/installation/tree.go`) binds the

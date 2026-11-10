@@ -30,7 +30,9 @@ options:
         which the runner reports as the publication's own diagnostic for its
         install profile. C(media-changed-tree) for a source image that no
         longer has the size and SHA-256 the operation froze, or
-        C(tree-source-drift) for a published tree extracted from another image.
+        C(tree-source-drift) for a published tree extracted from another image, or
+        C(artifact-server-not-applied) for an artifact server whose hosted
+        directories or content root are not on the host.
     type: str
     required: false
   outcome:

@@ -5,9 +5,20 @@
       - bootwright_os_tree_request.version == 'os-package-tree-v1'
       - bootwright_os_tree_request.identity.context is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$')
       - bootwright_os_tree_request.identity.profile is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$')
-      - bootwright_os_tree_request.publication.path.startswith('/var/lib/bootwright-hosted/' ~ bootwright_os_tree_request.identity.context ~ '/services/')
-      - bootwright_os_tree_request.publication.path.endswith('/public/os/' ~ bootwright_os_tree_request.identity.profile ~ '/tree')
-      - "'/../' not in bootwright_os_tree_request.publication.path"
+      - bootwright_os_tree_request.publication.path is string
+      - bootwright_os_tree_request.publication.path.startswith('/var/lib/bootwright-hosted/')
+      - bootwright_os_tree_request.publication.path.split('/') | length == 12
+      - bootwright_os_tree_request.publication.path.split('/')[3] == 'bootwright-hosted'
+      - bootwright_os_tree_request.publication.path.split('/')[4] == bootwright_os_tree_request.identity.context
+      - bootwright_os_tree_request.publication.path.split('/')[5] == 'services'
+      - bootwright_os_tree_request.publication.path.split('/')[6] == 'artifact-server'
+      - bootwright_os_tree_request.publication.path.split('/')[7] is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$')
+      - >-
+        bootwright_os_tree_request.publication.path.split('/')[8:]
+        == ['public', 'os', bootwright_os_tree_request.identity.profile, 'tree']
+      - >-
+        bootwright_os_tree_request.publication.path.split('/')[1:]
+        | select('in', ['', '.', '..']) | list | length == 0
       - bootwright_os_tree_request.media.name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$')
       - bootwright_os_tree_request.media.sha256 is match('^[0-9a-f]{64}$')
       - bootwright_os_tree_request.media.size | int > 0
@@ -25,6 +36,30 @@
     context: '{{ bootwright_os_tree_request.identity.context }}'
     path: '{{ managedos_package_tree_area }}'
     state: proved
+  register: managedos_package_tree_hosted
+
+- name: Read the artifact server's content root
+  ansible.builtin.stat:
+    path: '{{ managedos_package_tree_server }}'
+    follow: false
+  register: managedos_package_tree_server_root
+
+- name: Name an artifact server that is not applied
+  bootwright.core.managedos_tree_protocol:
+    phase: refused
+    reason: artifact-server-not-applied
+  when: not (managedos_package_tree_server_applied | bool)
+  no_log: true
+
+- name: Refuse an artifact server that is not applied before any effect
+  ansible.builtin.assert:
+    that:
+      - managedos_package_tree_server_applied | bool
+    fail_msg: >-
+      {{ managedos_package_tree_server }} is not the content root of an applied
+      artifact server: apply the artifact server (the infrastructure-services
+      stage) first, then this tree
+    quiet: true
 
 - name: Read the frozen source media
   ansible.builtin.stat:

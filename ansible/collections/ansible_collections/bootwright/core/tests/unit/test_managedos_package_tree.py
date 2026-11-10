@@ -52,9 +52,15 @@ class Refused(Exception):
 
 
 class Host:
-    def __init__(self, root, monkeypatch):
+    def __init__(self, root, monkeypatch, area=True, server=True, context="lab"):
         self.root = root
-        self.tree = self.local(PUBLICATION)
+        publication = PUBLICATION.replace("/lab/", "/%s/" % context)
+        self.tree = self.local(publication)
+        self.area, self.server, self.foreign = self.tree.parents[4], self.tree.parents[3], None
+        if area:
+            self.area.mkdir(parents=True)
+            if server:
+                self.server.mkdir()
         self.stage = pathlib.Path(str(self.tree) + ".staging")
         self.source = self.local("/var/lib/bootwright/media/" + MEDIA)
         self.source.parent.mkdir(parents=True)
@@ -64,8 +70,8 @@ class Host:
         self.values.update({"bootwright_os_tree_digest": "1" * 64, "bootwright_os_tree_material": {},
                             "bootwright_os_tree_request": {
                                 "version": "os-package-tree-v1",
-                                "identity": {"context": "lab", "profile": "rhel-9-8"},
-                                "publication": {"path": PUBLICATION, "url": "https://artifacts.example.test/os/rhel-9-8/tree"},
+                                "identity": {"context": context, "profile": "rhel-9-8"},
+                                "publication": {"path": publication, "url": "https://artifacts.example.test/os/rhel-9-8/tree"},
                                 "media": {"name": MEDIA, "sha256": SHA, "size": len(SOURCE)}}})
         monkeypatch.setattr(protocol, "emit", lambda value, **kwargs: self.evidence.append(value))
 
@@ -171,8 +177,10 @@ class Host:
             info = os.lstat(path)
         except FileNotFoundError:
             return {"exists": False}
+        owner = 4242 if path == self.foreign else 0 if info.st_uid == os.getuid() else info.st_uid
         result = {"exists": True, "isreg": stat.S_ISREG(info.st_mode), "islnk": stat.S_ISLNK(info.st_mode),
-                  "isdir": stat.S_ISDIR(info.st_mode), "size": info.st_size}
+                  "isdir": stat.S_ISDIR(info.st_mode), "size": info.st_size, "uid": owner,
+                  "wgrp": bool(info.st_mode & stat.S_IWGRP), "woth": bool(info.st_mode & stat.S_IWOTH)}
         if args.get("get_checksum") and result["isreg"]:
             assert args.get("checksum_algorithm") == "sha256", args
             result["checksum"] = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -304,9 +312,7 @@ def test_apply_from_the_frozen_source_names_no_refusal(tmp_path, monkeypatch):
 @pytest.mark.parametrize("operation", ["apply.yml", "destroy.yml", "observe.yml"])
 def test_every_entry_point_proves_the_artifact_servers_hosted_directories_before_any_effect(tmp_path, monkeypatch, operation):
     host = Host(tmp_path, monkeypatch)
-    service = host.tree.parents[4]
-    service.mkdir(parents=True)
-    service.chmod(0o755)
+    host.area.chmod(0o755)
     host.tree.mkdir(parents=True)
     (host.tree / "preserved").write_text("kept")
     with pytest.raises(Refused, match="is not a directory only root may enter"):
@@ -327,9 +333,7 @@ def test_the_proof_names_the_servers_service_directories(tmp_path, monkeypatch):
 @pytest.mark.parametrize("operation", ["apply.yml", "destroy.yml", "observe.yml"])
 def test_the_servers_own_content_root_is_never_refused(tmp_path, monkeypatch, operation):
     host = Host(tmp_path, monkeypatch)
-    server = host.tree.parents[3]
-    server.mkdir(parents=True)
-    server.chmod(0o755)
+    host.server.chmod(0o755)
     host.run(operation)
     assert not host.refusals()
 
@@ -343,3 +347,133 @@ def test_the_tree_proves_exactly_the_area_the_artifact_server_proves():
     proved = [Templar(loader=LOADER, variables=dict(values, **source)).template(source[name])
               for source, name in ((server, "infra_artifact_server_nginx_area"), (tree, "managedos_package_tree_area"))]
     assert proved[0] == proved[1] == ["services", "artifact-server"]
+
+
+def hosted(host):
+    return sorted(str(path.relative_to(host.root)) for path in (host.root / "var/lib/bootwright-hosted").rglob("*"))
+
+
+# Only the artifact server creates its directories, the private ones 0700 and
+# its content root 0755; a tree applied before it must not make them with the
+# default mode, which the server's own next apply would refuse (B1294). The
+# refusal is named, so the runner reports its remedy.
+def unapplied(host):
+    return pytest.raises(Refused, match="Refuse an artifact server that is not applied before any effect")
+
+
+@pytest.mark.parametrize("present", [None, 1, 0], ids=["no hosted root", "context only", "services only"])
+def test_apply_refuses_a_missing_artifact_server_area_before_any_effect(tmp_path, monkeypatch, present):
+    host = Host(tmp_path, monkeypatch, area=False)
+    if present is not None:
+        host.area.parents[present].mkdir(parents=True)
+    before = hosted(host)
+    with unapplied(host):
+        host.run("apply.yml")
+    assert hosted(host) == before
+    assert host.refusals() == ["artifact-server-not-applied"]
+    assert host.extracts == 0 and not host.completed()
+
+
+def break_server(host, how):
+    if how == "missing":
+        host.server.rmdir()
+    elif how == "file":
+        host.server.rmdir()
+        host.server.write_text("not a directory")
+    elif how == "link":
+        host.server.rmdir()
+        host.server.symlink_to(host.root, target_is_directory=True)
+    elif how == "group-writable":
+        host.server.chmod(0o775)
+    elif how == "other-writable":
+        host.server.chmod(0o757)
+    else:
+        host.foreign = host.server
+
+
+SERVER_FAULTS = ["missing", "file", "link", "group-writable", "other-writable", "not root"]
+
+
+@pytest.mark.parametrize("how", SERVER_FAULTS)
+def test_apply_refuses_a_missing_or_unsafe_content_root_before_any_effect(tmp_path, monkeypatch, how):
+    host = Host(tmp_path, monkeypatch)
+    break_server(host, how)
+    before = hosted(host)
+    with unapplied(host):
+        host.run("apply.yml")
+    assert hosted(host) == before
+    assert host.refusals() == ["artifact-server-not-applied"]
+    assert host.extracts == 0 and not host.tree.parent.exists() and not host.completed()
+
+
+@pytest.mark.parametrize("operation", ["destroy.yml", "observe.yml"])
+@pytest.mark.parametrize("where", ["no area", "no content root"])
+def test_removal_and_observation_of_a_host_without_the_server_create_nothing_and_do_not_refuse(tmp_path, monkeypatch, operation, where):
+    host = Host(tmp_path, monkeypatch, area=where == "no content root", server=False)
+    before = hosted(host)
+    host.run(operation)
+    host.run(operation)
+    assert hosted(host) == before and not host.refusals()
+    for record in host.completed():
+        assert record["outcome"] == "unchanged"
+        assert record["evidence"]["content"] is False and record["evidence"]["tree"] is False
+        if operation == "destroy.yml":
+            assert record["evidence"]["absent"] and record["evidence"]["postcondition"]
+    assert len(host.completed()) == 2
+
+
+_ROOT = "/var/lib/bootwright-hosted/lab/services/artifact-server/artifacts"
+_MALFORMED = {
+    "an extra component before the tree": PUBLICATION.replace("/tree", "/extra/tree"),
+    "an extra component after the tree": PUBLICATION + "/extra",
+    "an extra component in the content root": _ROOT + "/nested/public/os/rhel-9-8/tree",
+    "a trailing slash": PUBLICATION + "/",
+    "another service kind": PUBLICATION.replace("/artifact-server/", "/dns/"),
+    "another area": PUBLICATION.replace("/services/", "/machines/"),
+    "another hosted root": PUBLICATION.replace("/bootwright-hosted/", "/bootwright/"),
+    "another context": PUBLICATION.replace("/lab/", "/other/"),
+    "another profile": PUBLICATION.replace("/rhel-9-8/", "/rhel-8-10/"),
+    "another served directory": PUBLICATION.replace("/public/", "/private/"),
+    "another consumer": PUBLICATION.replace("/os/", "/iso/"),
+    "another leaf": PUBLICATION.replace("/tree", "/install.iso"),
+    "an empty server name": PUBLICATION.replace("/artifacts/", "//"),
+    "an empty component": PUBLICATION.replace("/public/os/", "/public//"),
+    "a dot server name": PUBLICATION.replace("/artifacts/", "/./"),
+    "a dot-dot server name": PUBLICATION.replace("/artifacts/", "/../"),
+    "a dot-dot in place of the served directory": PUBLICATION.replace("/public/", "/../"),
+    "a dot in place of the consumer": PUBLICATION.replace("/os/", "/./"),
+    "a relative path": PUBLICATION.lstrip("/"),
+}
+
+
+@pytest.mark.parametrize("operation", ["apply.yml", "destroy.yml", "observe.yml"])
+@pytest.mark.parametrize("name", sorted(_MALFORMED))
+def test_every_entry_point_refuses_a_publication_path_not_in_the_servers_normal_form(tmp_path, monkeypatch, operation, name):
+    host = Host(tmp_path, monkeypatch)
+    host.values["bootwright_os_tree_request"]["publication"]["path"] = _MALFORMED[name]
+    before = hosted(host)
+    with pytest.raises(Refused, match="Validate the frozen package tree request"):
+        host.run(operation)
+    assert hosted(host) == before
+    assert not host.evidence and host.extracts == 0 and not host.proofs
+
+
+def test_a_server_of_another_name_publishes_in_normal_form(tmp_path, monkeypatch):
+    host = Host(tmp_path, monkeypatch)
+    publication = "/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts.v2/public/os/rhel-9-8/tree"
+    host.values["bootwright_os_tree_request"]["publication"]["path"] = publication
+    host.tree = host.local(publication)
+    host.stage = pathlib.Path(str(host.tree) + ".staging")
+    host.tree.parents[3].mkdir()
+    host.run("apply.yml")
+    assert host.proofs == [["services", "artifact-server"]]
+    assert host.completed()[-1]["evidence"]["postcondition"]
+
+
+def test_a_context_named_with_digits_and_dashes_publishes_in_normal_form(tmp_path, monkeypatch):
+    host = Host(tmp_path, monkeypatch, context="lab-6-nodes-ceph-network-matrix")
+    host.run("apply.yml")
+    assert host.proofs == [["services", "artifact-server"]]
+    assert host.completed()[-1]["evidence"]["postcondition"]
+    host.run("destroy.yml")
+    assert not host.tree.exists()
