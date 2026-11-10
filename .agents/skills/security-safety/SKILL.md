@@ -17,14 +17,14 @@ Each is, or must become, an executable guard. Check every one a change touches.
 
 - A destructive physical path proves the exact target (system identity, complete
   MAC set, powered off) immediately before it inserts media, and again inside
-  the installer. For a Bootwright-installed OS, a root disk is named by a device path or, on bare metal, by
-  its serial number and exact size; an empty or wwn-only selector refuses. On
-  bare metal a kernel name such as `/dev/sda` is no disk identity: `deviceName`
-  must be a `/dev/disk/by-id/wwn-0x...` path, or absent beside `serialNumber`
-  and `sizeBytes`, and `%pre` refuses before any storage directive unless it
-  resolves to a whole disk, a serial declaration to exactly one
+  the installer. On bare metal a root disk is named only in a form of the
+  [root-device rule](../../../specs/api/machines.md#bmc-and-root-device-shape):
+  a `/dev/disk/by-id/wwn-0x...` path, a serial number with exact size, or a
+  logical volume (`volumeRef`, or the defaulted `bootVolume`) proved by its NAA
+  identifier under verified BMC TLS. A kernel name such as `/dev/sda` is no disk
+  identity, and `%pre` refuses before any storage directive unless the selector
+  resolves to exactly one whole disk
   ([physical installation](../../../specs/managed-os.md#physical-installation)).
-  OpenShift agent roots follow the [native selector](../../../specs/openshift-clusters.md#selection).
   Read [the disk-safety finding](../../knowledge/openshift-agent-disk-safety.md).
 - Consumer roles dispatch on the frozen substrate and fail closed on an unknown
   arm, and a task named for a proof never mutates. The structural tests live in

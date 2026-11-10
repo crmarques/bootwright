@@ -137,10 +137,10 @@ func RenderKickstart(input Installation) (string, error) {
 		return "", err
 	}
 	// Only a disk its substrate created may be left for the installer to
-	// choose; a physical one is named by its by-id WWN path or serial and size.
+	// choose; a physical one is named by its by-id WWN path, serial and size, or volume.
 	if input.Physical && !durableRootDevice(input.RootDevice) && !serialRootInstallation(input) && !input.RootVolume {
-		return "", refusal("lifecycle.state", "a physical installation names no root disk by its /dev/disk/by-id/wwn-0x path or by its serial number and size to erase",
-			"set spec.hardware.rootDevice.deviceName to the disk's /dev/disk/by-id/wwn-0x path, 16 or 32 lowercase hexadecimal digits, or set spec.substrate.baremetal.rootDevice.serialNumber and sizeBytes to the disk's serial number and exact capacity in bytes; a kernel name such as /dev/sda is refused, and a wwn-only selection is not yet supported")
+		return "", refusal("lifecycle.state", "a physical installation names no root disk by its /dev/disk/by-id/wwn-0x path, its serial number and size or a logical volume to erase",
+			rootSelectorRemedy(""))
 	}
 	if (input.RootWWN != "" || input.RootSerial != "" || input.RootSizeBytes != 0) && !input.Physical ||
 		input.RootSizeBytes != 0 && (input.RootSizeBytes < 4096 || input.RootSizeBytes > machineref.MaxClearBytes || input.RootSizeBytes%4096 != 0) ||

@@ -601,6 +601,12 @@ func canonicalWWN(declared string) string {
 
 var physicalRootIdentity = []string{"deviceName", "serialNumber", "sizeBytes", "wwn", "volumeRef", "bootVolume"}
 
+func rootSelectorRemedy(on string) string {
+	return "set spec.hardware.rootDevice.deviceName" + on + " to the disk's /dev/disk/by-id/wwn-0x path, 16 or 32 lowercase hexadecimal digits, set spec.substrate.baremetal.rootDevice.serialNumber and sizeBytes" + on +
+		" to the disk's serial number and exact capacity in bytes, or set spec.substrate.baremetal.rootDevice.volumeRef" + on +
+		" to an existing logical volume, or remove every root hint so the Machine defaults to bootVolume; a kernel name such as /dev/sda and a wwn alone are refused"
+}
+
 func serialRoot(hints substrate.RootDeviceHints) bool {
 	return hints.DeviceName == "" && hints.SerialNumber != "" && hints.SizeBytes != ""
 }
@@ -610,13 +616,11 @@ func serialRoot(hints substrate.RootDeviceHints) bool {
 // refusal, so Unsupported and the request builder never disagree about it.
 func refusedTarget(machine api.Object, target substrate.Target, private bool) (reason, remediation string) {
 	// A physical machine already holds whatever it holds, and a kernel name
-	// may name another disk on the next boot, so only a by-id WWN path does, or a serial and size.
-	// A wwn alone is not yet derived into a device the installer can name.
+	// may name another disk on the next boot, so only a by-id WWN path does, a serial and size,
+	// or a proved volume. A wwn alone is not yet derived into a device the installer can name.
 	if target.Physical && !durableRootDevice(target.RootDeviceHints.DeviceName) && !serialRoot(target.RootDeviceHints) && target.RootDeviceHints.VolumeRef == nil {
-		return "a physical installation erases only a root disk named by its /dev/disk/by-id/wwn-0x path or by its serial number and exact size, and the Machine names neither",
-			"set spec.hardware.rootDevice.deviceName on " + machine.Identity() +
-				" to the disk's /dev/disk/by-id/wwn-0x path, 16 or 32 lowercase hexadecimal digits, or set spec.substrate.baremetal.rootDevice.serialNumber and sizeBytes on " + machine.Identity() +
-				" to the disk's serial number and exact capacity in bytes; a kernel name such as /dev/sda is refused, and a wwn-only selection is not yet supported"
+		return "a physical installation erases only a root disk named by its /dev/disk/by-id/wwn-0x path, by its serial number and exact size, or by a volumeRef or bootVolume logical volume, and the Machine names none of them",
+			rootSelectorRemedy(" on " + machine.Identity())
 	}
 	// The Kickstart selects its disk by name alone, so any other hint would be
 	// ignored, but a physical %pre compares the wwn, serialNumber and sizeBytes it carries.
@@ -631,7 +635,7 @@ func refusedTarget(machine api.Object, target substrate.Target, private bool) (r
 		}
 	}
 	if len(uncarried) != 0 {
-		return "a managed-OS installation selects its root disk by deviceName or, on a physical Machine, by serialNumber and sizeBytes, and cannot carry the other root-device hints the Machine declares",
+		return "a managed-OS installation selects its root disk by deviceName or, on a physical Machine, by serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the other root-device hints the Machine declares",
 			"remove " + strings.Join(uncarried, ", ") + " from " + machine.Identity()
 	}
 	if wwn := target.RootDeviceHints.WWN; wwn != "" && "/dev/disk/by-id/wwn-0x"+canonicalWWN(wwn) != target.RootDeviceHints.DeviceName {

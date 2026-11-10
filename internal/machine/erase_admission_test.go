@@ -145,3 +145,45 @@ func TestEraseAdmissionComparesTheDeclaredRootSize(t *testing.T) {
 		}
 	}
 }
+
+func TestErasePolicyListsTheRootOnlyWhenItNamesIt(t *testing.T) {
+	const root = "/dev/disk/by-id/wwn-0x5000000000000009"
+	data := m("deviceName", "/dev/disk/by-id/wwn-0x5000000000000001", "wwn", "0x5000000000000001", "serialNumber", "DATA").With("sizeBytes", api.IntegerValue("8192"))
+	rootTarget := m("deviceName", root, "wwn", "0x5000000000000009", "serialNumber", "ROOT").With("sizeBytes", api.IntegerValue("8192"))
+	for name, declare := range map[string]func(api.Object) api.Object{
+		"wwn path": func(o api.Object) api.Object { return rootDeclared(o, root, m()) },
+		"serial": func(o api.Object) api.Object {
+			return rootDeclared(o, "", m("serialNumber", "ROOT").With("sizeBytes", api.IntegerValue("8192")))
+		},
+		"volumeRef": func(o api.Object) api.Object {
+			return rootDeclared(o, "", m("volumeRef", m("storageId", "s", "volumeId", "v")))
+		},
+		"bootVolume": func(o api.Object) api.Object { return rootDeclared(o, "", m("bootVolume", m())) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			machine, _ := fixture()
+			machine = declare(machine)
+			machine = machine.WithSpec(machine.Spec().WithPath(api.StringValue("rhel"), "os", "installProfileRef").
+				WithPath(api.BoolValue(true), "substrate", "baremetal", "bmc", "tls", "verify").
+				WithPath(api.StringValue("established"), "substrate", "baremetal", "bmc", "virtualMedia", "tls", "trust").
+				WithPath(m("method", "metadataClear", "targets", list(data)), "hardware", "eraseOnRemoval"))
+			if issues := validateErase(machine, substrate.ArmBaremetal); len(issues) != 0 {
+				t.Fatalf("a policy without a root target was refused: %+v", issues)
+			}
+			if RootEraseSelected(machine) {
+				t.Fatal("a policy without a root target selected the root")
+			}
+			target := rootTarget
+			if name == "serial" {
+				target = target.Without("deviceName").Without("wwn")
+			}
+			named := machine.WithSpec(machine.Spec().WithPath(list(data, target), "hardware", "eraseOnRemoval", "targets"))
+			if issues := validateErase(named, substrate.ArmBaremetal); len(issues) != 0 {
+				t.Fatalf("a policy naming its root was refused: %+v", issues)
+			}
+			if selected := RootEraseSelected(named); selected != (name == "wwn path" || name == "serial") {
+				t.Fatalf("root selected %v", selected)
+			}
+		})
+	}
+}

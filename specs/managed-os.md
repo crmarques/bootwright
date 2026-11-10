@@ -1207,9 +1207,9 @@ owns the `logicalOverwrite` and `metadataClear` methods, exact identities,
 private RAM boot, direct I/O, receipt acknowledgement and failure recovery. Omission retains disks. An original installation proved never
 started removes its unused policy without booting or writing a disk. When the
 installation froze a root `wwn`, `serialNumber` or `sizeBytes`, the root erase
-target — the target with the same `deviceName`, or, for a root declared by
-serial number, the target without `deviceName` with that `serialNumber` — must
-name the same ones, the WWN without regard to case or a `0x` or `naa.` prefix,
+target, when the policy names one under the
+[root-target rule](api/machines.md#physical-erase-policy), must name the same
+ones, the WWN without regard to case or a `0x` or `naa.` prefix,
 or the erase request refuses `api.invariant` when it is built. A root declared
 by serial number has the WWN it reported at installation, when it has one,
 recorded in the installation's evidence, so its erase can compare it.
@@ -1260,21 +1260,16 @@ media takes back nothing from the machine. The separate opt-in
 [physical erase](#physical-removal) consumes `data-loss` on removal. The
 authorization acknowledges already-planned loss; it selects no target and
 relaxes no proof. Installation erasure is confined to the root disk the
-Machine names, and on a physical Machine that name is a durable identity in one
-of the two forms the
-[root-device rule](api/machines.md#bmc-and-root-device-shape) states:
-`hardware.rootDevice.deviceName` as `/dev/disk/by-id/wwn-0x` followed by 16 or
-32 lowercase hexadecimal digits, or, with no `deviceName`,
-`substrate.baremetal.rootDevice.serialNumber` and `sizeBytes`, because a kernel
-name such as `/dev/sda` follows probe order and can name another disk on the
-next boot. An installation that names neither, including one selecting by `wwn`
-alone, or that names another form, refuses before registration, and the
-Kickstart renderer refuses rather than clearing every disk. Beside the path a
-physical Machine may declare `substrate.baremetal.rootDevice.wwn`,
-`serialNumber` and `sizeBytes`: the request freezes them, the `wwn` as `0x` and
-lowercase hexadecimal, and a `wwn` that is not the WWN the path names, a `wwn`
-without the path, or a serial number other than 1 to 256 ASCII letters, digits
-and `._:+/=-`, refuses before registration. One declaring any other hint
+Machine names, and on a physical Machine that name is one of the durable forms
+of the [root-device rule](api/machines.md#bmc-and-root-device-shape), because a
+kernel name such as `/dev/sda` follows probe order and can name another disk
+on the next boot. An installation that names none of them, including one
+selecting by `wwn` alone, refuses before registration, and the Kickstart
+renderer refuses rather than clearing every disk. The request freezes the
+`wwn`, `serialNumber` and `sizeBytes` declared beside the path, the `wwn` as
+`0x` and lowercase hexadecimal, and a `wwn` that is not the WWN the path
+names, a `wwn` without the path, or a serial number outside the rule's grammar
+refuses before registration. One declaring any other hint
 refuses before registration too, as the [supported shape](#installation)
 states.
 
@@ -1295,7 +1290,12 @@ disk), and requires exactly one to report the declared serial; that one must be 
 --getsize64` must report exactly `sizeBytes`. None, more than one, such as two
 paths of a multipath disk, namespaces of one NVMe controller or a cloned
 serial, or any other mismatch stops the installation before any storage
-directive; the `%pre` never chooses between them. Only after every proof and
+directive; the `%pre` never chooses between them. A logical-volume root
+resolves through the `/dev/disk/by-id/wwn-0x` path of the NAA identifier its
+Machine proof recorded and the media binds: exactly one block device in
+`/sys/class/block`, neither a partition nor a hidden NVMe path node, may report
+the `wwid` `naa.` and that identifier, and it must be a fixed, writable whole
+disk of exactly the proved capacity, under the identity rules below. Only after every proof and
 every declared clear does it write `ignoredisk --only-use=<name>` and
 `clearpart --all --initlabel --drives=<name>`, naming the kernel name that boot
 gave the disk, to `/tmp/bootwright-disk.ks`, which the storage section includes
@@ -2000,8 +2000,8 @@ the length of that many bytes in base64url without padding.
 
 | Refusal | Path | Reason | Remedy |
 | --- | --- | --- | --- |
-| A physical Machine naming no root device | on a Machine on a `baremetal` provider, neither a `spec.hardware.rootDevice.deviceName` that is `/dev/disk/by-id/wwn-0x` followed by 16 or 32 lowercase hexadecimal digits nor, without a `deviceName`, both `spec.substrate.baremetal.rootDevice.serialNumber` and `sizeBytes`, nor a logical-volume selector; a kernel name such as `/dev/sda`, another by-id path, a `wwn` alone and a serial number without its size included | `a physical installation erases only a root disk named by its /dev/disk/by-id/wwn-0x path or by its serial number and exact size, and the Machine names neither` | `set spec.hardware.rootDevice.deviceName on <machine> to the disk's /dev/disk/by-id/wwn-0x path, 16 or 32 lowercase hexadecimal digits, or set spec.substrate.baremetal.rootDevice.serialNumber and sizeBytes on <machine> to the disk's serial number and exact capacity in bytes; a kernel name such as /dev/sda is refused, and a wwn-only selection is not yet supported` |
-| A root-device hint other than deviceName | any `spec.hardware.rootDevice` field but `deviceName`, or `spec.substrate.baremetal.rootDevice.hctl`; a Machine on a `baremetal` provider may also declare `wwn`, `serialNumber` and `sizeBytes` | `a managed-OS installation selects its root disk by deviceName or, on a physical Machine, by serialNumber and sizeBytes, and cannot carry the other root-device hints the Machine declares` | `remove <hints> from <machine>` |
+| A physical Machine naming no root device | on a Machine on a `baremetal` provider, none of the forms of the [root-device rule](api/machines.md#bmc-and-root-device-shape); a kernel name such as `/dev/sda`, another by-id path, a `wwn` alone and a serial number without its size included | `a physical installation erases only a root disk named by its /dev/disk/by-id/wwn-0x path, by its serial number and exact size, or by a volumeRef or bootVolume logical volume, and the Machine names none of them` | `set spec.hardware.rootDevice.deviceName on <machine> to the disk's /dev/disk/by-id/wwn-0x path, 16 or 32 lowercase hexadecimal digits, set spec.substrate.baremetal.rootDevice.serialNumber and sizeBytes on <machine> to the disk's serial number and exact capacity in bytes, or set spec.substrate.baremetal.rootDevice.volumeRef on <machine> to an existing logical volume, or remove every root hint so the Machine defaults to bootVolume; a kernel name such as /dev/sda and a wwn alone are refused` |
+| A root-device hint other than deviceName | any `spec.hardware.rootDevice` field but `deviceName`, or `spec.substrate.baremetal.rootDevice.hctl`; a Machine on a `baremetal` provider may also declare `wwn`, `serialNumber`, `sizeBytes`, `volumeRef` and `bootVolume` | `a managed-OS installation selects its root disk by deviceName or, on a physical Machine, by serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the other root-device hints the Machine declares` | `remove <hints> from <machine>` |
 | A root-device wwn naming another disk | a `spec.substrate.baremetal.rootDevice.wwn` that, without regard to case or a `0x` prefix, is not the hexadecimal digits `spec.hardware.rootDevice.deviceName` names after `/dev/disk/by-id/wwn-0x`, or that stands without a `deviceName` | `a physical installation proves its root disk by the wwn the Machine declares only beside the deviceName that names it, and that wwn names another disk or stands alone` | `set spec.hardware.rootDevice.deviceName on <machine> to /dev/disk/by-id/wwn-0x followed by the WWN spec.substrate.baremetal.rootDevice.wwn declares, or remove the wwn` |
 | A root-device serial number the installer cannot compare | a `spec.substrate.baremetal.rootDevice.serialNumber` other than 1 to 256 characters drawn from ASCII letters, digits, `.`, `_`, `:`, `+`, `/`, `=` and `-` | `a physical installation compares its root disk's serial number inside the installer, and the serialNumber the Machine declares is not one it can compare` | `set spec.substrate.baremetal.rootDevice.serialNumber on <machine> to the disk's serial number, at most 256 ASCII letters, digits and ._:+/=- characters, or remove it` |
 | An unverified fetch of private material | `spec.substrate.baremetal.bmc.virtualMedia.tls.trust: disableVerification` on a Machine whose installation delivers private material (a delivered host key or an encrypted root disk's recovery passphrase) | `a Machine that delivers private material through its installation cannot let its BMC fetch without verifying the artifact server` | `declare substrate.baremetal.bmc.virtualMedia.tls.trust: importCertificate on <machine>, or established when its BMC already trusts the server` |

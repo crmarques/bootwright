@@ -233,7 +233,7 @@ func TestOnlyTheFirstRefusalAMachineMeetsIsReported(t *testing.T) {
 		reason, remediation string
 	}{
 		"a target before its network": {labCatalog(hinted, kernelNamed),
-			"a managed-OS installation selects its root disk by deviceName or, on a physical Machine, by serialNumber and sizeBytes, and cannot carry the other root-device hints the Machine declares",
+			"a managed-OS installation selects its root disk by deviceName or, on a physical Machine, by serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the other root-device hints the Machine declares",
 			"remove spec.hardware.rootDevice.rotational from Machine/rhel-01"},
 		"a network before its profile": {labCatalog(kernelNamed, passworded), kernel, kernelRemedy},
 		"a profile before its servers": {labCatalog(passworded, servicesHost(), onServices),

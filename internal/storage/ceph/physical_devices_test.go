@@ -38,9 +38,9 @@ func physicalCatalogPerHost(hosts, disks int) (api.Catalog, api.Object) {
 	return api.NewCatalog(objects), cluster
 }
 
-func TestPhysicalDeviceBoundIsTheMachineErasePolicyLessItsRootDisk(t *testing.T) {
+func TestPhysicalDeviceBoundIsTheInstallTimeClearBound(t *testing.T) {
 	targets, devices := maxEraseTargets, maxPhysicalDevices
-	if targets != machine.MaxEraseTargets || devices != targets-1 || devices != 15 {
+	if targets != machine.MaxEraseTargets || devices != machine.MaxClearTargets || devices >= targets {
 		t.Fatalf("physical device bound %d of %d erase targets", devices, targets)
 	}
 }

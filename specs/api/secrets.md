@@ -184,9 +184,10 @@ satellite:
   lifecycleEnvironment: Production
 ```
 
-`management: managed` registers each Bootwright-installed virtual Machine whose
-install profile selects the Entitlement in `spec.subscription`, proving and
-removing only the consumer its installation created
+`management: managed` registers each Bootwright-installed Machine, virtual or
+physical, whose install profile selects the Entitlement in
+`spec.subscription`, proving and removing only the consumer its installation
+created
 ([managed OS](../managed-os.md#registration)); `management: external` is a
 declaration and runs no registration. With `satellite` the registration
 reaches that server over its declared CA bundle

@@ -109,10 +109,8 @@ ends at or below `65535`, and the ranges of providers on the same host do not
 overlap. The emulator fetches media from the artifact server and opens no
 second listener.
 [Substrates](../substrates.md#machine-realization) owns the management controller each
-Machine receives. A libvirt provider whose name a Machine realized on a libvirt
-provider also takes refuses at admission, because that Machine's disk directory
-would hold the provider's virtual-media pool
-([substrates](../substrates.md#refusal-table)).
+Machine receives. A provider and a Machine may share a name; their media and
+disks occupy separate subtrees ([substrates](../substrates.md#machine-realization)).
 
 ### Libvirt capacity reserve
 
@@ -325,7 +323,7 @@ substrate reads; NIC names and substrate-neutral root-device hints stay in
 | --- | --- | --- | --- |
 | `baremetal` | `bmc` | object | The management controller; exact shape [below](#bmc-and-root-device-shape). |
 | `baremetal` | `nics` | array | Set of `{nicRef, macAddress, segmentRef}` keyed by `nicRef`; `nicRef` names a `hardware.nics[].name`, at most one entry per NIC; `macAddress` is EUI-48; optional `segmentRef` names a segment of the provider with this arm, and is refused without `providerRef`. Omitted, the NIC takes the provider's sole segment; with two or more, a NIC an available ethernet interface matches needs one (`api.invariant` at its entry, naming the candidates). |
-| `baremetal` | `rootDevice` | object | Physical-disk hints `wwn`, `hctl` and `serialNumber`, each a non-empty string, and `sizeBytes`, the root disk's exact capacity, 4096-aligned up to 64 TiB, proved by a Bootwright installation or the physical agent pre-boot serial proof. |
+| `baremetal` | `rootDevice` | object | Physical-disk hints `wwn`, `hctl` and `serialNumber`, each a non-empty string, `sizeBytes`, the root disk's exact capacity, 4096-aligned up to 64 TiB, proved by a Bootwright installation or the physical agent pre-boot serial proof, and the logical-volume selectors `volumeRef` and `bootVolume`; the [root forms](#bmc-and-root-device-shape) are one rule. |
 | `baremetal` | `firmware` | object | Declared firmware settings; [shape](#firmware-block). |
 | `libvirt`, `kubevirt` | `profileRef` | string | Provider-local `machineProfiles[].name`. |
 | `libvirt`, `kubevirt` | `nics` | array | Set of `{nicRef, segmentRef}` keyed by `nicRef`: `segmentRef` names a segment of the provider with this arm. A NIC without an entry takes the provider's sole segment, whatever its name; with two or more, every NIC needs its entry, else `api.invariant` at this field names the NIC. |
@@ -648,39 +646,40 @@ whitespace, control characters, quotes, other shell metacharacters and `.` or
 shell words verbatim. `minSizeGigabytes` is non-negative. Bare-metal root
 selectors follow the [OS lifecycle invariant](#os-lifecycle-and-substrate-invariants);
 predicate-only hints are not an adequate destructive target selector.
-Which hints an installation carries,
-and which it refuses, is the rule of the consumer that installs the Machine:
-[managed OS](../managed-os.md#installation) or the
-[cluster installer](../openshift-clusters.md#selection-and-refusal).
 Nothing installs an OS-ready Machine: there `deviceName` and `wwn` name the
 root disk that a Ceph OSD selection must not name, compared with each explicit
 OSD device path, `wwn` as its `/dev/disk/by-id/wwn-0x` path without regard to
-case or a `0x` prefix, and every other hint but `sizeBytes`, which refuses,
-warns `api.deferred` at its path, since it selects no disk.
+case or a `0x` prefix; `sizeBytes`, `bootVolume` and `volumeRef` refuse, and
+every other hint warns `api.deferred` at its path, since it selects no disk.
 
-A bare-metal Bootwright-installed Machine names its root disk by a durable
-identity in exactly one of two forms. Either `deviceName` is
-`/dev/disk/by-id/wwn-0x` followed by 16 or 32 lowercase hexadecimal digits, the
-form [managed physical hosts](../ceph.md#devices-and-destructive-ownership) use
-for OSD paths, beside which `wwn`, `serialNumber` and `sizeBytes` may stand as
-proofs; or `deviceName` is absent and `substrate.baremetal.rootDevice` declares
-`serialNumber` and `sizeBytes`, for a disk whose WWN cannot be learned before an
-OS boots or that has none, such as an NVMe disk, and a `wwn` then refuses, since
-a disk with a known WWN is named by its path. The installation erases that
-disk, and a kernel name such as `/dev/sda` moves with probe order, firmware and
-hot-added disks, so it refuses at `hardware.rootDevice.deviceName`, naming both
-forms. Its `%pre` stops before storage unless the path is a whole disk
-reporting every declared identity, or exactly one whole disk reports the serial
-number and is fixed, writable and exactly `sizeBytes` long ([physical
-installation](../managed-os.md#physical-installation)). A serial number that
+A bare-metal Machine that an installer writes, a Bootwright installation or a
+cluster's agent installer, names its root disk in exactly one of these forms.
+This list is the one root rule; [managed OS](../managed-os.md#physical-installation),
+the [cluster installer](../openshift-clusters.md#selection-and-refusal) and
+[physical disk safety](../state-reconciliation.md#physical-disk-safety) link
+it rather than restate it.
+
+| Form | Declared as | Consumer notes |
+| --- | --- | --- |
+| WWN | `hardware.rootDevice.deviceName` as `/dev/disk/by-id/wwn-0x` followed by 16 or 32 lowercase hexadecimal digits, the form [managed physical hosts](../ceph.md#devices-and-destructive-ownership) use for OSD paths | The one WWN spelling every consumer admits. `wwn`, as `0x` and the same digits, may stand beside it and must name the same WWN, and `serialNumber` and `sizeBytes` may stand beside it as proofs. The cluster installer also admits `wwn` alone, which a Bootwright installation refuses. |
+| Serial number | no `deviceName`; `substrate.baremetal.rootDevice.serialNumber`, 1 to 256 ASCII letters, digits or `._:+/=-`, and exact `sizeBytes` | For a disk whose WWN cannot be learned before an OS boots or that has none, such as an NVMe disk. A Bootwright installation refuses a `wwn` beside it, since a disk with a known WWN is named by its path. |
+| Logical volume | `substrate.baremetal.rootDevice.volumeRef` or `bootVolume` alone, under verified BMC TLS | One [existing logical volume](#existing-logical-root-volumes), proved by its NAA identifier and exact capacity. `bootVolume: {}` is the default on a Machine of a bare-metal provider that an installer writes and that declares no root hint. |
+
+The installation erases that disk, and a kernel name such as `/dev/sda` moves
+with probe order, firmware and hot-added disks, so it refuses at
+`hardware.rootDevice.deviceName`; every root refusal's remedy names each form,
+`volumeRef` and the `bootVolume` default included. A serial number that
 selects a disk, here or as a target named without `deviceName` below, is
 declared by no other Machine; a second declaration refuses `api.invariant` at
 its field, naming the other Machine, because two disks sharing a serial number
-cannot be told apart.
+cannot be told apart. Which other hints an installation carries, and the
+proofs it runs before and inside the installer, are the consumer's rule.
 
 ### Existing logical root volumes
 
-An installed physical Machine with no root hints defaults to
+A Machine of a bare-metal provider that an installer writes, a Bootwright
+installation or an agent node ([D252](../milestones/backlog.md#d252)), and
+that declares no root hint defaults to
 `substrate.baremetal.rootDevice.bootVolume: {}`. This selects the first enabled
 persistent local-disk firmware boot option through Redfish `BootOrder`, its
 `BootOptionReference` and a direct `RelatedItem` link to a Volume in this
@@ -747,11 +746,16 @@ on removal; omission retains its disks.
 | `targets[].sizeBytes` | integer | yes | — | Exact logical capacity, a multiple of 4096 up to 64 TiB, and at most 896 GiB for a `logicalOverwrite` target. |
 | `targets[].method` | string | no | the policy's `method` | The same choice, for this disk only. |
 
-The root is retained unless an explicit target names it. When present,
-the root target is the one whose `deviceName` is
+The policy lists the root only when it names it; an omitted root is retained,
+and every listed disk, root or data, is erased. This is the one root-target
+rule. The root target is the one whose `deviceName` is
 `hardware.rootDevice.deviceName`, or, for a root declared by serial number, the
-target without `deviceName` whose `serialNumber` and `sizeBytes` are the root
-device's. A target naming only one of `deviceName` and `wwn` refuses
+target without `deviceName` whose `serialNumber` is the root's, whose
+`sizeBytes` must then be the root's or it refuses `api.invariant` at that
+target's `sizeBytes`; a target naming the serial root's serial number with a
+`deviceName` refuses at its `targets[<i>]` path. A root selected by
+`volumeRef` or `bootVolume` has no root target: each listed target is erased by
+its own identity. A target naming only one of `deviceName` and `wwn` refuses
 `api.invariant` at its `targets[<i>]` path.
 
 ### Install-time data-disk clear
@@ -805,7 +809,7 @@ optional. Validation is lexical only.
 | `spec.updates.policy` | string | no | `withinRelease` (default) or `none`. `withinRelease` updates every installed package at installation, after registration, to the newest its update sources offer within `spec.os.version`, then reboots when anything changed; `none` installs the media's packages alone ([update within release](../managed-os.md#update-within-release)). `spec.updates` is closed. |
 | `spec.installer.anaconda` | object | union | Anaconda arm below. |
 | `spec.installer.templateClone` | object | union | A [refused arm](#refused-arms). |
-| `spec.subscription.entitlementRef` | string | no | Global `Entitlement` of type `redhatRhel`; registers the installed system with the hosted subscription service and unregisters it on destroy ([managed OS](../managed-os.md#registration)). |
+| `spec.subscription.entitlementRef` | string | no | Global `Entitlement` of type `redhatRhel`; registers the installed system with the hosted subscription service, or with the Entitlement's declared Satellite, and unregisters it on destroy ([managed OS](../managed-os.md#registration)). |
 | `spec.proxy` | choice object | no | External Proxy choice; omission uses direct access. |
 | `spec.ntp` | array of selections | no | NTPServer selections; omission leaves the native OS default. |
 | `spec.customizations` | object | no | Closed customization groups below. |

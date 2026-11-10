@@ -73,12 +73,36 @@ func TestPhysicalAgentRootRefusesBeforeRenderingInstallerInputs(t *testing.T) {
 	for _, device := range []string{"/dev/sda", "/dev/disk/by-path/pci-0000:00:04.0"} {
 		catalog := physicalWithRoot(text("deviceName", device))
 		refusals := Refusals(catalog)
-		if len(refusals) != 1 || !strings.Contains(refusals[0].Reason, "stable WWN") || !strings.Contains(refusals[0].Remediation, "Machine/metal-01") {
+		if len(refusals) != 1 || !strings.Contains(refusals[0].Reason, "stable root selector") || !strings.Contains(refusals[0].Remediation, "Machine/metal-01") || !strings.Contains(refusals[0].Remediation, "volumeRef") {
 			t.Fatalf("unsafe root refusal = %+v", refusals)
 		}
 		if _, _, _, err := Requests(catalog, "controller", testContext); err == nil {
 			t.Fatal("unsafe physical root produced installer requests")
 		}
+	}
+}
+
+func TestPhysicalAgentWWNPathReachesTheInstallerAsItsWWN(t *testing.T) {
+	const wwn = "0x5000c500a1b2c3d4"
+	want := map[string]any{"wwn": wwn}
+	for name, hints := range map[string][]api.FieldValue{
+		"wwn":                     {text("wwn", wwn)},
+		"wwn path":                {text("deviceName", "/dev/disk/by-id/wwn-"+wwn)},
+		"wwn path beside its wwn": {text("deviceName", "/dev/disk/by-id/wwn-"+wwn), text("wwn", wwn)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			media, install, _ := onlyRequests(t, physicalWithRoot(hints...))
+			if got := hostHints(t, media)["master-0"]; !reflect.DeepEqual(got, want) {
+				t.Fatalf("root hints = %#v", got)
+			}
+			if hardware := install.Nodes[0].Hardware; hardware.RootSelector != "wwn" || hardware.RootDisk != nil || hardware.RootVolumeRef != nil {
+				t.Fatalf("root proof = %+v", hardware)
+			}
+		})
+	}
+	refusals := Refusals(physicalWithRoot(text("deviceName", "/dev/disk/by-id/wwn-"+wwn), text("wwn", "0x5000c500a1b2c3d5")))
+	if len(refusals) != 1 || !strings.Contains(refusals[0].Remediation, "volumeRef") {
+		t.Fatalf("a path beside another wwn = %+v", refusals)
 	}
 }
 

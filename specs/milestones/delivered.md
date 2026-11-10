@@ -13371,3 +13371,45 @@ registry's token and content hosts and a Machine's
 subscription hosts are the operator's to list; a Machine routed `direct` or
 by `noProxy` goes around the proxy; the live proof is
 [B1250](backlog.md#b1250).
+
+### X352 — Root rule
+
+**Items:** B1260 (2026-11-10, [D252](backlog.md#d252)), Kind safety, Owners:
+Machine, with Managed OS, Container clusters and Storage. The
+[root-device rule](../api/machines.md#bmc-and-root-device-shape) alone lists
+the root forms: a `/dev/disk/by-id/wwn-0x` path, a serial number with exact
+size, or a logical volume through `volumeRef` or the defaulted `bootVolume`
+under verified BMC TLS. Managed OS, the agent installer, physical disk safety
+and Ceph retirement link it. The
+[root-target rule](../api/machines.md#physical-erase-policy) lists the root
+only when the policy names it. A physical agent node now also admits the WWN
+path, which reaches the installer as its `wwn` hint, so one WWN spelling
+validates for both installers. Every root refusal names each form,
+`volumeRef` and the `bootVolume` default included. Code already followed
+[D239](backlog.md#d239) and D252 (3) and (4) otherwise.
+
+| Finding | Change |
+| --- | --- |
+| API-03 | machines.md root-form table; managed-os.md physical installation links it, its `%pre` describes the NAA volume arm, refusal rows name every form; state-reconciliation.md physical disk safety adds the volume arm; the OS-ready warn clause excludes `bootVolume` and `volumeRef`; `rootSelectorRemedy` in managed-OS selection and the Kickstart renderer, and the installed-Machine admission refusal, name `volumeRef` and the `bootVolume` default |
+| API-08 | openshift-clusters.md selection links the rule and accepts every form per D252 (3); row 153 condition, reason and remedy; row 155 cites only `hardware.rootDevice`; a [hint projection](../openshift-clusters.md#root-device-hint-projection) table; `AgentRootDeviceRefusal` reason and remedy; `validateVolumeRoot` names `bootVolume` at its own field and gives a remedy |
+| REC-02 | the root-target rule; state-reconciliation.md erase, ceph.md retirement (two places) and the m2.md B485 recovery note say the root is covered only when named; the Ceph 15-disk bound is stated as the install-time clear bound the code already refuses with, keeping 15 (D252 (4)) |
+| API-38 | the WWN path is the one spelling both installers admit: `machine.AgentRootWWN` and the agent projection map it to `wwn` |
+| API-121 | the serial root target is identified by its serial number, whose size must match, in machines.md alone; managed-os.md physical removal and state-reconciliation.md link it |
+| API-01 | api/secrets.md registers each Bootwright-installed Machine, virtual or physical; the profile row names the Satellite path |
+| API-02 | the retired provider-name collision sentence is replaced by the shared-name link |
+
+Tests: `TestPhysicalAgentRootAdmitsEveryRootForm` (wwn, serial and size,
+WWN path, path beside its wwn, `volumeRef`, declared and defaulted
+`bootVolume`), `TestPhysicalAgentRootRefusalsNameEveryForm`,
+`TestLogicalVolumeRootRefusalsNameTheirOwnField` (the TLS refusal),
+`TestInstalledPhysicalRootRefusalNamesEveryForm`,
+`TestErasePolicyListsTheRootOnlyWhenItNamesIt` and
+`TestPhysicalAgentWWNPathReachesTheInstallerAsItsWWN`; the refusal-table
+tests hold both tables to the code.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** a Bootwright installation still refuses `wwn`
+alone, and the agent installer still admits it, so the path is the one
+spelling both admit rather than the only one. Making one form the only one is
+the audit's API-38 reshape, a breaking rename the owner decides
+([B1274](backlog.md#b1274)).

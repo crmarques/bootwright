@@ -1158,8 +1158,9 @@ cleanup or sanitization. Reinstallation overwrites the independently selected
 root, and explicit root erasure keeps its existing whole-disk semantics.
 
 Physical retirement requires explicit original erase authority for every
-selected data, DB and WAL disk. It does not require the root disk: an omitted
-root is retained. Machine removal erases only its frozen explicit targets; an
+selected data, DB and WAL disk, and for the root only when the policy names it
+([root-target rule](api/machines.md#physical-erase-policy)); an omitted root is
+retained. Machine removal erases only its frozen explicit targets; an
 OS reinstall still overwrites its independently selected root volume.
 The Machine's proved logical-volume NAA is excluded from OSD selection at the
 live disk-identity boundary, even when the authored root uses firmware discovery.
@@ -1223,16 +1224,18 @@ kind refuses `device-serial-mismatch`; one without such an alias refuses
 `device-alias`. Each is coded `lifecycle.unsupported` and names the Machine
 and the serials its host selects, and the first binding raises them before
 any disk is written.
-A physical host admits every distinct local whole disk its OSD services select,
-data, DB and WAL paths together, up to the most that its Machine's
-[erase policy](state-reconciliation.md#opt-in-physical-logical-overwrite) can cover beside the root disk: one fewer than
-that policy's target bound, 15 of 16. No call, round or deadline grows with the
+A physical host admits up to 15 distinct local whole disks its OSD services
+select, data, DB and WAL paths together: the
+[install-time clear](api/machines.md#install-time-data-disk-clear) bound, within
+the 16 targets of its Machine's
+[erase policy](state-reconciliation.md#opt-in-physical-logical-overwrite)
+([D198](milestones/backlog.md#d198), confirmed by
+[D252](milestones/backlog.md#d252)). No call, round or deadline grows with the
 device count, since every per-host call proves all of its host's disks at once
-(the [cluster execution budget](#cluster-execution-budget)), so physical
-retirement's need for every selected disk in that policy is the binding bound.
+(the [cluster execution budget](#cluster-execution-budget)).
 One disk past it refuses at request planning, coded `lifecycle.unsupported`,
 with reason
-`CephCluster <cluster> selects <disks> disks on physical Ceph host <host>, past the 15 that its Machine's eraseOnRemoval policy can cover beside the root disk within its 16 targets`
+`CephCluster <cluster> selects <disks> disks on physical Ceph host <host>, past the 15 permitted by physical install-time clearing (erase policies allow 16 targets)`
 and remedy
 `select at most 15 distinct disks for host <host> across the data_devices, db_devices and wal_devices paths of the OSD services of CephCluster <cluster>`.
 Shared WWN or serial selectors across hosts, partitions and multipath targets
@@ -1274,9 +1277,9 @@ This code path has synthetic coverage; live physical acceptance remains unrun.
 
 Physical retirement requires the original opt-in
 [erase policy](state-reconciliation.md#opt-in-physical-logical-overwrite), with
-either method on each disk as its Machine's owner chose, to cover the root disk
-and every selected data, DB and WAL disk, by its WWN or by its serial number
-and size. A `metadataClear` OSD disk reads as
+either method on each disk as its Machine's owner chose, to cover every
+selected data, DB and WAL disk, by its WWN or by its serial number and size,
+and the root when the policy names it. A `metadataClear` OSD disk reads as
 empty to native probes afterwards but is not sanitized. Ceph contributes
 the retirement policy Managed OS installation and erasure honor through
 [their retirement port](managed-os.md#physical-removal): each physical node's

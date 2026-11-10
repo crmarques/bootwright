@@ -2124,7 +2124,7 @@ def test_physical_missing_completed_identity_cannot_relearn_a_replacement(reques
     assert markers.records == retained
 
 
-# The Go planner admits as many disks per physical host as a Machine's 16 erase targets cover beside the root disk.
+# The Go planner admits as many disks per physical host as install-time clearing admits, 15.
 PHYSICAL_DISKS_BOUND = 15
 
 

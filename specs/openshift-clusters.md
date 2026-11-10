@@ -40,13 +40,12 @@ accepted. A node whose realized target is physical installs through its
 management controller under the trust its Machine declares, with the
 [private delivery](#boot-media) rules below.
 At [Machine admission](api/machines.md#os-lifecycle-and-substrate-invariants),
-a physical agent node requires a stable root selector and no
-`hardware.rootDevice.deviceName`: either `substrate.baremetal.rootDevice.wwn`
-as `0x` followed by 16 or 32 lowercase hexadecimal digits, or `serialNumber`
-and exact `sizeBytes`. A serial is 1 to 256 ASCII letters, digits or `._:+/=-`;
-capacity is 4096-aligned, from 4096 bytes to 64 TiB. Each declared selector
-must be valid. A serial selecting a root without a device path is declared by
-no other Machine, including its root, clear and erase targets.
+a physical agent node names its root in one of the forms of the
+[root-device rule](api/machines.md#bmc-and-root-device-shape): a WWN, as its
+`/dev/disk/by-id/wwn-0x` `deviceName` or as `wwn` alone; a serial number with
+exact `sizeBytes`; or `volumeRef` or `bootVolume`, declared or defaulted, under
+verified BMC TLS ([D252](milestones/backlog.md#d252)). Any other `deviceName`
+refuses, and each declared selector must be valid.
 
 The installation freezes a serial-selected root's serial and capacity into its
 hardware proof. Immediately before media insertion, and again after a firmware
@@ -60,7 +59,7 @@ the exact serial hint; it has no exact-size field. The existing
 [controller-to-installer race](state-reconciliation.md#physical-disk-safety)
 and real-hardware qualification remain.
 
-A physical node may instead use a [logical-volume root](api/machines.md#bmc-and-root-device-shape).
+A physical node may instead use a [logical-volume root](api/machines.md#existing-logical-root-volumes).
 The media block waits for that Machine's proof and binds the native WWN hint
 and its retained media receipt to the proved volume. A replay or installation
 whose current proof differs from that receipt refuses before boot. The native
@@ -150,9 +149,9 @@ every selected `OpenShiftCluster`, and both belong to the
 | A physical node with an HTTP BMC | a physical node's BMC uses HTTP | `a physical node's private boot image requires an HTTPS management controller` | `set spec.substrate.baremetal.bmc.address on <machine> to an HTTPS ComputerSystem endpoint` |
 | A physical node with unverified BMC TLS | a physical node disables BMC TLS verification | `a physical node's private boot image requires a BMC connection that verifies its certificate` | `enable spec.substrate.baremetal.bmc.tls.verify on <machine> and declare its trust bundle when needed` |
 | A physical node with unverified media TLS | a physical node selects disableVerification | `a physical node's private boot image requires virtual-media TLS verification` | `set spec.substrate.baremetal.bmc.virtualMedia.tls.trust on <machine> to importCertificate or established` |
-| A physical node without a stable root selector | a physical node lacks a supported WWN or serial number with exact size, declares a malformed selector, or declares `hardware.rootDevice.deviceName` | `a physical agent installation requires a stable WWN or an exact serial-number and size root selector and no deviceName` | `set spec.substrate.baremetal.rootDevice on <machine> with a supported wwn, or serialNumber and exact sizeBytes; remove spec.hardware.rootDevice.deviceName` |
+| A physical node without a stable root selector | a physical node names its root in none of the forms of the [root-device rule](api/machines.md#bmc-and-root-device-shape), declares a malformed selector, a `hardware.rootDevice.deviceName` other than a `/dev/disk/by-id/wwn-0x` path or one naming another WWN than its `wwn`, or a `volumeRef` or `bootVolume` beside another root hint | `a physical agent installation requires a stable root selector: a WWN as wwn or its /dev/disk/by-id/wwn-0x deviceName, serialNumber with exact sizeBytes, or a volumeRef or bootVolume logical volume` | `set spec.substrate.baremetal.rootDevice on <machine> with a supported wwn, serialNumber and exact sizeBytes, or volumeRef, or remove every root hint so it defaults to bootVolume; a deviceName other than the disk's /dev/disk/by-id/wwn-0x path is refused` |
 | A root device the installer cannot name | a virtual node's `spec.hardware.rootDevice.deviceName` other than `/dev/<name>` or `/dev/disk/by-path/<name>` | `the agent installer names a root device only as /dev/<name> or /dev/disk/by-path/<name>` | `set spec.hardware.rootDevice.deviceName on <machine> to such a path` |
-| A root device size the frozen input cannot carry | a node whose `minSizeGigabytes` exceeds 9007199254740991, the largest integer the frozen input carries exactly, at `spec.hardware.rootDevice` or `spec.substrate.baremetal.rootDevice` on its Machine | `a node's minSizeGigabytes is larger than the frozen installer input carries exactly` | `declare spec.hardware.rootDevice.minSizeGigabytes on <machine> as at most 9007199254740991` |
+| A root device size the frozen input cannot carry | a node whose `minSizeGigabytes` exceeds 9007199254740991, the largest integer the frozen input carries exactly, at `spec.hardware.rootDevice` on its Machine | `a node's minSizeGigabytes is larger than the frozen installer input carries exactly` | `declare spec.hardware.rootDevice.minSizeGigabytes on <machine> as at most 9007199254740991` |
 
 A row lifts with the code of the item that delivers what it refuses, and the
 table and its test change in that commit:
@@ -293,8 +292,8 @@ platform the API derived, the installation proxy choice, and the additional
 trust bundles the cluster selects. `agent-config.yaml` carries the rendezvous
 address — the install address of the first `controlPlane` node in node-name order — and one
 host record per node: its declared node name, its installer role, every NIC the
-realized target reports by name and hardware address, every root-device hint
-the Machine declares, under its own name and with its declared type, and the
+realized target reports by name and hardware address, its root-device hints as
+the [hint projection](#root-device-hint-projection) maps them, and the
 node's own network configuration with its install address applied and the name
 servers it selects as its resolvers. The selected NTP servers become additional
 time sources. Each selected name or time server is written as a managed
@@ -302,6 +301,21 @@ server's endpoint address or as an external server's declared `address`. The
 installation accepts a time source that answers, from an upstream source or
 from its own clock ([time service readiness](infrastructure-services.md#managed-network-services)),
 and requires no synchronized time of it.
+
+### Root-device hint projection
+
+Each admitted root-device hint reaches a host record's `rootDeviceHints` as
+follows; a node that declares none gets no `rootDeviceHints`.
+
+| Machine hint | `rootDeviceHints` key |
+| --- | --- |
+| `hardware.rootDevice.deviceName` on a virtual node, `/dev/<name>` or `/dev/disk/by-path/<name>` | `deviceName` |
+| `hardware.rootDevice.deviceName` on a physical node, a `/dev/disk/by-id/wwn-0x` path | `wwn`, as `0x` and the path's digits |
+| `substrate.baremetal.rootDevice.wwn`, `hctl`, `serialNumber` | the same name |
+| `hardware.rootDevice.model`, `vendor` | the same name |
+| `hardware.rootDevice.minSizeGigabytes`, `rotational` | the same name, as an integer and a boolean |
+| `substrate.baremetal.rootDevice.sizeBytes` | not carried; the [pre-boot serial proof](#selection) compares it |
+| `substrate.baremetal.rootDevice.volumeRef`, `bootVolume` | not carried at planning; the media block writes the proved volume's NAA identifier as the only key, `wwn` |
 
 The attempt writes `install-config.yaml`, with the bound material substituted,
 and `agent-config.yaml` in JSON's syntax, which is YAML whose every string is

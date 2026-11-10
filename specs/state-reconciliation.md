@@ -2441,11 +2441,12 @@ exception: Bootwright never claims ownership of or destroys the physical
 machine. Before changing it, an implementation must durably hold an exclusive
 context claim, prove the exact management controller/System identity, prove
 the complete live MAC set matches the immutable `Machine`, select one whole
-root disk from the authored hint by a durable disk identity: a WWN path or
-serial number and exact size for a Bootwright-installed Machine, or the
-[supported stable root selector](openshift-clusters.md#selection) for an agent-installed
-cluster node. The selector resolves to exactly one whole disk, never a kernel
-device name another boot may give another disk. The implementation must prove the
+root disk by a durable identity in one of the forms of the
+[root-device rule](api/machines.md#bmc-and-root-device-shape): a WWN path, a
+serial number and exact size, or a logical volume proved through verified BMC
+TLS by its NAA identifier and exact capacity and found again by that
+identifier inside the installer. The selector resolves to exactly one whole
+disk, never a kernel device name another boot may give another disk. The implementation must prove the
 machine is off, and consume `data-loss`. The live MAC set matches when the MACs
 the system reports for its own network ports, a management controller's host
 interface excepted, are exactly those the `Machine` declares, no more and no
@@ -2491,10 +2492,9 @@ writable and exactly that size, and none or several refuse before the first
 write; a partition and a hidden NVMe path node (its `hidden` attribute reads
 `1`) are not candidates, the node being its head node's own disk. A target may name its own `method`, which overrides the policy's for
 that disk; the frozen request records each target's resolved method. The
-approved root disk must be listed: the target with
-`hardware.rootDevice.deviceName`, or, for a root declared by serial number, the
-target without `deviceName` with its `serialNumber` and `sizeBytes`; data disks
-are individually listed.
+policy lists the root only when it names it, as the
+[root-target rule](api/machines.md#physical-erase-policy) identifies it; an
+omitted root is retained, and data disks are individually listed.
 The initial execution bound is 16 whole disks, each at most 64 TiB with a
 4096-byte aligned logical size. These are implementation bounds, not hardware
 sanitize capabilities. Each target's method is in

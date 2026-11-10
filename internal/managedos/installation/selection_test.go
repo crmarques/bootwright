@@ -236,7 +236,9 @@ func TestAPhysicalInstallationWithoutANamedRootDeviceRefuses(t *testing.T) {
 			expectRefusal(t, err, "lifecycle.unsupported")
 			remediation := diagnostics.Of(err)[0].Remediation
 			if !strings.Contains(remediation, "spec.hardware.rootDevice.deviceName on Machine/metal-01") ||
-				!strings.Contains(remediation, "wwn-only selection is not yet supported") {
+				!strings.Contains(remediation, "spec.substrate.baremetal.rootDevice.volumeRef on Machine/metal-01") ||
+				!strings.Contains(remediation, "defaults to bootVolume") ||
+				!strings.Contains(remediation, "a wwn alone are refused") {
 				t.Fatalf("remediation = %q", remediation)
 			}
 		})
@@ -465,7 +467,7 @@ func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 			_, _, err := Requests(catalog, "controller", testContext)
 			expectRefusal(t, err, "lifecycle.unsupported")
 			reported := diagnostics.Of(err)[0]
-			if reported.Message != "a managed-OS installation selects its root disk by deviceName or, on a physical Machine, by serialNumber and sizeBytes, and cannot carry the other root-device hints the Machine declares" {
+			if reported.Message != "a managed-OS installation selects its root disk by deviceName or, on a physical Machine, by serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the other root-device hints the Machine declares" {
 				t.Fatalf("message = %q", reported.Message)
 			}
 			if reported.Remediation != test.remediation {
@@ -503,7 +505,7 @@ func TestAPhysicalInstallationFreezesTheRootDiskIdentityItDeclares(t *testing.T)
 		"a serial and size":    {api.MapValue(text("serialNumber", "ZC1A2B3C"), size), "", "ZC1A2B3C", ""},
 		"a path, wwn and size": {api.MapValue(text("deviceName", path), text("wwn", "0x5000c500a1b2c3d4"), size), "0x5000c500a1b2c3d4", "", ""},
 		"a serial without its size": {api.MapValue(text("serialNumber", "ZC1A2B3C")), "", "",
-			"a physical installation erases only a root disk named by its /dev/disk/by-id/wwn-0x path or by its serial number and exact size, and the Machine names neither"},
+			"a physical installation erases only a root disk named by its /dev/disk/by-id/wwn-0x path, by its serial number and exact size, or by a volumeRef or bootVolume logical volume, and the Machine names none of them"},
 		"a wwn without its path": {api.MapValue(text("serialNumber", "ZC1A2B3C"), size, text("wwn", "0x5000c500a1b2c3d4")), "", "",
 			"a physical installation proves its root disk by the wwn the Machine declares only beside the deviceName that names it, and that wwn names another disk or stands alone"},
 		"an uppercase wwn":     {api.MapValue(text("deviceName", path), text("wwn", "0X5000C500A1B2C3D4")), "0x5000c500a1b2c3d4", "", ""},

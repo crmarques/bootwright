@@ -310,6 +310,7 @@ Alias cell.
 | [B1271](#b1271) | new, 2026-11-10 (X349 review) | defect | Controller | A package step that fails after dnf ran still records what its transaction added | Safe as it stands: the set is not recorded, so uninstall leaves those packages and never removes one it did not prove added |
 | [B1272](#b1272) | new, 2026-11-10 (X349 second review) | defect | Controller | The added package set stays within its bound and names only what Bootwright's transaction installed | Safe as it stands: the erase test keeps dependents, and a bound hit refuses before any removal |
 | [B1273](#b1273) | new, 2026-11-10 (X359 gate) | defect | Controller | `test_a_killed_lifecycle_supervisor_leaves_no_playbook_worker_or_task` reads a surviving process tree under heavy host load | It failed once under a load average near 30 and passed three times alone; the stopped-tree poll has no settle bound |
+| [B1274](#b1274) | new, 2026-11-10 (X352 review) | product | Machine, with Managed OS and Container clusters | One WWN root form for every consumer | A breaking rename the owner decides; both installers already admit the by-id WWN path |
 
 ### B82
 
@@ -3543,6 +3544,19 @@ the stopped process tree reads before a parent-death signal has reached every
 descendant. **Outcome:** the test waits on a bounded condition for the tree to
 empty rather than sampling it, so host load no longer fails the units lane.
 **Exit evidence:** the test passes under a parallel CPU load.
+
+### B1274
+
+**Owner:** Machine, with Managed OS and Container clusters. **Kind:** product.
+**Requires:** an owner decision. **Definition:** Candidate, from
+[audit 004](../../audits/004-spec-api/report-fable.md) API-38 and the
+independent review of [X352](delivered.md#x352--root-rule): after X352 both
+installers admit the `/dev/disk/by-id/wwn-0x` path, but a Bootwright
+installation still refuses `wwn` alone and the agent installer still admits
+it. **Outcome:** one WWN root form for every consumer, the other refused with
+a hint naming it, in one breaking commit before 1.0
+([pre-1.0 policy](../project.md#design-priorities-and-non-goals)). **Exit
+evidence:** admission tests in which each consumer refuses the retired form.
 
 ## Audit remediation (2026-10-26)
 
