@@ -75,7 +75,7 @@ def test_fips_state_read_runs_through_guest_yml_after_network():
     assert named["when"] == refused["when"] == [REQUESTED, UNPROVED]
     registered = only(applied, lambda task: task.get(INCLUDE) == "register.yml", "register the machine")
     between = [task for task in applied[read + 1:registered] if task.get(PROTOCOL, {}).get("phase") != "group"]
-    assert len(between) == 4 and registered < inspect
+    assert len(between) == 3 and registered < inspect
 
     observed = flattened("observe.yml")
     network = only(observed, lambda task: task.get(INCLUDE) == "network_observe.yml", "read the network")

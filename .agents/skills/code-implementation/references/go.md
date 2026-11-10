@@ -132,7 +132,9 @@ capability's request, evidence, observation or ownership code:
   quotes, a mark, proof identifier or place its automation fixes outside the
   request, an effect pin or a request identity member. A changed fixed place
   also needs the request version to move. It cannot see a change of meaning
-  under an unmoved version.
+  under an unmoved version, so the author moves the request version for a
+  change that loosens what an observation accepts as the context's own: a
+  removal compares no digest.
 - `contractRecipes` in `cmd/bootwright/contract_identity_test.go` restates what
   each content digest hashes, effect pins included, and must reproduce it;
   `requestIdentities` there names the request members that carry an effect's

@@ -37,7 +37,6 @@ INSPECT = "bootwright.core.managedos_install_inspect"
 PROTOCOL = "bootwright.core.managedos_install_protocol"
 REGISTRATION = "bootwright.core.managedos_registration"
 REGISTERING = "bootwright_os_install_request.registration is defined"
-ONCE = "not (managedos_install_anaconda_prepared | default(false) | bool)"
 REACHABLE = "managedos_install_anaconda_reachable.rc | default(1) == 0"
 NOT_REMOVAL = "not (managedos_install_anaconda_observes_removal | bool)"
 RESULT = "managedos_install_anaconda_registration_result"
@@ -175,19 +174,18 @@ def test_apply_publishes_the_marker_proof_before_registering():
                   and task["when"] == [REGISTERING], "prove the marker before registering")
     prepared = only(applied, lambda task: (task.get(PROTOCOL) or {}).get("phase") == "prepared", "publish the marker proof")
     registered = only(applied, included("register.yml"), "register the machine")
-    assert fips < proved and proved + 1 == prepared and prepared + 1 == registered
-    assert applied[prepared][PROTOCOL] == {"phase": "prepared", "marker": "{{ managedos_install_anaconda_marker }}"}
-    assert applied[prepared]["when"] == [REGISTERING, ONCE] and applied[prepared]["no_log"] is True
+    assert prepared < fips < proved and proved + 1 == registered
+    assert applied[prepared][PROTOCOL] == {"phase": "prepared", "marker": "{{ bootwright_os_install_material.marker }}"}
+    assert applied[prepared]["when"] == [] and applied[prepared]["no_log"] is True
     assert applied[proved]["no_log"] is True
     assert holds(applied[proved]["ansible.builtin.assert"]["that"],
                  managedos_install_anaconda_marker="m", bootwright_os_install_material={"marker": "m"})
     assert not holds(applied[proved]["ansible.builtin.assert"]["that"],
                      managedos_install_anaconda_marker="other", bootwright_os_install_material={"marker": "m"})
-    # The network restart and the update's reboot record the same proof before
-    # their power-off (Q66), in the one restart both include, and an attempt
-    # publishes it once, whichever comes first.
+    # The proof is recorded once per attempt, where the marker is first proved
+    # (Q66), so neither the restart nor the registration records it again.
     assert [name for name in task_files() for task in flattened(name)
-            if (task.get(PROTOCOL) or {}).get("phase") == "prepared"] == ["apply.yml", "reboot.yml"]
+            if (task.get(PROTOCOL) or {}).get("phase") == "prepared"] == ["apply.yml"]
 
 
 def test_register_material_never_enters_a_task_variable():

@@ -198,11 +198,17 @@ over frozen bytes that still verify, keeps that revision: it publishes
 nothing, asks nothing and reports the context unchanged, so a completed apply
 over that revision still
 [settles](state-reconciliation.md#lifecycle-unit). Changed input over a
-completed apply warns, before the prompt, with `lifecycle.state` that apply
-refuses it until `bootwright destroy --context <name>` takes back what that
-apply owns, and that importing the original files again does not undo the
-update: they become a new revision, which apply refuses the same way
-([B598](milestones/backlog.md#b598)).
+completed apply warns, before the prompt, with `lifecycle.state`. When an
+[additive apply](state-reconciliation.md#additive-apply) would admit it, the
+warning prints the sentence the `diff` [Input row](cli.md#comparison-header) prints for it,
+`bootwright apply` adds it to that apply without running any of its blocks,
+with the same caveat that this predicts the admission without proving the
+custody of the material the added instances borrow, and names no destroy;
+the update reads that prediction before it takes any lock. Otherwise it warns
+that apply refuses the input until `bootwright destroy --context <name>` takes
+back what that apply owns, and that importing the original files again does
+not undo the update: they become a new revision, which apply refuses the same
+way ([B598](milestones/backlog.md#b598)).
 
 Before discovery, resolve the
 state-root location read-only and reject a root within the input directory;

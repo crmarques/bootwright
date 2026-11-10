@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
 const (
@@ -116,7 +117,7 @@ func diffInput(result *lifecycle.DiffResult) string {
 	case result.Input == "none":
 		return "not applied yet" + next
 	case result.Input == "changed" && result.Adds:
-		return "changed since " + operation.Apply + "; bootwright apply adds it to that apply without running any of its blocks"
+		return contexts.AddedInput(operation.Apply)
 	case result.Input == "changed":
 		return "changed since " + operation.Apply + "; bootwright apply refuses it until bootwright destroy --context " + name + " takes back what that apply owns"
 	case operation.Verb == "destroy":

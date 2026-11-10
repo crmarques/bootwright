@@ -54,6 +54,7 @@ spec:
 
 type repository struct {
 	t              *testing.T
+	addsTo         string
 	registry       contexts.Registry
 	selection      contexts.Selection
 	configurations map[string][]byte
@@ -979,7 +980,13 @@ func options(r *repository) contexts.Options {
 			return contexts.ConfigurationError("unavailable implementation")
 		}
 		return ctx.Err()
-	}, InitializeSecrets: func(ctx context.Context, record contexts.Record, area secretstore.Area) error { return ctx.Err() }, Presenter: presenter{r}}
+	}, InitializeSecrets: func(ctx context.Context, record contexts.Record, area secretstore.Area) error { return ctx.Err() }, Presenter: presenter{r},
+		AddsTo: func(ctx context.Context, name string, candidate desiredstate.Sources) string {
+			if r.locked || r.leased || len(candidate.Files) == 0 {
+				r.t.Fatalf("the addition was read locked=%v leased=%v for %q over %d files", r.locked, r.leased, name, len(candidate.Files))
+			}
+			return r.addsTo
+		}}
 }
 
 func TestDefaultInitThenFirstInputImport(t *testing.T) {
@@ -1463,26 +1470,53 @@ func TestAnIdenticalUpdateKeepsTheSelectedRevisionAndAsksNothing(t *testing.T) {
 }
 
 // Changed input over a completed apply warns, in the presented plan and in the
-// result, that apply refuses it until a destroy takes back what that apply
-// owns; over pristine evidence it does not.
+// result: with diff's Input sentence and its prediction caveat, and no destroy
+// remedy, when an additive apply would admit it, and otherwise that apply
+// refuses it until a destroy takes back what that apply owns; over pristine
+// evidence it does not.
 func TestChangedInputOverACompletedApplyWarnsBeforeThePrompt(t *testing.T) {
-	for name, evidence := range map[string]string{"pristine": pristineEvidence, "applied": `{"version":1,"operation":"applied","ownership":"retained"}`} {
+	const applied = `{"version":1,"operation":"applied","ownership":"retained"}`
+	destroy := diagnostics.Diagnostic{
+		Severity: "warning", Code: "lifecycle.state",
+		Message:     "context example holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back; importing the original files again does not undo this update, because they become a new revision apply refuses the same way",
+		Remediation: "take it back with bootwright destroy --context example, then run bootwright apply --context example",
+	}
+	adds := diagnostics.Diagnostic{
+		Severity: "warning", Code: "lifecycle.state",
+		Message: "changed since op-1; bootwright apply adds it to that apply without running any of its blocks; this predicts that admission without proving the custody of the material the added instances borrow, " +
+			"which bootwright diff --context example --observe and the apply prove",
+		Remediation: "run bootwright apply --context example",
+	}
+	for name, test := range map[string]struct {
+		evidence, addsTo string
+		want             []diagnostics.Diagnostic
+	}{
+		"pristine":                          {evidence: pristineEvidence},
+		"pristine with an addition":         {evidence: pristineEvidence, addsTo: "op-1"},
+		"applied":                           {evidence: applied, want: []diagnostics.Diagnostic{destroy}},
+		"applied with a binding only added": {evidence: applied, addsTo: "op-1", want: []diagnostics.Diagnostic{adds}},
+	} {
 		t.Run(name, func(t *testing.T) {
 			r := existingRepository(t)
-			r.evidence["example"] = []byte(evidence)
+			r.evidence["example"], r.addsTo = []byte(test.evidence), test.addsTo
 			got, err := service(t, r, sourceFixture("/synthetic/input")).Update(context.Background(), contexts.UpdateRequest{Name: "example", InputDirectory: "/synthetic/input"})
 			if err != nil || got == nil || !got.InputChanged || !got.Presented || r.updatePlan == nil || !slices.Contains(r.calls, "publish") {
 				t.Fatalf("the changed update = %#v (%v): %v", got, err, r.calls)
 			}
-			warned := func(reported []diagnostics.Diagnostic) bool {
-				return slices.ContainsFunc(reported, func(d diagnostics.Diagnostic) bool {
-					return d.Severity == "warning" && d.Code == "lifecycle.state" &&
-						d.Message == "context example holds a completed apply, and apply refuses changed desired state until what that apply owns is taken back; importing the original files again does not undo this update, because they become a new revision apply refuses the same way" &&
-						d.Remediation == "take it back with bootwright destroy --context example, then run bootwright apply --context example"
-				})
+			lifecycleWarnings := func(reported []diagnostics.Diagnostic) []diagnostics.Diagnostic {
+				var found []diagnostics.Diagnostic
+				for _, d := range reported {
+					if d.Code == "lifecycle.state" {
+						found = append(found, d)
+					}
+				}
+				return found
 			}
-			if want := name == "applied"; warned(r.updatePlan.Diagnostics) != want || warned(got.Diagnostics) != want {
-				t.Fatalf("the warning over %s evidence: plan %#v, result %#v", name, r.updatePlan.Diagnostics, got.Diagnostics)
+			if !reflect.DeepEqual(lifecycleWarnings(r.updatePlan.Diagnostics), test.want) || !reflect.DeepEqual(lifecycleWarnings(got.Diagnostics), test.want) {
+				t.Fatalf("the warning over %s: plan %#v, result %#v, want %#v", name, r.updatePlan.Diagnostics, got.Diagnostics, test.want)
+			}
+			if test.addsTo != "" && !strings.HasPrefix(adds.Message, contexts.AddedInput(test.addsTo)+";") {
+				t.Fatalf("the warning does not open with diff's sentence %q", contexts.AddedInput(test.addsTo))
 			}
 		})
 	}

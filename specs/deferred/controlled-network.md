@@ -138,8 +138,9 @@ elsewhere, usually on the controller.
   release at or above the minimum is admitted, and its SHA-256 is read from
   its publisher by the Machine that downloads it, the controller or the mirror
   host; one below the minimum refuses at plan. When an advisory reaches the
-  default or the minimum, a new build raises both, and the next apply replaces
-  a retained release below the new minimum. `latest` goes. The OpenShift
+  default or the minimum, a new build raises both; a retained release below
+  the new minimum moves only through a destroy and a fresh apply
+  ([the tool table](../controller.md#the-tool-table)). `latest` goes. The OpenShift
   clients and installer follow the cluster's release; the release itself, the
   storage images, the carried wheels and the service images take no minimum,
   because the operator chooses a release

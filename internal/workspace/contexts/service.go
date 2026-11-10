@@ -308,6 +308,7 @@ type admittedUpdate struct {
 	environment string
 	controller  string
 	report      *compilation.Report
+	addsTo      string
 }
 
 func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionResult, error) {
@@ -327,6 +328,9 @@ func (s Service) Update(ctx context.Context, request UpdateRequest) (*AdmissionR
 	admitted, err := s.admitUpdate(ctx, request)
 	if err != nil {
 		return nil, err
+	}
+	if request.InputDirectory != "" && s.options.AddsTo != nil {
+		admitted.addsTo = s.options.AddsTo(ctx, request.Name, admitted.sources)
 	}
 	var presented *updateDecision
 	if !request.SkipConfirmation && request.InputDirectory != "" {
@@ -492,7 +496,8 @@ func sameConfiguration(ctx context.Context, tx Transaction, name string, config 
 // so every protected state refuses even an identical
 // input, and only then whether the input changes the selected revision.
 // Changed input returns its warnings: admission's, and over a completed apply
-// the warning that apply refuses it until a destroy.
+// the warning that apply adds it to that apply, when an additive apply would
+// admit it, or otherwise refuses it until a destroy.
 func (s Service) decideUpdate(ctx context.Context, tx Transaction, reg Registry, record Record, admitted admittedUpdate) (bool, []diagnostics.Diagnostic, error) {
 	if reg.Controller != (ControllerDescriptor{}) {
 		if err := tx.CheckControllerInput(ctx, record.Name, admitted.controller); err != nil {
@@ -513,7 +518,10 @@ func (s Service) decideUpdate(ctx context.Context, tx Transaction, reg Registry,
 		return unchanged, nil, err
 	}
 	warnings := slices.Clone(admitted.report.Diagnostics)
-	if disposition.Applied {
+	switch {
+	case disposition.Applied && admitted.addsTo != "":
+		warnings = append(warnings, AddedInputWarning(record.Name, admitted.addsTo))
+	case disposition.Applied:
 		warnings = append(warnings, appliedInputWarning(record.Name))
 	}
 	return false, warnings, nil

@@ -660,8 +660,11 @@ verb completes the
 operation's [finalization](state-reconciliation.md#lifecycle-unit) and then
 settles, and the preview says so in one line above those blocks; an `apply`
 whose input changed refuses there instead, and so does its preview. With a
-completed apply it previews the destroy that the recorded ownership evidence
-defines. It reads context state, allocates no identity, writes nothing and
+completed apply it previews the
+[additive apply](state-reconciliation.md#additive-apply) when that apply
+admits the changed input, under `--stage` and `--until`, and otherwise, over
+unchanged input or any other change, the destroy that the recorded ownership
+evidence defines. It reads context state, allocates no identity, writes nothing and
 creates no log.
 
 An invocation whose work durable state already proves settles before any of
@@ -784,7 +787,8 @@ failed attempt's adapter diagnostic names its block and the
 [log directory](cli/output.md#private-operation-logs).
 
 `next` names what the operation's own records call for, by one rule the
-receipt, `plan` and `status` share: `none` once the operation is `done`;
+receipt, `plan` and `status` share over the operation the result reports, for
+`plan` the one it continues: `none` once the operation is `done`;
 `destroy` for a `failed` destroy holding a block that is not `done`, an
 `unknown` one included, because `destroy` replaces it with a fresh removal of
 what it has not removed rather than continuing or resolving it; `resolve` while
@@ -794,15 +798,14 @@ otherwise the continuation of the operation's own verb,
 which is also how that verb completes a
 [finalization](state-reconciliation.md#lifecycle-unit). A settled verb reports
 `done` and `none` too, over the completed operation it proved, or over `none`
-when the context owns no operation at all. A completed apply admits a later
-destroy, but naming it next invites undoing what just succeeded; the verbs a
-context admits are what `plan` reports. `apply`
+when the context owns no operation at all. A completed apply never names its
+destroy next, which would invite undoing what just succeeded; `plan` reports
+the verbs a context admits. `apply`
 appears only as the previewed verb of a pure plan, and `destroy` only as that
 or as what a failed destroy calls for. Where `status` offers a next step it
 offers the command the token maps to in the table above, a command this
 executable runs: a continuation, a resolution and a replacement are all offered
-as the operation's own verb repeated, and `none` as no step at all. No next
-step names a verb this executable does not expose. Every step that names a context-backed command carries
+as the operation's own verb repeated, and `none` as no step at all. Every step that names a context-backed command carries
 `--context <name>` for the context `status` read
 ([context identity](cli/output.md#context-identity)). A continuation, a
 resolution or a replacement also carries `--authorize <token>` for each token

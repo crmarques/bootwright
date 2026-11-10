@@ -147,12 +147,12 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	secrets := wireSecrets(deps, compiler)
 	services := wireStubs()
 	services.AddOnCatalog = addoncatalog.New(addonpackages.Builtin())
-	services.Contexts = wireContexts(deps, compiler, secrets.hooks)
+	var reconciler lifecycle.Service
+	services.Contexts = wireContexts(deps, compiler, secrets.hooks, &reconciler)
 	services.Secrets, services.Encryption = secrets.custody, secrets.encryption
 	services.DesiredState = wireDesiredState(deps, compiler)
 	services.Controller = wireController(deps.Controller, compiler, deps.Confirmer, deps.AmbientRoute)
 	services.Media = wireMedia(deps.Media)
-	var reconciler lifecycle.Service
 	if deps.Lifecycle.Capacity == nil {
 		deps.Lifecycle.Capacity = remoteCapacity(services.DesiredState, &reconciler, deps)
 	}

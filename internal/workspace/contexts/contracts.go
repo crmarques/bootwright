@@ -160,6 +160,7 @@ type Options struct {
 	InitializeSecrets     func(context.Context, Record, secretstore.Area) error
 	ValidateConfiguration func(context.Context, Configuration) error
 	Presenter             Presenter
+	AddsTo                func(context.Context, string, desiredstate.Sources) string
 }
 
 // Inputs acquires an immutable revision for an explicit or current context.

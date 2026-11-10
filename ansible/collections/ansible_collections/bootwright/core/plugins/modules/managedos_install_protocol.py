@@ -15,9 +15,10 @@ options:
   phase:
     description:
       - The capability phase being published.
-      - C(prepared) publishes, before a registering apply registers the
-        machine, that the machine holds this installation's marker; it names
-        only that marker and waits until the runner has recorded it.
+      - C(prepared) publishes, once the apply proves the installed marker and
+        before it withdraws or powers off anything, that the machine holds
+        this installation's marker; it names only that marker and waits until
+        the runner has recorded it.
     type: str
     required: true
   group:

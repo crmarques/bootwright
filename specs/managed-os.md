@@ -641,11 +641,12 @@ marker through the identity operation, the power the BMC reports and
 the published content's presence, and its evidence carries that power whatever
 else it found. A matching marker with the
 content present is positive completion; a powered-off Machine with no marker
-and no published content is positive no effect, which is what an apply stopped
-before it published anything leaves; and this operation's own
+and no published content is positive no effect only when no attempt of its
+apply recorded the before-state below, which is what an apply stopped before it
+published anything leaves; and this operation's own
 unfinished work is a positive partial realization the next attempt converges,
-which is either content it published on a powered-off guest that never
-installed, or the frozen marker with the completion not yet true. The frozen
+which is either content it published on a powered-off guest whose installation
+is not proved, or the frozen marker with the completion not yet true. The frozen
 marker with a network not yet converged, rolled back, mismatched or drifted is
 a positive partial realization; network convergence never yields no effect.
 The frozen marker with an `absent` or `pending` registration is a positive
@@ -660,21 +661,24 @@ registration, and for a request updating `withinRelease`, the update. A
 private completion, of a delivered key or an encrypted root disk, has nothing
 published beneath its private subtree, neither its private material nor the
 image; that subtree left on a powered-off guest
-that never installed is its partial. Anything else
+whose installation is not proved is its partial. Anything else
 stays unknown, including a guest answering with another marker and a powered-on
 guest with none, because the first belongs to another installation and the
-second may be running the installer now. Before the network restart powers a
-Machine off, its attempt durably records, as the before-state its apply's
-records keep, that this installation's marker is proved and its disk boot
-intended (Q66, D183). That before-state is the same marker proof a
-registering apply records before it registers, so a removal of a registering
-installation whose apply reached the restart reads the guest's registration,
-as it does once that proof is recorded. An apply whose records hold that
+second may be running the installer now. As soon as an attempt proves that
+the installed Machine holds this installation's marker, and before it ejects
+the media, withdraws the work area or any private material, or powers the
+Machine off, it durably records, as the before-state its apply's records keep,
+that this installation's marker is proved and its disk boot intended (Q66,
+D183). That is its one recording point, and an attempt records it once. That
+before-state is the marker proof a registering apply requires before it
+registers ([Proof before registration](#registration)), so a removal of a
+registering installation whose apply proved its marker reads the guest's
+registration. An apply whose records hold that
 intent never reads positive no effect: a powered-off Machine whose identity
-read gets no answer and that shows nothing published, which is what the
-restart leaves a private
-Machine, of a delivered key or an encrypted root disk, after it withdrew its
-material, is a positive partial realization of this operation's own
+read gets no answer and that shows nothing published, which is what a power
+loss, a stop or the network restart leaves once the attempt withdrew the work
+area and any private material, of a delivered key or an encrypted root disk,
+is a positive partial realization of this operation's own
 installation. Its retry is told the installation is proved, so it boots the
 installed disk through the substrate's
 [disk-boot entry point](substrates.md#identity-and-power-operations) and reads
@@ -1043,9 +1047,10 @@ changes the request and so the marker, so it is another installation: the
 context is taken back with `bootwright destroy` and applied again.
 
 **Proof before registration.** After the installed system's network converged
-and its FIPS and root-encryption proofs passed, the apply proves that the
-machine holds this installation's marker and publishes `{"marker":<marker>}` as
-its attempt's preparation through the acknowledged `prepared` record of
+and its FIPS and root-encryption proofs passed, the apply proves anew that the
+machine holds this installation's marker, whose proof the attempt recorded
+as `{"marker":<marker>}`, the [before-state](#unknown-resolution), through the
+acknowledged `prepared` record of
 [the adapter result protocol](architecture.md#the-adapter-result-protocol). The
 capability accepts exactly that one member naming the frozen marker, and the
 worker registers only after the runner has recorded it, so an apply whose
@@ -1353,8 +1358,9 @@ and the BMC-to-artifact leg refuses `disableVerification`. The first byte of
 the image, `identity` and `identity.pub` is fetched through the listener before
 the insert, with the token redacted from any refusal, so a key the installer
 could not fetch fails before the disk is cleared. The private subtree is
-withdrawn when the installation completes, before the completion inspection,
-and by the inverse, and its absence is part of completion evidence: material
+withdrawn once the attempt recorded its proved installation
+([Unknown resolution](#unknown-resolution)), before network convergence and
+the completion inspection, and by the inverse, and its absence is part of completion evidence: material
 that only needed to exist for one boot does not outlive it. An attempt that
 fails leaves the subtree until the next apply clears it or a destroy removes
 it, and an observation reports it as unfinished work. The token never appears

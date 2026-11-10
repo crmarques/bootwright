@@ -581,8 +581,8 @@ def test_a_converging_network_fires_no_refusal(first, after, expected):
         answers.pop("boot_id")
     guest = Guest(answers).run("network.yml")
     assert guest.fired == [] and guest.ran == expected
-    # A restart records the proved installation before the power-off (Q66).
-    assert guest.published == (["prepared"] if "poweroff" in after else [])
+    # The proved installation was recorded before network convergence (Q66).
+    assert guest.published == []
     assert guest.scope["managedos_install_anaconda_network_result"] == {
         "network": True, "networkReboot": True, "networkDifferences": [], "changed": expected != ["wait", "read", "show"]}
     if "rollback" in after:

@@ -837,9 +837,14 @@ that default's size and SHA-256 from its publisher. Releases are
 `MAJOR.MINOR.PATCH` without a `v`, and the default is at or above the
 minimum (`TestTheEmbeddedToolTablePinsEachClientAtOrAboveItsMinimum`). The
 table moves only with a new build: when an advisory reaches a default or a
-minimum, that build raises both to the first fixed release, and an apply of a
-context that retained an older release acquires the new default, because a
-different release is a different request.
+minimum, that build raises both to the first fixed release. The table governs
+only the plan of a fresh apply. A settling apply and a removal run the release
+the completed apply proved, even below this build's minimum
+([lifecycle unit](state-reconciliation.md#lifecycle-unit)), and a continuation
+an earlier build registered refuses, so a retained release moves to the new
+default only after a destroy and a fresh apply. Reporting a proved client below
+the build's minimum, and taking a raised one without a destroy, are parked as
+[B1263](milestones/backlog.md#b1263).
 
 A declared release is compared by its leading `MAJOR.MINOR.PATCH`, a
 prerelease suffix ranking below the release it precedes; one below the

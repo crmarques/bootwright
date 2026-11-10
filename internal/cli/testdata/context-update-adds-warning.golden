@@ -1,0 +1,6 @@
+  warning  lifecycle.state
+    changed since op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a; bootwright apply adds it to that apply
+    without running any of its blocks; this predicts that admission without proving the custody
+    of the material the added instances borrow, which bootwright diff --context lab --observe
+    and the apply prove
+    Next: run bootwright apply --context lab

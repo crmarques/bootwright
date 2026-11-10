@@ -1169,8 +1169,8 @@ Before any effect, an apply refuses with `lifecycle.stage`:
 | A failed block the instance requires lies outside the selected stages | `the block this operation must retry is outside the selected stages` | the apply with `--stage` widened by the first such block's stage, keeping `--until` and the plan's authorizations |
 | The instance and every block it requires are done, or every block to retry lies outside them | `the add-on instance --until names and the blocks it requires have nothing to start under this selection` | `repeat bootwright apply --context <context> [--stage <list>] [--authorize <tokens>] without --until` |
 
-A destroy accepts neither selection: `plan --until` over a due destroy refuses
-as `plan --stage` does.
+A destroy accepts neither selection, so its preview refuses `lifecycle.stage`
+for either.
 
 Selection never weakens a safety rule. An unproved effect is resolved before
 anything else whatever stages are selected, because resolution is a read-only
@@ -1257,8 +1257,9 @@ command, with `--context`.
 
 Every `plan` previews exactly the decision the verb it previews takes, and one
 path takes both. That verb is a fresh `apply` over no operation or a completed
-destroy, the `destroy` of a completed apply, and an incomplete operation's own
-verb. A fresh apply's decision refuses, over no operation, state no index
+destroy, over a completed apply its [additive apply](#additive-apply) when
+admitted, else its `destroy`, and an incomplete operation's own verb. A fresh
+apply's decision refuses, over no operation, state no index
 accounts for, and over a completed destroy one holding a block that is not
 `done` ([lifecycle unit](#lifecycle-unit)); it then compiles the frozen input,
 refuses what this executable cannot realize, plans, refusing a block whose
@@ -1276,8 +1277,7 @@ as the fresh removal `destroy` starts over what it has not yet proved gone,
 unless its blocks are all `done`, when its finalization is due.
 `plan` over an incomplete apply previews its continuation, never the removal a
 `destroy` would start over it, so the refusal of records that contradict what
-an incomplete apply started stays that `destroy`'s. A `destroy` accepts no
-stage selection, so its preview refuses `lifecycle.stage` for any. Where a
+an incomplete apply started stays that `destroy`'s. Where a
 [finalization](#lifecycle-unit) is due, the preview decides as the verb does
 once that finalization is done, without performing it, and where the verb then
 settles, the preview says the verb only completes that finalization. The
@@ -1404,7 +1404,10 @@ the request, are an exact list of the literals the
 [contract guard](#continuation-and-removal) sees, which it holds to each
 implementation's contract, and a changed fixed place also moves the
 implementation's request version, so a removal under the new build refuses the
-old block's request instead of looking for its effects in the new place.
+old block's request instead of looking for its effects in the new place. A
+change that loosens what an observation accepts as this context's own moves
+the request version the same way, since the moved digest protects only an
+apply continuation.
 
 That re-proof, with the controller setup and host binding a continuation also
 re-proves ([controller-host protection](#controller-host-protection)), runs
@@ -1821,8 +1824,8 @@ member, and what a record or mark means beyond its shape and declared version,
 stay the author's to move. A mark changed without moving the
 digest fails closed: a removal under the new build reads the objects the old
 mark proves as foreign and refuses, leaving them in place, so its cost is a
-stuck or partial destroy. A change that loosens what an observation accepts as
-this context's own has no such backstop, so it always moves the digest.
+stuck or partial destroy. A change loosening what an observation accepts as
+this context's own has no such backstop, so it moves the request version.
 
 A fresh removal uses the secret material its apply bound, by reopening that
 operation's own binding rather than binding what the current declarations name.

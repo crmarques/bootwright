@@ -4,15 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"slices"
 	"testing"
 
+	"go.yaml.in/yaml/v3"
+
+	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 // An installation interrupted at each step after its proof is resolved from
-// what the guest shows and from the before-state its attempt recorded before
-// the network restart powered the machine off (Q66, D183): once that durable
+// what the guest shows and from the before-state its attempt recorded as soon
+// as it proved the marker, before any withdrawal or power-off (Q66, D183): once that durable
 // intent names this installation's marker, a powered-off machine that answers
 // nothing and shows nothing published is this operation's own partial
 // realization, never no effect, and its retry is told the installation is
@@ -77,6 +82,77 @@ func TestAnInstallationProvedBeforeItsPowerOffIsNeverReadAsNoEffect(t *testing.T
 			read.ApplyPreparations = []json.RawMessage{intent}
 			if observation, _ := New(failing).WithIdentities(&pinReader{}).Observe(context.Background(), read); observation.Effect != reconciliation.EffectUnknown {
 				t.Fatalf("a failed read with a recorded intent observed %s, want unknown", observation.Effect)
+			}
+		})
+	}
+}
+
+func TestAnInstallationStoppedAfterItsWithdrawalBeforeItsNetworkReadsPartialAndBootsItsDisk(t *testing.T) {
+	stop := "Converge the installed machine to its declared network"
+	withdrawals := []string{"Remove the work directory and the rendered kickstart with it", "Withdraw the private material now that the machine has it"}
+	var recorded []string
+	withdrawn, stopped := 0, false
+	var walk func([]any)
+	walk = func(tasks []any) {
+		for _, item := range tasks {
+			task, _ := item.(map[string]any)
+			if stopped || task == nil {
+				continue
+			}
+			name, _ := task["name"].(string)
+			if name == stop {
+				stopped = true
+				return
+			}
+			if slices.Contains(withdrawals, name) {
+				withdrawn++
+			}
+			if record, ok := task["bootwright.core.managedos_install_protocol"].(map[string]any); ok && record["phase"] == "prepared" {
+				recorded = append(recorded, fmt.Sprint(record["marker"]))
+			}
+			for _, section := range []string{"block", "rescue", "always"} {
+				nested, _ := task[section].([]any)
+				walk(nested)
+			}
+		}
+	}
+	var tasks []any
+	if err := yaml.Unmarshal(ansible.Assets()[roleTasks+"apply.yml"], &tasks); err != nil {
+		t.Fatal(err)
+	}
+	walk(tasks)
+	if !stopped || withdrawn != len(withdrawals) {
+		t.Fatalf("apply.yml reached %q stopped=%v after %d of its withdrawals", stop, stopped, withdrawn)
+	}
+	for profile, build := range map[string]func(*testing.T) (lifecycle.Execution, Request){
+		"virtual":  func(t *testing.T) (lifecycle.Execution, Request) { return execution(t, "digest") },
+		"physical": func(t *testing.T) (lifecycle.Execution, Request) { return privateExecution(t, nil) },
+	} {
+		t.Run(profile, func(t *testing.T) {
+			call, request := build(t)
+			marker, err := MarkerFor(request, "digest")
+			if err != nil {
+				t.Fatal(err)
+			}
+			call.ApplyPreparations = nil
+			for _, template := range recorded {
+				if template != "{{ bootwright_os_install_material.marker }}" {
+					t.Fatalf("the before-state names %q, not the frozen marker", template)
+				}
+				quoted, _ := json.Marshal(string(marker))
+				call.ApplyPreparations = append(call.ApplyPreparations, json.RawMessage(`{"marker":`+string(quoted)+`}`))
+			}
+			observed := Evidence{Power: "Off", Request: "digest", Address: request.Address, NetworkDifferences: []string{}}
+			data, _ := json.Marshal(observed)
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: data}}
+			observation, err := New(runner).WithIdentities(&pinReader{}).Observe(context.Background(), call)
+			if err != nil || observation.Effect != reconciliation.EffectPartial {
+				t.Fatalf("a run stopped before %q observed %s (%v), want partial", stop, observation.Effect, err)
+			}
+			retry := &fakeRunner{err: errors.New("stopped after its decision")}
+			_, _ = New(retry).WithIdentities(&pinReader{}).Apply(context.Background(), call)
+			if len(retry.requests) != 1 || retry.requests[0].MaterialValues["installationProved"] != "true" {
+				t.Fatalf("the retry of a run stopped before %q is not told its installation is proved", stop)
 			}
 		})
 	}

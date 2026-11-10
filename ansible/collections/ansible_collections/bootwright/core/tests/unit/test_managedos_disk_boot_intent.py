@@ -1,10 +1,12 @@
 """A proved installation records its disk-boot intent and is never installed again.
 
-Before the network restart or the update's reboot powers the machine off,
-roles/managedos_install_anaconda/tasks/reboot.yml, which both include,
-publishes the before-state that names this installation's marker, once per
-attempt. A later attempt of the same apply is told the
-installation is proved (bootwright_os_install_material.installationProved,
+As soon as roles/managedos_install_anaconda/tasks/apply.yml proves the
+installed machine holds this installation's marker, and before it ejects the
+media or withdraws the work area or any private material, it publishes the
+before-state that names that marker, once per attempt; the network restart,
+the update's reboot and the registration all follow it. A later attempt of
+the same apply is told the installation is proved
+(bootwright_os_install_material.installationProved,
 internal/managedos/installation), and apply.yml then boots the installed disk
 of a powered-off machine that does not answer and reads its identity, before
 the installer boot, which it skips (Q66, D183).
@@ -39,15 +41,25 @@ def named(tasks, name):
     return found[0]
 
 
-def test_the_intent_is_recorded_before_the_power_off():
+def test_the_intent_is_recorded_where_the_marker_is_proved_before_any_withdrawal():
+    tasks = list(flattened(loaded("apply.yml")))
+    prove = tasks.index(named(tasks, "Prove the installed marker matches this frozen installation"))
+    recorded = tasks.index(named(tasks, "Record that this installation is proved and its disk boot intended"))
+    later = [tasks.index(named(tasks, name)) for name in (
+        "Eject any installer media still inserted and read the machine's power",
+        "Remove the work directory and the rendered kickstart with it",
+        "Withdraw the private material now that the machine has it",
+        "Converge the installed machine to its declared network",
+        "Register the installed machine with its subscription service after its network converged",
+        "Update the installed machine within its release after its registration")]
+    assert prove + 1 == recorded and all(recorded < index for index in later)
+    assert tasks[recorded][PROTOCOL] == {"phase": "prepared", "marker": "{{ bootwright_os_install_material.marker }}"}
+    assert "when" not in tasks[recorded] and tasks[recorded]["no_log"] is True
     for name in ("network.yml", "update.yml"):
         assert sum(task.get("ansible.builtin.include_tasks") == "reboot.yml" for task in flattened(loaded(name))) == 1, name
-    tasks = list(flattened(loaded("reboot.yml")))
-    recorded = tasks.index(named(tasks, "Record that this installation is proved and its disk boot intended"))
-    powered = tasks.index(named(tasks, "Ask the machine to power off"))
-    assert recorded < powered
-    assert tasks[recorded][PROTOCOL]["phase"] == "prepared"
-    assert "managedos_install_anaconda_prepared" in str(tasks[recorded]["when"])
+    for name in sorted(path.name for path in TASKS.glob("*.yml")):
+        records = [task for task in flattened(loaded(name)) if (task.get(PROTOCOL) or {}).get("phase") == "prepared"]
+        assert len(records) == (1 if name == "apply.yml" else 0), name
 
 
 def test_a_proved_installation_boots_its_disk_and_never_the_installer():
@@ -66,12 +78,6 @@ def test_a_proved_installation_boots_its_disk_and_never_the_installer():
     assert powered < booted < answered
     assert inside[booted]["ansible.builtin.include_role"]["tasks_from"] == "boot_disk"
     assert inside[-1]["ansible.builtin.set_fact"] == {"managedos_install_anaconda_was_installed": True}
-
-
-def test_a_registering_attempt_publishes_its_before_state_once():
-    every = list(flattened(loaded("apply.yml")))
-    registering = named(every, "Publish that this installation's marker is proved before it registers")
-    assert "managedos_install_anaconda_prepared" in str(registering["when"])
 
 
 def test_fresh_install_proves_observed_marker_before_network_or_prepared():

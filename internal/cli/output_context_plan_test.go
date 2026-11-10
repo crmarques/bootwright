@@ -10,6 +10,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
 )
 
@@ -129,5 +130,19 @@ func TestAPresentedUpdateResultDoesNotRepeatItsWarnings(t *testing.T) {
 		if (errOut.Len() == 0) != presented || !bytes.HasPrefix(out.Bytes(), []byte("  ✓ Context updated\n")) {
 			t.Fatalf("presented %t: stdout %q, stderr %q", presented, out.String(), errOut.String())
 		}
+	}
+}
+
+func TestTheContextUpdateWarningOverAnAddedBindingNamesNoDestroyGolden(t *testing.T) {
+	plan := contextUpdatePlan()
+	plan.Diagnostics = []diagnostics.Diagnostic{contexts.AddedInputWarning("lab", "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a")}
+	var errOut bytes.Buffer
+	if err := NewContextPlanPresenter(io.Discard, &errOut).PresentUpdate(context.Background(), plan); err != nil {
+		t.Fatal(err)
+	}
+	matchesTextGolden(t, "context-update-adds-warning", errOut.Bytes())
+	diff := diffInput(&lifecycle.DiffResult{Context: lifecycle.ContextIdentity{Name: "lab"}, Input: "changed", Adds: true, Operation: lifecycle.DiffOperation{Apply: "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a"}})
+	if printed := strings.Join(strings.Fields(errOut.String()), " "); !strings.Contains(printed, diff+";") || strings.Contains(printed, "destroy") {
+		t.Fatalf("the warning %q does not print diff's Input sentence %q, or names a destroy", errOut.String(), diff)
 	}
 }

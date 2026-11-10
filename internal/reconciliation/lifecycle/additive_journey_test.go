@@ -95,6 +95,79 @@ func TestAPlanOverACompletedApplyPreviewsTheAdditiveApplyAndAnApplyPresentsIt(t 
 	}
 }
 
+func TestAPlanOverACompletedApplyPreviewsTheAdditiveApplyOnlyForAnAddedInstance(t *testing.T) {
+	type preview struct {
+		initial []api.Object
+		next    []api.Object
+		stages  []string
+		verb    string
+		adds    bool
+		code    string
+	}
+	for name, want := range map[string]preview{
+		"unchanged input":                          {verb: "destroy"},
+		"unchanged input under a stage selection":  {stages: []string{"add-ons"}, code: "lifecycle.stage"},
+		"an added instance":                        {next: []api.Object{addonBinding("cluster", "nmstate")}, verb: "apply", adds: true},
+		"an added instance under --stage add-ons":  {next: []api.Object{addonBinding("cluster", "nmstate")}, stages: []string{"add-ons"}, verb: "apply", adds: true},
+		"a changed object":                         {initial: []api.Object{serverObject("s", "v1")}, next: []api.Object{serverObject("s", "v2")}, verb: "destroy"},
+		"a changed object under a stage selection": {initial: []api.Object{serverObject("s", "v1")}, next: []api.Object{serverObject("s", "v2")}, stages: []string{"add-ons"}, code: "lifecycle.stage"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newAdditiveFixture(t, want.initial...)
+			root := f.root(t)
+			if want.next != nil {
+				f.publish("rev-2", want.next...)
+			}
+			result, err := f.service.Plan(context.Background(), PlanRequest{ContextName: testContextName, Stages: want.stages})
+			if want.code != "" {
+				if found := diagnostics.Of(err); len(found) == 0 || found[0].Code != want.code {
+					t.Fatalf("plan = %+v (%v), want %s", result, found, want.code)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(diagnostics.Of(err))
+			}
+			if result.Verb != want.verb || result.Receipt.Next != want.verb || (result.AddsTo == root.ID) != want.adds || result.Continuation {
+				t.Fatalf("plan previews %s (next %s, adds to %q), want %s", result.Verb, result.Receipt.Next, result.AddsTo, want.verb)
+			}
+		})
+	}
+}
+
+func TestAnUpdatedInputIsReportedAsAnAdditionOnlyWhenTheAdditiveApplyAdmitsIt(t *testing.T) {
+	for name, want := range map[string]struct {
+		initial, next []api.Object
+		adds          bool
+	}{
+		"unchanged input":   {},
+		"a binding only":    {next: []api.Object{addonBinding("cluster", "nmstate")}, adds: true},
+		"a changed object":  {initial: []api.Object{serverObject("s", "v1")}, next: []api.Object{serverObject("s", "v2")}},
+		"an addition mixed": {initial: []api.Object{serverObject("s", "v1")}, next: []api.Object{serverObject("s", "v2"), addonBinding("cluster", "nmstate")}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newAdditiveFixture(t, want.initial...)
+			root := f.root(t)
+			candidate := f.workspace.inputs
+			if want.next != nil {
+				candidate = diffSources("kind: Environment\n# candidate\n")
+				f.compiler.states[digestOf(candidate)] = diffState(want.next...)
+			}
+			before := slices.Clone(f.capability.applies)
+			adds, err := f.service.AddsTo(context.Background(), testContextName, candidate)
+			if err != nil || (adds == root.ID) != want.adds || (adds != "" && !want.adds) {
+				t.Fatalf("AddsTo = %q (%v), want an addition to %s: %v", adds, err, root.ID, want.adds)
+			}
+			if !slices.Equal(f.capability.applies, before) {
+				t.Fatalf("the reading ran %v", f.capability.applies[len(before):])
+			}
+			if head, _ := durableOperation(t, f.harness); head.ID != root.ID {
+				t.Fatalf("the reading registered %s", head.ID)
+			}
+		})
+	}
+}
+
 func TestAnInterruptedAdditiveApplyContinuesWithoutRerunningTheLineage(t *testing.T) {
 	f := newAdditiveFixture(t)
 	root := f.root(t)

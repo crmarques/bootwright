@@ -1,26 +1,12 @@
 ---
 # The one restart of an installed machine, network convergence's and the update
-# within the release's: the proved installation is recorded before the
-# power-off, the machine is powered off, its installed disk is booted through
-# the substrate exactly as after the installer, and its boot id proves it did
-# start again. The caller names the boot it must leave behind and may narrow
-# the power-off and return waits within its frozen reboot budget.
-
-# The phase follows the proof of this installation's marker, so before the
-# power-off the attempt durably records that proof, and a later attempt
-# boots the installed disk of a machine that no longer answers rather than
-# install it again (Q66).
-- name: Record that this installation is proved and its disk boot intended
-  bootwright.core.managedos_install_protocol:
-    phase: prepared
-    marker: '{{ bootwright_os_install_material.marker }}'
-  when: not (managedos_install_anaconda_prepared | default(false) | bool)
-  no_log: true
-
-- name: Remember that this attempt recorded its before-state
-  ansible.builtin.set_fact:
-    managedos_install_anaconda_prepared: true
-  changed_when: false
+# within the release's: the machine is powered off, its installed disk is
+# booted through the substrate exactly as after the installer, and its boot id
+# proves it did start again. The caller names the boot it must leave behind
+# and may narrow the power-off and return waits within its frozen reboot
+# budget. Both callers run after apply.yml recorded the proved installation
+# (Q66), so a machine this restart leaves off has its disk booted by the
+# next attempt, never the installer.
 
 - name: Ask the machine to power off
   ansible.builtin.include_tasks: guest.yml

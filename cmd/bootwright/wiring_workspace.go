@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/crmarques/bootwright/internal/cli"
+	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation/contextguard"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -14,7 +15,7 @@ import (
 // output, and its warnings on standard error, ahead of the prompt there. A
 // process with no output binds no presenter, so the service refuses to ask
 // rather than ask blind.
-func wireContexts(deps serviceDependencies, compiler compilation.Compiler, secrets contextSecretHooks) cli.ContextService {
+func wireContexts(deps serviceDependencies, compiler compilation.Compiler, secrets contextSecretHooks, reconciler *lifecycle.Service) cli.ContextService {
 	reader := inputReader(deps.Files)
 	options := contexts.Options{
 		Selection:             deps.Selection,
@@ -24,6 +25,15 @@ func wireContexts(deps serviceDependencies, compiler compilation.Compiler, secre
 	}
 	if deps.Lifecycle.Workspace != nil {
 		options.Operations = unfinishedOperations{workspace: deps.Lifecycle.Workspace, operations: operationStores(systemClock{}, deps.Lifecycle.Executable)}
+	}
+	if reconciler != nil {
+		options.AddsTo = func(ctx context.Context, name string, candidate desiredstate.Sources) string {
+			apply, err := reconciler.AddsTo(ctx, name, candidate)
+			if err != nil {
+				return ""
+			}
+			return apply
+		}
 	}
 	if deps.Streams.Out != nil {
 		options.Presenter = cli.NewContextPlanPresenter(deps.Streams.Out, deps.Streams.Err)

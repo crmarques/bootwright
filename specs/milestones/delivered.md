@@ -12928,9 +12928,11 @@ pinned release's size and SHA-256, and its content digest moved; plan goldens
 name the exact release a stage installs.
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
-occurred. **Limitations:** an operation an earlier build registered refuses to
-continue at its controller stage; a host's earlier `latest` sources are
-not reused, so each context's next apply acquires the defaults once; a
+occurred. **Limitations:** every context an earlier build applied refuses both
+continuation and destroy at its controller stage, because the stage request
+moved to `controller-clients-v3` and this build reads only that version, so
+the build that applied it destroys it; a host's earlier `latest` sources are
+not reused, so each context's next fresh apply acquires the defaults once; a
 declared non-default release still reads its publisher's metadata.
 
 ### X343 — The executable's bill of materials
@@ -13261,3 +13263,36 @@ hosts a libvirt provider waits for that provider's host block, which installs
 occurred. **Limitations:** the live proof on an SSH host is owed to the
 operator; an executable that exists but fails to run is still an error on a
 removal.
+
+### X350 — Proof and preview
+
+**Items:** B1257 and B1258 (2026-11-10, [D252](backlog.md#d252)), Kind
+safety, Owners: Managed OS and Reconciliation, with CLI, Workspace and
+Controller. A managed-OS attempt records its before-state, the proved marker
+and the intended disk boot, at one point: as soon as `apply.yml` proves the
+installed marker, before the media eject, the work-area and private-material
+withdrawal, the network restart and the registration, which no longer record
+it. A Machine powered off after the withdrawal is therefore the installation's
+own partial, whose retry boots its disk
+([Unknown resolution](../managed-os.md#unknown-resolution)). `plan`,
+`context update`, the receipt rule, `diff` and the controller pages give one
+answer over a completed apply: an input an additive apply admits previews and
+warns as that apply, and anything else as the destroy; a settling apply or a
+removal runs the client release the completed apply proved.
+
+| Finding | Change |
+| --- | --- |
+| REC-11 | one `prepared` record in `apply.yml` after the marker proof, none in `reboot.yml` or before registration; managed-os.md Unknown resolution, Protocol, Interruption, Proof before registration and private subtree; `TestAnInstallationStoppedAfterItsWithdrawalBeforeItsNetworkReadsPartialAndBootsItsDisk`, `test_the_intent_is_recorded_where_the_marker_is_proved_before_any_withdrawal` |
+| REC-46 | Unknown resolution says "whose installation is not proved" in both places |
+| REC-07 | state-reconciliation.md effect-pin paragraph and contract guard: loosened ownership moves the request version, the digest protects only an apply continuation; the Go reference names the obligation |
+| CLI-01 | cli.md plan paragraph and state-reconciliation.md preview verbs list the additive case; `TestAPlanOverACompletedApplyPreviewsTheAdditiveApplyOnlyForAnAddedInstance` |
+| REC-03 | `lifecycle.Service.AddsTo`, read before any lock, and `contexts.Options.AddsTo`; the warning prints `contexts.AddedInput`, the sentence `diff` prints, with its caveat and no destroy; contexts.md; `TestChangedInputOverACompletedApplyWarnsBeforeThePrompt`, `TestAnUpdatedInputIsReportedAsAnAdditionOnlyWhenTheAdditiveApplyAdmitsIt`, golden `context-update-adds-warning` |
+| CLI-37 | cli.md receipt rule names the operation it applies to |
+| NEW-01 | controller.md tool table, api/environment.md and deferred/controlled-network.md: the table governs only a fresh apply's plan; reporting and replacement stay [B1263](backlog.md#b1263) |
+| NEW-15 | X342 Limitations name the destroy refusal |
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** the `context update` addition is a prediction, as
+`diff` without `--observe` is; an attempt an earlier build interrupted between
+its withdrawal and its restart recorded no before-state, so its retry under
+this build still reads no effect.

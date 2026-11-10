@@ -8,6 +8,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
@@ -315,4 +316,42 @@ func (s Service) prerequisitesRefusal(ctx context.Context, view View, operation 
 		}
 	}
 	return nil
+}
+
+type candidateView struct {
+	View
+	inputs desiredstate.Sources
+}
+
+func (v candidateView) Inputs() desiredstate.Sources { return v.inputs }
+
+func (s Service) AddsTo(ctx context.Context, name string, candidate desiredstate.Sources) (string, error) {
+	if err := s.available(ctx); err != nil {
+		return "", err
+	}
+	var adds string
+	err := s.workspace.ReadLifecycle(ctx, name, func(view View) error {
+		store := s.store(view)
+		index, err := store.Index(ctx)
+		if err != nil || index.Current == "" {
+			return err
+		}
+		operation, err := store.ReadOperation(ctx, index.Current)
+		if err != nil || operation.Verb != reconciliation.Apply || operation.State != reconciliation.OperationDone {
+			return err
+		}
+		frozen, err := store.ReadPlan(ctx, operation.ID)
+		if err != nil {
+			return err
+		}
+		states, _, err := blockRecords(ctx, store, operation.ID, frozen)
+		if err != nil {
+			return err
+		}
+		if added, _ := s.additive(ctx, candidateView{View: view, inputs: candidate}, store, operation, frozen, states, false); added != nil {
+			adds = operation.ID
+		}
+		return nil
+	})
+	return adds, err
 }

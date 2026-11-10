@@ -109,7 +109,8 @@ These fields follow the normal `defaults.Environment` inheritance rules.
 Resolution, retention, retry and reuse follow
 [the controller stage](../controller.md#the-controller-stage):
 a retained client release is reused as frozen, and a later build's new
-default is a new release its next apply acquires.
+default reaches a completed environment only through a destroy and a fresh
+apply ([the tool table](../controller.md#the-tool-table)).
 
 ## Domains
 
