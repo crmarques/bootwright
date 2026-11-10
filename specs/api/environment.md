@@ -30,6 +30,7 @@ Environment fields emit in this order:
 | `spec.defaults` | kind-keyed partial specs | no | `{}` | Omitted object fields inherit the corresponding kind entry under the rules below. |
 | `spec.downloads` | object | no | source-specific | Closed download-mirror policy below. |
 | `spec.dependencyVersions` | object | no | this build's defaults | Version intent for the prerequisites this Environment controller stage installs; closed shape below. |
+| `spec.mirror` | object | no | — | The [artifact mirror](#artifact-mirror) that serves every public-origin client. |
 | `spec.controller` | object | yes | — | Required controller Machine selection below. |
 | `spec.lifecycle` | object | no | — | Offline-rescue input; a present `rescue` is refused until a rescue journey exists. |
 
@@ -370,6 +371,33 @@ Secret source and custody declarations belong to
 setting. A default may supply an omitted Secret source, but cannot override an
 authored source or copy material.
 
+## Artifact mirror
+
+`spec.mirror.artifacts.url` names one HTTPS file server, under the
+[download mirror](#download-mirrors) URL rules and 102 bytes shorter so the
+longest client path fits, that serves the clients of a
+[public origin](../security.md#acquisition-origins) the controller stage
+installs: Helm, `govc`, `kubectl` and `virtctl`. The OKD clients, also of a
+public origin, are refused beside it, because no build pins them. A client of
+a vendor origin, the OpenShift clients and installer, stays on its vendor or
+its `openshiftClientsMirror`. Each client is read from
+`<url>/<kind>/<release>/<file>`, its release with the `v` prefix and its file
+the publisher's own file name, for example
+`<url>/helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz` and
+`<url>/virtctl/v1.9.1/virtctl-v1.9.1-linux-amd64`.
+
+Because a client behind the mirror is acquired only by the size and SHA-256
+the build's [tool table](../controller.md#the-tool-table) pins, the stage
+reaches no publisher for any client behind it. A selected client release the table does
+not pin, a declared `spec.dependencyVersions` override or the OKD clients,
+refuses at plan, and so does a `helmMirror`, `govcMirror` or `virtctlMirror`
+beside it ([refusal table](#refusal-table)). `bootwright render acquisitions`
+names each file the mirror must hold.
+
+Not yet met: preflight proves the mirror holds every file before the stage
+runs, the mirror's trust may be a private anchor, and a managed artifact
+server may be the mirror; tracked as [B1246](../milestones/backlog.md#b1246).
+
 ## Controller Machine
 
 `spec.controller` is a required closed record containing only required
@@ -483,6 +511,9 @@ Environment.
 | Libvirt release pin | `spec.dependencyVersions.libvirt` other than `latest`, with the libvirt client selected | `this executable's controller stage installs the libvirt release the host's repositories provide, and <environment> pins spec.dependencyVersions.libvirt` | `remove spec.dependencyVersions.libvirt from <environment>` |
 | Client release below the minimum | `spec.dependencyVersions.<tool>` older than the minimum this executable's tool table holds, with that client selected | `this executable accepts <tool> <minimum> or newer, and <environment> declares <release> in spec.dependencyVersions.<tool>` | `declare <tool> <minimum> or newer in spec.dependencyVersions.<tool> of <environment>, or remove it for this build's default` |
 | Client release without MAJOR.MINOR.PATCH | `spec.dependencyVersions.<tool>` with no leading `MAJOR.MINOR.PATCH`, with that client selected | `this executable holds <tool> to <minimum> or newer by its MAJOR.MINOR.PATCH, and <environment> declares <release> in spec.dependencyVersions.<tool>, which names none` | `declare <tool> <minimum> or newer in spec.dependencyVersions.<tool> of <environment>, or remove it for this build's default` |
+| Per-client mirror beside the artifact mirror | `spec.downloads.helmMirror`, `govcMirror` or `virtctlMirror` with `spec.mirror.artifacts` | `spec.mirror.artifacts of <environment> names where every public-origin client comes from, and spec.downloads.<field> names it again` | `remove spec.downloads.<field> from <environment>` |
+| Unpinned client behind the artifact mirror | a selected public-origin client at a release the tool table does not pin, with `spec.mirror.artifacts` | `with spec.mirror.artifacts, this executable acquires a public-origin client only at a release its tool table pins, and <environment> selects <tool> <release>, whose checksum only its publisher holds` | `declare no <tool> release in spec.dependencyVersions of <environment> so it takes this build's pinned default, or remove spec.mirror.artifacts` |
+| OKD clients behind the artifact mirror | an OKD cluster's clients, with `spec.mirror.artifacts` | `with spec.mirror.artifacts, this executable acquires a public-origin client only at a release its tool table pins, and <environment> selects <tool> <release>, whose checksum only its publisher holds` | `select an openshift distribution, whose clients come from their vendor, or remove spec.mirror.artifacts from <environment>` |
 
 ## Lifecycle rescue declaration
 

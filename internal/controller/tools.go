@@ -105,6 +105,7 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]T
 		}
 	}
 	for index := range result {
+		result[index] = mirrored(environments[0], result[index])
 		if result[index], err = pinned(result[index]); err != nil {
 			return nil, selectionFailure(environments[0], "controller.state", "", err.Error())
 		}
@@ -136,10 +137,32 @@ func ProviderTool(catalog api.Catalog, kind string) (ToolRequest, error) {
 	if kind == "virtctl" {
 		request = virtctlRequest(versions, environments[0].Spec().Get("downloads"))
 	}
-	if request, err = pinned(request); err != nil {
+	if request, err = pinned(mirrored(environments[0], request)); err != nil {
 		return ToolRequest{}, selectionFailure(environments[0], "controller.state", "", err.Error())
 	}
 	return request, nil
+}
+
+// PublicOrigin says whether a client is served from a host any account
+// publishes on, which a declared artifact mirror replaces.
+func PublicOrigin(request ToolRequest) bool {
+	switch request.Kind {
+	case "helm", "govc", "kubectl", "virtctl":
+		return true
+	}
+	return request.Compatibility == "okd"
+}
+
+func mirrored(environment api.Object, request ToolRequest) ToolRequest {
+	base := strings.TrimRight(environment.Spec().Get("mirror", "artifacts", "url").Text(), "/")
+	if base == "" || !PublicOrigin(request) {
+		return request
+	}
+	request.Mirror = base + "/" + request.Kind
+	if request.Kind == "helm" {
+		request.Mirror += "/" + request.Version
+	}
+	return request
 }
 
 func targetToolVersions(environment api.Object) (map[string]string, error) {

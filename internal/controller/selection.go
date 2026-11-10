@@ -325,6 +325,7 @@ func unsupported(machine api.Object, catalog api.Catalog) []UnsupportedShape {
 	}
 	if environments := catalog.OfKind(api.Environment); len(environments) == 1 {
 		shapes = append(shapes, releasesBelowMinimum(environments[0], catalog)...)
+		shapes = append(shapes, mirrorShapes(environments[0], catalog)...)
 	}
 	if bypass := machine.Spec().Get("proxy", "noProxy"); bypass.Type() == api.Sequence && bypass.Len() > maxProxyBypassEntries {
 		shapes = append(shapes, UnsupportedShape{Object: machine, Field: "$.spec.proxy.noProxy",
@@ -435,6 +436,42 @@ func releasesBelowMinimum(environment api.Object, catalog api.Catalog) []Unsuppo
 		}
 		shapes = append(shapes, UnsupportedShape{Object: environment, Field: "$." + field, Reason: reason,
 			Remediation: "declare " + tool.Kind + " " + pin.Minimum + " or newer in " + field + " of " + environment.Identity() + ", or remove it for this build's default"})
+	}
+	return shapes
+}
+
+func mirrorShapes(environment api.Object, catalog api.Catalog) []UnsupportedShape {
+	if !environment.Spec().Get("mirror", "artifacts", "url").Present() {
+		return nil
+	}
+	shapes := []UnsupportedShape{}
+	for _, field := range []string{"govcMirror", "helmMirror", "virtctlMirror"} {
+		if environment.Spec().Get("downloads", field).Present() {
+			shapes = append(shapes, UnsupportedShape{Object: environment, Field: "$.spec.downloads." + field,
+				Reason:      "spec.mirror.artifacts of " + environment.Identity() + " names where every public-origin client comes from, and spec.downloads." + field + " names it again",
+				Remediation: "remove spec.downloads." + field + " from " + environment.Identity()})
+		}
+	}
+	tools, err := SelectTools(catalog)
+	if err != nil {
+		return shapes
+	}
+	seen := map[string]bool{}
+	for _, tool := range tools {
+		key := tool.Kind
+		if tool.Compatibility == "okd" {
+			key = "okd"
+		}
+		if !PublicOrigin(tool) || tool.SHA256 != "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		reason := "with spec.mirror.artifacts, this executable acquires a public-origin client only at a release its tool table pins, and " + environment.Identity() + " selects " + tool.Kind + " " + strings.TrimPrefix(tool.Version, "v") + ", whose checksum only its publisher holds"
+		remedy := "declare no " + tool.Kind + " release in spec.dependencyVersions of " + environment.Identity() + " so it takes this build's pinned default, or remove spec.mirror.artifacts"
+		if tool.Compatibility == "okd" {
+			remedy = "select an openshift distribution, whose clients come from their vendor, or remove spec.mirror.artifacts from " + environment.Identity()
+		}
+		shapes = append(shapes, UnsupportedShape{Object: environment, Field: "$.spec.mirror.artifacts", Reason: reason, Remediation: remedy})
 	}
 	return shapes
 }

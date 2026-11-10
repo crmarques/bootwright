@@ -294,3 +294,12 @@ func TestExactClusterReleaseGrammar(t *testing.T) {
 func TestExactOSReleaseGrammar(t *testing.T) {
 	lexicalRows(t, "os-release", []string{"9.8", "10.0", "11.2", "9.10", "1.0"}, []string{"", "9", "09.8", "9.08", "9.8.1", "rhel9", "0.1", "9.", ".8", "9.8 ", "v9.8", "9,8", "9.00"})
 }
+
+func TestAnArtifactMirrorLeavesRoomForTheLongestClientPath(t *testing.T) {
+	base := "https://mirror.example.test/"
+	fits := base + strings.Repeat("a", maxMirrorURLBytes-maxArtifactMirrorSuffix-len(base))
+	lexicalRows(t, "artifact-mirror-url", []string{"https://mirror.example.test/tools", fits}, []string{fits + "a", "http://mirror.example.test/tools", "https://mirror.example.test/tools?x"})
+	if !validMirrorURL(fits + "/helm/v" + strings.Repeat("1", 95)) {
+		t.Fatal("the longest derived helm mirror of an admitted artifact mirror is refused")
+	}
+}

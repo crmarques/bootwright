@@ -66,6 +66,12 @@ func TestControllerRefusalTableMatchesUnsupported(t *testing.T) {
 			clientRelease(t, names, "1.0.0")},
 		"Client release without MAJOR.MINOR.PATCH": {[]api.Object{environment(field("dependencyVersions", api.MapValue(text("helm", "4.3")))), machine(), cluster()},
 			clientRelease(t, names, "4.3")},
+		"Per-client mirror beside the artifact mirror": {[]api.Object{environment(artifactMirror(), field("downloads", api.MapValue(text("helmMirror", "https://other.example.test")))), machine(), cluster()},
+			withValues(names, "<field>", "helmMirror")},
+		"Unpinned client behind the artifact mirror": {[]api.Object{environment(artifactMirror(), field("dependencyVersions", api.MapValue(text("helm", "99.0.0")))), machine(), cluster()},
+			withValues(names, "<tool>", "helm", "<release>", "99.0.0")},
+		"OKD clients behind the artifact mirror": {[]api.Object{environment(artifactMirror()), machine(), okdCluster()},
+			withValues(names, "<tool>", "openshift-clients", "<release>", "4.19.3")},
 	}
 	for _, row := range refusalTable(t) {
 		test, found := cases[row.name]
@@ -172,4 +178,22 @@ func expand(text string, values map[string]string) string {
 		text = strings.ReplaceAll(text, placeholder, value)
 	}
 	return text
+}
+
+func artifactMirror() api.FieldValue {
+	return field("mirror", api.MapValue(field("artifacts", api.MapValue(text("url", "https://mirror.example.test/tools")))))
+}
+
+func okdCluster() api.Object {
+	return api.NewObject(api.OpenShiftCluster, "hub", api.Value{}, api.MapValue(
+		field("distribution", api.MapValue(text("type", "okd"), field("release", api.MapValue(text("version", "4.19.3"))))),
+	))
+}
+
+func withValues(names map[string]string, pairs ...string) map[string]string {
+	values := maps.Clone(names)
+	for index := 0; index+1 < len(pairs); index += 2 {
+		values[pairs[index]] = pairs[index+1]
+	}
+	return values
 }

@@ -13012,3 +13012,25 @@ cluster's default catalogs and update service, registries' token and blob
 delivery hosts, and an installed Machine's own package repositories, are not
 listed yet ([B1245](backlog.md#b1245)).
 
+### X355 — The artifact mirror for public-origin clients
+
+**Item:** B1246 (2026-11-10, [D250](backlog.md#d250) (4) and (7),
+[D251](backlog.md#d251) (5)), partly delivered in-tree.
+`spec.mirror.artifacts.url` on the Environment routes Helm, `govc`, `kubectl`
+and `virtctl` to `<url>/<kind>/<release>/<file>`
+([artifact mirror](../api/environment.md#artifact-mirror)). A client there is
+acquired by the size and SHA-256 the tool table pins, so the controller
+reaches no publisher for a client; the URL is held 102 bytes shorter than a
+download mirror so the longest client path fits; plan refuses a selected release the table does not pin,
+the OKD clients, and a `helmMirror`, `govcMirror` or `virtctlMirror` beside
+it, as three new rows of the Environment refusal table. The OpenShift clients
+and installer stay on their vendor origin. `render acquisitions` classes each
+mirrored client by the mirror's host. No request, evidence, contract version
+or content digest moved: a mirrored client is an ordinary tool request with
+its mirror.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** preflight does not yet prove the mirror holds every
+file, the mirror must verify against the host's trust store, and a managed
+artifact server cannot be the mirror yet ([B1246](backlog.md#b1246)).
+

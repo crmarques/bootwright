@@ -91,6 +91,8 @@ func ValidLexical(rule, value string) bool {
 		return validHTTPURL(value, false) && !strings.ContainsAny(value, "#'")
 	case "mirror-url":
 		return validMirrorURL(value)
+	case "artifact-mirror-url":
+		return len(value) <= maxMirrorURLBytes-maxArtifactMirrorSuffix && validMirrorURL(value)
 	case "proxy-endpoint":
 		return validProxyEndpoint(value)
 	case "proxy-bypass":
@@ -191,6 +193,8 @@ func validHTTPURL(value string, secure bool) bool {
 // maxMirrorURLBytes bounds a download mirror, which a frozen controller
 // request carries.
 const maxMirrorURLBytes = 4096
+
+const maxArtifactMirrorSuffix = len("/helm/v") + 95
 
 const packageRepositoryBase = 2048 - len("/repodata/") - 240
 

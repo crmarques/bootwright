@@ -840,7 +840,7 @@ states its route:
 | Artifact | Default origin | Mirror route |
 | --- | --- | --- |
 | Host packages | The host's repositories | The host's own dnf configuration ([host packages](controller.md#host-packages)) |
-| Target tools | Each tool's publisher: a vendor origin for an OpenShift release's clients and installer, a public one for every other tool, an OKD release's included | [Download mirrors](api/environment.md#download-mirrors) serve the bytes of the OpenShift clients and installer, Helm, `govc` and `virtctl`; a client at the build's default release needs no publisher contact, and any other release's publisher metadata is still read ([the controller stage](controller.md#the-controller-stage)) |
+| Target tools | Each tool's publisher: a vendor origin for an OpenShift release's clients and installer, a public one for every other tool, an OKD release's included | The [artifact mirror](api/environment.md#artifact-mirror) serves every public-origin client at its pinned release with no publisher contact; [download mirrors](api/environment.md#download-mirrors) serve the bytes of the OpenShift clients and installer, Helm, `govc` and `virtctl`, and any release the build does not pin still has its publisher's metadata read ([the controller stage](controller.md#the-controller-stage)) |
 | A managed service's image | The executable's compiled default | The service's `spec.image.local` ([management and placement](api/infrastructure-services.md#management-and-placement)) |
 | The emulated BMC's image | The executable's compiled default | None declared: the provider host's container runtime acquires it, and only when the host does not hold it ([Machine realization](substrates.md#machine-realization)) |
 | Operating-system media | The file or URL the operator names | The operator's own choice of source ([media store](managed-os.md#media-store)) |
@@ -859,9 +859,8 @@ mirror, vendor origins stay direct, and an artifact the mirror lacks refuses
 before any effect. The [controlled network design](deferred/controlled-network.md)
 holds the mirror host, its declaration and how it is filled.
 
-Not yet met: one Environment declaration routes a context's public-origin
-tools to its mirror and refuses an artifact the mirror lacks; tracked as
-[B1246](milestones/backlog.md#b1246).
+Not yet met: preflight refuses a client the declared artifact mirror lacks,
+before the stage runs; tracked as [B1246](milestones/backlog.md#b1246).
 
 Not yet met: a managed service's and the emulated BMC's images come from the
 declared mirror, with its credential and trust; tracked as

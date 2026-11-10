@@ -213,7 +213,7 @@ runs:
 | --- | --- | --- | --- |
 | Host packages | Each host's dnf | The repositories dnf is configured with | Nothing to do: a Satellite or a local repository serves, as [setup](#what-setup-admits-and-installs) says |
 | OpenShift clients and installer | The controller | `mirror.openshift.com`, a vendor origin | Nothing to do |
-| Helm, which every OpenShift cluster selects, `virtctl` and `govc` | The controller | `get.helm.sh` and GitHub | `spec.downloads` on the Environment: see the tools below |
+| Helm, which every OpenShift cluster selects, `virtctl` and `govc` | The controller | `get.helm.sh` and GitHub | `spec.mirror.artifacts` on the Environment: see the tools below |
 | The OKD clients and installer | The controller | GitHub | Not possible yet: their release metadata is read from GitHub |
 | A managed service's image | The Machine the service runs on | The registry its compiled default names | `spec.image.local` on the service |
 | The emulated BMC's image | The libvirt provider's host | `quay.io` | The host's own container configuration |
@@ -224,15 +224,16 @@ runs:
 
 **Tools.** Each build pins a default release of Helm, `virtctl`, `govc` and
 `kubectl` with its size and SHA-256 ([the tool table](../specs/controller.md#the-tool-table)).
-`spec.downloads` on the Environment names a mirror for Helm, `virtctl`,
-`govc` and the OpenShift clients and installer, and their bytes then come from it
-([download mirrors](../specs/api/environment.md#download-mirrors)). A
-default release is fetched from its mirror alone, with no publisher contact.
-A release you declare in `spec.dependencyVersions` other than the default
-still has its checksum read from its publisher, so it reaches `api.github.com`
-or `get.helm.sh` even with a mirror set. Fill the mirror with the default
-releases `make tool-table` names, under the layout the download mirrors
-section states.
+`spec.mirror.artifacts.url` on the Environment names one HTTPS file server
+for all of them ([artifact mirror](../specs/api/environment.md#artifact-mirror)):
+each is read from `<url>/<kind>/v<release>/<publisher file name>` by its pinned
+checksum, so the controller reaches no client publisher, GitHub included. Fill it
+with the files the `client` rows of `bootwright render acquisitions` name,
+from a machine that reaches the publishers. With the mirror declared, a
+release in `spec.dependencyVersions` other than the build's default is
+refused at plan, because its checksum only its publisher holds. The
+OpenShift clients and installer stay on `mirror.openshift.com`, a vendor
+origin, or on `spec.downloads.openshiftClientsMirror`.
 
 **Images.** Each compiled default is pinned by digest: `docker.io` for the
 name resolver, the proxy and the time server, `registry.access.redhat.com`

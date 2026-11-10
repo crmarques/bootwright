@@ -599,7 +599,9 @@ selects the host's `nmstate` package for the installer's `nmstatectl gc`
 invocation; the `iputils` package serves the virtual-IP duplicate-address
 probe.
 
-A client at the default release its tool table names is acquired by the size
+A declared [artifact mirror](api/environment.md#artifact-mirror) serves every
+public-origin client in place of its publisher. A client at the default
+release its tool table names is acquired by the size
 and SHA-256 that table holds, frozen into the stage's request, and no publisher
 metadata is read for it, from its publisher or from a
 [download mirror](api/environment.md#download-mirrors) alike. Every other

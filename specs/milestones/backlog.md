@@ -298,7 +298,7 @@ Alias cell.
 | [B1243](#b1243) | new, 2026-11-10 (D250 (2)); partly delivered by X343 on 2026-11-10 | enabling | Architecture | Each build's bill of materials names every component's license, a release ships its notices, and the container build's Go image is pinned | The document itself landed (X343); licenses need a source per component that no build input holds yet |
 | [B1244](#b1244) | new, 2026-11-10 (D250 (2)); partly delivered by X344 on 2026-11-10 | enabling | Architecture | Each pinned client is judged by what its binary holds, and the service and emulated BMC images are scanned on a schedule and in the mirror registry | The build's gate landed (X344); a binary scan downloads every client, and an image scan needs a pinned scanner |
 | [B1245](#b1245) | new, 2026-11-10 (D250 (8)); partly delivered by X345 on 2026-11-10 | product | CLI, with Controller | The acquisition list names each add-on's catalog and operator images and each installed Machine's own package repositories | The list landed (X345); an add-on's images follow from the catalog it selects, which planning does not read |
-| [B1246](#b1246) | new, 2026-11-10 (D250 (7)) | product | Controller, with Desired state | One mirror declaration routes a context's public-origin tools to its artifact server and refuses an artifact the mirror lacks | D250 parks the controlled-network plan until the owner promotes it |
+| [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355 on 2026-11-10 | product | Controller, with Desired state | Preflight proves the artifact mirror holds every client, a private trust anchor and a managed artifact server may serve it, and one declaration replaces the download mirrors | The declaration landed (X355); a probe needs an HTTP adapter in preflight, and a managed server needs B1249 |
 | [B1247](#b1247) | new, 2026-11-10 (D250 (7)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's images come from the declared mirror, with its credential and trust | D250 parks the controlled-network plan until the owner promotes it |
 | [B1248](#b1248) | new, 2026-11-10 (D250 (7)) | product | Container cluster | A cluster's release images are mapped to the declared mirror | D250 parks the controlled-network plan until the owner promotes it; B724's route awaits its acceptance |
 | [B1249](#b1249) | new, 2026-11-10 (D250 (8)) | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | D250 parks the controlled-network plan until the owner promotes it; no capability realizes a managed Registry |
@@ -3377,19 +3377,19 @@ repositories.
 ### B1246
 
 **Owner:** Controller, with Desired state. **Kind:** product. **Requires:**
-B1245. **Definition:** Needs definition, from [D250](#d250) (4) and
-(7): the [design](../deferred/controlled-network.md#declaration-and-refusal).
-**Outcome:** the Environment names one mirror, a Registry and an artifact
-server endpoint, placed on any Machine, the controller included, or external
-([deployment choices](../deferred/controlled-network.md#deployment-choices)).
-With it the controller stage acquires every public-origin tool from that
-endpoint and dials no public origin, and preflight refuses an artifact the
-mirror does not hold, naming it; without it every route stays as it is.
-**Open:**
-the field's name and whether it replaces `spec.downloads` (recommendation: it
-does, before 1.0); an external artifact server as the endpoint, which
-admission refuses today. **Exit evidence:** a stage test with every public
-origin unreachable, the refusal's test and effective-state goldens.
+none. **Definition:** Needs definition, from [D250](#d250) (4) and (7) and
+[D251](#d251) (5). **Delivered in-tree by X355:**
+`spec.mirror.artifacts.url` routes every public-origin client to
+`<url>/<kind>/<release>/<file>` by its pinned checksum, and plan refuses an
+unpinned client, the OKD clients and a per-client download mirror beside it
+([artifact mirror](../api/environment.md#artifact-mirror)). **Remaining:**
+preflight reads each mirrored file's size before the stage runs and refuses
+one the mirror lacks, naming it; a mirror verified against a `caBundle`
+Secret, a trust anchor, rather than the host's trust store; a managed
+ArtifactServer as the mirror once [B1249](#b1249) builds one; and
+`spec.downloads` folded into the declaration before 1.0. **Exit evidence:** a
+preflight test against a mirror missing a file, a private-trust acquisition
+test, and effective-state goldens.
 
 ### B1247
 
@@ -7927,6 +7927,11 @@ the owner's review:
 4. B1245's list is `bootwright render acquisitions`, a command of its own
    beside `render effective` rather than a section of `plan`, so it needs no
    context and reads a context-free input as well.
+5. B1246's declaration is `spec.mirror.artifacts.url`, a file server for the
+   public-origin clients alone; `spec.downloads.openshiftClientsMirror` stays
+   for the vendor clients, and the per-client mirrors refuse beside it rather
+   than being removed, until the owner decides whether one declaration
+   replaces them.
 
 ### D252
 
