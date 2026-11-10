@@ -98,7 +98,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			ContentDigest:  digest,
 			Request:        canonical,
 		})
-		for _, reference := range request.Placement.SecretReferences() {
+		for _, reference := range append(request.Placement.SecretReferences(), request.ImageSource.SecretReferences()...) {
 			if !slices.Contains(plan.Secrets, reference) {
 				plan.Secrets = append(plan.Secrets, reference)
 			}

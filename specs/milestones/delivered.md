@@ -13482,3 +13482,17 @@ the previous matcher.
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred.
+
+### X362 — The image mirror's Secrets bound at plan
+
+**Item:** B1297 (2026-11-10, found by X360's implementation), delivered
+in-tree. [X356](#x356--service-and-bmc-images-from-the-image-mirror) gave a
+managed Proxy, DNSServer or NTPServer request an `imageSource` naming the
+image mirror's credential and trust Secrets, and lent them to its apply, but
+the plan bound only the placement's Secrets, so an operation froze no binding
+for them and a mirror pull with a credential had no material to lend. The plan
+now binds every Secret the request names. The ArtifactServer and the emulated
+BMC already bound them.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred.

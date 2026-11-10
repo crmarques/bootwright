@@ -89,6 +89,9 @@ func TestAManagedServicePullsFromTheMirrorWithItsSecretsBound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !slices.Contains(plan.Secrets, "mirror-ca") || !slices.Contains(plan.Secrets, "mirror-pull") {
+		t.Fatalf("the plan binds %v, not the mirror's Secrets", plan.Secrets)
+	}
 	frozen, err := reconciliation.NewPlan(reconciliation.Apply, plan.Definitions)
 	if err != nil {
 		t.Fatal(err)
