@@ -22,6 +22,12 @@ DIGEST = "a" * 64
 CARRIED = {"answered": True, "autostart": True, "bridge": True, "definition": True, "managed": True, "name": "n", "owned": True, "state": "active", "uuid": "u"}
 
 
+# A provider with no VLAN subnet to refuse has its VLAN refusal unit answered
+# for and absent.
+VLAN_REFUSAL_ABSENT = {"name": "bootwright-lab-host-vlan-refusal.service", "answered": True, "present": False, "owned": False,
+                       "enabled": False, "state": "", "routes": []}
+
+
 def host_observation(**overrides):
     observation = {
         "directory": True,
@@ -35,6 +41,7 @@ def host_observation(**overrides):
         "uri": True,
     }
     observation.update(overrides)
+    observation.setdefault("vlanRefusal", dict(VLAN_REFUSAL_ABSENT))
     if "firewallReady" not in observation:
         removed = not observation["directory"] and not observation["pool"]
         observation["firewallReady"] = {
@@ -552,13 +559,18 @@ def test_a_provider_host_a_driver_did_not_answer_for_proves_no_removal(monkeypat
               "error: Failed to connect socket to '/var/run/libvirt/virtnetworkd-sock': No such file or directory\n")
     undefined = (1, "", "error: failed to get pool 'bootwright-lab-p-vmedia'\nerror: Storage pool not found\n")
 
+    refusal = "bootwright-lab-p-vlan-refusal.service"
+
     def runner(answers):
         def run(argv, check_rc=False, environ_update=None):
             del check_rc, environ_update
+            answers.setdefault(refusal, (0, "LoadState=not-found\nActiveState=inactive\nFragmentPath=\nDropInPaths=\n", ""))
             return answers.get(" ".join(argv[3:]) if argv[0].endswith("virsh") else argv[-1], (0, "", ""))
         return run
 
     request = {
+        "identity": {"context": "lab", "object": "p"},
+        "vlanRefusalUnit": refusal,
         "networks": [{"name": "bootwright-lab-guests", "bridge": "virbr-lab", "managed": True}],
         "packages": ["qemu-kvm"],
         "poolName": "bootwright-lab-p-vmedia",
@@ -664,3 +676,37 @@ def test_a_provider_host_apply_reports_each_shadowed_route_as_a_warning():
         records.clear()
         substrate_host_protocol.adapter_protocol.publish(dict(arguments, **unwarned), substrate_host_protocol.CAPABILITY, record)
         assert records and "warnings" not in records[-1]
+
+
+VLAN_REFUSAL_HELD = dict(VLAN_REFUSAL_ABSENT, present=True, owned=True, enabled=True, state="active", routes=["203.0.113.0/26"])
+
+
+def removed_host(**overrides):
+    return host_observation(**dict({"directory": False, "pool": "", "networks": []}, **overrides))
+
+
+def test_the_vlan_refusal_unit_is_published_as_evidence_and_held_while_present():
+    evidence = substrate_host_protocol.presence(host_observation(vlanRefusal=dict(VLAN_REFUSAL_HELD)), DIGEST)
+    assert evidence["postcondition"] and evidence["vlanRefusal"] == VLAN_REFUSAL_HELD
+    for broken in ({"state": "inactive"}, {"answered": False}, {"owned": False}, {"enabled": False}):
+        evidence = substrate_host_protocol.presence(host_observation(vlanRefusal=dict(VLAN_REFUSAL_HELD, **broken)), DIGEST)
+        assert not evidence["postcondition"] and "VLAN refusal" in substrate_host_protocol.unproved(evidence), broken
+
+
+def test_a_removal_proves_the_vlan_refusal_unit_and_every_route_gone():
+    assert substrate_host_protocol.absence(removed_host(), DIGEST)["postcondition"]
+    for left in ({"routes": ["203.0.113.0/26"]}, {"present": True}, {"enabled": True}, {"state": "failed"}):
+        observation = removed_host(vlanRefusal=dict(VLAN_REFUSAL_ABSENT, **left))
+        assert not substrate_host_protocol.absence(observation, DIGEST)["postcondition"], left
+        assert "VLAN refusal" in substrate_host_protocol.remaining(observation), left
+    evidence = substrate_host_protocol.absence(removed_host(vlanRefusal=dict(VLAN_REFUSAL_ABSENT, answered=False)), DIGEST)
+    assert not evidence["postcondition"] and "VLAN refusal" in substrate_host_protocol.unanswered(evidence)
+
+
+@pytest.mark.parametrize("vlan", [None, dict(VLAN_REFUSAL_HELD, routes="203.0.113.0/26"), dict(VLAN_REFUSAL_HELD, extra=True),
+                                  dict(VLAN_REFUSAL_HELD, owned="yes")])
+def test_malformed_vlan_refusal_evidence_is_never_published(vlan):
+    observation = host_observation()
+    observation["vlanRefusal"] = vlan
+    with pytest.raises(ValueError):
+        substrate_host_protocol.presence(observation, DIGEST)

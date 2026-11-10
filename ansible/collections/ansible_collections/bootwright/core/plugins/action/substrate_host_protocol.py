@@ -6,6 +6,8 @@ result and authorization descriptors belong to the invoking Bootwright process.
 
 from __future__ import annotations
 
+from collections import namedtuple
+
 from ansible.plugins.action import ActionBase
 from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol
 from ansible_collections.bootwright.core.plugins.module_utils.adapter_protocol import publishes, unreached
@@ -23,6 +25,8 @@ MAX_SERVICES = 16
 OBSERVED_NETWORK = {"answered", "autostart", "bridge", "definition", "managed", "name", "owned", "state", "uuid"}
 OPTIONAL_NETWORK = {"mtu"}
 OBSERVED_SERVICE = {"enabled", "name", "state"}
+OBSERVED_VLAN_REFUSAL = {"answered", "enabled", "name", "owned", "present", "routes", "state"}
+VLAN_REFUSAL_FLAGS = ("answered", "enabled", "owned", "present")
 
 
 digest = adapter_protocol.request_digest
@@ -116,6 +120,73 @@ def firewall_gone(evidence):
     return entry["answered"] and not entry["present"] and not entry["enabled"] and not entry["owned"] and not entry["ready"] and entry["state"] == ""
 
 
+def flagged(entry, keys, flags, what):
+    """One observed record with exactly its keys, its flags Boolean and every other value a string."""
+    if not isinstance(entry, dict) or set(entry) != keys:
+        raise ValueError(what)
+    for key in keys:
+        if key in flags and not isinstance(entry[key], bool):
+            raise ValueError(what)
+        if key not in flags and key != "routes" and not isinstance(entry[key], str):
+            raise ValueError(what)
+    return dict(entry)
+
+
+def vlan_refusal_of(observation):
+    entry = flagged(observation.get("vlanRefusal"), OBSERVED_VLAN_REFUSAL, VLAN_REFUSAL_FLAGS, "VLAN refusal evidence")
+    if not isinstance(entry["routes"], list) or not all(isinstance(route, str) for route in entry["routes"]):
+        raise ValueError("VLAN refusal evidence")
+    entry["routes"] = list(entry["routes"])
+    return {"vlanRefusal": entry}
+
+
+def vlan_refusal_realized(evidence):
+    """Whether the VLAN refusal unit is answered for and, while present, owned, enabled and active.
+
+    Go compares its routes with the frozen subnets.
+    """
+    vlan = evidence["vlanRefusal"]
+    return vlan["answered"] and (not vlan["present"] or (vlan["owned"] and vlan["enabled"] and vlan["state"] == "active"))
+
+
+def vlan_refusal_left(evidence):
+    vlan = evidence["vlanRefusal"]
+    return bool(vlan["present"] or vlan["enabled"] or vlan["owned"] or vlan["routes"] or vlan["state"])
+
+
+# Each resource the host block owns beside the libvirt ones, as a refusal names
+# it: how its evidence is read from the observation, whether an apply left it
+# realized, whether anything of it is left, and whether it was answered for.
+Held = namedtuple("Held", ("name", "read", "realized", "left", "answered"))
+HELD = (
+    Held("VLAN refusal", vlan_refusal_of, vlan_refusal_realized, vlan_refusal_left,
+         lambda evidence: evidence["vlanRefusal"]["answered"]),
+)
+
+
+def held_evidence(observation):
+    evidence = {}
+    for held in HELD:
+        evidence.update(held.read(observation))
+    return evidence
+
+
+def held_realized(evidence):
+    return all(held.realized(evidence) for held in HELD)
+
+
+def held_gone(evidence):
+    return all(held.answered(evidence) and not held.left(evidence) for held in HELD)
+
+
+def held_unanswered(evidence):
+    return [held.name for held in HELD if not held.answered(evidence)]
+
+
+def held_unproved(evidence):
+    return [held.name for held in HELD if not held.realized(evidence)]
+
+
 def presence(observation, request_digest):
     evidence = {
         "absent": False,
@@ -132,7 +203,9 @@ def presence(observation, request_digest):
         "services": services_of(observation),
         "uri": bool(observation.get("uri")),
     }
-    complete = evidence["hypervisor"] and evidence["uri"] and pool_realized(evidence) and firewall_realized(evidence)
+    evidence.update(held_evidence(observation))
+    complete = (evidence["hypervisor"] and evidence["uri"] and pool_realized(evidence) and firewall_realized(evidence)
+                and held_realized(evidence))
     for entry in evidence["services"]:
         complete = complete and entry["state"] == "active" and entry["enabled"]
     for entry in evidence["networks"]:
@@ -161,7 +234,8 @@ def remaining(observation):
         names.append("directory")
     if not firewall_gone({"firewallReady": firewall_ready(observation)}):
         names.append("firewall readiness")
-    return names
+    evidence = held_evidence(observation)
+    return names + [held.name for held in HELD if held.left(evidence)]
 
 
 def unproved(evidence):
@@ -183,7 +257,7 @@ def unproved(evidence):
         if not entry["bridge"] or (entry["managed"] and not realized(entry)):
             names.append("networks")
             break
-    return names
+    return names + held_unproved(evidence)
 
 
 def unanswered(evidence):
@@ -198,7 +272,7 @@ def unanswered(evidence):
         names.append("networks")
     if not evidence["poolAnswered"]:
         names.append("pool")
-    return names
+    return names + held_unanswered(evidence)
 
 
 def gone(evidence):
@@ -215,6 +289,7 @@ def gone(evidence):
         and not any(still_defined(entry) for entry in evidence["networks"])
         and evidence["directory"] is False
         and firewall_gone(evidence)
+        and held_gone(evidence)
     )
 
 
@@ -235,6 +310,7 @@ def absence(observation, request_digest):
         "services": services_of(observation),
         "uri": bool(observation.get("uri")),
     }
+    evidence.update(held_evidence(observation))
     evidence["postcondition"] = gone(evidence)
     return evidence
 

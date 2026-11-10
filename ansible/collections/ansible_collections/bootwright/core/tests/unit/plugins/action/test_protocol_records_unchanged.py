@@ -64,8 +64,10 @@ NETWORK = {"answered": True, "autostart": True, "bridge": True, "definition": Tr
 SERVICE = {"enabled": True, "name": "virtnetworkd.service", "state": "active"}
 READY = {"name": "bootwright-lab-host-firewalld-ready.service", "answered": True, "present": True, "owned": True,
          "enabled": True, "ready": True, "state": "active"}
+VLAN_REFUSAL = {"name": "bootwright-lab-host-vlan-refusal.service", "answered": True, "present": False, "owned": False,
+                "enabled": False, "state": "", "routes": []}
 HOST = {"firewallReady": READY, "directory": True, "hypervisor": True, "networks": [NETWORK], "pool": "active", "poolAnswered": True,
-        "poolAutostart": True, "poolOwned": True, "services": [SERVICE], "uri": True}
+        "poolAutostart": True, "poolOwned": True, "services": [SERVICE], "uri": True, "vlanRefusal": VLAN_REFUSAL}
 HOST_GONE = dict(HOST, firewallReady=dict(READY, present=False, owned=False, enabled=False, ready=False, state=""),
                  pool="", networks=[dict(NETWORK, state="", owned=False)], directory=False)
 DISK = {"name": "root", "present": True, "sizeGiB": 60}

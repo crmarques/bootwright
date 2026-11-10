@@ -154,7 +154,16 @@
                 "state": "active"
               }
             ],
-            "uri": true
+            "uri": true,
+            "vlanRefusal": {
+              "name": "bootwright-lab-host-vlan-refusal.service",
+              "answered": true,
+              "present": false,
+              "owned": false,
+              "enabled": false,
+              "state": "",
+              "routes": []
+            }
           }
         },
         false
@@ -217,7 +226,16 @@
                 "state": "active"
               }
             ],
-            "uri": false
+            "uri": false,
+            "vlanRefusal": {
+              "name": "bootwright-lab-host-vlan-refusal.service",
+              "answered": true,
+              "present": false,
+              "owned": false,
+              "enabled": false,
+              "state": "",
+              "routes": []
+            }
           }
         },
         false
@@ -272,7 +290,16 @@
                 "state": "active"
               }
             ],
-            "uri": true
+            "uri": true,
+            "vlanRefusal": {
+              "name": "bootwright-lab-host-vlan-refusal.service",
+              "answered": true,
+              "present": false,
+              "owned": false,
+              "enabled": false,
+              "state": "",
+              "routes": []
+            }
           }
         },
         false
@@ -359,7 +386,16 @@
                 "state": "active"
               }
             ],
-            "uri": true
+            "uri": true,
+            "vlanRefusal": {
+              "name": "bootwright-lab-host-vlan-refusal.service",
+              "answered": true,
+              "present": false,
+              "owned": false,
+              "enabled": false,
+              "state": "",
+              "routes": []
+            }
           }
         },
         false
@@ -422,7 +458,16 @@
                 "state": "active"
               }
             ],
-            "uri": true
+            "uri": true,
+            "vlanRefusal": {
+              "name": "bootwright-lab-host-vlan-refusal.service",
+              "answered": true,
+              "present": false,
+              "owned": false,
+              "enabled": false,
+              "state": "",
+              "routes": []
+            }
           },
           "warnings": [
             {
@@ -483,7 +528,16 @@
                 "state": "active"
               }
             ],
-            "uri": true
+            "uri": true,
+            "vlanRefusal": {
+              "name": "bootwright-lab-host-vlan-refusal.service",
+              "answered": true,
+              "present": false,
+              "owned": false,
+              "enabled": false,
+              "state": "",
+              "routes": []
+            }
           }
         },
         false
