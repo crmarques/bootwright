@@ -304,6 +304,8 @@ Alias cell.
 | [B1249](#b1249) | new, 2026-11-10 (D250 (8)) | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | D250 parks the controlled-network plan until the owner promotes it; no capability realizes a managed Registry |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
 | [B1251](#b1251) | new, 2026-11-10 (D250 (10)) | product | Infrastructure services | A managed Proxy admits only the destinations it declares | The network's own firewall is the control in production; this serves a lab or a site without one |
+| [B1263](#b1263) | new, 2026-11-10 (D252 (6)) | product | Controller, with State reconciliation | A completed environment reports a proved client below the build's minimum, and may take a raised one | A completed apply settles (D153); the owner put reporting first and left replacement without a destroy open |
+| [B1264](#b1264) | new, 2026-11-10 (D252, session) | product | Storage | Custom CRUSH device classes reach the core OSD projection | The plan refuses them by name until a slice realizes them |
 
 ### B82
 
@@ -3462,6 +3464,23 @@ local and link-local destinations and restricts `CONNECT` no further
 every other, logging the refusal, so a lab or a site without a filtering
 firewall holds its Machines to the vendor origins. **Exit evidence:** a
 configuration test and a refused request.
+
+### B1263
+
+**Owner:** Controller, with State reconciliation. **Kind:** product.
+**Requires:** none. **Definition:** Candidate, from [D252](#d252) (6) and
+[audit 004](../../audits/004-spec-api/report-fable.md) NEW-01. **Outcome:** `status` and `diff` report each client a completed
+apply proved below the build's minimum, naming the minimum; whether a running
+environment then takes the raised release without a destroy is the owner's
+open question. **Exit evidence:** a status test over a below-minimum client.
+
+### B1264
+
+**Owner:** Storage. **Kind:** product. **Requires:** none. **Definition:**
+Candidate, from [audit 004](../../audits/004-spec-api/report-fable.md) API-07 under [D252](#d252): `spec.crush_device_class` and
+the `{path, crush_device_class}` path record reach the core OSD projection, so a
+placement policy or pool on an OSD-declared class plans. **Exit evidence:** a
+planning test of a custom class that a placement policy uses.
 
 ## Audit remediation (2026-10-26)
 
@@ -7908,3 +7927,43 @@ the owner's review:
 4. B1245's list is `bootwright render acquisitions`, a command of its own
    beside `render effective` rather than a section of `plan`, so it needs no
    context and reads a context-free input as well.
+
+### D252
+
+**owner** (2026-11-10): shown the plan to fix the Blocking and High findings
+of [audit 004](../../audits/004-spec-api/report-fable.md), the owner included the eleven Medium findings that edit the same text,
+accepted each recommendation and said "start now and proceed till all items
+are fixed". This authorizes, out of sequence for implementation, X346 (M3,
+B1252), X347 (M1, B1253), X348 (M1, B1254), X349 (M1, B1255 and B1256), X350
+(M1, B1257 and B1258), X351 (M4, B1259), X352 (M1, B1260), X353 (M2, B1261)
+and X354 (M3, B1262), no more than two active at once. They cover REC-01, the
+30 High findings and NEW-01, with REC-46, REC-74, CLI-22, SKL-01, SKL-02,
+COR-36, NEW-15, CLI-37, API-38, API-121 and API-54. The owner's answers:
+
+1. A Codex session gets a tracked rules file that mirrors the ask list, and the
+   ask-rule test checks both runtimes.
+2. A BMC system that reports no UUID claims one exclusive `bmc-mac:<mac>` key
+   per declared MAC, so two spellings of one server's address conflict.
+3. A physical agent node's root is a WWN, a serial number with exact size,
+   `volumeRef`, or `bootVolume`, declared or defaulted, under verified BMC TLS,
+   as the code already reads [D239](#d239) (the audit's 15.3 (1) (b)).
+4. The physical Ceph host's disk bound stays 15, confirming [D198](#d198)'s
+   bound without the "beside the root disk" reason (15.3 (2) (a)).
+5. A Ceph topology node's `fqdn` defaults to its Machine's effective `fqdn`,
+   and a different authored value refuses (15.3 (3) (b)). Inputs that author
+   the composed name break, and the template-inputs chart is rendered again.
+6. Whether status or diff report a proved client below the build's minimum,
+   first, and whether a running environment takes a raised minimum without a
+   destroy are parked as [B1263](#b1263).
+
+Taken by the session, pending the owner's review: a custom CRUSH device class
+refuses at plan by name with a Not yet met line, and its realization is parked
+as [B1264](#b1264); a stored receipt whose shape changes moves its version,
+and before 1.0 an earlier receipt refuses with the `controller uninstall`
+exit it already names.
+
+The dated audit stays unchanged. Low findings and the other Medium findings
+stay outside this remediation. **Exit evidence:** each item's in-tree
+evidence, a finding-to-item map in each delivered record, and `make check` on
+each integration tree, with an independent review and `make race` for each
+safety slice. No push.
