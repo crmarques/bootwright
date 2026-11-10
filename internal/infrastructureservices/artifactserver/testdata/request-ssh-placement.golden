@@ -50,7 +50,7 @@
       "secret": "artifact-server-tls"
     },
     "unit": "bootwright-lab-artifacts-lab-artifacts",
-    "version": "artifact-server-nginx-v1"
+    "version": "artifact-server-nginx-v2"
   },
   "reservationKeys": [
     "path:/var/lib/bootwright-hosted/lab/services/artifact-server/lab-artifacts",

@@ -86,13 +86,14 @@ type Interface struct {
 // Controller is the emulated BMC this Machine is managed through: its own
 // container, unit and listener, exposing exactly this domain.
 type Controller struct {
-	Address        string `json:"address"`
-	CertificateRef string `json:"certificateRef"`
-	CredentialsRef string `json:"credentialsRef"`
-	Endpoint       string `json:"endpoint"`
-	Image          string `json:"image"`
-	Port           int    `json:"port"`
-	Unit           string `json:"unit"`
+	Address        string                      `json:"address"`
+	CertificateRef string                      `json:"certificateRef"`
+	CredentialsRef string                      `json:"credentialsRef"`
+	Endpoint       string                      `json:"endpoint"`
+	Image          string                      `json:"image"`
+	ImageSource    *managedservice.ImageSource `json:"imageSource,omitempty"`
+	Port           int                         `json:"port"`
+	Unit           string                      `json:"unit"`
 }
 
 // MachineRequest is the complete frozen intent for one virtual machine and its
@@ -226,7 +227,7 @@ func (r HostRequest) SecretReferences() []string {
 }
 
 func (r MachineRequest) SecretReferences() []string {
-	return sortedUnique(append(r.Placement.SecretReferences(), r.Controller.CredentialsRef, r.Controller.CertificateRef))
+	return sortedUnique(append(append(r.Placement.SecretReferences(), r.Controller.CredentialsRef, r.Controller.CertificateRef), r.Controller.ImageSource.SecretReferences()...))
 }
 
 func sortedUnique(values []string) []string {

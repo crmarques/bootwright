@@ -1,6 +1,6 @@
 implementation: artifact-server-nginx-v1
-content-digest: 2f2f45093fa223e22af8ec602c85eb355793c1fc91528dc93bd2e68c2a79e283
-request-version: artifact-server-nginx-v1
+content-digest: 0444766e59fa99e52c27a9d21ccab5bc839ca06f93445f3c977c4302ba353177
+request-version: artifact-server-nginx-v2
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -35,6 +35,11 @@ request-schema:
   identity.context string
   identity.service string
   image string
+  imageSource *struct managedservice.ImageSource omitempty
+  imageSource.credentialsRef string omitempty
+  imageSource.credentialsType string omitempty
+  imageSource.host string
+  imageSource.trustBundleRef string omitempty
   listeners []struct artifactserver.Listener
   listeners[].name string
   listeners[].port int

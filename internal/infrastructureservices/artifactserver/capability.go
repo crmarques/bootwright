@@ -294,7 +294,7 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	}
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: Implementation, Operation: operation, Variable: variablePrefix,
-		Canonical: canonical, Placement: request.Placement, Materials: materials(request), Values: values,
+		Canonical: canonical, Placement: request.Placement, Materials: materials(request, operation), Values: values,
 		Refusals: managedservice.ReadinessRefusals(Kind, request.Identity.Service, request.BindAddress, listenerPorts(request)),
 	}))
 }
@@ -304,7 +304,7 @@ const variablePrefix = "bootwright_artifact_server"
 // materials lists this capability's own bound parts. The placement's identity
 // and host key are added by the attempt, so they are not repeated here.
 // Anything not listed never leaves bounded memory.
-func materials(request Request) []lifecycle.MaterialFile {
+func materials(request Request, operation string) []lifecycle.MaterialFile {
 	var files []lifecycle.MaterialFile
 	if request.TLS != nil {
 		files = append(files,
@@ -312,7 +312,10 @@ func materials(request Request) []lifecycle.MaterialFile {
 			lifecycle.MaterialFile{Name: "tls.key", Part: secrets.PrivateKeyPart, Secret: request.TLS.Secret, Variable: "privateKey"},
 		)
 	}
-	return files
+	if operation != "apply" {
+		return files
+	}
+	return append(files, request.ImageSource.Materials()...)
 }
 
 // Unsupported refuses every selected object this capability cannot realize,

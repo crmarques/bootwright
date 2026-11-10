@@ -441,10 +441,15 @@ func releasesBelowMinimum(environment api.Object, catalog api.Catalog) []Unsuppo
 }
 
 func mirrorShapes(environment api.Object, catalog api.Catalog) []UnsupportedShape {
-	if !environment.Spec().Get("mirror", "artifacts", "url").Present() {
-		return nil
-	}
 	shapes := []UnsupportedShape{}
+	if registry, found := catalog.Find(api.Registry, environment.Spec().Get("mirror", "registry", "registryRef").Text()); found && registry.Spec().Get("management").Text() != "external" {
+		shapes = append(shapes, UnsupportedShape{Object: environment, Field: "$.spec.mirror.registry.registryRef",
+			Reason:      "this executable pulls images only from an external image mirror, and " + registry.Identity() + " is managed",
+			Remediation: "select an external Registry in spec.mirror.registry.registryRef of " + environment.Identity() + ", or remove spec.mirror.registry"})
+	}
+	if !environment.Spec().Get("mirror", "artifacts", "url").Present() {
+		return shapes
+	}
 	for _, field := range []string{"govcMirror", "helmMirror", "virtctlMirror"} {
 		if environment.Spec().Get("downloads", field).Present() {
 			shapes = append(shapes, UnsupportedShape{Object: environment, Field: "$.spec.downloads." + field,

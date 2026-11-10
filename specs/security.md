@@ -841,8 +841,8 @@ states its route:
 | --- | --- | --- |
 | Host packages | The host's repositories | The host's own dnf configuration ([host packages](controller.md#host-packages)) |
 | Target tools | Each tool's publisher: a vendor origin for an OpenShift release's clients and installer, a public one for every other tool, an OKD release's included | The [artifact mirror](api/environment.md#artifact-mirror) serves every public-origin client at its pinned release with no publisher contact; [download mirrors](api/environment.md#download-mirrors) serve the bytes of the OpenShift clients and installer, Helm, `govc` and `virtctl`, and any release the build does not pin still has its publisher's metadata read ([the controller stage](controller.md#the-controller-stage)) |
-| A managed service's image | The executable's compiled default | The service's `spec.image.local` ([management and placement](api/infrastructure-services.md#management-and-placement)) |
-| The emulated BMC's image | The executable's compiled default | None declared: the provider host's container runtime acquires it, and only when the host does not hold it ([Machine realization](substrates.md#machine-realization)) |
+| A managed service's image | The executable's compiled default | The [image mirror](api/environment.md#image-mirror) for a public-origin image, or the service's `spec.image.local` ([management and placement](api/infrastructure-services.md#management-and-placement)) |
+| The emulated BMC's image | The executable's compiled default | The [image mirror](api/environment.md#image-mirror); without it the provider host acquires the image, and only when it does not hold it ([Machine realization](substrates.md#machine-realization)) |
 | Operating-system media | The file or URL the operator names | The operator's own choice of source ([media store](managed-os.md#media-store)) |
 | A container cluster's release images | The release's publisher registries | The cluster's [registry policy](api/openshift-clusters.md#registry-policy) |
 | A storage cluster's images and packages | The distribution's vendor origins | The Entitlement's registry namespace and the cluster's package repository ([CephCluster](api/ceph.md#cephcluster)) |
@@ -861,10 +861,6 @@ holds the mirror host, its declaration and how it is filled.
 
 Not yet met: preflight refuses a client the declared artifact mirror lacks,
 before the stage runs; tracked as [B1246](milestones/backlog.md#b1246).
-
-Not yet met: a managed service's and the emulated BMC's images come from the
-declared mirror, with its credential and trust; tracked as
-[B1247](milestones/backlog.md#b1247).
 
 Not yet met: a cluster's release images are mapped to the declared mirror;
 tracked as [B1248](milestones/backlog.md#b1248).

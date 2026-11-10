@@ -299,7 +299,6 @@ Alias cell.
 | [B1244](#b1244) | new, 2026-11-10 (D250 (2)); partly delivered by X344 on 2026-11-10 | enabling | Architecture | Each pinned client is judged by what its binary holds, and the service and emulated BMC images are scanned on a schedule and in the mirror registry | The build's gate landed (X344); a binary scan downloads every client, and an image scan needs a pinned scanner |
 | [B1245](#b1245) | new, 2026-11-10 (D250 (8)); partly delivered by X345 on 2026-11-10 | product | CLI, with Controller | The acquisition list names each add-on's catalog and operator images and each installed Machine's own package repositories | The list landed (X345); an add-on's images follow from the catalog it selects, which planning does not read |
 | [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355 on 2026-11-10 | product | Controller, with Desired state | Preflight proves the artifact mirror holds every client, a private trust anchor and a managed artifact server may serve it, and one declaration replaces the download mirrors | The declaration landed (X355); a probe needs an HTTP adapter in preflight, and a managed server needs B1249 |
-| [B1247](#b1247) | new, 2026-11-10 (D250 (7)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's images come from the declared mirror, with its credential and trust | D250 parks the controlled-network plan until the owner promotes it |
 | [B1248](#b1248) | new, 2026-11-10 (D250 (7)) | product | Container cluster | A cluster's release images are mapped to the declared mirror | D250 parks the controlled-network plan until the owner promotes it; B724's route awaits its acceptance |
 | [B1249](#b1249) | new, 2026-11-10 (D250 (8)) | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | D250 parks the controlled-network plan until the owner promotes it; no capability realizes a managed Registry |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
@@ -3391,21 +3390,6 @@ ArtifactServer as the mirror once [B1249](#b1249) builds one; and
 `spec.downloads` folded into the declaration before 1.0. **Exit evidence:** a
 preflight test against a mirror missing a file, a private-trust acquisition
 test, and effective-state goldens.
-
-### B1247
-
-**Owner:** Infrastructure services, with Substrate. **Kind:** product.
-**Requires:** B1246. **Definition:** Needs definition, from [D250](#d250) (4)
-and (7): a managed service takes a mirror only through its own
-`spec.image.local`, with no pull credential and the host's trust store alone,
-and the emulated BMC's image has no field ([B1237](#b1237) records the same
-gap). **Outcome:** with the declaration, each managed service's and the
-emulated BMC's image is the mirror's copy of the digest the request froze,
-pulled over HTTPS with the Registry's access credential and verified against
-its trust anchor, never through an insecure-registry setting, and a test
-holds, for every role, that a host which already holds the digest pulls
-nothing. **Exit evidence:** request goldens, custody tests for
-the credential, and a pull refused when the mirror lacks the digest.
 
 ### B1248
 
@@ -7947,6 +7931,18 @@ the owner's review:
    for the vendor clients, and the per-client mirrors refuse beside it rather
    than being removed, until the owner decides whether one declaration
    replaces them.
+6. **owner** (2026-11-10): "proceed until all items are done" authorizes the
+   remaining items of D250's plan, slice by slice in its delivery order, each
+   through its own independent review and `make check`; the operator-run
+   proof, [B1250](#b1250), stays the owner's. Taken by the session for
+   B1247 (X356), pending the owner's review: the image mirror is
+   `spec.mirror.registry.registryRef`, an external Registry alone until
+   [B1249](#b1249) builds a managed one; only an image of a public origin is
+   mirrored, so a vendor image stays direct as D250 (4) keeps it; the
+   mirrored reference is the one pulled and run, so a host holding only the
+   origin's copy pulls the same digest once; and the credential and trust
+   anchor are lent to each pull rather than written into the host's registry
+   configuration.
 
 ### D252
 

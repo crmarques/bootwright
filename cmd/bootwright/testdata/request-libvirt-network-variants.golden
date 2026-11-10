@@ -106,7 +106,7 @@
       "uri": "qemu:///system",
       "uuid": "aba29103-d1de-8981-82e0-9cff228257f9",
       "vcpu": 4,
-      "version": "machine-libvirt-v2"
+      "version": "machine-libvirt-v3"
     },
     {
       "controller": {
@@ -155,7 +155,7 @@
       "uri": "qemu:///system",
       "uuid": "99955efc-42ad-8162-a1fb-9cdabe3b8e57",
       "vcpu": 4,
-      "version": "machine-libvirt-v2"
+      "version": "machine-libvirt-v3"
     },
     {
       "controller": {
@@ -210,7 +210,7 @@
       "uri": "qemu:///system",
       "uuid": "f84ec133-de31-8b74-9989-e15275b6bca9",
       "vcpu": 4,
-      "version": "machine-libvirt-v2"
+      "version": "machine-libvirt-v3"
     }
   ],
   "installations": [

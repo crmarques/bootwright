@@ -28,7 +28,7 @@ func TestAFrozenHostRequestOfAnyOtherVersionRefuses(t *testing.T) {
 // A machine request of any version but the one this build writes refuses by its
 // version.
 func TestAFrozenMachineRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"machine-libvirt-v1", "machine-libvirt-v3", "machine-libvirt-v4", "machine-libvirt-v5", "machine-libvirt-v6", "machine-libvirt-v7", "machine-libvirt-v8", ""} {
+	for _, version := range []string{"machine-libvirt-v1", "machine-libvirt-v2", "machine-libvirt-v4", "machine-libvirt-v5", "machine-libvirt-v6", "machine-libvirt-v7", "machine-libvirt-v8", ""} {
 		_, err := DecodeMachineRequest([]byte(`{"version":"` + version + `"}`))
 		if reported := diagnostics.Of(err); err == nil || len(reported) == 0 || !strings.Contains(reported[0].Message, "unsupported version") {
 			t.Fatalf("version %q was not refused by its version: %v", version, err)

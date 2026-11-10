@@ -2,7 +2,7 @@
 - name: Validate the frozen artifact-server request
   ansible.builtin.assert:
     that:
-      - bootwright_artifact_server_request.version == 'artifact-server-nginx-v1'
+      - bootwright_artifact_server_request.version == 'artifact-server-nginx-v2'
       - bootwright_artifact_server_request.unit is string
       - bootwright_artifact_server_request.contentRoot.startswith('/var/lib/bootwright-hosted/')
       - bootwright_artifact_server_request.contentRoot.split('/') | length == 8
@@ -83,36 +83,30 @@
     status: running
   no_log: true
 
-- name: Check whether the pinned server image is already present
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/podman
-      - image
-      - exists
-      - '{{ bootwright_artifact_server_request.image }}'
-  register: infra_artifact_server_nginx_image_present
-  failed_when: false
-  changed_when: false
-
-# The frozen egress route is the only one this pull may take. A native tool
-# may read either spelling of a proxy variable, and an empty one lets the
-# other win, so both spellings carry the same route and none is ambient.
+# The pull is pinned by digest and takes the frozen egress route alone; under
+# a declared image mirror it binds that mirror's credential and trust anchor,
+# lent for this one pull. A host already holding the reference pulls nothing.
+# The pull's own output stays hidden, and its failure, from which the module
+# has already masked every secret argument, is reported by the task after it.
 - name: Acquire the pinned server image
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/podman
-      - pull
-      - '{{ bootwright_artifact_server_request.image }}'
-  environment:
-    HTTP_PROXY: '{{ bootwright_artifact_server_request.egress.httpProxy | default("") }}'
-    HTTPS_PROXY: '{{ bootwright_artifact_server_request.egress.httpsProxy | default("") }}'
-    NO_PROXY: '{{ bootwright_artifact_server_request.egress.noProxy | join(",") }}'
-    http_proxy: '{{ bootwright_artifact_server_request.egress.httpProxy | default("") }}'
-    https_proxy: '{{ bootwright_artifact_server_request.egress.httpsProxy | default("") }}'
-    no_proxy: '{{ bootwright_artifact_server_request.egress.noProxy | join(",") }}'
+  bootwright.core.image_acquire:
+    image: '{{ bootwright_artifact_server_request.image }}'
+    egress: '{{ bootwright_artifact_server_request.egress }}'
+    host: '{{ bootwright_artifact_server_request.imageSource.host | default("") }}'
+    username: "{{ lookup('ansible.builtin.file', material.imageUsername, rstrip=false) if material.imageUsername is defined else '' }}"
+    password: "{{ lookup('ansible.builtin.file', material.imagePassword, rstrip=false) if material.imagePassword is defined else '' }}"
+    auth: "{{ lookup('ansible.builtin.file', material.imageAuth, rstrip=false) if material.imageAuth is defined else '' }}"
+    trust: "{{ lookup('ansible.builtin.file', material.imageTrust, rstrip=false) if material.imageTrust is defined else '' }}"
+  vars:
+    material: '{{ bootwright_artifact_server_material }}'
   register: infra_artifact_server_nginx_pull
-  when: infra_artifact_server_nginx_image_present.rc != 0
-  changed_when: infra_artifact_server_nginx_image_present.rc != 0
+  failed_when: false
+  no_log: true
+
+- name: Report why the pinned server image could not be acquired
+  ansible.builtin.fail:
+    msg: '{{ infra_artifact_server_nginx_pull.msg | default("the image pull failed") }}'
+  when: infra_artifact_server_nginx_pull.image is not defined
 
 - name: Report image acquisition completion
   bootwright.core.artifact_server_protocol:

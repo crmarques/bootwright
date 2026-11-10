@@ -280,24 +280,17 @@ def evaluate(value, variables):
     return all(templar.evaluate_conditional(trust_as_template(str(item))) for item in conditions(value))
 
 
-def test_the_controller_pull_carries_the_frozen_egress_and_skips_a_present_image():
+def test_the_controller_pull_carries_the_frozen_egress_and_its_mirror_source():
     tasks = load_machine("apply.yml")
-    check = named(tasks, "Check whether the pinned controller image is already present")
-    pull = named(tasks, "Acquire the pinned controller image")
-    assert check < pull
-    assert argv_of(tasks[check])[:3] == ["/usr/bin/podman", "image", "exists"]
-    assert argv_of(tasks[pull])[:2] == ["/usr/bin/podman", "pull"]
+    pull = tasks[named(tasks, "Acquire the pinned controller image")]
+    arguments = pull["bootwright.core.image_acquire"]
+    assert pull["no_log"] is True and pull["register"] == "substrate_libvirt_machine_pull"
     templar = Templar(loader=LOADER, variables=machine_variables())
-    environment = templar.template(tasks[pull]["environment"])
-    proxy, exempt = "http://proxy.example.test:3128", "192.0.2.0/24,lab.example.test"
-    assert environment == {
-        "HTTP_PROXY": proxy, "HTTPS_PROXY": proxy, "NO_PROXY": exempt,
-        "http_proxy": proxy, "https_proxy": proxy, "no_proxy": exempt,
-    }
-    for rc, pulled in ((0, False), (1, True)):
-        variables = machine_variables(substrate_libvirt_machine_image_present={"rc": rc})
-        assert evaluate(tasks[pull].get("when", True), variables) is pulled, rc
-        assert evaluate(tasks[pull]["changed_when"], variables) is pulled, rc
+    assert templar.template(arguments["egress"]) == machine_variables()["bootwright_substrate_machine_request"]["egress"]
+    assert templar.template(arguments["image"]) == machine_variables()["bootwright_substrate_machine_request"]["controller"]["image"]
+    assert templar.template(arguments["host"]) == ""
+    for name in ("username", "password", "auth", "trust"):
+        assert templar.template(arguments[name]) == "", name
 
 
 def domain_xml(context, machine, uuid):
@@ -388,9 +381,9 @@ def test_a_machine_destroy_removes_each_empty_context_parent():
         assert evaluate(parent["failed_when"], {parent["register"]: result}) is failed, result
     validate = named(tasks, "Validate the frozen machine request")
     base = {"bootwright_substrate_machine_digest": "0" * 64}
-    assert holds(tasks[validate], dict(base, bootwright_substrate_machine_request=dict(MACHINE, version="machine-libvirt-v2")))
-    assert not holds(tasks[validate], dict(base, bootwright_substrate_machine_request=dict(MACHINE, version="machine-libvirt-v1")))
-    shallow = dict(MACHINE, version="machine-libvirt-v2", directory="/var/lib/libvirt/images/bootwright/rhel-01")
+    assert holds(tasks[validate], dict(base, bootwright_substrate_machine_request=dict(MACHINE, version="machine-libvirt-v3")))
+    assert not holds(tasks[validate], dict(base, bootwright_substrate_machine_request=dict(MACHINE, version="machine-libvirt-v2")))
+    shallow = dict(MACHINE, version="machine-libvirt-v3", directory="/var/lib/libvirt/images/bootwright/rhel-01")
     assert not holds(tasks[validate], dict(base, bootwright_substrate_machine_request=shallow))
 
 

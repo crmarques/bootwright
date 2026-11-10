@@ -13097,3 +13097,33 @@ occurred. **Limitations:** an attempt whose every node refuses its pre-boot
 proof after the mark stays unknown and needs a destroy before a fresh
 install ([B1265](backlog.md#b1265)). An independent review found the window
 closed and put the destroy first in the remedy.
+
+### X356 — Service and BMC images from the image mirror
+
+**Item:** B1247 (2026-11-10, [D250](backlog.md#d250) (4) and (7),
+[D251](backlog.md#d251) (6)), delivered in-tree.
+`spec.mirror.registry.registryRef` on the Environment selects an external
+Registry as the image mirror ([image mirror](../api/environment.md#image-mirror)).
+Each managed service's, the artifact server's and the emulated BMC's image
+whose origin is public is then the frozen request's
+`<registry url>/<origin registry>/<repository>@<digest>`, with an
+`imageSource` naming the mirror host and the Registry's credential and trust
+Secrets, never their values; a vendor image and a service's own
+`spec.image.local` stay where they are, and without the declaration no
+request moves. The three roles pull through one module,
+`bootwright.core.image_acquire`, which pulls nothing when the host holds the
+reference, otherwise pulls over HTTPS with TLS verification on and the frozen
+egress, binds the lent credential and anchor from a private directory it
+removes after the pull, lends a credential only to the mirror's own host and
+an auth document's entry for that host alone, reads neither the host's own
+login nor its `certs.d` for a mirror, and fails naming the reference when the
+mirror lacks it, a failure the role reports uncensored. The mirror's Secrets
+are lent to apply alone. Plan refuses a managed
+Registry as the mirror, a new row of the Environment refusal table, and
+`render acquisitions` lists each mirrored reference.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** a managed Registry cannot be the mirror until
+[B1249](backlog.md#b1249); a host holding only the origin's copy pulls the
+mirror's once; the live proof is [B1250](backlog.md#b1250).
+

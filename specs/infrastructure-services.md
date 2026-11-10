@@ -336,7 +336,9 @@ else the executable's compiled default; `local` and `public` are two
 references the operator may hold at two places, the executable compares neither
 with the other, and an unset one falls through to the next. An authored
 reference is pinned by content digest at [admission](api/infrastructure-services.md#management-and-placement)
-and the compiled default is one, so a tag never reaches a plan.
+and the compiled default is one, so a tag never reaches a plan. Under a
+declared [image mirror](api/environment.md#image-mirror), a `public` or
+compiled reference of a public origin is pulled from the mirror instead.
 Image acquisition uses the placement Machine's normalized
 [proxy choice](api/machines.md#machine-proxy) and no ambient proxy variable;
 a managed, authenticated or private-trust Proxy refuses before registration, as

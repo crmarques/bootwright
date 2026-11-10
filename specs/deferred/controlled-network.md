@@ -174,7 +174,7 @@ Each step leaves a working product.
 2. Consuming a mirror the operator fills:
    [B1245](../milestones/backlog.md#b1245),
    [B1246](../milestones/backlog.md#b1246),
-   [B1247](../milestones/backlog.md#b1247) and
+   [B1247](../milestones/delivered.md#x356--service-and-bmc-images-from-the-image-mirror) and
    [B1248](../milestones/backlog.md#b1248), with the acceptance of
    [B724](../milestones/m3.md#b724).
 3. Bootwright builds and fills the mirror host:

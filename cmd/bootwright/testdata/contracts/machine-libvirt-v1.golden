@@ -1,6 +1,6 @@
 implementation: machine-libvirt-v1
-content-digest: 8f965da9ca0b4b43acac258c74d9b34b8b1b2ccd835a71ed65124dd206199bc8
-request-version: machine-libvirt-v2
+content-digest: 30c50b983a7b7aaf3535463ef7be3610e98135d612aa6814dfecc692b3b9c245
+request-version: machine-libvirt-v3
 automation-formats: https://bootwright.io/substrate/v1
 mark-formats: https://bootwright.io/substrate/v1
 proof-ids: none
@@ -34,6 +34,11 @@ request-schema:
   controller.credentialsRef string
   controller.endpoint string
   controller.image string
+  controller.imageSource *struct managedservice.ImageSource omitempty
+  controller.imageSource.credentialsRef string omitempty
+  controller.imageSource.credentialsType string omitempty
+  controller.imageSource.host string
+  controller.imageSource.trustBundleRef string omitempty
   controller.port int
   controller.unit string
   directory string

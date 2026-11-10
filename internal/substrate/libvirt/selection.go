@@ -212,10 +212,11 @@ func machineRequestFor(catalog api.Catalog, provider, machine api.Object, placem
 	}
 	address := provider.Spec().Get("libvirt", "bmcEmulation", "bindAddress").Text()
 	uuid := substrate.DomainUUID(contextName, name)
+	image, source := managedservice.MirroredImage(catalog, emulatorImage)
 	return MachineRequest{
 		Controller: Controller{
 			Address: address, CertificateRef: certificate, CredentialsRef: credentials, Endpoint: substrate.ControllerEndpoint(address, port, uuid),
-			Image: emulatorImage, Port: port, Unit: substrate.ControllerUnitName(contextName, name),
+			Image: image, ImageSource: source, Port: port, Unit: substrate.ControllerUnitName(contextName, name),
 		},
 		Directory:  substrate.DiskDirectory(contextName, name),
 		Disks:      disks,

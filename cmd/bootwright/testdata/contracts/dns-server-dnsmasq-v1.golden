@@ -1,6 +1,6 @@
 implementation: dns-server-dnsmasq-v1
-content-digest: 544a52237167283339c48158b98dc4639c72040c96fb129f3ba84675bde743df
-request-version: managed-service-v1
+content-digest: 6abdf9d67e382b6113a9612f65ae954e5efb21bc8c2af7e64953382475e690a5
+request-version: managed-service-v2
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -36,6 +36,11 @@ request-schema:
   identity.context string
   identity.service string
   image string
+  imageSource *struct managedservice.ImageSource omitempty
+  imageSource.credentialsRef string omitempty
+  imageSource.credentialsType string omitempty
+  imageSource.host string
+  imageSource.trustBundleRef string omitempty
   implementation string
   ingressHosts []string omitempty
   kind string

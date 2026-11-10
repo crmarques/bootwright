@@ -1,6 +1,6 @@
 implementation: ntp-server-chrony-v1
-content-digest: ec5e1a6ce989dff7c9cb987f5f0f6c97f8dc6f166f8ad2572f2394727e3ef029
-request-version: managed-service-v1
+content-digest: 0205ab2ecd86afa6a623a2603abccd1a444bb95b8e6a8edc6f563ce467cd8beb
+request-version: managed-service-v2
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -36,6 +36,11 @@ request-schema:
   identity.context string
   identity.service string
   image string
+  imageSource *struct managedservice.ImageSource omitempty
+  imageSource.credentialsRef string omitempty
+  imageSource.credentialsType string omitempty
+  imageSource.host string
+  imageSource.trustBundleRef string omitempty
   implementation string
   ingressHosts []string omitempty
   kind string

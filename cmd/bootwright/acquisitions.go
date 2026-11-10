@@ -102,6 +102,9 @@ func serviceAcquisitions(catalog api.Catalog) ([]cli.Acquisition, error) {
 			if err != nil {
 				return nil, err
 			}
+			if !service.Spec().Get("image", "local").Present() {
+				reference, _ = managedservice.MirroredImage(catalog, reference)
+			}
 			rows = append(rows, imageAcquisition("service image", reference, []string{service.Spec().Get("machineRef").Text()}, service.Identity()))
 		}
 	}
@@ -118,7 +121,8 @@ func emulatorAcquisitions(catalog api.Catalog) []cli.Acquisition {
 		if substrate.Variant(provider) != substrate.ArmLibvirt || !referenced[provider.Name()] {
 			continue
 		}
-		rows = append(rows, imageAcquisition("emulated BMC image", libvirt.EmulatorImage(), []string{substrate.HostMachine(provider)}, provider.Identity()))
+		reference, _ := managedservice.MirroredImage(catalog, libvirt.EmulatorImage())
+		rows = append(rows, imageAcquisition("emulated BMC image", reference, []string{substrate.HostMachine(provider)}, provider.Identity()))
 	}
 	return rows
 }

@@ -33,6 +33,7 @@ type Request struct {
 	Forwarders     []string          `json:"forwarders,omitempty"`
 	Identity       Identity          `json:"identity"`
 	Image          string            `json:"image"`
+	ImageSource    *ImageSource      `json:"imageSource,omitempty"`
 	Implementation string            `json:"implementation"`
 	IngressHosts   []string          `json:"ingressHosts,omitempty"`
 	Kind           string            `json:"kind"`

@@ -1,6 +1,6 @@
 implementation: proxy-squid-v1
-content-digest: f6f3786ce9c60b6b307aa8169bc8e87ab296769ab62d47fcfc5e536479147c16
-request-version: managed-service-v1
+content-digest: 962df68ac86c8580e35283db0b9df3cce490e0e218b088c81ef95057f09dbd07
+request-version: managed-service-v2
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -36,6 +36,11 @@ request-schema:
   identity.context string
   identity.service string
   image string
+  imageSource *struct managedservice.ImageSource omitempty
+  imageSource.credentialsRef string omitempty
+  imageSource.credentialsType string omitempty
+  imageSource.host string
+  imageSource.trustBundleRef string omitempty
   implementation string
   ingressHosts []string omitempty
   kind string

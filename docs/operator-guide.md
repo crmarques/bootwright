@@ -215,8 +215,8 @@ runs:
 | OpenShift clients and installer | The controller | `mirror.openshift.com`, a vendor origin | Nothing to do |
 | Helm, which every OpenShift cluster selects, `virtctl` and `govc` | The controller | `get.helm.sh` and GitHub | `spec.mirror.artifacts` on the Environment: see the tools below |
 | The OKD clients and installer | The controller | GitHub | Not possible yet: their release metadata is read from GitHub |
-| A managed service's image | The Machine the service runs on | The registry its compiled default names | `spec.image.local` on the service |
-| The emulated BMC's image | The libvirt provider's host | `quay.io` | The host's own container configuration |
+| A managed service's image | The Machine the service runs on | The registry its compiled default names | `spec.mirror.registry` on the Environment, or `spec.image.local` on the service: see the images below |
+| The emulated BMC's image | The libvirt provider's host | `quay.io` | `spec.mirror.registry` on the Environment |
 | Installation media | The controller | The file or URL you name | `media add --from-file`, or `--from-url` from your own server |
 | An OpenShift release | The controller while it builds the image, then every node | `quay.io`, where the release payload is published | `spec.install.registries` on the cluster |
 | A cluster's operators | The cluster's nodes | The registries of the catalog each add-on binding names | Nothing to do for a Red Hat catalog or IBM's Data Foundation on `icr.io`, vendor origins; another's repositories are mapped by the same `imageDigestSources` where the cluster pulls them by digest |
@@ -240,16 +240,24 @@ name resolver, the proxy and the time server, `registry.access.redhat.com`
 for the artifact server and `quay.io` for the emulated BMC. The exact
 references are the `catalog.go` of each kind under
 `internal/infrastructureservices/` and `internal/substrate/libvirt/catalog.go`.
-`spec.image.local` on a service names the copy in your registry, pinned by
-digest ([image pins](../specs/api/infrastructure-services.md#management-and-placement)).
-Bootwright supplies no registry login for that pull and no trust anchor of
-its own: it is the placement host's own `podman pull`, so it succeeds where
-the registry admits anonymous pulls of those repositories, or that host's
-container configuration already holds a login, and where the host trusts the
-registry's certificate authority. The emulated BMC
-has no such field: its host pulls the pinned image only when it does not hold
-it, so a mirror for `quay.io` in that host's `registries.conf`, or the image
-loaded beforehand, serves it.
+`spec.mirror.registry.registryRef` on the Environment selects an external
+Registry as the image mirror ([image mirror](../specs/api/environment.md#image-mirror)):
+every one of those images from `docker.io` or `quay.io`, the emulated BMC's
+included, is then pulled from `<registry url>/<origin registry>/<repository>`
+at the same digest, with the Registry's `credentialsRef` and `trustBundleRef`
+lent to that one pull. The artifact server's image stays on
+`registry.access.redhat.com`, a vendor origin. Copy each image the
+`service image` and `emulated BMC image` rows of `bootwright render
+acquisitions` name with its digest kept, for example with `skopeo copy --all
+--preserve-digests docker://quay.io/metal3-io/sushy-tools@sha256:<digest>
+docker://<registry url>/quay.io/metal3-io/sushy-tools:<any tag>`; the pull
+reads it by digest. A Machine whose `spec.proxy` names a proxy reaches the
+mirror through it unless the mirror's host is in its `noProxy`.
+`spec.image.local` on a service instead names one copy in your registry,
+pinned by digest ([image pins](../specs/api/infrastructure-services.md#management-and-placement));
+that pull binds no login or trust anchor of Bootwright's, so it succeeds where
+the registry admits anonymous pulls and the placement host trusts its
+certificate authority.
 
 **An OpenShift release.** `spec.install.registries.mirror` selects a declared
 Registry, and `imageDigestSources` maps the release's repositories to it; a

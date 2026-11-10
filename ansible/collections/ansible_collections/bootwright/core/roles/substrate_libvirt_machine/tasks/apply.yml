@@ -2,7 +2,7 @@
 - name: Validate the frozen machine request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_machine_request.version == 'machine-libvirt-v2'
+      - bootwright_substrate_machine_request.version == 'machine-libvirt-v3'
       - bootwright_substrate_machine_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_substrate_machine_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$')
       - bootwright_substrate_machine_request.directory == '/var/lib/libvirt/images/bootwright/'
@@ -170,36 +170,30 @@
   register: substrate_libvirt_machine_configuration
 
 
-- name: Check whether the pinned controller image is already present
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/podman
-      - image
-      - exists
-      - '{{ bootwright_substrate_machine_request.controller.image }}'
-  register: substrate_libvirt_machine_image_present
-  failed_when: false
-  changed_when: false
-
-# The frozen egress route is the only one this pull may take. A native tool
-# may read either spelling of a proxy variable, and an empty one lets the
-# other win, so both spellings carry the same route and none is ambient.
+# The pull is pinned by digest and takes the frozen egress route alone; under
+# a declared image mirror it binds that mirror's credential and trust anchor,
+# lent for this one pull. A host already holding the reference pulls nothing.
+# The pull's own output stays hidden, and its failure, from which the module
+# has already masked every secret argument, is reported by the task after it.
 - name: Acquire the pinned controller image
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/podman
-      - pull
-      - '{{ bootwright_substrate_machine_request.controller.image }}'
-  environment:
-    HTTP_PROXY: '{{ bootwright_substrate_machine_request.egress.httpProxy | default("") }}'
-    HTTPS_PROXY: '{{ bootwright_substrate_machine_request.egress.httpsProxy | default("") }}'
-    NO_PROXY: '{{ bootwright_substrate_machine_request.egress.noProxy | join(",") }}'
-    http_proxy: '{{ bootwright_substrate_machine_request.egress.httpProxy | default("") }}'
-    https_proxy: '{{ bootwright_substrate_machine_request.egress.httpsProxy | default("") }}'
-    no_proxy: '{{ bootwright_substrate_machine_request.egress.noProxy | join(",") }}'
+  bootwright.core.image_acquire:
+    image: '{{ bootwright_substrate_machine_request.controller.image }}'
+    egress: '{{ bootwright_substrate_machine_request.egress }}'
+    host: '{{ bootwright_substrate_machine_request.controller.imageSource.host | default("") }}'
+    username: "{{ lookup('ansible.builtin.file', material.imageUsername, rstrip=false) if material.imageUsername is defined else '' }}"
+    password: "{{ lookup('ansible.builtin.file', material.imagePassword, rstrip=false) if material.imagePassword is defined else '' }}"
+    auth: "{{ lookup('ansible.builtin.file', material.imageAuth, rstrip=false) if material.imageAuth is defined else '' }}"
+    trust: "{{ lookup('ansible.builtin.file', material.imageTrust, rstrip=false) if material.imageTrust is defined else '' }}"
+  vars:
+    material: '{{ bootwright_substrate_machine_material }}'
   register: substrate_libvirt_machine_pull
-  when: substrate_libvirt_machine_image_present.rc != 0
-  changed_when: substrate_libvirt_machine_image_present.rc != 0
+  failed_when: false
+  no_log: true
+
+- name: Report why the pinned controller image could not be acquired
+  ansible.builtin.fail:
+    msg: '{{ substrate_libvirt_machine_pull.msg | default("the image pull failed") }}'
+  when: substrate_libvirt_machine_pull.image is not defined
 
 - name: Observe the controller's authentication file
   ansible.builtin.stat:
@@ -225,6 +219,7 @@
       - /usr/bin/podman
       - run
       - --rm
+      - --pull=never
       - --interactive
       - --network=none
       - --entrypoint

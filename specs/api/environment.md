@@ -30,7 +30,7 @@ Environment fields emit in this order:
 | `spec.defaults` | kind-keyed partial specs | no | `{}` | Omitted object fields inherit the corresponding kind entry under the rules below. |
 | `spec.downloads` | object | no | source-specific | Closed download-mirror policy below. |
 | `spec.dependencyVersions` | object | no | this build's defaults | Version intent for the prerequisites this Environment controller stage installs; closed shape below. |
-| `spec.mirror` | object | no | — | The [artifact mirror](#artifact-mirror) that serves every public-origin client. |
+| `spec.mirror` | object | no | — | The [artifact mirror](#artifact-mirror) that serves every public-origin client, and the [image mirror](#image-mirror) that serves every public-origin image a Machine runs as a service. |
 | `spec.controller` | object | yes | — | Required controller Machine selection below. |
 | `spec.lifecycle` | object | no | — | Offline-rescue input; a present `rescue` is refused until a rescue journey exists. |
 
@@ -398,6 +398,33 @@ Not yet met: preflight proves the mirror holds every file before the stage
 runs, the mirror's trust may be a private anchor, and a managed artifact
 server may be the mirror; tracked as [B1246](../milestones/backlog.md#b1246).
 
+## Image mirror
+
+`spec.mirror.registry.registryRef` selects one external
+[Registry](infrastructure-services.md) as the image mirror. Each managed
+service's image, the artifact server's and the emulated BMC's whose origin is
+a [public origin](../security.md#acquisition-origins) is then pulled and run as
+`<registry url>/<origin registry>/<repository>@<digest>`, the digest the build
+pins, so a short Docker Hub name takes `docker.io` as its origin registry: for
+example `mirror.example.test/images/quay.io/metal3-io/sushy-tools@sha256:…`. An
+image of a vendor origin, such as the artifact server's from
+`registry.access.redhat.com`, stays on its vendor, and a service's own
+`spec.image.local` stays its image.
+
+The pull goes over HTTPS with TLS verification on, through the placement
+Machine's frozen egress route, and binds the Registry's `credentialsRef` and
+`trustBundleRef`: the operation lends them for that one pull, in a private
+directory the pull removes after it, never through an insecure-registry
+setting or the host's registry configuration. A host already holding the
+mirrored reference pulls nothing; one holding only the origin's copy pulls the
+same digest once from the mirror. A pull the mirror cannot serve fails naming
+the reference. A managed Registry refuses as the mirror
+([refusal table](#refusal-table)). `bootwright render acquisitions` names each
+mirrored reference.
+
+Not yet met: a Bootwright-managed Registry may be the image mirror; tracked as
+[B1249](../milestones/backlog.md#b1249).
+
 ## Controller Machine
 
 `spec.controller` is a required closed record containing only required
@@ -514,6 +541,7 @@ Environment.
 | Per-client mirror beside the artifact mirror | `spec.downloads.helmMirror`, `govcMirror` or `virtctlMirror` with `spec.mirror.artifacts` | `spec.mirror.artifacts of <environment> names where every public-origin client comes from, and spec.downloads.<field> names it again` | `remove spec.downloads.<field> from <environment>` |
 | Unpinned client behind the artifact mirror | a selected public-origin client at a release the tool table does not pin, with `spec.mirror.artifacts` | `with spec.mirror.artifacts, this executable acquires a public-origin client only at a release its tool table pins, and <environment> selects <tool> <release>, whose checksum only its publisher holds` | `declare no <tool> release in spec.dependencyVersions of <environment> so it takes this build's pinned default, or remove spec.mirror.artifacts` |
 | OKD clients behind the artifact mirror | an OKD cluster's clients, with `spec.mirror.artifacts` | `with spec.mirror.artifacts, this executable acquires a public-origin client only at a release its tool table pins, and <environment> selects <tool> <release>, whose checksum only its publisher holds` | `select an openshift distribution, whose clients come from their vendor, or remove spec.mirror.artifacts from <environment>` |
+| Managed image mirror | `spec.mirror.registry.registryRef` selecting a managed Registry | `this executable pulls images only from an external image mirror, and <registry> is managed` | `select an external Registry in spec.mirror.registry.registryRef of <environment>, or remove spec.mirror.registry` |
 
 ## Lifecycle rescue declaration
 

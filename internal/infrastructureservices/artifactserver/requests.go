@@ -8,24 +8,25 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-const requestVersion = "artifact-server-nginx-v1"
+const requestVersion = "artifact-server-nginx-v2"
 
 // Request is the complete frozen intent for one managed artifact server. Its
 // fields are declared in the canonical key order the plan digest requires, and
 // it carries no secret value: TLS names a declaration and its non-secret
 // fingerprint, never material or a material digest.
 type Request struct {
-	BindAddress string     `json:"bindAddress"`
-	ContentRoot string     `json:"contentRoot"`
-	Egress      Egress     `json:"egress"`
-	Endpoints   []Endpoint `json:"endpoints"`
-	Identity    Identity   `json:"identity"`
-	Image       string     `json:"image"`
-	Listeners   []Listener `json:"listeners"`
-	Placement   Placement  `json:"placement"`
-	TLS         *TLS       `json:"tls,omitempty"`
-	Unit        string     `json:"unit"`
-	Version     string     `json:"version"`
+	BindAddress string                      `json:"bindAddress"`
+	ContentRoot string                      `json:"contentRoot"`
+	Egress      Egress                      `json:"egress"`
+	Endpoints   []Endpoint                  `json:"endpoints"`
+	Identity    Identity                    `json:"identity"`
+	Image       string                      `json:"image"`
+	ImageSource *managedservice.ImageSource `json:"imageSource,omitempty"`
+	Listeners   []Listener                  `json:"listeners"`
+	Placement   Placement                   `json:"placement"`
+	TLS         *TLS                        `json:"tls,omitempty"`
+	Unit        string                      `json:"unit"`
+	Version     string                      `json:"version"`
 }
 
 // Identity and Egress are the shared managed-service values and Placement is
@@ -125,6 +126,7 @@ func (r Request) secretReferences() []string {
 		references = append(references, r.TLS.Secret)
 	}
 	references = append(references, r.Placement.SecretReferences()...)
+	references = append(references, r.ImageSource.SecretReferences()...)
 	slices.Sort(references)
 	return slices.Compact(references)
 }

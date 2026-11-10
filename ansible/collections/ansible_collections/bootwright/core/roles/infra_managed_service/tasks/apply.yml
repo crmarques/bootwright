@@ -2,7 +2,7 @@
 - name: Validate the frozen managed service request
   ansible.builtin.assert:
     that:
-      - bootwright_managed_service_request.version == 'managed-service-v1'
+      - bootwright_managed_service_request.version == 'managed-service-v2'
       - bootwright_managed_service_request.implementation in infra_managed_service_implementations
       - bootwright_managed_service_request.unit is string
       - bootwright_managed_service_request.contentRoot.startswith('/var/lib/bootwright-hosted/')
@@ -84,36 +84,30 @@
     status: running
   no_log: true
 
-- name: Check whether the pinned service image is already present
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/podman
-      - image
-      - exists
-      - '{{ bootwright_managed_service_request.image }}'
-  register: infra_managed_service_image_present
-  failed_when: false
-  changed_when: false
-
-# The frozen egress route is the only one this pull may take. A native tool
-# may read either spelling of a proxy variable, and an empty one lets the
-# other win, so both spellings carry the same route and none is ambient.
+# The pull is pinned by digest and takes the frozen egress route alone; under
+# a declared image mirror it binds that mirror's credential and trust anchor,
+# lent for this one pull. A host already holding the reference pulls nothing.
+# The pull's own output stays hidden, and its failure, from which the module
+# has already masked every secret argument, is reported by the task after it.
 - name: Acquire the pinned service image
-  ansible.builtin.command:
-    argv:
-      - /usr/bin/podman
-      - pull
-      - '{{ bootwright_managed_service_request.image }}'
-  environment:
-    HTTP_PROXY: '{{ bootwright_managed_service_request.egress.httpProxy | default("") }}'
-    HTTPS_PROXY: '{{ bootwright_managed_service_request.egress.httpsProxy | default("") }}'
-    NO_PROXY: '{{ bootwright_managed_service_request.egress.noProxy | join(",") }}'
-    http_proxy: '{{ bootwright_managed_service_request.egress.httpProxy | default("") }}'
-    https_proxy: '{{ bootwright_managed_service_request.egress.httpsProxy | default("") }}'
-    no_proxy: '{{ bootwright_managed_service_request.egress.noProxy | join(",") }}'
+  bootwright.core.image_acquire:
+    image: '{{ bootwright_managed_service_request.image }}'
+    egress: '{{ bootwright_managed_service_request.egress }}'
+    host: '{{ bootwright_managed_service_request.imageSource.host | default("") }}'
+    username: "{{ lookup('ansible.builtin.file', material.imageUsername, rstrip=false) if material.imageUsername is defined else '' }}"
+    password: "{{ lookup('ansible.builtin.file', material.imagePassword, rstrip=false) if material.imagePassword is defined else '' }}"
+    auth: "{{ lookup('ansible.builtin.file', material.imageAuth, rstrip=false) if material.imageAuth is defined else '' }}"
+    trust: "{{ lookup('ansible.builtin.file', material.imageTrust, rstrip=false) if material.imageTrust is defined else '' }}"
+  vars:
+    material: '{{ bootwright_managed_service_material }}'
   register: infra_managed_service_pull
-  when: infra_managed_service_image_present.rc != 0
-  changed_when: infra_managed_service_image_present.rc != 0
+  failed_when: false
+  no_log: true
+
+- name: Report why the pinned service image could not be acquired
+  ansible.builtin.fail:
+    msg: '{{ infra_managed_service_pull.msg | default("the image pull failed") }}'
+  when: infra_managed_service_pull.image is not defined
 
 - name: Report image acquisition completion
   bootwright.core.infra_service_protocol:

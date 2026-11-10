@@ -73,6 +73,11 @@ func TestArtifactServerRequestGoldensKeepTheirBytes(t *testing.T) {
 		"ssh-placement": {sshHost, artifactServer(text("machineRef", "services"))},
 		"proxy-egress":  {proxied, external, artifactServer()},
 		"digest-image":  {controller(), artifactServer(field("image", api.MapValue(text("public", digest))))},
+		"image-mirror": {controller(), artifactServer(field("image", api.MapValue(text("public", "quay.io/bootwright/nginx@sha256:"+strings.Repeat("a", 64))))),
+			api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue(field("mirror", api.MapValue(field("registry", api.MapValue(text("registryRef", "mirror"))))))),
+			api.NewObject(api.Registry, "mirror", api.Value{}, api.MapValue(text("management", "external"), text("url", "mirror.example.test/images"),
+				text("credentialsRef", "mirror-pull"), text("trustBundleRef", "mirror-ca"))),
+			api.NewObject(api.Secret, "mirror-pull", api.Value{}, api.MapValue(text("type", "usernamePassword"), text("source", "contextStore")))},
 	} {
 		t.Run(name, func(t *testing.T) {
 			matchesGolden(t, "request-"+name, requestGoldenOf(t, objects...))

@@ -209,6 +209,7 @@ func automationFormats() map[string]automationFormat {
 		"bootwright-ceph-metadata-v1":                transient("the registry client's User-Agent"),
 		"bootwright-pull-broker-v1":                  transient("the pull broker's User-Agent"),
 		"bootwright-contained-public-label-probe-v1": transient("the bytes the label probe writes in its own scratch and reads back"),
+		"bootwright-image-":                          transient("the private directory one image pull is lent its credential and trust anchor in, removed after it"),
 		"ceph-package-transaction-v1":                transient("the guest package transaction policy ceph_packages.transaction_request builds and the shared resolver reads within one run"),
 
 		"export-prerequisite-monitor-v2": transient("the MON v2 prerequisite refusal token, read from the result channel within one adapter run"),
@@ -227,7 +228,7 @@ func automationFormats() map[string]automationFormat {
 		"ceph-replication-evidence-v1": {class: formatMirrored},
 		// The request versions each role refuses unless its request names.
 		"substrate-host-libvirt-v1":  {class: formatMirrored},
-		"machine-libvirt-v2":         {class: formatMirrored},
+		"machine-libvirt-v3":         {class: formatMirrored},
 		"machine-baremetal-v1":       {class: formatMirrored},
 		"substrate-host-kubevirt-v1": {class: formatMirrored},
 		"machine-kubevirt-v1":        {class: formatMirrored},
@@ -243,8 +244,8 @@ func automationFormats() map[string]automationFormat {
 		"os-host-firewall-evidence-v1":          {class: formatMirrored},
 		"cluster-media-agent-v1":                {class: formatMirrored},
 		"cluster-install-agent-v1":              {class: formatMirrored},
-		"artifact-server-nginx-v1":              {class: formatMirrored},
-		"managed-service-v1":                    {class: formatMirrored},
+		"artifact-server-nginx-v2":              {class: formatMirrored},
+		"managed-service-v2":                    {class: formatMirrored},
 		// Power is no plan block: each run binds its request to the power
 		// content digest these implementations feed, and nothing is retained.
 		"machine-power-v1":      {class: formatMirrored},

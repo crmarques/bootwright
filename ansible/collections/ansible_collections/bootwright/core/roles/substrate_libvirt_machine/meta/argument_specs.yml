@@ -57,7 +57,7 @@ argument_specs:
             type: str
             required: true
             choices:
-              - machine-libvirt-v2
+              - machine-libvirt-v3
       bootwright_substrate_machine_digest:
         type: str
         required: true

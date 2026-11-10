@@ -547,6 +547,7 @@ func (c MachineCapability) run(ctx context.Context, execution lifecycle.Executio
 	}
 	if operation == "apply" {
 		materials = append(materials, lifecycle.MaterialFile{Name: "bmc-private-key", Part: secrets.PrivateKeyPart, Secret: request.Controller.CertificateRef, Variable: "controllerPrivateKey"})
+		materials = append(materials, request.Controller.ImageSource.Materials()...)
 	}
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: MachineImplementation, Operation: operation, Variable: machineVariable,

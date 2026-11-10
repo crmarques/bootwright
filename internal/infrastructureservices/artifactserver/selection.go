@@ -69,6 +69,10 @@ func requestFor(catalog api.Catalog, server api.Object, controllerMachine, conte
 	if err != nil {
 		return Request{}, err
 	}
+	var source *managedservice.ImageSource
+	if !spec.Get("image", "local").Present() {
+		image, source = managedservice.MirroredImage(catalog, image)
+	}
 	egress, err := managedservice.EgressFor(catalog, machine)
 	if err != nil {
 		return Request{}, err
@@ -88,6 +92,7 @@ func requestFor(catalog api.Catalog, server api.Object, controllerMachine, conte
 		Endpoints:   endpoints,
 		Identity:    Identity{Block: BlockID(name), Context: contextName, Service: name},
 		Image:       image,
+		ImageSource: source,
 		Listeners:   listeners,
 		Placement:   placement,
 		Unit:        unitPrefix + "-" + contextName + "-artifacts-" + name,

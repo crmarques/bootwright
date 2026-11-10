@@ -25,6 +25,9 @@ argument_specs:
           image:
             type: str
             required: true
+          imageSource:
+            type: dict
+            required: false
           listeners:
             type: list
             elements: dict
@@ -42,7 +45,7 @@ argument_specs:
             type: str
             required: true
             choices:
-              - artifact-server-nginx-v1
+              - artifact-server-nginx-v2
       bootwright_artifact_server_digest:
         type: str
         required: true

@@ -155,6 +155,10 @@ func (c Capability) requestFor(catalog api.Catalog, object api.Object, controlle
 	if err != nil {
 		return Request{}, err
 	}
+	var source *ImageSource
+	if !spec.Get("image", "local").Present() {
+		image, source = MirroredImage(catalog, image)
+	}
 	egress, err := EgressFor(catalog, machine)
 	if err != nil {
 		return Request{}, err
@@ -178,6 +182,7 @@ func (c Capability) requestFor(catalog api.Catalog, object api.Object, controlle
 		Endpoints:      endpoints,
 		Identity:       Identity{Block: c.definition.BlockID(name), Context: contextName, Service: name},
 		Image:          image,
+		ImageSource:    source,
 		Implementation: c.definition.Implementation,
 		Kind:           string(c.definition.Kind),
 		Placement:      placement,
@@ -400,9 +405,13 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	if err != nil {
 		return lifecycle.RunResult{}, err
 	}
+	var materials []lifecycle.MaterialFile
+	if operation == "apply" {
+		materials = request.ImageSource.Materials()
+	}
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: c.definition.Implementation, Operation: operation, Variable: c.definition.Variable,
-		Canonical: canonical, Placement: request.Placement,
+		Canonical: canonical, Placement: request.Placement, Materials: materials,
 		Refusals: ReadinessRefusals(request.Kind, request.Identity.Service, request.BindAddress, []int{request.Port}),
 	}))
 }

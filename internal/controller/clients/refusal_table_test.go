@@ -72,6 +72,9 @@ func TestControllerRefusalTableMatchesUnsupported(t *testing.T) {
 			withValues(names, "<tool>", "helm", "<release>", "99.0.0")},
 		"OKD clients behind the artifact mirror": {[]api.Object{environment(artifactMirror()), machine(), okdCluster()},
 			withValues(names, "<tool>", "openshift-clients", "<release>", "4.19.3")},
+		"Managed image mirror": {[]api.Object{environment(field("mirror", api.MapValue(field("registry", api.MapValue(text("registryRef", "mirror")))))), machine(), cluster(),
+			api.NewObject(api.Registry, "mirror", api.Value{}, api.MapValue(text("management", "managed"), text("machineRef", "controller")))},
+			withValues(names, "<registry>", "Registry/mirror")},
 	}
 	for _, row := range refusalTable(t) {
 		test, found := cases[row.name]

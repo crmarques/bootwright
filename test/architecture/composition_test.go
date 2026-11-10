@@ -31,9 +31,9 @@ func applicationValues() packageSymbols {
 		// ScopedFailure is the failure value a dependency adapter raises for
 		// its caller's scope to render; it binds no replaceable service.
 		"internal/controller/prerequisites": {"ScopedFailure": true},
-		// The immutable request and service definition other capabilities
-		// construct and read; they bind no replaceable service.
-		"internal/infrastructureservices/managedservice": {"Request": true, "Definition": true},
+		// The immutable request, service definition and image source other
+		// capabilities construct and read; they bind no replaceable service.
+		"internal/infrastructureservices/managedservice": {"Request": true, "Definition": true, "ImageSource": true},
 		// The removal gate's values, what a capability is asked and what it
 		// answers; they bind no replaceable service.
 		"internal/reconciliation/lifecycle": {"Probe": true, "Quiescence": true},
