@@ -70,10 +70,14 @@ func physicalWithRoot(hints ...api.FieldValue) api.Catalog {
 }
 
 func TestPhysicalAgentRootRefusesBeforeRenderingInstallerInputs(t *testing.T) {
-	for _, device := range []string{"/dev/sda", "/dev/disk/by-path/pci-0000:00:04.0"} {
+	for device, remedy := range map[string]string{
+		"/dev/sda":                               "volumeRef",
+		"/dev/disk/by-path/pci-0000:00:04.0":     "volumeRef",
+		"/dev/disk/by-id/wwn-0x5000c500a1b2c3d4": "spec.substrate.baremetal.rootDevice.wwn: 0x5000c500a1b2c3d4",
+	} {
 		catalog := physicalWithRoot(text("deviceName", device))
 		refusals := Refusals(catalog)
-		if len(refusals) != 1 || !strings.Contains(refusals[0].Reason, "stable root selector") || !strings.Contains(refusals[0].Remediation, "Machine/metal-01") || !strings.Contains(refusals[0].Remediation, "volumeRef") {
+		if len(refusals) != 1 || !strings.Contains(refusals[0].Reason, "never by spec.hardware.rootDevice.deviceName") || !strings.Contains(refusals[0].Remediation, "Machine/metal-01") || !strings.Contains(refusals[0].Remediation, remedy) {
 			t.Fatalf("unsafe root refusal = %+v", refusals)
 		}
 		if _, _, _, err := Requests(catalog, "controller", testContext); err == nil {
@@ -82,13 +86,11 @@ func TestPhysicalAgentRootRefusesBeforeRenderingInstallerInputs(t *testing.T) {
 	}
 }
 
-func TestPhysicalAgentWWNPathReachesTheInstallerAsItsWWN(t *testing.T) {
+func TestPhysicalAgentWWNReachesTheInstallerAsItsWWNHint(t *testing.T) {
 	const wwn = "0x5000c500a1b2c3d4"
 	want := map[string]any{"wwn": wwn}
 	for name, hints := range map[string][]api.FieldValue{
-		"wwn":                     {text("wwn", wwn)},
-		"wwn path":                {text("deviceName", "/dev/disk/by-id/wwn-"+wwn)},
-		"wwn path beside its wwn": {text("deviceName", "/dev/disk/by-id/wwn-"+wwn), text("wwn", wwn)},
+		"wwn": {text("wwn", wwn)},
 	} {
 		t.Run(name, func(t *testing.T) {
 			media, install, _ := onlyRequests(t, physicalWithRoot(hints...))
@@ -100,9 +102,11 @@ func TestPhysicalAgentWWNPathReachesTheInstallerAsItsWWN(t *testing.T) {
 			}
 		})
 	}
-	refusals := Refusals(physicalWithRoot(text("deviceName", "/dev/disk/by-id/wwn-"+wwn), text("wwn", "0x5000c500a1b2c3d5")))
-	if len(refusals) != 1 || !strings.Contains(refusals[0].Remediation, "volumeRef") {
-		t.Fatalf("a path beside another wwn = %+v", refusals)
+	for _, malformed := range []string{"0X5000C500A1B2C3D4", "5000c500a1b2c3d4", "naa.5000c500a1b2c3d4"} {
+		refusals := Refusals(physicalWithRoot(text("wwn", malformed)))
+		if len(refusals) != 1 || !strings.Contains(refusals[0].Remediation, "spec.substrate.baremetal.rootDevice.wwn on Machine/metal-01") {
+			t.Fatalf("a malformed wwn %s = %+v", malformed, refusals)
+		}
 	}
 }
 

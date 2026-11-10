@@ -20,8 +20,8 @@ import (
 )
 
 func eraseMachine() api.Object {
-	machine := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
-	hardware := machine.Spec().Get("hardware").With("eraseOnRemoval", api.MapValue(text("method", "logicalOverwrite"), field("targets", api.ListValue(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"), text("wwn", "wwn-example"), text("serialNumber", "serial-example"), number("sizeBytes", "8192"))))))
+	machine := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
+	hardware := machine.Spec().Get("hardware").With("eraseOnRemoval", api.MapValue(text("method", "logicalOverwrite"), field("targets", api.ListValue(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"), text("wwn", "0x5000c500a1b2c3d4"), text("serialNumber", "serial-example"), number("sizeBytes", "8192"))))))
 	return api.NewObject(api.Machine, machine.Name(), api.Value{}, machine.Spec().With("hardware", hardware))
 }
 
@@ -170,7 +170,7 @@ func TestPhysicalEraseRootTargetAgreesWithTheDeclaredRootIdentity(t *testing.T) 
 		"a serial number in another case": {"0x5000c500a1b2c3d4", "zc1a2b3c", true},
 	} {
 		t.Run(name, func(t *testing.T) {
-			machine := server(api.MapValue(text("deviceName", path), text("wwn", "0x5000c500a1b2c3d4"), text("serialNumber", "ZC1A2B3C")))
+			machine := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"), text("serialNumber", "ZC1A2B3C")))
 			hardware := machine.Spec().Get("hardware").With("eraseOnRemoval", api.MapValue(text("method", "logicalOverwrite"), field("targets", api.ListValue(
 				api.MapValue(text("deviceName", path), text("wwn", test.wwn), text("serialNumber", test.serial), number("sizeBytes", "8192")),
 				api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d9"), text("wwn", "0x5000c500a1b2c3d9"), text("serialNumber", "OTHER"), number("sizeBytes", "8192"))))))
@@ -324,13 +324,13 @@ func TestPhysicalEraseResolvesEachTargetMethodAndProvesItsExactCoverage(t *testi
 		{"the policy default", EraseMetadataClear, "", EraseMetadataClear, EraseMetadataClear},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			machine := server(api.MapValue(text("deviceName", root)))
+			machine := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
 			second := api.MapValue(text("deviceName", data), text("wwn", "0x5000c500a1b2c3d9"), text("serialNumber", "DATA"), number("sizeBytes", "2000398934016"))
 			if test.override != "" {
 				second = second.With("method", api.StringValue(test.override))
 			}
 			hardware := machine.Spec().Get("hardware").With("eraseOnRemoval", api.MapValue(text("method", test.policy), field("targets", api.ListValue(
-				api.MapValue(text("deviceName", root), text("wwn", "wwn-example"), text("serialNumber", "serial-example"), number("sizeBytes", "8192")), second))))
+				api.MapValue(text("deviceName", root), text("wwn", "0x5000c500a1b2c3d4"), text("serialNumber", "serial-example"), number("sizeBytes", "8192")), second))))
 			machine = api.NewObject(api.Machine, machine.Name(), api.Value{}, machine.Spec().With("hardware", hardware))
 			install := requestOf(t, labCatalog(metalProvider(), machine, sshKeySecret(api.MapValue(field("generated", api.MapValue())))), machine.Name())
 			request, err := eraseRequest(machine, install)
@@ -384,9 +384,9 @@ func TestPhysicalEraseRequestBoundsALogicalOverwriteTargetTo896GiB(t *testing.T)
 		{EraseLogicalOverwrite, "962072678400", true},
 		{EraseMetadataClear, "962072678400", false},
 	} {
-		machine := server(api.MapValue(text("deviceName", root)))
+		machine := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
 		hardware := machine.Spec().Get("hardware").With("eraseOnRemoval", api.MapValue(text("method", EraseLogicalOverwrite), field("targets", api.ListValue(
-			api.MapValue(text("deviceName", root), text("wwn", "wwn-example"), text("serialNumber", "serial-example"), number("sizeBytes", "8192")),
+			api.MapValue(text("deviceName", root), text("wwn", "0x5000c500a1b2c3d4"), text("serialNumber", "serial-example"), number("sizeBytes", "8192")),
 			api.MapValue(text("deviceName", data), text("wwn", "0x5000c500a1b2c3d9"), text("serialNumber", "DATA"), number("sizeBytes", test.size), text("method", test.method))))))
 		machine = api.NewObject(api.Machine, machine.Name(), api.Value{}, machine.Spec().With("hardware", hardware))
 		install := requestOf(t, labCatalog(metalProvider(), machine, sshKeySecret(api.MapValue(field("generated", api.MapValue())))), machine.Name())
@@ -457,12 +457,41 @@ func TestPhysicalEraseIncludesARootDeclaredBySerialNumberAndSize(t *testing.T) {
 	}
 }
 
-// A root disk declared by path and size is erased only through its path's
+// A root disk declared by its wwn is the erase target naming the by-id path
+// that wwn derives or, under any other native path, that wwn; either one must
+// carry the root's declared size.
+func TestPhysicalEraseMatchesAWWNRootByItsDerivedPathOrItsWWN(t *testing.T) {
+	for name, test := range map[string]struct {
+		device, wwn, size string
+		refused           bool
+	}{
+		"the derived path":          {"/dev/disk/by-id/wwn-0x5000c500a1b2c3d4", "0x5000c500a1b2c3d4", "8192", false},
+		"the derived path, resized": {"/dev/disk/by-id/wwn-0x5000c500a1b2c3d4", "0x5000c500a1b2c3d4", "12288", true},
+		"another path, its wwn":     {"/dev/sda", "naa.5000C500A1B2C3D4", "12288", true},
+		"another path and wwn":      {"/dev/sda", "0x5000c500a1b2c3d9", "12288", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			machine := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"), number("sizeBytes", "8192")))
+			hardware := machine.Spec().Get("hardware").With("eraseOnRemoval", api.MapValue(text("method", "logicalOverwrite"), field("targets", api.ListValue(
+				api.MapValue(text("deviceName", test.device), text("wwn", test.wwn), text("serialNumber", "ZC1A2B3C"), number("sizeBytes", test.size))))))
+			machine = api.NewObject(api.Machine, machine.Name(), api.Value{}, machine.Spec().With("hardware", hardware))
+			if !machineref.RootEraseSelected(machine) == (test.wwn != "0x5000c500a1b2c3d9") {
+				t.Fatalf("root erase selected = %v", machineref.RootEraseSelected(machine))
+			}
+			install := requestOf(t, labCatalog(metalProvider(), machine, sshKeySecret(api.MapValue(field("generated", api.MapValue())))), machine.Name())
+			if _, err := eraseRequest(machine, install); (err != nil) != test.refused {
+				t.Fatalf("erase request error = %v, refused %v", diagnostics.Of(err), test.refused)
+			}
+		})
+	}
+}
+
+// A root disk declared by its wwn and size is erased only through its
 // target of that size.
 func TestPhysicalEraseRootTargetAgreesWithTheDeclaredRootSize(t *testing.T) {
 	const path = "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"
 	for size, refused := range map[string]bool{"8192": false, "12288": true} {
-		machine := server(api.MapValue(text("deviceName", path), number("sizeBytes", "8192")))
+		machine := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"), number("sizeBytes", "8192")))
 		hardware := machine.Spec().Get("hardware").With("eraseOnRemoval", api.MapValue(text("method", "logicalOverwrite"), field("targets", api.ListValue(
 			api.MapValue(text("deviceName", path), text("wwn", "0x5000c500a1b2c3d4"), text("serialNumber", "ZC1A2B3C"), number("sizeBytes", size))))))
 		machine = api.NewObject(api.Machine, machine.Name(), api.Value{}, machine.Spec().With("hardware", hardware))

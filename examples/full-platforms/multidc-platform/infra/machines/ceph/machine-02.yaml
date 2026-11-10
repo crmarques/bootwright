@@ -11,6 +11,9 @@ spec:
     providerRef: bare-metal
 
     baremetal:
+      rootDevice:
+        wwn: '0x5000c500a1b2c312'
+
       bmc:
         address: https://bmc-storage-a-02.example.com/redfish/v1/Systems/1
         protocol: redfish
@@ -71,6 +74,3 @@ spec:
       - name: nic1
       - name: nic2
       - name: nic3
-
-    rootDevice:
-      deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c312

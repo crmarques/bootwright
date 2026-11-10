@@ -2444,7 +2444,7 @@ machine. Before changing it, an implementation must durably hold an exclusive
 context claim, prove the exact management controller/System identity, prove
 the complete live MAC set matches the immutable `Machine`, select one whole
 root disk by a durable identity in one of the forms of the
-[root-device rule](api/machines.md#bmc-and-root-device-shape): a WWN path, a
+[root-device rule](api/machines.md#bmc-and-root-device-shape): a WWN, a
 serial number and exact size, or a logical volume proved through verified BMC
 TLS by its NAA identifier and exact capacity and found again by that
 identifier inside the installer. The selector resolves to exactly one whole

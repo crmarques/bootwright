@@ -73,9 +73,25 @@ func RootDeviceHintPath(name string) string {
 	return "spec.hardware.rootDevice." + name
 }
 
+// RootDevicePath is the path a Machine's root disk is written through: its
+// declared deviceName, or the /dev/disk/by-id path its physical wwn derives.
 func RootDevicePath(machine api.Object) string {
-	return machine.Spec().Get("hardware", "rootDevice", "deviceName").Text()
+	if declared := machine.Spec().Get("hardware", "rootDevice", "deviceName").Text(); declared != "" {
+		return declared
+	}
+	return WWNDevicePath(machine.Spec().Get("substrate", ArmBaremetal, "rootDevice", "wwn").Text())
 }
+
+// WWNDevicePath is the /dev/disk/by-id path of a root wwn, or nothing when
+// the wwn is not 0x and 16 or 32 lowercase hexadecimal digits.
+func WWNDevicePath(wwn string) string {
+	if !ValidRootWWN(wwn) {
+		return ""
+	}
+	return "/dev/disk/by-id/wwn-" + wwn
+}
+
+func ValidRootWWN(wwn string) bool { return volumeWWN.MatchString(wwn) }
 
 func MachineRootDeviceHints(machine api.Object) RootDeviceHints { return rootDeviceHints(machine) }
 

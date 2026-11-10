@@ -16,7 +16,9 @@ so this example's destroy needs no data-loss authorization or power-off.
 - Topology: controller `192.0.2.1` runs DNS (`53/tcp+udp`), NTP (`123/udp`),
   and the artifact server (`8443/tcp` https, `8080/tcp` http); `metal-01`
   installs at `198.51.100.11/24` over `eno1` (one ethernet interface; no bond
-  or VLAN), root disk `/dev/disk/by-id/wwn-0x5000c500a1b2c301`. The BMC is an
+  or VLAN), root disk named by `substrate.baremetal.rootDevice.wwn`
+  `0x5000c500a1b2c301`, which the installation writes through
+  `/dev/disk/by-id/wwn-0x5000c500a1b2c301`. The BMC is an
   HTTPS Redfish system, verified against the `lab-bmc-ca` bundle.
 - The declared NIC addresses are compared with Redfish inventory before media
   insertion. `metal-01-host-key` is delivered privately, so completion proves

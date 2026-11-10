@@ -12,6 +12,7 @@ import (
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 const EraseImplementation = "physical-erase-v1"
@@ -87,7 +88,7 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 		return request, refusal("api.invariant", "physical erase requires its install network declaration", "declare the Machine install network")
 	}
 	seen := [3]map[string]bool{{}, {}, {}}
-	root := machine.Spec().Get("hardware", "rootDevice", "deviceName").Text()
+	root := substrate.RootDevicePath(machine)
 	hardware := install.Target.Hardware
 	for _, value := range policy.Get("targets").Items() {
 		size, err := strconv.ParseInt(value.Get("sizeBytes").Text(), 10, 64)
@@ -123,7 +124,7 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 		if root == "" && !bySerial && hardware != nil && hardware.SerialNumber != "" && target.SerialNumber == hardware.SerialNumber {
 			return request, refusal("api.invariant", "a serial-selected root erase target uses the original serial-only selector", "omit deviceName and wwn for this root target")
 		}
-		isRoot := root != "" && target.DeviceName == root ||
+		isRoot := root != "" && (target.DeviceName == root || hardware != nil && hardware.WWN != "" && !bySerial && eraseWWN(target.WWN) == eraseWWN(hardware.WWN)) ||
 			root == "" && bySerial && hardware != nil && hardware.SerialNumber != "" && target.SerialNumber == hardware.SerialNumber
 		if isRoot && hardware != nil &&
 			(hardware.WWN != "" && eraseWWN(target.WWN) != eraseWWN(hardware.WWN) || hardware.SerialNumber != "" && target.SerialNumber != hardware.SerialNumber ||

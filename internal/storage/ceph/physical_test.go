@@ -203,6 +203,45 @@ func TestPhysicalCephFreezesTheRootSerialItsMachineDeclares(t *testing.T) {
 	}
 }
 
+// A root its Machine declares by wwn is the root the Ceph host excludes from
+// its OSD devices, by that WWN, and the root an erase target names by its
+// derived path or by that WWN under any other path, so the host then retains
+// no root.
+func TestPhysicalCephFreezesTheRootWWNItsMachineDeclares(t *testing.T) {
+	const wwn = "0x7000000000000002"
+	for name, target := range map[string]api.Value{
+		"no root target":           {},
+		"the derived path":         requestMap("deviceName", "/dev/disk/by-id/wwn-"+wwn, "wwn", wwn, "serialNumber", "ROOT-2", "sizeBytes", 1<<39),
+		"another path and its wwn": requestMap("deviceName", "/dev/sdz", "wwn", "naa.7000000000000002", "serialNumber", "ROOT-2", "sizeBytes", 1<<39),
+	} {
+		t.Run(name, func(t *testing.T) {
+			catalog, cluster := physicalSerialCatalog(func(spec api.Value) api.Value {
+				targets := []api.Value{requestMap("serialNumber", "SER-2", "sizeBytes", 1<<40)}
+				if target.Present() {
+					targets = append(targets, target)
+				}
+				return spec.WithPath(requestMap("wwn", wwn), "substrate", "baremetal", "rootDevice").
+					WithPath(api.ListValue(targets...), "hardware", "eraseOnRemoval", "targets")
+			})
+			r, err := baseRequest(catalog, cluster, "synthetic")
+			if err != nil {
+				t.Fatal(diagnostics.Of(err))
+			}
+			for _, host := range r.Hosts {
+				if host.Machine != "node-2" {
+					continue
+				}
+				if host.RootWWN != wwn || host.RootSerial != "" || host.RetainRoot != !target.Present() {
+					t.Fatalf("node-2 root = wwn %q serial %q retained %v", host.RootWWN, host.RootSerial, host.RetainRoot)
+				}
+				if _, refused := rootDeviceRefusals(host)["device-root"]; !refused {
+					t.Fatal("a wwn-declared root is not excluded from the host's OSD devices")
+				}
+			}
+		})
+	}
+}
+
 func TestPhysicalCephRefusesASerialSelectionItsMachineDoesNotDeclare(t *testing.T) {
 	const undeclared = "the serial number SER-2 that this OSD selection names is no eraseOnRemoval target of Machine node-2 declared without deviceName, which would give its exact size"
 	const undeclaredRemedy = "declare the disk in spec.hardware.eraseOnRemoval.targets of Machine node-2 with its serialNumber and sizeBytes and no deviceName, or select it by that target's deviceName"

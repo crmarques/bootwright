@@ -8,7 +8,10 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const rootSizePath = "$.spec.substrate.baremetal.rootDevice.sizeBytes"
+const (
+	rootSizePath   = "$.spec.substrate.baremetal.rootDevice.sizeBytes"
+	rootSerialPath = "$.spec.substrate.baremetal.rootDevice.serialNumber"
+)
 
 // ValidDiskSerial accepts the serial grammar the physical disk workers prove.
 func ValidDiskSerial(value string) bool { return clearSerial.MatchString(value) }
@@ -35,8 +38,8 @@ type selectingSerial struct{ field, serial string }
 func selectingSerials(o api.Object) []selectingSerial {
 	var selecting []selectingSerial
 	hints := substrate.MachineRootDeviceHints(o)
-	if hints.DeviceName == "" && hints.SerialNumber != "" && hints.SizeBytes != "" {
-		selecting = append(selecting, selectingSerial{"$.spec.substrate.baremetal.rootDevice.serialNumber", hints.SerialNumber})
+	if hints.DeviceName == "" && (hints.WWN == "" || !installed(o)) && hints.SerialNumber != "" && hints.SizeBytes != "" {
+		selecting = append(selecting, selectingSerial{rootSerialPath, hints.SerialNumber})
 	}
 	for _, policy := range []string{"eraseOnRemoval", "clearOnInstall"} {
 		for index, target := range o.Spec().Get("hardware", policy, "targets").Items() {
@@ -76,9 +79,9 @@ func validateSelectingSerials(o api.Object, c api.Catalog) []api.Issue {
 		declared := declaredSerials(other)
 		for _, entry := range selecting {
 			if declared[entry.serial] {
-				remedy := "correct the serial number here or on " + other.Identity() + ", or select the disk by its /dev/disk/by-id/wwn-0x path"
-				if !installed(o) {
-					remedy = "correct the serial number here or on " + other.Identity() + ", or declare spec.substrate.baremetal.rootDevice.wwn as a stable WWN"
+				remedy := "correct the serial number here or on " + other.Identity() + ", or declare spec.substrate.baremetal.rootDevice.wwn as the disk's stable WWN"
+				if entry.field != rootSerialPath {
+					remedy = "correct the serial number here or on " + other.Identity() + ", or name the disk by its /dev/disk/by-id/wwn-0x deviceName with its wwn"
 				}
 				issues = append(issues, invariant(entry.field, "a disk selected by its serial number needs a serial number no other Machine declares, and "+other.Identity()+" declares "+entry.serial,
 					remedy))

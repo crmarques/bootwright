@@ -17,6 +17,10 @@ addresses, disk names, WWNs, media and credentials.
   is a documentation placeholder. Each OSD WWN must resolve to an empty local
   whole disk distinct from the root and every boot device. Replace each target
   from independently verified inventory.
+- Each Machine names its root disk by `substrate.baremetal.rootDevice.wwn`,
+  the one WWN root form an installer accepts
+  ([root-device rule](../../../specs/api/machines.md#bmc-and-root-device-shape)),
+  and the OSD services never name that disk.
 - The cluster uses one OSD service per host (`data-1` to `data-3`, canonical
   `/dev/disk/by-id/wwn-...` paths) because physical WWNs are unique. A host
   may select up to 15 disks, the most its 16-target erase policy covers beside

@@ -8248,7 +8248,7 @@ safety slice. No push.
 answered "B1267: proceed with a", then, told why the typed field is the better
 design for one WWN root form, "B1274: go with b", and "go for other parked
 items you listed". This authorizes, out of sequence for implementation, X368
-(M1, [B1298](delivered.md#x368--mac-claims)), X369 (M1, [B1274](m1.md#b1274)), X370 (M1,
+(M1, [B1298](delivered.md#x368--mac-claims)), X369 (M1, [B1274](delivered.md#x369--wwn-root)), X370 (M1,
 [B1270](m1.md#b1270)), X371 (M1, [B1271](m1.md#b1271) and
 [B1272](m1.md#b1272)), X372 (M1, [B1275](m1.md#b1275)), X373 (M1,
 [B1263](m1.md#b1263)), X374 (M2, [B1264](m2.md#b1264)) and X375 (M3,

@@ -65,7 +65,7 @@ func hardwareNIC(name, mac string) api.Value {
 // metalOn is the bare-metal Machine on its own network configuration, with
 // its install address on iface and the hardware NICs given.
 func metalOn(iface string, nics ...api.Value) api.Object {
-	metal := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
+	metal := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
 	var names, addresses []api.Value
 	for _, nic := range nics {
 		names = append(names, api.MapValue(text("name", nic.Get("name").Text())))

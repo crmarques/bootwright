@@ -68,7 +68,7 @@ func validateErase(o api.Object, variant string) []api.Issue {
 		if root == "" && hints.SerialNumber != "" && target.Get("serialNumber").Text() == hints.SerialNumber && target.Has("deviceName") {
 			issues = append(issues, invariant(field, "a serial-selected root erase target uses the original serial-only selector", "omit deviceName and wwn for this root target"))
 		}
-		isRoot := root != "" && target.Get("deviceName").Text() == root || root == "" && hints.SerialNumber != "" && target.Get("serialNumber").Text() == hints.SerialNumber
+		isRoot := namesRoot(root, target) || root == "" && hints.SerialNumber != "" && target.Get("serialNumber").Text() == hints.SerialNumber
 		if isRoot && !sized {
 			issues = append(issues, invariant(field+".sizeBytes", "an explicit root erase target must match the root's exact capacity", "correct the root erase target capacity"))
 		}
@@ -80,7 +80,7 @@ func validateErase(o api.Object, variant string) []api.Issue {
 func RootEraseSelected(o api.Object) bool {
 	root, hints := substrate.RootDevicePath(o), substrate.MachineRootDeviceHints(o)
 	for _, target := range o.Spec().Get("hardware", "eraseOnRemoval", "targets").Items() {
-		if root != "" && target.Get("deviceName").Text() == root {
+		if namesRoot(root, target) {
 			return true
 		}
 		if hints.SerialNumber != "" && target.Get("serialNumber").Text() == hints.SerialNumber && target.Get("sizeBytes").Text() == hints.SizeBytes {
@@ -88,4 +88,15 @@ func RootEraseSelected(o api.Object) bool {
 		}
 	}
 	return false
+}
+
+func namesRoot(root string, target api.Value) bool {
+	if root == "" {
+		return false
+	}
+	if target.Get("deviceName").Text() == root {
+		return true
+	}
+	hex := clearDevicePath.FindStringSubmatch(root)
+	return hex != nil && target.Has("wwn") && strings.TrimPrefix(clearWWN(target.Get("wwn").Text()), "naa.") == hex[1]
 }

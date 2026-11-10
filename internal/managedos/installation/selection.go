@@ -9,6 +9,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -559,17 +560,16 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 	// fixed, so its derived interfaces are deliberately left out of what the
 	// installation freezes.
 	if derived.Physical {
-		hardware := Hardware{RootVolumeRef: derived.RootDeviceHints.VolumeRef, ClearOnInstall: clearTargetsFor(machine), RootDevice: derived.RootDeviceHints.DeviceName, SerialNumber: derived.RootDeviceHints.SerialNumber}
-		if size := derived.RootDeviceHints.SizeBytes; size != "" {
+		hints := rootHints(derived)
+		hardware := Hardware{RootVolumeRef: hints.VolumeRef, ClearOnInstall: clearTargetsFor(machine), RootDevice: hints.DeviceName, SerialNumber: hints.SerialNumber}
+		if size := hints.SizeBytes; size != "" {
 			parsed, err := strconv.ParseInt(size, 10, 64)
 			if err != nil {
 				parsed = -1
 			}
 			hardware.SizeBytes = parsed
 		}
-		if derived.RootDeviceHints.WWN != "" {
-			hardware.WWN = "0x" + canonicalWWN(derived.RootDeviceHints.WWN)
-		}
+		hardware.WWN = hints.WWN
 		for _, declared := range derived.Interfaces {
 			hardware.Interfaces = append(hardware.Interfaces, Interface{MACAddress: declared.MACAddress, Name: declared.Name})
 		}
@@ -599,12 +599,20 @@ func canonicalWWN(declared string) string {
 	return strings.TrimPrefix(strings.ToLower(declared), "0x")
 }
 
-var physicalRootIdentity = []string{"deviceName", "serialNumber", "sizeBytes", "wwn", "volumeRef", "bootVolume"}
+var physicalRootIdentity = []string{"serialNumber", "sizeBytes", "wwn", "volumeRef", "bootVolume"}
 
 func rootSelectorRemedy(on string) string {
-	return "set spec.hardware.rootDevice.deviceName" + on + " to the disk's /dev/disk/by-id/wwn-0x path, 16 or 32 lowercase hexadecimal digits, set spec.substrate.baremetal.rootDevice.serialNumber and sizeBytes" + on +
-		" to the disk's serial number and exact capacity in bytes, or set spec.substrate.baremetal.rootDevice.volumeRef" + on +
-		" to an existing logical volume, or remove every root hint so the Machine defaults to bootVolume; a kernel name such as /dev/sda and a wwn alone are refused"
+	return machineref.RootFormsRemedy(on) + "; a device path such as /dev/sda is refused"
+}
+
+// rootHints are the root-device hints an installation writes through: a
+// physical root's wwn names the /dev/disk/by-id path the installer selects.
+func rootHints(target substrate.Target) substrate.RootDeviceHints {
+	hints := target.RootDeviceHints
+	if target.Physical && hints.DeviceName == "" {
+		hints.DeviceName = substrate.WWNDevicePath(hints.WWN)
+	}
+	return hints
 }
 
 func serialRoot(hints substrate.RootDeviceHints) bool {
@@ -615,11 +623,18 @@ func serialRoot(hints substrate.RootDeviceHints) bool {
 // realized target, or nothing when it can. It is the one statement of that
 // refusal, so Unsupported and the request builder never disagree about it.
 func refusedTarget(machine api.Object, target substrate.Target, private bool) (reason, remediation string) {
-	// A physical machine already holds whatever it holds, and a kernel name
-	// may name another disk on the next boot, so only a by-id WWN path does, a serial and size,
-	// or a proved volume. A wwn alone is not yet derived into a device the installer can name.
-	if target.Physical && !durableRootDevice(target.RootDeviceHints.DeviceName) && !serialRoot(target.RootDeviceHints) && target.RootDeviceHints.VolumeRef == nil {
-		return "a physical installation erases only a root disk named by its /dev/disk/by-id/wwn-0x path, by its serial number and exact size, or by a volumeRef or bootVolume logical volume, and the Machine names none of them",
+	hints := rootHints(target)
+	if target.Physical {
+		if reason, remediation := machineref.PhysicalRootDeviceNameRefusal(machine); reason != "" {
+			return reason, remediation
+		}
+		if hints.WWN != "" && !substrate.ValidRootWWN(hints.WWN) {
+			return "a physical installation names its root disk by a wwn of 0x followed by 16 or 32 lowercase hexadecimal digits, and the wwn the Machine declares is not one",
+				"set spec.substrate.baremetal.rootDevice.wwn on " + machine.Identity() + " to the disk's WWN in that form"
+		}
+	}
+	if target.Physical && !durableRootDevice(hints.DeviceName) && !serialRoot(hints) && hints.VolumeRef == nil {
+		return "a physical installation erases only a root disk named by its wwn, by its serial number and exact size, or by a volumeRef or bootVolume logical volume, and the Machine names none of them",
 			rootSelectorRemedy(" on " + machine.Identity())
 	}
 	// The Kickstart selects its disk by name alone, so any other hint would be
@@ -635,14 +650,10 @@ func refusedTarget(machine api.Object, target substrate.Target, private bool) (r
 		}
 	}
 	if len(uncarried) != 0 {
-		return "a managed-OS installation selects its root disk by deviceName or, on a physical Machine, by serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the other root-device hints the Machine declares",
+		return "a managed-OS installation selects its root disk by deviceName on a virtual Machine or, on a physical Machine, by wwn, serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the other root-device hints the Machine declares",
 			"remove " + strings.Join(uncarried, ", ") + " from " + machine.Identity()
 	}
-	if wwn := target.RootDeviceHints.WWN; wwn != "" && "/dev/disk/by-id/wwn-0x"+canonicalWWN(wwn) != target.RootDeviceHints.DeviceName {
-		return "a physical installation proves its root disk by the wwn the Machine declares only beside the deviceName that names it, and that wwn names another disk or stands alone",
-			"set spec.hardware.rootDevice.deviceName on " + machine.Identity() + " to /dev/disk/by-id/wwn-0x followed by the WWN spec.substrate.baremetal.rootDevice.wwn declares, or remove the wwn"
-	}
-	if serial := target.RootDeviceHints.SerialNumber; serial != "" && !rootSerial.MatchString(serial) {
+	if serial := hints.SerialNumber; serial != "" && !rootSerial.MatchString(serial) {
 		return "a physical installation compares its root disk's serial number inside the installer, and the serialNumber the Machine declares is not one it can compare",
 			"set spec.substrate.baremetal.rootDevice.serialNumber on " + machine.Identity() +
 				" to the disk's serial number, at most 256 ASCII letters, digits and ._:+/=- characters, or remove it"

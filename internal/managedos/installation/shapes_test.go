@@ -233,7 +233,7 @@ func TestOnlyTheFirstRefusalAMachineMeetsIsReported(t *testing.T) {
 		reason, remediation string
 	}{
 		"a target before its network": {labCatalog(hinted, kernelNamed),
-			"a managed-OS installation selects its root disk by deviceName or, on a physical Machine, by serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the other root-device hints the Machine declares",
+			"a managed-OS installation selects its root disk by deviceName on a virtual Machine or, on a physical Machine, by wwn, serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the other root-device hints the Machine declares",
 			"remove spec.hardware.rootDevice.rotational from Machine/rhel-01"},
 		"a network before its profile": {labCatalog(kernelNamed, passworded), kernel, kernelRemedy},
 		"a profile before its servers": {labCatalog(passworded, servicesHost(), onServices),
@@ -257,7 +257,7 @@ func TestOnlyTheFirstRefusalAMachineMeetsIsReported(t *testing.T) {
 // placement, not for its fetch.
 func TestTheProviderHostRuleDoesNotRefuseAPhysicalTarget(t *testing.T) {
 	sshPlaced := artifactServer(text("machineRef", "services"), text("bindAddress", "192.0.2.2"))
-	metal := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
+	metal := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
 	catalog := catalogOf(environment(), controller(), servicesHost(), metalProvider(), networkConfig(), sshPlaced,
 		service(api.DNSServer, "lab-dns", "53"), service(api.NTPServer, "lab-ntp", "123"), bootImage(), installProfile(), metal)
 	profile, _ := catalog.Find(api.MachineInstallProfile, "rhel-9-8")

@@ -116,37 +116,37 @@ func TestLabBaremetalClaimsTheMachineByItsController(t *testing.T) {
 // A root device path reaches installer directives and shell words verbatim, so
 // admission refuses a Machine whose deviceName carries a line break, naming the
 // Machine and the field, before anything is planned.
-func TestLabBaremetalAdmissionRefusesANewlineInTheRootDevice(t *testing.T) {
+func TestLabBaremetalAdmissionRefusesANewlineInTheRootWWN(t *testing.T) {
 	for name, value := range map[string]string{
-		"embedded directive": `"/dev/sda\nclearpart --all --initlabel"`,
-		"trailing newline":   `"/dev/sda\n"`,
+		"embedded directive": `"0x5000c500a1b2c301\nclearpart --all --initlabel"`,
+		"trailing newline":   `"0x5000c500a1b2c301\n"`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			sources := exampleDirectory(t, "lab-baremetal")
 			replaced := 0
 			for index, file := range sources.Files {
 				body := string(file.Bytes())
-				if !strings.Contains(body, "deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c301\n") {
+				if !strings.Contains(body, "wwn: '0x5000c500a1b2c301'\n") {
 					continue
 				}
-				body = strings.Replace(body, "deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c301\n", "deviceName: "+value+"\n", 1)
+				body = strings.Replace(body, "wwn: '0x5000c500a1b2c301'\n", "wwn: "+value+"\n", 1)
 				sources.Files[index] = desiredstate.NewSourceFile(file.Path(), []byte(body))
 				replaced++
 			}
 			if replaced != 1 {
-				t.Fatalf("the example declares %d root devices, want 1", replaced)
+				t.Fatalf("the example declares %d root WWNs, want 1", replaced)
 			}
 			state, _, err := wireCompiler().Compile(context.Background(), sources)
 			if state != nil || err == nil {
-				t.Fatal("a root device carrying a line break was admitted")
+				t.Fatal("a root WWN carrying a line break was admitted")
 			}
 			for _, diagnostic := range diagnostics.Of(err) {
-				if diagnostic.Code == "api.value" && diagnostic.Field == "$.spec.hardware.rootDevice.deviceName" &&
+				if diagnostic.Field == "$.spec.substrate.baremetal.rootDevice.wwn" &&
 					diagnostic.Object != nil && diagnostic.Object.Kind == string(api.Machine) && diagnostic.Object.Name == "metal-01" {
 					return
 				}
 			}
-			t.Fatalf("no deviceName refusal naming Machine/metal-01: %#v", diagnostics.Of(err))
+			t.Fatalf("no wwn refusal naming Machine/metal-01: %#v", diagnostics.Of(err))
 		})
 	}
 }

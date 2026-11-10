@@ -170,7 +170,7 @@ func unsupportedReason(catalog api.Catalog, cluster api.Object) (reason, remedia
 				return reason, remedy
 			}
 		}
-		if _, reason, remediation := installerRootDeviceHints(bound, target.RootDeviceHints, target.Physical); reason != "" {
+		if _, reason, remediation := installerRootDeviceHints(bound, target.RootDeviceHints); reason != "" {
 			return reason, remediation
 		}
 	}
@@ -398,12 +398,11 @@ const maxInstallerRootDeviceGigabytes = 1<<53 - 1
 
 // installerRootDeviceHints renders the root-device hints a node declares
 // under their admitted names and declared types, or nothing when it declares
-// none: sizeBytes is proved only before boot, a volume becomes its proved WWN
-// later, and a physical node's /dev/disk/by-id/wwn-0x deviceName becomes its
-// wwn. A hint the agent installer or the frozen request cannot carry refuses
+// none: sizeBytes is proved only before boot, and a volume becomes its proved
+// WWN later. A hint the agent installer or the frozen request cannot carry refuses
 // instead, naming the bound Machine, because that is what an operator changes;
 // the rule on a virtual node's deviceName is the installer's own.
-func installerRootDeviceHints(bound api.Object, hints substrate.RootDeviceHints, physical bool) (rendered map[string]any, reason, remediation string) {
+func installerRootDeviceHints(bound api.Object, hints substrate.RootDeviceHints) (rendered map[string]any, reason, remediation string) {
 	if reason, remedy := machine.AgentRootDeviceRefusal(bound); reason != "" {
 		return nil, reason, remedy
 	}
@@ -412,9 +411,6 @@ func installerRootDeviceHints(bound api.Object, hints substrate.RootDeviceHints,
 	}
 	if len(hints.Names()) == 0 {
 		return nil, "", ""
-	}
-	if wwn, pathed := machine.AgentRootWWN(hints); pathed && physical {
-		hints.WWN, hints.DeviceName = wwn, ""
 	}
 	remainder := strings.TrimPrefix(strings.TrimPrefix(hints.DeviceName, "/dev/"), "disk/by-path/")
 	if strings.Contains(remainder, "/") {
@@ -466,7 +462,7 @@ func nodeProjections(catalog api.Catalog, cluster api.Object, contextName, contr
 			return nil, err
 		}
 		target = emulatedFetchTrust(target, serverHost, served)
-		hints, reason, remediation := installerRootDeviceHints(bound, target.RootDeviceHints, target.Physical)
+		hints, reason, remediation := installerRootDeviceHints(bound, target.RootDeviceHints)
 		if reason != "" {
 			return nil, refusal("lifecycle.unsupported", reason, remediation)
 		}

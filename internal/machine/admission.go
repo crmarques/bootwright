@@ -671,6 +671,13 @@ func validateBaremetal(o api.Object) []api.Issue {
 	if installed(o) && !s.Has("os", "install", "hostKeyRef") {
 		issues = appendIssues(issues, invariant("$.spec.os.install.hostKeyRef", "bare-metal installation requires the SSH host key it delivers", "set spec.os.install.hostKeyRef to the sshKeyPair Secret whose pair the installation delivers as the host key"))
 	}
+	if reason, remedy := PhysicalRootDeviceNameRefusal(o); reason != "" {
+		return appendIssues(issues, invariant("$.spec.hardware.rootDevice.deviceName", reason, remedy))
+	}
+	if wwn := s.Get("substrate", substrate.ArmBaremetal, "rootDevice", "wwn"); wwn.Present() && !substrate.ValidRootWWN(wwn.Text()) {
+		return appendIssues(issues, invariant("$.spec.substrate.baremetal.rootDevice.wwn", "a root disk's wwn is 0x followed by 16 or 32 lowercase hexadecimal digits",
+			"set spec.substrate.baremetal.rootDevice.wwn on "+o.Identity()+" to the disk's WWN in that form, as its /dev/disk/by-id/wwn-0x link names it"))
+	}
 	if !installed(o) {
 		if reason, remedy := AgentRootDeviceRefusal(o); reason != "" {
 			issues = appendIssues(issues, invariant("$.spec.substrate.baremetal.rootDevice", reason, remedy))
@@ -678,18 +685,40 @@ func validateBaremetal(o api.Object) []api.Issue {
 		return issues
 	}
 	physical := s.Get("substrate", substrate.ArmBaremetal, "rootDevice")
-	bySerial := installed(o) && physical.Has("serialNumber") && physical.Has("sizeBytes")
-	if !s.Has("hardware", "rootDevice", "deviceName") && !physical.Has("wwn") && !bySerial && !physical.Has("volumeRef") && !physical.Has("bootVolume") {
-		issues = appendIssues(issues, invariant("$.spec.hardware.rootDevice", "bare-metal installation requires a root selector: a /dev/disk/by-id/wwn-0x deviceName, serialNumber with sizeBytes, or a volumeRef or bootVolume logical volume",
-			"set spec.hardware.rootDevice.deviceName to the disk's /dev/disk/by-id/wwn-0x path, spec.substrate.baremetal.rootDevice.serialNumber and sizeBytes, or spec.substrate.baremetal.rootDevice.volumeRef, or remove every root hint so the Machine defaults to spec.substrate.baremetal.rootDevice.bootVolume"))
+	bySerial := physical.Has("serialNumber") && physical.Has("sizeBytes")
+	if !physical.Has("wwn") && !bySerial && !physical.Has("volumeRef") && !physical.Has("bootVolume") {
+		issues = appendIssues(issues, invariant("$.spec.substrate.baremetal.rootDevice", "bare-metal installation requires a root selector: a wwn, serialNumber with sizeBytes, or a volumeRef or bootVolume logical volume",
+			RootFormsRemedy(" on "+o.Identity())))
 	}
 	return issues
+}
+
+// RootFormsRemedy names every root form of a bare-metal Machine an installer writes.
+func RootFormsRemedy(on string) string {
+	return "set spec.substrate.baremetal.rootDevice.wwn" + on + " to the disk's WWN, 0x and 16 or 32 lowercase hexadecimal digits, or its serialNumber and sizeBytes to the disk's serial number and exact capacity, or its volumeRef to an existing logical volume, or remove every root hint to default to bootVolume"
+}
+
+// PhysicalRootDeviceNameRefusal refuses a deviceName on a bare-metal Machine
+// an installer writes, whose WWN root form is substrate.baremetal.rootDevice.wwn.
+func PhysicalRootDeviceNameRefusal(o api.Object) (reason, remedy string) {
+	declared := o.Spec().Get("hardware", "rootDevice", "deviceName").Text()
+	if substrate.MachineArm(o) != substrate.ArmBaremetal || o.Spec().Get("os", "provided").Bool() || declared == "" {
+		return "", ""
+	}
+	reason = "a bare-metal Machine an installer writes names its root WWN as spec.substrate.baremetal.rootDevice.wwn, never by spec.hardware.rootDevice.deviceName"
+	if match := clearDevicePath.FindStringSubmatch(declared); match != nil {
+		return reason, "replace spec.hardware.rootDevice.deviceName on " + o.Identity() + " with spec.substrate.baremetal.rootDevice.wwn: 0x" + match[1] + ", the WWN " + declared + " names"
+	}
+	return reason, "remove spec.hardware.rootDevice.deviceName from " + o.Identity() + " and " + RootFormsRemedy("")
 }
 
 // AgentRootDeviceRefusal requires the durable selector the agent can carry.
 func AgentRootDeviceRefusal(o api.Object) (string, string) {
 	if substrate.MachineArm(o) != substrate.ArmBaremetal {
 		return "", ""
+	}
+	if reason, remedy := PhysicalRootDeviceNameRefusal(o); reason != "" {
+		return reason, remedy
 	}
 	hints := substrate.MachineRootDeviceHints(o)
 	if hints.VolumeRef != nil {
@@ -699,30 +728,15 @@ func AgentRootDeviceRefusal(o api.Object) (string, string) {
 		return "a volumeRef or bootVolume selects the root alone, and a volumeRef requires safe storageId and volumeId segments",
 			"declare only spec.substrate.baremetal.rootDevice.volumeRef or bootVolume on " + o.Identity() + ", without other root hints"
 	}
-	wwnHint, pathed := AgentRootWWN(hints)
-	wwn := clearDevicePath.MatchString("/dev/disk/by-id/wwn-" + wwnHint)
+	wwn := substrate.ValidRootWWN(hints.WWN)
 	serial := clearSerial.MatchString(hints.SerialNumber)
 	size, err := strconv.ParseInt(hints.SizeBytes, 10, 64)
 	sized := err == nil && size >= 4096 && size <= MaxClearBytes && size%4096 == 0
-	if hints.DeviceName != "" && !pathed || !wwn && !(serial && sized) || wwnHint != "" && !wwn || hints.SerialNumber != "" && !serial || hints.SizeBytes != "" && !(serial && sized) {
-		return "a physical agent installation requires a stable root selector: a WWN as wwn or its /dev/disk/by-id/wwn-0x deviceName, serialNumber with exact sizeBytes, or a volumeRef or bootVolume logical volume",
-			"set spec.substrate.baremetal.rootDevice on " + o.Identity() + " with a supported wwn, serialNumber and exact sizeBytes, or volumeRef, or remove every root hint so it defaults to bootVolume; a deviceName other than the disk's /dev/disk/by-id/wwn-0x path is refused"
+	if !wwn && !(serial && sized) || hints.WWN != "" && !wwn || hints.SerialNumber != "" && !serial || hints.SizeBytes != "" && !(serial && sized) {
+		return "a physical agent installation requires a stable root selector: a wwn, serialNumber with exact sizeBytes, or a volumeRef or bootVolume logical volume",
+			RootFormsRemedy(" on " + o.Identity())
 	}
 	return "", ""
-}
-
-// AgentRootWWN is the WWN a physical agent root names, from wwn or from a
-// /dev/disk/by-id/wwn-0x deviceName; pathed is false when a declared
-// deviceName is no such path or names another WWN than wwn.
-func AgentRootWWN(hints substrate.RootDeviceHints) (wwn string, pathed bool) {
-	if hints.DeviceName == "" {
-		return hints.WWN, false
-	}
-	match := clearDevicePath.FindStringSubmatch(hints.DeviceName)
-	if match == nil || hints.WWN != "" && hints.WWN != "0x"+match[1] {
-		return hints.WWN, false
-	}
-	return "0x" + match[1], true
 }
 
 func validateHardware(o api.Object, c api.Catalog, variant string) []api.Issue {
@@ -1118,7 +1132,7 @@ func validateVolumeRoot(o api.Object, variant string) []api.Issue {
 		return []api.Issue{invariant(path, "volumeRef and bootVolume select an installed physical root alone, and volumeRef uses 1 to 128 ASCII letters, digits, underscores or hyphens for each ID", "declare volumeRef with storageId and volumeId, or bootVolume, and remove other root hints")}
 	}
 	if !substrate.MachineBMC(o).Get("tls", "verify").Bool() || !strings.HasPrefix(substrate.MachineBMC(o).Get("address").Text(), "https://") {
-		return []api.Issue{invariant(path, "logical-volume discovery requires verified BMC TLS", "set spec.substrate.baremetal.bmc.tls.verify true on an https BMC address, or name the root by its /dev/disk/by-id/wwn-0x deviceName or by serialNumber and sizeBytes")}
+		return []api.Issue{invariant(path, "logical-volume discovery requires verified BMC TLS", "set spec.substrate.baremetal.bmc.tls.verify true on an https BMC address, or name the root by spec.substrate.baremetal.rootDevice.wwn or by serialNumber and sizeBytes")}
 	}
 	return nil
 }

@@ -69,6 +69,8 @@ spec:
       nics:
         - nicRef: eno1
           macAddress: 52:54:00:9a:1b:01
+      rootDevice:
+        wwn: "0x6000000000000001"
   hardware:
     clearOnInstall:
       targets:
@@ -90,8 +92,6 @@ spec:
           method: metadataClear
     nics:
       - name: eno1
-    rootDevice:
-      deviceName: /dev/disk/by-id/wwn-0x6000000000000001
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -145,6 +145,8 @@ spec:
       nics:
         - nicRef: eno1
           macAddress: 52:54:00:9a:1b:02
+      rootDevice:
+        wwn: "0x6000000000000002"
   hardware:
     clearOnInstall:
       targets:
@@ -166,8 +168,6 @@ spec:
           method: metadataClear
     nics:
       - name: eno1
-    rootDevice:
-      deviceName: /dev/disk/by-id/wwn-0x6000000000000002
   os:
     provided: false
     installProfileRef: rhel-9-8
@@ -221,6 +221,8 @@ spec:
       nics:
         - nicRef: eno1
           macAddress: 52:54:00:9a:1b:03
+      rootDevice:
+        wwn: "0x6000000000000003"
   hardware:
     clearOnInstall:
       targets:
@@ -242,8 +244,6 @@ spec:
           method: metadataClear
     nics:
       - name: eno1
-    rootDevice:
-      deviceName: /dev/disk/by-id/wwn-0x6000000000000003
   os:
     provided: false
     installProfileRef: rhel-9-8

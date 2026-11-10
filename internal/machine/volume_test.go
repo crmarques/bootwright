@@ -33,28 +33,32 @@ func TestOmittedPhysicalRootNormalizesToPersistentRedfishBootVolume(t *testing.T
 	}
 }
 
-func TestPhysicalAgentRootAdmitsEveryRootForm(t *testing.T) {
-	declared, catalog := fixture()
+func agentFixture(t *testing.T) (declared, normalized api.Object, catalog api.Catalog) {
+	declared, catalog = fixture()
 	declared = declared.WithSpec(declared.Spec().WithPath(api.BoolValue(true), "substrate", "baremetal", "bmc", "tls", "verify"))
-	original, normalization := Normalize(declared, replaced(catalog, declared))
+	normalized, normalization := Normalize(declared, replaced(catalog, declared))
 	if len(normalization) != 0 {
 		t.Fatal(normalization)
 	}
-	const path = "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"
+	return declared, normalized, catalog
+}
+
+func TestPhysicalAgentRootAdmitsEveryRootForm(t *testing.T) {
+	declared, original, catalog := agentFixture(t)
 	volume := m("storageId", "RAID-Integrated-1", "volumeId", "Disk_Virtual_0")
 	for _, test := range []struct {
-		name, device string
-		physical     api.Value
+		name     string
+		physical api.Value
 	}{
-		{"wwn", "", m("wwn", "0x5000c500a1b2c3d4")},
-		{"serial and size", "", m("serialNumber", "SYNTHETIC-ROOT-01").With("sizeBytes", api.IntegerValue("8192"))},
-		{"wwn path", path, m()},
-		{"wwn path beside its wwn", path, m("wwn", "0x5000c500a1b2c3d4")},
-		{"volumeRef", "", m("volumeRef", volume)},
-		{"declared bootVolume", "", m("bootVolume", m())},
+		{"wwn", m("wwn", "0x5000c500a1b2c3d4")},
+		{"32-digit wwn", m("wwn", "0x6000c500a1b2c3d4e5f60718293a4b5c")},
+		{"serial and size", m("serialNumber", "SYNTHETIC-ROOT-01").With("sizeBytes", api.IntegerValue("8192"))},
+		{"wwn beside serial and size", m("wwn", "0x5000c500a1b2c3d4", "serialNumber", "SYNTHETIC-ROOT-01").With("sizeBytes", api.IntegerValue("8192"))},
+		{"volumeRef", m("volumeRef", volume)},
+		{"declared bootVolume", m("bootVolume", m())},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			candidate := rootDeclared(original, test.device, test.physical)
+			candidate := rootDeclared(original, "", test.physical)
 			if reason, remedy := AgentRootDeviceRefusal(candidate); reason != "" {
 				t.Fatalf("%s: %s", reason, remedy)
 			}
@@ -85,8 +89,9 @@ func TestPhysicalAgentRootRefusalsNameEveryForm(t *testing.T) {
 	original, _ := fixture()
 	for name, candidate := range map[string]api.Object{
 		"kernel name":              rootDeclared(original, "/dev/sda", m()),
-		"wwn path beside another":  rootDeclared(original, "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4", m("wwn", "0x5000c500a1b2c3d5")),
 		"uppercase wwn path":       rootDeclared(original, "/dev/disk/by-id/wwn-0x5000C500A1B2C3D4", m()),
+		"uppercase wwn":            rootDeclared(original, "", m("wwn", "0x5000C500A1B2C3D4")),
+		"wwn without its 0x":       rootDeclared(original, "", m("wwn", "5000c500a1b2c3d4")),
 		"no selector":              rootDeclared(original, "", m()),
 		"bootVolume beside a wwn":  rootDeclared(original, "", m("bootVolume", m(), "wwn", "0x5000c500a1b2c3d4")),
 		"volumeRef beside its wwn": rootDeclared(original, "", m("volumeRef", m("storageId", "s", "volumeId", "v"), "wwn", "0x5000c500a1b2c3d4")),
@@ -97,6 +102,67 @@ func TestPhysicalAgentRootRefusalsNameEveryForm(t *testing.T) {
 				t.Fatalf("reason %q remedy %q", reason, remedy)
 			}
 		})
+	}
+}
+
+// A bare-metal Machine an installer writes names its root disk's WWN only as
+// substrate.baremetal.rootDevice.wwn, so any hardware.rootDevice.deviceName
+// refuses at its path, for a Bootwright installation and an agent node alike;
+// a by-id WWN path's remedy names the wwn it spells.
+func TestAPhysicalRootDeviceNameRefusesNamingTheWWN(t *testing.T) {
+	_, agent, catalog := agentFixture(t)
+	installed, installedCatalog := installedFixture()
+	const path = "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"
+	for name, test := range map[string]struct {
+		device   string
+		physical api.Value
+		remedy   string
+	}{
+		"a WWN path":            {path, m(), "with spec.substrate.baremetal.rootDevice.wwn: 0x5000c500a1b2c3d4, the WWN " + path + " names"},
+		"a WWN path beside wwn": {path, m("wwn", "0x5000c500a1b2c3d4"), "with spec.substrate.baremetal.rootDevice.wwn: 0x5000c500a1b2c3d4"},
+		"a kernel name":         {"/dev/sda", m(), "set spec.substrate.baremetal.rootDevice.wwn to the disk's WWN"},
+		"a by-path name":        {"/dev/disk/by-path/pci-0000:00:1f.2-ata-1", m(), "or remove every root hint to default to bootVolume"},
+		"a 32-digit WWN path":   {"/dev/disk/by-id/wwn-0x6000c500a1b2c3d4e5f60718293a4b5c", m(), "wwn: 0x6000c500a1b2c3d4e5f60718293a4b5c"},
+	} {
+		for consumer, base := range map[string]struct {
+			machine api.Object
+			catalog api.Catalog
+		}{"an agent node": {agent, catalog}, "a Bootwright installation": {installed, installedCatalog}} {
+			t.Run(name+" on "+consumer, func(t *testing.T) {
+				candidate := rootDeclared(base.machine, test.device, test.physical)
+				issues := Validate(candidate, replaced(base.catalog, candidate))
+				if len(issues) != 1 || issues[0].Code != "api.invariant" || issues[0].Field != "$.spec.hardware.rootDevice.deviceName" ||
+					!strings.Contains(issues[0].Message, "spec.substrate.baremetal.rootDevice.wwn") || !strings.Contains(issues[0].Remediation, test.remedy) {
+					t.Fatalf("issues %+v", issues)
+				}
+			})
+		}
+	}
+	provided := rootDeclared(agent, path, m("wwn", "0x5000c500a1b2c3d4"))
+	provided = provided.WithSpec(provided.Spec().WithPath(api.BoolValue(true), "os", "provided"))
+	if reason, _ := PhysicalRootDeviceNameRefusal(provided); reason != "" {
+		t.Fatalf("an OS-ready Machine's root deviceName, which only keeps it out of Ceph OSDs, refused: %s", reason)
+	}
+}
+
+// One Machine naming its root by wwn alone validates as a Bootwright
+// installation and as an agent node, so the same root declaration serves
+// either installer (audit 004 API-38).
+func TestOneWWNRootValidatesForEitherInstaller(t *testing.T) {
+	installed, installedCatalog := installedFixture()
+	_, agent, catalog := agentFixture(t)
+	agent = rootDeclared(agent, "", installed.Spec().Get("substrate", "baremetal", "rootDevice"))
+	if !installed.Spec().Has("substrate", "baremetal", "rootDevice", "wwn") || installed.Spec().Has("hardware", "rootDevice", "deviceName") {
+		t.Fatalf("the installed fixture does not name its root by wwn alone: %v", installed.Spec().Get("substrate", "baremetal", "rootDevice"))
+	}
+	if issues := Validate(installed, installedCatalog); len(issues) != 0 {
+		t.Fatalf("a Bootwright installation refused a wwn root: %v", issues)
+	}
+	if issues := Validate(agent, replaced(catalog, agent)); len(issues) != 0 {
+		t.Fatalf("an agent node refused a wwn root: %v", issues)
+	}
+	if got := substrate.RootDevicePath(installed); got != "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4" {
+		t.Fatalf("root device path = %q", got)
 	}
 }
 
@@ -123,8 +189,8 @@ func TestInstalledPhysicalRootRefusalNamesEveryForm(t *testing.T) {
 	installed := rootDeclared(original, "", m())
 	installed = installed.WithSpec(installed.Spec().WithPath(api.StringValue("rhel"), "os", "installProfileRef").WithPath(api.StringValue("host-key"), "os", "install", "hostKeyRef"))
 	issues := validateBaremetal(installed)
-	if len(issues) != 1 || issues[0].Field != "$.spec.hardware.rootDevice" ||
-		!strings.Contains(issues[0].Remediation, "rootDevice.volumeRef") || !strings.Contains(issues[0].Remediation, "bootVolume") || !strings.Contains(issues[0].Remediation, "serialNumber and sizeBytes") {
+	if len(issues) != 1 || issues[0].Field != "$.spec.substrate.baremetal.rootDevice" || !strings.Contains(issues[0].Remediation, "rootDevice.wwn") ||
+		!strings.Contains(issues[0].Remediation, "its volumeRef") || !strings.Contains(issues[0].Remediation, "bootVolume") || !strings.Contains(issues[0].Remediation, "serialNumber and sizeBytes") {
 		t.Fatalf("issues %+v", issues)
 	}
 }

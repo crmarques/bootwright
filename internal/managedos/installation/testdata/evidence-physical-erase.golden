@@ -18,7 +18,7 @@
         "method": "logicalOverwrite",
         "serialNumber": "serial-example",
         "sizeBytes": 8192,
-        "wwn": "wwn-example",
+        "wwn": "0x5000c500a1b2c3d4",
         "written": 8192,
         "verified": 8192
       }

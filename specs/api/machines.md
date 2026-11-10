@@ -664,14 +664,16 @@ it rather than restate it.
 
 | Form | Declared as | Consumer notes |
 | --- | --- | --- |
-| WWN | `hardware.rootDevice.deviceName` as `/dev/disk/by-id/wwn-0x` followed by 16 or 32 lowercase hexadecimal digits, the form [managed physical hosts](../ceph.md#devices-and-destructive-ownership) use for OSD paths | The one WWN spelling every consumer admits. `wwn`, as `0x` and the same digits, may stand beside it and must name the same WWN, and `serialNumber` and `sizeBytes` may stand beside it as proofs. The cluster installer also admits `wwn` alone, which a Bootwright installation refuses. |
-| Serial number | no `deviceName`; `substrate.baremetal.rootDevice.serialNumber`, 1 to 256 ASCII letters, digits or `._:+/=-`, and exact `sizeBytes` | For a disk whose WWN cannot be learned before an OS boots or that has none, such as an NVMe disk. A Bootwright installation refuses a `wwn` beside it, since a disk with a known WWN is named by its path. |
+| WWN | `substrate.baremetal.rootDevice.wwn`, `0x` followed by 16 or 32 lowercase hexadecimal digits | The one WWN root form ([D253](../milestones/backlog.md#d253)). Each installer derives what it needs: a Bootwright installation writes and proves the disk through `/dev/disk/by-id/wwn-0x<digits>`, and the agent installer takes it as its `wwn` hint. `serialNumber` and `sizeBytes` may stand beside it as proofs. |
+| Serial number | no `wwn`; `substrate.baremetal.rootDevice.serialNumber`, 1 to 256 ASCII letters, digits or `._:+/=-`, and exact `sizeBytes` | For a disk whose WWN cannot be learned before an OS boots or that has none, such as an NVMe disk. |
 | Logical volume | `substrate.baremetal.rootDevice.volumeRef` or `bootVolume` alone, under verified BMC TLS | One [existing logical volume](#existing-logical-root-volumes), proved by its NAA identifier and exact capacity. `bootVolume: {}` is the default on a Machine of a bare-metal provider that an installer writes and that declares no root hint. |
 
 The installation erases that disk, and a kernel name such as `/dev/sda` moves
-with probe order, firmware and hot-added disks, so it refuses at
-`hardware.rootDevice.deviceName`; every root refusal's remedy names each form,
-`volumeRef` and the `bootVolume` default included. A serial number that
+with probe order, firmware and hot-added disks, so on such a Machine any
+`hardware.rootDevice.deviceName` refuses `api.invariant` at its path. When it
+is a `/dev/disk/by-id/wwn-0x` path, the remedy names the `wwn` it spells;
+every other root refusal's remedy names each form, `volumeRef` and the
+`bootVolume` default included. A `wwn` in another form refuses at its path. A serial number that
 selects a disk, here or as a target named without `deviceName` below, is
 declared by no other Machine; a second declaration refuses `api.invariant` at
 its field, naming the other Machine, because two disks sharing a serial number
@@ -751,11 +753,13 @@ on removal; omission retains its disks.
 
 The policy lists the root only when it names it; an omitted root is retained,
 and every listed disk, root or data, is erased. This is the one root-target
-rule. The root target is the one whose `deviceName` is
-`hardware.rootDevice.deviceName`, or, for a root declared by serial number, the
-target without `deviceName` whose `serialNumber` is the root's, whose
-`sizeBytes` must then be the root's or it refuses `api.invariant` at that
-target's `sizeBytes`; a target naming the serial root's serial number with a
+rule. For a root declared by `wwn`, the root target is the one whose `deviceName`
+is the `/dev/disk/by-id/wwn-0x` path that `wwn` derives, or whose `wwn` names
+the same WWN under any other path, compared without regard to case or a `0x`
+or `naa.` prefix; for a root declared by serial number, it is the
+target without `deviceName` whose `serialNumber` is the root's. A root
+target's `sizeBytes` must be the root's declared `sizeBytes`, when it declares
+one, or it refuses `api.invariant` at that target's `sizeBytes`; a target naming the serial root's serial number with a
 `deviceName` refuses at its `targets[<i>]` path. A root selected by
 `volumeRef` or `bootVolume` has no root target: each listed target is erased by
 its own identity. A target naming only one of `deviceName` and `wwn` refuses
@@ -780,8 +784,8 @@ A target names `deviceName` and `wwn` together, or neither, in which case the
 `%pre` selects the one whole disk reporting its `serialNumber` and `sizeBytes`.
 Each refusal is `api.invariant` at the field's path. Every identity is
 distinct across the targets, and a target whose `deviceName`, `wwn` or
-`serialNumber` is the root device's, from `hardware.rootDevice.deviceName` and
-`substrate.baremetal.rootDevice`, refuses at its `targets[<i>]` path: the
+`serialNumber` is the root device's, from `substrate.baremetal.rootDevice` and
+the path its `wwn` derives, refuses at its `targets[<i>]` path: the
 installation already clears the root disk.
 
 ## MachineImage

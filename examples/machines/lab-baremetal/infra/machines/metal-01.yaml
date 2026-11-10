@@ -8,6 +8,9 @@ spec:
     providerRef: lab-metal
 
     baremetal:
+      rootDevice:
+        wwn: '0x5000c500a1b2c301'
+
       bmc:
         address: https://bmc-01.metal.example.test/redfish/v1/Systems/1
 
@@ -34,9 +37,6 @@ spec:
   hardware:
     nics:
       - name: eno1
-
-    rootDevice:
-      deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c301
 
   network:
     configRef: lab-metal

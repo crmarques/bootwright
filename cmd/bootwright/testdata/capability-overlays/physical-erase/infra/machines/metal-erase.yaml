@@ -6,6 +6,8 @@ spec:
   substrate:
     providerRef: lab-metal
     baremetal:
+      rootDevice:
+        wwn: '0x5000c500a1b2c3e1'
       bmc:
         address: https://bmc-erase.metal.example.test/redfish/v1/Systems/1
       nics:
@@ -24,13 +26,11 @@ spec:
       method: logicalOverwrite
       targets:
         - deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c3e1
-          wwn: naa.5000000000000001
+          wwn: naa.5000c500a1b2c3e1
           serialNumber: EXAMPLE-ROOT-01
           sizeBytes: 107374182400
     nics:
       - name: eno1
-    rootDevice:
-      deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c3e1
   network:
     configRef: lab-metal
     installAddressRef: ip

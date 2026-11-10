@@ -352,7 +352,7 @@ func TestARootDeviceHintFollowsItsArm(t *testing.T) {
 // Machine, which is the only lifecycle that delivers its own host key.
 func installedFixture() (api.Object, api.Catalog) {
 	machine, catalog := fixture()
-	machine = rootDeclared(machine, "/dev/sda", api.MapValue())
+	machine = rootDeclared(machine, "", m("wwn", "0x5000c500a1b2c3d4"))
 	spec := machine.Spec()
 	install := spec.Get("os", "install").With("hostKeyRef", api.StringValue("node-host-key"))
 	spec = spec.With("os", spec.Get("os").
@@ -688,7 +688,7 @@ func TestABaremetalRootDiskMayBeNamedBySerialNumberAndSize(t *testing.T) {
 		t.Fatalf("a root disk named by serial number and size was refused: %v", issues)
 	}
 	alone := rootDeclared(machine, "", m("serialNumber", "SYNTHETIC-ROOT-01"))
-	if issues := Validate(alone, replaced(catalog, alone)); !mentions(issues, "$.spec.hardware.rootDevice") {
+	if issues := Validate(alone, replaced(catalog, alone)); !mentions(issues, "$.spec.substrate.baremetal.rootDevice") {
 		t.Fatalf("a serial number without its size was admitted as a root selector: %v", issues)
 	}
 	unaligned := rootDeclared(machine, "", bySerial.With("sizeBytes", api.IntegerValue("480103981057")))

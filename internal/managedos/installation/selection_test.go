@@ -213,33 +213,38 @@ func TestUnsupportedNamesEveryProfileArmThisContractRefuses(t *testing.T) {
 }
 
 // A physical installation erases the disk it names, so a Machine that names
-// none by its by-id WWN path refuses before registration rather than leaving
-// the installer to clear every disk the server holds, or a kernel name that
-// another boot gives another disk. A wwn alone is admitted as a selector but
-// not yet derived into a device, so it refuses the same way.
+// none by its wwn, serial number and size or a logical volume refuses before
+// registration rather than leaving the installer to clear every disk the
+// server holds. A device path names no root on a physical Machine: a kernel
+// name another boot gives another disk, and a by-id WWN path refuses naming
+// the wwn it spells.
 func TestAPhysicalInstallationWithoutANamedRootDeviceRefuses(t *testing.T) {
-	for name, hints := range map[string]api.Value{
-		"wwn only":                api.MapValue(text("wwn", "0x5000c500a1b2c3d4")),
-		"predicates only":         api.MapValue(text("model", "PERC H755"), number("minSizeGigabytes", "400")),
-		"a kernel name":           api.MapValue(text("deviceName", "/dev/sda")),
-		"another by-id path":      api.MapValue(text("deviceName", "/dev/disk/by-id/ata-ST4000NM0035_ZC1A2B3C")),
-		"a by-id partition":       api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4-part1")),
-		"an uppercase wwn":        api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000C500A1B2C3D4")),
-		"a wwn of another length": api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3")),
+	const everyForm = "spec.substrate.baremetal.rootDevice.wwn"
+	for name, test := range map[string]struct {
+		hints  api.Value
+		remedy []string
+	}{
+		"predicates only":         {api.MapValue(text("model", "PERC H755"), number("minSizeGigabytes", "400")), []string{everyForm + " on Machine/metal-01", "its volumeRef to an existing logical volume", "default to bootVolume"}},
+		"a kernel name":           {api.MapValue(text("deviceName", "/dev/sda")), []string{"remove spec.hardware.rootDevice.deviceName from Machine/metal-01", everyForm, "volumeRef", "bootVolume"}},
+		"another by-id path":      {api.MapValue(text("deviceName", "/dev/disk/by-id/ata-ST4000NM0035_ZC1A2B3C")), []string{"remove spec.hardware.rootDevice.deviceName from Machine/metal-01", everyForm, "volumeRef", "bootVolume"}},
+		"a by-id partition":       {api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4-part1")), []string{"remove spec.hardware.rootDevice.deviceName from Machine/metal-01", everyForm}},
+		"a by-id WWN path":        {api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")), []string{"replace spec.hardware.rootDevice.deviceName on Machine/metal-01 with " + everyForm + ": 0x5000c500a1b2c3d4"}},
+		"a by-id path beside wwn": {api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"), text("wwn", "0x5000c500a1b2c3d4")), []string{everyForm + ": 0x5000c500a1b2c3d4"}},
+		"an uppercase wwn":        {api.MapValue(text("wwn", "0x5000C500A1B2C3D4")), []string{everyForm + " on Machine/metal-01 to the disk's WWN in that form"}},
+		"a wwn of another length": {api.MapValue(text("wwn", "0x5000c500a1b2c3")), []string{everyForm + " on Machine/metal-01 to the disk's WWN in that form"}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			catalog := labCatalog(metalProvider(), server(hints))
+			catalog := labCatalog(metalProvider(), server(test.hints))
 			if unsupported := lifecycle.Identities(Refusals(catalog)); !slices.Equal(unsupported, []string{"Machine/metal-01"}) {
 				t.Fatalf("unsupported = %v", unsupported)
 			}
 			_, _, err := Requests(catalog, "controller", testContext)
 			expectRefusal(t, err, "lifecycle.unsupported")
 			remediation := diagnostics.Of(err)[0].Remediation
-			if !strings.Contains(remediation, "spec.hardware.rootDevice.deviceName on Machine/metal-01") ||
-				!strings.Contains(remediation, "spec.substrate.baremetal.rootDevice.volumeRef on Machine/metal-01") ||
-				!strings.Contains(remediation, "defaults to bootVolume") ||
-				!strings.Contains(remediation, "a wwn alone are refused") {
-				t.Fatalf("remediation = %q", remediation)
+			for _, want := range test.remedy {
+				if !strings.Contains(remediation, want) {
+					t.Fatalf("remediation = %q, want %q", remediation, want)
+				}
 			}
 		})
 	}
@@ -251,7 +256,7 @@ func TestAPhysicalInstallationWithoutANamedRootDeviceRefuses(t *testing.T) {
 // an unverified controller leg, and Unsupported agrees with the request
 // builder.
 func TestAPrivateInstallationRefusesDisabledVerification(t *testing.T) {
-	metal := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
+	metal := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
 	metal = metal.WithSpec(metal.Spec().WithPath(api.StringValue(substrate.TrustDisableVerification),
 		"substrate", "baremetal", "bmc", "virtualMedia", "tls", "trust"))
 	catalog := labCatalog(metalProvider(), metal)
@@ -275,7 +280,7 @@ func TestAPrivateInstallationRefusesDisabledVerification(t *testing.T) {
 // reaches this today, because only a delivered-key target imports and it
 // always publishes privately, so the rule is proved on its own statement.
 func TestImportCertificateNeedsAnHttpsImageAndItsCertificate(t *testing.T) {
-	machine := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
+	machine := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
 	importing := func(url string) Request {
 		return Request{
 			Private:           &Publication{URL: url},
@@ -337,7 +342,7 @@ func TestAPrivateInstallationRefusesAnUnverifiedController(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			metal := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
+			metal := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
 			metal = metal.WithSpec(change(metal.Spec()))
 			catalog := labCatalog(metalProvider(), metal, sshKeySecret(api.MapValue(field("generated", api.MapValue(text("keyType", "ed25519"))))))
 			refusals := Refusals(catalog)
@@ -357,7 +362,7 @@ func TestAPrivateInstallationRefusesAnUnverifiedController(t *testing.T) {
 // A delivered key's URL is named by the Kickstart implanted in the installer
 // image, so that image is never derived as a public publication.
 func TestAPhysicalInstallationRefusesWhileItsHostKeyWouldBePublic(t *testing.T) {
-	catalog := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"))),
+	catalog := labCatalog(metalProvider(), server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"))),
 		sshKeySecret(api.MapValue(field("generated", api.MapValue()))))
 	requests, _, err := Requests(catalog, "controller", testContext)
 	if err != nil {
@@ -383,7 +388,7 @@ func TestAPhysicalInstallationRefusesWhileItsHostKeyWouldBePublic(t *testing.T) 
 // subtree: no public image, the private parent and URL, the serving
 // certificate the installer verifies, and the key type it installs.
 func TestAVerifiedPhysicalInstallationDerivesAPrivateRequest(t *testing.T) {
-	catalog := labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"))),
+	catalog := labCatalog(metalProvider(), server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"))),
 		sshKeySecret(api.MapValue(field("generated", api.MapValue(text("keyType", "rsa"))))))
 	if refusals := Refusals(catalog); len(refusals) != 0 {
 		t.Fatalf("refusals = %v", refusals)
@@ -437,11 +442,11 @@ func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 		remediation string
 	}{
 		"a physical model": {
-			[]api.Object{metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"), text("model", "PERC H755")))},
+			[]api.Object{metalProvider(), server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"), text("model", "PERC H755")))},
 			"Machine/metal-01", "remove spec.hardware.rootDevice.model from Machine/metal-01",
 		},
 		"a physical hctl beside its wwn and serial": {
-			[]api.Object{metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"), text("wwn", "0x5000c500a1b2c3d4"),
+			[]api.Object{metalProvider(), server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"),
 				text("serialNumber", "ZC1A2B3C"), text("hctl", "0:0:0:0")))},
 			"Machine/metal-01", "remove spec.substrate.baremetal.rootDevice.hctl from Machine/metal-01",
 		},
@@ -467,7 +472,7 @@ func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 			_, _, err := Requests(catalog, "controller", testContext)
 			expectRefusal(t, err, "lifecycle.unsupported")
 			reported := diagnostics.Of(err)[0]
-			if reported.Message != "a managed-OS installation selects its root disk by deviceName or, on a physical Machine, by serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the other root-device hints the Machine declares" {
+			if reported.Message != "a managed-OS installation selects its root disk by deviceName on a virtual Machine or, on a physical Machine, by wwn, serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the other root-device hints the Machine declares" {
 				t.Fatalf("message = %q", reported.Message)
 			}
 			if reported.Remediation != test.remediation {
@@ -488,39 +493,35 @@ func TestAnInstallationRefusesARootDeviceHintItCannotCarry(t *testing.T) {
 	}
 }
 
-// A physical Machine's wwn, serialNumber and sizeBytes stand beside its by-id
-// deviceName, or a serialNumber with its sizeBytes names the disk alone, and
-// are frozen, the wwn in its canonical 0x form, for the %pre to compare; a wwn
-// naming another disk than the path or standing without one, or a serial
-// number the %pre cannot carry as one word, refuses before registration
-// instead, and a serial number without its size names no root disk.
+// A physical Machine's wwn names its root disk, the installer writing through
+// the /dev/disk/by-id path it derives, and a serialNumber and sizeBytes beside
+// it are proofs; a serialNumber with its sizeBytes names the disk alone. Each
+// is frozen for the %pre to compare. A wwn in another form, or a serial number
+// the %pre cannot carry as one word, refuses before registration instead, and
+// a serial number without its size names no root disk.
 func TestAPhysicalInstallationFreezesTheRootDiskIdentityItDeclares(t *testing.T) {
-	const path = "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"
+	const path, wwn = "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4", "0x5000c500a1b2c3d4"
+	const badWWN = "a physical installation names its root disk by a wwn of 0x followed by 16 or 32 lowercase hexadecimal digits, and the wwn the Machine declares is not one"
+	const badSerial = "a physical installation compares its root disk's serial number inside the installer, and the serialNumber the Machine declares is not one it can compare"
 	size := field("sizeBytes", api.IntegerValue("480103981056"))
 	for name, test := range map[string]struct {
 		hints               api.Value
 		wwn, serial, reason string
 	}{
-		"a wwn and serial":     {api.MapValue(text("deviceName", path), text("wwn", "0x5000c500a1b2c3d4"), text("serialNumber", "ZC1A2B3C")), "0x5000c500a1b2c3d4", "ZC1A2B3C", ""},
-		"a serial and size":    {api.MapValue(text("serialNumber", "ZC1A2B3C"), size), "", "ZC1A2B3C", ""},
-		"a path, wwn and size": {api.MapValue(text("deviceName", path), text("wwn", "0x5000c500a1b2c3d4"), size), "0x5000c500a1b2c3d4", "", ""},
+		"a wwn alone":                  {api.MapValue(text("wwn", wwn)), wwn, "", ""},
+		"a wwn and serial":             {api.MapValue(text("wwn", wwn), text("serialNumber", "ZC1A2B3C")), wwn, "ZC1A2B3C", ""},
+		"a serial and size":            {api.MapValue(text("serialNumber", "ZC1A2B3C"), size), "", "ZC1A2B3C", ""},
+		"a wwn and size":               {api.MapValue(text("wwn", wwn), size), wwn, "", ""},
+		"a wwn beside serial and size": {api.MapValue(text("serialNumber", "ZC1A2B3C"), size, text("wwn", wwn)), wwn, "ZC1A2B3C", ""},
 		"a serial without its size": {api.MapValue(text("serialNumber", "ZC1A2B3C")), "", "",
-			"a physical installation erases only a root disk named by its /dev/disk/by-id/wwn-0x path, by its serial number and exact size, or by a volumeRef or bootVolume logical volume, and the Machine names none of them"},
-		"a wwn without its path": {api.MapValue(text("serialNumber", "ZC1A2B3C"), size, text("wwn", "0x5000c500a1b2c3d4")), "", "",
-			"a physical installation proves its root disk by the wwn the Machine declares only beside the deviceName that names it, and that wwn names another disk or stands alone"},
-		"an uppercase wwn":     {api.MapValue(text("deviceName", path), text("wwn", "0X5000C500A1B2C3D4")), "0x5000c500a1b2c3d4", "", ""},
-		"a wwn without its 0x": {api.MapValue(text("deviceName", path), text("wwn", "5000c500a1b2c3d4")), "0x5000c500a1b2c3d4", "", ""},
-		"a serial alone":       {api.MapValue(text("deviceName", path), text("serialNumber", "WD-WCC4N1234567")), "", "WD-WCC4N1234567", ""},
-		"another disk's wwn": {api.MapValue(text("deviceName", path), text("wwn", "0x5000c500a1b2c3d5")), "", "",
-			"a physical installation proves its root disk by the wwn the Machine declares only beside the deviceName that names it, and that wwn names another disk or stands alone"},
-		"a wwn in another form": {api.MapValue(text("deviceName", path), text("wwn", "naa.5000c500a1b2c3d4")), "", "",
-			"a physical installation proves its root disk by the wwn the Machine declares only beside the deviceName that names it, and that wwn names another disk or stands alone"},
-		"a serial with a space": {api.MapValue(text("deviceName", path), text("serialNumber", "ZC1A 2B3C")), "", "",
-			"a physical installation compares its root disk's serial number inside the installer, and the serialNumber the Machine declares is not one it can compare"},
-		"a serial with a quote": {api.MapValue(text("deviceName", path), text("serialNumber", "ZC1A'2B3C")), "", "",
-			"a physical installation compares its root disk's serial number inside the installer, and the serialNumber the Machine declares is not one it can compare"},
-		"a serial beyond its bound": {api.MapValue(text("deviceName", path), text("serialNumber", strings.Repeat("Z", 257))), "", "",
-			"a physical installation compares its root disk's serial number inside the installer, and the serialNumber the Machine declares is not one it can compare"},
+			"a physical installation erases only a root disk named by its wwn, by its serial number and exact size, or by a volumeRef or bootVolume logical volume, and the Machine names none of them"},
+		"an uppercase wwn":          {api.MapValue(text("wwn", "0X5000C500A1B2C3D4")), "", "", badWWN},
+		"a wwn without its 0x":      {api.MapValue(text("wwn", "5000c500a1b2c3d4")), "", "", badWWN},
+		"a wwn in another form":     {api.MapValue(text("wwn", "naa.5000c500a1b2c3d4")), "", "", badWWN},
+		"a bad wwn beside a serial": {api.MapValue(text("serialNumber", "ZC1A2B3C"), size, text("wwn", "0X5000C500A1B2C3D4")), "", "", badWWN},
+		"a serial with a space":     {api.MapValue(text("wwn", wwn), text("serialNumber", "ZC1A 2B3C")), "", "", badSerial},
+		"a serial with a quote":     {api.MapValue(text("wwn", wwn), text("serialNumber", "ZC1A'2B3C")), "", "", badSerial},
+		"a serial beyond its bound": {api.MapValue(text("wwn", wwn), text("serialNumber", strings.Repeat("Z", 257))), "", "", badSerial},
 	} {
 		t.Run(name, func(t *testing.T) {
 			catalog := physicalVariantCatalogOn(installProfile(), "ed25519", test.hints)
@@ -538,7 +539,7 @@ func TestAPhysicalInstallationFreezesTheRootDiskIdentityItDeclares(t *testing.T)
 			}
 			request, _ := onlyRequest(t, catalog)
 			wantPath, wantSize := path, int64(0)
-			if !test.hints.Has("deviceName") {
+			if !test.hints.Has("wwn") {
 				wantPath = ""
 			}
 			if test.hints.Has("sizeBytes") {
@@ -546,6 +547,11 @@ func TestAPhysicalInstallationFreezesTheRootDiskIdentityItDeclares(t *testing.T)
 			}
 			if hardware := request.Target.Hardware; hardware == nil || hardware.RootDevice != wantPath || hardware.WWN != test.wwn || hardware.SerialNumber != test.serial || hardware.SizeBytes != wantSize {
 				t.Fatalf("frozen hardware = %+v", request.Target.Hardware)
+			}
+			if wantPath != "" && (!strings.Contains(request.Kickstart, "\nignoredisk --only-use=disk/by-id/wwn-0x5000c500a1b2c3d4\n") ||
+				!strings.Contains(request.Kickstart, "\nclearpart --all --initlabel --drives=disk/by-id/wwn-0x5000c500a1b2c3d4\n") ||
+				!strings.Contains(request.Kickstart, "readlink -f -- '"+path+"'")) {
+				t.Fatal("the installer does not write through the by-id path the wwn derives")
 			}
 			if wantSize != 0 && !strings.Contains(request.Kickstart, "!= '480103981056'") {
 				t.Fatal("the target proof does not compare the frozen root disk size")
@@ -745,7 +751,7 @@ func sshKeySecret(source api.Value) api.Object {
 // exists: its keyType, or the ed25519 admission defaults it to. A key of any
 // other source refuses, naming the Secret and the Machine that selects it.
 func TestTheDeliveredHostKeyTypeIsItsGeneratedKeyType(t *testing.T) {
-	machine := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
+	machine := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
 	for _, row := range []struct {
 		name   string
 		source api.Value

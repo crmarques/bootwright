@@ -150,7 +150,9 @@ func physicalMatrixState(t *testing.T, name string, original *compilation.State)
 			objects = append(objects, api.NewObject(api.Secret, key, api.Value{}, secret.Spec().WithPath(api.StringValue("ecdsaP256"), "source", "generated", "keyType")))
 			spec = spec.With("substrate", api.MapValue(api.FieldValue{Name: "providerRef", Value: api.StringValue(provider.Name())}))
 			root := fmt.Sprintf("/dev/disk/by-id/wwn-0x6%015x", number)
-			spec = spec.WithPath(api.StringValue(key), "os", "install", "hostKeyRef").WithPath(api.StringValue(root), "hardware", "rootDevice", "deviceName")
+			spec = spec.WithPath(api.StringValue(key), "os", "install", "hostKeyRef").
+				WithPath(spec.Get("hardware", "rootDevice").Without("deviceName"), "hardware", "rootDevice").
+				WithPath(api.StringValue(fmt.Sprintf("0x6%015x", number)), "substrate", "baremetal", "rootDevice", "wwn")
 			nics, macs := []api.Value{}, []api.Value{}
 			for _, nic := range virtual.Interfaces {
 				nics = append(nics, api.MapValue(api.FieldValue{Name: "name", Value: api.StringValue(nic.Name)}))

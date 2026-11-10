@@ -33,10 +33,10 @@ type refusalCase struct {
 // either side fails here.
 func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 	customizations := installProfile().Spec().Get("customizations")
-	untrusting := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
+	untrusting := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
 	untrusting = untrusting.WithSpec(untrusting.Spec().WithPath(api.StringValue(substrate.TrustDisableVerification),
 		"substrate", "baremetal", "bmc", "virtualMedia", "tls", "trust"))
-	unverified := server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
+	unverified := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
 	unverified = unverified.WithSpec(unverified.Spec().WithPath(api.BoolValue(false), "substrate", "baremetal", "bmc", "tls", "verify"))
 	rotational := guest()
 	rotational = rotational.WithSpec(rotational.Spec().WithPath(
@@ -67,13 +67,14 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 		WithPath(api.StringValue("192.0.2.3"), "libvirt", "bmcEmulation", "bindAddress"))
 	cases := map[string]refusalCase{
 		"A physical Machine naming no root device": {
-			labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/sda")))), "Machine/metal-01", onMetal,
+			labCatalog(metalProvider(), server(api.MapValue(text("model", "PERC H755")))), "Machine/metal-01", onMetal,
 		},
 		"A root-device hint other than deviceName": {labCatalog(rotational), "Machine/rhel-01",
 			map[string]string{"<machine>": "Machine/rhel-01", "<hints>": "spec.hardware.rootDevice.rotational"}},
-		"A root-device wwn naming another disk": {labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"),
-			text("wwn", "0x5000c500a1b2c3d5")))), "Machine/metal-01", onMetal},
-		"A root-device serial number the installer cannot compare": {labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"),
+		"A physical root named by a device path": {labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))),
+			"Machine/metal-01", map[string]string{"<remedy>": "replace spec.hardware.rootDevice.deviceName on Machine/metal-01 with spec.substrate.baremetal.rootDevice.wwn: 0x5000c500a1b2c3d4, the WWN /dev/disk/by-id/wwn-0x5000c500a1b2c3d4 names"}},
+		"A root-device wwn in another form": {labCatalog(metalProvider(), server(api.MapValue(text("wwn", "0X5000C500A1B2C3D4")))), "Machine/metal-01", onMetal},
+		"A root-device serial number the installer cannot compare": {labCatalog(metalProvider(), server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"),
 			text("serialNumber", "ZC1A 2B3C")))), "Machine/metal-01", onMetal},
 		"An unverified fetch of private material": {labCatalog(metalProvider(), untrusting), "Machine/metal-01", onMetal},
 		"An unverified BMC leg for private delivery": {
@@ -93,7 +94,7 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 		"A credentialed proxy": {labCatalog(externalProxy("corporate", text("httpsProxy", "http://proxy.example.test:3128"),
 			text("trustBundleRef", "corporate-ca")), proxiedGuest(), repositoryProfile("https://mirror.example.test/a")), "Machine/rhel-01",
 			map[string]string{"<machine>": "Machine/rhel-01", "<profile>": "MachineInstallProfile/rhel-9-8", "<proxy>": "Proxy/corporate"}},
-		"An Ed25519 delivered host key under FIPS": {labCatalog(metalProvider(), server(api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"))),
+		"An Ed25519 delivered host key under FIPS": {labCatalog(metalProvider(), server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"))),
 			sshKeySecret(api.MapValue(field("generated", api.MapValue()))), fipsProfile()), "Machine/metal-01",
 			map[string]string{"<secret>": "Secret/metal-01-host-key"}},
 		"An Ed25519 fleet key under FIPS": {labCatalog(fipsProfile(), normalizedFleetSecret(t, api.MapValue(field("generated", api.MapValue())))),

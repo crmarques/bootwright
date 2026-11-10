@@ -503,6 +503,11 @@ func TestOSDRootExclusionMatchesADeclaredWWN(t *testing.T) {
 			t.Fatalf("the root of a Machine declaring wwn %s and /dev/vda is misread", wwn)
 		}
 	}
+	installed := machine.WithSpec(machine.Spec().Without("hardware").WithPath(m("wwn", "0x5000c500a1b2c3d4"), "substrate", "baremetal", "rootDevice").
+		WithPath(api.BoolValue(false), "os", "provided").WithPath(api.StringValue("rhel"), "os", "installProfileRef"))
+	if !rootDevice(installed, "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4") || rootDevice(installed, "/dev/disk/by-id/wwn-0x5000c500a1b2c3d5") {
+		t.Fatal("the root an installed physical Machine declares by wwn alone is misread")
+	}
 }
 
 func TestASerialOSDPathNamesOnlyADiskItsInstalledBareMetalMachineDeclaresWithoutDeviceName(t *testing.T) {

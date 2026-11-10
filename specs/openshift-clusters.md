@@ -41,11 +41,11 @@ management controller under the trust its Machine declares, with the
 [private delivery](#boot-media) rules below.
 At [Machine admission](api/machines.md#os-lifecycle-and-substrate-invariants),
 a physical agent node names its root in one of the forms of the
-[root-device rule](api/machines.md#bmc-and-root-device-shape): a WWN, as its
-`/dev/disk/by-id/wwn-0x` `deviceName` or as `wwn` alone; a serial number with
-exact `sizeBytes`; or `volumeRef` or `bootVolume`, declared or defaulted, under
-verified BMC TLS ([D252](milestones/backlog.md#d252)). Any other `deviceName`
-refuses, and each declared selector must be valid.
+[root-device rule](api/machines.md#bmc-and-root-device-shape): a WWN as `wwn`;
+a serial number with exact `sizeBytes`; or `volumeRef` or `bootVolume`,
+declared or defaulted, under verified BMC TLS ([D252](milestones/backlog.md#d252)).
+A `hardware.rootDevice.deviceName` refuses there, and each declared selector
+must be valid.
 
 The installation freezes a serial-selected root's serial and capacity into its
 hardware proof. Immediately before media insertion, and again after a firmware
@@ -110,7 +110,9 @@ to it. Its reason and remedy are the diagnostic's message and remediation, in
 which `<cluster>` is the refused cluster, `<machine>` the Machine of the node
 refused, `<provider>` and `<provider host>` that Machine's provider and the
 Machine the provider runs on, and `<server>` and `<server host>` the selected
-artifact server and its placement Machine. The four endpoint rows name the
+artifact server and its placement Machine. `<remedy>` replaces a
+`/dev/disk/by-id/wwn-0x` root path with the `wwn` it names, and otherwise
+removes the path and names every root form. The four endpoint rows name the
 first refused endpoint `<slot>` in `api`, `api-int`, `ingress` order and its
 native `<port>`, are checked only once no other row refuses the cluster, and
 their diagnostic carries the refused field's path.
@@ -149,7 +151,8 @@ every selected `OpenShiftCluster`, and both belong to the
 | A physical node with an HTTP BMC | a physical node's BMC uses HTTP | `a physical node's private boot image requires an HTTPS management controller` | `set spec.substrate.baremetal.bmc.address on <machine> to an HTTPS ComputerSystem endpoint` |
 | A physical node with unverified BMC TLS | a physical node disables BMC TLS verification | `a physical node's private boot image requires a BMC connection that verifies its certificate` | `enable spec.substrate.baremetal.bmc.tls.verify on <machine> and declare its trust bundle when needed` |
 | A physical node with unverified media TLS | a physical node selects disableVerification | `a physical node's private boot image requires virtual-media TLS verification` | `set spec.substrate.baremetal.bmc.virtualMedia.tls.trust on <machine> to importCertificate or established` |
-| A physical node without a stable root selector | a physical node names its root in none of the forms of the [root-device rule](api/machines.md#bmc-and-root-device-shape), declares a malformed selector, a `hardware.rootDevice.deviceName` other than a `/dev/disk/by-id/wwn-0x` path or one naming another WWN than its `wwn`, or a `volumeRef` or `bootVolume` beside another root hint | `a physical agent installation requires a stable root selector: a WWN as wwn or its /dev/disk/by-id/wwn-0x deviceName, serialNumber with exact sizeBytes, or a volumeRef or bootVolume logical volume` | `set spec.substrate.baremetal.rootDevice on <machine> with a supported wwn, serialNumber and exact sizeBytes, or volumeRef, or remove every root hint so it defaults to bootVolume; a deviceName other than the disk's /dev/disk/by-id/wwn-0x path is refused` |
+| A physical node without a stable root selector | a physical node names its root in none of the forms of the [root-device rule](api/machines.md#bmc-and-root-device-shape), declares a malformed selector, or a `volumeRef` or `bootVolume` beside another root hint | `a physical agent installation requires a stable root selector: a wwn, serialNumber with exact sizeBytes, or a volumeRef or bootVolume logical volume` | `set spec.substrate.baremetal.rootDevice.wwn on <machine> to the disk's WWN, 0x and 16 or 32 lowercase hexadecimal digits, or its serialNumber and sizeBytes to the disk's serial number and exact capacity, or its volumeRef to an existing logical volume, or remove every root hint to default to bootVolume` |
+| A physical node's root named by a device path | any `hardware.rootDevice.deviceName` on a physical node | `a bare-metal Machine an installer writes names its root WWN as spec.substrate.baremetal.rootDevice.wwn, never by spec.hardware.rootDevice.deviceName` | `<remedy>` |
 | A root device the installer cannot name | a virtual node's `spec.hardware.rootDevice.deviceName` other than `/dev/<name>` or `/dev/disk/by-path/<name>` | `the agent installer names a root device only as /dev/<name> or /dev/disk/by-path/<name>` | `set spec.hardware.rootDevice.deviceName on <machine> to such a path` |
 | A root device size the frozen input cannot carry | a node whose `minSizeGigabytes` exceeds 9007199254740991, the largest integer the frozen input carries exactly, at `spec.hardware.rootDevice` on its Machine | `a node's minSizeGigabytes is larger than the frozen installer input carries exactly` | `declare spec.hardware.rootDevice.minSizeGigabytes on <machine> as at most 9007199254740991` |
 
@@ -309,8 +312,7 @@ follows; a node that declares none gets no `rootDeviceHints`.
 
 | Machine hint | `rootDeviceHints` key |
 | --- | --- |
-| `hardware.rootDevice.deviceName` on a virtual node, `/dev/<name>` or `/dev/disk/by-path/<name>` | `deviceName` |
-| `hardware.rootDevice.deviceName` on a physical node, a `/dev/disk/by-id/wwn-0x` path | `wwn`, as `0x` and the path's digits |
+| `hardware.rootDevice.deviceName`, on a virtual node only, `/dev/<name>` or `/dev/disk/by-path/<name>` | `deviceName` |
 | `substrate.baremetal.rootDevice.wwn`, `hctl`, `serialNumber` | the same name |
 | `hardware.rootDevice.model`, `vendor` | the same name |
 | `hardware.rootDevice.minSizeGigabytes`, `rotational` | the same name, as an integer and a boolean |

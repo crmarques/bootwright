@@ -257,7 +257,7 @@ var kickstartFields = []struct {
 	{"a package entry", "spec.customizations.packages.install of the install profile", kickstartPackage, func(i Installation) []string { return i.Packages }},
 	{"the package source", "spec.installer.anaconda.packageSource of the install profile", kickstartPackageSource, func(i Installation) []string { return []string{i.PackageSource} }},
 	{"the release", "spec.os.version of the install profile", kickstartToken, func(i Installation) []string { return []string{i.Release} }},
-	{"the root device", "spec.hardware.rootDevice.deviceName of the Machine", kickstartToken, func(i Installation) []string { return []string{i.RootDevice} }},
+	{"the root device", "spec.hardware.rootDevice.deviceName of a virtual Machine, or the /dev/disk/by-id path of spec.substrate.baremetal.rootDevice.wwn of a physical one", kickstartToken, func(i Installation) []string { return []string{i.RootDevice} }},
 	{"the root disk serial number", "spec.substrate.baremetal.rootDevice.serialNumber of the Machine", kickstartToken, func(i Installation) []string { return []string{i.RootSerial} }},
 	{"the root disk WWN", "spec.substrate.baremetal.rootDevice.wwn of the Machine", kickstartToken, func(i Installation) []string { return []string{i.RootWWN} }},
 	{"the SELinux mode", "spec.customizations.security.selinux.mode of the install profile", kickstartToken, func(i Installation) []string { return []string{i.SELinux} }},

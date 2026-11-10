@@ -13422,7 +13422,7 @@ WWN path, path beside its wwn, `volumeRef`, declared and defaulted
 `TestLogicalVolumeRootRefusalsNameTheirOwnField` (the TLS refusal),
 `TestInstalledPhysicalRootRefusalNamesEveryForm`,
 `TestErasePolicyListsTheRootOnlyWhenItNamesIt` and
-`TestPhysicalAgentWWNPathReachesTheInstallerAsItsWWN`; the refusal-table
+`TestPhysicalAgentWWNReachesTheInstallerAsItsWWNHint` (X369 dropped its path cases); the refusal-table
 tests hold both tables to the code.
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
@@ -13430,7 +13430,7 @@ occurred. **Limitations:** a Bootwright installation still refuses `wwn`
 alone, and the agent installer still admits it, so the path is the one
 spelling both admit rather than the only one. Making one form the only one is
 the audit's API-38 reshape, a breaking rename the owner decides
-([B1274](m1.md#b1274)).
+([B1274](#x369--wwn-root)).
 
 ### X353 — Ceph node names
 
@@ -13720,3 +13720,43 @@ GPL-3.0-or-later, which that decision weighs; an image's license is its
 program's, not that of the rest of its content; and no release recipe exists, so
 the notices are refused by the build, not by a release step
 ([B1314](backlog.md#b1314)).
+
+### X369 — WWN root
+
+**Items:** B1274 (2026-11-10, [D253](backlog.md#d253) (2)), Kind safety,
+Owners: Machine, with Managed OS, Container clusters and Storage.
+`substrate.baremetal.rootDevice.wwn`, `0x` and 16 or 32 lowercase hexadecimal
+digits, is the one WWN root form of a bare-metal Machine an installer writes
+([root-device rule](../api/machines.md#bmc-and-root-device-shape)), which
+reverses [X352](#x352--root-rule)'s choice of the by-id path. A Bootwright
+installation derives `/dev/disk/by-id/wwn-0x<digits>` from it for its
+Kickstart and `%pre`, and the agent installer passes it as its `wwn` hint, so
+one Machine validates and plans for either. On such a Machine
+`hardware.rootDevice.deviceName` refuses `api.invariant` at its path, the
+remedy naming the `wwn` a by-id WWN path spells, and a `wwn` in another form
+refuses at its path. `serialNumber` and `sizeBytes` beside `wwn` stay proofs,
+as they were beside the path. An erase target is the root when its
+`deviceName` is the derived path or its `wwn` names the root's WWN under any
+other path; Ceph excludes the root by that WWN. OS-ready Machines keep
+`deviceName` and `wwn` for the Ceph OSD exclusion, virtual Machines keep
+`deviceName`, and erase and clear targets keep their native path form.
+
+| Finding | Change |
+| --- | --- |
+| API-38 | `substrate.RootDevicePath` derives the by-id path from `wwn`; `machine.PhysicalRootDeviceNameRefusal` refuses a physical root `deviceName` in admission, managed-OS selection and the agent; `machine.AgentRootWWN` and the agent's path-to-`wwn` mapping are removed; the erase admission and request match a root target by WWN; machines.md root forms and root-target rule, managed-os.md physical installation and refusal rows, openshift-clusters.md selection, refusal rows and hint projection, state-reconciliation.md physical disk safety and the security-safety skill state the one form; every tracked installed physical example names its root by `wwn` |
+
+Tests: `TestOneWWNRootValidatesForEitherInstaller`,
+`TestAPhysicalRootDeviceNameRefusesNamingTheWWN`,
+`TestAPhysicalInstallationFreezesTheRootDiskIdentityItDeclares` (a `wwn`
+alone, beside a serial and size, and malformed), the managed-OS and
+OpenShift refusal-table rows, `TestPhysicalAgentWWNReachesTheInstallerAsItsWWNHint`,
+`TestPhysicalEraseMatchesAWWNRootByItsDerivedPathOrItsWWN`, the WWN cases of
+`TestEraseAdmissionComparesTheDeclaredRootSize` and
+`TestErasePolicyListsTheRootOnlyWhenItNamesIt`, and
+`TestPhysicalCephFreezesTheRootWWNItsMachineDeclares`; the physical request
+goldens now carry the derived root path beside its `wwn`.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** a serial-declared root's erase still compares no
+WWN ([B1275](m1.md#b1275)); the `bootwright-template-inputs` chart still emits
+a physical root `deviceName`, which its owner changes.

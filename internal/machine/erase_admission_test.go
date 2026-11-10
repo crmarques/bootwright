@@ -144,6 +144,16 @@ func TestEraseAdmissionComparesTheDeclaredRootSize(t *testing.T) {
 			t.Fatalf("a %s-byte root target: issues %+v", size, issues)
 		}
 	}
+	byWWN := rootDeclared(machine.WithSpec(spec), "", m("wwn", "0x5000000000000009").With("sizeBytes", api.IntegerValue("8192")))
+	for _, device := range []string{"/dev/disk/by-id/wwn-0x5000000000000009", "/dev/sdz"} {
+		for size, included := range map[string]bool{"8192": true, "12288": false} {
+			target := m("deviceName", device, "wwn", "naa.5000000000000009", "serialNumber", "EXAMPLE-01").With("sizeBytes", api.IntegerValue(size))
+			changed := byWWN.WithSpec(byWWN.Spec().WithPath(m("method", "metadataClear", "targets", list(target)), "hardware", "eraseOnRemoval"))
+			if issues := validateErase(changed, substrate.ArmBaremetal); (len(issues) == 0) != included {
+				t.Fatalf("a %s-byte root target at %s for a wwn root: issues %+v", size, device, issues)
+			}
+		}
+	}
 }
 
 func TestErasePolicyListsTheRootOnlyWhenItNamesIt(t *testing.T) {
@@ -151,7 +161,8 @@ func TestErasePolicyListsTheRootOnlyWhenItNamesIt(t *testing.T) {
 	data := m("deviceName", "/dev/disk/by-id/wwn-0x5000000000000001", "wwn", "0x5000000000000001", "serialNumber", "DATA").With("sizeBytes", api.IntegerValue("8192"))
 	rootTarget := m("deviceName", root, "wwn", "0x5000000000000009", "serialNumber", "ROOT").With("sizeBytes", api.IntegerValue("8192"))
 	for name, declare := range map[string]func(api.Object) api.Object{
-		"wwn path": func(o api.Object) api.Object { return rootDeclared(o, root, m()) },
+		"wwn":                    func(o api.Object) api.Object { return rootDeclared(o, "", m("wwn", "0x5000000000000009")) },
+		"wwn under another path": func(o api.Object) api.Object { return rootDeclared(o, "", m("wwn", "0x5000000000000009")) },
 		"serial": func(o api.Object) api.Object {
 			return rootDeclared(o, "", m("serialNumber", "ROOT").With("sizeBytes", api.IntegerValue("8192")))
 		},
@@ -177,11 +188,14 @@ func TestErasePolicyListsTheRootOnlyWhenItNamesIt(t *testing.T) {
 			if name == "serial" {
 				target = target.Without("deviceName").Without("wwn")
 			}
+			if name == "wwn under another path" {
+				target = target.With("deviceName", api.StringValue("/dev/sdz")).With("wwn", api.StringValue("naa.5000000000000009"))
+			}
 			named := machine.WithSpec(machine.Spec().WithPath(list(data, target), "hardware", "eraseOnRemoval", "targets"))
 			if issues := validateErase(named, substrate.ArmBaremetal); len(issues) != 0 {
 				t.Fatalf("a policy naming its root was refused: %+v", issues)
 			}
-			if selected := RootEraseSelected(named); selected != (name == "wwn path" || name == "serial") {
+			if selected := RootEraseSelected(named); selected != (name == "wwn" || name == "wwn under another path" || name == "serial") {
 				t.Fatalf("root selected %v", selected)
 			}
 		})

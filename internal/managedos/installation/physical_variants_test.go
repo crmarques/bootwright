@@ -15,7 +15,7 @@ import (
 )
 
 func physicalVariantCatalog(profile api.Object, hostType string) api.Catalog {
-	return physicalVariantCatalogOn(profile, hostType, api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4")))
+	return physicalVariantCatalogOn(profile, hostType, api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
 }
 
 func physicalVariantCatalogOn(profile api.Object, hostType string, rootDevice api.Value) api.Catalog {
@@ -96,8 +96,7 @@ func TestPhysicalVariantRequestRetainsApplyDataLossAuthorization(t *testing.T) {
 func TestPhysicalHostVariantsRequestGolden(t *testing.T) {
 	profile := registeringProfile()
 	profile = profile.WithSpec(profile.Spec().WithPath(encryptionSecurity(true), "customizations", "security"))
-	request, _ := onlyRequest(t, physicalVariantCatalogOn(profile, "ecdsaP256", api.MapValue(text("deviceName", "/dev/disk/by-id/wwn-0x5000c500a1b2c3d4"),
-		text("wwn", "0X5000C500A1B2C3D4"), text("serialNumber", "ZC1A2B3C"))))
+	request, _ := onlyRequest(t, physicalVariantCatalogOn(profile, "ecdsaP256", api.MapValue(text("wwn", "0x5000c500a1b2c3d4"), text("serialNumber", "ZC1A2B3C"))))
 	if !request.fips() || request.Registration == nil || request.DiskEncryption == nil {
 		t.Fatal("combined physical variant lost a requested arm")
 	}

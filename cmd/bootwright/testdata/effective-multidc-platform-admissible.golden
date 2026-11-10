@@ -1309,14 +1309,14 @@ spec:
         - nicRef: nic3
           macAddress: 02:00:00:00:00:03
           segmentRef: ceph-network
+      rootDevice:
+        wwn: "0x5000c500a1b2c311"
   hardware:
     nics:
       - name: nic0
       - name: nic1
       - name: nic2
       - name: nic3
-    rootDevice:
-      deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c311
   os:
     provided: false
     installProfileRef: rhel-ceph-node
@@ -1396,14 +1396,14 @@ spec:
         - nicRef: nic3
           macAddress: 02:00:00:00:00:07
           segmentRef: ceph-network
+      rootDevice:
+        wwn: "0x5000c500a1b2c312"
   hardware:
     nics:
       - name: nic0
       - name: nic1
       - name: nic2
       - name: nic3
-    rootDevice:
-      deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c312
   os:
     provided: false
     installProfileRef: rhel-ceph-node
@@ -1483,14 +1483,14 @@ spec:
         - nicRef: nic3
           macAddress: 02:00:00:00:00:0b
           segmentRef: ceph-network
+      rootDevice:
+        wwn: "0x5000c500a1b2c313"
   hardware:
     nics:
       - name: nic0
       - name: nic1
       - name: nic2
       - name: nic3
-    rootDevice:
-      deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c313
   os:
     provided: false
     installProfileRef: rhel-ceph-node
@@ -1570,14 +1570,14 @@ spec:
         - nicRef: nic3
           macAddress: 02:00:00:00:00:0f
           segmentRef: ceph-network
+      rootDevice:
+        wwn: "0x5000c500a1b2c314"
   hardware:
     nics:
       - name: nic0
       - name: nic1
       - name: nic2
       - name: nic3
-    rootDevice:
-      deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c314
   os:
     provided: false
     installProfileRef: rhel-ceph-node
@@ -1657,14 +1657,14 @@ spec:
         - nicRef: nic3
           macAddress: 02:00:00:00:00:13
           segmentRef: ceph-network
+      rootDevice:
+        wwn: "0x5000c500a1b2c315"
   hardware:
     nics:
       - name: nic0
       - name: nic1
       - name: nic2
       - name: nic3
-    rootDevice:
-      deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c315
   os:
     provided: false
     installProfileRef: rhel-ceph-node
@@ -1744,14 +1744,14 @@ spec:
         - nicRef: nic3
           macAddress: 02:00:00:00:00:17
           segmentRef: ceph-network
+      rootDevice:
+        wwn: "0x5000c500a1b2c316"
   hardware:
     nics:
       - name: nic0
       - name: nic1
       - name: nic2
       - name: nic3
-    rootDevice:
-      deviceName: /dev/disk/by-id/wwn-0x5000c500a1b2c316
   os:
     provided: false
     installProfileRef: rhel-ceph-node
