@@ -797,8 +797,30 @@ substitutes an update silently; recovery follows
 `make build` and `make check` fail on a known vulnerability in what a build
 carries or pins: `govulncheck` over the executable's packages, failing only on
 a finding whose trace reaches a function, and OSV for every
-[locked wheel](controller.md#the-runtime-lock) and for every default client of
-the [tool table](controller.md#the-tool-table) by its top-level Go module. The only way past
+[locked wheel](controller.md#the-runtime-lock). Each default client of the
+[tool table](controller.md#the-tool-table) is judged by what its own binary
+holds: the gate downloads the release file the table pins, keeps it in the
+shared cache directory and checks it against the table's size and SHA-256 on
+every use, extracts the executable from an archive, and runs `govulncheck` in
+binary mode, which reads the Go toolchain and the modules the executable's
+build information names and fails only on a finding whose symbols the binary
+links. A server component that the client's top-level module also holds
+therefore fails nothing unless the client links it. Binary mode cannot judge a
+module whose build information has no release version, so the gate asks OSV
+about each, at the client's own release, from a table that maps govc's
+`github.com/vmware/govmomi` and kubectl's `k8s.io/` staging modules and refuses
+one it does not map. An executable that names no module beyond the toolchain,
+as `virtctl`'s release does, is also judged by its top-level Go module through
+OSV, and its third-party dependencies are not judged at all
+([B1317](milestones/backlog.md#b1317)). A scheduled job of
+`.github/workflows/vulnerability.yml` scans each managed service's and the
+emulated BMC's image by the digest the bill of materials names, with a scanner
+pinned by tag and digest, and reports the high and critical findings of each
+image in its summary without failing a build (a scan that cannot run is named
+and marks the job), because a base image always
+carries findings a build cannot fix
+(`TestTheScheduledImageScanTakesItsImagesFromTheBillOfMaterialsAndPinsItsScanner`).
+The only way past
 a finding is a reviewed exception in `cmd/bootwright/vulnerability-exceptions.json`
 naming the advisory and its aliases, the component's `bom-ref`, `not_affected`
 with a CycloneDX justification or `no_fix`, a reason, and an expiry at most 90
@@ -809,10 +831,12 @@ embeds the exceptions, which its bill of materials carries as VEX, and the
 build stamps the verdict `version` prints. `VULNCHECK=skip` builds without the
 databases and stamps the executable `unchecked`.
 
-Not yet met: the service and emulated BMC images are scanned on a schedule and
-in the mirror registry, and each pinned client is judged by the modules and
-toolchain its binary holds rather than by its top-level module alone; tracked
-as [B1244](milestones/backlog.md#b1244).
+Not yet met: the dependencies of a client whose binary names no module, which
+[B1317](milestones/backlog.md#b1317) owns, are not judged; the images in the
+mirror registry are not scanned, which
+[B1250](milestones/backlog.md#b1250)'s profile carries, and no release recipe
+refuses an executable stamped `unchecked`, which
+[B1314](milestones/backlog.md#b1314) owns.
 
 ### Acquisition origins
 

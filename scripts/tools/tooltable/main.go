@@ -18,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/crmarques/bootwright/tools/clientassets"
 )
 
 const maxMetadata = 1 << 20
@@ -51,20 +53,19 @@ type publisher struct {
 }
 
 var publishers = map[string]publisher{
-	"govc": {repository: "vmware/govmomi", asset: func(v string) string {
-		return "https://github.com/vmware/govmomi/releases/download/v" + v + "/govc_Linux_x86_64.tar.gz"
-	}, checksum: func(v, _ string) string {
+	"govc": {repository: "vmware/govmomi", asset: assetOf("govc"), checksum: func(v, _ string) string {
 		return "https://github.com/vmware/govmomi/releases/download/v" + v + "/checksums.txt"
 	}},
-	"helm": {repository: "helm/helm", asset: func(v string) string {
-		return "https://get.helm.sh/helm-v" + v + "-linux-amd64.tar.gz"
-	}, checksum: func(_, asset string) string { return asset + ".sha256sum" }},
-	"kubectl": {licenseRepository: "kubernetes/kubernetes", asset: func(v string) string {
-		return "https://dl.k8s.io/release/v" + v + "/bin/linux/amd64/kubectl"
-	}, checksum: func(_, asset string) string { return asset + ".sha256" }, latest: "https://dl.k8s.io/release/stable.txt"},
-	"virtctl": {repository: "kubevirt/kubevirt", asset: func(v string) string {
-		return "https://github.com/kubevirt/kubevirt/releases/download/v" + v + "/virtctl-v" + v + "-linux-amd64"
-	}},
+	"helm":    {repository: "helm/helm", asset: assetOf("helm"), checksum: func(_, asset string) string { return asset + ".sha256sum" }},
+	"kubectl": {licenseRepository: "kubernetes/kubernetes", asset: assetOf("kubectl"), checksum: func(_, asset string) string { return asset + ".sha256" }, latest: "https://dl.k8s.io/release/stable.txt"},
+	"virtctl": {repository: "kubevirt/kubevirt", asset: assetOf("virtctl")},
+}
+
+func assetOf(kind string) func(string) string {
+	return func(version string) string {
+		asset, _ := clientassets.Of(kind, version)
+		return asset.URL
+	}
 }
 
 var stable = regexp.MustCompile(`^v?([0-9]+)\.([0-9]+)\.([0-9]+)$`)

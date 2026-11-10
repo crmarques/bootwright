@@ -114,7 +114,10 @@ that met it ([D250](../../../../specs/milestones/backlog.md#d250) (15)):
 2. A fixed release exists: raise the component to it, in its own commit. For a
    client, move the default in `internal/controller/tooltable.json`, and the
    minimum too when the advisory reaches it, then run `make tool-table`; for a
-   wheel, refresh the runtime lock; for a Go module, `./scripts/go get` it.
+   wheel, refresh the runtime lock; for a Go module, `./scripts/go get` it. A
+   client's findings name the toolchain or module its own release file holds
+   and the release that fixes it, so the fix is a client release built with it;
+   `make tool-table-outdated` says whether its publisher has one.
 3. No fixed release exists, or the build does not contain or reach the
    affected code: add one entry to `cmd/bootwright/vulnerability-exceptions.json`
    with the advisory, its aliases, the component's `bom-ref` from

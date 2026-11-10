@@ -294,7 +294,6 @@ Alias cell.
 | [B1237](#b1237) | new, 2026-11-09 (D248 (5)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's default image comes from a Red Hat registry wherever Red Hat publishes one | Red Hat publishes no dnsmasq, chrony or sushy-tools image, and its squid image needs a `registry.redhat.io` login no managed-service pull carries |
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
 | [B1240](#b1240) | new, 2026-11-09 (X340 gate) | defect | Controller | The native supervisor test reads its task's PID only from a complete record | It failed once in `make check` beside the other lanes and passed when run again alone; the cause is a test-side race, not the supervisor |
-| [B1244](#b1244) | new, 2026-11-10 (D250 (2)); partly delivered by X344 on 2026-11-10 | enabling | Architecture | Each pinned client is judged by what its binary holds, and the service and emulated BMC images are scanned on a schedule and in the mirror registry | The build's gate landed (X344); a binary scan downloads every client, and an image scan needs a pinned scanner |
 | [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355 and X361 on 2026-11-10 | product | Controller, with Desired state | A managed artifact server may serve the artifact mirror, and one declaration replaces the download mirrors | The declaration (X355), the preflight probe and the private trust anchor (X361) landed; a managed server needs B1249, and folding `spec.downloads` awaits the owner (D251 (5)) |
 | [B1249](#b1249) | new, 2026-11-10 (D250 (8)) | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | D250 parks the controlled-network plan until the owner promotes it; no capability realizes a managed Registry |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
@@ -314,6 +313,7 @@ Alias cell.
 | [B1315](#b1315) | new, 2026-11-10 (X395 verification review) | defect | Substrate | A tagged managed Network whose `vlan` or trunk `bridge` changes redefines its own leg instead of refusing it as foreign | The refusal comes before any effect, so no isolation is lost; the e2e case never changes a leg, and a redefinition while guests use the old VLAN needs its own drift and quiescence rule |
 | [B1313](#b1313) | new, 2026-11-10 (X376) | enabling | Architecture | Bootwright names its own license, which the bill of materials and the notices carry | An owner decision: no file of the repository declares one |
 | [B1314](#b1314) | new, 2026-11-10 (X376 review) | enabling | Architecture | A release recipe builds, refuses a build that is unchecked or lacks its notices, and ships both documents with the executable | No release recipe exists; `make build` already refuses a build without notices, but nothing releases |
+| [B1317](#b1317) | new, 2026-11-10 (X400 review) | enabling | Architecture | A default client whose binary names no Go module has its third-party dependencies judged | virtctl 1.9.1 is built so its build information holds only the toolchain; the gate judges its Go dependencies by its top-level module alone |
 
 ### B82
 
@@ -3307,30 +3307,6 @@ renaming it, or waiting until the record holds a PID, closes the window.
 **Exit evidence:** the test parses the PID only from a complete record.
 **Outcome:** the controller units lane no longer fails on this race.
 
-### B1244
-
-**Owner:** Architecture. **Kind:** enabling. **Requires:** none.
-**Definition:** Needs definition, from [D250](#d250) (2), (9) and (15).
-**Delivered in-tree by X344:** the
-[vulnerability gate](../security.md#the-vulnerability-gate) of `make build`
-and `make check`, its reviewed exceptions carried as VEX, the stamped verdict
-`version` prints, a daily run, and the
-[finding procedure](../../.agents/skills/code-implementation/references/verification.md#vulnerability-findings)
-coding agents follow. Go findings fail only where their trace reaches a
-function, and every wheel and client finding fails until excepted.
-**Remaining:** each default client is judged by the Go toolchain and modules
-its binary's build information names (`govulncheck -mode binary` over the
-pinned artifact, or OSV over that list), not only by its top-level module,
-whose records mostly name server components; the managed services' and the
-emulated BMC's images are scanned on a schedule, reporting without failing a
-build, and in the mirror registry
-once [B1249](#b1249) builds it; a release build refuses an executable stamped
-`unchecked` once a release recipe exists. **Open:** the scanner and its pin
-(recommendation: one pinned by digest in the workflow, reading the images'
-digests from the bill of materials). **Exit evidence:** a scheduled job whose
-report names each image's findings, and a registry scan in
-[B1250](#b1250)'s profile.
-
 ### B1246
 
 **Owner:** Controller, with Desired state. **Kind:** product. **Requires:**
@@ -3406,7 +3382,10 @@ placement, a replay that copies nothing, a verification refusal and a row of
 have no route but to their package repositories, the vendor origins and the
 mirror host installs an OpenShift cluster and a Ceph cluster, and its evidence
 shows each denied attempt. **Exit evidence:** the profile's example, an
-in-tree test in which every public origin refuses, and an owner-accepted run.
+in-tree test in which every public origin refuses, an owner-accepted run, and a
+scan of the images in the mirror registry that reports each image's findings
+like the scheduled scan of the pinned images
+([X400](delivered.md#x400--client-binary-scan-and-scheduled-image-scan)).
 
 ### B1267
 
@@ -3613,13 +3592,32 @@ names a license.
 [X376](delivered.md#x376--component-licenses-notices-and-the-pinned-go-image).
 No release recipe exists: `make build` refuses a build whose components lack a
 license or text, but no step produces a release, so nothing yet refuses a
-release build that is stamped `unchecked`
-([B1244](#b1244)) or that ships without
+release build that is stamped `unchecked` by the
+[vulnerability gate](../security.md#the-vulnerability-gate)
+([X400](delivered.md#x400--client-binary-scan-and-scheduled-image-scan) left that
+part of the former B1244 here) or that ships without
 `bootwright.notices.txt`. **Outcome:** a release recipe builds with the
 vulnerability gate on, refuses an executable stamped `unchecked` or a build
 without its notices, and ships the executable, its bill of materials and its
 notices together. **Exit evidence:** the recipe, and a test that it refuses each
 of the two builds.
+
+### B1317
+
+**Owner:** Architecture. **Kind:** enabling. **Requires:** none.
+**Definition:** Candidate, from the review of
+[X400](delivered.md#x400--client-binary-scan-and-scheduled-image-scan).
+`virtctl` 1.9.1's release is built so that its build information names the Go
+toolchain and no module, so the
+[vulnerability gate](../security.md#the-vulnerability-gate) judges its toolchain
+by symbols and its dependencies by its top-level module alone, and an
+advisory against a dependency it links, such as `golang.org/x/net`, goes
+unseen. **Outcome:** the gate judges the dependencies the release was built
+from, for instance the modules of the publisher's `go.mod` and `go.sum` at the
+release tag, pinned by digest like the release file, or a build of the tag
+whose binary names them. **Exit evidence:** a test in which a client whose
+binary names no module has its dependencies judged, and a gate run that names
+them.
 
 ## Audit remediation (2026-10-26)
 
@@ -8232,6 +8230,37 @@ the owner's review:
     request every managed service freezes moves that request version and so
     the proxy's, resolver's and time service's content digests, rather than
     giving the registry a capability of its own.
+
+13. Taken by the session for B1244 (X400), pending the owner's review: a
+    default client is scanned by `govulncheck` in binary mode over the release
+    file its tool-table entry pins, so the toolchain and modules the binary
+    names decide, in place of its top-level module's records, which mostly name
+    server components. Binary mode never judges a module whose build
+    information has no release version, `(devel)` or empty, as govc's
+    `github.com/vmware/govmomi` and kubectl's `k8s.io/` staging modules are, so
+    the gate asks OSV about each at its client's release (govmomi at govc's,
+    `k8s.io/<module>` at `0.<minor>.<patch>` of kubectl's `1.<minor>.<patch>`)
+    and refuses a module no table maps; none has an advisory today. The two
+    kubectl exceptions for GO-2025-3521 and GO-2025-3547 matched no finding
+    and are gone, because `k8s.io/kubernetes` is named at v1.37.2 and the
+    binary links none of its symbols. `virtctl`'s release records no module, so
+    it is also judged by its top-level module and keeps its eight exceptions,
+    and its third-party dependencies are not judged at all, parked as
+    [B1317](#b1317). The scan found thirty-six advisories in the newest stable
+    releases of helm, kubectl and virtctl, whose toolchains or modules predate
+    the fixes (helm 4.3.1 on Go 1.27.2, kubectl 1.37.2 on Go 1.26.10 with
+    golang.org/x/net 0.57.0, virtctl 1.9.1 on Go 1.26.4), and no release with a
+    fix exists, so thirty-five are `no_fix` exceptions to 2027-02-08 instead of
+    a build that fails until a publisher releases, and the thirty-sixth, a
+    Windows-only flaw, is `not_affected` for the linux/amd64 release. The scan
+    matches symbols the binary links, never a call path. Images are scanned by
+    Trivy, pinned by tag and digest in the workflow, on the daily schedule and
+    by hand, reading the images from the bill of materials at run time so a
+    new pin cannot be left out, and reporting high and critical findings in
+    the job summary without failing a build, and marking the job when a scan
+    could not run; the scan of the mirror registry's images joins
+    [B1250](#b1250)'s profile, and the release that refuses an `unchecked`
+    build stays with [B1314](#b1314).
 
 ### D252
 

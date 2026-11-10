@@ -13005,8 +13005,9 @@ no locked wheel has one.
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** a pinned client is judged by its top-level Go module alone,
 not by the toolchain and modules its binary holds; the images are not scanned
-yet; and no release recipe refuses an `unchecked` executable
-([B1244](backlog.md#b1244)).
+yet; and no release recipe refuses an `unchecked` executable.
+[X400](#x400--client-binary-scan-and-scheduled-image-scan) delivered the first two
+and [B1314](backlog.md#b1314) owns the third.
 
 ### X345 — The acquisition list
 
@@ -13807,3 +13808,75 @@ Distribution configuration, the pinned SELinux level and storage label on an
 enforcing host and the probe against a real registry are proved against
 goldens and fakes only. A restart in the middle of a push loses that upload,
 because each start draws a new upload secret.
+
+### X400 — Client binary scan and scheduled image scan
+
+**Item:** B1244 (2026-11-10, [D250](backlog.md#d250) (2), (9) and (15),
+[D251](backlog.md#d251) (6) and (13)), delivered in-tree, so the item leaves the
+backlog. Each default client is judged by what its own binary holds, and the
+pinned images are scanned on a schedule. The third part of the item, a release
+build that refuses an executable stamped `unchecked`, needs a release recipe,
+which [B1314](backlog.md#b1314) owns; the scan of the images in the mirror
+registry joins [B1250](backlog.md#b1250)'s profile.
+
+*Clients.* `make vulngate` hands `scripts/tools/vulngate` the tool table, a
+cache directory (`client-releases` in the shared cache directory, a cache mount
+in `make container-build`) and the vulnerability database. For each default
+client the tool takes the publisher file from `scripts/tools/clientassets`,
+which `tooltable` shares, downloads it by the table's size and SHA-256 into
+`<cache>/<sha256>/`, checks the cached file against both on every use, extracts
+the executable from a tar.gz and runs `govulncheck` in binary mode in process
+(`golang.org/x/vuln/scan`, already pinned by `go.mod` of the tools). The four
+clients are fetched in parallel and scanned in turn. A finding that names a
+symbol the binary links needs an exception on the client's `bom-ref`, as the
+top-level module's records did, and the failure line names the module, its
+version and the release that fixes it. A binary whose build information names
+no module beyond the toolchain, which is how `virtctl` 1.9.1 is built, is also
+asked of OSV by its top-level module, so its eight earlier exceptions still
+apply; its third-party dependencies are not judged at all, which
+[B1317](backlog.md#b1317) parks. Binary mode skips a module whose build
+information has no release version, so govc's `github.com/vmware/govmomi`
+(`=> ../ (devel)`) and kubectl's `k8s.io/api`, `apimachinery`, `cli-runtime`,
+`client-go`, `component-base`, `component-helpers`, `kubectl`, `metrics` and
+`streaming` would have gone unseen; the gate asks OSV about each at its client's
+release (govmomi at govc's, `k8s.io/<module>` at `0.<minor>.<patch>` of
+kubectl's `1.<minor>.<patch>`) and refuses a module no table maps. None has an
+advisory today. The two `kubectl` exceptions for GO-2025-3521 and GO-2025-3547
+matched no finding, because `k8s.io/kubernetes` is named at v1.37.2 and the
+binary links no kubelet or kube-apiserver symbol, and are removed.
+
+*Findings.* The scan found thirty-six advisories in the newest stable releases
+of three clients: four in helm 4.3.1 (Go 1.27.2 with `golang.org/x/net` 0.60.0
+and `golang.org/x/crypto` 0.58.0), eight in kubectl 1.37.2 (`golang.org/x/net`
+0.57.0 and `golang.org/x/text` 0.40.0) and twenty-four in virtctl 1.9.1, whose
+Go 1.26.4 predates every standard-library fix; govc 0.56.2 has none.
+`make tool-table-outdated` names no newer release of any, so thirty-five are
+`no_fix` exceptions expiring 2027-02-08, whose reason names the advisory, the
+fixed release and what the client holds, and GO-2026-6604, which concerns
+Windows junctions, is `not_affected` with `requires_environment` for the
+linux/amd64 release. Nothing proves a call path: binary mode
+matches symbols the executable links. The owner may prefer the build to fail
+until a publisher releases; removing the entries does it.
+
+*Images.* The `images` job of `.github/workflows/vulnerability.yml` runs daily
+and by hand, writes the bill of materials with `bootwright sbom`, scans each
+container component by its digest with Trivy 0.76.2, pinned by tag and by the
+digest of its multi-architecture index, and prints each image's high and
+critical findings in the job summary. It never fails a build
+(`continue-on-error`, `--exit-code 0`); a scan that cannot run, such as a pull
+refused by a rate limit, is named in the summary, lets the later images be
+scanned and marks the job.
+`TestTheScheduledImageScanTakesItsImagesFromTheBillOfMaterialsAndPinsItsScanner`
+holds the job to a schedule, a digest-pinned scanner, the bill of materials as
+its list, and that list to the images the build pins, so a new pin cannot be
+left out.
+
+No request, evidence, contract version or content digest moved, and `version`
+prints what it did.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred, the container build was not run, and the image job ran in no
+workflow. **Limitations:** the scanner's own database is the one it downloads
+at each run, unpinned by nature; an image's finding is not judged by an
+exception; and no release recipe refuses an `unchecked` executable
+([B1314](backlog.md#b1314)).

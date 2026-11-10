@@ -102,7 +102,8 @@ itself: `docker build --output type=local,dest=bin .`;
 from a checkout whose `.git` is a directory it then stamps itself in the build.
 
 The build runs `make wheels` while the proxy settings below are set, into a
-cache mount of its own, so a warm cache fetches no wheel. Go's module and
+cache mount of its own, so a warm cache fetches no wheel, and its vulnerability
+gate keeps the clients' release files in a second cache mount. Go's module and
 build caches are cache mounts the engine keeps between builds:
 on the reference host a cold build took 31 seconds, a rebuild after a source
 change 8, and a build that leaves go.mod unchanged downloads nothing. The
@@ -355,11 +356,19 @@ summary.
 
 `make build` first runs `make vulngate`, the
 [vulnerability gate](../specs/security.md#the-vulnerability-gate): it needs
-`vuln.go.dev` and `api.osv.dev`, fails on a finding no reviewed exception in
-`cmd/bootwright/vulnerability-exceptions.json` covers, and stamps its verdict,
-which `bootwright version` prints. `make check` runs it too, and
-`.github/workflows/vulnerability.yml` runs it daily, so a new advisory against
-an unchanged build fails within a day. Without a route to those databases, run
+`vuln.go.dev` and `api.osv.dev`, scans each default client's release file by
+the Go toolchain and modules that binary names, fails on a finding no reviewed
+exception in `cmd/bootwright/vulnerability-exceptions.json` covers, and stamps
+its verdict, which `bootwright version` prints. The first run downloads the four
+release files, about 160 MB, into `CLIENTS_CACHE` (`client-releases` in the
+shared cache directory), checking each against the tool table's SHA-256 and
+again on every reuse, so a warm cache downloads none. `make check` runs the gate
+too, and `.github/workflows/vulnerability.yml` runs it daily, so a new advisory
+against an unchanged build fails within a day. The workflow's `images` job also
+scans on a schedule the managed services' and the emulated BMC's images, read by
+digest from the bill of materials, with a scanner pinned by digest, and
+reports their high and critical findings in its summary without failing a
+build. Without a route to the databases, run
 `make build VULNCHECK=skip`, which stamps the executable `unchecked`. The
 [verification tiers](../.agents/skills/code-implementation/references/verification.md#vulnerability-findings)
 say how a finding is settled.

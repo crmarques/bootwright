@@ -13,8 +13,12 @@ SOURCE ?= $(if $(COMMIT),$(if $(shell git status --porcelain --untracked-files=n
 STAMP = -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.source=$(SOURCE) -X main.vulnerabilityCheck=$(VULNERABILITY_CHECK)
 
 # The vulnerability gate runs before every build, and the build stamps its
-# verdict. VULNCHECK=skip builds offline and stamps the executable unchecked.
+# verdict. It scans each default client's release file, which it keeps verified
+# by the tool table's SHA-256 in the shared cache directory, so a warm cache
+# downloads none. VULNCHECK=skip builds without the databases and stamps the
+# executable unchecked.
 VULNCHECK ?= on
+CLIENTS_CACHE ?= $(shell ./scripts/cache-dir)/client-releases
 VULNERABILITY_CHECK = $(shell cat bin/vulnerability-check 2>/dev/null)
 vulngate:
 	@set -eu; mkdir -p bin; rm -f bin/vulnerability-check; \
@@ -26,7 +30,8 @@ vulngate:
 	CGO_ENABLED=0 ./scripts/govulncheck -db "$(VULNDB)" -format json ./cmd/bootwright >bin/govulncheck.json; \
 	$(GO) -C scripts/tools run ./vulngate -govulncheck "$(CURDIR)/bin/govulncheck.json" \
 		-lock "$(CURDIR)/internal/controller/runtimelock/lock.json" -table "$(CURDIR)/internal/controller/tooltable.json" \
-		-exceptions "$(CURDIR)/cmd/bootwright/vulnerability-exceptions.json" -verdict "$(CURDIR)/bin/vulnerability-check"
+		-exceptions "$(CURDIR)/cmd/bootwright/vulnerability-exceptions.json" -verdict "$(CURDIR)/bin/vulnerability-check" \
+		-artifacts "$(CLIENTS_CACHE)" -db "$(VULNDB)"
 
 # The container build takes its Go image from the Dockerfile, which pins it by
 # tag and digest. Each proxy and module-mirror
@@ -118,7 +123,7 @@ container-build:
 
 test:
 	$(GO) test ./...
-	$(GO) -C scripts/tools test ./licenses/... ./runtimewheels/... ./tooltable/... ./vulngate/...
+	$(GO) -C scripts/tools test ./clientassets/... ./licenses/... ./runtimewheels/... ./tooltable/... ./vulngate/...
 
 vet:
 	$(GO) vet ./...

@@ -1,11 +1,15 @@
 // Command vulngate fails a build on a known vulnerability in what the
 // executable carries or pins. It reads govulncheck's JSON for the
 // executable's own Go code, keeping only findings whose trace reaches a
-// function, and asks OSV about every locked wheel and every default client of
-// the tool table. Each finding needs an exception that names it, its
-// component and a reason and expires within 90 days; an expired, too distant
-// or unused exception fails as well. On success it writes the verdict the
-// build stamps into the executable.
+// function, scans each default client of the tool table as govulncheck's
+// binary mode reads the Go toolchain and modules its own build information
+// names, and asks OSV about every locked wheel, about the top-level module of
+// a client whose binary names none, and about each module whose build
+// information has no release version, which binary mode cannot judge, at the
+// client's own release. Each finding needs an exception that
+// names it, its component and a reason and expires within 90 days; an expired,
+// too distant or unused exception fails as well. On success it writes the
+// verdict the build stamps into the executable.
 package main
 
 import (
@@ -20,6 +24,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -29,7 +34,7 @@ const (
 	maxResponse      = 16 << 20
 )
 
-type finding struct{ ID, Ref string }
+type finding struct{ ID, Ref, Detail string }
 
 type exception struct {
 	ID            string   `json:"id"`
@@ -61,6 +66,8 @@ type pin struct {
 	Kind    string `json:"kind"`
 	Default struct {
 		Version string `json:"version"`
+		Bytes   int64  `json:"bytes"`
+		SHA256  string `json:"sha256"`
 	} `json:"default"`
 }
 
@@ -72,6 +79,7 @@ type options struct {
 	govulncheck, lock, table, exceptions, verdict, osv string
 	today                                              time.Time
 	client                                             *http.Client
+	scanClient                                         func(pin) ([]byte, error)
 }
 
 var releaseVersion = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
@@ -93,6 +101,9 @@ func main() {
 	flag.StringVar(&o.exceptions, "exceptions", "", "the reviewed vulnerability exceptions")
 	flag.StringVar(&o.verdict, "verdict", "", "where to write the verdict the build stamps")
 	flag.StringVar(&o.osv, "osv", "https://api.osv.dev", "the OSV API base")
+	artifacts, db := "", ""
+	flag.StringVar(&artifacts, "artifacts", "", "a directory that keeps each client's verified release file across builds")
+	flag.StringVar(&db, "db", "https://vuln.go.dev", "the Go vulnerability database")
 	flag.StringVar(&today, "today", "", "the date to judge expiry by, YYYY-MM-DD; today when empty")
 	flag.Parse()
 	o.today = time.Now().UTC().Truncate(24 * time.Hour)
@@ -104,6 +115,7 @@ func main() {
 		o.today = parsed
 	}
 	o.client = &http.Client{Timeout: 2 * time.Minute}
+	o.scanClient = clientSource{cache: artifacts, db: db, client: &http.Client{Timeout: 10 * time.Minute}}.scan
 	if err := run(o, os.Stdout); err != nil {
 		fail(err)
 	}
@@ -115,8 +127,8 @@ func fail(err error) {
 }
 
 func run(o options, out io.Writer) error {
-	if o.govulncheck == "" || o.lock == "" || o.table == "" || o.exceptions == "" || o.verdict == "" {
-		return errors.New("-govulncheck, -lock, -table, -exceptions and -verdict are required")
+	if o.scanClient == nil || o.govulncheck == "" || o.lock == "" || o.table == "" || o.exceptions == "" || o.verdict == "" {
+		return errors.New("-govulncheck, -lock, -table, -exceptions and -verdict are required, with a client scanner")
 	}
 	if err := os.Remove(o.verdict); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
@@ -129,7 +141,16 @@ func run(o options, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	queries, refs, err := osvQueries(o.lock, o.table)
+	pins, err := readTable(o.table)
+	if err != nil {
+		return err
+	}
+	clients, modules, err := scanClients(o, pins)
+	if err != nil {
+		return err
+	}
+	found = append(found, clients...)
+	queries, refs, err := osvQueries(o.lock, modules)
 	if err != nil {
 		return err
 	}
@@ -181,19 +202,30 @@ func readExceptions(path string, today time.Time) ([]exception, error) {
 	return document.Exceptions, nil
 }
 
-func goFindings(path string) ([]finding, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
+type scanResult struct {
+	findings   []rawFinding
+	modules    int
+	devel      []string
+	configured bool
+}
+
+type rawFinding struct{ osv, module, version, fixed string }
+
+func readScan(data []byte) (scanResult, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	var found []finding
-	configured := false
+	var result scanResult
 	for {
 		var message struct {
-			Config  *json.RawMessage `json:"config"`
+			Config *json.RawMessage `json:"config"`
+			SBOM   *struct {
+				Modules []struct {
+					Path    string `json:"path"`
+					Version string `json:"version"`
+				} `json:"modules"`
+			} `json:"SBOM"`
 			Finding *struct {
 				OSV   string `json:"osv"`
+				Fixed string `json:"fixed_version"`
 				Trace []struct {
 					Module   string `json:"module"`
 					Version  string `json:"version"`
@@ -204,25 +236,153 @@ func goFindings(path string) ([]finding, error) {
 		if err := decoder.Decode(&message); errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
-			return nil, fmt.Errorf("%s is no govulncheck JSON stream: %w", path, err)
+			return scanResult{}, err
 		}
-		configured = configured || message.Config != nil
+		result.configured = result.configured || message.Config != nil
+		if message.SBOM != nil {
+			for _, module := range message.SBOM.Modules {
+				if module.Path == "stdlib" {
+					continue
+				}
+				result.modules++
+				if (module.Version == "" || module.Version == "(devel)") && !slices.Contains(result.devel, module.Path) {
+					result.devel = append(result.devel, module.Path)
+				}
+			}
+		}
 		if message.Finding == nil || len(message.Finding.Trace) == 0 || message.Finding.Trace[0].Function == "" {
 			continue
 		}
 		frame := message.Finding.Trace[0]
-		ref := "go:" + frame.Module + "@" + frame.Version
-		if frame.Module == "stdlib" {
-			ref = "go:stdlib@" + strings.TrimPrefix(frame.Version, "v")
-		}
-		if !slices.Contains(found, finding{message.Finding.OSV, ref}) {
-			found = append(found, finding{message.Finding.OSV, ref})
+		item := rawFinding{message.Finding.OSV, frame.Module, frame.Version, message.Finding.Fixed}
+		if !slices.Contains(result.findings, item) {
+			result.findings = append(result.findings, item)
 		}
 	}
-	if !configured {
-		return nil, fmt.Errorf("%s holds no govulncheck scan", path)
+	if !result.configured {
+		return scanResult{}, errors.New("it holds no govulncheck scan")
+	}
+	return result, nil
+}
+
+func goFindings(path string) ([]finding, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	result, err := readScan(data)
+	if err != nil {
+		return nil, fmt.Errorf("%s is no govulncheck JSON stream: %w", path, err)
+	}
+	var found []finding
+	for _, item := range result.findings {
+		ref := "go:" + item.module + "@" + item.version
+		if item.module == "stdlib" {
+			ref = "go:stdlib@" + strings.TrimPrefix(item.version, "v")
+		}
+		if !slices.ContainsFunc(found, func(seen finding) bool { return seen.ID == item.osv && seen.Ref == ref }) {
+			found = append(found, finding{ID: item.osv, Ref: ref})
+		}
 	}
 	return found, nil
+}
+
+type clientModule struct{ module, version, ref string }
+
+var kubectlStaging = []string{"api", "apimachinery", "cli-runtime", "client-go", "component-base", "component-helpers", "kubectl", "metrics", "streaming"}
+
+func topLevelModule(entry pin) (string, error) {
+	if !releaseVersion.MatchString(entry.Default.Version) {
+		return "", fmt.Errorf("the tool table's default %s %q is no MAJOR.MINOR.PATCH, so its module cannot be named", entry.Kind, entry.Default.Version)
+	}
+	module := toolModules[entry.Kind]
+	if entry.Kind == "helm" {
+		major, _, _ := strings.Cut(entry.Default.Version, ".")
+		module = "helm.sh/helm/v" + major
+	}
+	if module == "" {
+		return "", fmt.Errorf("the tool table pins %s, whose Go module this gate does not know", entry.Kind)
+	}
+	return module, nil
+}
+
+func develModule(entry pin, name string) (clientModule, error) {
+	ref := "tool:" + entry.Kind + "@" + entry.Default.Version
+	if !releaseVersion.MatchString(entry.Default.Version) {
+		return clientModule{}, fmt.Errorf("the tool table's default %s %q is no MAJOR.MINOR.PATCH", entry.Kind, entry.Default.Version)
+	}
+	switch {
+	case entry.Kind == "govc" && (name == "../" || name == "github.com/vmware/govmomi"):
+		return clientModule{"github.com/vmware/govmomi", entry.Default.Version, ref}, nil
+	case entry.Kind == "kubectl" && strings.HasPrefix(name, "k8s.io/") && slices.Contains(kubectlStaging, strings.TrimPrefix(name, "k8s.io/")):
+		return clientModule{name, "0." + strings.TrimPrefix(entry.Default.Version, "1."), ref}, nil
+	}
+	return clientModule{}, fmt.Errorf("the %s binary names %s with no release version, which this gate cannot map to the release it was built from; add it to its table", entry.Kind, name)
+}
+
+func scanClients(o options, pins []pin) ([]finding, []clientModule, error) {
+	type outcome struct {
+		result scanResult
+		err    error
+	}
+	outcomes := make([]outcome, len(pins))
+	var group sync.WaitGroup
+	for index, entry := range pins {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			data, err := o.scanClient(entry)
+			if err == nil {
+				outcomes[index].result, err = readScan(data)
+			}
+			outcomes[index].err = err
+		}()
+	}
+	group.Wait()
+	var found []finding
+	var modules []clientModule
+	for index, entry := range pins {
+		if outcomes[index].err != nil {
+			return nil, nil, fmt.Errorf("the %s %s scan: %w", entry.Kind, entry.Default.Version, outcomes[index].err)
+		}
+		ref := "tool:" + entry.Kind + "@" + entry.Default.Version
+		if outcomes[index].result.modules == 0 {
+			module, err := topLevelModule(entry)
+			if err != nil {
+				return nil, nil, err
+			}
+			modules = append(modules, clientModule{module, entry.Default.Version, ref})
+		}
+		for _, name := range outcomes[index].result.devel {
+			module, err := develModule(entry, name)
+			if err != nil {
+				return nil, nil, err
+			}
+			modules = append(modules, module)
+		}
+		for _, item := range outcomes[index].result.findings {
+			if !slices.ContainsFunc(found, func(seen finding) bool { return seen.ID == item.osv && seen.Ref == ref }) {
+				detail := item.module + "@" + item.version + ", no fixed release"
+				if item.fixed != "" {
+					detail = item.module + "@" + item.version + ", fixed in " + item.fixed
+				}
+				found = append(found, finding{ID: item.osv, Ref: ref, Detail: detail})
+			}
+		}
+	}
+	return found, modules, nil
+}
+
+func readTable(path string) ([]pin, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var pins table
+	if err := json.Unmarshal(data, &pins); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return pins.Tools, nil
 }
 
 type osvQuery struct {
@@ -233,17 +393,14 @@ type osvQuery struct {
 	Version string `json:"version"`
 }
 
-func osvQueries(lockPath, tablePath string) ([]osvQuery, [][]string, error) {
+func osvQueries(lockPath string, clients []clientModule) ([]osvQuery, [][]string, error) {
 	var locked lock
-	var pins table
-	for path, target := range map[string]any{lockPath: &locked, tablePath: &pins} {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, nil, err
-		}
-		if err := json.Unmarshal(data, target); err != nil {
-			return nil, nil, fmt.Errorf("%s: %w", path, err)
-		}
+	data, err := os.ReadFile(lockPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := json.Unmarshal(data, &locked); err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", lockPath, err)
 	}
 	files := []lockFile{locked.Installer}
 	for _, abi := range slices.Sorted(func(yield func(string) bool) {
@@ -272,22 +429,11 @@ func osvQueries(lockPath, tablePath string) ([]osvQuery, [][]string, error) {
 		queries = append(queries, query)
 		refs = append(refs, []string{"pypi:" + file.Filename})
 	}
-	for _, entry := range pins.Tools {
-		if !releaseVersion.MatchString(entry.Default.Version) {
-			return nil, nil, fmt.Errorf("the tool table's default %s %q is no MAJOR.MINOR.PATCH, so its module cannot be named", entry.Kind, entry.Default.Version)
-		}
-		module := toolModules[entry.Kind]
-		if entry.Kind == "helm" {
-			major, _, _ := strings.Cut(entry.Default.Version, ".")
-			module = "helm.sh/helm/v" + major
-		}
-		if module == "" {
-			return nil, nil, fmt.Errorf("the tool table pins %s, whose Go module this gate does not know", entry.Kind)
-		}
-		query := osvQuery{Version: entry.Default.Version}
-		query.Package.Ecosystem, query.Package.Name = "Go", module
+	for _, client := range clients {
+		query := osvQuery{Version: client.version}
+		query.Package.Ecosystem, query.Package.Name = "Go", client.module
 		queries = append(queries, query)
-		refs = append(refs, []string{"tool:" + entry.Kind + "@" + entry.Default.Version})
+		refs = append(refs, []string{client.ref})
 	}
 	return queries, refs, nil
 }
@@ -326,7 +472,7 @@ func queryOSV(o options, queries []osvQuery, refs [][]string) ([]finding, error)
 		}
 		for _, vuln := range result.Vulns {
 			for _, ref := range refs[position] {
-				found = append(found, finding{vuln.ID, ref})
+				found = append(found, finding{ID: vuln.ID, Ref: ref})
 			}
 		}
 	}
@@ -341,7 +487,11 @@ func judge(found []finding, allowed []exception) []string {
 			return entry.Component == item.Ref && (entry.ID == item.ID || slices.Contains(entry.Aliases, item.ID))
 		})
 		if index < 0 {
-			failures = append(failures, "known vulnerability "+item.ID+" in "+item.Ref+" has no exception")
+			where := item.Ref
+			if item.Detail != "" {
+				where += " (" + item.Detail + ")"
+			}
+			failures = append(failures, "known vulnerability "+item.ID+" in "+where+" has no exception")
 			continue
 		}
 		used[index] = true
