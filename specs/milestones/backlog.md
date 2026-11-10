@@ -3804,6 +3804,7 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | B1050 | 2026-11-08 | Delivered by B1144 ([X304](delivered.md#x304--audit-003-foundation-remediation), 98a4e30a4): the MAC pipelines no longer close their producer early under `pipefail`, the recorded cause. |
 | B1169 | 2026-11-08 | Duplicate of [B1187](m3.md#b1187): the same lend-minted host token, revoked when its run returns. |
 | B1124 | 2026-11-09 | Retired under [D246](#d246): keeping a node's networks apart is segregation the estate's GitOps owns; Bootwright's part, forwarding on a pool's own interface alone, is [B1231](m4.md#b1231). |
+| B1286 | 2026-11-10 | Found while recording X395 ([D255](#d255)) and fixed in the same docs commit, so it never held an open item: the [Reservations](../substrates.md#provider-host-realization) text said a provider uses at most 63 of the 64 keys, while the code claims 64 (4 + 3 × 20) because the VLAN-refusal unit's key counts, as `TestTheManagedNetworkBoundKeepsTheHostReservationWithinItsKeys` asserts; the text now counts both unit keys. |
 
 ## Decisions
 

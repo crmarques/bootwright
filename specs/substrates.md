@@ -381,13 +381,13 @@ bridge name is host-global; `prefix:<masked prefix>` for every managed
 Network, because the host routes its prefix to that bridge;
 `libvirt-network:<name>` for every managed network; `libvirt-pool:<name>` for
 the pool and `path:` for its directory; and `unit:<name>` without the `.service`
-suffix for the provider's
-firewall readiness unit when it has managed networks
+suffix for the provider's firewall readiness unit and for its VLAN-refusal unit
+when it has managed networks
 (`TestHostReservationsClaimEveryManagedNetworkAndThePool`). One host defines
 at most 20 managed Networks across its providers, a host-wide rule of the
 [Libvirt arm](api/networks.md#libvirt-arm), so a provider's reservation uses at
-most 63 of the 64 keys one reservation holds: 20 × 3 network keys, two pool
-keys and one readiness-unit key
+most 64 of the 64 keys one reservation holds: 20 × 3 network keys, two pool
+keys and two unit keys, the readiness unit's and the VLAN-refusal unit's
 ([controller record](contexts/controller-record.md#bounds),
 `TestTheManagedNetworkBoundKeepsTheHostReservationWithinItsKeys`).
 
