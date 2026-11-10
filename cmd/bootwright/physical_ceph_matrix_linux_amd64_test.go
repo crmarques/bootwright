@@ -165,7 +165,7 @@ func physicalMatrixState(t *testing.T, name string, original *compilation.State)
 			spec = spec.WithPath(api.MapValue(api.FieldValue{Name: "method", Value: api.StringValue("logicalOverwrite")}, api.FieldValue{Name: "targets", Value: api.ListValue(targets...)}), "hardware", "eraseOnRemoval")
 		}
 		if object.Kind() == api.CephCluster {
-			nodes := spec.Get("topology", "nodes").Items()
+			nodes := requireObject(t, original.Effective(), api.CephCluster, object.Name()).Spec().Get("topology", "nodes").Items()
 			services := []api.Value{}
 			for _, service := range spec.Get("services").Items() {
 				if service.Get("service_type").Text() != "osd" {

@@ -254,6 +254,10 @@ A stretch cluster places every pool with its own stretch rule, so a policy
 whose `clusterRef` names one refuses at validation and at plan
 ([stretch topology](ceph.md#stretch-topology)).
 
+Not yet met: the core OSD projection carries no `crush_device_class`, so an
+OSD service that declares one refuses at plan; tracked as
+[B1264](milestones/backlog.md#b1264).
+
 | Field | Contract |
 | --- | --- |
 | `clusterRef` | Required managed `CephCluster`. A pool that names the policy names the same cluster, and a sole policy is never selected automatically. |
@@ -1257,7 +1261,7 @@ spec:
         ref: files
     placement:
       hosts:
-        - node-03.ceph-example.clusters.example.com
+        - storage-03.example.com
       count: 1
 
 ---

@@ -123,7 +123,6 @@ spec:
     nodes:
 {{- range $n := until 3 }}
       - name: ceph-0{{ add $n 1 }}
-        fqdn: ceph-0{{ add $n 1 }}.{{ $dom }}
         machineRef: ceph-0{{ add $n 1 }}
 
         labels:

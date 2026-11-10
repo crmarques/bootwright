@@ -90,25 +90,20 @@ spec:
         label: ceph-core
 
   topology:
-    # Each fqdn overrides the composed <node>.<cluster>.<storage domain> name
-    # to match the Machine hostname.
     nodes:
       - name: rhel-01
-        fqdn: rhel-01.lab.example.test
         machineRef: rhel-01
 
         labels:
           - ceph-core
 
       - name: rhel-02
-        fqdn: rhel-02.lab.example.test
         machineRef: rhel-02
 
         labels:
           - ceph-core
 
       - name: rhel-03
-        fqdn: rhel-03.lab.example.test
         machineRef: rhel-03
 
         labels:

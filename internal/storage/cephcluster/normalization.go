@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/machine"
 )
 
 func Normalize(object api.Object, catalog api.Catalog) (api.Object, []api.Issue) {
@@ -79,11 +80,19 @@ func normalizeCluster(object api.Object, catalog api.Catalog) api.Value {
 	domain := storageDomain(catalog)
 	nodes := ceph.Get("topology", "nodes").Items()
 	for i, node := range nodes {
+		host, placed := catalog.Find(api.Machine, textOf(node, "machineRef"))
+		if placed && !node.Has("fqdn") {
+			if fqdn, declared := machine.Address(host, "fqdn"); declared && fqdn != "" {
+				node = node.With("fqdn", api.StringValue(fqdn))
+			}
+		}
 		if !node.Has("fqdn") && textOf(node, "name") != "" && domain != "" {
 			node = node.With("fqdn", api.StringValue(textOf(node, "name")+"."+object.Name()+"."+domain))
 		}
-		if machine, ok := catalog.Find(api.Machine, textOf(node, "machineRef")); ok && !node.Has("site") && machine.Spec().Has("placement", "site") {
-			node = node.With("site", machine.Spec().Get("placement", "site"))
+		if placed && host.Spec().Has("placement", "site") {
+			node = node.With("site", host.Spec().Get("placement", "site"))
+		} else if placed {
+			node = node.Without("site")
 		}
 		if node.Has("osd", "serviceOverrides", "networks") {
 			node = node.WithPath(normalizeCIDRs(node.Get("osd", "serviceOverrides", "networks")), "osd", "serviceOverrides", "networks")

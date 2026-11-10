@@ -221,7 +221,7 @@ own refusal.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `spec.placement.site` | string | conditional | — | `Environment.spec.sites[].name`; required only where a consumer needs site placement. |
+| `spec.placement.site` | string | conditional | — | `Environment.spec.sites[].name`; required only where a consumer needs site placement: it is the only source of a [Ceph topology node's site](ceph.md#normalization), which a stretch CephCluster needs on every node, and it scopes the Machine's [interface assignments](networks.md#cross-kind-checks). |
 | `spec.substrate.providerRef` | string | conditional | — | Global `InfraProvider`; required whenever `os.provided: false`. |
 | `spec.substrate.baremetal` | object | conditional | — | The bare-metal [substrate arm](#substrate-arm): `bmc`, `nics`, `rootDevice` and [`firmware`](#firmware-block); required for a bare-metal install machine. |
 | `spec.substrate.libvirt` | object | conditional | — | The libvirt [substrate arm](#substrate-arm): `profileRef` and `nics`. |

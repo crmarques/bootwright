@@ -134,8 +134,10 @@ Composition uses one rule throughout the API:
 - a container node without an explicit `fqdn` is
   `<node.name>.<OpenShiftCluster.metadata.name>.<domains.containerClusters>`;
   and
-- a storage node without an explicit `fqdn` is
-  `<node.name>.<CephCluster.metadata.name>.<domains.storageClusters>`.
+- a storage node without an explicit `fqdn` takes its Machine's effective
+  `fqdn`, and is
+  `<node.name>.<CephCluster.metadata.name>.<domains.storageClusters>` only when
+  that Machine has none ([CephCluster normalization](ceph.md#normalization)).
 
 Authored node `name` values are DNS labels. A separate `fqdn` field is the only
 way to pin a cluster-visible host name outside the composed zone.

@@ -208,9 +208,9 @@ eligible device identity. The label is not permission to discover new hosts
 or disks after the authorization is frozen.
 
 The core OSD projection preserves explicit `db_devices.paths`,
-`wal_devices.paths`, `encrypted` and `tpm2` under the
-[bounded device contract](ceph.md#devices-and-destructive-ownership).
-`osds_per_device: 1` is the fixed native default; larger values refuse.
+`wal_devices.paths`, `encrypted` and `tpm2`, and refuses by name an
+`osds_per_device` above its native 1 and a `crush_device_class`
+([device contract](ceph.md#devices-and-destructive-ownership)).
 Every selected data, DB and WAL path receives the same independent identity
 proof before its per-host stable alias enters the native service document.
 Only data devices count as OSDs in readiness evidence.
@@ -702,11 +702,13 @@ root-or-Ceph-user owner rule, and no other daemon type gains this.
 
 ## Hosts, placement and CRUSH
 
-Topology nodes retain `name`, `machineRef`, optional `fqdn`, `site` and
-`labels`, plus a native `location` map for qualified CRUSH bucket types and
+Topology nodes retain `name`, `machineRef`, optional `fqdn` and `labels`,
+plus a native `location` map for qualified CRUSH bucket types and
 names. `location` retains the native HostSpec spelling and string values.
 Host identity and address are derived from the proved Machine/address binding;
-the registered hostname must agree with the installed host's native hostname.
+the registered hostname must agree with the installed host's native hostname,
+and a node's `site` is its Machine's `placement.site`, never authored on the
+node ([normalization](api/ceph.md#normalization)).
 The generated native HostSpec is visible as non-secret plan intent. A raw
 `service_type: host` entry in `services` refuses because it would create a
 second infrastructure owner.
@@ -714,8 +716,8 @@ second infrastructure owner.
 Native [HostSpec location](https://docs.ceph.com/en/tentacle/cephadm/host-management/#setting-the-initial-crush-location-of-host)
 describes initial hierarchy placement, not a live hierarchy-edit API: later
 changes to it are ignored. Native `host` identity is generated, not
-overridden through `location`. Each declared site resolves through
-Environment and the Machine. `location` is admitted only on a stretch
+overridden through `location`. Each site is a Machine's `placement.site`,
+which names an Environment site. `location` is admitted only on a stretch
 topology and names only its failure-domain bucket, whose value is the node's
 site ([stretch topology](ceph.md#stretch-topology)); it cannot put the host in
 a second site. The enrollment spec adds `root: default` beside it
@@ -784,9 +786,19 @@ already have the addressed structural element; bindings cannot grow arrays or
 choose resource identities. Whole-secret documents are not injected into
 arbitrary maps.
 
-The core cluster request never carries a binding: planning leaves the TLS
-bindings of an RGW service that a CephObjectGateway binds, and of the
-ingress that fronts it, to the gateway block, and refuses every other entry.
+The core cluster request never carries a binding. Planning routes each
+`serviceBindings` entry by its service type to the block that executes it:
+
+| Service type | Executing block | Bound leaves |
+| --- | --- | --- |
+| `rgw` that a CephObjectGateway binds, and the `ingress` that fronts it | gateway block | its TLS leaves |
+| `grafana`, `snmp-gateway` | monitoring unit | grafana's `/spec/initial_admin_password`; snmp-gateway's `/spec/credentials/` `snmp_community`, `snmp_v3_auth_username`, `snmp_v3_auth_password` and `snmp_v3_priv_password` |
+| `mgmt-gateway`, `oauth2-proxy` | management gateway unit | the gateway's `/spec/ssl_cert` and `/spec/ssl_key`; the proxy's `/spec/client_secret`, `/spec/cookie_secret`, `/spec/ssl_cert`, `/spec/ssl_key` and `/custom_configs/0/content` |
+| `nvmeof` | nvmeof unit | `/spec/root_ca_cert`, `/spec/server_cert`, `/spec/server_key`, `/spec/client_cert` and `/spec/client_key`, each certificate/key pair one `tlsCertificate` Secret as effect material |
+| `nfs`, and the `ingress` that fronts it | none: the entry refuses at validation as well | — |
+
+Any other entry, and an entry naming a leaf its row does not list, refuses at
+planning.
 
 For a native resource wrapper, `spec.secrets` uses this same pair and resolves
 paths relative to that resource's `native` payload. No `serviceRef` is needed

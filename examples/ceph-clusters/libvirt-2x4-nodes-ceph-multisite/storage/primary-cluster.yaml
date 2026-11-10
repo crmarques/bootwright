@@ -103,7 +103,6 @@ spec:
   topology:
     nodes:
       - name: primary-01
-        fqdn: primary-01.lab.example.test
         machineRef: primary-01
 
         labels:
@@ -112,7 +111,6 @@ spec:
           - core
 
       - name: primary-02
-        fqdn: primary-02.lab.example.test
         machineRef: primary-02
 
         labels:
@@ -121,7 +119,6 @@ spec:
           - core
 
       - name: primary-03
-        fqdn: primary-03.lab.example.test
         machineRef: primary-03
 
         labels:
@@ -130,7 +127,6 @@ spec:
           - gateway
 
       - name: primary-04
-        fqdn: primary-04.lab.example.test
         machineRef: primary-04
 
         labels:

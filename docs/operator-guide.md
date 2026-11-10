@@ -705,8 +705,9 @@ bootwright machine exec --context lab-rhel --name rhel-01,rhel-02,rhel-03 cat /e
 ```
 
 `cluster exec` does the same across clusters and nodes: `--name` and `--node`
-take comma-separated lists, each listed cluster runs the command on its first
-node, or on the `--node` members it declares, and every resolved Machine runs at
+take comma-separated lists, each listed cluster runs the command on its
+administrator node (the one `cluster info` names), or on the `--node` members
+it declares, and every resolved Machine runs at
 once with its output lines prefixed by the Machine name. `cluster info --name`
 takes a list too, and `cluster rsh` stays on one node
 ([sessions](../specs/cli.md#several-clusters-and-nodes)):

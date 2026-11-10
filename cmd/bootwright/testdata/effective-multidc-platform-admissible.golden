@@ -3097,27 +3097,27 @@ spec:
       service_id: block
       placement:
         hosts:
-          - node-01.ceph-multidc-01.clusters.example.com
-          - node-02.ceph-multidc-01.clusters.example.com
+          - storage-a-01.example.com
+          - storage-a-02.example.com
       spec:
         group: block
         pool: odf-hub-multidc-01-rbd
   topology:
     nodes:
       - name: node-01
-        fqdn: node-01.ceph-multidc-01.clusters.example.com
+        fqdn: storage-a-01.example.com
         machineRef: storage-a-01
         site: site-a
         labels:
           - ceph-core
       - name: node-02
-        fqdn: node-02.ceph-multidc-01.clusters.example.com
+        fqdn: storage-a-02.example.com
         machineRef: storage-a-02
         site: site-a
         labels:
           - ceph-core
       - name: node-03
-        fqdn: node-03.ceph-multidc-01.clusters.example.com
+        fqdn: storage-a-03.example.com
         machineRef: storage-a-03
         site: site-a
         labels:
@@ -3315,7 +3315,7 @@ spec:
     placement:
       count: 1
       hosts:
-        - node-03.ceph-multidc-01.clusters.example.com
+        - storage-a-03.example.com
     resource_type: ceph.smb.cluster
     user_group_settings:
       - ref: acceptance

@@ -438,7 +438,7 @@ spec:
         ref: acceptance
     placement:
       hosts:
-        - node-03.ceph-multidc-01.clusters.example.com
+        - storage-a-03.example.com
       count: 1
 
 ---

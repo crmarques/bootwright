@@ -124,7 +124,6 @@ spec:
     nodes:
 {{- range $name := list "ceph-01" "ceph-02" "ceph-04" }}
       - name: {{ $name }}
-        fqdn: {{ $name }}.{{ $dom }}
         machineRef: {{ $name }}
 
         labels:
@@ -134,7 +133,6 @@ spec:
 {{- end }}
 {{ end }}
       - name: ceph-03
-        fqdn: ceph-03.{{ $dom }}
         machineRef: ceph-03
 
         labels:

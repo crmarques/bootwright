@@ -158,13 +158,14 @@ func (a *admission) topology(ceph api.Value) {
 		fqdns = append(fqdns, NativeHostname(node))
 		names = append(names, textOf(node, "name"))
 		machines = append(machines, textOf(node, "machineRef"))
-		if machine, ok := a.catalog.Find(api.Machine, textOf(node, "machineRef")); ok {
-			if site := textOf(machine.Spec(), "placement", "site"); site != "" && textOf(node, "site") != "" && site != textOf(node, "site") {
-				a.invalid(field+".site", "storage node site must agree with its Machine placement", "set the topology node site to its Machine placement site")
+		if host, ok := a.catalog.Find(api.Machine, textOf(node, "machineRef")); ok {
+			if fqdn, declared := machine.Address(host, "fqdn"); declared && machine.Installed(host) && NativeHostname(node) != fqdn {
+				a.issue("api.invariant", field+".fqdn", "storage node "+textOf(node, "name")+" registers as "+NativeHostname(node)+", but Bootwright installs Machine/"+host.Name()+" with hostname "+fqdn,
+					"remove topology.nodes[].fqdn so the node takes its Machine's fqdn, or change the Machine's fqdn contact in spec.network.addresses")
 			}
-			provided := machine.Spec().Get("os", "provided").Bool()
+			provided := host.Spec().Get("os", "provided").Bool()
 			if ceph.Get("security", "fips", "enabled").Bool() && !provided {
-				if profile, ok := a.catalog.Find(api.MachineInstallProfile, textOf(machine.Spec(), "os", "installProfileRef")); !ok || !profile.Spec().Get("customizations", "security", "fips", "enabled").Bool() {
+				if profile, ok := a.catalog.Find(api.MachineInstallProfile, textOf(host.Spec(), "os", "installProfileRef")); !ok || !profile.Spec().Get("customizations", "security", "fips", "enabled").Bool() {
 					a.invalid(field+".machineRef", "FIPS storage requires a FIPS install profile on installed nodes", "select Machines installed with FIPS enabled or disable FIPS for the storage cluster")
 				}
 			}

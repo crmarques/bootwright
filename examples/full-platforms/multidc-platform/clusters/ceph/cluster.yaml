@@ -81,9 +81,7 @@ spec:
 
     nodes:
       - name: node-01
-        fqdn: node-01.ceph-multidc-01.clusters.example.com
         machineRef: storage-a-01
-        site: site-a
 
         labels:
           - _admin
@@ -101,9 +99,7 @@ spec:
           datacenter: site-a
 
       - name: node-02
-        fqdn: node-02.ceph-multidc-01.clusters.example.com
         machineRef: storage-a-02
-        site: site-a
 
         labels:
           - _admin
@@ -121,9 +117,7 @@ spec:
           datacenter: site-a
 
       - name: node-03
-        fqdn: node-03.ceph-multidc-01.clusters.example.com
         machineRef: storage-a-03
-        site: site-a
 
         labels:
           - osd
@@ -135,9 +129,7 @@ spec:
           datacenter: site-a
 
       - name: node-04
-        fqdn: node-04.ceph-multidc-01.clusters.example.com
         machineRef: storage-b-01
-        site: site-b
 
         labels:
           - _admin
@@ -155,9 +147,7 @@ spec:
           datacenter: site-b
 
       - name: node-05
-        fqdn: node-05.ceph-multidc-01.clusters.example.com
         machineRef: storage-b-02
-        site: site-b
 
         labels:
           - _admin
@@ -175,9 +165,7 @@ spec:
           datacenter: site-b
 
       - name: node-06
-        fqdn: node-06.ceph-multidc-01.clusters.example.com
         machineRef: storage-b-03
-        site: site-b
 
         labels:
           - osd
@@ -189,9 +177,7 @@ spec:
           datacenter: site-b
 
       - name: node-07
-        fqdn: node-07.ceph-multidc-01.clusters.example.com
         machineRef: storage-witness-01
-        site: site-c
 
         labels:
           - mon
@@ -201,11 +187,11 @@ spec:
 
       placement:
         hosts:
-          - node-01.ceph-multidc-01.clusters.example.com
-          - node-02.ceph-multidc-01.clusters.example.com
-          - node-04.ceph-multidc-01.clusters.example.com
-          - node-05.ceph-multidc-01.clusters.example.com
-          - node-07.ceph-multidc-01.clusters.example.com
+          - storage-a-01.example.com
+          - storage-a-02.example.com
+          - storage-b-01.example.com
+          - storage-b-02.example.com
+          - storage-witness-01.example.com
 
         count: 5
 
@@ -213,10 +199,10 @@ spec:
 
       placement:
         hosts:
-          - node-01.ceph-multidc-01.clusters.example.com
-          - node-02.ceph-multidc-01.clusters.example.com
-          - node-04.ceph-multidc-01.clusters.example.com
-          - node-05.ceph-multidc-01.clusters.example.com
+          - storage-a-01.example.com
+          - storage-a-02.example.com
+          - storage-b-01.example.com
+          - storage-b-02.example.com
 
         count: 3
 
@@ -225,12 +211,12 @@ spec:
 
       placement:
         hosts:
-          - node-01.ceph-multidc-01.clusters.example.com
-          - node-02.ceph-multidc-01.clusters.example.com
-          - node-03.ceph-multidc-01.clusters.example.com
-          - node-04.ceph-multidc-01.clusters.example.com
-          - node-05.ceph-multidc-01.clusters.example.com
-          - node-06.ceph-multidc-01.clusters.example.com
+          - storage-a-01.example.com
+          - storage-a-02.example.com
+          - storage-a-03.example.com
+          - storage-b-01.example.com
+          - storage-b-02.example.com
+          - storage-b-03.example.com
 
       spec:
         data_devices:
@@ -250,10 +236,10 @@ spec:
 
       placement:
         hosts:
-          - node-01.ceph-multidc-01.clusters.example.com
-          - node-02.ceph-multidc-01.clusters.example.com
-          - node-04.ceph-multidc-01.clusters.example.com
-          - node-05.ceph-multidc-01.clusters.example.com
+          - storage-a-01.example.com
+          - storage-a-02.example.com
+          - storage-b-01.example.com
+          - storage-b-02.example.com
 
       spec:
         retention_time: 14d
@@ -263,31 +249,31 @@ spec:
 
       placement:
         hosts:
-          - node-01.ceph-multidc-01.clusters.example.com
-          - node-02.ceph-multidc-01.clusters.example.com
-          - node-04.ceph-multidc-01.clusters.example.com
-          - node-05.ceph-multidc-01.clusters.example.com
+          - storage-a-01.example.com
+          - storage-a-02.example.com
+          - storage-b-01.example.com
+          - storage-b-02.example.com
 
     - service_type: alertmanager
 
       placement:
         hosts:
-          - node-01.ceph-multidc-01.clusters.example.com
-          - node-02.ceph-multidc-01.clusters.example.com
-          - node-04.ceph-multidc-01.clusters.example.com
-          - node-05.ceph-multidc-01.clusters.example.com
+          - storage-a-01.example.com
+          - storage-a-02.example.com
+          - storage-b-01.example.com
+          - storage-b-02.example.com
 
     - service_type: mds
       service_id: odf-cephfs
 
       placement:
         hosts:
-          - node-01.ceph-multidc-01.clusters.example.com
-          - node-02.ceph-multidc-01.clusters.example.com
-          - node-03.ceph-multidc-01.clusters.example.com
-          - node-04.ceph-multidc-01.clusters.example.com
-          - node-05.ceph-multidc-01.clusters.example.com
-          - node-06.ceph-multidc-01.clusters.example.com
+          - storage-a-01.example.com
+          - storage-a-02.example.com
+          - storage-a-03.example.com
+          - storage-b-01.example.com
+          - storage-b-02.example.com
+          - storage-b-03.example.com
 
     - service_type: rgw
       service_id: odf-all

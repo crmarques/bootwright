@@ -56,23 +56,17 @@ spec:
   topology:
     nodes:
       - name: node-01
-        fqdn: node-01.ceph-multidc-01.clusters.example.com
         machineRef: storage-a-01
-        site: site-a
         labels:
           - ceph-core
 
       - name: node-02
-        fqdn: node-02.ceph-multidc-01.clusters.example.com
         machineRef: storage-a-02
-        site: site-a
         labels:
           - ceph-core
 
       - name: node-03
-        fqdn: node-03.ceph-multidc-01.clusters.example.com
         machineRef: storage-a-03
-        site: site-a
         labels:
           - ceph-core
 
@@ -123,8 +117,8 @@ spec:
       service_id: block
       placement:
         hosts:
-          - node-01.ceph-multidc-01.clusters.example.com
-          - node-02.ceph-multidc-01.clusters.example.com
+          - storage-a-01.example.com
+          - storage-a-02.example.com
       spec:
         pool: odf-hub-multidc-01-rbd
         group: block

@@ -13413,3 +13413,30 @@ alone, and the agent installer still admits it, so the path is the one
 spelling both admit rather than the only one. Making one form the only one is
 the audit's API-38 reshape, a breaking rename the owner decides
 ([B1274](backlog.md#b1274)).
+
+### X353 — Ceph node names
+
+**Items:** B1261 (2026-11-10, [D252](backlog.md#d252) answer 5 and its
+session clause), delivered in-tree. **Kind:** defect. **Owners:** Storage.
+A topology node takes its Machine's effective `fqdn` and its Machine's
+`placement.site`; an authored node `site` refuses at validate, and an authored
+`fqdn` that differs from a Bootwright-installed Machine's refuses at validate
+naming both ([normalization](../api/ceph.md#normalization)). `serviceBindings`
+routing is one [table](../ceph-native-api.md#secret-bindings). A custom CRUSH
+device class refuses at plan by its member's name, and its realization is
+parked as [B1264](backlog.md#b1264).
+
+| Finding | Change |
+| --- | --- |
+| API-06 | `normalizeCluster` defaults a node's `fqdn` from `machine.Address(…, "fqdn")` before composing; `topology` refuses a mismatch on an installed Machine at `topology.nodes[i].fqdn`; api/ceph.md Normalization and invariants, api/environment.md composition; the restated `fqdn` lines and their comments leave the examples, e2e templates and admission fixtures, and the multidc example's placement hosts take the Machine names; `TestATopologyNodeTakesItsMachineFQDNAndSite`, `TestAnAuthoredNodeFQDNDifferingFromItsInstalledMachineRefuses`, `TestExampleCephNodesRegisterUnderTheirMachineFQDN`, `TestExampleCephNodeRefusesARestatedIdentity` |
+| API-54 | `ValidateAuthored` refuses `topology.nodes[i].site`; normalization always derives it from the Machine; ceph-native-api.md Hosts, api/machines.md `placement.site` names its consumers; the multidc example and stretch e2e template drop node sites; `TestAnAuthoredTopologyNodeSiteRefuses` |
+| API-05 | the routing table in ceph-native-api.md#secret-bindings, linked from api/ceph.md; `TestExampleServiceBindingsPlanByTheRoutingTable` plans the observability bindings and NVMe-oF mTLS bindings and refuses an nfs binding |
+| API-07 | `checkDevices` names `spec.crush_device_class`, `spec.<field>` and `<member>.paths[i]`; Not yet met line under CephPlacementPolicy; ceph.md core profile and ceph-native-api.md OSD projection name the refusal; `TestACustomCRUSHDeviceClassRefusesAtPlanByName` |
+| DOC-02 | the disconnected example README: carried wheels, the isolated host's dnf repositories, a link to Prepare a host |
+| DOC-03 | operator guide: `cluster exec` without `--node` runs on each cluster's administrator node |
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** an authored `fqdn` on a provided Machine that
+differs from its `fqdn` contact still refuses only at plan; the
+template-inputs chart renders node `fqdn` and `site` and must be rendered
+again (D252 answer 5).

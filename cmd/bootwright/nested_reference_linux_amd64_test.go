@@ -142,9 +142,9 @@ func TestANestedReferenceThroughARefusedOwnerAddsNothing(t *testing.T) {
 		"CephNVMeoFSubsystem/extnvme":    {"$.spec.clusterRef", "$.spec.serviceRef"},
 		"MachineInstallProfile/rhel-9-8": {"$.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint.serverRef", "$.spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint.endpointRef"},
 	})
-	topology := strings.Join([]string{"  topology:\n    nodes:\n", "      - name: rhel-01\n        fqdn: rhel-01.lab.example.test\n        machineRef: rhel-01\n\n        labels:\n          - ceph-core\n\n",
-		"      - name: rhel-02\n        fqdn: rhel-02.lab.example.test\n        machineRef: rhel-02\n\n        labels:\n          - ceph-core\n\n",
-		"      - name: rhel-03\n        fqdn: rhel-03.lab.example.test\n        machineRef: rhel-03\n\n        labels:\n          - ceph-core\n\n"}, "")
+	topology := strings.Join([]string{"  topology:\n    nodes:\n", "      - name: rhel-01\n        machineRef: rhel-01\n\n        labels:\n          - ceph-core\n\n",
+		"      - name: rhel-02\n        machineRef: rhel-02\n\n        labels:\n          - ceph-core\n\n",
+		"      - name: rhel-03\n        machineRef: rhel-03\n\n        labels:\n          - ceph-core\n\n"}, "")
 	_, _, err = wireCompiler().Compile(context.Background(), editedExample(t, "lab-compact-df", exampleEdit{"storage/cluster.yaml", topology, ""}))
 	requireOnlyOwnerRefusal(t, diagnostics.Of(err), map[string][2]string{"CephCluster/ceph-lab": {"$.spec.topology", "$.spec.cephadm.bootstrap.nodeRef"}})
 }

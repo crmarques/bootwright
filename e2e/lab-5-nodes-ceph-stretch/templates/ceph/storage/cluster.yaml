@@ -136,9 +136,7 @@ spec:
     nodes:
 {{- range $i, $name := $data }}
       - name: {{ $name }}
-        fqdn: {{ $name }}.{{ $dom }}
         machineRef: {{ $name }}
-        site: {{ include "site" (dict "root" $ "name" $name) }}
 
         labels:
           - ceph-mon
@@ -152,9 +150,7 @@ spec:
 
 {{ end }}
       - name: arbiter-01
-        fqdn: arbiter-01.{{ $dom }}
         machineRef: arbiter-01
-        site: {{ $v.sites.tiebreaker }}
 
         labels:
           - ceph-mon

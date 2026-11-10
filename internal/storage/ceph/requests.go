@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -531,9 +532,14 @@ func selectDevices(r *Request) {
 }
 
 func checkDevices(r Request, names []string, cluster api.Object, service api.Value) error {
+	osd := cephcluster.NativeServiceName(service)
 	for _, field := range service.Get("spec").Fields() {
+		if field.Name == "crush_device_class" {
+			return failure("lifecycle.unsupported", "OSD service "+osd+" sets spec.crush_device_class, and the core adapter does not yet carry a custom CRUSH device class into its OSD projection",
+				"remove spec.crush_device_class so each OSD takes its detected class (hdd, ssd or nvme), and select that class in the placement policy or pool")
+		}
 		if !slices.Contains([]string{"data_devices", "db_devices", "wal_devices", "encrypted", "tpm2", "osds_per_device"}, field.Name) {
-			return failure("lifecycle.unsupported", "an OSD allocation option is not modeled by the core adapter", "use explicit data, DB and WAL paths and one OSD per data disk")
+			return failure("lifecycle.unsupported", "OSD service "+osd+" sets spec."+field.Name+", an OSD allocation option the core adapter does not model", "remove spec."+field.Name+" and use explicit data, DB and WAL paths and one OSD per data disk")
 		}
 	}
 	if service.Get("spec", "osds_per_device").Present() && service.Get("spec", "osds_per_device").Text() != "1" {
@@ -551,7 +557,17 @@ func checkDevices(r Request, names []string, cluster api.Object, service api.Val
 		if !selector.Has("paths") || selector.Len() != 1 || len(selector.Get("paths").Items()) == 0 {
 			return failure("lifecycle.unsupported", "core OSDs require explicit device paths", "use nonempty data_devices.paths, db_devices.paths and wal_devices.paths without filters")
 		}
-		paths = append(paths, selector.Get("paths").Items()...)
+		for i, path := range selector.Get("paths").Items() {
+			member := field + ".paths[" + strconv.Itoa(i) + "]"
+			if path.Type() == api.Mapping && path.Has("crush_device_class") {
+				return failure("lifecycle.unsupported", "OSD service "+osd+" declares "+member+" as a {path, crush_device_class} record, and the core adapter does not yet carry a custom CRUSH device class into its OSD projection",
+					"write "+member+" as a plain device path so its OSD takes its detected class (hdd, ssd or nvme)")
+			}
+			if path.Type() != api.String {
+				return failure("lifecycle.unsupported", "OSD service "+osd+" declares "+member+" as something other than a plain device string", "use plain owned data-disk paths: /dev/sd* for explicit-media disks, /dev/vd* otherwise")
+			}
+			paths = append(paths, path)
+		}
 	}
 	seenPaths := map[string]bool{}
 	for _, path := range paths {
@@ -572,9 +588,6 @@ func checkDevices(r Request, names []string, cluster api.Object, service api.Val
 			}
 		}
 		for _, path := range paths {
-			if path.Type() != api.String {
-				return failure("lifecycle.unsupported", "core OSD paths must be plain device strings", "use plain owned data-disk paths: /dev/sd* for explicit-media disks, /dev/vd* otherwise")
-			}
 			p := path.Text()
 			found := false
 			for _, h := range r.Hosts {

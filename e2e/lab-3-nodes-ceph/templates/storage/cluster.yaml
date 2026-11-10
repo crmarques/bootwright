@@ -250,7 +250,6 @@ spec:
     nodes:
 {{- range $n := until 3 }}
       - name: rhel-0{{ add $n 1 }}
-        fqdn: rhel-0{{ add $n 1 }}.{{ $dom }}
         machineRef: rhel-0{{ add $n 1 }}
 
         labels:

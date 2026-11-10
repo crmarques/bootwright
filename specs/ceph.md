@@ -1175,8 +1175,11 @@ shared-device allocation.
 
 The bounded core profile accepts explicit `data_devices.paths`, optional
 `db_devices.paths` and `wal_devices.paths`, `encrypted` and `tpm2`, with one
-OSD per data device. All selected paths are distinct within a drive group and
-across services on a host; dynamic selectors, slots and sizes remain
+OSD per data device. A custom CRUSH device class, as `spec.crush_device_class`
+or a `{path, crush_device_class}` path record, refuses at plan by that member's
+name ([CephPlacementPolicy](ceph-resources.md#cephplacementpolicy)). All
+selected paths are distinct within a drive group and across services on a
+host; dynamic selectors, slots and sizes remain
 unsupported. TPM2 requires encryption and a declared TPM profile. Omitted
 options retain native BlueStore defaults. A nonempty DB/WAL device is reused
 only when the retained intent and complete native OSD/LV relationships prove

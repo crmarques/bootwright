@@ -108,25 +108,20 @@ spec:
         label: ceph-core
 
   topology:
-    # Each fqdn overrides the composed <node>.<cluster>.<storage domain> name
-    # to match the Machine hostname.
     nodes:
       - name: metal-01
-        fqdn: metal-01.metal.example.test
         machineRef: metal-01
 
         labels:
           - ceph-core
 
       - name: metal-02
-        fqdn: metal-02.metal.example.test
         machineRef: metal-02
 
         labels:
           - ceph-core
 
       - name: metal-03
-        fqdn: metal-03.metal.example.test
         machineRef: metal-03
 
         labels:

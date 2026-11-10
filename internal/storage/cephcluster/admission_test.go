@@ -58,7 +58,7 @@ func fixtureCatalog() api.Catalog {
 	for i := 1; i <= 3; i++ {
 		name := fmt.Sprintf("node-%d", i)
 		machine := fmt.Sprintf("machine-%d", i)
-		nodes = append(nodes, m("name", name, "machineRef", machine, "site", "site-a", "labels", api.StringList("mon", "mgr", "storage")))
+		nodes = append(nodes, m("name", name, "machineRef", machine, "labels", api.StringList("mon", "mgr", "storage")))
 		objects = append(objects, object(api.Machine, machine, m("placement", m("site", "site-a"), "hardware", m("rootDevice", m("deviceName", "/dev/vda")), "os", m("provided", true), "network", m("addresses", []api.Value{assignedAddress("ssh", fmt.Sprintf("192.0.2.%d", i))}), "access", m("ssh", m("addressRef", "ssh")))))
 	}
 	objects = append(objects, lanNetwork("public", "192.0.2.0/24"),
@@ -275,7 +275,13 @@ func TestStorageDistributionAndVendorNamespace(t *testing.T) {
 	}
 	wrong := ibm.WithSpec(ibm.Spec().WithPath(api.StringValue("registry.example.test/vendor-extra/ceph"), "image", "base"))
 	requireIssue(t, Validate(wrong, replace(catalog, wrong)), "$.spec.image.base")
-	if issues := ValidateAuthored(ibm.WithSpec(ibm.Spec().WithPath(api.StringValue("v9"), "release")), catalog); len(issues) != 0 {
+	authored := find(t, fixtureCatalog(), api.CephCluster, "storage").Spec()
+	nodes := authored.Get("topology", "nodes").Items()
+	for i := range nodes {
+		nodes[i] = nodes[i].Without("site")
+	}
+	authored = ibm.Spec().WithPath(api.ListValue(nodes...), "topology", "nodes")
+	if issues := ValidateAuthored(ibm.WithSpec(authored.WithPath(api.StringValue("v9"), "release")), catalog); len(issues) != 0 {
 		t.Fatal("native release string was refused", issues)
 	}
 }

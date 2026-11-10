@@ -115,14 +115,9 @@ planning realizes an rgw service a CephObjectGateway binds, with its TLS
 bindings, through the gateway block and an nfs service through its unit; an
 ingress plans once its auxiliary images are authored under `spec.images`
 and refuses at planning without them
-([refusal table](../ceph.md#refusal-table)). A
-`spec.serviceBindings` entry is left to the gateway block only for an RGW
-service a CephObjectGateway binds and for the ingress that fronts it, and
-the credential bindings of a grafana or snmp-gateway service to the monitoring
-unit, and the TLS binding of the management gateway to its unit. The nvmeof unit
-realizes `/spec/root_ca_cert`, `/spec/server_cert`, `/spec/server_key`,
-`/spec/client_cert` and `/spec/client_key`; each certificate/key pair binds one
-`tlsCertificate` Secret as effect material. Other entries refuse at planning. An RGW document must be bound by a CephObjectGateway of the same
+([refusal table](../ceph.md#refusal-table)). Each `spec.serviceBindings`
+entry plans by the [binding routing table](../ceph-native-api.md#secret-bindings).
+An RGW document must be bound by a CephObjectGateway of the same
 cluster whose `spec.serviceRef` names it; an unbound one refuses at its
 `service_id`, because cephadm would deploy it before its realm, zone group and
 zone exist. `spec.mgrModules` admits `cephadm` and
@@ -317,10 +312,13 @@ value is preserved:
   `cephadm.addressRef`, else the bootstrap node's Machine
   `access.ssh.addressRef`;
 - `networks.publicCIDRs` and `networks.clusterCIDRs` with host bits masked;
-- each topology node's `fqdn` as `<node>.<cluster>.<storage domain>` when the
+- each topology node's `fqdn` as its Machine's effective `fqdn` address when
+  the Machine has one, else as `<node>.<cluster>.<storage domain>` when the
   single Environment declares a storage domain (`domains.storageClusters`,
-  else `domains.clusters`, else `domains.base`), and its `site` from its
-  Machine's `placement.site`;
+  else `domains.clusters`, else `domains.base`);
+- each topology node's `site` as its Machine's `placement.site`, the only
+  authored owner of a node's site; an authored `topology.nodes[].site`
+  refuses `api.invariant`;
 - a `topology.stretch` block's `ruleName: stretch-rule`, its tiebreaker
   `site` from the tiebreaker node and, when omitted, its `dataSites` as the
   sorted distinct sites of the nodes the MON service places, other than the
@@ -341,8 +339,12 @@ checks:
   topology, network, FIPS, CephX, and cluster-login declarations agree;
 - each `topology.nodes[].machineRef` names a Machine, which is a Ceph node
   because the topology names it ([substrate arm](machines.md#substrate-arm));
+- on a Bootwright-installed Machine, an authored `topology.nodes[].fqdn` that
+  differs from the Machine's effective `fqdn` refuses `api.invariant` at
+  `topology.nodes[i].fqdn`, naming both; removing the override gives the
+  node its Machine's name;
 - native placement resolves to owned Machines and service counts fit finite
-  candidate sets, with consistent site and label bindings;
+  candidate sets, with consistent label bindings;
 - OSD selectors are bounded and internally consistent, exclude the Machine's
   root device, named by its path, WWN path or serial-number path, from explicit
   data, DB, and WAL paths (a root declared by serial number that a WWN path

@@ -84,41 +84,33 @@ spec:
         tpm2: true
 
   topology:
-    # Each fqdn overrides the composed <node>.<cluster>.<storage domain> name
-    # to match the Machine hostname.
     nodes:
       - name: rhel-01
-        fqdn: rhel-01.lab.example.test
         machineRef: rhel-01
         labels:
           - ceph-storage
           - ceph-mon
       - name: rhel-02
-        fqdn: rhel-02.lab.example.test
         machineRef: rhel-02
         labels:
           - ceph-storage
           - ceph-mon
       - name: rhel-03
-        fqdn: rhel-03.lab.example.test
         machineRef: rhel-03
         labels:
           - ceph-storage
           - ceph-mon
       - name: rhel-04
-        fqdn: rhel-04.lab.example.test
         machineRef: rhel-04
         labels:
           - ceph-storage
           - ceph-mon
       - name: rhel-05
-        fqdn: rhel-05.lab.example.test
         machineRef: rhel-05
         labels:
           - ceph-storage
           - ceph-mon
       - name: rhel-06
-        fqdn: rhel-06.lab.example.test
         machineRef: rhel-06
         labels:
           - ceph-storage

@@ -126,7 +126,19 @@ func ValidateAuthored(object api.Object, catalog api.Catalog) []api.Issue {
 		return a.issues
 	}
 	a.lexicalValues()
+	if object.Kind() == api.CephCluster {
+		a.authoredNodeSites()
+	}
 	return a.issues
+}
+
+func (a *admission) authoredNodeSites() {
+	for i, node := range a.object.Spec().Get("topology", "nodes").Items() {
+		if node.Has("site") {
+			a.issue("api.invariant", indexed("$.spec.topology.nodes", i)+".site", "a storage node's site is its Machine's spec.placement.site, so a topology node never authors one",
+				"remove topology.nodes[].site and set spec.placement.site on Machine/"+textOf(node, "machineRef"))
+		}
+	}
 }
 
 func Validate(object api.Object, catalog api.Catalog) []api.Issue {
