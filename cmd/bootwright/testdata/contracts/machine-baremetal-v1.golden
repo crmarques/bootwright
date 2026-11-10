@@ -1,12 +1,12 @@
 implementation: machine-baremetal-v1
-content-digest: 4c7210f8f4df52dab41ce734be7aaa69d2d9742cdfc1a571e6d607efb6bf92b1
+content-digest: 6e57381a45700b2ebe2c119278761057eea0347af980ff6f84c5b759b3e43ed8
 request-version: machine-baremetal-v1
 automation-formats: none
 mark-formats: none
 proof-ids: none
 fixed-places: none
 effect-pins:
-  identity+exact-addresses+power+system-claim+mac-claim+logical-volume
+  identity+exact-addresses+power+system-claim+every-mac-claim+logical-volume
 request-identity:
   identity.context
   identity.object

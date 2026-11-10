@@ -13173,7 +13173,8 @@ neither a `UUID` nor a serial, and the claim is made from its evidence in Go.
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** a pin-less power command on a server another
 context holds by `bmc-system:` under another spelling is not refused
-([B1267](backlog.md#b1267)).
+([B1267](backlog.md#b1267)). Note: closed by
+[X368](#x368--mac-claims).
 
 ### X357 — Release repositories from the image mirror
 
@@ -13623,3 +13624,31 @@ without their table ([B1304](backlog.md#b1304)); a leg whose VLAN or trunk
 changes must be deleted by hand ([B1315](backlog.md#b1315)); and a provider
 that drops its last tagged Network keeps its routing unit and table
 ([B1229](backlog.md#b1229)).
+
+### X368 — MAC claims
+
+**Item:** B1298 (2026-11-10, [D253](backlog.md#d253), widening
+[D252](backlog.md#d252) (2)), delivered in-tree, split from
+[B1267](backlog.md#b1267). **Kind:** safety. **Owners:** Substrate and
+Machine. `ProvedClaim` claims one exclusive `bmc-mac:<mac>` key per declared
+MAC, in canonical colon lower-case form, for every proved physical system,
+beside `bmc-system:<UUID>` when its proof records one
+([physical machine realization](../substrates.md#physical-machine-realization),
+[host reservations](../infrastructure-services.md#host-reservations)). A
+pin-less power command, which already drives the MAC keys, now meets a
+server another context proved by its `UUID` under another spelling of its
+BMC address and refuses `controller.conflict`. A claim whose `bmc:` key,
+`bmc-system:` key and MAC keys exceed one reservation's 64 keys refuses
+`lifecycle.state`; `keepProved` keeps at most the keys a held claim already
+fitted beside one planned `bmc:` key, so it needs no further bound. The
+bare-metal effect pin's `mac-claim` became `every-mac-claim`, which moved the
+`machine-baremetal-v1` content digest: an operation an earlier build
+registered finishes, or is destroyed, with that build.
+
+| Finding | Change |
+| --- | --- |
+| REC-74 (remainder) | `ProvedClaim` MAC keys for every system; `TestAPinLessPowerCommandRefusesAServerAnotherSpellingProvedByItsUUID`, `TestAProvedClaimRefusesMoreMACsThanOneReservationHolds`; substrates.md claim paragraph, the `bmc-system:` and `bmc-mac:` rows; B1267 narrowed to the SSH placement |
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** a context reaching the server over SSH still holds
+only `ssh/` keys ([B1267](backlog.md#b1267)).

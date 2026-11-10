@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -444,9 +445,9 @@ func TestAMachineReadsOnlyItsControllerCredentialsAsAccessCredentials(t *testing
 }
 
 // A proved machine's claim gains bmc-system:<UUID>, the UUID in lower case,
-// beside its bmc: key; one whose proof recorded no UUID, a serial alone
-// included, claims bmc-mac:<mac> for each declared MAC in lower case instead,
-// and a UUID that cannot name a key refuses rather than claim nothing.
+// and bmc-mac:<mac> for each declared MAC in lower case beside its bmc: key;
+// one whose proof recorded no UUID, a serial alone included, claims the MACs
+// alone, and a UUID that cannot name a key refuses rather than claim nothing.
 func TestAProvedMachineClaimsItsSystemUUID(t *testing.T) {
 	definition := planOf(t, reconciliation.Apply).Definitions[0]
 	block := reconciliation.Block{BlockDefinition: definition}
@@ -458,7 +459,7 @@ func TestAProvedMachineClaimsItsSystemUUID(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("claim = %v, %v", found, err)
 	}
-	want := append(request.ReservationKeys(), "bmc-system:4c4c4544-0042-3510-8052-b4c04f4d4e31")
+	want := append(request.ReservationKeys(), "bmc-system:4c4c4544-0042-3510-8052-b4c04f4d4e31", "bmc-mac:aa:bb:cc:dd:ee:01", "bmc-mac:aa:bb:cc:dd:ee:02")
 	if claim.Context != "lab" || claim.Kind != "substrate-physical" || claim.Service != request.Identity.Object || claim.Shared || !slices.Equal(claim.Keys, want) {
 		t.Fatalf("claim = %+v, want keys %v", claim, want)
 	}
@@ -469,6 +470,35 @@ func TestAProvedMachineClaimsItsSystemUUID(t *testing.T) {
 	}
 	if _, _, err := NewMachine(nil).ProvedClaim("lab", block, proof("uuid with space")); err == nil {
 		t.Fatal("a UUID that names no key was claimed")
+	}
+}
+
+// A claim holds its bmc: key, its bmc-system: key and one bmc-mac: key per
+// declared MAC within one reservation's key bound, and a MAC set that would
+// exceed it refuses rather than claim the machine by a part of its addresses.
+func TestAProvedClaimRefusesMoreMACsThanOneReservationHolds(t *testing.T) {
+	claim := func(count int) (prerequisites.HostReservation, error) {
+		t.Helper()
+		request := fixtureRequest(t)
+		request.Hardware = nil
+		for index := range count {
+			request.Hardware = append(request.Hardware, Interface{Name: fmt.Sprintf("eno%d", index), MACAddress: fmt.Sprintf("52:54:00:00:00:%02x", index)})
+		}
+		frozen, err := request.Canonical()
+		if err != nil {
+			t.Fatal(err)
+		}
+		evidence := encode(t, Evidence{Addresses: request.Addresses(), Postcondition: true, Power: "Off", Request: "digest", Serial: "SN1", UUID: "uuid-1"})
+		held, _, err := NewMachine(nil).ProvedClaim("lab", reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Request: frozen}}, evidence)
+		return held, err
+	}
+	held, err := claim(prerequisites.MaxReservationKeys - 2)
+	if err != nil || len(held.Keys) != prerequisites.MaxReservationKeys {
+		t.Fatalf("the largest MAC set claimed %d keys (%v), want %d", len(held.Keys), err, prerequisites.MaxReservationKeys)
+	}
+	_, err = claim(prerequisites.MaxReservationKeys - 1)
+	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "lifecycle.state" || !strings.Contains(reported[0].Message, "more than 62 MAC addresses") {
+		t.Fatalf("a MAC set beyond the bound = %+v", reported)
 	}
 }
 

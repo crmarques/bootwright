@@ -1154,25 +1154,31 @@ port it names or else its scheme's default, and the system's path below
 records a `UUID`, the block also claims the exclusive `bmc-system:<UUID>` key,
 the `UUID` in lower case, in the same controller record and before any media is
 inserted, so a second spelling of one server's address refuses
-`controller.conflict` naming the context that holds it. A system whose proof
-records no `UUID`, one reporting a serial number alone included, claims instead
+`controller.conflict` naming the context that holds it. Every proved system, with
+or without a `UUID`, one reporting a serial number alone included, also claims
 one exclusive `bmc-mac:<mac>` key for each declared MAC, in its
 colon-separated lower-case form, at the
 same point, because the proof showed a complete inventory reporting exactly
-that set ([D252](milestones/backlog.md#d252) (2);
-`TestTwoSpellingsOfOneUUIDLessServerConflict`). Two contexts of one controller
+that set ([D252](milestones/backlog.md#d252) (2), widened by
+[D253](milestones/backlog.md#d253);
+`TestTwoSpellingsOfOneUUIDLessServerConflict`). A claim whose `bmc:` key,
+`bmc-system:` key and MAC keys would exceed the 64 keys one reservation holds
+refuses `lifecycle.state` naming the Machine's `nics`
+(`TestAProvedClaimRefusesMoreMACsThanOneReservationHolds`). Two contexts of one controller
 store that both drive one server by its BMC therefore never drive it at once:
 the second registration refuses, and so does a
 [machine power command](cli.md#machine-power-operations) of the second
-context. A context that reaches the server as an OS-ready Machine over SSH
-holds only `ssh/` and `sshkey/` keys, so a context driving that server by its
-BMC is not refused, and a pin-less power command compares no `UUID` its BMC
-has not yet reported; both are tracked as [B1267](milestones/backlog.md#b1267).
+context, a pin-less one included, which meets the MAC keys under any spelling
+of the address
+(`TestAPinLessPowerCommandRefusesAServerAnotherSpellingProvedByItsUUID`). A
+context that reaches the server as an OS-ready Machine over SSH holds only
+`ssh/` and `sshkey/` keys, so a context driving that server by its BMC is not
+refused; that is tracked as [B1267](milestones/backlog.md#b1267).
 Contexts in different stores are not coordinated. The claim serializes use; it
 is not ownership of the machine and never authorizes destroying it.
 
 **Reservations.** `bmc:<host>:<port>/<system>` and, once proved,
-`bmc-system:<UUID>` or each `bmc-mac:<mac>`. A physical block owns no path, unit, socket or hypervisor
+`bmc-system:<UUID>` when its proof records one, and each `bmc-mac:<mac>`. A physical block owns no path, unit, socket or hypervisor
 object.
 
 **Evidence.** Completion requires the ComputerSystem answering with the bound

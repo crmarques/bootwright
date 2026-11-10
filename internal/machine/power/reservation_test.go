@@ -2,13 +2,16 @@ package power
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/substrate"
+	"github.com/crmarques/bootwright/internal/substrate/baremetal"
 )
 
 // A power command, --force included, refuses controller.conflict before any
@@ -72,6 +75,41 @@ func TestAPowerCommandRefusesAServerAnotherContextReserves(t *testing.T) {
 				t.Fatalf("a refused power command reached the adapter (%q) or the runtime %d times", runner.seen.Implementation, runtime.entered)
 			}
 		})
+	}
+}
+
+// A pin-less power command meets the claim another context's proof made of
+// a server that reported a UUID, under another spelling of its BMC address,
+// through the bmc-mac: key of the MAC both declare, and refuses before any
+// power request (D253 (1)).
+func TestAPinLessPowerCommandRefusesAServerAnotherSpellingProvedByItsUUID(t *testing.T) {
+	frozen, err := baremetal.Request{
+		Controller: baremetal.Controller{CredentialsRef: "metal-bmc", Endpoint: "https://192.0.2.40/redfish/v1/Systems/1", TLSVerify: true},
+		Hardware:   []baremetal.Interface{{MACAddress: "52-54-00-9A-1B-01", Name: "eno1"}},
+		Identity:   baremetal.Identity{Block: baremetal.BlockID("server"), Context: "other", Object: "server"},
+		Placement:  machine.Placement{Connection: machine.ConnectionLocal, Machine: "controller"},
+		Version:    "machine-baremetal-v1",
+	}.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := json.Marshal(baremetal.Evidence{Addresses: []string{"52:54:00:9a:1b:01"}, Postcondition: true, Power: "Off", Request: "digest", Serial: "SN1", UUID: "4C4C4544-0042-3510-8052-B4C04F4D4E31"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	held, found, err := baremetal.NewMachine(nil).ProvedClaim("other", reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Request: frozen}}, evidence)
+	if err != nil || !found {
+		t.Fatalf("claim = %v, %v", found, diagnostics.Of(err))
+	}
+	runtime, runner := &boundary{held: []prerequisites.HostReservation{held}}, &adapter{machine: "metal", power: machine.PowerOff}
+	_, err = New(stateSource{}, evidenceSource{}, &pins{}, runtime, runner, nil, &answer{}, nil, nil).
+		converge(context.Background(), PowerRequest{ContextName: "lab", Names: []string{"metal"}, Verb: Stop, Force: true, SkipConfirmation: true})
+	refused := onlyRefusal(t, err)
+	if refused.Code != "controller.conflict" || !strings.HasPrefix(refused.Message, "context other holds ") || refused.Object == nil || refused.Object.Name != "metal" {
+		t.Fatalf("refusal = %+v", refused)
+	}
+	if runner.seen.Implementation != "" {
+		t.Fatalf("a refused power command reached the adapter with %q", runner.seen.Implementation)
 	}
 }
 

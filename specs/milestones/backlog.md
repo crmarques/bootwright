@@ -299,7 +299,7 @@ Alias cell.
 | [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355 and X361 on 2026-11-10 | product | Controller, with Desired state | A managed artifact server may serve the artifact mirror, and one declaration replaces the download mirrors | The declaration (X355), the preflight probe and the private trust anchor (X361) landed; a managed server needs B1249, and folding `spec.downloads` awaits the owner (D251 (5)) |
 | [B1249](#b1249) | new, 2026-11-10 (D250 (8)) | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | D250 parks the controlled-network plan until the owner promotes it; no capability realizes a managed Registry |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
-| [B1267](#b1267) | new, 2026-11-10 (X348, audit 004 REC-74) | safety | Substrate and Machine, with Infrastructure services | A context driving a server by its BMC and one reaching it another way, or naming it by a UUID its BMC has not reported yet, conflict | Needs a cross-mechanism machine identity whose byte order is settled first |
+| [B1267](#b1267) | new, 2026-11-10 (X348, audit 004 REC-74) | safety | Substrate and Machine, with Infrastructure services | A context driving a server by its BMC and one reaching it as an OS-ready Machine over SSH conflict | Needs a cross-mechanism machine identity whose byte order is settled first |
 | [B1268](#b1268) | new, 2026-11-10 (D251 (7)) | product | Container cluster | Under the image mirror, a node's default time pool is replaced by the selected time servers | The agent install adds time sources beside the pool, and its manifest path admits only the Network kind, so no MachineConfig replaces it |
 | [B1269](#b1269) | new, 2026-11-10 (X357 review) | product | Container cluster | The controller's image build verifies a mirror against the cluster's selected trust bundles | The installer's own release extraction may read only the controller's trust store; B1250's run shows which |
 | [B1273](#b1273) | new, 2026-11-10 (X359 gate) | defect | Controller | `test_a_killed_lifecycle_supervisor_leaves_no_playbook_worker_or_task` reads a surviving process tree under heavy host load | It failed once under a load average near 30 and passed three times alone; the stopped-tree poll has no settle bound |
@@ -3434,17 +3434,15 @@ in-tree test in which every public origin refuses, and an owner-accepted run.
 safety. **Requires:** none. **Definition:** Candidate, from
 [audit 004](../../audits/004-spec-api/report-fable.md) REC-74 and X348: a
 context that uses a server as an OS-ready Machine over SSH holds only `ssh/`
-and `sshkey/` keys, and a pin-less power command compares the endpoint and MAC
-keys alone, so neither meets a context that drives that server by its BMC
-under another spelling and holds it by `bmc-system:<UUID>`
+and `sshkey/` keys, so it never meets a context that drives that server by its
+BMC and holds it by `bmc:`, `bmc-system:<UUID>` and `bmc-mac:` keys
 ([physical machine realization](../substrates.md#physical-machine-realization)).
-**Outcome:** both refuse `controller.conflict`; the design settles first
+The pin-less power case closed in [X368](delivered.md#x368--mac-claims)
+([D253](#d253)).
+**Outcome:** the SSH placement refuses `controller.conflict`; the design settles first
 whether the SMBIOS UUID a host reports and the Redfish UUID can differ in byte
-order, before any equality-keyed key is specified, and keeps `bmc-system:`.
-Claiming `bmc-mac:` keys for every physical server moved to
-[B1298](m1.md#b1298) under [D253](#d253) (1); this item keeps the SSH and
-cross-mechanism remainder, which needs that byte-order fact from real hardware
-([D224](#d224)).
+order, before any equality-keyed key is specified, and keeps `bmc-system:`;
+only real hardware can show it ([D224](#d224)).
 **Exit evidence:** a conflict test of an SSH placement on a server another
 context drives by its BMC.
 
@@ -8204,7 +8202,7 @@ safety slice. No push.
 answered "B1267: proceed with a", then, told why the typed field is the better
 design for one WWN root form, "B1274: go with b", and "go for other parked
 items you listed". This authorizes, out of sequence for implementation, X368
-(M1, [B1298](m1.md#b1298)), X369 (M1, [B1274](m1.md#b1274)), X370 (M1,
+(M1, [B1298](delivered.md#x368--mac-claims)), X369 (M1, [B1274](m1.md#b1274)), X370 (M1,
 [B1270](m1.md#b1270)), X371 (M1, [B1271](m1.md#b1271) and
 [B1272](m1.md#b1272)), X372 (M1, [B1275](m1.md#b1275)), X373 (M1,
 [B1263](m1.md#b1263)), X374 (M2, [B1264](m2.md#b1264)) and X375 (M3,
@@ -8213,7 +8211,7 @@ items you listed". This authorizes, out of sequence for implementation, X368
 1. Every physical server claims its MAC addresses as exclusive `bmc-mac:` keys,
    not only one that reports no UUID, widening [D252](#d252) (2), so a pin-less
    power command meets the context that holds the server under any spelling of
-   its BMC address ([B1298](m1.md#b1298), split from [B1267](#b1267), which keeps
+   its BMC address ([B1298](delivered.md#x368--mac-claims), split from [B1267](#b1267), which keeps
    the SSH and cross-mechanism remainder).
 2. `substrate.baremetal.rootDevice.wwn` is the one WWN root form of a bare-metal
    Machine an installer writes, as [audit 004](../../audits/004-spec-api/report-fable.md)

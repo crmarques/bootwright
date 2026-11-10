@@ -271,29 +271,33 @@ func (MachineCapability) ProvedClaim(contextName string, block reconciliation.Bl
 		return prerequisites.HostReservation{}, false, err
 	}
 	claim := prerequisites.HostReservation{Context: contextName, Kind: "substrate-physical", Service: request.Identity.Object, Keys: request.ReservationKeys()}
-	if identity.UUID == "" {
-		addresses := request.Addresses()
-		if len(addresses) == 0 || len(claim.Keys)+len(addresses) > prerequisites.MaxReservationKeys {
+	if identity.UUID != "" {
+		system := strings.ToLower(identity.UUID)
+		if !systemToken.MatchString(system) {
 			return prerequisites.HostReservation{}, false, refusal("lifecycle.state",
-				"the management controller at "+request.Controller.Endpoint+" reported no system UUID, and Machine/"+request.Identity.Object+
-					" declares no MAC address set of at most "+strconv.Itoa(prerequisites.MaxReservationKeys-len(claim.Keys))+" addresses to claim the machine by",
-				"correct spec.substrate.baremetal.nics on Machine/"+request.Identity.Object)
+				"the system UUID the management controller at "+request.Controller.Endpoint+" reported cannot name a host claim",
+				"correct spec.substrate.baremetal.bmc.address on Machine/"+request.Identity.Object+" so it names a BMC that reports a standard UUID")
 		}
-		hardware := make([]string, 0, len(addresses))
-		for _, address := range addresses {
-			hardware = append(hardware, substrate.MACReservationKey(address))
-		}
-		slices.Sort(hardware)
-		claim.Keys = append(claim.Keys, slices.Compact(hardware)...)
-		return claim, true, nil
+		claim.Keys = append(claim.Keys, substrate.SystemReservationKey(system))
 	}
-	system := strings.ToLower(identity.UUID)
-	if !systemToken.MatchString(system) {
+	addresses := request.Addresses()
+	if len(claim.Keys)+len(addresses) > prerequisites.MaxReservationKeys {
 		return prerequisites.HostReservation{}, false, refusal("lifecycle.state",
-			"the system UUID the management controller at "+request.Controller.Endpoint+" reported cannot name a host claim",
-			"correct spec.substrate.baremetal.bmc.address on Machine/"+request.Identity.Object+" so it names a BMC that reports a standard UUID")
+			"Machine/"+request.Identity.Object+" declares more than "+strconv.Itoa(prerequisites.MaxReservationKeys-len(claim.Keys))+" MAC addresses to claim the machine by",
+			"correct spec.substrate.baremetal.nics on Machine/"+request.Identity.Object)
 	}
-	claim.Keys = append(claim.Keys, substrate.SystemReservationKey(system))
+	if identity.UUID == "" && len(addresses) == 0 {
+		return prerequisites.HostReservation{}, false, refusal("lifecycle.state",
+			"the management controller at "+request.Controller.Endpoint+" reported no system UUID, and Machine/"+request.Identity.Object+
+				" declares no MAC address to claim the machine by",
+			"correct spec.substrate.baremetal.nics on Machine/"+request.Identity.Object)
+	}
+	hardware := make([]string, 0, len(addresses))
+	for _, address := range addresses {
+		hardware = append(hardware, substrate.MACReservationKey(address))
+	}
+	slices.Sort(hardware)
+	claim.Keys = append(claim.Keys, slices.Compact(hardware)...)
 	return claim, true, nil
 }
 
