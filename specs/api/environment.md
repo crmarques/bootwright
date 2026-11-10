@@ -30,7 +30,7 @@ Environment fields emit in this order:
 | `spec.defaults` | kind-keyed partial specs | no | `{}` | Omitted object fields inherit the corresponding kind entry under the rules below. |
 | `spec.downloads` | object | no | source-specific | Closed download-mirror policy below. |
 | `spec.dependencyVersions` | object | no | this build's defaults | Version intent for the prerequisites this Environment controller stage installs; closed shape below. |
-| `spec.mirror` | object | no | — | The [artifact mirror](#artifact-mirror) that serves every public-origin client, and the [image mirror](#image-mirror) that serves every public-origin image a Machine runs as a service. |
+| `spec.mirror` | object | no | — | The [artifact mirror](#artifact-mirror) that serves every public-origin client, with its optional trust anchor, and the [image mirror](#image-mirror) that serves every public-origin image a Machine runs as a service. |
 | `spec.controller` | object | yes | — | Required controller Machine selection below. |
 | `spec.lifecycle` | object | no | — | Offline-rescue input; a present `rescue` is refused until a rescue journey exists. |
 
@@ -394,9 +394,34 @@ refuses at plan, and so does a `helmMirror`, `govcMirror` or `virtctlMirror`
 beside it ([refusal table](#refusal-table)). `bootwright render acquisitions`
 names each file the mirror must hold.
 
-Not yet met: preflight proves the mirror holds every file before the stage
-runs, the mirror's trust may be a private anchor, and a managed artifact
-server may be the mirror; tracked as [B1246](../milestones/backlog.md#b1246).
+`spec.mirror.artifacts.trustBundleRef`, optional, names a `caBundle`
+[Secret](secrets.md), a [trust anchor](../secrets.md#immutable-binding-and-contexts) whose certificates verify the mirror beside the system
+trust store, as the image mirror Registry's `trustBundleRef` adds to it, so a
+mirror whose certificate an enterprise authority issued needs no change to
+the controller's trust store. The anchor verifies only the mirror's own host:
+a proxy and any other host keep the system trust store alone. Only the
+Secret's name is frozen into the controller stage's request; its certificate
+is lent to the attempt that downloads, as a private file the run removes
+after it, and to the preflight probe, and no record or evidence holds it.
+Without it the mirror verifies against the system trust store alone.
+
+Before the stage runs, [`preflight`](../cli/output.md#preflight) reads the
+size of each file the stage would read from the mirror, with no body: an
+HTTPS `HEAD`, or a one-byte ranged `GET` where the server refuses `HEAD`,
+through the controller Machine's [proxy choice](machines.md#machine-proxy)
+and the same trust, following a redirect only to HTTPS on the mirror's own
+host, within two minutes for all of them. The stage's download keeps to a
+like rule: a redirect leaves a source's host only from one publisher download
+host to another, so neither the artifact mirror nor a
+[download mirror](#download-mirrors) can redirect the stage to a publisher. It fails a file the mirror lacks or
+serves at a size other than the one the build pins, naming the file's URL and
+the publisher file to copy there, and reports one it could not read, or whose
+size the mirror did not name, as unknown. Without the declaration preflight
+probes nothing.
+
+Not yet met: a managed artifact server may be the mirror, and the
+declaration replaces `spec.downloads`; tracked as
+[B1246](../milestones/backlog.md#b1246).
 
 ## Image mirror
 

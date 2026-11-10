@@ -36,3 +36,17 @@ type CapacityChecker interface {
 type ClustersChecker interface {
 	Check(context.Context, clusterpreflight.PreflightRequest) (*Report, error)
 }
+
+type MirrorFile struct {
+	Tool      string
+	URL       string
+	Publisher string
+	Bytes     int64
+	Status    int
+	Served    int64
+	Failure   string
+}
+
+type MirrorProber interface {
+	ProbeMirror(context.Context, string, api.Catalog) ([]MirrorFile, error)
+}

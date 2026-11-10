@@ -3,6 +3,7 @@ package bundlelocal
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"net"
 	"net/http"
@@ -30,14 +31,28 @@ func acquisitionClient(ctx context.Context, egress prerequisites.SetupEgress, ap
 	if err != nil {
 		return nil, nil, err
 	}
+	return routedClient(proxy, roots, approved, timeout, nil)
+}
+
+type trustAnchor struct {
+	authority string
+	pool      *x509.CertPool
+}
+
+func routedClient(proxy func(*http.Request) (*url.URL, error), roots *x509.CertPool, approved func(*url.URL) bool, timeout time.Duration, anchor *trustAnchor) (*http.Client, func(), error) {
 	transport := &http.Transport{
 		Proxy: proxy, TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots},
 		DialContext:         (&net.Dialer{Timeout: 15 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
 		TLSHandshakeTimeout: 15 * time.Second, ResponseHeaderTimeout: 30 * time.Second,
 		MaxResponseHeaderBytes: 64 << 10, DisableCompression: true,
 	}
+	guarded := acquisition.GuardAcquisitionTransport(transport, approved)
+	if anchor != nil {
+		transport.TLSClientConfig.RootCAs = anchor.pool
+		transport.DialTLSContext = acquisition.AnchoredDial(transport.DialContext, roots, anchor.authority, anchor.pool)
+	}
 	client := &http.Client{
-		Transport: acquisition.GuardAcquisitionTransport(transport, approved), Timeout: timeout,
+		Transport: guarded, Timeout: timeout,
 		CheckRedirect: func(request *http.Request, previous []*http.Request) error {
 			if len(previous) >= 5 || !approved(request.URL) {
 				return bundleFailure("dependency acquisition redirected outside its approved HTTPS boundary")

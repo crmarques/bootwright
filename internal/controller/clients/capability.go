@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/secrets"
 )
 
 // Capability realizes the controller prerequisites one context adds to the
@@ -57,7 +58,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	if selection.MachineName() != input.Controller {
 		return empty, refuse("lifecycle.state", "the controller prerequisites block does not name the selected controller Machine", "use a compatible executable")
 	}
-	request := NewRequest(selection, requests)
+	request := NewRequest(selection, requests).WithMirrorTrust(catalog)
 	canonical, err := request.Canonical()
 	if err != nil {
 		return empty, err
@@ -468,11 +469,17 @@ func (c Capability) install(ctx context.Context, execution lifecycle.Execution, 
 func (c Capability) publish(ctx context.Context, execution lifecycle.Execution, request Request, target prerequisites.BundleArea, tools []prerequisites.ToolDefinition, recorded []string) (lifecycle.Result, error) {
 	failed := lifecycle.Result{Outcome: reconciliation.OutcomeFailed}
 	unknown := lifecycle.Result{Outcome: reconciliation.OutcomeUnknown}
+	trust, err := lentTrust(execution, request)
+	if err != nil {
+		return failed, err
+	}
+	defer clear(trust.Anchor)
 	result, err := c.installer.Clients(ctx, prerequisites.ClientInstallation{
 		Target:   target,
 		Identity: execution.Block.RequestDigest,
 		Tools:    tools,
 		Egress:   request.Egress,
+		Trust:    trust,
 		Launch:   execution.Launch,
 		Publish: func(_ context.Context, added []string) error {
 			if !slices.Equal(added, recorded) {
@@ -496,6 +503,25 @@ func (c Capability) publish(ctx context.Context, execution lifecycle.Execution, 
 		return unknown, refuse("controller.unknown", "the controller prerequisites adapter reported no usable outcome", liveResolution(execution))
 	}
 	return lifecycle.Result{}, nil
+}
+
+func lentTrust(execution lifecycle.Execution, request Request) (prerequisites.MirrorTrust, error) {
+	if request.MirrorTrust == nil {
+		return prerequisites.MirrorTrust{}, nil
+	}
+	anchor, err := MirrorAnchor(execution.Material, request.MirrorTrust.TrustBundleRef)
+	if err != nil {
+		return prerequisites.MirrorTrust{}, err
+	}
+	return prerequisites.MirrorTrust{Host: request.MirrorTrust.Host, Anchor: anchor}, nil
+}
+
+func MirrorAnchor(material map[string]secrets.Material, reference string) ([]byte, error) {
+	anchor, found := material[reference].Part(secrets.CertificatePart)
+	if !found || len(anchor) == 0 {
+		return nil, refuse("secret.part", "the artifact mirror's trust anchor, Secret "+reference+", lent no certificate", "set it with bootwright secret set --name "+reference+" --certificate-file <file>, then repeat the command")
+	}
+	return anchor, nil
 }
 
 // verify proves the whole closure after its effects: every host package

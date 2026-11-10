@@ -133,3 +133,27 @@ func mustQuote(t *testing.T, text string) []byte {
 	}
 	return quoted
 }
+
+func TestALentTrustAnchorReachesAnsibleOnlyAsAPrivateFile(t *testing.T) {
+	job := t.TempDir()
+	request := templatedSetup()
+	anchor := []byte("-----BEGIN CERTIFICATE-----\nMIIBmirror\n-----END CERTIFICATE-----\n")
+	request.Trust.Host, request.anchor = "get.example.test", anchor
+	if err := writeInvocation(job, prerequisites.PythonLaunch{Program: "/runtime/bin/python", Shim: "/runtime/bootwright-python"}, request); err != nil {
+		t.Fatal(err)
+	}
+	written, err := os.ReadFile(filepath.Join(job, "request.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(written, []byte("MIIBmirror")) || !bytes.Contains(written, mustQuote(t, filepath.Join(job, "trust.pem"))) || !bytes.Contains(written, mustQuote(t, "get.example.test")) {
+		t.Fatalf("the request carries the anchor or does not name its file and host:\n%s", written)
+	}
+	info, err := os.Stat(filepath.Join(job, "trust.pem"))
+	if err != nil || info.Mode().Perm() != 0600 {
+		t.Fatalf("the anchor file is not private: %v %v", info, err)
+	}
+	if held, _ := os.ReadFile(filepath.Join(job, "trust.pem")); !bytes.Equal(held, anchor) {
+		t.Fatalf("the anchor file holds %q", held)
+	}
+}

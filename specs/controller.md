@@ -622,7 +622,10 @@ invocation; the `iputils` package serves the virtual-IP duplicate-address
 probe.
 
 A declared [artifact mirror](api/environment.md#artifact-mirror) serves every
-public-origin client in place of its publisher. A client at the default
+public-origin client in place of its publisher, verified against the system
+trust store plus its optional `trustBundleRef` anchor, which the stage's
+request names and its downloading attempt is lent; `preflight` proves the
+mirror holds each file at its pinned size before the stage runs. A client at the default
 release its tool table names is acquired by the size
 and SHA-256 that table holds, frozen into the stage's request, and no publisher
 metadata is read for it, from its publisher or from a
@@ -705,8 +708,10 @@ The controller-prerequisites Ansible adapter (request version
 `ansiblelocal.requestVersion`) acquires target tools and
 nothing else. It receives one frozen request with the block's request digest
 as its identity, at least one exact tool source, an acquisition deadline in
-seconds for each tool source in order, the tool area it may publish into and
-the declared egress. That area's writability is the adapter's authority to
+seconds for each tool source in order, the tool area it may publish into, the
+declared egress, and the lent artifact-mirror anchor as `trust`: the mirror's
+host and the private file holding its certificate, both empty when none is
+lent. That area's writability is the adapter's authority to
 change anything at all; the fixed automation runs from the stage's own staged
 extraction ([automation](#the-controller-runtime)). The fixed controller
 playbook composes `bootwright.core.controller_prerequisites`. It validates the
@@ -868,7 +873,9 @@ With a context, the controller Machine's normalized
 controller stage and context preflight support direct access and qualified
 unauthenticated external proxies using the qualified system trust store, whose
 `tls-ca-bundle.pem` the adapter reads as its certificate blocks only, ignoring
-the `# <label>` lines `update-ca-trust` writes, which may hold UTF-8. That
+the `# <label>` lines `update-ca-trust` writes, which may hold UTF-8; only a
+connection to the artifact mirror's own host adds that mirror's declared
+anchor. That
 route follows the [context-free route's grammar](#the-context-free-acquisition-route):
 admission refuses an endpoint or bypass entry outside it, and controller
 selection proves it again, naming the Proxy or Machine field that breaks it
@@ -878,9 +885,11 @@ with a remedy. A managed Proxy, `proxyAuthRef`, `trustBundleRef`, a Proxy with
 before registration with their remedies, and selection refuses the first of
 them naming its field; an `httpProxy` alone names `connection.httpsProxy`,
 because every dependency source is HTTPS. Never fall back to direct access or
-read Secret material to probe an unsupported route; authenticated or
-private-trust acquisition needs its own Secrets consumer and recovery
-definition.
+read Secret material to probe an unsupported route; an authenticated or
+privately trusted Proxy needs its own Secrets consumer and recovery
+definition. The one Secret the stage and preflight read is the
+[artifact mirror](api/environment.md#artifact-mirror)'s anchor, for the
+mirror's own host.
 
 **No wheel origin.** Setup contacts no wheel origin: every wheel comes from
 the executable's [carried wheels](#the-runtime-lock), so pypi.org,

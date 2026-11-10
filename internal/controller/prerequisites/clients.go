@@ -12,6 +12,7 @@ type ClientInstallation struct {
 	Identity string
 	Tools    []ToolDefinition
 	Egress   SetupEgress
+	Trust    MirrorTrust
 	Launch   PythonLaunch
 	Publish  func(context.Context, []string) error
 	Progress func(ProgressEvent)
@@ -19,6 +20,11 @@ type ClientInstallation struct {
 	// error. The stage runs as one lifecycle block, so its output belongs to
 	// that block's attempt exactly as any other adapter run's does.
 	Output RunOutput
+}
+
+type MirrorTrust struct {
+	Host   string
+	Anchor []byte
 }
 
 // StagePreparation is a controller stage attempt's durable intent, recorded

@@ -588,7 +588,13 @@ Each stage holds these checks:
   `listener-firewall` rows, as `controller.<check>` with target `controller`:
   `ready` is `passed`, `not-ready` is `failed` and any other status is
   `unknown`, and a failed or unknown one carries the command that settles it
-  in `next`;
+  in `next`; and, when the Environment declares an
+  [artifact mirror](../api/environment.md#artifact-mirror), one
+  `controller.artifact-mirror` check for each file the stage reads from it,
+  with the file's URL as its target: `passed` when the mirror names the size
+  the build pins, `failed` when it answers 404 or 410 or names another size,
+  with `next` naming the publisher file to copy to that URL, and `unknown`
+  when no answer, another status or no size came;
 - `infrastructure-services`: the context's `listener-firewall` rows, the
   runtime firewall admission of each non-loopback socket of a managed Proxy,
   DNSServer, NTPServer or ArtifactServer the controller hosts, and of each
@@ -612,13 +618,14 @@ The controller and infrastructure-services stages read the controller's
 readiness once. It reports only what it observes. Observed: the controller's
 checks, including the sockets of the managed Proxy, DNSServer, NTPServer and
 ArtifactServer the controller hosts and of local emulated management
-controllers, the capacity of the hosts that hold Machines, and the cluster
-checks. Not observed, and so neither passed nor listed: an external service, a
+controllers, the artifact mirror's files, the capacity of the hosts that hold
+Machines, and the cluster checks. Not observed, and so neither passed nor listed: an external service, a
 Registry or LoadBalancer, and a managed service placed on a Machine other than
 the controller. `apply` checks those at its own effect boundary, as it does
 whether a service's port is free and what an artifact server's host holds; no
 preflight check probes them. With `--dry-run` no process runs: the controller
-checks collapse into one pending `controller.readiness` check, the listener
+checks collapse into one pending `controller.readiness` check, the artifact
+mirror's into one pending `controller.artifact-mirror` check, the listener
 checks into one pending `controller.listener-firewall` check, and every
 capacity and cluster check is pending.
 

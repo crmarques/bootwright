@@ -13496,3 +13496,39 @@ BMC already bound them.
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred.
+
+### X361 — Proving and trusting the artifact mirror
+
+**Item:** B1246 (2026-11-10, [D250](backlog.md#d250) (7),
+[D251](backlog.md#d251) (5), (6) and (9)), partly delivered in-tree.
+`bootwright preflight` gains `controller.artifact-mirror`, one check per file
+the controller stage reads from a declared
+[artifact mirror](../api/environment.md#artifact-mirror), targeted by the
+file's URL: it reads the size with an HTTPS `HEAD`, or a one-byte ranged
+`GET` where `HEAD` is refused, through the controller Machine's frozen route
+and the stage's transport, follows a redirect only to HTTPS on the mirror's
+own host, and finishes within two minutes. A 404 or 410 or another size
+fails, naming the publisher file to copy to that URL; any other answer is
+unknown; a dry run reports one pending check
+([preflight](../cli/output.md#preflight)).
+`spec.mirror.artifacts.trustBundleRef`, a `caBundle` Secret, verifies the
+mirror beside the system trust store, for the mirror's own host alone. The
+stage's request freezes only the Secret's name and the mirror's host, the
+block names the Secret as its one reference, and the attempt that downloads
+is lent the certificate, which the Ansible controller role reads from a
+private file in the run's job directory and adds to a TLS context used only
+for that host; the probe is lent it for its call alone and verifies only the
+mirror's own authority against it, an `https://` proxy against the system
+store. The stage's download now leaves a source's host only between publisher
+download hosts, so a mirror, the artifact mirror or a `spec.downloads` one,
+can no longer redirect it to a publisher. No record or
+evidence holds the certificate. The request version moved to
+`controller-clients-v4`, which moved the stage's content digest; the
+adapter's own request gained `trust` under its unchanged version, since no
+record retains it.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** the probe and the anchored download are proved
+against an in-process HTTPS server and a stubbed urllib3, not a real mirror
+or a TLS-inspecting proxy; a managed artifact server as the
+mirror and folding `spec.downloads` stay on [B1246](backlog.md#b1246).

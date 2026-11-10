@@ -18,13 +18,14 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 )
 from ansible_collections.bootwright.core.plugins.module_utils import controller_refusal
 
-ARGUMENTS = dict(bundle={}, tool={"source": {"id": "tool-oc"}}, egress={}, inspect_only=False, deadline=205)
+TRUST = {"host": "", "file": ""}
+ARGUMENTS = dict(bundle={}, tool={"source": {"id": "tool-oc"}}, egress={}, inspect_only=False, deadline=205, trust=TRUST)
 RELEASE = "4.21.11"
 
 
 class ToolArguments(unittest.TestCase):
     def test_the_frozen_deadline_is_passed_on_in_seconds(self):
-        self.assertEqual(tool_arguments(ARGUMENTS), ({}, ARGUMENTS["tool"], {}, 205, False))
+        self.assertEqual(tool_arguments(ARGUMENTS), ({}, ARGUMENTS["tool"], {}, 205, False, TRUST))
         self.assertEqual(tool_arguments(dict(ARGUMENTS, deadline=1))[3], 1)
         self.assertEqual(tool_arguments(dict(ARGUMENTS, deadline=7200))[3], 7200)
 
@@ -38,6 +39,7 @@ class ToolArguments(unittest.TestCase):
             ("past the ceiling", dict(ARGUMENTS, deadline=7201)),
             ("text", dict(ARGUMENTS, deadline="205")),
             ("extra argument", dict(ARGUMENTS, seconds=205)),
+            ("no trust", {key: value for key, value in ARGUMENTS.items() if key != "trust"}),
         ):
             with self.subTest(name):
                 with self.assertRaises(ValueError):

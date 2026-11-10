@@ -29,6 +29,7 @@ MAX_BUNDLE = 8 << 30
 MAX_DEADLINE = 7200
 CHUNK = 64 << 10
 MAX_TRUSTED_ROOTS = 4096
+MAX_ANCHOR = 1 << 20
 MAX_DETAIL = 200
 # The system trust store's root and owner, which a test points at a fixture.
 TRUST_ROOT = "/"
@@ -90,6 +91,7 @@ REFUSAL_CLASSES = {
     "source integrity": "integrity",
     "system TLS trust": "trust",
     "system TLS trust changed": "trust",
+    "trust anchor": "trust",
     "artifact write": "storage",
 }
 
@@ -275,8 +277,9 @@ def proxy_for(egress, target):
     return None if any(matches) else proxy or None
 
 
-def trusted_roots():
-    """The system trust store's certificate blocks as one TLS client context.
+def trusted_roots(anchor=()):
+    """The system trust store's certificate blocks, and an anchor's when one
+    is lent, as one TLS client context.
 
     update-ca-trust writes a '# <label>' line before each certificate, and a
     label may hold UTF-8, so only the certificate blocks are read."""
@@ -309,6 +312,7 @@ def trusted_roots():
     blocks = CERTIFICATE.findall(data)
     if not blocks or len(blocks) > MAX_TRUSTED_ROOTS:
         raise Refused("system TLS trust")
+    blocks += list(anchor)
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     try:
@@ -316,8 +320,37 @@ def trusted_roots():
             cadata="\n".join(block.decode("ascii") for block in blocks) + "\n"
         )
     except ssl.SSLError:
-        raise Refused("system TLS trust") from None
+        raise Refused("trust anchor" if anchor else "system TLS trust") from None
     return context
+
+
+def lent_anchor(trust):
+    """The host and certificate blocks of the trust anchor the stage lent,
+    read once from its private file, or None when it lent none."""
+    if not isinstance(trust, dict) or set(trust) != {"host", "file"}:
+        raise Refused("trust anchor")
+    host, path = trust["host"], trust["file"]
+    if not isinstance(host, str) or not isinstance(path, str):
+        raise Refused("trust anchor")
+    if not host and not path:
+        return None
+    if not host or not os.path.isabs(path):
+        raise Refused("trust anchor")
+    handle = os.open(path, FILE_FLAGS)
+    try:
+        observed = os.fstat(handle)
+        if (
+            not stat.S_ISREG(observed.st_mode)
+            or observed.st_mode & 0o077
+            or not 0 < observed.st_size <= MAX_ANCHOR
+        ):
+            raise Refused("trust anchor")
+        blocks = CERTIFICATE.findall(read_exact(handle, observed.st_size))
+    finally:
+        os.close(handle)
+    if not blocks or len(blocks) > MAX_TRUSTED_ROOTS:
+        raise Refused("trust anchor")
+    return host.lower(), tuple(blocks)
 
 
 @contextlib.contextmanager
@@ -367,10 +400,13 @@ class Routes:
 
     The system trust is read once, when the first route opens, and every
     manager is cleared on exit, so a staging loop or a tool opens one pool for
-    each route its sources take rather than one for every hop."""
+    each route its sources take rather than one for every hop. A lent anchor
+    joins the system trust only for its own host's connections."""
 
-    def __init__(self):
+    def __init__(self, anchor=None):
+        self.anchor = anchor
         self.trust = None
+        self.anchored = None
         self.managers = {}
 
     def __enter__(self):
@@ -382,24 +418,28 @@ class Routes:
             manager.clear()
         return False
 
-    def manager(self, route):
-        """The manager for route, a proxy URL or None for a direct one."""
-        if route not in self.managers:
+    def manager(self, route, host=None):
+        """The manager for route, a proxy URL or None for a direct one, to
+        host, which takes the lent anchor when it is the anchor's host."""
+        anchored = self.anchor is not None and (host or "").lower() == self.anchor[0]
+        if (route, anchored) not in self.managers:
             import urllib3  # Included in the immutable execution closure.
 
             if self.trust is None:
                 self.trust = trusted_roots()
+            if anchored and self.anchored is None:
+                self.anchored = trusted_roots(self.anchor[1])
             arguments = dict(
-                ssl_context=self.trust,
+                ssl_context=self.anchored if anchored else self.trust,
                 retries=False,
                 timeout=urllib3.Timeout(connect=15, read=30),
             )
-            self.managers[route] = (
+            self.managers[(route, anchored)] = (
                 urllib3.ProxyManager(route, proxy_ssl_context=self.trust, **arguments)
                 if route
                 else urllib3.PoolManager(**arguments)
             )
-        return self.managers[route]
+        return self.managers[(route, anchored)]
 
 
 def download(source, egress, descriptor, seconds, routes):
@@ -450,10 +490,13 @@ def respond(source, egress, deadline, consume, routes):
         parsed = endpoint(current, redirect=True)
         if (
             parsed.hostname != original.hostname
-            and parsed.hostname not in REDIRECT_HOSTS
+            and not (
+                original.hostname in REDIRECT_HOSTS
+                and parsed.hostname in REDIRECT_HOSTS
+            )
         ):
             raise Refused("redirect origin")
-        manager = routes.manager(proxy_for(egress, parsed))
+        manager = routes.manager(proxy_for(egress, parsed), parsed.hostname)
         response = None
         try:
             response = manager.request(
@@ -1178,11 +1221,14 @@ def project(bundle, tool, inspect_only):
     return manifest, changed
 
 
-def prepare_tool(location, tool, egress, deadline, inspect_only=False):
+def prepare_tool(location, tool, egress, deadline, inspect_only=False, trust=None):
     """Acquire one frozen tool's source when it is missing, then project it.
 
     A missing source streams under the acquisition deadline its request froze,
-    in seconds; no downloaded tool is ever executed."""
+    in seconds, verifying its host against the lent trust anchor beside the
+    system trust when that host is the anchor's; no downloaded tool is ever
+    executed."""
+    anchor = lent_anchor(trust or {"host": "", "file": ""})
     files = tool_files(tool)
     if (
         not isinstance(deadline, int)
@@ -1202,7 +1248,7 @@ def prepare_tool(location, tool, egress, deadline, inspect_only=False):
             for file in files:
                 if bundle.present(file["path"], MAX_SOURCE, 0o700):
                     raise Refused("unattributed target without retained source")
-            with Routes() as routes:
+            with Routes(anchor) as routes:
                 acquire(bundle, tool["source"], egress, deadline, routes)
             changed = True
         manifest, published = project(bundle, tool, inspect_only)

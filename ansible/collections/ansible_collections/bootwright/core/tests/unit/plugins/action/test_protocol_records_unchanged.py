@@ -86,7 +86,7 @@ POWER_UNMET = dict(POWER, power="Off")
 POWER_MALFORMED = dict(POWER, verb="bounce")
 CONTROLLER_REQUEST = {"version": "controller-prerequisites-v1", "identity": DIGEST, "publicationBundle": "p",
                       "tools": [{"source": {"id": "tool-oc"}}], "acquisition": [{"source": "tool-oc", "seconds": 121}],
-                      "egress": {}}
+                      "egress": {}, "trust": {"host": "", "file": ""}}
 CONTROLLER_PREPARATION = {"addedSources": ["tool-oc"]}
 CONTROLLER_TOOLS = [{"source": "tool-oc", "sha256": DIGEST, "files": DIGEST}]
 

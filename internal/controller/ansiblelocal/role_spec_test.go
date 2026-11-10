@@ -92,7 +92,7 @@ func TestTheRoleAdmitsEveryRequestThisBuildSends(t *testing.T) {
 	}
 	area := authorityArea{location: prerequisites.BundleLocation{Path: "/bundle", Writable: true}}
 	tools := []prerequisites.ToolDefinition{{Kind: "openshift-clients", Source: prerequisites.DependencySource{ID: "tool-openshift-clients", Bytes: 1}}}
-	request, err := New(newTreeStager(t)).request(context.Background(), area, strings.Repeat("a", 64), tools, prerequisites.SetupEgress{})
+	request, err := New(newTreeStager(t)).request(context.Background(), area, strings.Repeat("a", 64), tools, prerequisites.SetupEgress{}, prerequisites.MirrorTrust{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -148,6 +148,12 @@ func runProcess(ctx context.Context, launch prerequisites.PythonLaunch, tree sta
 }
 
 func writeInvocation(job string, launch prerequisites.PythonLaunch, request capabilityRequest) error {
+	if len(request.anchor) != 0 {
+		request.Trust.File = filepath.Join(job, "trust.pem")
+		if os.WriteFile(request.Trust.File, request.anchor, 0600) != nil {
+			return failure("controller.install", "the lent mirror trust anchor could not be materialized")
+		}
+	}
 	inventory := map[string]any{"all": map[string]any{"children": map[string]any{"bootwright_controller": map[string]any{"hosts": map[string]any{"controller": map[string]any{"ansible_connection": "local", "ansible_python_interpreter": launch.Shim, "ansible_host": "localhost"}}}}}}
 	variables := map[string]any{"bootwright_controller_request": request}
 	// ansible-core reads an --extra-vars file as trusted templates, and publisher

@@ -1,11 +1,13 @@
 package acquisition
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"net"
 	"net/url"
+	"strings"
 )
 
 // Failure contains only classified, public acquisition details.
@@ -52,4 +54,27 @@ func TransportFailure(subject, endpoint string, err error) *Failure {
 	}
 	failure.message = subject + " " + host + " " + condition
 	return failure
+}
+
+func AnchoredDial(dial func(context.Context, string, string) (net.Conn, error), system *x509.CertPool, authority string, anchored *x509.CertPool) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, _, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, err
+		}
+		pool := system
+		if strings.EqualFold(address, authority) {
+			pool = anchored
+		}
+		connection, err := dial(ctx, network, address)
+		if err != nil {
+			return nil, err
+		}
+		secured := tls.Client(connection, &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: pool, ServerName: host})
+		if err := secured.HandshakeContext(ctx); err != nil {
+			connection.Close()
+			return nil, err
+		}
+		return secured, nil
+	}
 }

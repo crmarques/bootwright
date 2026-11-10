@@ -229,7 +229,14 @@ for all of them ([artifact mirror](../specs/api/environment.md#artifact-mirror))
 each is read from `<url>/<kind>/v<release>/<publisher file name>` by its pinned
 checksum, so the controller reaches no client publisher, GitHub included. Fill it
 with the files the `client` rows of `bootwright render acquisitions` name,
-from a machine that reaches the publishers. With the mirror declared, a
+from a machine that reaches the publishers, then run
+`bootwright preflight --context <name> --stage controller`: it reads each
+file's size from the mirror, without downloading it, and names every file the
+mirror lacks or serves at another size, with the publisher file to copy
+there. When your own certificate authority issued the mirror's certificate,
+store that authority's certificate as a `caBundle` Secret and name it in
+`spec.mirror.artifacts.trustBundleRef`: the controller then trusts it beside
+the system trust store, for the mirror alone. With the mirror declared, a
 release in `spec.dependencyVersions` other than the build's default is
 refused at plan, because its checksum only its publisher holds. The
 OpenShift clients and installer stay on `mirror.openshift.com`, a vendor

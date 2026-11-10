@@ -297,7 +297,7 @@ Alias cell.
 | [B1243](#b1243) | new, 2026-11-10 (D250 (2)); partly delivered by X343 on 2026-11-10 | enabling | Architecture | Each build's bill of materials names every component's license, a release ships its notices, and the container build's Go image is pinned | The document itself landed (X343); licenses need a source per component that no build input holds yet |
 | [B1244](#b1244) | new, 2026-11-10 (D250 (2)); partly delivered by X344 on 2026-11-10 | enabling | Architecture | Each pinned client is judged by what its binary holds, and the service and emulated BMC images are scanned on a schedule and in the mirror registry | The build's gate landed (X344); a binary scan downloads every client, and an image scan needs a pinned scanner |
 | [B1245](#b1245) | new, 2026-11-10 (D250 (8)); partly delivered by X345 on 2026-11-10 | product | CLI, with Controller | The acquisition list names each add-on's catalog and operator images and each installed Machine's own package repositories | The list landed (X345); an add-on's images follow from the catalog it selects, which planning does not read |
-| [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355 on 2026-11-10 | product | Controller, with Desired state | Preflight proves the artifact mirror holds every client, a private trust anchor and a managed artifact server may serve it, and one declaration replaces the download mirrors | The declaration landed (X355); a probe needs an HTTP adapter in preflight, and a managed server needs B1249 |
+| [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355 and X361 on 2026-11-10 | product | Controller, with Desired state | A managed artifact server may serve the artifact mirror, and one declaration replaces the download mirrors | The declaration (X355), the preflight probe and the private trust anchor (X361) landed; a managed server needs B1249, and folding `spec.downloads` awaits the owner (D251 (5)) |
 | [B1249](#b1249) | new, 2026-11-10 (D250 (8)) | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | D250 parks the controlled-network plan until the owner promotes it; no capability realizes a managed Registry |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
 | [B1263](#b1263) | new, 2026-11-10 (D252 (6)) | product | Controller, with State reconciliation | A completed environment reports a proved client below the build's minimum, and may take a raised one | A completed apply settles (D153); the owner put reporting first and left replacement without a destroy open |
@@ -3377,14 +3377,17 @@ none. **Definition:** Needs definition, from [D250](#d250) (4) and (7) and
 `spec.mirror.artifacts.url` routes every public-origin client to
 `<url>/<kind>/<release>/<file>` by its pinned checksum, and plan refuses an
 unpinned client, the OKD clients and a per-client download mirror beside it
-([artifact mirror](../api/environment.md#artifact-mirror)). **Remaining:**
-preflight reads each mirrored file's size before the stage runs and refuses
-one the mirror lacks, naming it; a mirror verified against a `caBundle`
-Secret, a trust anchor, rather than the host's trust store; a managed
-ArtifactServer as the mirror once [B1249](#b1249) builds one; and
-`spec.downloads` folded into the declaration before 1.0. **Exit evidence:** a
-preflight test against a mirror missing a file, a private-trust acquisition
-test, and effective-state goldens.
+([artifact mirror](../api/environment.md#artifact-mirror)). **Delivered
+in-tree by X361:** `preflight` reads each mirrored file's size before the
+stage runs, with no body, and fails a file the mirror lacks or serves at
+another size, naming it and the publisher file to copy there; and
+`spec.mirror.artifacts.trustBundleRef`, a `caBundle` Secret, verifies the
+mirror beside the system trust store, lent to each download and the probe
+([D251](#d251) (9)). **Remaining:** a managed ArtifactServer as the mirror
+once [B1249](#b1249) builds one; and `spec.downloads` folded into the
+declaration before 1.0, which awaits the owner ([D251](#d251) (5)). **Exit
+evidence:** the preflight and private-trust tests landed with X361; a managed
+mirror's acquisition test and effective-state goldens remain.
 
 ### B1268
 
@@ -8079,6 +8082,31 @@ the owner's review:
    resolver. The field
    joins the request every managed service shares, so the three services'
    request version moves to `managed-service-v3`.
+9. Taken by the session for B1246 (X361), pending the owner's review: the
+   mirror's anchor is `spec.mirror.artifacts.trustBundleRef`, a `caBundle`
+   Secret that adds to the system trust store rather than replacing it, as
+   the image mirror Registry's `trustBundleRef` adds to `--cert-dir`'s
+   defaults, so a mirror behind a TLS-inspecting proxy, or one whose
+   authority is already trusted, needs nothing else; it verifies only the
+   mirror's own host, never a proxy or a redirect target elsewhere. The
+   stage's request freezes the Secret's name and the mirror's host, so
+   `controller-clients-v4` moves the stage's contract; the certificate is
+   lent to the downloading attempt as a private file in the run's job
+   directory, and to the probe. Preflight probes every file the stage reads
+   from the mirror, whether or not this host already retains it, because the
+   mirror is the Environment's declaration and another controller of it
+   reads the same files; it sends a `HEAD`, and a one-byte ranged `GET` only
+   where the server answers 405 or 501; it follows a redirect only to HTTPS
+   on the mirror's own host, and the stage's download now leaves a source's
+   host only between publisher download hosts, so neither the artifact mirror
+   nor a `spec.downloads` mirror redirects the stage to a publisher; the
+   anchor verifies the mirror's own authority alone, an `https://` proxy
+   keeping the system trust store in both the stage and the probe; it fails a 404 or 410 and a different
+   size, and reports any other status, a missing size or a transport failure
+   as unknown. The probe is a new check of the controller stage,
+   `controller.artifact-mirror`, one per file, targeted by the file's URL, run
+   beside the controller's readiness rather than inside it, since it needs
+   the context's Secret material the readiness never reads.
 
 ### D252
 

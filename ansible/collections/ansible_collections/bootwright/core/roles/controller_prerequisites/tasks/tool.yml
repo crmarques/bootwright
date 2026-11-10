@@ -9,6 +9,7 @@
     bundle: '{{ bootwright_controller_request.publicationBundle }}'
     tool: '{{ item }}'
     egress: '{{ bootwright_controller_request.egress }}'
+    trust: '{{ bootwright_controller_request.trust }}'
     inspect_only: false
     deadline: "{{ bootwright_controller_request.acquisition | selectattr('source', 'equalto', item.source.id) | map(attribute='seconds') | first }}"
   register: controller_prerequisites_tool_result

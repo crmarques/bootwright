@@ -547,6 +547,29 @@ class ControllerFilesTests(unittest.TestCase):
                 files.download(source, EGRESS, descriptor, DOWNLOAD, files.Routes())
         self.assertEqual(refused.exception.reason, "integrity")
 
+    def test_a_mirror_redirect_to_a_publisher_host_refuses_before_dialing_it(self):
+        source = dict(tool(b"publisher bytes")["source"], url="https://mirror.corp.test/tools/helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz")
+        requested = []
+        response = types.SimpleNamespace(
+            status=302,
+            headers={"Location": "https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz"},
+            close=lambda: None,
+        )
+
+        def request(method, url, **kwargs):
+            requested.append(url)
+            return response
+
+        manager = types.SimpleNamespace(request=request, clear=lambda: None)
+        library = types.SimpleNamespace(PoolManager=lambda **kwargs: manager, Timeout=lambda **kwargs: kwargs)
+        with mock.patch.dict("sys.modules", urllib3=library), mock.patch.object(
+            files, "trusted_roots", return_value=object()
+        ):
+            with self.assertRaises(files.AcquisitionRefused) as error:
+                files.download(source, EGRESS, self.sink()[0], DOWNLOAD, files.Routes())
+        self.assertEqual(error.exception.reason, "redirect")
+        self.assertEqual(requested, [source["url"]])
+
     def test_download_refuses_unapproved_redirects_bounds_and_raw_errors(self):
         source = tool(b"publisher bytes")["source"]
         for status, headers, body in (
@@ -943,6 +966,51 @@ class TrustedRoots(unittest.TestCase):
         context = observed[0]["ssl_context"]
         self.assertIsInstance(context, ssl.SSLContext)
         self.assertEqual(context.cert_store_stats()["x509_ca"], 2)
+
+    def anchor_file(self, data, mode=0o600, name="trust.pem"):
+        path = Path(self.parent) / name
+        path.write_bytes(data)
+        path.chmod(mode)
+        return str(path)
+
+    def test_a_lent_anchor_joins_the_system_trust_for_its_own_host_alone(self):
+        system, lent = files.CERTIFICATE.findall(FIXTURE.read_bytes())
+        root = trust_root(self.parent, system + b"\n")
+        anchor = files.lent_anchor({"host": "Mirror.Example.Test", "file": self.anchor_file(lent + b"\n")})
+        self.assertEqual(anchor, ("mirror.example.test", (lent,)))
+        observed = []
+        manager = types.SimpleNamespace(clear=lambda: None)
+
+        def pool(**kwargs):
+            observed.append(kwargs["ssl_context"])
+            return manager
+
+        library = types.SimpleNamespace(PoolManager=pool, Timeout=lambda **kwargs: kwargs)
+        with mock.patch.dict("sys.modules", urllib3=library), mock.patch.object(
+            files, "TRUST_ROOT", root
+        ), mock.patch.object(files, "TRUST_OWNER", os.geteuid()):
+            with files.Routes(anchor) as routes:
+                routes.manager(None, "mirror.example.test")
+                routes.manager(None, "get.helm.sh")
+                routes.manager(None, "mirror.example.test")
+        self.assertEqual([context.cert_store_stats()["x509_ca"] for context in observed], [2, 1])
+
+    def test_no_lent_anchor_is_none_and_an_unsafe_one_refuses(self):
+        self.assertIsNone(files.lent_anchor({"host": "", "file": ""}))
+        lent = files.CERTIFICATE.findall(FIXTURE.read_bytes())[0]
+        for name, trust in (
+            ("a readable file", {"host": "mirror.example.test", "file": self.anchor_file(lent, mode=0o644, name="readable.pem")}),
+            ("no certificate", {"host": "mirror.example.test", "file": self.anchor_file(b"# a label alone\n", name="labels.pem")}),
+            ("no host", {"host": "", "file": self.anchor_file(lent)}),
+            ("a relative file", {"host": "mirror.example.test", "file": "trust.pem"}),
+            ("another shape", {"host": "mirror.example.test", "file": self.anchor_file(lent), "pem": "x"}),
+        ):
+            with self.subTest(name), self.assertRaises(files.Refused):
+                files.lent_anchor(trust)
+        link = Path(self.parent) / "link.pem"
+        link.symlink_to(self.anchor_file(lent))
+        with self.assertRaises(OSError):
+            files.lent_anchor({"host": "mirror.example.test", "file": str(link)})
 
 
 # Stand-ins named and nested as urllib3 2.x names and nests its exceptions:

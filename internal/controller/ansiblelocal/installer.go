@@ -2,7 +2,9 @@ package ansiblelocal
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -43,7 +45,16 @@ type capabilityRequest struct {
 	Tools             []prerequisites.ToolDefinition `json:"tools"`
 	Acquisition       []toolAcquisition              `json:"acquisition"`
 	Egress            prerequisites.SetupEgress      `json:"egress"`
+	Trust             trustAnchor                    `json:"trust"`
+	anchor            []byte
 }
+
+type trustAnchor struct {
+	Host string `json:"host"`
+	File string `json:"file"`
+}
+
+const maxTrustAnchorBytes = 1 << 20
 
 type bundleLocation struct {
 	Path     string `json:"path"`
@@ -68,7 +79,7 @@ func (installer Installer) Clients(ctx context.Context, installation prerequisit
 	if installer.runner == nil || installer.Stager == nil || installation.Target == nil || installation.Publish == nil || len(installation.Tools) == 0 {
 		return result, failure("controller.install", "the Ansible controller adapter is incomplete")
 	}
-	request, err := installer.request(ctx, installation.Target, installation.Identity, installation.Tools, installation.Egress)
+	request, err := installer.request(ctx, installation.Target, installation.Identity, installation.Tools, installation.Egress, installation.Trust)
 	if err != nil {
 		return result, err
 	}
@@ -122,7 +133,7 @@ func (s swallowingOutput) Write(value []byte) (int, error) {
 // request freezes the complete Ansible invocation. The target area is the
 // only one publication may write, so its writability is what the request has
 // to prove.
-func (installer Installer) request(ctx context.Context, target prerequisites.BundleArea, identity string, tools []prerequisites.ToolDefinition, egress prerequisites.SetupEgress) (capabilityRequest, error) {
+func (installer Installer) request(ctx context.Context, target prerequisites.BundleArea, identity string, tools []prerequisites.ToolDefinition, egress prerequisites.SetupEgress, trust prerequisites.MirrorTrust) (capabilityRequest, error) {
 	if target == nil {
 		return capabilityRequest{}, failure("controller.install", "the Ansible controller adapter is incomplete")
 	}
@@ -149,7 +160,23 @@ func (installer Installer) request(ctx context.Context, target prerequisites.Bun
 	if !validSHA(request.Identity) {
 		return capabilityRequest{}, failure("controller.identity", "the frozen Ansible request is invalid")
 	}
+	if trust.Host != "" || len(trust.Anchor) != 0 {
+		if !anchored(request.Tools, trust) {
+			return capabilityRequest{}, failure("controller.identity", "the lent mirror trust anchor holds no certificate, or names a host no frozen tool source is read from")
+		}
+		request.Trust.Host, request.anchor = trust.Host, trust.Anchor
+	}
 	return request, nil
+}
+
+func anchored(tools []prerequisites.ToolDefinition, trust prerequisites.MirrorTrust) bool {
+	if trust.Host == "" || len(trust.Anchor) == 0 || len(trust.Anchor) > maxTrustAnchorBytes || !x509.NewCertPool().AppendCertsFromPEM(trust.Anchor) {
+		return false
+	}
+	return slices.ContainsFunc(tools, func(tool prerequisites.ToolDefinition) bool {
+		parsed, err := url.Parse(tool.Source.URL)
+		return err == nil && parsed.Hostname() == trust.Host
+	})
 }
 
 func actionResult(outcome string, intentRecorded bool) prerequisites.ActionResult {

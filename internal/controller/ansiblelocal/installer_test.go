@@ -1,15 +1,24 @@
 package ansiblelocal
 
 import (
+	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
+	"math/big"
 	"os"
 	"reflect"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/crmarques/bootwright/ansible"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -105,7 +114,7 @@ func TestTheRequestCarriesEachToolsAcquisitionDeadline(t *testing.T) {
 		{Kind: "openshift-clients", Source: prerequisites.DependencySource{ID: "tool-openshift-clients", Bytes: 44_433_552}},
 		{Kind: "kubectl", Source: prerequisites.DependencySource{ID: "tool-kubectl", Bytes: 1}},
 	}
-	request, err := New(newTreeStager(t)).request(context.Background(), targetArea(), strings.Repeat("a", 64), tools, prerequisites.SetupEgress{})
+	request, err := New(newTreeStager(t)).request(context.Background(), targetArea(), strings.Repeat("a", 64), tools, prerequisites.SetupEgress{}, prerequisites.MirrorTrust{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +126,7 @@ func TestTheRequestCarriesEachToolsAcquisitionDeadline(t *testing.T) {
 	if err != nil || !strings.Contains(string(encoded), `"noProxy":[]`) || strings.Contains(string(encoded), `"packages"`) || strings.Contains(string(encoded), `"native"`) {
 		t.Fatalf("the request encodes %s (%v), want tools alone and an empty bypass list", encoded, err)
 	}
-	if _, err := New(newTreeStager(t)).request(context.Background(), targetArea(), "not-a-digest", tools, prerequisites.SetupEgress{}); err == nil {
+	if _, err := New(newTreeStager(t)).request(context.Background(), targetArea(), "not-a-digest", tools, prerequisites.SetupEgress{}, prerequisites.MirrorTrust{}); err == nil {
 		t.Fatal("a request without a request digest identity was frozen")
 	}
 }
@@ -293,5 +302,39 @@ func TestTheRunnerGetsAWriterThatNeverFails(t *testing.T) {
 	}
 	if result, err := installer.Clients(context.Background(), clientInstallation(broken)); err != nil || result.Outcome != "changed" {
 		t.Fatalf("a broken output changed the result: %q (%v)", result.Outcome, err)
+	}
+}
+
+func selfSignedPEM(t *testing.T) []byte {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "mirror CA"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+}
+
+func TestALentAnchorIsKeptOnlyForAHostAFrozenSourceIsReadFrom(t *testing.T) {
+	tools := []prerequisites.ToolDefinition{{Kind: "helm", Source: prerequisites.DependencySource{ID: "tool-helm", URL: "https://mirror.example.test/tools/helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz", Bytes: 1}}}
+	anchor := selfSignedPEM(t)
+	request, err := New(newTreeStager(t)).request(context.Background(), targetArea(), strings.Repeat("a", 64), tools, prerequisites.SetupEgress{}, prerequisites.MirrorTrust{Host: "mirror.example.test", Anchor: anchor})
+	if err != nil || request.Trust.Host != "mirror.example.test" || request.Trust.File != "" || !bytes.Equal(request.anchor, anchor) {
+		t.Fatalf("the lent anchor was not kept for its host: %+v (%v)", request.Trust, err)
+	}
+	for name, trust := range map[string]prerequisites.MirrorTrust{
+		"another host":      {Host: "other.example.test", Anchor: anchor},
+		"no certificate":    {Host: "mirror.example.test", Anchor: []byte("not a certificate")},
+		"no host":           {Anchor: anchor},
+		"an empty anchor":   {Host: "mirror.example.test"},
+		"an oversized file": {Host: "mirror.example.test", Anchor: append(bytes.Repeat([]byte{'\n'}, maxTrustAnchorBytes), anchor...)},
+	} {
+		if _, err := New(newTreeStager(t)).request(context.Background(), targetArea(), strings.Repeat("a", 64), tools, prerequisites.SetupEgress{}, trust); err == nil {
+			t.Errorf("%s: the anchor was accepted", name)
+		}
 	}
 }

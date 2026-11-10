@@ -67,6 +67,7 @@ def run(area, area_root):
         ],
         "acquisition": [{"source": SOURCE, "seconds": 121}],
         "egress": {"httpProxy": "", "httpsProxy": "", "noProxy": []},
+        "trust": {"host": "", "file": ""},
     }
     inventory = {
         "all": {

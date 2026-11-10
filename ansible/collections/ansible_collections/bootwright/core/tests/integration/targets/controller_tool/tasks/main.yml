@@ -55,6 +55,9 @@
         bundle: '{{ controller_tool_bundle }}'
         tool: '{{ controller_tool_definition }}'
         egress: '{{ controller_tool_egress }}'
+        trust:
+          host: ''
+          file: ''
         inspect_only: false
         deadline: 121
       register: controller_tool_first
@@ -65,6 +68,9 @@
         bundle: '{{ controller_tool_bundle }}'
         tool: '{{ controller_tool_definition }}'
         egress: '{{ controller_tool_egress }}'
+        trust:
+          host: ''
+          file: ''
         inspect_only: false
         deadline: 121
       register: controller_tool_second

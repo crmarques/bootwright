@@ -1,6 +1,6 @@
 implementation: controller-prerequisites
-content-digest: 8e1b5c5efd0a0f8781f63b3d0bf5f26541ecc2458d35db2f09f9a0a0ae0fb3ca
-request-version: controller-clients-v3
+content-digest: 0fad929c7f9feb9dea63e67a99ae11b1de535763d9a75011e78457f3e6620b92
+request-version: controller-clients-v4
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -22,6 +22,9 @@ request-schema:
   libvirt string
   libvirtClient bool
   machine string
+  mirrorTrust *struct clients.MirrorTrust omitempty
+  mirrorTrust.host string
+  mirrorTrust.trustBundleRef string
   nmstate bool omitempty
   packages []string
   tools []struct clients.ToolRequest

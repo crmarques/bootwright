@@ -20,6 +20,7 @@ def frozen():
         tools=[dict(source=dict(id="tool-oc")), dict(source=dict(id="tool-kubectl"))],
         acquisition=[dict(source="tool-oc", seconds=205), dict(source="tool-kubectl", seconds=121)],
         egress={},
+        trust=dict(host="", file=""),
     )
 
 
@@ -29,6 +30,8 @@ class FrozenRequest(unittest.TestCase):
     def test_a_request_whose_deadlines_match_its_tools_is_accepted(self):
         request = frozen()
         self.assertIs(frozen_request(request), request)
+        anchored = dict(request, trust=dict(host="mirror.example.test", file="/run/job/trust.pem"))
+        self.assertIs(frozen_request(anchored), anchored)
 
     def test_a_native_or_other_version_request_or_a_mismatched_deadline_is_refused(self):
         request = frozen()
@@ -46,6 +49,10 @@ class FrozenRequest(unittest.TestCase):
             "past the ceiling": dict(request, acquisition=[request["acquisition"][0], dict(source="tool-kubectl", seconds=7201)]),
             "text": dict(request, acquisition=[request["acquisition"][0], dict(source="tool-kubectl", seconds="121")]),
             "extra key": dict(request, acquisition=[request["acquisition"][0], dict(source="tool-kubectl", seconds=121, bytes=1)]),
+            "no trust": {key: value for key, value in request.items() if key != "trust"},
+            "a host without its file": dict(request, trust=dict(host="mirror.example.test", file="")),
+            "a file without its host": dict(request, trust=dict(host="", file="/run/job/trust.pem")),
+            "the anchor itself": dict(request, trust=dict(host="mirror.example.test", file="/run/job/trust.pem", pem="x")),
         }
         for name, changed in changes.items():
             with self.subTest(name):

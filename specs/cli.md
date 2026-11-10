@@ -485,7 +485,10 @@ input universe, discovery and Environment selection are defined by
 mutation authority and never replaces a fresh lifecycle operation's
 effect-boundary probes. A live
 preflight may perform bounded read-only observation through
-qualified adapters but allocates no lifecycle identity or log. Failed,
+qualified adapters but allocates no lifecycle identity or log. Its controller
+stage reads the network only to size a declared
+[artifact mirror](api/environment.md#artifact-mirror)'s files, through the
+controller stage's own HTTPS transport and route and never their bodies. Failed,
 unavailable, forbidden, malformed, or contradictory observation is an explicit
 failed or unknown check, never success or absence.
 

@@ -21,8 +21,8 @@ def source_id(args):
 
 def tool_arguments(args):
     """The fixed argument set, with the source's acquisition deadline in whole
-    seconds as its request froze it."""
-    if set(args) != {"bundle", "tool", "egress", "inspect_only", "deadline"}:
+    seconds as its request froze it and the trust anchor the stage lent."""
+    if set(args) != {"bundle", "tool", "egress", "inspect_only", "deadline", "trust"}:
         raise ValueError("request")
     if not isinstance(args["inspect_only"], bool):
         raise ValueError("request")
@@ -33,7 +33,14 @@ def tool_arguments(args):
         or not 1 <= deadline <= MAX_DEADLINE
     ):
         raise ValueError("deadline")
-    return args["bundle"], args["tool"], args["egress"], deadline, args["inspect_only"]
+    return (
+        args["bundle"],
+        args["tool"],
+        args["egress"],
+        deadline,
+        args["inspect_only"],
+        args["trust"],
+    )
 
 
 class ActionModule(ActionBase):
@@ -45,10 +52,12 @@ class ActionModule(ActionBase):
         result = super().run(tmp, task_vars)
         result.update(changed=False, _ansible_no_log=True)
         try:
-            bundle, tool, egress, deadline, inspect_only = tool_arguments(
+            bundle, tool, egress, deadline, inspect_only, trust = tool_arguments(
                 self._task.args
             )
-            result.update(prepare_tool(bundle, tool, egress, deadline, inspect_only))
+            result.update(
+                prepare_tool(bundle, tool, egress, deadline, inspect_only, trust)
+            )
             return result
         except Exception as error:
             # Exceptions can include source/proxy paths. Evidence and diagnostics

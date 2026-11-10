@@ -30,8 +30,9 @@ def preparation(request):
 
 
 def frozen_request(request):
-    """The frozen request's shape: its exact keys, version and identity, and
-    one acquisition deadline per tool, in their order."""
+    """The frozen request's shape: its exact keys, version and identity, the
+    lent trust anchor's host and file, both or neither, and one acquisition
+    deadline per tool, in their order."""
     required = {
         "version",
         "identity",
@@ -39,6 +40,7 @@ def frozen_request(request):
         "tools",
         "acquisition",
         "egress",
+        "trust",
     }
     if set(request) != required:
         raise ValueError("request")
@@ -47,6 +49,14 @@ def frozen_request(request):
         or re.fullmatch(r"[a-f0-9]{64}", request["identity"]) is None
     ):
         raise ValueError("request")
+    trust = request["trust"]
+    if (
+        not isinstance(trust, dict)
+        or set(trust) != {"host", "file"}
+        or not all(isinstance(trust[key], str) for key in trust)
+        or bool(trust["host"]) != bool(trust["file"])
+    ):
+        raise ValueError("trust")
     tools, acquisition = request["tools"], request["acquisition"]
     if not isinstance(tools, list) or not 1 <= len(tools) <= 128:
         raise ValueError("tools")

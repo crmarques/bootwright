@@ -181,7 +181,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	}
 	services.Artifacts = artifactrendering.Service{Compiler: services.DesiredState, Encode: encoding.YAML, Files: comparison}
 	services.Comparison = comparison
-	services.EnvironmentPreflight = environmentpreflight.Service{Graph: effectiveGraph{state: services.DesiredState}, Selection: currentSelection(deps.Selection), Controller: services.Controller, Capacity: storagePreflight, Clusters: clusters}
+	services.EnvironmentPreflight = environmentpreflight.Service{Graph: effectiveGraph{state: services.DesiredState}, Selection: currentSelection(deps.Selection), Controller: services.Controller, Capacity: storagePreflight, Clusters: clusters, Mirror: mirrorProbe{material: reconciler, read: readMirror}}
 	return services
 }
 

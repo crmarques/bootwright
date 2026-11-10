@@ -28,3 +28,6 @@ argument_specs:
           egress:
             type: dict
             required: true
+          trust:
+            type: dict
+            required: true

@@ -3,6 +3,7 @@ package clients
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -19,7 +20,7 @@ const (
 	Kind           = string(api.Environment)
 	Implementation = "controller-prerequisites"
 	BlockID        = "controller-prerequisites"
-	Version        = "controller-clients-v3"
+	Version        = "controller-clients-v4"
 )
 
 // ToolRequest is one declared client requirement at its exact release, frozen
@@ -50,10 +51,34 @@ type Request struct {
 	Libvirt        string        `json:"libvirt"`
 	LibvirtClient  bool          `json:"libvirtClient"`
 	Machine        string        `json:"machine"`
+	MirrorTrust    *MirrorTrust  `json:"mirrorTrust,omitempty"`
 	NMState        bool          `json:"nmstate,omitempty"`
 	Packages       []string      `json:"packages"`
 	Tools          []ToolRequest `json:"tools"`
 	Version        string        `json:"version"`
+}
+
+type MirrorTrust struct {
+	Host           string `json:"host"`
+	TrustBundleRef string `json:"trustBundleRef"`
+}
+
+func (r Request) WithMirrorTrust(catalog api.Catalog) Request {
+	base, reference := controller.ArtifactMirror(catalog)
+	parsed, err := url.Parse(base)
+	if reference == "" || err != nil || !slices.ContainsFunc(r.Tools, func(tool ToolRequest) bool { return mirrorHost(tool.Mirror) == parsed.Hostname() }) {
+		return r
+	}
+	r.MirrorTrust = &MirrorTrust{Host: parsed.Hostname(), TrustBundleRef: reference}
+	return r
+}
+
+func mirrorHost(mirror string) string {
+	parsed, err := url.Parse(mirror)
+	if mirror == "" || err != nil {
+		return ""
+	}
+	return parsed.Hostname()
 }
 
 func NewRequest(selection controller.Selection, requests []controller.ToolRequest) Request {
@@ -125,6 +150,9 @@ func DecodeRequest(data []byte) (Request, error) {
 	}
 	if !slices.Equal(request.Packages, prerequisites.StageRequirements(request.native())) {
 		return Request{}, refuse("lifecycle.state", "the frozen controller prerequisites request names host packages its closures do not select", "destroy it with the build that applied it")
+	}
+	if trust := request.MirrorTrust; trust != nil && (trust.Host == "" || !api.ValidLexical("name", trust.TrustBundleRef) || !slices.ContainsFunc(request.Tools, func(tool ToolRequest) bool { return mirrorHost(tool.Mirror) == trust.Host })) {
+		return Request{}, refuse("lifecycle.state", "the frozen controller prerequisites request names a mirror trust anchor no client it reads from that mirror uses", "destroy it with the build that applied it")
 	}
 	return request, nil
 }

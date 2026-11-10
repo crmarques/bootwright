@@ -3,10 +3,12 @@ package preflight
 import (
 	"context"
 	"slices"
+	"strconv"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/availability"
+	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/environment/clusterpreflight"
@@ -21,9 +23,13 @@ type Service struct {
 	Controller ControllerChecker
 	Capacity   CapacityChecker
 	Clusters   ClustersChecker
+	Mirror     MirrorProber
 }
 
-const listenerCheck = "controller.listener-firewall"
+const (
+	listenerCheck = "controller.listener-firewall"
+	mirrorCheck   = "controller.artifact-mirror"
+)
 
 func CheckedStages() reconciliation.StageSelection {
 	return slices.DeleteFunc(reconciliation.Stages(), func(stage reconciliation.Stage) bool { return stage == reconciliation.StageAddOns })
@@ -65,6 +71,14 @@ func (s Service) Preflight(ctx context.Context, request PreflightRequest) (*Repo
 	if slices.Contains(stages, reconciliation.StageController) || slices.Contains(stages, reconciliation.StageInfrastructureServices) {
 		parts = append(parts, func(checks context.Context) (*Report, error) {
 			return s.controllerReport(checks, selected, request.DryRun, stages)
+		})
+	}
+	if mirror, _ := controller.ArtifactMirror(catalog); mirror != "" && slices.Contains(stages, reconciliation.StageController) {
+		if s.Mirror == nil {
+			return nil, availability.ErrNotImplemented
+		}
+		parts = append(parts, func(checks context.Context) (*Report, error) {
+			return s.mirrorReport(checks, catalog, selected, request.DryRun)
 		})
 	}
 	if slices.Contains(stages, reconciliation.StageSubstrates) {
@@ -130,6 +144,56 @@ func (s Service) controllerReport(ctx context.Context, selected string, dryRun b
 		}
 		return !controller
 	})}, nil
+}
+
+func (s Service) mirrorReport(ctx context.Context, catalog api.Catalog, selected string, dryRun bool) (*Report, error) {
+	if dryRun {
+		return &Report{Checks: []capacity.Check{{ID: mirrorCheck, Target: "controller", Status: capacity.Pending, Reason: "dry-run would read the size of each file the artifact mirror serves", Next: "repeat without --dry-run"}}}, nil
+	}
+	files, err := s.Mirror.ProbeMirror(ctx, selected, catalog)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, err
+		}
+		check := capacity.Check{ID: mirrorCheck, Target: "controller", Status: capacity.Unknown, Reason: "the artifact mirror could not be probed", Next: "resolve the reported failure and repeat the preflight"}
+		if reported := diagnostics.Of(err); len(reported) != 0 {
+			check.Reason = reported[0].Message
+			if reported[0].Remediation != "" {
+				check.Next = reported[0].Remediation
+			}
+		}
+		return &Report{Checks: []capacity.Check{check}}, nil
+	}
+	checks := make([]capacity.Check, 0, len(files))
+	for _, file := range files {
+		checks = append(checks, mirrorFileCheck(file, selected))
+	}
+	return &Report{Checks: checks}, nil
+}
+
+func mirrorFileCheck(file MirrorFile, selected string) capacity.Check {
+	pinned := strconv.FormatInt(file.Bytes, 10)
+	check := capacity.Check{ID: mirrorCheck, Target: file.URL, Status: capacity.Failed,
+		Next: "copy " + file.Publisher + " to " + file.URL + ", as bootwright render acquisitions --context " + selected + " lists, then repeat the preflight"}
+	served := file.Status == 200 || file.Status == 206
+	switch {
+	case file.Failure != "":
+		check.Status, check.Reason = capacity.Unknown, file.Failure
+		check.Next = "make the artifact mirror answer for " + file.Tool + " over verified HTTPS, then repeat the preflight"
+	case file.Status == 404 || file.Status == 410:
+		check.Reason = "the artifact mirror does not hold " + file.Tool + " (HTTP " + strconv.Itoa(file.Status) + ")"
+	case served && file.Served == file.Bytes:
+		check.Status, check.Reason, check.Next = capacity.Passed, "the artifact mirror serves "+file.Tool+" at the "+pinned+" bytes this build pins", ""
+	case served && file.Served >= 0:
+		check.Reason = "the artifact mirror serves " + strconv.FormatInt(file.Served, 10) + " bytes for " + file.Tool + ", and this build pins " + pinned
+	case served:
+		check.Status, check.Reason = capacity.Unknown, "the artifact mirror named no size for "+file.Tool
+		check.Next = "serve " + file.URL + " with its Content-Length, then repeat the preflight"
+	default:
+		check.Status, check.Reason = capacity.Unknown, "the artifact mirror answered HTTP "+strconv.Itoa(file.Status)+" for "+file.Tool
+		check.Next = "make the artifact mirror answer for " + file.Tool + " over verified HTTPS, then repeat the preflight"
+	}
+	return check
 }
 
 func (s Service) capacityReport(ctx context.Context, catalog api.Catalog, selected string, dryRun bool) (*Report, error) {

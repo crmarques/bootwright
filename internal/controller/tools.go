@@ -153,6 +153,15 @@ func PublicOrigin(request ToolRequest) bool {
 	return request.Compatibility == "okd"
 }
 
+func ArtifactMirror(catalog api.Catalog) (string, string) {
+	environments := catalog.OfKind(api.Environment)
+	if len(environments) != 1 {
+		return "", ""
+	}
+	artifacts := environments[0].Spec().Get("mirror", "artifacts")
+	return artifacts.Get("url").Text(), artifacts.Get("trustBundleRef").Text()
+}
+
 func mirrored(environment api.Object, request ToolRequest) ToolRequest {
 	base := strings.TrimRight(environment.Spec().Get("mirror", "artifacts", "url").Text(), "/")
 	if base == "" || !PublicOrigin(request) {

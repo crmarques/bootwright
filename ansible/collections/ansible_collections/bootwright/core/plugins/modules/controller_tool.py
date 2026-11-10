@@ -28,6 +28,12 @@ options:
     type: bool
     required: true
     description: Require existing source and executable postconditions without writes.
+  trust:
+    type: dict
+    required: true
+    description:
+      - The host whose downloads verify against a lent trust anchor beside the system trust store, and the private file holding it.
+      - Both are empty when the stage lent no anchor.
   deadline:
     type: int
     required: true
@@ -54,6 +60,7 @@ EXAMPLES = r"""
     egress: '{{ bootwright_controller_request.egress }}'
     inspect_only: true
     deadline: 205
+    trust: '{{ bootwright_controller_request.trust }}'
   no_log: true
 """
 
@@ -75,6 +82,7 @@ def main():
             egress=dict(type="dict", required=True, no_log=True),
             inspect_only=dict(type="bool", required=True),
             deadline=dict(type="int", required=True),
+            trust=dict(type="dict", required=True, no_log=True),
         ),
         supports_check_mode=False,
     )
