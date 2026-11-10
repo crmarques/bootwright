@@ -119,7 +119,9 @@
       - not substrate_libvirt_host_before.observation.vlanRefusal.present or substrate_libvirt_host_before.observation.vlanRefusal.owned
     fail_msg: >-
       The provider VLAN refusal unit {{ bootwright_substrate_host_request.vlanRefusalUnit | default('') }}
-      is unknown or belongs to another owner; restore it before removal
+      is unknown or belongs to another owner, or another VLAN refusal unit's
+      name hashes to its route metric while refusing routes are held under
+      it; restore it or remove the other unit before removal
     quiet: true
 
 # A connection read that did not answer proves nothing removed, and a profile

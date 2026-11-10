@@ -40,6 +40,7 @@ TYPES = {"1": "unicast", "2": "local", "3": "broadcast", "4": "anycast", "5": "m
 TABLES = {"253": "default", "254": "main", "255": "local"}
 ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C.UTF-8"}
 IDENTIFIER = re.compile(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\Z")
+UNIT_FILE = re.compile(r"bootwright-[a-z0-9-]+-vlan-refusal\.service\Z")
 
 
 def unit_name(request):
@@ -85,6 +86,14 @@ def prefixes(request):
 
 def route_arguments(verb, network, value):
     return [IP, "-%d" % network.version, "route", verb, "unreachable", str(network), "proto", PROTOCOL, "metric", str(value)]
+
+
+def sharing_metric(name, root):
+    """The other refusal unit files on this host whose names hash to this unit's metric."""
+    if not os.path.isdir(root):
+        return []
+    value = metric(name)
+    return sorted(entry for entry in os.listdir(root) if UNIT_FILE.match(entry) and entry != name and metric(entry) == value)
 
 
 def unit_content(name, networks):
@@ -203,10 +212,11 @@ def conflicts(routes, networks, value, running):
     exists to override, so it is admitted. Another unit's refusing route, of
     protocol 251 in the main table under another metric, refuses the same
     traffic and has its own kernel key, so it coexists. A refusing route under
-    this unit's metric is its own only while the unit is owned and running;
-    otherwise nothing proves whose it is. Every other overlapping route is
-    foreign and is refused, whatever its table or type, because replacing or
-    shadowing it would change what the host reaches.
+    this unit's metric for a frozen subnet is the unit's own key, which the
+    apply adopts as the removal deletes it; one for another subnet is exempt
+    only while the owned unit runs, since its stop deletes it. Every other
+    overlapping route is foreign and is refused, whatever its table or type,
+    because replacing or shadowing it would change what the host reaches.
     """
     found = []
     for network in networks:
@@ -214,7 +224,7 @@ def conflicts(routes, networks, value, running):
             other = route["network"]
             if other.version != network.version or not other.overlaps(network):
                 continue
-            if refusal_shaped(route) and (route["metric"] != value or running):
+            if refusal_shaped(route) and (route["metric"] != value or running or other in networks):
                 continue
             main = route["table"] == "main"
             if main and route["type"] == "unicast" and other.prefixlen < network.prefixlen and all(route["gateways"]):
@@ -257,6 +267,8 @@ def observe(runner, request, root=SYSTEMD, owner=0):
             result["answered"] = False
         else:
             result["routes"] = [str(network) for network in held(routes, networks, metric(name))]
+            if result["routes"] and sharing_metric(name, root):
+                result.update(present=True, owned=False)
     except (OSError, ValueError):
         result["answered"] = False
     return result
@@ -307,6 +319,8 @@ def settle(runner, request, root, owner, path):
     if reload:
         require(runner, [SYSTEMCTL, "daemon-reload"])
     if not active:
+        if before["routes"]:
+            delete_held(runner, request, root, owner, before)
         require(runner, [SYSTEMCTL, "start", name])
         changed = True
     elif before["routes"] != [str(network) for network in networks]:
@@ -336,7 +350,40 @@ def retire(runner, request, root, owner, path):
     require(runner, [SYSTEMCTL, "daemon-reload"])
     if before["state"] == "failed":
         command(runner, [SYSTEMCTL, "reset-failed", name])
-    return changed
+    return clear_held(runner, request, root, owner) or changed
+
+
+def clear_held(runner, request, root, owner):
+    """Delete the refusing routes the unit's stop left, such as after the unit was removed by hand."""
+    name = unit_name(request)
+    remaining = observe(runner, request, root, owner)
+    if not remaining["answered"] or remaining["present"]:
+        raise ValueError("the host did not prove the refusing routes left under the metric of %s its own, so none is deleted" % name)
+    return delete_held(runner, request, root, owner, remaining)
+
+
+def delete_held(runner, request, root, owner, observed):
+    """Delete the routes an observation proved held under the unit's own key, then prove none remains.
+
+    A route of the reserved protocol, in the main table, of type unreachable,
+    under the metric the unit's own name derives and equal to a frozen subnet
+    is this unit's own key, so it is the unit's whether or not the unit file
+    remains; the observation already refused a host where another unit's name
+    derives the same metric. The IPv4 delete matches type, protocol, metric
+    and table; the IPv6 delete matches table, destination, metric and
+    protocol but not type, which is as exact because the kernel keys an IPv6
+    route by table, destination and metric, so only the route the
+    observation read as unreachable can hold that key. A delete that fails
+    because the route went meanwhile is settled by the observation after it.
+    """
+    name, value = unit_name(request), metric(unit_name(request))
+    for network in prefixes(request):
+        if str(network) in observed["routes"]:
+            command(runner, route_arguments("del", network, value) + ["table", "main"])
+    after = observe(runner, request, root, owner)
+    if not after["answered"] or after["routes"]:
+        raise ValueError("the host still holds a refusing route of %s after its deletion, or did not answer; check ip route and repeat" % name)
+    return bool(observed["routes"])
 
 
 def manage(runner, request, state, root=SYSTEMD, owner=0):
@@ -350,6 +397,11 @@ def manage(runner, request, state, root=SYSTEMD, owner=0):
         return False
     networks = prefixes(request)
     before = observe(runner, request, root, owner)
+    sharing = sharing_metric(name, root) if before["routes"] else []
+    if sharing:
+        raise ValueError("another VLAN refusal unit, %s, has a name that hashes to the route metric of %s, so nothing proves whose "
+                         "the refusing routes under it are; remove the other context's unit or rename a provider, then repeat"
+                         % (", ".join(sharing), name))
     if not before["answered"] or (before["present"] and not before["owned"]):
         raise ValueError("the host did not answer for the VLAN refusal unit or its routes, or the unit or its enablement is unknown or foreign: %s" % name)
     path = os.path.join(root, name)

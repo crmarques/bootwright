@@ -74,7 +74,7 @@ func MachineBlockID(machine string) string { return reconciliation.BlockIdentity
 // the host layout invalidates a frozen plan.
 func HostContentDigest() string {
 	return contentDigest("bootwright.substrate.libvirt.host-v1", HostImplementation, hostRequestVersion,
-		strings.Join(hypervisorPackages, ","), substrate.ImagePrefix, substrate.Prefix, strings.Join(serviceUnits, ","), "bridge-use-claim", "vlan-refusal-v1", "nm-trunk-legs-v1", "routing-table-v1", "nm-unfrozen-connections-v1")
+		strings.Join(hypervisorPackages, ","), substrate.ImagePrefix, substrate.Prefix, strings.Join(serviceUnits, ","), "bridge-use-claim", "vlan-refusal-v2", "nm-trunk-legs-v1", "routing-table-v1", "nm-unfrozen-connections-v1")
 }
 
 func MachineContentDigest() string {

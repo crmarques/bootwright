@@ -258,15 +258,16 @@ routes; a unit adds, deletes and reports only routes of its own metric and
 never removes another's. Each provider refuses every subnet its own managed
 Networks carry, instead of one provider per host holding a shared subnet, so a
 provider's apply or removal never depends on another's and its subnets stay
-refused while any unit holding them runs. Metrics from distinct names are
-distinct unless their hashes collide, and no host-wide registry or extra
-reservation key exists to rule that out; a collision is caught when the second
-unit is applied after the first, as below. An apply
+refused while any unit holding them runs. Metrics from distinct names differ
+unless their hashes collide, which no host-wide registry rules out; the
+[collision refusal](#refusing-routes-left-behind) catches it. An apply
 rewrites the file when the subnets changed, stopping the running unit first so
 its old routes go, and starts it again; a replay over a unit that holds exactly
 its routes changes nothing, and one whose route was deleted restarts the unit.
 Destroy stops and removes the unit and its enablement after the networks, and
-resets a failed unit's state.
+resets a failed unit's state, then deletes the refusing routes the unit's own
+key still holds, as [refusing routes left behind](#refusing-routes-left-behind)
+specifies.
 
 Before it installs anything, and before any network is defined, the apply reads
 every IPv4 and IPv6 route of every table, and an unanswered listing refuses.
@@ -277,18 +278,21 @@ gateway on every hop that is strictly broader than the subnet, the default
 route for one, which the refusal exists to override. Another unit's refusing
 route, protocol 251 in the main table under another metric, refuses the same
 traffic under its own key and coexists; a refusing route under this unit's
-metric is exempt only while the unit is owned and running, and otherwise
-refuses, since nothing proves whose it is. The listing is numeric (`ip -N`),
-because `ip` prints a protocol by any name the host's `rt_protos` gives it. This includes the
-host's own `local` and `broadcast` routes, so an address the host holds inside
-a subnet it was to refuse also refuses the apply. The request reserves the unit
-beside the readiness unit. The observation reports `vlanRefusal`: the unit's
-`name`, `answered`, `present`, `owned`, `enabled` and `state` and `routes`, the
-frozen subnets the host holds as an unreachable route of protocol 251 in the
-main table under the unit's metric, in canonical order. Presence evidence requires the unit owned,
-enabled and active and `routes` equal to `refusedPrefixes`, or neither unit nor
-route when there is none; removal evidence requires an answered observation
-with the unit, its enablement and every route gone.
+metric for a frozen subnet is the unit's own key: the apply deletes it by that
+key before it starts an absent or stopped unit, and the unit's `ip route add`
+still refuses a foreign route that appears under it. One for another subnet is
+exempt only while the owned unit runs, and otherwise refuses. The listing is
+numeric (`ip -N`), because `ip` prints a protocol by any name the host's
+`rt_protos` gives it. This includes the host's own `local` and `broadcast`
+routes, so an address the host holds inside a subnet it was to refuse also
+refuses the apply. The request reserves the unit beside the readiness unit. The
+observation reports `vlanRefusal`: the unit's `name`, `answered`, `present`,
+`owned`, `enabled` and `state` and `routes`, the frozen subnets the host holds
+as an unreachable route of protocol 251 in the main table under the unit's
+metric, in canonical order. Presence evidence requires the unit owned, enabled
+and active and `routes` equal to `refusedPrefixes`, or neither unit nor route
+when there is none; removal evidence requires an answered observation with the
+unit, its enablement and every route gone.
 
 A managed network carries one IPv4 or IPv6 prefix, and its Network's `mtu`
 unless that is 1500, the MTU libvirt and the kernel already give; a Machine's
@@ -780,6 +784,24 @@ requires an answered observation with unit, enablement and table gone; a
 removal took nothing back while the unit is owned and enabled; and a table or
 unit of the name without this provider's ownership is foreign
 (`TestTheRoutingTableIsProvedOwnedLoadedAndForwarding`).
+
+### Refusing routes left behind
+
+The removal of a [VLAN refusal unit](#provider-host-realization) deletes by its
+full key (type, subnet, protocol, metric and table) every refusing route still
+held under the unit's own metric inside the frozen subnets, even when the unit
+was already gone, such as one removed by hand or whose stop step was skipped:
+the metric derives from the unit name and protocol 251 is reserved, so such a
+route is this provider's own effect. The IPv6 delete matches table, destination,
+metric and protocol, as exact as the kernel's IPv6 route key. The observation
+after the delete settles a route that went meanwhile and refuses while one
+remains. When another refusal unit file's name derives the same metric and a
+refusing route is held, nothing proves whose it is: the observation reports this
+unit present and not owned. The apply refuses before it changes the refusal unit
+or any route, naming the other unit; a removal refuses the same way with the
+collision stated but not the other unit's name, because the destroy assert reads
+fixed-key evidence. Held routes alone read as this provider's remains, so a
+removal over them is unfinished, not unknown.
 
 ## Machine realization
 

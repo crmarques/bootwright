@@ -1,6 +1,7 @@
 package libvirt
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -9,6 +10,8 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 func vlanNetwork(name, vlan string, cidrs ...api.FieldValue) api.Object {
@@ -199,5 +202,50 @@ func TestAProviderRefusesMoreSubnetsThanOneHostHoldsAtPlanTime(t *testing.T) {
 			found[0].Object == nil || found[0].Object.Name != "lab-libvirt" || !strings.Contains(found[0].Message, "66 subnets") || found[0].Remediation == "" {
 			t.Fatalf("%d subnets: %+v", 2*count, found)
 		}
+	}
+}
+
+func TestRefusingRoutesLeftWithoutTheirUnitAreAnUnfinishedRemoval(t *testing.T) {
+	request := refusalRequest(t, controller(), provider(), labNetwork(), vlanNetwork("ceph-cluster", "120", family("ipv4", "203.0.113.0/26")),
+		carrying(managedNetwork("ceph-public", "virbr-ceph", "192.0.2.65/26"), "ceph-cluster"))
+	canonical, err := request.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	residual := HostEvidence{Directory: observed(false), PoolAnswered: true, Request: "digest", URI: true,
+		FirewallReady: FirewallReadyEvidence{Name: request.FirewallReadyUnit, Answered: true},
+		VLANRefusal:   VLANRefusalEvidence{Name: request.VLANRefusalUnit, Answered: true, Routes: []string{"203.0.113.0/26"}}}
+	if err := ValidateHostRemovalUnfinished(encode(t, residual), request, "digest"); err != nil {
+		t.Fatalf("held routes without their unit were not an unfinished removal: %v", err)
+	}
+	if err := ValidateHostPartial(encode(t, residual), "digest"); err != nil {
+		t.Fatalf("held routes without their unit were not a partial realization: %v", err)
+	}
+	execution := lifecycle.Execution{Block: reconciliation.Block{
+		BlockDefinition: reconciliation.BlockDefinition{ID: request.Identity.Block, Request: canonical}, RequestDigest: "digest",
+	}}
+	for _, verb := range []reconciliation.Verb{reconciliation.Apply, reconciliation.Destroy} {
+		capability := NewHost(&fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: encode(t, residual)}})
+		observe := capability.Observe
+		if verb == reconciliation.Destroy {
+			observe = capability.ObserveRemoval
+		}
+		observation, err := observe(context.Background(), execution)
+		if err != nil || observation.Effect != reconciliation.EffectPartial {
+			t.Fatalf("%s over held routes without their unit = %+v, %v", verb, observation, err)
+		}
+	}
+	for name, damage := range map[string]func(*VLANRefusalEvidence){
+		"unread":       func(e *VLANRefusalEvidence) { e.Answered = false },
+		"foreign unit": func(e *VLANRefusalEvidence) { e.Present = true },
+		"no route":     func(e *VLANRefusalEvidence) { e.Routes = nil },
+	} {
+		t.Run(name, func(t *testing.T) {
+			left := residual
+			damage(&left.VLANRefusal)
+			if err := ValidateHostRemovalUnfinished(encode(t, left), request, "digest"); err == nil {
+				t.Fatal("evidence that proves no owned refusing route was accepted as an unfinished removal")
+			}
+		})
 	}
 }

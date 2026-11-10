@@ -14061,3 +14061,32 @@ spec moved; the collection's content digest did.
 
 **Commits:** this record's commit. Gates: listed in its message. No push
 occurred.
+
+### X380 — Refusing routes left without their unit
+
+**Item:** B1292, delivered in-tree (2026-11-10) and awaiting operator
+acceptance, found by the independent review of
+[X365](#x365--the-provider-hosts-vlan-refusal-evidence). A provider host
+removal now deletes the refusing routes left under its
+[VLAN refusal unit](../substrates.md#provider-host-realization)'s own key once
+the unit is stopped and removed, even when the unit was already gone, and the
+Go observation counts such routes as owned remains, so a removal over them is
+unfinished rather than unknown. Before, the retire step removed only the unit,
+so a unit gone without its stop step left routes the removal's proof refused
+on every repeat. A held route proves ownership on its own because its key is
+the unit's: the reserved protocol 251, the main table, the `unreachable`
+type, a frozen subnet and the metric hashed from the unit name, which carries
+the context and provider. An apply adopts the same routes: it deletes them by
+that key before it starts an absent or stopped unit. The one exception is
+another refusal unit file whose name hashes to the same metric while such a
+route is held, which the observation reports as a foreign unit: the apply
+refuses before it changes the refusal unit or any route, naming the other unit,
+and a removal refuses with the collision stated but not the other unit's name,
+because the destroy assert reads fixed-key evidence. The provider host content
+digest moved (its `vlan-refusal` effect pin); its request version did not,
+because the ownership key is built only from values every frozen request of that
+version carries and automation of that version already used, so an older block's
+routes are exactly the ones this removal deletes.
+
+**Commits:** this record's commit. Gates: listed in its message. No push
+occurred.

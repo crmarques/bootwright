@@ -403,7 +403,7 @@ func decodeHostRemains(data []byte, digest string) (HostEvidence, error) {
 	return evidence, nil
 }
 
-const vlanRefusalRemedy = "repeat the apply to restore the owned refusing routes; remove any route that overlaps a VLAN subnet it names"
+const vlanRefusalRemedy = "repeat the apply, which restores or adopts the refusing routes under the unit's own key; remove any other route that overlaps a VLAN subnet it names"
 
 func matchVLANRefusal(observed VLANRefusalEvidence, request HostRequest, running bool) error {
 	if request.VLANRefusalUnit == "" {
@@ -491,8 +491,8 @@ func ValidateHostPartial(data []byte, digest string) error {
 	return holdsOwned(evidence)
 }
 
-// holdsOwned requires the evidence to report the pool, its directory or one of
-// this context's managed networks, and no managed network defined without
+// holdsOwned requires the evidence to report something this context owns,
+// held refusing routes included, and no managed network defined without
 // this context's ownership nor a same-named pool targeting another directory.
 func holdsOwned(evidence HostEvidence) error {
 	if evidence.Pool != "" && !evidence.PoolOwned {
@@ -515,7 +515,7 @@ func holdsOwned(evidence HostEvidence) error {
 	}
 	held = held || routed
 	vlan := evidence.VLANRefusal
-	present := held || evidence.Pool != "" || (evidence.Directory != nil && *evidence.Directory) || (ready.Answered && ready.Present && ready.Owned) || (vlan.Answered && vlan.Present && vlan.Owned)
+	present := held || evidence.Pool != "" || (evidence.Directory != nil && *evidence.Directory) || (ready.Answered && ready.Present && ready.Owned) || (vlan.Answered && vlan.Present && vlan.Owned) || (vlan.Answered && len(vlan.Routes) > 0)
 	for _, network := range evidence.Networks {
 		if !network.Managed || (network.State == "" && !network.Owned) {
 			continue

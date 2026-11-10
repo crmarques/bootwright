@@ -77,6 +77,8 @@ class Host:
             if self.fail == "ip":
                 return 1, "", "injected"
             return 0, self.listing(argv, version), ""
+        if argv[0] == refusal.IP:
+            return (0, "", "") if self.ip(argv) else (2, "", "RTNETLINK answers: No such process")
         action, name = argv[1], argv[-1]
         if action == self.fail:
             return 1, "", "injected failure"
@@ -107,7 +109,11 @@ class Host:
         return found
 
     def ip(self, words):
-        """One ip route add or del as the kernel does it: an add of an existing key fails, a del removes the first match."""
+        """One ip route add or del as the kernel does it: an add of an existing key fails, a del removes the first match.
+
+        An IPv4 delete matches the type it names; an IPv6 delete matches table,
+        destination, metric and protocol whatever the route's type.
+        """
         version = 4 if words[1] == "-4" else 6
         assert words[0] == refusal.IP and words[2] == "route" and words[4] == "unreachable" and words[6] == "proto"
         item = {"type": "unreachable", "dst": words[5], "protocol": words[7], "flags": []}
@@ -120,8 +126,10 @@ class Host:
                 return False
             self.routes[version].append(item)
             return True
+        table = words[words.index("table") + 1] if "table" in words else "main"
         for index, other in enumerate(self.routes[version]):
-            if (other.get("type") == "unreachable" and other["dst"] == item["dst"] and other["protocol"] == item["protocol"]
+            if ((version == 6 or other.get("type") == words[4]) and other["dst"] == item["dst"] and other["protocol"] == item["protocol"]
+                    and str(other.get("table") or "main") == table
                     and ("metric" not in words or kernel_key(version, other)[2] == item["metric"])):
                 del self.routes[version][index]
                 return True
@@ -374,12 +382,29 @@ def test_a_context_that_adds_a_subnet_another_context_refuses_leaves_that_route_
     assert host.observe(other)["state"] == "active" and host.observe(other)["routes"] == [V6]
 
 
-def test_a_route_under_the_units_metric_that_the_unit_does_not_hold_refuses(tmp_path):
+def test_an_apply_adopts_the_units_own_routes_left_without_the_unit(tmp_path):
     stale = {"type": "unreachable", "dst": V4, "protocol": refusal.PROTOCOL, "metric": refusal.metric(NAME), "flags": []}
+    host = Host(tmp_path, v4=[stale], v6=[dict(stale, dst=V6)])
+    assert host.manage("present")
+    assert host.observe() == held()
+    assert host.unreachable() == sorted([V4, V6])
+
+
+def test_an_apply_adopts_the_routes_an_inactive_owned_unit_left(tmp_path):
+    host = Host(tmp_path)
+    host.manage("present")
+    host.state = "inactive"
+    assert host.manage("present")
+    assert host.observe() == held()
+    assert host.unreachable() == sorted([V4, V6])
+
+
+def test_a_route_under_the_units_metric_for_another_subnet_still_refuses_while_the_unit_is_stopped(tmp_path):
+    stale = {"type": "unreachable", "dst": "203.0.113.0/27", "protocol": refusal.PROTOCOL, "metric": refusal.metric(NAME), "flags": []}
     host = Host(tmp_path, v4=[stale])
     with pytest.raises(ValueError, match="never replaced") as failure:
         host.manage("present")
-    assert "unreachable route 203.0.113.0/26" in str(failure.value)
+    assert "unreachable route 203.0.113.0/27" in str(failure.value)
     assert not (tmp_path / NAME).exists()
 
 
@@ -416,3 +441,106 @@ def test_a_provider_with_only_a_vlan_leg_freezes_both_units():
     assert ready.unit_name(legged) == "bootwright-lab-host-firewalld-ready.service"
     with pytest.raises(ValueError):
         refusal.unit_name(dict(legged, vlanRefusalUnit=""))
+
+
+def own_route(destination, **fields):
+    return dict({"type": "unreachable", "dst": destination, "protocol": refusal.PROTOCOL, "metric": refusal.metric(NAME), "flags": []}, **fields)
+
+
+def test_a_removal_deletes_the_units_own_routes_left_without_the_unit_and_nothing_else(tmp_path):
+    foreign = [own_route(V4, protocol="static"), own_route(V4, metric=refusal.metric(NAME) + 1),
+               own_route("203.0.113.0/27"), own_route(V4, type="blackhole"), own_route(V4, table="vpn")]
+    host = Host(tmp_path, v4=foreign + [own_route(V4)], v6=[own_route(V6)])
+    assert host.observe() == {"name": NAME, "answered": True, "present": False, "owned": False, "enabled": False, "state": "", "routes": [V4, V6]}
+    assert host.manage("absent")
+    assert host.observe()["routes"] == []
+    assert host.routes[4][1:] == foreign and host.refusals(6) == []
+    deletes = [call for call in host.calls if call[0] == refusal.IP and "del" in call]
+    assert deletes == [refusal.route_arguments("del", ipaddress.ip_network(prefix), refusal.metric(NAME)) + ["table", "main"] for prefix in (V4, V6)]
+    assert not host.manage("absent")
+
+
+def test_a_removal_deletes_the_routes_a_stopped_unit_left_behind(tmp_path):
+    host = Host(tmp_path)
+    host.manage("present")
+    host.state = "inactive"
+    assert host.manage("absent")
+    assert host.unreachable() == [] and not (tmp_path / NAME).exists()
+
+
+OTHER = "bootwright-two-host-vlan-refusal.service"
+
+
+def colliding(tmp_path, monkeypatch):
+    (tmp_path / OTHER).write_text("# Bootwright owned VLAN refusal: %s\n" % OTHER)
+    monkeypatch.setattr(refusal, "metric", lambda name: 1 << 30)
+
+
+def effects(host):
+    return [call for call in host.calls if (call[0] == refusal.IP and "del" in call) or (call[0] == refusal.SYSTEMCTL and call[1] != "show")]
+
+
+@pytest.mark.parametrize("state", ["present", "absent"])
+def test_a_route_another_units_name_also_derives_proves_nothing_and_survives(tmp_path, monkeypatch, state):
+    colliding(tmp_path, monkeypatch)
+    host = Host(tmp_path, v4=[own_route(V4, metric=1 << 30)])
+    assert host.observe()["present"] is True and host.observe()["owned"] is False
+    with pytest.raises(ValueError, match="another VLAN refusal unit, %s, has a name that hashes to the route metric of %s" % (OTHER, NAME)):
+        host.manage(state)
+    assert host.unreachable() == [V4]
+    assert effects(host) == [] and not (tmp_path / NAME).exists()
+
+
+def test_a_colliding_unit_refuses_before_any_effect_while_the_own_unit_is_held(tmp_path, monkeypatch):
+    monkeypatch.setattr(refusal, "metric", lambda name: 1 << 30)
+    host = Host(tmp_path)
+    assert host.manage("present")
+    colliding(tmp_path, monkeypatch)
+    host.calls.clear()
+    for state in ("absent", "present"):
+        with pytest.raises(ValueError, match="hashes to the route metric"):
+            host.manage(state)
+    assert effects(host) == []
+    assert host.unreachable() == sorted([V4, V6]) and (tmp_path / NAME).exists()
+    assert (tmp_path / "multi-user.target.wants" / NAME).is_symlink() and host.state == "active"
+
+
+def test_a_route_that_goes_between_the_observation_and_its_delete_settles_the_removal(tmp_path, monkeypatch):
+    host = Host(tmp_path, v4=[own_route(V4)])
+    real = host.ip
+
+    def vanished(words):
+        if words[3] == "del":
+            real(words)
+            return False
+        return real(words)
+
+    monkeypatch.setattr(host, "ip", vanished)
+    assert host.manage("absent")
+    assert host.unreachable() == []
+
+
+def test_a_delete_that_fails_while_the_route_remains_refuses(tmp_path, monkeypatch):
+    host = Host(tmp_path, v4=[own_route(V4)])
+    real = host.ip
+    monkeypatch.setattr(host, "ip", lambda words: False if words[3] == "del" else real(words))
+    with pytest.raises(ValueError, match="still holds a refusing route"):
+        host.manage("absent")
+    assert host.unreachable() == [V4]
+
+
+def test_a_removal_deletes_only_the_units_own_ipv6_route(tmp_path):
+    foreign = [own_route(V6, metric=refusal.metric(NAME) + 1), own_route("2001:db8:120::/80"), own_route(V6, table="vpn")]
+    host = Host(tmp_path, v6=foreign + [own_route(V6)])
+    assert host.manage("absent")
+    assert host.routes[6][1:] == foreign
+
+
+@pytest.mark.parametrize("fields", [{"type": "blackhole"}, {"protocol": "static"}, {"type": "prohibit", "protocol": "static"}])
+def test_an_ipv6_route_of_another_type_or_protocol_under_the_units_key_survives_a_removal(tmp_path, fields):
+    survivor = own_route(V6, **fields)
+    host = Host(tmp_path, v6=[survivor])
+    assert host.observe()["routes"] == []
+    assert not host.manage("absent")
+    assert host.routes[6][1:] == [survivor]
+    assert not [call for call in host.calls if call[0] == refusal.IP and "del" in call]

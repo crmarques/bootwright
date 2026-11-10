@@ -1407,7 +1407,9 @@ implementation's request version, so a removal under the new build refuses the
 old block's request instead of looking for its effects in the new place. A
 change that loosens what an observation accepts as this context's own moves
 the request version the same way, since the moved digest protects only an
-apply continuation.
+apply continuation, unless it admits only effects earlier builds of that
+version made, under a key their request already freezes, so their removals
+receive the fix.
 
 That re-proof, with the controller setup and host binding a continuation also
 re-proves ([controller-host protection](#controller-host-protection)), runs

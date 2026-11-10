@@ -134,7 +134,10 @@ capability's request, evidence, observation or ownership code:
   also needs the request version to move. It cannot see a change of meaning
   under an unmoved version, so the author moves the request version for a
   change that loosens what an observation accepts as the context's own: a
-  removal compares no digest.
+  removal compares no digest. The
+  [exception](../../../../specs/state-reconciliation.md#dependency-safety-during-recovery)
+  leaves it for a change that admits only effects earlier builds of that
+  version made, under a key their request already freezes.
 - `contractRecipes` in `cmd/bootwright/contract_identity_test.go` restates what
   each content digest hashes, effect pins included, and must reproduce it;
   `requestIdentities` there names the request members that carry an effect's
