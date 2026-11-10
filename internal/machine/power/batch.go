@@ -22,6 +22,7 @@ type target struct {
 	pin      machine.HardwareIdentity
 	host     HostIdentity
 	expected []string
+	drives   []lifecycle.Drive
 }
 
 // normalized trims, drops empty and repeated names, and sorts them bytewise.
@@ -101,6 +102,7 @@ func (s Service) resolveOne(ctx context.Context, catalog api.Catalog, contextNam
 			resolved.pin = proved
 		}
 	}
+	resolved.drives = drives(frozen, physical, resolved.pin, declaredMACs(object))
 	if physical {
 		if resolved.host, err = s.controllerHost(ctx, name); err != nil {
 			return target{}, err
@@ -113,6 +115,24 @@ func (s Service) resolveOne(ctx context.Context, catalog api.Catalog, contextNam
 		}
 	}
 	return resolved, nil
+}
+
+func drives(frozen Request, physical bool, pin machine.HardwareIdentity, macs []string) []lifecycle.Drive {
+	endpoint := substrate.ControllerReservationKey(frozen.Controller.Endpoint)
+	switch {
+	case physical:
+		keys := []string{endpoint}
+		for _, mac := range macs {
+			keys = append(keys, substrate.MACReservationKey(mac))
+		}
+		if strings.TrimSpace(pin.UUID) != "" {
+			keys = append(keys, substrate.SystemReservationKey(pin.UUID))
+		}
+		return []lifecycle.Drive{{Kind: "substrate-physical", Object: frozen.Identity.Object, Keys: keys}}
+	case substrate.EmulatedBMC(frozen.Arm):
+		return []lifecycle.Drive{{Kind: "substrate-machine-bmc", Object: frozen.Identity.Object, Keys: []string{endpoint}, Shared: true}}
+	}
+	return nil
 }
 
 func (s Service) controllerHost(ctx context.Context, name string) (HostIdentity, error) {

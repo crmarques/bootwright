@@ -306,6 +306,7 @@ Alias cell.
 | [B1263](#b1263) | new, 2026-11-10 (D252 (6)) | product | Controller, with State reconciliation | A completed environment reports a proved client below the build's minimum, and may take a raised one | A completed apply settles (D153); the owner put reporting first and left replacement without a destroy open |
 | [B1264](#b1264) | new, 2026-11-10 (D252, session) | product | Storage | Custom CRUSH device classes reach the core OSD projection | The plan refuses them by name until a slice realizes them |
 | [B1265](#b1265) | new, 2026-11-10 (X346 review) | defect | Container clusters | An OpenShift attempt whose every node refused its pre-boot proof after the boot mark stays retryable | Safe as it stands: the block stays unknown and a destroy clears it; recording the boot per node needs a restructured boot play |
+| [B1267](#b1267) | new, 2026-11-10 (X348, audit 004 REC-74) | safety | Substrate and Machine, with Infrastructure services | A context driving a server by its BMC and one reaching it another way, or naming it by a UUID its BMC has not reported yet, conflict | Needs a cross-mechanism machine identity whose byte order is settled first |
 
 ### B82
 
@@ -3480,6 +3481,25 @@ still never does. The runner accepts one preparation per run, and the proof
 must stay immediately before each insert, so the fix restructures the boot
 play. **Exit evidence:** a resolution test over an attempt whose every pre-boot
 proof refused after the mark.
+
+### B1267
+
+**Owner:** Substrate and Machine, with Infrastructure services. **Kind:**
+safety. **Requires:** none. **Definition:** Candidate, from
+[audit 004](../../audits/004-spec-api/report-fable.md) REC-74 and X348: a
+context that uses a server as an OS-ready Machine over SSH holds only `ssh/`
+and `sshkey/` keys, and a pin-less power command compares the endpoint and MAC
+keys alone, so neither meets a context that drives that server by its BMC
+under another spelling and holds it by `bmc-system:<UUID>`
+([physical machine realization](../substrates.md#physical-machine-realization)).
+**Outcome:** both refuse `controller.conflict`; the design settles first
+whether the SMBIOS UUID a host reports and the Redfish UUID can differ in byte
+order, before any equality-keyed key is specified, and keeps `bmc-system:`.
+Claiming `bmc-mac:` keys for every physical server, not only one that reports
+no UUID as [D252](#d252) (2) settles, would also close the pin-less power case;
+that widening is the owner's choice.
+**Exit evidence:** a conflict test of an SSH placement on a server another
+context drives by its BMC.
 
 ## Audit remediation (2026-10-26)
 

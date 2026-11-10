@@ -1706,10 +1706,9 @@ that it answers as another system, and its remedy is to correct the Machine's
 management controller address or destroy and apply the context so the machine is proved
 again, pointing at the run's retained output for the identities. That output
 names the Machine and both identities, and the diagnostic repeats neither: each
-is what a management controller reported, so it is printed with every character removed
-that its [evidence](substrates.md#physical-machine-realization) refuses as not
-printable, a format character such as a bidi override included, and then cut
-to 128 characters, the bound that evidence holds it to. A
+is what a management controller reported, so it is printed with every character
+its [evidence](substrates.md#physical-machine-realization) refuses as not
+printable removed, then cut to its 128-character bound. A
 record or pin of that Machine that cannot be read refuses
 `lifecycle.state` before any confirmation or run.
 
@@ -1717,7 +1716,9 @@ A power command never acts on the host that runs Bootwright. One naming the
 environment's controller Machine refuses `machine.power` before any request, and
 so does one whose management controller reports a system UUID or MAC address
 that is the controller host's own, read locally; `--force` and `--yes` lift
-neither. A command on a physical Machine also refuses when this host cannot
+neither, nor the `controller.conflict` of
+[another context's hold](substrates.md#identity-and-power-operations). A
+command on a physical Machine also refuses when this host cannot
 read its own DMI product UUID and MAC addresses, since nothing then shows the
 request misses it. A physical Machine with no recorded pin is proved by the
 [target proof](substrates.md#physical-machine-realization), a complete

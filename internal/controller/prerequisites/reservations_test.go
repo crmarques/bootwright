@@ -87,19 +87,31 @@ func TestAConflictNamesTheFirstHolderInStoredOrder(t *testing.T) {
 	}
 }
 
-// A shared claim conflicts with nothing at acquisition, except a shared bmc:
-// key another context holds exclusively, which refuses the registration that
-// carries the emulated BMC's installation; an exclusive bmc: claim over a held
-// shared one, and two shared claims, conflict with nothing (B803).
-func TestOnlyASharedBMCKeyConflictsWithItsExclusiveHolder(t *testing.T) {
+// A shared claim conflicts with nothing at acquisition, except one bmc: key
+// held shared and claimed exclusively in either order: the emulated BMC's
+// registration refuses under a physical holder, and a physical Machine's
+// registration refuses under an emulated BMC's shared claim, an SSH-placed
+// one's unqualified key included (REC-09); two shared claims conflict with
+// nothing (B803).
+func TestASharedAndAnExclusiveBMCKeyConflictInEitherOrder(t *testing.T) {
 	physical := HostReservation{Context: "metal", Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc:192.0.2.1:8000/1"}}
 	emulated := HostReservation{Context: "lab", Kind: "substrate-machine-bmc", Service: "rhel-01", Keys: []string{"bmc:192.0.2.1:8000/1"}, Shared: true}
 	use := HostReservation{Context: "lab", Kind: "substrate-host-use", Service: "lab", Keys: []string{"bridge-use:virbr-lab"}, Shared: true}
 	if found := Conflicts([]HostReservation{physical}, []HostReservation{emulated}); len(found) != 1 || found[0].Held.Context != "metal" {
 		t.Fatalf("a shared bmc key under an exclusive holder = %+v", found)
 	}
-	if found := Conflicts([]HostReservation{emulated}, []HostReservation{physical}); len(found) != 0 {
+	found := Conflicts([]HostReservation{emulated}, []HostReservation{physical})
+	if len(found) != 1 || found[0].Held.Context != "lab" || found[0].Releasing {
 		t.Fatalf("an exclusive bmc key over a shared holder = %+v", found)
+	}
+	if diagnostic := ConflictDiagnostic(found[0]); diagnostic.Code != "controller.conflict" ||
+		!strings.HasSuffix(diagnostic.Remediation, ", or change spec.substrate.baremetal.bmc.address on Machine/metal-01") {
+		t.Fatalf("diagnostic = %+v", diagnostic)
+	}
+	twin := emulated
+	twin.Context, twin.Service = "edge", "rhel-02"
+	if found := Conflicts([]HostReservation{twin}, []HostReservation{emulated}); len(found) != 0 {
+		t.Fatalf("two shared bmc claims conflicted: %+v", found)
 	}
 	other := use
 	other.Context = "other"
@@ -145,7 +157,8 @@ func TestAReleaseConflictsWithAnotherContextsUse(t *testing.T) {
 // A releasing claim conflicts with exactly the claims its release re-proof
 // would refuse over: another context's shared use of its bridge, or an
 // exclusive holder of its emulated BMC endpoint. The same claims beside a
-// claim that is not releasing conflict with nothing (B839).
+// claim that is not releasing conflict with nothing (B839), except an
+// exclusive claim of a held shared bmc: key, which conflicts either way.
 func TestAReleasingClaimConflictsWithWhatItsReleaseGuards(t *testing.T) {
 	bridge := HostReservation{Context: "other", Kind: "substrate-host", Service: "lab", Keys: []string{"bridge:virbr-lab"}}
 	bmc := HostReservation{Context: "other", Kind: "substrate-machine-bmc", Service: "node-01", Keys: []string{"bmc:192.0.2.1:8000/node-01"}, Shared: true}
@@ -153,10 +166,11 @@ func TestAReleasingClaimConflictsWithWhatItsReleaseGuards(t *testing.T) {
 		held     HostReservation
 		wanted   HostReservation
 		conflict bool
+		standing bool
 	}{
 		"a bridge use":                      {held: bridge, wanted: HostReservation{Kind: "substrate-host-use", Service: "edge", Keys: []string{"bridge-use:virbr-lab"}, Shared: true}, conflict: true},
 		"another bridge's use":              {held: bridge, wanted: HostReservation{Kind: "substrate-host-use", Service: "edge", Keys: []string{"bridge-use:virbr-other"}, Shared: true}},
-		"an exclusive BMC holder":           {held: bmc, wanted: HostReservation{Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc:192.0.2.1:8000/node-01"}}, conflict: true},
+		"an exclusive BMC holder":           {held: bmc, wanted: HostReservation{Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc:192.0.2.1:8000/node-01"}}, conflict: true, standing: true},
 		"a shared BMC holder":               {held: bmc, wanted: HostReservation{Kind: "substrate-machine-bmc", Service: "node-02", Keys: []string{"bmc:192.0.2.1:8000/node-01"}, Shared: true}},
 		"a bridge use on another SSH host":  {held: HostReservation{Context: "other", Kind: "substrate-host", Service: "lab", Keys: []string{"ssh/192.0.2.9:22/bridge:virbr-lab"}}, wanted: HostReservation{Kind: "substrate-host-use", Service: "edge", Keys: []string{"bridge-use:virbr-lab"}, Shared: true}},
 		"a bridge use on the same SSH host": {held: HostReservation{Context: "other", Kind: "substrate-host", Service: "lab", Keys: []string{"ssh/192.0.2.9:22/bridge:virbr-lab"}}, wanted: HostReservation{Kind: "substrate-host-use", Service: "edge", Keys: []string{"ssh/192.0.2.9:22/bridge-use:virbr-lab"}, Shared: true}, conflict: true},
@@ -164,8 +178,8 @@ func TestAReleasingClaimConflictsWithWhatItsReleaseGuards(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			wanted := test.wanted
 			wanted.Context = "lab"
-			if conflicts := Conflicts([]HostReservation{test.held}, []HostReservation{wanted}); len(conflicts) != 0 {
-				t.Fatalf("a claim that is not releasing conflicts: %+v", conflicts)
+			if conflicts := Conflicts([]HostReservation{test.held}, []HostReservation{wanted}); len(conflicts) > 0 != test.standing || test.standing && conflicts[0].Releasing {
+				t.Fatalf("a claim that is not releasing conflicts: %+v, want %t", conflicts, test.standing)
 			}
 			releasing := test.held
 			releasing.Releasing = true

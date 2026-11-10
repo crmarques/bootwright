@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/custody"
@@ -174,6 +175,49 @@ func TestARegistrationRacingABoundedRunCollectsNothingOfIt(t *testing.T) {
 	}
 	if reads := h.binder.reads(); len(reads) != 1 {
 		t.Fatalf("the run read %v", reads)
+	}
+}
+
+// A bounded run that drives a machine refuses controller.conflict, under the
+// shared hold and before its call runs, while another context holds what it
+// drives: an exclusive key it drives shared or exclusively, or a shared key it
+// drives exclusively. Its own context's claims, and a shared key it drives
+// shared, let it run (REC-10).
+func TestABoundedRunRefusesAMachineAnotherContextHolds(t *testing.T) {
+	drive := Drive{Kind: "substrate-physical", Object: "metal", Keys: []string{"bmc:bmc.example.test:443/1", "bmc-mac:52:54:00:9a:1b:01"}}
+	shared := Drive{Kind: "substrate-machine-bmc", Object: "guest", Keys: []string{"bmc:192.0.2.10:8000/1"}, Shared: true}
+	for name, test := range map[string]struct {
+		held    prerequisites.HostReservation
+		drive   Drive
+		refused bool
+	}{
+		"a MAC another context holds":          {held: prerequisites.HostReservation{Context: "other", Kind: "substrate-physical", Service: "server", Keys: []string{"bmc:192.0.2.40:443/1", "bmc-mac:52:54:00:9a:1b:01"}}, drive: drive, refused: true},
+		"an endpoint another context shares":   {held: prerequisites.HostReservation{Context: "other", Kind: "substrate-machine-bmc", Service: "node", Keys: []string{"bmc:bmc.example.test:443/1"}, Shared: true}, drive: drive, refused: true},
+		"a shared endpoint driven exclusively": {held: prerequisites.HostReservation{Context: "other", Kind: "substrate-physical", Service: "server", Keys: []string{"bmc:192.0.2.10:8000/1"}}, drive: shared, refused: true},
+		"a shared endpoint driven shared":      {held: prerequisites.HostReservation{Context: "other", Kind: "substrate-machine-bmc", Service: "node", Keys: []string{"bmc:192.0.2.10:8000/1"}, Shared: true}, drive: shared},
+		"this context's own claim":             {held: prerequisites.HostReservation{Context: testContextName, Kind: "substrate-physical", Service: "metal", Keys: drive.Keys}, drive: drive},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t)
+			h.workspace.foreign = []prerequisites.HostReservation{test.held}
+			called := false
+			err := h.service.WithRuntime(context.Background(), RuntimeRequest{ContextName: testContextName, Drives: []Drive{test.drive}},
+				func(context.Context, Runtime) error {
+					called = true
+					return nil
+				})
+			if !test.refused {
+				if err != nil || !called {
+					t.Fatalf("the run = %v, called %t", err, called)
+				}
+				return
+			}
+			reported := diagnostics.Of(err)
+			if called || len(reported) != 1 || reported[0].Code != "controller.conflict" || !strings.HasPrefix(reported[0].Message, "context other holds ") ||
+				reported[0].Object == nil || reported[0].Object.Name != test.drive.Object {
+				t.Fatalf("the run was called %t and reported %#v", called, reported)
+			}
+		})
 	}
 }
 

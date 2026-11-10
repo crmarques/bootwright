@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -101,6 +102,40 @@ func TestAMachineOnAnSSHHostClaimsItsBMCSocketThere(t *testing.T) {
 		plan.SSHReservations[0].Reservation.Service != "rhel-01" ||
 		!slices.Contains(plan.SSHReservations[0].Reservation.Keys, "socket:192.0.2.5:8000") {
 		t.Fatalf("SSH claims = %+v, want rhel-01's BMC socket qualified by the Machine hypervisor at 192.0.2.5:22", plan.SSHReservations)
+	}
+}
+
+// The bmc: key of an emulated BMC on a provider host reached over SSH is
+// published unqualified, so it meets a physical Machine's exclusive claim of
+// the same endpoint in another context: the emulated BMC's registration
+// refuses under that holder, and a physical Machine's registration and power
+// command refuse under the emulated BMC's shared claim (REC-09).
+func TestAnSSHHostedEmulatedBMCConflictsWithAPhysicalMachineAtItsEndpoint(t *testing.T) {
+	arm := provider().Spec().Get("libvirt")
+	remote := provider(field("libvirt", arm.With("machineRef", api.StringValue("hypervisor")).
+		With("bmcEmulation", arm.Get("bmcEmulation").With("bindAddress", api.StringValue("192.0.2.5")))))
+	catalog := catalogOf(controller(), remoteHost(), remote, networkConfig(), guest("rhel-01"))
+	plan, err := NewMachine(nil).Plan(context.Background(), lifecycle.PlanInput{
+		Verb: reconciliation.Apply, State: compilation.NewState(catalog, catalog, nil),
+		Controller: "controller", Context: lifecycle.ContextIdentity{Name: testContext},
+	})
+	if err != nil || len(plan.Reservations) != 1 {
+		t.Fatalf("plan = %+v (%v)", plan, err)
+	}
+	emulated := plan.Reservations[0]
+	if !emulated.Shared || len(emulated.Keys) != 1 || !strings.HasPrefix(emulated.Keys[0], "bmc:") {
+		t.Fatalf("the emulated BMC claims %+v, want one unqualified shared bmc: key", emulated)
+	}
+	physical := prerequisites.HostReservation{Context: "metal", Kind: "substrate-physical", Service: "metal-01", Keys: emulated.Keys}
+	if found := prerequisites.Conflicts([]prerequisites.HostReservation{physical}, []prerequisites.HostReservation{emulated}); len(found) != 1 || found[0].Held.Context != "metal" {
+		t.Fatalf("the emulated BMC under a physical holder = %+v", found)
+	}
+	if found := prerequisites.Conflicts([]prerequisites.HostReservation{emulated}, []prerequisites.HostReservation{physical}); len(found) != 1 || found[0].Held.Context != testContext {
+		t.Fatalf("a physical Machine registering under the emulated BMC = %+v", found)
+	}
+	driving := prerequisites.HostReservation{Context: "metal", Kind: "substrate-physical", Service: "metal-01", Keys: emulated.Keys}
+	if found := prerequisites.UseConflicts([]prerequisites.HostReservation{emulated}, driving); len(found) != 1 || found[0].Held.Context != testContext {
+		t.Fatalf("a physical Machine driving the emulated endpoint = %+v", found)
 	}
 }
 

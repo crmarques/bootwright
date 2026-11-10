@@ -66,7 +66,7 @@ rows never refuse a service placed there.
 | Arm | Selected when | Execution | Coordination |
 | --- | --- | --- | --- |
 | Controller | The placement Machine is the [Environment controller](api/environment.md#controller-machine) | Local, through the private controller runtime under [Controller's execution boundary](controller.md#the-controller-runtime) | The Workspace root lock, the context lease, the verified host binding and the host reservations below |
-| SSH | The placement Machine authors `access.ssh` | Remote, over SSH from the controller | The context lease only |
+| SSH | The placement Machine authors `access.ssh` | Remote, over SSH from the controller | The context lease and the SSH-qualified [host reservations](#host-reservations) below |
 
 The controller arm requires this context's verified
 [host binding](contexts.md#controller-relationship-and-host-binding) and the
@@ -136,8 +136,9 @@ A reservation key is one of:
 | `prefix:<masked prefix>` | One managed libvirt network's routed prefix, IPv4 or IPv6, written masked (`prefix:198.51.100.0/24`); it conflicts with every held prefix it overlaps, identical or nested, because the host routes each to its own bridge. |
 | `libvirt-domain:<name>` | One libvirt domain definition. |
 | `kubevirt-vm:<server>/<namespace>/<name>` | One KubeVirt VirtualMachine, by the host cluster's API server, namespace and name. |
-| `bmc:<host>:<port>/<system>` | One [physical machine](substrates.md#physical-machine-realization), named by its management-controller endpoint, normalized for the key alone as that page states (the port it names or else its scheme's default), and exact ComputerSystem, so two contexts of one controller store never drive one server. The claim serializes use; it is never ownership of the machine and authorizes nothing about it. An [emulated BMC's](substrates.md#machine-realization) machine block holds the same key shared: it conflicts with no other shared holder, its registration, which carries this Machine's installation, refuses `controller.conflict` while another context holds the key exclusively, and so does its release, re-proved like `bridge-use:<name>` immediately before the removal's effect, which marks the shared claim releasing as it marks a bridge, so an exclusive claim of the key refuses until the removal completes. |
-| `bmc-system:<UUID>` | The same physical machine, named by the `UUID` its proof records in lower case, claimed once the proof records it and before any media is inserted, so a second spelling of one server's address refuses. A system that reports no `UUID` claims no such key. |
+| `bmc:<host>:<port>/<system>` | One [physical machine](substrates.md#physical-machine-realization), named by its management-controller endpoint, normalized for the key alone as that page states (the port it names or else its scheme's default), and exact ComputerSystem, so that two contexts of one controller store never [drive one server by its BMC](substrates.md#physical-machine-realization) at once. The claim serializes use; it is never ownership of the machine and authorizes nothing about it. An [emulated BMC's](substrates.md#machine-realization) machine block holds the same key shared: it conflicts with no other shared holder, its registration, which carries this Machine's installation, refuses `controller.conflict` while another context holds the key exclusively, a physical Machine's registration refuses while another context holds it shared (`TestASharedAndAnExclusiveBMCKeyConflictInEitherOrder`), and so does its release, re-proved like `bridge-use:<name>` immediately before the removal's effect, which marks the shared claim releasing as it marks a bridge, so an exclusive claim of the key refuses until the removal completes. A [machine power command](cli.md#machine-power-operations) refuses while another context holds the key it drives, under the same relation. |
+| `bmc-system:<UUID>` | The same physical machine, named by the `UUID` its proof records in lower case, claimed once the proof records it and before any media is inserted, so a second spelling of one server's address refuses. A system that reports no `UUID` claims `bmc-mac:` keys instead. |
+| `bmc-mac:<mac>` | The same physical machine, named by one MAC address it declares, in its colon-separated lower-case form: a system whose proof records no `UUID`, one that reports a serial number alone included, claims one exclusive key per declared MAC once the proof holds and before any media is inserted, so a second spelling of its address refuses (D252 (2)). |
 | `media:<filename.iso>` | A shared claim on one image of the [media store](managed-os.md#media-store); it conflicts with nothing and blocks only that image's deletion or replacement while any context holds it. |
 
 A `socket:` key writes an IPv6 address unbracketed, the one form every
@@ -227,15 +228,20 @@ Every claim placed over SSH is also published (Q96). One whose placement is
 the controller is published as the controller's own, with its keys as they
 are. Any other, a managed service's, an artifact server's, an
 [emulated BMC's](substrates.md#machine-realization) or a libvirt provider
-host's, is published with every key qualified by its SSH host,
-`ssh/<address>:<port>/<key>`, the address and port written as the host is
-named above with an IPv6 address unbracketed, and holds and releases those
+host's, is published with every key but its `bmc:`, `bmc-system:` and
+`bmc-mac:` keys qualified by its SSH host, `ssh/<address>:<port>/<key>`, the
+address and port written as the host is named above with an IPv6 address
+unbracketed, and holds and releases those
 keys by the controller's conflict relation and release paths, compared only
 with keys of the same qualifier. Every such key is also published qualified
 by the host key that Machine's `access.ssh.knownHostsRef` pins (D188),
 `sshkey/SHA256:<digest>/<key>`, the SHA-256 digest of the key blob in
 unpadded URL-safe base64 (`ssh-keygen -l` shows it with `+` for `-` and `/`
-for `_`). Two
+for `_`). Those three key classes name an endpoint the controller dials or a
+machine it drives, not a resource of the SSH host, so every placement publishes
+them unqualified and an emulated BMC on an SSH host meets a physical Machine's
+claim of its endpoint
+(`TestAnSSHHostedEmulatedBMCConflictsWithAPhysicalMachineAtItsEndpoint`). Two
 contexts of one store targeting one SSH host therefore refuse each other's
 conflicting claims there, whether they reach it by one address or by two
 addresses, or a name and an address, that pin one host key; a diagnostic on

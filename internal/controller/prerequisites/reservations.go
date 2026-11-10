@@ -32,22 +32,17 @@ type Conflict struct {
 // keys at one port and either binds a wildcard address, which holds its port
 // on every address; and when both are managed network prefixes that overlap,
 // identical or nested, since the host routes each prefix to its own bridge. A
-// shared claim conflicts with nothing but an exclusive holder of its bmc: key.
+// shared and an exclusive claim of one bmc: key conflict, in either order.
 func Conflicts(held, wanted []HostReservation) []Conflict {
 	var found []Conflict
 	reported := map[[6]string]bool{}
 	for _, holder := range held {
-		if holder.Shared && !holder.Releasing {
-			continue
-		}
 		for _, heldKey := range holder.Keys {
 			conflict, ok := firstConflict(holder, heldKey, wanted)
 			if !ok {
 				continue
 			}
-			_, heldClaim := unqualified(conflict.HeldKey)
-			_, wantedClaim := unqualified(conflict.WantedKey)
-			identity := [6]string{holder.Context, holder.Kind, holder.Service, heldClaim, conflict.Wanted.Kind + "/" + conflict.Wanted.Service, wantedClaim}
+			identity := [6]string{holder.Context, holder.Kind, holder.Service, reportedKey(conflict.HeldKey), conflict.Wanted.Kind + "/" + conflict.Wanted.Service, reportedKey(conflict.WantedKey)}
 			if !reported[identity] {
 				reported[identity] = true
 				found = append(found, conflict)
@@ -55,6 +50,14 @@ func Conflicts(held, wanted []HostReservation) []Conflict {
 		}
 	}
 	return found
+}
+
+func reportedKey(key string) string {
+	_, claim := unqualified(key)
+	if strings.HasPrefix(claim, "bmc-mac:") {
+		return "bmc-mac:"
+	}
+	return claim
 }
 
 func firstConflict(holder HostReservation, heldKey string, wanted []HostReservation) (Conflict, bool) {
@@ -67,7 +70,8 @@ func firstConflict(holder HostReservation, heldKey string, wanted []HostReservat
 			if guard != "" && wantedKey == guard && claim.Shared == guardShared {
 				return Conflict{Held: holder, Wanted: claim, HeldKey: heldKey, WantedKey: wantedKey, Releasing: true}, true
 			}
-			if holder.Shared || claim.Shared && !(strings.HasPrefix(wantedKey, "bmc:") && wantedKey == heldKey) {
+			sameBMC := strings.HasPrefix(wantedKey, "bmc:") && wantedKey == heldKey
+			if holder.Shared && (holder.Releasing || claim.Shared || !sameBMC) || claim.Shared && !sameBMC {
 				continue
 			}
 			if keysConflict(heldKey, wantedKey) {
@@ -76,6 +80,48 @@ func firstConflict(holder HostReservation, heldKey string, wanted []HostReservat
 		}
 	}
 	return Conflict{}, false
+}
+
+func UseConflicts(held []HostReservation, use HostReservation) []Conflict {
+	var found []Conflict
+	reported := map[[4]string]bool{}
+	for _, holder := range held {
+		if holder.Context == use.Context || holder.Shared && use.Shared {
+			continue
+		}
+		for _, heldKey := range holder.Keys {
+			index := slices.IndexFunc(use.Keys, func(wanted string) bool { return keysConflict(heldKey, wanted) })
+			identity := [4]string{holder.Context, holder.Kind, holder.Service, reportedKey(heldKey)}
+			if index < 0 || reported[identity] {
+				continue
+			}
+			reported[identity] = true
+			found = append(found, Conflict{Held: holder, Wanted: use, HeldKey: heldKey, WantedKey: use.Keys[index]})
+		}
+	}
+	return found
+}
+
+func UseDiagnostic(c Conflict) diagnostics.Diagnostic {
+	_, heldKey := unqualified(c.HeldKey)
+	class, _, _ := strings.Cut(heldKey, ":")
+	object := conflictObject(c.Wanted)
+	used := map[string]string{
+		"bmc":        "the management controller endpoint " + object + " is driven through",
+		"bmc-system": "the system UUID " + object + "'s pin records",
+		"bmc-mac":    "a MAC address " + object + " declares",
+	}[class]
+	if used == "" {
+		used = describeKey(c.HeldKey) + " that " + object + " uses"
+	}
+	message := "context " + c.Held.Context + " holds " + used + ", for " + conflictObject(c.Held) +
+		", so this context may not drive that machine and nothing was sent to it"
+	remediation := "act on the machine through context " + c.Held.Context + ", or run bootwright destroy --context " + c.Held.Context + " first" + conflictField(c.Wanted, class)
+	diagnostic := diagnostics.Diagnostic{Severity: "error", Code: "controller.conflict", Message: message, Remediation: remediation}
+	if kind, ok := claimObjectKind(c.Wanted); ok {
+		diagnostic.Object = &diagnostics.ObjectIdentity{APIVersion: api.APIVersion, Kind: kind, Name: c.Wanted.Service}
+	}
+	return diagnostic
 }
 
 func QualifiedKeys(qualifier string, keys []string) []string {

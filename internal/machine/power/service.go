@@ -217,7 +217,22 @@ func (s Service) converge(ctx context.Context, request PowerRequest) (*Results, 
 	if err := s.confirm(ctx, name, request, targets); err != nil {
 		return nil, err
 	}
+	if err := s.admitBatch(ctx, name, targets); err != nil {
+		return nil, err
+	}
 	return s.executeAll(ctx, name, request.Verb, targets)
+}
+
+func (s Service) admitBatch(ctx context.Context, contextName string, targets []target) error {
+	var drives []lifecycle.Drive
+	for _, resolved := range targets {
+		drives = append(drives, resolved.drives...)
+	}
+	if len(targets) < 2 || len(drives) == 0 {
+		return nil
+	}
+	return s.runtime.WithRuntime(ctx, lifecycle.RuntimeRequest{ContextName: contextName, Drives: drives},
+		func(context.Context, lifecycle.Runtime) error { return nil })
 }
 
 // refuseTemplateValues refuses a power request holding a template delimiter
@@ -289,7 +304,7 @@ func (s Service) execute(ctx context.Context, name string, resolved target, posi
 	}
 	references := append(credentialReferences(frozen.Controller), frozen.Placement.SecretReferences()...)
 	var result, retained *Result
-	err = s.runtime.WithRuntime(ctx, lifecycle.RuntimeRequest{ContextName: name, Secrets: references, RetainOutput: true}, func(inner context.Context, runtime lifecycle.Runtime) error {
+	err = s.runtime.WithRuntime(ctx, lifecycle.RuntimeRequest{ContextName: name, Secrets: references, RetainOutput: true, Drives: resolved.drives}, func(inner context.Context, runtime lifecycle.Runtime) error {
 		retained = &Result{Machine: frozen.Identity.Object, LogLocation: runtime.LogLocation, Logs: slices.Clone(runtime.Logs), Run: runtime.Run}
 		if s.reporter != nil && total == 1 {
 			s.reporter.ReportLogLocation(inner, lifecycle.LogLocation{Path: runtime.LogLocation, Context: name, Run: runtime.Run})

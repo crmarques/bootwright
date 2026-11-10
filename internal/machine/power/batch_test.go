@@ -224,7 +224,8 @@ func TestSeveralMachinesRunConcurrentlyInOneScope(t *testing.T) {
 	}
 }
 
-// No more than lifecycle.MaxRunningBlocks runs hold the runtime at once.
+// No more than lifecycle.MaxRunningBlocks runs hold the runtime at once,
+// beside the one admission hold that checks the whole batch first.
 func TestABatchRunsAtMostMaxRunningBlocksAtOnce(t *testing.T) {
 	names := []string{"metal", "rack", "zero"}
 	for index := range 8 {
@@ -247,7 +248,7 @@ func TestABatchRunsAtMostMaxRunningBlocksAtOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	canonical := slices.Sorted(slices.Values(names))
-	if runner.most != lifecycle.MaxRunningBlocks || runtime.entered != len(names) || runner.ended != len(names) {
+	if runner.most != lifecycle.MaxRunningBlocks || runtime.entered != len(names)+1 || runner.ended != len(names) {
 		t.Fatalf("held %d runs at once, lent %d, ended %d", runner.most, runtime.entered, runner.ended)
 	}
 	if !slices.Equal(slices.Sorted(slices.Values(first)), canonical[:lifecycle.MaxRunningBlocks]) {

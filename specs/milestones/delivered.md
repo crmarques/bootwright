@@ -13127,3 +13127,33 @@ occurred. **Limitations:** a managed Registry cannot be the mirror until
 [B1249](backlog.md#b1249); a host holding only the origin's copy pulls the
 mirror's once; the live proof is [B1250](backlog.md#b1250).
 
+### X348 — BMC claims
+
+**Item:** B1254 (2026-11-10, [D252](backlog.md#d252) (2)), Kind safety,
+Owners: Substrate and Machine. A machine power command, `--force` included,
+reads the controller record under its run's shared lock and refuses
+`controller.conflict` before any power request while another context holds what
+it drives: a physical Machine's endpoint `bmc:`, each declared MAC's `bmc-mac:`
+and its pin's `bmc-system:` keys, exclusively, and an emulated BMC's endpoint
+key, shared; a batch refuses whole ([power operations](../cli.md#machine-power-operations)). A
+bare-metal proof that records no `UUID`, a serial alone included, claims one
+exclusive `bmc-mac:<mac>` key per declared MAC, in canonical colon form, before any media insertion, and
+a fresh apply keeps it as it keeps `bmc-system:`. The specs state once that
+`bmc:`, `bmc-system:` and `bmc-mac:` keys are never SSH-qualified and that
+the SSH arm publishes its claims as host reservations.
+
+| Finding | Change |
+| --- | --- |
+| REC-10 | `lifecycle.RuntimeRequest.Drives` and `RefuseHeldDrives`, `prerequisites.UseConflicts` and `UseDiagnostic`; power declares its drives; cli.md power paragraph; `TestAPowerCommandRefusesAServerAnotherContextReserves`, `TestABoundedRunRefusesAMachineAnotherContextHolds` |
+| REC-41 | `ProvedClaim` claims `bmc-mac:` keys without a `UUID`; `keepProved` keeps them; the bare-metal effect pin gains `mac-claim`; `TestTwoSpellingsOfOneUUIDLessServerConflict` |
+| REC-09 | qualifier exemption in infrastructure-services.md and controller-record.md; `Conflicts` now also refuses an exclusive `bmc:` claim under another context's shared one, so a physical Machine's registration refuses under an emulated BMC; `TestASharedAndAnExclusiveBMCKeyConflictInEitherOrder`, `TestAnSSHHostedEmulatedBMCConflictsWithAPhysicalMachineAtItsEndpoint` |
+| REC-06 | substrates.md provider-host paragraph and the SSH Coordination cell link the host-reservations owner |
+| REC-74 | the promise scoped to two contexts that drive one server by its BMC; cross-mechanism identity parked as [B1267](backlog.md#b1267) |
+
+The collection's proof is unchanged: it already refuses a system that reports
+neither a `UUID` nor a serial, and the claim is made from its evidence in Go.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** a pin-less power command on a server another
+context holds by `bmc-system:` under another spelling is not refused
+([B1267](backlog.md#b1267)).

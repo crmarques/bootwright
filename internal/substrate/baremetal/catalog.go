@@ -30,7 +30,7 @@ func BlockID(machine string) string { return reconciliation.BlockIdentity("machi
 func ContentDigest() string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		"bootwright.substrate.baremetal.machine-v1", Implementation, requestVersion,
-		"identity+exact-addresses+power+system-claim+logical-volume",
+		"identity+exact-addresses+power+system-claim+mac-claim+logical-volume",
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }

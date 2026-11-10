@@ -75,12 +75,11 @@ The libvirt provider host is the Machine `spec.libvirt.machineRef` names. It
 must be OS-ready and reachable through one of the
 [placement arms](infrastructure-services.md#placement-arms-and-credentials)
 managed services use: the controller arm when it is the Environment
-controller, otherwise the SSH arm with its bound identity and host key. The
-controller arm claims the [host reservations](infrastructure-services.md#host-reservations)
-below; the SSH arm is coordinated by the context lease alone, and its emulated
-BMC's socket is compared only with its own context's sockets on that host.
-Its BMC endpoint still holds a shared cross-context `bmc:` claim regardless of
-placement. A bare-metal
+controller, otherwise the SSH arm with its bound identity and host key. Either
+arm's claims, its emulated BMC's socket included, are published as
+[host reservations](infrastructure-services.md#host-reservations) states,
+SSH-placed ones qualified by that host and its BMC endpoint's shared `bmc:`
+key unqualified on every placement. A bare-metal
 provider has no host: its Machines are reached at the BMCs they
 declare, always from the controller Machine.
 
@@ -583,7 +582,8 @@ addresses that endpoint claims exclusively. Its removal refuses
 `controller.conflict` while another context holds that key exclusively, naming
 that context and `bootwright destroy --context <holder>`, and the registration
 that carries this Machine's installation refuses while another context holds
-it.
+it, as a physical Machine's registration refuses while this one holds it
+shared.
 
 **Evidence.** Completion requires the domain defined with the frozen definition
 and ownership metadata, every disk present at its frozen size, the BMC unit
@@ -832,14 +832,25 @@ port it names or else its scheme's default, and the system's path below
 records a `UUID`, the block also claims the exclusive `bmc-system:<UUID>` key,
 the `UUID` in lower case, in the same controller record and before any media is
 inserted, so a second spelling of one server's address refuses
-`controller.conflict` naming the context that holds it. A system that reports
-no `UUID` claims no identity key. Two contexts of one controller store
-therefore cannot both drive one physical server; contexts in different stores
-are not coordinated. The claim serializes use; it is not ownership of the
-machine and never authorizes destroying it.
+`controller.conflict` naming the context that holds it. A system whose proof
+records no `UUID`, one reporting a serial number alone included, claims instead
+one exclusive `bmc-mac:<mac>` key for each declared MAC, in its
+colon-separated lower-case form, at the
+same point, because the proof showed a complete inventory reporting exactly
+that set ([D252](milestones/backlog.md#d252) (2);
+`TestTwoSpellingsOfOneUUIDLessServerConflict`). Two contexts of one controller
+store that both drive one server by its BMC therefore never drive it at once:
+the second registration refuses, and so does a
+[machine power command](cli.md#machine-power-operations) of the second
+context. A context that reaches the server as an OS-ready Machine over SSH
+holds only `ssh/` and `sshkey/` keys, so a context driving that server by its
+BMC is not refused, and a pin-less power command compares no `UUID` its BMC
+has not yet reported; both are tracked as [B1267](milestones/backlog.md#b1267).
+Contexts in different stores are not coordinated. The claim serializes use; it
+is not ownership of the machine and never authorizes destroying it.
 
 **Reservations.** `bmc:<host>:<port>/<system>` and, once proved,
-`bmc-system:<UUID>`. A physical block owns no path, unit, socket or hypervisor
+`bmc-system:<UUID>` or each `bmc-mac:<mac>`. A physical block owns no path, unit, socket or hypervisor
 object.
 
 **Evidence.** Completion requires the ComputerSystem answering with the bound
@@ -1568,6 +1579,20 @@ declares no MAC, or whose proof does not hold, refuses. A power command naming
 the Environment's controller Machine refuses, and so does one whose BMC reports
 the controller host's own `UUID` or one of its MAC addresses, read locally and
 compared as a pin is, because no power command may stop the host that runs Bootwright.
+A power command, `--force` and `--yes` included, also refuses
+`controller.conflict` before any power request while another context of the
+controller store holds what its run drives, read from the controller record
+under the shared lock that run holds: a physical Machine drives, exclusively,
+its BMC endpoint's `bmc:` key, a `bmc-mac:` key for each MAC it declares and,
+once pinned, its pin's `bmc-system:` key; an emulated BMC drives its endpoint's
+`bmc:` key shared, which only an exclusive holder refuses
+([host reservations](infrastructure-services.md#host-reservations)). This
+context's own claims never refuse it. A batch, after its confirmation, checks
+every member in one hold and refuses whole, naming each held Machine, before
+any power request (`TestAPowerBatchRefusesWholeWhenAnyMemberIsHeld`). The
+diagnostic's object is the Machine, it names the holding context and its object but no key value, and its remedy
+is to act on the machine through that context or destroy it first
+(`TestAPowerCommandRefusesAServerAnotherContextReserves`).
 The [CLI journey](cli.md#machine-power-operations) owns the rest.
 
 Every BMC leg carries the trust its declaration sets. The

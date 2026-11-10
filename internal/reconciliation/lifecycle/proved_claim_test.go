@@ -50,18 +50,18 @@ func TestAProvedClaimIsTakenBeforeItsDependentStarts(t *testing.T) {
 }
 
 // A fresh apply republishes its planned reservations, which cannot name a UUID
-// only a proof learns, so keepProved carries this context's own bmc-system:
-// keys onto the planned reservation of the same kind and service, and nothing
-// another context or another service holds.
+// or MAC claim only a proof learns, so keepProved carries this context's own
+// bmc-system: and bmc-mac: keys onto the planned reservation of the same kind
+// and service, and nothing another context or another service holds.
 func TestKeepProvedCarriesOnlyTheOwnProvedSystemKey(t *testing.T) {
 	planned := []prerequisites.HostReservation{{Context: "lab", Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc:a:443/1"}}}
 	held := []prerequisites.HostReservation{
-		{Context: "lab", Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc-system:u1", "bmc:a:443/1"}},
+		{Context: "lab", Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc-system:u1", "bmc:a:443/1", "bmc-mac:52:54:00:9a:1b:01"}},
 		{Context: "other", Kind: "substrate-physical", Service: "metal-01", Keys: []string{"bmc-system:u2"}},
 		{Context: "lab", Kind: "substrate-physical", Service: "metal-02", Keys: []string{"bmc-system:u3"}},
 	}
 	kept := keepProved(held, "lab", planned)
-	if len(kept) != 1 || !slices.Equal(kept[0].Keys, []string{"bmc:a:443/1", "bmc-system:u1"}) || len(planned[0].Keys) != 1 {
+	if len(kept) != 1 || !slices.Equal(kept[0].Keys, []string{"bmc:a:443/1", "bmc-system:u1", "bmc-mac:52:54:00:9a:1b:01"}) || len(planned[0].Keys) != 1 {
 		t.Fatalf("kept = %+v, planned %+v", kept, planned)
 	}
 }

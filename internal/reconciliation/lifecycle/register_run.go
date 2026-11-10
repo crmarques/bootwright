@@ -217,7 +217,7 @@ func keepProved(held []prerequisites.HostReservation, contextName string, planne
 				continue
 			}
 			for _, key := range own.Keys {
-				if strings.HasPrefix(key, "bmc-system:") && !slices.Contains(reservation.Keys, key) {
+				if (strings.HasPrefix(key, "bmc-system:") || strings.HasPrefix(key, "bmc-mac:")) && !slices.Contains(reservation.Keys, key) {
 					reservation.Keys = append(reservation.Keys, key)
 				}
 			}

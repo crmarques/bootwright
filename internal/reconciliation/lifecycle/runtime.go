@@ -22,6 +22,28 @@ type RuntimeRequest struct {
 	ContextName  string
 	Secrets      []string
 	RetainOutput bool
+	Drives       []Drive
+}
+
+type Drive struct {
+	Kind   string
+	Object string
+	Keys   []string
+	Shared bool
+}
+
+func RefuseHeldDrives(contextName string, held []prerequisites.HostReservation, drives []Drive) error {
+	var found []diagnostics.Diagnostic
+	for _, drive := range drives {
+		use := prerequisites.HostReservation{Context: contextName, Kind: drive.Kind, Service: drive.Object, Keys: drive.Keys, Shared: drive.Shared}
+		for _, conflict := range prerequisites.UseConflicts(held, use) {
+			found = append(found, prerequisites.UseDiagnostic(conflict))
+		}
+	}
+	if len(found) == 0 {
+		return nil
+	}
+	return &diagnostics.Failure{Diagnostics: found}
 }
 
 // Runtime is the private execution boundary one bounded adapter call runs in.
@@ -73,6 +95,9 @@ func (s Service) WithRuntime(ctx context.Context, request RuntimeRequest, call f
 	}
 	defer clearMaterial(material)
 	return s.workspace.RunLifecycle(ctx, name, func(view RunView) error {
+		if err := RefuseHeldDrives(view.Identity().Name, view.Controller().State.Reservations, request.Drives); err != nil {
+			return err
+		}
 		located, err := s.approvedRuntime(ctx)
 		if err != nil {
 			return err

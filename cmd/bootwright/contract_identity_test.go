@@ -124,7 +124,7 @@ func contractRecipes() map[string]digestRecipe {
 			partPin("root-template-blank"), partPin("owner-annotation-mark"), partPin("substrate-access-kubevirt-v1"), partPin("substrate-access-kubevirt-evidence-v1"),
 			partPin("spread-preferred-anti-affinity"), partPin("lend-bound-secret")),
 		baremetal.Implementation: digestOf(partDomain("bootwright.substrate.baremetal.machine-v1"), partImplementation(baremetal.Implementation), partRequest("machine-baremetal-v1"),
-			partPin("identity+exact-addresses+power+system-claim+logical-volume")),
+			partPin("identity+exact-addresses+power+system-claim+mac-claim+logical-volume")),
 		installation.TreeImplementation:  digestOf(partImplementation(installation.TreeImplementation), partVersion(installation.TreeEvidenceVersion)),
 		installation.EraseImplementation: {separator: ":", parts: []digestPart{partImplementation(installation.EraseImplementation), partRequest("physical-erase-v2"), partPin("descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v1")}},
 		installation.FirewallImplementation: digestOf(partDomain("bootwright.managedos.host-firewall-v1"), partImplementation(installation.FirewallImplementation),

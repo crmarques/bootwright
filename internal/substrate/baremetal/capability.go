@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
@@ -266,8 +267,25 @@ func (MachineCapability) ProvedClaim(contextName string, block reconciliation.Bl
 		return prerequisites.HostReservation{}, false, err
 	}
 	identity, err := ProvedIdentity(evidence)
-	if err != nil || identity.UUID == "" {
+	if err != nil {
 		return prerequisites.HostReservation{}, false, err
+	}
+	claim := prerequisites.HostReservation{Context: contextName, Kind: "substrate-physical", Service: request.Identity.Object, Keys: request.ReservationKeys()}
+	if identity.UUID == "" {
+		addresses := request.Addresses()
+		if len(addresses) == 0 || len(claim.Keys)+len(addresses) > prerequisites.MaxReservationKeys {
+			return prerequisites.HostReservation{}, false, refusal("lifecycle.state",
+				"the management controller at "+request.Controller.Endpoint+" reported no system UUID, and Machine/"+request.Identity.Object+
+					" declares no MAC address set of at most "+strconv.Itoa(prerequisites.MaxReservationKeys-len(claim.Keys))+" addresses to claim the machine by",
+				"correct spec.substrate.baremetal.nics on Machine/"+request.Identity.Object)
+		}
+		hardware := make([]string, 0, len(addresses))
+		for _, address := range addresses {
+			hardware = append(hardware, substrate.MACReservationKey(address))
+		}
+		slices.Sort(hardware)
+		claim.Keys = append(claim.Keys, slices.Compact(hardware)...)
+		return claim, true, nil
 	}
 	system := strings.ToLower(identity.UUID)
 	if !systemToken.MatchString(system) {
@@ -275,12 +293,8 @@ func (MachineCapability) ProvedClaim(contextName string, block reconciliation.Bl
 			"the system UUID the management controller at "+request.Controller.Endpoint+" reported cannot name a host claim",
 			"correct spec.substrate.baremetal.bmc.address on Machine/"+request.Identity.Object+" so it names a BMC that reports a standard UUID")
 	}
-	return prerequisites.HostReservation{
-		Context: contextName, Kind: "substrate-physical", Service: request.Identity.Object,
-		Keys: append(request.ReservationKeys(), SystemReservationKey(system)),
-	}, true, nil
+	claim.Keys = append(claim.Keys, substrate.SystemReservationKey(system))
+	return claim, true, nil
 }
-
-func SystemReservationKey(uuid string) string { return "bmc-system:" + strings.ToLower(uuid) }
 
 var _ lifecycle.ProvingClaimer = MachineCapability{}

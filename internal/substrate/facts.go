@@ -15,18 +15,21 @@ type facts struct {
 	tools            []string
 	credential       [2]secrets.Part
 	portPinned       bool
+	emulatedBMC      bool
 }
 
 var account = [2]secrets.Part{secrets.UsernamePart, secrets.PasswordPart}
 
 var armFacts = map[string]facts{
 	ArmBaremetal: {delivery: DeliveryFetch, accessCredential: true, credential: account},
-	ArmLibvirt:   {delivery: DeliveryFetch, bridgedGuests: true, credential: account},
+	ArmLibvirt:   {delivery: DeliveryFetch, bridgedGuests: true, credential: account, emulatedBMC: true},
 	ArmVSphere:   {delivery: DeliveryFetch, tools: []string{"govc"}, credential: account},
 	ArmKubeVirt:  {delivery: DeliveryPush, accessCredential: true, tools: []string{"virtctl"}, credential: [2]secrets.Part{secrets.ValuePart}, portPinned: true},
 }
 
 func PortPinned(arm string) bool { return armFacts[arm].portPinned }
+
+func EmulatedBMC(arm string) bool { return armFacts[arm].emulatedBMC }
 
 func ControllerCredential(arm string) (user, password secrets.Part) {
 	credential, ok := armFacts[arm]

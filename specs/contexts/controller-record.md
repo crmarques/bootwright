@@ -93,7 +93,8 @@ completed removal or the holder's deletion, and while it stands a claim another 
 key that release guards refuses
 ([host reservations](../infrastructure-services.md#host-reservations)). Entries are
 ordered by context name then kind then service. A claim a block places on
-an SSH host that is not the controller prefixes every key with
+an SSH host that is not the controller prefixes every key but a `bmc:`,
+`bmc-system:` or `bmc-mac:` key, which it publishes unqualified, with
 `ssh/<address>:<port>/`, the SSH address as declared (an IP in canonical form,
 unbracketed, a DNS name without case or a final dot) and port its placement
 connects to; the same claim's keys are published again prefixed by

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -443,7 +444,8 @@ func TestAMachineReadsOnlyItsControllerCredentialsAsAccessCredentials(t *testing
 }
 
 // A proved machine's claim gains bmc-system:<UUID>, the UUID in lower case,
-// beside its bmc: key; one whose proof recorded no UUID claims no such key,
+// beside its bmc: key; one whose proof recorded no UUID, a serial alone
+// included, claims bmc-mac:<mac> for each declared MAC in lower case instead,
 // and a UUID that cannot name a key refuses rather than claim nothing.
 func TestAProvedMachineClaimsItsSystemUUID(t *testing.T) {
 	definition := planOf(t, reconciliation.Apply).Definitions[0]
@@ -460,10 +462,49 @@ func TestAProvedMachineClaimsItsSystemUUID(t *testing.T) {
 	if claim.Context != "lab" || claim.Kind != "substrate-physical" || claim.Service != request.Identity.Object || claim.Shared || !slices.Equal(claim.Keys, want) {
 		t.Fatalf("claim = %+v, want keys %v", claim, want)
 	}
-	if _, found, err := NewMachine(nil).ProvedClaim("lab", block, proof("")); found || err != nil {
-		t.Fatalf("a machine with no UUID claimed %v (%v)", found, err)
+	claim, found, err = NewMachine(nil).ProvedClaim("lab", block, proof(""))
+	want = append(request.ReservationKeys(), "bmc-mac:aa:bb:cc:dd:ee:01", "bmc-mac:aa:bb:cc:dd:ee:02")
+	if err != nil || !found || claim.Shared || !slices.Equal(claim.Keys, want) {
+		t.Fatalf("a machine with no UUID claimed %+v (%v), want keys %v", claim, err, want)
 	}
 	if _, _, err := NewMachine(nil).ProvedClaim("lab", block, proof("uuid with space")); err == nil {
 		t.Fatal("a UUID that names no key was claimed")
+	}
+}
+
+// Two contexts that spell one UUID-less server's BMC address differently hold
+// two bmc: keys, and their proved claims still conflict through the bmc-mac:
+// keys of the MAC set both proved (D252 (2)).
+func TestTwoSpellingsOfOneUUIDLessServerConflict(t *testing.T) {
+	spelled := catalogOf().Objects()
+	for index, object := range spelled {
+		if object.Kind() == api.Machine && object.Name() == "server" {
+			spelled[index] = object.WithSpec(object.Spec().WithPath(api.StringValue("https://192.0.2.10/redfish/v1/Systems/1"), "substrate", "baremetal", "bmc", "address"))
+		}
+	}
+	claimed := func(contextName string, catalog api.Catalog) prerequisites.HostReservation {
+		t.Helper()
+		definition := planIn(t, reconciliation.Apply, catalog).Definitions[0]
+		var request Request
+		if err := json.Unmarshal(definition.Request, &request); err != nil {
+			t.Fatal(err)
+		}
+		evidence := encode(t, Evidence{Addresses: request.Addresses(), Postcondition: true, Power: "Off", Request: "digest", Serial: "SN1"})
+		claim, found, err := NewMachine(nil).ProvedClaim(contextName, reconciliation.Block{BlockDefinition: definition}, evidence)
+		if err != nil || !found {
+			t.Fatalf("claim = %+v, %v (%v)", claim, found, err)
+		}
+		return claim
+	}
+	held, wanted := claimed("first", catalogOf()), claimed("lab", api.NewCatalog(spelled))
+	if held.Keys[0] == wanted.Keys[0] {
+		t.Fatalf("the two spellings share the key %s", held.Keys[0])
+	}
+	conflicts := prerequisites.Conflicts([]prerequisites.HostReservation{held}, []prerequisites.HostReservation{wanted})
+	if len(conflicts) != 1 || conflicts[0].Held.Context != "first" || !strings.HasPrefix(conflicts[0].HeldKey, "bmc-mac:") {
+		t.Fatalf("conflicts = %+v, want one bmc-mac conflict with context first", conflicts)
+	}
+	if diagnostic := prerequisites.ConflictDiagnostic(conflicts[0]); diagnostic.Code != "controller.conflict" || strings.Contains(diagnostic.Message, "aa:bb") {
+		t.Fatalf("diagnostic = %+v", diagnostic)
 	}
 }

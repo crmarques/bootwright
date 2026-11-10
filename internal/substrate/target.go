@@ -1,6 +1,7 @@
 package substrate
 
 import (
+	"net"
 	"net/netip"
 	"net/url"
 	"slices"
@@ -434,6 +435,18 @@ func ControllerReservationKey(endpoint string) string {
 		host = bracketed(parsed.Hostname()) + ":" + port
 	}
 	return "bmc:" + host + strings.TrimPrefix(parsed.Path, "/redfish/v1/Systems")
+}
+
+func SystemReservationKey(uuid string) string {
+	return "bmc-system:" + strings.ToLower(strings.TrimSpace(uuid))
+}
+
+func MACReservationKey(mac string) string {
+	address := strings.TrimSpace(mac)
+	if parsed, err := net.ParseMAC(address); err == nil {
+		address = parsed.String()
+	}
+	return "bmc-mac:" + strings.ToLower(address)
 }
 
 // bracketed wraps a literal IPv6 address so the colon separating host from

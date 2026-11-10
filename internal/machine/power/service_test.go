@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -44,18 +45,25 @@ func (e evidenceSource) Realization(_ context.Context, _, name string) (machine.
 }
 
 // boundary lends a runtime as the lifecycle does: inside the context the
-// request names, and a run that asks to retain its output is given a file
-// named under an identity of its own, and one that does not is given none.
+// request names, refusing a run that drives what another context of held
+// reserves, and a run that asks to retain its output is given a file named
+// under an identity of its own, and one that does not is given none.
 type boundary struct {
 	requested []string
 	entered   int
 	retaining []bool
+	held      []prerequisites.HostReservation
+	drives    [][]lifecycle.Drive
 }
 
 func (b *boundary) WithRuntime(ctx context.Context, request lifecycle.RuntimeRequest, call func(context.Context, lifecycle.Runtime) error) error {
 	b.entered++
 	b.requested = slices.Clone(request.Secrets)
 	b.retaining = append(b.retaining, request.RetainOutput)
+	b.drives = append(b.drives, request.Drives)
+	if err := lifecycle.RefuseHeldDrives(request.ContextName, b.held, request.Drives); err != nil {
+		return err
+	}
 	identity := lifecycle.ContextIdentity{Name: request.ContextName}
 	if !request.RetainOutput {
 		return call(ctx, lifecycle.Runtime{Context: identity, Material: map[string]secrets.Material{}})
