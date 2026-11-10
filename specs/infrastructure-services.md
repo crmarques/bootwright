@@ -651,7 +651,7 @@ graph, never from authored daemon syntax:
 
 | Kind | Derived from the graph | Authored |
 | --- | --- | --- |
-| `Proxy` | The client set below, as the only addresses it serves. Before it admits a client it refuses every request whose destination is a loopback or unspecified address (`127.0.0.0/8`, `0.0.0.0/32`, `::1/128`, `::/128`) or a link-local one (`169.254.0.0/16`, `fe80::/10`), and every request for its cache manager; `CONNECT` is not restricted further (`test_the_proxy_refuses_local_link_local_and_manager_destinations_before_it_admits_a_client`). Caching and authentication are disabled. | `bindAddress`, `port` |
+| `Proxy` | The client set below, as the only addresses it serves. Before it admits a client it refuses every request whose destination is a loopback or unspecified address (`127.0.0.0/8`, `0.0.0.0/32`, `::1/128`, `::/128`) or a link-local one (`169.254.0.0/16`, `fe80::/10`), and every request for its cache manager (`test_the_proxy_refuses_local_link_local_and_manager_destinations_before_it_admits_a_client`). Without `allowedDestinations` it admits a client to every other destination and port, `CONNECT` included, and keeps no access log. With it, the destination rule below admits a client only to those destinations and the mirror hosts, and refuses and logs every other request. Caching and authentication are disabled. | `bindAddress`, `port`, `allowedDestinations[]` |
 | `DNSServer` | One name per retained Machine, from its effective `fqdn` contact, answering the addresses of that Machine its clients can reach, by the rule below, each as its own record, with the reverse record on the first address only, and the records each selected container cluster answers at. | `bindAddress`, `port`, `forwarders[]` |
 | `NTPServer` | The client set below, as the only addresses it answers. | `bindAddress`, `port`, `upstreamSources[]` |
 
@@ -661,6 +661,67 @@ retained Machine IP address as a single-host prefix, sorted and deduplicated
 ([D240](milestones/backlog.md#d240) (8)). Other Networks, which can hold hosts
 outside the graph, and VIPs add nothing, so a managed proxy or time service is
 never planned open to the world.
+
+**The proxy's destination rule.** A managed Proxy that declares
+[`allowedDestinations`](api/infrastructure-services.md#proxy-dns-ntp-and-registry-deployment)
+freezes them in its request, sorted and deduplicated, with the host of each
+mirror its Environment declares at the port it serves: `spec.mirror.artifacts.url`'s
+host at 443, and the url host of the Registry `spec.mirror.registry.registryRef`
+selects at its port, else 443. A Machine routed through the proxy therefore
+reaches the mirror the same Environment routes its artifacts to, and an
+authored list need not repeat it. The derivation names no other host:
+the token and content hosts a registry redirects a pull to are the
+operator's to declare.
+
+The proxy evaluates, in order: the cache manager, loopback, unspecified and
+link-local refusals above; then one rule per frozen destination, which admits
+a derived client when the destination matches and its port is the entry's own
+or, for an entry without one, 80 or 443; then a refusal of everything else.
+The rules hold plain HTTP and `CONNECT` alike, so an HTTPS tunnel opens only
+to a declared destination's admitted port. Every entry, an address included,
+is matched against the host the request names and nothing it resolves to
+(squid's `dstdomain -n`, which looks nothing up). A request by IP literal
+therefore never matches a name through its reverse lookup, and a name never
+matches a declared address: a name with several addresses, one of them
+declared, could otherwise be admitted and forwarded to another, since squid
+rotates the addresses it tries. An IPv6 entry is written both bare and
+bracketed, the two spellings squid may store a request's host in; another
+spelling of it, such as an uncompressed one, is refused. The local refusals
+read every address the destination resolves to, so a declared name that
+resolves to loopback or link-local, among others, is still refused
+(`test_a_proxy_that_freezes_destinations_admits_only_them`).
+
+The list holds only what reaches the proxy. A Machine that is given another
+route ignores its proxy settings: it connects directly where the network
+forwards it, or tunnels data through name lookups a resolver forwards for it,
+a managed DNSServer's `forwarders` included. The list is a control only where
+the network offers no other route, for example a managed libvirt Network
+declared `forward: none` for the Machines, with the Proxy on a Machine
+attached to it and to a routed network, and a DNSServer that has no
+`forwarders`, or forwards only to a resolver that itself answers only the
+admitted names.
+
+With destinations frozen, squid writes its access log, every admitted request
+and every refusal as `TCP_DENIED/403` with its client, method and destination,
+to `/var/log/squid/access.log` inside the container, read on the placement
+host with `podman exec <unit> cat /var/log/squid/access.log`; squid strips
+query terms from it by default. That directory is a 64 MiB tmpfs the unit
+mounts, writable by squid's unprivileged user, so the log never reaches the
+host's filesystem; once it is full, squid drops further lines
+(`on-error=drop`) rather than stopping, so a client that repeats refused
+requests can silence the log but not the proxy or the host. It is not the
+container's standard output, because squid opens its logs as its
+unprivileged effective user, which a pipe the container runtime created as
+root may refuse. The log lives as long as the container, which each restart
+replaces, and is not rotated
+(`test_a_proxy_that_freezes_destinations_logs_to_a_capped_tmpfs_and_drops_lines_when_full`).
+Without them the access log stays off and the rendered configuration is the one an earlier
+request version wrote
+(`test_a_proxy_that_freezes_no_destination_admits_every_remote_one_and_logs_nothing`).
+The apply refuses a frozen destination holding any character outside the
+grammar's alphabet, or not exactly one well-formed address or domain with an
+optional port in `1..65535`, so no value writes another squid directive
+(`test_the_apply_refuses_a_destination_that_could_write_another_squid_directive`).
 
 A Machine's name answers an address only when its clients can dial it: an
 address held by no Network (a contact), an interface address on a

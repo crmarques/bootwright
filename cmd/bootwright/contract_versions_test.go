@@ -245,7 +245,7 @@ func automationFormats() map[string]automationFormat {
 		"cluster-media-agent-v1":                {class: formatMirrored},
 		"cluster-install-agent-v1":              {class: formatMirrored},
 		"artifact-server-nginx-v2":              {class: formatMirrored},
-		"managed-service-v2":                    {class: formatMirrored},
+		"managed-service-v3":                    {class: formatMirrored},
 		// Power is no plan block: each run binds its request to the power
 		// content digest these implementations feed, and nothing is retained.
 		"machine-power-v1":      {class: formatMirrored},

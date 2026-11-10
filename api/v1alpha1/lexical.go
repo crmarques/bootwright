@@ -97,6 +97,9 @@ func ValidLexical(rule, value string) bool {
 		return validProxyEndpoint(value)
 	case "proxy-bypass":
 		return validProxyBypass(value)
+	case "proxy-destination":
+		_, _, ok := ProxyDestination(value)
+		return ok
 	case "systemd-unit":
 		return systemdUnitPattern.MatchString(value)
 	case "package-spec":
@@ -306,6 +309,60 @@ func proxyBypassHost(value string) (string, bool) {
 		}
 	}
 	return host, true
+}
+
+const ProxyDestinationForms = "a host name, a .domain suffix, which admits the domain and every name beneath it, or an IP address, each optionally with :port, an IPv6 address bracketed before one"
+
+func ProxyDestination(value string) (string, int, bool) {
+	host, port := value, 0
+	switch {
+	case strings.HasPrefix(value, "["):
+		end := strings.Index(value, "]")
+		if end < 0 || !strings.HasPrefix(value[end+1:], ":") {
+			return "", 0, false
+		}
+		address, err := netip.ParseAddr(value[1:end])
+		if err != nil || !address.Is6() || address.Zone() != "" {
+			return "", 0, false
+		}
+		host, port = address.String(), destinationPort(value[end+2:])
+		if port == 0 {
+			return "", 0, false
+		}
+		return host, port, true
+	case strings.Count(value, ":") == 1:
+		host, port = value[:strings.Index(value, ":")], destinationPort(value[strings.Index(value, ":")+1:])
+		if port == 0 {
+			return "", 0, false
+		}
+	}
+	if address, err := netip.ParseAddr(host); err == nil {
+		if address.Zone() != "" || port != 0 && address.Is6() {
+			return "", 0, false
+		}
+		return address.String(), port, true
+	}
+	if !validDNS(strings.TrimPrefix(host, ".")) {
+		return "", 0, false
+	}
+	return host, port, true
+}
+
+func destinationPort(digits string) int {
+	if digits == "" || len(digits) > 5 || digits[0] == '0' {
+		return 0
+	}
+	port := 0
+	for _, c := range digits {
+		if c < '0' || c > '9' {
+			return 0
+		}
+		port = port*10 + int(c-'0')
+	}
+	if port > 65535 {
+		return 0
+	}
+	return port
 }
 
 // printableExcept holds when every byte is printable ASCII other than space

@@ -7,8 +7,9 @@ selects only its own daemon configuration and unit templates from a fixed
 table, so every task is shared.
 
 The proxy refuses loopback, unspecified and link-local destinations and its
-cache manager before it admits any derived client, and it stops within
-podman's stop timeout. A destroy of a managed service or the artifact server
+cache manager before it admits any derived client, admits a client only to the
+destinations a request freezes when it freezes any, logs each refusal, and it
+stops within podman's stop timeout. A destroy of a managed service or the artifact server
 removes the kind's, the services' and the context's directories once each is
 empty, never recursively, and only when the content root sits exactly at
 <hosted root>/<context>/services/<kind>/<name>. Evaluating those guards needs Ansible's
@@ -19,6 +20,7 @@ under tests/unit/plugins.
 from __future__ import annotations
 
 import importlib
+import ipaddress
 import pathlib
 import re
 from types import SimpleNamespace
@@ -74,7 +76,7 @@ def test_the_argument_spec_keys_the_request_by_its_frozen_implementation():
     assert request["kind"]["choices"] == ["DNSServer", "NTPServer", "Proxy"]
     assert request["implementation"]["choices"] == sorted(implementations()) == [
         "dns-server-dnsmasq-v1", "ntp-server-chrony-v1", "proxy-squid-v1"]
-    assert request["version"]["choices"] == ["managed-service-v2"]
+    assert request["version"]["choices"] == ["managed-service-v3"]
 
 
 def test_each_implementation_selects_only_its_own_templates():
@@ -120,6 +122,179 @@ def test_the_proxy_stops_within_podmans_stop_timeout():
     assert int(found[0][1]) <= PODMAN_STOP_TIMEOUT // 2
 
 
+PROXY = {
+    "bindAddress": "192.0.2.1",
+    "clients": ["127.0.0.1/32", "192.0.2.0/24"],
+    "contentRoot": "/var/lib/bootwright-hosted/lab/services/proxy/egress",
+    "destinations": [
+        {"address": "198.51.100.50"},
+        {"address": "2001:db8::50", "port": 8443},
+        {"domain": ".redhat.com"},
+        {"domain": "mirror.lab.example.test", "port": 443},
+        {"domain": "registry.lab.example.test", "port": 8443},
+    ],
+    "egress": {"noProxy": []},
+    "endpoints": [{"address": "192.0.2.1:3128", "name": "egress"}],
+    "identity": {"block": "proxy-egress", "context": "lab", "service": "egress"},
+    "image": "registry.example.test/squid@sha256:" + "0" * 64,
+    "implementation": "proxy-squid-v1",
+    "kind": "Proxy",
+    "placement": {"connection": "local", "machine": "controller"},
+    "port": 3128,
+    "unit": "bootwright-lab-proxy-egress",
+    "version": "managed-service-v3",
+}
+
+
+def squid_configuration(request, template="squid.conf.j2"):
+    """squid.conf, or the proxy's unit, as ansible.builtin.template writes it for one request."""
+    found = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True) or {})
+    found.update(LOADER.load_from_file(str(ROLE / "vars" / "main.yml"), trusted_as_template=True) or {})
+    found["bootwright_managed_service_request"] = request
+    source = ROLE / "templates" / template
+    templar = Templar(loader=LOADER, variables=found).copy_with_new_env(searchpath=[str(source.parent)], available_variables=found)
+    return templar.template(trust_as_template(source.read_text()), escape_backslashes=False,
+                            overrides={"trim_blocks": True, "lstrip_blocks": False, "newline_sequence": "\n"})
+
+
+def squid_decides(configuration, client, host, port, addresses=(), manager=False):
+    """The http_access verdict squid reaches for one request, by squid.conf.documented's ACL semantics.
+
+    Rules are read in order, the first whose every ACL matches decides, and an
+    ACL declared on several lines holds every value. dst matches when any
+    address the destination resolves to is in it, or the IP literal it names;
+    dstdomain -n compares the host the request names, a literal address
+    included, with each value exactly, or with a .domain and every name beneath
+    it, and never looks anything up; port matches the destination port;
+    manager matches a cache manager request.
+    """
+    acls, rules = {}, []
+    for line in configuration.splitlines():
+        words = line.split()
+        if words[:1] == ["acl"]:
+            kind, values = words[2], [value for value in words[3:] if value != "-n"]
+            acls.setdefault(words[1], (kind, []))[1].extend(values)
+        elif words[:1] == ["http_access"]:
+            rules.append((words[1], words[2:]))
+    try:
+        resolved = [ipaddress.ip_address(host.strip("[]"))]
+    except ValueError:
+        resolved = [ipaddress.ip_address(address) for address in addresses]
+
+    def matches(name):
+        negated = name.startswith("!")
+        name = name.lstrip("!")
+        if name == "all":
+            found = True
+        elif name == "manager":
+            found = manager
+        else:
+            kind, values = acls[name]
+            if kind in ("src", "dst"):
+                subjects = [ipaddress.ip_address(client)] if kind == "src" else resolved
+                found = any(subject in ipaddress.ip_network(value) for subject in subjects for value in values)
+            elif kind == "dstdomain":
+                found = any(host == value.lstrip(".") or value.startswith(".") and host.endswith(value) for value in values)
+            elif kind == "port":
+                found = str(port) in values
+            else:
+                raise AssertionError("the evaluator does not model acl type %s" % kind)
+        return found != negated
+
+    for action, names in rules:
+        if all(matches(name) for name in names):
+            return action
+    raise AssertionError("no http_access rule decided; the configuration must end in deny all")
+
+
+DECISIONS = [
+    ("a declared suffix's own domain", "192.0.2.10", "redhat.com", 443, ("203.0.113.1",), "allow"),
+    ("a name beneath an exact declared name", "192.0.2.10", "cache.mirror.lab.example.test", 443, ("192.0.2.82",), "deny"),
+    ("a name beneath a declared suffix over CONNECT", "192.0.2.10", "cdn.redhat.com", 443, ("203.0.113.3",), "allow"),
+    ("a declared suffix over plain HTTP", "192.0.2.10", "cdn.redhat.com", 80, ("203.0.113.3",), "allow"),
+    ("a name that only ends like a suffix", "192.0.2.10", "evilredhat.com", 443, ("203.0.113.4",), "deny"),
+    ("an undeclared vendor-looking host", "192.0.2.10", "quay.io", 443, ("203.0.113.5",), "deny"),
+    ("an undeclared public host", "192.0.2.10", "github.com", 443, ("203.0.113.6",), "deny"),
+    ("a declared name at its declared port", "192.0.2.10", "registry.lab.example.test", 8443, ("192.0.2.80",), "allow"),
+    ("a declared name at another port", "192.0.2.10", "registry.lab.example.test", 443, ("192.0.2.80",), "deny"),
+    ("a port-pinned name at a web port it does not name", "192.0.2.10", "mirror.lab.example.test", 80, ("192.0.2.81",), "deny"),
+    ("a port-pinned name at its port", "192.0.2.10", "mirror.lab.example.test", 443, ("192.0.2.81",), "allow"),
+    ("a declared name off the web ports", "192.0.2.10", "cdn.redhat.com", 22, ("203.0.113.3",), "deny"),
+    ("an IP literal whose reverse name is declared", "192.0.2.10", "203.0.113.3", 443, (), "deny"),
+    ("a declared address", "192.0.2.10", "198.51.100.50", 443, (), "allow"),
+    ("a name resolving to a declared address", "192.0.2.10", "other.example.test", 443, ("198.51.100.50",), "deny"),
+    ("a name resolving to a declared and an undeclared address", "192.0.2.10", "x.attacker.example", 443,
+     ("198.51.100.50", "203.0.113.66"), "deny"),
+    ("a declared IPv6 address bracketed at its port", "192.0.2.10", "[2001:db8::50]", 8443, (), "allow"),
+    ("another spelling of a declared IPv6 address", "192.0.2.10", "2001:db8:0::50", 8443, (), "deny"),
+    ("a declared IPv6 address at its port", "192.0.2.10", "2001:db8::50", 8443, (), "allow"),
+    ("a declared IPv6 address at a web port", "192.0.2.10", "2001:db8::50", 443, (), "deny"),
+    ("a declared name resolving to loopback", "192.0.2.10", "cdn.redhat.com", 443, ("127.0.0.1",), "deny"),
+    ("a declared name resolving to link-local metadata", "192.0.2.10", "cdn.redhat.com", 80, ("169.254.169.254",), "deny"),
+    ("a declared name resolving to loopback beside a remote address", "192.0.2.10", "cdn.redhat.com", 443,
+     ("203.0.113.3", "127.0.0.1"), "deny"),
+    ("a client outside the derived set", "198.51.100.9", "cdn.redhat.com", 443, ("203.0.113.3",), "deny"),
+]
+
+
+@pytest.mark.parametrize("what, client, host, port, addresses, verdict", DECISIONS, ids=[row[0] for row in DECISIONS])
+def test_a_proxy_that_freezes_destinations_admits_only_them(what, client, host, port, addresses, verdict):
+    assert squid_decides(squid_configuration(PROXY), client, host, port, addresses) == verdict, what
+
+
+def test_a_proxy_that_freezes_no_destination_admits_every_remote_one_and_logs_nothing():
+    configuration = squid_configuration(dict(PROXY, destinations=[]))
+    assert configuration == squid_configuration({key: value for key, value in PROXY.items() if key != "destinations"})
+    assert squid_decides(configuration, "192.0.2.10", "quay.io", 443, ("203.0.113.5",)) == "allow"
+    assert squid_decides(configuration, "192.0.2.10", "quay.io", 443, ("127.0.0.1",)) == "deny"
+    assert squid_decides(configuration, "192.0.2.10", "quay.io", 443, ("203.0.113.5",), manager=True) == "deny"
+    assert [line for line in configuration.splitlines() if line.startswith("access_log")] == ["access_log none"]
+
+
+def test_a_proxy_that_freezes_destinations_refuses_the_rest_after_its_local_refusals_and_logs_each():
+    lines = [line for line in squid_configuration(PROXY).splitlines() if line.strip()]
+    access = [" ".join(line.split()[1:]) for line in lines if line.split()[0] == "http_access"]
+    assert access[:3] == ["deny manager", "deny bootwright_local_destinations", "deny bootwright_link_local_destinations"]
+    assert access[-1] == "deny all"
+    assert all(rule.startswith("allow bootwright_clients bootwright_destination_") for rule in access[3:-1])
+    assert len(access[3:-1]) == len(PROXY["destinations"])
+    assert [line for line in lines if line.startswith("acl bootwright_destination_")] == [
+        "acl bootwright_destination_1 dstdomain -n 198.51.100.50",
+        "acl bootwright_destination_2 dstdomain -n 2001:db8::50 [2001:db8::50]",
+        "acl bootwright_destination_3 dstdomain -n .redhat.com",
+        "acl bootwright_destination_4 dstdomain -n mirror.lab.example.test",
+        "acl bootwright_destination_5 dstdomain -n registry.lab.example.test",
+    ]
+    assert [line for line in lines if line.startswith("access_log")] == ["access_log stdio:/var/log/squid/access.log on-error=drop"]
+    assert not [line for line in lines if line.startswith(("strip_query_terms", "logformat"))]
+
+
+def test_a_proxy_that_freezes_destinations_logs_to_a_capped_tmpfs_and_drops_lines_when_full():
+    unit = squid_configuration(PROXY, "squid.container.j2").splitlines()
+    assert [line for line in unit if line.startswith("Tmpfs=")] == ["Tmpfs=/var/log/squid:rw,nosuid,nodev,noexec,size=64m,mode=1777"]
+    bare = squid_configuration({key: value for key, value in PROXY.items() if key != "destinations"}, "squid.container.j2")
+    assert "Tmpfs=" not in bare
+    logs = [line.split() for line in squid_configuration(PROXY).splitlines() if line.startswith("access_log")]
+    assert logs == [["access_log", "stdio:/var/log/squid/access.log", "on-error=drop"]]
+
+
+def test_the_apply_refuses_a_destination_that_could_write_another_squid_directive():
+    tasks = load_tasks("infra_managed_service", "apply.yml")
+    validate = validate_of(tasks)
+    scope = {"bootwright_managed_service_request": PROXY, "bootwright_managed_service_digest": "0" * 64,
+             "infra_managed_service_implementations": implementations()}
+    assert holds(validate, scope)
+    for injected in ("mirror.lab.example.test\nhttp_access allow all", "mirror.lab.example.test all", "Mirror.example.test", "a#b",
+                     "-n", "all.", "a..b"):
+        request = dict(PROXY, destinations=[{"domain": injected}])
+        assert not holds(validate, dict(scope, bootwright_managed_service_request=request)), injected
+    for tampered in ({"address": "all"}, {"address": "192.0.2.1", "domain": "a.test"}, {}, {"domain": "a.test", "ports": 80},
+                     {"domain": "a.test", "port": "80-443"}, {"domain": "a.test", "port": 0}, {"domain": "a.test", "port": 65536},
+                     {"domain": "a.test", "port": True}, {"address": "-1.2.3"}):
+        request = dict(PROXY, destinations=[tampered])
+        assert not holds(validate, dict(scope, bootwright_managed_service_request=request)), tampered
+
+
 def load_tasks(role, name):
     loaded = LOADER.load_from_file(str(ROLES / role / "tasks" / name), trusted_as_template=True)
     return [task for task in loaded if isinstance(task, dict)]
@@ -146,7 +321,7 @@ def validate_of(tasks):
 
 
 MANAGED = {
-    "version": "managed-service-v2",
+    "version": "managed-service-v3",
     "kind": "DNSServer",
     "implementation": "dns-server-dnsmasq-v1",
     "unit": "bootwright-lab-dns-resolver",

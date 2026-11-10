@@ -66,7 +66,7 @@ Effective service fields emit in this order, omitting inapplicable fields:
 
 | Kinds | Field order |
 | --- | --- |
-| Proxy | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `connection`. |
+| Proxy | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `connection`, `allowedDestinations`. |
 | DNSServer | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `address`, `additionalIngressHosts`, `forwarders`. |
 | NTPServer | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `address`, `upstreamSources`. |
 | ArtifactServer | `management`, `machineRef`, `image`, `bindAddress`, `retention`, `tls`, `listeners`, `endpoints`. |
@@ -114,6 +114,21 @@ readiness probes the service through its endpoint addresses.
 A managed Proxy, DNSServer or NTPServer bound to a wildcard declares at most 61
 distinct endpoint addresses, its [host reservation's](../infrastructure-services.md#host-reservations)
 bound.
+
+Managed Proxy additionally accepts optional `allowedDestinations[]`, a
+non-empty set of the destinations it admits; absent, it admits every remote
+destination, as [managed network services](../infrastructure-services.md#managed-network-services)
+states. Each entry is a host name, such as `registry.redhat.io`; a `.domain`
+suffix, such as `.redhat.com`, which admits that domain and every name beneath
+it, as squid's `dstdomain` reads it; or an IP address, which admits only a
+request that names that address, never a name that resolves to it. Each optionally ends in `:<port>`, `1..65535` without a
+leading zero, with an IPv6 address bracketed before one; an entry without a
+port admits ports 80 and 443, one with a port admits that port alone. Names are
+lowercase, with no trailing dot and no `*`; a CIDR block, a URL and a path are
+outside the grammar. Validate refuses another entry at
+`allowedDestinations[<i>]` with the `proxy-destination` grammar's diagnostic,
+an entry naming a loopback, unspecified or link-local address, which the proxy
+refuses before it reads any entry, and the field on an external Proxy.
 
 Managed DNSServer additionally accepts optional `additionalIngressHosts[]`
 and `forwarders[]`; forwarders are IP resolver addresses. Managed NTPServer

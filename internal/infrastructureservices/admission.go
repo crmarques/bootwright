@@ -334,7 +334,7 @@ func validateIntrinsic(o api.Object, partial bool) []api.Issue {
 		}
 		forbid("connection", "address", "url")
 	case "external":
-		forbid("machineRef", "implementation", "image", "bindAddress", "port", "listeners", "retention", "tls", "forwarders", "upstreamSources")
+		forbid("machineRef", "implementation", "image", "bindAddress", "port", "listeners", "retention", "tls", "forwarders", "upstreamSources", "allowedDestinations")
 		if o.Kind() != api.ArtifactServer {
 			forbid("endpoints")
 		}
@@ -363,6 +363,9 @@ func validateIntrinsic(o api.Object, partial bool) []api.Issue {
 	}
 	issues = add(issues, validateImagePins(value, mode, partial)...)
 	issues = add(issues, validatePort(o.Kind(), value)...)
+	if o.Kind() == api.Proxy && mode != "external" {
+		issues = add(issues, validateAllowedDestinations(value)...)
+	}
 	if o.Kind() == api.LoadBalancer {
 		issues = add(issues, validateBindAddressNames(value)...)
 	}
@@ -389,6 +392,25 @@ func validateProxyEndpoints(connection api.Value) []api.Issue {
 			Message:     "a proxy endpoint is a bare http or https URL of at most 4096 ASCII bytes with a host and no userinfo, path, query or fragment",
 			Remediation: "set spec.connection." + name + " to " + api.ProxyEndpointForm,
 		})
+	}
+	return issues
+}
+
+func validateAllowedDestinations(value api.Value) []api.Issue {
+	issues := []api.Issue{}
+	for index, entry := range value.Get("allowedDestinations").Items() {
+		host, _, ok := api.ProxyDestination(entry.Text())
+		if !ok || entry.Type() != api.String {
+			continue
+		}
+		if address, err := netip.ParseAddr(host); err == nil {
+			address = address.Unmap()
+			if address.IsLoopback() || address.IsUnspecified() || address.IsLinkLocalUnicast() {
+				issues = append(issues, issue(fmt.Sprintf("$.spec.allowedDestinations[%d]", index),
+					"a managed Proxy refuses every loopback, unspecified and link-local destination before it admits a declared one",
+					"remove the entry; a service on the proxy's own host or a link-local address is reached directly, never through the proxy"))
+			}
+		}
 	}
 	return issues
 }

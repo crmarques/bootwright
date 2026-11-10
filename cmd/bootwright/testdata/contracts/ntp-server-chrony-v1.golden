@@ -1,6 +1,6 @@
 implementation: ntp-server-chrony-v1
-content-digest: 0205ab2ecd86afa6a623a2603abccd1a444bb95b8e6a8edc6f563ce467cd8beb
-request-version: managed-service-v2
+content-digest: 78f7a299d7a2d6f20417d2d490f496a251ab50e039b68356cafa8d6ab759c1a3
+request-version: managed-service-v3
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -23,6 +23,10 @@ request-schema:
   bindAddress string
   clients []string omitempty
   contentRoot string
+  destinations []struct managedservice.Destination omitempty
+  destinations[].address string omitempty
+  destinations[].domain string omitempty
+  destinations[].port int omitempty
   egress struct managedservice.Egress
   egress.httpProxy string omitempty
   egress.httpsProxy string omitempty

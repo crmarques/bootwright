@@ -30,9 +30,11 @@ func Definition() managedservice.Definition {
 		Purpose:        "proxy egress",
 		Subject:        "proxy",
 		Image:          defaultImage,
-		Extend: func(catalog api.Catalog, _ api.Value, request *managedservice.Request) error {
+		Extend: func(catalog api.Catalog, spec api.Value, request *managedservice.Request) error {
 			request.Clients = managedservice.Clients(catalog)
-			return nil
+			admitted, err := destinations(catalog, spec.Get("allowedDestinations"))
+			request.Destinations = admitted
+			return err
 		},
 	}
 }

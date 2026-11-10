@@ -83,3 +83,22 @@ func TestABypassRemedyNamesNoFieldPath(t *testing.T) {
 		}
 	}
 }
+
+func TestAManagedProxyRefusesALocalAllowedDestinationAndAnExternalOneAnyList(t *testing.T) {
+	declared := api.StringList(".redhat.com", "127.0.0.1", "[::1]:443", "169.254.169.254", "fe80::1", "0.0.0.0", "::ffff:127.0.0.1", "192.0.2.7:8443")
+	managed := obj(api.Proxy, "egress", m("management", "managed", "machineRef", "host", "implementation", "squid", "allowedDestinations", declared))
+	var fields []string
+	for _, issue := range validateIntrinsic(managed, true) {
+		if strings.HasPrefix(issue.Field, "$.spec.allowedDestinations") {
+			fields = append(fields, issue.Field)
+		}
+	}
+	if strings.Join(fields, " ") != "$.spec.allowedDestinations[1] $.spec.allowedDestinations[2] $.spec.allowedDestinations[3] $.spec.allowedDestinations[4] $.spec.allowedDestinations[5] $.spec.allowedDestinations[6]" {
+		t.Fatalf("refused %v", fields)
+	}
+	external := obj(api.Proxy, "egress", m("management", "external", "connection", m("httpProxy", "http://proxy.example.test:3128"), "allowedDestinations", api.StringList(".redhat.com")))
+	issues := validateIntrinsic(external, false)
+	if len(issues) != 1 || issues[0].Field != "$.spec.allowedDestinations" || !strings.Contains(issues[0].Remediation, "management: external does not use") {
+		t.Fatalf("external issues = %+v", issues)
+	}
+}

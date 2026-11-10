@@ -1,7 +1,10 @@
 {#
   Quadlet definition for one managed proxy. The container runs as root so
   the declared port is served exactly as authored, and the image entrypoint is
-  never used: the frozen request alone decides what runs.
+  never used: the frozen request alone decides what runs. A proxy that
+  freezes destinations logs to a 64 MiB tmpfs every user of the container may
+  write, since squid writes as its own unprivileged user and the image's
+  entrypoint, which would own the directory, never runs.
 #}
 [Unit]
 Description=Bootwright managed proxy {{ bootwright_managed_service_request.identity.service }}
@@ -16,6 +19,9 @@ User=0
 Entrypoint=/usr/sbin/squid
 Exec=-f /etc/squid/squid.conf -N
 Volume={{ infra_managed_service_config_dir }}/squid.conf:/etc/squid/squid.conf:ro,Z
+{% if bootwright_managed_service_request.destinations | default([]) %}
+Tmpfs=/var/log/squid:rw,nosuid,nodev,noexec,size=64m,mode=1777
+{% endif %}
 
 [Service]
 Restart=always

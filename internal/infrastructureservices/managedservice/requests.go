@@ -28,6 +28,7 @@ type Request struct {
 	BindAddress    string            `json:"bindAddress"`
 	Clients        []string          `json:"clients,omitempty"`
 	ContentRoot    string            `json:"contentRoot"`
+	Destinations   []Destination     `json:"destinations,omitempty"`
 	Egress         Egress            `json:"egress"`
 	Endpoints      []Endpoint        `json:"endpoints"`
 	Forwarders     []string          `json:"forwarders,omitempty"`

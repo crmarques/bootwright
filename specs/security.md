@@ -641,7 +641,7 @@ procedure and ports by source.
 
 | Listener | Clients | Transport and authentication | Privilege | Client restriction |
 | --- | --- | --- | --- | --- |
-| Managed Proxy | Selected graph's Machine addresses, network CIDRs and loopback | HTTP proxy; no client credential | Root container with host networking | Squid source ACL derived from the graph; other clients refused |
+| Managed Proxy | Selected graph's Machine addresses, network CIDRs and loopback | HTTP proxy; no client credential | Root container with host networking | Squid source ACL derived from the graph; other clients refused. Loopback and link-local destinations refused; with `allowedDestinations`, only those and the mirror hosts admitted and each refusal logged ([destination rule](infrastructure-services.md#managed-network-services)) |
 | Managed DNSServer | Selected Machines and the controller; cluster consumers when declared | DNS over UDP and TCP; no client authentication | Root container with host networking | Bind address and operator firewall; every reachable client can query and use declared forwarders |
 | Managed NTPServer | Selected graph's Machine addresses, network CIDRs and loopback | NTP over UDP; no client credential | Root container with host networking, without host clock adjustment | Chrony source ACL derived from the graph |
 | Managed ArtifactServer | BMCs fetching virtual media, installers fetching packages or private material, and controller probes | Authored HTTP or HTTPS; HTTPS verifies the declared serving certificate; private URL is a capability | Root container master with application-user workers and host networking | Bind address and operator firewall; private subtree needs its token |

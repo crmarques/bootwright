@@ -4,10 +4,23 @@
   reach only remote destinations: loopback, unspecified and link-local
   destinations are refused before any client is admitted, because they reach
   the host's own services and metadata, and the cache manager is never served.
+  A request that freezes destinations admits a client only to them, each at
+  its one declared port or else at ports 80 and 443. Every destination, an
+  address included, is matched against the host the request names, with -n:
+  no lookup, so an IP-literal request never borrows a name through its reverse
+  lookup, and a name never borrows a declared address through one of the
+  several it resolves to, which squid may forward to instead. An IPv6 address
+  is written bare and bracketed, the two spellings a host can be stored in.
+  Every other request is refused, and the access log records each request and
+  refusal (TCP_DENIED/403) with its query terms stripped, squid's default. It
+  is a file on the unit's size-capped tmpfs rather than the container's
+  standard output, which squid's unprivileged effective user may not reopen,
+  and a full log drops lines rather than stopping squid.
   Caching is disabled: this proxy exists to reach a publisher, not to store
   what it fetched. The shutdown lifetime ends a stop inside podman's stop
   timeout, so a stop never kills the daemon and leaves its unit failed.
 #}
+{% set destinations = bootwright_managed_service_request.destinations | default([]) %}
 http_port {{ infra_managed_service_listen }}:{{ bootwright_managed_service_request.port }}
 
 acl bootwright_local_destinations dst 127.0.0.0/8 0.0.0.0/32 ::1/128 ::/128
@@ -15,14 +28,36 @@ acl bootwright_link_local_destinations dst 169.254.0.0/16 fe80::/10
 {% for client in bootwright_managed_service_request.clients | default([]) %}
 acl bootwright_clients src {{ client }}
 {% endfor %}
+{% if destinations %}
+acl bootwright_port_web port 80 443
+{% for destination in destinations %}
+{% if destination.address is defined %}
+{% set bracketed = (' [' ~ destination.address ~ ']') if ':' in destination.address else '' %}
+acl bootwright_destination_{{ loop.index }} dstdomain -n {{ destination.address }}{{ bracketed }}
+{% else %}
+acl bootwright_destination_{{ loop.index }} dstdomain -n {{ destination.domain }}
+{% endif %}
+{% if destination.port is defined %}
+acl bootwright_port_{{ loop.index }} port {{ destination.port }}
+{% endif %}
+{% endfor %}
+{% endif %}
 http_access deny manager
 http_access deny bootwright_local_destinations
 http_access deny bootwright_link_local_destinations
+{% for destination in destinations %}
+http_access allow bootwright_clients bootwright_destination_{{ loop.index }} bootwright_port_{{ loop.index if destination.port is defined else 'web' }}
+{% else %}
 http_access allow bootwright_clients
+{% endfor %}
 http_access deny all
 
 cache deny all
+{% if destinations %}
+access_log stdio:/var/log/squid/access.log on-error=drop
+{% else %}
 access_log none
+{% endif %}
 pid_filename none
 via off
 forwarded_for delete

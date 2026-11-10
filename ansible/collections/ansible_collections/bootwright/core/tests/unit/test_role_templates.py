@@ -55,7 +55,7 @@ def service(kind, slug, name, port, **fields):
         "placement": LOCAL,
         "port": port,
         "unit": "bootwright-%s-%s-%s" % (CONTEXT, slug, name),
-        "version": "managed-service-v2",
+        "version": "managed-service-v3",
     }
     request.update(fields)
     return request

@@ -1,6 +1,6 @@
 implementation: proxy-squid-v1
-content-digest: 962df68ac86c8580e35283db0b9df3cce490e0e218b088c81ef95057f09dbd07
-request-version: managed-service-v2
+content-digest: c2e5c9ff9a042e45bf8a311f4076934eb7727533c9ca51c849f752181470e2e4
+request-version: managed-service-v3
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -23,6 +23,10 @@ request-schema:
   bindAddress string
   clients []string omitempty
   contentRoot string
+  destinations []struct managedservice.Destination omitempty
+  destinations[].address string omitempty
+  destinations[].domain string omitempty
+  destinations[].port int omitempty
   egress struct managedservice.Egress
   egress.httpProxy string omitempty
   egress.httpsProxy string omitempty

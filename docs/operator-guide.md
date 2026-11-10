@@ -294,14 +294,67 @@ its time sources. A cluster's nodes take theirs as additional sources, so
 their default pool stays configured unless the cluster's own configuration
 replaces it.
 
-**The firewall.** Bootwright filters no destination. Apart from a managed
-libvirt Network declared `forward: none`, which gives its guests no outbound
-route at all, the network's own firewall or proxy holds each machine to its
-package repositories, the hosts its vendor documents for the product and your
-mirror. For OpenShift that vendor list
-names `quay.io` and its content hosts for the release payload; an
-installation from a mirrored release under `NeverContactSource` needs none of
-them.
+**The firewall.** In production the network's own firewall or proxy holds
+each machine to its package repositories, the hosts its vendor documents for
+the product and your mirror. For OpenShift that vendor list names `quay.io`
+and its content hosts for the release payload; an installation from a
+mirrored release under `NeverContactSource` needs none of them. A managed
+libvirt Network declared `forward: none` gives its guests no outbound route at
+all.
+
+A lab, or a site without a filtering firewall, can hold the Machines that
+route through a managed Proxy to a list instead: `spec.allowedDestinations`
+on that Proxy admits only the names, `.domain` suffixes and addresses it
+lists, each at an optional port, and refuses every other request
+([the grammar](../specs/api/infrastructure-services.md#proxy-dns-ntp-and-registry-deployment)).
+An address entry admits a request for that address alone, never a name that
+resolves to it.
+The hosts of `spec.mirror.artifacts.url` and of the image mirror Registry are
+added for you. A list for a vendor-only lab starts from the vendor origins
+Bootwright itself reads:
+
+```yaml
+spec:
+  management: managed
+  machineRef: bastion
+  implementation: squid
+  allowedDestinations:
+    - mirror.openshift.com
+    - registry.redhat.io
+    - registry.access.redhat.com
+    - registry.connect.redhat.com
+    - cp.icr.io
+    - icr.io
+    - public.dhe.ibm.com
+```
+
+A registry's token service and the content host it redirects a pull to are
+other names, which its vendor's firewall documentation lists and Bootwright
+does not: add each one by its exact host name, and so do the hosts a
+Machine's subscription and package repositories use when it reaches them
+through this proxy. Do not write a `.domain` suffix of a shared hosting or
+content-delivery domain, such as `.amazonaws.com`, `.cloudfront.net` or an
+Akamai domain: it admits every tenant on that domain, and so a host anyone
+can publish on or send data to. Each refusal is a `TCP_DENIED/403` line in
+the proxy's access log, which `sudo podman exec <unit> cat
+/var/log/squid/access.log` reads on the Proxy's Machine, the unit being the
+`bootwright-<context>-proxy-<name>` container; a run that fails to fetch
+names its host there. The log is held in 64 MiB of memory, drops lines once
+full and starts again when the container restarts.
+
+The list holds a Machine only when the network gives it no other route. A
+Machine with `direct: {}` or a destination in its `noProxy` goes around the
+proxy, and so does a hostile one, which ignores its proxy settings: it
+connects directly wherever the network forwards it, or carries data out in
+name lookups that a resolver forwards, a managed DNSServer's `forwarders`
+included. On a network with no filtering firewall, give the Machines no
+route but the proxy, for example a managed libvirt Network declared
+`forward: none` with the Proxy on a Machine attached to both it and a
+routed network, and give their DNSServer no `forwarders`, or forward only to
+a resolver that answers just the names you admit. A Machine that reaches
+everything through the proxy needs no public name lookup, because the proxy
+resolves each name it admits
+([managed network services](../specs/infrastructure-services.md#managed-network-services)).
 
 One declaration that routes every public origin to a mirror host Bootwright
 builds and fills, tools pinned by the build and a software bill of materials

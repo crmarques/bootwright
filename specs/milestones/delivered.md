@@ -13331,3 +13331,43 @@ remedy.
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred.
+
+### X359 — Destinations a managed Proxy admits
+
+**Item:** B1251 (2026-11-10, [D250](backlog.md#d250) (10),
+[D251](backlog.md#d251) (6) and (8)), delivered in-tree, Owner:
+Infrastructure services. A managed Proxy's optional
+`spec.allowedDestinations` lists the names, `.domain` suffixes and IP
+addresses it admits, each at an optional port
+([the grammar](../api/infrastructure-services.md#proxy-dns-ntp-and-registry-deployment));
+validate refuses an entry outside the `proxy-destination` grammar, a
+loopback, unspecified or link-local address, an empty list and the field on an
+external Proxy. The request freezes them sorted and deduplicated, with the
+hosts of the Environment's artifact mirror and image mirror Registry at their
+HTTPS port. Squid then keeps its local, link-local and cache-manager
+refusals first, admits a derived client to each frozen destination at its
+port, or at 80 and 443, by `dstdomain -n` against the host the request names,
+an address included, so a name never borrows a declared address it resolves
+to, refuses every other request, plain HTTP and `CONNECT` alike, and writes
+its access log, each refusal a `TCP_DENIED/403` line, to
+`/var/log/squid/access.log` on a 64 MiB tmpfs the unit mounts, dropping lines
+once full
+([destination rule](../infrastructure-services.md#managed-network-services)).
+The apply refuses a frozen destination outside the grammar's alphabet or not
+exactly one well-formed address or domain with a port in `1..65535`. The
+guide states that the list holds only Machines the network gives no other
+route, and to list content hosts by exact name. Without
+the field the request and the rendered configuration keep their bytes. The
+shared request gained `destinations`, so `managed-service-v3` moves the
+proxy, name server and time server contracts.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** the refused request is proved by an in-tree model
+of squid's `http_access` evaluation over the rendered configuration, not by a
+running squid, which also has to prove the pinned image's squid accepts an
+address and a bracketed IPv6 value in `dstdomain -n` and writes its log to
+the tmpfs; the log is not rotated and starts again with each container; a
+registry's token and content hosts and a Machine's
+subscription hosts are the operator's to list; a Machine routed `direct` or
+by `noProxy` goes around the proxy; the live proof is
+[B1250](backlog.md#b1250).

@@ -16,6 +16,10 @@ argument_specs:
           contentRoot:
             type: str
             required: true
+          destinations:
+            type: list
+            elements: dict
+            required: false
           egress:
             type: dict
             required: true
@@ -75,7 +79,7 @@ argument_specs:
             type: str
             required: true
             choices:
-              - managed-service-v2
+              - managed-service-v3
       bootwright_managed_service_digest:
         type: str
         required: true

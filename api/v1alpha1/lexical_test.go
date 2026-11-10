@@ -164,6 +164,26 @@ func TestAProxyBypassEntryIsAHostAddressOrBlock(t *testing.T) {
 			"lab_example.test", " lab.example.test", "http://lab.example.test", ""})
 }
 
+// A managed Proxy's allowed destination is what squid's dstdomain or dst
+// matches exactly, optionally at one port.
+func TestAProxyDestinationIsANameSuffixOrAddressAtAnOptionalPort(t *testing.T) {
+	lexicalRows(t, "proxy-destination",
+		[]string{"registry.redhat.io", ".redhat.com", "quay.io:443", ".example.test:8443", "192.0.2.7", "192.0.2.7:8443", "2001:db8::1",
+			"[2001:db8::1]:8443", "localhost", "a:65535"},
+		[]string{"*", "*.redhat.com", "10.0.0.0/8", "Registry.redhat.io", "registry.redhat.io.", ".", "..redhat.com", "registry.redhat.io:",
+			"registry.redhat.io:0", "registry.redhat.io:08443", "registry.redhat.io:65536", "registry.redhat.io:https", "a:1:2",
+			"[2001:db8::1]", "[2001:db8::1]443", "[192.0.2.7]:443", "fe80::1%eth0", "https://registry.redhat.io", "registry.redhat.io/path",
+			"registry redhat.io", "lab_example.test", " quay.io", ""})
+	for value, want := range map[string]struct {
+		host string
+		port int
+	}{"[2001:DB8:0::1]:8443": {"2001:db8::1", 8443}, "2001:DB8::1": {"2001:db8::1", 0}, ".redhat.com": {".redhat.com", 0}, "quay.io:443": {"quay.io", 443}} {
+		if host, port, ok := ProxyDestination(value); !ok || host != want.host || port != want.port {
+			t.Errorf("ProxyDestination(%q) = %q, %d, %v", value, host, port, ok)
+		}
+	}
+}
+
 // A repository base URL reaches a Kickstart command line, where '#' ends the
 // line and a quote re-tokenizes it.
 func TestARepositoryURLRefusesAFragmentOrAQuote(t *testing.T) {

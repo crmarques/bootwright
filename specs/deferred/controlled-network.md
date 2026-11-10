@@ -182,7 +182,7 @@ Each step leaves a working product.
    [B1236](../milestones/delivered.md#x358--container-runtime-on-an-ssh-placement-host), [B68](../milestones/m1.md#b68)
    and [B1249](../milestones/backlog.md#b1249).
 4. Proof: [B1250](../milestones/backlog.md#b1250), with
-   [B1251](../milestones/backlog.md#b1251) as the lab's vendor-only gate.
+   [B1251](../milestones/delivered.md#x359--destinations-a-managed-proxy-admits) as the lab's vendor-only gate.
 
 ## Left out
 

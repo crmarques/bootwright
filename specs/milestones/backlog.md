@@ -300,7 +300,6 @@ Alias cell.
 | [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355 on 2026-11-10 | product | Controller, with Desired state | Preflight proves the artifact mirror holds every client, a private trust anchor and a managed artifact server may serve it, and one declaration replaces the download mirrors | The declaration landed (X355); a probe needs an HTTP adapter in preflight, and a managed server needs B1249 |
 | [B1249](#b1249) | new, 2026-11-10 (D250 (8)) | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | D250 parks the controlled-network plan until the owner promotes it; no capability realizes a managed Registry |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
-| [B1251](#b1251) | new, 2026-11-10 (D250 (10)) | product | Infrastructure services | A managed Proxy admits only the destinations it declares | The network's own firewall is the control in production; this serves a lab or a site without one |
 | [B1263](#b1263) | new, 2026-11-10 (D252 (6)) | product | Controller, with State reconciliation | A completed environment reports a proved client below the build's minimum, and may take a raised one | A completed apply settles (D153); the owner put reporting first and left replacement without a destroy open |
 | [B1264](#b1264) | new, 2026-11-10 (D252, session) | product | Storage | Custom CRUSH device classes reach the core OSD projection | The plan refuses them by name until a slice realizes them |
 | [B1265](#b1265) | new, 2026-11-10 (X346 review) | defect | Container clusters | An OpenShift attempt whose every node refused its pre-boot proof after the boot mark stays retryable | Safe as it stands: the block stays unknown and a destroy clears it; recording the boot per node needs a restructured boot play |
@@ -310,6 +309,7 @@ Alias cell.
 | [B1270](#b1270) | new, 2026-11-10 (X349) | defect | Secrets, with State reconciliation | Each capability names the class of every Secret it references, so a live binding holds only effect material | Safe as it stands: an unclassified reference is held as effect material, so a renewal refuses more than the class rule requires |
 | [B1271](#b1271) | new, 2026-11-10 (X349 review) | defect | Controller | A package step that fails after dnf ran still records what its transaction added | Safe as it stands: the set is not recorded, so uninstall leaves those packages and never removes one it did not prove added |
 | [B1272](#b1272) | new, 2026-11-10 (X349 second review) | defect | Controller | The added package set stays within its bound and names only what Bootwright's transaction installed | Safe as it stands: the erase test keeps dependents, and a bound hit refuses before any removal |
+| [B1273](#b1273) | new, 2026-11-10 (X359 gate) | defect | Controller | `test_a_killed_lifecycle_supervisor_leaves_no_playbook_worker_or_task` reads a surviving process tree under heavy host load | It failed once under a load average near 30 and passed three times alone; the stopped-tree poll has no settle bound |
 
 ### B82
 
@@ -3438,17 +3438,6 @@ mirror host installs an OpenShift cluster and a Ceph cluster, and its evidence
 shows each denied attempt. **Exit evidence:** the profile's example, an
 in-tree test in which every public origin refuses, and an owner-accepted run.
 
-### B1251
-
-**Owner:** Infrastructure services. **Kind:** product. **Requires:** none.
-**Definition:** Candidate, from [D250](#d250) (10): the managed Proxy refuses
-local and link-local destinations and restricts `CONNECT` no further
-([managed network services](../infrastructure-services.md#managed-network-services)).
-**Outcome:** a managed Proxy declares the destinations it admits and refuses
-every other, logging the refusal, so a lab or a site without a filtering
-firewall holds its Machines to the vendor origins. **Exit evidence:** a
-configuration test and a refused request.
-
 ### B1263
 
 **Owner:** Controller, with State reconciliation. **Kind:** product.
@@ -3541,6 +3530,19 @@ install time is never compared. **Outcome:** a carried set drops members no
 longer installed, the bound's refusal names a remedy, and a member whose
 install time differs from the snapshot is not removed. **Exit evidence:** setup
 tests over a pruned carry-forward and a reinstalled package.
+
+### B1273
+
+**Owner:** Controller. **Kind:** defect. **Requires:** none.
+**Definition:** Candidate, from X359's `make check`:
+`test_a_killed_lifecycle_supervisor_leaves_no_playbook_worker_or_task` in
+`ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_controller_supervisor.py`
+asserted `[False, True, True, True] == [False] * 4` once under a load average
+near 30, and passed in three runs alone and in a full units rerun. The poll of
+the stopped process tree reads before a parent-death signal has reached every
+descendant. **Outcome:** the test waits on a bounded condition for the tree to
+empty rather than sampling it, so host load no longer fails the units lane.
+**Exit evidence:** the test passes under a parallel CPU load.
 
 ## Audit remediation (2026-10-26)
 
@@ -7926,7 +7928,7 @@ by the session, pending the owner's review:
    the mirror from it on the mirror host, before the controller stage's tools.
 9. A build's vulnerability gate takes a reviewed, expiring exception as its
    only way past, and images are scanned on a schedule, not in the build.
-10. The work is parked as B1242 to [B1251](#b1251) until the owner
+10. The work is parked as B1242 to [B1251](delivered.md#x359--destinations-a-managed-proxy-admits) until the owner
     promotes it, in the
     [design's order](../deferred/controlled-network.md#delivery-order);
     [B68](m1.md#b68), [B1236](delivered.md#x358--container-runtime-on-an-ssh-placement-host) (delivered) and the acceptance of
@@ -8015,6 +8017,30 @@ the owner's review:
    operator catalogs stay authored; and replacing the nodes' default time
    pool is parked as [B1268](#b1268), because the install writes no
    MachineConfig: its manifest path admits only the Network kind.
+8. Taken by the session for B1251 (X359), pending the owner's review: the
+   list is `spec.allowedDestinations` on a managed Proxy, refused on an
+   external one, and absent it changes nothing. An entry is a name, a
+   `.domain` suffix or an IP address, each at an optional port, which is
+   what squid's `dstdomain` and `dst` match exactly; a `*.` wildcard and a
+   CIDR block are left out. An entry without a port admits ports 80 and
+   443, one with a port that port alone, for plain HTTP and `CONNECT`
+   alike. Every entry, an address included, matches the host a request
+   names and nothing it resolves to (`dstdomain -n`), so an IP-literal
+   request never borrows a declared name and a name with several addresses
+   never borrows a declared one; an IPv6 entry is written bare and
+   bracketed. The hosts of the Environment's artifact
+   mirror and image mirror Registry join the list at their HTTPS port,
+   while a registry's token and content hosts stay the operator's to
+   declare, since Bootwright cannot verify them, by exact name rather than
+   a suffix of a shared hosting domain. With the list, squid logs every
+   request and refusal to a 64 MiB tmpfs the unit mounts world-writable, so
+   it depends on no user id of the image, and drops lines once it is full,
+   never the proxy; not to its standard output, which squid's unprivileged
+   user may not reopen. The guide states that the list holds only Machines
+   the network gives no other route, direct or through a forwarding
+   resolver. The field
+   joins the request every managed service shares, so the three services'
+   request version moves to `managed-service-v3`.
 
 ### D252
 

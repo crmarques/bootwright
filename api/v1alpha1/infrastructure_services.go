@@ -27,8 +27,9 @@ func infrastructureServiceSchema(kind Kind) *Shape {
 	}
 	switch kind {
 	case Proxy:
-		fields = append(fields, field("connection", record(field("httpProxy", url()), field("httpsProxy", url()), field("auth", record(required("proxyAuthRef", secret("usernamePassword")))), field("trustBundleRef", secret("caBundle")))))
+		fields = append(fields, field("connection", record(field("httpProxy", url()), field("httpsProxy", url()), field("auth", record(required("proxyAuthRef", secret("usernamePassword")))), field("trustBundleRef", secret("caBundle")))), field("allowedDestinations", nonemptyArray(set(lexical("proxy-destination")))))
 		external = append(external, "connection")
+		managed = append(managed, "allowedDestinations")
 	case DNSServer:
 		fields = append(fields, field("address", ip()), field("additionalIngressHosts", set(dns())), field("forwarders", set(ip())))
 		external = append(external, "address")

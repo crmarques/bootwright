@@ -1,6 +1,6 @@
 implementation: dns-server-dnsmasq-v1
-content-digest: 6abdf9d67e382b6113a9612f65ae954e5efb21bc8c2af7e64953382475e690a5
-request-version: managed-service-v2
+content-digest: 8ccdd3e8731c134f3f14f690ffae6466daa8b4b93040d721e2233b4863a8dad6
+request-version: managed-service-v3
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -23,6 +23,10 @@ request-schema:
   bindAddress string
   clients []string omitempty
   contentRoot string
+  destinations []struct managedservice.Destination omitempty
+  destinations[].address string omitempty
+  destinations[].domain string omitempty
+  destinations[].port int omitempty
   egress struct managedservice.Egress
   egress.httpProxy string omitempty
   egress.httpsProxy string omitempty

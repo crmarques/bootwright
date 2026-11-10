@@ -35,7 +35,7 @@ func refusal(t *testing.T, err error) diagnostics.Diagnostic {
 // declare, refuses by naming its version and the build that can still destroy it.
 func TestAManagedServiceRequestOfAnotherVersionRefusesNamingItsVersion(t *testing.T) {
 	for kind, definition := range definitions() {
-		for _, retired := range []string{kind + "-v1", kind + "-v2", "managed-service-v3"} {
+		for _, retired := range []string{kind + "-v1", kind + "-v2", "managed-service-v2", "managed-service-v4"} {
 			t.Run(retired, func(t *testing.T) {
 				request := managedservice.Request{
 					Kind:      string(definition.Kind),
