@@ -312,6 +312,7 @@ Alias cell.
 | [B1302](#b1302) | new, 2026-11-10 (X395 review, D255 (16)) | safety | Substrate | The routing observation compares each rule of the owned table with the rule the collection loads, so a rule replaced in place is repaired | `nft -j` renders rule expressions differently across nft releases, and a comparison that misreads a supported host would reload on every apply; the count per chain catches a deleted or added rule |
 | [B1303](#b1303) | new, 2026-11-10 (X395 review, D255 (17)) | safety | Substrate | Each Machine NIC on a trunk carries only the VLAN tags its segment declares | The trunk filters no VLAN, so a guest can tag any VLAN on it; per-tap filtering needs NetworkManager's bridge VLAN settings on a libvirt tap, unproved on a host |
 | [B1304](#b1304) | new, 2026-11-10 (X395 review, D255 (16)) | safety | Substrate | A routing unit that fails at boot leaves no VLAN leg up without its table | Making NetworkManager wait on the unit stops all host networking when nft fails, which can cut a remote host off; activating the legs only after the table loads changes how they come up and is the owner's choice |
+| [B1315](#b1315) | new, 2026-11-10 (X395 verification review) | defect | Substrate | A tagged managed Network whose `vlan` or trunk `bridge` changes redefines its own leg instead of refusing it as foreign | The refusal comes before any effect, so no isolation is lost; the e2e case never changes a leg, and a redefinition while guests use the old VLAN needs its own drift and quiescence rule |
 
 ### B82
 
@@ -3588,6 +3589,22 @@ up and is the owner's choice. **Outcome:** a leg never comes up at boot
 without its table, and a failed table load leaves the host's other connections
 up. **Exit evidence:** a boot of a provider host whose ruleset fails to load,
 showing every leg down and the other connections up.
+
+### B1315
+
+**Owner:** Substrate. **Kind:** defect. **Requires:** none. **Definition:**
+Candidate, from the X395 verification review: a leg's connection name and
+UUID derive from its Network's name, but the ownership proof requires the held
+profile's interface name to equal the frozen `<bridge>.<vlan>`. After an
+apply that changes the Network's `vlan` or its trunk `bridge`, Bootwright's
+own earlier profile, whose keyfile still carries every ownership mark, reads
+as foreign: the apply refuses before any effect and destroy refuses too, so
+the operator must delete a Bootwright-owned profile by hand
+([trunks and VLAN legs](../substrates.md#trunks-and-vlan-legs)). **Outcome:**
+a marked keyfile whose device differs from the frozen one reads as owned and
+drifted; the apply redefines it once no domain uses the old device, and
+destroy removes it. **Exit evidence:** module and role tests that change one
+leg's VLAN and its trunk, then destroy, with no hand step.
 
 ## Audit remediation (2026-10-26)
 
