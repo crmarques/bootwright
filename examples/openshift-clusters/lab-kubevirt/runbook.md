@@ -54,9 +54,9 @@ storage class's StorageProfile.
 - Routes to the host API, to the CDI upload proxy on `*.apps` without an
   ambient proxy, to each node on port 22, to the rendezvous node on 8090 and
   to the cluster API.
-- `virtctl` pinned through `spec.dependencyVersions.virtctl`; an accepted
-  run never uses `latest`. The controller stage reads its release metadata
-  from api.github.com and downloads it from github.com.
+- The build's default `virtctl`, whose size and SHA-256 the build pins; the
+  controller stage downloads it from github.com and reads no release
+  metadata.
 
 ```sh
 export CONTEXT=lab-kubevirt

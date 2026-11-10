@@ -323,6 +323,9 @@ func unsupported(machine api.Object, catalog api.Catalog) []UnsupportedShape {
 				Remediation: "remove spec.dependencyVersions.libvirt from " + environments[0].Identity()})
 		}
 	}
+	if environments := catalog.OfKind(api.Environment); len(environments) == 1 {
+		shapes = append(shapes, releasesBelowMinimum(environments[0], catalog)...)
+	}
 	if bypass := machine.Spec().Get("proxy", "noProxy"); bypass.Type() == api.Sequence && bypass.Len() > maxProxyBypassEntries {
 		shapes = append(shapes, UnsupportedShape{Object: machine, Field: "$.spec.proxy.noProxy",
 			Reason:      "this executable's controller route carries at most " + strconv.Itoa(maxProxyBypassEntries) + " bypass entries, and " + machine.Identity() + " declares more in spec.proxy.noProxy",
@@ -406,4 +409,32 @@ func requiresIPUtils(catalog api.Catalog, controllerMachine string) bool {
 		}
 	}
 	return false
+}
+
+func releasesBelowMinimum(environment api.Object, catalog api.Catalog) []UnsupportedShape {
+	tools, err := SelectTools(catalog)
+	if err != nil {
+		return nil
+	}
+	shapes, seen := []UnsupportedShape{}, map[string]bool{}
+	for _, tool := range tools {
+		pin, found, err := PinOf(tool.Kind)
+		if err != nil || !found || seen[tool.Kind] {
+			continue
+		}
+		seen[tool.Kind] = true
+		order, comparable := CompareReleases(tool.Version, pin.Minimum)
+		if comparable && order >= 0 {
+			continue
+		}
+		field := "spec.dependencyVersions." + tool.Kind
+		declared := environment.Spec().Get("dependencyVersions", tool.Kind).Text()
+		reason := "this executable accepts " + tool.Kind + " " + pin.Minimum + " or newer, and " + environment.Identity() + " declares " + declared + " in " + field
+		if !comparable {
+			reason = "this executable holds " + tool.Kind + " to " + pin.Minimum + " or newer by its MAJOR.MINOR.PATCH, and " + environment.Identity() + " declares " + declared + " in " + field + ", which names none"
+		}
+		shapes = append(shapes, UnsupportedShape{Object: environment, Field: "$." + field, Reason: reason,
+			Remediation: "declare " + tool.Kind + " " + pin.Minimum + " or newer in " + field + " of " + environment.Identity() + ", or remove it for this build's default"})
+	}
+	return shapes
 }

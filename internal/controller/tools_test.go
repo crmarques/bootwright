@@ -38,7 +38,7 @@ func TestTargetToolLimitCountsDistinctRequirements(t *testing.T) {
 				}
 				return
 			}
-			want := []controller.ToolRequest{{Kind: "helm", Version: "latest"}, {Kind: "openshift-clients", Version: "4.21.15", Compatibility: "openshift"}, {Kind: "openshift-install", Version: "4.21.15", Compatibility: "openshift"}}
+			want := []controller.ToolRequest{defaultTool(t, "helm"), {Kind: "openshift-clients", Version: "4.21.15", Compatibility: "openshift"}, {Kind: "openshift-install", Version: "4.21.15", Compatibility: "openshift"}}
 			if err != nil || !reflect.DeepEqual(tools, want) {
 				t.Fatal("repeated consumers changed the required tool closure", tools, err)
 			}
@@ -46,7 +46,7 @@ func TestTargetToolLimitCountsDistinctRequirements(t *testing.T) {
 	}
 }
 
-func TestTargetToolsFollowExactSelectedReleaseAndGenericLatest(t *testing.T) {
+func TestTargetToolsFollowExactSelectedReleaseAndTheBuildsDefault(t *testing.T) {
 	objects := selectionObjects()
 	objects = append(objects, api.NewObject(api.OpenShiftCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("4.21.15"), "distribution", "release", "version")))
 	tools, err := controller.SelectTools(api.NewCatalog(objects))
@@ -55,7 +55,7 @@ func TestTargetToolsFollowExactSelectedReleaseAndGenericLatest(t *testing.T) {
 	}
 	for _, tool := range tools {
 		if tool.Kind == "helm" {
-			if tool.Version != "latest" {
+			if tool != defaultTool(t, "helm") {
 				t.Fatal(tool)
 			}
 		} else if tool.Version != "4.21.15" || tool.Compatibility != "openshift" {
@@ -105,12 +105,12 @@ func TestReferencedVSphereRequestsOnlyItsGenericClient(t *testing.T) {
 		api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("virtualization"), "substrate", "providerRef")),
 	)
 	tools, err := controller.SelectTools(api.NewCatalog(objects))
-	if err != nil || !reflect.DeepEqual(tools, []controller.ToolRequest{{Kind: "govc", Version: "latest"}}) {
+	if err != nil || !reflect.DeepEqual(tools, []controller.ToolRequest{defaultTool(t, "govc")}) {
 		t.Fatal(tools, err)
 	}
 }
 
-func TestVirtualizationProfileRequestsUpstreamLatestIndependentlyOfCSV(t *testing.T) {
+func TestVirtualizationProfileRequestsTheDefaultUpstreamClientIndependentlyOfCSV(t *testing.T) {
 	objects := append(selectionObjects(),
 		api.NewObject(api.OpenShiftCluster, "cluster", api.Value{}, api.MapValue().WithPath(api.StringValue("openshift"), "distribution", "type").WithPath(api.StringValue("4.20.8"), "distribution", "release", "version")),
 		api.NewObject(api.ClusterAddon, "virtualization", api.Value{}, api.MapValue().With("provides", api.StringList("kubevirt")).WithPath(api.StringValue("kubevirt-hyperconverged-operator.v4.20.2"), "olm", "subscription", "startingCSV")),
@@ -122,8 +122,8 @@ func TestVirtualizationProfileRequestsUpstreamLatestIndependentlyOfCSV(t *testin
 		t.Fatal(err)
 	}
 	index := slices.IndexFunc(tools, func(tool controller.ToolRequest) bool { return tool.Kind == "virtctl" })
-	if index < 0 || tools[index].Compatibility != "kubevirt" || tools[index].Version != "latest" {
-		t.Fatal("virtualization did not request the latest upstream client", tools)
+	if index < 0 || tools[index] != defaultTool(t, "virtctl") {
+		t.Fatal("virtualization did not request the default upstream client", tools)
 	}
 }
 
@@ -134,7 +134,7 @@ func TestKubeVirtRequirementNeedsNoVendorCSVOrClusterObservation(t *testing.T) {
 			api.NewObject(api.Machine, "guest", api.Value{}, api.MapValue().WithPath(api.StringValue("virtualization"), "substrate", "providerRef")),
 		)
 		tools, err := controller.SelectTools(api.NewCatalog(objects))
-		if err != nil || !reflect.DeepEqual(tools, []controller.ToolRequest{{Kind: "virtctl", Version: "latest", Compatibility: "kubevirt"}}) {
+		if err != nil || !reflect.DeepEqual(tools, []controller.ToolRequest{defaultTool(t, "virtctl")}) {
 			t.Fatal(access, tools, err)
 		}
 	}
@@ -143,7 +143,7 @@ func TestKubeVirtRequirementNeedsNoVendorCSVOrClusterObservation(t *testing.T) {
 		api.NewObject(api.ClusterAddonBinding, "binding", api.Value{}, api.MapValue().With("clusterRef", api.StringValue("cluster")).With("addonRefs", api.StringList("virtualization"))),
 	)
 	tools, err := controller.SelectTools(api.NewCatalog(objects))
-	if err != nil || len(tools) != 1 || tools[0].Kind != "virtctl" || tools[0].Version != "latest" {
+	if err != nil || len(tools) != 1 || tools[0] != defaultTool(t, "virtctl") {
 		t.Fatal("selected manifest add-on omitted its client", tools, err)
 	}
 }
@@ -188,12 +188,12 @@ func TestTargetCLIVersionOverridesRejectMalformedSelections(t *testing.T) {
 		}
 		return objects
 	}
-	for _, value := range []api.Value{api.StringValue(""), api.StringValue("v"), api.StringValue("vlatest"), api.StringValue("1.2 3"), api.StringValue("../1.2.3"), api.StringValue(strings.Repeat("1", 96)), api.BoolValue(true)} {
+	for _, value := range []api.Value{api.StringValue(""), api.StringValue("latest"), api.StringValue("v"), api.StringValue("vlatest"), api.StringValue("1.2 3"), api.StringValue("../1.2.3"), api.StringValue(strings.Repeat("1", 96)), api.BoolValue(true)} {
 		if _, err := controller.SelectTools(api.NewCatalog(withVirtctl(value))); err == nil {
 			t.Fatal("malformed CLI version override accepted", value)
 		}
 	}
-	for _, value := range []string{"latest", "v1.2.3", "v1.2.3-rc.1", "1.02.3", "1.2.3+build", "v1.2", strings.Repeat("1", 95), "v" + strings.Repeat("1", 95)} {
+	for _, value := range []string{"v1.2.3", "v1.2.3-rc.1", "1.02.3", "1.2.3+build", "v1.2", strings.Repeat("1", 95), "v" + strings.Repeat("1", 95)} {
 		if _, err := controller.SelectTools(api.NewCatalog(withVirtctl(api.StringValue(value)))); err != nil {
 			t.Fatal("exact publisher release tag refused", value, err)
 		}
@@ -201,9 +201,9 @@ func TestTargetCLIVersionOverridesRejectMalformedSelections(t *testing.T) {
 }
 
 func TestTargetCLIVersionsCoexistWithOtherDependencyOverrides(t *testing.T) {
-	versions := api.MapValue().With("helm", api.StringValue("latest"))
-	for _, dependency := range []string{"libvirt", "govc", "virtctl"} {
-		versions = versions.With(dependency, api.StringValue("latest"))
+	versions := api.MapValue().With("libvirt", api.StringValue("latest"))
+	for _, dependency := range []string{"helm", "govc", "virtctl"} {
+		versions = versions.With(dependency, api.StringValue("9.9.9"))
 	}
 	objects := selectionObjects()
 	for index, object := range objects {
@@ -312,4 +312,17 @@ func TestAnAuthoredKubeVirtProviderRequestsVirtctlOnce(t *testing.T) {
 	if err != nil || count != 1 {
 		t.Fatalf("virtctl requested %d times: %+v %v", count, tools, err)
 	}
+}
+
+func defaultTool(t *testing.T, kind string) controller.ToolRequest {
+	t.Helper()
+	pin, found, err := controller.PinOf(kind)
+	if err != nil || !found {
+		t.Fatalf("the build pins no %s: %v", kind, err)
+	}
+	request := controller.ToolRequest{Kind: kind, Version: "v" + pin.Default.Version, SHA256: pin.Default.SHA256, Bytes: pin.Default.Bytes}
+	if kind == "virtctl" {
+		request.Compatibility = "kubevirt"
+	}
+	return request
 }

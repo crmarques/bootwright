@@ -29,7 +29,7 @@ Environment fields emit in this order:
 | `spec.remoteMachinesAccessKey` | object | conditional | — | Fleet key for the `bootwright` account installed on managed machines. |
 | `spec.defaults` | kind-keyed partial specs | no | `{}` | Omitted object fields inherit the corresponding kind entry under the rules below. |
 | `spec.downloads` | object | no | source-specific | Closed download-mirror policy below. |
-| `spec.dependencyVersions` | object | no | `latest` at apply | Version intent for the prerequisites this Environment controller stage installs; closed shape below. |
+| `spec.dependencyVersions` | object | no | this build's defaults | Version intent for the prerequisites this Environment controller stage installs; closed shape below. |
 | `spec.controller` | object | yes | — | Required controller Machine selection below. |
 | `spec.lifecycle` | object | no | — | Offline-rescue input; a present `rescue` is refused until a rescue journey exists. |
 
@@ -42,16 +42,17 @@ documented identity.
 `spec.dependencyVersions` controls the versions this Environment's own
 [controller stage](../state-reconciliation.md#stages-and-the-pause-boundary)
 installs. Fields emit in the following order. Every field is optional and
-accepts a string; omission means `latest` when the stage resolves the
-dependency. Admission preserves authored values and does not materialize
+accepts a string; omission means the default release the build's
+[tool table](../controller.md#the-tool-table) names for a client, and `latest`
+for libvirt. Admission preserves authored values and does not materialize
 release numbers or contact publishers.
 
 | Field | Dependency | Exact override |
 | --- | --- | --- |
 | `libvirt` | Native libvirt client, including `virsh` | `latest`; the grammar admits a distribution package version or `[EPOCH:]VERSION-RELEASE`, which a plan refuses ([refusal table](#refusal-table)). |
-| `helm` | Helm | `latest` or an exact publisher release tag, optionally prefixed by `v`. |
-| `govc` | vSphere client | `latest` or an exact publisher release tag, optionally prefixed by `v`. |
-| `virtctl` | Upstream KubeVirt client | `latest` or an exact publisher release tag, optionally prefixed by `v`. |
+| `helm` | Helm | An exact publisher release tag, optionally prefixed by `v`, at or above the build's minimum. |
+| `govc` | vSphere client | An exact publisher release tag, optionally prefixed by `v`, at or above the build's minimum. |
+| `virtctl` | Upstream KubeVirt client | An exact publisher release tag, optionally prefixed by `v`, at or above the build's minimum. |
 
 The private interpreter, `ansible-core` and the baseline native packages have
 no field here. They are [host prerequisites](../controller.md): one prepared
@@ -59,8 +60,11 @@ host serves every context, so no single Environment may move their versions.
 `python`, `ansible`, `podman`, `openssh` and `nmstate` are therefore rejected
 like any other unknown key.
 
-`latest` selects the publisher's latest stable release for
-the generic target clients. For the libvirt client the controller stage
+A client takes no `latest`: the build's default replaces it, and a newer
+release is a new build or a declared one. A declared release below the
+build's minimum, or one without a leading `MAJOR.MINOR.PATCH`, refuses at plan
+while its client is selected ([refusal table](#refusal-table)). For the
+libvirt client the controller stage
 installs whatever the host's own repositories provide, through the host's dnf,
 so a selected libvirt closure with any other `libvirt` value refuses at plan,
 naming the Environment and the remedy of removing the field, and the stage
@@ -85,8 +89,9 @@ host prerequisite no Environment versions.
 
 OpenShift/OKD installer and client versions remain tied to the target cluster's
 declared release. `openshift-install`, `oc` and `kubectl` are not override keys.
-`virtctl` defaults to upstream latest; declare an explicit version when the
-target virtualization installation requires a particular client. No version
+`virtctl` defaults to the build's default upstream release; declare an
+explicit version when the target virtualization installation requires a
+particular client. No version
 is inferred from a running target cluster.
 
 For example:
@@ -95,15 +100,15 @@ For example:
 spec:
   dependencyVersions:
     libvirt: latest
-    helm: "4.3.0"
-    virtctl: "1.9.0"
+    helm: "4.3.1"
+    virtctl: "1.9.1"
 ```
 
 These fields follow the normal `defaults.Environment` inheritance rules.
 Resolution, retention, retry and reuse follow
 [the controller stage](../controller.md#the-controller-stage):
-a retained client release is reused as frozen, so moving a `latest`
-dependency forward means declaring the newer release here.
+a retained client release is reused as frozen, and a later build's new
+default is a new release its next apply acquires.
 
 ## Domains
 
@@ -341,6 +346,7 @@ own expansion limits, canonical output, and immutable source provenance.
 | `openshiftClientsMirror` | string | no | upstream source | Absolute HTTPS base URL for OpenShift client downloads. |
 | `virtctlMirror` | string | no | upstream source | Absolute HTTPS base URL for the resolved `virtctl` release. |
 | `helmMirror` | string | no | upstream source | Absolute HTTPS base URL for the resolved Helm release. |
+| `govcMirror` | string | no | upstream source | Absolute HTTPS base URL for the resolved `govc` release. |
 
 A mirror is an [HTTPS URL](../api.md#graph-validation) of at most 4096 bytes on
 the default port or port 443, because the controller stage appends a release
@@ -352,10 +358,12 @@ build's tolerance as well, so a mirror ending in a bare `?` or `#` never
 strands its operation: the block still observes and destroys, and only a new
 resolution refuses it. These fields select download sources; they do not fill
 attributes on cluster objects. Helm archives reside directly under the base URL;
-OpenShift archives and `virtctl` binaries reside under `<base>/<exact-version>/`.
-The `virtctl` directory and filename include the release's `v` prefix.
-Publisher metadata determines versions and checksums even when a mirror supplies
-the artifact bytes.
+OpenShift archives, `govc` archives and `virtctl` binaries reside under
+`<base>/<exact-version>/`; the `govc` and `virtctl` directories, and the
+`virtctl` filename, include the release's `v` prefix. A default release is
+fetched by the size and SHA-256 the build's tool table pins, so a mirror
+serves it with no publisher contact; for any other release, publisher metadata
+determines the checksum even when a mirror supplies the artifact bytes.
 
 Secret source and custody declarations belong to
 [each Secret](secrets.md#source-union). `Environment` has no `secretStorage`
@@ -473,6 +481,8 @@ Environment.
 | Private trust | `spec.connection.trustBundleRef` on the selected external `Proxy` | `this executable's controller stage trusts only the host's system trust store, and <proxy> sets spec.connection.trustBundleRef` | `select direct: {} or an external Proxy without spec.connection.trustBundleRef that the host's system trust store verifies in spec.proxy on <machine>` |
 | HTTP proxy alone | `spec.connection.httpProxy` without `spec.connection.httpsProxy` on the selected external `Proxy` | `every dependency source is HTTPS, so the spec.connection.httpProxy of <proxy> alone selects no controller acquisition route` | `set connection.httpsProxy on <proxy> to the proxy endpoint; every dependency source is HTTPS` |
 | Libvirt release pin | `spec.dependencyVersions.libvirt` other than `latest`, with the libvirt client selected | `this executable's controller stage installs the libvirt release the host's repositories provide, and <environment> pins spec.dependencyVersions.libvirt` | `remove spec.dependencyVersions.libvirt from <environment>` |
+| Client release below the minimum | `spec.dependencyVersions.<tool>` older than the minimum this executable's tool table holds, with that client selected | `this executable accepts <tool> <minimum> or newer, and <environment> declares <release> in spec.dependencyVersions.<tool>` | `declare <tool> <minimum> or newer in spec.dependencyVersions.<tool> of <environment>, or remove it for this build's default` |
+| Client release without MAJOR.MINOR.PATCH | `spec.dependencyVersions.<tool>` with no leading `MAJOR.MINOR.PATCH`, with that client selected | `this executable holds <tool> to <minimum> or newer by its MAJOR.MINOR.PATCH, and <environment> declares <release> in spec.dependencyVersions.<tool>, which names none` | `declare <tool> <minimum> or newer in spec.dependencyVersions.<tool> of <environment>, or remove it for this build's default` |
 
 ## Lifecycle rescue declaration
 

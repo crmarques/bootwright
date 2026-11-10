@@ -381,7 +381,7 @@ func TestActualExampleSelectsTargetToolsFromItsClusters(t *testing.T) {
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-sno"))
 	tools, err := controller.SelectTools(state.Effective())
 	want := []controller.ToolRequest{
-		{Kind: "helm", Version: "latest"},
+		defaultToolRequest(t, "helm"),
 		{Kind: "openshift-clients", Version: "4.21.15", Compatibility: "openshift"},
 		{Kind: "openshift-install", Version: "4.21.15", Compatibility: "openshift"},
 	}
@@ -495,10 +495,10 @@ func TestActualAdmissibleProjectionSelectsKubeVirtTools(t *testing.T) {
 	state, _ := compileAcceptance(t, admissibleExampleSources(t, false))
 	tools, err := controller.SelectTools(state.Effective())
 	want := []controller.ToolRequest{
-		{Kind: "helm", Version: "latest"},
+		defaultToolRequest(t, "helm"),
 		{Kind: "openshift-clients", Version: "4.21.15", Compatibility: "openshift"},
 		{Kind: "openshift-install-fips", Version: "4.21.15", Compatibility: "openshift"},
-		{Kind: "virtctl", Version: "latest", Compatibility: "kubevirt"},
+		defaultToolRequest(t, "virtctl"),
 	}
 	if err != nil || !slices.Equal(tools, want) {
 		t.Fatalf("target tools: %#v err=%v", tools, diagnostics.Of(err))

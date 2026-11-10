@@ -6,8 +6,8 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-// DependencyVersions is version intent, not evidence of a resolved release.
-// Each value is latest or one exact release. An override selects no capability.
+// DependencyVersions is version intent: latest for a host package, and for a
+// client one exact release or empty for the build's default.
 type DependencyVersions struct {
 	Python  string `json:"python"`
 	Ansible string `json:"ansible"`
@@ -29,7 +29,6 @@ func DefaultDependencyVersions() DependencyVersions {
 	return DependencyVersions{
 		Python: "latest", Ansible: "latest", Podman: "latest", OpenSSH: "latest",
 		NMState: "latest", Libvirt: "latest", InstallerMedia: "latest",
-		Helm: "latest", Govc: "latest", Virtctl: "latest",
 	}
 }
 
@@ -62,7 +61,7 @@ func selectDependencyVersions(environment api.Object) (DependencyVersions, error
 			return DependencyVersions{}, selectionFailure(environment, "api.value", "$.spec.dependencyVersions."+field.Name, "dependency version names must identify a supported dependency")
 		}
 		if field.Value.Type() != api.String || !api.ValidLexical(grammar, field.Value.Text()) {
-			return DependencyVersions{}, selectionFailure(environment, "api.value", "$.spec.dependencyVersions."+field.Name, "dependency version must be latest or an exact publisher release tag")
+			return DependencyVersions{}, selectionFailure(environment, "api.value", "$.spec.dependencyVersions."+field.Name, "dependency version must be an exact publisher release tag, or latest for libvirt")
 		}
 		*target = field.Value.Text()
 		if grammar == "cli-version" {

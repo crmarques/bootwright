@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
-	"slices"
 	"strings"
 	"testing"
 
@@ -28,8 +27,8 @@ func TestEveryAdmittedCLIVersionPassesTheToolScreen(t *testing.T) {
 	}
 }
 
-func TestHelmLatestResolvesPublisherLockAndRetainsItWithoutNetwork(t *testing.T) {
-	request := controller.ToolRequest{Kind: "helm", Version: "latest", Mirror: "https://mirror.example.test/tools"}
+func TestADeclaredHelmReleaseResolvesItsPublisherChecksumAndRetainsItWithoutNetwork(t *testing.T) {
+	request := controller.ToolRequest{Kind: "helm", Version: "v4.2.3", Mirror: "https://mirror.example.test/tools"}
 	digest := strings.Repeat("a", 64)
 	requests := []string{}
 	resolver := &ToolCatalog{metadata: func(_ context.Context, method, endpoint string, _ int64, egress prerequisites.SetupEgress) (toolMetadata, error) {
@@ -38,7 +37,7 @@ func TestHelmLatestResolvesPublisherLockAndRetainsItWithoutNetwork(t *testing.T)
 			t.Fatal("explicit route lost")
 		}
 		switch endpoint {
-		case "https://api.github.com/repos/helm/helm/releases/latest":
+		case "https://api.github.com/repos/helm/helm/releases/tags/v4.2.3":
 			return toolMetadata{data: []byte(`{"tag_name":"v4.2.3","draft":false,"prerelease":false,"assets":[]}`)}, nil
 		case "https://get.helm.sh/helm-v4.2.3-linux-amd64.tar.gz.sha256sum":
 			return toolMetadata{data: []byte(digest + "  helm-v4.2.3-linux-amd64.tar.gz\n")}, nil
@@ -72,7 +71,7 @@ func TestHelmLatestResolvesPublisherLockAndRetainsItWithoutNetwork(t *testing.T)
 }
 
 func TestToolMetadataRefusesUnsupportedCompatibilityBeforeNetwork(t *testing.T) {
-	for _, request := range []controller.ToolRequest{{Kind: "virtctl", Version: "4.21.0", Compatibility: "openshift-virtualization"}, {Kind: "helm", Version: "latest", Mirror: "https://user:secret@example.test"}, {Kind: "openshift-install", Version: "latest", Compatibility: "openshift"}} {
+	for _, request := range []controller.ToolRequest{{Kind: "virtctl", Version: "4.21.0", Compatibility: "openshift-virtualization"}, {Kind: "helm", Version: "v4.2.3", Mirror: "https://user:secret@example.test"}, {Kind: "helm", Version: "latest"}, {Kind: "openshift-install", Version: "latest", Compatibility: "openshift"}, {Kind: "helm", Version: "v4.2.3", SHA256: "abc", Bytes: 10}, {Kind: "helm", Version: "v4.2.3", SHA256: strings.Repeat("a", 64)}} {
 		calls := 0
 		resolver := &ToolCatalog{metadata: func(context.Context, string, string, int64, prerequisites.SetupEgress) (toolMetadata, error) {
 			calls++
@@ -120,39 +119,69 @@ func TestPublisherChecksumAndOriginBoundaries(t *testing.T) {
 		t.Fatal("canceled resolution read metadata")
 		return toolMetadata{}, nil
 	}}
-	if _, err := resolver.Resolve(ctx, []controller.ToolRequest{{Kind: "helm", Version: "latest"}}, prerequisites.SetupEgress{}); !errors.Is(err, context.Canceled) {
+	if _, err := resolver.Resolve(ctx, []controller.ToolRequest{{Kind: "helm", Version: "v4.2.3"}}, prerequisites.SetupEgress{}); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 }
 
-func TestFrozenLatestSelectsDeterministicallyAndRejectsConflictingOldIdentities(t *testing.T) {
-	request := controller.ToolRequest{Kind: "helm", Version: "latest"}
-	retained := []prerequisites.DependencySource{}
-	for _, version := range []string{"v4.2.9", "4.2.10", "v4.2.10"} {
-		endpoint, _, err := sourceURL(request, version)
-		if err != nil {
-			t.Fatal(err)
-		}
-		retained = append(retained, prerequisites.DependencySource{ID: toolSourcePrefix(request) + version, URL: endpoint, SHA256: strings.Repeat("a", 64), Bytes: 1024})
+func TestARetainedReleaseNeedsNoMetadataAndAConflictingIdentityRefuses(t *testing.T) {
+	request := controller.ToolRequest{Kind: "helm", Version: "v4.2.10"}
+	endpoint, _, err := sourceURL(request, request.Version)
+	if err != nil {
+		t.Fatal(err)
 	}
+	retained := []prerequisites.DependencySource{{ID: toolSourcePrefix(request) + request.Version, URL: endpoint, SHA256: strings.Repeat("a", 64), Bytes: 1024}}
 	resolver := &ToolCatalog{metadata: func(context.Context, string, string, int64, prerequisites.SetupEgress) (toolMetadata, error) {
-		t.Fatal("retained latest read mutable publisher metadata")
+		t.Fatal("a retained release read publisher metadata")
 		return toolMetadata{}, nil
 	}}
 	selected, complete, err := resolver.Select([]controller.ToolRequest{request}, retained)
 	if err != nil || !complete || len(selected) != 1 || selected[0].Version != "v4.2.10" {
 		t.Fatal(selected, complete, err)
 	}
-	slices.Reverse(retained)
-	reordered, complete, err := resolver.Select([]controller.ToolRequest{request}, retained)
-	if err != nil || !complete || !reflect.DeepEqual(selected, reordered) {
-		t.Fatal("retention order changed frozen release", reordered, err)
-	}
-	conflict := retained[len(retained)-1]
+	conflict := retained[0]
 	conflict.SHA256 = strings.Repeat("b", 64)
-	retained = append(retained, conflict)
-	if _, _, err := resolver.Select([]controller.ToolRequest{request}, retained); err == nil {
-		t.Fatal("conflicting older publisher identity was hidden by newest release")
+	if _, _, err := resolver.Select([]controller.ToolRequest{request}, append(retained, conflict)); err == nil {
+		t.Fatal("a conflicting publisher identity was accepted")
+	}
+	other := retained[0]
+	other.ID = toolSourcePrefix(request) + "4.2.10"
+	if _, _, err := resolver.Select([]controller.ToolRequest{request}, []prerequisites.DependencySource{other}); err == nil {
+		t.Fatal("a retained release of another spelling satisfied an exact request")
+	}
+}
+
+func TestAPinnedToolComesFromItsMirrorWithNoPublisherMetadata(t *testing.T) {
+	pin, _, err := controller.PinOf("helm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := controller.ToolRequest{Kind: "helm", Version: "v" + pin.Default.Version, Mirror: "https://mirror.example.test/tools", SHA256: pin.Default.SHA256, Bytes: pin.Default.Bytes}
+	resolver := &ToolCatalog{metadata: func(_ context.Context, method, endpoint string, _ int64, _ prerequisites.SetupEgress) (toolMetadata, error) {
+		t.Fatal("a pinned tool read publisher metadata", method, endpoint)
+		return toolMetadata{}, nil
+	}}
+	resolved, err := resolver.Resolve(t.Context(), []controller.ToolRequest{request}, prerequisites.SetupEgress{})
+	if err != nil || len(resolved) != 1 {
+		t.Fatal(resolved, err)
+	}
+	source := resolved[0].Source
+	if source.URL != "https://mirror.example.test/tools/helm-v"+pin.Default.Version+"-linux-amd64.tar.gz" || source.SHA256 != pin.Default.SHA256 || source.Bytes != pin.Default.Bytes {
+		t.Fatal("the pinned source lost its mirror, size or digest", source)
+	}
+	selected, complete, err := resolver.Select([]controller.ToolRequest{request}, []prerequisites.DependencySource{source})
+	if err != nil || !complete || !reflect.DeepEqual(selected, resolved) {
+		t.Fatal("the pinned source was not retained", selected, complete, err)
+	}
+	for _, edit := range []func(*prerequisites.DependencySource){
+		func(s *prerequisites.DependencySource) { s.SHA256 = strings.Repeat("b", 64) },
+		func(s *prerequisites.DependencySource) { s.Bytes++ },
+	} {
+		changed := source
+		edit(&changed)
+		if _, _, err := resolver.Select([]controller.ToolRequest{request}, []prerequisites.DependencySource{changed}); err == nil {
+			t.Fatal("a retained source that differs from the pin was accepted", changed)
+		}
 	}
 }
 
@@ -210,8 +239,8 @@ func TestOKDRepositoryFallbackRequiresDefinitiveNotFound(t *testing.T) {
 	}
 }
 
-func TestVirtctlLatestAndExactOverrideFreezeUpstreamPublisherIdentity(t *testing.T) {
-	for _, version := range []string{"latest", "v1.8.2"} {
+func TestAnExactVirtctlOverrideFreezesTheUpstreamPublisherIdentity(t *testing.T) {
+	for _, version := range []string{"v1.8.2"} {
 		request := controller.ToolRequest{Kind: "virtctl", Version: version, Compatibility: "kubevirt", Mirror: "https://mirror.example.test/tools"}
 		selected, complete, err := (&ToolCatalog{}).Select([]controller.ToolRequest{request}, nil)
 		if err != nil || complete || len(selected) != 0 {
@@ -220,10 +249,7 @@ func TestVirtctlLatestAndExactOverrideFreezeUpstreamPublisherIdentity(t *testing
 		calls := 0
 		resolver := &ToolCatalog{metadata: func(_ context.Context, method, endpoint string, _ int64, _ prerequisites.SetupEgress) (toolMetadata, error) {
 			calls++
-			wanted := "https://api.github.com/repos/kubevirt/kubevirt/releases/latest"
-			if version != "latest" {
-				wanted = "https://api.github.com/repos/kubevirt/kubevirt/releases/tags/v1.8.2"
-			}
+			wanted := "https://api.github.com/repos/kubevirt/kubevirt/releases/tags/" + version
 			if method != http.MethodGet || endpoint != wanted {
 				t.Fatal("unexpected metadata request", method, endpoint)
 			}
@@ -281,12 +307,11 @@ func TestExactPinsResolveThePublishersPrereleaseTags(t *testing.T) {
 	}
 }
 
-func TestVirtctlLatestRefusesUnstableOrUnprovenPublisherAssets(t *testing.T) {
+func TestAnExactVirtctlRefusesAnUnprovenPublisherAsset(t *testing.T) {
 	valid := `{"tag_name":"v1.8.2","draft":false,"prerelease":false,"assets":[{"name":"virtctl-v1.8.2-linux-amd64","browser_download_url":"https://github.com/kubevirt/kubevirt/releases/download/v1.8.2/virtctl-v1.8.2-linux-amd64","size":12345,"digest":"sha256:` + strings.Repeat("e", 64) + `"}]}`
 	for name, payload := range map[string]string{
 		"draft":           strings.Replace(valid, `"draft":false`, `"draft":true`, 1),
-		"prerelease":      strings.Replace(valid, `"prerelease":false`, `"prerelease":true`, 1),
-		"unstable tag":    strings.ReplaceAll(valid, "v1.8.2", "v1.8.2-rc.1"),
+		"another tag":     strings.ReplaceAll(valid, "v1.8.2", "v1.8.2-rc.1"),
 		"missing digest":  strings.Replace(valid, "sha256:"+strings.Repeat("e", 64), "", 1),
 		"wrong publisher": strings.Replace(valid, "https://github.com/kubevirt/", "https://github.com/unapproved/", 1),
 		"missing asset":   `{"tag_name":"v1.8.2","draft":false,"prerelease":false,"assets":[]}`,
@@ -295,51 +320,15 @@ func TestVirtctlLatestRefusesUnstableOrUnprovenPublisherAssets(t *testing.T) {
 			calls := 0
 			resolver := &ToolCatalog{metadata: func(_ context.Context, method, endpoint string, _ int64, _ prerequisites.SetupEgress) (toolMetadata, error) {
 				calls++
-				if calls > 1 || method != http.MethodGet || endpoint != "https://api.github.com/repos/kubevirt/kubevirt/releases/latest" {
+				if calls > 1 || method != http.MethodGet || endpoint != "https://api.github.com/repos/kubevirt/kubevirt/releases/tags/v1.8.2" {
 					t.Fatal("unproven release triggered another acquisition", method, endpoint)
 				}
 				return toolMetadata{data: []byte(payload)}, nil
 			}}
-			if _, err := resolver.Resolve(t.Context(), []controller.ToolRequest{{Kind: "virtctl", Version: "latest", Compatibility: "kubevirt"}}, prerequisites.SetupEgress{}); err == nil {
-				t.Fatal("unstable or unproven release accepted")
+			if _, err := resolver.Resolve(t.Context(), []controller.ToolRequest{{Kind: "virtctl", Version: "v1.8.2", Compatibility: "kubevirt"}}, prerequisites.SetupEgress{}); err == nil {
+				t.Fatal("an unproven release was accepted")
 			}
 		})
-	}
-}
-
-type boundToolArea struct {
-	prerequisites.BundleArea
-	entries []prerequisites.BundleEntry
-}
-
-func (a boundToolArea) Entries(context.Context) ([]prerequisites.BundleEntry, error) {
-	return a.entries, nil
-}
-
-func TestContextLatestIgnoresANewerReleaseRetainedByAnotherContext(t *testing.T) {
-	request := controller.ToolRequest{Kind: "helm", Version: "latest"}
-	sources := []prerequisites.DependencySource{}
-	for _, version := range []string{"v4.2.3", "v4.2.4"} {
-		endpoint, _, err := sourceURL(request, version)
-		if err != nil {
-			t.Fatal(err)
-		}
-		sources = append(sources, prerequisites.DependencySource{ID: toolSourcePrefix(request) + version, URL: endpoint, SHA256: strings.Repeat("a", 64), Bytes: 1024})
-	}
-	view := prerequisites.StorageView{Context: prerequisites.SetupContext{Name: "example"}, State: prerequisites.HostState{ToolSources: sources, Bindings: []prerequisites.ControllerBinding{{Context: "example", Tools: "bound-area"}}}, OpenBundle: func(_ context.Context, id string) (prerequisites.BundleArea, error) {
-		if id != "bound-area" {
-			t.Fatalf("opened %s", id)
-		}
-		return boundToolArea{entries: []prerequisites.BundleEntry{{Path: "sources/" + sources[0].ID}}}, nil
-	}}
-	selected, complete, err := prerequisites.SelectContextTools(context.Background(), &ToolCatalog{}, view, []controller.ToolRequest{request})
-	if err != nil || !complete || len(selected) != 1 || selected[0].Version != "v4.2.3" {
-		t.Fatalf("context selection: %+v %v %v", selected, complete, err)
-	}
-	view.State.Bindings = nil
-	selected, complete, err = prerequisites.SelectContextTools(context.Background(), &ToolCatalog{}, view, []controller.ToolRequest{request})
-	if err != nil || complete || len(selected) != 0 {
-		t.Fatalf("unbound context reused another context: %+v %v %v", selected, complete, err)
 	}
 }
 

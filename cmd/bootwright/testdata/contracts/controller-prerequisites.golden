@@ -1,6 +1,6 @@
 implementation: controller-prerequisites
-content-digest: 12861259f12ba6828a41390a1acbe06a50f813a4939f65e9b503d450db7356c7
-request-version: controller-clients-v2
+content-digest: 8e1b5c5efd0a0f8781f63b3d0bf5f26541ecc2458d35db2f09f9a0a0ae0fb3ca
+request-version: controller-clients-v3
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -25,9 +25,11 @@ request-schema:
   nmstate bool omitempty
   packages []string
   tools []struct clients.ToolRequest
+  tools[].bytes int64 omitempty
   tools[].compatibility string
   tools[].kind string
   tools[].mirror string
+  tools[].sha256 string omitempty
   tools[].version string
   version string
 evidence-schema:

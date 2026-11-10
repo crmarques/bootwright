@@ -324,7 +324,7 @@ func (c Capability) apply(ctx context.Context, execution lifecycle.Execution) (l
 		missing := []controller.ToolRequest{}
 		for _, wanted := range request.ToolRequests() {
 			if !slices.ContainsFunc(tools, func(tool prerequisites.ToolDefinition) bool {
-				return tool.Kind == wanted.Kind && tool.Compatibility == wanted.Compatibility && (wanted.Version == "latest" || tool.Version == wanted.Version)
+				return tool.Kind == wanted.Kind && tool.Compatibility == wanted.Compatibility && tool.Version == wanted.Version
 			}) {
 				missing = append(missing, wanted)
 			}
@@ -637,9 +637,7 @@ func (c Capability) retained(ctx context.Context, execution lifecycle.Execution,
 // executable. proved is what it recorded in the apply the asking operation
 // runs over, so a consumer runs the file its own context's stage installed.
 // The closure is recovered from retained identities, but only from those the
-// proof names: the host's sources are shared, and the newest release under a
-// latest intent may be one another context retained and this one never
-// published.
+// proof names, because the host's sources are shared.
 func (c Capability) LocateTool(ctx context.Context, view prerequisites.StorageView, block reconciliation.Block, proved lifecycle.BlockEvidence, tool controller.InstalledTool) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err

@@ -151,8 +151,14 @@ func toolRequests(requests []controller.ToolRequest) ([]controller.ToolRequest, 
 		if request.Mirror != "" && !stagedMirror(request.Mirror) {
 			return nil, bundleFailure("tool mirrors require credential-free HTTPS base URLs")
 		}
-		if request.Version != "latest" && !toolVersion(request.Version) {
+		if !toolVersion(request.Version) {
 			return nil, bundleFailure("target tool requires an exact safe release version")
+		}
+		if request.SHA256 != "" || request.Bytes != 0 {
+			digest, err := hex.DecodeString(request.SHA256)
+			if err != nil || len(digest) != sha256.Size || hex.EncodeToString(digest) != request.SHA256 || request.Bytes <= 0 || request.Bytes > maxToolSourceBytes {
+				return nil, bundleFailure("a pinned tool request names no lowercase SHA-256 or a size outside its bound")
+			}
 		}
 		switch request.Kind {
 		case "helm", "govc", "kubectl":
@@ -280,8 +286,11 @@ func okdSourceURL(endpoint, repository string) string {
 }
 
 func toolDefinition(request controller.ToolRequest, version string, source prerequisites.DependencySource) (prerequisites.ToolDefinition, error) {
-	if !toolVersion(version) || request.Version != "latest" && version != request.Version || request.Version == "latest" && !stableVersion(version) {
+	if !toolVersion(version) || version != request.Version {
 		return prerequisites.ToolDefinition{}, bundleFailure("retained tool version does not satisfy its original request")
+	}
+	if request.SHA256 != "" && (source.SHA256 != request.SHA256 || source.Bytes != request.Bytes) {
+		return prerequisites.ToolDefinition{}, bundleFailure("retained tool source differs from the size and SHA-256 this build pins")
 	}
 	expected, _, err := sourceURL(request, version)
 	if err != nil {
@@ -325,24 +334,27 @@ type githubToolRelease struct {
 }
 
 func (c *ToolCatalog) release(ctx context.Context, repository, version string, egress prerequisites.SetupEgress) (githubToolRelease, error) {
-	endpoint := "https://api.github.com/repos/" + repository + "/releases/"
-	if version == "latest" {
-		endpoint += "latest"
-	} else {
-		endpoint += "tags/" + url.PathEscape(version)
-	}
+	endpoint := "https://api.github.com/repos/" + repository + "/releases/tags/" + url.PathEscape(version)
 	data, err := c.metadata(ctx, http.MethodGet, endpoint, maxToolMetadataBytes, egress)
 	var release githubToolRelease
 	if err != nil {
 		return release, err
 	}
-	if json.Unmarshal(data.data, &release) != nil || release.Draft || version == "latest" && release.Prerelease || !toolVersion(release.Tag) || len(release.Assets) > 256 || version != "latest" && release.Tag != version {
+	if json.Unmarshal(data.data, &release) != nil || release.Draft || !toolVersion(release.Tag) || len(release.Assets) > 256 || release.Tag != version {
 		return release, bundleFailure("publisher release metadata is missing, unstable, or inconsistent")
 	}
 	return release, nil
 }
 
 func (c *ToolCatalog) resolve(ctx context.Context, request controller.ToolRequest, egress prerequisites.SetupEgress) (prerequisites.ToolDefinition, error) {
+	if request.SHA256 != "" {
+		source := prerequisites.DependencySource{ID: toolSourcePrefix(request) + request.Version, SHA256: request.SHA256, Bytes: request.Bytes}
+		var err error
+		if source.URL, _, err = sourceURL(request, request.Version); err != nil {
+			return prerequisites.ToolDefinition{}, err
+		}
+		return toolDefinition(request, request.Version, source)
+	}
 	version, release, repository, err := c.resolveVersion(ctx, request, egress)
 	if err != nil {
 		return prerequisites.ToolDefinition{}, err
@@ -411,7 +423,7 @@ func (c *ToolCatalog) resolveVersion(ctx context.Context, request controller.Too
 	}
 	if repository != "" {
 		tag := version
-		if version != "latest" && request.Compatibility != "okd" {
+		if request.Compatibility != "okd" {
 			tag = withV(version)
 		}
 		release, err = c.release(ctx, repository, tag, egress)
@@ -425,19 +437,6 @@ func (c *ToolCatalog) resolveVersion(ctx context.Context, request controller.Too
 		if err != nil {
 			return "", githubToolRelease{}, "", err
 		}
-		if version == "latest" {
-			version = release.Tag
-		}
-	}
-	if request.Kind == "kubectl" && version == "latest" {
-		metadata, err := c.metadata(ctx, http.MethodGet, "https://dl.k8s.io/release/stable.txt", 128, egress)
-		if err != nil {
-			return "", githubToolRelease{}, "", err
-		}
-		version = strings.TrimSpace(string(metadata.data))
-	}
-	if request.Version == "latest" && !stableVersion(version) {
-		return "", githubToolRelease{}, "", bundleFailure("latest tool metadata does not identify a stable release")
 	}
 	return version, release, repository, nil
 }

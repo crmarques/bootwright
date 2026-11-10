@@ -19,24 +19,25 @@ const (
 	Kind           = string(api.Environment)
 	Implementation = "controller-prerequisites"
 	BlockID        = "controller-prerequisites"
-	Version        = "controller-clients-v2"
+	Version        = "controller-clients-v3"
 )
 
-// ToolRequest is one declared client requirement, frozen in the plan before
-// any release is resolved. Fields are ordered so the encoded request is
-// canonical.
+// ToolRequest is one declared client requirement at its exact release, frozen
+// in the plan with the size and SHA-256 the build's tool table pins for it.
+// Fields are ordered so the encoded request is canonical.
 type ToolRequest struct {
+	Bytes         int64  `json:"bytes,omitempty"`
 	Compatibility string `json:"compatibility"`
 	Kind          string `json:"kind"`
 	Mirror        string `json:"mirror"`
+	SHA256        string `json:"sha256,omitempty"`
 	Version       string `json:"version"`
 }
 
 // Request is what this block freezes: the clients the selected graph needs,
 // the host package requirements its closures name, the libvirt intent it
-// declares, and the controller Machine's route. Exact releases are not frozen
-// here: a tool's latest intent is resolved by the attempt that installs it,
-// and a host package is whatever the host's repositories provide.
+// declares, and the controller Machine's route. A host package is whatever the
+// host's repositories provide.
 type Request struct {
 	ContainerRuntime bool                      `json:"containerRuntime"`
 	Egress           prerequisites.SetupEgress `json:"egress"`
@@ -80,7 +81,7 @@ func NewRequest(selection controller.Selection, requests []controller.ToolReques
 	}
 	request.Packages = prerequisites.StageRequirements(request.native())
 	for _, tool := range requests {
-		request.Tools = append(request.Tools, ToolRequest{Compatibility: tool.Compatibility, Kind: tool.Kind, Mirror: tool.Mirror, Version: tool.Version})
+		request.Tools = append(request.Tools, ToolRequest{Bytes: tool.Bytes, Compatibility: tool.Compatibility, Kind: tool.Kind, Mirror: tool.Mirror, SHA256: tool.SHA256, Version: tool.Version})
 	}
 	return request
 }
@@ -96,7 +97,7 @@ func (r Request) native() prerequisites.StageNative {
 func (r Request) ToolRequests() []controller.ToolRequest {
 	requests := make([]controller.ToolRequest, 0, len(r.Tools))
 	for _, tool := range r.Tools {
-		requests = append(requests, controller.ToolRequest{Kind: tool.Kind, Version: tool.Version, Compatibility: tool.Compatibility, Mirror: tool.Mirror})
+		requests = append(requests, controller.ToolRequest{Kind: tool.Kind, Version: tool.Version, Compatibility: tool.Compatibility, Mirror: tool.Mirror, SHA256: tool.SHA256, Bytes: tool.Bytes})
 	}
 	slices.SortFunc(requests, controller.CompareToolRequests)
 	return requests

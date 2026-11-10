@@ -927,7 +927,7 @@ func TestDecodeRefusesPackagesItsClosuresDoNotSelect(t *testing.T) {
 // Every version but the one this build writes refuses, and the refusal names
 // it so the remedy is the executable that registered the operation.
 func TestAFrozenStageRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"controller-clients-v0", "controller-clients-v1", "controller-clients-v3", "controller-clients-v4", "controller-clients-v6"} {
+	for _, version := range []string{"controller-clients-v0", "controller-clients-v1", "controller-clients-v2", "controller-clients-v4", "controller-clients-v6"} {
 		_, err := DecodeRequest([]byte(`{"version":"` + version + `"}`))
 		if err == nil {
 			t.Fatalf("version %q was accepted", version)
@@ -945,8 +945,7 @@ var _ lifecycle.ToolLocator = Capability{}
 
 // Another block locates its clients in the area of the closure this stage
 // proved in its apply, recovered only from the retained identities that proof
-// names: a newer release under the same latest intent, retained by another
-// context, is never offered. Anything short of a completed apply's proof of
+// names: a release another context retained is never offered. Anything short of a completed apply's proof of
 // exactly this request and area, read as the one bounded shape it declares, or
 // a closure only partly retained, names no area it may run from, even one that
 // holds the file.
@@ -1106,31 +1105,5 @@ func TestInterruptedStageUsesItsPreparedSourcesBeforeAnyContextBinding(t *testin
 	observation, err := capability.Observe(context.Background(), execution)
 	if err != nil || observation.Effect != reconciliation.EffectCompleted || !slices.Equal(tools.offered, []prerequisites.DependencySource{selected[0].Source}) {
 		t.Fatalf("prepared recovery: %+v %v sources=%+v", observation, err, tools.offered)
-	}
-}
-
-func TestFreshStageKeepsTheReleaseInItsContextBinding(t *testing.T) {
-	selected := []prerequisites.ToolDefinition{toolDefinition("helm", "v4.2.3")}
-	newer := toolDefinition("helm", "v4.2.4")
-	tools := &fakeTools{selected: selected, complete: true, present: true}
-	capability := stage(tools, newDnf(), &fakeSetup{}, &fakeInstaller{})
-	block := planBlock(t, capability, stateOf(environment(), machine(), cluster()), reconciliation.Apply)
-	request, err := DecodeRequest(block.Request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request.Tools = []ToolRequest{{Kind: "helm", Version: "latest"}}
-	block.Request, err = request.Canonical()
-	if err != nil {
-		t.Fatal(err)
-	}
-	digest := prerequisites.ToolsDigest(selected)
-	recorder := newRecorder(&fakeArea{sealed: true, entries: []prerequisites.BundleEntry{{Path: "sources/" + selected[0].Source.ID}}})
-	recorder.published[digest] = true
-	execution := recorder.execution(t, block, prerequisites.HostState{ToolSources: []prerequisites.DependencySource{selected[0].Source, newer.Source}, Bindings: []prerequisites.ControllerBinding{{Context: "example", Tools: digest}}})
-	execution.Stage.Setup.Context.Name = "example"
-	result, err := capability.Apply(context.Background(), execution)
-	if err != nil || result.Outcome != reconciliation.OutcomeUnchanged || !slices.Equal(tools.offered, []prerequisites.DependencySource{selected[0].Source}) {
-		t.Fatalf("fresh stage: %+v %v sources=%+v", result, err, tools.offered)
 	}
 }

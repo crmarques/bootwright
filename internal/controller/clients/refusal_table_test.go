@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
@@ -61,6 +62,10 @@ func TestControllerRefusalTableMatchesUnsupported(t *testing.T) {
 		"Private trust":       {[]api.Object{proxied(), externalProxy(endpoint, text("trustBundleRef", "corporate-ca"))}, names},
 		"HTTP proxy alone":    {[]api.Object{proxied(), externalProxy(text("httpProxy", "http://proxy.example.test:3128"))}, names},
 		"Libvirt release pin": {append([]api.Object{environment(field("dependencyVersions", api.MapValue(text("libvirt", "10.0.0"))))}, libvirtGraph()[1:]...), names},
+		"Client release below the minimum": {[]api.Object{environment(field("dependencyVersions", api.MapValue(text("helm", "1.0.0")))), machine(), cluster()},
+			clientRelease(t, names, "1.0.0")},
+		"Client release without MAJOR.MINOR.PATCH": {[]api.Object{environment(field("dependencyVersions", api.MapValue(text("helm", "4.3")))), machine(), cluster()},
+			clientRelease(t, names, "4.3")},
 	}
 	for _, row := range refusalTable(t) {
 		test, found := cases[row.name]
@@ -82,6 +87,19 @@ func TestControllerRefusalTableMatchesUnsupported(t *testing.T) {
 	if got := (Capability{}).Unsupported(stateOf(environment(), proxied(".example.test"), externalProxy(endpoint))); len(got) != 0 {
 		t.Fatalf("a supported controller was refused: %+v", got)
 	}
+}
+
+// clientRelease adds a refused helm release and the build's minimum to the
+// placeholders every row names.
+func clientRelease(t *testing.T, names map[string]string, release string) map[string]string {
+	t.Helper()
+	pin, _, err := controller.PinOf("helm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := maps.Clone(names)
+	values["<tool>"], values["<minimum>"], values["<release>"] = "helm", pin.Minimum, release
+	return values
 }
 
 // withEnvironment adds the plain Environment unless the graph declares its own.

@@ -7639,10 +7639,10 @@ B680, whose stable-only mutant failed the admission test);
 `TestAReplayThatInstallsAHostPackageSealsTheInterruptedPublication`,
 `TestASealFailureAfterAReplayedHostPackageInstallIsUnknown` and
 `TestInstalledToolLookupPreservesStoreFailures` (B237);
-`TestContextLatestIgnoresANewerReleaseRetainedByAnotherContext`,
-`TestContextPreflightSelectsLatestOnlyFromItsOwnBinding`,
+TestContextLatestIgnoresANewerReleaseRetainedByAnotherContext,
+TestContextPreflightSelectsLatestOnlyFromItsOwnBinding,
 `TestInterruptedStageUsesItsPreparedSourcesBeforeAnyContextBinding` and
-`TestFreshStageKeepsTheReleaseInItsContextBinding` (B239); and for the
+TestFreshStageKeepsTheReleaseInItsContextBinding (B239); and for the
 `nmstate` closure `TestAgentMediaSelectsNMStateFromItsClusterNodes`,
 `TestARequestAndStageNativeOfAgree`, `TestTheFrozenRequestCarriesNMStateAndIPUtils`,
 `TestContextPreflightReportsTheNMStateAndIPUtilsClosures` and
@@ -12900,3 +12900,36 @@ this build, as [B1216](m1.md#b1216)'s operator run already does; knowing no
 earlier path, that discard cannot see an earlier build's `controller install`
 still running, so every command of that build stops first
 ([the uninstall flow](../controller.md#the-uninstall-flow)).
+
+### X342 — Default clients pinned by the build
+
+**Item:** B1242 (2026-11-10, [D250](backlog.md#d250) (2), (12), (13) and
+(17); [D251](backlog.md#d251)), completed in-tree. Each build embeds the
+[tool table](../controller.md#the-tool-table) `internal/controller/tooltable.json`:
+for Helm, `govc`, `kubectl` and `virtctl`, a minimum release and a default
+release with its size and SHA-256, read from each publisher on 2026-11-10 and
+confirmed by `make tool-table`. Selection fills the default into every tool
+request that names no release, with its size and SHA-256, and the controller
+stage acquires such a request from its publisher or its download mirror with
+no publisher metadata. A declared release keeps the publisher-checksum route;
+one below the minimum, or one with no `MAJOR.MINOR.PATCH`, refuses at plan
+while its client is selected
+([refusal table](../api/environment.md#refusal-table)). `latest` is no longer
+a client release: admission refuses it, and the stage's latest resolution,
+the `kubectl` stable-version lookup and the context-bound selection of a
+latest release go, with the tests that held them.
+`spec.downloads.govcMirror` joins the download mirrors. `make tool-table` and
+`make tool-table-outdated`, a standard-library Go tool in
+`scripts/tools/tooltable`, re-read each default from its publisher;
+`.github/workflows/tool-table.yml` runs them on a change and weekly.
+
+The controller stage's request moved to `controller-clients-v3`, carrying each
+pinned release's size and SHA-256, and its content digest moved; plan goldens
+name the exact release a stage installs.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** an operation an earlier build registered refuses to
+continue at its controller stage; a host's earlier `latest` sources are
+not reused, so each context's next apply acquires the defaults once; a
+declared non-default release still reads its publisher's metadata.
+

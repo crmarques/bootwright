@@ -52,13 +52,13 @@ func TestEnvironmentDependencyVersionsDefaultsAndOmission(t *testing.T) {
       dependencyVersions:
         govc: "0.53.0"
         helm: "v4.2.0"
-        virtctl: latest
+        virtctl: "1.9.1"
   dependencyVersions:
     helm: "v4.3.0"
 `
 	state, _ := compileAcceptance(t, controllerInputs(environment, serviceHost))
 	versions := requireObject(t, state.Effective(), api.Environment, "synthetic").Spec().Get("dependencyVersions")
-	if versions.Get("govc").Text() != "0.53.0" || versions.Get("helm").Text() != "v4.3.0" || versions.Get("virtctl").Text() != "latest" {
+	if versions.Get("govc").Text() != "0.53.0" || versions.Get("helm").Text() != "v4.3.0" || versions.Get("virtctl").Text() != "1.9.1" {
 		t.Fatal("dependency version defaults did not preserve field precedence")
 	}
 	for _, declaration := range []string{"", "  dependencyVersions: {}\n"} {
@@ -83,7 +83,8 @@ func TestEnvironmentDependencyVersionsRejectAmbiguousOverrides(t *testing.T) {
 		{"context-independent nmstate", "nmstate: latest", "api.field", "nmstate"},
 		{"empty version", "helm: ''", "api.value", "helm"},
 		{"range", "helm: '^4.0.0'", "api.value", "helm"},
-		{"whitespace", "virtctl: ' latest'", "api.value", "virtctl"},
+		{"whitespace", "virtctl: ' 1.9.1'", "api.value", "virtctl"},
+		{"latest client", "helm: latest", "api.value", "helm"},
 		{"package expression", "libvirt: '>=5.0'", "api.value", "libvirt"},
 		{"package path", "libvirt: '../release'", "api.value", "libvirt"},
 		{"null", "govc: null", "api.type", "govc"},
@@ -109,4 +110,17 @@ func TestEnvironmentDependencyVersionsAdmitAnyPublisherReleaseTag(t *testing.T) 
 	if versions.Get("govc").Text() != "0.54" || versions.Get("virtctl").Text() != "1.9.0rc1" {
 		t.Fatal("an exact publisher release tag was not preserved as authored")
 	}
+}
+
+func defaultToolRequest(t *testing.T, kind string) controller.ToolRequest {
+	t.Helper()
+	pin, found, err := controller.PinOf(kind)
+	if err != nil || !found {
+		t.Fatalf("the build pins no %s: %v", kind, err)
+	}
+	request := controller.ToolRequest{Kind: kind, Version: "v" + pin.Default.Version, SHA256: pin.Default.SHA256, Bytes: pin.Default.Bytes}
+	if kind == "virtctl" {
+		request.Compatibility = "kubevirt"
+	}
+	return request
 }

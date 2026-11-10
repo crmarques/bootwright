@@ -295,7 +295,6 @@ Alias cell.
 | [B1237](#b1237) | new, 2026-11-09 (D248 (5)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's default image comes from a Red Hat registry wherever Red Hat publishes one | Red Hat publishes no dnsmasq, chrony or sushy-tools image, and its squid image needs a `registry.redhat.io` login no managed-service pull carries |
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
 | [B1240](#b1240) | new, 2026-11-09 (X340 gate) | defect | Controller | The native supervisor test reads its task's PID only from a complete record | It failed once in `make check` beside the other lanes and passed when run again alone; the cause is a test-side race, not the supervisor |
-| [B1242](#b1242) | new, 2026-11-10 (D250 (2)) | product | Controller | Target tools are pinned by the build and acquired without their publisher's metadata | D250 parks the controlled-network plan until the owner promotes it |
 | [B1243](#b1243) | new, 2026-11-10 (D250 (2)) | enabling | Architecture | Each build writes one software bill of materials, and every build input is pinned | D250 parks the controlled-network plan until the owner promotes it |
 | [B1244](#b1244) | new, 2026-11-10 (D250 (2)) | enabling | Architecture | A build fails on a known vulnerability in what it carries or pins | D250 parks the controlled-network plan until the owner promotes it |
 | [B1245](#b1245) | new, 2026-11-10 (D250 (8)) | product | CLI, with Controller | One read-only list names every artifact a context acquires, its origin, its digest and the Machine that reads it | D250 parks the controlled-network plan until the owner promotes it |
@@ -3306,32 +3305,10 @@ renaming it, or waiting until the record holds a PID, closes the window.
 **Exit evidence:** the test parses the PID only from a complete record.
 **Outcome:** the controller units lane no longer fails on this race.
 
-### B1242
-
-**Owner:** Controller. **Kind:** product. **Requires:** none.
-**Definition:** Specified by [D250](#d250) (2), (12), (13) and (17): the controller
-stage resolves `latest` and every tool's SHA-256 from its publisher at apply,
-even when a [download mirror](../api/environment.md#download-mirrors) serves
-the bytes, so a context with an OpenShift cluster always reaches a public
-origin for Helm ([the controller stage](../controller.md#the-controller-stage)).
-**Outcome:** the [build's tool table](../deferred/controlled-network.md#the-build)
-holds, for Helm, `kubectl`, `virtctl` and `govc`, a minimum release and a
-default release with its size and SHA-256. A context that names no release
-acquires the default by that digest with no publisher metadata; a declared
-release at or above the minimum takes its SHA-256 from its publisher, read by
-the Machine that downloads it; one below the minimum refuses at plan; the next
-apply replaces a retained release below a raised minimum; `latest` is removed
-from `dependencyVersions`; and every one of the four tools has a mirror route.
-The OpenShift clients and installer keep following the cluster's release and
-the vendor's checksum file. **Exit evidence:** an offline check that holds the
-table as the runtime lock is held; a stage test that acquires every default
-tool from a mirror with its publisher unreachable; a refusal test below the
-minimum; a replacement test after a raised minimum.
-
 ### B1243
 
-**Owner:** Architecture. **Kind:** enabling. **Requires:** B1242 for the
-tools' entries. **Definition:** Needs definition, from [D250](#d250) (2): no
+**Owner:** Architecture. **Kind:** enabling. **Requires:** none; its tools'
+entries come from the tool table X342 delivered. **Definition:** Needs definition, from [D250](#d250) (2): no
 build writes a bill of materials, the module list in the executable's build
 information is its only record, and the container build's Go image is named by
 a tag ([building in a container](../../docs/development.md#building-in-a-container)).
@@ -3375,7 +3352,7 @@ exception expires; the skill's procedure and a docs check that cites it.
 
 ### B1245
 
-**Owner:** CLI, with Controller. **Kind:** product. **Requires:** B1242.
+**Owner:** CLI, with Controller. **Kind:** product. **Requires:** none.
 **Definition:** Needs definition, from [D250](#d250) (8): no command lists
 what a context acquires, and the
 [operator guide](../../docs/operator-guide.md#on-a-controlled-network) keeps
@@ -3391,7 +3368,7 @@ replaced by the command.
 ### B1246
 
 **Owner:** Controller, with Desired state. **Kind:** product. **Requires:**
-B1242, B1245. **Definition:** Needs definition, from [D250](#d250) (4) and
+B1245. **Definition:** Needs definition, from [D250](#d250) (4) and
 (7): the [design](../deferred/controlled-network.md#declaration-and-refusal).
 **Outcome:** the Environment names one mirror, a Registry and an artifact
 server endpoint, placed on any Machine, the controller included, or external
@@ -7863,7 +7840,7 @@ by the session, pending the owner's review:
    the mirror from it on the mirror host, before the controller stage's tools.
 9. A build's vulnerability gate takes a reviewed, expiring exception as its
    only way past, and images are scanned on a schedule, not in the build.
-10. The work is parked as [B1242](#b1242) to [B1251](#b1251) until the owner
+10. The work is parked as B1242 to [B1251](#b1251) until the owner
     promotes it, in the
     [design's order](../deferred/controlled-network.md#delivery-order);
     [B68](m1.md#b68), [B1236](#b1236) and the acceptance of
@@ -7903,3 +7880,21 @@ took, pending the owner's review:
     minimum; an exception expires within 90 days; and the skill takes the
     finding procedure with the gate, because a procedure for a gate and an
     exception file that do not exist yet cannot be followed.
+
+### D251
+
+**owner** (2026-11-10): shown the recorded answers and the plan's first step,
+the owner said "proceed implementation". This authorizes, out of sequence,
+the controlled-network program in the
+[design's delivery order](../deferred/controlled-network.md#delivery-order),
+one slice per step, starting with X342 (B1242). Taken by the session, pending
+the owner's review:
+
+1. B1242 attaches to M1, whose controller stage it changes, and completes
+   in-tree in X342, because its exit evidence is in-tree alone.
+2. The four pinned clients take a minimum equal to their default in the first
+   table, so a declared release older than the build's tested one refuses;
+   a later refresh may raise a default and leave its minimum.
+3. `spec.downloads.govcMirror` joins the three mirrors, so every pinned client
+   has a mirror route before [B1246](#b1246) replaces them with one
+   declaration.

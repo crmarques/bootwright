@@ -176,10 +176,11 @@ the download follows; `controller install` contacts none of them, and
 authority must be in the host's system trust store, which every acquisition
 verifies against.
 
-- `api.github.com`: release metadata of helm, govc, virtctl and the OKD
-  clients and installer.
+- `api.github.com`: release metadata of a declared helm, govc or virtctl
+  release other than the build's default, and of the OKD clients and
+  installer.
 - `cdn.dl.k8s.io`: where `dl.k8s.io` redirects a kubectl download.
-- `dl.k8s.io`: kubectl releases and their stable version.
+- `dl.k8s.io`: kubectl releases.
 - `get.helm.sh`: helm releases.
 - `github.com`: the govc, virtctl and OKD client and installer releases.
 - `mirror.openshift.com`: OpenShift client and installer releases.
@@ -203,7 +204,8 @@ registry or file server the enterprise runs:
 | --- | --- | --- | --- |
 | Host packages | Each host's dnf | The repositories dnf is configured with | Nothing to do: a Satellite or a local repository serves, as [setup](#what-setup-admits-and-installs) says |
 | OpenShift clients and installer | The controller | `mirror.openshift.com`, a vendor origin | Nothing to do |
-| Helm, which every OpenShift cluster selects, `virtctl`, `govc` and the OKD clients and installer | The controller | GitHub and `get.helm.sh` | Not possible yet: see the tools below |
+| Helm, which every OpenShift cluster selects, `virtctl` and `govc` | The controller | `get.helm.sh` and GitHub | `spec.downloads` on the Environment: see the tools below |
+| The OKD clients and installer | The controller | GitHub | Not possible yet: their release metadata is read from GitHub |
 | A managed service's image | The Machine the service runs on | The registry its compiled default names | `spec.image.local` on the service |
 | The emulated BMC's image | The libvirt provider's host | `quay.io` | The host's own container configuration |
 | Installation media | The controller | The file or URL you name | `media add --from-file`, or `--from-url` from your own server |
@@ -211,14 +213,17 @@ registry or file server the enterprise runs:
 | A cluster's operators | The cluster's nodes | The registries of the catalog each add-on binding names | Nothing to do for a Red Hat catalog or IBM's Data Foundation on `icr.io`, vendor origins; another's repositories are mapped by the same `imageDigestSources` where the cluster pulls them by digest |
 | IBM Ceph images and packages | The controller, which resolves each image's digest, then each Ceph host | `cp.icr.io` and `public.dhe.ibm.com`, vendor origins | Nothing to do |
 
-**Tools.** `spec.downloads` on the Environment names a mirror for the
-OpenShift clients and installer, for `virtctl` and for Helm, and their bytes
-then come from it ([download mirrors](../specs/api/environment.md#download-mirrors)).
-The controller stage still reads each release's metadata and checksum from
-its publisher, so the [destinations above](#destinations-to-allow) stay
-necessary: a context with an OpenShift cluster reaches `api.github.com` and
-`get.helm.sh` for Helm even with `helmMirror` set, and `govc` has no mirror
-field.
+**Tools.** Each build pins a default release of Helm, `virtctl`, `govc` and
+`kubectl` with its size and SHA-256 ([the tool table](../specs/controller.md#the-tool-table)).
+`spec.downloads` on the Environment names a mirror for Helm, `virtctl`,
+`govc` and the OpenShift clients and installer, and their bytes then come from it
+([download mirrors](../specs/api/environment.md#download-mirrors)). A
+default release is fetched from its mirror alone, with no publisher contact.
+A release you declare in `spec.dependencyVersions` other than the default
+still has its checksum read from its publisher, so it reaches `api.github.com`
+or `get.helm.sh` even with a mirror set. Fill the mirror with the default
+releases `make tool-table` names, under the layout the download mirrors
+section states.
 
 **Images.** Each compiled default is pinned by digest: `docker.io` for the
 name resolver, the proxy and the time server, `registry.access.redhat.com`
@@ -666,8 +671,9 @@ lists what a host must offer; in brief:
   so prove them free.
 - Capacity for the guests plus the virt-launcher overhead the coverage row
   gives, and about two cores per host node for OpenShift Virtualization.
-- A `virtctl` pinned through `spec.dependencyVersions`, and a route from the
-  controller to the host's upload proxy without an ambient proxy.
+- The build's default `virtctl`, or a release declared in
+  `spec.dependencyVersions`, and a route from the controller to the host's
+  upload proxy without an ambient proxy.
 
 Stop every hosted Machine before a destroy: a removal refuses while a
 VirtualMachine runs. A power command or `machine list --power-status` works

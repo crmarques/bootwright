@@ -3,6 +3,7 @@ package controller
 import (
 	"cmp"
 	"slices"
+	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/addons"
@@ -11,13 +12,15 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-// ToolRequest describes a declarative tool requirement and publisher family.
-// Setup freezes latest to an exact release before acquiring executable bytes.
+// ToolRequest is one exact client release; a release the build's tool table
+// pins carries that table's size and SHA-256.
 type ToolRequest struct {
 	Kind          string `json:"kind"`
 	Version       string `json:"version"`
 	Compatibility string `json:"compatibility"`
 	Mirror        string `json:"mirror"`
+	SHA256        string `json:"sha256,omitempty"`
+	Bytes         int64  `json:"bytes,omitempty"`
 }
 
 // InstalledTool names one executable the controller stage published. A
@@ -97,8 +100,13 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]T
 			if tool == virtctl.Kind {
 				result = append(result, virtctl)
 			} else {
-				result = append(result, ToolRequest{Kind: tool, Version: versions[tool]})
+				result = append(result, ToolRequest{Kind: tool, Version: versions[tool], Mirror: downloads.Get(tool + "Mirror").Text()})
 			}
+		}
+	}
+	for index := range result {
+		if result[index], err = pinned(result[index]); err != nil {
+			return nil, selectionFailure(environments[0], "controller.state", "", err.Error())
 		}
 	}
 	slices.SortFunc(result, CompareToolRequests)
@@ -124,10 +132,14 @@ func ProviderTool(catalog api.Catalog, kind string) (ToolRequest, error) {
 	if err != nil {
 		return ToolRequest{}, err
 	}
+	request := ToolRequest{Kind: kind, Version: versions[kind], Mirror: environments[0].Spec().Get("downloads", kind+"Mirror").Text()}
 	if kind == "virtctl" {
-		return virtctlRequest(versions, environments[0].Spec().Get("downloads")), nil
+		request = virtctlRequest(versions, environments[0].Spec().Get("downloads"))
 	}
-	return ToolRequest{Kind: kind, Version: versions[kind]}, nil
+	if request, err = pinned(request); err != nil {
+		return ToolRequest{}, selectionFailure(environments[0], "controller.state", "", err.Error())
+	}
+	return request, nil
 }
 
 func targetToolVersions(environment api.Object) (map[string]string, error) {
@@ -135,20 +147,40 @@ func targetToolVersions(environment api.Object) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	versions := map[string]string{"helm": selected.Helm, "govc": selected.Govc, "virtctl": selected.Virtctl}
-	for key, value := range versions {
-		if value != "latest" {
-			versions[key] = "v" + value
+	versions := map[string]string{"helm": selected.Helm, "govc": selected.Govc, "virtctl": selected.Virtctl, "kubectl": ""}
+	for kind, value := range versions {
+		if value == "" {
+			pin, found, err := PinOf(kind)
+			if err != nil || !found {
+				return nil, selectionFailure(environment, "controller.state", "", "this build's tool table names no default "+kind+" release")
+			}
+			value = pin.Default.Version
 		}
+		versions[kind] = "v" + value
 	}
 	return versions, nil
 }
 
+func pinned(request ToolRequest) (ToolRequest, error) {
+	pin, found, err := PinOf(request.Kind)
+	if err != nil {
+		return ToolRequest{}, err
+	}
+	compatibility := ""
+	if request.Kind == "virtctl" {
+		compatibility = "kubevirt"
+	}
+	if found && request.Compatibility == compatibility && strings.TrimPrefix(request.Version, "v") == pin.Default.Version {
+		request.SHA256, request.Bytes = pin.Default.SHA256, pin.Default.Bytes
+	}
+	return request, nil
+}
+
 func CompareToolRequests(a, b ToolRequest) int {
-	for _, pair := range [][2]string{{a.Kind, b.Kind}, {a.Version, b.Version}, {a.Compatibility, b.Compatibility}, {a.Mirror, b.Mirror}} {
+	for _, pair := range [][2]string{{a.Kind, b.Kind}, {a.Version, b.Version}, {a.Compatibility, b.Compatibility}, {a.Mirror, b.Mirror}, {a.SHA256, b.SHA256}} {
 		if order := cmp.Compare(pair[0], pair[1]); order != 0 {
 			return order
 		}
 	}
-	return 0
+	return cmp.Compare(a.Bytes, b.Bytes)
 }

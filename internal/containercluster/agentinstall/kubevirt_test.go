@@ -12,6 +12,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/containercluster/openshift"
+	controllerscope "github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/machine"
@@ -140,7 +141,7 @@ func TestKubeVirtRequestsMatchTheirGoldens(t *testing.T) {
 				decoded.PublicationRoot != (Publication{}) || decoded.TLSCertificateRef != "" || len(needs.ArtifactServers) != 0 {
 				t.Fatalf("pushed request publishes: %+v", decoded)
 			}
-			if want := []Tool{{Compatibility: "kubevirt", Kind: "virtctl", Version: "latest"}}; !reflect.DeepEqual(decoded.PortTools, want) {
+			if want := []Tool{{Compatibility: "kubevirt", Kind: "virtctl", Version: "v" + defaultVirtctl()}}; !reflect.DeepEqual(decoded.PortTools, want) {
 				t.Fatalf("port tools = %+v", decoded.PortTools)
 			}
 			definition, err := mediaDefinition(media, needs, reconciliation.Apply)
@@ -210,7 +211,7 @@ func kubevirtRunOn(t *testing.T, catalog api.Catalog, operation string, pins map
 			return area, err
 		}
 		held := area.(fakeArea)
-		held.entries = append(held.entries, prerequisites.BundleEntry{Path: "tools/virtctl/kubevirt/v1.6.2/virtctl", Executable: true})
+		held.entries = append(held.entries, prerequisites.BundleEntry{Path: kubevirtTool().Files[0].Path, Executable: true})
 		return held, nil
 	}
 	var proved []lifecycle.BlockEvidence
@@ -259,7 +260,7 @@ func TestEveryKubeVirtOperationCarriesEachNodesPinAndItsKubeconfigAlone(t *testi
 				t.Fatalf("%s: node %d carries %v", operation, index, run.MaterialValues)
 			}
 		}
-		if located := run.MaterialValues["virtctl"]; (operation == "apply") != strings.HasSuffix(located, "/tools/virtctl/kubevirt/v1.6.2/virtctl") {
+		if located := run.MaterialValues["virtctl"]; (operation == "apply") != strings.HasSuffix(located, "/"+kubevirtTool().Files[0].Path) {
 			t.Fatalf("%s: virtctl = %q", operation, run.MaterialValues["virtctl"])
 		}
 		for _, material := range run.Materials {
@@ -296,8 +297,14 @@ func TestAKubeVirtApplyWithoutTheMachinesRecordRefusesBeforeTheAdapter(t *testin
 }
 
 func kubevirtTool() prerequisites.ToolDefinition {
-	return prerequisites.ToolDefinition{Kind: "virtctl", Compatibility: "kubevirt", Version: "v1.6.2",
-		Files: []prerequisites.ToolFile{{Member: "virtctl", Path: "tools/virtctl/kubevirt/v1.6.2/virtctl"}}}
+	version := "v" + defaultVirtctl()
+	return prerequisites.ToolDefinition{Kind: "virtctl", Compatibility: "kubevirt", Version: version,
+		Files: []prerequisites.ToolFile{{Member: "virtctl", Path: "tools/virtctl/kubevirt/" + version + "/virtctl"}}}
+}
+
+func defaultVirtctl() string {
+	pin, _, _ := controllerscope.PinOf("virtctl")
+	return pin.Default.Version
 }
 
 type recordedLends struct {

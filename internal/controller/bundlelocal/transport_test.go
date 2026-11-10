@@ -77,12 +77,12 @@ func TestUnreachablePublisherNamesItsHostAndCorrectableCondition(t *testing.T) {
 // A tool catalog failure is reached only through a context's controller
 // stage, which setup cannot settle because it installs no target tool.
 func TestToolCatalogFailuresNameTheStageThatReachedThem(t *testing.T) {
-	request := controller.ToolRequest{Kind: "helm", Version: "latest"}
-	endpoint, _, err := sourceURL(request, "v4.2.10")
+	request := controller.ToolRequest{Kind: "helm", Version: "v4.2.10"}
+	endpoint, _, err := sourceURL(request, request.Version)
 	if err != nil {
 		t.Fatal(err)
 	}
-	source := prerequisites.DependencySource{ID: toolSourcePrefix(request) + "v4.2.10", URL: endpoint, SHA256: strings.Repeat("a", 64), Bytes: 1024}
+	source := prerequisites.DependencySource{ID: toolSourcePrefix(request) + request.Version, URL: endpoint, SHA256: strings.Repeat("a", 64), Bytes: 1024}
 	conflict := source
 	conflict.SHA256 = strings.Repeat("b", 64)
 	_, _, err = (&ToolCatalog{}).Select([]controller.ToolRequest{request}, []prerequisites.DependencySource{source, conflict})

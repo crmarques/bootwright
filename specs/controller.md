@@ -589,30 +589,33 @@ intent the Environment's [`dependencyVersions`](api/environment.md#dependency-ve
 declares. OpenShift/OKD installer and clients remain tied to the target
 release. A cluster pinned to a release image still selects its clients from
 the declared `release.version`; without that version the stage refuses rather
-than inferring a client release from the image. `virtctl` uses upstream
-latest unless explicitly overridden; no remote target discovery or automatic
-compatibility inference is required. A tool's `latest` intent is resolved by
-the attempt that installs it and retained from then on; moving a retained
-`latest` client to a newer release requires declaring that release in
-`dependencyVersions`. A host package is whatever the host's repositories
-provide. An agent-installed OpenShiftCluster node that references a declared Machine
+than inferring a client release from the image. Helm, `govc`, `virtctl` and a
+standalone `kubectl` take the release the build's
+[tool table](#the-tool-table) names as their default unless the Environment
+declares one; no remote target discovery or automatic compatibility inference
+is required, and no stage resolves a newest release. A host package is
+whatever the host's repositories provide. An agent-installed OpenShiftCluster node that references a declared Machine
 selects the host's `nmstate` package for the installer's `nmstatectl gc`
 invocation; the `iputils` package serves the virtual-IP duplicate-address
 probe.
 
-Each target tool's SHA-256 comes from its publisher's own metadata, read over
-TLS to that publisher and never from a mirror
-([dependency versions](api/environment.md#dependency-versions)), and the
-adapter verifies the source against it before extraction. No publisher
-signature is verified for any tool, so that TLS and the publisher's metadata
-are the whole authenticity a source has, a named widening of
-[publisher authenticity](security.md#cryptography-and-supply-chain):
+A client at the default release its tool table names is acquired by the size
+and SHA-256 that table holds, frozen into the stage's request, and no publisher
+metadata is read for it, from its publisher or from a
+[download mirror](api/environment.md#download-mirrors) alike. Every other
+release's SHA-256 comes from its publisher's own metadata, read over TLS to
+that publisher and never from a mirror
+([dependency versions](api/environment.md#dependency-versions)). The adapter
+verifies the source against the frozen SHA-256 before extraction. No
+publisher signature is verified for any tool, so the table, or that TLS and
+the publisher's metadata, are the whole authenticity a source has, a named
+widening of [publisher authenticity](security.md#cryptography-and-supply-chain):
 
-| Tool | Release resolved from | SHA-256 from |
+| Tool | A release other than the table's default resolved from | Its SHA-256 from |
 | --- | --- | --- |
 | OpenShift `oc`, `kubectl` and installer | the declared release | `sha256sum.txt` beside the archive on `mirror.openshift.com` |
 | OKD `oc`, `kubectl` and installer | the declared release's GitHub release | the release asset's digest, else `sha256sum.txt` beside the archive |
-| standalone `kubectl` | the declared release, or `dl.k8s.io/release/stable.txt` for `latest` | `<archive>.sha256` on `dl.k8s.io` |
+| standalone `kubectl` | the declared release | `<archive>.sha256` on `dl.k8s.io` |
 | Helm | the `helm/helm` GitHub release | `<archive>.sha256sum` on `get.helm.sh` |
 | `govc` | the `vmware/govmomi` GitHub release | the release asset's digest, else the release's `checksums.txt` |
 | `virtctl` | the `kubevirt/kubevirt` GitHub release | the release asset's digest; a release without one refuses |
@@ -737,9 +740,8 @@ apply a removal takes back, because the stage's own removal retains and proves
 no closure. That proof names the tool area and the exact bytes of each client,
 so the stage recovers the closure from the retained identities of exactly
 those clients and answers with the file the proved area holds. The host's
-retained sources are shared, so recovering the closure from all of them would
-select the newest release another context retained under the same `latest`
-intent, an area this context never published. An apply that proved no
+retained sources are shared, so recovering the closure from all of them could
+name an area another context published and this one never did. An apply that proved no
 completed stage, a closure only partly retained or naming another area, an
 area that does not exist, or one without the file answers that the executable
 is not installed and names `apply --stage controller`, and no search path is
@@ -800,6 +802,31 @@ binding and reservations and retires the tool area only that binding named
 (`TestAnUnknownControllerPublicationNamesTheApplyThatMetIt`,
 `TestAnUnknownControllerPublicationNamesTheDestroyThatMetIt`,
 `TestAnUnknownControllerPublicationNamesTheDeletionThatMetIt`).
+
+### The tool table
+
+Each build embeds one tool table, `internal/controller/tooltable.json`, in the
+format `controller.ToolTableFormat`. For `govc`, Helm, a standalone `kubectl`
+and `virtctl`, in that order, it names the minimum release this build accepts
+and the default release it installs when an Environment declares none, with
+that default's size and SHA-256 from its publisher. Releases are
+`MAJOR.MINOR.PATCH` without a `v`, and the default is at or above the
+minimum (`TestTheEmbeddedToolTablePinsEachClientAtOrAboveItsMinimum`). The
+table moves only with a new build: when an advisory reaches a default or a
+minimum, that build raises both to the first fixed release, and an apply of a
+context that retained an older release acquires the new default, because a
+different release is a different request.
+
+A declared release is compared by its leading `MAJOR.MINOR.PATCH`, a
+prerelease suffix ranking below the release it precedes; one below the
+minimum, or one without that triple, refuses at plan while its client is
+selected ([refusal table](api/environment.md#refusal-table)). The OpenShift and
+OKD clients and installer follow the cluster's release and take no minimum.
+`make tool-table` reads each default's checksum and size from its publisher
+and fails when either differs, and `make tool-table-outdated` names newer
+stable releases; only these contact a publisher, and
+[development](../docs/development.md#lock-refresh-and-tested-hosts) owns the
+refresh.
 
 ## Egress and local effects
 

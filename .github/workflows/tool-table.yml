@@ -1,0 +1,49 @@
+name: tool-table
+
+on:
+  push:
+    paths:
+      - internal/controller/tooltable.json
+      - scripts/tools/tooltable/**
+      - .github/workflows/tool-table.yml
+  pull_request:
+    paths:
+      - internal/controller/tooltable.json
+      - scripts/tools/tooltable/**
+      - .github/workflows/tool-table.yml
+  schedule:
+    - cron: "41 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Verify every default against its publisher
+        run: make tool-table
+
+  outdated:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Report newer releases
+        run: |
+          {
+            echo "## Tool table: newer releases (advisory)"
+            echo
+            make --no-print-directory tool-table-outdated
+          } >> "$GITHUB_STEP_SUMMARY"

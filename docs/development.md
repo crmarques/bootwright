@@ -280,6 +280,25 @@ carries with the new lock's. `verify` downloads every locked URL and compares it
 `.github/workflows/runtime-lock.yml` runs `verify` when the lock or the tool
 changes and weekly, with `outdated` as an advisory summary.
 
+The controller stage's clients follow the tool table
+`internal/controller/tooltable.json` ([controller](../specs/controller.md#the-tool-table)).
+To move a default, edit its version, size and SHA-256 in the table and run,
+with network:
+
+```sh
+make tool-table
+make tool-table-outdated
+```
+
+`make tool-table` reads each default's checksum and size from its publisher
+and fails on any difference, so a hand-edited entry is proved before it is
+committed. `make tool-table-outdated` names each client whose publisher has a
+newer stable release, without gating. Raise a minimum only for an advisory
+that reaches the releases below it, and never above its default.
+`.github/workflows/tool-table.yml` runs `make tool-table` when the table or its
+tool changes and weekly, with `make tool-table-outdated` as an advisory
+summary.
+
 Each managed service runs one container image pinned by content digest in its
 capability's `catalog.go`. All four were resolved from their publisher's
 current stable tag and qualified by hand against podman 5.8.4 on Fedora 43 on

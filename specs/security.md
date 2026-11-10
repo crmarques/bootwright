@@ -772,13 +772,18 @@ installation reaches no package index and no setup resolves, discovers or
 checks for a newer version; the upgrade is a new build. Host packages are the
 exception: the host's `dnf` resolves them under its own signature policy
 ([W2](#the-controller-hosts-attacker-model)), and the evidence records each
-provider's NEVRA and repository. Target tools are a named widening of
-publisher authenticity: a [target tool's](controller.md#the-controller-stage)
-SHA-256 is its publisher's own release metadata, the release's asset digest or
-the publisher's checksum file, read over verified HTTPS from the publisher even
-when a mirror serves the bytes. No publisher signature is verified, so a
-publisher compromised at the first acquisition is trusted from then
-on: the digest and size that acquisition records pin every later use. A tool
+provider's NEVRA and repository. A target client at its default release is
+pinned like the runtime: the build's
+[tool table](controller.md#the-tool-table) holds its release, size and
+SHA-256, read from its publisher when the table was refreshed, and the
+controller stage acquires it by that digest alone. Every other target tool is a
+named widening of publisher authenticity: a
+[target tool's](controller.md#the-controller-stage) SHA-256 is its publisher's
+own release metadata, the release's asset digest or the publisher's checksum
+file, read over verified HTTPS from the publisher even when a mirror serves the
+bytes. No publisher signature is verified, so a publisher compromised at the
+table's refresh, or at a declared release's first acquisition, is trusted
+from then on: the digest and size recorded then pin every later use. A tool
 whose publisher offers no such metadata refuses. A frozen operation never
 substitutes an update silently; recovery follows
 [state reconciliation](state-reconciliation.md#dependency-safety-during-recovery).
@@ -811,7 +816,7 @@ states its route:
 | Artifact | Default origin | Mirror route |
 | --- | --- | --- |
 | Host packages | The host's repositories | The host's own dnf configuration ([host packages](controller.md#host-packages)) |
-| Target tools | Each tool's publisher: a vendor origin for an OpenShift release's clients and installer, a public one for every other tool, an OKD release's included | [Download mirrors](api/environment.md#download-mirrors) serve the bytes of the OpenShift clients and installer, Helm and `virtctl`; the publisher's metadata is still read ([the controller stage](controller.md#the-controller-stage)) |
+| Target tools | Each tool's publisher: a vendor origin for an OpenShift release's clients and installer, a public one for every other tool, an OKD release's included | [Download mirrors](api/environment.md#download-mirrors) serve the bytes of the OpenShift clients and installer, Helm, `govc` and `virtctl`; a client at the build's default release needs no publisher contact, and any other release's publisher metadata is still read ([the controller stage](controller.md#the-controller-stage)) |
 | A managed service's image | The executable's compiled default | The service's `spec.image.local` ([management and placement](api/infrastructure-services.md#management-and-placement)) |
 | The emulated BMC's image | The executable's compiled default | None declared: the provider host's container runtime acquires it, and only when the host does not hold it ([Machine realization](substrates.md#machine-realization)) |
 | Operating-system media | The file or URL the operator names | The operator's own choice of source ([media store](managed-os.md#media-store)) |
@@ -829,10 +834,6 @@ and hands none to a Machine: every public-origin artifact comes from that
 mirror, vendor origins stay direct, and an artifact the mirror lacks refuses
 before any effect. The [controlled network design](deferred/controlled-network.md)
 holds the mirror host, its declaration and how it is filled.
-
-Not yet met: a target tool is acquired by a digest the build pins or the
-Environment declares, with no publisher metadata; tracked as
-[B1242](milestones/backlog.md#b1242).
 
 Not yet met: one Environment declaration routes a context's public-origin
 tools to its mirror and refuses an artifact the mirror lacks; tracked as

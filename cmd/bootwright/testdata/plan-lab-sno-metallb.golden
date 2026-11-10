@@ -26,7 +26,7 @@
       "install-host-package qemu-kvm-core",
       "install-host-package swtpm",
       "install-host-package swtpm-tools",
-      "publish-target-client helm latest",
+      "publish-target-client helm v4.3.1",
       "publish-target-client openshift-clients 4.21.15",
       "publish-target-client openshift-install 4.21.15"
     ]

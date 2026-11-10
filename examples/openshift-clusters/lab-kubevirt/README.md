@@ -40,8 +40,8 @@ profile; its live run on an external host is B731's operator gate.
   `ReadWriteMany` in its first claim property set, and at least one node is
   schedulable for virtual machines with KVM.
 - The controller reaches the host API and the CDI upload proxy without an
-  ambient proxy, and pins `virtctl` through `spec.dependencyVersions`; its
-  release metadata comes from api.github.com.
+  ambient proxy, and installs the build's default `virtctl`, whose size and
+  SHA-256 the build pins, from github.com.
 - Operator inputs: `host-kubeconfig`, `openshift-pull-secret`, the generated
   `kubevirt-cluster-admin-ssh-key`, and host capacity for the five guests. All
   names and addresses are fixtures.

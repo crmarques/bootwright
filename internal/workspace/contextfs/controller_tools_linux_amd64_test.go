@@ -135,8 +135,8 @@ func resolvedSetupFixture(t *testing.T, store *Store, record contexts.Record) {
 // The controller stage retains the sources it acquired, seals the area its
 // closure names and records it on the binding. The install, in a later operation, locates the installer and the
 // client that stage installed from its proof alone, even once another context
-// on this host retained a newer helm under the same latest intent, whose
-// closure this context never published.
+// on this host retained a newer helm, whose closure this context never
+// published.
 func TestTheInstallLocatesTheClientsTheControllerStageInstalled(t *testing.T) {
 	ctx := context.Background()
 	store, record := lifecycleFixture(t)
@@ -144,7 +144,7 @@ func TestTheInstallLocatesTheClientsTheControllerStageInstalled(t *testing.T) {
 	request := clients.Request{
 		Egress: prerequisites.SetupEgress{NoProxy: []string{}}, Machine: "controller", Version: clients.Version,
 		Tools: []clients.ToolRequest{
-			{Kind: "helm", Version: "latest"},
+			{Kind: "helm", Version: "v3.19.0"},
 			{Compatibility: "openshift", Kind: "openshift-clients", Version: "4.19.3"},
 			{Compatibility: "openshift", Kind: "openshift-install", Version: "4.19.3"},
 		},
@@ -199,11 +199,11 @@ func TestTheInstallLocatesTheClientsTheControllerStageInstalled(t *testing.T) {
 	}
 	newer := []prerequisites.DependencySource{}
 	for _, tool := range requests {
-		version := "v3.20.0"
+		tool.Version = "v3.20.0"
 		if tool.Kind != "helm" {
-			tool.Version, version = "4.22.3", "4.22.3"
+			tool.Version = "4.22.3"
 		}
-		newer = append(newer, publishedSource(t, tool, version, "b"))
+		newer = append(newer, publishedSource(t, tool, tool.Version, "b"))
 	}
 	err = store.MutateLifecycle(ctx, record.Name, func(tx lifecycle.Transaction) error {
 		return tx.RetainDependencies(ctx, newer)
@@ -216,8 +216,8 @@ func TestTheInstallLocatesTheClientsTheControllerStageInstalled(t *testing.T) {
 		if view.State.Bindings[0].Tools != area {
 			t.Fatalf("the binding names tool area %q, want %s", view.State.Bindings[0].Tools, area)
 		}
-		if selected, complete, err := catalog.Select(requests, view.State.ToolSources); err != nil || !complete || prerequisites.ToolsDigest(selected) == area {
-			t.Fatalf("the newer helm another context retained is not what the host's sources now select (%v)", err)
+		if selected, complete, err := catalog.Select(requests, view.State.ToolSources); err != nil || !complete || prerequisites.ToolsDigest(selected) != area {
+			t.Fatalf("the releases another context retained changed what this context's exact requests select (%v)", err)
 		}
 		execution := lifecycle.Execution{LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
 			return stage.LocateTool(inner, view, block, proved, tool)

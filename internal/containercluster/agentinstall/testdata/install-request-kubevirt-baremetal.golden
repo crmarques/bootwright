@@ -141,7 +141,7 @@
     {
       "compatibility": "kubevirt",
       "kind": "virtctl",
-      "version": "latest"
+      "version": "v1.9.1"
     }
   ],
   "publicationRoot": {

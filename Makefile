@@ -1,4 +1,4 @@
-.PHONY: build wheels container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check focus quick race check-offline check check-go
+.PHONY: build wheels tool-table tool-table-outdated container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check focus quick race check-offline check check-go
 
 GO := ./scripts/go
 VULNDB ?= https://vuln.go.dev
@@ -33,6 +33,15 @@ wheels:
 	$(GO) -C scripts/tools run ./runtimewheels -lock "$(CURDIR)/internal/controller/runtimelock/lock.json" \
 		-dest "$(CURDIR)/internal/controller/runtimelock/wheels" -cache "$(WHEELS_CACHE)"
 
+# The controller stage installs each default client by the size and SHA-256
+# the tool table pins. These read the publishers, which no build does.
+TOOL_TABLE = $(CURDIR)/internal/controller/tooltable.json
+tool-table:
+	$(GO) -C scripts/tools run ./tooltable -table "$(TOOL_TABLE)" verify
+
+tool-table-outdated:
+	$(GO) -C scripts/tools run ./tooltable -table "$(TOOL_TABLE)" outdated
+
 build: wheels
 	CGO_ENABLED=0 $(GO) build -trimpath -buildvcs=false -ldflags '$(STAMP)' -o bin/bootwright ./cmd/bootwright
 
@@ -66,7 +75,7 @@ container-build:
 
 test:
 	$(GO) test ./...
-	$(GO) -C scripts/tools test ./runtimewheels/...
+	$(GO) -C scripts/tools test ./runtimewheels/... ./tooltable/...
 
 vet:
 	$(GO) vet ./...
