@@ -28,9 +28,17 @@ an existing skill; otherwise its content moves to that reference.
 `CLAUDE.md` only imports it. A personal or local override never replaces it:
 use `~/.claude/CLAUDE.md` or `CLAUDE.local.md` for Claude Code and
 `~/.codex/AGENTS.md` for Codex, or make the local file defer to the tracked
-`AGENTS.md`. The tracked `.claude/settings.json` asks before every command
-AGENTS.md forbids an agent to run on its own, and `TestDocsAskRulesCoverEveryEffectfulCommand` keeps that list complete against the [command catalog](../../specs/cli/commands.md#command-and-flag-catalog); a bypass permission mode skips
-those rules, and Codex needs the same commands under its own approval policy,
-which this repository does not track. Both runtimes run the same advisory
+`AGENTS.md`. The tracked `.claude/settings.json` and
+`.codex/rules/bootwright.rules` ask before every command AGENTS.md forbids an
+agent to run on its own, and
+`TestDocsAskRulesCoverEveryEffectfulCommand` keeps both complete against the
+[command catalog](../../specs/cli/commands.md#command-and-flag-catalog). Codex
+reads `<repo>/.codex/rules/` only once the project's `.codex/` layer is trusted;
+a session that does not trust it copies the file to `~/.codex/rules/`. A bypass
+permission mode skips both. A Codex prefix rule matches only the leading words:
+a global flag between the binary and the command, an absolute binary path and
+`git -C <dir>` do not match, and a flag-gated command (`cluster info`,
+`render effective`) prompts on every run; `.claude/settings.json` matches
+those forms. Both runtimes run the same advisory
 [end-of-turn check](code-implementation/references/verification.md#end-of-turn-hook):
 `.claude/settings.json` and `.codex/hooks.json` call `scripts/hooks/stop-check`.

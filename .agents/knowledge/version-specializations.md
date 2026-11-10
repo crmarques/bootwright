@@ -180,6 +180,7 @@ Evidence first, then at most four touch points, usually three.
    the implementation version
    ([continuation](continuation-after-a-fix.md#rule)).
 
-Then `make build` and `bootwright apply --stage <same>`; gates are `make focus`
-while iterating, `./scripts/ansible-check --suite units`, `make docs-check` and
-`make check` before integration.
+Then `make build`; the operator runs `bootwright apply --stage <same>`, which an
+agent only proposes and runs when the owner asks ([AGENTS.md](../../AGENTS.md)).
+Gates are `make focus` while iterating, `./scripts/ansible-check --suite units`,
+`make docs-check` and `make check` before integration.

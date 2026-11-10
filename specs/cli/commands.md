@@ -65,6 +65,15 @@ controller runtime when its directory is missing, for the commands whose cell
 names it. That rebuild waits for `controller/install/lock`, uses no network and changes no
 setup record. “Mutate” permits only the named, planned effects.
 
+An *asked* command is one whose cell names a Mutate effect (a planned mutation
+or removal, host packages, a download, SSH, a power operation, a host identity
+rewrite), reveals a secret, or deletes or rotates local state irreversibly
+(`context delete`, `secret delete`, `secret encryption rotate`, `media
+delete`); an agent runs it only when the owner asks, and
+`TestDocsAskRulesCoverEveryEffectfulCommand` keeps the tracked
+`.claude/settings.json` and `.codex/rules/bootwright.rules` complete against
+these cells.
+
 The Effects column is the only owner of what a command may do. Another page
 describes a command's effects only by projecting its cell and defines no other
 class. A page that means the commands that run no process and open no network

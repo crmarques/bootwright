@@ -849,9 +849,10 @@ func notYetMetParagraph(pages map[string]markdownFile, from string, line int, te
 }
 
 // askRuleMarkers are the phrases of a catalog Effects cell that name a remote
-// or host effect, or a command that reveals a secret: the cells of the
-// "Mutate" class that specs/cli/commands.md defines, never "Local" or
-// "Observe" ones. A marker with a flag fires only for the invocation that
+// or host effect, a command that reveals a secret, or an irreversible local
+// change (a deletion or a key rotation): the cells of the "Mutate" class that
+// specs/cli/commands.md defines and those local deletions, never other "Local"
+// or "Observe" ones. A marker with a flag fires only for the invocation that
 // carries the flag, because the command reveals the secret by that flag alone.
 var askRuleMarkers = []struct{ phrase, flag string }{
 	{phrase: "planned mutation"},
@@ -862,6 +863,10 @@ var askRuleMarkers = []struct{ phrase, flag string }{
 	{phrase: "power operation"},
 	{phrase: "host identity rewrite"},
 	{phrase: "reveal"},
+	{phrase: "guarded removal"},
+	{phrase: "local logical deletion"},
+	{phrase: "local key rotation"},
+	{phrase: "local media deletion"},
 	{phrase: "confidential material", flag: "--secrets"},
 	{phrase: "sensitive files", flag: "--sensitive"},
 	{phrase: "local artifact writes", flag: "--sensitive"},
@@ -875,13 +880,12 @@ var askRuleMarkers = []struct{ phrase, flag string }{
 var askRuleNoAsk = map[string]string{
 	"context init": "local", "context update": "local", "context use": "local",
 	"context list": "read local state", "context current": "read local state",
-	"context delete": "never resource mutation", "add-ons list": "read executable registry", "add-ons info": "read executable registry",
+	"add-ons list": "read executable registry", "add-ons info": "read executable registry",
 	"secret set": "local confidential write", "secret generate": "generated-material batch",
 	"secret check": "no values emitted", "secret list": "read confidential-store metadata",
-	"secret info": "read confidential-store metadata only", "secret delete": "local logical deletion",
+	"secret info":            "read confidential-store metadata only",
 	"secret encryption init": "idempotent initialization", "secret encryption status": "read confidential metadata",
-	"secret encryption rotate": "local key rotation", "media list": "read local media",
-	"media delete": "local media deletion", "validate": "no write",
+	"media list": "read local media", "validate": "no write",
 	"controller check": "bounded local observation", "preflight": "observe unless", "plan": "none", "status": "read local state", "logs": "read local state",
 	"diff": "read local state", "render storage": "never execution",
 	"machine list": "read local state", "machine info": "read local inventory",
@@ -904,7 +908,7 @@ var askRuleInvocations = []string{
 // askRuleGroupFlagCommands are the grouped commands whose ask pattern must
 // also match global flags written between the group and the subcommand, as in
 // "render --context c effective"; B1219 extends this to every grouped command.
-var askRuleGroupFlagCommands = []string{"render effective", "render installer"}
+var askRuleGroupFlagCommands = []string{"render effective", "render installer", "context delete", "secret delete", "secret encryption rotate", "media delete"}
 
 // catalogCommand is one command row of the catalog: its local flags and its
 // Effects cell with a "same" cell replaced by the cell it repeats.
@@ -959,6 +963,14 @@ func catalogCommands(t *testing.T) map[string]catalogCommand {
 	return commands
 }
 
+func permissionPatternRegexp(body string) *regexp.Regexp {
+	var quoted []string
+	for part := range strings.SplitSeq(body, "*") {
+		quoted = append(quoted, regexp.QuoteMeta(part))
+	}
+	return regexp.MustCompile("^" + strings.Join(quoted, ".*") + "$")
+}
+
 // askRuleViolations compares the catalog with the ask patterns of
 // .claude/settings.json: every command whose Effects cell carries a marker has
 // a pattern that matches its invocation, and every pattern naming a Bootwright
@@ -972,11 +984,7 @@ func askRuleViolations(commands map[string]catalogCommand, patterns []string, no
 		if !isBash {
 			continue
 		}
-		var quoted []string
-		for part := range strings.SplitSeq(body, "*") {
-			quoted = append(quoted, regexp.QuoteMeta(part))
-		}
-		bodies[pattern] = regexp.MustCompile("^" + strings.Join(quoted, ".*") + "$")
+		bodies[pattern] = permissionPatternRegexp(body)
 		_, after, named := strings.Cut(body, "bootwright")
 		if !named {
 			continue
@@ -1064,10 +1072,134 @@ func askRuleViolations(commands map[string]catalogCommand, patterns []string, no
 	return violations
 }
 
+// codexRule is one prefix_rule of a Codex rules file: the alternatives of each
+// pattern word and its decision.
+type codexRule struct {
+	pattern  [][]string
+	decision string
+}
+
+var (
+	codexRuleBlock    = regexp.MustCompile(`(?s)prefix_rule\((.*?)\n\)`)
+	codexRulePattern  = regexp.MustCompile(`(?m)^\s*pattern\s*=\s*(\[.*\]),\s*$`)
+	codexRuleDecision = regexp.MustCompile(`(?m)^\s*decision\s*=\s*"(\w+)",\s*$`)
+	codexBinaries     = []string{"bootwright", "./bin/bootwright", "bin/bootwright"}
+)
+
+// parseCodexRules reads the prefix_rule entries of a Codex rules file whose
+// pattern is one line of JSON-compatible words and whose decision is one line.
+func parseCodexRules(text string) ([]codexRule, error) {
+	var lines []string
+	for line := range strings.SplitSeq(text, "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(line), "#") {
+			lines = append(lines, line)
+		}
+	}
+	var rules []codexRule
+	blocks := codexRuleBlock.FindAllStringSubmatch(strings.Join(lines, "\n"), -1)
+	if opened := strings.Count(strings.Join(lines, "\n"), "prefix_rule("); opened != len(blocks) {
+		return nil, fmt.Errorf("%d prefix_rule calls, %d in the one form this check reads", opened, len(blocks))
+	}
+	for _, block := range blocks {
+		pattern := codexRulePattern.FindStringSubmatch(block[1])
+		decision := codexRuleDecision.FindStringSubmatch(block[1])
+		if pattern == nil || decision == nil {
+			return nil, fmt.Errorf("prefix_rule without a one-line pattern and decision: %s", block[0])
+		}
+		var words []json.RawMessage
+		if err := json.Unmarshal([]byte(pattern[1]), &words); err != nil {
+			return nil, fmt.Errorf("pattern %s: %w", pattern[1], err)
+		}
+		rule := codexRule{decision: decision[1]}
+		for _, word := range words {
+			var literal string
+			var alternatives []string
+			if json.Unmarshal(word, &literal) == nil {
+				alternatives = []string{literal}
+			} else if err := json.Unmarshal(word, &alternatives); err != nil {
+				return nil, fmt.Errorf("pattern %s: %w", pattern[1], err)
+			}
+			rule.pattern = append(rule.pattern, alternatives)
+		}
+		if len(rule.pattern) == 0 {
+			return nil, fmt.Errorf("prefix_rule with an empty pattern: %s", block[0])
+		}
+		rules = append(rules, rule)
+	}
+	return rules, nil
+}
+
+func (rule codexRule) matches(words []string) bool {
+	if len(words) < len(rule.pattern) {
+		return false
+	}
+	for index, alternatives := range rule.pattern {
+		if !slices.Contains(alternatives, words[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+// codexDecision is the most restrictive decision of the rules matching a
+// command ("" when none does), as Codex applies them.
+func codexDecision(rules []codexRule, words []string) string {
+	rank := map[string]int{"allow": 1, "prompt": 2, "forbidden": 3}
+	decision := ""
+	for _, rule := range rules {
+		if rule.matches(words) && rank[rule.decision] > rank[decision] {
+			decision = rule.decision
+		}
+	}
+	return decision
+}
+
+// codexRuleViolations compares the catalog with the prefix rules of
+// .codex/rules/bootwright.rules: every command whose Effects cell carries a
+// marker has a prompting or forbidding rule for each way the repository binary
+// is named, and every rule on a bootwright command names a catalog command and
+// never allows it. A prefix rule cannot see global flags or an absolute path,
+// so the invocation shapes of askRuleInvocations that need them are not checked.
+func codexRuleViolations(commands map[string]catalogCommand, rules []codexRule) []string {
+	var violations []string
+	for _, rule := range rules {
+		if !slices.Equal(rule.pattern[0], codexBinaries) {
+			continue
+		}
+		var words []string
+		for _, alternatives := range rule.pattern[1:] {
+			words = append(words, alternatives[0])
+		}
+		if name := strings.Join(words, " "); commands[name].effects == "" {
+			violations = append(violations, fmt.Sprintf("the Codex rule for bootwright %q names a command specs/cli/commands.md does not list", name))
+		}
+		if rule.decision == "allow" {
+			violations = append(violations, fmt.Sprintf("the Codex rule for bootwright %q allows a command; a bootwright rule prompts or forbids", strings.Join(words, " ")))
+		}
+	}
+	for _, name := range sortedKeys(commands) {
+		effects := strings.ToLower(commands[name].effects)
+		for _, marker := range askRuleMarkers {
+			if !strings.Contains(effects, marker.phrase) || marker.flag != "" && !strings.Contains(commands[name].flags, "`"+marker.flag+"`") {
+				continue
+			}
+			for _, binary := range codexBinaries {
+				words := append([]string{binary}, strings.Fields(name)...)
+				if decision := codexDecision(rules, words); decision != "prompt" && decision != "forbidden" {
+					violations = append(violations, fmt.Sprintf("bootwright %s has %q effects, but no prompt rule in .codex/rules/bootwright.rules matches %q", name, marker.phrase, strings.Join(words, " ")))
+				}
+			}
+			break
+		}
+	}
+	return violations
+}
+
 // TestDocsAskRulesCoverEveryEffectfulCommand keeps the tracked Claude Code ask
-// list complete: AGENTS.md forbids an agent to run a command with effects or
-// one that reveals a secret on its own, and specs/cli/commands.md owns which
-// commands those are.
+// list and the tracked Codex rules complete: AGENTS.md forbids an agent to run
+// a command with effects, one that reveals a secret or one that deletes or
+// rotates local state irreversibly on its own, and specs/cli/commands.md owns
+// which commands those are.
 func TestDocsAskRulesCoverEveryEffectfulCommand(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", ".claude", "settings.json"))
 	if err != nil {
@@ -1087,6 +1219,158 @@ func TestDocsAskRulesCoverEveryEffectfulCommand(t *testing.T) {
 	}
 	for _, violation := range askRuleViolations(commands, settings.Permissions.Ask, askRuleNoAsk) {
 		t.Error(violation)
+	}
+	rulesText, err := os.ReadFile(filepath.Join("..", "..", ".codex", "rules", "bootwright.rules"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules, err := parseCodexRules(string(rulesText))
+	if err != nil {
+		t.Fatalf(".codex/rules/bootwright.rules: %v", err)
+	}
+	if len(rules) < 20 {
+		t.Fatalf("read %d Codex rules; the file's shape has changed", len(rules))
+	}
+	for _, violation := range codexRuleViolations(commands, rules) {
+		t.Error(violation)
+	}
+}
+
+func TestDocsCodexRuleViolations(t *testing.T) {
+	commands := map[string]catalogCommand{
+		"apply":        {flags: "`--yes` false", effects: "complete planned mutation"},
+		"cluster info": {flags: "`--secrets` false", effects: "read local state and optional confidential material"},
+		"media delete": {flags: "`--yes` false", effects: "local media deletion when not frozen"},
+		"status":       {flags: "none", effects: "read local state"},
+	}
+	text := `# comment
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "apply"],
+    decision = "prompt",
+)
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "cluster", "info"],
+    decision = "prompt",
+)
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "media", "delete"],
+    decision = "forbidden",
+)
+`
+	rules, err := parseCodexRules(text)
+	if err != nil || len(rules) != 3 {
+		t.Fatalf("parsed %d rules, %v", len(rules), err)
+	}
+	if got := codexRuleViolations(commands, rules); len(got) != 0 {
+		t.Fatalf("a complete rule list has violations: %v", got)
+	}
+	for name, test := range map[string]struct {
+		rules []codexRule
+		want  string
+	}{
+		"media rule removed": {rules[:2], `bootwright media delete has "local media deletion" effects, but no prompt rule`},
+		"apply rule removed": {rules[1:], `no prompt rule in .codex/rules/bootwright.rules matches "./bin/bootwright apply"`},
+		"binary missing": {[]codexRule{rules[0], rules[1], {pattern: [][]string{{"bootwright"}, {"media"}, {"delete"}}, decision: "prompt"}},
+			`matches "bin/bootwright media delete"`},
+		"allowed":       {append(slices.Clone(rules), codexRule{pattern: [][]string{codexBinaries, {"status"}}, decision: "allow"}), `rule for bootwright "status" allows a command`},
+		"unlisted":      {append(slices.Clone(rules), codexRule{pattern: [][]string{codexBinaries, {"machine"}, {"wipe"}}, decision: "prompt"}), `rule for bootwright "machine wipe" names a command`},
+		"allow only":    {append(slices.Clone(rules[1:]), codexRule{pattern: [][]string{codexBinaries, {"apply"}}, decision: "allow"}), `matches "bootwright apply"`},
+		"flag position": {[]codexRule{rules[0], {pattern: [][]string{codexBinaries, {"cluster"}, {"info"}, {"--secrets"}}, decision: "prompt"}, rules[2]}, `matches "bootwright cluster info"`},
+	} {
+		got := codexRuleViolations(commands, test.rules)
+		if len(got) == 0 || !strings.Contains(strings.Join(got, "\n"), test.want) {
+			t.Errorf("%s: violations %v, want %q", name, got, test.want)
+		}
+	}
+	if _, err := parseCodexRules("prefix_rule(\n    pattern = [\"git\"],\n)\n"); err == nil {
+		t.Error("a rule without a decision parsed")
+	}
+}
+
+func TestDocsGitGuardForms(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", ".claude", "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var settings struct {
+		Permissions struct {
+			Ask  []string `json:"ask"`
+			Deny []string `json:"deny"`
+		} `json:"permissions"`
+	}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatal(err)
+	}
+	decide := func(command string) string {
+		for _, list := range []struct {
+			decision string
+			patterns []string
+		}{{"deny", settings.Permissions.Deny}, {"ask", settings.Permissions.Ask}} {
+			for _, pattern := range list.patterns {
+				body, isBash := strings.CutPrefix(pattern, "Bash(")
+				if isBash && permissionPatternRegexp(strings.TrimSuffix(body, ")")).MatchString(command) {
+					return list.decision
+				}
+			}
+		}
+		return ""
+	}
+	for command, want := range map[string]string{
+		"git push origin main":                                "ask",
+		"git -C /w push origin main":                          "ask",
+		"git push --force origin main":                        "deny",
+		"git push origin main --force":                        "deny",
+		"git push origin main --force-with-lease":             "deny",
+		"git push origin main -f":                             "deny",
+		"git push origin +main":                               "deny",
+		"git -C /w push --force origin main":                  "ask",
+		"git -C /w push origin main --force":                  "ask",
+		"git -C /w push origin main -f":                       "ask",
+		"git -C /w push origin +main":                         "ask",
+		"git reset --hard HEAD~1":                             "deny",
+		"git reset HEAD~1 --hard":                             "deny",
+		"git -C /w reset --hard HEAD~1":                       "ask",
+		"git tag v1":                                          "deny",
+		"git -C /w tag v1":                                    "ask",
+		"git clean -fd":                                       "ask",
+		"git -C /w clean -fd":                                 "ask",
+		"git rebase main":                                     "ask",
+		"git -C /w rebase main":                               "",
+		"git -C /w merge --ff-only a/b":                       "",
+		"git -C /w worktree add /t b":                         "",
+		"git -C /w branch -d a/b":                             "",
+		"git -C /w commit -m fix":                             "",
+		"git -C /w commit -m \"tag push -f +x reset --hard\"": "ask",
+		"git -C /w reset --soft HEAD~1":                       "",
+	} {
+		if got := decide(command); got != want {
+			t.Errorf("%q: decision %q, want %q", command, got, want)
+		}
+	}
+
+	rulesText, err := os.ReadFile(filepath.Join("..", "..", ".codex", "rules", "bootwright.rules"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules, err := parseCodexRules(string(rulesText))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for command, want := range map[string]string{
+		"git push origin main":         "prompt",
+		"git push --force origin main": "forbidden",
+		"git push -f origin main":      "forbidden",
+		"git reset --hard HEAD~1":      "forbidden",
+		"git tag v1":                   "forbidden",
+		"git clean -fd":                "prompt",
+		"git rebase main":              "prompt",
+		"git commit -m fix":            "",
+		"git merge --ff-only a/b":      "",
+		"ansible-playbook site.yml":    "prompt",
+	} {
+		if got := codexDecision(rules, strings.Fields(command)); got != want {
+			t.Errorf("Codex %q: decision %q, want %q", command, got, want)
+		}
 	}
 }
 

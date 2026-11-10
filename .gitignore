@@ -13,6 +13,8 @@
 /.claude/worktrees/
 /.codex/*
 !/.codex/hooks.json
+!/.codex/rules/
+!/.codex/rules/bootwright.rules
 /site/
 /.state/
 /tmp/

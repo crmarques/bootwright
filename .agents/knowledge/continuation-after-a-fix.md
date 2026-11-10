@@ -32,10 +32,11 @@ lock continues with no `controller install`.
 
 ## Rule
 
-- Fix, `make build`, then `bootwright apply` with the same `--stage`. The
-  operation, its done blocks and their evidence stay; each attempt record names
-  the build that ran it (`build`), and `plan` and `status` say the operation was
-  registered by another build.
+- Fix, `make build`, then the operator runs `bootwright apply` with the same
+  `--stage`; an agent proposes it and runs it only when the owner asks
+  ([AGENTS.md](../../AGENTS.md)). The operation, its done blocks and their
+  evidence stay; each attempt record names the build that ran it (`build`), and
+  `plan` and `status` say the operation was registered by another build.
 - `bootwright controller install` is needed only when the fix moves the runtime lock (another
   `ansible-core`, Python dependency or interpreter ABI). Before that setup the
   apply refuses with `run bootwright controller install`; after it, a live operation whose

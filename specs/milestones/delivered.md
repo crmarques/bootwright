@@ -13034,3 +13034,37 @@ occurred. **Limitations:** preflight does not yet prove the mirror holds every
 file, the mirror must verify against the host's trust store, and a managed
 artifact server cannot be the mirror yet ([B1246](backlog.md#b1246)).
 
+### X347 — Agent effect guard
+
+**Item:** B1253 (2026-11-10, [D252](backlog.md#d252) (1)), Kind safety,
+Owners: Agent guidance with CLI. AGENTS.md names the commands an agent never
+runs unasked by the catalog's Effects column
+([asked commands](../cli/commands.md#command-and-flag-catalog)) instead of an
+inline list; `.claude/settings.json` asks before each of them, and the tracked
+`.codex/rules/bootwright.rules` prompts before each in Codex, `controller
+rebind` and the irreversible local commands (`context delete`, `secret delete`,
+`secret encryption rotate`, `media delete`) included. The git deny rules also
+cover a trailing `--force`, `-f` and a `+refspec` and `git reset --hard` with
+the flag last; the `git -C <dir>` forms of push, clean, reset `--hard` and tag
+ask rather than deny, because a glob after `git -C` also matches a commit
+message, and `git -C` rebase, merge, worktree, branch and commit stay
+unguarded for local integration. As COR-01 recommended, commands whose only
+write is the context's own input or generated material (`context init`,
+`update` and `use`, `secret set` and `generate`, `render` to an output
+directory) stay unasked; the asked class is the one
+[commands](../cli/commands.md#command-and-flag-catalog) defines. Two knowledge passages now send `apply` to the operator.
+
+| Finding | Change |
+| --- | --- |
+| COR-01 | AGENTS.md routes to the catalog; four ask patterns in the grouped form; the four commands moved from `askRuleNoAsk` to `askRuleMarkers` (irreversible local change) |
+| SKL-01 | `.codex/rules/bootwright.rules`, its `.gitignore` exception, and `codexRuleViolations` inside `TestDocsAskRulesCoverEveryEffectfulCommand` |
+| SKL-02 | deny and ask forms for trailing force flags and `git -C`; `TestDocsGitGuardForms` |
+| COR-36 | version-specializations.md and continuation-after-a-fix.md: the operator runs `apply`, an agent proposes it |
+
+Codex loads `<repo>/.codex/rules/` only for a trusted project and prefix rules
+match leading words only, so a global flag, an absolute binary path and `git -C`
+do not match there; a flag-gated command prompts on every run. The rules file
+could not be loaded by `codex execpolicy` here (no Codex binary).
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** the Codex rules file has not been loaded by Codex.

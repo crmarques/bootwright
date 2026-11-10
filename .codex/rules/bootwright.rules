@@ -1,0 +1,218 @@
+# Codex approval rules for the commands AGENTS.md forbids an agent to run
+# unasked. Codex loads this file from <repo>/.codex/rules/ once the project's
+# .codex/ layer is trusted; a session that does not trust the project copies it
+# to ~/.codex/rules/. Prefix rules match only the leading words of a command:
+#   - the repository binary matches as bootwright, ./bin/bootwright or
+#     bin/bootwright; an absolute path, a global flag between the binary and
+#     the command, and a flag between a group and its command (render --context
+#     c effective) do not match;
+#   - a command that is effectful only with a flag (cluster info --secrets,
+#     render effective --sensitive) prompts whenever it runs, because a flag
+#     after the command cannot be told apart by prefix;
+#   - git -C <dir> forms cannot be matched, because a directory is not a literal.
+# TestDocsAskRulesCoverEveryEffectfulCommand keeps this file complete against
+# the command catalog in specs/cli/commands.md, as it does .claude/settings.json.
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "apply"],
+    decision = "prompt",
+    justification = "bootwright apply acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "destroy"],
+    decision = "prompt",
+    justification = "bootwright destroy acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "controller", "install"],
+    decision = "prompt",
+    justification = "bootwright controller install acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "controller", "uninstall"],
+    decision = "prompt",
+    justification = "bootwright controller uninstall acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "controller", "rebind"],
+    decision = "prompt",
+    justification = "bootwright controller rebind acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "media", "add"],
+    decision = "prompt",
+    justification = "bootwright media add acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "media", "delete"],
+    decision = "prompt",
+    justification = "bootwright media delete acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "machine", "start"],
+    decision = "prompt",
+    justification = "bootwright machine start acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "machine", "stop"],
+    decision = "prompt",
+    justification = "bootwright machine stop acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "machine", "restart"],
+    decision = "prompt",
+    justification = "bootwright machine restart acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "machine", "trust"],
+    decision = "prompt",
+    justification = "bootwright machine trust acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "machine", "rsh"],
+    decision = "prompt",
+    justification = "bootwright machine rsh acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "machine", "exec"],
+    decision = "prompt",
+    justification = "bootwright machine exec acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "machine", "cp"],
+    decision = "prompt",
+    justification = "bootwright machine cp acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "cluster", "rsh"],
+    decision = "prompt",
+    justification = "bootwright cluster rsh acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "cluster", "exec"],
+    decision = "prompt",
+    justification = "bootwright cluster exec acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "cluster", "kubeconfig"],
+    decision = "prompt",
+    justification = "bootwright cluster kubeconfig acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "cluster", "keyring"],
+    decision = "prompt",
+    justification = "bootwright cluster keyring acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "cluster", "info"],
+    decision = "prompt",
+    justification = "bootwright cluster info acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "secret", "show"],
+    decision = "prompt",
+    justification = "bootwright secret show acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "secret", "delete"],
+    decision = "prompt",
+    justification = "bootwright secret delete acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "secret", "encryption", "rotate"],
+    decision = "prompt",
+    justification = "bootwright secret encryption rotate acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "context", "delete"],
+    decision = "prompt",
+    justification = "bootwright context delete acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "render", "effective"],
+    decision = "prompt",
+    justification = "bootwright render effective acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "render", "installer"],
+    decision = "prompt",
+    justification = "bootwright render installer acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = ["ansible-playbook"],
+    decision = "prompt",
+    justification = "a playbook run changes a host; the owner asks for it (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = ["sudo"],
+    decision = "prompt",
+    justification = "privileged commands wait for the owner",
+)
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "a push waits for the owner (AGENTS.md)",
+)
+
+prefix_rule(
+    pattern = ["git", "push", "--force"],
+    decision = "forbidden",
+    justification = "a force push is never run by an agent",
+)
+
+prefix_rule(
+    pattern = ["git", "push", "-f"],
+    decision = "forbidden",
+    justification = "a force push is never run by an agent",
+)
+
+prefix_rule(
+    pattern = ["git", "reset", "--hard"],
+    decision = "forbidden",
+    justification = "a hard reset discards work",
+)
+
+prefix_rule(
+    pattern = ["git", "tag"],
+    decision = "forbidden",
+    justification = "a tag is a release step the owner takes",
+)
+
+prefix_rule(
+    pattern = ["git", "clean"],
+    decision = "prompt",
+    justification = "git clean deletes untracked files",
+)
+
+prefix_rule(
+    pattern = ["git", "rebase"],
+    decision = "prompt",
+    justification = "a rebase rewrites history",
+)

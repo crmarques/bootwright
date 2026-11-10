@@ -27,6 +27,10 @@
       "Bash(git push *)",
       "Bash(git clean *)",
       "Bash(git rebase *)",
+      "Bash(git -C * push *)",
+      "Bash(git -C * clean *)",
+      "Bash(git -C * reset *--hard*)",
+      "Bash(git -C * tag *)",
       "Bash(*bootwright *apply*)",
       "Bash(*bootwright *destroy*)",
       "Bash(*bootwright *controller install*)",
@@ -45,6 +49,10 @@
       "Bash(*bootwright *cluster keyring*)",
       "Bash(*bootwright *secret show*)",
       "Bash(*bootwright *controller rebind*)",
+      "Bash(*bootwright *context *delete*)",
+      "Bash(*bootwright *secret *delete*)",
+      "Bash(*bootwright *secret *encryption *rotate*)",
+      "Bash(*bootwright *media *delete*)",
       "Bash(*bootwright *cluster info*--secrets*)",
       "Bash(*bootwright *cluster info*--object-user*)",
       "Bash(*bootwright *render *effective*--sensitive*)",
@@ -55,7 +63,11 @@
     "deny": [
       "Bash(git push --force *)",
       "Bash(git push -f *)",
+      "Bash(git push *--force*)",
+      "Bash(git push * -f*)",
+      "Bash(git push *+*)",
       "Bash(git reset --hard *)",
+      "Bash(git reset *--hard*)",
       "Bash(git tag *)"
     ]
   },

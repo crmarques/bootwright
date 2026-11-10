@@ -26,10 +26,10 @@ recording it as an item the Refs line names. Update the owning spec with any
 intentional contract change; add future detail when a requested feature needs
 it.
 
-Agents never run `ansible-playbook` against a host, or a Bootwright command
-with effects (`apply`, `destroy`, `controller install`/`uninstall`, `media add`, `machine` or `cluster`
-sessions, power or trust) or that reveals a secret, unless the owner asks in
-the conversation.
+Agents never run `ansible-playbook` against a host, or a Bootwright command the
+[catalog](specs/cli/commands.md#command-and-flag-catalog) marks as asked, unless
+the owner asks in the conversation; `.claude/settings.json` and
+`.codex/rules/bootwright.rules` ask before each.
 
 For every tracked edit, follow
 [code-implementation](.agents/skills/code-implementation/SKILL.md), the single
