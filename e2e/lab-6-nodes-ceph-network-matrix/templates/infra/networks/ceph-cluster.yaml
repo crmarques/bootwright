@@ -6,7 +6,7 @@ metadata:
 
 spec:
   provided: true
-  description: The unrouted Ceph replication network, a VLAN the Ceph hosts stack on the ceph-public bridge.
+  description: The unrouted Ceph replication network of the three data hosts, a VLAN on the operator trunk with no host leg.
   vlan: {{ $n.vlan }}
 
   ipv4:

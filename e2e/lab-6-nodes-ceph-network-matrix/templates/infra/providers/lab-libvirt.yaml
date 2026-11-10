@@ -1,4 +1,5 @@
 {{- $ceph := .Values.guest.ceph -}}
+{{- $arb := .Values.guest.arbiter -}}
 {{- $app := .Values.guest.app -}}
 {{- $client := .Values.guest.client -}}
 apiVersion: bootwright.io/v1alpha1
@@ -35,6 +36,12 @@ spec:
             sizeGiB: {{ $ceph.osdDiskGiB }}
             media: ssd
 
+      - name: arbiter
+        cpu: {{ $arb.cpu }}
+        memoryMiB: {{ $arb.memoryMiB }}
+        diskGiB: {{ $arb.diskGiB }}
+        tpm: {}
+
       - name: app
         cpu: {{ $app.cpu }}
         memoryMiB: {{ $app.memoryMiB }}
@@ -48,11 +55,12 @@ spec:
         tpm: {}
 
   segments:
-    - name: app-trunk
+    - name: ceph-trunk
 
       taggedNetworkRefs:
-        - app-users
-        - app-guest-only
+        - ceph-public
+        - ceph-cluster
+        - ceph-arbiter
 
       libvirt:
         bridge: {{ .Values.networks.trunkBridge }}

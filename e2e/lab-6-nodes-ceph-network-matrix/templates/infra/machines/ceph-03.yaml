@@ -1,0 +1,38 @@
+{{- $net := .Values.networks -}}
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-03
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: arbiter
+
+      nics:
+        - nicRef: nic0
+          segmentRef: ceph-trunk
+
+  hardware:
+    nics:
+      - name: nic0
+
+    rootDevice:
+      deviceName: /dev/vda
+
+  os:
+    provided: false
+    installProfileRef: rhel
+
+  network:
+    configRef: ceph-arbiter
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: ceph-03.{{ .Values.host.domain }}
+
+      - name: ip
+        address: {{ .Values.guest.arbiter.address }}
+        interface: nic0.{{ $net.cephArbiter.vlan }}

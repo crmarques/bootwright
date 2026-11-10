@@ -1,5 +1,5 @@
 {{- $node := index .Values.guest.ceph.nodes 0 -}}
-{{- $vlan := .Values.networks.cephCluster.vlan -}}
+{{- $net := .Values.networks -}}
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata:
@@ -13,7 +13,7 @@ spec:
 
       nics:
         - nicRef: nic0
-          segmentRef: ceph-public
+          segmentRef: ceph-trunk
 
   hardware:
     nics:
@@ -27,7 +27,7 @@ spec:
     installProfileRef: rhel
 
   network:
-    configRef: ceph-plain
+    configRef: ceph-vlan
     installAddressRef: ip
 
     addresses:
@@ -36,8 +36,8 @@ spec:
 
       - name: ip
         address: {{ $node.public }}
-        interface: nic0
+        interface: nic0.{{ $net.cephPublic.vlan }}
 
       - name: cluster
         address: {{ $node.cluster }}
-        interface: nic0.{{ $vlan }}
+        interface: nic0.{{ $net.cephCluster.vlan }}

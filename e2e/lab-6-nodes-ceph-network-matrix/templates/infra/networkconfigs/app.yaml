@@ -1,5 +1,4 @@
-{{- $user := .Values.networks.user -}}
-{{- $guest := .Values.networks.guestOnly -}}
+{{- $net := .Values.networks -}}
 apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig
 metadata:
@@ -23,28 +22,13 @@ spec:
         ipv6:
           enabled: false
 
-      - name: nic0.{{ $user.vlan }}
+      - name: nic0.{{ $net.cephPublic.vlan }}
         type: vlan
         state: up
 
         vlan:
           base-iface: nic0
-          id: {{ $user.vlan }}
-
-        ipv4:
-          enabled: true
-          dhcp: false
-
-        ipv6:
-          enabled: false
-
-      - name: nic0.{{ $guest.vlan }}
-        type: vlan
-        state: up
-
-        vlan:
-          base-iface: nic0
-          id: {{ $guest.vlan }}
+          id: {{ $net.cephPublic.vlan }}
 
         ipv4:
           enabled: true
@@ -65,6 +49,21 @@ spec:
         ipv6:
           enabled: false
 
+      - name: nic1.{{ $net.guestOnly.vlan }}
+        type: vlan
+        state: up
+
+        vlan:
+          base-iface: nic1
+          id: {{ $net.guestOnly.vlan }}
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+
     dns-resolver:
       config:
         search:
@@ -73,13 +72,13 @@ spec:
     routes:
       config:
         - destination: 0.0.0.0/0
-          next-hop-address: {{ $user.gateway }}
-          next-hop-interface: nic0.{{ $user.vlan }}
+          next-hop-address: {{ $net.cephPublic.gateway }}
+          next-hop-interface: nic0.{{ $net.cephPublic.vlan }}
           table-id: 254
           metric: 100
 
-        - destination: {{ .Values.networks.extraRoute }}
-          next-hop-address: {{ $user.gateway }}
-          next-hop-interface: nic0.{{ $user.vlan }}
+        - destination: {{ $net.extraRoute }}
+          next-hop-address: {{ $net.user.gateway }}
+          next-hop-interface: nic1
           table-id: 254
           metric: 200

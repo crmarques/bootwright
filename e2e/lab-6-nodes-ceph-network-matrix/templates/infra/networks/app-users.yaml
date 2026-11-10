@@ -1,12 +1,12 @@
-{{- $n := .Values.networks.cephPublic -}}
+{{- $n := .Values.networks.user -}}
 apiVersion: bootwright.io/v1alpha1
 kind: Network
 metadata:
-  name: ceph-public
+  name: app-users
 
 spec:
   provided: false
-  description: The Ceph public network lab-libvirt defines on its host, NAT to the internet, carrying the cluster VLAN tagged.
+  description: The user network lab-libvirt defines on its host for the sample server and its client, NAT to the internet, carrying the guest-only VLAN tagged.
 
   ipv4:
     cidr: {{ $n.cidr }}
@@ -18,4 +18,4 @@ spec:
     forward: nat
 
     taggedNetworkRefs:
-      - ceph-cluster
+      - app-guest-only

@@ -1,9 +1,9 @@
-{{- $node := index .Values.guest.ceph.nodes 2 -}}
-{{- $vlan := .Values.networks.cephCluster.vlan -}}
+{{- $node := index .Values.guest.ceph.nodes 1 -}}
+{{- $net := .Values.networks -}}
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata:
-  name: ceph-03
+  name: ceph-02
 
 spec:
   substrate:
@@ -13,10 +13,10 @@ spec:
 
       nics:
         - nicRef: nic0
-          segmentRef: ceph-public
+          segmentRef: ceph-trunk
 
         - nicRef: nic1
-          segmentRef: ceph-public
+          segmentRef: ceph-trunk
 
   hardware:
     nics:
@@ -31,17 +31,17 @@ spec:
     installProfileRef: rhel
 
   network:
-    configRef: ceph-split
+    configRef: ceph-vlan-bond
     installAddressRef: ip
 
     addresses:
       - name: fqdn
-        address: ceph-03.{{ .Values.host.domain }}
+        address: ceph-02.{{ .Values.host.domain }}
 
       - name: ip
         address: {{ $node.public }}
-        interface: nic0
+        interface: bond0.{{ $net.cephPublic.vlan }}
 
       - name: cluster
         address: {{ $node.cluster }}
-        interface: nic1.{{ $vlan }}
+        interface: bond0.{{ $net.cephCluster.vlan }}

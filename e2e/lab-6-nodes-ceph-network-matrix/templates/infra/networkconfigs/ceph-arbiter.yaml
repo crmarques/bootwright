@@ -1,9 +1,8 @@
-{{- $pub := .Values.networks.cephPublic -}}
-{{- $clu := .Values.networks.cephCluster -}}
+{{- $net := .Values.networks -}}
 apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig
 metadata:
-  name: ceph-plain
+  name: ceph-arbiter
 
 spec:
   dns:
@@ -18,20 +17,18 @@ spec:
         mtu: 1500
 
         ipv4:
-          enabled: true
-          dhcp: false
+          enabled: false
 
         ipv6:
           enabled: false
 
-      - name: nic0.{{ $clu.vlan }}
+      - name: nic0.{{ $net.cephArbiter.vlan }}
         type: vlan
         state: up
-        mtu: 1500
 
         vlan:
           base-iface: nic0
-          id: {{ $clu.vlan }}
+          id: {{ $net.cephArbiter.vlan }}
 
         ipv4:
           enabled: true
@@ -48,7 +45,7 @@ spec:
     routes:
       config:
         - destination: 0.0.0.0/0
-          next-hop-address: {{ $pub.gateway }}
-          next-hop-interface: nic0
+          next-hop-address: {{ $net.cephArbiter.gateway }}
+          next-hop-interface: nic0.{{ $net.cephArbiter.vlan }}
           table-id: 254
           metric: 100

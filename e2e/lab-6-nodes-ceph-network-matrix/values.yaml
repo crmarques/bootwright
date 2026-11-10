@@ -1,4 +1,4 @@
-# Default input of the lab-5-nodes-ceph-network-matrix case. Override keys
+# Default input of the lab-6-nodes-ceph-network-matrix case. Override keys
 # with e2e/render.sh --set or a --values file.
 
 host:
@@ -14,43 +14,51 @@ host:
     - 162.159.200.1
 
 networks:
-  # Ceph public (client) network, managed: Bootwright creates its bridge, host
-  # address and NAT and removes them at destroy. Install, SSH, MON, OSD front
-  # and RGW ingress traffic.
+  # The operator trunk the runbook creates; Bootwright never creates or
+  # removes it. Its VLAN legs hold the gateways of the two Ceph public
+  # subnets, and the host routes between them and NATs both to its uplink.
+  trunkBridge: br-nm
+
+  # Ceph public subnet of the three data hosts and app-01: VLAN 110 on the trunk,
+  # host leg br-nm.110. Install, SSH, MON, OSD front and RGW ingress traffic.
   cephPublic:
-    bridge: virbr-ceph
+    vlan: 110
     cidr: 198.51.100.0/26
     gateway: 198.51.100.1
     prefix: 26
 
-  # Ceph cluster (replication) network: OSD back traffic only, VLAN 120
-  # tagged on virbr-ceph. No host address: the provider host refuses its
-  # subnet instead of routing it out of the uplink.
+  # Ceph cluster (replication) network: OSD back traffic of the three data
+  # hosts only, VLAN 120 on the trunk, no host leg.
   cephCluster:
     vlan: 120
     cidr: 203.0.113.0/26
 
-  # The operator trunk the runbook creates and Bootwright never creates or
-  # removes. Its VLAN 130 leg holds the user network's gateway and shares the
-  # host's uplink by NAT.
-  trunkBridge: br-nm
+  # The MON-only arbiter's subnet: VLAN 150 on the trunk, host leg br-nm.150,
+  # routed by the host to the Ceph public subnet; the cluster's second public
+  # CIDR.
+  cephArbiter:
+    vlan: 150
+    cidr: 198.51.100.128/26
+    gateway: 198.51.100.129
+    prefix: 26
 
-  # User network, VLAN 130 on the trunk: the install network of app-01 and
-  # client-01 and the sample server's clients.
+  # User network, managed: Bootwright creates its bridge, host address and
+  # NAT and removes them at destroy. The sample server's clients.
   user:
-    vlan: 130
+    bridge: virbr-user
     cidr: 198.51.100.64/26
     gateway: 198.51.100.65
     prefix: 26
 
-  # Guest-only VLAN 140 on the trunk, reached only by convergence after the
-  # install: app-01 and client-01 only, MTU 1400, no host address.
+  # Guest-only VLAN 140, tagged on virbr-user, reached only by convergence
+  # after the install: app-01 and client-01 only, MTU 1400, no host address,
+  # so the provider host refuses its subnet.
   guestOnly:
     vlan: 140
     cidr: 203.0.113.64/26
     mtu: 1400
 
-  # A route each trunk guest adds through its install gateway.
+  # A route each user-network guest adds through the user gateway.
   extraRoute: 192.0.2.0/24
 
 # Media names as added with `bootwright media add --name`.
@@ -65,7 +73,8 @@ bond:
   mode: active-backup
 
 guest:
-  # ceph-01 to ceph-03, in this order: public and cluster address.
+  # ceph-01, ceph-02 and ceph-04, the data hosts, in this order: public and
+  # cluster address.
   ceph:
     nodes:
       - public: 198.51.100.11
@@ -74,25 +83,33 @@ guest:
       - public: 198.51.100.12
         cluster: 203.0.113.12
 
-      - public: 198.51.100.13
-        cluster: 203.0.113.13
+      - public: 198.51.100.14
+        cluster: 203.0.113.14
 
     cpu: 3
-    memoryMiB: 6144
-    diskGiB: 25
-    osdDiskGiB: 20
+    memoryMiB: 5120
+    diskGiB: 20
+    osdDiskGiB: 15
 
-  # app-01: the sample server, installed on the user VLAN, with a second NIC
-  # on the Ceph public network.
+  # ceph-03: a MON only, on the arbiter subnet alone.
+  arbiter:
+    address: 198.51.100.130
+    cpu: 2
+    memoryMiB: 2048
+    diskGiB: 15
+
+  # app-01: the sample server, installed on the Ceph public VLAN, with a
+  # second NIC on the user network.
   app:
-    user: 198.51.100.70
     public: 198.51.100.21
+    user: 198.51.100.70
     guestOnly: 203.0.113.70
     cpu: 2
     memoryMiB: 2048
     diskGiB: 15
 
-  # client-01: the client container, installed on the user VLAN over a bond.
+  # client-01: the client container, installed on the user network over a
+  # bond.
   client:
     user: 198.51.100.80
     guestOnly: 203.0.113.80

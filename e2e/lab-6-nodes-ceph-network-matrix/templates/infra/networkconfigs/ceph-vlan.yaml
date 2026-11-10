@@ -1,0 +1,66 @@
+{{- $net := .Values.networks -}}
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: ceph-vlan
+
+spec:
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+
+  nmstate:
+    interfaces:
+      - name: nic0
+        type: ethernet
+        state: up
+        mtu: 1500
+
+        ipv4:
+          enabled: false
+
+        ipv6:
+          enabled: false
+
+      - name: nic0.{{ $net.cephPublic.vlan }}
+        type: vlan
+        state: up
+
+        vlan:
+          base-iface: nic0
+          id: {{ $net.cephPublic.vlan }}
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+
+      - name: nic0.{{ $net.cephCluster.vlan }}
+        type: vlan
+        state: up
+
+        vlan:
+          base-iface: nic0
+          id: {{ $net.cephCluster.vlan }}
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+
+    dns-resolver:
+      config:
+        search:
+          - {{ .Values.host.domain }}
+
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          next-hop-address: {{ $net.cephPublic.gateway }}
+          next-hop-interface: nic0.{{ $net.cephPublic.vlan }}
+          table-id: 254
+          metric: 100

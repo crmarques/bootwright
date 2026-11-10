@@ -1,22 +1,22 @@
-{{- $client := .Values.guest.client -}}
+{{- $app := .Values.guest.app -}}
 {{- $net := .Values.networks -}}
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
 metadata:
-  name: client-01
+  name: app-01
 
 spec:
   substrate:
     providerRef: lab-libvirt
     libvirt:
-      profileRef: client
+      profileRef: app
 
       nics:
         - nicRef: nic0
-          segmentRef: app-trunk
+          segmentRef: ceph-trunk
 
         - nicRef: nic1
-          segmentRef: app-trunk
+          segmentRef: app-users
 
   hardware:
     nics:
@@ -31,22 +31,26 @@ spec:
     installProfileRef: rhel
 
   network:
-    configRef: client
+    configRef: app
     installAddressRef: ip
 
     addresses:
       - name: fqdn
-        address: client-01.{{ .Values.host.domain }}
+        address: app-01.{{ .Values.host.domain }}
 
       - name: ip
-        address: {{ $client.user }}
-        interface: bond0.{{ $net.user.vlan }}
+        address: {{ $app.public }}
+        interface: nic0.{{ $net.cephPublic.vlan }}
+
+      - name: user
+        address: {{ $app.user }}
+        interface: nic1
 
       - name: guest
-        address: {{ $client.guestOnly }}
-        interface: bond0.{{ $net.guestOnly.vlan }}
+        address: {{ $app.guestOnly }}
+        interface: nic1.{{ $net.guestOnly.vlan }}
 
     overrides:
       interfaces:
-        - name: bond0.{{ $net.guestOnly.vlan }}
+        - name: nic1.{{ $net.guestOnly.vlan }}
           mtu: {{ $net.guestOnly.mtu }}

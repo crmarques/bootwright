@@ -1,9 +1,8 @@
-{{- $pub := .Values.networks.cephPublic -}}
-{{- $clu := .Values.networks.cephCluster -}}
+{{- $net := .Values.networks -}}
 apiVersion: bootwright.io/v1alpha1
 kind: NetworkConfig
 metadata:
-  name: ceph-bond
+  name: ceph-vlan-bond
 
 spec:
   dns:
@@ -50,20 +49,33 @@ spec:
             - nic1
 
         ipv4:
+          enabled: false
+
+        ipv6:
+          enabled: false
+
+      - name: bond0.{{ $net.cephPublic.vlan }}
+        type: vlan
+        state: up
+
+        vlan:
+          base-iface: bond0
+          id: {{ $net.cephPublic.vlan }}
+
+        ipv4:
           enabled: true
           dhcp: false
 
         ipv6:
           enabled: false
 
-      - name: bond0.{{ $clu.vlan }}
+      - name: bond0.{{ $net.cephCluster.vlan }}
         type: vlan
         state: up
-        mtu: 1500
 
         vlan:
           base-iface: bond0
-          id: {{ $clu.vlan }}
+          id: {{ $net.cephCluster.vlan }}
 
         ipv4:
           enabled: true
@@ -80,7 +92,7 @@ spec:
     routes:
       config:
         - destination: 0.0.0.0/0
-          next-hop-address: {{ $pub.gateway }}
-          next-hop-interface: bond0
+          next-hop-address: {{ $net.cephPublic.gateway }}
+          next-hop-interface: bond0.{{ $net.cephPublic.vlan }}
           table-id: 254
           metric: 100

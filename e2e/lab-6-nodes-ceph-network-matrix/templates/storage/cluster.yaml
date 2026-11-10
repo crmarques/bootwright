@@ -42,6 +42,7 @@ spec:
   networks:
     publicCIDRs:
       - {{ .Values.networks.cephPublic.cidr }}
+      - {{ .Values.networks.cephArbiter.cidr }}
 
     clusterCIDRs:
       - {{ .Values.networks.cephCluster.cidr }}
@@ -60,19 +61,19 @@ spec:
 
       placement:
         count: 3
-        label: ceph-core
+        label: ceph-mon
 
     - service_type: mgr
 
       placement:
         count: 2
-        label: ceph-core
+        label: ceph-data
 
     - service_type: osd
       service_id: data
 
       placement:
-        label: ceph-core
+        label: ceph-data
 
       spec:
         data_devices:
@@ -84,7 +85,7 @@ spec:
 
       placement:
         count: 2
-        label: ceph-core
+        label: ceph-data
 
     - service_type: rgw
       service_id: objects
@@ -107,8 +108,8 @@ spec:
         count: 2
 
         hosts:
+          - ceph-01.{{ $dom }}
           - ceph-02.{{ $dom }}
-          - ceph-03.{{ $dom }}
 
       spec:
         backend_service: rgw.objects
@@ -121,14 +122,24 @@ spec:
 
   topology:
     nodes:
-{{- range $n := until 3 }}
-      - name: ceph-0{{ add $n 1 }}
-        fqdn: ceph-0{{ add $n 1 }}.{{ $dom }}
-        machineRef: ceph-0{{ add $n 1 }}
+{{- range $name := list "ceph-01" "ceph-02" "ceph-04" }}
+      - name: {{ $name }}
+        fqdn: {{ $name }}.{{ $dom }}
+        machineRef: {{ $name }}
 
         labels:
-          - ceph-core
+          - ceph-data
+{{- if ne $name "ceph-04" }}
+          - ceph-mon
+{{- end }}
 {{ end }}
+      - name: ceph-03
+        fqdn: ceph-03.{{ $dom }}
+        machineRef: ceph-03
+
+        labels:
+          - ceph-mon
+
   images:
     haproxy:
       base: {{ $c.images.haproxy.base }}

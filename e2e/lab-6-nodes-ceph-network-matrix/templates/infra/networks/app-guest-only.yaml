@@ -6,7 +6,7 @@ metadata:
 
 spec:
   provided: true
-  description: A guest-only VLAN on the operator trunk that app-01 and client-01 reach only by convergence after the install; no host address.
+  description: A guest-only VLAN on the user network's bridge that app-01 and client-01 reach only by convergence after the install; no host address.
   vlan: {{ $n.vlan }}
 
   ipv4:

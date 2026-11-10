@@ -1,0 +1,14 @@
+{{- $n := .Values.networks.cephArbiter -}}
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: ceph-arbiter
+
+spec:
+  provided: true
+  description: The MON-only arbiter's subnet, a VLAN on the operator trunk whose host leg routes it to the Ceph public subnet.
+  vlan: {{ $n.vlan }}
+
+  ipv4:
+    cidr: {{ $n.cidr }}
+    gateway: {{ $n.gateway }}
