@@ -14045,3 +14045,19 @@ did, because the edited action plugin is embedded in it.
 
 **Commits:** this record's commit. Gates: listed in its message. No push
 occurred.
+
+### X366 — The package tree's proved area
+
+**Item:** B1293, delivered in-tree (2026-11-10) and awaiting operator
+acceptance; it blocked the owner's lab-6-nodes-ceph-network-matrix run. The
+shared package tree's hosted-directory proof, added by the X328 review, took
+one component too many from its publication path and required the artifact
+server's content root to be `0700`, although that server creates it `0755`
+([artifact server owned host state](../infrastructure-services.md#managed-artifact-serving)),
+so every fresh host refused the tree. It now proves `services/artifact-server`,
+the area the artifact server proves itself; only root can create or change the
+content root inside that private parent. No request, contract version or
+spec moved; the collection's content digest did.
+
+**Commits:** this record's commit. Gates: listed in its message. No push
+occurred.

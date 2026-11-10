@@ -1,5 +1,8 @@
 ---
-managedos_package_tree_area: "{{ bootwright_os_tree_request.publication.path.split('/')[5:8] }}"
+# The artifact server's own private directories, services/artifact-server: the
+# server's content root beneath them is its own 0755 directory, which only root
+# can create or change inside the private parent.
+managedos_package_tree_area: "{{ bootwright_os_tree_request.publication.path.split('/')[5:7] }}"
 managedos_package_tree_staging: '{{ bootwright_os_tree_request.publication.path }}.staging'
 managedos_package_tree_media: '/var/lib/bootwright/media/{{ bootwright_os_tree_request.media.name }}'
 managedos_package_tree_served_root: '{{ bootwright_os_tree_request.publication.path | dirname | dirname | dirname }}'

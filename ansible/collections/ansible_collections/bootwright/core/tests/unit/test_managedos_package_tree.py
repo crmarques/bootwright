@@ -304,9 +304,9 @@ def test_apply_from_the_frozen_source_names_no_refusal(tmp_path, monkeypatch):
 @pytest.mark.parametrize("operation", ["apply.yml", "destroy.yml", "observe.yml"])
 def test_every_entry_point_proves_the_artifact_servers_hosted_directories_before_any_effect(tmp_path, monkeypatch, operation):
     host = Host(tmp_path, monkeypatch)
-    server = host.tree.parents[3]
-    server.mkdir(parents=True)
-    server.chmod(0o755)
+    service = host.tree.parents[4]
+    service.mkdir(parents=True)
+    service.chmod(0o755)
     host.tree.mkdir(parents=True)
     (host.tree / "preserved").write_text("kept")
     with pytest.raises(Refused, match="is not a directory only root may enter"):
@@ -318,4 +318,28 @@ def test_every_entry_point_proves_the_artifact_servers_hosted_directories_before
 def test_the_proof_names_the_servers_service_directories(tmp_path, monkeypatch):
     host = Host(tmp_path, monkeypatch)
     host.run("apply.yml")
-    assert host.proofs == [["services", "artifact-server", "artifacts"]]
+    assert host.proofs == [["services", "artifact-server"]]
+
+
+# The artifact server creates its content root 0755, so its container can read
+# what it serves; only the private directories above it are the hosted area
+# (B1293).
+@pytest.mark.parametrize("operation", ["apply.yml", "destroy.yml", "observe.yml"])
+def test_the_servers_own_content_root_is_never_refused(tmp_path, monkeypatch, operation):
+    host = Host(tmp_path, monkeypatch)
+    server = host.tree.parents[3]
+    server.mkdir(parents=True)
+    server.chmod(0o755)
+    host.run(operation)
+    assert not host.refusals()
+
+
+def test_the_tree_proves_exactly_the_area_the_artifact_server_proves():
+    server = dict(LOADER.load_from_file(str(ROLE.parent / "infra_artifact_server_nginx/defaults/main.yml"), trusted_as_template=True))
+    tree = dict(LOADER.load_from_file(str(ROLE / "defaults/main.yml"), trusted_as_template=True))
+    content_root = PUBLICATION.split("/public/", maxsplit=1)[0]
+    values = {"bootwright_artifact_server_request": {"contentRoot": content_root},
+              "bootwright_os_tree_request": {"publication": {"path": PUBLICATION}}}
+    proved = [Templar(loader=LOADER, variables=dict(values, **source)).template(source[name])
+              for source, name in ((server, "infra_artifact_server_nginx_area"), (tree, "managedos_package_tree_area"))]
+    assert proved[0] == proved[1] == ["services", "artifact-server"]
