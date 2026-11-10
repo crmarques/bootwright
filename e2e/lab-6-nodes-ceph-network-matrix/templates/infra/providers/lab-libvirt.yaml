@@ -53,14 +53,3 @@ spec:
         memoryMiB: {{ $client.memoryMiB }}
         diskGiB: {{ $client.diskGiB }}
         tpm: {}
-
-  segments:
-    - name: ceph-trunk
-
-      taggedNetworkRefs:
-        - ceph-public
-        - ceph-cluster
-        - ceph-arbiter
-
-      libvirt:
-        bridge: {{ .Values.networks.trunkBridge }}

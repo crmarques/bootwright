@@ -12,7 +12,7 @@ spec:
 
       nics:
         - nicRef: nic0
-          segmentRef: ceph-trunk
+          segmentRef: ceph-arbiter
 
   hardware:
     nics:

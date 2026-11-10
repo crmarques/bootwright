@@ -5,10 +5,15 @@ metadata:
   name: ceph-arbiter
 
 spec:
-  provided: true
-  description: The MON-only arbiter's subnet, a VLAN on the operator trunk whose host leg routes it to the Ceph public subnet.
+  provided: false
+  description: The MON-only arbiter's subnet, a second VLAN leg on the same trunk, routed to the Ceph public subnet and NAT to the internet.
   vlan: {{ $n.vlan }}
 
   ipv4:
     cidr: {{ $n.cidr }}
     gateway: {{ $n.gateway }}
+
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: {{ .Values.networks.trunkBridge }}
+    forward: nat

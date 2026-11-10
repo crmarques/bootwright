@@ -14,13 +14,13 @@ host:
     - 162.159.200.1
 
 networks:
-  # The operator trunk the runbook creates; Bootwright never creates or
-  # removes it. Its VLAN legs hold the gateways of the two Ceph public
-  # subnets, and the host routes between them and NATs both to its uplink.
+  # The trunk bridge lab-libvirt creates for the two Ceph VLAN legs below.
+  # Bootwright holds each leg's gateway, routes between the two legs, NATs both
+  # to the uplink and refuses every other path into them; destroy removes it.
   trunkBridge: br-nm
 
   # Ceph public subnet of the three data hosts and app-01: VLAN 110 on the trunk,
-  # host leg br-nm.110. Install, SSH, MON, OSD front and RGW ingress traffic.
+  # host leg br-nm.110, managed. Install, SSH, MON, OSD front and RGW ingress traffic.
   cephPublic:
     vlan: 110
     cidr: 198.51.100.0/26
@@ -28,14 +28,14 @@ networks:
     prefix: 26
 
   # Ceph cluster (replication) network: OSD back traffic of the three data
-  # hosts only, VLAN 120 on the trunk, no host leg.
+  # hosts only, VLAN 120 on the trunk, no host leg: the host refuses its subnet.
   cephCluster:
     vlan: 120
     cidr: 203.0.113.0/26
 
   # The MON-only arbiter's subnet: VLAN 150 on the trunk, host leg br-nm.150,
-  # routed by the host to the Ceph public subnet; the cluster's second public
-  # CIDR.
+  # managed, routed by the host to the Ceph public subnet; the cluster's second
+  # public CIDR.
   cephArbiter:
     vlan: 150
     cidr: 198.51.100.128/26

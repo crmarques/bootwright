@@ -13,10 +13,10 @@ spec:
 
       nics:
         - nicRef: nic0
-          segmentRef: ceph-trunk
+          segmentRef: ceph-public
 
         - nicRef: nic1
-          segmentRef: ceph-trunk
+          segmentRef: ceph-public
 
   hardware:
     nics:

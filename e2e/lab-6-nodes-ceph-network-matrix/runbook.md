@@ -13,9 +13,9 @@ Context `lab-6-nodes-ceph-network-matrix`; 6 guests, 15 vCPUs, 23 GiB.
 ```text
              this host: libvirt substrate + controller (DNS, NTP, proxy, artifacts on CONTROLLER_ADDRESS)
      ┌──────────────────────────────┴───────────────────────────────────────┐
-  br-nm  (operator trunk, no port; legs routed + NAT by the runbook)    virbr-user  (managed Network app-users, NAT)
+  br-nm  (trunk lab-libvirt owns; legs, routing, NAT Bootwright's)   virbr-user  (managed Network app-users, NAT)
    ├ VLAN 110  198.51.100.0/26    leg br-nm.110 .1     Ceph public      ├ untagged  198.51.100.64/26  host .65   users
-   ├ VLAN 120  203.0.113.0/26     no leg               Ceph cluster     └ VLAN 140  203.0.113.64/26   guest-only, MTU 1400,
+   ├ VLAN 120  203.0.113.0/26     no leg, refused      Ceph cluster     └ VLAN 140  203.0.113.64/26   guest-only, MTU 1400,
    └ VLAN 150  198.51.100.128/26  leg br-nm.150 .129   arbiter, routed                                 refused on the host
                                                         to VLAN 110
 
@@ -31,18 +31,18 @@ Context `lab-6-nodes-ceph-network-matrix`; 6 guests, 15 vCPUs, 23 GiB.
 
 | Machine | Install interface | Segment | Converged after the install |
 | --- | --- | --- | --- |
-| `ceph-01` | `nic0.110` over `nic0` | `ceph-trunk` | `nic0.120` |
-| `ceph-02` | `bond0.110` over `bond0`, active-backup over `nic0` and `nic1` | `ceph-trunk` twice | `bond0.120` |
-| `ceph-04` | `nic0.110` over `nic0` | `ceph-trunk` twice | addressless `nic1` carrying `nic1.120` |
-| `ceph-03` | `nic0.150` over `nic0` | `ceph-trunk` | nothing: one subnet |
-| `app-01` | `nic0.110` over `nic0` | `ceph-trunk`, then `app-users` | `nic1` on the user network, `nic1.140` MTU 1400, a 192.0.2.0/24 route |
+| `ceph-01` | `nic0.110` over `nic0` | `ceph-public` | `nic0.120` |
+| `ceph-02` | `bond0.110` over `bond0`, active-backup over `nic0` and `nic1` | `ceph-public` twice | `bond0.120` |
+| `ceph-04` | `nic0.110` over `nic0` | `ceph-public` twice | addressless `nic1` carrying `nic1.120` |
+| `ceph-03` | `nic0.150` over `nic0` | `ceph-arbiter` | nothing: one subnet |
+| `app-01` | `nic0.110` over `nic0` | `ceph-public`, then `app-users` | `nic1` on the user network, `nic1.140` MTU 1400, a 192.0.2.0/24 route |
 | `client-01` | `bond0`, active-backup over `nic0` and `nic1` | `app-users` twice | `bond0.140` MTU 1400, a 192.0.2.0/24 route |
 
 | Network | Object | Realized as | Purpose |
 | --- | --- | --- | --- |
-| Ceph public | `ceph-public`, VLAN 110, provided | trunk leg `br-nm.110` holds its gateway | install, SSH, MON, OSD front, RGW ingress |
-| Ceph cluster | `ceph-cluster`, VLAN 120, provided | tagged on the trunk, no leg | OSD replication and heartbeats of the three data hosts |
-| Arbiter | `ceph-arbiter`, VLAN 150, provided | trunk leg `br-nm.150`, routed to VLAN 110 | the third MON; the cluster's second public CIDR |
+| Ceph public | `ceph-public`, VLAN 110, managed, `forward: nat` | leg `br-nm.110` on the trunk `br-nm`, both Bootwright's NetworkManager connections | install, SSH, MON, OSD front, RGW ingress |
+| Ceph cluster | `ceph-cluster`, VLAN 120, provided | tagged on `ceph-public`'s trunk (`taggedNetworkRefs`), no leg; its subnet refused on the host | OSD replication and heartbeats of the three data hosts |
+| Arbiter | `ceph-arbiter`, VLAN 150, managed, `forward: nat` | leg `br-nm.150` on the same trunk, routed to VLAN 110 (`routedNetworkRefs`) | the third MON; the cluster's second public CIDR |
 | User | `app-users`, managed, NAT | libvirt network on `virbr-user` | HTTP to the sample server; install of `client-01` |
 | Guest-only | `app-guest-only`, VLAN 140, provided | tagged on `virbr-user`; its subnet refused on the host | converged second network of `app-01` and `client-01` |
 
@@ -55,11 +55,14 @@ replicated pools' size 2 one host short of their host count, as the
 [replica-safety rule](../../specs/ceph-resources.md#replicated-protection)
 requires.
 
-A VLAN install interface needs its gateway on that VLAN, and Bootwright never
-gives the host an address on a tagged Network
-([provider host realization](../../specs/substrates.md#provider-host-realization)),
-so the Ceph VLANs ride an operator trunk whose legs the runbook creates, routes
-and NATs. The [acceptance table](#11-record-the-result) names what one
+Every network is a Bootwright `Network`. The two Ceph public subnets are
+[tagged managed Networks](../../specs/api/networks.md#tagged-managed-networks):
+lab-libvirt creates the trunk `br-nm` and a VLAN leg holding each gateway as
+its own NetworkManager connections, and one owned nftables table routes the
+two legs to each other, NATs them to the uplink and refuses every other path
+into them, the user network's included
+([trunks and routing](../../specs/substrates.md#provider-host-trunks-and-routing)).
+The runbook builds no network by hand; destroy removes all of it. The [acceptance table](#11-record-the-result) names what one
 complete run supplies.
 
 Run every numbered step in order in one Bash session from the checkout under
@@ -95,7 +98,7 @@ GUESTS=ceph-01,ceph-02,ceph-03,ceph-04,app-01,client-01
 CEPH_HOSTS=ceph-01,ceph-02,ceph-03,ceph-04
 ```
 
-## 2. Prepare the host, the trunk and its routing
+## 2. Prepare the host
 
 Complete [host preparation](../README.md#prepare-the-host), including the RHEL
 9.8 boot and DVD media and the IBM entitlement key file, then return here.
@@ -107,6 +110,30 @@ if ! rpm -q tcpdump >/dev/null; then
     sudo dnf install --setopt=install_weak_deps=False tcpdump
 fi
 command -v tcpdump python3
+```
+
+A host that ran an earlier version of this case still holds the trunk that
+version built by hand: NetworkManager profiles named exactly `br-nm.110`,
+`br-nm.150` and `br-nm`, and the nftables table `inet bw-e2e-trunk`. Remove
+them once, the legs before the trunk; each command acts only on what exists,
+and no profile of those names is Bootwright's, whose profiles are all named
+`bootwright-<context>-...`. List what is there first, read-only:
+
+```bash
+nmcli -t -f NAME,UUID connection show | awk -F: -v t="$TRUNK" -v p="$TRUNK.$PUBLIC_VLAN" -v a="$TRUNK.$ARBITER_VLAN" '$1 == t || $1 == p || $1 == a'
+sudo nft list tables | grep -x 'table inet bw-e2e-trunk'
+```
+
+Then delete each listed profile by the UUID shown and the table if it was
+listed:
+
+```bash
+for name in "$TRUNK.$PUBLIC_VLAN" "$TRUNK.$ARBITER_VLAN" "$TRUNK"; do
+    for uuid in $(nmcli -t -f NAME,UUID connection show | awk -F: -v name="$name" '$1 == name { print $2 }'); do
+        sudo nmcli connection delete uuid "$uuid"
+    done
+done
+if sudo nft list tables | grep -qx 'table inet bw-e2e-trunk'; then sudo nft delete table inet bw-e2e-trunk; fi
 ```
 
 The [capacity gate](../../specs/substrates.md#capacity-admission) counts three
@@ -124,50 +151,22 @@ be applied. Require the two capacity numbers and no output from each check:
 grep MemAvailable /proc/meminfo; df -BG --output=avail /var/lib/libvirt
 ip -br link | grep -E "^($USER_BRIDGE|$TRUNK)(\.|\b)"
 ip -4 route | grep -E '198\.51\.100\.|203\.0\.113\.|192\.0\.2\.'
-sudo nft list tables | grep bw-e2e
+sudo nft list tables | grep -E 'bw-e2e|bootwright-'
 sudo virsh --connect qemu:///system list --all --name | grep bootwright-
 sudo virsh --connect qemu:///system net-list --all --name | grep bootwright-
 systemctl list-units --all --no-legend 'bootwright-*'
 ```
 
-Create the operator trunk: an isolated bridge with no physical port and two
-VLAN legs, the gateways of the two Ceph public subnets. VLAN 120 gets no leg:
-nothing on the host joins the replication network. Bootwright neither creates
-nor removes these connections.
-
-```sh
-sudo nmcli connection add type bridge ifname "$TRUNK" con-name "$TRUNK" bridge.stp no ipv4.method disabled ipv6.method disabled connection.zone trusted
-sudo nmcli connection add type vlan ifname "$TRUNK.$PUBLIC_VLAN" con-name "$TRUNK.$PUBLIC_VLAN" vlan.parent "$TRUNK" vlan.id "$PUBLIC_VLAN" ipv4.method manual ipv4.addresses "$PUBLIC_GATEWAY/26" ipv6.method disabled connection.zone trusted
-sudo nmcli connection add type vlan ifname "$TRUNK.$ARBITER_VLAN" con-name "$TRUNK.$ARBITER_VLAN" vlan.parent "$TRUNK" vlan.id "$ARBITER_VLAN" ipv4.method manual ipv4.addresses "$ARBITER_GATEWAY/26" ipv6.method disabled connection.zone trusted
-sudo nmcli connection up "$TRUNK"
-sudo nmcli connection up "$TRUNK.$PUBLIC_VLAN"
-sudo nmcli connection up "$TRUNK.$ARBITER_VLAN"
-ip -br address show "$TRUNK.$PUBLIC_VLAN"; ip -br address show "$TRUNK.$ARBITER_VLAN"
-for i in "$TRUNK.$PUBLIC_VLAN" "$TRUNK.$ARBITER_VLAN"; do sudo firewall-cmd --get-zone-of-interface="$i"; done
-```
-
-Require both leg addresses and `trusted` twice. The host routes between the
-two legs (both are connected subnets) and must NAT both to its uplink, for
-the IBM packages and images. The user network must not reach the trunk: the
-libvirt rules let `virbr-user` guests out to any interface, so the runbook's
-own table refuses them on the trunk legs. This table is the whole of the
-case's host routing policy; it accepts nothing another table refuses:
+NetworkManager and firewalld must run: Bootwright proves both and installs or
+enables neither. Note the uplink for the B1215 capture:
 
 ```bash
+systemctl is-active NetworkManager.service firewalld.service
+nmcli -t -f NAME connection show | grep '^bootwright-'        # no output
 UPLINK=$(ip -4 route get 192.0.2.1 | sed -n 's/.* dev \([^ ]*\).*/\1/p'); printf 'Uplink: %s\n' "$UPLINK"
-sudo nft add table inet bw-e2e-trunk
-sudo nft add chain inet bw-e2e-trunk forward '{ type filter hook forward priority -5; }'
-for LEG in "$TRUNK.$PUBLIC_VLAN" "$TRUNK.$ARBITER_VLAN"; do
-    sudo nft add rule inet bw-e2e-trunk forward iifname "\"$USER_BRIDGE\"" oifname "\"$LEG\"" counter reject
-done
-sudo nft add chain inet bw-e2e-trunk postrouting '{ type nat hook postrouting priority 100; }'
-sudo nft add rule inet bw-e2e-trunk postrouting ip saddr "{ $PUBLIC_CIDR, $ARBITER_CIDR }" ip daddr != "{ $PUBLIC_CIDR, $ARBITER_CIDR }" oifname "\"$UPLINK\"" counter masquerade
-sudo sysctl -w net.ipv4.ip_forward=1
-sudo nft list table inet bw-e2e-trunk
 ```
 
-The `virbr-user` interface does not exist yet; the rule names it and matches
-once the substrates stage creates it.
+Require `active` twice.
 
 ## 3. Create the context and refuse a bond mode
 
@@ -227,6 +226,10 @@ then require `ready` before starting services:
 ./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services,substrates --yes
 sudo virsh --connect qemu:///system net-dumpxml "bootwright-$CONTEXT-app-users"
 ip -br address show "$USER_BRIDGE"; sudo firewall-cmd --get-zone-of-interface="$USER_BRIDGE"
+nmcli -t -f NAME,UUID,TYPE,DEVICE connection show --active | grep "^bootwright-$CONTEXT-"
+ip -br address show "$TRUNK.$PUBLIC_VLAN"; ip -br address show "$TRUNK.$ARBITER_VLAN"; ip -br link show "$TRUNK"
+for i in "$TRUNK" "$TRUNK.$PUBLIC_VLAN" "$TRUNK.$ARBITER_VLAN"; do sudo firewall-cmd --get-zone-of-interface="$i"; done
+sudo nft list table inet "bootwright-$CONTEXT-lab-libvirt-routing"
 ip -4 route show "$GUEST_CIDR" table all
 ip -4 route show "$CLUSTER_CIDR" table all
 systemctl list-units --all --no-legend 'bootwright-*'
@@ -236,10 +239,15 @@ sysctl net.ipv4.ip_forward
 
 Require the libvirt network active with `<forward mode='nat'>` on
 `virbr-user` and the host address 198.51.100.65/26, `trusted` for the bridge,
-and (B1215) an `unreachable 203.0.113.64/26` route held by a Bootwright unit
-the listing shows: the host refuses the guest-only subnet instead of routing it
-out of its uplink. The replication VLAN rides the operator trunk, so the host
-refuses nothing for it and the second route listing is empty. Require (B1221)
+(B1281) three active `bootwright-lab-6-nodes-ceph-network-matrix-*`
+connections, the trunk and the two legs, with 198.51.100.1/26 on `br-nm.110`,
+198.51.100.129/26 on `br-nm.150`, no address on `br-nm` and `trusted` for all
+three; (B1282) the owned table with its `input`, `forward` and `postrouting`
+chains, the two legs in `legs` and `nat_legs`, both directions of the leg pair
+in `routed`, and `virbr-user` among `managed`; and (B1215) `unreachable` routes
+for 203.0.113.64/26 and 203.0.113.0/26 held by Bootwright's refusal unit the
+listing shows, with the routing unit beside it: the host refuses both subnets
+it holds no address in instead of routing them out of its uplink. Require (B1221)
 the context's directory under `/var/lib/bootwright-hosted/`, holding the served
 content and the emulated BMC state, and forwarding `= 1`.
 
@@ -439,13 +447,14 @@ hop, and every Ceph host reaches the IBM registry through the trunk NAT:
 ./bin/bootwright machine exec --context "$CONTEXT" --name ceph-01 -- ping -c 3 "$ARBITER"
 ./bin/bootwright machine exec --context "$CONTEXT" --name "$CEPH_HOSTS" -- getent hosts cp.icr.io public.dhe.ibm.com
 ./bin/bootwright machine exec --context "$CONTEXT" --name "$CEPH_HOSTS" -- curl -sS -o /dev/null -w '%{http_code}\n' --max-time 20 https://cp.icr.io/v2/
-sudo nft list chain inet bw-e2e-trunk postrouting
+sudo nft list chain inet "bootwright-$CONTEXT-lab-libvirt-routing" postrouting
 ```
 
 Require `via 198.51.100.129 dev nic0.150`, a first hop 198.51.100.129 and the
-target on the second, the ping to answer, the names to resolve, `401` from
-each host (the registry answered an anonymous request), and a nonzero
-masquerade count.
+target on the second, the ping to answer, the names to resolve, and `401`
+from each host (the registry answered an anonymous request): the owned table
+routed the arbiter's leg to the public leg and masqueraded both legs to the
+uplink through its one `postrouting` rule.
 
 ## 7. Build and verify the cluster
 
@@ -586,20 +595,23 @@ on client-01 curl -fsS --noproxy '*' --max-time 5 "http://$APP_USER:$APP_PORT/he
 on ceph-03 ping -c 2 -W 2 "$APP_PUBLIC"                                                                        # the arbiter to a Ceph client: routed, answers
 ```
 
-The user network's probes into the trunk fail at the runbook's
-`bw-e2e-trunk` rule, the trunk's probes into the user network at libvirt's
-`guest_input` rule. The arbiter's probe of the replication VLAN fails because
-nothing on the host routes it: the host holds no address there and, the VLAN
-being on an operator trunk, refuses nothing for it, so the probe leaves the
-uplink unmasqueraded and nobody answers. Read the counters, read-only:
+Both directions between the user network and a leg are refused by the owned
+table (B1282), which runs before libvirt's chains: the user network's probes
+into a leg at `oifname @legs reject`, and the legs' probes into the user
+network at the final `iifname @legs reject`, because `virbr-user` is in the
+table's `managed` set, so the NAT legs' accept never matches traffic towards
+it. No probe here reaches libvirt's own `guest_input` rule. The arbiter's probe
+of the replication VLAN fails at the host's `unreachable` route for
+203.0.113.0/26 (B1215): require `Destination Host Unreachable` from
+198.51.100.129 on that one. Read the owned chain, read-only; it counts
+nothing, so the probes above are its evidence:
 
 ```sh
-sudo nft list chain inet bw-e2e-trunk forward
-sudo nft list chain ip libvirt_network guest_input
+sudo nft list chain inet "bootwright-$CONTEXT-lab-libvirt-routing" forward
 ```
 
-Require packet counts on both `bw-e2e-trunk` reject rules and on the
-`guest_input` reject rule for `virbr-user`.
+Require its rules in the order the
+[routing table](../../specs/substrates.md#routing-table) states.
 
 **The refused guest-only subnet (B1215).** A data host's probe of VLAN 140,
 which `virbr-user` carries tagged and the host holds no address in, must be
@@ -696,27 +708,27 @@ answering and every OSD up.
 **Route cut to the arbiter.** Drop everything the host forwards to or from
 the arbiter's leg: `ceph-03` loses every path to the other MONs, quorum holds
 on the two data-host MONs and client I/O continues; delete the two rules and
-the arbiter rejoins. The rules sit in the runbook's own table, so nothing else
-changes and nothing leaves the uplink:
+the arbiter rejoins. The drops sit in a table of the runbook's own, ahead of
+Bootwright's, which stays untouched, and nothing leaves the uplink:
 
 ```bash
-sudo nft insert rule inet bw-e2e-trunk forward oifname "\"$TRUNK.$ARBITER_VLAN\"" counter drop
-sudo nft insert rule inet bw-e2e-trunk forward iifname "\"$TRUNK.$ARBITER_VLAN\"" counter drop
+sudo nft add table inet bw-e2e-cut
+sudo nft add chain inet bw-e2e-cut forward '{ type filter hook forward priority -20; }'
+sudo nft add rule inet bw-e2e-cut forward oifname "\"$TRUNK.$ARBITER_VLAN\"" counter drop
+sudo nft add rule inet bw-e2e-cut forward iifname "\"$TRUNK.$ARBITER_VLAN\"" counter drop
 sleep 30
 ceph_admin -s
 client roundtrip
-sudo nft -a list chain inet bw-e2e-trunk forward
-```
-
-```bash
-CUT_HANDLES='' # The two handles of the drop rules listed above, space-separated.
-for h in ${CUT_HANDLES:?}; do sudo nft delete rule inet bw-e2e-trunk forward handle "$h"; done
+sudo nft list table inet bw-e2e-cut
+sudo nft delete table inet bw-e2e-cut
 ceph_admin -s    # repeat until three MONs are in quorum
+./bin/bootwright diff --context "$CONTEXT" --observe
 ```
 
 Require `HEALTH_WARN` naming `mon.ceph-03` out of quorum with two MONs in
-quorum, `0 failed` from the client, nonzero counts on both drop rules, and
-three MONs in quorum again once they are gone.
+quorum, `0 failed` from the client, nonzero counts on both drop rules, three
+MONs in quorum again once the table is gone, and the provider realized: the
+owned routing table never changed.
 
 **Reboot (B326).** Detach `app-01`, restart all six, repeat the address read
 until each answers SSH; the declared addresses return without an apply and the
@@ -781,14 +793,19 @@ sudo virsh --connect qemu:///system list --all
 sudo virsh --connect qemu:///system net-list --all
 ip -br link | grep -E "^$USER_BRIDGE\b"                       # no output
 ip -4 route show "$GUEST_CIDR" table all                      # no output
+ip -4 route show "$CLUSTER_CIDR" table all                    # no output
+nmcli -t -f NAME connection show | grep "^bootwright-$CONTEXT-"   # no output
+ip -br link | grep -E "^$TRUNK(\.|\b)"                          # no output
+sudo nft list tables | grep "bootwright-$CONTEXT-"            # no output
 systemctl list-units --all --no-legend 'bootwright-*'          # no unit of the refused subnet
 sudo ls /var/lib/bootwright-hosted/                            # no directory of this context
 ```
 
 Require no domain, disk, libvirt network or `virbr-user` of the context;
-(B1215) no unreachable route and no unit holding one; and (B1221) the
-context's hosted directory removed. The trunk and its table remain: the
-runbook made them. Then:
+(B1215) no unreachable route and no unit holding one; (B1281) no
+`bootwright-lab-6-nodes-ceph-network-matrix-*` connection and no `br-nm` link;
+(B1282) no routing table or unit; and (B1221) the context's hosted directory
+removed. Then:
 
 ```sh
 EVIDENCE_CONTEXT="$CONTEXT"
@@ -810,29 +827,20 @@ choices `false`, then define `verify_selected_features` and
 [step 7](../lab-network-variants/runbook.md#verify-the-selected-features-on-each-guest)
 and [step 8](../lab-network-variants/runbook.md#8-check-drift-and-reboot):
 under `set +e` a missing function only prints `command not found`. Its
-one-guest context uses only a managed network, so it needs no trunk, and the
-listener firewall rules are still in place.
+one-guest context uses only an untagged managed network, and the listener
+firewall rules are still in place.
 
-Then clean up in this order: remove the routing table and the trunk, complete
-[Restore listener firewall](../README.md#restore-listener-firewall), which
-reads its record from `RUN_DIR`, and
+Then complete [Restore listener firewall](../README.md#restore-listener-firewall),
+which reads its record from `RUN_DIR`, and
 [Remove diagnostic tools](../README.md#remove-diagnostic-tools), and only then
 remove the private directory:
-
-```sh
-sudo nft delete table inet bw-e2e-trunk
-sudo nmcli connection down "$TRUNK.$PUBLIC_VLAN"
-sudo nmcli connection down "$TRUNK.$ARBITER_VLAN"
-sudo nmcli connection down "$TRUNK"
-sudo nmcli connection delete "$TRUNK.$PUBLIC_VLAN" "$TRUNK.$ARBITER_VLAN" "$TRUNK"
-```
 
 ```sh
 rm -rf -- "${RUN_DIR:?}" "${INPUT_DIR:?}"
 ```
 
 Keep the verified archives under `.cache/e2e-evidence` for owner review.
-Forwarding stays on: libvirt keeps it on for its own networks.
+Forwarding stays on: Bootwright and libvirt both turn it on and never reset it.
 
 ## 11. Record the result
 
@@ -843,11 +851,14 @@ failure leaves the run an observation. Keep host-specific evidence private.
 
 | Item | Evidence this run supplies |
 | --- | --- |
+| [B1281](../../specs/milestones/m1.md#b1281) | The trunk and both legs as owned NetworkManager connections in `trusted`, every install shape over a leg segment, and destroy leaving no connection or link |
+| [B1282](../../specs/milestones/m1.md#b1282) | The owned table routing the two legs, masquerading both, refusing the user network into the legs, and its removal |
+| [B1283](../../specs/milestones/m1.md#b1283) | This case declaring every network as a `Network`, with no trunk, table or route built by hand |
 | [B74](../../specs/milestones/m1.md#b74) | The bond (`client-01`), VLAN (`ceph-01`, `ceph-03`, `ceph-04`, `app-01`) and VLAN-over-bond (`ceph-02`) install shapes, MAC pins, the 802.3ad refusal, links and routes, reboot and the install Ctrl-C and replay |
 | [B326](../../specs/milestones/m1.md#b326) | Final network on six shapes, reboot, MTU drift and restoration, the convergence Ctrl-C and replay, and lab-network-variants' cut-off drill |
 | [B1266](../../specs/milestones/m2.md#b1266) | The MON-only `ceph-03`, holding no replication address, admitted and running a MON alone on its routed subnet |
 | [B1213](../../specs/milestones/m1.md#b1213) | The machines apply admitted and the storage preflight passing after it, or a refusal naming each byte group |
-| [B1215](../../specs/milestones/m1.md#b1215) | A data host's probe of the guest-only VLAN refused on the host with nothing on the uplink, and a removal leaving no unit or route |
+| [B1215](../../specs/milestones/m1.md#b1215) | A data host's probe of the guest-only VLAN and the arbiter's of the replication VLAN refused on the host with nothing on the uplink, and a removal leaving no unit or route |
 | [B1020](../../specs/milestones/m2.md#b1020) | `diff --observe`'s Ceph observation answering with the seed MON stopped and quorum held by `ceph-02` and the routed arbiter |
 | [B1044](../../specs/milestones/m2.md#b1044) | The package tree's `.treeinfo` proof made again after the first reset, shown in its retained output |
 | [B1036](../../specs/milestones/m2.md#b1036) | An installation's listener fetch made again after the second reset, shown in its retained output |

@@ -6,7 +6,7 @@ metadata:
 
 spec:
   provided: true
-  description: The unrouted Ceph replication network of the three data hosts, a VLAN on the operator trunk with no host leg.
+  description: The unrouted Ceph replication network of the three data hosts, carried tagged on the trunk of ceph-public; the host holds no address in it and refuses its subnet.
   vlan: {{ $n.vlan }}
 
   ipv4:

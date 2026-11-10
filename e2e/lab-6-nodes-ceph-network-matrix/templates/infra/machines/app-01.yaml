@@ -13,7 +13,7 @@ spec:
 
       nics:
         - nicRef: nic0
-          segmentRef: ceph-trunk
+          segmentRef: ceph-public
 
         - nicRef: nic1
           segmentRef: app-users

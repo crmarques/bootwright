@@ -5,10 +5,21 @@ metadata:
   name: ceph-public
 
 spec:
-  provided: true
-  description: The Ceph public subnet of the data hosts and the sample server, a VLAN on the operator trunk whose host leg is its gateway.
+  provided: false
+  description: The Ceph public subnet of the data hosts and the sample server, a VLAN leg on the trunk lab-libvirt creates, holding its gateway, routed to the arbiter subnet and NAT to the internet.
   vlan: {{ $n.vlan }}
 
   ipv4:
     cidr: {{ $n.cidr }}
     gateway: {{ $n.gateway }}
+
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: {{ .Values.networks.trunkBridge }}
+    forward: nat
+
+    taggedNetworkRefs:
+      - ceph-cluster
+
+    routedNetworkRefs:
+      - ceph-arbiter
