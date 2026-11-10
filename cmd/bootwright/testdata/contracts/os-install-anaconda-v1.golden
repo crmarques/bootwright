@@ -1,9 +1,9 @@
 implementation: os-install-anaconda-v1
-content-digest: 1ad101193456fefd3f7af08224cbe95483c1d13a9846ac4ac6d9ab377cb50aa3
+content-digest: ffaa7202524164ab5321798276fa78488ae13ca548af3a7311e6704d95fd70b9
 request-version: os-install-anaconda-v2
 automation-formats: none
 mark-formats: none
-proof-ids: .bootwright-tree-identity, /etc/bootwright/registration.json, /etc/bootwright/update.json
+proof-ids: .bootwright-tree-identity, /etc/bootwright/registration.json, /etc/bootwright/root-wwn, /etc/bootwright/update.json
 fixed-places: .bootwright-satellite.pem.tmp, /etc/bootwright, /etc/rhsm/ca/bootwright-satellite.pem, /run/bootwright, /var/lib/bootwright-hosted, bootwright-network-apply.service
 effect-pins:
   os
@@ -191,6 +191,7 @@ evidence-schema:
   registration.state string
   request string
   rootEncryption bool
+  rootWWN string
   tree bool
   treeContent bool
   treeIdentity string

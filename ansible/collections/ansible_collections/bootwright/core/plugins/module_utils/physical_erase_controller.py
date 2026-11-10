@@ -22,7 +22,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import physical_er
 from ansible_collections.bootwright.core.plugins.module_utils import ssh_key_policy
 
 ROOT = Path(hosted_area.ROOT)
-REQUEST_VERSION = "physical-erase-v2"
+REQUEST_VERSION = "physical-erase-v3"
 MEDIA = Path("/var/lib/bootwright/media")
 
 
@@ -107,21 +107,33 @@ class Controller:
     def close(self):
         os.close(self.lock)
 
+    def worker_for(self, original_attempt):
+        """The RAM worker's request: the frozen targets, the original identity and the root's WWN and serial number.
+
+        Go names the root's WWN: the one its declaration names or, for a root
+        declared by serial number, the one it reported at installation.
+        """
+        hardware = self.request["install"]["target"]["hardware"]
+        try:
+            wwn = base64.b64decode(self.material["rootWWNBase64"], validate=True).decode("ascii")
+        except (KeyError, ValueError):
+            raise worker.Refusal("root") from None
+        return {
+            "version": worker.VERSION,
+            "originalAttempt": original_attempt,
+            "request": self.digest,
+            "uuid": base64.b64decode(self.material["pinnedUUIDBase64"], validate=True).decode("ascii").strip().lower(),
+            "macs": sorted(nic["macAddress"].lower() for nic in hardware["interfaces"]),
+            "targets": self.request["targets"],
+            "deadlineSeconds": self.request["deadlineSeconds"],
+            "root": {"wwn": wwn, "serialNumber": hardware.get("serialNumber", "")},
+        }
+
     def load(self):
         state = json.loads(read(self.root / "custody.json"))
         if state["request"] != self.digest or state["applyOperation"] != self.material["applyOperation"]:
             raise worker.Refusal("foreign-custody")
-        uuid = base64.b64decode(self.material["pinnedUUIDBase64"], validate=True).decode("ascii").strip().lower()
-        macs = sorted(nic["macAddress"].lower() for nic in self.request["install"]["target"]["hardware"]["interfaces"])
-        self.worker_request = {
-            "version": worker.VERSION,
-            "originalAttempt": state["originalAttempt"],
-            "request": self.digest,
-            "uuid": uuid,
-            "macs": macs,
-            "targets": self.request["targets"],
-            "deadlineSeconds": self.request["deadlineSeconds"],
-        }
+        self.worker_request = self.worker_for(state["originalAttempt"])
         worker.validate_request(self.worker_request)
         if state["worker"] != self.worker_request:
             raise worker.Refusal("foreign-target")
@@ -130,15 +142,7 @@ class Controller:
     def prepare(self):
         path = self.root / "custody.json"
         if not path.exists():
-            self.worker_request = {
-                "version": worker.VERSION,
-                "originalAttempt": self.material["originalAttempt"],
-                "request": self.digest,
-                "uuid": base64.b64decode(self.material["pinnedUUIDBase64"], validate=True).decode("ascii").strip().lower(),
-                "macs": sorted(nic["macAddress"].lower() for nic in self.request["install"]["target"]["hardware"]["interfaces"]),
-                "targets": self.request["targets"],
-                "deadlineSeconds": self.request["deadlineSeconds"],
-            }
+            self.worker_request = self.worker_for(self.material["originalAttempt"])
             worker.validate_request(self.worker_request)
             state = {
                 "request": self.digest,

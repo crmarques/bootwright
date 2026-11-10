@@ -2436,7 +2436,54 @@ nothing is using the data. A native daemon list alone proves neither consumer
 quiescence nor the removal of OSD data, credentials and SSH authorization.
 The [storage contract](ceph.md) owns those additional proofs.
 
-### Physical disk safety
+### Controller-host protection
+
+The controller is an OS-ready provided Machine and remains outside selected
+cluster node membership under
+[the API relationship](api/environment.md#controller-machine). That declaration
+alone does not prove live host identity or ownership.
+[Controller setup](controller.md) defines prerequisite preparation and uses
+[Workspace host binding](contexts.md#controller-relationship-and-host-binding).
+
+A controller-hosted service effect runs only under verified host binding and
+the stable conflict identities of the
+[host reservations](infrastructure-services.md#host-reservations), which give
+shared ports, paths, service instances and other exclusive host resources
+cross-context ownership, conflict refusal and recovery evidence. Context-local
+leases remain necessary but do not coordinate two contexts targeting the same
+host. A managed network keeps off the host's own links and routes under the
+probe of [provider host realization](substrates.md#provider-host-realization).
+
+A fresh removal proves, before its plan is presented and again under the
+exclusive lock before it resolves an effect, probes quiescence or registers,
+that controller setup completed on this host, that this host is the host the
+controller state records, and that a binding the controller state records for
+the context names this host. A fresh removal over a context the controller
+state records no binding for proceeds once that host is proved: no apply can
+bind a context that holds an incomplete operation, the removal is that
+context's exit, and the apply after it binds the context again.
+
+An apply, a destroy and a bounded run must preserve the controller OS, power,
+Bootwright runtime, Workspace state, keyring and evidence needed to continue or
+remove owned resources. A bounded
+[power request](substrates.md#identity-and-power-operations) therefore refuses
+the environment's controller Machine and any target whose reported system
+identity is the controller host's own, and it acts on a physical Machine only
+under a current pin or a fresh proof of its complete MAC set. An owned service
+may be removed only through its frozen inverse when remaining operations no
+longer depend on it. Selecting a Machine as the controller never grants ownership of
+the host, its runtime or another context's services.
+
+Controller setup, immutable execution dependencies and locally hosted services
+have separate owners. Plans must model their actual readiness relationships
+without converting every Machine address or service reference into a readiness
+edge. Missing, changed or unprovable controller bindings refuse the affected
+operation, except a missing binding beneath a fresh removal, which proceeds on
+a proved host as above; continuation never silently substitutes the invoking host or moves
+context state. Migration and complete-store restore require their own defined
+recovery journey.
+
+## Physical disk safety
 
 Existing operator-owned bare metal is the explicit external-substrate
 exception: Bootwright never claims ownership of or destroys the physical
@@ -2482,6 +2529,24 @@ supported.
 Omitting the opt-in physical erase policy retains the machine and its installed
 system. Offline erase follows its separate safety contract below
 ([B70](milestones/m1.md#b70)).
+
+An erase recognises the root disk under the
+[root-target rule](api/machines.md#physical-erase-policy) at three points,
+each comparing what it can see. Admission and the erase request compare each
+target's declared identities with the root's declaration. The removal, before
+any effect, also compares each target with the WWN a root declared by serial
+number [reported at installation](managed-os.md#physical-removal), read from
+that installation's original apply record, and refuses a target that names it
+other than by the serial number alone; a record not completed names none,
+and a completed record that proves no installation, or that cannot be read,
+refuses `lifecycle.state`. Only the RAM worker sees the disk a target without
+`deviceName` selects, so it is handed the root's WWN, the declared one or the
+reported one, and its declared serial number: a target without `deviceName`
+that does not name that serial number, but whose disk reports that WWN, is the
+root unrecognised, and refuses `root-target-unrecognised` before any holder
+release and again on the exclusively held disk before the first write. A target
+names a root declared by `wwn` alone by the `deviceName` and `wwn` pair. A root
+whose WWN is unknown keeps the serial number and size comparison.
 
 ### Opt-in physical logical overwrite
 
@@ -2633,53 +2698,6 @@ node's open count is 0, it removes them deepest first with
 Any remaining holder, any other holder (md, bcache, a device-mapper node with
 an undeclared slave) or a failed command refuses `disk-in-use`, so nothing
 spanning an undeclared disk is removed.
-
-### Controller-host protection
-
-The controller is an OS-ready provided Machine and remains outside selected
-cluster node membership under
-[the API relationship](api/environment.md#controller-machine). That declaration
-alone does not prove live host identity or ownership.
-[Controller setup](controller.md) defines prerequisite preparation and uses
-[Workspace host binding](contexts.md#controller-relationship-and-host-binding).
-
-A controller-hosted service effect runs only under verified host binding and
-the stable conflict identities of the
-[host reservations](infrastructure-services.md#host-reservations), which give
-shared ports, paths, service instances and other exclusive host resources
-cross-context ownership, conflict refusal and recovery evidence. Context-local
-leases remain necessary but do not coordinate two contexts targeting the same
-host. A managed network keeps off the host's own links and routes under the
-probe of [provider host realization](substrates.md#provider-host-realization).
-
-A fresh removal proves, before its plan is presented and again under the
-exclusive lock before it resolves an effect, probes quiescence or registers,
-that controller setup completed on this host, that this host is the host the
-controller state records, and that a binding the controller state records for
-the context names this host. A fresh removal over a context the controller
-state records no binding for proceeds once that host is proved: no apply can
-bind a context that holds an incomplete operation, the removal is that
-context's exit, and the apply after it binds the context again.
-
-An apply, a destroy and a bounded run must preserve the controller OS, power,
-Bootwright runtime, Workspace state, keyring and evidence needed to continue or
-remove owned resources. A bounded
-[power request](substrates.md#identity-and-power-operations) therefore refuses
-the environment's controller Machine and any target whose reported system
-identity is the controller host's own, and it acts on a physical Machine only
-under a current pin or a fresh proof of its complete MAC set. An owned service
-may be removed only through its frozen inverse when remaining operations no
-longer depend on it. Selecting a Machine as the controller never grants ownership of
-the host, its runtime or another context's services.
-
-Controller setup, immutable execution dependencies and locally hosted services
-have separate owners. Plans must model their actual readiness relationships
-without converting every Machine address or service reference into a readiness
-edge. Missing, changed or unprovable controller bindings refuse the affected
-operation, except a missing binding beneath a fresh removal, which proceeds on
-a proved host as above; continuation never silently substitutes the invoking host or moves
-context state. Migration and complete-store restore require their own defined
-recovery journey.
 
 ## Confirmation and authorization
 

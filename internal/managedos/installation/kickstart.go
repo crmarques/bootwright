@@ -13,7 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const kickstartVersion = "kickstart-anaconda-v1"
+const kickstartVersion = "kickstart-anaconda-v2"
 
 // guestHostKeys are the keys a guest-agent installation generates here rather
 // than at first boot, so the republished copy is the key sshd presents. Each
@@ -200,6 +200,7 @@ func RenderKickstart(input Installation) (string, error) {
 	lines = append(lines, "")
 	lines = append(lines, encryptionPostLines(input)...)
 	lines = append(lines, postSection(input)...)
+	lines = append(lines, rootWWNPostLines(input)...)
 	return strings.Join(compact(lines), "\n") + "\n", nil
 }
 
@@ -777,6 +778,9 @@ func targetProofLines(input Installation) []string {
 		identity = true
 	}
 	lines = append(lines, rootIdentityLines(input, subject)...)
+	if bySerial {
+		lines = append(lines, rootWWNRecordLines(subject)...)
+	}
 	if !identity && len(input.ClearTargets) != 0 {
 		lines = append(lines, identityFunctionLines()...)
 	}
@@ -865,6 +869,37 @@ func rootIdentityLines(input Installation, subject string) []string {
 		lines = append(lines, refuse("reports a size other than "+size+" bytes")...)
 	}
 	return lines
+}
+
+const rootWWNStage = "/tmp/bootwright-root-wwn"
+
+func rootWWNRecordLines(subject string) []string {
+	return []string{
+		`bootwright_root_wwn=''`,
+		`bootwright_wwid="${bootwright_disk}/device/wwid"`,
+		`if [ -e "${bootwright_disk}/wwid" ]; then bootwright_wwid="${bootwright_disk}/wwid"; fi`,
+		`if [ -e "${bootwright_wwid}" ]; then`,
+		`if ! bootwright_raw=$(tr -d ' \t\n\v\f\r' < "${bootwright_wwid}") ||`,
+		`{ [ -n "${bootwright_raw}" ] && ! bootwright_root_wwn=$(bootwright_identity "${bootwright_wwid}" text); }; then`,
+		`echo 'Bootwright: ` + subject + ` reports an unreadable WWN; refusing before any disk is touched.' >&2`,
+		"exit 1",
+		"fi",
+		"fi",
+		`printf '%s\n' "${bootwright_root_wwn}" > ` + rootWWNStage,
+	}
+}
+
+func rootWWNPostLines(input Installation) []string {
+	if !input.Physical || !serialRootInstallation(input) {
+		return nil
+	}
+	return []string{
+		"%post --nochroot --erroronfail",
+		"set -eu",
+		"install -d -m 0755 /mnt/sysimage" + parentOf(RootWWNPath),
+		"install -m 0444 " + rootWWNStage + " /mnt/sysimage" + RootWWNPath,
+		"%end",
+	}
 }
 
 func identityFunctionLines() []string {

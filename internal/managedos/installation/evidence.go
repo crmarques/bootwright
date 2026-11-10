@@ -3,9 +3,11 @@ package installation
 import (
 	"regexp"
 	"slices"
+	"strings"
 	"unicode"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 const maxEvidenceBytes = 64 << 10
@@ -80,7 +82,8 @@ type Evidence struct {
 	Registration RegistrationEvidence `json:"registration"`
 	Request      string               `json:"request"`
 	// RootEncryption is the root filesystem on a LUKS device bound to the TPM.
-	RootEncryption bool `json:"rootEncryption"`
+	RootEncryption bool   `json:"rootEncryption"`
+	RootWWN        string `json:"rootWWN"`
 	// Tree fields observe the immutable profile dependency, never owned effects.
 	Tree        bool `json:"tree"`
 	TreeContent bool `json:"treeContent"`
@@ -138,6 +141,9 @@ func ValidatePresence(data []byte, request Request, digest, marker string) error
 	}
 	if request.DiskEncryption != nil && !evidence.RootEncryption {
 		return refusal("lifecycle.state", "the installed machine's root filesystem is not on the LUKS device with a TPM2 binding its installation encrypted", "")
+	}
+	if evidence.RootWWN != "" && !request.serialRoot() {
+		return refusal("lifecycle.state", "the installation evidence records a root disk WWN for a root not declared by serial number", "")
 	}
 	if request.Registration != nil && evidence.Registration.State != registrationOwned {
 		return refusal("lifecycle.state", "the installed machine is not registered with a subscription consumer this installation created", "")
@@ -361,6 +367,9 @@ func decodeEvidence(data []byte, digest string) (Evidence, error) {
 	if !wellFormedOS(evidence.OS) {
 		return Evidence{}, refusal("lifecycle.state", "the installation evidence reports a malformed release", "")
 	}
+	if !wellFormedRootWWN(evidence.RootWWN) {
+		return Evidence{}, refusal("lifecycle.state", "the installation evidence reports a malformed root disk WWN", "")
+	}
 	if evidence.Request != digest {
 		return Evidence{}, refusal("lifecycle.state", "the installation evidence names another request", "")
 	}
@@ -405,4 +414,35 @@ func wellFormedUpdate(update UpdateEvidence) bool {
 func wellFormedOS(system OSEvidence) bool {
 	return osReleaseToken.MatchString(system.ID) && osReleaseToken.MatchString(system.VersionID) &&
 		(system.Kernel == "" || updateKernel.MatchString(system.Kernel))
+}
+
+func wellFormedRootWWN(wwn string) bool {
+	if len(wwn) > 256 || strings.TrimSpace(wwn) != wwn {
+		return false
+	}
+	for _, character := range wwn {
+		if character < 0x20 || character > 0x7e {
+			return false
+		}
+	}
+	return true
+}
+
+func (r Request) serialRoot() bool {
+	hardware := r.Target.Hardware
+	return r.Target.Physical && hardware != nil && hardware.SerialNumber != "" && hardware.RootDevice == "" && hardware.RootVolumeRef == nil
+}
+
+func RecordedRootWWN(proof lifecycle.BlockEvidence, request Request, digest string) (string, error) {
+	if !request.serialRoot() || proof.State != reconciliation.BlockDone {
+		return "", nil
+	}
+	evidence, err := decodeEvidence(proof.Evidence, digest)
+	if err != nil {
+		return "", err
+	}
+	if !evidence.Postcondition || evidence.Absent {
+		return "", refusal("lifecycle.state", "the installation's apply record proves no completed installation", "restore the original apply records")
+	}
+	return evidence.RootWWN, nil
 }

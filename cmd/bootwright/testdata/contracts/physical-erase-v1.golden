@@ -1,6 +1,6 @@
 implementation: physical-erase-v1
-content-digest: c4f3ec054639de219556c73aae3c52cd8cc291d024eed1f27af5d30b0f746cec
-request-version: physical-erase-v2
+content-digest: e3cb651bcca26600cdc8372763a566a2b2af820b932ca038772ffdffacda2a24
+request-version: physical-erase-v3
 automation-formats: none
 mark-formats: none
 proof-ids: bootwright.erase=1

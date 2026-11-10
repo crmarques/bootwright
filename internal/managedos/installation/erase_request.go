@@ -16,7 +16,7 @@ import (
 )
 
 const EraseImplementation = "physical-erase-v1"
-const eraseRequestVersion = "physical-erase-v2"
+const eraseRequestVersion = "physical-erase-v3"
 const eraseVariable = "bootwright_physical_erase"
 
 const (
@@ -124,15 +124,10 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 		if root == "" && !bySerial && hardware != nil && hardware.SerialNumber != "" && target.SerialNumber == hardware.SerialNumber {
 			return request, refusal("api.invariant", "a serial-selected root erase target uses the original serial-only selector", "omit deviceName and wwn for this root target")
 		}
-		isRoot := root != "" && (target.DeviceName == root || hardware != nil && hardware.WWN != "" && !bySerial && eraseWWN(target.WWN) == eraseWWN(hardware.WWN)) ||
-			root == "" && bySerial && hardware != nil && hardware.SerialNumber != "" && target.SerialNumber == hardware.SerialNumber
-		if isRoot && hardware != nil &&
-			(hardware.WWN != "" && eraseWWN(target.WWN) != eraseWWN(hardware.WWN) || hardware.SerialNumber != "" && target.SerialNumber != hardware.SerialNumber ||
-				hardware.SizeBytes != 0 && target.SizeBytes != hardware.SizeBytes) {
-			return request, refusal("api.invariant", "physical erase's root target names another wwn, serialNumber or sizeBytes than spec.substrate.baremetal.rootDevice declares for the same disk",
-				"make the root target of spec.hardware.eraseOnRemoval and spec.substrate.baremetal.rootDevice name the same wwn, serialNumber and sizeBytes")
-		}
 		request.Targets = append(request.Targets, target)
+	}
+	if err := eraseRootRules(request.Targets, root, hardware, ""); err != nil {
+		return request, err
 	}
 	if len(request.Targets) == 0 || len(request.Targets) > machineref.MaxEraseTargets {
 		return request, refusal("api.invariant", "physical erase requires 1 to 16 explicit whole-disk targets", "list each disk to erase; an omitted root disk is retained")
@@ -140,6 +135,36 @@ func eraseRequest(machine api.Object, install Request) (EraseRequest, error) {
 	slices.SortFunc(request.Targets, eraseTargetOrder)
 	request.Install.Private = &Publication{Path: install.Private.Path + "-erase", URL: install.Private.URL + "-erase", CertificateRef: install.Private.CertificateRef}
 	return request, nil
+}
+
+func eraseRootTarget(target EraseTarget, root string, hardware *Hardware, recorded string) bool {
+	switch {
+	case hardware == nil:
+		return false
+	case target.DeviceName == "":
+		return hardware.SerialNumber != "" && target.SerialNumber == hardware.SerialNumber
+	case root != "":
+		return target.DeviceName == root || hardware.WWN != "" && eraseWWN(target.WWN) == eraseWWN(hardware.WWN)
+	}
+	return recorded != "" && (eraseWWN(target.WWN) == eraseWWN(recorded) || strings.HasPrefix(recorded, "naa.") && target.DeviceName == substrate.WWNDevicePath("0x"+eraseWWN(recorded)))
+}
+
+func eraseRootRules(targets []EraseTarget, root string, hardware *Hardware, recorded string) error {
+	for _, target := range targets {
+		if !eraseRootTarget(target, root, hardware, recorded) {
+			continue
+		}
+		if root == "" && target.DeviceName != "" {
+			return refusal("api.invariant", "physical erase target "+eraseTargetName(target)+" names the WWN "+recorded+" the serial-selected root disk reported at installation, and a serial-selected root erase target uses the original serial-only selector",
+				"omit deviceName and wwn for this root target")
+		}
+		if target.DeviceName != "" && hardware.WWN != "" && eraseWWN(target.WWN) != eraseWWN(hardware.WWN) || hardware.SerialNumber != "" && target.SerialNumber != hardware.SerialNumber ||
+			hardware.SizeBytes != 0 && target.SizeBytes != hardware.SizeBytes {
+			return refusal("api.invariant", "physical erase's root target names another wwn, serialNumber or sizeBytes than spec.substrate.baremetal.rootDevice declares for the same disk",
+				"make the root target of spec.hardware.eraseOnRemoval and spec.substrate.baremetal.rootDevice name the same wwn, serialNumber and sizeBytes")
+		}
+	}
+	return nil
 }
 
 func eraseTargetName(target EraseTarget) string {

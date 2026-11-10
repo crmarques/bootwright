@@ -291,6 +291,40 @@ def resolve_serial(serial, root=Path("/sys")):
     return "/dev/" + node.name
 
 
+def reported_wwn(node):
+    """The WWN a disk's sysfs node reports, or None when it reports none."""
+    path = node / "wwid" if (node / "wwid").exists() else node / "device/wwid"
+    if not path.exists():
+        return None
+    with open(path, "rb") as stream:
+        if not stream.read(258).strip():
+            return None
+    return text(path)
+
+
+def selects_root(node, target, root):
+    """Whether a target without deviceName that Go did not identify as the root selects the root's disk, read from node().
+
+    Go identifies such a target as the root only by the root's declared serial
+    number; the disk the worker resolves it to is the root when it reports the
+    root's declared WWN or, for a root declared by serial number, the WWN that
+    disk reported at installation.
+    """
+    if not root["wwn"] or "deviceName" in target or (root["serialNumber"] and target["serialNumber"] == root["serialNumber"]):
+        return False
+    observed = reported_wwn(node())
+    return observed is not None and matches_wwn(observed, root["wwn"])
+
+
+def unrecognised_root(request, sysfs=Path("/sys")):
+    """Refuse, before any effect, a target that selects the root without naming it as the root."""
+    for target in request["targets"]:
+        def node(target=target):
+            return sysfs / "class/block" / Path(resolve_serial(target["serialNumber"], sysfs)).name
+        if selects_root(node, target, request["root"]):
+            raise Refusal("root-target-unrecognised")
+
+
 class BlockDisk:
     """Linux block identity includes diskseq, so a recycled dev_t cannot pass."""
 
@@ -461,8 +495,14 @@ def prepare(targets, opener=BlockDisk, release=release_holders):
 
 
 def validate_request(request):
-    if set(request) != {"version", "originalAttempt", "request", "uuid", "macs", "targets", "deadlineSeconds"}:
+    if set(request) != {"version", "originalAttempt", "request", "uuid", "macs", "targets", "deadlineSeconds", "root"}:
         raise Refusal("request")
+    root = request["root"]
+    if not isinstance(root, dict) or set(root) != {"wwn", "serialNumber"}:
+        raise Refusal("root")
+    for value in root.values():
+        if not isinstance(value, str) or len(value) > 256 or value.strip() != value or (value and not value.isprintable()):
+            raise Refusal("root")
     if request["version"] != VERSION or not isinstance(request["originalAttempt"], str) or not request["originalAttempt"]:
         raise Refusal("request")
     if not isinstance(request["request"], str) or not re.fullmatch("[0-9a-f]{64}", request["request"]):
@@ -577,10 +617,11 @@ def usage(disks):
     unused([node for disk in disks for node in disk.nodes()])
 
 
-def execute(request, directory, opener=BlockDisk, prove_hardware=hardware, release=prepare, clock=time.monotonic, scan=usage):
+def execute(request, directory, opener=BlockDisk, prove_hardware=hardware, release=prepare, clock=time.monotonic, scan=usage, sysfs=Path("/sys")):
     validate_request(request)
     pace = Pace(request, prove_hardware, clock)
     pace.prove()
+    unrecognised_root(request, sysfs)
     release(request["targets"])
     pace.prove()
     disks = []
@@ -593,6 +634,8 @@ def execute(request, directory, opener=BlockDisk, prove_hardware=hardware, relea
         # Acquire and prove the complete set before the first disk is written.
         for disk, target in zip(disks, request["targets"]):
             disk.prove(target)
+            if selects_root(lambda disk=disk: disk.sys, target, request["root"]):
+                raise Refusal("root-target-unrecognised")
         atomic(Path(directory) / "status.json", {"state": "partial", "request": request["request"], "originalAttempt": request["originalAttempt"]})
         # The exclusive holds already refuse new mounts and dm or md claims, so
         # the usage scan of every disk shares the paced system proof.

@@ -137,6 +137,28 @@ def test_an_encrypting_installation_completes_only_with_the_root_encryption_proo
     assert protocol.absence({"observation": {}}, DIGEST)["rootEncryption"] is False
 
 
+# A root disk declared by serial number records the WWN it reported to the
+# installer's proof, or none when it reported none; its installation completes
+# only once that record was read and is well formed. Any other installation
+# records none, whatever it is given.
+def test_a_serial_declared_root_records_the_wwn_it_reported_to_the_installer():
+    for value, recorded in (("naa.5000c500a1b2c3d4\n", "naa.5000c500a1b2c3d4"), ("eui.0025388b91c0a2f1", "eui.0025388b91c0a2f1"), ("\n", ""), ("", "")):
+        evidence, refused = protocol.completion(proved(rootWWNRequired=True, rootWWNRead=True, rootWWN=value))
+        assert evidence["rootWWN"] == recorded and evidence["postcondition"] is True and refused is None
+    for arguments in (proved(rootWWNRequired=True, rootWWNRead=False, rootWWN="naa.5000c500a1b2c3d4"),
+                      proved(rootWWNRequired="True", rootWWN="naa.5000c500a1b2c3d4"),
+                      proved(rootWWNRequired=True, rootWWNRead=True, rootWWN=" naa.5000c500a1b2c3d4"),
+                      proved(rootWWNRequired=True, rootWWNRead=True, rootWWN="naa.\u00e9"),
+                      proved(rootWWNRequired=True, rootWWNRead=True, rootWWN="x" * 257)):
+        evidence, refused = protocol.completion(arguments)
+        assert evidence["rootWWN"] == "" and evidence["postcondition"] is False
+        assert refused is not None and refused.endswith("not proved: rootWWN")
+    for arguments in (proved(), proved(rootWWNRead=True, rootWWN="naa.5000c500a1b2c3d4"), proved(rootWWNRequired=False, rootWWN="naa.1")):
+        evidence, refused = protocol.completion(arguments)
+        assert evidence["rootWWN"] == "" and evidence["postcondition"] is True and refused is None
+    assert protocol.absence({"observation": {}}, DIGEST)["rootWWN"] == ""
+
+
 CONSUMER = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
 
 

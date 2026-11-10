@@ -756,11 +756,18 @@ and every listed disk, root or data, is erased. This is the one root-target
 rule. For a root declared by `wwn`, the root target is the one whose `deviceName`
 is the `/dev/disk/by-id/wwn-0x` path that `wwn` derives, or whose `wwn` names
 the same WWN under any other path, compared without regard to case or a `0x`
-or `naa.` prefix; for a root declared by serial number, it is the
-target without `deviceName` whose `serialNumber` is the root's. A root
+or `naa.` prefix, or the target without `deviceName` whose `serialNumber` is
+the root's declared `serialNumber`; for a root declared by serial number, it is the
+target without `deviceName` whose `serialNumber` is the root's, or a target
+naming the WWN that root [reported at installation](../managed-os.md#physical-removal)
+by its `wwn` or by the by-id path an `naa.` WWN derives. A root
 target's `sizeBytes` must be the root's declared `sizeBytes`, when it declares
 one, or it refuses `api.invariant` at that target's `sizeBytes`; a target naming the serial root's serial number with a
-`deviceName` refuses at its `targets[<i>]` path. A root selected by
+`deviceName` refuses at its `targets[<i>]` path, and one naming its reported WWN
+refuses `api.invariant` when its removal runs. Admission compares the declared
+identities only; the disk each target selects is compared with the root's
+identity where [physical disk safety](../state-reconciliation.md#physical-disk-safety)
+states, so the root is never erased unrecognised. A root selected by
 `volumeRef` or `bootVolume` has no root target: each listed target is erased by
 its own identity. A target naming only one of `deviceName` and `wwn` refuses
 `api.invariant` at its `targets[<i>]` path.

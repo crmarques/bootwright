@@ -228,3 +228,62 @@ class SerialResolutionTests(unittest.TestCase):
                     disk.identify(dict(expected, deviceName="/dev/sda", wwn="0x5000000000000001"))
             finally:
                 worker.number_ioctl = original
+
+
+class RootRecognitionTests(unittest.TestCase):
+    """A target named only by serial number and size that selects the disk
+    reporting the root's WWN, without naming the root's declared serial number,
+    is the root disk the policy did not name as the root, and refuses before
+    any effect."""
+
+    WWN_ROOT = {"wwn": "0x5000c500a1b2c3d4", "serialNumber": ""}
+    SERIAL_ROOT = {"wwn": "naa.5000c500a1b2c3d4", "serialNumber": "EXAMPLE-ROOT-01"}
+
+    def request(self, root, *targets):
+        return {"root": root, "targets": [{"method": "metadataClear", "serialNumber": serial, "sizeBytes": 8192} for serial in targets]}
+
+    def sysfs(self, root):
+        sda = block(root, "sda", "EXAMPLE-ROOT-01")
+        (sda / "device/wwid").write_text("naa.5000c500a1b2c3d4\n")
+        sdb = block(root, "sdb", "EXAMPLE-DATA-02")
+        (sdb / "device/wwid").write_text("naa.5000c500a1b2c3d9\n")
+        block(root, "sdc", "EXAMPLE-DATA-03")
+        nvme = block(root, "nvme0n1", "EXAMPLE-NVME-01", native=True)
+        (nvme / "wwid").write_text("eui.0025388b91c0a2f1\n")
+        return sda
+
+    def test_a_serial_target_resolving_to_the_wwn_root_refuses_before_any_effect(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.sysfs(root)
+            with self.assertRaisesRegex(worker.Refusal, "root-target-unrecognised"):
+                worker.unrecognised_root(self.request(self.WWN_ROOT, "EXAMPLE-DATA-02", "EXAMPLE-ROOT-01"), root)
+            worker.unrecognised_root(self.request(self.WWN_ROOT, "EXAMPLE-DATA-02", "EXAMPLE-DATA-03", "EXAMPLE-NVME-01"), root)
+            worker.unrecognised_root(self.request(dict(self.WWN_ROOT, serialNumber="EXAMPLE-ROOT-01"), "EXAMPLE-ROOT-01"), root)
+            worker.unrecognised_root(self.request({"wwn": "", "serialNumber": ""}, "EXAMPLE-ROOT-01"), root)
+
+    def test_the_wwn_a_serial_root_reported_at_installation_identifies_its_disk(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.sysfs(root)
+            worker.unrecognised_root(self.request(self.SERIAL_ROOT, "EXAMPLE-ROOT-01", "EXAMPLE-DATA-02"), root)
+            (root / "class/block/sda/device/vpd_pg80").write_bytes(b"\x00\x80\x00\x0fEXAMPLE-OTHER-1")
+            with self.assertRaisesRegex(worker.Refusal, "root-target-unrecognised"):
+                worker.unrecognised_root(self.request(self.SERIAL_ROOT, "EXAMPLE-OTHER-1"), root)
+            nvme = {"wwn": "eui.0025388b91c0a2f1", "serialNumber": "EXAMPLE-NVME-09"}
+            with self.assertRaisesRegex(worker.Refusal, "root-target-unrecognised"):
+                worker.unrecognised_root(self.request(nvme, "EXAMPLE-NVME-01"), root)
+
+    def test_the_held_disk_is_compared_again_and_an_unreadable_wwn_refuses(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sda = self.sysfs(root)
+            target = {"method": "metadataClear", "serialNumber": "EXAMPLE-DATA-02", "sizeBytes": 8192}
+            self.assertTrue(worker.selects_root(lambda: sda, target, self.WWN_ROOT))
+            self.assertFalse(worker.selects_root(lambda: root / "class/block/sdc", target, self.WWN_ROOT))
+            self.assertFalse(worker.selects_root(lambda: sda, dict(target, deviceName="/dev/sda", wwn="naa.5000c500a1b2c3d4"), self.WWN_ROOT))
+            (root / "class/block/sdc/device/wwid").write_text(" \n")
+            self.assertFalse(worker.selects_root(lambda: root / "class/block/sdc", target, self.WWN_ROOT))
+            (sda / "device/wwid").write_bytes(b"naa.\xff\n")
+            with self.assertRaisesRegex(worker.Refusal, "identity"):
+                worker.selects_root(lambda: sda, target, self.WWN_ROOT)

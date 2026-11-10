@@ -68,7 +68,7 @@ func validateErase(o api.Object, variant string) []api.Issue {
 		if root == "" && hints.SerialNumber != "" && target.Get("serialNumber").Text() == hints.SerialNumber && target.Has("deviceName") {
 			issues = append(issues, invariant(field, "a serial-selected root erase target uses the original serial-only selector", "omit deviceName and wwn for this root target"))
 		}
-		isRoot := namesRoot(root, target) || root == "" && hints.SerialNumber != "" && target.Get("serialNumber").Text() == hints.SerialNumber
+		isRoot := namesRoot(root, target) || hints.SerialNumber != "" && target.Get("serialNumber").Text() == hints.SerialNumber && (root == "" || !target.Has("deviceName"))
 		if isRoot && !sized {
 			issues = append(issues, invariant(field+".sizeBytes", "an explicit root erase target must match the root's exact capacity", "correct the root erase target capacity"))
 		}

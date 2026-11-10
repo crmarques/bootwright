@@ -96,6 +96,8 @@ const (
 	HostKeyPath = "/etc/bootwright/host-key.pub"
 )
 
+const RootWWNPath = "/etc/bootwright/root-wwn"
+
 const (
 	NetworkDocumentPath = "/etc/bootwright/network.yml"
 	NetworkMarkerPath   = "/etc/bootwright/network-marker.json"

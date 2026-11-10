@@ -27,6 +27,7 @@ type installerHost struct {
 	env     []string
 	// include receives the storage include the %pre wrote, empty when none.
 	include *string
+	wwn     *string
 }
 
 // runTargetProof runs the rendered target-proof %pre against a synthetic
@@ -91,8 +92,9 @@ func runTargetProof(t *testing.T, input Installation, host installerHost) (strin
 		host.prepare(t, blocks, proc)
 	}
 	include := filepath.Join(sysfs, "..", "bootwright-disk.ks")
+	stage := filepath.Join(sysfs, "..", "bootwright-root-wwn")
 	script := strings.NewReplacer("/sys/class/net", sysfs, "/sys/class/block", blocks, "/sys/fs/btrfs", filepath.Join(sysfs, "..", "btrfs"), "/proc/", proc+"/",
-		diskInclude, include).Replace(strings.Join(lines[start+1:end], "\n"))
+		diskInclude, include, rootWWNStage, stage).Replace(strings.Join(lines[start+1:end], "\n"))
 	mocks := `
 readlink() { case "${@: -1}" in /dev/*) ;; *) command readlink "$@"; return;; esac; if builtin [ -z "$resolved" ]; then return 1; fi; printf '%s\n' "$resolved"; }
 [() { if builtin [ "$1 $2" = "! -b" ]; then case "$3" in /dev/sda|/dev/sda1) return 1;; *) return 0;; esac; fi; builtin [ "$@"; }
@@ -113,6 +115,9 @@ lsblk() { case "${@: -1}" in /dev/sda) echo disk;; /dev/sda1) echo part;; esac; 
 	}
 	if host.include != nil {
 		*host.include = string(written)
+	}
+	if recorded, err := os.ReadFile(stage); host.wwn != nil && err == nil {
+		*host.wwn = string(recorded)
 	}
 	return string(output), err
 }
@@ -418,6 +423,74 @@ func TestThePhysicalTargetProofResolvesASerialRootToExactlyOneDisk(t *testing.T)
 				t.Fatalf("%s was not refused before storage: %v, include %q\n%s", name, err, include, output)
 			}
 		})
+	}
+}
+
+// A root disk declared by serial number has the WWN it reports recorded by
+// the %pre that matched its serial number and size, empty when it reports
+// none or a blank one, and an unreadable one stops the installation before
+// any disk is touched; a --nochroot %post installs the record on the
+// installed system. A root named by its WWN, and a virtual one, record none.
+func TestThePhysicalTargetProofRecordsTheWWNASerialRootReports(t *testing.T) {
+	const serial, size = "ZC1A2B3C", "480103981056"
+	input := physicalInstallation()
+	input.RootDevice, input.RootSerial, input.RootSizeBytes = "", serial, 480103981056
+	unreadable := "the disk reporting the declared root serial number " + serial + " reports an unreadable WWN"
+	for name, test := range map[string]struct {
+		disk, attribute, content, recorded, refusal string
+	}{
+		"a SCSI NAA identifier":   {"sda", "device/wwid", "naa.5000c500a1b2c3d4\n", "naa.5000c500a1b2c3d4\n", ""},
+		"an NVMe EUI identifier":  {"nvme0n1", "wwid", "eui.0025388b91c0a2f1\n", "eui.0025388b91c0a2f1\n", ""},
+		"no identifier":           {"sda", "", "", "\n", ""},
+		"a blank identifier":      {"sda", "device/wwid", " \n", "\n", ""},
+		"an unprintable identity": {"sda", "device/wwid", "naa.\x01\n", "", unreadable},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var recorded string
+			host := serialHost(t, []serialDisk{{test.disk, serial, "0", "0", false, ""}, {"sdz", "OTHER-01", "0", "0", false, ""}}, size)
+			base := host.prepare
+			host.prepare = func(t *testing.T, blocks, proc string) {
+				base(t, blocks, proc)
+				if err := os.WriteFile(filepath.Join(blocks, "sdz", "device", "wwid"), []byte("naa.5000c500a1b2c3d9\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				if test.attribute != "" {
+					if err := os.WriteFile(filepath.Join(blocks, test.disk, test.attribute), []byte(test.content), 0o644); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			host.wwn = &recorded
+			output, err := runTargetProof(t, input, host)
+			if test.refusal != "" {
+				if err == nil || !strings.Contains(output, "Bootwright: "+test.refusal+"; refusing before any disk is touched.") {
+					t.Fatalf("an unreadable WWN was not refused: %v\n%s", err, output)
+				}
+				return
+			}
+			if err != nil || recorded != test.recorded {
+				t.Fatalf("recorded %q, want %q: %v\n%s", recorded, test.recorded, err, output)
+			}
+		})
+	}
+	installed := "%post --nochroot --erroronfail\nset -eu\ninstall -d -m 0755 /mnt/sysimage/etc/bootwright\n" +
+		"install -m 0444 " + rootWWNStage + " /mnt/sysimage" + RootWWNPath + "\n%end"
+	byWWN := physicalInstallation()
+	byWWN.RootWWN = strings.TrimPrefix(byWWN.RootDevice, "/dev/disk/by-id/wwn-")
+	for name, test := range map[string]struct {
+		input    Installation
+		recorded bool
+	}{"by serial": {input, true}, "by WWN": {byWWN, false}, "by path": {physicalInstallation(), false}} {
+		rendered, err := RenderKickstart(test.input)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if strings.Contains(rendered, installed) != test.recorded || strings.Contains(rendered, rootWWNStage) != test.recorded {
+			t.Fatalf("%s records the root WWN %v:\n%s", name, !test.recorded, rendered)
+		}
+	}
+	if virtual := kickstartOf(t, labCatalog()); strings.Contains(virtual, rootWWNStage) || strings.Contains(virtual, "--nochroot") {
+		t.Fatalf("a virtual installation records a root WWN:\n%s", virtual)
 	}
 }
 

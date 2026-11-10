@@ -223,6 +223,20 @@ func installationStarted(execution lifecycle.Execution, request EraseRequest) (b
 	return false, refusal("lifecycle.state", "physical erase has no original installation effect boundary", "restore the original apply records before continuing removal")
 }
 
+func installedRootWWN(execution lifecycle.Execution, request EraseRequest) (string, error) {
+	install := request.Install.Identity.Object
+	for _, original := range execution.OriginalRemovalDependents {
+		if original.Block.ID != BlockID(install) {
+			continue
+		}
+		if !originalEraseBlock(original, install, Implementation, BlockID(install)) || original.Block.RequestDigest != request.InstallDigest {
+			break
+		}
+		return RecordedRootWWN(original, request.Install, request.InstallDigest)
+	}
+	return "", refusal("lifecycle.state", "physical erase has no original installation effect boundary", "restore the original apply records before continuing removal")
+}
+
 func (EraseCapability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiescence, error) {
 	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "offline erase independently requires a powered-off target or its authenticated RAM worker"}, nil
 }
@@ -265,6 +279,21 @@ func (c EraseCapability) run(ctx context.Context, execution lifecycle.Execution,
 		return lifecycle.RunResult{}, err
 	}
 	install := request.Install
+	if install.Target.Hardware == nil {
+		return lifecycle.RunResult{}, refusal("lifecycle.state", "physical erase has no frozen physical hardware", "restore the original apply records")
+	}
+	recorded, err := installedRootWWN(execution, request)
+	if err != nil {
+		return lifecycle.RunResult{}, err
+	}
+	if err := eraseRootRules(request.Targets, install.Target.Hardware.RootDevice, install.Target.Hardware, recorded); err != nil {
+		return lifecycle.RunResult{}, err
+	}
+	rootWWN := install.Target.Hardware.WWN
+	if rootWWN == "" {
+		rootWWN = recorded
+	}
+	values["rootWWNBase64"] = base64.StdEncoding.EncodeToString([]byte(rootWWN))
 	key, err := authorizedKey(execution, install)
 	if err != nil {
 		return lifecycle.RunResult{}, err

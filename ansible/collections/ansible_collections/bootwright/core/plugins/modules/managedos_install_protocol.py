@@ -153,6 +153,24 @@ options:
         proves it.
     type: bool
     required: false
+  rootWWN:
+    description:
+      - What the installed system's /etc/bootwright/root-wwn holds, the WWN
+        a root disk declared by serial number reported to the installer's
+        proof, or nothing when it reported none.
+    type: str
+    required: false
+  rootWWNRead:
+    description:
+      - Whether that record was read over the pinned fleet connection.
+    type: bool
+    required: false
+  rootWWNRequired:
+    description:
+      - Whether the frozen request declares its physical root disk by serial
+        number, so a completion proves the record read and well formed.
+    type: bool
+    required: false
   registration:
     description:
       - The consumer UUID and the ownership state the registration worker

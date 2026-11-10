@@ -569,7 +569,7 @@ registers, a registration this installation owns, as
 [Update within release](#update-within-release) states. The evidence records the marker
 digest, the host public key, the address, whether that connection was accepted,
 the network result, `fips`, whether the installed system proved FIPS mode,
-`rootEncryption`, whether it proved its root disk encrypted, and
+`rootEncryption`, whether it proved its root disk encrypted, `rootWWN`, and
 `registration`, the consumer and the ownership state the worker read, and
 `update`, what the update did; a later consumer that
 connects to the Machine binds that key, never a first-use answer from the
@@ -1205,16 +1205,12 @@ second and claim release last. Its
 [physical erase contract](state-reconciliation.md#opt-in-physical-logical-overwrite)
 owns the `logicalOverwrite` and `metadataClear` methods, exact identities,
 private RAM boot, direct I/O, receipt acknowledgement and failure recovery. Omission retains disks. An original installation proved never
-started removes its unused policy without booting or writing a disk. When the
-installation froze a root `wwn`, `serialNumber` or `sizeBytes`, the root erase
-target, when the policy names one under the
-[root-target rule](api/machines.md#physical-erase-policy), must name the same
-ones, the WWN without regard to case or a `0x` or `naa.` prefix,
-or the erase request refuses `api.invariant` when it is built. A root declared
-by serial number has the WWN it reported at installation, when it has one,
-recorded in the installation's evidence, so its erase can compare it.
-Not yet met: installation evidence records no WWN for a root disk declared by
-serial number; tracked as [B1275](milestones/m1.md#b1275).
+started removes its unused policy without booting or writing a disk. A root
+erase target, when the policy names one, follows the
+[root-target rule](api/machines.md#physical-erase-policy), which compares it
+with the root's frozen identity and, for a root declared by serial number, the
+WWN it reported, [recorded](#physical-installation) in the installation's
+evidence.
 
 The installation request version freezes the optional
 `eraseOnRemoval` Boolean so recovery guidance agrees with the separate policy.
@@ -1329,6 +1325,12 @@ storage directive when any of these fails. This
 narrows, but does not close, the interval between the controller's last proof
 and the installer's first write; what remains is recorded as a residual race
 rather than described as eliminated.
+
+**A serial-declared root's WWN is recorded.** The `%pre` writes the WWN the
+proved serial-declared root reports, read as above, empty when blank or absent;
+a `--nochroot` `%post` installs it at `/etc/bootwright/root-wwn`, which the
+completion and each observation read over the pinned fleet connection into
+`rootWWN`, unproved when unread or malformed.
 
 **Declared data disks are cleared only after every proof.** A Machine that
 declares `hardware.clearOnInstall` has its data disks proved and cleared in

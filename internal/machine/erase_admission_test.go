@@ -154,6 +154,14 @@ func TestEraseAdmissionComparesTheDeclaredRootSize(t *testing.T) {
 			}
 		}
 	}
+	withSerial := rootDeclared(machine.WithSpec(spec), "", m("wwn", "0x5000000000000009", "serialNumber", "EXAMPLE-ROOT").With("sizeBytes", api.IntegerValue("8192")))
+	for size, included := range map[string]bool{"8192": true, "12288": false} {
+		target := m("serialNumber", "EXAMPLE-ROOT").With("sizeBytes", api.IntegerValue(size))
+		changed := withSerial.WithSpec(withSerial.Spec().WithPath(m("method", "metadataClear", "targets", list(target)), "hardware", "eraseOnRemoval"))
+		if issues := validateErase(changed, substrate.ArmBaremetal); (len(issues) == 0) != included || !included && issues[0].Field != "$.spec.hardware.eraseOnRemoval.targets[0].sizeBytes" {
+			t.Fatalf("a %s-byte target naming a wwn root's serial number: issues %+v", size, issues)
+		}
+	}
 }
 
 func TestErasePolicyListsTheRootOnlyWhenItNamesIt(t *testing.T) {

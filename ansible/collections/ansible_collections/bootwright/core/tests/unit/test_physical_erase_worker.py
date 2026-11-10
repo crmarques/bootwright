@@ -1,5 +1,7 @@
 """The erase worker never selects a target or trusts incomplete coverage."""
 
+from pathlib import Path
+import tempfile
 import unittest
 from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_process as process
 from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_worker as worker
@@ -94,6 +96,7 @@ class EraseBoundaryTests(unittest.TestCase):
             "uuid": "uuid-example",
             "macs": ["02:00:00:00:00:01"],
             "deadlineSeconds": 60,
+            "root": {"wwn": "", "serialNumber": ""},
             "targets": [
                 {"deviceName": "/dev/example", "method": "logicalOverwrite", "wwn": "wwn-example", "serialNumber": "serial-example", "sizeBytes": 8192},
             ],
@@ -193,6 +196,36 @@ class EraseBoundaryTests(unittest.TestCase):
             with self.subTest(size=value), self.assertRaises(worker.Refusal):
                 changed = dict(request, targets=[dict(request["targets"][0], sizeBytes=value)])
                 worker.validate_request(changed)
+
+    def test_the_request_names_the_root_wwn_and_serial_number_it_compares(self):
+        request = self.request()
+        for root in ({"wwn": "0x5000c500a1b2c3d4", "serialNumber": ""}, {"wwn": "naa.5000c500a1b2c3d4", "serialNumber": "ZC1A2B3C"}):
+            worker.validate_request(dict(request, root=root))
+        for root in (None, {}, {"wwn": ""}, {"wwn": "", "serialNumber": "", "size": 1}, {"wwn": 1, "serialNumber": ""},
+                     {"wwn": " naa.1", "serialNumber": ""}, {"wwn": "x" * 257, "serialNumber": ""}, {"wwn": "naa.\n1", "serialNumber": ""}):
+            with self.subTest(root=root), self.assertRaises(worker.Refusal):
+                worker.validate_request(dict(request, root=root))
+        missing = dict(request)
+        del missing["root"]
+        with self.assertRaisesRegex(worker.Refusal, "request"):
+            worker.validate_request(missing)
+
+    def test_an_unrecognised_root_refuses_before_the_holder_release_and_every_write(self):
+        request = dict(self.request(), root={"wwn": "0x5000c500a1b2c3d4", "serialNumber": ""},
+                       targets=[{"method": "logicalOverwrite", "serialNumber": "serial-example", "sizeBytes": 8192}])
+        released = []
+        with tempfile.TemporaryDirectory() as temporary:
+            sysfs = Path(temporary)
+            node = sysfs / "class/block/sda"
+            (node / "device").mkdir(parents=True)
+            (node / "removable").write_text("0\n")
+            (node / "ro").write_text("0\n")
+            (node / "device/serial").write_text("serial-example\n")
+            (node / "device/wwid").write_text("naa.5000c500a1b2c3d4\n")
+            with self.assertRaisesRegex(worker.Refusal, "root-target-unrecognised"):
+                worker.execute(request, temporary, opener=lambda target: self.fail("opened"), prove_hardware=lambda _: None,
+                               release=released.append, sysfs=sysfs)
+        self.assertEqual(released, [])
 
     def test_a_target_names_its_disk_by_path_and_wwn_or_by_serial_number_alone(self):
         request = self.request()

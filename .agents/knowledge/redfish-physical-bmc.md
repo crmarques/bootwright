@@ -469,7 +469,7 @@ neither refuses every physical installation on that server.
 The controller-side proof still closes before the machine boots. The Kickstart
 therefore repeats it in a fail-closed `%pre` on the booted host, and the
 remaining interval is recorded as a
-[residual race](../../specs/state-reconciliation.md#mutation-safety) rather than
+[residual race](../../specs/state-reconciliation.md#physical-disk-safety) rather than
 described as closed — the same limitation
 [openshift-agent-disk-safety.md](openshift-agent-disk-safety.md) records for the
 agent installer, which admits no equivalent hook at all.

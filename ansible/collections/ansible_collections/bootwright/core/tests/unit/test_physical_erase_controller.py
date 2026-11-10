@@ -1,5 +1,6 @@
 """Image custody never reopens a replaced operator source or publishes stages."""
 
+import base64
 import hashlib
 import os
 from pathlib import Path
@@ -22,7 +23,7 @@ class ControllerTests(unittest.TestCase):
                 if create:
                     path.mkdir(mode=0o700)
 
-            request = {"version": "physical-erase-v2", "install": {"identity": {"context": "lab", "object": "metal-01"}}}
+            request = {"version": "physical-erase-v3", "install": {"identity": {"context": "lab", "object": "metal-01"}}}
             material = {"applyOperation": "op-" + "0" * 32}
             with patch.object(controller, "ROOT", root), patch.object(controller, "directory", side_effect=proved):
                 instance = controller.Controller(request, "a" * 64, material, create=True)
@@ -32,9 +33,31 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(visited, [(path, True) for path in expected])
             self.assertEqual(instance.root, expected[-1])
             self.assertEqual(str(controller.ROOT), "/var/lib/bootwright-hosted")
-            for version in ("physical-erase-v1", "physical-erase-v3"):
+            for version in ("physical-erase-v2", "physical-erase-v4"):
                 with self.assertRaises(controller.worker.Refusal):
                     controller.Controller(dict(request, version=version), "a" * 64, material)
+
+    def test_the_worker_compares_the_root_wwn_go_names_and_the_root_serial_number(self):
+        hardware = {"interfaces": [{"macAddress": "52:54:00:9A:1B:01"}], "serialNumber": "ZC1A2B3C"}
+        request = {"targets": [{"method": "metadataClear", "serialNumber": "ZC1A2B3C", "sizeBytes": 8192}], "deadlineSeconds": 14400,
+                   "install": {"target": {"hardware": hardware}}}
+        instance = object.__new__(controller.Controller)
+        instance.request, instance.digest = request, "a" * 64
+        instance.material = {"pinnedUUIDBase64": base64.b64encode(b"Example-System\n").decode(),
+                             "rootWWNBase64": base64.b64encode(b"naa.5000c500a1b2c3d4").decode()}
+        worker_request = instance.worker_for("remove/erase/1")
+        controller.worker.validate_request(worker_request)
+        self.assertEqual(worker_request["root"], {"wwn": "naa.5000c500a1b2c3d4", "serialNumber": "ZC1A2B3C"})
+        self.assertEqual((worker_request["uuid"], worker_request["macs"]), ("example-system", ["52:54:00:9a:1b:01"]))
+        del hardware["serialNumber"]
+        instance.material["rootWWNBase64"] = ""
+        self.assertEqual(instance.worker_for("remove/erase/1")["root"], {"wwn": "", "serialNumber": ""})
+        for material in ({}, {"rootWWNBase64": "not base64!"}):
+            instance.material = dict(instance.material, **material)
+            if not material:
+                del instance.material["rootWWNBase64"]
+            with self.subTest(material=material), self.assertRaisesRegex(controller.worker.Refusal, "root"):
+                instance.worker_for("remove/erase/1")
 
     def test_build_keeps_the_verified_input_descriptor_through_native_readers(self):
         with tempfile.TemporaryDirectory() as temporary:

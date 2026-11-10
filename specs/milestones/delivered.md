@@ -13759,7 +13759,7 @@ goldens now carry the derived root path beside its `wwn`.
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** a serial-declared root's erase still compares no
-WWN ([B1275](m1.md#b1275)); the `bootwright-template-inputs` chart still emits
+WWN ([B1275](#x372--serial-root-wwn)); the `bootwright-template-inputs` chart still emits
 a physical root `deviceName`, which its owner changes.
 
 ### X360 — A managed registry on its placement Machine
@@ -13911,3 +13911,50 @@ occurred. **Limitations:** the unclassified-reference test covers the
 references the contract examples plan; the Ceph consumer and replication
 blocks bind host keys their `SecretReferences` do not name (reported, not
 changed).
+
+### X372 — Serial root WWN
+
+**Items:** B1275 (2026-11-10, [D253](backlog.md#d253)), Kind safety, Owners:
+Managed OS, with Machine. Closes [X298](#x298--physical-disks-named-by-serial-number-and-size)'s
+left-open note. A root declared by serial number has the WWN its disk reported
+to the `%pre` that proved its serial number and size
+[recorded](../managed-os.md#physical-installation) in the installation's
+evidence as `rootWWN`, empty when it reported none, and its erase compares it
+under the [root-target rule](../api/machines.md#physical-erase-policy): a
+target naming it by `wwn` or by the by-id path an `naa.` WWN derives is the
+root, which a serial root's target names by serial number alone, so the
+removal refuses before any effect. It also closes the gap an independent
+review of [X369](#x369--wwn-root) found: a target without `deviceName` that
+selects a WWN-declared root was the root unrecognised unless it named the
+root's serial number and size. Only the RAM worker sees the disk such a target
+selects, so it is handed the root's WWN, declared or reported, and declared
+serial number, and refuses `root-target-unrecognised` before any holder
+release and again on the held disk before the first write
+([physical disk safety](../state-reconciliation.md#physical-disk-safety)). A
+target without `deviceName` naming a WWN root's declared serial number is that
+root in admission and the erase request, so its size must be the root's.
+Physical disk safety is now its own section, split from mutation safety to
+keep within the section budget. Contracts: kickstart-anaconda-v1 to v2 (the
+os-install-anaconda-v1 digest) and physical-erase-v2 to v3.
+
+| Finding | Change |
+| --- | --- |
+| B1275 | the physical `%pre` writes the serial root's WWN, a `--nochroot` `%post` installs `/etc/bootwright/root-wwn`, `root_wwn.yml` reads it in the apply and every observation, the protocol action publishes `rootWWN` and a completion that cannot read it is unproved; Go's `Evidence.RootWWN` is bounded printable ASCII and only a serial root may carry one; the erase reads it from the original installation record, refuses a target naming it, and hands the worker `rootWWNBase64` |
+| X369 review | the worker request carries `root` (WWN and serial number); `unrecognised_root` and `selects_root` refuse a target without `deviceName` whose disk reports the root's WWN; admission and the erase request treat a serial-only target naming a WWN root's serial as the root |
+
+Tests: Go `TestThePhysicalTargetProofRecordsTheWWNASerialRootReports`,
+`TestInstallationEvidenceRecordsTheWWNOfASerialDeclaredRoot`,
+`TestPhysicalEraseComparesTheWWNASerialRootReportedAtInstallation`,
+`TestPhysicalEraseHandsTheWorkerTheDeclaredRootWWN` and a WWN-root serial case
+of `TestEraseAdmissionComparesTheDeclaredRootSize`; Python
+`test_managedos_install_root_wwn.py`,
+`test_a_serial_declared_root_records_the_wwn_it_reported_to_the_installer`,
+`RootRecognitionTests`, `test_an_unrecognised_root_refuses_before_the_holder_release_and_every_write`,
+`test_the_request_names_the_root_wwn_and_serial_number_it_compares` and
+`test_the_worker_compares_the_root_wwn_go_names_and_the_root_serial_number`.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** an installation completed before this build records
+no WWN and is refused by its moved digest; that the installer image's sysfs
+`wwid` of a serial-declared root equals the RAM worker's is unverified on
+hardware.

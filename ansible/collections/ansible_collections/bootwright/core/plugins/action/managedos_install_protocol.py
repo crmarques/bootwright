@@ -70,6 +70,24 @@ MAX_DIFFERENCE_BYTES = 200
 CONTENT = ("image", "private", "work")
 
 
+def root_wwn(arguments):
+    """The WWN a serial-declared root disk reported to the installer, '' when none, or None when unproved.
+
+    The record holds the identity the %pre read, printable ASCII of at most 256
+    characters without surrounding white space, or nothing; the same rules as
+    Go's decode. Any other installation records none.
+    """
+    if not flag(arguments.get("rootWWNRequired")):
+        return ""
+    value = arguments.get("rootWWN")
+    if not flag(arguments.get("rootWWNRead")) or not isinstance(value, str):
+        return None
+    value = value[:-1] if value.endswith("\n") else value
+    if len(value) > 256 or value.strip() != value or not all(0x20 <= ord(character) <= 0x7e for character in value):
+        return None
+    return value
+
+
 def tree_identity(value):
     """The digest of the image the published tree was extracted from, or ''."""
     value = value or ""
@@ -191,6 +209,7 @@ def presence(arguments, request_digest):
         "registration": registration(arguments.get("registration")),
         "request": adapter_protocol.request_digest(request_digest),
         "rootEncryption": flag(arguments.get("rootEncryption")),
+        "rootWWN": root_wwn(arguments) or "",
         "tree": bool(observation.get("tree")),
         "treeContent": bool(observation.get("treeContent")),
         "treeIdentity": tree_identity(observation.get("treeIdentity")),
@@ -206,6 +225,7 @@ def presence(arguments, request_digest):
         and evidence["network"] and evidence["networkReboot"]
         and (evidence["fips"] or not flag(arguments.get("fipsRequired")))
         and (evidence["rootEncryption"] or not flag(arguments.get("rootEncryptionRequired")))
+        and root_wwn(arguments) is not None
         and (evidence["registration"]["state"] == "owned" or not flag(arguments.get("registrationRequired")))
         and update_proved(evidence, arguments)
     )
@@ -228,7 +248,7 @@ def released(evidence, arguments):
 
 
 def unproved(evidence, private_delivery=False, fips_required=False, encryption_required=False, registration_required=False,
-             update_required=False):
+             update_required=False, root_wwn_unread=False):
     """What a completion proof still lacks, named for the same reason."""
     names = [name for name in ("marker", "hostKey", "address") if not evidence[name]]
     if evidence["media"]:
@@ -248,6 +268,8 @@ def unproved(evidence, private_delivery=False, fips_required=False, encryption_r
         names.append("fips")
     if encryption_required and not evidence["rootEncryption"]:
         names.append("rootEncryption")
+    if root_wwn_unread:
+        names.append("rootWWN")
     if registration_required and evidence["registration"]["state"] != "owned":
         names.append("registration")
     if evidence["update"]["state"] != ("complete" if update_required else "none"):
@@ -277,6 +299,7 @@ def absence(arguments, request_digest):
         "registration": registration(arguments.get("registration")),
         "request": adapter_protocol.request_digest(request_digest),
         "rootEncryption": False,
+        "rootWWN": "",
         "tree": False,
         "treeContent": False,
         "treeIdentity": "",
@@ -301,7 +324,7 @@ def completion(arguments):
         unmet = unproved(
             evidence, flag(arguments.get("privateDelivery")), flag(arguments.get("fipsRequired")),
             flag(arguments.get("rootEncryptionRequired")), flag(arguments.get("registrationRequired")),
-            flag(arguments.get("updateRequired")),
+            flag(arguments.get("updateRequired")), root_wwn(arguments) is None,
         )
         verb = "not proved"
     if publishes(evidence, arguments.get("observed")):
