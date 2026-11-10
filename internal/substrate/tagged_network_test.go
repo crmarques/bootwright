@@ -121,6 +121,53 @@ func TestALegDeviceFitsTheInterfaceNameBound(t *testing.T) {
 	}
 }
 
+// The collection refuses a trunk whose name holds a dot, because the dot reads
+// as the VLAN device of another link, so admission refuses it first.
+func TestATrunkNameHoldsNoDot(t *testing.T) {
+	lab := topologyProvider("lab", "host", "8000", topologyProfile())
+	dotted := taggedNetwork("dotted", "lab", "br.nm", "192.0.2.1/24", 140)
+	refused := issuesAt(Validate(dotted, api.NewCatalog([]api.Object{lab, dotted, topologyHost("host")})), "$.spec.libvirt.bridge")
+	want := api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.bridge",
+		Message:     "the trunk br.nm of tagged managed Network/dotted is a bridge Bootwright creates, and a dot in a bridge name reads as the VLAN device of another link",
+		Remediation: "name the trunk without a dot in spec.libvirt.bridge of Network/dotted, such as br-nm"}
+	if len(refused) != 1 || refused[0] != want {
+		t.Fatalf("refused = %v", refused)
+	}
+	untagged := managedNetwork("plain", "lab", "br.nm", "192.0.2.1/24")
+	if issues := issuesAt(Validate(untagged, api.NewCatalog([]api.Object{lab, untagged, topologyHost("host")})), "$.spec.libvirt.bridge"); len(issues) != 0 {
+		t.Fatalf("an untagged managed Network's dotted bridge was refused: %v", issues)
+	}
+}
+
+// A leg's connection is bootwright-<context>-<network> and a trunk's
+// bootwright-<context>-<provider>-trunk-<bridge>, so a tagged managed Network
+// named <provider>-trunk-<bridge> after a trunk of the context would take that
+// trunk's connection name and UUID.
+func TestALegConnectionNeverTakesATrunksName(t *testing.T) {
+	lab := topologyProvider("lab", "host", "8000", topologyProfile())
+	other := topologyProvider("other", "host", "8001", topologyProfile())
+	public := taggedNetwork("ceph-public", "lab", "br-trunk", "192.0.2.1/24", 140)
+	own := taggedNetwork("lab-trunk-br-trunk", "lab", "br-trunk", "203.0.113.1/24", 150)
+	theirs := taggedNetwork("other-trunk-br-o", "lab", "br-trunk", "198.51.100.1/24", 160)
+	storage := taggedNetwork("storage", "other", "br-o", "198.51.100.129/26", 170)
+	catalog := api.NewCatalog([]api.Object{lab, other, public, own, theirs, storage, topologyHost("host")})
+	for _, test := range []struct {
+		leg      api.Object
+		provider string
+		bridge   string
+	}{{own, "lab", "br-trunk"}, {theirs, "other", "br-o"}} {
+		refused := issuesAt(Validate(test.leg, catalog), "$.metadata.name")
+		trunk := test.provider + "-trunk-" + test.bridge
+		want := "the VLAN leg connection of tagged managed " + test.leg.Identity() + " would take the name and UUID of the NetworkManager connection of trunk " + test.bridge + " of InfraProvider/" + test.provider + ", which is named after " + trunk
+		if len(refused) != 1 || refused[0].Code != "api.invariant" || refused[0].Message != want {
+			t.Fatalf("%s: refused = %v", test.leg.Identity(), refused)
+		}
+	}
+	if issues := issuesAt(Validate(public, catalog), "$.metadata.name"); len(issues) != 0 {
+		t.Fatalf("a leg named after no trunk was refused: %v", issues)
+	}
+}
+
 func TestATaggedManagedNetworkRefusesIPv6AndAnMTUOtherThan1500(t *testing.T) {
 	lab := topologyProvider("lab", "host", "8000", topologyProfile())
 	dual := taggedNetwork("dual", "lab", "br-trunk", "192.0.2.1/24", 140)

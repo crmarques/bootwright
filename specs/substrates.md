@@ -391,7 +391,10 @@ Network, because the host routes its prefix to that bridge;
 `libvirt-network:<name>` for every managed network; `libvirt-pool:<name>` for
 the pool and `path:` for its directory; `bridge:<bridge>` for every trunk,
 and `bridge:<device>` and `prefix:<masked prefix>` for every leg, because a
-link name and a connected route are host-global; and `unit:<name>` without the
+link name and a connected route are host-global; `nm-connection:<name>` for
+every trunk and leg, because a NetworkManager connection name is host-global
+and two contexts can derive one name (context `a` with Network `b-c` and
+context `a-b` with Network `c` both name `bootwright-a-b-c`); and `unit:<name>` without the
 `.service` suffix for the provider's
 firewall readiness unit and for its VLAN-refusal unit when it has managed
 networks or legs, and for its routing unit, whose name is also its table's
@@ -401,8 +404,9 @@ at most 20 managed Networks across its providers, a host-wide rule of the
 [Libvirt arm](api/networks.md#libvirt-arm), so a provider's reservation uses at
 most 64 keys, all one reservation holds: 20 × 3 network keys, two pool keys
 and the readiness and VLAN-refusal unit keys. Each trunk counts as a managed
-Network and claims one key, each leg two and the routing unit one, so k legs on
-t trunks leave at most 65 − k − 2t ≤ 62 keys
+Network and claims two keys, each leg three and the routing unit one, so k legs
+on t trunks claim at most 4 + 1 + 3 × (20 − k − t) + 3k + 2t = 65 − t ≤ 64
+keys, the bound unchanged, with exactly 64 when one trunk carries every leg
 ([controller record](contexts/controller-record.md#bounds),
 `TestTheManagedNetworkBoundKeepsTheHostReservationWithinItsKeys`,
 `TestTheManagedNetworkBoundWithATrunkKeepsTheHostReservationWithinItsKeys`).

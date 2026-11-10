@@ -1,7 +1,9 @@
 package libvirt
 
 import (
+	"fmt"
 	"slices"
+	"strconv"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -45,6 +47,7 @@ func TestTheRoutingRequestFreezesEveryDeclaredPairAndNoOther(t *testing.T) {
 func TestTheHostReservationClaimsTheTrunkLegsAndRoutingUnit(t *testing.T) {
 	keys := taggedHostRequest(t, taggedObjects()...).ReservationKeys()
 	for _, key := range []string{"bridge:br-trunk", "bridge:br-trunk.140", "bridge:br-trunk.150", "prefix:203.0.113.64/26", "prefix:203.0.113.128/26",
+		"nm-connection:bootwright-lab-lab-libvirt-trunk-br-trunk", "nm-connection:bootwright-lab-ceph-public", "nm-connection:bootwright-lab-ceph-arbiter",
 		"unit:bootwright-lab-lab-libvirt-routing", "unit:bootwright-lab-lab-libvirt-vlan-refusal", "unit:bootwright-lab-lab-libvirt-firewalld-ready"} {
 		if !slices.Contains(keys, key) {
 			t.Errorf("the reservation lacks %s: %v", key, keys)
@@ -60,11 +63,18 @@ func TestTheManagedNetworkBoundWithATrunkKeepsTheHostReservationWithinItsKeys(t 
 	objects = append(objects, legNetwork("leg", "10.250.0.1/24", "140"))
 	request := taggedHostRequest(t, objects...)
 	keys := request.ReservationKeys()
-	if want := 4 + 1 + 3*(substrate.MaxManagedNetworks-2) + 2 + 1; len(keys) != want || len(keys) > prerequisites.MaxReservationKeys-2 {
+	if want := 4 + 1 + 3*(substrate.MaxManagedNetworks-2) + 3 + 2; len(keys) != want || len(keys) > prerequisites.MaxReservationKeys {
 		t.Fatalf("%d keys, want %d: %v", len(keys), want, keys)
 	}
 	if issues := substrate.Validate(objects[len(objects)-1], catalogOf(objects...)); len(issues) != 0 {
 		t.Fatalf("the bound refused %d Networks and a trunk: %v", substrate.MaxManagedNetworks-1, issues)
+	}
+	legs := []api.Object{controller(), provider()}
+	for index := range substrate.MaxManagedNetworks - 1 {
+		legs = append(legs, legNetwork(fmt.Sprintf("leg-%02d", index), fmt.Sprintf("10.%d.0.1/24", 100+index), strconv.Itoa(100+index)))
+	}
+	if keys := taggedHostRequest(t, legs...).ReservationKeys(); len(keys) != 4+1+3*(substrate.MaxManagedNetworks-1)+2 || len(keys) > prerequisites.MaxReservationKeys {
+		t.Fatalf("%d legs on one trunk claim %d keys, of the %d one reservation holds", substrate.MaxManagedNetworks-1, len(keys), prerequisites.MaxReservationKeys)
 	}
 }
 

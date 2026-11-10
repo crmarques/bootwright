@@ -215,10 +215,10 @@ func (r HostRequest) ReservationKeys() []string {
 		keys = append(keys, "unit:"+RoutingTable(*r.Routing))
 	}
 	for _, trunk := range r.Trunks {
-		keys = append(keys, "bridge:"+trunk.Bridge)
+		keys = append(keys, "bridge:"+trunk.Bridge, "nm-connection:"+trunk.Name)
 	}
 	for _, leg := range r.Legs {
-		keys = append(keys, "bridge:"+leg.Device)
+		keys = append(keys, "bridge:"+leg.Device, "nm-connection:"+leg.Name)
 		if prefix, err := netip.ParsePrefix(leg.Address); err == nil {
 			keys = append(keys, "prefix:"+prefix.Masked().String())
 		}

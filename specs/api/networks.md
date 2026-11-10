@@ -144,6 +144,14 @@ provider segment or another provider's Network naming a trunk is refused at
 - A leg device `<bridge>.<vlan>` longer than the 15 bytes of a Linux interface
   name, at `$.spec.libvirt.bridge`, naming the longest bridge that fits
   (`TestALegDeviceFitsTheInterfaceNameBound`).
+- A `bridge` holding a dot, at `$.spec.libvirt.bridge`: the trunk is a bridge
+  the host block creates, and a dot reads as the VLAN device of another link
+  (`TestATrunkNameHoldsNoDot`).
+- A name `<provider>-trunk-<bridge>` for any provider and trunk of the
+  context's tagged managed Networks, at `$.metadata.name`: the leg's connection
+  `bootwright-<context>-<name>` would be that trunk's connection
+  `bootwright-<context>-<provider>-trunk-<bridge>`, name and UUID alike
+  (`TestALegConnectionNeverTakesATrunksName`).
 
 The host routes between two legs only when one names the other in
 `routedNetworkRefs`, one side being enough, and masquerades a leg whose

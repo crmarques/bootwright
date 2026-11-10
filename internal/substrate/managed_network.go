@@ -85,7 +85,26 @@ func validateNetworkArm(o api.Object, c api.Catalog) []api.Issue {
 		}
 	}
 	issues = add(issues, validateLeg(o)...)
+	issues = add(issues, validateLegConnectionName(o, c)...)
 	return add(issues, validateRoutedNetworks(o, c)...)
+}
+
+func validateLegConnectionName(o api.Object, c api.Catalog) []api.Issue {
+	if _, leg := TaggedManagedNetwork(o); !leg {
+		return nil
+	}
+	for _, peer := range c.OfKind(api.Network) {
+		if _, tagged := TaggedManagedNetwork(peer); !tagged {
+			continue
+		}
+		provider, bridge := ManagedNetworkProvider(peer), peer.Spec().Get(ArmLibvirt, "bridge").Text()
+		if trunk := provider + "-trunk-" + bridge; o.Name() == trunk {
+			return []api.Issue{{Code: "api.invariant", Field: "$.metadata.name",
+				Message:     "the VLAN leg connection of tagged managed " + o.Identity() + " would take the name and UUID of the NetworkManager connection of trunk " + bridge + " of InfraProvider/" + provider + ", which is named after " + trunk,
+				Remediation: "rename " + o.Identity() + " so it is not " + trunk}}
+		}
+	}
+	return nil
 }
 
 func validateRoutedNetworks(o api.Object, c api.Catalog) []api.Issue {
@@ -148,6 +167,11 @@ func validateLeg(o api.Object) []api.Issue {
 			Remediation: fmt.Sprintf("set spec.mtu of %s to %d, or remove spec.vlan to realize it as an untagged libvirt network", o.Identity(), defaultMTU)})
 	}
 	bridge := o.Spec().Get(ArmLibvirt, "bridge").Text()
+	if strings.Contains(bridge, ".") {
+		issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.bridge",
+			Message:     "the trunk " + bridge + " of tagged managed " + o.Identity() + " is a bridge Bootwright creates, and a dot in a bridge name reads as the VLAN device of another link",
+			Remediation: "name the trunk without a dot in spec.libvirt.bridge of " + o.Identity() + ", such as " + strings.ReplaceAll(bridge, ".", "-")})
+	}
 	if device := LegDevice(bridge, vlan); api.ValidLexical("bridge", bridge) && len(device) > MaxInterfaceName {
 		issues = add(issues, api.Issue{Code: "api.invariant", Field: "$.spec.libvirt.bridge",
 			Message:     fmt.Sprintf("the leg of tagged managed %s is the host VLAN device %s, %d bytes, and a Linux interface name holds at most %d", o.Identity(), device, len(device), MaxInterfaceName),

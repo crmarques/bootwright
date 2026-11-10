@@ -8370,5 +8370,14 @@ review with the others:
     owned UUID and a foreign file at a frozen keyfile path refuse (10 narrowed),
     since the removal deletes only what it owns.
 
+18. Each trunk and leg also claims the exclusive key `nm-connection:<name>`,
+    because two contexts can derive one connection name (context `a` with
+    Network `b-c` and context `a-b` with Network `c`), which revises (12): k
+    legs on t trunks claim at most 65 - t <= 64 keys, the bound unchanged. A
+    tagged managed Network named `<provider>-trunk-<bridge>` after a trunk of
+    the context, whose leg would take that trunk's connection name and UUID,
+    refuses at `$.metadata.name`, and a trunk `bridge` with a dot, which the
+    collection already refused, refuses at `$.spec.libvirt.bridge` (3).
+
 **Exit evidence:** each item's in-tree evidence and the operator run of
-[B1283](m1.md#b1283), then the owner's review of (1) to (17).
+[B1283](m1.md#b1283), then the owner's review of (1) to (18).
