@@ -205,7 +205,9 @@ origins. `bootwright render acquisitions --input-dir <dir>`, or
 `--context <name>` for a context's input, lists each artifact your desired
 state acquires, its origin and class, its digest and the Machines that read
 it ([acquisition list](../specs/cli.md#acquisition-list)), which gives a
-firewall's owner each Machine's destinations. This is what each step reaches,
+firewall's owner each Machine's destinations, including each registry's
+token, signature and blob delivery hosts as `registry` rows, which a vendor
+registry serves from `quay.io`'s hosts. This is what each step reaches,
 and what moves a public origin to a registry or file server the enterprise
 runs:
 
@@ -219,8 +221,10 @@ runs:
 | The emulated BMC's image | The libvirt provider's host | `quay.io` | `spec.mirror.registry` on the Environment |
 | Installation media | The controller | The file or URL you name | `media add --from-file`, or `--from-url` from your own server |
 | An OpenShift release | The controller while it builds the image, then every node | `quay.io`, where the release payload is published | `spec.mirror.registry` on the Environment, or `spec.install.registries` on the cluster |
-| A cluster's operators | The cluster's nodes | The registries of the catalog each add-on binding names | Nothing to do for a Red Hat catalog or IBM's Data Foundation on `icr.io`, vendor origins; another's repositories are mapped by the same `imageDigestSources` where the cluster pulls them by digest |
-| IBM Ceph images and packages | The controller, which resolves each image's digest, then each Ceph host | `cp.icr.io` and `public.dhe.ibm.com`, vendor origins | Nothing to do |
+| A cluster's operators | The cluster's nodes | The registries of the catalog each add-on binding names; the `add-on catalog image` rows name each catalog image, and what a catalog's index points at is the cluster's mirror tooling's (`oc-mirror`) | Nothing to do for a Red Hat catalog or IBM's Data Foundation on `icr.io`, vendor origins, beyond allowing the `registry blob host` rows of `render acquisitions`; another's repositories are mapped by the same `imageDigestSources` where the cluster pulls them by digest |
+| A cluster's default catalogs and update service | The cluster's nodes | `registry.redhat.io` for the `default catalog image` rows and `api.openshift.com` for the `update service` row, vendor origins, until your GitOps disables the default sources and the update server | Nothing to do while they stay enabled, beyond allowing the `registry blob host` rows of `render acquisitions` |
+| An installed Machine's packages | The Machine | `subscription.rhsm.redhat.com` and `cdn.redhat.com` for a hosted subscription, or the Satellite and `repositories.configure` hosts the `machine registration`, `machine repositories` and `machine repository` rows name | Nothing to do: your Satellite or your own repositories serve |
+| IBM Ceph images and packages | The controller, which resolves each image's digest, then each Ceph host | `cp.icr.io` and `public.dhe.ibm.com`, vendor origins | Nothing to do, beyond allowing the `registry blob host` rows of `render acquisitions` |
 
 **Tools.** Each build pins a default release of Helm, `virtctl`, `govc` and
 `kubectl` with its size and SHA-256 ([the tool table](../specs/controller.md#the-tool-table)).

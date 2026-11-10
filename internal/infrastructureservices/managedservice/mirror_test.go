@@ -34,10 +34,11 @@ func TestAnImageMirrorServesEveryPublicOriginImageUnderItsOriginAtTheSameDigest(
 	catalog := catalogOf(mirrorEnvironment(), mirrorRegistry(text("credentialsRef", "mirror-pull"), text("trustBundleRef", "mirror-ca")),
 		secretOf("mirror-pull", "usernamePassword"), secretOf("mirror-ca", "caBundle"))
 	for origin, want := range map[string]string{
-		"quay.io/metal3-io/sushy-tools" + digest:   "mirror.example.test:8443/images/quay.io/metal3-io/sushy-tools" + digest,
-		"library/nginx" + digest:                   "mirror.example.test:8443/images/docker.io/library/nginx" + digest,
-		"localhost:5000/squid" + digest:            "localhost:5000/squid" + digest,
-		"registry.access.redhat.com/ubi9" + digest: "registry.access.redhat.com/ubi9" + digest,
+		"quay.io/metal3-io/sushy-tools" + digest:      "mirror.example.test:8443/images/quay.io/metal3-io/sushy-tools" + digest,
+		"library/nginx" + digest:                      "mirror.example.test:8443/images/docker.io/library/nginx" + digest,
+		"registry-1.docker.io/library/nginx" + digest: "mirror.example.test:8443/images/docker.io/library/nginx" + digest,
+		"localhost:5000/squid" + digest:               "localhost:5000/squid" + digest,
+		"registry.access.redhat.com/ubi9" + digest:    "registry.access.redhat.com/ubi9" + digest,
 	} {
 		got, source := MirroredImage(catalog, origin)
 		if got == origin && source == nil && got == want {

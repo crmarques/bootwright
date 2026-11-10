@@ -43,11 +43,13 @@ func listAcquisitions(catalog api.Catalog) ([]cli.Acquisition, error) {
 	acquired = append(acquired, emulatorAcquisitions(catalog)...)
 	acquired = append(acquired, clusterAcquisitions(catalog, controllerMachine)...)
 	acquired = append(acquired, storageAcquisitions(catalog, controllerMachine)...)
+	acquired = append(acquired, operatorAcquisitions(catalog)...)
+	acquired = append(acquired, machineRepositoryAcquisitions(catalog)...)
 	for _, image := range catalog.OfKind(api.MachineImage) {
 		acquired = append(acquired, cli.Acquisition{Kind: "installation media", Artifact: image.Spec().Get("bootMedia").Text(), Class: classMediaStore,
 			Origin: "the file or URL media add named", SHA256: strings.TrimPrefix(image.Spec().Get("checksum").Text(), "sha256:"), Machines: []string{controllerMachine}, Consumer: image.Identity()})
 	}
-	return acquired, nil
+	return withRegistryHosts(acquired), nil
 }
 
 func controllerAcquisitions(catalog api.Catalog) ([]cli.Acquisition, string, error) {
@@ -131,12 +133,7 @@ func emulatorAcquisitions(catalog api.Catalog) []cli.Acquisition {
 func clusterAcquisitions(catalog api.Catalog, controllerMachine string) []cli.Acquisition {
 	var rows []cli.Acquisition
 	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
-		machines := []string{controllerMachine}
-		for _, node := range cluster.Spec().Get("nodes").Items() {
-			if machine := node.Get("machineRef").Text(); machine != "" {
-				machines = append(machines, machine)
-			}
-		}
+		machines := append([]string{controllerMachine}, clusterNodes(cluster)...)
 		distribution := cluster.Spec().Get("distribution")
 		release := distribution.Get("release")
 		if distribution.Get("type").Text() == "openshift" {
@@ -204,12 +201,25 @@ func storageAcquisitions(catalog api.Catalog, controllerMachine string) []cli.Ac
 	return rows
 }
 
+func clusterNodes(cluster api.Object) []string {
+	var machines []string
+	for _, node := range cluster.Spec().Get("nodes").Items() {
+		if machine := node.Get("machineRef").Text(); machine != "" {
+			machines = append(machines, machine)
+		}
+	}
+	return machines
+}
+
 func imageAcquisition(kind, reference string, machines []string, consumer string) cli.Acquisition {
 	repository, digest, _ := strings.Cut(reference, "@sha256:")
 	if first, _, _ := strings.Cut(repository, "/"); !strings.ContainsAny(first, ".:") && first != "localhost" {
 		repository = "docker.io/" + repository
 	}
 	version := ""
+	if separator := strings.LastIndex(repository, ":"); separator > strings.LastIndex(repository, "/") {
+		repository, version = repository[:separator], repository[separator+1:]
+	}
 	if digest != "" {
 		version = "sha256:" + digest
 	}

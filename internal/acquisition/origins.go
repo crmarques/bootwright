@@ -9,14 +9,14 @@ const (
 )
 
 var vendorHosts = []string{
-	"cp.icr.io", "icr.io", "mirror.openshift.com", "public.dhe.ibm.com",
-	"registry.access.redhat.com", "registry.connect.redhat.com", "registry.redhat.io",
+	"access.redhat.com", "api.openshift.com", "cdn.redhat.com", "cp.icr.io", "dd2.icr.io", "icr.io", "mirror.openshift.com", "public.dhe.ibm.com",
+	"registry.access.redhat.com", "registry.connect.redhat.com", "registry.redhat.io", "subscription.rhsm.redhat.com",
 }
 
 var publicHosts = []string{
-	"api.github.com", "cdn.dl.k8s.io", "dl.k8s.io", "docker.io", "files.pythonhosted.org", "gcr.io", "get.helm.sh",
-	"ghcr.io", "github.com", "objects.githubusercontent.com", "quay.io", "registry.gitlab.com", "registry.k8s.io",
-	"release-assets.githubusercontent.com",
+	"api.github.com", "auth.docker.io", "cdn.dl.k8s.io", "cdn.quay.io", "cdn01.quay.io", "cdn02.quay.io", "cdn03.quay.io", "cdn04.quay.io", "cdn05.quay.io", "cdn06.quay.io",
+	"dl.k8s.io", "docker.io", "files.pythonhosted.org", "gcr.io", "get.helm.sh", "ghcr.io", "github.com", "objects.githubusercontent.com",
+	"production.cloudfront.docker.com", "quay.io", "registry-1.docker.io", "registry.gitlab.com", "registry.k8s.io", "release-assets.githubusercontent.com",
 }
 
 func OriginClass(host string) string {

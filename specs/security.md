@@ -815,7 +815,7 @@ host, never who wrote the content:
 | Origin | Who publishes there | Who connects |
 | --- | --- | --- |
 | The host's package repositories | Whoever the host's package manager is configured to trust ([W2](#the-controller-hosts-attacker-model)) | Each host's own package manager |
-| A vendor origin | Red Hat or IBM alone, the vendors of the platforms a context installs, as on a client download site or an entitled registry | The Machine that needs the artifact, directly or through its declared proxy |
+| A vendor origin | Red Hat or IBM alone, the vendors of the platforms a context installs, as on a client download site, an entitled registry, Red Hat's subscription and update services or an add-on catalog IBM publishes | The Machine that needs the artifact, directly or through its declared proxy |
 | A public origin | Any account, or a project other than those vendors | The same Machine, unless the artifact's mirror route moves it |
 
 OpenShift's release payload is vendor content served from a registry on which
@@ -839,7 +839,21 @@ states its route:
 | The emulated BMC's image | The executable's compiled default | The [image mirror](api/environment.md#image-mirror); without it the provider host acquires the image, and only when it does not hold it ([Machine realization](substrates.md#machine-realization)) |
 | Operating-system media | The file or URL the operator names | The operator's own choice of source ([media store](managed-os.md#media-store)) |
 | A container cluster's release images | The release's publisher registries | The cluster's [registry policy](api/openshift-clusters.md#registry-policy) |
+| An add-on's catalog image | The `catalogSource` image the add-on authors, on the registry its author chose | The catalog's contents are the cluster's mirror tooling's (`oc-mirror`); the image's registry is classed by its host, so only `icr.io` and Red Hat's are vendor origins |
+| A connected cluster's default OperatorHub catalogs and update service | `registry.redhat.io` and `api.openshift.com`, vendor origins, which Bootwright leaves enabled | The cluster's own GitOps, which disables the defaults ([OLM installation](add-ons.md#olm-installation)) |
+| An installed Machine's repositories | `cdn.redhat.com` and `subscription.rhsm.redhat.com` for a hosted subscription, a vendor origin | The Entitlement's Satellite, or the profile's `repositories.configure` entries ([registration](managed-os.md#registration)) |
 | A storage cluster's images and packages | The distribution's vendor origins | The Entitlement's registry namespace and the cluster's package repository ([CephCluster](api/ceph.md#cephcluster)) |
+
+A registry's token service and blob delivery hosts take the class of the
+serving host as well: Docker Hub's and `quay.io`'s are public origins, and
+`dd2.icr.io`, which serves `icr.io`'s blobs, and `access.redhat.com`, which
+serves `registry.access.redhat.com`'s signatures, are vendor origins. Red
+Hat's content is served from `quay.io`'s delivery hosts, so a vendor image is
+a vendor origin at its registry and a public one where its bytes come from,
+so a network that denies public origins denies those hosts too, and a vendor
+image then needs a mirror or an exception for them
+([B1301](milestones/backlog.md#b1301)).
+The [acquisition list](cli.md#acquisition-list) names each.
 
 Time and name service are no acquisition and follow the same rule through
 their own selections: a managed resolver forwards only to its declared

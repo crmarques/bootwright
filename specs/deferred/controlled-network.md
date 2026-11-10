@@ -26,7 +26,10 @@ it goes through the mirror. IBM's `icr.io`, where the Data Foundation catalog
 and operator images live and where IBM's cloud customers also publish, stays a
 direct vendor origin by the owner's choice, so that a cluster keeps taking
 Data Foundation's later updates from it; a firewall that admits it admits that
-whole host. A vendor host that accepts uploads, such as a telemetry or support
+whole host. Red Hat's registries serve their blobs from `quay.io`'s delivery
+hosts, which are public by their serving host, so whether those hosts are
+admitted or vendor images take a mirror route is open
+([B1301](../milestones/backlog.md#b1301)). A vendor host that accepts uploads, such as a telemetry or support
 endpoint, is no acquisition origin, so a firewall that serves this rule admits
 the content hosts alone. Time and name service follow the rule through fields
 that already exist: a Machine or cluster with no NTP selection keeps its
@@ -173,7 +176,7 @@ Each step leaves a working product.
    [B1244](../milestones/backlog.md#b1244). After the first, a file server the
    operator fills already serves every default tool.
 2. Consuming a mirror the operator fills:
-   [B1245](../milestones/backlog.md#b1245),
+   [B1245](../milestones/delivered.md#x363--the-rest-of-the-acquisition-list),
    [B1246](../milestones/backlog.md#b1246),
    [B1247](../milestones/delivered.md#x356--service-and-bmc-images-from-the-image-mirror) and
    [B1248](../milestones/delivered.md#x357--release-repositories-from-the-image-mirror), with the acceptance of
@@ -187,6 +190,8 @@ Each step leaves a working product.
 ## Left out
 
 What an installed cluster contacts by itself, such as telemetry, the update
-service or a community catalog, is cluster configuration its GitOps owns. RPM
+service or a community catalog, is cluster configuration its GitOps owns; the
+acquisition list names its default catalogs and update service, and no
+telemetry endpoint. RPM
 mirroring stays with the enterprise's repositories. An add-on whose images
 live on another public registry needs a mirror set of its own.

@@ -574,20 +574,68 @@ The rows, sorted by kind, artifact and selecting object, cover:
   mirror;
 - each storage cluster's image and auxiliary images, read by the controller
   and its hosts, and its package repository;
-- each MachineImage of the media store.
+- each MachineImage of the media store;
+- each add-on binding's catalog image, which the add-on's `catalogSource`
+  authors for a package or a `ClusterAddon`, read by the bound cluster's
+  nodes and named alone: the operator images the catalog's index names are
+  not in the desired state, so the list leaves them, and the catalog's
+  contents, to the cluster's own mirror tooling (`oc-mirror`);
+- for an `openshift` cluster, its default OperatorHub catalogs, one image on
+  `registry.redhat.io` for each of the add-on catalog names
+  `addons.DefaultCatalogs` holds (`redhat-operator-index`,
+  `certified-operator-index`, `community-operator-index` and
+  `redhat-marketplace-index`), tagged with the release's minor, and its
+  update service,
+  `https://api.openshift.com/api/upgrades_info/v1/graph`, because Bootwright
+  never changes `OperatorHub` or the cluster's update server
+  ([OLM installation](add-ons.md#olm-installation)); a cluster's GitOps that
+  disables them removes what the nodes reach, which the list does not read.
+  A cluster that selects its release by `release.image` alone has no
+  `release.version`, so its catalog rows carry no tag and its update service
+  row no channel;
+- each registry's own token and delivery hosts, as host-only rows beside the
+  image that reaches the registry: `docker.io`'s endpoint
+  (`registry-1.docker.io`), token service (`auth.docker.io`) and blob host
+  (`production.cloudfront.docker.com`); the `cdn.quay.io` and
+  `cdn01.quay.io` to `cdn06.quay.io` blob hosts of `quay.io`,
+  `registry.redhat.io` and `registry.access.redhat.com`, and the
+  `access.redhat.com` signature store of the last; and `dd2.icr.io`, the
+  blob host of `icr.io`. A row merges every consumer and Machine that reaches
+  the host. A registry that serves its own token service names none, and a
+  declared registry, a mirror among them, names none the list could verify;
+- each installed Machine's own package repositories: for a Machine whose
+  install profile selects a managed `redhatRhel` Entitlement, its registration
+  with `subscription.rhsm.redhat.com` and its subscription repositories on
+  `cdn.redhat.com`, or the Satellite or Capsule `hostname` and the
+  `contentBaseURL` the Entitlement declares; and each enabled
+  `spec.customizations.repositories.configure` entry's `baseURL`, with its
+  `gpgKeyURL` when it checks signatures with a remote key
+  ([registration](managed-os.md#registration)).
 
-A registry row names the registry's authority; its token service and the
-host it redirects blob downloads to are further destinations the list does
-not name. A row names the origin a Machine reads, and a Machine with a
-declared proxy reaches it through that proxy.
+A registry row names the registry's authority; its token service and blob
+delivery hosts are the host-only rows above. A row names the origin a Machine
+reads, and a Machine with a declared proxy reaches it through that proxy.
 `TestTheAcquisitionListNamesWhatEachOwnerAcquiresWithItsOrigin` holds the
-list to an example. The text mode writes one table; either structured mode
-places the rows in `result.acquisitions`.
+list to an example, and
+`TestAnInstalledMachineNamesItsHostedSubscriptionAndItsConfiguredRepositories`,
+`TestAMachineRegisteringWithASatelliteNamesTheSatelliteAndItsContentRoot` and
+`TestAnAuthoredAddOnNamesItsCatalogImageAloneOnTheRegistryItsAuthorChose` to
+the add-on and Machine rows. The text mode writes one table; either structured
+mode places the rows in `result.acquisitions`.
 
-Not yet met: the list names what each add-on's catalog and operator pull, a
-connected cluster's default operator catalogs and update service, each
-registry's token and blob delivery hosts, and each installed Machine's own
-package repositories; tracked as [B1245](milestones/backlog.md#b1245).
+The delivery hosts rest on what a registry showed an anonymous client or Red
+Hat and Docker publish, not on a run of this executable: a token realm and a
+blob redirect were read for `docker.io`, `quay.io`, `registry.access.redhat.com`
+and `icr.io`; the `cdn.quay.io` and `cdn02.quay.io` to `cdn06.quay.io` hosts,
+the `access.redhat.com` signature store, the `registry.redhat.io` delivery
+hosts and `api.openshift.com` come from Red Hat's OpenShift firewall list, and
+the default catalog names from its Operator documentation, which lists
+`redhat-marketplace` only for the OLMv1 catalog.
+`cp.icr.io`'s delivery host needs an entitlement to read and is not named.
+
+Not yet met: the list names no delivery host for `cp.icr.io`, which answers
+only an entitled client; tracked as
+[B1300](milestones/backlog.md#b1300).
 
 #### Schema export
 

@@ -45,7 +45,7 @@ func (acquisitionsPresentation) documentedResult() {}
 
 func acquisitionsCommand() commandSpec {
 	return available(commandSpec{path: "render acquisitions", short: "List every artifact the selected desired state acquires",
-		long: "List every artifact the selected desired state acquires or hands a Machine to acquire: the host packages and clients of the controller stage, each managed service's and the emulated BMC's image, each container cluster's release and declared mirrors, each storage cluster's images and package repository, and the installation media of the media store." +
+		long: "List every artifact the selected desired state acquires or hands a Machine to acquire: the host packages and clients of the controller stage, each managed service's and the emulated BMC's image, each container cluster's release, declared mirrors, default operator catalogs and update service, each add-on binding's catalog image, each registry's token and delivery hosts, each storage cluster's images and package repository, each installed Machine's own package repositories, and the installation media of the media store." +
 			" Each row names the artifact, its version, its origin and that origin's class (vendor, public, declared, host repositories or media store), its SHA-256 and size where the build or the desired state pins them, the Machines that read it and the object that selects it." +
 			" It reads the selected context's input, or with --input-dir a context-free input file or directory, registers nothing and contacts nothing.",
 		flags: []flagSpec{directoryFlag("input-dir", "Read a context-free input file or directory instead of a context")}})

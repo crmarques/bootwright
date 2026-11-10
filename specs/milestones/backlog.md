@@ -296,7 +296,6 @@ Alias cell.
 | [B1240](#b1240) | new, 2026-11-09 (X340 gate) | defect | Controller | The native supervisor test reads its task's PID only from a complete record | It failed once in `make check` beside the other lanes and passed when run again alone; the cause is a test-side race, not the supervisor |
 | [B1243](#b1243) | new, 2026-11-10 (D250 (2)); partly delivered by X343 on 2026-11-10 | enabling | Architecture | Each build's bill of materials names every component's license, a release ships its notices, and the container build's Go image is pinned | The document itself landed (X343); licenses need a source per component that no build input holds yet |
 | [B1244](#b1244) | new, 2026-11-10 (D250 (2)); partly delivered by X344 on 2026-11-10 | enabling | Architecture | Each pinned client is judged by what its binary holds, and the service and emulated BMC images are scanned on a schedule and in the mirror registry | The build's gate landed (X344); a binary scan downloads every client, and an image scan needs a pinned scanner |
-| [B1245](#b1245) | new, 2026-11-10 (D250 (8)); partly delivered by X345 on 2026-11-10 | product | CLI, with Controller | The acquisition list names each add-on's catalog and operator images and each installed Machine's own package repositories | The list landed (X345); an add-on's images follow from the catalog it selects, which planning does not read |
 | [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355 and X361 on 2026-11-10 | product | Controller, with Desired state | A managed artifact server may serve the artifact mirror, and one declaration replaces the download mirrors | The declaration (X355), the preflight probe and the private trust anchor (X361) landed; a managed server needs B1249, and folding `spec.downloads` awaits the owner (D251 (5)) |
 | [B1249](#b1249) | new, 2026-11-10 (D250 (8)) | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | D250 parks the controlled-network plan until the owner promotes it; no capability realizes a managed Registry |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
@@ -305,6 +304,8 @@ Alias cell.
 | [B1269](#b1269) | new, 2026-11-10 (X357 review) | product | Container cluster | The controller's image build verifies a mirror against the cluster's selected trust bundles | The installer's own release extraction may read only the controller's trust store; B1250's run shows which |
 | [B1273](#b1273) | new, 2026-11-10 (X359 gate) | defect | Controller | `test_a_killed_lifecycle_supervisor_leaves_no_playbook_worker_or_task` reads a surviving process tree under heavy host load | It failed once under a load average near 30 and passed three times alone; the stopped-tree poll has no settle bound |
 | [B1299](#b1299) | new, 2026-11-10 (split from B1263, D253) | product | Controller, with State reconciliation | A running environment takes a raised client minimum without a destroy | An open owner question: a completed apply settles (D153), so replacing a client is a fresh apply today |
+| [B1300](#b1300) | new, 2026-11-10 (X363) | product | CLI | The acquisition list names `cp.icr.io`'s blob delivery host | The list landed (X363); the host answers only an entitled client, which this session could not use |
+| [B1301](#b1301) | new, 2026-11-10 (X363 review) | product | Controller, with Infrastructure services and Container clusters | A vendor registry's delivery hosts are admitted as fetch-only exceptions, or vendor images get a mirror route | A controlled network that denies public origins breaks a vendor image pull today; the owner decides how |
 
 ### B82
 
@@ -3340,28 +3341,6 @@ digests from the bill of materials). **Exit evidence:** a scheduled job whose
 report names each image's findings, and a registry scan in
 [B1250](#b1250)'s profile.
 
-### B1245
-
-**Owner:** CLI, with Controller. **Kind:** product. **Requires:** none.
-**Definition:** Needs definition, from [D250](#d250) (8) and
-[D251](#d251) (4). **Delivered in-tree by X345:** `bootwright render
-acquisitions` lists, for an admitted graph, the controller stage's host
-packages and clients, each managed service's and the emulated BMC's image,
-each container cluster's release repositories and declared mirrors, each
-storage cluster's images and package repository, and the media store's
-images, with origin, [class](../security.md#acquisition-origins), digest and
-Machines ([acquisition list](../cli.md#acquisition-list)). **Remaining:**
-each add-on binding's catalog image and the operator images that catalog
-names; a connected cluster's default OperatorHub catalogs on
-`registry.redhat.io` and its update service; each registry's token service
-and blob delivery host; and each installed Machine's own package
-repositories, its registration or `repositories.configure`. **Open:** whether an add-on's images
-come from the catalog the operator authors or from a catalog read live
-(recommendation: name the catalog image alone, which the desired state holds,
-and leave its contents to the cluster's mirror tooling). **Exit evidence:**
-rows for an add-on example's catalog and for a managed Machine's
-repositories.
-
 ### B1246
 
 **Owner:** Controller, with Desired state. **Kind:** product. **Requires:**
@@ -3412,7 +3391,7 @@ mirror row of [B1250](#b1250)'s profile.
 ### B1249
 
 **Owner:** Infrastructure services, with State reconciliation. **Kind:**
-product. **Requires:** B1245, B1246, [B68](m1.md#b68), [B1236](delivered.md#x358--container-runtime-on-an-ssh-placement-host) (delivered).
+product. **Requires:** [B1245](delivered.md#x363--the-rest-of-the-acquisition-list) (delivered), B1246, [B68](m1.md#b68), [B1236](delivered.md#x358--container-runtime-on-an-ssh-placement-host) (delivered).
 **Definition:** Needs definition, from [D250](#d250) (8), (14) and (16): the
 [design](../deferred/controlled-network.md#the-mirror-host). **Outcome:** a
 context that places its mirror Registry and artifact server on a Machine,
@@ -3432,7 +3411,7 @@ placement, a replay that copies nothing, a verification refusal and a row of
 ### B1250
 
 **Owner:** Controller, with each consumer's owner. **Kind:** enabling.
-**Requires:** B1246, B1249. **Definition:** Candidate, from
+**Requires:** B1246, B1249, [B1301](#b1301). **Definition:** Candidate, from
 [D250](#d250) (10). **Outcome:** a lab profile whose controller and Machines
 have no route but to their package repositories, the vendor origins and the
 mirror host installs an OpenShift cluster and a Ceph cluster, and its evidence
@@ -3481,6 +3460,42 @@ completed apply proved a client below a later build's minimum takes the
 raised release without a destroy, which the settle rule of a completed apply
 ([lifecycle unit](../state-reconciliation.md#lifecycle-unit)) does not allow
 today. **Exit evidence:** an owner decision, then its tests.
+
+### B1300
+
+**Owner:** CLI. **Kind:** product. **Requires:** none. **Definition:**
+Candidate, from [X363](delivered.md#x363--the-rest-of-the-acquisition-list)'s
+limitations: the [acquisition list](../cli.md#acquisition-list) names no blob
+delivery host for `cp.icr.io`, which answers only an entitled client.
+**Outcome:** the list names `cp.icr.io`'s delivery host. **Exit evidence:** a
+read of a `cp.icr.io` blob redirect with an entitlement key, run by the owner,
+with the row and test following it.
+
+### B1301
+
+**Owner:** Controller, with Infrastructure services and Container clusters.
+**Kind:** product. **Requires:** an owner decision. **Definition:** Candidate,
+from the review of [X363](delivered.md#x363--the-rest-of-the-acquisition-list).
+The [controlled network rule](../deferred/controlled-network.md#the-rule)
+keeps a vendor origin direct and admits no public one, but Red Hat's
+registries serve their blobs from `cdn.quay.io` and `cdn01.quay.io` to
+`cdn06.quay.io`, which the [origin class](../security.md#acquisition-origins)
+puts in public by serving host, since any account publishes on `quay.io`.
+`dd2.icr.io`, which serves `icr.io`'s blobs, is a vendor origin instead,
+because D250's choice makes `icr.io` a vendor origin by the owner's decision
+and a registry's own delivery host takes its registry's class; Red Hat's
+delivery hosts are not Red Hat's registry host, so no such choice covers them.
+No route removes the difference: `managedservice.MirroredImage` mirrors only
+public-class images, so the artifact server's `registry.access.redhat.com`
+image, the default catalogs and the IBM Ceph images on `cp.icr.io` are never
+mirrored, and a network that denies public origins breaks their pulls.
+**Outcome:** the owner chooses between admitting a vendor registry's delivery
+hosts as fetch-only exceptions of the rule, the Docker Hub and CloudFront
+hosts not applying since Docker Hub is a public origin, and giving vendor
+images a mirror route; the rule, the origin class and
+[B1250](#b1250)'s profile then follow the choice. **Exit evidence:** the
+decision recorded as a clause of [D251](#d251) or its successor, and the
+profile's example.
 
 ## Audit remediation (2026-10-26)
 
@@ -8011,6 +8026,23 @@ the owner's review:
    `controller.artifact-mirror`, one per file, targeted by the file's URL, run
    beside the controller's readiness rather than inside it, since it needs
    the context's Secret material the readiness never reads.
+10. Taken by the session for B1245 (X363), pending the owner's review: an
+    add-on's catalog is named by the `catalogSource` image the desired state
+    authors and its operator images are left to the cluster's mirror tooling,
+    as the item recommended. A connected OpenShift cluster is listed with a
+    default OperatorHub catalog for each name `addons.DefaultCatalogs` holds,
+    marketplace included, tagged with the release's minor, and the update service at `api.openshift.com`,
+    because Bootwright never changes `OperatorHub` or the update server; a
+    cluster whose GitOps disables them keeps rows for what it no longer
+    reaches. A registry's token and delivery hosts are named only where read
+    from the registry or from Red Hat's or Docker's published lists, so
+    `docker.io`, `quay.io`, `registry.redhat.io`, `registry.access.redhat.com`
+    and `icr.io` carry them and every other registry, `cp.icr.io`'s delivery
+    host included, names none ([B1300](#b1300)); a delivery row merges its
+    consumers into one. An installed Machine's repositories are classed by
+    their host, so Red Hat's hosted `cdn.redhat.com` and
+    `subscription.rhsm.redhat.com` are vendor origins and a Satellite or a
+    configured repository is declared.
 
 ### D252
 

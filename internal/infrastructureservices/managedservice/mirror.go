@@ -34,6 +34,9 @@ func MirroredImage(catalog api.Catalog, reference string) (string, *ImageSource)
 	if first, _, _ := strings.Cut(reference, "/"); !strings.ContainsAny(first, ".:") && first != "localhost" {
 		qualified = "docker.io/" + reference
 	}
+	if rest, ok := strings.CutPrefix(qualified, "registry-1.docker.io/"); ok {
+		qualified = "docker.io/" + rest
+	}
 	if origin, _, _ := strings.Cut(qualified, "/"); !found || acquisition.OriginClass(origin) != acquisition.ClassPublic {
 		return reference, nil
 	}

@@ -13009,7 +13009,7 @@ yet; and no release recipe refuses an `unchecked` executable
 ### X345 — The acquisition list
 
 **Item:** B1245 (2026-11-10, [D250](backlog.md#d250) (8),
-[D251](backlog.md#d251) (4)), partly delivered in-tree. `bootwright render
+[D251](backlog.md#d251) (4)), partly delivered in-tree, completed by [X363](#x363--the-rest-of-the-acquisition-list). `bootwright render
 acquisitions` lists every artifact the selected desired state acquires or
 hands a Machine to acquire, from a context's input or a context-free
 `--input-dir`, with its version, origin, origin class, pinned SHA-256 and size,
@@ -13024,10 +13024,10 @@ other host is `declared`. The operator guide points a firewall's owner at it.
 No request, evidence, contract version or content digest moved.
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
-occurred. **Limitations:** add-on catalogs and their operator images, a connected
-cluster's default catalogs and update service, registries' token and blob
-delivery hosts, and an installed Machine's own package repositories, are not
-listed yet ([B1245](backlog.md#b1245)).
+occurred. **Limitations:** add-on catalogs, a connected cluster's default
+catalogs and update service, registries' token and blob delivery hosts, and an
+installed Machine's own package repositories, were not listed yet; they are
+in [X363](#x363--the-rest-of-the-acquisition-list).
 
 ### X355 — The artifact mirror for public-origin clients
 
@@ -13532,3 +13532,48 @@ occurred. **Limitations:** the probe and the anchored download are proved
 against an in-process HTTPS server and a stubbed urllib3, not a real mirror
 or a TLS-inspecting proxy; a managed artifact server as the
 mirror and folding `spec.downloads` stay on [B1246](backlog.md#b1246).
+
+### X363 — The rest of the acquisition list
+
+**Item:** B1245 (2026-11-10, [D250](backlog.md#d250) (8),
+[D251](backlog.md#d251) (4), (6) and (10)), delivered in-tree.
+`bootwright render acquisitions` now also lists each add-on binding's catalog
+image, which the add-on's `catalogSource` authors, for the nodes of the bound
+cluster; an `openshift` cluster's four default OperatorHub catalogs, derived from
+`addons.DefaultCatalogs`, on `registry.redhat.io` tagged `v<minor>` and its update service at
+`api.openshift.com`; each known registry's token, signature and blob delivery
+hosts as host-only rows, merged across the images that reach it; and each
+installed Machine's own repositories: its hosted registration and
+`cdn.redhat.com` subscription repositories or its Satellite and content root,
+and each enabled `repositories.configure` entry with its remote key
+([acquisition list](../cli.md#acquisition-list)). An add-on's operator images
+stay out, with the catalog's contents, for the cluster's mirror tooling. The
+origin hosts joined `vendorHosts` and `publicHosts` and the
+[origins](../security.md#acquisition-origins) table gained three rows. No
+request, evidence, contract version or content digest moved.
+
+Each host was read, not assumed: the `docker.io`, `quay.io`, `icr.io` and
+`registry.access.redhat.com` token realms and the blob redirects of a small
+public image were read anonymously
+(`auth.docker.io`, `production.cloudfront.docker.com`, `cdn01.quay.io`,
+`dd2.icr.io`); Docker's allow list confirms the Docker Hub hosts; Red Hat's
+OpenShift firewall list gives `cdn.quay.io` and `cdn02.quay.io` to
+`cdn06.quay.io`, the `access.redhat.com` signature store, the
+`registry.redhat.io` hosts and `api.openshift.com`, and its Operator
+documentation the catalog names and `v<minor>` tag; the update graph
+answered at its URL, and the `subscription-manager` default configuration
+names `subscription.rhsm.redhat.com` and `cdn.redhat.com`.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** `cp.icr.io` answers only an entitled client, so
+its delivery host is unnamed ([B1300](backlog.md#b1300)); the
+`redhat-marketplace` index image's name rests on the OLMv1 catalog page of
+Red Hat's documentation and no live cluster confirmed that a release still
+creates it; an OKD cluster is not
+listed, because it is not yet realized ([B748](backlog.md#b748)); a registry that
+is not one of the five named, a mirror included, names no companion hosts; a
+vendor image's registry is vendor but its delivery hosts, `quay.io`'s, are
+public, so a vendor-only network must allow them, which
+[B1301](backlog.md#b1301) decides; and
+`subscription.rhsm.redhat.com` and `cdn.redhat.com` rest on the shipped
+`subscription-manager` configuration, since no request to them was verified.

@@ -7,6 +7,8 @@ func TestEveryOriginIsClassedByItsHost(t *testing.T) {
 		"registry.redhat.io": ClassVendor, "cp.icr.io": ClassVendor, "icr.io": ClassVendor, "MIRROR.OPENSHIFT.COM": ClassVendor,
 		"public.dhe.ibm.com:443": ClassVendor, "quay.io": ClassPublic, "docker.io": ClassPublic, "github.com": ClassPublic,
 		"get.helm.sh": ClassPublic, "registry.example.test:5000": ClassDeclared, "us.icr.io": ClassDeclared, "quay.io.example.test": ClassDeclared,
+		"api.openshift.com": ClassVendor, "cdn.redhat.com": ClassVendor, "subscription.rhsm.redhat.com": ClassVendor, "access.redhat.com": ClassVendor, "dd2.icr.io": ClassVendor,
+		"cdn01.quay.io": ClassPublic, "registry-1.docker.io": ClassPublic, "auth.docker.io": ClassPublic, "production.cloudfront.docker.com": ClassPublic, "cdn.example.test": ClassDeclared,
 	} {
 		if got := OriginClass(host); got != want {
 			t.Errorf("%s is classed %s, want %s", host, got, want)
