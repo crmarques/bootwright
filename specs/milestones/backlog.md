@@ -300,18 +300,11 @@ Alias cell.
 | [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355 and X361 on 2026-11-10 | product | Controller, with Desired state | A managed artifact server may serve the artifact mirror, and one declaration replaces the download mirrors | The declaration (X355), the preflight probe and the private trust anchor (X361) landed; a managed server needs B1249, and folding `spec.downloads` awaits the owner (D251 (5)) |
 | [B1249](#b1249) | new, 2026-11-10 (D250 (8)) | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | D250 parks the controlled-network plan until the owner promotes it; no capability realizes a managed Registry |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
-| [B1263](#b1263) | new, 2026-11-10 (D252 (6)) | product | Controller, with State reconciliation | A completed environment reports a proved client below the build's minimum, and may take a raised one | A completed apply settles (D153); the owner put reporting first and left replacement without a destroy open |
-| [B1264](#b1264) | new, 2026-11-10 (D252, session) | product | Storage | Custom CRUSH device classes reach the core OSD projection | The plan refuses them by name until a slice realizes them |
-| [B1265](#b1265) | new, 2026-11-10 (X346 review) | defect | Container clusters | An OpenShift attempt whose every node refused its pre-boot proof after the boot mark stays retryable | Safe as it stands: the block stays unknown and a destroy clears it; recording the boot per node needs a restructured boot play |
 | [B1267](#b1267) | new, 2026-11-10 (X348, audit 004 REC-74) | safety | Substrate and Machine, with Infrastructure services | A context driving a server by its BMC and one reaching it another way, or naming it by a UUID its BMC has not reported yet, conflict | Needs a cross-mechanism machine identity whose byte order is settled first |
 | [B1268](#b1268) | new, 2026-11-10 (D251 (7)) | product | Container cluster | Under the image mirror, a node's default time pool is replaced by the selected time servers | The agent install adds time sources beside the pool, and its manifest path admits only the Network kind, so no MachineConfig replaces it |
 | [B1269](#b1269) | new, 2026-11-10 (X357 review) | product | Container cluster | The controller's image build verifies a mirror against the cluster's selected trust bundles | The installer's own release extraction may read only the controller's trust store; B1250's run shows which |
-| [B1270](#b1270) | new, 2026-11-10 (X349) | defect | Secrets, with State reconciliation | Each capability names the class of every Secret it references, so a live binding holds only effect material | Safe as it stands: an unclassified reference is held as effect material, so a renewal refuses more than the class rule requires |
-| [B1271](#b1271) | new, 2026-11-10 (X349 review) | defect | Controller | A package step that fails after dnf ran still records what its transaction added | Safe as it stands: the set is not recorded, so uninstall leaves those packages and never removes one it did not prove added |
-| [B1272](#b1272) | new, 2026-11-10 (X349 second review) | defect | Controller | The added package set stays within its bound and names only what Bootwright's transaction installed | Safe as it stands: the erase test keeps dependents, and a bound hit refuses before any removal |
 | [B1273](#b1273) | new, 2026-11-10 (X359 gate) | defect | Controller | `test_a_killed_lifecycle_supervisor_leaves_no_playbook_worker_or_task` reads a surviving process tree under heavy host load | It failed once under a load average near 30 and passed three times alone; the stopped-tree poll has no settle bound |
-| [B1274](#b1274) | new, 2026-11-10 (X352 review) | product | Machine, with Managed OS and Container clusters | One WWN root form for every consumer | A breaking rename the owner decides; both installers already admit the by-id WWN path |
-| [B1275](#b1275) | new, 2026-11-10 (X354 gate) | defect | Managed OS | Installation evidence records the WWN a serial-declared root disk reports at installation | Found when the Not yet met line of B1104 had to leave at its in-tree delivery; the erase compares serial number and size meanwhile |
+| [B1299](#b1299) | new, 2026-11-10 (split from B1263, D253) | product | Controller, with State reconciliation | A running environment takes a raised client minimum without a destroy | An open owner question: a completed apply settles (D153), so replacing a client is a fresh apply today |
 
 ### B82
 
@@ -3446,37 +3439,6 @@ mirror host installs an OpenShift cluster and a Ceph cluster, and its evidence
 shows each denied attempt. **Exit evidence:** the profile's example, an
 in-tree test in which every public origin refuses, and an owner-accepted run.
 
-### B1263
-
-**Owner:** Controller, with State reconciliation. **Kind:** product.
-**Requires:** none. **Definition:** Candidate, from [D252](#d252) (6) and
-[audit 004](../../audits/004-spec-api/report-fable.md) NEW-01. **Outcome:** `status` and `diff` report each client a completed
-apply proved below the build's minimum, naming the minimum; whether a running
-environment then takes the raised release without a destroy is the owner's
-open question. **Exit evidence:** a status test over a below-minimum client.
-
-### B1264
-
-**Owner:** Storage. **Kind:** product. **Requires:** none. **Definition:**
-Candidate, from [audit 004](../../audits/004-spec-api/report-fable.md) API-07 under [D252](#d252): `spec.crush_device_class` and
-the `{path, crush_device_class}` path record reach the core OSD projection, so a
-placement policy or pool on an OSD-declared class plans. **Exit evidence:** a
-planning test of a custom class that a placement policy uses.
-
-### B1265
-
-**Owner:** Container clusters. **Kind:** defect. **Requires:** none.
-**Definition:** Candidate, from the independent review of
-[X346](delivered.md#x346--boot-before-no-effect): the apply records its boot
-and writes the `.bootwright-booted` mark before the nodes' pre-boot proofs, so
-an attempt whose every node then refuses its proof inserts no media yet reads
-unknown, and only a destroy clears it. **Outcome:** such an attempt reads
-positive no effect and its retry proceeds, while a node that received media
-still never does. The runner accepts one preparation per run, and the proof
-must stay immediately before each insert, so the fix restructures the boot
-play. **Exit evidence:** a resolution test over an attempt whose every pre-boot
-proof refused after the mark.
-
 ### B1267
 
 **Owner:** Substrate and Machine, with Infrastructure services. **Kind:**
@@ -3490,54 +3452,12 @@ under another spelling and holds it by `bmc-system:<UUID>`
 **Outcome:** both refuse `controller.conflict`; the design settles first
 whether the SMBIOS UUID a host reports and the Redfish UUID can differ in byte
 order, before any equality-keyed key is specified, and keeps `bmc-system:`.
-Claiming `bmc-mac:` keys for every physical server, not only one that reports
-no UUID as [D252](#d252) (2) settles, would also close the pin-less power case;
-that widening is the owner's choice.
+Claiming `bmc-mac:` keys for every physical server moved to
+[B1298](m1.md#b1298) under [D253](#d253) (1); this item keeps the SSH and
+cross-mechanism remainder, which needs that byte-order fact from real hardware
+([D224](#d224)).
 **Exit evidence:** a conflict test of an SSH placement on a server another
 context drives by its BMC.
-
-### B1270
-
-**Owner:** Secrets, with State reconciliation. **Kind:** defect. **Requires:**
-none. **Definition:** Candidate, from
-[X349](delivered.md#x349--holds-uninstall): the
-[effect-material hold](../secrets.md#effect-material-under-a-live-binding)
-reads every referenced Secret that a capability does not name as an access
-credential as effect material, except a `caBundle`, so a `known_hosts` trust
-anchor and the SSH key of a capability with no access-credential reader (the
-libvirt arms among them) refuse a named renewal or replacement while bound.
-**Outcome:** each capability names the access credentials and trust anchors
-it references, and the hold covers effect material alone. **Exit evidence:**
-a hold test over a libvirt host block naming its SSH key and `known_hosts`
-entry.
-
-### B1271
-
-**Owner:** Controller. **Kind:** defect. **Requires:** none. **Definition:**
-Candidate, from the independent review of
-[X349](delivered.md#x349--holds-uninstall): the install computes its
-[added set](../controller.md#host-packages) from snapshots taken around dnf
-and records it only when the package step completes, so a step that fails
-after dnf ran (the after-snapshot, a presence re-read or cancellation) loses
-the set and a resumed install counts those packages as present before.
-**Outcome:** the pending intent records the package identities held before
-the transaction, within its bound, and a resumed step diffs against them.
-**Exit evidence:** a setup test that fails after dnf and resumes with the set
-intact.
-
-### B1272
-
-**Owner:** Controller. **Kind:** defect. **Requires:** none. **Definition:**
-Candidate, from the second independent review of
-[X349](delivered.md#x349--holds-uninstall): a receipt carries every earlier
-install's added set forward without pruning what is gone, so many installs can
-reach the 1024-entry bound and `controller install` then fails with no remedy;
-a package another tool installs between the snapshots around dnf, or one an
-operator removed and reinstalled, counts as Bootwright's, because the recorded
-install time is never compared. **Outcome:** a carried set drops members no
-longer installed, the bound's refusal names a remedy, and a member whose
-install time differs from the snapshot is not removed. **Exit evidence:** setup
-tests over a pruned carry-forward and a reinstalled package.
 
 ### B1273
 
@@ -3552,31 +3472,15 @@ descendant. **Outcome:** the test waits on a bounded condition for the tree to
 empty rather than sampling it, so host load no longer fails the units lane.
 **Exit evidence:** the test passes under a parallel CPU load.
 
-### B1274
+### B1299
 
-**Owner:** Machine, with Managed OS and Container clusters. **Kind:** product.
-**Requires:** an owner decision. **Definition:** Candidate, from
-[audit 004](../../audits/004-spec-api/report-fable.md) API-38 and the
-independent review of [X352](delivered.md#x352--root-rule): after X352 both
-installers admit the `/dev/disk/by-id/wwn-0x` path, but a Bootwright
-installation still refuses `wwn` alone and the agent installer still admits
-it. **Outcome:** one WWN root form for every consumer, the other refused with
-a hint naming it, in one breaking commit before 1.0
-([pre-1.0 policy](../project.md#design-priorities-and-non-goals)). **Exit
-evidence:** admission tests in which each consumer refuses the retired form.
-
-### B1275
-
-**Owner:** Managed OS. **Kind:** defect. **Requires:** none. **Definition:**
-Candidate, from [X298](delivered.md#x298--physical-disks-named-by-serial-number-and-size)'s
-left-open note, found by the X354 gate: the
-[physical removal](../managed-os.md#physical-removal) rule says a root declared
-by serial number has the WWN it reported at installation recorded in the
-installation's evidence, so its erase can compare it, but the evidence records
-none. **Outcome:** the installation's evidence records the WWN the host reports
-for a serial-declared root disk when it has one, and the erase compares it.
-**Exit evidence:** installation and erase tests over a serial-declared root with
-and without a reported WWN.
+**Owner:** Controller, with State reconciliation. **Kind:** product.
+**Requires:** an owner decision. **Definition:** Candidate, split from
+[B1263](m1.md#b1263) by [D253](#d253): whether a running environment whose
+completed apply proved a client below a later build's minimum takes the
+raised release without a destroy, which the settle rule of a completed apply
+([lifecycle unit](../state-reconciliation.md#lifecycle-unit)) does not allow
+today. **Exit evidence:** an owner decision, then its tests.
 
 ## Audit remediation (2026-10-26)
 
@@ -8134,11 +8038,11 @@ COR-36, NEW-15, CLI-37, API-38, API-121 and API-54. The owner's answers:
    the composed name break, and the template-inputs chart is rendered again.
 6. Whether status or diff report a proved client below the build's minimum,
    first, and whether a running environment takes a raised minimum without a
-   destroy are parked as [B1263](#b1263).
+   destroy are parked as [B1263](m1.md#b1263).
 
 Taken by the session, pending the owner's review: a custom CRUSH device class
 refuses at plan by name with a Not yet met line, and its realization is parked
-as [B1264](#b1264); a stored receipt whose shape changes moves its version,
+as [B1264](m2.md#b1264); a stored receipt whose shape changes moves its version,
 and before 1.0 an earlier receipt refuses with the `controller uninstall`
 exit it already names.
 
@@ -8147,3 +8051,34 @@ stay outside this remediation. **Exit evidence:** each item's in-tree
 evidence, a finding-to-item map in each delivered record, and `make check` on
 each integration tree, with an independent review and `make race` for each
 safety slice. No push.
+
+### D253
+
+**owner** (2026-11-10): shown the parked follow-ups of [D252](#d252), the owner
+answered "B1267: proceed with a", then, told why the typed field is the better
+design for one WWN root form, "B1274: go with b", and "go for other parked
+items you listed". This authorizes, out of sequence for implementation, X368
+(M1, [B1298](m1.md#b1298)), X369 (M1, [B1274](m1.md#b1274)), X370 (M1,
+[B1270](m1.md#b1270)), X371 (M1, [B1271](m1.md#b1271) and
+[B1272](m1.md#b1272)), X372 (M1, [B1275](m1.md#b1275)), X373 (M1,
+[B1263](m1.md#b1263)), X374 (M2, [B1264](m2.md#b1264)) and X375 (M3,
+[B1265](m3.md#b1265)), no more than two active at once. The owner's answers:
+
+1. Every physical server claims its MAC addresses as exclusive `bmc-mac:` keys,
+   not only one that reports no UUID, widening [D252](#d252) (2), so a pin-less
+   power command meets the context that holds the server under any spelling of
+   its BMC address ([B1298](m1.md#b1298), split from [B1267](#b1267), which keeps
+   the SSH and cross-mechanism remainder).
+2. `substrate.baremetal.rootDevice.wwn` is the one WWN root form of a bare-metal
+   Machine an installer writes, as [audit 004](../../audits/004-spec-api/report-fable.md)
+   API-38 recommended: each installer derives what it needs from it, and
+   `hardware.rootDevice.deviceName` there refuses with a remedy naming `wwn`.
+   Ceph OSD device paths and erase targets keep their native path form.
+3. [B1263](m1.md#b1263) delivers the reporting of a client below the build's
+   minimum; taking a raised release without a destroy stays open as
+   [B1299](#b1299).
+
+Implementation choices do not authorize a live command, a push or a release.
+**Exit evidence:** each item's in-tree evidence, and `make check` on each
+integration tree, with an independent review and `make race` for each safety
+slice. No push.

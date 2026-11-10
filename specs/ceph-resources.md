@@ -256,7 +256,7 @@ whose `clusterRef` names one refuses at validation and at plan
 
 Not yet met: the core OSD projection carries no `crush_device_class`, so an
 OSD service that declares one refuses at plan; tracked as
-[B1264](milestones/backlog.md#b1264).
+[B1264](milestones/m2.md#b1264).
 
 | Field | Contract |
 | --- | --- |

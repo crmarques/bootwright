@@ -13112,7 +13112,7 @@ before any effect and a pre-boot refusal must stay retryable.
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** an attempt whose every node refuses its pre-boot
 proof after the mark stays unknown and needs a destroy before a fresh
-install ([B1265](backlog.md#b1265)). An independent review found the window
+install ([B1265](m3.md#b1265)). An independent review found the window
 closed and put the destroy first in the remedy.
 
 ### X356 — Service and BMC images from the image mirror
@@ -13237,8 +13237,8 @@ The audit's unnamed-binding case is narrowed: a binding no registered
 operation names holds its versions only while an apply is registering or the
 records cannot be read, so a context at rest renews freely; a binding the
 keyring did not list when the command read the holds is held too (found by
-the independent review). Parked: [B1270](backlog.md#b1270) and
-[B1271](backlog.md#b1271).
+the independent review). Parked: [B1270](m1.md#b1270) and
+[B1271](m1.md#b1271).
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred; no `rpm` or `dnf` ran here, so the snapshot format and the
@@ -13303,7 +13303,7 @@ removal runs the client release the completed apply proved.
 | CLI-01 | cli.md plan paragraph and state-reconciliation.md preview verbs list the additive case; `TestAPlanOverACompletedApplyPreviewsTheAdditiveApplyOnlyForAnAddedInstance` |
 | REC-03 | `lifecycle.Service.AddsTo`, read before any lock, and `contexts.Options.AddsTo`; the warning prints `contexts.AddedInput`, the sentence `diff` prints, with its caveat and no destroy; contexts.md; `TestChangedInputOverACompletedApplyWarnsBeforeThePrompt`, `TestAnUpdatedInputIsReportedAsAnAdditionOnlyWhenTheAdditiveApplyAdmitsIt`, golden `context-update-adds-warning` |
 | CLI-37 | cli.md receipt rule names the operation it applies to |
-| NEW-01 | controller.md tool table, api/environment.md and deferred/controlled-network.md: the table governs only a fresh apply's plan; reporting and replacement stay [B1263](backlog.md#b1263) |
+| NEW-01 | controller.md tool table, api/environment.md and deferred/controlled-network.md: the table governs only a fresh apply's plan; reporting and replacement stay [B1263](m1.md#b1263) |
 | NEW-15 | X342 Limitations name the destroy refusal |
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
@@ -13427,7 +13427,7 @@ occurred. **Limitations:** a Bootwright installation still refuses `wwn`
 alone, and the agent installer still admits it, so the path is the one
 spelling both admit rather than the only one. Making one form the only one is
 the audit's API-38 reshape, a breaking rename the owner decides
-([B1274](backlog.md#b1274)).
+([B1274](m1.md#b1274)).
 
 ### X353 — Ceph node names
 
@@ -13439,7 +13439,7 @@ A topology node takes its Machine's effective `fqdn` and its Machine's
 naming both ([normalization](../api/ceph.md#normalization)). `serviceBindings`
 routing is one [table](../ceph-native-api.md#secret-bindings). A custom CRUSH
 device class refuses at plan by its member's name, and its realization is
-parked as [B1264](backlog.md#b1264).
+parked as [B1264](m2.md#b1264).
 
 | Finding | Change |
 | --- | --- |

@@ -849,7 +849,7 @@ the completed apply proved, even below this build's minimum
 an earlier build registered refuses, so a retained release moves to the new
 default only after a destroy and a fresh apply. Reporting a proved client below
 the build's minimum, and taking a raised one without a destroy, are parked as
-[B1263](milestones/backlog.md#b1263).
+[B1263](milestones/m1.md#b1263).
 
 A declared release is compared by its leading `MAJOR.MINOR.PATCH`, a
 prerelease suffix ranking below the release it precedes; one below the
