@@ -63,6 +63,15 @@
   ansible.builtin.import_tasks: preboot_vips.yml
   when: not (containercluster_install_agent_settled | bool)
 
+# Recorded in the apply's own records before the mark and any boot, so a
+# resolution reads a boot even when the mark is gone, and never proves that
+# nothing was installed once this point was reached.
+- name: Record durably that this attempt boots its nodes from the image
+  bootwright.core.containercluster_install_protocol:
+    phase: prepared
+    identity: '{{ containercluster_install_agent_before.observation.identity }}'
+  no_log: true
+
 - name: Mark the work area as one this cluster's nodes boot from
   ansible.builtin.copy:
     content: ''

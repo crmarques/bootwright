@@ -48,8 +48,18 @@ options:
     type: str
     required: false
   identity:
-    description: The cluster identity this operation's own installer recorded.
+    description:
+      - The cluster identity this operation's own installer recorded, which a
+        C(prepared) phase records durably before the work area is marked and
+        any node is booted.
     type: str
+    required: false
+  booted:
+    description:
+      - Whether the work area carries the mark this installation writes before
+        it hands any node the image. Only a real boolean false is recorded as
+        unbooted.
+    type: bool
     required: false
   state:
     description: What the cluster and its nodes answered.

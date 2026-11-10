@@ -349,7 +349,7 @@ func TestInstallObservationClassifiesWhatItFound(t *testing.T) {
 func TestAnInstallStoppedBeforeTheAPIAnswersIsPartialOnlyOnItsOwnImage(t *testing.T) {
 	booted := func(e *InstallEvidence) {
 		*e = InstallEvidence{
-			Identity: anchorIdentity, Media: []string{"sno-01"}, Missing: []string{"master-0"},
+			Booted: true, Identity: anchorIdentity, Media: []string{"sno-01"}, Missing: []string{"master-0"},
 			OwnMedia: []string{"sno-01"}, Powered: []string{"sno-01"}, Request: testDigest,
 		}
 	}
@@ -381,6 +381,9 @@ func TestAnInstallStoppedBeforeTheAPIAnswersIsPartialOnlyOnItsOwnImage(t *testin
 		}), reconciliation.EffectUnknown},
 		"no image, nothing running": {then(func(e *InstallEvidence) {
 			e.Media, e.OwnMedia, e.Powered = []string{}, []string{}, []string{}
+		}), reconciliation.EffectUnknown},
+		"no image, nothing running, before the boot mark": {then(func(e *InstallEvidence) {
+			e.Booted, e.Media, e.OwnMedia, e.Powered = false, []string{}, []string{}, []string{}
 		}), reconciliation.EffectNoEffect},
 		"its own image, no identity recorded": {then(func(e *InstallEvidence) {
 			e.Identity = ""
@@ -406,6 +409,77 @@ func TestAnInstallStoppedBeforeTheAPIAnswersIsPartialOnlyOnItsOwnImage(t *testin
 			}
 		})
 	}
+}
+
+func TestClusterInstallObservationWithBootPreparationNeverReadsNoEffect(t *testing.T) {
+	silent := func(booted bool) json.RawMessage {
+		return installEvidence(t, testDigest, func(e *InstallEvidence) {
+			*e = InstallEvidence{
+				Booted: booted, Identity: anchorIdentity, Media: []string{}, Missing: []string{"master-0"},
+				OwnMedia: []string{}, Powered: []string{}, Request: testDigest,
+			}
+		})
+	}
+	recorded := []json.RawMessage{json.RawMessage(`{"identity":"` + anchorIdentity + `"}`)}
+	for name, expectation := range map[string]struct {
+		evidence     json.RawMessage
+		preparations []json.RawMessage
+		effect       reconciliation.EffectState
+	}{
+		"a marked work area":                    {silent(true), nil, reconciliation.EffectUnknown},
+		"a boot the apply's records hold":       {silent(false), recorded, reconciliation.EffectUnknown},
+		"a marked area and a recorded boot":     {silent(true), recorded, reconciliation.EffectUnknown},
+		"an identity kept before the boot mark": {silent(false), nil, reconciliation.EffectNoEffect},
+	} {
+		t.Run(name, func(t *testing.T) {
+			execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
+			execution.ApplyPreparations = expectation.preparations
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: expectation.evidence}}
+			observation, err := NewInstall(runner).Observe(context.Background(), execution)
+			if err != nil {
+				t.Fatalf("observe: %v", err)
+			}
+			if observation.Effect != expectation.effect {
+				t.Fatalf("effect = %q, want %q", observation.Effect, expectation.effect)
+			}
+		})
+	}
+	t.Run("the unknown names its remedy", func(t *testing.T) {
+		execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
+		block := execution.Block
+		block.Object = "sno"
+		got, explains := NewInstall(nil).Unresolved(reconciliation.Apply, block, silent(true))
+		want := lifecycle.Unresolved{
+			Reason: "the installation of OpenShiftCluster sno on Machine controller recorded a boot of its nodes from its image, and now nothing answers, no node runs and no node presents media, so the cluster may be installed on nodes that are off",
+			Remedy: "run bootwright destroy --context " + testContext + " before installing it again, or, if its nodes finished installing, start them with bootwright machine start --context " + testContext + " --name sno-01 so the installed cluster answers",
+		}
+		if !explains || got != want {
+			t.Fatalf("unresolved = %+v (%t), want %+v", got, explains, want)
+		}
+	})
+	t.Run("an apply records its boot only with this build's identity", func(t *testing.T) {
+		execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
+		execution.Attempt = 1
+		var kept []json.RawMessage
+		execution.Prepare = func(_ context.Context, preparation json.RawMessage) error {
+			kept = append(kept, preparation)
+			return nil
+		}
+		runner := &fakeRunner{err: refusal("lifecycle.state", "stopped", "")}
+		_, _ = NewInstall(runner).Apply(context.Background(), execution)
+		if len(runner.requests) != 1 || runner.requests[0].Prepare == nil {
+			t.Fatal("the apply offers no boot record")
+		}
+		prepare := runner.requests[0].Prepare
+		for _, refused := range []string{`{"identity":""}`, `{"identity":"` + strings.ToUpper(anchorIdentity) + `"}`, `{"identity":"` + anchorIdentity + `","other":true}`} {
+			if prepare(context.Background(), json.RawMessage(refused)) == nil {
+				t.Fatalf("the boot record %s was accepted", refused)
+			}
+		}
+		if err := prepare(context.Background(), recorded[0]); err != nil || len(kept) != 1 {
+			t.Fatalf("the boot record was refused: %v", err)
+		}
+	})
 }
 
 // A removal proves only that no node presents this cluster's media; the

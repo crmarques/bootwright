@@ -303,7 +303,7 @@ def test_a_kept_copy_changes_only_to_the_identity_it_names(tmp_path, before, exp
 
 def test_an_observation_keeps_nothing_and_reads_only_the_kept_copy(tmp_path):
     work = work_area(tmp_path / "work", rewritten())
-    assert observe(request(tmp_path, work)) == {"identity": "", "kubeconfig": False, "url": ""}
+    assert observe(request(tmp_path, work)) == {"booted": False, "identity": "", "kubeconfig": False, "url": ""}
     assert not (work / KEPT).exists()
 
 
@@ -386,7 +386,7 @@ def test_a_kubeconfig_the_installer_would_not_write_names_no_identity(tmp_path, 
 def test_a_work_area_without_its_kubeconfig_names_no_identity(tmp_path):
     work = work_area(tmp_path / "work", None)
     observation = observe({"workRoot": str(work), "image": {"path": str(tmp_path), "url": "https://192.0.2.1:8443"}})
-    assert observation == {"identity": "", "kubeconfig": False, "url": ""}
+    assert observation == {"booted": False, "identity": "", "kubeconfig": False, "url": ""}
 
 
 # The agent installer writes no metadata.json, so one found in the work area is
@@ -815,3 +815,13 @@ def test_bad_validation_shape_keeps_the_host_status(tmp_path, service, validatio
                                        validations_info=validations)), {})
     result = registration(declared(tmp_path, asset_state(tmp_path / "work")))
     assert result["unready"] == [{"name": "master-0", "status": "error", "message": "", "validations": []}]
+
+
+# The observation reports the mark the installation writes before it boots any
+# node, at the name the media block's rebuild refuses on, whatever it is.
+def test_the_observation_reports_the_boot_mark(tmp_path):
+    work = work_area(tmp_path / "work", kubeconfig())
+    assert observe(request(tmp_path, work))["booted"] is False
+    (work / inspect.MARKER).symlink_to(tmp_path / "nowhere")
+    assert observe(request(tmp_path, work))["booted"] is True
+    assert inspect.MARKER == ".bootwright-booted"

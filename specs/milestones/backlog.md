@@ -306,6 +306,7 @@ Alias cell.
 | [B1251](#b1251) | new, 2026-11-10 (D250 (10)) | product | Infrastructure services | A managed Proxy admits only the destinations it declares | The network's own firewall is the control in production; this serves a lab or a site without one |
 | [B1263](#b1263) | new, 2026-11-10 (D252 (6)) | product | Controller, with State reconciliation | A completed environment reports a proved client below the build's minimum, and may take a raised one | A completed apply settles (D153); the owner put reporting first and left replacement without a destroy open |
 | [B1264](#b1264) | new, 2026-11-10 (D252, session) | product | Storage | Custom CRUSH device classes reach the core OSD projection | The plan refuses them by name until a slice realizes them |
+| [B1265](#b1265) | new, 2026-11-10 (X346 review) | defect | Container clusters | An OpenShift attempt whose every node refused its pre-boot proof after the boot mark stays retryable | Safe as it stands: the block stays unknown and a destroy clears it; recording the boot per node needs a restructured boot play |
 
 ### B82
 
@@ -3481,6 +3482,20 @@ Candidate, from [audit 004](../../audits/004-spec-api/report-fable.md) API-07 un
 the `{path, crush_device_class}` path record reach the core OSD projection, so a
 placement policy or pool on an OSD-declared class plans. **Exit evidence:** a
 planning test of a custom class that a placement policy uses.
+
+### B1265
+
+**Owner:** Container clusters. **Kind:** defect. **Requires:** none.
+**Definition:** Candidate, from the independent review of
+[X346](delivered.md#x346--boot-before-no-effect): the apply records its boot
+and writes the `.bootwright-booted` mark before the nodes' pre-boot proofs, so
+an attempt whose every node then refuses its proof inserts no media yet reads
+unknown, and only a destroy clears it. **Outcome:** such an attempt reads
+positive no effect and its retry proceeds, while a node that received media
+still never does. The runner accepts one preparation per run, and the proof
+must stay immediately before each insert, so the fix restructures the boot
+play. **Exit evidence:** a resolution test over an attempt whose every pre-boot
+proof refused after the mark.
 
 ## Audit remediation (2026-10-26)
 

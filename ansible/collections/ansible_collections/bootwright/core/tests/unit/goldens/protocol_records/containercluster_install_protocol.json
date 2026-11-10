@@ -171,6 +171,7 @@
           "outcome": "changed",
           "evidence": {
             "absent": false,
+            "booted": true,
             "cluster": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "completed": true,
             "identity": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
@@ -210,6 +211,7 @@
           "outcome": "changed",
           "evidence": {
             "absent": false,
+            "booted": true,
             "cluster": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "completed": false,
             "identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -245,6 +247,7 @@
           "outcome": "changed",
           "evidence": {
             "absent": true,
+            "booted": true,
             "cluster": "",
             "completed": false,
             "identity": "",
@@ -275,6 +278,61 @@
   },
   {
     "case": "malformed",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the installation capability result could not be published"
+    }
+  },
+  {
+    "case": "completed unbooted observed",
+    "records": [
+      [
+        {
+          "phase": "completed",
+          "outcome": "changed",
+          "evidence": {
+            "absent": false,
+            "booted": false,
+            "cluster": "",
+            "completed": false,
+            "identity": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "media": [],
+            "missing": [],
+            "ownMedia": [],
+            "postcondition": false,
+            "powered": [],
+            "release": "4.21.15",
+            "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "restored": false
+          }
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "prepared",
+    "records": [
+      [
+        {
+          "phase": "prepared",
+          "preparation": {
+            "identity": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          }
+        },
+        true
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "prepared without identity",
     "records": [],
     "result": {
       "failed": true,

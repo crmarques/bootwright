@@ -203,7 +203,7 @@ func TestInstallEvidenceMatchesItsGoldens(t *testing.T) {
 		// installation completed at the declared release, with its media ejected.
 		"completed": {
 			InstallEvidence{
-				Cluster: anchorIdentity, Completed: true, Identity: anchorIdentity, Media: []string{}, Missing: []string{},
+				Booted: true, Cluster: anchorIdentity, Completed: true, Identity: anchorIdentity, Media: []string{}, Missing: []string{},
 				OwnMedia: []string{}, Postcondition: true, Powered: []string{"sno-01"}, Release: "4.21.15",
 				Request: testDigest,
 			},
@@ -213,7 +213,7 @@ func TestInstallEvidenceMatchesItsGoldens(t *testing.T) {
 		// kubeconfig cut short and put the kept copy back in its place first.
 		"completed-restored": {
 			InstallEvidence{
-				Cluster: anchorIdentity, Completed: true, Identity: anchorIdentity, Media: []string{}, Missing: []string{},
+				Booted: true, Cluster: anchorIdentity, Completed: true, Identity: anchorIdentity, Media: []string{}, Missing: []string{},
 				OwnMedia: []string{}, Postcondition: true, Powered: []string{"sno-01"}, Release: "4.21.15",
 				Request: testDigest, Restored: true, VIPsNotProbed: []string{"2001:db8::10"},
 			},
@@ -222,7 +222,7 @@ func TestInstallEvidenceMatchesItsGoldens(t *testing.T) {
 		// A removal ejects the media and retains the cluster, which still answers.
 		"removed": {
 			InstallEvidence{
-				Absent: true, Cluster: anchorIdentity, Completed: true, Identity: anchorIdentity,
+				Absent: true, Booted: true, Cluster: anchorIdentity, Completed: true, Identity: anchorIdentity,
 				Media: []string{}, Missing: []string{}, OwnMedia: []string{}, Postcondition: true,
 				Powered: []string{"sno-01"}, Release: "4.21.15", Request: testDigest,
 			},
@@ -233,7 +233,7 @@ func TestInstallEvidenceMatchesItsGoldens(t *testing.T) {
 		// apply interrupted during the installation wait.
 		"partial": {
 			InstallEvidence{
-				Cluster: anchorIdentity, Identity: anchorIdentity, Media: []string{"sno-01"}, Missing: []string{},
+				Booted: true, Cluster: anchorIdentity, Identity: anchorIdentity, Media: []string{"sno-01"}, Missing: []string{},
 				OwnMedia: []string{"sno-01"}, Powered: []string{"sno-01"}, Release: "4.21.15", Request: testDigest,
 			},
 			func(data []byte) error { return ValidateInstallPartial(data, testDigest) },
@@ -243,7 +243,7 @@ func TestInstallEvidenceMatchesItsGoldens(t *testing.T) {
 		// wait, before the API answers. The node is not yet in the cluster.
 		"partial-booted": {
 			InstallEvidence{
-				Identity: anchorIdentity, Media: []string{"sno-01"}, Missing: []string{"master-0"},
+				Booted: true, Identity: anchorIdentity, Media: []string{"sno-01"}, Missing: []string{"master-0"},
 				OwnMedia: []string{"sno-01"}, Powered: []string{"sno-01"}, Request: testDigest,
 			},
 			func(data []byte) error { return ValidateInstallPartial(data, testDigest) },
@@ -259,14 +259,15 @@ func TestInstallEvidenceMatchesItsGoldens(t *testing.T) {
 			},
 			func(data []byte) error { return ValidateInstallReleasePartial(data, install, testDigest) },
 		},
-		// The image was built, so its anchor is known, but nothing answers and
-		// no node runs: every declared node is missing.
+		// The image was built, so its anchor is known, but no node was booted
+		// from it, nothing answers and no node runs: every declared node is
+		// missing.
 		"no-effect": {
 			InstallEvidence{
 				Identity: anchorIdentity, Media: []string{}, Missing: []string{"master-0"},
 				OwnMedia: []string{}, Powered: []string{}, Request: testDigest,
 			},
-			func(data []byte) error { return ValidateInstallNoEffect(data, testDigest) },
+			func(data []byte) error { return ValidateInstallNoEffect(data, testDigest, false) },
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

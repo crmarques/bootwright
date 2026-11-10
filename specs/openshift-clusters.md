@@ -1007,8 +1007,11 @@ configured.
 **Unknown resolution.** Observation is read-only against the frozen request. A
 cluster answering with this operation's identity at the declared release,
 reporting its installation completed, whole and with its media released, is
-positive completion. Nothing answering, no node
-running and no media inserted is positive no effect. That same cluster
+positive completion. Nothing answering, no node running and no media inserted
+is positive no effect only with no `.bootwright-booted` work-area mark and no
+boot [before-state](state-reconciliation.md#operation-records) recorded;
+otherwise it stays unknown, boots nothing, naming the remedy: destroy before
+installing again, or start installed nodes. That same cluster
 answering while the completion is not yet true is a positive partial
 realization the next attempt converges. So is nothing answering yet while this
 operation recorded its identity, at least one node presents this cluster's own

@@ -13068,3 +13068,32 @@ could not be loaded by `codex execpolicy` here (no Codex binary).
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** the Codex rules file has not been loaded by Codex.
+
+### X346 — Boot before no effect
+
+**Item:** B1252 (2026-11-10, [D252](backlog.md#d252)), delivered in-tree.
+**Kind:** safety. **Owners:** Container clusters. The Unknown resolution of
+`cluster-install-<cluster>` reads nothing answering, no node running and no
+media inserted as positive no effect only when the work area carries no
+`.bootwright-booted` mark and the apply's records hold no boot this block
+recorded; otherwise the block stays unknown, boots no media and names its
+remedy: start the nodes and continue, or destroy the context before installing
+again ([OpenShift clusters](../openshift-clusters.md)). An apply's attempt
+records this build's identity as its `prepared` before-state after the virtual
+IP proof and before it marks the area, so an attempt stopped before that point
+still reads no effect and is retried. The evidence gains `booted`, the
+inspection reads the mark, and the content digest of
+`cluster-install-agent-v1` moved.
+
+Finding map, [audit 004](../../audits/004-spec-api/report-fable.md): REC-01
+(Blocking) — `ValidateInstallNoEffect` refuses a marked area or a recorded
+boot; the observe role publishes the mark; the apply records the boot before
+the mark; `Unresolved` names the remedy. The audit's "identity this block
+recorded" is read as the recorded boot, because the kept identity exists
+before any effect and a pre-boot refusal must stay retryable.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** an attempt whose every node refuses its pre-boot
+proof after the mark stays unknown and needs a destroy before a fresh
+install ([B1265](backlog.md#b1265)). An independent review found the window
+closed and put the destroy first in the remedy.

@@ -1,6 +1,9 @@
 package agentinstall
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"slices"
 
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -111,6 +114,7 @@ func decodeMediaEvidence(data []byte, digest string) (MediaEvidence, error) {
 // installed and the release it reports — and nothing secret.
 type InstallEvidence struct {
 	Absent bool `json:"absent"`
+	Booted bool `json:"booted"`
 	// Identity names this build: a domain-separated SHA-256 of the admin client
 	// certificate in the copy this installation keeps of the kubeconfig its
 	// installer wrote with the image, a certificate the installer's later
@@ -277,9 +281,10 @@ func ValidateInstallReleasePartial(data []byte, request InstallRequest, digest s
 }
 
 // ValidateInstallNoEffect accepts evidence only when it positively proves that
-// nothing was installed: no cluster answers, no node runs and no node holds
-// this operation's media.
-func ValidateInstallNoEffect(data []byte, digest string) error {
+// nothing was installed: no cluster answers, no node runs, no node holds this
+// operation's media, and nothing was ever booted from its image, which the
+// work area's boot mark and a boot the operation's records hold each say.
+func ValidateInstallNoEffect(data []byte, digest string, bootRecorded bool) error {
 	evidence, err := decodeInstallEvidence(data, digest)
 	if err != nil {
 		return err
@@ -289,6 +294,9 @@ func ValidateInstallNoEffect(data []byte, digest string) error {
 	}
 	if len(evidence.Powered) != 0 || len(evidence.Media) != 0 {
 		return refusal("lifecycle.state", "a node is running or still holds boot media", "")
+	}
+	if evidence.Booted || bootRecorded {
+		return refusal("lifecycle.state", "this cluster's nodes were booted from its image, so nodes off and no media inserted do not prove that nothing was installed", "")
 	}
 	return nil
 }
@@ -345,4 +353,21 @@ func decodeInstallEvidence(data []byte, digest string) (InstallEvidence, error) 
 		}
 	}
 	return evidence, nil
+}
+
+const maxPreparationBytes = 4096
+
+type bootPreparation struct {
+	Identity string `json:"identity"`
+}
+
+func validBootPreparation(data json.RawMessage) error {
+	preparation, err := reconciliation.DecodeEvidence[bootPreparation](data, maxPreparationBytes, "installation")
+	if err != nil {
+		return err
+	}
+	if decoded, err := hex.DecodeString(preparation.Identity); err != nil || len(decoded) != sha256.Size || hex.EncodeToString(decoded) != preparation.Identity {
+		return refusal("lifecycle.state", "the installation's automation recorded a boot that names no identity of this build", "")
+	}
+	return nil
 }

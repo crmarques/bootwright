@@ -176,7 +176,12 @@ CASES = {
         {"state": {"media": []}},
         {"state": {"media": ["sno-02", "sno-01"]}},
         {"identity": "c" * 64, "state": dict(CLUSTER, release="x" * 129)},
-    ),
+    ) + [
+        ("completed unbooted observed", completed(observed=True, identity="c" * 64, booted=False,
+                                                  state=dict(CLUSTER, cluster="", completed=False, powered=[]))),
+        ("prepared", {"phase": "prepared", "identity": "c" * 64}),
+        ("prepared without identity", {"phase": "prepared", "identity": ""}),
+    ],
     "substrate_physical_protocol": common([]) + [
         ("completed proving", completed(endpoint=ENDPOINT, observation=PHYSICAL, expected=["aa:bb:cc:dd:ee:01"])),
         ("completed unproving", completed(endpoint=ENDPOINT, observation=dict(PHYSICAL, failures=["x"], power=""),

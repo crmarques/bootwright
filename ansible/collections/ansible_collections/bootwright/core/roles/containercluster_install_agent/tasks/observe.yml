@@ -62,6 +62,7 @@
     outcome: unchanged
     digest: '{{ bootwright_cluster_install_digest }}'
     identity: '{{ containercluster_install_agent_before.observation.identity }}'
+    booted: '{{ containercluster_install_agent_before.observation.booted }}'
     state: '{{ containercluster_install_agent_state }}'
     placement: '{{ containercluster_install_agent_placement_read }}'
     observed: true

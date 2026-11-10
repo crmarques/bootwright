@@ -540,7 +540,7 @@ def test_a_removal_observation_of_a_foreign_image_publishes_the_media_alone():
         media_task["ansible.builtin.set_fact"]["containercluster_install_agent_state"])
     found = protocol.evidence(arguments(outcome="unchanged", observed=True, state=resolved), DIGEST, False)
     assert found == {
-        "absent": False, "cluster": "", "completed": False, "identity": IDENTITY, "media": ["sno-01"],
+        "absent": False, "booted": True, "cluster": "", "completed": False, "identity": IDENTITY, "media": ["sno-01"],
         "missing": ["master-0"], "ownMedia": [], "postcondition": False, "powered": ["sno-01"],
         "release": "", "request": DIGEST, "restored": False,
     }
@@ -572,7 +572,8 @@ def test_the_placement_read_is_published_as_the_go_golden_reads_it():
     powered = ["master-%d" % index for index in range(6)]
     found = protocol.evidence(arguments(state=state(powered=powered), placement=PLACED), DIGEST, False)
     assert found == {
-        "absent": False, "cluster": IDENTITY, "completed": True, "identity": IDENTITY, "media": [], "missing": [],
+        "absent": False, "booted": True, "cluster": IDENTITY, "completed": True, "identity": IDENTITY, "media": [],
+        "missing": [],
         "ownMedia": [], "postcondition": True, "powered": powered, "release": RELEASE, "request": DIGEST,
         "restored": False, "placement": [
             {"labels": {"example.test/rack": "rack-a", "example.test/row": ""}, "name": "master-3", "taints": []},
@@ -649,3 +650,51 @@ def test_placement_runs_only_on_a_proved_completion_and_before_the_access_is_off
         assert not all(templar.evaluate_conditional(condition) for condition in conditions)
     refusal = finish[index[0] + 1]
     assert "ansible.builtin.fail" in refusal and refusal["when"] == "containercluster_install_agent_placement.refused is defined"
+
+
+# Only a real boolean false records an unbooted work area, because evidence
+# read as unbooted is what lets an observation prove nothing was installed.
+@pytest.mark.parametrize("booted, expected", [
+    (False, False), (True, True), ("False", True), (0, True), (None, True),
+], ids=repr)
+def test_only_a_boolean_false_records_an_unbooted_work_area(booted, expected):
+    assert protocol.evidence(arguments(booted=booted), DIGEST, False)["booted"] is expected
+    assert protocol.evidence(dict(arguments(), booted=booted), DIGEST, True)["booted"] is expected
+
+
+@pytest.mark.parametrize("identity", ["", "C" * 64, "c" * 63, "c" * 65, "g" * 64, None], ids=repr)
+def test_a_boot_is_recorded_only_with_this_builds_identity(identity):
+    with pytest.raises(ValueError):
+        protocol.preparation({"identity": identity})
+
+
+def test_a_boot_is_recorded_with_the_identity_alone():
+    assert protocol.preparation({"identity": IDENTITY, "state": state()}) == {"identity": IDENTITY}
+    assert "prepared" in protocol.PHASES
+
+
+# The boot is recorded in the apply's records before the work area is marked,
+# and both before any node is booted, on every path, never excused.
+def test_the_boot_is_recorded_before_the_mark_on_every_path():
+    prepare = tasks("prepare_boot.yml")
+    recorded = [index for index, task in enumerate(prepare)
+                if (task.get("bootwright.core.containercluster_install_protocol") or {}).get("phase") == "prepared"]
+    marked = [index for index, task in enumerate(prepare)
+              if str((task.get("ansible.builtin.copy") or {}).get("dest", "")).endswith("/.bootwright-booted")]
+    assert len(recorded) == 1 and len(marked) == 1 and recorded[0] < marked[0]
+    task = prepare[recorded[0]]
+    assert not {"when", "failed_when", "ignore_errors"} & set(task)
+    assert task["bootwright.core.containercluster_install_protocol"]["identity"] == (
+        "{{ containercluster_install_agent_before.observation.identity }}")
+
+
+# An observation and a removal publish the mark as the inspection read it; an
+# apply's completion runs after prepare_boot.yml marked the area.
+def test_each_publication_names_the_boot_mark():
+    def published(name):
+        return one(name, lambda task: (task.get("bootwright.core.containercluster_install_protocol") or {}).get(
+            "phase") == "completed")["bootwright.core.containercluster_install_protocol"]
+    read = "{{ containercluster_install_agent_before.observation.booted }}"
+    assert published("observe.yml")["booted"] == read
+    assert published("destroy.yml")["booted"] == read
+    assert published("finish.yml")["booted"] is True

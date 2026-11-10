@@ -67,10 +67,16 @@ def evidence(arguments, request_digest, removed):
     `restored` records that a wait of this apply put the kept copy back in
     place of the installer's own kubeconfig. Like `completed`, only a real
     boolean true counts, and a removal waits for nothing, so it never restores.
+
+    `booted` records that the work area carries the mark this installation
+    writes before it hands any node the image. Only a real boolean false says
+    it does not, because an area read as unbooted lets an observation prove
+    that nothing was installed.
     """
     state = arguments.get("state") or {}
     found = {
         "absent": bool(removed),
+        "booted": arguments.get("booted") is not False,
         "cluster": bounded(state.get("cluster")),
         "completed": state.get("completed") is True,
         "identity": bounded(arguments.get("identity")),
@@ -140,6 +146,15 @@ def refused(arguments):
     return "%s-node-%d" % (reason, node)
 
 
+def preparation(arguments):
+    """The before-state an apply records before it marks the work area and
+    boots any node: this build's identity, a public digest, and nothing else."""
+    identity = bounded(arguments.get("identity"))
+    if len(identity) != 64 or not set(identity) <= adapter_protocol.HEX:
+        raise ValueError("identity")
+    return {"identity": identity}
+
+
 def completion(arguments):
     """The evidence one completion publishes, or what it names when unmet.
 
@@ -158,8 +173,9 @@ CAPABILITY = adapter_protocol.Capability(
     "installation",
     "the installation capability result could not be published",
     completion,
-    phases=adapter_protocol.REFUSING_PHASES,
+    phases=adapter_protocol.PREPARING_PHASES,
     refusals=refused,
+    preparation=preparation,
 )
 PHASES = CAPABILITY.phases
 

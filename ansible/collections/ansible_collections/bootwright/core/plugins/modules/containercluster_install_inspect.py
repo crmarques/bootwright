@@ -10,8 +10,9 @@ version_added: "0.1.0"
 description:
   - Reports this build's identity, a domain-separated SHA-256 of the
     administrator client certificate in the copy of the installer's
-    kubeconfig this installation keeps beside it, and the address of the image
-    its media block published.
+    kubeconfig this installation keeps beside it, whether the work area
+    carries the mark the installation writes before it boots any node, and the
+    address of the image its media block published.
   - The kept copy is the installer's file as last seen whole, within the
     64 KiB this module reads and naming the same identity, so it never grows
     past that bound however often C(agent wait-for install-complete) rewrites
@@ -98,7 +99,7 @@ EXAMPLES = r"""
 
 RETURN = r"""
 observation:
-  description: This build's identity, whether the kept copy exists, and the published image address.
+  description: This build's identity, whether the kept copy exists, whether the work area is marked booted, and the published image address.
   returned: always
   type: dict
 restore:
@@ -153,6 +154,11 @@ IMAGE = "agent.iso"
 # it (see TYPED). The kept copy is replaced only in one rename, and only by a
 # whole file within MAX_KUBECONFIG that names the identity it already names.
 KEPT = ".bootwright-kubeconfig"
+# MARKER is what this installation writes into the work area before it hands
+# any node the image (prepare_boot.yml), the name the media block's rebuild
+# refuses on. Anything at that name counts, so an area it cannot prove
+# unbooted never reads as one nothing was installed from.
+MARKER = ".bootwright-booted"
 # A larger kubeconfig names no identity and is never kept. Each install-complete
 # run grows the installer's file by the base64 of the router CA bundle, so the
 # kept copy follows only as many rewrites as fit within this bound and then
@@ -456,6 +462,7 @@ def observe(request):
     """
     image = request["image"]
     return {
+        "booted": os.path.lexists(os.path.join(request["workRoot"], MARKER)),
         "identity": identity(os.path.join(request["workRoot"], KEPT)),
         "kubeconfig": os.path.isfile(os.path.join(request["workRoot"], KEPT)),
         "url": published(image["path"], image["url"]),

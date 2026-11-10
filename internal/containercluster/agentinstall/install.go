@@ -2,6 +2,7 @@ package agentinstall
 
 import (
 	"context"
+	"encoding/json"
 	"maps"
 	"slices"
 	"strconv"
@@ -242,8 +243,9 @@ func offered(produced []lifecycle.Produced, proved bool) []lifecycle.Produced {
 
 // Observe is read-only. The cluster this operation installed, answering at the
 // declared release with every declared node and no media left inserted, is
-// positive completion; nothing running and nothing answering is positive no
-// effect; that same cluster answering with the completion not yet true is a
+// positive completion; nothing running and nothing answering, before any boot
+// the work area's mark or the apply's records hold, is positive no effect;
+// that same cluster answering with the completion not yet true is a
 // positive partial realization the next attempt converges.
 func (c InstallCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
 	return c.observe(ctx, execution, reconciliation.Apply)
@@ -270,8 +272,9 @@ func (c InstallCapability) ObserveRemoval(ctx context.Context, execution lifecyc
 // and partial forms, a removal's its released and partial release forms, each
 // in that order. When none accepts the evidence the effect is unknown, and the
 // refusal that decided it comes back with it: the presence check's for an
-// apply, the partial release's for a removal.
-func installEffect(verb reconciliation.Verb, evidence []byte, request InstallRequest, digest string) (reconciliation.EffectState, error) {
+// apply, the partial release's for a removal. bootRecorded says the apply's
+// records hold a boot of this block, which forbids no effect.
+func installEffect(verb reconciliation.Verb, evidence []byte, request InstallRequest, digest string, bootRecorded bool) (reconciliation.EffectState, error) {
 	if verb == reconciliation.Destroy {
 		if ValidateInstallReleased(evidence, digest) == nil {
 			return reconciliation.EffectCompleted, nil
@@ -285,7 +288,7 @@ func installEffect(verb reconciliation.Verb, evidence []byte, request InstallReq
 	switch {
 	case presence == nil:
 		return reconciliation.EffectCompleted, nil
-	case ValidateInstallNoEffect(evidence, digest) == nil:
+	case ValidateInstallNoEffect(evidence, digest, bootRecorded) == nil:
 		return reconciliation.EffectNoEffect, nil
 	case ValidateInstallPartial(evidence, digest) == nil:
 		return reconciliation.EffectPartial, nil
@@ -314,7 +317,7 @@ func (c InstallCapability) observe(ctx context.Context, execution lifecycle.Exec
 		lifecycle.ClearProduced(result.Produced)
 		return unknown, err
 	}
-	effect, _ := installEffect(verb, result.Evidence, request, execution.Block.RequestDigest)
+	effect, _ := installEffect(verb, result.Evidence, request, execution.Block.RequestDigest, len(execution.ApplyPreparations) != 0)
 	produced := offered(result.Produced, len(outputs) != 0 && effect == reconciliation.EffectCompleted)
 	return lifecycle.Observation{Effect: effect, Evidence: result.Evidence, Produced: produced}, nil
 }
@@ -449,13 +452,17 @@ func (c InstallCapability) runWithOutputs(ctx context.Context, execution lifecyc
 			})
 		}
 	}
+	var preparation func(json.RawMessage) error
+	if operation == "apply" {
+		preparation = validBootPreparation
+	}
 	// The deadline follows the budgets and nodes this request froze, not this
 	// build's.
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: InstallImplementation, Operation: operation, Variable: installVariablePrefix,
 		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
 		Outputs: outputs, Refusals: refusals, Deadline: request.Deadline(),
-		NodeCount: len(request.Nodes), Parallelism: request.Budgets.FanOut,
+		NodeCount: len(request.Nodes), Parallelism: request.Budgets.FanOut, Preparation: preparation,
 	}))
 }
 
