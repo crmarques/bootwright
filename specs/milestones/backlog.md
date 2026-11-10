@@ -311,6 +311,7 @@ Alias cell.
 | [B1272](#b1272) | new, 2026-11-10 (X349 second review) | defect | Controller | The added package set stays within its bound and names only what Bootwright's transaction installed | Safe as it stands: the erase test keeps dependents, and a bound hit refuses before any removal |
 | [B1273](#b1273) | new, 2026-11-10 (X359 gate) | defect | Controller | `test_a_killed_lifecycle_supervisor_leaves_no_playbook_worker_or_task` reads a surviving process tree under heavy host load | It failed once under a load average near 30 and passed three times alone; the stopped-tree poll has no settle bound |
 | [B1274](#b1274) | new, 2026-11-10 (X352 review) | product | Machine, with Managed OS and Container clusters | One WWN root form for every consumer | A breaking rename the owner decides; both installers already admit the by-id WWN path |
+| [B1275](#b1275) | new, 2026-11-10 (X354 gate) | defect | Managed OS | Installation evidence records the WWN a serial-declared root disk reports at installation | Found when the Not yet met line of B1104 had to leave at its in-tree delivery; the erase compares serial number and size meanwhile |
 
 ### B82
 
@@ -1447,9 +1448,12 @@ always answers quiescent
 `internal/substrate/baremetal/capability.go:212-217`). Destroy therefore removes
 DNS, NTP and the artifact server from under a running, retained physical host
 (the lab-baremetal example's NTP `lab-ntp` and DNS `lab-dns`). Each link is in
-the spec (`specs/infrastructure-services.md:362-365`,
-`specs/substrates.md:519-535`); the consequence is not, and "removes only what is
-out of use" (`specs/state-reconciliation.md:1787`) is overstated. **Impact:** a
+the spec (the managed artifact serving quiescence clause of
+[infrastructure services](../infrastructure-services.md#managed-artifact-serving) and
+the [Quiescence rule of Machine realization](../substrates.md#machine-realization));
+the consequence is not, and "removes only what is out of use"
+([state reconciliation](../state-reconciliation.md#quiescence-before-removal))
+is overstated; the spec carries a Not yet met line for it. **Impact:** a
 retained host loses name resolution and time sync; the operator's destroy was
 explicit and no data is lost. **Smallest fix:** state in the spec that derived
 quiescence holds only through consumers that prove their stop; the destroy plan
@@ -1489,7 +1493,7 @@ engine waits its budget before it resolves.
 ### B576
 
 The spec says completion "requires the domain defined with the frozen
-definition" (`specs/substrates.md:336`), but `ValidateMachinePresence` proves
+definition" ([Machine realization](../substrates.md#machine-realization)), but `ValidateMachinePresence` proves
 the domain name and ownership, the active unit, the controller image, the system
 UUID, a non-empty power state and the disks
 (`internal/substrate/libvirt/evidence.go:70-105`, `:382-409`). It never reads
@@ -1502,7 +1506,7 @@ ignores the define, so a redefinition is reported `unchanged`
 redefine, after a cross-build template change or an operator `virsh edit`.
 **Impact:** a false claim of completeness and a mislabelled outcome; the target
 is not damaged, and `diff --observe` cannot compare the unproved fields. **Smallest
-fix:** narrow `specs/substrates.md:336` to what the evidence proves and say that
+fix:** narrow [substrates evidence](../substrates.md#machine-realization) to what the evidence proves and say that
 the definition is rewritten on every attempt; report `changed` when
 the dumpxml taken before the define differs from the rendered XML; widen
 `libvirt_domain_inspect` and `MachineEvidence` as the Machine projector item
@@ -3557,6 +3561,19 @@ it. **Outcome:** one WWN root form for every consumer, the other refused with
 a hint naming it, in one breaking commit before 1.0
 ([pre-1.0 policy](../project.md#design-priorities-and-non-goals)). **Exit
 evidence:** admission tests in which each consumer refuses the retired form.
+
+### B1275
+
+**Owner:** Managed OS. **Kind:** defect. **Requires:** none. **Definition:**
+Candidate, from [X298](delivered.md#x298--physical-disks-named-by-serial-number-and-size)'s
+left-open note, found by the X354 gate: the
+[physical removal](../managed-os.md#physical-removal) rule says a root declared
+by serial number has the WWN it reported at installation recorded in the
+installation's evidence, so its erase can compare it, but the evidence records
+none. **Outcome:** the installation's evidence records the WWN the host reports
+for a serial-declared root disk when it has one, and the erase compares it.
+**Exit evidence:** installation and erase tests over a serial-declared root with
+and without a reported WWN.
 
 ## Audit remediation (2026-10-26)
 
@@ -7468,7 +7485,14 @@ the agent image from such a volume.
 (12) The answers authorize, out of sequence and for implementation only, X313
 (M3, B926) and X314 (M4, B1184), both active at once; they are the waiver of
 M2's and M3c's Requires for implementing them, as D234 was for its slices.
+
 Promotion, operator gates and milestone completion keep every Requires.
+
+(13) Session note of 2026-11-10 (X354), pending the owner's review:
+[D224](#d224), dated earlier, abolished every emulated stand-in for the
+physical path, so clause (1)'s session clause about B67's emulated rehearsal
+is moot: no such rehearsal runs, and B67's acceptance is
+[B730](m3.md#b730)'s real-hardware run.
 
 ### D236
 

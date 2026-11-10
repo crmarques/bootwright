@@ -221,9 +221,6 @@ target: an excluded cluster root names its own list, and any other excluded
 object names the authored lists. Omission of both cluster lists skips this filtering and retains
 every selected object.
 
-Not yet met: a package's configuration retains no export; tracked as
-[B760](../milestones/m4.md#b760).
-
 ## Remote-machine access and install defaults
 
 `spec.remoteMachinesAccessKey.keyRef` is a plain reference to an `sshKeyPair`

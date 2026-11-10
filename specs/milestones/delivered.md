@@ -13440,3 +13440,30 @@ occurred. **Limitations:** an authored `fqdn` on a provided Machine that
 differs from its `fqdn` contact still refuses only at plan; the
 template-inputs chart renders node `fqdn` and `site` and must be rendered
 again (D252 answer 5).
+
+### X354 — Specs say what is delivered
+
+**Item:** B1262 (2026-11-10, [D252](backlog.md#d252)), Kind defect, Owners:
+Container clusters, with Add-ons and every spec owner. The coverage pages, the
+B251 and B730 exits and the Not yet met lines agree with
+[D224](backlog.md#d224), [D235](backlog.md#d235) (2) and in-tree delivery. A
+Not yet met line is deleted or re-scoped in the commit that moves its item to
+`awaiting operator acceptance` ([conventions](../index.md#conventions)), and
+`TestDocsNotYetMetNamesAnUndeliveredItem` now refuses a line linking such an
+item as it refused one linking a `completed` item.
+
+| Finding | Change |
+| --- | --- |
+| SCO-01 | the Physical nodes row names no emulated tier; B251's exit names B730's real-hardware run; B730 says its run is B67's acceptance; D235 (13) marks clause (1)'s B67 rehearsal moot |
+| SCO-02 | the lab-physical node shape names no fixed count, the compact host's required rows and B883 (D235 (2)); the kubevirt package row names B730's physical run as its gate and B732 as further evidence; the example README follows |
+| API-04 | the trust bundle policy row names `spec.install.additionalTrustBundlePolicy` and its in-tree evidence |
+| DOC-01 | the Installation section points to the refusal table's physical rows; the operator guide and the coverage page say a physical node installs, proved in-tree until B730's row, and keep the vSphere multi-node refusal under B733; the stale projection test comment |
+| COR-02 | the index conventions and the milestones skill name the trigger; the matcher flags an awaiting item; the B721 and B760 lines are deleted and the B67 line keeps its vSphere part |
+| COR-03 | substrates.md and state-reconciliation.md carry the B576 and B571 lines; both items cite sections instead of lines |
+
+Tests: the `awaiting row` case of
+`TestDocsNotYetMetMatcherRejectsBadParagraphs`, which finds no violation on
+the previous matcher.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred.

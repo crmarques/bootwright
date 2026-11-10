@@ -2,10 +2,14 @@
 
 A synthetic preparation profile for [B730](../../../specs/milestones/m3.md#b730)
 and the [acceptance matrix](../../../specs/openshift-coverage.md#acceptance-profiles):
-three physical masters and two physical workers installed through their BMCs.
-No live run or owner acceptance is claimed, and the accepted
-[lab-sno](../lab-sno/) and [lab-compact](../lab-compact/) rows are
-prerequisites to the consuming M3d run.
+a cluster of any node shape the installer accepts, shown here as three
+physical masters and two physical workers installed through their BMCs; the
+owner's compact host needs no workers
+([D235](../../../specs/milestones/backlog.md#d235) (2)). On that host the
+bonded VLAN install interface and a secondary network are required rows, then
+the `nmstate` and `kubevirt` packages install. No live run or owner acceptance
+is claimed. The accepted [lab-sno](../lab-sno/) and
+[lab-compact](../lab-compact/) rows are waived for that run (D235 (1)).
 
 ## Worth noting
 
@@ -29,7 +33,8 @@ prerequisites to the consuming M3d run.
 - For an encryption variant, confirm TPM2 availability, clear leftover TPM
   keys before reinstalling, then add `security.diskEncryption.unlock.tpm2: {}`
   in the private copy.
-- Complete the emulated physical-path rehearsal and the owning M1 physical
-  prerequisites before the real-hardware row. Removal ejects media and deletes
+- Complete the owning M1 physical prerequisites before the real-hardware row;
+  no emulated rehearsal stands in for it
+  ([D224](../../../specs/milestones/backlog.md#d224)). Removal ejects media and deletes
   Bootwright-owned delivery state but retains the operating system and data on
   the disks.

@@ -2354,12 +2354,11 @@ the removal: each consumer's cluster must leave with owned virtual node
 Machines the same removal deletes, not only erases, or the removal refuses
 before registration, before any quiescence probe and whatever a capability
 would answer, naming the consumer and what it consumes. The apply's `plan`
-warns of each such consumer with `lifecycle.surviving-consumer`, from the same
+warns of each such consumer with `lifecycle.surviving-consumer`, from the
 decision taken over the apply's inverse. It is not an
 online effect, its Machines are `Stop first`, its quiescence derives from
 their stop proof, and its inverse and removal observation record retirement
-without contacting the hosts. A retired block's removal observation is answered
-from its frozen request with no host contact, and the controller-local destroy
+without contacting the hosts; that observation reads its frozen request, and the controller-local destroy
 runs of the image and host blocks are not host-contacting calls.
 
 Bootwright removes and replaces only what is out of use. Machine capabilities
@@ -2368,7 +2367,10 @@ is unproved and refuses. Most removals prove every affected Machine stopped
 before registration, report `lifecycle.live` with the stop commands (or the
 remedy a capability names when no stop settles its block), and make no effect
 when any target is live. Each Machine inverse revalidates its target
-immediately before removing it.
+just before removing it.
+
+Not yet met: a retained physical Machine always reads quiescent; tracked as
+[B571](milestones/backlog.md#b571).
 
 An `OnlineRemoval` capability requires its effects removed while their Machines
 remain reachable. Only Machine blocks whose inverse dependency closure contains

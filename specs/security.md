@@ -414,9 +414,6 @@ same rule: it reaches the release payload through the controller Machine's
 proxy choice, given as `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` from its
 frozen request, never from the environment.
 
-Not yet met: the image build runs direct; tracked as
-[B721](milestones/m3.md#b721).
-
 ## Local context privilege
 
 The [context store](contexts.md#storage-locking-and-publication) owns

@@ -658,9 +658,8 @@ A node whose realized target is
 `data-loss` on **apply**: the agent installer writes the release image to that
 node's disk, and that is the moment its existing content is lost. A cluster of
 virtual nodes consumes nothing here, because their disks are created by their
-realization and removed by its inverse. A physical node refuses before
-registration, as [selection](#selection-and-refusal)
-states.
+realization and removed by its inverse. A physical node's refusals are rows of the
+[refusal table](#refusal-table).
 
 **Resolution before boot.** The installer polls the cluster API from the
 controller, so before anything is booted the block resolves the name of each

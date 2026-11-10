@@ -1214,7 +1214,7 @@ or the erase request refuses `api.invariant` when it is built. A root declared
 by serial number has the WWN it reported at installation, when it has one,
 recorded in the installation's evidence, so its erase can compare it.
 Not yet met: installation evidence records no WWN for a root disk declared by
-serial number; tracked as [B1104](milestones/m1.md#b1104).
+serial number; tracked as [B1275](milestones/backlog.md#b1275).
 
 The installation request version freezes the optional
 `eraseOnRemoval` Boolean so recovery guidance agrees with the separate policy.

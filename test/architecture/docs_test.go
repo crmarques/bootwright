@@ -721,7 +721,8 @@ func TestDocsNotYetMetMatcherRejectsBadParagraphs(t *testing.T) {
 		"# M2\n\n| ID | Alias | Kind | Owner | Outcome | Requires | Definition | Delivery |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n"+
 			"| [B1](#b1) | | product | x | y | | Specified | not started |\n"+
 			"| [B2](#b2) | | product | x | y | | Specified | completed |\n"+
-			"| [B4](#b4) | | product | x | y | | Specified | not started |\n\n### B1\n\n### B2\n", "\n")}
+			"| [B4](#b4) | | product | x | y | | Specified | not started |\n"+
+			"| [B5](#b5) | | product | x | y | | Specified | awaiting operator acceptance, X9 |\n\n### B1\n\n### B2\n\n### B5\n", "\n")}
 	backlog := markdownFile{path: "specs/milestones/backlog.md", lines: strings.Split(
 		"# Backlog\n\n| ID | Alias |\n| --- | --- |\n| [B3](#b3) | x |\n\n### B3\n", "\n")}
 	spec := func(body string) markdownFile {
@@ -742,6 +743,7 @@ func TestDocsNotYetMetMatcherRejectsBadParagraphs(t *testing.T) {
 		{"target does not resolve", "Not yet met: a; [B1](milestones/m2.md#b1).", []string{"specs/api/x.md:1 B1 links milestones/m2.md#b1, not a milestone page or the backlog at #b1"}},
 		{"item on another page", "Not yet met: a; [B3](../milestones/m2.md#b3).", []string{"specs/api/x.md:1 B3 has no heading on specs/milestones/m2.md", "specs/api/x.md:1 B3 has no row on specs/milestones/m2.md"}},
 		{"delivered row", "Not yet met: a; [B2](../milestones/m2.md#b2).", []string{"specs/api/x.md:1 B2 is delivered on specs/milestones/m2.md"}},
+		{"awaiting row", "Not yet met: a; [B5](../milestones/m2.md#b5).", []string{"specs/api/x.md:1 B5 is awaiting operator acceptance on specs/milestones/m2.md, so its in-tree code is delivered; delete or re-scope the line"}},
 		{"row without heading", "Not yet met: a; [B4](../milestones/m2.md#b4).", []string{"specs/api/x.md:1 B4 has no heading on specs/milestones/m2.md"}},
 		{"a slice record beside a good item", "Not yet met: a; [B1](../milestones/m2.md#b1), delivered by [X12](../milestones/delivered.md#x12--first).",
 			[]string{"specs/api/x.md:1 Not yet met paragraph links the delivered record ../milestones/delivered.md#x12--first; delivery state belongs on the milestone page"}},
@@ -824,7 +826,7 @@ func notYetMetParagraph(pages map[string]markdownFile, from string, line int, te
 			violations = append(violations, fmt.Sprintf("%s:%d %s links %s, not a milestone page or the backlog at #%s", from, line, item, target, strings.ToLower(item)))
 			continue
 		}
-		heading, row, delivered := false, false, false
+		heading, row, delivered, awaiting := false, false, false, false
 		proseLines(pages[resolved], func(_ int, text string) {
 			if strings.TrimRight(text, " ") == "### "+item {
 				heading = true
@@ -832,7 +834,9 @@ func notYetMetParagraph(pages map[string]markdownFile, from string, line int, te
 			if match := notYetMetRowHead.FindStringSubmatch(text); match != nil && match[1] == item {
 				row = true
 				cells := strings.Split(strings.TrimSuffix(strings.TrimSpace(text), "|"), "|")
-				delivered = strings.HasPrefix(strings.TrimSpace(cells[len(cells)-1]), "completed")
+				state := strings.TrimSpace(cells[len(cells)-1])
+				delivered = strings.HasPrefix(state, "completed")
+				awaiting = strings.HasPrefix(state, "awaiting operator acceptance")
 			}
 		})
 		if !heading {
@@ -843,6 +847,9 @@ func notYetMetParagraph(pages map[string]markdownFile, from string, line int, te
 		}
 		if delivered {
 			violations = append(violations, fmt.Sprintf("%s:%d %s is delivered on %s", from, line, item, resolved))
+		}
+		if awaiting {
+			violations = append(violations, fmt.Sprintf("%s:%d %s is awaiting operator acceptance on %s, so its in-tree code is delivered; delete or re-scope the line", from, line, item, resolved))
 		}
 	}
 	return violations

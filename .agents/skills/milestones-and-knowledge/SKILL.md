@@ -31,6 +31,10 @@ A spec line in the exact form the
 [conventions](../../../specs/index.md#conventions) give, linking one open item.
 It states what code does not yet do. It never links a delivered record and
 never holds acceptance or baseline state; those belong on the milestone page.
+Delete the line, or re-scope it to the part still undone, in the commit that
+moves its item to `awaiting operator acceptance`: the item's in-tree code is
+delivered, and the operator residue stays on the item. `make docs-check` fails
+a line whose item is `completed` or awaiting acceptance.
 
 ## Decisions and delivered records
 

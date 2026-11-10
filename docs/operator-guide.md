@@ -735,8 +735,10 @@ No real-hardware row has been accepted yet: [B67](../specs/milestones/m3.md#b67)
 and [B78](../specs/milestones/m1.md#b78) name one as exit evidence, and M2 and
 M3 each need one besides their emulated rehearsal (decision D17). Today a physical
 installation is proved in-tree only until [B73](../specs/milestones/m1.md#b73)'s
-real-hardware operator gate runs, and a
-physical cluster node refuses until [B67](../specs/milestones/m3.md#b67).
+real-hardware operator gate runs, and a physical cluster node installs, proved
+in-tree until [B730](../specs/milestones/m3.md#b730)'s real-hardware row runs
+(D2, D224). A multi-node vSphere cluster refuses on its own, under
+[B733](../specs/milestones/m3.md#b733).
 
 ### KubeVirt providers
 

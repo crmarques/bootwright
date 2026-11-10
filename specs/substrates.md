@@ -643,6 +643,11 @@ that, like any of the domain, unit, container or disks present without the
 whole, is a positive partial realization. The adapter's postcondition is the
 apply's, so it plays no part here either.
 
+Not yet met: completion evidence proves the domain name, ownership, unit,
+image, system UUID, power state and disks but not vCPU, memory, interfaces, TPM
+or boot order, and a redefinition reports unchanged; tracked as
+[B576](milestones/backlog.md#b576).
+
 **Unresolved.** An observation that proves nothing
 [names why](state-reconciliation.md#attempts-and-unknown-outcomes), first
 match first. One that returned no evidence names the Machine the adapter runs

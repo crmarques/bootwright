@@ -2,9 +2,8 @@
 
 Start with [project intent](project.md) when scope matters. Read the
 [milestones](milestones.md) Status and Scope rules and, on the authorized
-milestone page, only its opening, the Planned slices row, the item's row and
-its `### B<n>` section ([AGENTS.md](../AGENTS.md)), then open only the owning
-section below. A specified capability is not necessarily
+milestone page, only the parts [AGENTS.md](../AGENTS.md) names, then open only
+the owning section below. A specified capability is not necessarily
 implemented or authorized.
 
 | Read when the task touches | Owner |
@@ -50,9 +49,10 @@ implemented or authorized.
 
 Each requirement has one owner; other pages link to it. Specs state target
 invariants in the present tense and claim no availability. A rule the code does
-not yet meet carries one line, "Not yet met: ...; tracked as B<n>", linking the
-item on its milestone page or among the parked items.
-Delivery state lives in milestones, observed lessons in
-[knowledge](../.agents/knowledge/index.md), and working procedure in skills. Add
-detail with its first requested feature or a demonstrated ambiguity; design for
-an unpromoted feature lives under `deferred/`.
+not yet meet carries one line, "Not yet met: ...; tracked as B<n>", linking its
+open item on a milestone page or the backlog; the commit that moves the item to
+`awaiting operator acceptance` deletes or re-scopes the line.
+Delivery state lives in milestones, lessons in
+[knowledge](../.agents/knowledge/index.md), procedure in skills. Add detail
+with its first requested feature or a demonstrated ambiguity; an unpromoted
+feature's design lives under `deferred/`.

@@ -329,13 +329,12 @@ func TestUnsupportedNamesEveryClusterThisContractCannotInstall(t *testing.T) {
 	}
 }
 
-// A cluster with a physical node refuses, because booting that node erases
-// what it holds and that boot is not yet qualified on emulated hardware. A
-// node Bootwright also installs an operating system on refuses too, because
-// two installations would write its one disk. Either refusal names the bound
-// Machine, because that is what an operator changes. A node whose realized
-// target does not derive refuses with its substrate's own reason and the remedy
-// naming the provider to correct.
+// A node Bootwright also installs an operating system on refuses, because two
+// installations would write its one disk. The refusal names the bound Machine,
+// because that is what an operator changes. A node whose realized target does
+// not derive refuses with its substrate's own reason and the remedy naming the
+// provider to correct. A physical node is not among them: it installs under the
+// trust and root selector its Machine declares.
 func TestUnsupportedNamesEveryClusterWithANodeThisContractCannotBoot(t *testing.T) {
 	installed := guest("sno-01", "198.51.100.21")
 	installed = installed.WithSpec(installed.Spec().WithPath(api.StringValue("rhel-9-8"), "os", "installProfileRef"))
