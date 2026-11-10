@@ -49,6 +49,7 @@ type HostPackages interface {
 	Present(ctx context.Context, requirements []string) ([]HostPackageEvidence, error)
 	Preview(ctx context.Context, missing []string) (HostPackagePreview, error)
 	Install(ctx context.Context, missing []string, output RunOutput) ([]HostPackageEvidence, error)
+	Snapshot(ctx context.Context) ([]InstalledPackage, error)
 }
 
 // WithPython holds the runtime's launch lock shared for the whole block and
@@ -256,7 +257,7 @@ type OwnedObject struct {
 }
 
 type HostPackageRemoval interface {
-	InstalledNames(ctx context.Context, names []string) ([]string, error)
+	Snapshot(ctx context.Context) ([]InstalledPackage, error)
 	EraseTest(ctx context.Context, names []string) error
 	RemovalPreview(ctx context.Context, names []string) (HostPackagePreview, error)
 	Remove(ctx context.Context, names []string, output RunOutput) error

@@ -1535,10 +1535,11 @@ given to clevis on standard input; it never reaches a request, evidence, a
 log, an argv or the installed disk.
 
 **Custody.** The Secret version bound to the installation is the disk's
-recovery secret: it is never renewed or replaced while the Machine exists. An
-apply never re-keys an installed disk and does not detect a changed value, and
-Bootwright offers no command that reveals a bound version, so the operator
-keeps the value the installation bound. The passphrase is effect material, so
+recovery secret. An apply never re-keys an installed disk and does not detect
+a changed value, and no command reveals a bound version, so while the binding
+lives `secret generate --renew` and `secret set` refuse to replace it
+([effect material under a live binding](secrets.md#effect-material-under-a-live-binding)),
+and the current version stays the value the installation bound. The passphrase is effect material, so
 the [access-credential rebind](state-reconciliation.md#access-credential-rebind)
 refuses it, as it refuses the fleet key and a delivered host key; a bare-metal
 target's management controller credentials are the access credential an

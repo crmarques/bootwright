@@ -39,3 +39,19 @@ type ContextConfirmer interface {
 type Compiler interface {
 	Compile(context.Context, desiredstate.Sources) (*compilation.State, *compilation.Report, error)
 }
+
+type HoldReader interface {
+	SecretHolds(context.Context, string) (Holds, error)
+}
+
+type Holds struct {
+	Bindings    []Hold
+	Registering bool
+}
+
+type Hold struct {
+	Binding   string
+	Operation string
+	Secrets   []string
+	All       bool
+}

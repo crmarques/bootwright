@@ -12,7 +12,7 @@ import (
 func secretCommands() []commandSpec {
 	return []commandSpec{
 		available(commandSpec{path: "secret set", short: "Store confidential material", flags: []flagSpec{nameFlag(), fileFlag("value-file", "Read a value from a file"), boolFlag("value-stdin", "Read a value from standard input"), stringFlag("username", "Store this username with a password"), fileFlag("password-file", "Read a password from a file"), boolFlag("password-stdin", "Read a password from standard input"), fileFlag("certificate-file", "Read a certificate or CA bundle from a file"), fileFlag("private-key-file", "Read a private key from a file"), fileFlag("public-key-file", "Read an SSH public key from a file"), confirmationFlag()}, long: "Store one declared contextStore secret using the exact input flags for its type. Stdin-backed replacement requires --yes."}),
-		available(commandSpec{path: "secret generate", short: "Generate declared secret material", flags: []flagSpec{stringFlag("name", "Select one generated secret (default: all)"), boolFlag("renew", "Renew selected generated material")}}),
+		available(commandSpec{path: "secret generate", short: "Generate declared secret material", flags: []flagSpec{stringFlag("name", "Select one generated secret (default: all)"), boolFlag("renew", "Renew selected generated material"), confirmationFlag()}, long: "Create missing or stale generated secrets; --renew replaces current ones after confirmation unless --yes. A Secret whose current version a live operation holds as effect material is refused when named and left unchanged otherwise."}),
 		available(commandSpec{path: "secret check", short: "Check secret availability and types"}),
 		available(commandSpec{path: "secret info", short: "Inspect secret identity and custody metadata", flags: []flagSpec{stringFlag("name", "Select comma-separated secret names (default: all)")}, long: "Show stored secret identity, parts, and custody metadata. --name takes a comma-separated list (default: all). This command reads metadata only; it never reads or reveals secret material."}),
 		available(commandSpec{path: "secret list", short: "List secret metadata"}),
@@ -54,9 +54,10 @@ func (s Services) invokeSecrets(ctx context.Context, path string, values *reques
 		return commandResult{secretMutation: result}, err
 	case "secret generate":
 		result, err := invokeResult(ctx, values, custody.GenerateRequest{
-			ContextName: values.text("context"),
-			Name:        values.text("name"),
-			Renew:       values.boolean("renew"),
+			ContextName:      values.text("context"),
+			Name:             values.text("name"),
+			Renew:            values.boolean("renew"),
+			SkipConfirmation: values.boolean("yes"),
 		}, s.Secrets.Generate)
 		return commandResult{secretMutation: result}, err
 	case "secret check":

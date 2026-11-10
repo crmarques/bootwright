@@ -946,8 +946,9 @@ must resolve to an IP literal, because the installer fetches the passphrase
 before it configures name resolution. The selected PCRs are sealed at the
 values measured while the installer runs, so a PCR that measures the boot
 loader, the kernel or its command line can leave the installed disk waiting on
-the console. The bound passphrase is the disk's recovery secret: keep the
-recovery Secret unchanged while the Machine exists.
+the console. The bound passphrase is the disk's recovery secret, which no
+renewal or replacement reaches while the Machine exists
+([effect material under a live binding](../secrets.md#effect-material-under-a-live-binding)).
 
 Any referenced install profile enables `sshd`; cross-field service and
 firewall requirements are checked before effective rendering.

@@ -129,8 +129,13 @@ discipline honours the same settings.
 
 `generate [--name] [--renew]` selects every effective generated declaration or
 one named generated declaration. Unknown/non-generated names fail before writes.
-Without renew, create missing/stale values; renew replaces the selected set with
-no extra prompt. Generate reports by name the generated Secrets it changed and
+Without renew, create missing/stale values. A renewal that would replace an
+existing current version is confirmed before the lease unless `--yes`, as a
+file-input replacement is: the prompt names every Secret it would replace, and
+under the lease the command refuses with `secret.store.conflict`, writing
+nothing, when any of those versions changed meanwhile. A Secret whose current
+version is [held as effect material](#effect-material-under-a-live-binding)
+is refused when named and skipped, reported unchanged, when not. Generate reports by name the generated Secrets it changed and
 those it left unchanged. `check` validates all declarations and their current keyring
 material. `list` reads metadata only; an uninitialized store is empty.
 `info [--name <list>]` reuses that same metadata listing and adds no material
@@ -344,6 +349,35 @@ including an orphan-acknowledged deletion, which abandons the context's realized
 objects but still removes its keyring. Recreating a name starts with a new
 keyring and never exposes prior keyring material;
 [native-side retention](#native-side-retention) lies outside the keyring.
+
+### Effect material under a live binding
+
+While a binding that no completed removal released holds an effect-material
+Secret's current version, nothing replaces that version, because no command
+reveals a bound version ([D160](milestones/backlog.md#d160)) and the current
+one is then the only copy the operator can read. `secret generate --renew` or
+a stale regeneration naming the Secret, and a `secret set` replacement,
+refuse with `secret.store.conflict` and write nothing, before any prompt or
+input read and again under the lease. The refusal names the Secret and the
+operation holding it, and its remedy takes the context back with
+`bootwright destroy --context <context>`, which releases the binding. An
+unnamed generation skips such a Secret and reports it unchanged.
+
+The lifecycle names the holds: each binding that the current operation, and
+the lineage it applies or takes back, names; and as its effect material every
+Secret a block of that operation references other than as an access
+credential it presents, the classes the
+[access-credential rebind](state-reconciliation.md#access-credential-rebind)
+reads. A block whose capability cannot name its Secrets holds every version
+its binding pins, and a `caBundle` is always a trust anchor. A binding no
+registered operation names holds every version it pins while an apply has
+raised its running evidence and is not yet registered, when the keyring did
+not list it yet as the command read the holds, before any prompt or input
+read, and whenever the lifecycle records cannot be read; beside a context at
+rest it holds nothing
+(`TestRenewRefusesALiveEffectMaterialBinding`,
+`TestAnUnnamedBindingHoldsWhileAnApplyRegisters`,
+`TestSecretHoldsNameTheEffectMaterialACompletedApplyBound`).
 
 ## Produced material
 
@@ -639,7 +673,7 @@ Failures use the `secret.*` codes of the
 envelope/exit/cancellation rules apply. Every refusal about a declared or named
 Secret carries the object `Secret/<name>`, for a valid name, and a remedy; a
 remedy that names a command binds it to the context with `--context`. A
-replacement or deletion declined at its prompt, or one no terminal can
+replacement, renewal or deletion declined at its prompt, or one no terminal can
 confirm, refuses with `secret.store.conflict`, writes nothing, and names
 `secret check` and then the same command with `--yes`. A missing
 or stale Secret's remedy is by its source: `secret generate --name <name>` for

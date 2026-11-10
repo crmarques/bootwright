@@ -158,6 +158,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	}
 	reconciler = wireLifecycle(deps.Lifecycle, deps.Controller, compiler, secrets.binder)
 	services.Lifecycle = reconciler
+	services.Secrets = secrets.binder.WithHolds(reconciler)
 	services.Logs = wireLogs(deps.Lifecycle)
 	machine := wireMachine(machineDependencies{
 		State: services.DesiredState, Lifecycle: reconciler, Trust: deps.Trust,

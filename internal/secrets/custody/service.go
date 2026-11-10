@@ -3,6 +3,7 @@ package custody
 import (
 	"context"
 	"crypto/subtle"
+	"maps"
 	"slices"
 	"strings"
 
@@ -16,6 +17,7 @@ type Service struct {
 	compiler  Compiler
 	material  Materializer
 	confirmer Confirmer
+	holds     HoldReader
 }
 
 func New(access StoreAccess, compiler Compiler, material Materializer, confirmer Confirmer) *Service {
@@ -43,15 +45,19 @@ func (s Service) Set(ctx context.Context, request SetRequest) (*MutationResult, 
 		return nil, err
 	}
 	result := &MutationResult{Context: selected, Name: request.Name, Parts: d.Parts()}
+	held := s.readHolds(ctx, selected)
 	switch {
 	case input.UsesStdin():
-		err = s.setFromStdin(ctx, selected, d, input, request.SkipConfirmation, result)
+		err = s.setFromStdin(ctx, selected, d, input, request.SkipConfirmation, held, result)
 	case !request.SkipConfirmation:
-		err = s.setConfirmed(ctx, selected, d, input, result)
+		err = s.setConfirmed(ctx, selected, d, input, held, result)
 	default:
 		err = s.access.Mutate(ctx, selected, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 			snapshot, err := session.Inspect(ctx)
 			if err != nil {
+				return err
+			}
+			if err := refuseHeld(held, snapshot, selected.Name, d.Name); err != nil {
 				return err
 			}
 			previous, exists := currentVersion(snapshot, request.Name)
@@ -72,7 +78,7 @@ func (s Service) Set(ctx context.Context, request SetRequest) (*MutationResult, 
 // setConfirmed confirms a file-input replacement with no store lock and no
 // context lease held, then proves under the lease that the version it asked
 // about is still the current one before it reads the files and writes.
-func (s Service) setConfirmed(ctx context.Context, selected secretstore.Context, d secrets.Declaration, input secrets.Input, result *MutationResult) error {
+func (s Service) setConfirmed(ctx context.Context, selected secretstore.Context, d secrets.Declaration, input secrets.Input, held holdIndex, result *MutationResult) error {
 	var seen secretstore.Version
 	existed := false
 	err := s.access.View(ctx, selected, false, func(session secretstore.StoreSession, _ secretstore.Selection) error {
@@ -84,7 +90,7 @@ func (s Service) setConfirmed(ctx context.Context, selected secretstore.Context,
 			return err
 		}
 		seen, existed = currentVersion(snapshot, d.Name)
-		return nil
+		return refuseHeld(held, snapshot, selected.Name, d.Name)
 	})
 	if err != nil {
 		return err
@@ -102,6 +108,9 @@ func (s Service) setConfirmed(ctx context.Context, selected secretstore.Context,
 		previous, exists := currentVersion(snapshot, d.Name)
 		if exists != existed || (exists && previous.ID != seen.ID) {
 			return changedMeanwhile(selected.Name, d.Name, "written")
+		}
+		if err := refuseHeld(held, snapshot, selected.Name, d.Name); err != nil {
+			return err
 		}
 		material, err := s.material.Acquire(ctx, d, input)
 		if err != nil {
@@ -123,7 +132,7 @@ func changedMeanwhile(contextName, name, outcome string) error {
 // being typed or piped blocks no other command. It decides under a shared read
 // whether a replacement needs --yes, and proves that again under the exclusive
 // lock before it writes.
-func (s Service) setFromStdin(ctx context.Context, selected secretstore.Context, d secrets.Declaration, input secrets.Input, yes bool, result *MutationResult) error {
+func (s Service) setFromStdin(ctx context.Context, selected secretstore.Context, d secrets.Declaration, input secrets.Input, yes bool, held holdIndex, result *MutationResult) error {
 	existed := false
 	err := s.access.View(ctx, selected, false, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 		if session == nil {
@@ -134,6 +143,9 @@ func (s Service) setFromStdin(ctx context.Context, selected secretstore.Context,
 			return err
 		}
 		_, existed = currentVersion(snapshot, d.Name)
+		if err := refuseHeld(held, snapshot, selected.Name, d.Name); err != nil {
+			return err
+		}
 		if existed && !yes {
 			return secrets.Refusal("input", "stdin replacement requires --yes before reading material", selected.Name, d.Name, "repeat the command with --yes after reviewing that Secret "+d.Name+" is replaced")
 		}
@@ -150,6 +162,9 @@ func (s Service) setFromStdin(ctx context.Context, selected secretstore.Context,
 	return s.access.Mutate(ctx, selected, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 		snapshot, err := session.Inspect(ctx)
 		if err != nil {
+			return err
+		}
+		if err := refuseHeld(held, snapshot, selected.Name, d.Name); err != nil {
 			return err
 		}
 		previous, exists := currentVersion(snapshot, d.Name)
@@ -216,10 +231,25 @@ func (s Service) Generate(ctx context.Context, request GenerateRequest) (*Mutati
 		return nil, err
 	}
 	result := &MutationResult{Context: selected, Name: request.Name}
+	held := s.readHolds(ctx, selected)
+	var confirmed map[string]string
+	if request.Renew && !request.SkipConfirmation {
+		if confirmed, err = s.confirmRenewal(ctx, selected, declarations, request, held); err != nil {
+			return nil, err
+		}
+	}
 	err = s.access.Mutate(ctx, selected, func(session secretstore.StoreSession, _ secretstore.Selection) error {
 		snapshot, err := session.Inspect(ctx)
 		if err != nil {
 			return err
+		}
+		replaced, err := replacements(snapshot, selected.Name, declarations, request, held)
+		if err != nil {
+			return err
+		}
+		if confirmed != nil && !maps.Equal(confirmed, replaced) {
+			maps.Copy(confirmed, replaced)
+			return changedMeanwhile(selected.Name, renewalSubject(confirmed), "renewed")
 		}
 		var writes []secretstore.Put
 		materialBytes := 0
@@ -236,7 +266,11 @@ func (s Service) Generate(ctx context.Context, request GenerateRequest) (*Mutati
 				continue
 			}
 			previous, exists := currentVersion(snapshot, d.Name)
-			if exists && previous.Declaration.Fingerprint == d.Fingerprint && !(request.Renew && (request.Name == "" || request.Name == d.Name)) {
+			if exists && previous.Declaration.Fingerprint == d.Fingerprint && !renews(request, d) {
+				result.UnchangedNames = append(result.UnchangedNames, d.Name)
+				continue
+			}
+			if _, refused := held.holder(snapshot, d.Name); refused {
 				result.UnchangedNames = append(result.UnchangedNames, d.Name)
 				continue
 			}

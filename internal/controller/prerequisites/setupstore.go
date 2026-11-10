@@ -6,7 +6,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-const SetupStateFormat = "bootwright.setup-state-v1"
+const SetupStateFormat = "bootwright.setup-state-v2"
 
 const PresentBeforeBootwright = "present before bootwright"
 
@@ -24,19 +24,21 @@ type SetupState struct {
 }
 
 type PendingSetup struct {
-	Requested  []string `json:"requested"`
-	ID         string   `json:"id"`
-	PlanDigest string   `json:"planDigest"`
-	Actions    []string `json:"actions"`
-	StartedAt  string   `json:"startedAt"`
+	Requested  []string           `json:"requested"`
+	ID         string             `json:"id"`
+	PlanDigest string             `json:"planDigest"`
+	Actions    []string           `json:"actions"`
+	StartedAt  string             `json:"startedAt"`
+	Added      []InstalledPackage `json:"added"`
 }
 
 type HostReceipt struct {
-	Platform ReceiptPlatform  `json:"platform"`
-	Lock     string           `json:"lock"`
-	Runtime  ReceiptRuntime   `json:"runtime"`
-	Closure  string           `json:"closure"`
-	Packages []ReceiptPackage `json:"packages"`
+	Platform ReceiptPlatform    `json:"platform"`
+	Lock     string             `json:"lock"`
+	Runtime  ReceiptRuntime     `json:"runtime"`
+	Closure  string             `json:"closure"`
+	Packages []ReceiptPackage   `json:"packages"`
+	Added    []InstalledPackage `json:"added"`
 }
 
 type ReceiptPlatform struct {

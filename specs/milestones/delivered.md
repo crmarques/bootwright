@@ -13182,3 +13182,47 @@ time pool stays beside the selected servers ([B1268](backlog.md#b1268)); the
 controller's image build trusts its own store alone ([B1269](backlog.md#b1269)); the
 live proof is [B1250](backlog.md#b1250).
 
+### X349 — Holds, uninstall
+
+**Items:** B1255 and B1256 (2026-11-10, [D252](backlog.md#d252)), delivered
+in-tree. **Kind:** safety. **Owners:** Secrets, with State reconciliation
+(B1255); Controller, with Contexts (B1256).
+
+B1255: while a binding no completed removal released holds an effect-material
+Secret's current version, a named `secret generate --renew` or stale
+regeneration and a `secret set` replacement refuse with
+`secret.store.conflict`, naming the Secret, the holding operation and destroy,
+and write nothing; an unnamed generation reports it unchanged
+([effect material under a live binding](../secrets.md#effect-material-under-a-live-binding)).
+The lifecycle's `SecretHolds` names each binding of the current operation's
+lineage and the Secrets its blocks reference other than as an access
+credential; custody reads it before the store lock and checks it against the
+keyring under the lease. A renewal that replaces a current version asks
+first unless `--yes`, which `secret generate` now takes.
+
+B1256: the install receipt (`bootwright.setup-state-v2`, no converter) records
+each install transaction's added set from two `rpm -qa` snapshots under the
+install lock; uninstall erase-tests and removes exactly its still-installed
+members with `--setopt=clean_requirements_on_remove=False`, proves the result
+from two more snapshots, and reads dnf's preview as display text only. Both
+controller-record remedies name `controller uninstall`, and security.md's
+package-transaction carve-out is gone.
+
+| Finding | Change |
+| --- | --- |
+| REC-12 | `custody.Holds`, `holdIndex.holder`, the guards in `Set` and `Generate`; `lifecycle.SecretHolds`; secrets.md, commands.md, managed-os.md Custody and api/machines.md cite the rule |
+| CLI-22 | `confirmRenewal` and the lease re-proof; `--yes` on `secret generate`; secrets.md's declined-confirmation sentence names renewals |
+| REC-08 | `InstalledPackage`, `TransactionAdded`, `HostReceipt.Added`, `PendingSetup.Added`; `hostdnf.Snapshot`; uninstall removes `stillAdded` with dependency cleanup disabled; `previewNames` deleted; controller.md and controller-record.md |
+| REC-05 | `toolSourcesRemedy` and `controllerVersionRemedy` name `controller uninstall`; controller-record.md says uninstall reads no controller record |
+| REC-04 | security.md defers a controller run's cancellation to the adapter result protocol |
+
+The audit's unnamed-binding case is narrowed: a binding no registered
+operation names holds its versions only while an apply is registering or the
+records cannot be read, so a context at rest renews freely; a binding the
+keyring did not list when the command read the holds is held too (found by
+the independent review). Parked: [B1270](backlog.md#b1270) and
+[B1271](backlog.md#b1271).
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred; no `rpm` or `dnf` ran here, so the snapshot format and the
+`clean_requirements_on_remove` option are proved against fakes only.

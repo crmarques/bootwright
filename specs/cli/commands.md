@@ -98,7 +98,7 @@ by a related noun, and `--short` is the one flag that prints names only.
 | `bootwright add-ons list` | none | built-in packages, their capabilities, OLM package, default source and configuration members | read executable registry |
 | `bootwright add-ons info` | required `--name <package>`; an unknown name refuses | [one package described](../add-ons.md#the-package-listing) | read executable registry |
 | `bootwright secret set` | required `--name`; type-specific `--value-file`, `--value-stdin`, `--username`, `--password-file`, `--password-stdin`, `--certificate-file`, `--private-key-file`, `--public-key-file` under [Secrets](../secrets.md); `--yes` false | stored identity and parts, never values | local confidential write |
-| `bootwright secret generate` | optional `--name`; `--renew` false | changed and unchanged Secret names | atomic selected generated-material batch |
+| `bootwright secret generate` | optional `--name`; `--renew` false; `--yes` false | changed and unchanged Secret names | atomic selected generated-material batch |
 | `bootwright secret check` | none | declared availability/type checks | bounded material reads; no values emitted |
 | `bootwright secret list` | none | context secret identities, types, parts, and availability | read confidential-store metadata |
 | `bootwright secret info` | `--name <list>` default all; an unknown name refuses | selected secret identity, parts, state, version and binding metadata | read confidential-store metadata only; no material read or availability check |
@@ -544,4 +544,8 @@ Secret, media, and add-on mutation obeys the immutable binding and external-
 content rules in state reconciliation. A set, renewal, replacement, or
 deletion refuses while an incomplete operation or completed-apply snapshot
 needs the existing version, unless that exact version remains durably
-available for continuation and destroy.
+available for continuation and destroy. A bound version of effect material
+stays available but no command reveals it, so a renewal or replacement of a
+Secret whose current version a live binding holds as effect material refuses
+even then, as [effect material under a live binding](../secrets.md#effect-material-under-a-live-binding)
+states.

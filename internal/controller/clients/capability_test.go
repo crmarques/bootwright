@@ -197,6 +197,10 @@ func (f *fakeDnf) Preview(_ context.Context, missing []string) (prerequisites.Ho
 	return prerequisites.HostPackagePreview{Text: "Installing: " + strings.Join(missing, " ") + "\n"}, nil
 }
 
+func (f *fakeDnf) Snapshot(context.Context) ([]prerequisites.InstalledPackage, error) {
+	return nil, nil
+}
+
 func (f *fakeDnf) Install(_ context.Context, missing []string, output prerequisites.RunOutput) ([]prerequisites.HostPackageEvidence, error) {
 	f.record("install", missing)
 	f.output = output

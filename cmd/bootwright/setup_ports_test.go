@@ -65,6 +65,10 @@ func (p *setupPorts) Preview(context.Context, []string) (prerequisites.HostPacka
 	return prerequisites.HostPackagePreview{}, errors.New("unexpected dnf preview")
 }
 
+func (p *setupPorts) Snapshot(context.Context) ([]prerequisites.InstalledPackage, error) {
+	return []prerequisites.InstalledPackage{}, nil
+}
+
 func (p *setupPorts) Install(context.Context, []string, prerequisites.RunOutput) ([]prerequisites.HostPackageEvidence, error) {
 	p.effects++
 	return nil, errors.New("unexpected dnf install")

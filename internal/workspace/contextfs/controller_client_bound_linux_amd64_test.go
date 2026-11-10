@@ -70,7 +70,8 @@ func TestToolSourcesPastTheBoundNameTheFreshStoreExit(t *testing.T) {
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || reported[0].Code != "controller.conflict" ||
 		!strings.Contains(reported[0].Remediation, "run this context's controller stage on another controller host") ||
-		!strings.Contains(reported[0].Remediation, "remove /var/lib/bootwright and run bootwright controller install") {
+		!strings.Contains(reported[0].Remediation, "then run bootwright controller uninstall --keep-packages and bootwright controller install") ||
+		strings.Contains(reported[0].Remediation, "remove /var/lib") {
 		t.Fatalf("a tool source past the bound reported %+v", reported)
 	}
 }

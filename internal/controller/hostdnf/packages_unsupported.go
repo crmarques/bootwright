@@ -43,7 +43,7 @@ func (*Packages) Install(ctx context.Context, _ []string, _ prerequisites.RunOut
 	return nil, unsupported(ctx)
 }
 
-func (*Packages) InstalledNames(ctx context.Context, _ []string) ([]string, error) {
+func (*Packages) Snapshot(ctx context.Context) ([]prerequisites.InstalledPackage, error) {
 	return nil, unsupported(ctx)
 }
 

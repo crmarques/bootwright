@@ -108,9 +108,12 @@ version is not read, and no build converts one. A controller read and every
 context transaction refuse with `context.state`, "controller evidence version
 N is unsupported: this build reads version M only and converts none", M being
 `ControllerRecordVersion`, and the fresh-install remedy: with a build that reads the
-record, destroy each environment and delete each context, then, as root,
-remove `/var/lib/bootwright` and `/var/lib/bootwright-staging` and run
-`bootwright controller install`. No command rebuilds the record alone: it is
+record, destroy each environment and delete each context, then run this
+build's `bootwright controller uninstall --discard-unreadable` and
+`bootwright controller install`. Uninstall never reads the controller record,
+so one of another version does not stop it, and the discard is accepted
+because the store is readable and holds no context
+([uninstall flow](../controller.md#the-uninstall-flow)). No command rebuilds the record alone: it is
 published by the first binding of an apply on a root that holds none, and a
 root holding one never gets a second. The fresh install also drops the host's
 contexts with their Secrets and its stored media, which `bootwright context init`
@@ -157,8 +160,9 @@ host (`TestAClientAreaAtTheBoundNamesItsRemedy`,
 would pass 4096 refuses with `controller.conflict`, saying that no command of
 this build frees a retained tool source, and names the two exits: run this
 context's controller stage on another controller host, or start this host
-afresh by destroying every environment and deleting every context on it, then,
-as root, removing `/var/lib/bootwright` and running `bootwright controller install`
+afresh by destroying every environment and deleting every context on it, then
+running `bootwright controller uninstall --keep-packages` and
+`bootwright controller install`
 (`TestToolSourcesPastTheBoundNameTheFreshStoreExit`).
 
 A tool area is bounded to 8 GiB total,
@@ -233,15 +237,19 @@ never wait for it and refuse a held lock as busy; a launch's
 polling so that cancellation ends the wait.
 
 `state.json` is the canonical record whose version is `prerequisites.SetupStateFormat`
-(in `internal/controller/prerequisites/setupstore.go`), at most 256 KiB. Its
-`pending` member, `{id, planDigest, actions, startedAt, requested}`, is
+(in `internal/controller/prerequisites/setupstore.go`), at most 1 MiB. Its
+`pending` member, `{id, planDigest, actions, startedAt, requested, added}`, is
 written and synchronized before setup's first effect and cleared with the
 receipt it writes last. The `receipt` holds the platform (`id`, `versionId`,
 `like`, `architecture`, `glibc`, `tested`), the lock digest, the runtime
 (`digest`, `interpreter`, `python`, `abi`, `ansibleCore`), the closure digest
 and the packages, each with its requirement, what requires it, the provider's
 NEVRA, its repository and `installedBy`, a setup run ID or
-`present before bootwright`. `requested` freezes the requirements absent before
+`present before bootwright`, and `added`, the
+[packages its install transactions added](../controller.md#host-packages),
+each `{nevra, installTime}`, sorted by NEVRA and at most 1024, which alone
+decides what uninstall removes; `pending.added` holds the set of a package
+step that completed before the receipt. `requested` freezes the requirements absent before
 this setup's package transaction. A resumed setup retains that intent and its
 original ID until it writes the receipt, attributing newly present requested
 providers to that ID. A subsequent setup carries forward every still-installed

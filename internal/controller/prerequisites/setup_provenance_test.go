@@ -18,10 +18,11 @@ func TestSetupRetainsOriginalPackageProvenanceAcrossProviderUpdates(t *testing.T
 		{Requirement: "podman", Provider: "podman-0:1.0-1.x86_64", InstalledBy: "install-000042"},
 		{Requirement: "python3.14", Provider: provider("python3.14"), InstalledBy: "install-000042"},
 	}
+	f.store.view.State.Receipt.Added = []InstalledPackage{{NEVRA: "podman-0:1.0-1.x86_64", InstallTime: 1750000000}, {NEVRA: provider("python3.14"), InstallTime: 1750000000}}
 	if _, err := f.service.Setup(context.Background(), SetupRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	owned, _, err := receiptNames(f.store.view, false)
+	owned, err := addedNames(f.store.view)
 	if err != nil || !slices.Contains(owned, "podman") || !slices.Contains(owned, "python3.14") {
 		t.Fatalf("owned packages = %v, %v; receipt %+v", owned, err, f.store.view.State.Receipt.Packages)
 	}
@@ -48,7 +49,7 @@ func TestInterruptedSetupKeepsTheOriginalPackageIntentUntilReceipt(t *testing.T)
 	if _, err := f.service.Setup(context.Background(), SetupRequest{}); err != nil {
 		t.Fatal(err)
 	}
-	owned, _, err := receiptNames(f.store.view, false)
+	owned, err := addedNames(f.store.view)
 	if err != nil || !slices.Contains(owned, "openssh-clients") {
 		t.Fatalf("resumed owned packages = %v (%v)", owned, err)
 	}
@@ -67,7 +68,7 @@ func TestSetupCanDiscardUnavailableRunOutputWithoutLosingReceipt(t *testing.T) {
 	if err != nil || report.Outcome != "changed" || report.LogLocation != "" {
 		t.Fatalf("setup = %+v (%v)", report, err)
 	}
-	owned, _, err := receiptNames(f.store.view, false)
+	owned, err := addedNames(f.store.view)
 	if err != nil || !slices.Contains(owned, "openssh-clients") {
 		t.Fatalf("unlogged receipt lost ownership: %v (%v)", owned, err)
 	}
@@ -148,5 +149,31 @@ func TestSetupReportsItsRunID(t *testing.T) {
 	report, err = f.service.Setup(context.Background(), SetupRequest{})
 	if err != nil || report.SetupRun != "" || report.LogLocation != "" {
 		t.Fatalf("a setup that retained nothing names %q (%v)", report.SetupRun, err)
+	}
+}
+
+func addedNames(view SetupView) ([]string, error) {
+	added, _, err := receiptNames(view, false)
+	names := []string{}
+	for _, item := range added {
+		name, _ := providerName(item.NEVRA)
+		names = append(names, name)
+	}
+	return names, err
+}
+
+// The receipt records what the install transaction added, a dependency it
+// pulled in included, and never a package already on the host.
+func TestTheReceiptRecordsWhatTheInstallTransactionAdded(t *testing.T) {
+	f := newSetupFixture(t)
+	f.packages.present["openssh-clients"] = false
+	f.packages.present["libnet"] = true
+	f.packages.pulls = map[string][]string{"openssh-clients": {"libfido2"}}
+	if _, err := f.service.Setup(context.Background(), SetupRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	added, err := addedNames(f.store.view)
+	if err != nil || !slices.Equal(added, []string{"libfido2", "openssh-clients"}) {
+		t.Fatalf("added = %q (%v)", added, err)
 	}
 }

@@ -1,5 +1,5 @@
 {
-  "format": "bootwright.setup-state-v1",
+  "format": "bootwright.setup-state-v2",
   "pending": {
     "requested": [
       "podman",
@@ -11,7 +11,17 @@
       "runtime",
       "receipt"
     ],
-    "startedAt": "2026-10-14T09:00:00Z"
+    "startedAt": "2026-10-14T09:00:00Z",
+    "added": [
+      {
+        "nevra": "containers-common-5:0.64.2-1.fc44.noarch",
+        "installTime": 1760432400
+      },
+      {
+        "nevra": "podman-5:5.8.1-1.fc44.x86_64",
+        "installTime": 1760432400
+      }
+    ]
   },
   "receipt": {
     "platform": {
@@ -47,6 +57,12 @@
         "provider": "openssh-clients-10.2p1-1.fc44.x86_64",
         "repository": "@System",
         "installedBy": "present before bootwright"
+      }
+    ],
+    "added": [
+      {
+        "nevra": "python3.14-0:3.14.8-1.fc44.x86_64",
+        "installTime": 1760000000
       }
     ]
   },

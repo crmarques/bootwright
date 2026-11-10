@@ -14,7 +14,7 @@ func TestPublicCatalog(t *testing.T) {
 	expected := map[string]string{
 		"context init": "file input-dir name", "context update": "file input-dir name yes", "context use": "name", "context list": "", "context current": "short", "context delete": "allow-orphans name purge yes",
 		"add-ons list": "", "add-ons info": "name",
-		"secret set": "certificate-file name password-file password-stdin private-key-file public-key-file username value-file value-stdin yes", "secret generate": "name renew", "secret check": "", "secret list": "", "secret info": "name", "secret show": "name part", "secret delete": "name yes",
+		"secret set": "certificate-file name password-file password-stdin private-key-file public-key-file username value-file value-stdin yes", "secret generate": "name renew yes", "secret check": "", "secret list": "", "secret info": "name", "secret show": "name part", "secret delete": "name yes",
 		"secret encryption init": "", "secret encryption status": "", "secret encryption rotate": "yes",
 		"media add": "from-file from-url from-url-file name sha256 yes", "media list": "checksums", "media delete": "name yes",
 		"validate": "file", "preflight": "clusters dry-run stage trust-on-first-use",

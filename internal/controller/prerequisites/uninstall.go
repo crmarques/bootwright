@@ -70,7 +70,7 @@ type uninstallInspection struct {
 	discard  bool
 	packages []string
 	before   []string
-	kept     []string
+	kept     []InstalledPackage
 }
 
 func (i uninstallInspection) empty() bool {
@@ -195,10 +195,11 @@ func (s Service) inspectUninstall(ctx context.Context, view UninstallView, reque
 		inspection.kept = added
 	case request.DiscardUnreadable:
 	case len(added) != 0:
-		installed, err := removal.InstalledNames(ctx, added)
+		snapshot, err := removal.Snapshot(ctx)
 		if err != nil {
 			return inspection, err
 		}
+		installed := stillAdded(snapshot, added)
 		if len(installed) != 0 {
 			if err := removal.EraseTest(ctx, installed); err != nil {
 				return inspection, err
@@ -207,6 +208,21 @@ func (s Service) inspectUninstall(ctx context.Context, view UninstallView, reque
 		inspection.packages = installed
 	}
 	return inspection, nil
+}
+
+func stillAdded(snapshot, added []InstalledPackage) []string {
+	ours := map[string]bool{}
+	for _, item := range added {
+		ours[packageIdentity(item)] = true
+	}
+	installed := []string{}
+	for _, item := range snapshot {
+		if argument := PackageArgument(item); argument != "" && ours[packageIdentity(item)] && !slices.Contains(installed, argument) {
+			installed = append(installed, argument)
+		}
+	}
+	slices.Sort(installed)
+	return installed
 }
 
 func (s Service) ownedObjectsGone(ctx context.Context) error {
@@ -226,8 +242,8 @@ func (s Service) ownedObjectsGone(ctx context.Context) error {
 		"destroy the context that owns each with a build that reads it (bootwright destroy --context <name>), or remove each by hand, then run "+uninstallInvocation+" again")
 }
 
-func receiptNames(setup SetupView, keep bool) ([]string, []string, error) {
-	refuse := func(message string) ([]string, []string, error) {
+func receiptNames(setup SetupView, keep bool) ([]InstalledPackage, []string, error) {
+	refuse := func(message string) ([]InstalledPackage, []string, error) {
 		return nil, nil, failure(uninstallCode, message+", so the host packages it added are not known",
 			"run bootwright controller install, then run "+uninstallInvocation+" again; or pass --keep-packages to leave every host package")
 	}
@@ -237,30 +253,23 @@ func receiptNames(setup SetupView, keep bool) ([]string, []string, error) {
 	if !keep && setup.State.Pending != nil {
 		return refuse("an earlier install (" + setup.State.Pending.ID + ") was interrupted before it recorded what it installed")
 	}
-	added, before := []string{}, []string{}
+	before := []string{}
 	if setup.Foreign != "" || setup.State.Receipt == nil {
-		return added, before, nil
+		return []InstalledPackage{}, before, nil
 	}
 	for _, item := range setup.State.Receipt.Packages {
 		name, ok := providerName(item.Provider)
-		if !ok {
-			if keep {
-				continue
-			}
-			return refuse("the install record names a package this build cannot read")
-		}
-		target := &added
-		if item.InstalledBy == PresentBeforeBootwright || item.InstalledBy == "" {
-			target = &before
-		}
-		if !slices.Contains(*target, name) {
-			*target = append(*target, name)
+		if ok && (item.InstalledBy == PresentBeforeBootwright || item.InstalledBy == "") && !slices.Contains(before, name) {
+			before = append(before, name)
 		}
 	}
-	added = slices.DeleteFunc(added, func(name string) bool { return slices.Contains(before, name) })
-	slices.Sort(added)
+	for _, item := range setup.State.Receipt.Added {
+		if !ValidInstalledPackage(item) && !keep {
+			return refuse("the install record names a package this build cannot read")
+		}
+	}
 	slices.Sort(before)
-	return added, before, nil
+	return MergeAdded(setup.State.Receipt.Added), before, nil
 }
 
 func providerName(provider string) (string, bool) {
@@ -277,69 +286,45 @@ func providerName(provider string) (string, bool) {
 }
 
 func (s Service) removalPreview(ctx context.Context, removal HostPackageRemoval, inspected uninstallInspection) (HostPackagePreview, error) {
-	preview, err := removal.RemovalPreview(ctx, inspected.packages)
-	if err != nil {
-		return HostPackagePreview{}, err
-	}
-	named := previewNames(preview, inspected.before)
-	if len(named) != 0 {
-		return HostPackagePreview{}, failure(uninstallCode, "dnf would also remove packages present before Bootwright: "+strings.Join(named, ", "),
-			"pass --keep-packages to leave every host package, or remove the packages install added yourself")
-	}
-	return preview, nil
-}
-
-func previewNames(preview HostPackagePreview, before []string) []string {
-	if preview.Truncated {
-		return slices.Clone(before)
-	}
-	named := []string{}
-	for _, field := range strings.Fields(preview.Text) {
-		for _, name := range before {
-			if field == name || strings.HasPrefix(field, name+".") || strings.HasPrefix(field, name+"-") && len(field) > len(name)+1 &&
-				field[len(name)+1] >= '0' && field[len(name)+1] <= '9' {
-				if !slices.Contains(named, name) {
-					named = append(named, name)
-				}
-			}
-		}
-	}
-	slices.Sort(named)
-	return named
+	return removal.RemovalPreview(ctx, inspected.packages)
 }
 
 func (s Service) removePackages(ctx context.Context, removal HostPackageRemoval, inspected uninstallInspection, output RunOutput) error {
-	if _, err := s.removalPreview(ctx, removal, inspected); err != nil {
+	before, err := removal.Snapshot(ctx)
+	if err != nil {
 		return err
-	}
-	kept := []string{}
-	if len(inspected.before) != 0 {
-		var err error
-		if kept, err = removal.InstalledNames(ctx, inspected.before); err != nil {
-			return err
-		}
 	}
 	names := inspected.packages
 	if err := removal.Remove(ctx, names, output); err != nil {
 		return err
 	}
-	still, err := removal.InstalledNames(ctx, names)
+	after, err := removal.Snapshot(ctx)
 	if err != nil {
 		return err
 	}
+	present := map[string]bool{}
+	for _, item := range after {
+		present[PackageArgument(item)] = true
+	}
+	still, gone := []string{}, []string{}
+	for _, name := range names {
+		if present[name] {
+			still = append(still, name)
+		}
+	}
+	for _, item := range before {
+		if argument := PackageArgument(item); !present[argument] && !slices.Contains(names, argument) && !slices.Contains(gone, argument) {
+			gone = append(gone, argument)
+		}
+	}
+	slices.Sort(gone)
 	if len(still) != 0 {
 		return failure(uninstallCode, "dnf did not remove "+strings.Join(still, ", "),
 			"review the host's dnf configuration, then run "+uninstallInvocation+" again")
 	}
-	if len(kept) != 0 {
-		remaining, err := removal.InstalledNames(ctx, kept)
-		if err != nil {
-			return err
-		}
-		if gone := slices.DeleteFunc(slices.Clone(kept), func(name string) bool { return slices.Contains(remaining, name) }); len(gone) != 0 {
-			return failure(uninstallCode, "dnf also removed packages present before Bootwright: "+strings.Join(gone, ", "),
-				"reinstall them with dnf, then run "+uninstallInvocation+" again to remove the state")
-		}
+	if len(gone) != 0 {
+		return failure(uninstallCode, "dnf also removed packages no install transaction added: "+strings.Join(gone, ", "),
+			"reinstall them with dnf, then run "+uninstallInvocation+" again to remove the state")
 	}
 	return nil
 }
@@ -406,8 +391,8 @@ func (i uninstallInspection) keptText() []string {
 	for _, name := range i.before {
 		kept = append(kept, name+" (present before bootwright)")
 	}
-	for _, name := range i.kept {
-		kept = append(kept, name+" (install added it; --keep-packages keeps it)")
+	for _, item := range i.kept {
+		kept = append(kept, item.NEVRA+" (install added it; --keep-packages keeps it)")
 	}
 	if i.discard {
 		kept = append(kept, "every host package: --discard-unreadable removes none")

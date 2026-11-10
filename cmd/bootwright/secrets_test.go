@@ -171,7 +171,7 @@ func secretCommandAndBindingJourney(t *testing.T, implementation string) {
 	}
 	addSecretInput(t, filepath.Dir(opaque), filepath.Base(opaque), "replacement-canary")
 	contextRun(t, services, 0, "secret", "set", "--name", "opaque", "--value-file", opaque, "--yes")
-	contextRun(t, services, 0, "secret", "generate", "--name", "token", "--renew")
+	contextRun(t, services, 0, "secret", "generate", "--name", "token", "--renew", "--yes")
 	contextRun(t, services, 0, "secret", "delete", "--name", "opaque", "--yes")
 	contextRun(t, services, 0, "secret", "delete", "--name", "opaque", "--yes")
 	// New desired state may orphan/remove names; an exact continuation still

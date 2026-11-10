@@ -307,12 +307,9 @@ process group once the adapter is reaped or the 5-second drain passes,
 whichever comes first. A group kill alone never reaches a worker in a session
 of its own, and sent first it would end the supervisor before its handler ran.
 A controller run arms no parent-death signal, so its tree outlives its
-invocation, but its supervisor carries the same termination handler.
-Cancellation or a deadline before a native package transaction is authorized
-ends the tree the lifecycle way, with the 60-second drain. Once the
-transaction's acknowledgement is delivered, nothing is signaled or killed: it
-runs to its end, and the adapter stops at its next acknowledgement, which fails
-once the invocation's ends of the channels close.
+invocation; its supervisor carries the same termination handler, and its
+cancellation, deadline and drain follow the
+[adapter result protocol](architecture.md#the-adapter-result-protocol).
 
 Each lifecycle adapter invocation owns a job directory `bootwright-run-<n>`
 beneath `/run`, which holds its lent material and never survives a reboot, and

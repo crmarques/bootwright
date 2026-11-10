@@ -118,6 +118,7 @@ type hostPackages struct {
 	present map[string]bool
 	refuse  map[string]bool
 	preview string
+	pulls   map[string][]string
 }
 
 func (p *hostPackages) Qualify(context.Context) error {
@@ -166,11 +167,24 @@ func (p *hostPackages) Preview(_ context.Context, missing []string) (HostPackage
 	return HostPackagePreview{Text: p.preview, Notes: []string{"this install also adds or updates core packages (glibc); dnf applies it as for any package install"}}, nil
 }
 
+func (p *hostPackages) Snapshot(context.Context) ([]InstalledPackage, error) {
+	installed := []InstalledPackage{}
+	for requirement, present := range p.present {
+		if present {
+			installed = append(installed, InstalledPackage{NEVRA: provider(requirement), InstallTime: 1760000000})
+		}
+	}
+	return installed, nil
+}
+
 func (p *hostPackages) Install(_ context.Context, missing []string, _ RunOutput) ([]HostPackageEvidence, error) {
 	p.owner.record("install " + strings.Join(missing, ","))
 	evidence := []HostPackageEvidence{}
 	for _, requirement := range missing {
 		p.present[requirement] = true
+		for _, dependency := range p.pulls[requirement] {
+			p.present[dependency] = true
+		}
 		evidence = append(evidence, HostPackageEvidence{Requirement: requirement, Package: provider(requirement), Repository: "fedora"})
 	}
 	return evidence, nil

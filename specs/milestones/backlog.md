@@ -308,6 +308,9 @@ Alias cell.
 | [B1267](#b1267) | new, 2026-11-10 (X348, audit 004 REC-74) | safety | Substrate and Machine, with Infrastructure services | A context driving a server by its BMC and one reaching it another way, or naming it by a UUID its BMC has not reported yet, conflict | Needs a cross-mechanism machine identity whose byte order is settled first |
 | [B1268](#b1268) | new, 2026-11-10 (D251 (7)) | product | Container cluster | Under the image mirror, a node's default time pool is replaced by the selected time servers | The agent install adds time sources beside the pool, and its manifest path admits only the Network kind, so no MachineConfig replaces it |
 | [B1269](#b1269) | new, 2026-11-10 (X357 review) | product | Container cluster | The controller's image build verifies a mirror against the cluster's selected trust bundles | The installer's own release extraction may read only the controller's trust store; B1250's run shows which |
+| [B1270](#b1270) | new, 2026-11-10 (X349) | defect | Secrets, with State reconciliation | Each capability names the class of every Secret it references, so a live binding holds only effect material | Safe as it stands: an unclassified reference is held as effect material, so a renewal refuses more than the class rule requires |
+| [B1271](#b1271) | new, 2026-11-10 (X349 review) | defect | Controller | A package step that fails after dnf ran still records what its transaction added | Safe as it stands: the set is not recorded, so uninstall leaves those packages and never removes one it did not prove added |
+| [B1272](#b1272) | new, 2026-11-10 (X349 second review) | defect | Controller | The added package set stays within its bound and names only what Bootwright's transaction installed | Safe as it stands: the erase test keeps dependents, and a bound hit refuses before any removal |
 
 ### B82
 
@@ -3510,6 +3513,49 @@ no UUID as [D252](#d252) (2) settles, would also close the pin-less power case;
 that widening is the owner's choice.
 **Exit evidence:** a conflict test of an SSH placement on a server another
 context drives by its BMC.
+
+### B1270
+
+**Owner:** Secrets, with State reconciliation. **Kind:** defect. **Requires:**
+none. **Definition:** Candidate, from
+[X349](delivered.md#x349--holds-uninstall): the
+[effect-material hold](../secrets.md#effect-material-under-a-live-binding)
+reads every referenced Secret that a capability does not name as an access
+credential as effect material, except a `caBundle`, so a `known_hosts` trust
+anchor and the SSH key of a capability with no access-credential reader (the
+libvirt arms among them) refuse a named renewal or replacement while bound.
+**Outcome:** each capability names the access credentials and trust anchors
+it references, and the hold covers effect material alone. **Exit evidence:**
+a hold test over a libvirt host block naming its SSH key and `known_hosts`
+entry.
+
+### B1271
+
+**Owner:** Controller. **Kind:** defect. **Requires:** none. **Definition:**
+Candidate, from the independent review of
+[X349](delivered.md#x349--holds-uninstall): the install computes its
+[added set](../controller.md#host-packages) from snapshots taken around dnf
+and records it only when the package step completes, so a step that fails
+after dnf ran (the after-snapshot, a presence re-read or cancellation) loses
+the set and a resumed install counts those packages as present before.
+**Outcome:** the pending intent records the package identities held before
+the transaction, within its bound, and a resumed step diffs against them.
+**Exit evidence:** a setup test that fails after dnf and resumes with the set
+intact.
+
+### B1272
+
+**Owner:** Controller. **Kind:** defect. **Requires:** none. **Definition:**
+Candidate, from the second independent review of
+[X349](delivered.md#x349--holds-uninstall): a receipt carries every earlier
+install's added set forward without pruning what is gone, so many installs can
+reach the 1024-entry bound and `controller install` then fails with no remedy;
+a package another tool installs between the snapshots around dnf, or one an
+operator removed and reinstalled, counts as Bootwright's, because the recorded
+install time is never compared. **Outcome:** a carried set drops members no
+longer installed, the bound's refusal names a remedy, and a member whose
+install time differs from the snapshot is not removed. **Exit evidence:** setup
+tests over a pruned carry-forward and a reinstalled package.
 
 ## Audit remediation (2026-10-26)
 

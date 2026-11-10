@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -195,13 +196,14 @@ func (s Service) apply(ctx context.Context, tx SetupTransaction, current *inspec
 	state.Format = SetupStateFormat
 	requested := slices.Clone(current.requested())
 	started := s.now()
+	var added []InstalledPackage
 	if state.Pending != nil {
-		id, started = state.Pending.ID, state.Pending.StartedAt
+		id, started, added = state.Pending.ID, state.Pending.StartedAt, state.Pending.Added
 		requested = append(requested, state.Pending.Requested...)
 	}
 	slices.Sort(requested)
 	requested = slices.Compact(requested)
-	state.Pending = &PendingSetup{ID: id, PlanDigest: current.planDigest(s.ports.Lock), Actions: slices.Clone(steps), StartedAt: started, Requested: requested}
+	state.Pending = &PendingSetup{ID: id, PlanDigest: current.planDigest(s.ports.Lock), Actions: slices.Clone(steps), StartedAt: started, Requested: requested, Added: MergeAdded(added)}
 	current.report.Progress = make([]ActionProgress, len(steps))
 	for index, step := range steps {
 		current.report.Progress[index] = ActionProgress{ID: step, Phase: "planned"}
@@ -219,7 +221,11 @@ func (s Service) apply(ctx context.Context, tx SetupTransaction, current *inspec
 		var err error
 		switch step {
 		case packagesStep:
-			installed, err = s.install(ctx, current, run)
+			var added []InstalledPackage
+			if installed, added, err = s.install(ctx, current, run); err == nil {
+				state.Pending.Added = MergeAdded(state.Pending.Added, added)
+				err = addedBound(state.Pending.Added)
+			}
 		case runtimeStep:
 			err = s.prepareRuntime(ctx, tx, current)
 		case receiptStep:
@@ -249,20 +255,28 @@ func (s Service) apply(ctx context.Context, tx SetupTransaction, current *inspec
 	return nil
 }
 
-func (s Service) install(ctx context.Context, current *inspection, run RunOutput) ([]HostPackageEvidence, error) {
+func (s Service) install(ctx context.Context, current *inspection, run RunOutput) ([]HostPackageEvidence, []InstalledPackage, error) {
 	requested := current.requested()
+	before, err := s.ports.Packages.Snapshot(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
 	evidence, err := s.ports.Packages.Install(ctx, requested, run)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	still, err := s.ports.Packages.Missing(ctx, requested)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(still) != 0 {
-		return nil, failure("controller.install", "dnf finished but nothing provides "+strings.Join(still, ", "), "check the host's dnf configuration, then run bootwright controller install again")
+		return nil, nil, failure("controller.install", "dnf finished but nothing provides "+strings.Join(still, ", "), "check the host's dnf configuration, then run bootwright controller install again")
 	}
-	return evidence, nil
+	after, err := s.ports.Packages.Snapshot(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	return evidence, TransactionAdded(before, after), nil
 }
 
 func (s Service) prepareRuntime(ctx context.Context, tx SetupTransaction, current *inspection) error {
@@ -319,6 +333,16 @@ func (s Service) recordReceipt(ctx context.Context, tx SetupTransaction, current
 	for _, evidence := range present {
 		packages = append(packages, receiptPackage(evidence, id, installed, previous))
 	}
+	var added []InstalledPackage
+	if previous != nil {
+		added = previous.Added
+	}
+	if state.Pending != nil {
+		added = MergeAdded(added, state.Pending.Added)
+	}
+	if err := addedBound(added); err != nil {
+		return err
+	}
 	interpreter, release := current.interpreter, current.release
 	receipt := HostReceipt{
 		Platform: ReceiptPlatform{ID: release.ID, VersionID: release.VersionID, Like: slices.Clone(release.Like), Architecture: release.Architecture,
@@ -328,6 +352,7 @@ func (s Service) recordReceipt(ctx context.Context, tx SetupTransaction, current
 			ABI: interpreter.ABI, AnsibleCore: current.runtime.AnsibleCore},
 		Closure:  RuntimeClosureDigest(s.ports.Lock.Digest, interpreter.ABI),
 		Packages: packages,
+		Added:    MergeAdded(added),
 	}
 	if state.Runtimes.Current != current.runtime.Digest {
 		if state.Runtimes.Current != "" {
@@ -406,4 +431,11 @@ func setupOutput(ctx context.Context, tx SetupTransaction) (string, SetupRun, er
 		return "", nil, err
 	}
 	return id, discardedSetupRun{}, nil
+}
+
+func addedBound(added []InstalledPackage) error {
+	if len(added) > MaxAddedPackages {
+		return failure("controller.install", "the install transactions added more than "+strconv.Itoa(MaxAddedPackages)+" packages, which the install record cannot hold", "")
+	}
+	return nil
 }

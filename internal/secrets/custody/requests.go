@@ -13,9 +13,10 @@ type SetRequest struct {
 }
 
 type GenerateRequest struct {
-	ContextName string
-	Name        string
-	Renew       bool
+	ContextName      string
+	Name             string
+	Renew            bool
+	SkipConfirmation bool
 }
 
 type CheckRequest struct{ ContextName string }

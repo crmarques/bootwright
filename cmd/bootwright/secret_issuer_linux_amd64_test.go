@@ -82,8 +82,8 @@ func TestGeneratedIssuerThroughProductionCustodyAndFrozenBinding(t *testing.T) {
 	}
 	original := read()
 	defer clear(original)
-	contextRun(t, services, 0, "secret", "generate", "--name", "z-root", "--renew")
-	contextRun(t, services, 0, "secret", "generate", "--name", "a-leaf", "--renew")
+	contextRun(t, services, 0, "secret", "generate", "--name", "z-root", "--renew", "--yes")
+	contextRun(t, services, 0, "secret", "generate", "--name", "a-leaf", "--renew", "--yes")
 	reopened := read()
 	defer clear(reopened)
 	if !bytes.Equal(original, reopened) {

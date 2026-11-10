@@ -271,7 +271,7 @@ func TestAnotherBuildsSetupFormatRefusesALaunch(t *testing.T) {
 		content []byte
 		foreign string
 	}{
-		{"another format", setupStateName, []byte("{\"format\":\"bootwright.setup-state-v2\",\"runtimes\":{}}\n"), "bootwright.setup-state-v2"},
+		{"an earlier format", setupStateName, []byte("{\"format\":\"bootwright.setup-state-v1\",\"runtimes\":{}}\n"), "bootwright.setup-state-v1"},
 		{"malformed", setupStateName, []byte("not a record"), unreadableSetupFormat},
 		{"oversized", setupStateName, bytes.Repeat([]byte(" "), maxSetupState+1), unreadableSetupFormat},
 		{"unrecognized entry", "venvs", []byte("x"), unrecognizedSetupFormat},

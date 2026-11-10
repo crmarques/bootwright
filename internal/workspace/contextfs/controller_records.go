@@ -20,14 +20,15 @@ func controllerFailure(code, message, remediation string) error {
 }
 
 const toolSourcesRemedy = "no command of this build frees a retained tool source, because it never retires one; run this context's controller stage on another controller host, " +
-	"or start this host afresh: destroy every environment and delete every context on it, then, as root, remove /var/lib/bootwright and run bootwright controller install"
+	"or start this host afresh: destroy every environment (bootwright destroy --context <name>) and delete every context (bootwright context delete --name <name> --purge) on it, " +
+	"then run bootwright controller uninstall --keep-packages and bootwright controller install"
 
 // controllerVersionRemedy is the fresh install of a store whose controller
 // record another version wrote. No command rebuilds the record alone, so the
 // whole root goes, and with it the contexts, their Secrets and the stored media.
 const controllerVersionRemedy = "with a build that reads it, destroy each environment (bootwright destroy --context <name>) and delete each context " +
 	"(bootwright context delete --name <name> --purge); then run bootwright controller uninstall --discard-unreadable and bootwright controller install " +
-	"with this build. Never remove /var/lib/bootwright while services it manages run. That fresh install also drops this host's contexts with their Secrets and its stored media: " +
+	"with this build, which never reads the controller record. That fresh install also drops this host's contexts with their Secrets and its stored media: " +
 	"recreate them from your input directories with bootwright context init and bootwright media add."
 
 // ControllerRecordVersion is the private shared-host evidence format. It

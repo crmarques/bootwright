@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	maxSetupState         = 256 << 10
+	maxSetupState         = 1 << 20
 	maxSetupActions       = 64
 	maxSetupPackages      = 128
 	maxSetupPackageOwners = 64
@@ -48,6 +48,7 @@ func normalizedSetupState(value prerequisites.SetupState) prerequisites.SetupSta
 		pending := *value.Pending
 		pending.Actions = nonNil(slices.Clone(pending.Actions))
 		pending.Requested = nonNil(slices.Clone(pending.Requested))
+		pending.Added = addedSet(pending.Added)
 		value.Pending = &pending
 	}
 	if value.Receipt != nil {
@@ -60,9 +61,29 @@ func normalizedSetupState(value prerequisites.SetupState) prerequisites.SetupSta
 		for index := range receipt.Packages {
 			receipt.Packages[index].RequiredBy = nonNil(slices.Clone(receipt.Packages[index].RequiredBy))
 		}
+		receipt.Added = addedSet(receipt.Added)
 		value.Receipt = &receipt
 	}
 	return value
+}
+
+func addedSet(values []prerequisites.InstalledPackage) []prerequisites.InstalledPackage {
+	if values == nil {
+		return []prerequisites.InstalledPackage{}
+	}
+	return slices.Clone(values)
+}
+
+func validAddedSet(values []prerequisites.InstalledPackage) bool {
+	if values == nil || len(values) > prerequisites.MaxAddedPackages {
+		return false
+	}
+	for index, item := range values {
+		if !prerequisites.ValidInstalledPackage(item) || index > 0 && values[index-1].NEVRA >= item.NEVRA {
+			return false
+		}
+	}
+	return true
 }
 
 func nonNil(values []string) []string {
@@ -108,6 +129,9 @@ func validatePendingSetup(pending prerequisites.PendingSetup) error {
 			return state("pending package requirement is invalid")
 		}
 	}
+	if !validAddedSet(pending.Added) {
+		return state("pending setup added packages are invalid")
+	}
 	started, err := time.Parse(time.RFC3339Nano, pending.StartedAt)
 	if err != nil || started.UTC().Format(time.RFC3339Nano) != pending.StartedAt {
 		return state("pending setup start time is invalid")
@@ -126,6 +150,9 @@ func validateHostReceipt(receipt prerequisites.HostReceipt) error {
 	}
 	if receipt.Packages == nil || len(receipt.Packages) > maxSetupPackages {
 		return state("setup receipt package count is invalid")
+	}
+	if !validAddedSet(receipt.Added) {
+		return state("setup receipt added packages are invalid")
 	}
 	for _, item := range receipt.Packages {
 		run := validSetupIdentity(item.InstalledBy)

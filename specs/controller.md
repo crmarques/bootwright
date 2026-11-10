@@ -290,6 +290,20 @@ each requirement's provider NEVRA and the repository `dnf repoquery
 resolve differently between the preview and the install when its metadata
 refreshes; the install's output and the recorded NEVRAs are the truth.
 
+**The transaction's added set.** Under `controller/install/lock`, the install
+lists every installed package with `rpm -qa` and its `NAME`, `EPOCHNUM`,
+`VERSION`, `RELEASE`, `ARCH` and `INSTALLTIME` before and after the dnf
+transaction (an imported `gpg-pubkey` is no package and is skipped). The
+packages it added are those listed after whose name and architecture no
+package held before, so an upgrade of a package already on the host is never
+among them; each is recorded by NEVRA and install time in the pending intent
+as soon as the package step completes, and the receipt carries forward every
+earlier install's set beside this one's, at most 1024 packages
+(`TestTheReceiptRecordsWhatTheInstallTransactionAdded`). A package step that
+does not complete, interrupted or failing after dnf ran, or whose set would
+pass the bound, records no set, so its packages stay on uninstall, and the
+pending intent it leaves refuses a plain uninstall as below. The set is never read from dnf's output.
+
 `rpm` and `dnf` get a clean environment, `LC_ALL=C` and
 `PATH=/usr/sbin:/usr/bin`, stdin from `/dev/null`, a bounded run time and
 bounded output, and only the admitted [route](#egress-and-local-effects). They
@@ -434,29 +448,31 @@ remedy named, unless it names another code:
   package requires refuses naming the dependent packages rpm reports, with the
   remedy "remove the dependent packages first, or pass --keep-packages".
 
-**Packages.** The packages to remove are the providers the receipt records
-with `installedBy` an install run ID, by package name, that `rpm -q` still
-reports installed; a provider the receipt marks `present before bootwright`
-is never among them, and one the host no longer has drops out. Before the
-plan, as root, `rpm --erase --test -- <names>` must succeed; a failure that
-names a dependent outside the set is the refusal above, and any other failure
-refuses with rpm's own message. The plan then shows, as display text bounded
-to 64 KiB as install's preview is,
-`dnf remove --assumeno -- <names>`, dnf's own resolution, including the
-dependencies it would remove with them. A resolution that names a package the
-receipt marks `present before bootwright` refuses, read conservatively so a
-doubtful match or a truncated preview refuses too, with the remedy of passing
-`--keep-packages` or removing the packages by hand; after the removal `rpm -q`
-must still report each such package it reported before, or the removal
-refuses and removes no state. The removal runs
-`dnf remove --assumeyes -- <names>` with the environment, executable
-qualification and dnf configuration ownership of an
-[install](#host-packages), streams what dnf prints to the terminal, and then
-`rpm -q` must report none of the names, or it refuses `controller.uninstall`,
-"dnf did not remove `<names>`", with the remedy of reviewing the host's dnf
-configuration and running uninstall again. A package removal that fails
-removes no state, so the receipt that names what to remove survives for the
-next run.
+**Packages.** The packages to remove are the members of the receipt's
+[added set](#host-packages) still installed, matched by name and
+architecture in an `rpm -qa` listing so a later upgrade of one is still
+Bootwright's, each named as rpm and dnf select one installed package,
+`name-version-release.arch`. A package present before Bootwright, a
+dependency it already had included, is never in the set, and one the host no
+longer has drops out. Before the plan, as root,
+`rpm --erase --test -- <names>` must succeed; a failure that names a dependent
+outside the set is the refusal above, and any other failure refuses with rpm's
+own message. The plan then shows, as display text bounded to 64 KiB as
+install's preview is and never read for a decision,
+`dnf remove --assumeno --setopt=clean_requirements_on_remove=False -- <names>`.
+The removal runs
+`dnf remove --assumeyes --setopt=clean_requirements_on_remove=False -- <names>`,
+so dnf removes exactly the names and no dependency it would call unused, with
+the environment, executable qualification and dnf configuration ownership of
+an [install](#host-packages), and streams what dnf prints to the terminal.
+`rpm -qa` before and after it then proves the result: a name still listed
+refuses `controller.uninstall`, "dnf did not remove `<names>`", with the remedy
+of reviewing the host's dnf configuration and running uninstall again, and a
+package gone that is not in the set refuses, "dnf also removed packages no
+install transaction added: `<names>`", with the remedy of reinstalling them
+and running uninstall again (`TestAnUninstallRemovesExactlyTheInstallTransaction`).
+A package removal that fails removes no state, so the receipt that names what
+to remove survives for the next run.
 
 **The owned-object proof.** Before the plan and again after confirmation,
 under the same locks and as root, uninstall proves that no object

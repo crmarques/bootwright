@@ -133,6 +133,9 @@ func (healingPackages) Present(_ context.Context, requirements []string) ([]prer
 func (healingPackages) Preview(context.Context, []string) (prerequisites.HostPackagePreview, error) {
 	return prerequisites.HostPackagePreview{}, errors.New("nothing to preview")
 }
+func (healingPackages) Snapshot(context.Context) ([]prerequisites.InstalledPackage, error) {
+	return []prerequisites.InstalledPackage{}, nil
+}
 func (healingPackages) Install(context.Context, []string, prerequisites.RunOutput) ([]prerequisites.HostPackageEvidence, error) {
 	return nil, errors.New("nothing to install")
 }

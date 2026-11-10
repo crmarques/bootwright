@@ -21,15 +21,18 @@ func TestSetupPackageIntentGoldenAndUnloggedIdentityRoundTrip(t *testing.T) {
 	state.Pending = &prerequisites.PendingSetup{
 		ID: "install-" + strings.Repeat("a", 32), PlanDigest: setupDigest(4),
 		Actions: []string{"runtime", "receipt"}, StartedAt: "2026-10-14T09:00:00Z", Requested: []string{"podman", "python3.14"},
+		Added: []prerequisites.InstalledPackage{{NEVRA: "containers-common-5:0.64.2-1.fc44.noarch", InstallTime: 1760432400}, {NEVRA: "podman-5:5.8.1-1.fc44.x86_64", InstallTime: 1760432400}},
 	}
 	state.Receipt.Packages[0].InstalledBy = state.Pending.ID
+	state.Receipt.Added = []prerequisites.InstalledPackage{{NEVRA: "python3.14-0:3.14.8-1.fc44.x86_64", InstallTime: 1760000000}}
 	data, err := encodeSetupState(state)
 	if err != nil {
 		t.Fatal(err)
 	}
 	matchesGolden(t, "setup-package-intent", data, true)
 	decoded, foreign := decodeSetupState(data)
-	if foreign != "" || decoded.Pending == nil || !slices.Equal(decoded.Pending.Requested, state.Pending.Requested) || decoded.Receipt.Packages[0].InstalledBy != state.Pending.ID {
+	if foreign != "" || decoded.Pending == nil || !slices.Equal(decoded.Pending.Requested, state.Pending.Requested) || decoded.Receipt.Packages[0].InstalledBy != state.Pending.ID ||
+		!slices.Equal(decoded.Pending.Added, state.Pending.Added) || !slices.Equal(decoded.Receipt.Added, state.Receipt.Added) {
 		t.Fatalf("round trip = %+v (%s)", decoded, foreign)
 	}
 	state.Pending.Requested[0] = "other"

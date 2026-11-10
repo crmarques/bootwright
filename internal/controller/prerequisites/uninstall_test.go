@@ -19,6 +19,7 @@ type uninstallFixture struct {
 	remaining  []string
 	collateral []string
 	previewed  []string
+	removed    []string
 	eraseErr   error
 	erasures   int
 	eraseFrom  int
@@ -72,9 +73,17 @@ type removalPackages struct {
 	f *uninstallFixture
 }
 
-func (p removalPackages) InstalledNames(_ context.Context, names []string) ([]string, error) {
-	p.f.record("rpm -q " + strings.Join(names, " "))
-	return slices.DeleteFunc(slices.Clone(names), func(name string) bool { return !slices.Contains(p.f.installed, name) }), nil
+func nevra(name string) string { return name + "-0:1-1.fc44.x86_64" }
+
+func argument(name string) string { return name + "-1-1.fc44.x86_64" }
+
+func (p removalPackages) Snapshot(context.Context) ([]InstalledPackage, error) {
+	p.f.record("rpm -qa")
+	listed := []InstalledPackage{}
+	for _, name := range p.f.installed {
+		listed = append(listed, InstalledPackage{NEVRA: nevra(name), InstallTime: 1762790000})
+	}
+	return listed, nil
 }
 
 func (p removalPackages) EraseTest(_ context.Context, names []string) error {
@@ -94,11 +103,12 @@ func (p removalPackages) RemovalPreview(_ context.Context, names []string) (Host
 
 func (p removalPackages) Remove(_ context.Context, names []string, output RunOutput) error {
 	p.f.record("dnf remove")
+	p.f.removed = slices.Clone(names)
 	if p.f.removeErr != nil {
 		return p.f.removeErr
 	}
 	p.f.installed = slices.DeleteFunc(p.f.installed, func(name string) bool {
-		return (slices.Contains(names, name) || slices.Contains(p.f.collateral, name)) && !slices.Contains(p.f.remaining, name)
+		return (slices.Contains(names, argument(name)) || slices.Contains(p.f.collateral, name)) && !slices.Contains(p.f.remaining, name)
 	})
 	_, err := output.Write([]byte("Complete!\n"))
 	return err
@@ -128,9 +138,16 @@ func (f *uninstallFixture) service() Service {
 }
 
 func receiptView(packages ...ReceiptPackage) UninstallView {
+	added := []InstalledPackage{}
+	for _, item := range packages {
+		if item.InstalledBy != PresentBeforeBootwright {
+			name, _ := providerName(item.Provider)
+			added = append(added, InstalledPackage{NEVRA: nevra(name), InstallTime: 1762790000})
+		}
+	}
 	return UninstallView{
 		Root: "/var/lib/bootwright", Staging: "/var/lib/bootwright-staging", RootExists: true, StagingSeen: true,
-		Setup: SetupView{Exists: true, State: SetupState{Format: SetupStateFormat, Receipt: &HostReceipt{Packages: packages}}},
+		Setup: SetupView{Exists: true, State: SetupState{Format: SetupStateFormat, Receipt: &HostReceipt{Packages: packages, Added: added}}},
 	}
 }
 
@@ -167,14 +184,13 @@ func TestAnUninstallRemovesThePackagesBeforeTheState(t *testing.T) {
 		t.Fatalf("the uninstall failed: %#v", diagnostics.Of(err))
 	}
 	want := []string{
-		"rpm -q podman python3.13", "rpm --erase --test podman", "dnf remove --assumeno", "plan", "confirm",
-		"rpm -q podman python3.13", "rpm --erase --test podman", "dnf remove --assumeno", "rpm -q openssh-clients",
-		"dnf remove", "rpm -q podman", "rpm -q openssh-clients", "remove-state",
+		"rpm -qa", "rpm --erase --test " + argument("podman"), "dnf remove --assumeno", "plan", "confirm",
+		"rpm -qa", "rpm --erase --test " + argument("podman"), "rpm -qa", "dnf remove", "rpm -qa", "remove-state",
 	}
 	if !slices.Equal(f.events, want) || f.asked != "controller uninstall" {
 		t.Fatalf("events = %q (asked %q), want %q", f.events, f.asked, want)
 	}
-	if result.Outcome != "removed" || !slices.Equal(result.Packages, []string{"podman"}) ||
+	if result.Outcome != "removed" || !slices.Equal(result.Packages, []string{argument("podman")}) ||
 		!slices.Equal(result.Paths, []string{"/var/lib/bootwright", "/var/lib/bootwright-staging"}) ||
 		!slices.Contains(result.Kept, "openssh-clients (present before bootwright)") {
 		t.Fatalf("result = %+v", result)
@@ -208,7 +224,7 @@ func TestAnUninstallRefusesBeforeAnyEffect(t *testing.T) {
 		"an interrupted install":   {view: pending, code: uninstallCode, message: "(install-000003) was interrupted"},
 		"a foreign record":         {view: foreign, code: uninstallCode, message: "written by another Bootwright build"},
 		"a dependent package":      {view: installReceipt(), erase: failure(uninstallCode, "other installed packages require podman: cockpit-podman", ""), code: uninstallCode, message: "cockpit-podman"},
-		"an unreadable provider":   {view: receiptView(receipt("podman", "podman", "install-000001")), code: uninstallCode, message: "cannot read"},
+		"an unreadable addition":   {view: unreadableAddition(), code: uninstallCode, message: "cannot read"},
 		"a store this build skips": {view: installReceipt(), busy: failure("context.state", "registry version 99", ""), code: "context.state", message: "registry version 99"},
 	}
 	for name, test := range cases {
@@ -230,6 +246,12 @@ func TestAnUninstallRefusesBeforeAnyEffect(t *testing.T) {
 	}
 }
 
+func unreadableAddition() UninstallView {
+	view := installReceipt()
+	view.Setup.State.Receipt.Added = append(view.Setup.State.Receipt.Added, InstalledPackage{NEVRA: "podman", InstallTime: 1})
+	return view
+}
+
 // --keep-packages runs no rpm or dnf at all, so neither an interrupted nor a
 // foreign install record refuses, and every package install added stays.
 func TestAnUninstallWithKeepPackagesTouchesNoPackage(t *testing.T) {
@@ -248,7 +270,7 @@ func TestAnUninstallWithKeepPackagesTouchesNoPackage(t *testing.T) {
 			if !slices.Equal(f.events, []string{"plan", "confirm", "remove-state"}) || len(result.Packages) != 0 || f.plan.Preview != nil {
 				t.Fatalf("events = %q, result %+v", f.events, result)
 			}
-			if name == "a receipt" && !slices.Contains(result.Kept, "podman (install added it; --keep-packages keeps it)") {
+			if name == "a receipt" && !slices.Contains(result.Kept, nevra("podman")+" (install added it; --keep-packages keeps it)") {
 				t.Fatalf("kept = %q", result.Kept)
 			}
 		})
@@ -281,7 +303,7 @@ func TestADeclinedOrMovedUninstallRemovesNothing(t *testing.T) {
 func TestAnUnfinishedPackageRemovalRemovesNoState(t *testing.T) {
 	f := &uninstallFixture{views: []UninstallView{installReceipt()}, installed: []string{"podman"}, remaining: []string{"podman"}}
 	_, err := f.service().Uninstall(context.Background(), UninstallRequest{SkipConfirmation: true})
-	uninstallRefusal(t, err, uninstallCode, "dnf did not remove podman")
+	uninstallRefusal(t, err, uninstallCode, "dnf did not remove "+argument("podman"))
 	if slices.Contains(f.events, "remove-state") || slices.Contains(f.events, "confirm") {
 		t.Fatalf("events = %q", f.events)
 	}
@@ -320,25 +342,34 @@ func TestAReceiptProviderNamesItsPackage(t *testing.T) {
 	}
 }
 
-// dnf's resolution naming a package present before Bootwright refuses before
-// the plan, and one dnf removed anyway fails before the state is removed.
-func TestAnUninstallNeverRemovesAPackagePresentBeforeBootwright(t *testing.T) {
-	f := &uninstallFixture{views: []UninstallView{installReceipt()}, installed: []string{"openssh-clients", "podman"}, previewed: []string{"openssh-clients"}}
-	_, err := f.service().Uninstall(context.Background(), UninstallRequest{SkipConfirmation: true})
-	uninstallRefusal(t, err, uninstallCode, "dnf would also remove packages present before Bootwright: openssh-clients")
-	if slices.Contains(f.events, "plan") || slices.Contains(f.events, "dnf remove") {
-		t.Fatalf("events = %q", f.events)
+// Uninstall removes exactly the packages the install transactions added, a
+// dependency the transaction pulled in included, and decides nothing from
+// dnf's preview: a dependency already on the host before the install, which
+// dnf's cleanup would take as unused, stays, and a dnf that removes it anyway
+// fails before the state is removed.
+func TestAnUninstallRemovesExactlyTheInstallTransaction(t *testing.T) {
+	view := installReceipt()
+	view.Setup.State.Receipt.Added = append(view.Setup.State.Receipt.Added, InstalledPackage{NEVRA: nevra("containers-common"), InstallTime: 1762790000})
+	f := &uninstallFixture{views: []UninstallView{view}, installed: []string{"openssh-clients", "libnet", "podman", "containers-common"}, previewed: []string{"libnet", "openssh-clients"}}
+	result, err := f.service().Uninstall(context.Background(), UninstallRequest{SkipConfirmation: true})
+	if err != nil {
+		t.Fatalf("the uninstall failed: %#v", diagnostics.Of(err))
 	}
-	f = &uninstallFixture{views: []UninstallView{installReceipt()}, installed: []string{"openssh-clients", "podman"}, collateral: []string{"openssh-clients"}}
-	_, err = f.service().Uninstall(context.Background(), UninstallRequest{SkipConfirmation: true})
-	uninstallRefusal(t, err, uninstallCode, "dnf also removed packages present before Bootwright: openssh-clients")
+	transaction := []string{argument("containers-common"), argument("podman")}
+	if !slices.Equal(f.removed, transaction) || !slices.Equal(result.Packages, transaction) ||
+		!slices.Equal(f.installed, []string{"openssh-clients", "libnet"}) || !slices.Contains(f.events, "remove-state") {
+		t.Fatalf("removed %q, result %+v, still installed %q, events %q", f.removed, result, f.installed, f.events)
+	}
+}
+
+// A dnf that removes a package no install transaction added, its cleanup of
+// unused dependencies included, fails before the state is removed.
+func TestAnUninstallNeverRemovesAPackagePresentBeforeBootwright(t *testing.T) {
+	f := &uninstallFixture{views: []UninstallView{installReceipt()}, installed: []string{"openssh-clients", "libnet", "podman"}, collateral: []string{"libnet"}}
+	_, err := f.service().Uninstall(context.Background(), UninstallRequest{SkipConfirmation: true})
+	uninstallRefusal(t, err, uninstallCode, "dnf also removed packages no install transaction added: "+argument("libnet"))
 	if slices.Contains(f.events, "remove-state") {
 		t.Fatalf("events = %q", f.events)
-	}
-	truncated := previewNames(HostPackagePreview{Text: "Removing:\n", Truncated: true}, []string{"openssh-clients"})
-	named := previewNames(HostPackagePreview{Text: " openssh-clients.x86_64 9.9p1-3\n openssh-9.9p1-3.fc44\n podman-docker\n"}, []string{"openssh", "openssh-clients", "podman"})
-	if !slices.Equal(truncated, []string{"openssh-clients"}) || !slices.Equal(named, []string{"openssh", "openssh-clients"}) {
-		t.Fatalf("truncated %q, named %q", truncated, named)
 	}
 }
 
@@ -366,7 +397,7 @@ func TestAnUninstallWhoseStateFailsNamesTheRemovedPackages(t *testing.T) {
 	f := &uninstallFixture{views: []UninstallView{installReceipt()}, installed: []string{"podman"},
 		stateErr: failure("context.state", "the state root was replaced while uninstall inspected it", "")}
 	_, err := f.service().Uninstall(context.Background(), UninstallRequest{SkipConfirmation: true})
-	uninstallRefusal(t, err, uninstallCode, "removed the host packages podman but not the state: the state root was replaced")
+	uninstallRefusal(t, err, uninstallCode, "removed the host packages "+argument("podman")+" but not the state: the state root was replaced")
 }
 
 func everyRootView() UninstallView {

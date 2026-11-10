@@ -6,84 +6,67 @@ import (
 	"context"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 const (
-	uninstallCode = "controller.uninstall"
-	nameFormat    = `%{NAME}\n`
+	uninstallCode  = "controller.uninstall"
+	snapshotFormat = `%{NAME}\t%{EPOCHNUM}:%{VERSION}-%{RELEASE}\t%{ARCH}\t%{INSTALLTIME}\n`
+	snapshotLimit  = 8 << 20
+	maxSnapshot    = 65536
+	maxRemovals    = prerequisites.MaxAddedPackages
+	noCleanup      = "--setopt=clean_requirements_on_remove=False"
 )
 
 var (
-	packageName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]*$`)
-	neededBy    = regexp.MustCompile(`^\s*\S.* is needed by \(installed\) (\S+)\s*$`)
+	packageArgument = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]*-[A-Za-z0-9._+~^]+-[A-Za-z0-9._+~^]+\.[A-Za-z0-9_]+$`)
+	neededBy        = regexp.MustCompile(`^\s*\S.* is needed by \(installed\) (\S+)\s*$`)
 )
 
 var _ prerequisites.HostPackageRemoval = (*Packages)(nil)
 
-func (p *Packages) InstalledNames(ctx context.Context, names []string) ([]string, error) {
-	if err := validNames(names, true); err != nil {
-		return nil, err
-	}
+func (p *Packages) Snapshot(ctx context.Context) ([]prerequisites.InstalledPackage, error) {
 	rpm, err := p.qualify(p.rpm)
 	if err != nil {
 		return nil, unqualifiedFor(uninstallCode, "rpm")
 	}
-	present := make([]bool, len(names))
-	failures := make([]error, len(names))
-	var group sync.WaitGroup
-	for index, name := range names {
-		group.Add(1)
-		go func() {
-			defer group.Done()
-			present[index], failures[index] = p.installedName(ctx, rpm, name)
-		}()
+	querying, cancel := context.WithTimeout(ctx, repoTimeout)
+	defer cancel()
+	stdout, stderr := &capped{limit: snapshotLimit}, &capped{limit: errorLimit}
+	args := []string{"-qa", "--queryformat", snapshotFormat}
+	exit, err := p.run(querying, command{path: rpm, args: args, env: p.rpmEnvironment()}, stdout, stderr)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
-	group.Wait()
-	if err := ctx.Err(); err != nil {
-		return nil, err
+	unreadable := diagnostics.NewFailureWithRemediation("controller.state", "rpm could not list the installed packages", "", "check that the RPM database is readable")
+	if err != nil || exit != 0 || stdout.truncated || stderr.Len() != 0 {
+		return nil, unreadable
 	}
-	installed := []string{}
-	for index, name := range names {
-		if failures[index] != nil {
-			return nil, failures[index]
+	installed := []prerequisites.InstalledPackage{}
+	for _, line := range strings.Split(strings.TrimSuffix(stdout.String(), "\n"), "\n") {
+		fields := strings.Split(line, "\t")
+		if len(fields) != 4 || len(installed) == maxSnapshot {
+			return nil, unreadable
 		}
-		if present[index] {
-			installed = append(installed, name)
+		if fields[0] == "gpg-pubkey" && fields[2] == "(none)" {
+			continue
 		}
+		installTime, err := strconv.ParseInt(fields[3], 10, 64)
+		item := prerequisites.InstalledPackage{NEVRA: fields[0] + "-" + fields[1] + "." + fields[2], InstallTime: installTime}
+		if err != nil || !prerequisites.ValidInstalledPackage(item) {
+			return nil, unreadable
+		}
+		installed = append(installed, item)
 	}
 	return installed, nil
 }
 
-func (p *Packages) installedName(ctx context.Context, rpm, name string) (bool, error) {
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
-	defer cancel()
-	stdout, stderr := &capped{limit: errorLimit}, &capped{limit: errorLimit}
-	args := []string{"-q", "--queryformat", nameFormat, "--", name}
-	exit, err := p.run(ctx, command{path: rpm, args: args, env: p.rpmEnvironment()}, stdout, stderr)
-	unreadable := removalFailure("rpm could not report whether "+name+" is installed", "check that the RPM database is readable")
-	switch {
-	case err != nil || stdout.truncated:
-		return false, unreadable
-	case exit == 1 && stdout.String() == "package "+name+" is not installed\n" && stderr.Len() == 0:
-		return false, nil
-	case exit != 0 || stderr.Len() != 0 || stdout.Len() == 0:
-		return false, unreadable
-	}
-	for _, line := range strings.Split(strings.TrimSuffix(stdout.String(), "\n"), "\n") {
-		if line != name {
-			return false, unreadable
-		}
-	}
-	return true, nil
-}
-
 func (p *Packages) EraseTest(ctx context.Context, names []string) error {
-	if err := validNames(names, false); err != nil {
+	if err := validNames(names); err != nil {
 		return err
 	}
 	rpm, err := p.qualify(p.rpm)
@@ -129,7 +112,7 @@ func dependentsOf(text string) []string {
 }
 
 func (p *Packages) RemovalPreview(ctx context.Context, names []string) (prerequisites.HostPackagePreview, error) {
-	if err := validNames(names, false); err != nil {
+	if err := validNames(names); err != nil {
 		return prerequisites.HostPackagePreview{}, err
 	}
 	dnf, err := p.qualify(p.dnf)
@@ -139,7 +122,7 @@ func (p *Packages) RemovalPreview(ctx context.Context, names []string) (prerequi
 	previewing, cancel := context.WithTimeout(ctx, previewTime)
 	defer cancel()
 	stdout, stderr := &capped{limit: previewLimit}, &capped{limit: errorLimit}
-	args := append([]string{"remove", "--assumeno", "--"}, names...)
+	args := append([]string{"remove", "--assumeno", noCleanup, "--"}, names...)
 	exit, err := p.run(previewing, command{path: dnf, args: args, env: p.dnfEnvironment()}, stdout, stderr)
 	if ctx.Err() != nil {
 		return prerequisites.HostPackagePreview{}, ctx.Err()
@@ -157,7 +140,7 @@ func (p *Packages) RemovalPreview(ctx context.Context, names []string) (prerequi
 }
 
 func (p *Packages) Remove(ctx context.Context, names []string, output prerequisites.RunOutput) error {
-	if err := validNames(names, false); err != nil {
+	if err := validNames(names); err != nil {
 		return err
 	}
 	dnf, err := p.qualify(p.dnf)
@@ -167,7 +150,7 @@ func (p *Packages) Remove(ctx context.Context, names []string, output prerequisi
 	removing, cancel := context.WithTimeout(ctx, installTime)
 	defer cancel()
 	stream := &stream{out: output, tail: &tail{limit: tailLimit}}
-	args := append([]string{"remove", "--assumeyes", "--"}, names...)
+	args := append([]string{"remove", "--assumeyes", noCleanup, "--"}, names...)
 	exit, err := p.run(removing, command{path: dnf, args: args, env: p.dnfEnvironment()}, stream, stream)
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -178,13 +161,13 @@ func (p *Packages) Remove(ctx context.Context, names []string, output prerequisi
 	return nil
 }
 
-func validNames(names []string, allowEmpty bool) error {
-	if len(names) == 0 && !allowEmpty || len(names) > maxRequests {
+func validNames(names []string) error {
+	if len(names) == 0 || len(names) > maxRemovals {
 		return removalFailure("the host package removal is empty or too large", "")
 	}
 	for index, name := range names {
-		if len(name) > 128 || !packageName.MatchString(name) || slices.Contains(names[:index], name) {
-			return removalFailure("a host package to remove is outside the package name grammar", "")
+		if len(name) > 256 || !packageArgument.MatchString(name) || slices.Contains(names[:index], name) {
+			return removalFailure("a host package to remove is outside the package grammar", "")
 		}
 	}
 	return nil
