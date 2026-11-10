@@ -26,6 +26,7 @@ OBSERVED_NETWORK = {"answered", "autostart", "bridge", "definition", "managed", 
 OPTIONAL_NETWORK = {"mtu"}
 OBSERVED_SERVICE = {"enabled", "name", "state"}
 MAX_CONNECTIONS = 64
+MAX_REFUSED = 64
 OBSERVED_CONNECTION = {"active", "answered", "definition", "device", "name", "owned", "present", "role", "zone"}
 CONNECTION_FLAGS = ("active", "answered", "definition", "owned", "present")
 OBSERVED_ROUTING = {"answered", "enabled", "forwarding", "loaded", "name", "owned", "present", "state", "table"}
@@ -204,26 +205,34 @@ def routing_left(evidence):
                 or routing["table"])
 
 
+def vlan_unit_left(vlan):
+    return bool(vlan["present"] or vlan["enabled"] or vlan["owned"] or vlan["routes"] or vlan["state"])
+
+
 def vlan_refusal_of(observation):
     entry = flagged(observation.get("vlanRefusal"), OBSERVED_VLAN_REFUSAL, VLAN_REFUSAL_FLAGS, "VLAN refusal evidence")
-    if not isinstance(entry["routes"], list) or not all(isinstance(route, str) for route in entry["routes"]):
+    routes = entry["routes"]
+    if not isinstance(routes, list) or len(routes) > MAX_REFUSED or not all(isinstance(route, str) for route in routes):
         raise ValueError("VLAN refusal evidence")
-    entry["routes"] = list(entry["routes"])
+    entry["routes"] = list(routes)
     return {"vlanRefusal": entry}
 
 
 def vlan_refusal_realized(evidence):
-    """Whether the VLAN refusal unit is answered for and, while present, owned, enabled and active.
+    """Whether the VLAN refusal unit is wholly held or wholly absent.
 
-    Go compares its routes with the frozen subnets.
+    Held is answered, named, present, owned, enabled and active with its routes;
+    absent is answered with no file, ownership, enablement, state or route. Go
+    compares the name and routes with the frozen request.
     """
     vlan = evidence["vlanRefusal"]
-    return vlan["answered"] and (not vlan["present"] or (vlan["owned"] and vlan["enabled"] and vlan["state"] == "active"))
+    held = (vlan["answered"] and bool(vlan["name"]) and vlan["present"] and vlan["owned"] and vlan["enabled"]
+            and vlan["state"] == "active" and bool(vlan["routes"]))
+    return held or (vlan["answered"] and not vlan_unit_left(vlan))
 
 
 def vlan_refusal_left(evidence):
-    vlan = evidence["vlanRefusal"]
-    return bool(vlan["present"] or vlan["enabled"] or vlan["owned"] or vlan["routes"] or vlan["state"])
+    return vlan_unit_left(evidence["vlanRefusal"])
 
 
 # Each resource the host block owns beside the libvirt ones, as a refusal names

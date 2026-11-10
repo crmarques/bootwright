@@ -9281,6 +9281,7 @@ add-ons` stays with [B770](backlog.md#b770).
 **Guard tests:** the inherited-scope, context-free, cluster preflight service
 and golden tests, each proved by a seeded mismatch; the delivering commit
 records the gates.
+
 ### X178 — Audit lane S: libvirt host evidence, routes and root disk identity
 
 **Items:** B845, B843 and B840.
@@ -14024,3 +14025,23 @@ this build's continuation and destroy at its controller stage while the stage
 request version differs ([X342](#x342--default-clients-pinned-by-the-build)),
 so the remedy runs with the build that applied it where that holds; a removal
 in progress reports nothing.
+### X365 — The provider host's VLAN refusal evidence
+
+**Item:** B1291, delivered in-tree (2026-11-10) and awaiting operator
+acceptance. The live failure it was opened for, the provider host action
+dropping the [VLAN refusal unit](../substrates.md#provider-host-realization)
+from the evidence it published, was fixed in parallel by
+[B1295](m1.md#b1295) (X395); this slice tightens that proof. The published
+unit is a closed shape of at most 64 route strings, with Boolean flags checked
+by type and every other field a string. An apply's postcondition needs it
+wholly held (answered, named, present, owned, enabled and active, with its
+routes) or wholly absent (answered, with no file, ownership, enablement, state
+or route), while the engine still matches its name and routes to the frozen
+subnets; a removal's needs it answered and gone, and names it when it remains.
+A test holds the published evidence of both forms to every field the host
+observation carries, so a field cannot be dropped again unseen. No request,
+contract version or Go evidence type moved; the collection's content digest
+did, because the edited action plugin is embedded in it.
+
+**Commits:** this record's commit. Gates: listed in its message. No push
+occurred.

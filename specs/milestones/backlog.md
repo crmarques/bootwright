@@ -315,6 +315,7 @@ Alias cell.
 | [B1314](#b1314) | new, 2026-11-10 (X376 review) | enabling | Architecture | A release recipe builds, refuses a build that is unchecked or lacks its notices, and ships both documents with the executable | No release recipe exists; `make build` already refuses a build without notices, but nothing releases |
 | [B1317](#b1317) | new, 2026-11-10 (X400 review) | enabling | Architecture | A default client whose binary names no Go module has its third-party dependencies judged | virtctl 1.9.1 is built so its build information holds only the toolchain; the gate judges its Go dependencies by its top-level module alone |
 | [B1316](#b1316) | new, 2026-11-10 (X370 review) | defect | Storage, with Secrets | A storage consumer or replication block names every Secret its binding pins | Safe as it stands: the hold walks the applied lineage, whose cluster and host blocks class those keys as effect material |
+| [B1292](#b1292) | new, 2026-11-10 (X365 review) | defect | Substrate | A removal clears refusing routes its VLAN refusal unit no longer holds | Safe as it stands: the removal refuses while such a route remains instead of reading the host as clean; it needs a host whose unit vanished without its stop step |
 
 ### B82
 
@@ -3602,6 +3603,20 @@ vulnerability gate on, refuses an executable stamped `unchecked` or a build
 without its notices, and ships the executable, its bill of materials and its
 notices together. **Exit evidence:** the recipe, and a test that it refuses each
 of the two builds.
+
+### B1292
+
+**Owner:** Substrate. **Kind:** defect. **Requires:** none. **Definition:**
+Candidate, from the independent review of
+[X365](delivered.md#x365--the-provider-hosts-vlan-refusal-evidence): a removal
+whose VLAN refusal unit is already gone while routes under its metric remain,
+such as a unit removed by hand, refuses with "still present: VLAN refusal",
+and repeating it cannot converge, because the retire step removes only the
+unit; an observation of that host counts no held route, so it resolves unknown
+rather than partial. **Outcome:** the retire step deletes the refusing routes
+of the unit's own metric even without the unit, and an observation counts them
+as owned remains. **Exit evidence:** refusal-unit tests over a host holding
+those routes without the unit.
 
 ### B1317
 

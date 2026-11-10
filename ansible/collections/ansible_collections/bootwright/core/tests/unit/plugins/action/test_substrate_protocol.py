@@ -525,6 +525,9 @@ def test_a_provider_host_absence_needs_an_answer_and_no_directory(monkeypatch):
     # the removal from completing rather than reading as gone.
     pooled = substrate_host_protocol.absence(dict(HOST_GONE, pool="inactive"), DIGEST)
     assert (pooled["pool"], pooled["postcondition"]) == ("inactive", False)
+    refusing = host_action(dict(arguments, observation=dict(HOST_GONE, vlanRefusal=dict(VLAN_REFUSAL_HELD)))).run(task_vars={})
+    assert refusing["failed"] is True
+    assert refusing["msg"].endswith("still present: VLAN refusal")
     kept_pool = host_action(dict(arguments, observation=dict(HOST_GONE, pool="inactive"))).run(task_vars={})
     assert kept_pool["failed"] is True
     assert kept_pool["msg"].endswith("still present: pool")
@@ -555,6 +558,8 @@ def test_a_provider_host_observation_is_absence_only_when_the_uri_answered(monke
     assert (pool["absent"], pool["pool"]) == (False, "inactive")
     defined = publish(dict(HOST_GONE, networks=[dict(forgotten_network(), owned=True)]))
     assert defined["absent"] is False
+    refusing = publish(dict(HOST_GONE, vlanRefusal=dict(VLAN_REFUSAL_HELD)))
+    assert (refusing["absent"], refusing["postcondition"], refusing["vlanRefusal"]) == (False, False, VLAN_REFUSAL_HELD)
 
 
 # The uri answering proves only that the hypervisor driver did. The network
@@ -717,6 +722,48 @@ def test_malformed_vlan_refusal_evidence_is_never_published(vlan):
     observation["vlanRefusal"] = vlan
     with pytest.raises(ValueError):
         substrate_host_protocol.presence(observation, DIGEST)
+
+
+# Go proves the refusal unit from the published evidence alone, so a field the
+# observation carried and the evidence dropped reads there as an unanswered unit
+# on apply and as a vacuously removed one on destroy (B1291).
+def test_the_provider_host_evidence_carries_every_field_the_observation_proves(tmp_path):
+    def run(argv, check_rc=False, environ_update=None):
+        del check_rc, environ_update
+        return 0, "", ""
+
+    request = {"networks": [], "packages": [], "poolName": "p", "poolPath": str(tmp_path / "pool"), "services": [],
+               "uri": "qemu:///system", "identity": {"context": "lab", "object": "host"}}
+    observation = observe_host(run, request)
+    observation_only = {"collisions", "collisionsAnswered", "connectionRefusals", "drifted", "routingForwarding",
+                        "routingRefusals", "shadows", "trunks"}
+    framing = {"absent", "postcondition", "request"}
+    for form in (substrate_host_protocol.presence, substrate_host_protocol.absence):
+        assert set(form(observation, DIGEST)) == set(observation) - observation_only | framing
+
+
+def test_a_provider_host_proof_needs_its_refusal_unit_wholly_held_or_wholly_gone():
+    for refusal in (VLAN_REFUSAL_HELD, VLAN_REFUSAL_ABSENT, dict(VLAN_REFUSAL_ABSENT, name="")):
+        assert substrate_host_protocol.presence(host_observation(vlanRefusal=dict(refusal)), DIGEST)["postcondition"], refusal
+    for refusal in (dict(VLAN_REFUSAL_HELD, name=""), dict(VLAN_REFUSAL_HELD, routes=[]),
+                    dict(VLAN_REFUSAL_ABSENT, routes=["203.0.113.0/26"]), dict(VLAN_REFUSAL_ABSENT, state="failed"),
+                    dict(VLAN_REFUSAL_ABSENT, enabled=True), dict(VLAN_REFUSAL_ABSENT, answered=False)):
+        evidence = substrate_host_protocol.presence(host_observation(vlanRefusal=refusal), DIGEST)
+        assert not evidence["postcondition"], refusal
+        assert substrate_host_protocol.unproved(evidence) == ["VLAN refusal"], refusal
+    for refusal in (VLAN_REFUSAL_HELD, dict(VLAN_REFUSAL_ABSENT, routes=["203.0.113.0/26"]), dict(VLAN_REFUSAL_ABSENT, enabled=True)):
+        kept = removed_host(vlanRefusal=dict(refusal))
+        assert not substrate_host_protocol.absence(kept, DIGEST)["postcondition"], refusal
+        assert substrate_host_protocol.remaining(kept) == ["VLAN refusal"], refusal
+
+
+def test_a_vlan_refusal_route_list_is_bounded_and_every_entry_a_string():
+    for routes in (["203.0.113.0/26"] * 65, [7]):
+        for form in (substrate_host_protocol.presence, substrate_host_protocol.absence):
+            with pytest.raises(ValueError):
+                form(host_observation(vlanRefusal=dict(VLAN_REFUSAL_HELD, routes=routes)), DIGEST)
+    full = host_observation(vlanRefusal=dict(VLAN_REFUSAL_HELD, routes=["203.0.113.0/26"] * 64))
+    assert substrate_host_protocol.presence(full, DIGEST)["vlanRefusal"]["routes"] == ["203.0.113.0/26"] * 64
 
 
 TRUNK_HELD = {"name": "bootwright-lab-host-trunk-br-lab", "role": "trunk", "device": "br-lab", "answered": True, "present": True,
