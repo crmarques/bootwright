@@ -14117,3 +14117,22 @@ moved.
 
 **Commits:** this record's commit. Gates: listed in its message. No push
 occurred.
+
+### X382 — The network-matrix runbook's checks
+
+**Item:** B1310, delivered in-tree (2026-11-10) and awaiting operator
+acceptance. The lab-6-nodes-ceph-network-matrix runbook now requires what the
+first run showed the product and the cluster do: a converged Machine's hosted
+directory holds its `bmc/` state and the served content under
+`services/artifact-server`, and no `install/` work area, which the Anaconda
+installation removes once the machine is verified
+([image build work area](../managed-os.md#publication));
+the seed MON drill polls until `ceph-01` leaves `quorum_names` before it reads
+the quorum; the observation rehearsal creates its pool with one placement group
+under `mon_max_pg_per_osd`; and the hand disk is required on
+`InfraProvider/lab-libvirt`'s `app` profile per the
+[observable fields](../state-reconciliation.md#observable-fields-by-implementation).
+No code, contract or value moved.
+
+**Commits:** this record's commit. Gates: listed in its message. No push
+occurred.

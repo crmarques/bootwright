@@ -381,11 +381,18 @@ installer waits, then converge:
 ```sh
 ./bin/bootwright apply --context "$CONTEXT" --stage machines --yes
 ./bin/bootwright machine list --context "$CONTEXT" --power-status
-sudo ls -R /var/lib/bootwright-hosted/"$CONTEXT" | head -40
+sudo ls /var/lib/bootwright-hosted/"$CONTEXT"
+sudo ls -R /var/lib/bootwright-hosted/"$CONTEXT"/machines
+sudo ls /var/lib/bootwright-hosted/"$CONTEXT"/services/artifact-server
 ```
 
-Require (B1221) the installer-image work of the installations under the
-context's hosted directory too, beside its served content and BMC state.
+Require (B1221) the context's hosted directory to hold `machines` and
+`services`: each Machine's emulated BMC state under `machines/<name>/bmc/`
+(`conf.py`, `htpasswd`, `tls.crt`, `tls.key`) and the served content under
+`services/artifact-server/`. A Machine's `install/` directory, the installer
+image's work area, exists only while its image builds: the role removes it once
+the installation is verified, so a converged run shows no `install/` under any
+Machine.
 
 ## 6. Verify the install shapes, the final network and the routing
 
@@ -497,6 +504,10 @@ FSID='' # The cluster FSID cluster info printed.
 MON_UNIT="ceph-${FSID:?Set FSID from cluster info}@mon.ceph-01.service"
 ./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node ceph-01 -- sudo -n systemctl stop "$MON_UNIT"
 ./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node ceph-01 -- systemctl is-active "$MON_UNIT"
+for _ in $(seq 1 30); do
+    ceph_admin -m 198.51.100.12,"$ARBITER" quorum_status --format json 2>/dev/null | python3 -I -c 'import json, sys; sys.exit("ceph-01" in json.load(sys.stdin)["quorum_names"])' 2>/dev/null && break
+    sleep 2
+done
 ceph_admin -m 198.51.100.12,"$ARBITER" quorum_status --format json-pretty
 ./bin/bootwright diff --context "$CONTEXT" --observe
 ./bin/bootwright cluster exec --context "$CONTEXT" --name ceph-e2e --node ceph-01 -- sudo -n systemctl start "$MON_UNIT"
@@ -504,7 +515,10 @@ ceph_admin -s    # repeat until three MONs are in quorum
 ```
 
 `ceph_admin` names the two other MONs explicitly: its retained configuration
-names only the seed. Require `inactive` for the unit, `quorum_names` to list
+names only the seed. The remaining MONs call an election only after they notice
+the loss, so a read right after the stop still lists all three: the loop waits,
+for up to thirty tries two seconds apart, until `quorum_names` no longer holds
+`ceph-01`. Require `inactive` for the unit, `quorum_names` to list
 `ceph-02` and `ceph-03` only, and `diff --observe` to observe the Ceph objects,
 none `unknown` and none timed out, while the seed is down: its Ceph
 observation runs Bootwright's admin clients, which name every MON of the
@@ -754,7 +768,7 @@ to `app-01`, whose profile declares none, and create a pool by hand; then
 ```sh
 sudo qemu-img create -f qcow2 /var/lib/libvirt/images/e2e-hand-disk.qcow2 1G
 sudo virsh --connect qemu:///system attach-disk "bootwright-$CONTEXT-app-01" /var/lib/libvirt/images/e2e-hand-disk.qcow2 vdz --driver qemu --subdriver qcow2 --live
-ceph_admin osd pool create e2e-hand-pool 8
+ceph_admin osd pool create e2e-hand-pool 1
 ./bin/bootwright diff --context "$CONTEXT" --observe
 ./bin/bootwright diff --context "$CONTEXT" --observe --output-dir "$RUN_DIR/diff-tree"
 cat "$RUN_DIR/diff-tree/notes.txt"
@@ -764,7 +778,13 @@ sudo rm -f /var/lib/libvirt/images/e2e-hand-disk.qcow2
 ./bin/bootwright diff --context "$CONTEXT" --observe --exit-code
 ```
 
-Require (B1113) the hand disk on `Machine/app-01` and (B1114) `e2e-hand-pool`
+The pool takes one placement group because the case's own pools already hold
+369 at size 2 on three OSDs, and a pool of 8 would exceed `mon_max_pg_per_osd`
+(250) and be refused with `ERANGE`. Require (B1113) the hand disk on
+`InfraProvider/lab-libvirt`, listed as a `dataDisks` entry of the `app` machine
+profile, the one profile only `app-01` uses
+([observable fields](../../specs/state-reconciliation.md#observable-fields-by-implementation)),
+and (B1114) `e2e-hand-pool`
 listed as a pool no applied object declares, nothing else differing, the
 declared pools' size, minimum size, application and autoscale mode read
 (B600), and exit `0` after both are removed. If the pool delete is refused,
@@ -863,7 +883,7 @@ failure leaves the run an observation. Keep host-specific evidence private.
 | [B1044](../../specs/milestones/m2.md#b1044) | The package tree's `.treeinfo` proof made again after the first reset, shown in its retained output |
 | [B1036](../../specs/milestones/m2.md#b1036) | An installation's listener fetch made again after the second reset, shown in its retained output |
 | [B1189](../../specs/milestones/m1.md#b1189) | The file-copy runbook on `app-01` and `client-01` |
-| [B1221](../../specs/milestones/m1.md#b1221) | The context's `/var/lib/bootwright-hosted/` directory during the run and its removal at destroy |
+| [B1221](../../specs/milestones/m1.md#b1221) | The context's `/var/lib/bootwright-hosted/` directory during the run (each Machine's `bmc/` state and the served content, no `install/` once the images are built) and its removal at destroy |
 | [B1223](../../specs/milestones/m1.md#b1223) | `logs --follow` beside each apply, which never waits on it |
 
 Step 9's observation drill rehearses [B1118](../../specs/milestones/m1.md#b1118)
