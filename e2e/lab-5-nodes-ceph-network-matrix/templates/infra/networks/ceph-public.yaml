@@ -1,0 +1,21 @@
+{{- $n := .Values.networks.cephPublic -}}
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: ceph-public
+
+spec:
+  provided: false
+  description: The Ceph public network lab-libvirt defines on its host, NAT to the internet, carrying the cluster VLAN tagged.
+
+  ipv4:
+    cidr: {{ $n.cidr }}
+    gateway: {{ $n.gateway }}
+
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: {{ $n.bridge }}
+    forward: nat
+
+    taggedNetworkRefs:
+      - ceph-cluster

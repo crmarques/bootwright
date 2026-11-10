@@ -1,0 +1,47 @@
+{{- $node := index .Values.guest.ceph.nodes 2 -}}
+{{- $vlan := .Values.networks.cephCluster.vlan -}}
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: ceph-03
+
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: ceph
+
+      nics:
+        - nicRef: nic0
+          segmentRef: ceph-public
+
+        - nicRef: nic1
+          segmentRef: ceph-public
+
+  hardware:
+    nics:
+      - name: nic0
+      - name: nic1
+
+    rootDevice:
+      deviceName: /dev/vda
+
+  os:
+    provided: false
+    installProfileRef: rhel
+
+  network:
+    configRef: ceph-split
+    installAddressRef: ip
+
+    addresses:
+      - name: fqdn
+        address: ceph-03.{{ .Values.host.domain }}
+
+      - name: ip
+        address: {{ $node.public }}
+        interface: nic0
+
+      - name: cluster
+        address: {{ $node.cluster }}
+        interface: nic1.{{ $vlan }}

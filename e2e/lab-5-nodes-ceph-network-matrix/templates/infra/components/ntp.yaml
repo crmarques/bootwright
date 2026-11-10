@@ -1,0 +1,19 @@
+apiVersion: bootwright.io/v1alpha1
+kind: NTPServer
+metadata:
+  name: lab-ntp
+
+spec:
+  management: managed
+  machineRef: controller
+  implementation: chrony
+  port: 123
+
+  endpoints:
+    - name: ip
+      addressRef: ip
+
+  upstreamSources:
+{{- range .Values.host.upstreamNTP }}
+    - {{ . }}
+{{- end }}

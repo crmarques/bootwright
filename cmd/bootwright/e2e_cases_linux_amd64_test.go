@@ -51,6 +51,10 @@ var e2eRenders = map[string][]e2eRender{
 	"lab-3-nodes-ocp":                {{name: "metallb off", sets: []string{"addons.metallb=false"}}},
 	"lab-3-nodes-ocp-features":       {{name: "mirror off", sets: []string{"mirror.enabled=false"}}},
 	"lab-5-nodes-ceph-networks":      {{name: "default"}},
+	"lab-5-nodes-ceph-network-matrix": {
+		{name: "default"},
+		{name: "bond mode refusal", sets: []string{"bond.mode=802.3ad"}, refuses: "qualifies only active-backup bonding"},
+	},
 	"lab-5-nodes-ceph-stretch": {
 		{name: "default"},
 		{name: "file off", sets: []string{"ceph.services.file=false"}},

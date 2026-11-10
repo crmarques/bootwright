@@ -1,0 +1,14 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephObjectGateway
+metadata:
+  name: objects
+
+spec:
+  clusterRef: ceph-e2e
+  serviceRef: rgw.objects
+  realm: objects
+  zoneGroup: objects
+  zone: objects
+
+  endpoint:
+    fqdn: s3.{{ .Values.host.domain }}

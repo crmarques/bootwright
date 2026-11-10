@@ -1,0 +1,13 @@
+{{- $n := .Values.networks.cephCluster -}}
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: ceph-cluster
+
+spec:
+  provided: true
+  description: The unrouted Ceph replication network, a VLAN the Ceph hosts stack on the ceph-public bridge.
+  vlan: {{ $n.vlan }}
+
+  ipv4:
+    cidr: {{ $n.cidr }}

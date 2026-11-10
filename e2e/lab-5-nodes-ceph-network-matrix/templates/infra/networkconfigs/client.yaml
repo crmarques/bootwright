@@ -1,0 +1,104 @@
+{{- $user := .Values.networks.user -}}
+{{- $guest := .Values.networks.guestOnly -}}
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: client
+
+spec:
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+
+  nmstate:
+    interfaces:
+      - name: nic0
+        type: ethernet
+        state: up
+        controller: bond0
+
+        ipv4:
+          enabled: false
+
+        ipv6:
+          enabled: false
+
+      - name: nic1
+        type: ethernet
+        state: up
+        controller: bond0
+
+        ipv4:
+          enabled: false
+
+        ipv6:
+          enabled: false
+
+      - name: bond0
+        type: bond
+        state: up
+
+        link-aggregation:
+          mode: {{ .Values.bond.mode }}
+
+          options:
+            miimon: 100
+
+          port:
+            - nic0
+            - nic1
+
+        ipv4:
+          enabled: false
+
+        ipv6:
+          enabled: false
+
+      - name: bond0.{{ $user.vlan }}
+        type: vlan
+        state: up
+
+        vlan:
+          base-iface: bond0
+          id: {{ $user.vlan }}
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+
+      - name: bond0.{{ $guest.vlan }}
+        type: vlan
+        state: up
+
+        vlan:
+          base-iface: bond0
+          id: {{ $guest.vlan }}
+
+        ipv4:
+          enabled: true
+          dhcp: false
+
+        ipv6:
+          enabled: false
+
+    dns-resolver:
+      config:
+        search:
+          - {{ .Values.host.domain }}
+
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          next-hop-address: {{ $user.gateway }}
+          next-hop-interface: bond0.{{ $user.vlan }}
+          table-id: 254
+          metric: 100
+
+        - destination: {{ .Values.networks.extraRoute }}
+          next-hop-address: {{ $user.gateway }}
+          next-hop-interface: bond0.{{ $user.vlan }}
+          table-id: 254
+          metric: 200

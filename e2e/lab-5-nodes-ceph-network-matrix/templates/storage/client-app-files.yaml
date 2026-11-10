@@ -1,0 +1,9 @@
+apiVersion: bootwright.io/v1alpha1
+kind: CephClient
+metadata:
+  name: app-files
+
+spec:
+  clusterRef: ceph-e2e
+  subvolumeRef: app-files
+  access: readWrite
