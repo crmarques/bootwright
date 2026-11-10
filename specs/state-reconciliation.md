@@ -2111,9 +2111,13 @@ moved since the first read. It proves this context is bound to this host as a
 continuation does, refusing `controller.identity` or `controller.state` with
 the remedy `run bootwright diff --context <name> without --observe` for an
 unbound context, and locates this build's controller runtime, refusing
-`controller.state` with `run bootwright controller install` when it is not prepared. It observes at most
-as many blocks at once as an operation runs, each inside its own execution
-guard, reports one check row, `observation`, and holds the lock until every
+`controller.state` with `run bootwright controller install` when it is not prepared. It starts
+observations in frozen plan order, each inside its own execution guard, at
+most as many at once as an operation runs and at most a
+[throttle's](#stages-and-the-pause-boundary) capacity of the blocks naming one
+throttle, skipping a block whose throttle is full so it never holds back a
+later one; an observation claims no exclusive resource. Readings fold in frozen plan order, whatever order observations return in. It
+reports one check row, `observation`, and holds the lock until every
 observation returned, so an apply or destroy started meanwhile refuses
 `lifecycle.lease`. Canceling it stops further observations, and a block not
 yet observed reads unknown with `the observation was canceled`; a read-only

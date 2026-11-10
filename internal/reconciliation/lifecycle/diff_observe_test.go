@@ -874,3 +874,107 @@ func TestObservationsHonorTheClusterThrottle(t *testing.T) {
 		t.Fatalf("%d observations overlapped; throttle is 2", widest)
 	}
 }
+
+func throttledDiffFixture(t *testing.T, throttled ...string) (diffFixture, *projectingCapability) {
+	t.Helper()
+	f := newDiffHarness(t, "alpha", "bravo", "charlie", "delta")
+	for i := range f.capability.definitions {
+		if slices.Contains(throttled, f.capability.definitions[i].Object) {
+			f.capability.definitions[i].Throttle = "cluster/shared"
+		}
+	}
+	plan, err := reconciliation.NewPlan(reconciliation.Apply, f.capability.definitions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var order []string
+	for _, block := range plan.Blocks {
+		order = append(order, block.ID)
+	}
+	if !slices.Equal(order, []string{"alpha", "bravo", "charlie", "delta"}) {
+		t.Fatalf("frozen order %v", order)
+	}
+	f.apply(t)
+	projecting := &projectingCapability{testCapability: f.capability, answers: map[string]scriptedObservation{}, paths: []ProjectedPath{{Kind: api.ArtifactServer, Path: "spec.image"}}}
+	f.service.capabilities = testResolver{capability: projecting}
+	f.service.options.Concurrency = 8
+	f.service.options.Throttle = 1
+	return f, projecting
+}
+
+func TestAFullThrottleNeverHoldsBackALaterObservation(t *testing.T) {
+	f, _ := throttledDiffFixture(t, "alpha", "bravo")
+	var lock sync.Mutex
+	inFlight, together := map[string]bool{}, false
+	gathered := make(chan struct{})
+	f.capability.observeHold = func(block string) {
+		lock.Lock()
+		inFlight[block] = true
+		if inFlight["alpha"] && inFlight["charlie"] && inFlight["delta"] && !together {
+			together = true
+			close(gathered)
+		}
+		lock.Unlock()
+		if block != "bravo" {
+			select {
+			case <-gathered:
+			case <-time.After(5 * time.Second):
+			}
+		}
+		lock.Lock()
+		delete(inFlight, block)
+		lock.Unlock()
+	}
+	result := f.observe(t)
+	if !together {
+		t.Fatal("bravo, waiting on its full throttle, held back charlie and delta")
+	}
+	if result.Blocks.Observed != 4 || result.Blocks.Unknown != 0 || len(f.capability.observes) < 4 {
+		t.Fatalf("blocks %+v, observes %v", result.Blocks, f.capability.observes)
+	}
+}
+
+func TestCancellationReachesABlockWaitingOnAFullThrottle(t *testing.T) {
+	f, projecting := throttledDiffFixture(t, "alpha", "bravo")
+	projecting.answers["alpha"] = scriptedObservation{err: context.Canceled}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var lock sync.Mutex
+	arrived := map[string]bool{}
+	others := make(chan struct{})
+	var once sync.Once
+	f.capability.observeHold = func(block string) {
+		lock.Lock()
+		arrived[block] = true
+		if arrived["charlie"] && arrived["delta"] {
+			once.Do(func() { close(others) })
+		}
+		lock.Unlock()
+		select {
+		case <-others:
+		case <-time.After(5 * time.Second):
+		}
+		if block == "alpha" {
+			cancel()
+			return
+		}
+		<-ctx.Done()
+	}
+	observes := len(f.capability.observes)
+	result, err := f.service.Diff(ctx, DiffRequest{ContextName: "lab", Observe: true})
+	if err != nil {
+		t.Fatalf("diff = %v", err)
+	}
+	if started := f.capability.observes[observes:]; slices.Contains(started, "bravo") || len(started) != 3 {
+		t.Fatalf("observations started %v", started)
+	}
+	if bravo := objectOf(t, result, api.ArtifactServer, "bravo"); bravo.Real.State != "unknown" || bravo.Real.Reason != "the observation was canceled" {
+		t.Fatalf("bravo reads %+v", bravo.Real)
+	}
+	if alpha := objectOf(t, result, api.ArtifactServer, "alpha"); alpha.Real.State != "unknown" {
+		t.Fatalf("alpha reads %+v", alpha.Real)
+	}
+	if result.Blocks.Unknown != 2 || result.Blocks.Observed != 2 {
+		t.Fatalf("blocks %+v", result.Blocks)
+	}
+}

@@ -14136,3 +14136,20 @@ No code, contract or value moved.
 
 **Commits:** this record's commit. Gates: listed in its message. No push
 occurred.
+
+### X384 — Observations past a full throttle
+
+**Item:** B1312, admission half delivered in-tree (2026-11-10); found by the
+owner's lab-6-nodes-ceph-network-matrix run. `diff --observe` now
+[starts observations](../state-reconciliation.md#reading-the-real-side-live) in
+frozen order, within the operation's bound and each
+[throttle's](../state-reconciliation.md#stages-and-the-pause-boundary)
+capacity, skipping a block whose throttle is full, so it no longer holds back
+a later one, and starts none once canceled. Readings still fold in frozen
+order. The bound and the
+throttle are the apply's own; no knob was added. The per-block cost of a Ceph
+observation, which dominates that run's minutes, stays open on B1312 for an
+owner decision.
+
+**Commits:** this record's commit. Gates: listed in its message. No push
+occurred.

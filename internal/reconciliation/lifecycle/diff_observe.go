@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller"
@@ -123,57 +122,68 @@ func (s Service) reproveDiff(ctx context.Context, view RunView, store recordRead
 	return verifyHostBinding(view.Controller(), view.Identity(), host, unobservedDiff(read.context.Name), false)
 }
 
+type settledReading struct {
+	block   reconciliation.Block
+	reading blockReading
+}
+
+// inspectAll starts observations in frozen order, a full throttle never holding back a later block that may run.
 func (s Service) inspectAll(ctx context.Context, view RunView, store recordReader, approved approved, read *diffRead, blocks []reconciliation.Block, material map[string]secrets.Material) map[string]blockReading {
 	readings := make(map[string]blockReading, len(blocks))
-	var mutex sync.Mutex
-	var running sync.WaitGroup
 	settle := func(block reconciliation.Block, reading blockReading) {
-		mutex.Lock()
-		defer mutex.Unlock()
 		reading.implementation = block.Implementation
 		readings[block.ID] = reading
 		s.reportObservation(ctx, ProgressEvent{Status: "running", Completed: len(readings), Declared: len(blocks)})
 	}
-	slots := make(chan struct{}, s.Concurrency())
-	throttles := map[string]chan struct{}{}
+	canceled := blockReading{state: sideUnknown, reason: "the observation was canceled", remedy: repeatObserved(read.context.Name)}
+	var waiting []reconciliation.Block
 	for _, block := range blocks {
-		switch {
-		case slices.Contains(read.rebuilt, block.ID):
+		if slices.Contains(read.rebuilt, block.ID) {
 			settle(block, rebuiltReading(read, block))
 			continue
 		}
-		var throttle chan struct{}
-		if block.Throttle != "" {
-			throttle = throttles[block.Throttle]
-			if throttle == nil {
-				throttle = make(chan struct{}, s.Throttle())
-				throttles[block.Throttle] = throttle
+		waiting = append(waiting, block)
+	}
+	settled := make(chan settledReading, len(waiting))
+	running, throttled := 0, map[string]int{}
+	for len(waiting) != 0 || running != 0 {
+		if ctx.Err() != nil {
+			for _, block := range waiting {
+				settle(block, canceled)
 			}
-			if !acquire(ctx, throttle) {
-				settle(block, blockReading{state: sideUnknown, reason: "the observation was canceled", remedy: repeatObserved(read.context.Name)})
-				continue
-			}
+			waiting = nil
 		}
-		if !acquire(ctx, slots) {
-			if throttle != nil {
-				<-throttle
+		waiting = slices.DeleteFunc(waiting, func(block reconciliation.Block) bool {
+			if ctx.Err() != nil || running >= s.Concurrency() || block.Throttle != "" && throttled[block.Throttle] >= s.Throttle() {
+				return false
 			}
-			settle(block, blockReading{state: sideUnknown, reason: "the observation was canceled", remedy: repeatObserved(read.context.Name)})
+			running++
+			if block.Throttle != "" {
+				throttled[block.Throttle]++
+			}
+			go func() {
+				settled <- settledReading{block: block, reading: s.inspect(ctx, view, store, approved, read, block, material)}
+			}()
+			return true
+		})
+		if running == 0 {
 			continue
 		}
-		running.Add(1)
-		go func() {
-			defer running.Done()
-			defer func() {
-				<-slots
-				if throttle != nil {
-					<-throttle
-				}
-			}()
-			settle(block, s.inspect(ctx, view, store, approved, read, block, material))
-		}()
+		var done settledReading
+		select {
+		case done = <-settled:
+		case <-ctx.Done():
+			if len(waiting) != 0 {
+				continue
+			}
+			done = <-settled
+		}
+		running--
+		if done.block.Throttle != "" {
+			throttled[done.block.Throttle]--
+		}
+		settle(done.block, done.reading)
 	}
-	running.Wait()
 	status := "ok"
 	for _, reading := range readings {
 		if reading.state == sideUnknown {
@@ -182,22 +192,6 @@ func (s Service) inspectAll(ctx context.Context, view RunView, store recordReade
 	}
 	s.reportObservation(ctx, ProgressEvent{Status: status, Completed: len(blocks), Declared: len(blocks)})
 	return readings
-}
-
-func acquire(ctx context.Context, slots chan struct{}) bool {
-	if ctx.Err() != nil {
-		return false
-	}
-	select {
-	case <-ctx.Done():
-		return false
-	case slots <- struct{}{}:
-	}
-	if ctx.Err() != nil {
-		<-slots
-		return false
-	}
-	return true
 }
 
 func (s Service) reportObservation(ctx context.Context, event ProgressEvent) {
