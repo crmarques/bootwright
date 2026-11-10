@@ -135,7 +135,77 @@ def test_unproved_chain_stays_unknown(object_request, name, approval):
     plans, replaces = broken(name)
     cluster = Cluster(object_request, "sample.v3", plans, replaces=replaces)
     cluster.program(approval=approval, check=True)
-    assert cluster.observe()["classification"] == "unknown"
+    state = cluster.observe()
+    assert state["classification"] == "unknown"
+    gap = RETENTION.get(name)
+    assert state["olm"][0].get("chainGap") == gap if gap else "chainGap" not in (state["olm"] or [{}])[0]
+    assert state["observations"][0]["ownership"] == ("own" if gap else "unknown")
+    if gap:
+        assert state["olm"][0]["chain"] == [] and state["olm"][0]["installedCSV"] == "sample.v3"
+        assert state["checks"][0]["satisfied"] is False and not state["checks"][0].get("unknown")
+
+
+RETENTION = {"duplicate": {"cause": "duplicatePlans", "csv": "sample.v3", "plans": ["upgrade-b", "upgrade-c"]}}
+
+
+def seven_links():
+    return [plan("initial", 1, "sample.v1")] + [plan("upgrade-%d" % n, n, "sample.v%d" % n, "sample.v%d" % (n - 1)) for n in range(2, 8)]
+
+
+@pytest.mark.parametrize("deleted,missing", [(2, "sample.v2"), (1, "sample.v1")])
+@pytest.mark.parametrize("approval", ["exact", "operatorManaged"])
+def test_a_link_olm_collected_is_a_retention_gap(object_request, deleted, missing, approval):
+    # gcInstallPlans: above five plans per namespace, lowest generations first.
+    cluster = Cluster(object_request, "sample.v7", seven_links()[deleted:], replaces="sample.v6")
+    cluster.program(approval=approval, check=True)
+    state = cluster.observe()
+    assert state["classification"] == "unknown" and state["observations"][0]["ownership"] == "own"
+    assert state["olm"][0]["chainGap"] == {"cause": "planCollected", "csv": missing} and state["olm"][0]["chain"] == []
+    assert state["checks"][0]["satisfied"] is False and not state["checks"][0].get("unknown")
+
+
+@pytest.mark.parametrize("change", ["fewer than five plans", "an older plan survives", "a plan without generation"])
+def test_a_missing_link_olm_would_not_have_collected_is_no_retention_gap(object_request, change):
+    plans = seven_links()[2:]
+    if change == "fewer than five plans":
+        del plans[0]
+    elif change == "an older plan survives":
+        plans.append(plan("other-upgrade", 1, "other.v2", "other.v1"))
+    else:
+        plans.append(plan("other-upgrade", 9, "other.v2", "other.v1"))
+        del plans[-1]["spec"]["generation"]
+    cluster = Cluster(object_request, "sample.v7", plans, replaces="sample.v6")
+    cluster.program(check=True)
+    state = cluster.observe()
+    assert state["classification"] == "unknown" and state["observations"][0]["ownership"] == "unknown"
+    assert all("chainGap" not in fact for fact in state["olm"])
+
+
+@pytest.mark.parametrize("phase", ["Failed", "Replacing", "Installing"])
+def test_a_retention_gap_needs_a_succeeded_installed_csv(object_request, phase):
+    cluster = Cluster(object_request, "sample.v7", seven_links()[2:], replaces="sample.v6", phase=phase)
+    cluster.program(check=True)
+    state = cluster.observe()
+    assert state["classification"] == "unknown" and state["observations"][0]["ownership"] == "unknown"
+    assert all("chainGap" not in fact for fact in state["olm"])
+
+
+def test_a_chain_past_sixteen_csvs_is_a_retention_gap(object_request):
+    plans = [plan("initial", 1, "sample.v1")] + [plan("upgrade-%02d" % n, n, "sample.v%d" % n, "sample.v%d" % (n - 1)) for n in range(2, 18)]
+    cluster = Cluster(object_request, "sample.v17", plans, replaces="sample.v16")
+    cluster.program(check=True)
+    state = cluster.observe()
+    assert state["classification"] == "unknown" and state["olm"][0]["chainGap"] == {"cause": "chainTooLong"}
+    assert state["observations"][0]["ownership"] == "own"
+
+
+def test_the_installed_csvs_own_plan_missing_is_no_retention_gap(object_request):
+    plans = two_links()[:2]
+    cluster = Cluster(object_request, "sample.v3", plans, replaces="sample.v2")
+    cluster.program(check=True)
+    state = cluster.observe()
+    assert state["classification"] == "unknown" and state["observations"][0]["ownership"] == "unknown"
+    assert all("chainGap" not in fact for fact in state["olm"])
 
 
 @pytest.mark.parametrize("phase", ["Installing", "Failed", "Replacing"])
@@ -172,6 +242,7 @@ def test_dependent_chain(object_request, name):
     state = cluster.observe()
     if name:
         assert state["classification"] == "unknown"
+        assert state["dependents"][0].get("chainGap") == RETENTION.get(name)
         return
     assert state["classification"] == "completed"
     fact = state["dependents"][0]

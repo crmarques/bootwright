@@ -13296,3 +13296,38 @@ occurred. **Limitations:** the `context update` addition is a prediction, as
 `diff` without `--observe` is; an attempt an earlier build interrupted between
 its withdrawal and its restart recorded no before-state, so its retry under
 this build still reads no effect.
+
+### X351 — Chain retention gap
+
+**Items:** B1259 (2026-11-10, [D252](backlog.md#d252)), delivered in-tree.
+**Kind:** safety. **Owners:** Add-ons.
+
+The cluster object collector now classifies why an owner-approved upgrade's
+replacement chain could not be followed. Only OLM's retention, with the
+installed CSV `Succeeded` (an older link or the pinned plan no InstallPlan
+lists any more in a namespace that still holds five or more plans, none older
+than the oldest proved link, as `gcInstallPlans` leaves it; several plans for
+one CSV; more than sixteen CSVs), is recorded as a `chainGap` cause in the OLM or
+dependent facts, without raising the observation's ownership to unknown; the
+block still reads unknown through `reached`, and the observation stays
+read-only. Its unresolved reason names the Subscription, the installed and
+pinned CSV and the missing CSV or the duplicate plans, and its remedy is not a
+`destroy`. Every other unproved chain still marks ownership unknown and keeps
+the foreign-object reason and destroy remedy; a malformed cause keeps the
+generic one, and a gap beside another unknown cause reports that cause first.
+The shared evidence shape moved `addon-instance-evidence-v2` and
+`cluster-network-evidence-v2`. The rule and the closed cause set:
+[observation and continuation](../add-ons.md#observation-and-continuation).
+
+| Finding | Change |
+| --- | --- |
+| REC-13 | `chain` in `cluster_objects_engine.py` records the retention cause and skips the pinned-CSV and approval reads that raised unknown; `ChainGap`, `RetentionGaps` and `validGap` in `internal/addons/clusterobjects`; `unresolved` in `internal/addons/instance`; add-ons.md and project.md qualify the promise |
+
+The installed CSV's own plan missing is not a retention cause: OLM collects
+the oldest plans first, so the newest surviving link must be proved before an
+older one counts as collected. A plan deleted by hand from a namespace of
+fewer than five plans, or beside an older surviving plan, keeps the destroy
+remedy.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred.

@@ -196,3 +196,76 @@ func TestNativeEvidenceValuesAreBoundedAndGrammatical(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestARetentionGapStaysUnknownAndIsTheOnlyCauseItNames(t *testing.T) {
+	sub := Ref{APIVersion: "operators.coreos.com/v1alpha1", Kind: "Subscription", Namespace: "operators", Name: "operator", Namespaced: true}
+	p := Program{Steps: []Step{
+		{Subscribe: &Subscription{Object: ObjectEntry{Ref: sub, DesiredDigest: "digest"}, CSV: "op.v1"}},
+		{ApproveDependent: &DependentApproval{Namespace: "engine", Subscription: "engine", CSV: "engine.v1"}},
+	}}
+	base := func() Evidence {
+		return Evidence{
+			Receipts:     []Receipt{{Ref: sub, UID: "uid", DesiredDigest: "digest", Disposition: "unchanged", Basis: UIDMatched}},
+			Observations: []ObjectObservation{{Ref: sub, Ownership: Own, Equal: true}},
+			OLM:          []OLMFacts{{Namespace: "operators", Subscription: "operator", InstalledCSV: "op.v3", Gap: &ChainGap{Cause: PlanCollected, CSV: "op.v2"}}},
+			Dependents:   []DependentFacts{{Namespace: "engine", Subscription: "engine", UID: "engine-uid", InstalledCSV: "engine.v1"}},
+		}
+	}
+	e := base()
+	if ValidateEvidence(e) != nil || EvaluateEvidence(p, e) != UnknownRealization {
+		t.Fatal("a retention gap must validate and read unknown")
+	}
+	gaps, other := RetentionGaps(p, e)
+	if other || len(gaps) != 1 || gaps[0].Subscription != "operator" || gaps[0].Expected != "op.v1" || gaps[0].Installed != "op.v3" || !strings.Contains(gaps[0].Detail(), "no InstallPlan that installed CSV op.v2 remains") {
+		t.Fatalf("%+v %v", gaps, other)
+	}
+	e.Dependents[0].InstalledCSV, e.Dependents[0].Gap = "engine.v4", &ChainGap{Cause: ChainTooLong}
+	if gaps, other := RetentionGaps(p, e); other || len(gaps) != 2 || gaps[1].Subscription != "engine" {
+		t.Fatalf("a dependent gap: %+v %v", gaps, other)
+	}
+	for name, change := range map[string]func(*Evidence){
+		"an unknown check":       func(e *Evidence) { e.Checks = []CheckResult{{Unknown: true}}; p.Checks = []Check{{}} },
+		"a foreign object":       func(e *Evidence) { e.Observations[0].Ownership = Foreign },
+		"a receipt mismatch":     func(e *Evidence) { e.Receipts[0].DesiredDigest = "other" },
+		"another dependent csv":  func(e *Evidence) { e.Dependents[0].InstalledCSV = "engine.v9" },
+		"an unprogrammed source": func(e *Evidence) { e.OLM[0].Subscription = "stranger" },
+	} {
+		p.Checks = nil
+		e := base()
+		change(&e)
+		if gaps, other := RetentionGaps(p, e); !other && len(gaps) != 0 {
+			t.Errorf("%s: a gap hid another unknown cause: %+v", name, gaps)
+		}
+	}
+	p.Checks = nil
+	for name, gap := range map[string]ChainGap{
+		"an unknown cause":     {Cause: "planDeleted", CSV: "op.v2"},
+		"an invalid csv":       {Cause: PlanCollected, CSV: "Op V2"},
+		"an empty plan name":   {Cause: DuplicatePlans, CSV: "op.v2", Plans: []string{"plan-a", ""}},
+		"a sentinel plan name": {Cause: DuplicatePlans, CSV: "op.v2", Plans: []string{"plan-a", "invalid"}},
+	} {
+		e := base()
+		e.OLM[0].Gap = &gap
+		if ValidateEvidence(e) == nil {
+			t.Errorf("%s validated", name)
+		}
+	}
+	for name, change := range map[string]func(*Evidence){
+		"beside a chain":          func(e *Evidence) { e.OLM[0].Chain = chain("op.v1", "op.v3") },
+		"on the pinned csv":       func(e *Evidence) { e.OLM[0].InstalledCSV = "op.v1" },
+		"collected naming no csv": func(e *Evidence) { e.OLM[0].Gap.CSV = "" },
+		"duplicate of one plan": func(e *Evidence) {
+			e.OLM[0].Gap = &ChainGap{Cause: DuplicatePlans, CSV: "op.v3", Plans: []string{"plan-a"}}
+		},
+		"too long naming a csv": func(e *Evidence) { e.OLM[0].Gap = &ChainGap{Cause: ChainTooLong, CSV: "op.v2"} },
+	} {
+		e := base()
+		change(&e)
+		if EvaluateEvidence(p, e) != UnknownRealization {
+			t.Errorf("%s: read known", name)
+		}
+		if gaps, _ := RetentionGaps(p, e); len(gaps) != 0 {
+			t.Errorf("%s: malformed gap read as retention: %+v", name, gaps)
+		}
+	}
+}

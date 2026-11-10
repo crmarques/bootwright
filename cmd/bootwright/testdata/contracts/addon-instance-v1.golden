@@ -1,5 +1,5 @@
 implementation: addon-instance-v1
-content-digest: 993b57e89d799b7d6b525517aa2dd88e8f31ece5cba2c1f1dcf19e590385f16c
+content-digest: 493e3268d9a21775626378b40d42829af4892dfc23f8e9cc142598a817a63681
 request-version: addon-instance-request-v1
 automation-formats: none
 mark-formats: bootwright.cluster-objects.owner-v1, bootwright.io/owner
@@ -77,6 +77,10 @@ evidence-schema:
   olm[].chain []struct clusterobjects.ChainLink omitempty
   olm[].chain[].plan string
   olm[].chain[].csv string
+  olm[].chainGap *struct clusterobjects.ChainGap omitempty
+  olm[].chainGap.cause string
+  olm[].chainGap.csv string omitempty
+  olm[].chainGap.plans []string omitempty
   dependents []struct clusterobjects.DependentFacts
   dependents[].namespace string
   dependents[].subscription string
@@ -90,6 +94,10 @@ evidence-schema:
   dependents[].chain []struct clusterobjects.ChainLink omitempty
   dependents[].chain[].plan string
   dependents[].chain[].csv string
+  dependents[].chainGap *struct clusterobjects.ChainGap omitempty
+  dependents[].chainGap.cause string
+  dependents[].chainGap.csv string omitempty
+  dependents[].chainGap.plans []string omitempty
   checks []struct clusterobjects.CheckResult
   checks[].unknown bool omitempty
   checks[].index int

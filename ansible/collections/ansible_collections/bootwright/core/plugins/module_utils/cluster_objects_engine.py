@@ -58,6 +58,8 @@ class Engine:
         self.plan_readings = {}
         self.csv_readings = {}
         self.chains = {}
+        self.gaps = {}
+        self.unproved = False
         self.snapshot = None
         self.projections = {}
 
@@ -218,7 +220,9 @@ class Engine:
         if installed and self.chains.get((value["namespace"], value["subscription"])) == installed:
             expected = installed
         if installed != expected or model.native(installed, "name") == "invalid":
-            if observe and installed:
+            if observe and installed and (value["namespace"], value["subscription"]) in self.gaps:
+                self.unproved = True
+            elif observe and installed:
                 self.unknown = True
             return False, model.native(installed or "pending", "name")
         csv = self.probe(olm_ref("ClusterServiceVersion", value["namespace"], installed), CSV_FIELDS)
@@ -290,6 +294,7 @@ class Engine:
             installed = live.get("status", {}).get("installedCSV", "")
             succeeded, last = (False, "pending")
             chain = self.chain(obj, live, csv, installed) if observe and installed and installed != csv else None
+            gap = self.gaps.get((obj["namespace"], obj["name"])) if observe and not chain else None
             if installed == csv or chain:
                 succeeded, last = self.csv({"namespace": obj["namespace"], "subscription": obj["name"], "csv": installed}, observe)
                 if chain and not succeeded:
@@ -302,7 +307,7 @@ class Engine:
                         return
                     raise Refused(model.label(obj) + " resolution failed: " + model.native(condition.get("message", "")))
             plan_name = (live.get("status", {}).get("installPlanRef") or {}).get("name", "")
-            if chain:
+            if chain or gap:
                 approved = self.installed_plan(obj, live, csv)
             elif managed:
                 approved = self.first_plan(obj, live, csv, observe) or approved
@@ -312,13 +317,18 @@ class Engine:
                 approved = self.installed_plan(obj, live, csv)
             else:
                 approved = self.plan(obj, live, csv, plan_name, observe) if plan_name else None
-            if installed != csv and not chain:
+            if gap:
+                self.unproved = True
+                succeeded, last = False, model.native(installed, "name")
+            elif installed != csv and not chain:
                 succeeded, last = self.csv({"namespace": obj["namespace"], "subscription": obj["name"], "csv": csv}, observe)
             if observe or succeeded:
                 self.not_ready = self.not_ready or not succeeded
                 fact = {"namespace": obj["namespace"], "subscription": obj["name"],
                         "installedCSV": model.native(installed, "name") if installed else "", "installPlan": approved or {},
                         "chain": [{"plan": link["plan"], "csv": link["csv"]} for link in chain or []]}
+                if gap:
+                    fact["chainGap"] = dict(gap)
                 if dependent:
                     fact["uid"] = live["metadata"]["uid"]
                     version = self.csv_readings.get((obj["namespace"], installed), {}).get("spec", {}).get("version", "")
@@ -387,11 +397,31 @@ class Engine:
     def chain(self, obj, live, csv, installed):
         # B1184: OLM records the replaced CSV as each upgrade's bundle lookup
         # `replaces`; every plan must survive, Manual, approved and from the source.
+        # B1259: with a Succeeded installed CSV, a link OLM's gcInstallPlans
+        # could have collected, two plans for one CSV or more than sixteen CSVs
+        # is a retention gap; every other failure is not.
         root = self.installed_plan(obj, live, csv)
         plans = self.listed("InstallPlan", obj["namespace"], PLAN_FIELDS)
         head = self.probe(olm_ref("ClusterServiceVersion", obj["namespace"], installed), CSV_FIELDS)
-        if root is None or not plans or not head:
+        if plans is None or not head:
             return None
+
+        def mentioned(name):
+            return any(name in (plan.get("spec", {}).get("clusterServiceVersionNames") or [])
+                       or any(lookup.get("identifier") == name for lookup in plan.get("status", {}).get("bundleLookups") or [])
+                       for plan in plans)
+
+        def gap(cause, **found):
+            if head.get("status", {}).get("phase") == "Succeeded":
+                self.gaps[(obj["namespace"], obj["name"])] = dict(found, cause=cause)
+
+        def collected(name, oldest):
+            # gcInstallPlans deletes only above five plans per namespace and
+            # lowest generations first, so every survivor is no older than the
+            # oldest proved link.
+            generations = [plan.get("spec", {}).get("generation") for plan in plans]
+            return (len(plans) >= 5 and not mentioned(name)
+                    and all(isinstance(g, int) and not isinstance(g, bool) and g >= oldest for g in generations))
         catalog, uid = live.get("spec", {}), live["metadata"]["uid"]
         source = {"name": catalog.get("source"), "namespace": catalog.get("sourceNamespace")}
         links = {}
@@ -406,12 +436,20 @@ class Engine:
             for lookup in lookups:
                 if isinstance(lookup.get("identifier"), str) and lookup["identifier"] in (spec.get("clusterServiceVersionNames") or []):
                     links.setdefault(lookup["identifier"], []).append((plan, lookup.get("replaces")))
-        pinned = self.plan_readings.get((obj["namespace"], root["name"]), {}).get("spec", {}).get("generation")
         chain, current, generation = [], installed, None
         while current != csv:
-            found = links.get(current) or []
-            if len(found) != 1 or len(chain) >= 15 or model.native(current, "name") != current:
+            if not isinstance(current, str) or not current or model.native(current, "name") != current:
                 return None
+            found = links.get(current) or []
+            if len(chain) >= 15:
+                return gap("chainTooLong")
+            if not found:
+                return gap("planCollected", csv=current) if chain and collected(current, generation) else None
+            if len(found) > 1:
+                names = [item[0]["metadata"].get("name") for item in found]
+                if len(names) > 16 or any(model.native(name, "name") in ("", "invalid") or model.native(name, "name") != name for name in names):
+                    return None
+                return gap("duplicatePlans", csv=current, plans=names)
             plan, previous = found[0]
             name = model.native(plan["metadata"].get("name"), "name")
             if name != plan["metadata"].get("name") or generation is not None and plan["spec"]["generation"] >= generation:
@@ -421,6 +459,9 @@ class Engine:
             self.plan_readings[(obj["namespace"], name)] = plan
             chain.insert(0, {"plan": name, "csv": current, "name": name})
             current, generation = previous, plan["spec"]["generation"]
+        if root is None:
+            return gap("planCollected", csv=csv) if chain and collected(csv, generation) else None
+        pinned = self.plan_readings.get((obj["namespace"], root["name"]), {}).get("spec", {}).get("generation")
         if not chain or not isinstance(pinned, int) or isinstance(pinned, bool) or pinned >= generation:
             return None
         self.chains[(obj["namespace"], obj["name"])] = installed
@@ -545,7 +586,7 @@ class Engine:
         if self.unknown and readings:
             readings[0]["ownership"] = "unknown"
             readings[0]["equal"] = False
-        unknown = self.unknown or any(r["ownership"] in ("unknown", "foreign") for r in readings)
+        unknown = self.unknown or self.unproved or any(r["ownership"] in ("unknown", "foreign") for r in readings)
         complete = (not self.not_ready and all(r["ownership"] == "own" and r["equal"] for r in readings)
                     and all(c["satisfied"] for c in self.state["checks"])
                     and all(d.get("uid") for d in self.state["dependents"]))

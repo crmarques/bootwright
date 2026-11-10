@@ -46,7 +46,7 @@ func ValidateEvidence(evidence Evidence) error {
 				return fail()
 			}
 		}
-		if !nativeName(olm.Namespace) || !nativeName(olm.Subscription) || !nativeName(olm.InstalledCSV) || !bounded(olm.CSVVersion) || !nativeImage(olm.CatalogImage) || !nativeImage(olm.BundleImage) || !validPlan(olm.InstallPlan) || !validChain(olm.Chain) {
+		if !nativeName(olm.Namespace) || !nativeName(olm.Subscription) || !nativeName(olm.InstalledCSV) || !bounded(olm.CSVVersion) || !nativeImage(olm.CatalogImage) || !nativeImage(olm.BundleImage) || !validPlan(olm.InstallPlan) || !validChain(olm.Chain) || !validGap(olm.Gap) {
 			return fail()
 		}
 		if olm.MaxOpenShiftVersion != "" && olm.MaxOpenShiftVersion != "invalid" && (!bounded(olm.MaxOpenShiftVersion) || !minorVersion.MatchString(olm.MaxOpenShiftVersion)) {
@@ -54,7 +54,7 @@ func ValidateEvidence(evidence Evidence) error {
 		}
 	}
 	for _, dependent := range evidence.Dependents {
-		if !nativeName(dependent.Namespace) || !nativeName(dependent.Subscription) || !nativeName(dependent.InstalledCSV) || !bounded(dependent.CSVVersion) || !bounded(dependent.UID) || !validPlan(dependent.InstallPlan) || !validChain(dependent.Chain) {
+		if !nativeName(dependent.Namespace) || !nativeName(dependent.Subscription) || !nativeName(dependent.InstalledCSV) || !bounded(dependent.CSVVersion) || !bounded(dependent.UID) || !validPlan(dependent.InstallPlan) || !validChain(dependent.Chain) || !validGap(dependent.Gap) {
 			return fail()
 		}
 	}
@@ -71,6 +71,20 @@ func validChain(chain []ChainLink) bool {
 	}
 	for _, link := range chain {
 		if link.Plan == "" || link.CSV == "" || link.Plan == "invalid" || link.CSV == "invalid" || !nativeName(link.Plan) || !nativeName(link.CSV) {
+			return false
+		}
+	}
+	return true
+}
+func validGap(gap *ChainGap) bool {
+	if gap == nil {
+		return true
+	}
+	if gap.Cause != PlanCollected && gap.Cause != DuplicatePlans && gap.Cause != ChainTooLong || gap.CSV == "invalid" || !nativeName(gap.CSV) || len(gap.Plans) > 16 {
+		return false
+	}
+	for _, plan := range gap.Plans {
+		if plan == "" || plan == "invalid" || !nativeName(plan) {
 			return false
 		}
 	}

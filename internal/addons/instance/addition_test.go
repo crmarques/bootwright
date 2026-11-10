@@ -136,3 +136,107 @@ func TestAnUnresolvedAddedInstanceNeverInvitesDeletingAnObjectAnotherInstanceDec
 		}
 	}
 }
+
+func TestAnUpgradeChainOLMRetentionBrokeIsNamedAndNeverAnInvitationToDestroy(t *testing.T) {
+	request := fixtureRequest(t)
+	block := fixtureBlock(t, request)
+	capability := New(nil, fixtureRegistry(t), nil)
+	collected := func(e *Evidence) {
+		e.OLM[0].InstalledCSV, e.OLM[0].Gap = "fixture.v2.0.0", &co.ChainGap{Cause: co.PlanCollected, CSV: "fixture.v1.0.0"}
+		e.Postcondition, e.Classification = false, "unknown"
+		for i := range e.Checks {
+			e.Checks[i].Satisfied = false
+		}
+	}
+	unproved := func(e *Evidence) {
+		e.OLM[0].InstalledCSV = "fixture.v2.0.0"
+		e.Observations[0].Ownership, e.Observations[0].Equal = co.Unknown, false
+		e.Postcondition, e.Classification = false, "unknown"
+	}
+	explain := func(e Evidence) []lifecycle.Unresolved {
+		var out []lifecycle.Unresolved
+		for _, call := range []func() (lifecycle.Unresolved, bool){
+			func() (lifecycle.Unresolved, bool) {
+				return capability.Unresolved(reconciliation.Apply, block, encoded(t, e))
+			},
+			func() (lifecycle.Unresolved, bool) {
+				return capability.UnresolvedAdded(reconciliation.Apply, block, encoded(t, e), nil)
+			},
+		} {
+			unresolved, ok := call()
+			if !ok {
+				t.Fatalf("no reason for %+v", e.OLM)
+			}
+			out = append(out, unresolved)
+		}
+		return out
+	}
+	for name, test := range map[string]struct {
+		change func(*Evidence)
+		reason string
+	}{
+		"the pinned plan was collected": {collected, "Subscription/fixture-operator/fixture reports CSV fixture.v2.0.0 in place of the pinned CSV fixture.v1.0.0, and its upgrade chain cannot be proved: the InstallPlan that installed the pinned CSV fixture.v1.0.0 no longer exists"},
+		"a later plan was collected": {func(e *Evidence) {
+			collected(e)
+			e.OLM[0].Gap.CSV = "fixture.v1.5.0"
+		}, "no InstallPlan that installed CSV fixture.v1.5.0 remains"},
+		"two plans install one CSV": {func(e *Evidence) {
+			collected(e)
+			e.OLM[0].Gap = &co.ChainGap{Cause: co.DuplicatePlans, CSV: "fixture.v2.0.0", Plans: []string{"install-a", "install-b"}}
+		}, "InstallPlans install-a, install-b each install CSV fixture.v2.0.0"},
+		"more than sixteen CSVs": {func(e *Evidence) {
+			collected(e)
+			e.OLM[0].Gap = &co.ChainGap{Cause: co.ChainTooLong}
+		}, "more than sixteen CSVs lie between CSV fixture.v1.0.0 and CSV fixture.v2.0.0"},
+	} {
+		e := fixtureEvidence(t, request, block.RequestDigest)
+		test.change(&e)
+		if effect, err := effectOf(encoded(t, e), request, block.RequestDigest); err != nil || effect != reconciliation.EffectUnknown {
+			t.Errorf("%s: effect %s %v", name, effect, err)
+		}
+		for _, unresolved := range explain(e) {
+			if !strings.Contains(unresolved.Reason, test.reason) || unresolved.Remedy != unprovedChain || strings.Contains(unresolved.Remedy, "destroy") {
+				t.Errorf("%s: %+v", name, unresolved)
+			}
+		}
+	}
+	for name, change := range map[string]func(*Evidence){
+		"an Automatic, other-source or replaces-mismatched link": unproved,
+		"a gap beside a recorded chain": func(e *Evidence) {
+			collected(e)
+			e.OLM[0].Chain = []co.ChainLink{{Plan: "install-a", CSV: "fixture.v1.0.0"}, {Plan: "install-b", CSV: "fixture.v2.0.0"}}
+		},
+		"a gap on the pinned CSV": func(e *Evidence) {
+			collected(e)
+			e.OLM[0].InstalledCSV = "fixture.v1.0.0"
+		},
+		"a collected gap naming no CSV": func(e *Evidence) {
+			collected(e)
+			e.OLM[0].Gap.CSV = ""
+		},
+		"a duplicate gap naming one plan": func(e *Evidence) {
+			collected(e)
+			e.OLM[0].Gap = &co.ChainGap{Cause: co.DuplicatePlans, CSV: "fixture.v2.0.0", Plans: []string{"install-a"}}
+		},
+	} {
+		e := fixtureEvidence(t, request, block.RequestDigest)
+		change(&e)
+		reasons := explain(e)
+		if reasons[0].Remedy != destroyAndApply || strings.Contains(reasons[0].Reason, "cannot be proved") {
+			t.Errorf("%s: %+v", name, reasons[0])
+		}
+	}
+	e := fixtureEvidence(t, request, block.RequestDigest)
+	collected(&e)
+	e.Checks[0].Unknown = true
+	reasons := explain(e)
+	if reasons[0].Remedy != destroyAndApply || !strings.HasPrefix(reasons[0].Reason, "add-on ") || !strings.Contains(reasons[0].Reason, "; also Subscription/fixture-operator/fixture reports CSV fixture.v2.0.0 in place of the pinned CSV fixture.v1.0.0") {
+		t.Errorf("a gap beside an unknown check: %+v", reasons[0])
+	}
+	e = fixtureEvidence(t, request, block.RequestDigest)
+	collected(&e)
+	e.OLM[0].Gap.Cause = "planDeleted"
+	if _, ok := capability.Unresolved(reconciliation.Apply, block, encoded(t, e)); ok {
+		t.Error("a gap outside the closed set of causes was read")
+	}
+}

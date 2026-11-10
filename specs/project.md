@@ -96,9 +96,9 @@ resources are those that no owned-object evidence
 transfer, adopt or reclaim ownership, so an owned object stays as applied and
 a change to it is a destroy followed by a fresh apply
 ([D153](milestones/backlog.md#d153)); approving an upgrade of an owned
-operator subscription stays the owner's, and an upgrade the owner approves
-reads complete by the
-[replacement chain rule](add-ons.md#observation-and-continuation). An optional
+operator subscription stays the owner's, and the
+[replacement chain rule](add-ons.md#observation-and-continuation) bounds when an
+upgrade the owner approves reads complete. An optional
 [GitOps bootstrap object](add-ons.md#the-gitops-bootstrap-object) hands one
 cluster to GitOps earlier, once every other block of the `add-ons` stage that
 requires that cluster's installation block, its other add-on instances and

@@ -51,11 +51,26 @@ type OLMFacts struct {
 	Plans               []OperatorPlan `json:"plans,omitempty"`
 	CSVs                []OperatorCSV  `json:"csvs,omitempty"`
 	Chain               []ChainLink    `json:"chain,omitempty"`
+	Gap                 *ChainGap      `json:"chainGap,omitempty"`
 }
 
 type ChainLink struct {
 	Plan string `json:"plan"`
 	CSV  string `json:"csv"`
+}
+
+type GapCause string
+
+const (
+	PlanCollected  GapCause = "planCollected"
+	DuplicatePlans GapCause = "duplicatePlans"
+	ChainTooLong   GapCause = "chainTooLong"
+)
+
+type ChainGap struct {
+	Cause GapCause `json:"cause"`
+	CSV   string   `json:"csv,omitempty"`
+	Plans []string `json:"plans,omitempty"`
 }
 
 type OperatorPlan struct {
@@ -78,6 +93,7 @@ type DependentFacts struct {
 	InstalledCSV string      `json:"installedCSV"`
 	CSVVersion   string      `json:"csvVersion"`
 	Chain        []ChainLink `json:"chain,omitempty"`
+	Gap          *ChainGap   `json:"chainGap,omitempty"`
 }
 
 type CheckResult struct {
@@ -171,6 +187,7 @@ type CSVObservation struct {
 	Installed, Expected string
 	Plan                string
 	Chain               []ChainLink
+	Gap                 *ChainGap
 }
 
 type Observation struct {
@@ -225,6 +242,9 @@ func EvaluateObservation(observation Observation) Realization {
 }
 
 func reached(csv CSVObservation) bool {
+	if csv.Gap != nil {
+		return false
+	}
 	if csv.Installed == "" || csv.Installed == csv.Expected {
 		return len(csv.Chain) == 0
 	}
@@ -239,6 +259,78 @@ func reached(csv CSVObservation) bool {
 		seen[link.CSV], seen["plan/"+link.Plan] = true, true
 	}
 	return true
+}
+
+type RetentionGap struct {
+	Namespace, Subscription, Expected, Installed string
+	ChainGap
+}
+
+func (gap RetentionGap) Detail() string {
+	switch gap.Cause {
+	case PlanCollected:
+		if gap.CSV == gap.Expected {
+			return "the InstallPlan that installed the pinned CSV " + gap.CSV + " no longer exists, as when OLM, which keeps five InstallPlans per namespace, collected it"
+		}
+		return "no InstallPlan that installed CSV " + gap.CSV + " remains, as when OLM, which keeps five InstallPlans per namespace, collected it"
+	case DuplicatePlans:
+		return "InstallPlans " + strings.Join(gap.Plans, ", ") + " each install CSV " + gap.CSV
+	default:
+		return "more than sixteen CSVs lie between CSV " + gap.Expected + " and CSV " + gap.Installed
+	}
+}
+
+func retentionGap(gap *ChainGap, chain []ChainLink, expected, installed string) bool {
+	if gap == nil || len(chain) != 0 || expected == "" || installed == "" || installed == expected {
+		return false
+	}
+	switch gap.Cause {
+	case PlanCollected:
+		return gap.CSV != "" && len(gap.Plans) == 0
+	case DuplicatePlans:
+		return gap.CSV != "" && len(gap.Plans) >= 2
+	case ChainTooLong:
+		return gap.CSV == "" && len(gap.Plans) == 0
+	}
+	return false
+}
+
+func RetentionGaps(program Program, evidence Evidence) ([]RetentionGap, bool) {
+	expected := map[string]string{}
+	for _, step := range program.Steps {
+		if step.Subscribe != nil {
+			expected[step.Subscribe.Object.Namespace+"/"+step.Subscribe.Object.Name] = step.Subscribe.CSV
+		}
+		if step.ApproveDependent != nil {
+			expected[step.ApproveDependent.Namespace+"/"+step.ApproveDependent.Subscription] = step.ApproveDependent.CSV
+		}
+	}
+	var gaps []RetentionGap
+	bridged := evidence
+	bridged.OLM = append([]OLMFacts(nil), evidence.OLM...)
+	bridged.Dependents = append([]DependentFacts(nil), evidence.Dependents...)
+	bridge := func(namespace, subscription string, gap *ChainGap, chain []ChainLink, installed string) (string, bool) {
+		want := expected[namespace+"/"+subscription]
+		if !retentionGap(gap, chain, want, installed) {
+			return "", false
+		}
+		gaps = append(gaps, RetentionGap{Namespace: namespace, Subscription: subscription, Expected: want, Installed: installed, ChainGap: *gap})
+		return want, true
+	}
+	for i, olm := range evidence.OLM {
+		if want, ok := bridge(olm.Namespace, olm.Subscription, olm.Gap, olm.Chain, olm.InstalledCSV); ok {
+			bridged.OLM[i].InstalledCSV, bridged.OLM[i].Gap = want, nil
+		}
+	}
+	for i, dependent := range evidence.Dependents {
+		if want, ok := bridge(dependent.Namespace, dependent.Subscription, dependent.Gap, dependent.Chain, dependent.InstalledCSV); ok {
+			bridged.Dependents[i].InstalledCSV, bridged.Dependents[i].Gap = want, nil
+		}
+	}
+	if len(gaps) == 0 {
+		return nil, false
+	}
+	return gaps, EvaluateEvidence(program, bridged) == UnknownRealization
 }
 
 func BoundedObservation(value string) string {
@@ -322,7 +414,7 @@ func EvaluateEvidence(program Program, evidence Evidence) Realization {
 			return UnknownRealization
 		}
 		csvSeen[key] = true
-		observation.CSVs = append(observation.CSVs, CSVObservation{ReadKnown: true, Installed: olm.InstalledCSV, Expected: expected, Plan: olm.InstallPlan.Name, Chain: olm.Chain})
+		observation.CSVs = append(observation.CSVs, CSVObservation{ReadKnown: true, Installed: olm.InstalledCSV, Expected: expected, Plan: olm.InstallPlan.Name, Chain: olm.Chain, Gap: olm.Gap})
 	}
 	for _, dependent := range evidence.Dependents {
 		key := dependent.Namespace + "/" + dependent.Subscription
@@ -335,7 +427,7 @@ func EvaluateEvidence(program Program, evidence Evidence) Realization {
 			state = Absent
 		}
 		observation.Dependents = append(observation.Dependents, state)
-		observation.CSVs = append(observation.CSVs, CSVObservation{ReadKnown: true, Installed: dependent.InstalledCSV, Expected: expectedCSVs[key], Plan: dependent.InstallPlan.Name, Chain: dependent.Chain})
+		observation.CSVs = append(observation.CSVs, CSVObservation{ReadKnown: true, Installed: dependent.InstalledCSV, Expected: expectedCSVs[key], Plan: dependent.InstallPlan.Name, Chain: dependent.Chain, Gap: dependent.Gap})
 	}
 	if len(csvSeen) != len(expectedCSVs) {
 		return UnknownRealization

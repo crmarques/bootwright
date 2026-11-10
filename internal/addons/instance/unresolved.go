@@ -12,6 +12,7 @@ import (
 const (
 	destroyAndApply = "destroy and apply again"
 	removeUnowned   = "remove or correct the object on the cluster if no add-on of this context owns it"
+	unprovedChain   = "no Bootwright command changes this; the apply's records prove the pinned CSV's installation and the installed CSV reports Succeeded, so leave the Subscription as it is and let the owner of the upgrade, the GitOps source, verify that the operator reached the installed CSV"
 )
 
 func (c Capability) Unresolved(verb reconciliation.Verb, block reconciliation.Block, data json.RawMessage) (lifecycle.Unresolved, bool) {
@@ -82,9 +83,32 @@ func (c Capability) unresolved(verb reconciliation.Verb, block reconciliation.Bl
 			return lifecycle.Unresolved{Reason: object.Kind + "/" + object.Namespace + "/" + object.Name + " is foreign or could not be read", Remedy: remedy(object.Ref)}, true
 		}
 	}
-	for _, olm := range evidence.OLM {
-		subscription := co.Ref{Kind: "Subscription", Namespace: olm.Namespace, Name: olm.Subscription}
-		return lifecycle.Unresolved{Reason: "Subscription/" + olm.Namespace + "/" + olm.Subscription + " reports CSV " + olm.InstalledCSV + " without proving the declared installation", Remedy: remedy(subscription)}, true
+	var gaps []co.RetentionGap
+	other := true
+	if program, err := request.Objects(); err == nil {
+		gaps, other = co.RetentionGaps(program, evidence.Evidence)
 	}
-	return lifecycle.Unresolved{Reason: "add-on " + request.Package + " on " + request.Cluster + " did not prove its objects and checks", Remedy: remedy(co.Ref{})}, true
+	gapped, gapReason := map[string]bool{}, ""
+	for _, gap := range gaps {
+		gapped[gap.Namespace+"/"+gap.Subscription] = true
+		if gapReason != "" {
+			gapReason += "; "
+		}
+		gapReason += "Subscription/" + gap.Namespace + "/" + gap.Subscription + " reports CSV " + gap.Installed + " in place of the pinned CSV " + gap.Expected + ", and its upgrade chain cannot be proved: " + gap.Detail()
+	}
+	if len(gaps) > 0 && !other {
+		return lifecycle.Unresolved{Reason: gapReason, Remedy: unprovedChain}, true
+	}
+	also := ""
+	if gapReason != "" {
+		also = "; also " + gapReason
+	}
+	for _, olm := range evidence.OLM {
+		if gapped[olm.Namespace+"/"+olm.Subscription] {
+			continue
+		}
+		subscription := co.Ref{Kind: "Subscription", Namespace: olm.Namespace, Name: olm.Subscription}
+		return lifecycle.Unresolved{Reason: "Subscription/" + olm.Namespace + "/" + olm.Subscription + " reports CSV " + olm.InstalledCSV + " without proving the declared installation" + also, Remedy: remedy(subscription)}, true
+	}
+	return lifecycle.Unresolved{Reason: "add-on " + request.Package + " on " + request.Cluster + " did not prove its objects and checks" + also, Remedy: remedy(co.Ref{})}, true
 }

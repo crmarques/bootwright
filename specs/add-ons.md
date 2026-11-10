@@ -454,12 +454,13 @@ An observation is read-only and reads every program object, the OLM state and
 every check once: every object own and equal with every check holding is
 completion; every object absent is no effect; some own objects with the rest
 absent, not ready or not equal to its declared body is a partial realization; a
-foreign object, a failed read or an installed CSV other than the expected one
-that no replacement chain reached (below) is unknown, whose remedy is to
+foreign object or a failed read is unknown, whose remedy is to
 destroy and apply again, except for an instance an
 [additive apply](state-reconciliation.md#additive-apply) added, whose remedy
 is to remove or correct the object and repeat `apply`, which observes it again,
-because a `destroy` takes the whole lineage and its cluster back. An own
+because a `destroy` takes the whole lineage and its cluster back. An installed
+CSV other than the expected one that no replacement chain reached is unknown
+with the reason and remedy of the chain rule below. An own
 object that differs from its declared body, as when Argo CD or an operator changes a
 declared field, is that partial realization: the observation records which
 object differs and repairs nothing, and the first differing field is named
@@ -501,8 +502,36 @@ the attempt's rules still refuse, an observation reads unknown, and
 [B1130](milestones/m4.md#b1130)'s case stands.
 A chain with a collected plan, two plans for one CSV, a link that fails any
 test, more than sixteen CSVs or an installed CSV not `Succeeded` therefore
-stays unknown. The evidence records the installed CSV, its version and the
-chain, each CSV from the expected one with the plan that installed it. The
+stays unknown, and an upgrade the owner approves reads complete only while OLM
+retains every InstallPlan of its chain; the observation stays read-only and
+the state unknown, never complete ([D153](milestones/backlog.md#d153)). Only a
+chain OLM's retention broke, with the installed CSV `Succeeded`, has a reason
+and remedy of its own, and its evidence names the cause, one of a closed set:
+
+- `planCollected`: no InstallPlan lists a CSV older than a proved link, or
+  the pinned CSV once every later link was proved, while the namespace holds
+  at least five InstallPlans, none of a generation below the oldest proved
+  link, as OLM's collection leaves them; it names that CSV.
+- `duplicatePlans`: several plans that pass the link tests install one CSV;
+  it names the CSV and the plans.
+- `chainTooLong`: more than sixteen CSVs lie between the pinned and the
+  installed CSV.
+
+Its reason names the Subscription, the installed and the pinned CSV and the
+cause, and its remedy is not a `destroy`: no Bootwright command changes it,
+the apply's records prove the pinned CSV's installation and the installed CSV
+reports `Succeeded`, and the upgrade is the owner's, the GitOps source's, to
+verify. Every other unproved chain, such as
+an Automatic or unapproved plan, another Subscription's or catalog source's
+plan, a plan that lists the CSV but fails a test, a missing plan OLM's
+collection would have kept, the installed CSV's own plan missing or not
+`Succeeded`, a `replaces` or generation mismatch, a foreign or unreadable CSV or a
+channel change, and a malformed cause, stays an unknown reading with the
+remedy above. A retention gap beside another unknown cause names that cause
+first, with its remedy. A channel change is not an upgrade of the pinned
+installation. The evidence records the installed CSV, its version and the
+chain, each CSV from the expected one with the plan that installed it, or the
+retention cause. The
 rule approves nothing and changes no object; an attempt keeps the rules of
 OLM installation, and a pending later upgrade is reported as there.
 
@@ -535,8 +564,9 @@ what the evidence lists. The listed objects stay as applied: a change to one is
 a destroy followed by a fresh apply
 ([lifecycle unit](state-reconciliation.md#lifecycle-unit),
 [D153](milestones/backlog.md#d153)), and approving an upgrade of
-an owned Subscription stays the owner's; an upgrade the owner approves reads
-complete by the [replacement chain rule](#observation-and-continuation).
+an owned Subscription stays the owner's, and the
+[replacement chain rule](#observation-and-continuation) bounds when an upgrade
+the owner approves reads complete.
 [Project](project.md#lifecycle-and-handoff) defines the downstream day-2
 resources a GitOps source may control. The GitOps package may create one
 [bootstrap object](#the-gitops-bootstrap-object).

@@ -131,6 +131,14 @@ and tested in
   generations among them. A pending plan and
   other Subscriptions' plans count, so at most four upgrades survive behind
   the pinned plan, and a chain whose link was collected cannot be proved.
+  `gcInstallPlans` (`pkg/controller/operators/catalog/operator.go`,
+  `maxInstallPlanCount = 5`, `maxDeletesPerSweep = 5`) returns without
+  deleting while the namespace lists five plans or fewer, and otherwise
+  deletes whole generations, lowest first, while at least five remain. The
+  observation therefore records a missing link as the `planCollected`
+  retention gap only when it is older than a proved link, the namespace still
+  lists five or more plans and none has a generation below the oldest proved
+  link (B1259); a plan deleted by hand in a smaller namespace is not one.
 - A CSV that a newer CSV names as `spec.replaces` goes `Replacing`, then
   `Deleting` once the newer one succeeds, then is deleted
   (`olm/operator.go`, `isBeingReplaced`). Replaced CSVs never survive; the
