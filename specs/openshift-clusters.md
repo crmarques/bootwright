@@ -299,7 +299,12 @@ realized target reports by name and hardware address, its root-device hints as
 the [hint projection](#root-device-hint-projection) maps them, and the
 node's own network configuration with its install address applied and the name
 servers it selects as its resolvers. The selected NTP servers become additional
-time sources. Each selected name or time server is written as a managed
+time sources (`additionalNTPSources`), the booted installer's only ones,
+which its host checks use. Under the Environment's
+[image mirror](api/environment.md#image-mirror), the nodes then keep those
+servers alone: the install also writes one chrony MachineConfig per pool
+([install-time manifests](#install-time-manifests)), and without the mirror
+the operating system's default pool stays beside them. Each selected name or time server is written as a managed
 server's endpoint address or as an external server's declared `address`. The
 installation accepts a time source that answers, from an upstream source or
 from its own clock ([time service readiness](infrastructure-services.md#managed-network-services)),
@@ -411,14 +416,31 @@ The media block writes into `<work>/openshift/`, before it builds the image, the
 manifests its frozen request carries: each a core-kind object, named
 `bootwright-<nn>-<purpose>.yaml`, rendered from typed intent, never authored.
 The admitted kinds are `MachineConfig` and the operator `Network` named
-`cluster`. No operator custom resource is one, because the bootstrap control
+`cluster`. The one MachineConfig source is the time configuration: under the
+Environment's image mirror, a cluster that selects an NTP server gets
+`bootwright-10-master-chrony.yaml` and `bootwright-11-worker-chrony.yaml`, the
+MachineConfigs `99-master-bootwright-chrony` and `99-worker-bootwright-chrony`
+(`machineconfiguration.openshift.io/v1`, labelled with their pool's
+`machineconfiguration.openshift.io/role`), written for both pools whatever the
+roster, since every topology has both and a node joined later follows its
+pool. Each carries an Ignition 3.2.0 file `/etc/chrony.conf`, mode 0644
+(`420`), `overwrite: true`, as a base64 data URL, holding one `server <address>
+iburst` line per selected server, in selection order and at the address
+`additionalNTPSources` names, followed by `driftfile /var/lib/chrony/drift`,
+`makestep 1.0 3`, `rtcsync` and `logdir /var/log/chrony`, with no `pool`
+line and no DHCP `sourcedir`. Its name sorts after the installer's own
+`50-<role>s-chrony-configuration`, so the machine config operator writes this
+file. An address outside the `host` rule refuses at `$.spec.install.ntp`, and a
+frozen request admits a MachineConfig only in exactly this derived form, both
+pools together, each naming exactly the agent's `additionalNTPSources`. No operator custom resource is one, because the bootstrap control
 plane retries a manifest whose kind it cannot map for 60 minutes after
 bootstrap and then fails it; such objects are applied after installation by the
 [cluster network block](#post-installation-network-configuration). A manifest
 holding secret material names its Secret, and the attempt substitutes it.
 
-Not yet met: MachineConfig and Secret-part manifest projections have no typed
-source; tracked as [B719](milestones/m3.md#b719).
+Not yet met: MachineConfig projections other than the time configuration, and
+Secret-part manifest projections, have no typed source; tracked as
+[B719](milestones/m3.md#b719).
 
 ### Installation features
 
@@ -452,10 +474,6 @@ the release from the mirror. A cluster mirror other than that Registry
 refuses, because one install pull secret carries one mirror credential. An
 `additionalTrustBundlePolicy` still needs an authored
 `additionalTrustBundleRefs` entry.
-
-Not yet met: under the image mirror, a node's default time pool is replaced by
-the selected time servers rather than kept beside them; tracked as
-[B1268](milestones/backlog.md#b1268).
 
 **IPv6.** A cluster whose networks are all IPv6 installs with IPv6 VIPs and
 rendezvous address, and each static IPv6 interface states `dhcp: false` and

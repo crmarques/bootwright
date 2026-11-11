@@ -298,7 +298,6 @@ Alias cell.
 | [B1249](#b1249) | new, 2026-11-10 (D250 (8)) | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | D250 parks the controlled-network plan until the owner promotes it; no capability realizes a managed Registry |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
 | [B1267](#b1267) | new, 2026-11-10 (X348, audit 004 REC-74) | safety | Substrate and Machine, with Infrastructure services | A context driving a server by its BMC and one reaching it as an OS-ready Machine over SSH conflict | Needs a cross-mechanism machine identity whose byte order is settled first |
-| [B1268](#b1268) | new, 2026-11-10 (D251 (7)) | product | Container cluster | Under the image mirror, a node's default time pool is replaced by the selected time servers | The agent install adds time sources beside the pool, and its manifest path admits only the Network kind, so no MachineConfig replaces it |
 | [B1273](#b1273) | new, 2026-11-10 (X359 gate) | defect | Controller | `test_a_killed_lifecycle_supervisor_leaves_no_playbook_worker_or_task` reads a surviving process tree under heavy host load | It failed once under a load average near 30 and passed three times alone; the stopped-tree poll has no settle bound |
 | [B1299](#b1299) | new, 2026-11-10 (split from B1263, D253) | product | Controller, with State reconciliation | A running environment takes a raised client minimum without a destroy | An open owner question: a completed apply settles (D153), so replacing a client is a fresh apply today |
 | [B1300](#b1300) | new, 2026-11-10 (X363) | product | CLI | The acquisition list names `cp.icr.io`'s blob delivery host | The list landed (X363); the host answers only an entitled client, which this session could not use |
@@ -3327,19 +3326,6 @@ once [B1249](#b1249) builds one; and `spec.downloads` folded into the
 declaration before 1.0, which awaits the owner ([D251](#d251) (5)). **Exit
 evidence:** the preflight and private-trust tests landed with X361; a managed
 mirror's acquisition test and effective-state goldens remain.
-
-### B1268
-
-**Owner:** Container cluster. **Kind:** product. **Requires:** none.
-**Definition:** Candidate, from [D251](#d251) (7): B1248's open question on the
-time pool. Today `agent-config.yaml` adds each selected NTPServer to the
-nodes' time sources beside the operating system's default pool
-([installer inputs](../openshift-clusters.md#installer-inputs)), which a node
-without a route to it simply fails to reach. **Outcome:** under the
-Environment's image mirror, a cluster that selects a time server installs its
-nodes with those servers alone, through a chrony MachineConfig the install's
-manifest path admits beside the Network kind. **Exit evidence:** a projection golden of the
-manifest and a node row of [B1250](#b1250)'s profile.
 
 ### B1249
 
@@ -8124,8 +8110,8 @@ the owner's review:
    joins the cluster's own; each release repository the distribution names
    and the cluster does not map gains a `NeverContactSource` entry, while
    operator catalogs stay authored; and replacing the nodes' default time
-   pool is parked as [B1268](#b1268), because the install writes no
-   MachineConfig: its manifest path admits only the Network kind.
+   pool was parked as B1268, because the install wrote no MachineConfig: its
+   manifest path admitted only the Network kind; [X403](delivered.md#x403--the-selected-time-servers-alone-under-the-image-mirror) delivered it.
 8. Taken by the session for B1251 (X359), pending the owner's review: the
    list is `spec.allowedDestinations` on a managed Proxy, refused on an
    external one, and absent it changes nothing. An entry is a name, a
@@ -8298,6 +8284,18 @@ the owner's review:
     image, so the build refuses when its log records that fallback; `oc`'s own
     retry of the source repository after its mirrors is not refused
     ([B1326](#b1326)).
+15. Taken by the session for B1268 (X403), pending the owner's review: under
+    the Environment's image mirror, a cluster that selects an NTP server
+    installs both machine pools with a chrony MachineConfig,
+    `99-master-bootwright-chrony` and `99-worker-bootwright-chrony`, whose
+    `/etc/chrony.conf` names those servers alone and keeps RHCOS's
+    `driftfile`, `makestep`, `rtcsync` and `logdir`, with no `pool` line and no
+    DHCP `sourcedir`. Both pools get one whatever the roster, a single node or
+    a compact cluster included, since every topology has both and a node
+    joined to the worker pool later follows the same servers.
+    `additionalNTPSources` stays, because the booted installer's host checks
+    need a reachable source before any MachineConfig applies. Without the
+    mirror the default pool stays beside the selected servers, as before.
 
 ### D252
 

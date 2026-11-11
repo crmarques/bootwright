@@ -312,8 +312,11 @@ operating system's default time sources, a public pool on RHEL and RHCOS
 ([DNS and NTP selections](../specs/api/infrastructure-services.md#dns-and-ntp-selection-lists)).
 A Machine Bootwright installs is installed with its selected NTPServers as
 its time sources. A cluster's nodes take theirs as additional sources, so
-their default pool stays configured unless the cluster's own configuration
-replaces it.
+their default pool stays configured beside them, unless the Environment
+declares an image mirror (`spec.mirror.registry`): then the cluster installs a
+chrony configuration on both machine pools that names its selected NTP servers
+alone, with no pool
+([install-time manifests](../specs/openshift-clusters.md#install-time-manifests)).
 
 **The firewall.** In production the network's own firewall or proxy holds
 each machine to its package repositories, the hosts its vendor documents for

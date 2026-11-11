@@ -34,8 +34,9 @@ endpoint, is no acquisition origin, so a firewall that serves this rule admits
 the content hosts alone. Time and name service follow the rule through fields
 that already exist: a Machine or cluster with no NTP selection keeps its
 operating system's public pool, so a controlled network declares one. A
-cluster's selection is added beside its nodes' default pool, which only the
-cluster's own configuration replaces.
+cluster's selection is added beside its nodes' default pool, and under the
+Environment's image mirror it replaces that pool
+([install-time manifests](../openshift-clusters.md#install-time-manifests)).
 
 ## Deployment choices
 

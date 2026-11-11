@@ -142,3 +142,20 @@ accepted that on one node in [B722](../../specs/milestones/delivered.md#x294--a-
   if OLM installs the operator inside the window; otherwise bootstrap fails.
   The outcome depends on catalog reachability and is unproven (R3:C34, corrected
   by RV).
+- The live ISO's `/etc/chrony.conf` holds only a `server <source> iburst` line
+  per `additionalNTPSources` entry, then `makestep 1.0 3`, `rtcsync` and
+  `logdir`, with no pool (`addNTPSources` in the installer's
+  `pkg/asset/agent/image/ignition.go`, release-4.20), so those sources are the
+  booted installer's only ones and its host time checks need them.
+- The installed nodes' time configuration is the installer's MachineConfig per
+  pool, `50-<role>s-chrony-configuration` (`createChronyManifestContent` in
+  `manifests_generator.go` of assisted-service's network package). On
+  release-4.20, 4.21 and 4.22 it always starts from the default content,
+  `pool 0.rhel.pool.ntp.org iburst` and `sourcedir /run/chrony-dhcp` included,
+  and appends a `server` line per source the hosts reported, so the pool stays
+  beside the selected servers. Only master drops the pool, when the cluster's
+  newer `ntp_sources` field (not `additional_ntp_source`) is set. A later name
+  wins the same path in the machine config operator's merge
+  (`MergeMachineConfigs`), so the selected servers alone need a MachineConfig
+  sorting after it, such as `99-<role>-bootwright-chrony`
+  ([X403](../../specs/milestones/delivered.md#x403--the-selected-time-servers-alone-under-the-image-mirror)).

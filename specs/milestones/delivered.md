@@ -13200,7 +13200,8 @@ request or install configuration moves, so no contract moved.
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** operator catalogs stay authored; the nodes' default
-time pool stays beside the selected servers ([B1268](backlog.md#b1268)); the
+time pool stayed beside the selected servers until
+[X403](#x403--the-selected-time-servers-alone-under-the-image-mirror); the
 controller's image build trusted its own store alone until
 [X402](#x402--release-reads-verified-against-the-clusters-trust); the
 live proof is [B1250](backlog.md#b1250).
@@ -14289,3 +14290,61 @@ occurred. **Limitations:** an OSD that cephadm later re-creates on a replaced
 disk takes its class from the per-class document, not from the authored path
 record; the class of an existing OSD never changes, so a changed class needs
 the OSD re-created outside Bootwright. A live run on IBM Storage Ceph is owed.
+
+### X403 — The selected time servers alone under the image mirror
+
+**Item:** B1268 (2026-11-10, [D251](backlog.md#d251) (6), (7) and (15)),
+delivered in-tree; its live proof is a node row of
+[B1250](backlog.md#b1250)'s profile. `agent-config.yaml` adds each selected
+NTPServer as `additionalNTPSources`, which the installer's `addNTPSources`
+(`pkg/asset/agent/image/ignition.go`) makes the live ISO's only time sources.
+The installed nodes then take the installer's own
+`50-<role>s-chrony-configuration` MachineConfigs, which on assisted-service
+release-4.20, 4.21 and 4.22 always start from the default content, `pool
+0.rhel.pool.ntp.org iburst` and `sourcedir /run/chrony-dhcp` included, and
+append a `server` line per reported source (`createChronyManifestContent` in
+`manifests_generator.go` of assisted-service's network package), so a node
+under a mirror kept a pool it cannot reach. Only master drops that pool, when
+the cluster's newer `ntp_sources` field is set.
+
+Under the Environment's image mirror (`spec.mirror.registry`), a cluster that
+selects an NTP server now freezes, after any OVN `Network`, the manifests
+`bootwright-10-master-chrony.yaml` and `bootwright-11-worker-chrony.yaml`: the
+MachineConfigs `99-master-bootwright-chrony` and `99-worker-bootwright-chrony`
+(`machineconfiguration.openshift.io/v1`, labelled with their pool's role), each
+an Ignition 3.2.0 file `/etc/chrony.conf`, mode `420`, `overwrite: true`, as a
+base64 data URL, holding one `server <address> iburst` line per selected
+server at the address `additionalNTPSources` names, then `driftfile`,
+`makestep 1.0 3`, `rtcsync` and `logdir`, with no `pool` line and no DHCP
+`sourcedir`. The name sorts after the installer's, so the machine config
+operator's merge (`MergeMachineConfigs`) keeps this file. Both pools get one in every topology;
+`additionalNTPSources` stays for the live ISO's host checks
+([installer inputs](../openshift-clusters.md#installer-inputs),
+[install-time manifests](../openshift-clusters.md#install-time-manifests)).
+An address the schema's `host` rule refuses, which admission already
+refuses, also refuses here at `$.spec.install.ntp`, and `validateInstallManifests` admits a MachineConfig
+only as that exact derived content, read back from its data URL and proved
+through `canonicaljson`, so a decoded request refuses an authored
+MachineConfig, another role, file, mode, path or name, a `pool` line or any
+other directive; a decoded request also needs both pools' manifests together,
+each naming exactly the agent's `additionalNTPSources`. The media role writes
+the frozen manifests unchanged.
+
+`install-chrony-manifests.golden` holds the frozen manifests,
+`install-chrony-manifests-yaml.golden` their YAML, read back to the same
+content, and the chrony configuration is decoded and compared; the single-node
+and compact clusters each get both; with no mirror or no selected time
+server, the request carries no manifest and every other golden is unchanged,
+while `media-request-environment-mirror.golden` gains the two manifests. An
+IPv6 server is named as written, and a request whose pools or servers
+disagree refuses on decode. No request field or contract moved: a mirrored
+cluster with a time selection gets a new media request on its next fresh
+apply, while a settled apply and a continuation of a frozen one are
+unaffected.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** the merge order, Ignition 3.2.0 and the `openshift/`
+manifest directory were read in the sources for 4.20 to 4.22; only a live
+install proves that the nodes run with the selected servers alone, which is a
+node row of [B1250](backlog.md#b1250)'s profile. A later release whose
+installer sets master's `ntp_sources` would drop the pool upstream.

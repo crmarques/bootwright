@@ -1,0 +1,38 @@
+# bootwright-10-master-chrony.yaml
+---
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+    labels:
+        machineconfiguration.openshift.io/role: master
+    name: 99-master-bootwright-chrony
+spec:
+    config:
+        ignition:
+            version: 3.2.0
+        storage:
+            files:
+                - contents:
+                    source: data:text/plain;charset=utf-8;base64,c2VydmVyIDE5Mi4wLjIuMSBpYnVyc3QKZHJpZnRmaWxlIC92YXIvbGliL2Nocm9ueS9kcmlmdAptYWtlc3RlcCAxLjAgMwpydGNzeW5jCmxvZ2RpciAvdmFyL2xvZy9jaHJvbnkK
+                  mode: 420
+                  overwrite: true
+                  path: /etc/chrony.conf
+# bootwright-11-worker-chrony.yaml
+---
+apiVersion: machineconfiguration.openshift.io/v1
+kind: MachineConfig
+metadata:
+    labels:
+        machineconfiguration.openshift.io/role: worker
+    name: 99-worker-bootwright-chrony
+spec:
+    config:
+        ignition:
+            version: 3.2.0
+        storage:
+            files:
+                - contents:
+                    source: data:text/plain;charset=utf-8;base64,c2VydmVyIDE5Mi4wLjIuMSBpYnVyc3QKZHJpZnRmaWxlIC92YXIvbGliL2Nocm9ueS9kcmlmdAptYWtlc3RlcCAxLjAgMwpydGNzeW5jCmxvZ2RpciAvdmFyL2xvZy9jaHJvbnkK
+                  mode: 420
+                  overwrite: true
+                  path: /etc/chrony.conf

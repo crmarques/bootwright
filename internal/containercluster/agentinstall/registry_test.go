@@ -55,7 +55,11 @@ func TestRegistryMirrorRequiresExplicitTrust(t *testing.T) {
 }
 
 func environmentMirrorCatalog(extra ...api.Object) api.Catalog {
-	objects := singleNodeCatalog().Objects()
+	return underTheImageMirror(singleNodeCatalog(), extra...)
+}
+
+func underTheImageMirror(catalog api.Catalog, extra ...api.Object) api.Catalog {
+	objects := catalog.Objects()
 	for i, object := range objects {
 		if object.Kind() == api.Environment {
 			objects[i] = object.WithSpec(object.Spec().With("mirror", api.MapValue(field("registry", api.MapValue(text("registryRef", "mirror"))))))

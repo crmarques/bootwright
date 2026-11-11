@@ -312,6 +312,9 @@ func DecodeMediaRequest(data []byte) (MediaRequest, error) {
 	if err := validateInstallManifests(request.Manifests); err != nil {
 		return MediaRequest{}, err
 	}
+	if err := validateTimeManifests(request.Manifests, request.AgentConfig); err != nil {
+		return MediaRequest{}, err
+	}
 	if err := onTheController(request.Placement, "cluster media"); err != nil {
 		return MediaRequest{}, err
 	}

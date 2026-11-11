@@ -266,7 +266,7 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 	if err != nil {
 		return empty(err)
 	}
-	agent, err := agentConfig(cluster, nodes, timeSources)
+	agent, manifests, err := nodeInputs(catalog, cluster, nodes, timeSources)
 	if err != nil {
 		return empty(err)
 	}
@@ -294,7 +294,7 @@ func requestFor(catalog api.Catalog, cluster api.Object, controllerMachine, cont
 	needs.Machines = sortedUnique(needs.Machines)
 	mediaRequest := MediaRequest{
 		AgentConfig: agent, Budgets: mediaBudgets, DeliveryKind: delivery, Identity: identity(MediaBlockID(name)), Image: image,
-		InstallConfig: install, Manifests: installManifests(cluster), Placement: placement, PullSecretRef: pullSecret,
+		InstallConfig: install, Manifests: manifests, Placement: placement, PullSecretRef: pullSecret,
 		Release: release, SSHKeyRef: sshKey, TLSCertificateRef: certificate, Tool: tool,
 		TrustBundleRefs: trustBundleRefs(catalog, cluster),
 		Version:         mediaRequestVersion, WorkRoot: WorkRoot(contextName, name),
@@ -657,6 +657,15 @@ func resolverAddresses(catalog api.Catalog, node api.Object, needs *Requirements
 		}
 	}
 	return addresses, nil
+}
+
+func nodeInputs(catalog api.Catalog, cluster api.Object, nodes []nodeProjection, timeSources []string) (map[string]any, []InstallManifest, error) {
+	agent, err := agentConfig(cluster, nodes, timeSources)
+	if err != nil {
+		return nil, nil, err
+	}
+	manifests, err := installManifests(catalog, cluster, timeSources)
+	return agent, manifests, err
 }
 
 // timeAddresses derives the time sources the cluster installs with, from its
