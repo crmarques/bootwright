@@ -666,6 +666,7 @@ type Execution struct {
 	Output           prerequisites.RunOutput
 	RetiredWithHosts bool
 	ReadOnly         bool
+	Shared           *SharedReadings
 	// Released: the operator stated on this destroy that what this block's pre-stop inverse removes from its Machine's guest was removed outside Bootwright.
 	Released bool
 }

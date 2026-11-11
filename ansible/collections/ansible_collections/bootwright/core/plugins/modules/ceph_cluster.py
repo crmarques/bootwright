@@ -34,6 +34,9 @@ options:
       - C(retirement) set to C(tiebreaker) selects a provided stretch tiebreaker's removal on destroy, or its read-only observation on observe.
       - C(reading) set to C(unrecorded) marks a cluster observation no operation records, which alone lists the cluster's pools and the
         OSDs no declared service places.
+      - C(reading) set to C(hosts) reads only each cluster host's state, once, for every resource observation of one C(diff --observe)
+        whose request has the same reading scope; it publishes that host reading as its evidence.
+      - C(hosts) carries such a host reading, as JSON; a resource observation then replays it in place of its own host state reads.
     type: dict
     required: true
   outputs:
@@ -81,7 +84,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import ceph_core
 
 # The closed, non-secret values material may carry beside its paths. AnsibleModule masks every leaf of a no_log option as a
 # substring of each result string, so a selector left masked would censor the refusal names and evidence versions that contain it.
-SELECTORS = frozenset(("tiebreaker", "unrecorded"))
+SELECTORS = frozenset(("tiebreaker", "unrecorded", "hosts"))
 
 
 def main():
@@ -101,12 +104,13 @@ def main():
         material = dict(params["material"])
         retirement = material.pop("retirement", None)
         reading = material.pop("reading", None)
+        shared = ceph_core.shared_hosts(material.pop("hosts", None))
         for selector in (retirement, reading):
             if selector in SELECTORS:
                 module.no_log_values.discard(selector)
         transport = ceph_core.Transport(params["request"], material)
         result = ceph_core.execute(params["request"], params["operation"], params["digest"], transport, params["outputs"], retirement=retirement,
-                                   reading=reading)
+                                   reading=reading, shared=shared)
     except Exception as error:
         reason, detail = ceph_core.refusal(error, ceph_core.CLUSTER_REASONS)
         failure = {"reason": reason}

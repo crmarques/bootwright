@@ -145,6 +145,7 @@ func (s Service) inspectAll(ctx context.Context, view RunView, store recordReade
 		waiting = append(waiting, block)
 	}
 	settled := make(chan settledReading, len(waiting))
+	shared := NewSharedReadings()
 	running, throttled := 0, map[string]int{}
 	for len(waiting) != 0 || running != 0 {
 		if ctx.Err() != nil {
@@ -162,7 +163,7 @@ func (s Service) inspectAll(ctx context.Context, view RunView, store recordReade
 				throttled[block.Throttle]++
 			}
 			go func() {
-				settled <- settledReading{block: block, reading: s.inspect(ctx, view, store, approved, read, block, material)}
+				settled <- settledReading{block: block, reading: s.inspect(ctx, view, store, approved, read, block, material, shared)}
 			}()
 			return true
 		})
@@ -211,7 +212,7 @@ func installFroze(read *diffRead) string {
 	return "install " + registeredWith(read.owning.Executable) + ", which froze it, to observe it"
 }
 
-func (s Service) inspection(ctx context.Context, view RunView, store recordReader, approved approved, launch prerequisites.PythonLaunch, read *diffRead, block reconciliation.Block, material map[string]secrets.Material) (Execution, error) {
+func (s Service) inspection(ctx context.Context, view RunView, store recordReader, approved approved, launch prerequisites.PythonLaunch, read *diffRead, block reconciliation.Block, material map[string]secrets.Material, shared *SharedReadings) (Execution, error) {
 	owner, err := routedIn(ctx, store, read.owning, block.ID)
 	if err != nil {
 		return Execution{}, err
@@ -223,7 +224,7 @@ func (s Service) inspection(ctx context.Context, view RunView, store recordReade
 	setup := view.Controller()
 	execution := Execution{
 		Context: view.Identity().Name, Incarnation: view.Identity().Incarnation, ApplyOperation: owner.ID, ApplyProved: proved, Block: block,
-		Launch: launch, Material: material, ApplyRegistered: owner.Created,
+		Launch: launch, Material: material, ApplyRegistered: owner.Created, Shared: shared,
 		LocateTool: func(inner context.Context, tool controller.InstalledTool) (string, error) {
 			return s.locateTool(inner, store, setup, read.context.Name, read.owning, read.owningPlan, tool)
 		},
@@ -234,7 +235,7 @@ func (s Service) inspection(ctx context.Context, view RunView, store recordReade
 	return execution, nil
 }
 
-func (s Service) inspect(ctx context.Context, view RunView, store recordReader, approved approved, read *diffRead, block reconciliation.Block, material map[string]secrets.Material) blockReading {
+func (s Service) inspect(ctx context.Context, view RunView, store recordReader, approved approved, read *diffRead, block reconciliation.Block, material map[string]secrets.Material, shared *SharedReadings) blockReading {
 	capability, ok := s.capabilities.Resolve(block.Kind, block.Implementation)
 	if !ok {
 		return blockReading{state: sideUnknown, reason: "this executable does not offer the implementation block " + block.ID + " froze", remedy: installFroze(read)}
@@ -245,7 +246,7 @@ func (s Service) inspect(ctx context.Context, view RunView, store recordReader, 
 	var observation Observation
 	warned := &warningCollector{}
 	err := s.withPython(ctx, approved, func(launch prerequisites.PythonLaunch) error {
-		execution, err := s.inspection(ctx, view, store, approved, launch, read, block, material)
+		execution, err := s.inspection(ctx, view, store, approved, launch, read, block, material, shared)
 		if err != nil {
 			return err
 		}

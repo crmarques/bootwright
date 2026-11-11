@@ -819,6 +819,7 @@ argument_specs:
         description:
           - Runner-owned private material file paths.
           - C(retirement) C(tiebreaker) selects a provided stretch tiebreaker's removal or its read-only observation.
+          - C(reading) C(hosts) reads each host's state once for a diff's resource observations; C(hosts) lends that reading to one.
       bootwright_ceph_output:
         type: dict
         required: false

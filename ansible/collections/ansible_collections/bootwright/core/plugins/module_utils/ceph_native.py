@@ -69,6 +69,9 @@ SCOPE_MEMBERS = frozenset(("controller", "version", "cluster", "owner", "fsid", 
                            "clusterSSHTransport", "monIP", "publicNetworks", "clusterNetworks", "callHome", "release", "ansiblePackageVersion",
                            "packageRepository", "packageRepositoryKey", "clusterKeyRef", "registryRef", "registry"))
 SCOPE_OPTIONAL = frozenset(("security", "auxiliary", "config", "packages", "nfsGaneshaPackageVersion", "registryTrustBundleRef", "stretch"))
+# The members that name one block's own resource beside its action; everything else a request carries is its cluster's.
+RESOURCE_MEMBERS = frozenset(("pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway", "nfsExport", "objectUser",
+                              "objectBucket", "nvmeof"))
 # cephadm's container_image_<name> settings an auxiliary image may fill, in name order.
 AUXILIARY_NAMES = (
     "alertmanager", "alloy", "grafana", "haproxy", "keepalived", "loki", "nginx", "node_exporter",
@@ -589,47 +592,45 @@ def validate(request):
     """Admit only the implemented core envelope, including concrete devices."""
     require(isinstance(request, dict))
     required = SCOPE_MEMBERS | {"action"}
-    resources = {"pool", "client", "policy", "rbd", "filesystem", "subvolume", "settings", "service", "gateway",
-                 "nfsExport", "objectUser", "objectBucket", "nvmeof"}
-    require(required <= set(request) and not set(request) - required - SCOPE_OPTIONAL - {"delegated"} - resources)
+    require(required <= set(request) and not set(request) - required - SCOPE_OPTIONAL - {"delegated"} - RESOURCE_MEMBERS)
     hosts = scope_checks(request)
     validate_delegated(request, hosts)
     if request["action"] == "cluster":
-        require(not resources & set(request))
+        require(not RESOURCE_MEMBERS & set(request))
         return request
     require(request["action"] == "service" or "service" not in request)
     if request["action"] == "service":
-        require(not (resources - {"service"}) & set(request))
+        require(not (RESOURCE_MEMBERS - {"service"}) & set(request))
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_units
         ceph_native_units.validate(request, hosts)
         return request
     require(request["action"] == "gateway" or "gateway" not in request)
     if request["action"] == "gateway":
-        require(not (resources - {"gateway"}) & set(request))
+        require(not (RESOURCE_MEMBERS - {"gateway"}) & set(request))
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_object
         ceph_native_object.validate(request, hosts)
         return request
     require(request["action"] == "object-user" or "objectUser" not in request)
     if request["action"] == "object-user":
-        require(not (resources - {"objectUser"}) & set(request))
+        require(not (RESOURCE_MEMBERS - {"objectUser"}) & set(request))
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_object
         ceph_native_object.validate_user(request, hosts)
         return request
     require(request["action"] == "object-bucket" or "objectBucket" not in request)
     if request["action"] == "object-bucket":
-        require(not (resources - {"objectBucket"}) & set(request))
+        require(not (RESOURCE_MEMBERS - {"objectBucket"}) & set(request))
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_object
         ceph_native_object.validate_bucket(request, hosts)
         return request
     require(request["action"] == "nvmeof" or "nvmeof" not in request)
     if request["action"] == "nvmeof":
-        require(not (resources - {"nvmeof"}) & set(request))
+        require(not (RESOURCE_MEMBERS - {"nvmeof"}) & set(request))
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_nvmeof
         ceph_native_nvmeof.validate(request, hosts)
         return request
     require(request["action"] == "nfs-export" or "nfsExport" not in request)
     if request["action"] == "nfs-export":
-        require(not (resources - {"nfsExport"}) & set(request))
+        require(not (RESOURCE_MEMBERS - {"nfsExport"}) & set(request))
         from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_nfs
         ceph_native_nfs.validate_export(request, hosts)
         return request

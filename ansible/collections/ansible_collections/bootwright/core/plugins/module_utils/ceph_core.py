@@ -49,6 +49,13 @@ NATIVE_FAILURES = ("native-unknown", "native-refusal", "native-timeout")
 # A provided tiebreaker's removal evidence (ceph_native_stretch.TiebreakerRemoval); its Go caller decodes the same closed members.
 TIEBREAKER_EVIDENCE = "ceph-tiebreaker-evidence-v1"
 TIEBREAKER_MEMBERS = frozenset(("version", "request", "owner", "fsid", "host", "removed", "attempted"))
+# One diff observation's host reading (state-reconciliation.md, Reading the real side live): the `hosts` reading of a resource block reads
+# each host's state once, and every resource block of the same scope replays it in place of its own host reads. Its Go caller
+# (decodeHostReading in internal/storage/ceph) decodes the same closed members; it lives within that one diff and is never stored.
+HOST_READING = "ceph-host-reading-v1"
+HOST_READING_MEMBERS = frozenset(("version", "request", "scope", "hosts"))
+UNRECORDED_READING = "unrecorded"
+HOSTS_READING = "hosts"
 # The produced-material output each action writes on apply and observe: its Go caller reads exactly that one.
 OUTPUTS = {"client": "client", "cluster": "dashboard", "object-user": "object-user"}
 UNIT_DAEMON = re.compile(r"[a-z][a-z0-9-]*\.[A-Za-z0-9][A-Za-z0-9_.-]{0,250}\Z")
@@ -99,6 +106,17 @@ class ReadinessRefusal(ceph_native.Refusal):
         self.checks = list(checks)
 
 
+class SharedRefusal(ceph_native.Refusal):
+    """A host read the shared host reading recorded as refused: the block publishes the reason, detail and native cause its own read of
+    that host would have published."""
+
+    def __init__(self, refused):
+        super().__init__(refused["reason"])
+        self.detail = refused.get("detail")
+        if "nativeError" in refused:
+            self.native_error = refused["nativeError"]
+
+
 class UnsettledRefusal(ceph_native.RemoteRefusal):
     """A host whose native layout cephadm kept moving through every bounded snapshot: not ready, never a contradiction."""
 
@@ -146,6 +164,8 @@ def refusal(error, reasons):
     `remote-refusal` from a worker, and its detail still carries the token.
     A readiness timeout's detail names the native health checks that blocked it.
     """
+    if isinstance(error, SharedRefusal):
+        return str(error), error.detail
     if isinstance(error, ReadinessRefusal) and error.checks:
         return (str(error) if str(error) in reasons else "unknown"), readiness_detail(error.checks)
     if isinstance(error, ceph_native.RemoteRefusal):
@@ -733,19 +753,112 @@ class Transport:
         return result
 
 
+def reading_scope(request):
+    """The digest of what a host's state reading may read of a request: all of it but the action and the block's own resource."""
+    projection = {key: value for key, value in request.items() if key != "action" and key not in ceph_native.RESOURCE_MEMBERS}
+    return hashlib.sha256(canonical_json.canonical(projection)).hexdigest()
+
+
+def host_state(transport, host, **options):
+    """One host's state read, the one call a shared host reading stands in for; both paths read through it, so a refusal names one site."""
+    return transport.call(host, "host_state", **options)
+
+
+def host_entry(host, state):
+    """One host's validated state reading, and the manager daemons it names pending."""
+    ceph_native.require(isinstance(state, dict), "evidence")
+    state = dict(state)
+    waiting = state.pop("pending", None)
+    ceph_native.require(waiting is None or isinstance(waiting, list) and 0 < len(waiting) <= 16
+                        and all(isinstance(name, str) and ceph_native.PENDING_DAEMON.fullmatch(name) is not None for name in waiting), "evidence")
+    ceph_native.require(set(state) == {"name", "owned", "exists"} and state["name"] == host["name"]
+                        and type(state["owned"]) is bool and type(state["exists"]) is bool, "evidence")
+    return state, waiting or []
+
+
+def refused_entry(value):
+    reasons = set(CLUSTER_REASONS) | {"unknown", "remote-refusal", "adapter-exception"}
+    return (isinstance(value, dict) and {"reason", "unsettled"} <= set(value) <= {"reason", "unsettled", "detail", "nativeError"}
+            and value["reason"] in reasons and type(value["unsettled"]) is bool and (not value["unsettled"] or "detail" in value and "nativeError" not in value)
+            and ("detail" not in value or isinstance(value["detail"], str) and 0 < len(value["detail"]) <= adapter_protocol.MAX_DETAIL)
+            and ("nativeError" not in value or native_diagnostics.valid(value["nativeError"])))
+
+
+def host_reading(value, request_digest=None, request=None):
+    """A closed host reading: each host's raw state in request order, ending at the first host whose read refused, with that refusal.
+    Against a request it must name that request's reading scope and its hosts, so a block never replays another scope's reading."""
+    ceph_native.require(isinstance(value, dict) and HOST_READING_MEMBERS <= set(value) <= HOST_READING_MEMBERS | {"specializations"}
+                        and value["version"] == HOST_READING and ceph_native.digest(value["request"]) and ceph_native.digest(value["scope"]), "evidence")
+    ceph_native.require(request_digest is None or value["request"] == request_digest, "evidence")
+    ceph_native.require("specializations" not in value or specialization_ids(value["specializations"]), "evidence")
+    hosts = value["hosts"]
+    ceph_native.require(isinstance(hosts, list) and 0 < len(hosts) <= 64, "evidence")
+    for index, entry in enumerate(hosts):
+        ceph_native.require(isinstance(entry, dict) and set(entry) in ({"name", "state"}, {"name", "refused"}) and isinstance(entry["name"], str), "evidence")
+        ceph_native.require(isinstance(entry["state"], dict) if "state" in entry else index == len(hosts) - 1 and refused_entry(entry["refused"]),
+                            "evidence")
+    if request is not None:
+        ceph_native.require(value["scope"] == reading_scope(request), "request")
+        names = [host["name"] for host in request["hosts"]]
+        ceph_native.require([entry["name"] for entry in hosts] == names[:len(hosts)] and (len(hosts) == len(names) or "refused" in hosts[-1]),
+                            "evidence")
+    return value
+
+
+def read_hosts(request, request_digest, transport):
+    """Each host's state once, in request order, for every resource block of this reading scope to replay. It stops at the first host
+    whose read refuses and records that refusal as a block's own read of that host would publish it."""
+    entries = []
+    for host in request["hosts"]:
+        try:
+            state = host_state(transport, host)
+            host_entry(host, state)
+        except Exception as error:  # pylint: disable=broad-exception-caught
+            if unsettled(error):
+                # The observation's own read rewraps it so (observe_state); the replay raises the same type again.
+                error = UnsettledRefusal(error.detail, host["name"])
+            reason, detail = refusal(error, CLUSTER_REASONS)
+            refused = {"reason": reason, "unsettled": isinstance(error, UnsettledRefusal)}
+            if detail:
+                refused["detail"] = detail
+            native_error = getattr(error, "native_error", None)
+            if native_diagnostics.valid(native_error):
+                refused["nativeError"] = native_error
+            entries.append({"name": host["name"], "refused": refused})
+            break
+        entries.append({"name": host["name"], "state": state})
+    value = {"version": HOST_READING, "request": request_digest, "scope": reading_scope(request), "hosts": entries}
+    applied = getattr(transport, "applied", None)
+    if applied:
+        value["specializations"] = sorted(applied)
+    return host_reading(value, request_digest, request)
+
+
+def replayed_host(shared, index, host):
+    """The shared reading's state of the index-th host, or the refusal its read recorded."""
+    entry = shared["hosts"][index]
+    ceph_native.require(entry["name"] == host["name"], "evidence")
+    if "refused" in entry and entry["refused"]["unsettled"]:
+        raise UnsettledRefusal(entry["refused"]["detail"], host["name"])
+    if "refused" in entry:
+        raise SharedRefusal(entry["refused"])
+    return host_entry(host, entry["state"])
+
+
 def observe_state(request, request_digest, bootstrap, transport, deadline=None, now=time.monotonic, blocking=None, activation=None, *,
-                  unrecorded=False):
+                  unrecorded=False, shared=None):
     """One validated snapshot; an optional deadline bounds all of its probes, an optional list receives the health check
-    codes that kept readiness unproved, and another whether only a stretch cluster's activation is still missing."""
+    codes that kept readiness unproved, and another whether only a stretch cluster's activation is still missing. A shared host
+    reading, admitted against this request, stands in for each host's own state read."""
     def read(host, phase):
         try:
             if deadline is None:
-                return transport.call(host, phase)
+                return host_state(transport, host) if phase == "host_state" else transport.call(host, phase)
             started = now()
             remaining = deadline - started
             ceph_native.require(remaining > 0, "not-ready")
             budget = min(660, remaining)
-            result = transport.call(host, phase, timeout=budget)
+            result = host_state(transport, host, timeout=budget) if phase == "host_state" else transport.call(host, phase, timeout=budget)
         except ceph_native.RemoteRefusal as error:
             if unsettled(error):
                 raise UnsettledRefusal(error.detail, host["name"]) from None
@@ -766,17 +879,10 @@ def observe_state(request, request_digest, bootstrap, transport, deadline=None, 
     observed["request"] = request_digest
     evidence(observed, request_digest, request)
     host_states, pending = [], []
-    for host in request["hosts"]:
-        state = read(host, "host_state")
-        ceph_native.require(isinstance(state, dict), "evidence")
-        state = dict(state)
-        waiting = state.pop("pending", None)
-        ceph_native.require(waiting is None or isinstance(waiting, list) and 0 < len(waiting) <= 16
-                            and all(isinstance(name, str) and ceph_native.PENDING_DAEMON.fullmatch(name) is not None for name in waiting), "evidence")
-        ceph_native.require(set(state) == {"name", "owned", "exists"} and state["name"] == host["name"]
-                            and type(state["owned"]) is bool and type(state["exists"]) is bool, "evidence")
+    for index, host in enumerate(request["hosts"]):
+        state, waiting = host_entry(host, read(host, "host_state")) if shared is None else replayed_host(shared, index, host)
         host_states.append(state)
-        pending += [name for name in waiting or [] if name not in checks + pending]
+        pending += [name for name in waiting if name not in checks + pending]
     if request["action"] == "cluster":
         if any(state["exists"] for state in host_states):
             observed["exists"] = True
@@ -1063,12 +1169,28 @@ def execute_tiebreaker(request, operation, request_digest, transport, outputs):
     return {"changed": result.get("changed", False), "evidence": tiebreaker_evidence(value, request_digest, request)}
 
 
-def admit_selectors(request, operation, outputs, retirement, reading):
-    """The closed selectors beside the material: a tiebreaker's retirement, and the unrecorded reading only a cluster observation with no
-    output takes."""
+def admit_selectors(request, operation, outputs, retirement, reading, shared=None):
+    """The closed selectors beside the material: a tiebreaker's retirement; the unrecorded reading only a cluster observation with no
+    output takes; and the host reading a resource observation with no output either takes or replays, never both."""
     ceph_native.require(retirement in (None, "tiebreaker"), "request")
-    ceph_native.require(reading is None or reading == "unrecorded" and operation == "observe" and retirement is None
+    ceph_native.require(reading in (None, HOSTS_READING) or reading == UNRECORDED_READING and operation == "observe" and retirement is None
                         and request["action"] == "cluster" and not outputs, "request")
+    hosts = reading == HOSTS_READING or shared is not None
+    ceph_native.require(not hosts or operation == "observe" and retirement is None and request["action"] in ceph_native_resources.ACTIONS
+                        and not outputs and (reading is None) != (shared is None), "request")
+    if shared is not None:
+        host_reading(shared, None, request)
+
+
+def shared_hosts(value):
+    """The host reading a block replays, as its Go caller lends it beside the material: one bounded JSON object."""
+    if value is None or isinstance(value, dict):
+        return value
+    ceph_native.require(isinstance(value, str) and 0 < len(value) <= 65536, "request")
+    try:
+        return json.loads(value)
+    except ValueError:
+        raise ceph_native.Refusal("request") from None
 
 
 def apply_native_cluster(request, bootstrap, transport, before):
@@ -1100,12 +1222,18 @@ def apply_native_cluster(request, bootstrap, transport, before):
 
 
 def execute(request, operation, request_digest, transport, outputs=None, *, now=time.monotonic, pause=time.sleep, connect=tls_certificate,
-            retirement=None, reading=None):
-    """Keep read-only observation distinct from any preparation or mutation; only an observation no operation records reads unrecorded."""
+            retirement=None, reading=None, shared=None):
+    """Keep read-only observation distinct from any preparation or mutation; only an observation no operation records reads unrecorded.
+    A `hosts` reading reads only each host's state; a shared host reading replaces those reads of a resource observation."""
     ceph_native.validate(request)
     ceph_native.require(operation in ("apply", "observe", "destroy"))
     ceph_native.require(ceph_native.digest(request_digest))
-    admit_selectors(request, operation, outputs, retirement, reading)
+    admit_selectors(request, operation, outputs, retirement, reading, shared)
+    if reading == HOSTS_READING:
+        return {"changed": False, "evidence": read_hosts(request, request_digest, transport)}
+    if shared is not None and shared.get("specializations"):
+        with transport.applied_lock:
+            transport.applied.update(shared["specializations"])
     if operation != "observe":
         ceph_native.require(ceph_native.supported_transport(request), "unsupported-release")
     if retirement is not None:
@@ -1166,7 +1294,8 @@ def execute(request, operation, request_digest, transport, outputs=None, *, now=
         changed = transport.call(bootstrap, "destroy")["changed"]
     pending = []
     observation = (wait_ready(request, request_digest, bootstrap, transport, now, pause) if operation == "apply"
-                   else observe_state(request, request_digest, bootstrap, transport, blocking=pending, unrecorded=reading is not None))
+                   else observe_state(request, request_digest, bootstrap, transport, blocking=pending, unrecorded=reading == UNRECORDED_READING,
+                                      shared=shared))
     # Read-only observations may return partial evidence. Mutation completion
     # is not claimed until the actual desired postcondition is observed.
     if operation == "apply":

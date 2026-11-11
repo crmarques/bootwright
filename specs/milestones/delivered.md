@@ -14611,5 +14611,33 @@ pools as a list. The independent review's findings were applied before
 integration; a hand pool's PG checks still gate every block, parked as
 [B1328](backlog.md#b1328).
 
+### X411 — One host reading per cluster scope in a diff
+
+**Item:** [B1312](m1.md#b1312), delivered in-tree (2026-11-10) under
+[D256](backlog.md#d256) (2) and awaiting operator acceptance. A
+`diff --observe` now hands its observations one `lifecycle.SharedReadings`
+store, created when they start and dropped when they return
+([shared readings](../state-reconciliation.md#reading-the-real-side-live)). A
+Ceph resource block's observation keys it by its cluster and the digest of its
+frozen request without the action and resource members; the first block of a
+key runs the core role's `hosts` reading, which calls `host_state` once per
+host, and every block of the key replays that `ceph-host-reading-v1` reading
+in place of its own host reads after its own bootstrap `observe`
+([Ceph observation](../ceph.md#shared-host-readings)). A host read's
+refusal travels in the reading with the reason, detail and native cause the
+block's own read would publish, an unsettled host replays as the same
+unsettled refusal, and that refusal marks every block of the scope for that
+diff; a failed or canceled reading run leaves each block its own read; the cluster block and every apply, destroy and resolution read as
+before. The worker's `host_state` reads no resource member, which
+`test_ceph_shared_host_reading.py` holds by watching every member read,
+iteration, copy and encoding of the request, for each shared action, over
+plain, OSD-variant, tunnel and recovery hosts; a Go test holds the members Go
+zeroes equal to the collection's `RESOURCE_MEMBERS`. Lifecycle
+concurrency changed (safety class): the store is a per-key single flight whose
+waiters honor their own cancellation. Effect at that run's topology (4 hosts,
+17 resource and 1 cluster host-reading blocks): `host_state` SSH sessions from
+72 to 8, and those blocks' sessions from 90 to 26 (estimate). No request,
+evidence or contract version moved; the collection's automation digest did.
+
 **Commits:** this record's commit. Gates: listed in its message. No live run or
 push occurred.

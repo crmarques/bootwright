@@ -554,7 +554,12 @@ func (c Capability) observe(ctx context.Context, e lifecycle.Execution, removal 
 	if err != nil {
 		return unknown, err
 	}
-	result, err := c.run(ctx, e, "observe", r)
+	var result lifecycle.RunResult
+	if shared := c.sharedHosts(ctx, e, r, removal); shared != nil {
+		result, err = c.invoke(ctx, e, "observe", r, shared, nil)
+	} else {
+		result, err = c.run(ctx, e, "observe", r)
+	}
 	if err != nil {
 		return unknown, err
 	}

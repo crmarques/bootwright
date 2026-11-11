@@ -2424,6 +2424,35 @@ contexts from claiming the same target; a native name, process-local mutex or
 context lease alone cannot coordinate another controller. B79 qualifies the
 supported coordination scope and refuses unproved exclusivity before effects.
 
+### Shared host readings
+
+A core block's observation reads its bootstrap host's `observe` and then each
+cluster host's `host_state`, in request order. Within one
+[`diff --observe`](state-reconciliation.md#reading-the-real-side-live) the
+resource blocks (pools, a gateway's zone pools included, placement policies,
+clients, RBD images, filesystems, subvolumes and the settings block) share one
+host reading per reading scope instead: the frozen request without its action
+and its block's own resource member, which is everything a host's
+`host_state` reads, its action only ever compared with `cluster`. The first
+such block of a scope runs a `hosts` reading (`ceph-host-reading-v1`), which
+calls `host_state` on each host once, in request order, and stops at the
+first host whose read refuses, recording the reason, detail and native cause
+that read gives. Every block of the scope still reads its bootstrap host's
+`observe` itself, then replays the reading in place of its host reads, so its
+evidence, its `not ready` warnings and its refusal are those its own reads
+would give, and a reading of another scope refuses `request` before any
+call. A refusal the reading records, such as an SSH exit 255 from one host,
+therefore marks every block of that scope unknown with that reason for the
+rest of that diff, where each block's own read could have reached that host
+or failed otherwise; the next diff reads again
+([D256](milestones/backlog.md#d256) (2)). A host whose layout cephadm kept
+moving replays as the same unsettled refusal its own read raises. A `hosts` reading that fails as a run, or returns evidence the
+controller does not accept, leaves each block of the scope to read its hosts
+itself. The cluster block, whose bootstrap host reads its recovery state
+during an interrupted bootstrap, reads its hosts itself, as every block of an
+apply, a destroy and a resolution does. The reading runs inside its first
+block's [throttle](#claims-and-throttle) slot and claims no other.
+
 ## NVMe-oF subsystems
 
 A `ceph-service-<cluster>-nvmeof-<service-token>` unit realizes one gateway group,

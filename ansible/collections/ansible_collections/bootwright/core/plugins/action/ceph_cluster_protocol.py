@@ -21,6 +21,11 @@ def completion(arguments):
         if observed or removed and result["removed"]:
             return result, None
         return result, "the Ceph operation has not proved its postcondition"
+    if isinstance(value, dict) and value.get("version") == ceph_core.HOST_READING:
+        result = ceph_core.host_reading(value, arguments.get("digest"))
+        if observed and not removed:
+            return result, None
+        return result, "the Ceph operation has not proved its postcondition"
     result = ceph_core.evidence(value, arguments.get("digest"))
     if observed or result["removed" if removed else "ready"]:
         return result, None

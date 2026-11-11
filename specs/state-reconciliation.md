@@ -2126,6 +2126,22 @@ yet observed reads unknown with `the observation was canceled`; a read-only
 Ceph remote worker an observation already started may run on until its own
 deadline.
 
+**Shared readings.** Each block is still read by its own observation, but the
+observations of one comparison may share a reading their capability keys by
+everything it depends on (`lifecycle.SharedReadings`): the first observation
+that asks for a key reads it inside its own execution guard and throttle slot,
+and every other one that asks waits for that reading, or for its own
+cancellation, and uses it in place of its own read. The store is created when
+observations start and dropped when they return, so a shared reading is never
+older than the comparison it serves and never reaches another comparison, an
+apply, a destroy or a resolution, none of which carries one; and because its
+key holds every input the reading depends on, no observation uses a reading
+taken under a request it did not freeze. A failed shared reading stays failed
+for that comparison and each observation that asked for it reads for itself,
+so a failure reads as that observation's own. The Ceph resource blocks share
+their cluster's host reads this way
+([observation](ceph.md#shared-host-readings)).
+
 ### Readings and their fold
 
 **Readings.** One block of a [live reading](#reading-the-real-side-live) reads:

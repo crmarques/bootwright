@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -992,5 +993,74 @@ func TestCancellationReachesABlockWaitingOnAFullThrottle(t *testing.T) {
 	}
 	if result.Blocks.Unknown != 2 || result.Blocks.Observed != 2 {
 		t.Fatalf("blocks %+v", result.Blocks)
+	}
+}
+
+func TestEachDiffHandsItsObservationsOneSharedReadingsOfItsOwn(t *testing.T) {
+	f := newDiffHarness(t, "alpha", "bravo", "charlie")
+	f.apply(t)
+	for _, execution := range f.capability.executions {
+		if execution.Shared != nil {
+			t.Fatalf("apply's block %s carries shared readings", execution.Block.ID)
+		}
+	}
+	var diffs []*SharedReadings
+	for range 2 {
+		before := len(f.capability.executions)
+		f.observe(t)
+		observed := f.capability.executions[before:]
+		if len(observed) != 3 {
+			t.Fatalf("a diff observed %d blocks", len(observed))
+		}
+		for _, execution := range observed {
+			if execution.Shared == nil || execution.Shared != observed[0].Shared {
+				t.Fatalf("block %s observed with shared readings %p, its diff's first %p", execution.Block.ID, execution.Shared, observed[0].Shared)
+			}
+		}
+		diffs = append(diffs, observed[0].Shared)
+	}
+	if diffs[0] == diffs[1] {
+		t.Fatal("two diffs shared one reading store")
+	}
+}
+
+type sharingCapability struct {
+	*projectingCapability
+	reads atomic.Int32
+}
+
+func (c *sharingCapability) Observe(ctx context.Context, execution Execution) (Observation, error) {
+	if _, err := execution.Shared.Read(ctx, "ceph-host-reading\x00cluster", func(context.Context) ([]byte, error) {
+		c.reads.Add(1)
+		time.Sleep(5 * time.Millisecond)
+		return []byte("hosts"), nil
+	}); err != nil {
+		return Observation{}, err
+	}
+	return c.projectingCapability.Observe(ctx, execution)
+}
+
+func TestOneThrottleSlotAndOneObservationAtATimeStillShareOneReading(t *testing.T) {
+	f := newDiffHarness(t, "alpha", "bravo", "charlie", "delta")
+	for i := range f.capability.definitions {
+		f.capability.definitions[i].Throttle = "ceph/cluster"
+	}
+	f.apply(t)
+	sharing := &sharingCapability{projectingCapability: &projectingCapability{testCapability: f.capability, answers: map[string]scriptedObservation{}, paths: []ProjectedPath{{Kind: api.ArtifactServer, Path: "spec.image"}}}}
+	f.service.capabilities = testResolver{capability: sharing}
+	f.service.options.Concurrency = 1
+	f.service.options.Throttle = 1
+	done := make(chan *DiffResult, 1)
+	go func() { done <- f.observe(t) }()
+	select {
+	case result := <-done:
+		if result.Blocks.Observed != 4 || result.Blocks.Unknown != 0 {
+			t.Fatalf("blocks %+v", result.Blocks)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("observations sharing one reading under one throttle slot deadlocked")
+	}
+	if sharing.reads.Load() != 1 {
+		t.Fatalf("the shared reading ran %d times", sharing.reads.Load())
 	}
 }
