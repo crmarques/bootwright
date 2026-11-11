@@ -10,6 +10,7 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/clients"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/mirrorfill"
@@ -314,6 +315,44 @@ func TestAManagedImageMirrorOnAnInstalledMachinePlansAfterItsInstallation(t *tes
 	}
 }
 
+// A managed artifact mirror with a public image shares the installed image
+// mirror's host. It pulls its origin before the controller's mirrored clients,
+// without waiting for the Registry or its image fill.
+func TestAPublicArtifactMirrorOnTheInstalledMirrorHostPrecedesTheControllerClients(t *testing.T) {
+	const name = "lab-sno-installed-mirror-host"
+	public := "docker.io/library/nginx@sha256:" + strings.Repeat("c", 64)
+	sources := editedSources(t, installedImageMirrorWith(t, nil), sourceEdits{
+		replace: map[string][2]string{
+			"infra/components/mirror-artifacts.yaml": {"  retention: persistent", "  retention: persistent\n\n  image:\n    public: " + public},
+		},
+	})
+	_, waits := mirrorOrder(t, name, sources)
+	const server, registry, fill = "artifact-server-mirror-artifacts", "registry-mirror-registry", "mirror-images-" + name
+	if !slices.Contains(waits[clients.MirroredClientsBlockID], server) {
+		t.Fatalf("the controller clients do not wait for the artifact mirror: %v", waits[clients.MirroredClientsBlockID])
+	}
+	if slices.Contains(waits[server], registry) || slices.Contains(waits[server], fill) {
+		t.Fatalf("the artifact mirror waits for the image mirror: %v", waits[server])
+	}
+	if !slices.Contains(waits["proxy-lab-proxy"], fill) {
+		t.Errorf("the controller's proxy does not wait for the image mirror: %v", waits["proxy-lab-proxy"])
+	}
+	state, _ := compileAcceptance(t, sources)
+	found := false
+	for _, definition := range productionDefinitions(t, state, name) {
+		if definition.ID == server {
+			found = true
+			request, err := artifactserver.DecodeRequest(definition.Request)
+			if err != nil || request.Image != public || request.ImageSource != nil {
+				t.Fatalf("the artifact mirror pulls %s (%+v, %v)", request.Image, request.ImageSource, err)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("the plan has no %s block", server)
+	}
+}
+
 // With its cluster kept, the node's emulated BMC on the mirror host's own
 // provider host waits for the mirror and pulls through it, while the mirror
 // host's emulated BMC there still reads its origin.
@@ -377,6 +416,35 @@ func TestTheAcquisitionListNamesEachEmulatedBMCAndServicePullBesideAnInstalledMi
 	images, err := mirrorImageArtifacts(state.Effective())
 	if err != nil || !slices.ContainsFunc(images, func(image mirrorfill.Image) bool { return image.Repository == sushy }) {
 		t.Fatalf("the fill copies %+v (%v), not the node's emulated BMC image", images, err)
+	}
+}
+
+// An OS-provided Machine never creates an emulated BMC, even when it names
+// the mirror host's provider, so it adds no mirrored image to the fill.
+func TestAProvidedMachineBesideTheMirrorHostAddsNoBMCImageToTheMirror(t *testing.T) {
+	sources := editedSources(t, installedImageMirror(t), sourceEdits{
+		replace: map[string][2]string{
+			"infra/machines/edge.yaml": {"spec:\n", "spec:\n  substrate:\n    providerRef: lab-libvirt\n\n"},
+		},
+	})
+	state, _ := compileAcceptance(t, sources)
+	pulls, err := imagePulls(state.Effective())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bmcs []string
+	for _, pull := range pulls {
+		if pull.kind == "emulated BMC image" {
+			bmcs = append(bmcs, pull.pulled)
+		}
+	}
+	if !slices.Equal(bmcs, []string{libvirt.EmulatorImage()}) {
+		t.Errorf("only the mirror host creates a BMC, but its provider pulls %v", bmcs)
+	}
+	images, err := mirrorImageArtifacts(state.Effective())
+	sushy, _, _ := strings.Cut(libvirt.EmulatorImage(), "@")
+	if err != nil || slices.ContainsFunc(images, func(image mirrorfill.Image) bool { return image.Repository == sushy }) {
+		t.Fatalf("the fill includes an image no mirrored BMC pulls: %+v (%v)", images, err)
 	}
 }
 

@@ -470,9 +470,10 @@ binds the Registry's `credentialsRef`, the credential the fill pushes with,
 because Distribution's password file grants each user every action; a pull-only
 credential is [B1319](../milestones/backlog.md#b1319). An image pulled on the
 mirror host itself, the Registry's own and the artifact server's there, stays
-its origin's, as does one pulled on a Machine that runs what an installed
-mirror host's installation waits for, so the mirror never waits for itself,
-and every consumer on another Machine waits for the Registry and its fill.
+its origin's. Off that host, only the emulated BMCs and managed servers its
+installation waits for keep their origins, following the
+[mirror host ordering](../infrastructure-services.md#mirror-host); every other
+mirrored consumer waits for the Registry and its fill.
 The Registry may be placed on the controller Machine, whose controller stage
 then installs `skopeo`, or on a Machine Bootwright installs, whose profile
 installs it.

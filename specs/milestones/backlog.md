@@ -8585,9 +8585,9 @@ the owner's review:
     dependency cycle. The exemption is by Machine, as (27)'s is, because
     `MirroredImage` takes the Machine an image is pulled on and the fill
     copies exactly what the consumers' own derivation mirrors; its cost, that
-    such a Machine's other services pull their origins too, is
-    [B1340](delivered.md#x432--only-what-an-installed-mirror-hosts-installation-waits-for-pulls-its-origin). No named refusal row is needed, since no such cycle
-    remains.
+    such a Machine's other services pulled their origins too, was removed by
+    [X432 (B1340)](delivered.md#x432--only-what-an-installed-mirror-hosts-installation-waits-for-pulls-its-origin).
+    No named refusal row is needed, since no such cycle remains.
 
 X430 took (36) onward while X409, which took (31) to (33), was in flight beside it, and X431 took (34) and (35).
 

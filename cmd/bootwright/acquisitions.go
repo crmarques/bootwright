@@ -160,10 +160,7 @@ func imagePulls(catalog api.Catalog) ([]imagePull, error) {
 		}
 		host := substrate.HostMachine(provider)
 		var pulled []string
-		for _, machine := range catalog.OfKind(api.Machine) {
-			if machine.Spec().Get("substrate", "providerRef").Text() != provider.Name() {
-				continue
-			}
+		for _, machine := range substrate.HostedMachines(catalog, provider.Name()) {
 			reference, _ := managedservice.MirroredImage(catalog, libvirt.EmulatorImage(), managedservice.EmulatedBMCConsumer(machine, host))
 			if !slices.Contains(pulled, reference) {
 				pulled = append(pulled, reference)

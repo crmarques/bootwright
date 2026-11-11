@@ -15277,10 +15277,30 @@ another guest lists both
 ordering, the [image mirror](../api/environment.md#image-mirror) sentence, the
 [acquisition list](../cli.md#acquisition-list) and the deferred
 controlled-network page. Contracts: unchanged; a request's shape is the same,
-only which image reference it carries for a given graph.
+only which image reference it carries for a given graph. New plans use the
+narrower routing; previously frozen plans retain their image references.
+[Continuation and removal](../state-reconciliation.md#continuation-and-removal)
+governs an older operation: continuation with another build refuses if
+replanning would change its frozen blocks.
 
-**Commits:** this commit. Gates: listed in its message. No live run or push
-occurred. **Limitations:** an installed mirror host's own emulated BMC and the
-servers its installation selects still dial their public origins, so B1250's
+*Review follow-up.* A public-image artifact mirror on the installed mirror
+host still precedes the controller's mirrored clients without waiting for
+the Registry or image fill
+(`TestAPublicArtifactMirrorOnTheInstalledMirrorHostPrecedesTheControllerClients`).
+A proposed split-host reproduction is already refused by the
+[mirror services placement rule](../api/environment.md#refusal-table), and
+an OS-provided Machine is never realized
+(`TestProvidedMachinesAreNeverRealized`), so neither review scenario needs a
+new origin exemption.
+The per-consumer acquisition list now uses `substrate.HostedMachines`, as
+VM creation does, so an OS-provided Machine naming the mirror host's provider
+adds no unused mirrored BMC image to the fill
+(`TestAProvidedMachineBesideTheMirrorHostAddsNoBMCImageToTheMirror`, failed
+before the correction and passed after it).
+
+**Commits:** the X432 implementation and its review follow-up. Gates: listed
+in their messages. No live run or push occurred. **Limitations:** an installed
+mirror host's own emulated BMC and the servers its installation selects still
+dial their public origins, so B1250's
 no-public-route profile must route those origins from their hosts or place
 them where the profile allows; the live proof is [B1250](backlog.md#b1250).
