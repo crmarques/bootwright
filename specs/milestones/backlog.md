@@ -308,7 +308,6 @@ Alias cell.
 | [B1304](#b1304) | new, 2026-11-10 (X395 review, D255 (16)) | safety | Substrate | A routing unit that fails at boot leaves no VLAN leg up without its table | Making NetworkManager wait on the unit stops all host networking when nft fails, which can cut a remote host off; activating the legs only after the table loads changes how they come up and is the owner's choice |
 | [B1315](#b1315) | new, 2026-11-10 (X395 verification review) | defect | Substrate | A tagged managed Network whose `vlan` or trunk `bridge` changes redefines its own leg instead of refusing it as foreign | The refusal comes before any effect, so no isolation is lost; the e2e case never changes a leg, and a redefinition while guests use the old VLAN needs its own drift and quiescence rule |
 | [B1313](#b1313) | new, 2026-11-10 (X376) | enabling | Architecture | Bootwright names its own license, which the bill of materials and the notices carry | An owner decision: no file of the repository declares one |
-| [B1317](#b1317) | new, 2026-11-10 (X400 review) | enabling | Architecture | A default client whose binary names no Go module has its third-party dependencies judged | virtctl 1.9.1 is built so its build information holds only the toolchain; the gate judges its Go dependencies by its top-level module alone |
 | [B1328](#b1328) | new, 2026-11-10 (X410 review) | defect | Storage | A pool no applied object declares raises no placement group check that keeps every Ceph block from ready | outside D256's pool and filesystem scope; needs a bounded mapping from a PG ID to its pool |
 | [B1316](#b1316) | new, 2026-11-10 (X370 review) | defect | Storage, with Secrets | A storage consumer or replication block names every Secret its binding pins | Safe as it stands: the hold walks the applied lineage, whose cluster and host blocks class those keys as effect material |
 | [B1326](#b1326) | new, 2026-11-10 (X402 review) | safety | Container cluster | A release read on the controller never reaches the source repository past a failing mirror | oc's `--icsp-file` strategy tries the source last, which no wrapper argument stops; only a live run shows it happening |
@@ -3602,23 +3601,6 @@ and the same fail-closed rules. **Exit evidence:** unit tests that a PG check
 on an undeclared pool's PGs leaves every block ready, one on a declared pool's
 PGs marks exactly its holders not ready, and an unmapped PG ID gates every
 block.
-
-### B1317
-
-**Owner:** Architecture. **Kind:** enabling. **Requires:** none.
-**Definition:** Candidate, from the review of
-[X400](delivered.md#x400--client-binary-scan-and-scheduled-image-scan).
-`virtctl` 1.9.1's release is built so that its build information names the Go
-toolchain and no module, so the
-[vulnerability gate](../security.md#the-vulnerability-gate) judges its toolchain
-by symbols and its dependencies by its top-level module alone, and an
-advisory against a dependency it links, such as `golang.org/x/net`, goes
-unseen. **Outcome:** the gate judges the dependencies the release was built
-from, for instance the modules of the publisher's `go.mod` and `go.sum` at the
-release tag, pinned by digest like the release file, or a build of the tag
-whose binary names them. **Exit evidence:** a test in which a client whose
-binary names no module has its dependencies judged, and a gate run that names
-them.
 
 ### B1316
 
