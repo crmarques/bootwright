@@ -4,41 +4,57 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/addons"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/desiredstate/yamlstream"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-// Normalization sorts addonConfigs and inputs, but a diagnostic names the
-// authored positions, the field and the line alike (specs/api.md, YAML streams
-// and decoding).
+// Normalization may sort a list, but a diagnostic names the authored
+// position, the field and the line alike (specs/api.md, YAML streams and
+// decoding).
 func TestSortedNestedListsKeepAuthoredAndInheritedDiagnosticLocations(t *testing.T) {
-	list := "    - addonRef: z-addon\n      inputs:\n        - name: z-input\n          value: present\n        - name: a-input\n          value: ''\n    - addonRef: a-addon\n"
-	binding := "apiVersion: bootwright.io/v1alpha1\nkind: ClusterAddonBinding\nmetadata:\n  name: selected\nspec:\n  clusterRef: cluster\n"
+	list := "    - name: z-step\n      gates: apply\n      playbook: playbooks/a.yaml\n      target:\n        boundCluster: {}\n      outputs:\n        - name: z-output\n          file: present\n        - name: a-output\n          file: ''\n    - name: a-step\n      gates: apply\n      manifests:\n        - path: manifests/a.yaml\n"
+	addon := "apiVersion: bootwright.io/v1alpha1\nkind: ClusterAddon\nmetadata:\n  name: selected\nspec:\n  manifestSet:\n    manifests:\n      - path: manifests/a.yaml\n"
+	sortSteps := func(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
+		if o.Kind() != api.ClusterAddon {
+			return o, nil
+		}
+		byName := func(a, b api.Value) int { return strings.Compare(a.Get("name").Text(), b.Get("name").Text()) }
+		steps := o.Spec().Get("steps").Items()
+		for i := range steps {
+			if steps[i].Has("outputs") {
+				outputs := steps[i].Get("outputs").Items()
+				slices.SortFunc(outputs, byName)
+				steps[i] = steps[i].With("outputs", api.ListValue(outputs...))
+			}
+		}
+		slices.SortFunc(steps, byName)
+		return o.WithSpec(o.Spec().With("steps", api.ListValue(steps...))), nil
+	}
 	for _, inherited := range []bool{false, true} {
 		t.Run(map[bool]string{false: "authored", true: "inherited"}[inherited], func(t *testing.T) {
 			content := environmentYAML
 			if inherited {
-				content += "  defaults:\n    ClusterAddonBinding:\n      addonConfigs:\n" + indent(list, 4)
-				content += "---\n" + binding
+				content += "  defaults:\n    ClusterAddon:\n      steps:\n" + indent(list, 4)
+				content += "---\n" + addon
 			} else {
-				content += "---\n" + binding + "  addonConfigs:\n" + list
+				content += "---\n" + addon + "  steps:\n" + list
 			}
-			c := compilation.NewCompiler(yamlstream.Parser{}, nil, compilation.Rules{Normalize: addons.Normalize})
+			c := compilation.NewCompiler(yamlstream.Parser{}, nil, compilation.Rules{Normalize: sortSteps})
 			_, _, err := c.Compile(context.Background(), sources(content))
 			if err == nil {
 				t.Fatal("invalid references accepted")
 			}
-			want := strings.Count(strings.Split(content, "value: ''")[0], "\n") + 1
+			want := strings.Count(strings.Split(content, "file: ''")[0], "\n") + 1
 			found := false
 			for _, diagnostic := range diagnostics.Of(err) {
-				if diagnostic.Object != nil && diagnostic.Object.Kind == string(api.ClusterAddonBinding) && diagnostic.Field == "$.spec.addonConfigs[0].inputs[1].value" {
+				if diagnostic.Object != nil && diagnostic.Object.Kind == string(api.ClusterAddon) && diagnostic.Field == "$.spec.steps[0].outputs[1].file" {
 					found = true
 					if diagnostic.Source == nil || diagnostic.Source.Line != want {
 						t.Fatalf("wrong origin: want line%d got%+v", want, diagnostic)

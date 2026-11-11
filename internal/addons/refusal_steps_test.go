@@ -13,9 +13,6 @@ func requiring(name, capability string) api.Object {
 
 func TestUndecodableSelectionsAreTheirOwnOnlyRefusal(t *testing.T) {
 	consumer := requiring("consumer", "capability")
-	tokenInput := m("name", s("credential"), "secretType", s("token"))
-	secretAddon := manifestAddon("pulls").WithSpec(manifestAddon("pulls").Spec().With("inputs", l(tokenInput)))
-	storageAddon := manifestAddon("storage").WithSpec(manifestAddon("storage").Spec().With("provides", api.StringList("dataFoundation")).With("readiness", m("checks", l(m()))).With("inputs", l(storageInput("export"))))
 	for _, test := range []struct {
 		name        string
 		undecodable string
@@ -26,8 +23,7 @@ func TestUndecodableSelectionsAreTheirOwnOnlyRefusal(t *testing.T) {
 		{
 			name: "a selected profile", undecodable: "ClusterAddonProfile/broken",
 			objects: []api.Object{consumer},
-			owner: obj(api.ClusterAddonBinding, "binding", m("clusterRef", s("cluster"), "profileRefs", api.StringList("broken"), "addonRefs", api.StringList("consumer"),
-				"addonConfigs", l(m("addonRef", s("expanded"))))),
+			owner:   obj(api.ClusterAddonBinding, "binding", m("clusterRef", s("cluster"), "profileRefs", api.StringList("broken"), "addonRefs", api.StringList("consumer"))),
 		},
 		{
 			name: "a profile a profile expands", undecodable: "ClusterAddonProfile/broken",
@@ -37,20 +33,7 @@ func TestUndecodableSelectionsAreTheirOwnOnlyRefusal(t *testing.T) {
 		{
 			name: "a selected add-on", undecodable: "ClusterAddon/broken",
 			objects: []api.Object{consumer},
-			owner: obj(api.ClusterAddonBinding, "binding", m("clusterRef", s("cluster"), "addonRefs", api.StringList("consumer", "broken"),
-				"addonConfigs", l(m("addonRef", s("broken"))))),
-		},
-		{
-			name: "a CephConsumer input target", undecodable: "CephConsumer/export",
-			objects: []api.Object{storageAddon},
-			owner: obj(api.ClusterAddonBinding, "binding", m("clusterRef", s("cluster"), "addonRefs", api.StringList("storage"),
-				"addonConfigs", l(m("addonRef", s("storage"), "inputs", l(m("name", s("export"), "value", s("export"))))))),
-		},
-		{
-			name: "a Secret input target", undecodable: "Secret/credential",
-			objects: []api.Object{secretAddon},
-			owner: obj(api.ClusterAddonBinding, "binding", m("clusterRef", s("cluster"), "addonRefs", api.StringList("pulls"),
-				"addonConfigs", l(m("addonRef", s("pulls"), "inputs", l(m("name", s("credential"), "value", s("credential"))))))),
+			owner:   obj(api.ClusterAddonBinding, "binding", m("clusterRef", s("cluster"), "addonRefs", api.StringList("consumer", "broken"))),
 		},
 		{
 			name: "an add-on another binding of the cluster selects", undecodable: "ClusterAddon/broken",
@@ -86,10 +69,6 @@ func TestAddonRefusalsNameANextStep(t *testing.T) {
 	binding := func(spec api.Value) api.Object {
 		return obj(api.ClusterAddonBinding, "binding", spec.With("clusterRef", s("cluster")))
 	}
-	tokenAddon := manifestAddon("pulls").WithSpec(manifestAddon("pulls").Spec().With("inputs", l(m("name", s("credential"), "secretType", s("token")))))
-	configured := func(inputs api.Value) api.Object {
-		return binding(m("addonRefs", api.StringList("pulls"), "addonConfigs", l(m("addonRef", s("pulls"), "inputs", inputs))))
-	}
 	provider := manifestAddon("provider").WithSpec(m("provides", api.StringList("capability"), "requires", api.StringList("reverse")))
 	consumer := manifestAddon("consumer").WithSpec(m("provides", api.StringList("reverse"), "requires", api.StringList("capability")))
 	for _, test := range []struct {
@@ -103,15 +82,6 @@ func TestAddonRefusalsNameANextStep(t *testing.T) {
 				obj(api.ClusterAddonProfile, "first", m("profileRefs", api.StringList("second"))),
 				obj(api.ClusterAddonProfile, "second", m("profileRefs", api.StringList("first"))),
 			}},
-		{"a configuration that selects", "$.spec.addonConfigs[0].addonRef", "select b through spec.addonRefs or a profile, or remove this spec.addonConfigs entry",
-			binding(m("addonRefs", api.StringList("a"), "addonConfigs", l(m("addonRef", s("b"))))), []api.Object{manifestAddon("a"), manifestAddon("b")}},
-		{"a required input missing", "$.spec.addonConfigs", "add an input named credential to the spec.addonConfigs entry of pulls, naming a Secret of type token",
-			binding(m("addonRefs", api.StringList("pulls"))), []api.Object{tokenAddon}},
-		{"an input of the wrong Secret type", "$.spec.addonConfigs[0].inputs[0].value", "set the value to the name of a Secret of type token declared in the selected input",
-			configured(l(m("name", s("credential"), "value", s("credential")))), []api.Object{tokenAddon, obj(api.Secret, "credential", m("type", s("opaque")))}},
-		{"an undeclared input", "$.spec.addonConfigs[0].inputs[1].name", "remove the input, or use an input pulls declares: credential",
-			configured(l(m("name", s("credential"), "value", s("credential")), m("name", s("undeclared"), "value", s("credential")))),
-			[]api.Object{tokenAddon, obj(api.Secret, "credential", m("type", s("token")))}},
 		{"an add-on bound twice", "$.spec.addonRefs[0]", "bind a to cluster through one ClusterAddonBinding only",
 			binding(m("addonRefs", api.StringList("a"))), []api.Object{manifestAddon("a"), obj(api.ClusterAddonBinding, "before", m("clusterRef", s("cluster"), "addonRefs", api.StringList("a")))}},
 		{"a capability nothing provides", "$.spec.addonRefs[0]", "select a package or add-on that provides capability for OpenShiftCluster/cluster, or remove ClusterAddon/consumer from the selection",

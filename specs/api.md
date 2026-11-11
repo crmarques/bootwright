@@ -57,7 +57,6 @@ proves each row warned and refused at `plan`.
 | OpenShiftCluster | `spec.install.servingCertificates` | [B723](milestones/m3.md#b723) |
 | ClusterAddon | `spec.manifestSet` | [B90](milestones/m4.md#b90) |
 | ClusterAddon | `spec.olm.namespace.management: external` | [B90](milestones/m4.md#b90) |
-| ClusterAddon | `spec.inputs` | none tracked |
 | ClusterAddon | `spec.steps` | none tracked |
 | CustomPlaybook | `spec.enabled: true` | [B102](milestones/backlog.md#b102) |
 | Environment | `spec.dependencyVersions.libvirt other than latest` | [B676](milestones/backlog.md#b676) |

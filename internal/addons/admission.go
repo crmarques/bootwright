@@ -20,13 +20,6 @@ func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 				s = s.With(field, sortedStrings(s.Get(field)))
 			}
 		}
-		if s.Has("inputs") {
-			inputs := s.Get("inputs").Items()
-			for i := range inputs {
-				inputs[i] = inputs[i].Default("required", api.BoolValue(true))
-			}
-			s = s.With("inputs", SortedNamed(api.ListValue(inputs...), "name"))
-		}
 		if olm := s.Get("olm"); olm.Present() {
 			if image := olm.Get("catalogSource", "image"); image.Present() {
 				olm = olm.WithPath(api.StringValue(api.CanonicalImage(image.Text())), "catalogSource", "image")
@@ -74,16 +67,6 @@ func Normalize(o api.Object, _ api.Catalog) (api.Object, []api.Issue) {
 			}
 			s = s.With("steps", api.ListValue(steps...))
 		}
-	case api.ClusterAddonBinding:
-		if s.Has("addonConfigs") {
-			configs := s.Get("addonConfigs").Items()
-			for i := range configs {
-				if configs[i].Has("inputs") {
-					configs[i] = configs[i].With("inputs", SortedNamed(configs[i].Get("inputs"), "name"))
-				}
-			}
-			s = s.With("addonConfigs", SortedNamed(api.ListValue(configs...), "addonRef"))
-		}
 	default:
 		return o, nil
 	}
@@ -126,23 +109,6 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 func validateDeclaration(o api.Object, c api.Catalog, partial bool) []api.Issue {
 	s := o.Spec()
 	issues := []api.Issue{}
-	providesStorage := slices.Contains(s.Get("provides").Strings(), "dataFoundation")
-	for i, input := range s.Get("inputs").Items() {
-		for j, effect := range input.Get("effects").Items() {
-			if len(issues) >= maxIssues {
-				return issues[:maxIssues]
-			}
-			field := indexed(indexed("spec.inputs", i)+".effects", j)
-			wrongStorageKind := input.Get("resourceKind").Text() != string(api.CephConsumer) && (!partial || input.Has("resourceKind") || input.Has("secretType"))
-			missingStorageCapability := !providesStorage && (!partial || s.Has("provides"))
-			if effect.Has("cephConsumerAttachment") && (wrongStorageKind || missingStorageCapability) {
-				issues = append(issues, addonIssue("api.invariant", field, "Storage attachment requires a CephConsumer input and the dataFoundation capability.", "make the input a CephConsumer resourceKind input and add dataFoundation to provides, or remove the cephConsumerAttachment effect"))
-			}
-			if effect.Has("globalPullSecretMerge") && input.Get("secretType").Text() != "token" && (!partial || input.Has("resourceKind") || input.Has("secretType")) {
-				issues = append(issues, addonIssue("api.invariant", field, "Global pull-secret merging requires a token Secret input.", "make the input a token Secret input (secretType: token), or remove the globalPullSecretMerge effect"))
-			}
-		}
-	}
 	olm := s.Get("olm")
 	if catalog := olm.Get("catalogSource"); catalog.Present() {
 		if source := olm.Get("subscription", "source"); source.Present() && catalog.Get("name").Text() != "" && source.Text() != catalog.Get("name").Text() {
@@ -169,7 +135,6 @@ func validateDeclaration(o api.Object, c api.Catalog, partial bool) []api.Issue 
 	issues = append(issues, validateCustomResources(olm, partial)...)
 	issues = append(issues, validateReadiness(s, partial)...)
 	issues = append(issues, validateManifests(s.Get("manifestSet", "manifests"), "spec.manifestSet.manifests", partial)...)
-	inputsByName := uniqueNamedValues(s.Get("inputs"), "name")
 	for i, step := range s.Get("steps").Items() {
 		if len(issues) >= maxIssues {
 			return issues[:maxIssues]
@@ -193,7 +158,7 @@ func validateDeclaration(o api.Object, c api.Catalog, partial bool) []api.Issue 
 		if !partial && !step.Has("playbook") && (step.Has("target") || step.Has("outputs")) {
 			issues = append(issues, addonIssue("api.invariant", field, "Targets and outputs require a playbook step.", "add a playbook to the step, or remove its target and outputs"))
 		}
-		issues = append(issues, validateStepTarget(step.Get("target"), inputsByName, s.Has("inputs"), field+".target", c, partial)...)
+		issues = append(issues, validateStepTarget(step.Get("target"), field+".target", c, partial)...)
 		for j, output := range step.Get("outputs").Items() {
 			if len(issues) >= maxIssues {
 				return issues[:maxIssues]
@@ -206,7 +171,7 @@ func validateDeclaration(o api.Object, c api.Catalog, partial bool) []api.Issue 
 	return boundedIssues(issues)
 }
 
-func validateStepTarget(target api.Value, inputs map[string]api.Value, inputsPresent bool, field string, c api.Catalog, partial bool) []api.Issue {
+func validateStepTarget(target api.Value, field string, c api.Catalog, partial bool) []api.Issue {
 	issues := []api.Issue{}
 	if static := target.Get("static"); static.Present() {
 		if !partial && static.Get("clusters").Len()+static.Get("machines").Len() == 0 {
@@ -219,16 +184,6 @@ func validateStepTarget(target api.Value, inputs map[string]api.Value, inputsPre
 			if machine, found := c.Find(api.Machine, ref.Text()); found && !machine.Spec().Has("access", "ssh") {
 				issues = append(issues, addonIssue("api.reference", indexed(field+".static.machines", i), "Static playbook targets must select SSH-accessible Machines.", "select a Machine that declares spec.access.ssh, or give that Machine SSH access"))
 			}
-		}
-	}
-	if from := target.Get("fromInput"); from.Present() {
-		if partial && (!inputsPresent || !from.Has("input")) {
-			return issues
-		}
-		input, found := inputs[from.Get("input").Text()]
-		validKind := slices.Contains([]string{string(api.CephConsumer), string(api.CephCluster), string(api.OpenShiftCluster), string(api.Machine)}, input.Get("resourceKind").Text())
-		if !found || !validKind && (!partial || input.Has("resourceKind") || input.Has("secretType")) || input.Get("resourceKind").Text() == string(api.CephConsumer) && !hasEffect(input, "cephConsumerAttachment") && (!partial || input.Has("effects")) {
-			issues = append(issues, addonIssue("api.reference", field+".fromInput.input", "Input targets require a declared supported resource input and any required storage-attachment effect.", "name a declared input whose resourceKind is CephConsumer, CephCluster, OpenShiftCluster or Machine; a CephConsumer input also needs the cephConsumerAttachment effect"))
 		}
 	}
 	return boundedIssues(issues)
@@ -278,15 +233,6 @@ func uniqueNamedValues(values api.Value, key string) map[string]api.Value {
 		delete(unique, name)
 	}
 	return unique
-}
-
-func hasEffect(input api.Value, effect string) bool {
-	for _, value := range input.Get("effects").Items() {
-		if value.Len() == 1 && value.Get(effect).Type() == api.Mapping {
-			return true
-		}
-	}
-	return false
 }
 
 func indexed(field string, index int) string { return field + "[" + strconv.Itoa(index) + "]" }

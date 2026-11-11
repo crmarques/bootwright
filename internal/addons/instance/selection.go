@@ -13,7 +13,6 @@ import (
 var shapeRows = map[addons.ShapeRefusal][2]string{
 	addons.ShapeManifestSet: {"<addon> declares a manifest set, which this executable does not install", "remove spec.manifestSet from <addon> and declare an olm arm, or remove <addon> from the selection of <binding>"},
 	addons.ShapeSteps:       {"<addon> declares steps, which this executable does not run", "remove spec.steps from <addon>, or remove <addon> from the selection of <binding>"},
-	addons.ShapeInputs:      {"<addon> declares inputs, which this executable does not place", "remove spec.inputs from <addon>, or remove <addon> from the selection of <binding>"},
 	addons.ShapeExternal:    {"<addon> declares an external namespace, which this executable does not install into", "set spec.olm.namespace.management of <addon> to managed, or remove <addon> from the selection of <binding>"},
 	addons.ShapeNoGroup:     {"<addon> declares no OperatorGroup, which this executable needs to install its operator", "declare spec.olm.operatorGroup of <addon>, or remove <addon> from the selection of <binding>"},
 	addons.ShapeTargets:     {"<addon> targets namespaces other than its own or all, which this executable does not install", "set spec.olm.operatorGroup.targetNamespaces of <addon> to its own namespace or an empty list, or remove <addon> from the selection of <binding>"},

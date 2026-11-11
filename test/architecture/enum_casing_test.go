@@ -19,7 +19,6 @@ var nativeEnumFields = map[string]string{
 	"CephPool.spec.compression.algorithm":                                             "Ceph compression algorithms",
 	"CephPool.spec.erasure.plugin":                                                    "Ceph erasure-code plugins",
 	"CephRBDImage.spec.features[]":                                                    "RBD image features",
-	"ClusterAddon.spec.inputs[].resourceKind":                                         "registered kind names",
 	"ClusterAddon.spec.olm.customResources[].gate[].condition.condition.status":       "Kubernetes condition statuses",
 	"ClusterAddon.spec.readiness.checks[].condition.condition.status":                 "Kubernetes condition statuses",
 	"ClusterAddon.spec.steps[].requires[].condition.condition.status":                 "Kubernetes condition statuses",

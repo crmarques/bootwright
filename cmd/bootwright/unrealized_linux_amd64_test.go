@@ -85,7 +85,6 @@ func unrealizedFixtures(t *testing.T) map[string]desiredstate.Sources {
 			"  controller:\n    machineRef: controller\n", "  controller:\n    machineRef: controller\n\n  dependencyVersions:\n    libvirt: 10.0.0\n", nil),
 		"a manifest-set add-on": addOnSources(t, unrealizedAddOnHead+"  manifestSet:\n    manifests:\n      - path: manifests/extra.yaml\n", map[string]string{}),
 		"an external namespace": addOnSources(t, unrealizedAddOnHead+fmt.Sprintf(unrealizedAddOnOLM, "      management: external"), map[string]string{}),
-		"an add-on with inputs": addOnSources(t, unrealizedAddOnHead+fmt.Sprintf(unrealizedAddOnOLM, "")+"  inputs:\n    - name: machine\n      resourceKind: Machine\n      required: false\n", map[string]string{}),
 		"an add-on with steps":  addOnSources(t, unrealizedAddOnHead+fmt.Sprintf(unrealizedAddOnOLM, "")+"  steps:\n    - name: extra\n      gates: apply\n      manifests:\n        - path: manifests/extra.yaml\n", map[string]string{}),
 		"serving certificates": patchedSources(t, exampleDirectory(t, "lab-sno"), cluster, "    mode: connected\n",
 			"    mode: connected\n\n    servingCertificates:\n      ingress:\n        defaultCertificateRef: artifact-server-tls\n", nil),

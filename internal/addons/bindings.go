@@ -1,7 +1,6 @@
 package addons
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 
@@ -9,7 +8,7 @@ import (
 )
 
 // ExpandBinding returns definitions in authored depth-first selection order,
-// retaining the first occurrence of each add-on. Configurations select nothing.
+// retaining the first occurrence of each add-on.
 func ExpandBinding(binding api.Object, c api.Catalog) ([]api.Object, []api.Issue) {
 	if binding.Kind() != api.ClusterAddonBinding {
 		return nil, nil
@@ -121,63 +120,7 @@ func uniqueObjects(objects []api.Object) map[string]api.Object {
 
 func validateBinding(binding api.Object, c api.Catalog) []api.Issue {
 	profiles, definitions := uniqueObjects(c.OfKind(api.ClusterAddonProfile)), uniqueObjects(c.OfKind(api.ClusterAddon))
-	selected, issues, complete := expandIndexed(binding, c, profiles, definitions)
-	selectedByName := uniqueObjects(selected)
-	configs := binding.Spec().Get("addonConfigs")
-	configsByName := uniqueNamedValues(configs, "addonRef")
-	for i, config := range configs.Items() {
-		if len(issues) >= maxIssues {
-			return issues[:maxIssues]
-		}
-		if _, found := selectedByName[config.Get("addonRef").Text()]; complete && !found {
-			issues = append(issues, addonIssue("api.reference", indexed("spec.addonConfigs", i)+".addonRef", "ClusterAddon/"+config.Get("addonRef").Text()+" is configured but not selected by this binding", "select "+config.Get("addonRef").Text()+" through spec.addonRefs or a profile, or remove this spec.addonConfigs entry"))
-		}
-	}
-	for _, addon := range selected {
-		config := configsByName[addon.Name()]
-		configField := "spec.addonConfigs"
-		for i, candidate := range configs.Items() {
-			if candidate.Get("addonRef").Text() == addon.Name() {
-				configField = indexed(configField, i) + ".inputs"
-				break
-			}
-		}
-		inputs := config.Get("inputs")
-		inputsByName := uniqueNamedValues(inputs, "name")
-		acceptedByName := uniqueNamedValues(addon.Spec().Get("inputs"), "name")
-		for _, accepted := range addon.Spec().Get("inputs").Items() {
-			if len(issues) >= maxIssues {
-				return issues[:maxIssues]
-			}
-			supplied, present := inputsByName[accepted.Get("name").Text()]
-			if !present {
-				if !accepted.Has("required") || accepted.Get("required").Bool() {
-					issues = append(issues, addonIssue("api.required", configField, "required input "+accepted.Get("name").Text()+" of ClusterAddon/"+addon.Name()+" is not supplied", "add an input named "+accepted.Get("name").Text()+" to the spec.addonConfigs entry of "+addon.Name()+", naming a "+inputKind(accepted)))
-				}
-				continue
-			}
-			kind := api.Kind(accepted.Get("resourceKind").Text())
-			if accepted.Has("secretType") {
-				kind = api.Secret
-			}
-			value := supplied.Get("value").Text()
-			target, found := c.Find(kind, value)
-			if !found && c.Undecodable(kind, value) {
-				continue
-			}
-			if !found || kind == api.Secret && target.Spec().Get("type").Text() != accepted.Get("secretType").Text() {
-				issues = append(issues, addonIssue("api.reference", inputField(configField, inputs, accepted.Get("name").Text())+".value", fmt.Sprintf("input %s of ClusterAddon/%s names %s, which is not a %s in the selected input", accepted.Get("name").Text(), addon.Name(), value, inputKind(accepted)), "set the value to the name of a "+inputKind(accepted)+" declared in the selected input"))
-			}
-		}
-		for j, supplied := range inputs.Items() {
-			if len(issues) >= maxIssues {
-				return issues[:maxIssues]
-			}
-			if _, declared := acceptedByName[supplied.Get("name").Text()]; !declared {
-				issues = append(issues, addonIssue("api.field", indexed(configField, j)+".name", "ClusterAddon/"+addon.Name()+" declares no input named "+supplied.Get("name").Text(), undeclaredRemedy(addon)))
-			}
-		}
-	}
+	_, issues, _ := expandIndexed(binding, c, profiles, definitions)
 	cluster := binding.Spec().Get("clusterRef").Text()
 	for i, ref := range binding.Spec().Get("afterRefs").Strings() {
 		if other, found := c.Find(api.ClusterAddonBinding, ref); found && other.Spec().Get("clusterRef").Text() != cluster {
@@ -191,34 +134,9 @@ type Attachment struct{ ClusterRef, ConsumerRef string }
 
 func StorageAttachments(c api.Catalog, r Registry) []Attachment {
 	seen := map[Attachment]bool{}
-	profiles, definitions := uniqueObjects(c.OfKind(api.ClusterAddonProfile)), uniqueObjects(c.OfKind(api.ClusterAddon))
 	for _, binding := range c.OfKind(api.ClusterAddonBinding) {
 		for _, use := range r.consumption(binding) {
 			seen[Attachment{ClusterRef: binding.Spec().Get("clusterRef").Text(), ConsumerRef: use.Name}] = true
-		}
-		// Validation owns selection diagnostics; this projection grants no effects.
-		selected, _, _ := expandIndexed(binding, c, profiles, definitions)
-		configsByName := uniqueNamedValues(binding.Spec().Get("addonConfigs"), "addonRef")
-		for _, addon := range selected {
-			if !slices.Contains(addon.Spec().Get("provides").Strings(), "dataFoundation") {
-				continue
-			}
-			config, found := configsByName[addon.Name()]
-			if !found {
-				continue
-			}
-			declaredInputs := uniqueNamedValues(addon.Spec().Get("inputs"), "name")
-			suppliedInputs := uniqueNamedValues(config.Get("inputs"), "name")
-			for _, input := range addon.Spec().Get("inputs").Items() {
-				_, unique := declaredInputs[input.Get("name").Text()]
-				if !unique || input.Get("resourceKind").Text() != string(api.CephConsumer) || input.Has("secretType") || !hasEffect(input, "cephConsumerAttachment") {
-					continue
-				}
-				value, supplied := suppliedInputs[input.Get("name").Text()]
-				if supplied && value.Get("value").Type() == api.String && value.Get("value").Text() != "" {
-					seen[Attachment{ClusterRef: binding.Spec().Get("clusterRef").Text(), ConsumerRef: value.Get("value").Text()}] = true
-				}
-			}
 		}
 	}
 	out := make([]Attachment, 0, len(seen))
@@ -232,35 +150,4 @@ func StorageAttachments(c api.Catalog, r Registry) []Attachment {
 		return strings.Compare(a.ConsumerRef, b.ConsumerRef)
 	})
 	return out
-}
-
-func inputKind(v api.Value) string {
-	if v.Has("secretType") {
-		return "Secret of type " + v.Get("secretType").Text()
-	}
-	return v.Get("resourceKind").Text()
-}
-func inputField(base string, inputs api.Value, name string) string {
-	for i, v := range inputs.Items() {
-		if v.Get("name").Text() == name {
-			return indexed(base, i)
-		}
-	}
-	return base
-}
-func undeclaredRemedy(addon api.Object) string {
-	names := []string{}
-	for _, v := range addon.Spec().Get("inputs").Items() {
-		names = append(names, v.Get("name").Text())
-	}
-	slices.Sort(names)
-	if len(names) == 0 {
-		return "remove the input"
-	}
-	suffix := ""
-	if len(names) > 8 {
-		suffix = fmt.Sprintf(" and %d more", len(names)-8)
-		names = names[:8]
-	}
-	return "remove the input, or use an input " + addon.Name() + " declares: " + strings.Join(names, ", ") + suffix
 }

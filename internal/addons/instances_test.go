@@ -87,11 +87,11 @@ func TestRegistryDuplicateLastAndCycleDiagnostics(t *testing.T) {
 		t.Fatal(issues)
 	}
 }
-func TestSeveralMissingInputsAndCapabilitiesRemainDistinct(t *testing.T) {
-	a := manifestAddon("consumer").WithSpec(m("inputs", l(m("name", s("one"), "resourceKind", s("Machine")), m("name", s("two"), "resourceKind", s("Machine"))), "requires", api.StringList("alpha", "beta")))
-	b := obj(api.ClusterAddonBinding, "binding", m("clusterRef", s("cluster"), "addonRefs", api.StringList("consumer"), "addonConfigs", l(m("addonRef", s("consumer")))))
+func TestSeveralMissingCapabilitiesRemainDistinct(t *testing.T) {
+	a := manifestAddon("consumer").WithSpec(m("requires", api.StringList("alpha", "beta")))
+	b := obj(api.ClusterAddonBinding, "binding", m("clusterRef", s("cluster"), "addonRefs", api.StringList("consumer")))
 	issues := Validate(b, api.NewCatalog([]api.Object{a, b}))
-	if len(issues) != 4 {
+	if len(issues) != 2 {
 		t.Fatal(issues)
 	}
 	seen := map[string]bool{}
@@ -100,7 +100,7 @@ func TestSeveralMissingInputsAndCapabilitiesRemainDistinct(t *testing.T) {
 			t.Fatal(issues)
 		}
 		seen[i.Message] = true
-		if i.Field != "$.spec.addonConfigs[0].inputs" && i.Field != "$.spec.addonRefs[0]" {
+		if i.Field != "$.spec.addonRefs[0]" {
 			t.Fatal(i)
 		}
 	}

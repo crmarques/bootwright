@@ -13,21 +13,9 @@ func init() {
 }
 
 func addonSchema() *Shape {
-	inputs := named(choice(
-		required("name", nonempty()),
-		field("resourceKind", addonResourceKind()),
-		field("secretType", enumeration("opaque", "token", "usernamePassword", "dockerConfigJson", "caBundle", "tlsCertificate", "sshKeyPair")),
-		defaulted("required", boolean(), BoolValue(true)),
-		field("effects", array(choice(
-			field("cephConsumerAttachment", record()),
-			field("globalPullSecretMerge", record(required("registry", nonempty()), required("username", nonempty()))),
-		))),
-	))
-	inputs.Element.Arms = []string{"resourceKind", "secretType"}
 	s := record(
 		field("provides", set(lexical("token"))),
 		field("requires", set(lexical("token"))),
-		field("inputs", inputs),
 		field("olm", addonOLMSchema()),
 		field("manifestSet", record(required("manifests", nonemptyArray(array(record(required("path", lexical("relative-path")))))))),
 		field("readiness", record(defaulted("timeout", duration(), StringValue("30m")), field("checks", array(addonReadinessSchema())))),
@@ -35,16 +23,6 @@ func addonSchema() *Shape {
 	)
 	s.Arms = []string{"olm", "manifestSet"}
 	return s
-}
-
-func addonResourceKind() *Shape {
-	values := []string{}
-	for _, kind := range Kinds() {
-		if kind != Secret {
-			values = append(values, string(kind))
-		}
-	}
-	return enumeration(values...)
 }
 
 func addonOLMSchema() *Shape {
@@ -74,11 +52,10 @@ func addonReadinessSchema() *Shape {
 func addonStepSchema() *Shape {
 	target := choice(
 		field("boundCluster", record()),
-		field("fromInput", record(required("input", nonempty()))),
 		field("static", record(field("clusters", array(clusters(ContainerClusterCategory, StorageClusterCategory))), field("machines", array(ref(Machine))))),
 		field("limit", enumeration("firstReachable", "all")),
 	)
-	target.Arms = []string{"boundCluster", "fromInput", "static"}
+	target.Arms = []string{"boundCluster", "static"}
 	s := record(
 		required("name", lexical("token")), field("gates", enumeration("apply")), field("follows", enumeration("operatorReady", "ready")),
 		field("requires", array(addonReadinessSchema())), field("source", playbookSourceSchema()),
@@ -96,9 +73,7 @@ func addonProfileSchema() *Shape {
 }
 
 func addonBindingSchema() *Shape {
-	configs := array(record(required("addonRef", ref(ClusterAddon)), field("inputs", named(record(required("name", nonempty()), required("value", nonempty()))))))
-	configs.NameKey = "addonRef"
-	return record(required("clusterRef", clusters(ContainerClusterCategory)), field("profileRefs", array(ref(ClusterAddonProfile))), field("addonRefs", array(ref(ClusterAddon))), field("addonConfigs", configs), field("packages", addonPackagesSchema()), field("afterRefs", set(ref(ClusterAddonBinding))))
+	return record(required("clusterRef", clusters(ContainerClusterCategory)), field("profileRefs", array(ref(ClusterAddonProfile))), field("addonRefs", array(ref(ClusterAddon))), field("packages", addonPackagesSchema()), field("afterRefs", set(ref(ClusterAddonBinding))))
 }
 
 type PackageSubscription struct {

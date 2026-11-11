@@ -137,7 +137,6 @@ func authoredRefusalCases(t *testing.T) map[string]refusalCase {
 	return map[string]refusalCase{
 		"An authored manifest set":                             {addon: variant(with("manifestSet", api.MapValue())), values: named},
 		"An authored add-on with steps":                        {addon: variant(with("steps", api.ListValue(api.MapValue()))), values: named},
-		"An authored add-on with inputs":                       {addon: variant(with("inputs", api.ListValue(api.MapValue()))), values: named},
 		"An authored external namespace":                       {addon: variant(at(api.StringValue("external"), "olm", "namespace", "management")), values: named},
 		"An authored add-on with no OperatorGroup":             {addon: variant(without), values: named},
 		"An authored OperatorGroup targeting other namespaces": {addon: variant(at(api.StringList("elsewhere"), "olm", "operatorGroup", "targetNamespaces")), values: named},

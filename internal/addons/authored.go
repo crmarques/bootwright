@@ -20,7 +20,6 @@ type ShapeRefusal string
 const (
 	ShapeManifestSet ShapeRefusal = "it declares a manifest set"
 	ShapeSteps       ShapeRefusal = "it declares steps"
-	ShapeInputs      ShapeRefusal = "it declares inputs"
 	ShapeExternal    ShapeRefusal = "its namespace is external"
 	ShapeNoGroup     ShapeRefusal = "it declares no OperatorGroup"
 	ShapeTargets     ShapeRefusal = "its OperatorGroup targets other namespaces"
@@ -37,8 +36,6 @@ func AuthoredShapeRefusal(definition api.Object) ShapeRefusal {
 		return ShapeManifestSet
 	case spec.Get("steps").Len() > 0:
 		return ShapeSteps
-	case spec.Get("inputs").Len() > 0:
-		return ShapeInputs
 	case olm.Get("namespace", "management").Text() == "external":
 		return ShapeExternal
 	case !olm.Get("operatorGroup").Present():

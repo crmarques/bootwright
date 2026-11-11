@@ -6,8 +6,8 @@ This page owns `ClusterAddon`, `ClusterAddonProfile`, and
 [built-in package](#built-in-packages) is an add-on compiled into the executable
 and selected by name. Profiles compose
 authored add-ons and other profiles. Bindings attach the expanded set and any
-built-in packages to one `OpenShiftCluster`, supplying scalar input values to
-authored add-ons and typed configuration to packages.
+built-in packages to one `OpenShiftCluster`, supplying typed configuration to
+packages.
 
 Each of these kinds names its objects under the [one name rule](../api.md#object-names).
 
@@ -20,10 +20,9 @@ acceptance implies no execution support; all declarations obey
 
 References are plain scalar names in fixed namespaces: `clusterRef` names a
 `OpenShiftCluster`, `profileRefs` name `ClusterAddonProfile` objects,
-`addonRefs` and `addonRef` name `ClusterAddon` objects, and `secretRefs` name
+`addonRefs` name `ClusterAddon` objects, and `secretRefs` name
 `Secret` objects, each effect material that a binding places in its cluster as
-an [owned Secret](../add-ons.md#owned-secrets). An input's `resourceKind` or `secretType` constrains its
-binding value as described below. [Environment kind defaults](environment.md#kind-defaults)
+an [owned Secret](../add-ons.md#owned-secrets). [Environment kind defaults](environment.md#kind-defaults)
 may supply only the fields permitted by that closed contract; this page owns
 their kind-specific validation and built-in defaults.
 
@@ -41,7 +40,6 @@ their kind-specific validation and built-in defaults.
 | --- | --- | --- | --- | --- |
 | `spec.provides` | array of strings | no | `[]` | Set of add-on capability tokens. |
 | `spec.requires` | array of strings | no | `[]` | Set of add-on capability tokens. |
-| `spec.inputs` | array of objects | no | `[]` | Accepted inputs, keyed by unique `name`. |
 | `spec.olm` | object | conditional | — | Exactly one of `olm` and `manifestSet` is present. |
 | `spec.manifestSet` | object | conditional | — | Exactly one of `olm` and `manifestSet` is present. |
 | `spec.readiness` | object | no | — | Timeout and readiness checks. |
@@ -61,43 +59,6 @@ provides `metallb` when it answers `LoadBalancer` Service addresses
 ([package metallb](#package-metallb)); a package or add-on that needs such an
 address requires it. An add-on with any `provides` value requires at least one
 effective readiness check after the readiness defaults below apply.
-
-### Accepted inputs and effects
-
-`spec.inputs` is an array with set semantics keyed by author-defined `name`.
-Each entry is:
-
-| Field | Type | Required | Default | Rule |
-| --- | --- | --- | --- | --- |
-| `name` | string | yes | — | Unique within the add-on. |
-| `resourceKind` | string | conditional | — | Exactly one of `resourceKind` and `secretType`; names a registered kind other than `Secret`. |
-| `secretType` | string | conditional | — | Exactly one of `resourceKind` and `secretType`; one of the [Secret types](secrets.md#secret). |
-| `required` | boolean | no | `true` | Every binding must supply a value when true; explicit false makes the input optional. |
-| `effects` | array | no | `[]` | Each entry is one effect union below. |
-
-Names do not determine input types or effects. `resourceKind: Secret` is
-invalid; Secret inputs use `secretType`, and a bound Secret input is effect
-material its binding places. The former `resourceRef` and `secretRef` input declaration
-fields are unknown.
-
-Effects declare how a supplied input is consumed. Their names belong to a
-closed vocabulary, unlike input names. Each effect entry sets exactly one
-known arm:
-
-| Arm | Shape | Rule |
-| --- | --- | --- |
-| `cephConsumerAttachment` | `{}` | Input is `resourceKind: CephConsumer` and the add-on provides `dataFoundation`; the bound consumer supplies storage integration for the binding's cluster. |
-| `globalPullSecretMerge` | `{registry, username}` | Input is `secretType: token`; both strings are non-empty. The token supplies credentials for that registry and username in the binding's cluster global pull secret. |
-
-Validation checks effect compatibility and resolves supplied object names.
-The storage attachment also defines the relationship used by
-[Environment cluster selection](environment.md#cluster-selection).
-An empty effect list declares no such built-in relationship or operation.
-Effects never grant execution authority. The
-[add-on lifecycle](../add-ons.md#refusal-table) refuses every bound authored
-add-on, and so every effect it declares; the
-[closed execution vocabulary](../deferred/add-ons-design.md#closed-execution-vocabulary)
-records what a custom-package lifecycle would add.
 
 ### OLM arm
 
@@ -150,7 +111,7 @@ capability under the same [trust boundary](../add-ons.md#trust-boundary) as a
 built-in package. The shape has a managed namespace, an OperatorGroup targeting
 that namespace or every namespace, a required `startingCSV`, an owned catalog
 with an explicit `priority`, custom resources of its own namespace each behind a
-gate, and no inputs, Secret placement, manifest set or step. Every other shape
+gate, and no Secret placement, manifest set or step. Every other shape
 validates and is refused at `plan`. Admission refuses these faults, each at its
 own indexed field:
 
@@ -284,29 +245,15 @@ occurrences are dropped.
 | `spec.clusterRef` | string | yes | — | One `OpenShiftCluster`. |
 | `spec.profileRefs` | array of strings | no | `[]` | Ordered profiles expanded first. |
 | `spec.addonRefs` | array of strings | no | `[]` | Ordered direct add-ons appended afterward. |
-| `spec.addonConfigs` | array of objects | no | `[]` | Set keyed by `addonRef`; supplies inputs but does not select an add-on. |
 | `spec.packages` | object | no | `{}` | Closed record whose optional members are [built-in package](#built-in-packages) names; a present member selects that package and holds its configuration. |
 | `spec.afterRefs` | array of strings | no | `[]` | Set of other `ClusterAddonBinding` refs of the same cluster; everything this binding selects runs after everything they select. |
 
-At least one profile, direct add-on or package is selected. Every config has:
-
-| Field | Type | Required | Default | Rule |
-| --- | --- | --- | --- | --- |
-| `addonRef` | string | yes | — | A selected `ClusterAddon`. |
-| `inputs` | array of objects | no | `[]` | Set keyed by input `name`. |
-| `inputs[].name` | string | yes | — | Must be declared by the selected add-on. |
-| `inputs[].value` | string | yes | — | Non-empty scalar resource or Secret name. |
-
-For a `resourceKind` input, `value` resolves to the declared kind. For a
-`secretType` input, it resolves to a `Secret` with that exact type. Every
-required accepted input is supplied exactly once and undeclared inputs are
-rejected. These remain generic named lists: input names and values are not
-add-on-specific schema fields. Input order does not define installation order.
+At least one profile, direct add-on or package is selected.
 
 Only one binding may apply a given add-on to a given cluster after profile
 expansion. A selected add-on's required capability tokens must be provided by
 another selected add-on; the resulting `requires`/`provides` graph must be
-acyclic. Config entries never select otherwise absent add-ons.
+acyclic.
 
 A package is bound to one cluster at most once across that cluster's
 bindings, and packages take part in the capability graph with the add-ons
@@ -332,9 +279,6 @@ authored positions in the document, as
 
 | Fault | Code | Field | Message | Remedy |
 | --- | --- | --- | --- | --- |
-| A required input is missing | `api.required` | `$.spec.addonConfigs[<i>].inputs`, or `$.spec.addonConfigs` when the binding has no entry for the add-on | `required input <input> of ClusterAddon/<addon> is not supplied` | `add an input named <input> to the spec.addonConfigs entry of <addon>, naming a <kind>` (or `naming a Secret of type <secretType>`) |
-| An input names no object of its kind | `api.reference` | `$.spec.addonConfigs[<i>].inputs[<j>].value` | `input <input> of ClusterAddon/<addon> names <value>, which is not a <kind> in the selected input` (or `which is not a Secret of type <secretType> in the selected input`) | `set the value to the name of a <kind> declared in the selected input` (or `of a Secret of type <secretType>`) |
-| An input is not declared | `api.field` | `$.spec.addonConfigs[<i>].inputs[<j>].name` | `ClusterAddon/<addon> declares no input named <input>` | `remove the input, or use an input <addon> declares: <names>` (at most eight names, then `and <n> more`; `remove the input` when it declares none) |
 | A profile reaches a missing add-on or profile | `api.reference` | `$.spec.profileRefs[<i>]` | `profile <profile> expands to <Kind>/<name>, which is not in the selected input` | `declare <Kind>/<name>, add its file to the selection, or remove it from ClusterAddonProfile/<owner>` |
 | A required capability has no provider | `api.reference` | the selecting entry: `$.spec.addonRefs[<k>]`, `$.spec.profileRefs[<i>]` through which the binding reaches the add-on, or `$.spec.packages.<package>` | `<subject> requires capability <capability>, which nothing else selected for OpenShiftCluster/<cluster> provides` (`<subject>` is `ClusterAddon/<addon>` or `package <package>`) | `select a package or add-on that provides <capability> for OpenShiftCluster/<cluster>, or remove <subject> from the selection` |
 | Capability requirements form a cycle | `api.invariant` | the selecting entry of the cycle's first member in canonical order | `capability requirements of the packages and add-ons selected for OpenShiftCluster/<cluster> form a cycle through <member list>` | `remove one requires entry among <member list> to break the cycle` |
@@ -345,7 +289,6 @@ authored positions in the document, as
 | An authored add-on shares a namespace with another instance | `api.invariant` | the selecting entry of the later add-on in canonical order | `ClusterAddon/<addon> uses namespace <namespace>, which <subject> also uses on OpenShiftCluster/<cluster>` (`<subject>` is `ClusterAddon/<other>` or `package <package>`; a package's namespace is its OLM namespace or one of its Secret placement namespaces) | `set olm.namespace.name of ClusterAddon/<addon> to a namespace that no other package or add-on selected for the cluster uses` |
 | An authored add-on shares an OLM package with another instance | `api.invariant` | the selecting entry of the later add-on in canonical order | `ClusterAddon/<addon> uses OLM package <package>, which <subject> also uses on OpenShiftCluster/<cluster>` | `select one of ClusterAddon/<addon> and <subject> for the cluster, because OLM package <package> installs once` |
 | An authored add-on shares a CatalogSource with another instance | `api.invariant` | the selecting entry of the later add-on in canonical order | `ClusterAddon/<addon> uses CatalogSource <catalog>, which <subject> also uses on OpenShiftCluster/<cluster>` (either instance owns the catalog and the other owns or subscribes to it) | `set olm.catalogSource.name of ClusterAddon/<addon> to a CatalogSource name that no other package or add-on selected for the cluster uses` (an add-on that only subscribes: `set olm.subscription.source of ClusterAddon/<addon> to a catalog that no other add-on selected for the cluster owns`) |
-| A configuration names an unselected add-on | `api.reference` | `$.spec.addonConfigs[<i>].addonRef` | `ClusterAddon/<addon> is configured but not selected by this binding` | `select <addon> through spec.addonRefs or a profile, or remove this spec.addonConfigs entry` |
 | A binding selects nothing | `api.invariant` | `$.spec` | `the binding selects no profile, add-on or package` | `add a package to spec.packages, a profile to spec.profileRefs or an add-on to spec.addonRefs` |
 | Profile expansion returns to a profile | `api.invariant` | `$.spec.profileRefs[<i>]` | `profile expansion returns to ClusterAddonProfile/<profile>` | `remove the reference to <profile> from this list or from a profile it expands` |
 | An ordering names a binding of another cluster | `api.invariant` | `$.spec.afterRefs[<i>]` | `spec.afterRefs names ClusterAddonBinding/<other>, which binds OpenShiftCluster/<other cluster>, not OpenShiftCluster/<cluster>` | `name a binding of OpenShiftCluster/<cluster>, or remove <other> from spec.afterRefs` |
@@ -687,8 +630,7 @@ its own indexed field:
 Environment kind defaults never select a package: a binding that declares no
 `spec.packages` member selects none through them, as the
 [Kind defaults](environment.md#kind-defaults) rule for members that select
-decides. After them, normalization materializes input `required`,
-readiness timeout, omitted OLM readiness checks, namespace management, present
+decides. After them, normalization materializes readiness timeout, omitted OLM readiness checks, namespace management, present
 OperatorGroup name and target namespaces, and subscription name, source,
 source namespace, and the OLM `catalogSource.securityContextConfig`. These
 built-in defaults never create an OperatorGroup still omitted after Environment defaults or append to
@@ -701,7 +643,6 @@ pool's `autoAssign`; for `fdf`, `defaultStorageClass`; for `acm`,
 `gitops` with a `bootstrap`, the three `sync` members; and for `gitlab`, `database.port`, `database.name`, `redis.port`,
 `objectStorage.registryBucket` and `gitaly.size`.
 
-Explicit false remains false, including an optional input's `required`
-value.
+Explicit false remains false.
 Ordered arrays retain order; set-valued arrays and map keys canonicalize under
 the common API rules.

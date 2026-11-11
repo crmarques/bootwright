@@ -270,8 +270,6 @@ func TestDefinedCapabilityTokensAreDefinedByTheAddOnAPISpec(t *testing.T) {
 func TestLiteralCapabilityTokenReadersNameDefinedTokens(t *testing.T) {
 	defined := api.DefinedCapabilityTokens()
 	for file, tokens := range map[string][]string{
-		"internal/addons/bindings.go":                              {"dataFoundation"},
-		"internal/addons/admission.go":                             {"dataFoundation"},
 		"cmd/bootwright/wiring_reconciliation.go":                  {"kubevirt"},
 		"internal/controller/tools.go":                             {"kubevirt"},
 		"internal/containercluster/openshift/network_admission.go": {"nmstate"},

@@ -15326,3 +15326,23 @@ host-and-port allowlist does not enforce read-only requests inside TLS or
 prove a redirect's vendor provenance; the network filtering layer owns
 that restriction. No host firewall or live run is claimed, and
 [B1250](backlog.md#b1250) retains the operator proof. No push occurred.
+
+### X416 — Add-on inputs leave v1alpha1
+
+**Item:** B1331 ([D257](backlog.md#d257) (4)), delivered in-tree.
+**Kind:** product. **Owners:** Add-ons. Audit 004 API-30: the unused
+`ClusterAddon.spec.inputs`, its nested effects, and
+`ClusterAddonBinding.spec.addonConfigs` leave the
+[add-on API](../api/addons.md). Their declaration shapes move to the
+[deferred design](../deferred/add-ons-design.md#inputs-and-binding-configuration).
+The dependent `fromInput` target also leaves admission; the other reserved
+step shapes stay. Input normalization, binding diagnostics, selection
+relationships and the plan refusal for inputs leave with the fields.
+
+The compiler regression tests prove an unknown-field refusal with the ordinary
+hint for each removed path, and fail against the previous source. Package
+configuration still retains its Ceph consumer relationships. The downstream
+template-inputs charts declare none of the removed fields and need no edit.
+
+**Commits:** this commit. **Gates:** listed in its message. **Limitations:**
+breaking authoring change; delete the removed fields. No live run or push.

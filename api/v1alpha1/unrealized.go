@@ -23,7 +23,6 @@ var unrealized = []Unrealized{
 	{Kind: OpenShiftCluster, Path: "$.spec.install.servingCertificates", Item: "B723"},
 	{Kind: ClusterAddon, Path: "$.spec.manifestSet", Item: "B90"},
 	{Kind: ClusterAddon, Path: "$.spec.olm.namespace.management", Value: "external", Item: "B90"},
-	{Kind: ClusterAddon, Path: "$.spec.inputs"},
 	{Kind: ClusterAddon, Path: "$.spec.steps"},
 	{Kind: CustomPlaybook, Path: "$.spec.enabled", Value: "true", Item: "B102"},
 	{Kind: Environment, Path: "$.spec.dependencyVersions.libvirt", Except: "latest", Item: "B676"},

@@ -5,7 +5,8 @@ custom-package lifecycle. The [add-on lifecycle](../add-ons.md) owns the
 built-in packages M4 implements, their instances and blocks, the cluster
 object program, readiness and retirement, and the
 [add-on API](../api/addons.md) owns admission. Nothing here is implemented
-except the step shape recorded under [Steps](#steps), which admission enforces.
+except the step shape recorded under [Steps](#steps), which admission enforces
+without the future `fromInput` target.
 B90's first slice takes only the normalized definition and the instance
 identity from this design; the rest stays here.
 
@@ -61,6 +62,54 @@ files, mount crossings and concurrent replacement. Freeze content before
 planning effects. External step `source.path` remains valid declaration data
 but lifecycle-ineligible; live external directories are never lifecycle input.
 The API rejects add-on `source.git`.
+
+## Inputs and binding configuration
+
+These shapes are future design, absent from v1alpha1. A later input journey
+must define validation, execution and selection together. `effects` belongs
+to an input declaration.
+
+`spec.inputs` is an array with set semantics keyed by author-defined `name`.
+Each entry is:
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `name` | string | yes | — | Unique within the add-on. |
+| `resourceKind` | string | conditional | — | Exactly one of `resourceKind` and `secretType`; names a registered kind other than `Secret`. |
+| `secretType` | string | conditional | — | Exactly one of `resourceKind` and `secretType`; one of the [Secret types](../api/secrets.md#secret). |
+| `required` | boolean | no | `true` | Every binding must supply a value when true; explicit false makes the input optional. |
+| `effects` | array | no | `[]` | Each entry is one effect union below. |
+
+Names do not determine input types or effects. `resourceKind: Secret` is
+invalid; Secret inputs use `secretType`, and a bound Secret input is effect
+material its binding places. The former `resourceRef` and `secretRef` input declaration
+fields are unknown.
+
+Effects declare how a supplied input is consumed. Their names belong to a
+closed vocabulary, unlike input names. Each effect entry sets exactly one
+known arm:
+
+| Arm | Shape | Rule |
+| --- | --- | --- |
+| `cephConsumerAttachment` | `{}` | Input is `resourceKind: CephConsumer` and the add-on provides `dataFoundation`; the bound consumer supplies storage integration for the binding's cluster. |
+| `globalPullSecretMerge` | `{registry, username}` | Input is `secretType: token`; both strings are non-empty. The token supplies credentials for that registry and username in the binding's cluster global pull secret. |
+
+A future binding's `spec.addonConfigs` is a set keyed by `addonRef`. Each
+entry supplies inputs to an already selected add-on; it selects none. Each
+entry has:
+
+| Field | Type | Required | Default | Rule |
+| --- | --- | --- | --- | --- |
+| `addonRef` | string | yes | — | A selected `ClusterAddon`. |
+| `inputs` | array of objects | no | `[]` | Set keyed by input `name`. |
+| `inputs[].name` | string | yes | — | Must be declared by the selected add-on. |
+| `inputs[].value` | string | yes | — | Non-empty scalar resource or Secret name. |
+
+For a `resourceKind` input, `value` resolves to the declared kind. For a
+`secretType` input, it resolves to a `Secret` with that exact type. Every
+required accepted input is supplied exactly once and undeclared inputs are
+rejected. These remain generic named lists: input names and values are not
+add-on-specific schema fields. Input order does not define installation order.
 
 ## Catalogs and dynamic discovery
 
@@ -260,7 +309,7 @@ A playbook target sets exactly one selection arm and an optional limit:
 | Field | Shape | Rule |
 | --- | --- | --- |
 | `boundCluster` | `{}` | Machines of the binding's `OpenShiftCluster`. |
-| `fromInput` | `{input: <name>}` | A declared `resourceKind` input of kind `CephConsumer`, `CephCluster`, `OpenShiftCluster`, or `Machine`. A `CephConsumer` input also declares `cephConsumerAttachment`. |
+| `fromInput` | `{input: <name>}` | Future design, absent from v1alpha1: a declared `resourceKind` input of kind `CephConsumer`, `CephCluster`, `OpenShiftCluster`, or `Machine`. A `CephConsumer` input also declares `cephConsumerAttachment`. |
 | `static` | `{clusters?: [names], machines?: [names]}` | At least one list is non-empty. Cluster names resolve to `OpenShiftCluster` or `CephCluster`; machine names resolve to SSH-accessible `Machine` objects. |
 | `limit` | string | `firstReachable` by default, or `all`. |
 

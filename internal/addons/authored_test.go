@@ -106,9 +106,6 @@ func TestAuthoredGroupShapesAndNonExecutableShapes(t *testing.T) {
 		"steps": {func(spec api.Value) api.Value {
 			return spec.With("steps", l(m("name", s("one"), "manifests", manifests("manifests/a.yaml"))))
 		}, "steps"},
-		"inputs": {func(spec api.Value) api.Value {
-			return spec.With("inputs", l(m("name", s("one"), "resourceKind", s("Machine"))))
-		}, "inputs"},
 		"external": {func(spec api.Value) api.Value { return spec.WithPath(s("external"), "olm", "namespace", "management") }, "external"},
 		"no group": {func(spec api.Value) api.Value { return spec.With("olm", spec.Get("olm").Without("operatorGroup")) }, "no OperatorGroup"},
 		"other target": {func(spec api.Value) api.Value {

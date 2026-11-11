@@ -2,7 +2,6 @@ package addons
 
 import (
 	"fmt"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -11,7 +10,7 @@ import (
 )
 
 func TestNormalizationPreservesPresenceAndOrder(t *testing.T) {
-	base := m("olm", m("namespace", m("name", s("operators")), "subscription", m("package", s("example-operator"), "channel", s("stable")), "catalogSource", m("name", s("example-catalog"), "image", s("registry.example.test/catalog:v1"))), "provides", api.StringList("z", "a"), "inputs", l(m("name", s("z"), "resourceKind", s("Machine"), "required", api.BoolValue(false)), m("name", s("a"), "resourceKind", s("Machine"))), "steps", l(m("name", s("later"), "follows", s("ready"), "manifests", manifests("manifests/later.yaml")), m("name", s("earlier"), "gates", s("apply"), "manifests", manifests("manifests/earlier.yaml"))))
+	base := m("olm", m("namespace", m("name", s("operators")), "subscription", m("package", s("example-operator"), "channel", s("stable")), "catalogSource", m("name", s("example-catalog"), "image", s("registry.example.test/catalog:v1"))), "provides", api.StringList("z", "a"), "steps", l(m("name", s("later"), "follows", s("ready"), "manifests", manifests("manifests/later.yaml")), m("name", s("earlier"), "gates", s("apply"), "manifests", manifests("manifests/earlier.yaml"))))
 	object := obj(api.ClusterAddon, "example", base)
 	normalized, issues := Normalize(object, api.NewCatalog(nil))
 	if len(issues) != 0 {
@@ -27,7 +26,7 @@ func TestNormalizationPreservesPresenceAndOrder(t *testing.T) {
 	if got.Get("readiness", "timeout").Text() != "30m" || got.Get("readiness", "checks").Len() != 1 || got.Get("readiness", "checks").Items()[0].Get("csvSucceeded", "subscription").Text() != "example-operator" {
 		t.Fatal("OLM readiness default did not use the effective subscription")
 	}
-	if !slices.Equal(got.Get("provides").Strings(), []string{"a", "z"}) || got.Get("inputs").Items()[0].Get("name").Text() != "a" || !got.Get("inputs").Items()[0].Get("required").Bool() || got.Get("inputs").Items()[1].Get("required").Bool() {
+	if !slices.Equal(got.Get("provides").Strings(), []string{"a", "z"}) {
 		t.Fatal("set defaults or explicit false changed")
 	}
 	if got.Get("steps").Items()[0].Get("name").Text() != "later" || got.Get("steps").Items()[0].Has("timeout") || got.Get("steps").Items()[0].Has("target") {
@@ -59,9 +58,6 @@ func TestAddonSemanticFailures(t *testing.T) {
 		{"manifest segment", base.With("manifestSet", m("manifests", manifests("payload/a.yaml")))},
 		{"manifest suffix", base.With("manifestSet", m("manifests", manifests("manifests/a.json")))},
 		{"capability readiness", base.With("provides", api.StringList("customCapability"))},
-		{"storage effect kind", base.With("inputs", l(m("name", s("input"), "resourceKind", s("Machine"), "effects", l(m("cephConsumerAttachment", m())))))},
-		{"storage effect capability", base.With("inputs", l(storageInput("export")))},
-		{"pull-secret type", base.With("inputs", l(m("name", s("credential"), "secretType", s("opaque"), "effects", l(m("globalPullSecretMerge", m("registry", s("registry.example.test"), "username", s("reader")))))))},
 		{"empty step", base.With("steps", l(m("name", s("empty"), "gates", s("apply"))))},
 		{"missing target", base.With("steps", l(step.Without("target")))},
 		{"manifest-only target", base.With("steps", l(step.Without("playbook").With("manifests", manifests("manifests/a.yaml"))))},
@@ -69,8 +65,6 @@ func TestAddonSemanticFailures(t *testing.T) {
 		{"OLM-only anchor", base.With("steps", l(step.Without("gates").With("follows", s("operatorReady"))))},
 		{"Git source", base.With("steps", l(step.With("source", m("git", m("url", s("https://git.example.test/repository"), "ref", s("main"))))))},
 		{"secret hash output", base.With("steps", l(step.With("outputs", l(m("name", s("result"), "file", s("result.txt"), "secret", api.BoolValue(true), "format", s("sha256"))))))},
-		{"unsupported target input", base.With("inputs", l(m("name", s("input"), "resourceKind", s("NetworkConfig")))).With("steps", l(step.With("target", m("fromInput", m("input", s("input"))))))},
-		{"storage target without effect", base.With("inputs", l(storageInput("input").Without("effects"))).With("steps", l(step.With("target", m("fromInput", m("input", s("input"))))))},
 		{"empty static target", base.With("steps", l(step.With("target", m("static", m()))))},
 		{"connection variables", base.With("steps", l(step.With("extraVars", m("ansible_connection", s("local")))))},
 	}
@@ -404,42 +398,6 @@ func TestIterativeProfileDAG(t *testing.T) {
 	}
 }
 
-func TestTypedBindingInputsAndStorageAttachments(t *testing.T) {
-	input := storageInput("arbitrary-label")
-	addon := manifestAddon("storage").WithSpec(manifestAddon("storage").Spec().With("provides", api.StringList("dataFoundation")).With("inputs", l(input, m("name", s("optional"), "secretType", s("token"), "required", api.BoolValue(false)))))
-	export := obj(api.CephConsumer, "export", m())
-	binding := obj(api.ClusterAddonBinding, "binding", m("clusterRef", s("cluster"), "addonRefs", api.StringList("storage"), "addonConfigs", l(m("addonRef", s("storage"), "inputs", l(m("name", s("arbitrary-label"), "value", s("export")))))))
-	catalog := api.NewCatalog([]api.Object{addon, export, binding})
-	if issues := Validate(binding, catalog); len(issues) != 0 {
-		t.Fatal(issues)
-	}
-	if got := StorageAttachments(catalog, Registry{}); !reflect.DeepEqual(got, []Attachment{{ClusterRef: "cluster", ConsumerRef: "export"}}) {
-		t.Fatalf("attachments = %v", got)
-	}
-	for _, altered := range []api.Object{
-		addon.WithSpec(addon.Spec().Without("provides")),
-		addon.WithSpec(addon.Spec().With("inputs", l(input.Without("effects")))),
-		addon.WithSpec(addon.Spec().With("inputs", l(input.With("resourceKind", s("Machine"))))),
-		addon.WithSpec(addon.Spec().With("inputs", l(input.With("secretType", s("token"))))),
-		addon.WithSpec(addon.Spec().With("inputs", l(input, input))),
-	} {
-		if got := StorageAttachments(api.NewCatalog([]api.Object{altered, export, binding}), Registry{}); len(got) != 0 {
-			t.Fatal("undeclared or invalid storage relationship inferred", got)
-		}
-	}
-	badConfig := m("addonRef", s("storage"), "inputs", l(m("name", s("optional"), "value", s("credential"))))
-	badBinding := binding.WithSpec(binding.Spec().With("addonConfigs", l(badConfig)))
-	credential := obj(api.Secret, "credential", m("type", s("opaque")))
-	issues := Validate(badBinding, api.NewCatalog([]api.Object{addon, export, credential, badBinding}))
-	if !hasCode(issues, "api.required") || !hasCode(issues, "api.reference") {
-		t.Fatal("required input or Secret type mismatch accepted", issues)
-	}
-	configOnly := binding.WithSpec(binding.Spec().With("addonRefs", api.StringList("other")))
-	if !hasCode(Validate(configOnly, api.NewCatalog([]api.Object{addon, export, manifestAddon("other"), configOnly})), "api.reference") || len(StorageAttachments(api.NewCatalog([]api.Object{addon, export, manifestAddon("other"), configOnly}), Registry{})) != 0 {
-		t.Fatal("configuration selected an unbound add-on")
-	}
-}
-
 func TestCapabilitiesAndDuplicateBindings(t *testing.T) {
 	provider := manifestAddon("provider").WithSpec(m("provides", api.StringList("capability")))
 	consumer := manifestAddon("consumer").WithSpec(m("requires", api.StringList("capability")))
@@ -488,7 +446,6 @@ func TestPartialDefaultsNeedOnlyPresentPrerequisites(t *testing.T) {
 		m("steps", l(m("target", m("static", m())))),
 		m("steps", l(m("follows", s("operatorReady")))),
 		m("manifestSet", m("manifests", l(m()))),
-		m("inputs", l(m("name", s("input"), "effects", l(m("cephConsumerAttachment", m()))))),
 	} {
 		o := obj(api.ClusterAddon, "", spec)
 		if issues := ValidatePartial(o, api.NewCatalog(nil)); len(issues) != 0 {
@@ -499,7 +456,6 @@ func TestPartialDefaultsNeedOnlyPresentPrerequisites(t *testing.T) {
 		m("steps", l(m("playbook", s("../escape.yaml")))),
 		m("steps", l(m("source", m("git", m())))),
 		m("provides", api.StringList("capability"), "readiness", m("checks", l())),
-		m("inputs", l(m("name", s("input"), "resourceKind", s("Machine"), "effects", l(m("cephConsumerAttachment", m()))))),
 	} {
 		issues := ValidatePartial(obj(api.ClusterAddon, "", spec), api.NewCatalog(nil))
 		if len(issues) == 0 {
@@ -533,10 +489,6 @@ func manifests(value string) api.Value { return l(m("path", s(value))) }
 
 func manifestAddon(name string) api.Object {
 	return obj(api.ClusterAddon, name, m("manifestSet", m("manifests", manifests("manifests/example.yaml"))))
-}
-
-func storageInput(name string) api.Value {
-	return m("name", s(name), "resourceKind", s("CephConsumer"), "effects", l(m("cephConsumerAttachment", m())))
 }
 
 func names(objects []api.Object) []string {

@@ -8,7 +8,7 @@ func commentLineCeilings() map[string]int {
 		"ansible": 14, "api/v1alpha1": 53, "cmd/bootwright": 208,
 		"internal/nativeexec":      0,
 		"internal/acquisition":     9,
-		"internal/adapterprotocol": 132, "internal/addons": 7, "internal/addons/catalog": 0, "internal/addons/clusterobjects": 0, "internal/addons/clusterobjects/driver": 0, "internal/addons/instance": 0,
+		"internal/adapterprotocol": 132, "internal/addons": 6, "internal/addons/catalog": 0, "internal/addons/clusterobjects": 0, "internal/addons/clusterobjects/driver": 0, "internal/addons/instance": 0,
 		"internal/addons/packages": 2, "internal/containercluster/networking": 2,
 		"internal/availability": 0, "internal/canonicaljson": 27,
 		"internal/cli": 450, "internal/containercluster": 0, "internal/containercluster/openshift": 21, "internal/containercluster/access": 24,
