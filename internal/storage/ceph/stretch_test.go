@@ -114,7 +114,7 @@ func TestAStretchClusterDeadlineAddsItsTwoActivationCallsAndOneReadinessWait(t *
 	r.Hosts = slices.Repeat(r.Hosts[:1], 8)
 	_, err := cephDeadline(r, "apply")
 	refusedWith(t, err, "lifecycle.unsupported", "CephCluster example declares 8 Ceph hosts, whose cluster run deadline of 6h3m0s is past the 6h0m0s every adapter run is held to",
-		"declare at most 7 entries in spec.topology.nodes of CephCluster example; B79 tracks larger clusters")
+		"declare at most 7 entries in spec.topology.nodes of CephCluster example; B1183 tracks larger clusters")
 }
 
 func stretchEvidence(r Request, stage string, enabled bool) Evidence {

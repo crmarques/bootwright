@@ -129,10 +129,10 @@ func refusesDeclaration(refusal lifecycle.Refusal, object api.Object, catalog ap
 func TestUnrealizedTableMatchesUnsupported(t *testing.T) {
 	var want, got [][]string
 	for _, declaration := range api.UnrealizedDeclarations() {
-		item := "none tracked"
-		if declaration.Item != "" {
-			item = "[" + declaration.Item + "](milestones/" + milestonePage(t, declaration.Item) + "#" + strings.ToLower(declaration.Item) + ")"
+		if declaration.Item == "" {
+			t.Fatalf("%s %s has no tracking item", declaration.Kind, declaration.Declaration())
 		}
+		item := "[" + declaration.Item + "](milestones/" + milestonePage(t, declaration.Item) + "#" + strings.ToLower(declaration.Item) + ")"
 		want = append(want, []string{string(declaration.Kind), "`" + declaration.Declaration() + "`", item})
 	}
 	for _, row := range markdownTable(t, unrealizedSpec, "### Admitted but unrealized", []string{"Kind", "Declaration", "Tracked by"}) {
@@ -153,7 +153,7 @@ func TestUnrealizedTableMatchesUnsupported(t *testing.T) {
 				}
 				declared[declaration.Declaration()+string(declaration.Kind)] = true
 				if !slices.ContainsFunc(report.Advisories, func(d diagnostics.Diagnostic) bool {
-					return d.Code == "api.unrealized" && d.Severity == "warning" && d.Field == declaration.Path && d.Object != nil && d.Object.Name == object.Name()
+					return d.Code == "api.unrealized" && d.Severity == "warning" && d.Field == declaration.Path && d.Object != nil && d.Object.Name == object.Name() && strings.Contains(d.Message, "tracked as "+declaration.Item)
 				}) {
 					t.Errorf("%s: %s declares %s without an api.unrealized advisory", name, object.Identity(), declaration.Declaration())
 				}

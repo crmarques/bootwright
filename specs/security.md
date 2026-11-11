@@ -669,6 +669,7 @@ dependent-consumer registration; inspection changes no firewall rules. The
 [controller contract](controller.md#results-and-qualification) owns the bounded
 firewalld query and manual remedy. [B318](milestones/delivered.md#x62--controller-listener-firewall-inspection)
 records its in-tree evidence; B78 retains real-hardware qualification.
+
 Not yet met: the emulated BMC does not refuse a non-loopback bind and has no
 confined SELinux type; tracked as [B334](milestones/backlog.md#b334).
 
@@ -878,8 +879,8 @@ which runs the real Makefile against stand-ins for the engine and `scripts/go`).
 The release is unsigned and no provenance statement accompanies it; the
 verdict it carries is the one the gate wrote during that build.
 
-Not yet met: the images in the mirror registry are not scanned, which
-[B1250](milestones/backlog.md#b1250)'s profile carries.
+Not yet met: the images in the mirror registry are not scanned; tracked as
+[B1250](milestones/backlog.md#b1250).
 
 ### Acquisition origins
 

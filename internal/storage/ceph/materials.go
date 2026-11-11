@@ -417,5 +417,5 @@ func adapterRefusals() map[string]error {
 
 func clusterHostBudget(cluster string, hosts int, stretch bool) (string, string) {
 	return fmt.Sprintf("CephCluster %s declares %d Ceph hosts, whose cluster run deadline of %s is past the %s every adapter run is held to", cluster, hosts, applyDeadline(hosts, stretch), lifecycle.MaxDeadline),
-		fmt.Sprintf("declare at most %d entries in spec.topology.nodes of CephCluster %s; B79 tracks larger clusters", hostBound(stretch), cluster)
+		fmt.Sprintf("declare at most %d entries in spec.topology.nodes of CephCluster %s; B1183 tracks larger clusters", hostBound(stretch), cluster)
 }

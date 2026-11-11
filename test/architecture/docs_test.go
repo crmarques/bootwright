@@ -701,6 +701,7 @@ func byteBudgetViolations(root string, tracked []string, budgets map[string]int,
 }
 
 var (
+	notYetMetMarker  = regexp.MustCompile(`(?i)not\s+yet\s+met\b`)
 	notYetMetLink    = regexp.MustCompile(`\[(B\d+)\]\(([^)\s]+)\)`)
 	notYetMetPage    = regexp.MustCompile(`^specs/milestones/(m[1-9][0-9]*|backlog)\.md$`)
 	notYetMetRowHead = regexp.MustCompile(`^\| \[(B\d+)\]\(#b\d+\) \|`)
@@ -735,9 +736,17 @@ func TestDocsNotYetMetMatcherRejectsBadParagraphs(t *testing.T) {
 	}{
 		{"good m2 link", "Not yet met: a; tracked as [B1](../milestones/m2.md#b1).", nil},
 		{"good backlog link", "Not yet met: a; tracked as\n[B3](../milestones/backlog.md#b3).", nil},
-		{"two paragraphs split at the next marker", "Not yet met: a; [B1](../milestones/m2.md#b1).\nNot yet met: b; [B3](../milestones/backlog.md#b3).", nil},
+		{"two paragraphs", "Not yet met: a; [B1](../milestones/m2.md#b1).\n\nNot yet met: b; [B3](../milestones/backlog.md#b3).", nil},
+		{"mid-line marker", "A rule. Not yet met: a; [B1](../milestones/m2.md#b1).", []string{"specs/api/x.md:1 Not yet met marker must open a paragraph as Not yet met:"}},
+		{"bold marker", "**Not yet met:** a; [B1](../milestones/m2.md#b1).", []string{"specs/api/x.md:1 Not yet met marker must open a paragraph as Not yet met:"}},
+		{"mixed-case marker", "A rule. nOt YeT mEt: a; [B1](../milestones/m2.md#b1).", []string{"specs/api/x.md:1 Not yet met marker must open a paragraph as Not yet met:"}},
+		{"marker after prose without a blank", "A rule.\nNot yet met: a; [B1](../milestones/m2.md#b1).", []string{"specs/api/x.md:2 Not yet met marker must open a paragraph as Not yet met:"}},
+		{"wrapped marker", "A rule. Not yet\nmet: a; [B1](../milestones/m2.md#b1).", []string{"specs/api/x.md:1 Not yet met marker must open a paragraph as Not yet met:"}},
+		{"quoted convention", "The form is `Not yet met: ...; tracked as B<n>`.", nil},
+		{"code fence", "```\nNot yet met: sample.\n```", nil},
+		{"target prose after the item", "Not yet met: a; [B1](../milestones/m2.md#b1). The target rule holds.", []string{"specs/api/x.md:1 Not yet met paragraph must end at its tracking link"}},
 		{"no link", "Not yet met: a; tracked as B1.", []string{"specs/api/x.md:1 Not yet met paragraph links no B<n> item"}},
-		{"second marker without link", "Not yet met: a; [B1](../milestones/m2.md#b1).\nNot yet met: b.", []string{"specs/api/x.md:2 Not yet met paragraph links no B<n> item"}},
+		{"second marker without link", "Not yet met: a; [B1](../milestones/m2.md#b1).\n\nNot yet met: b.", []string{"specs/api/x.md:3 Not yet met paragraph links no B<n> item"}},
 		{"delivered record", "Not yet met: a; [B1](../milestones/delivered.md#b1).", []string{"specs/api/x.md:1 B1 links ../milestones/delivered.md#b1, not a milestone page or the backlog at #b1"}},
 		{"wrong anchor", "Not yet met: a; [B1](../milestones/m2.md#b2).", []string{"specs/api/x.md:1 B1 links ../milestones/m2.md#b2, not a milestone page or the backlog at #b1"}},
 		{"target does not resolve", "Not yet met: a; [B1](milestones/m2.md#b1).", []string{"specs/api/x.md:1 B1 links milestones/m2.md#b1, not a milestone page or the backlog at #b1"}},
@@ -751,7 +760,7 @@ func TestDocsNotYetMetMatcherRejectsBadParagraphs(t *testing.T) {
 			[]string{"specs/api/x.md:1 Not yet met paragraph links the delivered record ../milestones/delivered.md; delivery state belongs on the milestone page"}},
 		{"a delivered record on a later line", "Not yet met: a; [B3](../milestones/backlog.md#b3)\nand [X4](../milestones/delivered.md#x4).",
 			[]string{"specs/api/x.md:1 Not yet met paragraph links the delivered record ../milestones/delivered.md#x4; delivery state belongs on the milestone page"}},
-		{"a spec link beside a good item", "Not yet met: a; [B1](../milestones/m2.md#b1) and [the rule](../api.md#grammar).", nil},
+		{"a spec link before the item", "Not yet met: [the rule](../api.md#grammar); tracked as [B1](../milestones/m2.md#b1).", nil},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -786,20 +795,28 @@ func notYetMetViolations(files []markdownFile) []string {
 		start, paragraph := 0, []string(nil)
 		flush := func() {
 			if start != 0 {
-				violations = append(violations, notYetMetParagraph(byPath, file.path, start, strings.Join(paragraph, " "))...)
+				text := inlineCode.ReplaceAllString(strings.Join(paragraph, "\n"), "")
+				markers := notYetMetMarker.FindAllStringIndex(text, -1)
+				if len(markers) != 0 {
+					if len(markers) != 1 || !strings.HasPrefix(strings.TrimSpace(paragraph[0]), "Not yet met:") {
+						number := start + strings.Count(text[:markers[0][0]], "\n")
+						violations = append(violations, fmt.Sprintf("%s:%d Not yet met marker must open a paragraph as Not yet met:", file.path, number))
+					} else {
+						violations = append(violations, notYetMetParagraph(byPath, file.path, start, strings.Join(paragraph, " "))...)
+					}
+				}
 			}
 			start, paragraph = 0, nil
 		}
 		proseLines(file, func(number int, line string) {
-			switch {
-			case strings.HasPrefix(strings.TrimSpace(line), "Not yet met:"):
+			if strings.TrimSpace(line) == "" {
 				flush()
-				start, paragraph = number, []string{line}
-			case strings.TrimSpace(line) == "":
-				flush()
-			case start != 0:
-				paragraph = append(paragraph, line)
+				return
 			}
+			if start == 0 {
+				start = number
+			}
+			paragraph = append(paragraph, line)
 		})
 		flush()
 	}
@@ -852,6 +869,15 @@ func notYetMetParagraph(pages map[string]markdownFile, from string, line int, te
 			violations = append(violations, fmt.Sprintf("%s:%d %s is awaiting operator acceptance on %s, so its in-tree code is delivered; delete or re-scope the line", from, line, item, resolved))
 		}
 	}
+	if len(violations) == 0 {
+		all := markdownLinkWithLabel.FindAllStringSubmatchIndex(text, -1)
+		last := all[len(all)-1]
+		tail := strings.TrimSpace(text[last[1]:])
+		if !notYetMetItemLabel.MatchString(text[last[2]:last[3]]) || tail != "" && tail != "." {
+			violations = append(violations, fmt.Sprintf("%s:%d Not yet met paragraph must end at its tracking link", from, line))
+		}
+	}
+
 	return violations
 }
 

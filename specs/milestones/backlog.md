@@ -319,6 +319,7 @@ Alias cell.
 | [B1346](#b1346) | new, 2026-11-11 (B1338 review) | safety | Workspace | A same-inode snapshot or rollback of the store within one boot is detected | Inode and same-filesystem checks cannot tell it from the store; detection needs a record format change |
 | [B1341](#b1341) | new, 2026-11-11 (B1338 review) | safety | Workspace | A freed inode reused by a recreated directory is not taken for the recorded one | Pre-existing on ext4 and xfs; detection needs a record format change |
 | [B1342](#b1342) | new, 2026-11-11 (B1338 review) | defect | Ceph | The Ansible records of managed Ceph hosts survive a reboot that renumbers a device | Fixing them moves the automation digest; the Ceph hosts that renumber devices are not yet qualified |
+| [B1349](#b1349) | new, 2026-11-11 (X418; audit 004 API-34) | product | Add-ons | Reserved authored steps gain an explicitly authorized lifecycle | D183 keeps the shapes admitted and inert; no concrete execution journey is promoted |
 
 ### B82
 
@@ -3635,6 +3636,17 @@ metadata, the `cache-directory.json` marker in `ceph_host_runtime.py` and
 compares, so it moves the automation digest and the contract version. **Exit
 evidence:** a unit test for each record that a changed `st_dev` with the same
 inode still verifies, and the contract golden moved with the digest.
+
+### B1349
+
+**Outcome:** a promoted authored-step journey gives the reserved
+[step declarations](../api/addons.md#steps) an execution contract under the
+[deferred add-on design](../deferred/add-ons-design.md#steps). Until then they
+stay admitted, warn with this item, and refuse at plan when selected, as D183
+(Q115 (c)) requires. **Requires:** an owner-promoted journey and its trust,
+effect, evidence, continuation and removal contracts. **Definition:** Candidate.
+**Exit evidence:** a named slice qualifies each supported step's effect and
+recovery and removes its unrealized row; admission alone proves no execution.
 
 ## Audit remediation (2026-10-26)
 
@@ -8918,7 +8930,7 @@ fix it now", "proceed with 6 and 7" and "proceed with packages 11 and 12"
 implementation, X412 (M1, [B1267](delivered.md#x412--server-claims-over-ssh)), X413 (M3,
 [B1327](delivered.md#x413--rebuild-a-never-inserted-area)), X414 (M2, [B1316](delivered.md#x414--ceph-host-keys)), X415 (M1,
 [B1330](delivered.md#x415--single-value-fields-leave-v1alpha1)), X416 (M4, [B1331](delivered.md#x416--add-on-inputs-leave-v1alpha1)), X417 (M1,
-[B1332](delivered.md#x417--observe-host-keys)), X418 (M1, [B1333](m1.md#b1333)) and X419 (M1,
+[B1332](delivered.md#x417--observe-host-keys)), X418 (M1, [B1333](delivered.md#x418--truthful-unrealized-state)) and X419 (M1,
 [B1334](m1.md#b1334)), no more than two active at once. The owner's answers:
 
 1. A completed environment keeps the client release its apply proved; the
@@ -8941,8 +8953,12 @@ implementation, X412 (M1, [B1267](delivered.md#x412--server-claims-over-ssh)), X
    and closed lists derived or checked (B1333, B1334).
 
 Taken by the session, pending the owner's review: package 11's COR-16 follows
-the audit's decision (10) (a), recording B1079's narrowed destroy confirmation
-as a session clause cited by B1079 rather than withdrawing it.
+the audit's decision (10) (a). For [B1079](m2.md#b1079), a provided tiebreaker
+whose marker, installed key line, sshd drop-in and registry credential anchor
+are all absent reads as unclaimed; its read-only proof of no FSID layout
+permits retirement without B938's lost-marker confirmation. Any remaining
+trace still refuses and keeps B938's exit. This records the narrower proof
+already implemented by B1079; it authorizes no additional removal.
 
 **Exit evidence:** each item's in-tree evidence and `make check` on each
 integration tree, with an independent review and `make race` for each safety

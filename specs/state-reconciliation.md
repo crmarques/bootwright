@@ -984,9 +984,13 @@ where stated), and the reference or rule that names that object. A
 requirement resolves only to a block that realizes its target, so an external
 service orders nothing. A reference no row names orders
 nothing; one that can name a realized object needs its family's own ordering
-or a stated reason (`TestEveryReferenceFieldHasAnEdgeRowOrAReason`). Not yet met: six
+or a stated reason (`TestEveryReferenceFieldHasAnEdgeRowOrAReason`).
+
+Not yet met: six
 storage references emit requirements no row names; tracked as
-[B969](milestones/backlog.md#b969). Destroy inverts every edge. A family
+[B969](milestones/backlog.md#b969).
+
+Destroy inverts every edge. A family
 ordering its own blocks, as a storage child after its cluster, is not listed.
 `TestEveryRequirementMatchesTheEdgeCatalog` plans every
 example and fails on a requirement no row names, or when a capability omits

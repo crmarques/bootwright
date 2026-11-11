@@ -10,13 +10,6 @@ authorization, leases, continuation and removal. [M2](milestones/m2.md)
 owns delivery and qualification. An accepted storage declaration does not
 claim lifecycle support.
 
-Candidate core plans and runtime ports are implemented. Not yet met:
-complete resource lifecycles, removal while hosts survive and release
-qualification; tracked as
-[B79](milestones/m2.md#b79), [B80](milestones/m2.md#b80),
-[B81](milestones/m2.md#b81), [B472](milestones/m2.md#b472) and
-[B491](milestones/m2.md#b491).
-
 ## Ownership and supported inputs
 
 Storage owns Ceph topology, native projection, cluster identity, placement,
@@ -559,8 +552,8 @@ links each matrix combination that this table refuses.
 | A native service whose auxiliary image is not selected | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, declaring in `services` a service whose type needs an auxiliary image (an `alertmanager`, `alloy`, `grafana`, `ingress`, `loki`, `mgmt-gateway`, `node-exporter`, `nvmeof`, `oauth2-proxy`, `prometheus`, `promtail`, `smb` or `snmp-gateway` service) that `images` does not set; `<service>` is the first such service's qualified name in name order, `<family>` its `service_type`, `<name>` the first image it needs in name order that `images` does not set (only `keepalived` for an `ingress` with `spec.keepalive_only`) and `<cluster>` the CephCluster | `the <family> service <service> needs cephadm's container_image_<name>, and spec.images.<name> is not set; Bootwright keeps no default` | `set spec.images.<name> of CephCluster <cluster> to an image beneath its Entitlement registry, or remove <service> from its spec.services, together with its spec.serviceBindings entries` |
 | CephSMBResource objects whose samba images are not selected | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, that a CephSMBResource of any resource type names in its `clusterRef` while `images` does not set both `samba` and `samba_metrics`, and that the native-service row does not refuse; `<smb>` is the first such CephSMBResource in name order, `<name>` is `samba` unless `images` sets it, else `samba_metrics`, and `<cluster>` the CephCluster | `CephSMBResource <smb> needs cephadm's container_image_<name>, and spec.images.<name> is not set; Bootwright keeps no default` | `set spec.images.<name> of CephCluster <cluster> to an image beneath its Entitlement registry, or remove every CephSMBResource whose spec.clusterRef is <cluster> from the selected Environment` |
 | An auxiliary image that no declared service needs | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, setting `images.<name>` for an image that no service in `services` and no CephSMBResource naming it needs (per the auxiliary image table, with `samba` and `samba_metrics` for a CephSMBResource) and that neither the native-service nor the CephSMBResource row refuses; `<name>` is the first such name in name order and `<cluster>` the CephCluster | `spec.images.<name> is set, but no declared service or CephSMBResource of CephCluster <cluster> needs cephadm's container_image_<name>` | `remove spec.images.<name> from CephCluster <cluster>` |
-| More Ceph hosts than the cluster run deadline admits | a CephCluster without `topology.stretch`, or a CephPlacementPolicy, CephPool or CephClient naming it, whose topology declares more nodes than the [cluster execution budget](#cluster-execution-budget) fits under the run ceiling; `<deadline>` is that budget's apply deadline for `<hosts>` hosts and `<most>` the largest host count it admits | `CephCluster <cluster> declares <hosts> Ceph hosts, whose cluster run deadline of <deadline> is past the 6h0m0s every adapter run is held to` | `declare at most <most> entries in spec.topology.nodes of CephCluster <cluster>; B79 tracks larger clusters` |
-| More hosts than a stretch cluster's run deadline admits | a CephCluster declaring `topology.stretch`, or a CephPlacementPolicy, CephPool or CephClient naming it, whose topology declares more nodes than the [cluster execution budget](#cluster-execution-budget) with its stretch activation fits under the run ceiling; `<deadline>` is that budget's apply deadline for `<hosts>` hosts and `<most>` the largest host count it admits | `CephCluster <cluster> declares <hosts> Ceph hosts, whose cluster run deadline of <deadline> is past the 6h0m0s every adapter run is held to` | `declare at most <most> entries in spec.topology.nodes of CephCluster <cluster>; B79 tracks larger clusters` |
+| More Ceph hosts than the cluster run deadline admits | a CephCluster without `topology.stretch`, or a CephPlacementPolicy, CephPool or CephClient naming it, whose topology declares more nodes than the [cluster execution budget](#cluster-execution-budget) fits under the run ceiling; `<deadline>` is that budget's apply deadline for `<hosts>` hosts and `<most>` the largest host count it admits | `CephCluster <cluster> declares <hosts> Ceph hosts, whose cluster run deadline of <deadline> is past the 6h0m0s every adapter run is held to` | `declare at most <most> entries in spec.topology.nodes of CephCluster <cluster>; B1183 tracks larger clusters` |
+| More hosts than a stretch cluster's run deadline admits | a CephCluster declaring `topology.stretch`, or a CephPlacementPolicy, CephPool or CephClient naming it, whose topology declares more nodes than the [cluster execution budget](#cluster-execution-budget) with its stretch activation fits under the run ceiling; `<deadline>` is that budget's apply deadline for `<hosts>` hosts and `<most>` the largest host count it admits | `CephCluster <cluster> declares <hosts> Ceph hosts, whose cluster run deadline of <deadline> is past the 6h0m0s every adapter run is held to` | `declare at most <most> entries in spec.topology.nodes of CephCluster <cluster>; B1183 tracks larger clusters` |
 | A distribution that core Ceph does not realize | a CephCluster, or a CephPlacementPolicy, CephPool or CephClient whose `clusterRef` names it, whose `distribution` selects the `oss` or `redhat` arm, an omitted `distribution` included, because omission selects `oss` ([distribution](api/ceph.md#cephcluster)) | `core Ceph realizes only the IBM Storage Ceph distribution` | `select spec.distribution.ibm` |
 
 The [`clusterSSH.transport` field rule](api/ceph.md) states what omission
@@ -705,6 +698,7 @@ topology; this section owns what the plan derives and realizes (D196).
 The JSON keys the stages read that no cited page fixes are recorded as
 unverified in the [stretch native facts](../.agents/knowledge/ceph-stretch-native-facts.md)
 until B488's rehearsal reads them from the selected build.
+
 Not yet met: an interrupted stretch stage has no forward exit short of
 retiring the whole cluster; tracked as [B920](milestones/m2.md#b920).
 
@@ -762,8 +756,10 @@ stretch behaviour has no qualified profile.
 
 Not yet met: NVMe-oF has no stretch profile of at least four nodes per data
 site; tracked as [B935](milestones/m2.md#b935).
+
 Not yet met: NFS and SMB have no stretch profiles; tracked as
 [B936](milestones/m2.md#b936).
+
 Not yet met: observability and management services claim no site-loss
 placement on a stretch cluster; tracked as [B937](milestones/m2.md#b937).
 
@@ -978,7 +974,7 @@ CephPlacementPolicy, CephPool and CephClient naming it, and request planning
 and every block's deadline refuse it with the same reason and remedy.
 
 Not yet met: clusters of more hosts than the run ceiling fits under this
-budget refuse; tracked as [B79](milestones/m2.md#b79).
+budget refuse; tracked as [B1183](milestones/m2.md#b1183).
 
 The cluster block's deadline is at least the sum of the ceilings of the longest
 call sequence its run can make: every 660 s native call, the 1860 s bootstrap
@@ -1266,7 +1262,9 @@ owned clears included) and device-readback calls, and the cluster observation's 
 reads, run per-disk or per-OSD native commands whose ceilings are not admitted
 against the call's 640 s worker budget, on virtual and physical hosts alike, so a slow host
 ends the call ambiguous rather than refusing by name; tracked as
-[B900](milestones/m2.md#b900). Original physical Machine presence evidence
+[B900](milestones/m2.md#b900).
+
+Original physical Machine presence evidence
 supplies the system UUID and complete MAC inventory; installed-host SSH proof
 remains mandatory. Before device binding, the host re-proves those hardware
 facts from bounded kernel inventory. An unreadable or changed inventory refuses.
@@ -2262,7 +2260,9 @@ recorded as durable evidence, so continuation never contacts the stopped hosts.
 
 Not yet met: removal while hosts survive, including storage-native consumer
 quiescence and complete owned cleanup; tracked as
-[B491](milestones/m2.md#b491). The engine supports
+[B491](milestones/m2.md#b491).
+
+The engine supports
 the [online ordering](state-reconciliation.md#quiescence-before-removal), but
 candidate Ceph capabilities refuse removal until their native proofs and
 inverses are qualified. Native principal or pool absence alone cannot prove
@@ -2362,7 +2362,9 @@ native call. An export's principals and a replication's peer and bootstrap
 credential live in the cluster's monitor store, whose copy on the tiebreaker
 goes with the FSID's data under `rm-cluster`, and their custody is on the
 bootstrap host, which is never the tiebreaker; no rbd-mirror daemon runs
-there, since the tiebreaker [runs a MON alone](#stretch-topology). Not yet met: the sshd drop-in
+there, since the tiebreaker [runs a MON alone](#stretch-topology).
+
+Not yet met: the sshd drop-in
 the `authorize` phase writes stays on the tiebreaker after its removal;
 tracked as [B940](milestones/m2.md#b940).
 

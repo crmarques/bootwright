@@ -135,7 +135,9 @@ The three `media` commands follow the host-wide
 
 Not yet met: `render installer` and `render storage` run no use case
 and answer `cli.not-implemented`; their contracts are intent, tracked as
-[B52](../milestones/m7.md#b52) and [B55](../milestones/m7.md#b55). Every other command here is available.
+[B52](../milestones/m7.md#b52) and [B55](../milestones/m7.md#b55).
+
+Every other command here is available.
 `TestUnavailableCommandsMatchTheStubWiring` holds this list.
 
 Not yet met: `preflight --stage add-ons` runs no add-on prerequisite check and answers

@@ -271,6 +271,7 @@ tenth of its ceiling (below ten lines, none), so narration that leaves a
 package can return unnoticed only up to that tenth, and the ceilings bound the
 module's total. A package with no ceiling fails until its count is added, and
 a ceiling naming no package fails until it is removed.
+
 Not yet met: production comments still contain narration beyond the retained
 forms above; tracked as [B98](milestones/backlog.md#b98).
 
@@ -841,7 +842,9 @@ operations. `TestEveryBoundPlaybookIsNamedForItsCapabilityAndOperation` holds
 every binding to that pattern, and `test_collection_names.py` holds role and
 action-plugin names to the [role pattern](#ansible-collection-structure); the
 roles and plugins that predate the patterns are an exact allowance in that
-test that only shrinks. Not yet met: 5 roles and 14 plugins still carry
+test that only shrinks.
+
+Not yet met: 5 roles and 14 plugins still carry
 names outside the patterns; tracked as
 [B966](milestones/backlog.md#b966).
 
@@ -866,7 +869,9 @@ them; `containercluster/install_apply.yml` is the one such playbook, and
 holds every later play to a declared entry point or the eight task files its
 allowance names. `test_entry_point_reads.py` refuses an entry point whose task
 files read a `bootwright_*` variable that its specification, the role's defaults
-and the task files do not define. Not yet met: some roles declare nested
+and the task files do not define.
+
+Not yet met: some roles declare nested
 members as bare mappings; tracked as [B431](milestones/backlog.md#b431).
 
 Every `observe` entrypoint runs only the modules the read-only allowlist

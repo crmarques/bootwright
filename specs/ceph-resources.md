@@ -18,8 +18,7 @@ samba images are authored under `spec.images` of its CephCluster
 ([refusal table](ceph.md#refusal-table)). `CephNVMeoFSubsystem` is
 realized under its [field record](#cephnvmeofsubsystem), and a managed
 `CephConsumer` by its consumer block under its [field record](#cephconsumer).
-Native effects remain artifact-gated. **Not yet met:** later P2
-kinds and their qualified lifecycles. [Storage admission](api/ceph.md)
+Native effects remain artifact-gated. [Storage admission](api/ceph.md)
 states current refusals.
 The target additions and migrations below belong to
 [B80](milestones/m2.md#b80), [B81](milestones/m2.md#b81),

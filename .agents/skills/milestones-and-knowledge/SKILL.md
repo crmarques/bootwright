@@ -22,19 +22,22 @@ read them whole.
 
 - Number, place, move, split, drop and complete items as the identifiers and
   scope rules say, and fill every column the Items table header names.
+- Before moving, splitting or closing an item, search specs for every link to
+  it. Check that each Not yet met paragraph names an outcome the item still
+  owns; re-point, re-scope or delete the paragraph with the item change.
 - Item detail holds the bounded outcome, a link to the owning spec section,
   exit evidence and any deferral reason. Never restate a spec rule in an item.
 
 ## Not yet met
 
-A spec line in the exact form the
-[conventions](../../../specs/index.md#conventions) give, linking one open item.
+A spec paragraph in the exact form the
+[conventions](../../../specs/index.md#conventions) give, linking one open item and ending at its link.
 It states what code does not yet do. It never links a delivered record and
 never holds acceptance or baseline state; those belong on the milestone page.
-Delete the line, or re-scope it to the part still undone, in the commit that
+Delete the paragraph, or re-scope it to the part still undone, in the commit that
 moves its item to `awaiting operator acceptance`: the item's in-tree code is
 delivered, and the operator residue stays on the item. `make docs-check` fails
-a line whose item is `completed` or awaiting acceptance.
+a paragraph whose item is `completed` or awaiting acceptance.
 
 ## Decisions and delivered records
 

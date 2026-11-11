@@ -63,7 +63,7 @@ func TestClusterBudgetPlansThreeHostsThroughTheBoundWithOneServiceSubmission(t *
 
 func TestHostPastTheBoundRefusesClusterAndDependentResources(t *testing.T) {
 	const reason = "CephCluster example declares 12 Ceph hosts, whose cluster run deadline of 6h10m0s is past the 6h0m0s every adapter run is held to"
-	const remedy = "declare at most 11 entries in spec.topology.nodes of CephCluster example; B79 tracks larger clusters"
+	const remedy = "declare at most 11 entries in spec.topology.nodes of CephCluster example; B1183 tracks larger clusters"
 	for hosts, refused := range map[int]bool{11: false, 12: true} {
 		catalog := pinnedCatalogOf(t, hosts, nil)
 		catalog = api.NewCatalog(append(catalog.Objects(), childOf(api.CephPlacementPolicy, "policy", "replicated", requestMap("size", 2))))

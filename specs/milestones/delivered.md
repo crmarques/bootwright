@@ -15439,3 +15439,27 @@ passes with zero controller, capacity and cluster calls.
 
 **Commits:** this commit. **Gates:** listed in its message. The independent
 review of X417 included this correction. **Limitations:** no live run or push.
+
+### X418 — Truthful unrealized state
+
+**Item:** B1333 ([D257](backlog.md#d257) (6)), delivered in-tree.
+**Kind:** defect. **Owners:** Spec corpus, with each spec owner.
+
+- COR-05: the Ceph run-ceiling marker and refusal remedies name B1183, which
+  owns that outcome. The serial-root WWN evidence gap is already implemented
+  under the [installation contract](../managed-os.md#physical-installation),
+  so no stale gap or duplicate item is added.
+- COR-06: the docs matcher inspects whole paragraphs, including wrapped,
+  emphasized and mixed-case markers, and refuses misplaced markers and target
+  prose after the final tracking link. Spec paragraphs are split accordingly;
+  broad qualification summaries leave the target specs. The
+  [conventions](../index.md#conventions) and milestone skill name paragraphs
+  and require checking ownership of their links when an item moves or closes.
+- API-34: reserved steps track parked [B1349](backlog.md#b1349). Every
+  unrealized row must name an item, and its advisory must name that same item.
+- COR-16: [D257](backlog.md#d257) records B1079's existing narrowed confirmation
+  proof as a session clause pending the owner's review, and B1079 cites it.
+
+**Commits:** this commit. **Gates:** listed in its message. The new marker and
+missing-item regressions fail on the prior implementation. **Limitations:**
+no step execution, new removal behavior, operator acceptance or push is claimed.

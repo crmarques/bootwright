@@ -558,7 +558,9 @@ no VLAN (`bridge.vlan-filtering no`), so a guest on it can send and receive any
 802.1Q tag, not only those its segment declares, and reach every other guest
 on that trunk in that VLAN; isolation between the trunk's guests is the guests'
 own configuration, and only the host side of each leg is judged by the
-[routing table](#routing-table). Not yet met: VLAN filtering per tap, which
+[routing table](#routing-table).
+
+Not yet met: VLAN filtering per tap, which
 would admit only the declared tags on each Machine NIC; tracked as
 [B1303](milestones/backlog.md#b1303).
 
@@ -799,19 +801,25 @@ A removal stops, disables and removes the unit, whose stop deletes the table,
 then removes the ruleset file and `/etc/bootwright/routing` while it is empty;
 it never removes `/etc/bootwright`, which a managed operating system's records
 share and whose creator nothing proves.
+
 Not yet met: a unit that fails at boot leaves no table while NetworkManager
 still brings the legs up, which then reach whatever firewalld's trusted zone
 and libvirt's rules admit; tracked as
-[B1304](milestones/backlog.md#b1304). The observation reports `routing` `{name, table,
+[B1304](milestones/backlog.md#b1304).
+
+The observation reports `routing` `{name, table,
 answered, present, owned, enabled, state, loaded, forwarding}`: the unit, the
 table's name when `nft` lists one of it, whether systemd and `nft` answered,
 the presence and ownership of the unit with its ruleset file, the unit's
 enablement and state, whether the live table carries
 exactly the frozen comment, chains, hooks, priorities, policies, set elements
-and each chain's rule count, and whether `net.ipv4.ip_forward` is 1. Not yet
-met: `loaded` counts each chain's rules without comparing their expressions,
+and each chain's rule count, and whether `net.ipv4.ip_forward` is 1.
+
+Not yet met: `loaded` counts each chain's rules without comparing their expressions,
 so a rule replaced by another in the same chain still reads loaded and is
-never repaired; tracked as [B1302](milestones/backlog.md#b1302). Presence
+never repaired; tracked as [B1302](milestones/backlog.md#b1302).
+
+Presence
 requires the unit owned, enabled and active, the table loaded and, with
 `forwarding`, forwarding on, in the collection's postcondition as in Go's
 judgment, or nothing reported without `routing`; removal
