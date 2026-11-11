@@ -451,9 +451,9 @@ pins, so a short Docker Hub name takes `docker.io` as its origin registry: for
 example `mirror.example.test/images/quay.io/metal3-io/sushy-tools@sha256:…`. An
 image of a vendor origin, such as the artifact server's from
 `registry.access.redhat.com`, stays on its vendor, and a service's own
-`spec.image.local` stays its image, as does every image pulled on a Machine
-that runs what an installed mirror host's installation waits for, often the
-controller ([B1340](../milestones/backlog.md#b1340)). An external Registry's
+`spec.image.local` stays its image, as does every image pulled on the mirror
+host and, when Bootwright installs it, the image of each emulated BMC and
+managed server that installation waits for. An external Registry's
 location is its `url`.
 
 A managed Registry is filled on its

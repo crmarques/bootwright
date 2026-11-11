@@ -42,7 +42,7 @@ func TestAnImageMirrorServesEveryPublicOriginImageUnderItsOriginAtTheSameDigest(
 		"localhost:5000/squid" + digest:               "localhost:5000/squid" + digest,
 		"registry.access.redhat.com/ubi9" + digest:    "registry.access.redhat.com/ubi9" + digest,
 	} {
-		got, source := MirroredImage(catalog, origin, "controller")
+		got, source := MirroredImage(catalog, origin, ImageConsumer{Identity: "Proxy/egress", Machine: "controller"})
 		if got == origin && source == nil && got == want {
 			continue
 		}
@@ -50,7 +50,7 @@ func TestAnImageMirrorServesEveryPublicOriginImageUnderItsOriginAtTheSameDigest(
 			t.Fatalf("%s mirrored to %s with %+v, want %s", origin, got, source, want)
 		}
 	}
-	if got, source := MirroredImage(catalogOf(), "quay.io/a/b"+digest, "controller"); got != "quay.io/a/b"+digest || source != nil {
+	if got, source := MirroredImage(catalogOf(), "quay.io/a/b"+digest, ImageConsumer{Identity: "Proxy/egress", Machine: "controller"}); got != "quay.io/a/b"+digest || source != nil {
 		t.Fatalf("an undeclared mirror moved the image to %s (%+v)", got, source)
 	}
 }
@@ -153,18 +153,18 @@ func managedMirror(extra ...api.FieldValue) []api.Object {
 func TestAManagedImageMirrorIsReadAtItsEndpointAndNeverByItsOwnHost(t *testing.T) {
 	origin := "quay.io/metal3-io/sushy-tools@sha256:" + strings.Repeat("a", 64)
 	catalog := catalogOf(managedMirror()...)
-	got, source := MirroredImage(catalog, origin, "controller")
+	got, source := MirroredImage(catalog, origin, ImageConsumer{Identity: "Proxy/egress", Machine: "controller"})
 	if got != "203.0.113.20:5000/"+origin || source == nil || *source != (ImageSource{Host: "203.0.113.20:5000", CredentialsRef: "mirror-push", CredentialsType: "usernamePassword", TrustBundleRef: "mirror-ca"}) {
 		t.Fatalf("mirrored to %s with %+v", got, source)
 	}
 	if required := MirrorRequirements(catalog, source); !slices.Equal(required, []reconciliation.ObjectRef{{Kind: "Registry", Object: "mirror"}}) {
 		t.Fatalf("a consumer requires %+v", required)
 	}
-	if got, source := MirroredImage(catalog, origin, "mirror-host"); got != origin || source != nil || MirrorRequirements(catalog, source) != nil {
+	if got, source := MirroredImage(catalog, origin, ImageConsumer{Identity: "Proxy/egress", Machine: "mirror-host"}); got != origin || source != nil || MirrorRequirements(catalog, source) != nil {
 		t.Fatalf("the mirror host pulls %s (%+v)", got, source)
 	}
 	authored := catalogOf(managedMirror(text("trustBundleRef", "corporate-ca"))...)
-	if _, source := MirroredImage(authored, origin, "controller"); source == nil || source.TrustBundleRef != "corporate-ca" {
+	if _, source := MirroredImage(authored, origin, ImageConsumer{Identity: "Proxy/egress", Machine: "controller"}); source == nil || source.TrustBundleRef != "corporate-ca" {
 		t.Fatalf("an authored anchor was replaced: %+v", source)
 	}
 	if required := MirrorRequirements(catalogOf(mirrorEnvironment(), mirrorRegistry()), &ImageSource{Host: "m"}); required != nil {
@@ -172,10 +172,11 @@ func TestAManagedImageMirrorIsReadAtItsEndpointAndNeverByItsOwnHost(t *testing.T
 	}
 }
 
-// A mirror host Bootwright installs waits for its provider host's emulated
-// BMC and every managed server its installation selects, and those wait for
-// their own hosts' installations in turn, so every pull on each of those
-// Machines stays at its origin while a pull anywhere else reads the mirror.
+// A mirror host Bootwright installs waits for its own emulated BMC and every
+// managed server its installation selects, and those wait for their own
+// hosts' installations in turn, so exactly those consumers pull their
+// origins, while another service or another Machine's emulated BMC on the
+// same Machines reads the mirror.
 func TestAnInstalledMirrorHostsInstallationPullsFromTheOrigins(t *testing.T) {
 	origin := "quay.io/metal3-io/sushy-tools@sha256:" + strings.Repeat("a", 64)
 	installed := func(name, profile string, extra ...api.FieldValue) api.Object {
@@ -192,29 +193,45 @@ func TestAnInstalledMirrorHostsInstallationPullsFromTheOrigins(t *testing.T) {
 	objects := slices.DeleteFunc(managedMirror(), func(object api.Object) bool { return object.Kind() == api.Machine })
 	objects = append(objects,
 		installed("mirror-host", "mirror", field("substrate", api.MapValue(text("providerRef", "lab-libvirt")))),
-		installed("time-host", "time"),
+		installed("time-host", "time", field("substrate", api.MapValue(text("providerRef", "lab-libvirt")))),
+		installed("guest", "time", field("substrate", api.MapValue(text("providerRef", "lab-libvirt")))),
 		api.NewObject(api.InfraProvider, "lab-libvirt", api.Value{}, api.MapValue(field("libvirt", api.MapValue(text("machineRef", "hypervisor"))))),
 		api.NewObject(api.MachineInstallProfile, "mirror", api.Value{}, api.MapValue(field("installer", api.MapValue(field("anaconda", api.MapValue(field("redfishVirtualMedia", endpoint))))),
 			field("ntp", selecting("time")))),
 		api.NewObject(api.MachineInstallProfile, "time", api.Value{}, api.MapValue(field("ntp", selecting("deep-time")))),
 		api.NewObject(api.NetworkConfig, "guests", api.Value{}, api.MapValue(field("dns", selecting("resolver")))),
 		server(api.ArtifactServer, "media", "media-host"), server(api.NTPServer, "time", "time-host"), server(api.NTPServer, "deep-time", "deep-host"),
-		server(api.DNSServer, "resolver", "resolver-host"),
+		server(api.DNSServer, "resolver", "resolver-host"), server(api.Proxy, "egress", "resolver-host"), server(api.NTPServer, "spare-time", "time-host"),
 		api.NewObject(api.DNSServer, "external-resolver", api.Value{}, api.MapValue(text("management", "external"), text("machineRef", "elsewhere"))),
 	)
 	catalog := catalogOf(objects...)
 	mirror, _ := infrastructureservices.ImageMirrorOf(catalog)
-	hosts := OriginHosts(catalog, mirror)
-	want := []string{"deep-host", "hypervisor", "media-host", "mirror-host", "resolver-host", "time-host"}
-	if got := slices.Sorted(maps.Keys(hosts)); !slices.Equal(got, want) {
-		t.Fatalf("the origin hosts are %v, want %v", got, want)
+	want := []string{"ArtifactServer/media", "DNSServer/resolver", "Machine/mirror-host", "Machine/time-host", "NTPServer/deep-time", "NTPServer/time"}
+	if got := slices.Sorted(maps.Keys(OriginConsumers(catalog, mirror))); !slices.Equal(got, want) {
+		t.Fatalf("the origin consumers are %v, want %v", got, want)
 	}
-	for _, host := range want {
-		if got, source := MirroredImage(catalog, origin, host); got != origin || source != nil {
-			t.Errorf("%s pulls %s (%+v)", host, got, source)
+	machine := func(name string) api.Object { found, _ := catalog.Find(api.Machine, name); return found }
+	service := func(kind api.Kind, name string) api.Object { found, _ := catalog.Find(kind, name); return found }
+	for name, consumer := range map[string]ImageConsumer{
+		"the mirror host's BMC": EmulatedBMCConsumer(machine("mirror-host"), "hypervisor"),
+		"the time host's BMC":   EmulatedBMCConsumer(machine("time-host"), "hypervisor"),
+		"the resolver":          ServiceConsumer(service(api.DNSServer, "resolver")),
+		"the media server":      ServiceConsumer(service(api.ArtifactServer, "media")),
+		"the deep time server":  ServiceConsumer(service(api.NTPServer, "deep-time")),
+		"the mirror host's own": {Identity: "Proxy/beside-mirror", Machine: "mirror-host"},
+	} {
+		if got, source := MirroredImage(catalog, origin, consumer); got != origin || source != nil {
+			t.Errorf("%s pulls %s (%+v)", name, got, source)
 		}
 	}
-	if got, source := MirroredImage(catalog, origin, "controller"); got != "203.0.113.20:5000/"+origin || source == nil {
-		t.Fatalf("the controller pulls %s (%+v)", got, source)
+	for name, consumer := range map[string]ImageConsumer{
+		"another guest's BMC":             EmulatedBMCConsumer(machine("guest"), "hypervisor"),
+		"a proxy beside the resolver":     ServiceConsumer(service(api.Proxy, "egress")),
+		"a time server nothing waits for": ServiceConsumer(service(api.NTPServer, "spare-time")),
+		"a service on the controller":     {Identity: "Proxy/controller-proxy", Machine: "controller"},
+	} {
+		if got, source := MirroredImage(catalog, origin, consumer); got != "203.0.113.20:5000/"+origin || source == nil || MirrorRequirements(catalog, source) == nil {
+			t.Errorf("%s pulls %s (%+v)", name, got, source)
+		}
 	}
 }

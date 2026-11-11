@@ -184,7 +184,7 @@ func (c Capability) requestFor(catalog api.Catalog, object api.Object, controlle
 	}
 	var source *ImageSource
 	if !spec.Get("image", "local").Present() {
-		image, source = MirroredImage(catalog, image, machine.Name())
+		image, source = MirroredImage(catalog, image, ServiceConsumer(object))
 	}
 	egress, err := EgressFor(catalog, machine)
 	if err != nil {

@@ -71,7 +71,7 @@ func requestFor(catalog api.Catalog, server api.Object, controllerMachine, conte
 	}
 	var source *managedservice.ImageSource
 	if !spec.Get("image", "local").Present() {
-		image, source = managedservice.MirroredImage(catalog, image, machine.Name())
+		image, source = managedservice.MirroredImage(catalog, image, managedservice.ServiceConsumer(server))
 	}
 	egress, err := managedservice.EgressFor(catalog, machine)
 	if err != nil {

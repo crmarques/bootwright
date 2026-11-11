@@ -10,8 +10,12 @@ import (
 
 	"github.com/crmarques/bootwright/internal/controller/clients"
 	"github.com/crmarques/bootwright/internal/desiredstate"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/mirrorfill"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
 	"github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 )
 
 const mirrorRegistryFile = `apiVersion: bootwright.io/v1alpha1
@@ -262,7 +266,8 @@ func TestAManagedImageMirrorOnTheControllerIsFilledLocallyAfterTheStage(t *testi
 // A managed image mirror on a Machine Bootwright installs runs its Registry
 // and fill there, over the installed arm, after that installation; every
 // service and emulated BMC the installation waits for pulls its origin, so
-// the mirror never waits for itself.
+// the mirror never waits for itself, while the proxy beside them on the
+// controller, which nothing there waits for, pulls through the mirror.
 func TestAManagedImageMirrorOnAnInstalledMachinePlansAfterItsInstallation(t *testing.T) {
 	const name = "lab-sno-installed-mirror-host"
 	sources := installedImageMirror(t)
@@ -274,24 +279,104 @@ func TestAManagedImageMirrorOnAnInstalledMachinePlansAfterItsInstallation(t *tes
 	if !slices.Contains(waits["dns-edge-dns"], fill) {
 		t.Errorf("the edge resolver does not wait for the fill: %v", waits["dns-edge-dns"])
 	}
-	for _, id := range []string{"os-install-mirror", "machine-mirror", "dns-lab-dns", "ntp-lab-ntp", "proxy-lab-proxy", "artifact-server-lab-artifacts"} {
+	if !slices.Contains(waits["proxy-lab-proxy"], fill) || !slices.Contains(waits["proxy-lab-proxy"], registry) {
+		t.Errorf("the proxy on the controller, which the installation does not wait for, does not wait for the mirror: %v", waits["proxy-lab-proxy"])
+	}
+	for _, id := range []string{"os-install-mirror", "machine-mirror", "dns-lab-dns", "ntp-lab-ntp", "artifact-server-lab-artifacts"} {
 		if slices.Contains(waits[id], registry) || slices.Contains(waits[id], fill) {
 			t.Errorf("%s, which the mirror host's installation waits for, waits for the mirror: %v", id, waits[id])
 		}
 	}
 	state, _ := compileAcceptance(t, sources)
+	pulled := map[string]string{}
 	for _, definition := range productionDefinitions(t, state, name) {
-		if definition.ID == fill {
+		switch definition.ID {
+		case fill:
 			request, err := mirrorfill.DecodeImagesRequest(definition.Request)
 			if err != nil || !request.Placement.Installed() {
 				t.Fatalf("the fill is %+v (%v)", request, err)
 			}
+		case "proxy-lab-proxy", "dns-lab-dns":
+			request, err := managedservice.DecodeRequest(definition.Request, managedservice.RequestVersion)
+			if err != nil {
+				t.Fatal(err)
+			}
+			pulled[definition.ID] = request.Image
 		}
+	}
+	if pulled["dns-lab-dns"] != dnsserver.Definition(nil).Image || pulled["proxy-lab-proxy"] == proxy.Definition().Image || !strings.HasSuffix(pulled["proxy-lab-proxy"], "/"+proxy.Definition().Image) {
+		t.Fatalf("the controller's resolver and proxy pull %v", pulled)
 	}
 	services, _ := productionSourcesContext(t, name, name, sources)
 	out, _ := contextRun(t, services, 0, "plan", "--context", name, "--output", "json")
 	if install, at := strings.Index(out, `"os-install-mirror"`), strings.Index(out, `"`+fill+`"`); install < 0 || at < install {
 		t.Fatalf("the plan does not preview the installation before the fill:\n%s", out)
+	}
+}
+
+// With its cluster kept, the node's emulated BMC on the mirror host's own
+// provider host waits for the mirror and pulls through it, while the mirror
+// host's emulated BMC there still reads its origin.
+func TestAnotherGuestsEmulatedBMCBesideAnInstalledMirrorHostPullsThroughTheMirror(t *testing.T) {
+	const name = "lab-sno-installed-mirror-host"
+	sources := installedImageMirrorWith(t, nil)
+	_, waits := mirrorOrder(t, name, sources)
+	const registry, fill = "registry-mirror-registry", "mirror-images-" + name
+	if !slices.Contains(waits["machine-sno-01"], fill) || !slices.Contains(waits["machine-sno-01"], registry) {
+		t.Errorf("the node's emulated BMC does not wait for the mirror: %v", waits["machine-sno-01"])
+	}
+	if slices.Contains(waits["machine-mirror"], fill) || slices.Contains(waits["machine-mirror"], registry) {
+		t.Errorf("the mirror host's emulated BMC waits for the mirror: %v", waits["machine-mirror"])
+	}
+	state, _ := compileAcceptance(t, sources)
+	images := map[string]string{}
+	for _, definition := range productionDefinitions(t, state, name) {
+		if definition.ID == "machine-sno-01" || definition.ID == "machine-mirror" {
+			request, err := libvirt.DecodeMachineRequest(definition.Request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			images[definition.ID] = request.Controller.Image
+		}
+	}
+	if images["machine-mirror"] != libvirt.EmulatorImage() || !strings.HasSuffix(images["machine-sno-01"], "/"+libvirt.EmulatorImage()) || images["machine-sno-01"] == libvirt.EmulatorImage() {
+		t.Fatalf("the emulated BMCs pull %v", images)
+	}
+}
+
+// The acquisition list reads the same per-consumer derivation: the provider's
+// emulated BMC image once from its origin, for the mirror host's own, and once
+// through the mirror, for the node's, and the controller's proxy through the
+// mirror beside its resolver at its origin.
+func TestTheAcquisitionListNamesEachEmulatedBMCAndServicePullBesideAnInstalledMirrorHost(t *testing.T) {
+	state, _ := compileAcceptance(t, installedImageMirrorWith(t, nil))
+	acquired, err := listAcquisitions(state.Effective())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := func(kind, consumer string) []string {
+		var artifacts []string
+		for _, item := range acquired {
+			if item.Kind == kind && item.Consumer == consumer && slices.Equal(item.Machines, []string{"controller"}) {
+				artifacts = append(artifacts, item.Artifact)
+			}
+		}
+		slices.Sort(artifacts)
+		return artifacts
+	}
+	sushy, _, _ := strings.Cut(libvirt.EmulatorImage(), "@")
+	if got := rows("emulated BMC image", "InfraProvider/lab-libvirt"); len(got) != 2 || got[1] != sushy || !strings.HasSuffix(got[0], "/"+sushy) {
+		t.Errorf("the provider's emulated BMC images are %v", got)
+	}
+	if got := rows("service image", "Proxy/lab-proxy"); len(got) != 1 || !strings.HasSuffix(got[0], "/docker.io/ubuntu/squid") {
+		t.Errorf("the controller's proxy reads %v", got)
+	}
+	if got := rows("service image", "DNSServer/lab-dns"); len(got) != 1 || got[0] != "docker.io/4km3/dnsmasq" {
+		t.Errorf("the installation's resolver reads %v", got)
+	}
+	images, err := mirrorImageArtifacts(state.Effective())
+	if err != nil || !slices.ContainsFunc(images, func(image mirrorfill.Image) bool { return image.Repository == sushy }) {
+		t.Fatalf("the fill copies %+v (%v), not the node's emulated BMC image", images, err)
 	}
 }
 

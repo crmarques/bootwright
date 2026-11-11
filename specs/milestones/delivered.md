@@ -15110,7 +15110,7 @@ stale installed-Machine line went, the
 [mirror host](../infrastructure-services.md#mirror-host) image fill and
 ordering, [host packages](../controller.md#host-packages), the context checks
 the deferred page and the managed Registry's consumers, whose stale Not yet
-met line went. Parked: [B1340](backlog.md#b1340). Contracts:
+met line went. Parked: [B1340](#x432--only-what-an-installed-mirror-hosts-installation-waits-for-pulls-its-origin). Contracts:
 `controller-clients-v5` moved to `controller-clients-v6` with `imageMirror`,
 which moved the stage's content digest; a stage an earlier build froze
 refuses by its version, and the build that applied it destroys it.
@@ -15121,7 +15121,7 @@ the controller's repositories, the local fill against a Registry on the same
 host and the installed arm's sudo under the image fill are proved by tests
 alone. A Machine that runs a managed server an installed mirror host's
 installation selects pulls every image from its origin
-([B1340](backlog.md#b1340)); in the common lab shape, a libvirt provider on
+([B1340](#x432--only-what-an-installed-mirror-hosts-installation-waits-for-pulls-its-origin)); in the common lab shape, a libvirt provider on
 the controller, that is every pull on the controller, so B1250's
 no-public-route profile waits for B1340 as well. The live proof is
 [B1250](backlog.md#b1250).
@@ -15235,3 +15235,52 @@ templates no longer author either field, and the `environment-ha` and
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** none; requests and rendered installer bytes of
 admitted inputs are unchanged, so no digest moved.
+
+### X432 — Only what an installed mirror host's installation waits for pulls its origin
+
+**Item:** B1340 (2026-11-11, [D251](backlog.md#d251) (6) and (35)),
+delivered in-tree, so B1340 leaves the backlog and
+[B1250](backlog.md#b1250) no longer waits for it.
+
+*Per-consumer derivation.* `managedservice.MirroredImage` takes an
+`ImageConsumer`, the consumer's identity and the Machine it pulls on, built by
+`ServiceConsumer` from a managed service or artifact server and by
+`EmulatedBMCConsumer` from a libvirt Machine and its provider's host, rather
+than the pull Machine alone. Every pull on the mirror host itself still reads
+its origin (D251 (27)). `OriginConsumers` replaced `OriginHosts`: from the
+mirror host, each Machine Bootwright installs on the chain adds its own
+emulated BMC and each managed DNS, NTP and artifact server its installation
+selects, and the chain follows the Machines those servers and its provider
+run on, so another service or another Machine's emulated BMC on those
+Machines pulls through the mirror and requires the Registry and its fill. The
+cycle stays broken because every block the mirror host's installation waits
+for, transitively, is its own substrate block, a provider host block, which
+pulls no image, or a server and installation on the chain, all of which still
+read their origins (`TestAnInstalledMirrorHostsInstallationPullsFromTheOrigins`).
+
+*Plans.* `TestAManagedImageMirrorOnAnInstalledMachinePlansAfterItsInstallation`
+now holds the controller's unrelated proxy to the Registry and the fill, its
+request carrying the mirror's copy, while the installation's resolver there
+keeps its origin image;
+`TestAnotherGuestsEmulatedBMCBesideAnInstalledMirrorHostPullsThroughTheMirror`
+plans the example with its cluster kept: the node's emulated BMC on the
+controller waits for the mirror and pulls through it, the mirror host's
+emulated BMC beside it reads its origin, through the whole lifecycle ordering.
+
+*Acquisitions.* The fill's image list and `render acquisitions` read the same
+derivation: a libvirt provider's emulated BMC image is listed once for each
+reference its Machines' BMCs pull, so a provider hosting the mirror host and
+another guest lists both
+(`TestTheAcquisitionListNamesEachEmulatedBMCAndServicePullBesideAnInstalledMirrorHost`).
+
+*Records.* Specs: the [mirror host](../infrastructure-services.md#mirror-host)
+ordering, the [image mirror](../api/environment.md#image-mirror) sentence, the
+[acquisition list](../cli.md#acquisition-list) and the deferred
+controlled-network page. Contracts: unchanged; a request's shape is the same,
+only which image reference it carries for a given graph.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** an installed mirror host's own emulated BMC and the
+servers its installation selects still dial their public origins, so B1250's
+no-public-route profile must route those origins from their hosts or place
+them where the profile allows; the live proof is [B1250](backlog.md#b1250).

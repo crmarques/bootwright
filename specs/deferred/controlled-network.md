@@ -111,9 +111,9 @@ for an image and `<endpoint>/<kind>/<version>/<file>` for a tool:
 With the declaration present no public origin is dialed: an artifact the
 mirror does not hold refuses in preflight, naming it and the command that
 fills the mirror. Vendor origins stay direct. Without it, every consumer keeps
-its own route, as today. Until [B1340](../milestones/backlog.md#b1340), a
-Machine that runs what an installed mirror host's installation waits for,
-often the controller, still pulls its service images from their origins.
+its own route, as today. The emulated BMC and managed servers an installed
+mirror host's installation waits for still pull their images from their
+origins.
 
 ## Filling the mirror
 

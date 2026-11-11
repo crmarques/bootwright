@@ -1066,12 +1066,15 @@ an installation whose substrate runs a controller client refuses
 Registry and the image fill are not among the blocks the stage waits for,
 since nothing it reads is an image. Each managed service, artifact server and
 libvirt machine block that pulls through the mirror waits for the Registry and
-its fill, and every image pulled on the mirror host stays its origin's, as
-does, when Bootwright installs that host, every image pulled on a Machine
-that runs its libvirt provider or a managed server its installation selects,
-and so on for each such Machine it installs, so no mirror block waits for
-itself (`TestAManagedImageMirrorIsFilledAfterTheControllerStageAndBeforeItsConsumers`,
-`TestAnInstalledMirrorHostsInstallationPullsFromTheOrigins`). On the
+its fill, and every image pulled on the mirror host stays its origin's. When
+Bootwright installs that host, so does exactly what its installation waits
+for: its own emulated BMC and each managed server its installation selects,
+and so on for each Machine Bootwright installs that runs one of them; another service or
+another Machine's emulated BMC on those Machines pulls through the mirror and
+waits for it, so no mirror block waits for itself
+(`TestAManagedImageMirrorIsFilledAfterTheControllerStageAndBeforeItsConsumers`,
+`TestAnInstalledMirrorHostsInstallationPullsFromTheOrigins`,
+`TestAnotherGuestsEmulatedBMCBesideAnInstalledMirrorHostPullsThroughTheMirror`). On the
 controller Machine the Registry and the image fill run locally after the
 stage (`TestAManagedImageMirrorOnTheControllerIsFilledLocallyAfterTheStage`);
 on a Machine Bootwright installs they take the installed arm after that

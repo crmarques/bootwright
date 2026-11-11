@@ -317,7 +317,6 @@ Alias cell.
 | [B1324](#b1324) | new, 2026-11-10 (X401) | product | Container cluster | A disconnected cluster verifies release signatures for its upgrades | A mirrored release's signatures stay on the vendor's signature store |
 | [B1325](#b1325) | new, 2026-11-10 (X401) | product | Infrastructure services | Several mirror hosts, or a mirror on a cluster | One Environment names one artifact mirror and one image mirror, each on one OS-ready Machine |
 | [B1329](#b1329) | new, 2026-11-11 (X409) | product | Infrastructure services, with Managed OS | A managed service on a Machine Bootwright installs opens its ports in that host's firewall | No managed service publishes host port requirements, so an installed host's profile must disable its firewall |
-| [B1340](#b1340) | new, 2026-11-11 (X431) | product | Infrastructure services | Only what an installed mirror host's installation waits for pulls its origin | Every pull on a Machine running such a service reads its origin, its other services' included: with a libvirt provider on the controller, every pull on the controller, so B1250's no-public-route profile cannot pass until this lands |
 | [B1345](#b1345) | new, 2026-11-12 (X431 gate) | defect | Cluster objects | `test_real_ansible_action_module_handoff` runs a real playbook under a 30-second subprocess timeout that host load exceeds | It timed out once in `make check` at a load average near 40 and passed twice alone |
 
 ### B82
@@ -3326,7 +3325,7 @@ golden with X401.
 ### B1250
 
 **Owner:** Controller, with each consumer's owner. **Kind:** enabling.
-**Requires:** B1246, [B1249](delivered.md#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs) (delivered), [B1301](#b1301), [B1340](#b1340). **Definition:** Candidate, from
+**Requires:** B1246, [B1249](delivered.md#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs) (delivered), [B1301](#b1301), [B1340](delivered.md#x432--only-what-an-installed-mirror-hosts-installation-waits-for-pulls-its-origin) (delivered). **Definition:** Candidate, from
 [D250](#d250) (10). **Outcome:** a lab profile whose controller and Machines
 have no route but to their package repositories, the vendor origins and the
 mirror host installs an OpenShift cluster and a Ceph cluster, and its evidence
@@ -3645,19 +3644,6 @@ installs publishes its sockets as host port requirements, so the
 [refusal table](../infrastructure-services.md#refusal-table)'s firewall row
 goes. **Exit evidence:** a plan test that an installed host with its firewall
 enabled plans the firewall block with the service's ports before the service.
-
-### B1340
-
-**Owner:** Infrastructure services. **Kind:** product. **Requires:** none.
-**Definition:** Candidate, from
-[X431](delivered.md#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs)
-and [D251](#d251) (35). **Outcome:** under a managed image mirror on a Machine
-Bootwright installs, only the emulated BMC of that Machine and the managed
-servers its installation waits for pull their origins, and every other
-service on the Machines they run on pulls through the mirror, the fill and
-`render acquisitions` reading the same per-consumer derivation. **Exit
-evidence:** a plan test in which a controller hosting the installation's
-resolver and an unrelated proxy pulls the proxy's image through the mirror.
 
 ## Audit remediation (2026-10-26)
 
@@ -8600,7 +8586,7 @@ the owner's review:
     `MirroredImage` takes the Machine an image is pulled on and the fill
     copies exactly what the consumers' own derivation mirrors; its cost, that
     such a Machine's other services pull their origins too, is
-    [B1340](#b1340). No named refusal row is needed, since no such cycle
+    [B1340](delivered.md#x432--only-what-an-installed-mirror-hosts-installation-waits-for-pulls-its-origin). No named refusal row is needed, since no such cycle
     remains.
 
 X430 took (36) onward while X409, which took (31) to (33), was in flight beside it, and X431 took (34) and (35).

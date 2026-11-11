@@ -149,22 +149,27 @@ func imagePulls(catalog api.Catalog) ([]imagePull, error) {
 			}
 			machine, pulled := service.Spec().Get("machineRef").Text(), reference
 			if !service.Spec().Get("image", "local").Present() {
-				pulled, _ = managedservice.MirroredImage(catalog, reference, machine)
+				pulled, _ = managedservice.MirroredImage(catalog, reference, managedservice.ServiceConsumer(service))
 			}
 			pulls = append(pulls, imagePull{kind: "service image", origin: reference, pulled: pulled, machine: machine, consumer: service.Identity()})
 		}
 	}
-	referenced := map[string]bool{}
-	for _, machine := range catalog.OfKind(api.Machine) {
-		referenced[machine.Spec().Get("substrate", "providerRef").Text()] = true
-	}
 	for _, provider := range catalog.OfKind(api.InfraProvider) {
-		if substrate.Variant(provider) != substrate.ArmLibvirt || !referenced[provider.Name()] {
+		if substrate.Variant(provider) != substrate.ArmLibvirt {
 			continue
 		}
-		machine := substrate.HostMachine(provider)
-		pulled, _ := managedservice.MirroredImage(catalog, libvirt.EmulatorImage(), machine)
-		pulls = append(pulls, imagePull{kind: "emulated BMC image", origin: libvirt.EmulatorImage(), pulled: pulled, machine: machine, consumer: provider.Identity()})
+		host := substrate.HostMachine(provider)
+		var pulled []string
+		for _, machine := range catalog.OfKind(api.Machine) {
+			if machine.Spec().Get("substrate", "providerRef").Text() != provider.Name() {
+				continue
+			}
+			reference, _ := managedservice.MirroredImage(catalog, libvirt.EmulatorImage(), managedservice.EmulatedBMCConsumer(machine, host))
+			if !slices.Contains(pulled, reference) {
+				pulled = append(pulled, reference)
+				pulls = append(pulls, imagePull{kind: "emulated BMC image", origin: libvirt.EmulatorImage(), pulled: reference, machine: host, consumer: provider.Identity()})
+			}
+		}
 	}
 	return pulls, nil
 }

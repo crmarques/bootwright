@@ -567,7 +567,8 @@ The rows, sorted by kind, artifact and selecting object, cover:
   hosts a `github.com` or `dl.k8s.io` download follows
   ([the controller stage](controller.md#the-controller-stage));
 - each managed service's image as it selects it, and the emulated BMC's image
-  for each libvirt provider a Machine references;
+  for each libvirt provider a Machine references, once for each reference its
+  Machines' emulated BMCs pull;
 - each container cluster's release repositories, which the installer of its
   release names whether or not a `release.image` is authored, read by the
   controller and the cluster's nodes; and each declared `imageDigestSources`

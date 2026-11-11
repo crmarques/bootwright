@@ -32,7 +32,20 @@ func ImageMirror(catalog api.Catalog) (api.Object, bool) {
 	return catalog.Find(api.Registry, reference.Text())
 }
 
-func MirroredImage(catalog api.Catalog, reference, machine string) (string, *ImageSource) {
+type ImageConsumer struct {
+	Identity string
+	Machine  string
+}
+
+func ServiceConsumer(service api.Object) ImageConsumer {
+	return ImageConsumer{Identity: service.Identity(), Machine: service.Spec().Get("machineRef").Text()}
+}
+
+func EmulatedBMCConsumer(machine api.Object, host string) ImageConsumer {
+	return ImageConsumer{Identity: machine.Identity(), Machine: host}
+}
+
+func MirroredImage(catalog api.Catalog, reference string, consumer ImageConsumer) (string, *ImageSource) {
 	mirror, found := infrastructureservices.ImageMirrorOf(catalog)
 	qualified := reference
 	if first, _, _ := strings.Cut(reference, "/"); !strings.ContainsAny(first, ".:") && first != "localhost" {
@@ -44,7 +57,7 @@ func MirroredImage(catalog api.Catalog, reference, machine string) (string, *Ima
 	if origin, _, _ := strings.Cut(qualified, "/"); !found || acquisition.OriginClass(origin) != acquisition.ClassPublic {
 		return reference, nil
 	}
-	if mirror.Location == "" || mirror.Managed && OriginHosts(catalog, mirror)[machine] {
+	if mirror.Location == "" || mirror.Managed && (consumer.Machine == mirror.Registry.Spec().Get("machineRef").Text() || OriginConsumers(catalog, mirror)[consumer.Identity]) {
 		return reference, nil
 	}
 	host, _, _ := strings.Cut(mirror.Location, "/")
@@ -57,26 +70,29 @@ func MirroredImage(catalog api.Catalog, reference, machine string) (string, *Ima
 	return mirror.Location + "/" + qualified, source
 }
 
-func OriginHosts(catalog api.Catalog, mirror infrastructureservices.ImageMirror) map[string]bool {
-	host := mirror.Registry.Spec().Get("machineRef").Text()
-	hosts, pending := map[string]bool{host: true}, []string{host}
+func OriginConsumers(catalog api.Catalog, mirror infrastructureservices.ImageMirror) map[string]bool {
+	consumers, visited := map[string]bool{}, map[string]bool{}
+	pending := []string{mirror.Registry.Spec().Get("machineRef").Text()}
 	for len(pending) != 0 {
-		machine, found := catalog.Find(api.Machine, pending[0])
+		name := pending[0]
 		pending = pending[1:]
-		if !found || !machineref.Installed(machine) {
+		machine, found := catalog.Find(api.Machine, name)
+		if visited[name] || !found || !machineref.Installed(machine) {
 			continue
 		}
-		for _, next := range installationHosts(catalog, machine) {
-			if next != "" && !hosts[next] {
-				hosts[next] = true
-				pending = append(pending, next)
-			}
+		visited[name] = true
+		consumers[machine.Identity()] = true
+		servers, hosts := installationWaits(catalog, machine)
+		for _, server := range servers {
+			consumers[server.Identity()] = true
 		}
+		pending = append(pending, hosts...)
 	}
-	return hosts
+	return consumers
 }
 
-func installationHosts(catalog api.Catalog, machine api.Object) []string {
+func installationWaits(catalog api.Catalog, machine api.Object) ([]api.Object, []string) {
+	var servers []api.Object
 	var hosts []string
 	if provider, realized := machineref.Provider(machine, catalog); realized {
 		hosts = append(hosts, substrate.HostMachine(provider))
@@ -84,6 +100,7 @@ func installationHosts(catalog api.Catalog, machine api.Object) []string {
 	place := func(kind api.Kind, selections []api.Value) {
 		for _, selection := range selections {
 			if server, found := catalog.Find(kind, selection.Get("serverRef").Text()); found && server.Spec().Get("management").Text() == "managed" {
+				servers = append(servers, server)
 				hosts = append(hosts, server.Spec().Get("machineRef").Text())
 			}
 		}
@@ -98,7 +115,7 @@ func installationHosts(catalog api.Catalog, machine api.Object) []string {
 	if network, err := substrate.NetworkSpec(catalog, machine); err == nil {
 		place(api.DNSServer, network.Get("dns").Items())
 	}
-	return hosts
+	return servers, hosts
 }
 
 func artifactEndpoints(value api.Value) []api.Value {
