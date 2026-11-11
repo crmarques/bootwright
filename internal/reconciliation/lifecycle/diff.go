@@ -57,6 +57,8 @@ type diffRead struct {
 	patches       map[string][]holderPatch
 	unproven      map[api.Kind]bool
 	carriers      map[string][]string
+	outdated      []OutdatedClient
+	warnings      []diagnostics.Diagnostic
 }
 
 type diffSide struct {
@@ -169,6 +171,9 @@ func (s Service) readDiff(ctx context.Context, view View, observed bool) (diffRe
 		return diffRead{}, err
 	}
 	read.digest = inputDigest(view)
+	if read.operation.Verb == reconciliation.Apply {
+		read.outdated, read.warnings = s.outdatedClients(ctx, store, view.Identity().Name, read.owning, read.owningPlan)
+	}
 	return read, nil
 }
 
@@ -306,7 +311,8 @@ func (r diffRead) result() *DiffResult {
 	if r.owning.ID != "" {
 		operation.Applied = cmp.Or(r.appliedReason, diffReadable)
 	}
-	return &DiffResult{Context: r.context, Operation: operation, Input: r.input, Adds: r.adds, Plan: plan, Observed: r.observed, Blocks: r.blocks, Objects: joinObjects(r), Markers: r.markers}
+	return &DiffResult{Context: r.context, Operation: operation, Input: r.input, Adds: r.adds, Plan: plan, Observed: r.observed, Blocks: r.blocks, Objects: joinObjects(r), Markers: r.markers,
+		OutdatedClients: r.outdated, Warnings: r.warnings}
 }
 
 type objectPlan struct {

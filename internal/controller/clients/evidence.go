@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
+	"github.com/crmarques/bootwright/internal/reconciliation"
+	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
 const maxEvidenceBytes = 64 << 10
@@ -69,4 +71,19 @@ func (e Evidence) encode() (json.RawMessage, error) {
 		return nil, refuse("lifecycle.state", "the controller prerequisites evidence cannot be encoded", "use a compatible executable")
 	}
 	return data, nil
+}
+
+func (Capability) ProvedClients(block reconciliation.Block, proved lifecycle.BlockEvidence) []lifecycle.ProvedClient {
+	if proved.State != reconciliation.BlockDone {
+		return nil
+	}
+	evidence, err := reconciliation.DecodeEvidence[Evidence](proved.Evidence, maxEvidenceBytes, "controller prerequisites")
+	if err != nil || evidence.Retained || evidence.Request != block.RequestDigest {
+		return nil
+	}
+	clients := make([]lifecycle.ProvedClient, 0, len(evidence.Tools))
+	for _, tool := range evidence.Tools {
+		clients = append(clients, lifecycle.ProvedClient{Kind: tool.Kind, Version: tool.Version})
+	}
+	return clients
 }

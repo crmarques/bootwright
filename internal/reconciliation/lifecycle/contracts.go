@@ -440,6 +440,10 @@ type ToolLocator interface {
 	LocateTool(context.Context, prerequisites.StorageView, reconciliation.Block, BlockEvidence, controller.InstalledTool) (string, error)
 }
 
+type ProvedClientReader interface {
+	ProvedClients(reconciliation.Block, BlockEvidence) []ProvedClient
+}
+
 // DeltaAdmitter admits a block an additive apply adds beside its lineage.
 type DeltaAdmitter interface {
 	AdmitAdded(lineage reconciliation.Plan, added reconciliation.Block) error

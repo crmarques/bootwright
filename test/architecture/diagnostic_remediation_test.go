@@ -9,7 +9,7 @@ import (
 
 var warningOnlyDiagnosticCodes = []string{
 	"api.deferred", "api.unrealized", "api.unverified", "access.exit", "access.unproved", "context.orphaned",
-	"controller.loader-preload", "controller.runtime-retention", "controller.untested-release",
+	"controller.loader-preload", "controller.outdated-client", "controller.runtime-retention", "controller.untested-release",
 	"input.secrets-directory", "lifecycle.surviving-consumer", "logs.detached", "logs.truncated", "storage.not-ready", "substrate.lend-not-revoked", "substrate.shadowed-route",
 }
 

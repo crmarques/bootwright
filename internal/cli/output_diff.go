@@ -32,16 +32,17 @@ const (
 )
 
 type diffResult struct {
-	Context   diffContext   `json:"context"`
-	Operation diffOperation `json:"operation"`
-	Input     string        `json:"input"`
-	Adds      bool          `json:"adds,omitempty"`
-	Plan      diffPlan      `json:"plan"`
-	Observed  bool          `json:"observed"`
-	Blocks    diffBlocks    `json:"blocks"`
-	Objects   []diffObject  `json:"objects"`
-	Files     []diffFileOut `json:"files"`
-	Summary   diffSummary   `json:"summary"`
+	Context   diffContext      `json:"context"`
+	Operation diffOperation    `json:"operation"`
+	Input     string           `json:"input"`
+	Adds      bool             `json:"adds,omitempty"`
+	Plan      diffPlan         `json:"plan"`
+	Observed  bool             `json:"observed"`
+	Blocks    diffBlocks       `json:"blocks"`
+	Objects   []diffObject     `json:"objects"`
+	Files     []diffFileOut    `json:"files"`
+	Summary   diffSummary      `json:"summary"`
+	Outdated  []outdatedClient `json:"outdatedClients,omitempty"`
 }
 
 func (diffResult) documentedResult() {}
@@ -173,7 +174,7 @@ func writeDiffStatus(ctx context.Context, out io.Writer, result *lifecycle.DiffR
 	if options.json {
 		return status, writeEnvelope(out, commandEnvelope{
 			SchemaVersion: "v1alpha1", Command: "diff", OK: status == 0, ExitCode: status,
-			Result: displayDiff(result, rows, files), Diagnostics: []diagnostic{}, Logs: []string{},
+			Result: displayDiff(result, rows, files), Diagnostics: displayDiagnostics(result.Warnings), Logs: []string{},
 		})
 	}
 	text := diffText(result, rows, files, source, options.style)
@@ -355,5 +356,6 @@ func displayDiff(result *lifecycle.DiffResult, rows []diffRow, files []diffFile)
 		Objects:  objects,
 		Files:    diffFileResults(files, rows),
 		Summary:  diffSummaryOf(rows, result.Observed),
+		Outdated: displayOutdatedClients(result.OutdatedClients),
 	}
 }

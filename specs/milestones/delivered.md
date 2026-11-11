@@ -13307,7 +13307,7 @@ removal runs the client release the completed apply proved.
 | CLI-01 | cli.md plan paragraph and state-reconciliation.md preview verbs list the additive case; `TestAPlanOverACompletedApplyPreviewsTheAdditiveApplyOnlyForAnAddedInstance` |
 | REC-03 | `lifecycle.Service.AddsTo`, read before any lock, and `contexts.Options.AddsTo`; the warning prints `contexts.AddedInput`, the sentence `diff` prints, with its caveat and no destroy; contexts.md; `TestChangedInputOverACompletedApplyWarnsBeforeThePrompt`, `TestAnUpdatedInputIsReportedAsAnAdditionOnlyWhenTheAdditiveApplyAdmitsIt`, golden `context-update-adds-warning` |
 | CLI-37 | cli.md receipt rule names the operation it applies to |
-| NEW-01 | controller.md tool table, api/environment.md and deferred/controlled-network.md: the table governs only a fresh apply's plan; reporting and replacement stay [B1263](m1.md#b1263) |
+| NEW-01 | controller.md tool table, api/environment.md and deferred/controlled-network.md: the table governs only a fresh apply's plan; reporting and replacement stay [B1263](#x373--clients-below-the-minimum) |
 | NEW-15 | X342 Limitations name the destroy refusal |
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
@@ -13988,3 +13988,39 @@ occurred; `rpm` and `dnf` are proved against fakes only. **Limitations:** a
 package another tool installs during the dnf transaction still counts as
 added; a member a later `dnf upgrade` replaced is left by uninstall, not
 removed.
+
+### X373 — Clients below the minimum
+
+**Items:** B1263 (2026-11-10, [D253](backlog.md#d253) (3)), Kind product,
+Owners: Controller, with State reconciliation and CLI.
+
+Over an apply, `status` and `diff` read the completed proof of the apply's controller stage block,
+through the stage capability's new `ProvedClientReader`, and report each
+client it proved below this build's [tool table](../controller.md#the-tool-table)
+minimum, which a settling apply and a removal keep running
+([outdated clients](../cli.md#outdated-clients)): an `outdatedClients` row
+`{kind, release, minimum, apply}` in each result and a
+`controller.outdated-client` warning whose remedy is a destroy and a fresh
+apply, or keeping the build that applied it. Text writes the warning on
+standard error, `diff` now included; a client at or above the minimum, or one
+the table gives no minimum (the OpenShift and OKD clients and installer), adds
+nothing. It reads no host and moves no request, evidence, contract version or
+content digest. Taking a raised release without a destroy stays
+[B1299](backlog.md#b1299).
+
+| Finding | Change |
+| --- | --- |
+| NEW-01 | the reporting half [X350](#x350--proof-and-preview) left to B1263: `lifecycle.Service.outdatedClients`, `clients.Capability.ProvedClients`, the `status` and `diff` results and warnings; controller.md tool table, cli.md, cli/output.md (result rows, the code) and the operator guide's Tools paragraph |
+
+Tests: `TestStatusAndDiffReportAClientTheCompletedApplyProvedBelowTheMinimum`,
+`TestStatusAndDiffReportNothingForAClientProvedAtTheMinimum`,
+`TestProvedClientsNameEachReleaseACompletedStageProved` and goldens
+`cli-status-outdated-client`, `cli-status-outdated-client-json`,
+`cli-diff-outdated-client` and `cli-diff-outdated-client-json`.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** a context an earlier build applied still refuses
+this build's continuation and destroy at its controller stage while the stage
+request version differs ([X342](#x342--default-clients-pinned-by-the-build)),
+so the remedy runs with the build that applied it where that holds; a removal
+in progress reports nothing.

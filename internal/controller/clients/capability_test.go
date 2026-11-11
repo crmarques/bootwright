@@ -948,6 +948,8 @@ func TestAFrozenStageRequestOfAnyOtherVersionRefuses(t *testing.T) {
 // satisfying it.
 var _ lifecycle.ToolLocator = Capability{}
 
+var _ lifecycle.ProvedClientReader = Capability{}
+
 // Another block locates its clients in the area of the closure this stage
 // proved in its apply, recovered only from the retained identities that proof
 // names: a release another context retained is never offered. Anything short of a completed apply's proof of

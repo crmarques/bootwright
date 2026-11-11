@@ -188,6 +188,11 @@ func (r *Runner) writeLifecycleInspection(ctx context.Context, command *cobra.Co
 	case path == "logs" && result.logs != nil:
 		return true, writeLogs(out, r.config.ErrOut, result.logs, selectedStructured(command))
 	case path == "diff" && result.lifecycleDiff != nil:
+		if !selectedJSON(command) {
+			if err := writeHumanDiagnostics(r.config.ErrOut, displayDiagnostics(result.lifecycleDiff.Warnings)); err != nil {
+				return true, err
+			}
+		}
 		flags := command.Flags()
 		status, err := writeDiffStatus(ctx, out, result.lifecycleDiff, diffOptions{
 			json: selectedJSON(command), exitCode: boolValue(flags, "exit-code"),

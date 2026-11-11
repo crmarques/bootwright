@@ -240,7 +240,7 @@ schemas, ordering and escaping remain stable.
 | `schemaVersion` | Exact string `v1alpha1`; changing it is a public output-version change. |
 | `command` | Canonical resolved command path without the executable. |
 | `ok` | `true` if and only if `exitCode` is `0`. |
-| `exitCode` | Exact Bootwright process exit status: `0`, `1`, `2`, or `130`, and `3` only for a `diff --exit-code` that found a difference, whose `result` is the comparison and whose `diagnostics` are empty. |
+| `exitCode` | Exact Bootwright process exit status: `0`, `1`, `2`, or `130`, and `3` only for a `diff --exit-code` that found a difference, whose `result` is the comparison and whose `diagnostics` hold only its `controller.outdated-client` warnings. |
 | `result` | Command-specific object, or JSON `null` when no trustworthy result exists. |
 | `diagnostics` | Ordered diagnostic objects; empty when none. |
 | `logs` | Ordered safe paths relative to the [log root](../contexts/log-root.md) for private logs actually created; empty when none. |
@@ -893,6 +893,7 @@ probe. Its result orders these fields:
 | `lifecycle` | `null` when no operation exists, else `operation`, `verb`, `state`, `next` (the receipt's action token, which the human Lifecycle `Next` row prints as the receipt does; the command it maps to is in `nextSteps`), `anotherBuild` (boolean: the build in hand is not the one that registered the operation, by the rule of [another build](../state-reconciliation.md#dependency-safety-during-recovery)), `lineage` (present only when the operation is an [additive apply](../state-reconciliation.md#additive-apply): the applies it adds to, root first and itself last, each `{operation, verb, state}`), ordered `blocks` of `{id, description, stage, state, outcome, attempts}`, `logs` of safe paths relative to the log root, in the order and form the envelope's [`logs`](#private-operation-logs) list them, and `live`, each block the records hold `running` in plan order as `{block, attempt, resolution, output, present, bytes}`, its newest output relative to the log root, `present` false and `bytes` 0 while that file is not yet written, `[]` when none runs. A block that is `unknown` or `running` adds `unresolved`, `{reason, remedy}`: why its outcome is unproved and what the operator does, which for a block no resolution observed is the exact command, with `--context` and the frozen plan's `--authorize` tokens, that observes it, as its [resolution](../state-reconciliation.md#attempts-and-unknown-outcomes) names them; every other block omits it. |
 | `handoff` | `{ready, reasons}` derived from the [handoff predicate](../state-reconciliation.md#bootstrap-completion-and-gitops-readiness), with a boolean `ready` and ordered reason strings; `reasons` is `[]` when ready. Human output has a Handoff section with `ready`, or `not ready` followed by each reason. A completed apply with a latched log fault over unchanged input offers the settled apply in `nextSteps` as the invocation that [restores](../state-reconciliation.md#converging-an-effect) that boundary. |
 | `contradictions` | Ordered strings naming what the context's durable records contradict, each worded as the [refusal](../state-reconciliation.md#continuation-and-removal) over those records names it, and last an operation whose continuation or removal reopens a frozen Secret binding the context's keyring no longer lists, or whose keyring listing fails reporting the material corrupt or undecryptable; empty when nothing does. |
+| `outdatedClients` | Present only over an apply whose controller stage proved a client below this build's minimum ([outdated clients](../cli.md#outdated-clients)): one `{kind, release, minimum, apply}` row for each such client in `kind` order, `apply` the operation whose stage proved it; each also adds a `controller.outdated-client` warning. |
 | `paths` | Only with `--paths`: `{kind, path, present}` for `store`, `logs`, `hosted` and `libvirt-images` in that order, each the context's entry under that root on this host; `present` says an entry exists, examined without following a link or reading it, and a path the host will not answer reads absent with a `context.state` warning. |
 
 The cluster, resource and shared rows share one realization vocabulary. Each
@@ -1002,9 +1003,12 @@ its `files` holding the unified `patch` lines the text result prints:
 | `document` | The effective-state encoder's canonical JSON of the one object as that side states it, set only when `difference` is `changed`, `added`, `removed` or `unmanaged` and that side exists; otherwise `null`. |
 | `files` | Each file the text result lists, in path order: `desired` and `real`, its path on each side or `""` for `/dev/null`, `objects`, the `<Kind>/<name>` of its listed objects, and `patch`, its unified patch lines. |
 | `summary` | The counts `none`, `changed`, `added`, `removed`, `unmanaged` and `unknown` of objects by difference, and `applied`, the objects compared with the applied side because no host read projected them, which is `0` without one. |
+| `outdatedClients` | As in the [`status` result](#lifecycle-and-status-results), when the current operation is an apply. |
 
 Every string passes through the display escaping above. The command adds
-only the diagnostic code `runtime.tool`.
+only the diagnostic code `runtime.tool` and the `controller.outdated-client`
+warnings, which text output writes on standard error and a structured result
+carries in its envelope's `diagnostics`.
 
 ## Diagnostic taxonomy and order
 
@@ -1091,6 +1095,7 @@ it to a variable.
 | `controller.untested-release` | Informational: the host's release is outside the releases this build was tested on; setup checks its floors and continues. Never a refusal. |
 | `controller.loader-preload` | Informational: `/etc/ld.so.preload` is not empty, so it loads libraries into every process, root dnf runs included; setup continues. Never a refusal. |
 | `controller.runtime-retention` | Informational: after a setup, a controller runtime a running command holds was kept ("kept: 3 runtimes (1 in use)"), or older runtimes and wheels could not all be removed; the next setup retries. Never a refusal and never changes the setup's outcome. |
+| `controller.outdated-client` | A warning `status` and `diff` report over an apply whose controller stage proved a client below this build's minimum; it names the client, the proved release and the minimum, and its remedy names the destroy and apply that install this build's default, or keeping the build that applied it ([outdated clients](../cli.md#outdated-clients)). Never a refusal. |
 | `controller.unknown` | A local controller prerequisite action has an unresolved effect outcome. |
 | `lifecycle.state` | Durable lifecycle state does not permit the requested transition or continuation. |
 | `lifecycle.unsupported` | This executable cannot realize a selected object: no capability claims its kind, its capability reports the shape unsupported, or two implementations of one capability claim it. |

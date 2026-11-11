@@ -873,9 +873,10 @@ only the plan of a fresh apply. A settling apply and a removal run the release
 the completed apply proved, even below this build's minimum
 ([lifecycle unit](state-reconciliation.md#lifecycle-unit)), and a continuation
 an earlier build registered refuses, so a retained release moves to the new
-default only after a destroy and a fresh apply. Reporting a proved client below
-the build's minimum, and taking a raised one without a destroy, are parked as
-[B1263](milestones/m1.md#b1263).
+default only after a destroy and a fresh apply. `status` and `diff` report each
+client an apply's completed controller stage proved below this build's minimum
+([outdated clients](cli.md#outdated-clients)); taking a raised release without
+a destroy is parked as [B1299](milestones/backlog.md#b1299).
 
 A declared release is compared by its leading `MAJOR.MINOR.PATCH`, a
 prerelease suffix ranking below the release it precedes; one below the

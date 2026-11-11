@@ -3423,7 +3423,7 @@ empty rather than sampling it, so host load no longer fails the units lane.
 
 **Owner:** Controller, with State reconciliation. **Kind:** product.
 **Requires:** an owner decision. **Definition:** Candidate, split from
-[B1263](m1.md#b1263) by [D253](#d253): whether a running environment whose
+[B1263](delivered.md#x373--clients-below-the-minimum) by [D253](#d253): whether a running environment whose
 completed apply proved a client below a later build's minimum takes the
 raised release without a destroy, which the settle rule of a completed apply
 ([lifecycle unit](../state-reconciliation.md#lifecycle-unit)) does not allow
@@ -8302,7 +8302,7 @@ COR-36, NEW-15, CLI-37, API-38, API-121 and API-54. The owner's answers:
    the composed name break, and the template-inputs chart is rendered again.
 6. Whether status or diff report a proved client below the build's minimum,
    first, and whether a running environment takes a raised minimum without a
-   destroy are parked as [B1263](m1.md#b1263).
+   destroy are parked as [B1263](delivered.md#x373--clients-below-the-minimum).
 
 Taken by the session, pending the owner's review: a custom CRUSH device class
 refuses at plan by name with a Not yet met line, and its realization is parked
@@ -8325,7 +8325,7 @@ items you listed". This authorizes, out of sequence for implementation, X368
 (M1, [B1298](delivered.md#x368--mac-claims)), X369 (M1, [B1274](delivered.md#x369--wwn-root)), X370 (M1,
 [B1270](delivered.md#x370--secret-classes)), X371 (M1, [B1271](delivered.md#x371--added-set-across-failures) and
 [B1272](delivered.md#x371--added-set-across-failures)), X372 (M1, [B1275](delivered.md#x372--serial-root-wwn)), X373 (M1,
-[B1263](m1.md#b1263)), X374 (M2, [B1264](m2.md#b1264)) and X375 (M3,
+[B1263](delivered.md#x373--clients-below-the-minimum)), X374 (M2, [B1264](m2.md#b1264)) and X375 (M3,
 [B1265](m3.md#b1265)), no more than two active at once. The owner's answers:
 
 1. Every physical server claims its MAC addresses as exclusive `bmc-mac:` keys,
@@ -8338,7 +8338,7 @@ items you listed". This authorizes, out of sequence for implementation, X368
    API-38 recommended: each installer derives what it needs from it, and
    `hardware.rootDevice.deviceName` there refuses with a remedy naming `wwn`.
    Ceph OSD device paths and erase targets keep their native path form.
-3. [B1263](m1.md#b1263) delivers the reporting of a client below the build's
+3. [B1263](delivered.md#x373--clients-below-the-minimum) delivers the reporting of a client below the build's
    minimum; taking a raised release without a destroy stays open as
    [B1299](#b1299).
 

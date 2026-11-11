@@ -979,6 +979,19 @@ continuing. A completed apply is the exception, for the reason above. These are
 next steps only; the receipt's `next` still names what the operation's own
 records call for.
 
+### Outdated clients
+
+Over an apply, `status` and [`diff`](#desired-and-realized-state-comparison)
+also report each client the apply's controller stage proved at a release below
+this build's [minimum](controller.md#the-tool-table), which a settling apply
+and a removal keep running. They read it from that stage block's completed
+proof alone, contacting no host, and report each such client as an
+`outdatedClients` row of their [results](cli/output.md#lifecycle-and-status-results)
+and a `controller.outdated-client` warning naming the client, the proved
+release and the minimum, whose remedy is a destroy and a fresh apply, which
+install this build's default, or keeping the build that applied it. A client
+at or above the minimum, or one the table gives no minimum, adds nothing.
+
 ## Desired and realized state comparison
 
 `diff` sets the context's desired state beside what its apply realized, object
@@ -1010,9 +1023,10 @@ comparison found, unless `--exit-code` is set, and writes no
 `--exit-code` changes nothing about the comparison or what it writes. It makes
 the exit status say whether the comparison found anything: `3` when any object
 is `changed`, `added`, `removed`, `unmanaged` or `unknown`, and `0` when none is, so a script
-can test for drift. Status `3` is not a failure: standard error stays empty,
+can test for drift. Status `3` is not a failure: standard error holds only the
+[outdated client](#outdated-clients) warnings it holds without the flag,
 the result is the one the command writes without the flag, and a structured
-result carries `ok` `false` and `exitCode` `3` with no diagnostic.
+result carries `ok` `false` and `exitCode` `3` with no other diagnostic.
 
 ### Comparison header
 

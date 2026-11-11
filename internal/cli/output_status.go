@@ -21,7 +21,29 @@ type statusResult struct {
 	Lifecycle       *statusLifecycle       `json:"lifecycle"`
 	Handoff         statusHandoff          `json:"handoff"`
 	Contradictions  []string               `json:"contradictions"`
+	OutdatedClients []outdatedClient       `json:"outdatedClients,omitempty"`
 	Paths           []statusPath           `json:"paths,omitempty"`
+}
+
+type outdatedClient struct {
+	Kind    string `json:"kind"`
+	Release string `json:"release"`
+	Minimum string `json:"minimum"`
+	Apply   string `json:"apply"`
+}
+
+func displayOutdatedClients(clients []lifecycle.OutdatedClient) []outdatedClient {
+	if len(clients) == 0 {
+		return nil
+	}
+	out := make([]outdatedClient, 0, len(clients))
+	for _, client := range clients {
+		out = append(out, outdatedClient{
+			Kind: escapeDisplayLine(client.Kind), Release: escapeDisplayLine(client.Release),
+			Minimum: escapeDisplayLine(client.Minimum), Apply: escapeDisplayLine(client.Apply),
+		})
+	}
+	return out
 }
 
 func (statusResult) documentedResult() {}
@@ -130,6 +152,7 @@ func displayStatus(result *lifecycle.StatusResult) statusResult {
 		NextSteps:       displayLines(result.NextSteps),
 		Handoff:         statusHandoff{Ready: result.Handoff.Ready, Reasons: displayLines(result.Handoff.Reasons)},
 		Contradictions:  displayLines(result.Contradictions),
+		OutdatedClients: displayOutdatedClients(result.OutdatedClients),
 		Paths:           displayPaths(result.Paths),
 	}
 	for _, check := range result.SetupChecks {

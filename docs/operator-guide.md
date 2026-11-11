@@ -244,7 +244,10 @@ the system trust store, for the mirror alone. With the mirror declared, a
 release in `spec.dependencyVersions` other than the build's default is
 refused at plan, because its checksum only its publisher holds. The
 OpenShift clients and installer stay on `mirror.openshift.com`, a vendor
-origin, or on `spec.downloads.openshiftClientsMirror`.
+origin, or on `spec.downloads.openshiftClientsMirror`. A newer build may raise
+a client's minimum: `bootwright status` and `bootwright diff` then warn of each
+client an earlier apply installed below it, and a destroy and a fresh apply
+install the new default ([outdated clients](../specs/cli.md#outdated-clients)).
 
 **Images.** Each compiled default is pinned by digest: `docker.io` for the
 name resolver, the proxy, the time server and the registry, `registry.access.redhat.com`

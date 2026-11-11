@@ -280,6 +280,9 @@ func (s Service) status(ctx context.Context, view View) (*StatusResult, *api.Cat
 	}
 	result.Lifecycle = summary
 	result.Warnings, result.LogLocation = attemptWarnings(ctx, store, operation.ID, plan, attempts), store.LogDirectory(operation.ID)
+	if err := s.statusOutdatedClients(ctx, store, view.Identity().Name, operation, plan, states, result); err != nil {
+		return nil, nil, err
+	}
 	if result.Secrets.Bindings, err = bindingsHeld(view, operation); err != nil {
 		return nil, nil, err
 	}

@@ -1141,7 +1141,7 @@ func cliGoldens() []cliGolden {
 				"    Next: run bootwright help <command> to see which forms this build runs\n",
 		},
 		{golden: "cli-not-implemented-json", args: "status --output json", code: 1, record: func(r *dispatchRecord) { r.err = availability.ErrNotImplemented }},
-	}, append(append(append(clusterGoldens(), diffGoldens()...), handoffGoldens()...), append(additiveGoldens(), logsGoldens()...)...)...)
+	}, append(append(append(append(clusterGoldens(), diffGoldens()...), handoffGoldens()...), append(additiveGoldens(), logsGoldens()...)...), outdatedClientGoldens()...)...)
 }
 
 // storedImage is the record a media confirmation shows before its prompt.

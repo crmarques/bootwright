@@ -26,15 +26,17 @@ type DiffRequest struct {
 }
 
 type DiffResult struct {
-	Context   ContextIdentity
-	Operation DiffOperation
-	Input     string
-	Adds      bool
-	Plan      DiffPlan
-	Observed  bool
-	Blocks    DiffBlocks
-	Objects   []ObjectDiff
-	Markers   DiffMarkers
+	Context         ContextIdentity
+	Operation       DiffOperation
+	Input           string
+	Adds            bool
+	Plan            DiffPlan
+	Observed        bool
+	Blocks          DiffBlocks
+	Objects         []ObjectDiff
+	Markers         DiffMarkers
+	OutdatedClients []OutdatedClient
+	Warnings        []diagnostics.Diagnostic
 }
 
 type DiffMarkers struct {
@@ -418,7 +420,8 @@ type StatusResult struct {
 	Handoff         HandoffSummary
 	// Contradictions names what the context's records contradict, in the
 	// words a refusal that points at status names each of them.
-	Contradictions []string
+	Contradictions  []string
+	OutdatedClients []OutdatedClient
 	// Paths is set only when asked: store, logs, hosted, libvirt-images.
 	Paths []ContextPath
 	// LogLocation is the host path of the reported operation's logs, presented
