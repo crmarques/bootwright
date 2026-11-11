@@ -5,11 +5,13 @@ on:
     paths:
       - internal/controller/tooltable.json
       - scripts/tools/tooltable/**
+      - scripts/tools/clientassets/**
       - .github/workflows/tool-table.yml
   pull_request:
     paths:
       - internal/controller/tooltable.json
       - scripts/tools/tooltable/**
+      - scripts/tools/clientassets/**
       - .github/workflows/tool-table.yml
   schedule:
     - cron: "41 5 * * 1"

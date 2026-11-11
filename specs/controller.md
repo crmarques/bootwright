@@ -884,7 +884,9 @@ minimum, or one without that triple, refuses at plan while its client is
 selected ([refusal table](api/environment.md#refusal-table)). The OpenShift and
 OKD clients and installer follow the cluster's release and take no minimum.
 `make tool-table` reads each default's checksum and size from its publisher
-and fails when either differs, and `make tool-table-outdated` names newer
+and fails when either differs, and likewise the pinned `go.mod` of a client
+whose binary names no module
+([the vulnerability gate](security.md#the-vulnerability-gate)), and `make tool-table-outdated` names newer
 stable releases; only these contact a publisher, and
 [development](../docs/development.md#lock-refresh-and-tested-hosts) owns the
 refresh.

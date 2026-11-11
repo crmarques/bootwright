@@ -1,12 +1,16 @@
 // Command tooltable checks the controller's tool table against each client's
 // publisher: verify reads the publisher's checksum and size of every default
 // release and its repository's declared license and fails when any differs from
-// the table, and outdated prints
+// the table, reads each pinned go.mod of a client release from its publisher
+// and fails when its size or SHA-256 differs from its pin or its release is no
+// longer a table default, and outdated prints
 // each client whose publisher names a newer stable release. Only these
 // commands contact a publisher; a build reads the table alone.
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -15,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -81,6 +86,9 @@ func main() {
 		switch command {
 		case "verify":
 			err = verify(pins, fetch, os.Stdout)
+			if err == nil {
+				err = verifyModules(pins, fetch, os.Stdout)
+			}
 		case "outdated":
 			err = outdated(pins, fetch, os.Stdout)
 		default:
@@ -136,6 +144,41 @@ func verify(pins []pin, fetch fetcher, out io.Writer) error {
 	}
 	if failed {
 		return errors.New("the tool table differs from its publishers")
+	}
+	return nil
+}
+
+func verifyModules(pins []pin, fetch fetcher, out io.Writer) error {
+	modules, err := clientassets.Modules()
+	if err != nil {
+		return err
+	}
+	return verifyModulePins(pins, modules, fetch, out)
+}
+
+func verifyModulePins(pins []pin, modules []clientassets.Module, fetch fetcher, out io.Writer) error {
+	failed := false
+	for _, module := range modules {
+		index := slices.IndexFunc(pins, func(entry pin) bool { return entry.Kind == module.Kind })
+		if index < 0 || pins[index].Default.Version != module.Version {
+			failed = true
+			fmt.Fprintf(out, "%s %s: its go.mod is pinned, but the table's default is another release; move or remove the pin in scripts/tools/clientassets/buildmodules.json\n", module.Kind, module.Version)
+			continue
+		}
+		data, _, err := fetch(http.MethodGet, module.URL)
+		if err != nil {
+			return fmt.Errorf("%s %s go.mod: %w", module.Kind, module.Version, err)
+		}
+		sum := sha256.Sum256(data)
+		if digest := hex.EncodeToString(sum[:]); digest != module.SHA256 || int64(len(data)) != module.Bytes {
+			failed = true
+			fmt.Fprintf(out, "%s %s: its release's go.mod is %s and %d bytes; the pin %s and %d bytes\n", module.Kind, module.Version, digest, len(data), module.SHA256, module.Bytes)
+			continue
+		}
+		fmt.Fprintf(out, "%s %s: its go.mod matches its pin\n", module.Kind, module.Version)
+	}
+	if failed {
+		return errors.New("the pinned go.mod files differ from their publishers or the table")
 	}
 	return nil
 }

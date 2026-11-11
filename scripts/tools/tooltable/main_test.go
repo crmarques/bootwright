@@ -1,10 +1,14 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/crmarques/bootwright/tools/clientassets"
 )
 
 type answer struct {
@@ -76,5 +80,27 @@ func TestOutdatedNamesANewerStableRelease(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "kubectl: the default is 1.37.2 and its publisher's newest stable release 1.38.0") || !strings.Contains(out.String(), "govc: the default 0.56.2 is its publisher's newest stable release") {
 		t.Fatal(out.String())
+	}
+}
+
+func TestVerifyHoldsEachPinnedGoModToItsPublisherAndTheTableDefault(t *testing.T) {
+	body := "module kubevirt.io/kubevirt\n"
+	sum := sha256.Sum256([]byte(body))
+	module := clientassets.Module{Kind: "virtctl", Version: "1.9.1", URL: "https://raw.githubusercontent.com/kubevirt/kubevirt/v1.9.1/go.mod", Bytes: int64(len(body)), SHA256: hex.EncodeToString(sum[:])}
+	answers := map[string]answer{"GET " + module.URL: {data: body}}
+	pins := []pin{{Kind: "virtctl", Default: release{Version: "1.9.1"}}}
+	var out strings.Builder
+	if err := verifyModulePins(pins, []clientassets.Module{module}, fake(answers), &out); err != nil || !strings.Contains(out.String(), "its go.mod matches its pin") {
+		t.Fatalf("a matching pin failed: %v\n%s", err, out.String())
+	}
+	answers["GET "+module.URL] = answer{data: body + "// changed\n"}
+	out.Reset()
+	if err := verifyModulePins(pins, []clientassets.Module{module}, fake(answers), &out); err == nil || !strings.Contains(out.String(), "its release's go.mod is") {
+		t.Fatalf("a go.mod the pin does not name passed: %v\n%s", err, out.String())
+	}
+	pins[0].Default.Version = "1.9.2"
+	out.Reset()
+	if err := verifyModulePins(pins, []clientassets.Module{module}, fake(answers), &out); err == nil || !strings.Contains(out.String(), "the table's default is another release") {
+		t.Fatalf("a pin for a release the table no longer defaults passed: %v\n%s", err, out.String())
 	}
 }

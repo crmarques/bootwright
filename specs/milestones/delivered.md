@@ -13837,7 +13837,7 @@ version and the release that fixes it. A binary whose build information names
 no module beyond the toolchain, which is how `virtctl` 1.9.1 is built, is also
 asked of OSV by its top-level module, so its eight earlier exceptions still
 apply; its third-party dependencies are not judged at all, which
-[B1317](backlog.md#b1317) parks. Binary mode skips a module whose build
+[X405](#x405--the-modules-a-release-was-built-from-judged) later delivered. Binary mode skips a module whose build
 information has no release version, so govc's `github.com/vmware/govmomi`
 (`=> ../ (devel)`) and kubectl's `k8s.io/api`, `apimachinery`, `cli-runtime`,
 `client-go`, `component-base`, `component-helpers`, `kubectl`, `metrics` and
@@ -14423,3 +14423,80 @@ tests that expect a tree to survive keep their 1 s sample.
 **Commits:** this commit. Gates: listed in its message, including repeated runs
 of both files under eight busy-loop processes. No product code, contract or
 push changed.
+
+### X405 — The modules a release was built from, judged
+
+**Item:** B1317 (2026-11-10, from the [X400](#x400--client-binary-scan-and-scheduled-image-scan)
+review), delivered in-tree, so the item leaves the backlog. **Kind:**
+enabling. **Owners:** Architecture. `virtctl` 1.9.1's build information names
+the Go toolchain and no module, so the
+[vulnerability gate](../security.md#the-vulnerability-gate) judged its
+dependencies by its top-level module alone. The gate now also judges every
+module of the `go.mod` its release was built from.
+
+`scripts/tools/clientassets/buildmodules.json` pins, for `virtctl` 1.9.1, the
+size and SHA-256 of `https://raw.githubusercontent.com/kubevirt/kubevirt/v1.9.1/go.mod`
+(10705 bytes), which `clientassets.ModulesOf` hands both the gate and
+`tooltable`. A client whose binary names no module needs a pin for its default
+release, and a release with none fails the gate before anything is fetched
+(`TestAReleaseWithNoPinnedGoModIsRefusedBeforeAnythingIsFetched`). The gate
+downloads the file into `<cache>/<sha256>/go.mod`, beside the release files,
+checks it against the pinned size and digest on every use, refetches a
+tampered copy and keeps a download that fails its digest nowhere
+(`TestAReleaseGoModIsFetchedByItsPinnedDigestAndKeptByIt`); a warm cache
+fetches nothing for it. `golang.org/x/mod/modfile`, already in the module
+graph through `govulncheck`, parses it, so the tools module requires it
+directly. Each `require`, direct or indirect, is asked of OSV at its version
+after the `replace` directives apply: a replacement by another module or
+version is asked at that module and version, and a replacement by a local
+directory under the release's own tree (`./...`), which is `kubevirt.io/api`
+and `kubevirt.io/client-go` here and part of the release itself, is judged by
+the top-level module, and a local path anywhere else fails the gate; a
+`replace` naming the required version outranks one for any version, as in Go
+(`TestTheGoModModulesApplyEachReplacement`,
+`TestAClientWhoseBinaryNamesNoModuleHasTheDependenciesOfItsReleaseJudged`).
+OSV's limit of 1000 queries per batch is met by asking in batches of 500
+(`TestOSVIsAskedInBatchesAndEveryAnswerIsKept`), and a failure names the module
+and version it found. `make tool-table` reads each pinned `go.mod` from its
+publisher and fails when its size or digest differs or when its release is no
+longer the table's default, and its workflow now runs when
+`scripts/tools/clientassets` changes.
+
+*Findings.* The 173 modules of `virtctl` 1.9.1's `go.mod` (175 requirements,
+two replaced by local directories) have seventy-one advisory identifiers
+against eleven modules, forty-eight advisories. Seven were already excepted for
+the toolchain (`GO-2026-5026`, `-5942`, `-6603`, `-6610`, `-6611`, `-6612`,
+`-6617`, which `golang.org/x/net` 0.49.0 also carries), and their reasons now
+name the module's fix. Forty-one are new exceptions on `tool:virtctl@1.9.1` to
+2027-02-08: thirty-nine `not_affected` with `code_not_present`, because the
+affected package is in a module or package the release file names no symbol of
+(`github.com/cilium/ebpf`, `containernetworking/plugins`, `cel-go`,
+`insomniacslk/dhcp`, `klauspost/compress`, `go.mongodb.org/mongo-driver`,
+`google.golang.org/grpc`, `golang.org/x/mod` and `golang.org/x/crypto` are
+absent as modules from the executable, whose only `x/crypto` strings are the
+standard library's own `vendor/golang.org/x/crypto` copy that `crypto/tls`
+uses, with `cryptobyte` and `chacha20poly1305`, and none carries a
+`kubevirt.io/kubevirt/vendor/golang.org/x/crypto` symbol; and its
+`golang.org/x/net/html` holds only an `init` and its package-variable file
+names, none of `Parse`, `ParseFragment`, `ParseWithOptions`, `Render` or the
+parser's methods, nor its `golang.org/x/sys` `windows` nor its `golang.org/x/text`
+`secure/precis`), and two `no_fix`, because the executable links the affected
+package (`golang.org/x/net/http2` once and `golang.org/x/text/unicode/norm`
+once) and no newer `virtctl` exists (`make tool-table-outdated` names no newer
+release). The absence is read from the release file's symbol and file names,
+not from a reachability analysis, and the reasons say so. The findings are conservative:
+OSV judges a module at a version, and the `go.mod` holds the modules of every
+KubeVirt binary, so a finding for a module `virtctl` does not link still needs
+its reviewed exception, which is how the gate asks an owner to look again each
+90 days. The exceptions are bundled in this commit because the gate change that
+finds them is here.
+
+No request, evidence, contract version or content digest moved.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** the pin is a separate file, hand-edited when
+`virtctl` moves and proved by `make tool-table`, not a field of the tool table;
+only `virtctl` is mapped to a publisher `go.mod`, so another client whose build
+information names no module fails the gate until its source is added; the
+release's `go.sum` and the replacement of a module by one with its own
+`go.mod` are not read.

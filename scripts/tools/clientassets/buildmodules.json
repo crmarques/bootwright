@@ -1,0 +1,11 @@
+{
+  "format": "bootwright.client-build-modules-v1",
+  "releases": [
+    {
+      "kind": "virtctl",
+      "version": "1.9.1",
+      "bytes": 10705,
+      "sha256": "c1858cbf6b469dd6f5baab5e8d22f5303e1227e635172b32779eb23888a97b61"
+    }
+  ]
+}

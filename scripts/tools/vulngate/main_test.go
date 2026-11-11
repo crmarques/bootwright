@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +23,7 @@ const (
 	namedModules  = `{"config":{"scan_mode":"binary"}}` + "\n" + `{"SBOM":{"go_version":"go1.26.10","modules":[{"path":"example.com/client","version":"v1.0.0"},{"path":"golang.org/x/net","version":"v0.57.0"}]}}` + "\n"
 	stdlibOnly    = `{"config":{"scan_mode":"binary"}}` + "\n" + `{"SBOM":{"go_version":"go1.26.4","modules":[{"path":"stdlib","version":"go1.26.4"}]}}` + "\n"
 	symbolFinding = `{"finding":{"osv":"GO-2026-6603","fixed_version":"v0.60.0","trace":[{"module":"golang.org/x/net","version":"v0.57.0","package":"golang.org/x/net/http2","function":"Close"}]}}` + "\n"
+	releaseGoMod  = "module kubevirt.io/kubevirt\n\ngo 1.26.0\n\nrequire (\n\tgolang.org/x/net v0.49.0\n\tgithub.com/spf13/cobra v1.10.2 // indirect\n\tk8s.io/api v0.0.0\n\tkubevirt.io/api v0.0.0\n)\n\nreplace (\n\tk8s.io/api => k8s.io/api v0.34.2\n\tkubevirt.io/api => ./staging/src/kubevirt.io/api\n)\n"
 	moduleOnly    = `{"finding":{"osv":"GO-2025-3521","trace":[{"module":"k8s.io/kubernetes","version":"v1.37.2"}]}}` + "\n"
 )
 
@@ -75,6 +78,12 @@ func newClientFixture(t *testing.T, vulns map[string][]string, govulncheck strin
 		osv:         server.URL,
 		today:       time.Date(2026, 11, 10, 0, 0, 0, 0, time.UTC),
 		client:      server.Client(),
+		buildModules: func(entry pin) ([]byte, error) {
+			if entry.Kind != "virtctl" {
+				return nil, errors.New("no go.mod of " + entry.Kind)
+			}
+			return []byte(releaseGoMod), nil
+		},
 		scanClient: func(entry pin) ([]byte, error) {
 			data, found := clients[entry.Kind]
 			if !found {
@@ -239,5 +248,145 @@ func TestAModuleWithNoReleaseVersionThatNoTableMapsIsRefused(t *testing.T) {
 	tableOf(t, f, `{"tools":[{"kind":"kubectl","default":{"version":"1.9.1"}}]}`)
 	if err := run(f.options, &strings.Builder{}); err == nil || !strings.Contains(err.Error(), "cannot map") {
 		t.Fatalf("an unmapped module with no release version was skipped: %v", err)
+	}
+}
+
+func TestAClientWhoseBinaryNamesNoModuleHasTheDependenciesOfItsReleaseJudged(t *testing.T) {
+	vulns := map[string][]string{
+		"golang.org/x/net@v0.49.0":       {"GO-2026-6603", "GHSA-aaaa-bbbb-cccc"},
+		"github.com/spf13/cobra@v1.10.2": {"GO-2026-4444"},
+		"k8s.io/api@v0.34.2":             {"GO-2026-5555"},
+		"k8s.io/api@v0.0.0":              {"GO-2026-0000"},
+		"kubevirt.io/api@v0.0.0":         {"GO-2026-0001"},
+	}
+	f := newClientFixture(t, vulns, scanned, nil, map[string]string{"helm": namedModules, "virtctl": stdlibOnly})
+	var out strings.Builder
+	err := run(f.options, &out)
+	for _, want := range []string{
+		"GHSA-aaaa-bbbb-cccc in tool:virtctl@1.9.1 (golang.org/x/net@v0.49.0) has no exception",
+		"GO-2026-6603 in tool:virtctl@1.9.1 (golang.org/x/net@v0.49.0) has no exception",
+		"GO-2026-4444 in tool:virtctl@1.9.1 (github.com/spf13/cobra@v1.10.2) has no exception",
+		"GO-2026-5555 in tool:virtctl@1.9.1 (k8s.io/api@v0.34.2) has no exception",
+	} {
+		if err == nil || !strings.Contains(out.String(), want) {
+			t.Fatalf("a dependency of the release went unjudged (%q): %v\n%s", want, err, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "GO-2026-0000") || strings.Contains(out.String(), "GO-2026-0001") {
+		t.Fatalf("a replaced module was judged at its unreplaced version or a local replacement was queried:\n%s", out.String())
+	}
+	netEntry := excepted("GO-2026-6603", "tool:virtctl@1.9.1", "2027-01-01")
+	netEntry.Aliases = []string{"GHSA-aaaa-bbbb-cccc"}
+	covered := newClientFixture(t, vulns, scanned, []exception{netEntry, excepted("GO-2026-4444", "tool:virtctl@1.9.1", "2027-01-01"), excepted("GO-2026-5555", "tool:virtctl@1.9.1", "2027-01-01")}, map[string]string{"helm": namedModules, "virtctl": stdlibOnly})
+	if err := run(covered.options, &out); err != nil {
+		t.Fatalf("covered dependencies failed: %v", err)
+	}
+}
+
+func TestAClientWhoseReleaseGoModCannotBeReadFailsTheGate(t *testing.T) {
+	for name, read := range map[string]func(pin) ([]byte, error){
+		"unpinned":  func(pin) ([]byte, error) { return nil, errors.New("no go.mod is pinned") },
+		"malformed": func(pin) ([]byte, error) { return []byte("module"), nil },
+		"empty":     func(pin) ([]byte, error) { return []byte("module kubevirt.io/kubevirt\n"), nil },
+	} {
+		f := newFixture(t, nil, scanned, nil)
+		f.options.buildModules = read
+		if err := run(f.options, &strings.Builder{}); err == nil {
+			t.Errorf("a %s go.mod passed", name)
+		}
+	}
+}
+
+func TestAClientWhoseBinaryNamesModulesNeedsNoGoMod(t *testing.T) {
+	f := newClientFixture(t, nil, scanned, nil, map[string]string{"helm": namedModules, "virtctl": namedModules})
+	f.options.buildModules = func(pin) ([]byte, error) { return nil, errors.New("read a go.mod it did not need") }
+	if err := run(f.options, &strings.Builder{}); err != nil {
+		t.Fatalf("a client that names its modules asked for a go.mod: %v", err)
+	}
+}
+
+func TestOSVIsAskedInBatchesAndEveryAnswerIsKept(t *testing.T) {
+	var sizes []int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Queries []osvQuery `json:"queries"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&request)
+		sizes = append(sizes, len(request.Queries))
+		type result struct {
+			Vulns []map[string]string `json:"vulns,omitempty"`
+		}
+		answer := struct {
+			Results []result `json:"results"`
+		}{}
+		for _, query := range request.Queries {
+			found := result{}
+			if query.Package.Name == "example.com/m1200" {
+				found.Vulns = []map[string]string{{"id": "GO-2026-1200"}}
+			}
+			answer.Results = append(answer.Results, found)
+		}
+		_ = json.NewEncoder(w).Encode(answer)
+	}))
+	t.Cleanup(server.Close)
+	var targets []osvTarget
+	for index := range 1201 {
+		target := osvTarget{refs: []string{"tool:virtctl@1.9.1"}, detail: "example.com/m@v1.0.0"}
+		target.query.Package.Ecosystem, target.query.Package.Name, target.query.Version = "Go", "example.com/m"+strconv.Itoa(index), "v1.0.0"
+		targets = append(targets, target)
+	}
+	found, err := queryOSV(options{osv: server.URL, client: server.Client()}, targets)
+	if err != nil || len(found) != 1 || found[0].ID != "GO-2026-1200" || found[0].Detail != "example.com/m@v1.0.0" {
+		t.Fatalf("found %+v: %v", found, err)
+	}
+	if len(sizes) != 3 || sizes[0] != osvBatch || sizes[1] != osvBatch || sizes[2] != 201 {
+		t.Fatalf("batches = %v", sizes)
+	}
+}
+
+func TestTheGoModModulesApplyEachReplacement(t *testing.T) {
+	entry := pin{Kind: "virtctl"}
+	modules, err := goModModules([]byte(releaseGoMod+"replace golang.org/x/net v0.49.0 => example.com/fork/net v0.49.1\n"), entry, "ref")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, module := range modules {
+		got = append(got, module.module+"@"+module.version)
+	}
+	want := []string{"example.com/fork/net@v0.49.1", "github.com/spf13/cobra@v1.10.2", "k8s.io/api@v0.34.2"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("modules = %v, want %v", got, want)
+	}
+}
+
+func TestAVersionSpecificReplacementWinsOverAWildcardAndOnlyOwnTreePathsAreSkipped(t *testing.T) {
+	entry := pin{Kind: "virtctl"}
+	header := "module kubevirt.io/kubevirt\n\ngo 1.26.0\n\nrequire example.com/m v1.0.0\n"
+	for name, test := range map[string]struct{ replaces, want string }{
+		"wildcard first":           {"replace example.com/m => example.com/wild v1.1.0\nreplace example.com/m v1.0.0 => example.com/exact v1.2.0\n", "example.com/exact@v1.2.0"},
+		"exact first":              {"replace example.com/m v1.0.0 => example.com/exact v1.2.0\nreplace example.com/m => example.com/wild v1.1.0\n", "example.com/exact@v1.2.0"},
+		"wildcard only":            {"replace example.com/m => example.com/wild v1.1.0\n", "example.com/wild@v1.1.0"},
+		"another version":          {"replace example.com/m v0.9.0 => example.com/other v0.9.1\n", "example.com/m@v1.0.0"},
+		"a version-specific local": {"replace example.com/m => example.com/wild v1.1.0\nreplace example.com/m v1.0.0 => ./staging/m\n", ""},
+	} {
+		modules, err := goModModules([]byte(header+"require example.com/n v1.0.0\n"+test.replaces), entry, "ref")
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		var got string
+		for _, module := range modules {
+			if module.module != "example.com/n" {
+				got = module.module + "@" + module.version
+			}
+		}
+		if got != test.want {
+			t.Errorf("%s: judged %q, want %q", name, got, test.want)
+		}
+	}
+	for _, path := range []string{"../other", "/abs/other"} {
+		if _, err := goModModules([]byte(header+"replace example.com/m => "+path+"\n"), entry, "ref"); err == nil || !strings.Contains(err.Error(), "outside its own tree") {
+			t.Errorf("a replacement by %s was accepted: %v", path, err)
+		}
 	}
 }

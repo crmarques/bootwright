@@ -347,7 +347,12 @@ make tool-table-outdated
 
 `make tool-table` reads each default's checksum and size from its publisher
 and fails on any difference, so a hand-edited entry is proved before it is
-committed, and each repository's declared license; it sends `GITHUB_TOKEN`, when set, to `api.github.com` alone, which lifts GitHub's anonymous rate limit. `make tool-table-outdated` names each client whose publisher has a
+committed, and each repository's declared license, and the `go.mod` of
+`virtctl`'s release tag against its pin in
+`scripts/tools/clientassets/buildmodules.json` (when moving `virtctl`, set that
+pin's version, size and SHA-256 to the new tag's `go.mod`, which the
+[vulnerability gate](../specs/security.md#the-vulnerability-gate) judges the
+release's dependencies by); it sends `GITHUB_TOKEN`, when set, to `api.github.com` alone, which lifts GitHub's anonymous rate limit. `make tool-table-outdated` names each client whose publisher has a
 newer stable release, without gating. Raise a minimum only for an advisory
 that reaches the releases below it, and never above its default.
 `.github/workflows/tool-table.yml` runs `make tool-table` when the table or its
@@ -357,10 +362,10 @@ summary.
 `make build` first runs `make vulngate`, the
 [vulnerability gate](../specs/security.md#the-vulnerability-gate): it needs
 `vuln.go.dev` and `api.osv.dev`, scans each default client's release file by
-the Go toolchain and modules that binary names, fails on a finding no reviewed
+the Go toolchain and modules that binary names (for `virtctl`, whose binary names none, the modules of its pinned release `go.mod`), fails on a finding no reviewed
 exception in `cmd/bootwright/vulnerability-exceptions.json` covers, and stamps
 its verdict, which `bootwright version` prints. The first run downloads the four
-release files, about 160 MB, into `CLIENTS_CACHE` (`client-releases` in the
+release files, about 160 MB, and `virtctl`'s release `go.mod`, into `CLIENTS_CACHE` (`client-releases` in the
 shared cache directory), checking each against the tool table's SHA-256 and
 again on every reuse, so a warm cache downloads none. `make check` runs the gate
 too, and `.github/workflows/vulnerability.yml` runs it daily, so a new advisory

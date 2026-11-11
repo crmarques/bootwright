@@ -30,6 +30,7 @@ var scanning sync.Mutex
 type clientSource struct {
 	cache, db string
 	client    *http.Client
+	pins      func(kind, version string) (clientassets.Module, error)
 }
 
 func (s clientSource) scan(entry pin) ([]byte, error) {
@@ -41,7 +42,7 @@ func (s clientSource) scan(entry pin) ([]byte, error) {
 		return nil, errors.New("-artifacts and -db are required to scan the clients")
 	}
 	sweep(s.cache)
-	release, err := s.fetch(asset, entry)
+	release, err := s.fetch(asset.URL, pinned{entry.Default.Bytes, entry.Default.SHA256})
 	if err != nil {
 		return nil, fmt.Errorf("%s %s: %w", entry.Kind, entry.Default.Version, err)
 	}
@@ -74,10 +75,36 @@ func (s clientSource) scan(entry pin) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-func (s clientSource) fetch(asset clientassets.Asset, entry pin) (*os.File, error) {
-	directory := filepath.Join(s.cache, entry.Default.SHA256)
-	cached := filepath.Join(directory, path.Base(asset.URL))
-	if file, err := openVerified(cached, entry); err == nil {
+type pinned struct {
+	bytes  int64
+	sha256 string
+}
+
+func (s clientSource) buildModules(entry pin) ([]byte, error) {
+	lookup := s.pins
+	if lookup == nil {
+		lookup = clientassets.ModulesOf
+	}
+	module, err := lookup(entry.Kind, entry.Default.Version)
+	if err != nil {
+		return nil, fmt.Errorf("the %s %s binary names no module, so its dependencies come from its release's go.mod: %w", entry.Kind, entry.Default.Version, err)
+	}
+	if s.cache == "" || s.client == nil {
+		return nil, errors.New("-artifacts is required to read the clients' go.mod files")
+	}
+	sweep(s.cache)
+	file, err := s.fetch(module.URL, pinned{module.Bytes, module.SHA256})
+	if err != nil {
+		return nil, fmt.Errorf("%s %s go.mod: %w", entry.Kind, entry.Default.Version, err)
+	}
+	defer file.Close()
+	return io.ReadAll(io.LimitReader(file, module.Bytes+1))
+}
+
+func (s clientSource) fetch(url string, want pinned) (*os.File, error) {
+	directory := filepath.Join(s.cache, want.sha256)
+	cached := filepath.Join(directory, path.Base(url))
+	if file, err := openVerified(cached, want); err == nil {
 		return file, nil
 	}
 	if err := os.MkdirAll(directory, 0o755); err != nil {
@@ -89,23 +116,23 @@ func (s clientSource) fetch(asset clientassets.Asset, entry pin) (*os.File, erro
 	}
 	defer os.Remove(partial.Name())
 	defer partial.Close()
-	response, err := s.client.Get(asset.URL)
+	response, err := s.client.Get(url)
 	if err != nil {
 		return nil, err
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s answered %s", asset.URL, response.Status)
+		return nil, fmt.Errorf("%s answered %s", url, response.Status)
 	}
-	if _, err := io.Copy(partial, io.LimitReader(response.Body, entry.Default.Bytes+1)); err != nil {
+	if _, err := io.Copy(partial, io.LimitReader(response.Body, want.bytes+1)); err != nil {
 		return nil, err
 	}
 	if err := partial.Close(); err != nil {
 		return nil, err
 	}
-	file, err := openVerified(partial.Name(), entry)
+	file, err := openVerified(partial.Name(), want)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", asset.URL, err)
+		return nil, fmt.Errorf("%s: %w", url, err)
 	}
 	if err := os.Rename(partial.Name(), cached); err != nil {
 		file.Close()
@@ -114,15 +141,15 @@ func (s clientSource) fetch(asset clientassets.Asset, entry pin) (*os.File, erro
 	return file, nil
 }
 
-func openVerified(file string, entry pin) (*os.File, error) {
+func openVerified(file string, want pinned) (*os.File, error) {
 	source, err := os.Open(file)
 	if err != nil {
 		return nil, err
 	}
 	digest := sha256.New()
 	size, err := io.Copy(digest, source)
-	if err == nil && (size != entry.Default.Bytes || hex.EncodeToString(digest.Sum(nil)) != entry.Default.SHA256) {
-		err = fmt.Errorf("the file is %d bytes with another SHA-256 than the tool table's %d bytes and %s", size, entry.Default.Bytes, entry.Default.SHA256)
+	if err == nil && (size != want.bytes || hex.EncodeToString(digest.Sum(nil)) != want.sha256) {
+		err = fmt.Errorf("the file is %d bytes with another SHA-256 than the pinned %d bytes and %s", size, want.bytes, want.sha256)
 	}
 	if err == nil {
 		_, err = source.Seek(0, io.SeekStart)

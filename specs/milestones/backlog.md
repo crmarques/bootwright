@@ -309,7 +309,6 @@ Alias cell.
 | [B1315](#b1315) | new, 2026-11-10 (X395 verification review) | defect | Substrate | A tagged managed Network whose `vlan` or trunk `bridge` changes redefines its own leg instead of refusing it as foreign | The refusal comes before any effect, so no isolation is lost; the e2e case never changes a leg, and a redefinition while guests use the old VLAN needs its own drift and quiescence rule |
 | [B1313](#b1313) | new, 2026-11-10 (X376) | enabling | Architecture | Bootwright names its own license, which the bill of materials and the notices carry | An owner decision: no file of the repository declares one |
 | [B1314](#b1314) | new, 2026-11-10 (X376 review) | enabling | Architecture | A release recipe builds, refuses a build that is unchecked or lacks its notices, and ships both documents with the executable | No release recipe exists; `make build` already refuses a build without notices, but nothing releases |
-| [B1317](#b1317) | new, 2026-11-10 (X400 review) | enabling | Architecture | A default client whose binary names no Go module has its third-party dependencies judged | virtctl 1.9.1 is built so its build information holds only the toolchain; the gate judges its Go dependencies by its top-level module alone |
 | [B1316](#b1316) | new, 2026-11-10 (X370 review) | defect | Storage, with Secrets | A storage consumer or replication block names every Secret its binding pins | Safe as it stands: the hold walks the applied lineage, whose cluster and host blocks class those keys as effect material |
 | [B1326](#b1326) | new, 2026-11-10 (X402 review) | safety | Container cluster | A release read on the controller never reaches the source repository past a failing mirror | oc's `--icsp-file` strategy tries the source last, which no wrapper argument stops; only a live run shows it happening |
 
@@ -3569,23 +3568,6 @@ build refuses, or never makes, a release read from a source that the cluster's
 `oc` a configuration with no source alternate or by denying those hosts to the
 build's egress. **Exit evidence:** a test in which a mapped source is never
 dialled by the build, and the mirror row of [B1250](#b1250)'s profile.
-
-### B1317
-
-**Owner:** Architecture. **Kind:** enabling. **Requires:** none.
-**Definition:** Candidate, from the review of
-[X400](delivered.md#x400--client-binary-scan-and-scheduled-image-scan).
-`virtctl` 1.9.1's release is built so that its build information names the Go
-toolchain and no module, so the
-[vulnerability gate](../security.md#the-vulnerability-gate) judges its toolchain
-by symbols and its dependencies by its top-level module alone, and an
-advisory against a dependency it links, such as `golang.org/x/net`, goes
-unseen. **Outcome:** the gate judges the dependencies the release was built
-from, for instance the modules of the publisher's `go.mod` and `go.sum` at the
-release tag, pinned by digest like the release file, or a build of the tag
-whose binary names them. **Exit evidence:** a test in which a client whose
-binary names no module has its dependencies judged, and a gate run that names
-them.
 
 ### B1316
 
@@ -8226,8 +8208,8 @@ the owner's review:
     and are gone, because `k8s.io/kubernetes` is named at v1.37.2 and the
     binary links none of its symbols. `virtctl`'s release records no module, so
     it is also judged by its top-level module and keeps its eight exceptions,
-    and its third-party dependencies are not judged at all, parked as
-    [B1317](#b1317). The scan found thirty-six advisories in the newest stable
+    and its third-party dependencies were not judged until
+    [X405](delivered.md#x405--the-modules-a-release-was-built-from-judged). The scan found thirty-six advisories in the newest stable
     releases of helm, kubectl and virtctl, whose toolchains or modules predate
     the fixes (helm 4.3.1 on Go 1.27.2, kubectl 1.37.2 on Go 1.26.10 with
     golang.org/x/net 0.57.0, virtctl 1.9.1 on Go 1.26.4), and no release with a

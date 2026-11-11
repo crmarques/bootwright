@@ -817,8 +817,20 @@ about each, at the client's own release, from a table that maps govc's
 `github.com/vmware/govmomi` and kubectl's `k8s.io/` staging modules and refuses
 one it does not map. An executable that names no module beyond the toolchain,
 as `virtctl`'s release does, is also judged by its top-level Go module through
-OSV, and its third-party dependencies are not judged at all
-([B1317](milestones/backlog.md#b1317)). A scheduled job of
+OSV and by every module of the `go.mod` its release was built from: the gate
+downloads the publisher's `go.mod` at the release tag, keeps it in the same
+cache by the SHA-256 and size pinned in
+`scripts/tools/clientassets/buildmodules.json` (a release with no pin fails
+the gate, and `make tool-table` reads the publisher's file and fails on a
+pin that differs or names a release the table no longer defaults), applies its
+`replace` directives (a version-specific one outranks one for any version, a
+directory under the release's own tree is part of the release and is judged by
+the top-level module, and any other local path fails the gate) and asks OSV about each required module, direct or
+indirect, at its version. These findings are conservative: OSV judges a module
+at a version, not the symbols the executable links, and the `go.mod` holds the
+modules of every KubeVirt binary, so a finding for a module `virtctl` does not
+link still needs an exception, which says whether the release file holds a
+symbol of the affected package. A scheduled job of
 `.github/workflows/vulnerability.yml` scans each managed service's and the
 emulated BMC's image by the digest the bill of materials names, with a scanner
 pinned by tag and digest, and reports the high and critical findings of each
@@ -837,9 +849,7 @@ embeds the exceptions, which its bill of materials carries as VEX, and the
 build stamps the verdict `version` prints. `VULNCHECK=skip` builds without the
 databases and stamps the executable `unchecked`.
 
-Not yet met: the dependencies of a client whose binary names no module, which
-[B1317](milestones/backlog.md#b1317) owns, are not judged; the images in the
-mirror registry are not scanned, which
+Not yet met: the images in the mirror registry are not scanned, which
 [B1250](milestones/backlog.md#b1250)'s profile carries, and no release recipe
 refuses an executable stamped `unchecked`, which
 [B1314](milestones/backlog.md#b1314) owns.
