@@ -28,6 +28,8 @@ plugins/modules/infra_service_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/infrastructureservices_mirror_files_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/infrastructureservices_mirror_image.py validate-modules:missing-gplv3-license
 plugins/modules/infrastructureservices_mirror_images_protocol.py validate-modules:missing-gplv3-license
+plugins/modules/infrastructureservices_mirror_release.py validate-modules:missing-gplv3-license
+plugins/modules/infrastructureservices_mirror_release_protocol.py validate-modules:missing-gplv3-license
 plugins/modules/libvirt_domain_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/libvirt_host_inspect.py validate-modules:missing-gplv3-license
 plugins/modules/lifecycle_scratch.py validate-modules:missing-gplv3-license

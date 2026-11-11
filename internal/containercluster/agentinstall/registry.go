@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 )
 
 // RegistryMirror names only the credential binding and the host it authorizes.
@@ -19,32 +19,35 @@ type RegistryMirror struct {
 
 func registryMirror(catalog api.Catalog, cluster api.Object) (*RegistryMirror, error) {
 	selection := cluster.Spec().Get("install", "registries", "mirror")
-	environment, declared := managedservice.ImageMirror(catalog)
+	environment, declared := infrastructureservices.ImageMirrorOf(catalog)
 	if !selection.Present() && !declared {
 		return nil, nil
 	}
-	registry := environment
+	registry := environment.Registry
 	if selection.Present() {
 		found := false
 		if registry, found = catalog.Find(api.Registry, selection.Get("registryRef").Text()); !found {
 			return nil, refusal("api.reference", "the selected registry mirror is absent", "declare the Registry selected by "+cluster.Identity())
 		}
-		if declared && registry.Name() != environment.Name() {
-			return nil, refusal("api.invariant", "the cluster selects "+registry.Identity()+" as its registry mirror beside the Environment's image mirror "+environment.Identity(),
-				"select Registry "+environment.Name()+" in install.registries.mirror.registryRef on "+cluster.Identity()+", or remove install.registries.mirror")
+		if declared && registry.Name() != environment.Registry.Name() {
+			return nil, refusal("api.invariant", "the cluster selects "+registry.Identity()+" as its registry mirror beside the Environment's image mirror "+environment.Registry.Identity(),
+				"select Registry "+environment.Registry.Name()+" in install.registries.mirror.registryRef on "+cluster.Identity()+", or remove install.registries.mirror")
 		}
 	}
+	location, trust := registry.Spec().Get("url").Text(), registry.Spec().Get("trustBundleRef").Text()
 	if registry.Spec().Get("management").Text() != "external" {
-		remedy := "select an external Registry on " + cluster.Identity()
-		if !selection.Present() {
-			remedy = "select an external Registry in spec.mirror.registry.registryRef on the Environment"
+		if !declared {
+			return nil, refusal("lifecycle.unsupported", "a managed Registry is a cluster's mirror only as the Environment's image mirror, whose host copies the release",
+				"select an external Registry on "+cluster.Identity()+", or name "+registry.Identity()+" in spec.mirror.registry.registryRef on the Environment")
 		}
-		return nil, refusal("lifecycle.unsupported", "this executable installs through external registry mirrors only", remedy)
+		if reason, remedy := mirroredReleaseRefusal(cluster); reason != "" {
+			return nil, refusal("lifecycle.unsupported", reason, remedy)
+		}
+		location, trust = environment.Location, environment.TrustBundleRef
 	}
-	if trust := registry.Spec().Get("trustBundleRef").Text(); trust != "" && !slices.Contains(trustBundleRefs(catalog, cluster), trust) {
+	if trust != "" && !slices.Contains(trustBundleRefs(catalog, cluster), trust) {
 		return nil, refusal("api.invariant", "the registry mirror trust bundle is not selected by the cluster", "add Secret "+trust+" to install.additionalTrustBundleRefs on "+cluster.Identity())
 	}
-	location := registry.Spec().Get("url").Text()
 	if !strings.Contains(location, "://") {
 		location = "https://" + location
 	}
@@ -66,10 +69,41 @@ func registryMirror(catalog api.Catalog, cluster api.Object) (*RegistryMirror, e
 	return mirror, nil
 }
 
+func mirroredReleaseRefusal(cluster api.Object) (reason, remediation string) {
+	image := cluster.Spec().Get("distribution", "release", "image").Text()
+	if image == "" {
+		return "", ""
+	}
+	repository, digest, _ := strings.Cut(image, "@")
+	tag := ""
+	if index := strings.LastIndex(repository, ":"); index > strings.LastIndex(repository, "/") {
+		repository, tag = repository[:index], repository[index+1:]
+	}
+	if repository != infrastructureservices.OpenShiftReleaseRepository {
+		return "the image mirror's host copies a release only from " + infrastructureservices.OpenShiftReleaseRepository,
+			"pin spec.distribution.release.image on " + cluster.Identity() + " in " + infrastructureservices.OpenShiftReleaseRepository + ", or remove it"
+	}
+	if (digest == "" || tag != "") && tag != cluster.Spec().Get("distribution", "release", "version").Text()+"-x86_64" {
+		return "the image mirror's host copies a release by its digest or by its version's x86_64 tag alone",
+			"pin spec.distribution.release.image on " + cluster.Identity() + " by digest with no other tag, or remove it"
+	}
+	return "", ""
+}
+
+func MirroredRelease(catalog api.Catalog, cluster api.Object) (digest string, ok bool) {
+	mirror, err := registryMirror(catalog, cluster)
+	environment, declared := infrastructureservices.ImageMirrorOf(catalog)
+	if err != nil || mirror == nil || !declared || !environment.Managed || cluster.Spec().Get("distribution", "type").Text() != "openshift" {
+		return "", false
+	}
+	_, digest, _ = strings.Cut(cluster.Spec().Get("distribution", "release", "image").Text(), "@")
+	return digest, true
+}
+
 func trustBundleRefs(catalog api.Catalog, cluster api.Object) []string {
 	references := cluster.Spec().Get("install", "additionalTrustBundleRefs").Strings()
-	if registry, declared := managedservice.ImageMirror(catalog); declared {
-		if trust := registry.Spec().Get("trustBundleRef").Text(); trust != "" && !slices.Contains(references, trust) {
+	if mirror, declared := infrastructureservices.ImageMirrorOf(catalog); declared {
+		if trust := mirror.TrustBundleRef; trust != "" && !slices.Contains(references, trust) {
 			references = append(slices.Clone(references), trust)
 		}
 	}
@@ -78,7 +112,7 @@ func trustBundleRefs(catalog api.Catalog, cluster api.Object) []string {
 
 var releaseRepositories = map[string][]string{
 	"okd":       {"quay.io/okd/scos-content", "quay.io/okd/scos-release"},
-	"openshift": {"quay.io/openshift-release-dev/ocp-release", "quay.io/openshift-release-dev/ocp-v4.0-art-dev"},
+	"openshift": {infrastructureservices.OpenShiftReleaseRepository, infrastructureservices.OpenShiftComponentRepository},
 }
 
 func ImageDigestSources(catalog api.Catalog, cluster api.Object) []any {
@@ -88,11 +122,11 @@ func ImageDigestSources(catalog api.Catalog, cluster api.Object) []any {
 		authored = append(authored, source.Get("source").Text())
 		sources = append(sources, nativeValue(source))
 	}
-	registry, declared := managedservice.ImageMirror(catalog)
+	mirror, declared := infrastructureservices.ImageMirrorOf(catalog)
 	if !declared {
 		return sources
 	}
-	location := strings.TrimRight(registry.Spec().Get("url").Text(), "/")
+	location := strings.TrimRight(mirror.Location, "/")
 	distribution := cluster.Spec().Get("distribution", "type").Text()
 	if distribution != "okd" {
 		distribution = "openshift"

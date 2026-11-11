@@ -1,0 +1,63 @@
+implementation: mirror-release-v1
+content-digest: 89a5d0852835510f616ddcae6a812a292bfa70e2a031fdccfef5fdb8b6340610
+request-version: mirror-release-v1
+automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  none
+request-identity:
+  identity.context
+  identity.cluster
+  identity.registry
+  mirror.host
+  release.repository
+  release.components
+  release.tag
+  placement.machine
+request-schema:
+  client struct mirrorfill.ReleaseClient
+  client.checksums string
+  client.file string
+  client.url string
+  egress struct managedservice.Egress
+  egress.httpProxy string omitempty
+  egress.httpsProxy string omitempty
+  egress.noProxy []string
+  identity struct mirrorfill.ReleaseIdentity
+  identity.cluster string
+  identity.context string
+  identity.environment string
+  identity.registry string
+  mirror struct managedservice.ImageSource
+  mirror.credentialsRef string omitempty
+  mirror.credentialsType string omitempty
+  mirror.host string
+  mirror.trustBundleRef string omitempty
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  pullSecretRef string
+  release struct mirrorfill.ReleaseImage
+  release.components string
+  release.digest string omitempty
+  release.repository string
+  release.tag string
+  release.version string
+  version string
+evidence-schema:
+  absent bool
+  components []struct mirrorfill.ComponentEvidence
+  components[].digest string
+  components[].name string
+  digest string
+  missing int
+  postcondition bool
+  request string
+  version string

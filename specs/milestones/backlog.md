@@ -294,7 +294,7 @@ Alias cell.
 | [B1237](#b1237) | new, 2026-11-09 (D248 (5)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's default image comes from a Red Hat registry wherever Red Hat publishes one | Red Hat publishes no dnsmasq, chrony or sushy-tools image, and its squid image needs a `registry.redhat.io` login no managed-service pull carries |
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
 | [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355, X361 and X401 on 2026-11-10 | product | Controller, with Desired state | A managed artifact server may serve the artifact mirror, and one declaration replaces the download mirrors | The declaration (X355), the preflight probe and the private trust anchor (X361) and a managed server on an SSH Machine (X401) landed; folding `spec.downloads` awaits the owner (D251 (5)) |
-| [B1249](#b1249) | new, 2026-11-10 (D250 (8)); partly delivered by X401 on 2026-11-10 and X408 and X407 on 2026-11-11 | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | X401 built and fills a managed artifact mirror on an SSH Machine, X408 split the controller stage around one on the controller and X407 built and fills a managed image mirror beside it; X409 placed the artifact mirror on a Machine Bootwright installs; releases, `skopeo` on the controller and an image mirror on an installed Machine remain, which D251 (6) authorizes slice by slice |
+| [B1249](#b1249) | new, 2026-11-10 (D250 (8)); partly delivered by X401 on 2026-11-10 and X408, X407, X409 and X430 on 2026-11-11 | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | X401 built and fills a managed artifact mirror on an SSH Machine, X408 split the controller stage around one on the controller and X407 built and fills a managed image mirror beside it; X409 placed the artifact mirror on a Machine Bootwright installs and X430 copies a cluster's release into the image mirror; `skopeo` on the controller and an image mirror on an installed Machine remain, which D251 (6) authorizes slice by slice |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
 | [B1300](#b1300) | new, 2026-11-10 (X363) | product | CLI | The acquisition list names `cp.icr.io`'s blob delivery host | The list landed (X363); the host answers only an entitled client, which this session could not use |
 | [B1301](#b1301) | new, 2026-11-10 (X363 review) | product | Controller, with Infrastructure services and Container clusters | A vendor registry's delivery hosts are admitted as fetch-only exceptions, or vendor images get a mirror route | A controlled network that denies public origins breaks a vendor image pull today; the owner decides how |
@@ -307,6 +307,8 @@ Alias cell.
 | [B1315](#b1315) | new, 2026-11-10 (X395 verification review) | defect | Substrate | A tagged managed Network whose `vlan` or trunk `bridge` changes redefines its own leg instead of refusing it as foreign | The refusal comes before any effect, so no isolation is lost; the e2e case never changes a leg, and a redefinition while guests use the old VLAN needs its own drift and quiescence rule |
 | [B1313](#b1313) | new, 2026-11-10 (X376) | enabling | Architecture | Bootwright names its own license, which the bill of materials and the notices carry | An owner decision: no file of the repository declares one |
 | [B1328](#b1328) | new, 2026-11-10 (X410 review) | defect | Storage | A pool no applied object declares raises no placement group check that keeps every Ceph block from ready | outside D256's pool and filesystem scope; needs a bounded mapping from a PG ID to its pool |
+| [B1336](#b1336) | new, 2026-11-11 (X430) | defect | Infrastructure services | The acquisition list names the registry delivery hosts the image mirror's host reads its images through | `mirror image` rows carry no registry hosts beside them, though the host's `skopeo` reads each origin's token and blob hosts |
+| [B1339](#b1339) | new, 2026-11-12 (X430 gate) | defect | Architecture | `make race` finishes the composition package within its test timeout | Under `-race` `cmd/bootwright` took 519 s alone and passed 10 minutes inside `make race`, which runs it with the default timeout |
 | [B1326](#b1326) | new, 2026-11-10 (X402 review) | safety | Container cluster | A release read on the controller never reaches the source repository past a failing mirror | oc's `--icsp-file` strategy tries the source last, which no wrapper argument stops; only a live run shows it happening |
 | [B1319](#b1319) | new, 2026-11-10 (X401) | safety | Infrastructure services | A managed Registry's consumers pull with a credential that cannot push | Distribution's password file holds one user that both pushes and pulls; a pull-only one needs token authentication or a front end |
 | [B1320](#b1320) | new, 2026-11-10 (X401) | product | Container cluster, with Add-ons | Operator catalogs and an add-on's images reach the image mirror | A catalog's contents are left to the cluster's mirror tooling today |
@@ -3352,12 +3354,16 @@ consumers pull, copied by digest and read back, the mirror host's own
 services exempt, each consumer off the mirror host requiring the Registry and
 its fill, and `skopeo` proved on the host
 ([X407](delivered.md#x407--a-managed-image-mirror-on-the-mirror-host)).
+**Delivered in-tree by X430** ([D251](#d251) (36) to (40)): part (b), the
+managed image mirror as a cluster's registry mirror and
+`mirror-release-<cluster>`, which copies the cluster's release into it with
+the release's own verified `oc` (`--to` the `ocp-v4.0-art-dev` repository and
+`--to-release-image` the `ocp-release` one), lent a two-entry auth document
+in a private scratch removed in an `always`, and proves every component there
+before the cluster's image build
+([X430](delivered.md#x430--openshift-releases-copied-into-the-managed-image-mirror)).
 **Remaining**, from the session's plan of 2026-11-10, each slice through its
-own review: (b) an OpenShift release into
-that Registry by the release's own `oc` (`--to` the `ocp-v4.0-art-dev`
-repository and `--to-release-image` the `ocp-release` one), its pull secret
-lent per attempt as a two-entry auth document with a private `HOME`, removed
-in an `always`, and the cluster's registry mirror refusal lifted; (c) `skopeo` a
+own review: (c) `skopeo` a
 stage package so the image mirror may sit on the controller, whose plan
 refuses it until then ([D251](#d251) (30)); (d) a managed image mirror on a
 Bootwright-installed Machine, whose image fill takes the SSH arm and which
@@ -3369,8 +3375,8 @@ installation's evidence, and the `lab-sno-installed-mirror-host` example as
 ([X409](delivered.md#x409--a-managed-artifact-mirror-on-a-machine-bootwright-installs)).
 **Exit evidence:** the plan-order, replay and verification tests for the SSH
 placement landed with X401, the controller placement's order with X408, the
-image tests with X407 and the installed placement's order with X409; the
-release tests remain.
+image tests with X407, the installed placement's order with X409 and the
+release tests with X430.
 
 ### B1250
 
@@ -3583,6 +3589,34 @@ and the same fail-closed rules. **Exit evidence:** unit tests that a PG check
 on an undeclared pool's PGs leaves every block ready, one on a declared pool's
 PGs marks exactly its holders not ready, and an unmapped PG ID gates every
 block.
+
+### B1336
+
+**Owner:** Infrastructure services. **Kind:** defect. **Requires:** none.
+**Definition:** Candidate, found while delivering
+[X430](delivered.md#x430--openshift-releases-copied-into-the-managed-image-mirror).
+`render acquisitions` adds a registry's token and blob delivery hosts beside
+each row whose kind `imagePullKinds` names; X430 added its `mirror release`
+rows, but the image fill's `mirror image` rows were never named, so the
+mirror host's reads of `docker.io` and `quay.io` delivery hosts are missing
+from the list a controlled network is built from. **Outcome:** each `mirror
+image` row carries its registry's delivery hosts on the mirror host.
+**Exit evidence:** an acquisition test over the `lab-rhel-mirror-host`
+example naming `production.cloudfront.docker.com` and `cdn.quay.io` on
+`mirror`, with the example goldens updated.
+
+### B1339
+
+**Owner:** Architecture. **Kind:** defect. **Requires:** none.
+**Definition:** Candidate, from X430's gates. `make race` runs
+`go test -race` over `cmd/bootwright` with the default 10-minute timeout,
+and that package now takes about 9 minutes alone under `-race` on this
+host (519 s, no data race) as the examples it plans grow, so the target
+times out while other packages share the host. **Outcome:** `make race`
+passes on a clean host without a manual rerun, by giving the composition
+package an explicit `-timeout`, or by splitting its slowest example tests.
+**Exit evidence:** `make race` on an idle host passes, and the timeout or
+split is recorded in docs/development.md.
 
 ### B1319
 
@@ -8569,6 +8603,61 @@ the owner's review:
     published on the controller. These rows live in the managed-service
     refusal table, whose capabilities refuse them, because the Environment
     table's leaf was at its budget.
+
+Clauses (34) and (35) are unused: X430 took (36) onward while X409, which took (31) to (33), was in flight beside it.
+
+36. Taken by the session for B1249 (X430), pending the owner's review: a
+    managed Registry is a cluster's registry mirror only as the Environment's
+    image mirror, whose host copies the release; its host is the
+    `<address>:<port>` `infrastructureservices.ImageMirrorOf` derives, its trust
+    the anchor that derivation names, and its `credentialsRef` the pull
+    secret's entry, so no request shape moves. Under it a cluster's release
+    image may only be quay.io's `ocp-release`, pinned by digest or by the tag
+    `<version>-x86_64`, because the copy and the cluster's
+    `imageDigestSources` map that repository and `ocp-v4.0-art-dev` alone and
+    the installer reads the release its version names; another repository or
+    another tag refuses.
+37. Taken by the session for B1249 (X430): the copy is one block per cluster,
+    `mirror-release-<cluster>` of the `mirror-fill` family, keyed
+    `OpenShiftCluster`/`<cluster>` rather than by the Registry, so a consumer
+    that requires the Registry never waits for a release; it requires the
+    Registry's own block, holds the Registry's push exclusively, and only the
+    cluster's image build requires it, since the installation already waits
+    for that build, in place of the plan's requirement from both. The copy
+    pushes with `oc adm release mirror --to=<location>/<ocp-v4.0-art-dev>
+    --to-release-image=<location>/<ocp-release>:<tag>` and never `--insecure`.
+38. Taken by the session for B1249 (X430): the copy's proof and replay are a
+    read of the mirror in Python rather than oc's report: the release manifest
+    at the pin or tag, the `release-manifests/image-references` file of the
+    release's own layers in the Registry, and each component's manifest by
+    digest, so a replay downloads no client and runs nothing, and a component
+    the mirror lacks after the copy refuses with `lifecycle.state`. Each layer
+    read is bounded in bytes, headers and time and must hash to its digest. A
+    damaged copy found by the first read, a layer missing or no readable image
+    references, is copied over rather than refused. The evidence names the
+    release digest, each component by name and digest, and how many are
+    missing; the removal takes nothing back, as the image fill's.
+39. Taken by the session for B1249 (X430): the copy's `oc` is the
+    `openshift-client-linux-<version>.tar.gz` the controller stage reads for
+    that release, from its download mirror when one is declared, checked on
+    the mirror host against the publisher's own `sha256sum.txt` on
+    `mirror.openshift.com` before `oc` alone is extracted, and kept for that
+    run only. FIPS mode on the mirror host is not distinguished; the static
+    client's behaviour there is left to the live run.
+40. Taken by the session for B1249 (X430): the pull secret's custody is the
+    plan's, refined: the controller derives per attempt an auth document of
+    exactly two entries, the `auth` token of the pull secret's `quay.io` entry
+    (its other members dropped) and the Registry's credential for its own
+    location, lends it as material under a name no Secret has, and clears it
+    when the run returns; the copy writes it `0600` into the run's private
+    `mirror-release` scratch, beside the anchor, the client and private
+    `HOME`, XDG and `DOCKER_CONFIG` locations, while the document and the
+    anchor go to a private directory on tmpfs beneath `/run`, so a copy killed
+    before its `always` leaves no credential on the host's disk; the next copy
+    on that host removes another run's copy scratch and lent directory older
+    than seven hours, past any run's deadline. The scratch is the runner's,
+    through `lifecycle_scratch`, because a role names no fixed scratch path. A
+    pull secret with no `quay.io` token refuses before any run.
 
 ### D252
 

@@ -327,6 +327,22 @@ lab-sno-ordered:
   ntp-lab-ntp
   proxy-lab-proxy
   substrate-host-lab-libvirt
+lab-sno-release-mirror:
+  artifact-server-lab-artifacts
+  artifact-server-mirror-artifacts
+  cluster-install-sno
+  cluster-media-sno
+  controller-mirrored-clients
+  controller-prerequisites
+  dns-lab-dns
+  machine-sno-01
+  mirror-files-lab-sno-release-mirror
+  mirror-images-lab-sno-release-mirror
+  mirror-release-sno
+  ntp-lab-ntp
+  proxy-lab-proxy
+  registry-mirror-registry
+  substrate-host-lab-libvirt
 libvirt-2x4-nodes-ceph-multisite:
   artifact-server-lab-artifacts
   ceph-cluster-primary

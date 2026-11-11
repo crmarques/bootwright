@@ -325,3 +325,43 @@ func TestAnInstalledMirrorHostPlansThroughTheLifecycleService(t *testing.T) {
 		t.Fatalf("the plan does not preview the installation, the mirror's server and its fill between the stage's blocks:\n%s", out)
 	}
 }
+
+// A cluster under a managed image mirror installs from the release the mirror
+// host copies: the copy waits for the Registry and both controller blocks,
+// never precedes the controller stage, and the cluster's image build waits for
+// it, its installation after that build, through this build's own
+// capabilities and the engine's ordering, with no cycle.
+func TestAClusterUnderAManagedImageMirrorWaitsForItsReleaseCopy(t *testing.T) {
+	const name = "lab-sno-release-mirror"
+	_, waits := mirrorOrder(t, name, exampleDirectory(t, name))
+	const registry, release = "registry-mirror-registry", "mirror-release-sno"
+	for _, want := range []string{registry, "controller-prerequisites", "controller-mirrored-clients"} {
+		if !slices.Contains(waits[release], want) {
+			t.Fatalf("the release copy waits %v, not for %s", waits[release], want)
+		}
+	}
+	if slices.Contains(waits[release], "mirror-images-"+name) || slices.Contains(waits[release], "cluster-media-sno") {
+		t.Fatalf("the release copy waits for %v", waits[release])
+	}
+	if !slices.Contains(waits["cluster-media-sno"], release) || !slices.Contains(waits["cluster-install-sno"], "cluster-media-sno") {
+		t.Errorf("the image build waits %v and the installation %v", waits["cluster-media-sno"], waits["cluster-install-sno"])
+	}
+	for id, waited := range waits {
+		if strings.HasPrefix(id, "controller-") && slices.Contains(waited, release) {
+			t.Fatalf("controller block %s waits for the release copy", id)
+		}
+	}
+}
+
+// The example planned through the whole lifecycle service, with its
+// unsupported-shape checks, claims and host checks, previews the Registry,
+// the release copy and the cluster's image build in that order.
+func TestAReleaseMirrorExamplePlansThroughTheLifecycleService(t *testing.T) {
+	const name = "lab-sno-release-mirror"
+	services, _ := productionExampleContext(t, name, name)
+	out, _ := contextRun(t, services, 0, "plan", "--context", name, "--output", "json")
+	registry, release, media := strings.Index(out, `"registry-mirror-registry"`), strings.Index(out, `"mirror-release-sno"`), strings.Index(out, `"cluster-media-sno"`)
+	if registry < 0 || release < 0 || media < 0 || !(registry < release && release < media) {
+		t.Fatalf("the plan does not preview the Registry, the release copy and the cluster's image build in that order:\n%s", out)
+	}
+}

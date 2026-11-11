@@ -1,0 +1,20 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: lab-sno-release-mirror
+
+spec:
+  domains:
+    base: lab.example.test
+
+  mirror:
+    artifacts:
+      serverRef: mirror-artifacts
+      endpointRef: ip
+
+    registry:
+      registryRef: mirror-registry
+      endpointRef: ip
+
+  controller:
+    machineRef: controller

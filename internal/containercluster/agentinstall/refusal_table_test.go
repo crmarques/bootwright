@@ -108,6 +108,13 @@ func TestOpenShiftClusterRefusalTableMatchesUnsupported(t *testing.T) {
 			return spec.With("distribution", api.MapValue(text("type", "openshift"),
 				field("release", api.MapValue(text("image", "quay.io/openshift/release:4.21.15")))))
 		}), "OpenShiftCluster/sno", onSNOCluster},
+		"A managed Registry mirror outside the image mirror": {managedSelection(), "OpenShiftCluster/sno", map[string]string{"<cluster>": "OpenShiftCluster/sno", "<registry>": "Registry/mirror"}},
+		"A release image outside the release repository under a managed image mirror": {
+			underTheManagedImageMirror(singleNodeCatalog(), "quay.io/example/release@sha256:"+strings.Repeat("ab", 32)), "OpenShiftCluster/sno", onSNOCluster,
+		},
+		"A release image by another tag under a managed image mirror": {
+			underTheManagedImageMirror(singleNodeCatalog(), "quay.io/openshift-release-dev/ocp-release:4.21.14-x86_64"), "OpenShiftCluster/sno", onSNOCluster,
+		},
 		"A disconnected cluster": {sno(func(spec api.Value) api.Value {
 			return spec.WithPath(api.StringValue("disconnected"), "install", "mode")
 		}), "OpenShiftCluster/sno", onSNOCluster},
@@ -231,4 +238,19 @@ func expand(text string, values map[string]string) string {
 		text = strings.ReplaceAll(text, placeholder, value)
 	}
 	return text
+}
+
+// managedSelection is a cluster that selects a managed Registry as its mirror
+// while the Environment names no image mirror.
+func managedSelection() api.Catalog {
+	objects := underTheManagedImageMirror(singleNodeCatalog(), "").Objects()
+	for i, object := range objects {
+		switch object.Kind() {
+		case api.Environment:
+			objects[i] = object.WithSpec(object.Spec().Without("mirror"))
+		case api.OpenShiftCluster:
+			objects[i] = object.WithSpec(object.Spec().WithPath(api.MapValue(field("mirror", api.MapValue(text("registryRef", "mirror")))), "install", "registries"))
+		}
+	}
+	return api.NewCatalog(objects)
 }

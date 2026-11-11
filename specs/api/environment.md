@@ -480,17 +480,16 @@ directory the pull removes after it, never through an insecure-registry
 setting or the host's registry configuration. A host already holding the
 mirrored reference pulls nothing; one holding only the origin's copy pulls the
 same digest once from the mirror. A pull the mirror cannot serve fails naming
-the reference. A cluster's release repositories map to an external mirror
+the reference. A cluster's release repositories map to the mirror, and a managed mirror's
+host copies each such cluster's release into it
 ([registry mirrors](../openshift-clusters.md#installation-features)). A
 managed image mirror's placement refuses at plan as its
 [refusal table](#refusal-table) rows say. `bootwright render acquisitions`
 names each mirrored reference and, for a managed mirror, each image the mirror
 host copies from its origin.
 
-Not yet met: a container cluster under a managed image mirror refuses until the
-mirror host copies its release, and the mirror host may be the controller or a
-Machine Bootwright installs; tracked as
-[B1249](../milestones/backlog.md#b1249).
+Not yet met: the mirror host may be the controller or a Machine Bootwright
+installs; tracked as [B1249](../milestones/backlog.md#b1249).
 
 ## Controller Machine
 

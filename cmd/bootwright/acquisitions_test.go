@@ -300,3 +300,46 @@ func TestAMirroredImageNamedByTagAndDigestIsCopiedByItsDigest(t *testing.T) {
 		t.Fatalf("images = %+v (%v)", images, err)
 	}
 }
+
+// A cluster under a managed image mirror reads both release repositories from
+// the mirror alone, while the mirror host reads them from quay.io with its
+// CDN, and the release's own oc and its publisher's checksum list from the
+// source the controller stage reads that client from.
+func TestAReleaseCopiedIntoAManagedImageMirrorIsReadFromQuayOnItsHostAlone(t *testing.T) {
+	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-sno-release-mirror"))
+	acquired, err := listAcquisitions(state.Effective())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, repository := range openShiftReleaseRepositories {
+		copied := slices.IndexFunc(acquired, func(item cli.Acquisition) bool { return item.Kind == "mirror release" && item.Artifact == repository })
+		if copied < 0 || acquired[copied].Class != acquisition.ClassPublic || !slices.Equal(acquired[copied].Machines, []string{"mirror"}) ||
+			acquired[copied].Consumer != "OpenShiftCluster/sno" || acquired[copied].Version != "4.21.15" {
+			t.Errorf("the mirror host copies %s as %+v", repository, acquired)
+		}
+		if slices.ContainsFunc(acquired, func(item cli.Acquisition) bool { return item.Kind == "release" && item.Artifact == repository }) {
+			t.Errorf("the cluster still reads %s from its origin", repository)
+		}
+		if !slices.ContainsFunc(acquired, func(item cli.Acquisition) bool {
+			return item.Kind == "release mirror" && item.Artifact == repository && item.Origin == "203.0.113.20:5000/"+repository
+		}) {
+			t.Errorf("the cluster reads %s from no managed mirror", repository)
+		}
+	}
+	for kind, origin := range map[string]string{
+		"mirror release client":           "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.21.15/openshift-client-linux-4.21.15.tar.gz",
+		"mirror release client checksums": "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.21.15/sha256sum.txt",
+		"mirror release signatures":       "https://storage.googleapis.com/openshift-release/official/signatures/openshift/release",
+	} {
+		if !slices.ContainsFunc(acquired, func(item cli.Acquisition) bool {
+			return item.Kind == kind && item.Origin == origin && slices.Equal(item.Machines, []string{"mirror"})
+		}) {
+			t.Errorf("the mirror host reads no %s from %s", kind, origin)
+		}
+	}
+	if !slices.ContainsFunc(acquired, func(item cli.Acquisition) bool {
+		return item.Kind == "registry blob host" && item.Artifact == "cdn.quay.io" && slices.Contains(item.Machines, "mirror")
+	}) {
+		t.Error("the mirror host's quay.io delivery hosts are not listed")
+	}
+}

@@ -1,0 +1,13 @@
+---
+- name: Observe one cluster's release in the managed image mirror
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute the release copy observe capability
+      ansible.builtin.import_role:
+        name: bootwright.core.infrastructureservices_mirror_release
+        tasks_from: observe

@@ -7,7 +7,12 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 )
 
-const MirrorPath = "mirror"
+const (
+	MirrorPath                   = "mirror"
+	MirrorFillFamily             = "mirror-fill"
+	OpenShiftReleaseRepository   = "quay.io/openshift-release-dev/ocp-release"
+	OpenShiftComponentRepository = "quay.io/openshift-release-dev/ocp-v4.0-art-dev"
+)
 
 type ArtifactMirror struct {
 	URL            string

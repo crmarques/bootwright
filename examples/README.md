@@ -32,6 +32,7 @@ names the case that runs its scenario, if any.
 | `openshift-clusters/` | [lab-sno](openshift-clusters/lab-sno/README.md) | Install single-node OpenShift on a libvirt guest. |
 | `openshift-clusters/` | [lab-sno-installed-mirror-host](openshift-clusters/lab-sno-installed-mirror-host/README.md) | Prepare single-node OpenShift whose controller clients come from a managed artifact mirror on a libvirt guest Bootwright installs first. |
 | `openshift-clusters/` | [lab-sno-mirror-host](openshift-clusters/lab-sno-mirror-host/README.md) | Prepare single-node OpenShift whose controller clients come from a managed artifact mirror on an SSH Machine. |
+| `openshift-clusters/` | [lab-sno-release-mirror](openshift-clusters/lab-sno-release-mirror/README.md) | Prepare single-node OpenShift whose release a managed image mirror on an SSH Machine copies before the cluster is built. |
 | `openshift-clusters/` | [lab-compact](openshift-clusters/lab-compact/README.md) | Install compact OpenShift on three libvirt masters with installer-owned virtual IPs. |
 | `openshift-clusters/` | [lab-anysize](openshift-clusters/lab-anysize/README.md) | Prepare the bonded ten-node OpenShift acceptance topology. |
 | `openshift-clusters/` | [lab-features](openshift-clusters/lab-features/README.md) | Prepare TPM2 encryption, proxy and external mirror acceptance. |

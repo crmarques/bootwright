@@ -1,0 +1,323 @@
+[
+  {
+    "case": "loaded",
+    "records": [
+      [
+        {
+          "phase": "loaded"
+        },
+        true
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "group running",
+    "records": [
+      [
+        {
+          "phase": "group",
+          "group": "Network",
+          "status": "running"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "group ok",
+    "records": [
+      [
+        {
+          "phase": "group",
+          "group": "Network",
+          "status": "ok"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "group failed",
+    "records": [
+      [
+        {
+          "phase": "group",
+          "group": "Network",
+          "status": "failed"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "group skipped",
+    "records": [
+      [
+        {
+          "phase": "group",
+          "group": "Network",
+          "status": "skipped"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "unknown phase",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "unsupported mirror-release protocol phase"
+    }
+  },
+  {
+    "case": "bad status",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the release copy result could not be published"
+    }
+  },
+  {
+    "case": "bad outcome",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the release copy result could not be published"
+    }
+  },
+  {
+    "case": "refused client-unreachable",
+    "records": [
+      [
+        {
+          "phase": "refused",
+          "reason": "client-unreachable"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "refused client-digest-mismatch",
+    "records": [
+      [
+        {
+          "phase": "refused",
+          "reason": "client-digest-mismatch"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "refused release-unreachable",
+    "records": [
+      [
+        {
+          "phase": "refused",
+          "reason": "release-unreachable"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "refused release-incomplete",
+    "records": [
+      [
+        {
+          "phase": "refused",
+          "reason": "release-incomplete"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "refused release-digest-mismatch",
+    "records": [
+      [
+        {
+          "phase": "refused",
+          "reason": "release-digest-mismatch"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "refused mirror-unreadable",
+    "records": [
+      [
+        {
+          "phase": "refused",
+          "reason": "mirror-unreadable"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "refused unnamed",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the release copy result could not be published"
+    }
+  },
+  {
+    "case": "completed proving",
+    "records": [
+      [
+        {
+          "phase": "completed",
+          "outcome": "changed",
+          "evidence": {
+            "absent": false,
+            "components": [
+              {
+                "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "name": "cli"
+              }
+            ],
+            "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "missing": 0,
+            "postcondition": true,
+            "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "version": "mirror-release-evidence-v1"
+          }
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "completed unproving",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the release copy did not reach its postcondition; not proved: digest, components, missing"
+    }
+  },
+  {
+    "case": "completed unproving observed",
+    "records": [
+      [
+        {
+          "phase": "completed",
+          "outcome": "changed",
+          "evidence": {
+            "absent": false,
+            "components": [
+              {
+                "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                "name": "cli"
+              }
+            ],
+            "digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "missing": 3,
+            "postcondition": false,
+            "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "version": "mirror-release-evidence-v1"
+          }
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "removal",
+    "records": [
+      [
+        {
+          "phase": "completed",
+          "outcome": "changed",
+          "evidence": {
+            "absent": true,
+            "components": [],
+            "digest": "",
+            "missing": 0,
+            "postcondition": true,
+            "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "version": "mirror-release-evidence-v1"
+          }
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "removal still present",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the release copy did not reach its postcondition; not proved: digest, components, missing"
+    }
+  },
+  {
+    "case": "malformed",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the release copy result could not be published"
+    }
+  },
+  {
+    "case": "channel refused",
+    "records": [
+      [
+        {
+          "phase": "loaded"
+        },
+        true
+      ]
+    ],
+    "result": {
+      "failed": true,
+      "msg": "the release copy result could not be published"
+    }
+  }
+]

@@ -7,6 +7,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
 func mirrorCatalog(credentialType string, trust bool) api.Catalog {
@@ -142,5 +143,97 @@ func TestABroaderAuthoredSourceKeepsTheReleaseRepositoriesItMaps(t *testing.T) {
 	}
 	if !NeverContacted(catalog, cluster, "quay.io/openshift-release-dev/ocp-v4.0-art-dev") || NeverContacted(catalog, cluster, "quay.io/openshift-release-devx/ocp") {
 		t.Fatal("the never-contacted test does not respect path boundaries")
+	}
+}
+
+// underTheManagedImageMirror places the Environment's image mirror on a
+// managed Registry of an SSH Machine, its anchor the issuer of its serving
+// certificate, and gives the cluster an authored release image.
+func underTheManagedImageMirror(catalog api.Catalog, image string) api.Catalog {
+	objects := catalog.Objects()
+	for i, object := range objects {
+		switch object.Kind() {
+		case api.Environment:
+			objects[i] = object.WithSpec(object.Spec().With("mirror", api.MapValue(field("registry", api.MapValue(text("registryRef", "mirror"), text("endpointRef", "ip"))))))
+		case api.OpenShiftCluster:
+			if image != "" {
+				objects[i] = object.WithSpec(object.Spec().WithPath(api.StringValue(image), "distribution", "release", "image"))
+			}
+		}
+	}
+	return api.NewCatalog(append(objects,
+		api.NewObject(api.Machine, "mirror", api.Value{}, api.MapValue(
+			field("network", api.MapValue(field("addresses", api.ListValue(api.MapValue(text("name", "ip"), text("address", "203.0.113.20")))))),
+			field("access", api.MapValue(field("ssh", api.MapValue(text("addressRef", "ip"), text("knownHostsRef", "mirror-known-hosts"),
+				field("auth", api.MapValue(text("privateKeyRef", "mirror-access-key"))))))))),
+		api.NewObject(api.Registry, "mirror", api.Value{}, api.MapValue(text("management", "managed"), text("machineRef", "mirror"),
+			field("port", api.IntegerValue("5000")), field("tls", api.MapValue(text("secretRef", "mirror-tls"))), text("credentialsRef", "mirror-credentials"),
+			field("endpoints", api.ListValue(api.MapValue(text("name", "ip"), text("addressRef", "ip")))))),
+		api.NewObject(api.Secret, "mirror-credentials", api.Value{}, api.MapValue(text("type", "usernamePassword"))),
+		api.NewObject(api.Secret, "mirror-ca", api.Value{}, api.MapValue(text("type", "caBundle"))),
+		api.NewObject(api.Secret, "mirror-tls", api.Value{}, api.MapValue(text("type", "tlsCertificate"),
+			field("source", api.MapValue(field("generated", api.MapValue(text("issuerRef", "mirror-ca")))))))))
+}
+
+// A managed Registry that is the Environment's image mirror is the cluster's
+// mirror: its credential joins the pull secret for its endpoint, the issuer
+// of its certificate joins the cluster's trust, both release repositories map
+// beneath it, and the image build waits for the release its host copies, the
+// installation after it, while the request shapes stay those an external
+// mirror freezes.
+func TestTheManagedImageMirrorIsTheClustersMirrorOnceItsHostCopiesTheRelease(t *testing.T) {
+	catalog := underTheManagedImageMirror(singleNodeCatalog(), "")
+	media, _, needs := onlyRequests(t, catalog)
+	if media.RegistryMirror == nil || *media.RegistryMirror != (RegistryMirror{CredentialsRef: "mirror-credentials", CredentialsType: "usernamePassword", Host: "203.0.113.20:5000"}) {
+		t.Fatalf("mirror = %+v", media.RegistryMirror)
+	}
+	if !slices.Contains(media.TrustBundleRefs, "mirror-ca") {
+		t.Fatalf("trust = %v", media.TrustBundleRefs)
+	}
+	for index, source := range ImageDigestSources(catalog, clusterOf(t, catalog)) {
+		entry := source.(map[string]any)
+		if entry["mirrors"].([]any)[0] != "203.0.113.20:5000/"+releaseRepositories["openshift"][index] || entry["sourcePolicy"] != "NeverContactSource" {
+			t.Fatalf("source %d = %v", index, entry)
+		}
+	}
+	want := reconciliation.ObjectRef{Kind: "OpenShiftCluster", Object: "sno", Family: "mirror-fill"}
+	if needs.MirroredRelease != "sno" || !slices.Contains(mediaRequires(needs), want) || slices.Contains(installRequires(needs), want) {
+		t.Fatalf("requirements = %+v", needs)
+	}
+	if digest, managed := MirroredRelease(catalog, clusterOf(t, catalog)); !managed || digest != "" {
+		t.Fatalf("mirrored release = %q, %v", digest, managed)
+	}
+	pinned := "sha256:" + strings.Repeat("ab", 32)
+	for _, image := range []string{"quay.io/openshift-release-dev/ocp-release@" + pinned, "quay.io/openshift-release-dev/ocp-release:4.21.15-x86_64@" + pinned} {
+		authored := underTheManagedImageMirror(singleNodeCatalog(), image)
+		if digest, managed := MirroredRelease(authored, clusterOf(t, authored)); !managed || digest != pinned {
+			t.Fatalf("%s: mirrored release = %q, %v", image, digest, managed)
+		}
+	}
+	if _, _, needs := onlyRequests(t, underTheImageMirror(singleNodeCatalog())); needs.MirroredRelease != "" || len(releaseRequires(needs)) != 0 {
+		t.Fatalf("an external mirror waits for a release copy: %+v", needs)
+	}
+}
+
+// A managed Registry is no cluster's mirror outside the Environment's image
+// mirror, and under it the mirror host copies only quay.io's release
+// repository, by digest or by the version's tag.
+func TestAReleaseTheMirrorHostCannotCopyRefuses(t *testing.T) {
+	for name, catalog := range map[string]api.Catalog{
+		"a managed Registry is a cluster's mirror only as the Environment's image mirror": managedSelection(),
+		"copies a release only from quay.io/openshift-release-dev/ocp-release":            underTheManagedImageMirror(singleNodeCatalog(), "quay.io/example/release@sha256:"+strings.Repeat("ab", 32)),
+		"by its digest or by its version's x86_64 tag alone":                              underTheManagedImageMirror(singleNodeCatalog(), "quay.io/openshift-release-dev/ocp-release:4.21.14-x86_64"),
+		"by its digest or by its version's x86_64 tag alone; a tag beside the digest": underTheManagedImageMirror(singleNodeCatalog(),
+			"quay.io/openshift-release-dev/ocp-release:4.21.14-x86_64@sha256:"+strings.Repeat("ab", 32)),
+	} {
+		if _, _, _, err := Requests(catalog, "controller", testContext); err == nil || !strings.Contains(diagnostics.Of(err)[0].Message, strings.Split(name, ";")[0]) {
+			t.Errorf("%s: %v", name, diagnostics.Of(err))
+		}
+		if _, managed := MirroredRelease(catalog, clusterOf(t, catalog)); managed {
+			t.Errorf("%s: a refused cluster names a release to copy", name)
+		}
+	}
+	if _, _, _, err := Requests(underTheManagedImageMirror(singleNodeCatalog(), "quay.io/openshift-release-dev/ocp-release:4.21.15-x86_64"), "controller", testContext); err != nil {
+		t.Fatalf("the version's own tag refused: %v", diagnostics.Of(err))
 	}
 }

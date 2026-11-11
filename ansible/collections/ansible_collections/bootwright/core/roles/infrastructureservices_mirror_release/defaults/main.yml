@@ -1,0 +1,52 @@
+---
+# The release is read from quay.io by the digest the cluster pins, else by its
+# version's tag, and pushed to that tag in the mirror.
+infrastructureservices_mirror_release_source: >-
+  {{ bootwright_mirror_release_request.release.repository
+     ~ (('@' ~ bootwright_mirror_release_request.release.digest) if (bootwright_mirror_release_request.release.digest | default('')) != ''
+        else (':' ~ bootwright_mirror_release_request.release.tag)) }}
+infrastructureservices_mirror_release_target: '{{ bootwright_mirror_release_request.mirror.host }}'
+infrastructureservices_mirror_release_scratch: '{{ infrastructureservices_mirror_release_run.path | default("") }}'
+infrastructureservices_mirror_release_client: '{{ infrastructureservices_mirror_release_scratch }}/bin/oc'
+# The lent auth document and anchor live on tmpfs, in the private directory
+# the module's prepare made and returned.
+infrastructureservices_mirror_release_lent: '{{ infrastructureservices_mirror_release_prepared.lent | default("") }}'
+infrastructureservices_mirror_release_auth: '{{ infrastructureservices_mirror_release_lent }}/auth.json'
+infrastructureservices_mirror_release_bypass: >-
+  {{ (bootwright_mirror_release_request.egress.noProxy | default([]))
+     + [bootwright_mirror_release_request.mirror.host | regex_replace('^\[?([^\]]+?)\]?:[0-9]{1,5}$(?!\n)', '\1')] }}
+# The copy reads nothing of the host's own: its home, configuration, cache and
+# runtime directories and its registry auth file are the run's, and it trusts
+# the mirror's anchor beside the system roots alone.
+infrastructureservices_mirror_release_environment:
+  HOME: '{{ infrastructureservices_mirror_release_scratch }}/home'
+  XDG_CONFIG_HOME: '{{ infrastructureservices_mirror_release_scratch }}/config'
+  XDG_CACHE_HOME: '{{ infrastructureservices_mirror_release_scratch }}/cache'
+  XDG_DATA_HOME: '{{ infrastructureservices_mirror_release_scratch }}/data'
+  XDG_RUNTIME_DIR: '{{ infrastructureservices_mirror_release_scratch }}/runtime'
+  DOCKER_CONFIG: '{{ infrastructureservices_mirror_release_scratch }}/config'
+  REGISTRY_AUTH_FILE: '{{ infrastructureservices_mirror_release_auth }}'
+  SSL_CERT_DIR: '{{ infrastructureservices_mirror_release_lent }}/trust:/etc/pki/tls/certs:/etc/ssl/certs'
+  HTTP_PROXY: '{{ bootwright_mirror_release_request.egress.httpProxy | default("") }}'
+  http_proxy: '{{ bootwright_mirror_release_request.egress.httpProxy | default("") }}'
+  HTTPS_PROXY: '{{ bootwright_mirror_release_request.egress.httpsProxy | default("") }}'
+  https_proxy: '{{ bootwright_mirror_release_request.egress.httpsProxy | default("") }}'
+  NO_PROXY: "{{ infrastructureservices_mirror_release_bypass | join(',') }}"
+  no_proxy: "{{ infrastructureservices_mirror_release_bypass | join(',') }}"
+# What the mirror holds after this run: the read back after a copy, else the
+# first read, which found the release whole.
+infrastructureservices_mirror_release_held: >-
+  {{ infrastructureservices_mirror_release_verified
+     if (infrastructureservices_mirror_release_verified | default({})).digest is defined
+     else infrastructureservices_mirror_release_found }}
+# The first read copies over a damaged release it finds, and refuses only a
+# mirror it cannot read or one holding another release at the pin.
+infrastructureservices_mirror_release_unreadable: >-
+  {{ infrastructureservices_mirror_release_found.digest is not defined
+     and (infrastructureservices_mirror_release_found.reason | default('mirror-unreadable')) != 'release-incomplete' }}
+infrastructureservices_mirror_release_whole: >-
+  {{ infrastructureservices_mirror_release_found.digest | default('') != ''
+     and infrastructureservices_mirror_release_found.missing | default(1) | int == 0
+     and infrastructureservices_mirror_release_found.components | default([]) | length > 0 }}
+# The seconds one read of the mirror or the publisher may take.
+infrastructureservices_mirror_release_read_timeout: 60

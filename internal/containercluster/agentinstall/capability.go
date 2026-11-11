@@ -10,6 +10,7 @@ import (
 	controllerscope "github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -82,7 +83,14 @@ func mediaRequires(needs Requirements) []reconciliation.ObjectRef {
 	for _, name := range needs.Proxies {
 		references = append(references, reconciliation.ObjectRef{Kind: "Proxy", Object: name})
 	}
-	return references
+	return append(references, releaseRequires(needs)...)
+}
+
+func releaseRequires(needs Requirements) []reconciliation.ObjectRef {
+	if needs.MirroredRelease == "" {
+		return nil
+	}
+	return []reconciliation.ObjectRef{{Kind: Kind, Object: needs.MirroredRelease, Family: infrastructureservices.MirrorFillFamily}}
 }
 
 func mediaDescription(verb reconciliation.Verb, request MediaRequest) string {

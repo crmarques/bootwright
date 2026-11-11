@@ -56,9 +56,9 @@ row: the build decides what is acquired, the declaration only where from.
 
 ## The mirror host
 
-Its artifact mirror and image mirror on an OS-ready Machine reached over SSH,
-and its artifact mirror on the controller or a Machine Bootwright installs,
-are specified in [mirror host](../infrastructure-services.md#mirror-host); the
+Its artifact mirror, image mirror and release copies on an OS-ready Machine
+reached over SSH, and its artifact mirror on the controller or a Machine
+Bootwright installs, are specified in [mirror host](../infrastructure-services.md#mirror-host); the
 rest of this section stays deferred with
 [B1249](../milestones/backlog.md#b1249).
 

@@ -1,0 +1,40 @@
+{
+  "client": {
+    "checksums": "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.21.15/sha256sum.txt",
+    "file": "openshift-client-linux-4.21.15.tar.gz",
+    "url": "https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.21.15/openshift-client-linux-4.21.15.tar.gz"
+  },
+  "egress": {
+    "noProxy": []
+  },
+  "identity": {
+    "cluster": "sno",
+    "context": "lab",
+    "environment": "lab",
+    "registry": "mirror-registry"
+  },
+  "mirror": {
+    "credentialsRef": "mirror-registry-credentials",
+    "credentialsType": "usernamePassword",
+    "host": "203.0.113.20:5000",
+    "trustBundleRef": "mirror-ca"
+  },
+  "placement": {
+    "address": "203.0.113.20",
+    "connection": "ssh",
+    "knownHostsRef": "mirror-known-hosts",
+    "machine": "mirror",
+    "port": 22,
+    "privateKeyRef": "mirror-access-key",
+    "user": "root"
+  },
+  "pullSecretRef": "openshift-pull-secret",
+  "release": {
+    "components": "quay.io/openshift-release-dev/ocp-v4.0-art-dev",
+    "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    "repository": "quay.io/openshift-release-dev/ocp-release",
+    "tag": "4.21.15-x86_64",
+    "version": "4.21.15"
+  },
+  "version": "mirror-release-v1"
+}

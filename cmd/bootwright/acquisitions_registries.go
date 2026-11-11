@@ -23,7 +23,7 @@ var registryCompanions = map[string][]registryHost{
 	"icr.io":             {{"registry blob host", "dd2.icr.io"}},
 }
 
-var imagePullKinds = []string{"service image", "emulated BMC image", "release", "storage image", "add-on catalog image", "default catalog image"}
+var imagePullKinds = []string{"service image", "emulated BMC image", "release", "mirror release", "storage image", "add-on catalog image", "default catalog image"}
 
 func withRegistryHosts(rows []cli.Acquisition) []cli.Acquisition {
 	type key struct{ kind, host string }

@@ -1,0 +1,7 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: mirror-access-key
+
+spec:
+  type: sshKeyPair

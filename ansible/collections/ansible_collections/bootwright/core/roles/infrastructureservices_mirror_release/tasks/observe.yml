@@ -1,0 +1,64 @@
+---
+- name: Validate the frozen release copy request
+  ansible.builtin.assert:
+    that:
+      - bootwright_mirror_release_request.version == 'mirror-release-v1'
+      - bootwright_mirror_release_request.identity.context is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_release_request.identity.environment is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_release_request.identity.registry is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_release_request.identity.cluster is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_release_request.mirror.host is match('^([a-z0-9]([a-z0-9.-]*[a-z0-9])?|\[[0-9a-f:.]+\]):[0-9]{1,5}$(?!\n)')
+      - bootwright_mirror_release_request.mirror.credentialsType == 'usernamePassword'
+      - bootwright_mirror_release_request.release.repository == 'quay.io/openshift-release-dev/ocp-release'
+      - bootwright_mirror_release_request.release.components == 'quay.io/openshift-release-dev/ocp-v4.0-art-dev'
+      - bootwright_mirror_release_request.release.version is match('^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$(?!\n)')
+      - bootwright_mirror_release_request.release.tag == bootwright_mirror_release_request.release.version ~ '-x86_64'
+      - (bootwright_mirror_release_request.release.digest | default('')) == ''
+        or bootwright_mirror_release_request.release.digest is match('^sha256:[0-9a-f]{64}$(?!\n)')
+      - bootwright_mirror_release_request.client.file == 'openshift-client-linux-' ~ bootwright_mirror_release_request.release.version ~ '.tar.gz'
+      - bootwright_mirror_release_request.client.url is match('^https://[^\s?#"\x27\\]+$(?!\n)')
+      - bootwright_mirror_release_request.client.url.endswith('/' ~ bootwright_mirror_release_request.client.file)
+      - bootwright_mirror_release_request.client.checksums == 'https://mirror.openshift.com/pub/openshift-v4/clients/ocp/'
+        ~ bootwright_mirror_release_request.release.version ~ '/sha256sum.txt'
+      - bootwright_mirror_release_digest is match('^[0-9a-f]{64}$(?!\n)')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.infrastructureservices_mirror_release_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Read which part of the release the image mirror holds
+  bootwright.core.infrastructureservices_mirror_release:
+    mode: read
+    release: '{{ bootwright_mirror_release_request.release }}'
+    client: '{{ bootwright_mirror_release_request.client }}'
+    mirror: '{{ bootwright_mirror_release_request.mirror.host }}'
+    egress: '{{ bootwright_mirror_release_request.egress }}'
+    username: "{{ lookup('ansible.builtin.file', bootwright_mirror_release_material.imageUsername, rstrip=false) }}"
+    password: "{{ lookup('ansible.builtin.file', bootwright_mirror_release_material.imagePassword, rstrip=false) }}"
+    trust: "{{ lookup('ansible.builtin.file', bootwright_mirror_release_material.imageTrust, rstrip=false) }}"
+    timeout: '{{ infrastructureservices_mirror_release_read_timeout | int }}'
+  register: infrastructureservices_mirror_release_observed
+  failed_when: false
+  no_log: true
+
+- name: Publish bounded release copy observation
+  bootwright.core.infrastructureservices_mirror_release_protocol:
+    phase: completed
+    outcome: unchanged
+    digest: '{{ bootwright_mirror_release_digest }}'
+    release: '{{ bootwright_mirror_release_request.release }}'
+    held:
+      digest: '{{ infrastructureservices_mirror_release_observed.digest }}'
+      components: '{{ infrastructureservices_mirror_release_observed.components }}'
+      missing: '{{ infrastructureservices_mirror_release_observed.missing | int }}'
+    observed: true
+  when: infrastructureservices_mirror_release_observed.digest is defined
+  no_log: true
+
+- name: Refuse an observation that could not read the image mirror
+  ansible.builtin.fail:
+    msg: the image mirror could not be read, so what it holds of the release is unknown
+  when: infrastructureservices_mirror_release_observed.digest is not defined

@@ -137,6 +137,9 @@ every selected `OpenShiftCluster`, and both belong to the
 | A boot-image server off the controller | selected artifact server’s `spec.machineRef` differs from the controller Machine | `a cluster's boot image is built on the controller, so the server it is published through is placed there` | `set spec.machineRef on <server> to the controller Machine` |
 | An OKD cluster | `spec.distribution.type: okd` | `this executable installs no OKD cluster` | `correct <cluster>` |
 | A release pinned by image alone | `spec.distribution.release` without `version` | `a cluster pinned to a release image alone names no version for its installer to match` | `correct <cluster>` |
+| A managed Registry mirror outside the image mirror | `spec.install.registries.mirror.registryRef` names a managed Registry while the Environment names no `spec.mirror.registry` | `a managed Registry is a cluster's mirror only as the Environment's image mirror, whose host copies the release` | `select an external Registry on <cluster>, or name <registry> in spec.mirror.registry.registryRef on the Environment` |
+| A release image outside the release repository under a managed image mirror | `spec.distribution.release.image` outside `quay.io/openshift-release-dev/ocp-release` while the image mirror is a managed Registry | `the image mirror's host copies a release only from quay.io/openshift-release-dev/ocp-release` | `pin spec.distribution.release.image on <cluster> in quay.io/openshift-release-dev/ocp-release, or remove it` |
+| A release image by another tag under a managed image mirror | that image naming a tag other than `<version>-x86_64`, or no digest and no tag, while the image mirror is a managed Registry | `the image mirror's host copies a release by its digest or by its version's x86_64 tag alone` | `pin spec.distribution.release.image on <cluster> by digest with no other tag, or remove it` |
 | A disconnected cluster | `spec.install.mode: disconnected` | `this executable installs no disconnected cluster` | `correct <cluster>` |
 | Serving certificates | `spec.install.servingCertificates` | `this executable does not install install.servingCertificates` | `correct <cluster>` |
 | An endpoint port the installer does not serve | `spec.install.endpoints.<slot>.port` other than 6443 for `api` and `api-int`, or 443 for `ingress` | `the agent installer serves endpoint <slot> on port <port> and has no input for another` | `remove spec.install.endpoints.<slot>.port from <cluster>, or set it to <port>` |
@@ -166,6 +169,8 @@ table and its test change in that commit:
 - [B748](milestones/backlog.md#b748) lifts the OKD row.
 
 Each other row stays until an item names it.
+
+### Boot-media trust
 
 A physical node's BMC imports the artifact server's certificate under
 `importCertificate`, its default, and the installation carries that trust
@@ -470,7 +475,15 @@ authored `source` maps, itself or by a path prefix, gains an entry naming
 `quay.io/openshift-release-dev/ocp-release` and `ocp-v4.0-art-dev`, and for
 OKD, once [B748](milestones/backlog.md#b748) admits it, `quay.io/okd/scos-release`
 and `scos-content`. The image build on the controller and every node then read
-the release from the mirror. A cluster mirror other than that Registry
+the release from the mirror. That Registry may be a managed one on the
+[mirror host](infrastructure-services.md#mirror-host): its endpoint
+`<address>:<port>` is the mirror's host, the issuer of its serving
+certificate its trust bundle, its `credentialsRef` the pull secret's entry,
+and the cluster's image build and installation wait for the release that
+host copies into it, so the release image may only be quay.io's
+`ocp-release`, pinned by digest or by its version's `x86_64` tag
+([refusal table](#refusal-table)). A managed Registry is no other cluster's
+mirror. A cluster mirror other than that Registry
 refuses, because one install pull secret carries one mirror credential. An
 `additionalTrustBundlePolicy` still needs an authored
 `additionalTrustBundleRefs` entry.

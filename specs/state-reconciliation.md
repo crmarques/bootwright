@@ -979,7 +979,7 @@ union a plan consumes.
 ### Reference edges
 
 Each row is one requirement class a capability family emits: the block (its
-family and each block kind it names), the API object it requires (narrowed to one family
+family and block kinds), the API object it requires (of one family
 where stated), and the reference or rule that names that object. A
 requirement resolves only to a block that realizes its target, so an external
 service orders nothing. A reference no row names is
@@ -990,39 +990,40 @@ storage references emit requirements no row names; tracked as
 [B969](milestones/backlog.md#b969). Destroy inverts every edge. A family
 ordering its own blocks, as a storage child after its cluster, is not listed.
 `TestEveryRequirementMatchesTheEdgeCatalog` plans every
-example and fails when a capability emits a requirement no row names, or omits
+example and fails on a requirement no row names, or when a capability omits
 one a row's field path names on its object while a block realizes the target.
 
 | Block | Requires | Named by |
 | --- | --- | --- |
 | `substrate-machine` `Machine` | `InfraProvider` | `spec.substrate.providerRef` |
-| `substrate-machine` `Machine` | `Registry` | the managed image mirror its emulated BMC's image is pulled through |
+| `substrate-machine` `Machine` | `Registry` | the managed image mirror its BMC pulls through |
 | `os-install` `Machine` | `Machine` from `substrate-machine` | the Machine itself, realized by its substrate |
 | `os-install` `Machine` | `Machine` from `physical-erase` | the Machine itself, when it declares `spec.hardware.eraseOnRemoval` |
 | `os-install` `Machine` | `MachineInstallProfile` | `spec.os.installProfileRef`, realized when its package tree is hosted |
 | `os-install` `Machine` | `ArtifactServer` | the install profile's and the Machine's artifact endpoints |
 | `os-install` `Machine` | `DNSServer` | the `dns` selections of the Machine's network configuration |
 | `os-install` `Machine` | `NTPServer` | `spec.os.install.ntp[].serverRef` |
-| `os-install` `Machine` | `CephCluster` from `storage-physical-retirement` | a storage cluster whose retirement must release this physical Machine first |
-| `os-host-firewall` `Machine` | `Machine` from `os-install` | the Machine itself, whose installation the host port requirements of its services wait for |
+| `os-install` `Machine` | `CephCluster` from `storage-physical-retirement` | a storage cluster whose retirement releases this physical Machine first |
+| `os-host-firewall` `Machine` | `Machine` from `os-install` | the Machine itself, whose installation its services' ports wait for |
 | `physical-erase` `Machine` | `Machine` from `substrate-machine` | the Machine itself |
 | `physical-erase` `Machine` | `ArtifactServer` | the erase image's artifact endpoint |
 | `physical-erase` `Machine` | `DNSServer` | the `dns` selections of the Machine's network configuration |
 | `physical-erase` `Machine` | `NTPServer` | `spec.os.install.ntp[].serverRef` |
-| `physical-erase` `Machine` | `CephCluster` from `storage-physical-retirement` | a storage cluster whose retirement must release this physical Machine first |
+| `physical-erase` `Machine` | `CephCluster` from `storage-physical-retirement` | a storage cluster whose retirement releases this physical Machine first |
 | `os-package-tree` `MachineInstallProfile` | `ArtifactServer` | `spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint.serverRef`, `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint.serverRef` |
 | `controller-prerequisites` `Environment` | `ArtifactServer` | `spec.mirror.artifacts.serverRef` |
-| `managed-service` `ArtifactServer`, `DNSServer`, `NTPServer`, `Proxy` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
+| `managed-service` `ArtifactServer`, `DNSServer`, `NTPServer`, `Proxy` | `InfraProvider` | the provider whose libvirt bridge carries the service's address |
 | `managed-service` `ArtifactServer` | `Machine` from `os-install` | `spec.machineRef`, if installed |
-| `managed-service` `DNSServer`, `NTPServer`, `Proxy` | `Registry` | the managed image mirror its image is pulled through |
+| `managed-service` `DNSServer`, `NTPServer`, `Proxy` | `Registry` | the managed image mirror it pulls through |
 | `mirror-fill` `ArtifactServer` | `ArtifactServer` from `managed-service` | the mirror it fills |
 | `mirror-fill` `ArtifactServer` | `Machine` from `os-install` | `spec.machineRef`, if installed |
-| `mirror-fill` `Registry` | `Registry` from `managed-service` | the image mirror it fills |
+| `mirror-fill` `Registry`, `OpenShiftCluster` | `Registry` from `managed-service` | the image mirror it fills |
 | `substrate-host` `InfraProvider` | `OpenShiftCluster` | `spec.kubevirt.hostClusterRef` |
 | `substrate-host` `InfraProvider` | `ClusterAddonBinding` | non-last instances on that host |
 | `substrate-host` `InfraProvider` | `OpenShiftClusterNetwork` | that host's network block |
 | `cluster-media` `OpenShiftCluster` | `ArtifactServer` | `spec.install.agent.redfishVirtualMedia.artifactServerEndpoint.serverRef` |
 | `cluster-media` `OpenShiftCluster` | `Proxy` | `spec.install.proxy.proxyRef` |
+| `cluster-media` `OpenShiftCluster` | `OpenShiftCluster` from `mirror-fill` | its release copy |
 | `cluster-install` `OpenShiftCluster` | `Machine` | `spec.nodes[].machineRef` |
 | `cluster-install` `OpenShiftCluster` | `DNSServer` | the `dns` selections of each node's network configuration |
 | `cluster-install` `OpenShiftCluster` | `NTPServer` | `spec.install.ntp[].serverRef` |

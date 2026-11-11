@@ -240,6 +240,10 @@ func contractRows() []contractRow {
 			noEffect: map[string]any{"images": []any{}, "version": mirrorfill.ImagesEvidenceVersion}, absence: map[string]any{"images": []any{}, "version": mirrorfill.ImagesEvidenceVersion},
 			removalObservesNothing: "specs/infrastructure-services.md, Mirror host: the image fill's removal takes back nothing, because its Registry's removal deletes what was pushed",
 			drift:                  map[string]any{"images": []any{map[string]any{"repository": "docker.io/foreign/image", "digest": "sha256:" + strings.Repeat("f", 64), "verified": true}}}},
+		{kind: mirrorfill.ReleaseKind, implementation: mirrorfill.ReleaseImplementation, example: "lab-sno-release-mirror", presence: contractMirrorReleasePresence,
+			noEffect: map[string]any{"components": []any{}, "version": mirrorfill.ReleaseEvidenceVersion}, absence: map[string]any{"components": []any{}, "version": mirrorfill.ReleaseEvidenceVersion},
+			removalObservesNothing: "specs/infrastructure-services.md, Mirror host: the release copy's removal takes back nothing, because its Registry's removal deletes what was pushed",
+			drift:                  map[string]any{"absent": true, "digest": "sha256:" + strings.Repeat("f", 64), "components": []any{}, "version": mirrorfill.ReleaseEvidenceVersion}},
 	}
 }
 
@@ -1598,7 +1602,7 @@ func contractMaterial(t *testing.T, example contractExample, references []string
 		case "usernamePassword":
 			material[reference] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.UsernamePart: []byte("admin"), secrets.PasswordPart: []byte("contract-password")})
 		case "dockerConfigJson":
-			material[reference] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(`{"auths":{"registry.example.test":{"auth":"Y29udHJhY3Q6c2VjcmV0"}}}`)})
+			material[reference] = secrets.NewMaterial(map[secrets.Part][]byte{secrets.ValuePart: []byte(`{"auths":{"quay.io":{"auth":"cXVheTpzZWNyZXQ="},"registry.example.test":{"auth":"Y29udHJhY3Q6c2VjcmV0"}}}`)})
 		case "sshKeyPair":
 			material[reference] = contractKeyPair(t, reference)
 		case "caBundle":
@@ -1774,6 +1778,15 @@ func TestEveryReferencedSecretIsClassified(t *testing.T) {
 			}
 		}
 	}
+}
+
+func contractMirrorReleasePresence(t *testing.T, execution lifecycle.Execution) map[string]any {
+	t.Helper()
+	if _, err := mirrorfill.DecodeReleaseRequest(execution.Block.Request); err != nil {
+		t.Fatal(err)
+	}
+	components := []any{map[string]any{"name": "cli", "digest": "sha256:" + strings.Repeat("1", 64)}}
+	return map[string]any{"postcondition": true, "digest": "sha256:" + strings.Repeat("2", 64), "components": components, "version": mirrorfill.ReleaseEvidenceVersion}
 }
 
 func contractMirrorImagesPresence(t *testing.T, execution lifecycle.Execution) map[string]any {

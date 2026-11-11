@@ -1,0 +1,50 @@
+---
+argument_specs:
+  apply:
+    short_description: Copy one cluster's release into the managed image mirror with the release's own oc.
+    options: &request
+      bootwright_mirror_release_request:
+        type: dict
+        required: true
+        options:
+          client:
+            type: dict
+            required: true
+          egress:
+            type: dict
+            required: true
+          identity:
+            type: dict
+            required: true
+          mirror:
+            type: dict
+            required: true
+          placement:
+            type: dict
+            required: true
+          pullSecretRef:
+            type: str
+            required: true
+          release:
+            type: dict
+            required: true
+          version:
+            type: str
+            required: true
+            choices:
+              - mirror-release-v1
+      bootwright_mirror_release_digest:
+        type: str
+        required: true
+      bootwright_mirror_release_material:
+        type: dict
+        required: true
+      bootwright_run_scratch:
+        type: path
+        required: true
+  observe:
+    short_description: Observe which part of one cluster's release the managed image mirror holds.
+    options: *request
+  destroy:
+    short_description: Release one cluster's release copy, whose Registry's removal deletes it.
+    options: *request

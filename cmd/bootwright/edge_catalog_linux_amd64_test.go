@@ -256,7 +256,7 @@ func unorderedReferences() map[string]string {
 		"Proxy spec.machineRef":                                                              placement,
 		"Registry spec.machineRef":                                                           placement,
 		"Environment spec.mirror.registry.registryRef":                                       "each consumer that pulls through a managed image mirror requires its Registry, so the Environment's selection orders nothing itself (specs/infrastructure-services.md, Mirror host)",
-		"OpenShiftCluster spec.install.registries.mirror.registryRef":                        "a cluster installs through an external registry mirror alone, which no block realizes, and a managed one refuses (specs/openshift-clusters.md, Installation features)",
+		"OpenShiftCluster spec.install.registries.mirror.registryRef":                        "a cluster installs through an external registry mirror, which no block realizes, or the managed image mirror, whose release copy its blocks require instead (specs/openshift-clusters.md, Installation features)",
 		"InfraProvider spec.libvirt.machineRef":                                              "the libvirt provider host is an OS-ready Machine (specs/substrates.md), so no block of the plan readies it",
 		"Environment spec.controller.machineRef":                                             "the controller Machine is the host that runs Bootwright, which no block of its own plan realizes",
 		"Environment spec.lifecycle.rescue.artifactServerEndpoint.serverRef":                 "admission refuses a present rescue until a rescue journey exists (specs/api/environment.md, Lifecycle rescue declaration)",

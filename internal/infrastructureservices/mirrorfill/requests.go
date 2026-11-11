@@ -8,6 +8,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
@@ -17,7 +18,7 @@ const (
 	Kind                 = string(api.ArtifactServer)
 	FilesImplementation  = "mirror-files-v1"
 	FilesEvidenceVersion = "mirror-files-evidence-v1"
-	Family               = "mirror-fill"
+	Family               = infrastructureservices.MirrorFillFamily
 	MaxFiles             = 128
 )
 

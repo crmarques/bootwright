@@ -947,7 +947,8 @@ one `machineRef`, and plan refuses two Machines
 the acquisition list names: the public-origin clients the controller stage
 installs at the releases the build's tool table pins, and the public-origin
 images the managed services and emulated BMCs off the mirror host pull, each
-by the digest the build pins. It is never a pass-through to a publisher
+by the digest the build pins, and the release of each OpenShift cluster that
+installs through the image mirror. It is never a pass-through to a publisher
 ([controlled network supply](deferred/controlled-network.md#the-mirror-host)).
 
 **Fill.** One block of the `mirror-fill` family, implementation
@@ -996,6 +997,61 @@ fill's removal takes nothing back and contacts no host, because the Registry's
 own removal deletes what was pushed; pruning an image no longer listed is
 [B1323](milestones/backlog.md#b1323).
 
+**Release fill.** One block of the same family per such cluster,
+implementation `mirrorfill.ReleaseImplementation`, named
+`mirror-release-<cluster>`, runs on the mirror host after the Registry's own
+block and copies the cluster's release, `quay.io/openshift-release-dev/ocp-release`
+at the digest its `spec.distribution.release.image` pins or else at the tag
+`<version>-x86_64`, with the release's own `oc`. It first reads the mirror:
+the release manifest at that reference, the image references in the release's
+own layers there, and each component's manifest by digest beneath
+`<registry location>/quay.io/openshift-release-dev/ocp-v4.0-art-dev`, the
+layout the cluster's [registry mirrors](openshift-clusters.md#installation-features)
+map. Each layer read is bounded in its compressed and expanded bytes, its
+archive headers and its total time, and must hash to its digest, as an index's
+`amd64` manifest must to the digest the index names. A release held with every
+component is not copied again, so a replay runs nothing and reports unchanged;
+a held copy that is damaged, with a layer missing or no readable image
+references, is copied over, while a mirror the host cannot read or one holding
+another release at the pin refuses. Otherwise it reads
+`openshift-client-linux-<version>.tar.gz` from the source the controller
+stage reads that client from and `sha256sum.txt` from its publisher's release
+directory on `mirror.openshift.com`, through the frozen egress route over
+verified HTTPS, and extracts `oc` only when the archive's SHA-256 is the one
+listed, then runs `oc adm release mirror -a <auth> --from=<release>
+--to=<location>/<components> --to-release-image=<location>/<release
+repository>:<tag> --insecure=false`, never `--insecure`, verifying the
+Registry against its anchor beside the system roots through `SSL_CERT_DIR`;
+oc also reads the release's signatures from `storage.googleapis.com` and
+`mirror.openshift.com`, only warning when it cannot, and its report of what it
+copied, which holds no credential, enters the run's log.
+The release is read back as before: a release or component the Registry then
+lacks fails the attempt with `lifecycle.state` on the cluster, and so do a
+release held at another digest than the pin and an archive its publisher does
+not list; a client, copy or Registry the host cannot read fails it with
+`lifecycle.unknown`. The evidence names the release digest the Registry holds,
+each component by name and digest and how many it lacks
+(`TestTheReleaseFillReadsItsEffectFromWhatTheMirrorHolds`); its removal takes
+nothing back, as the image fill's does.
+
+**Release custody.** The copy runs in the run's private scratch on the mirror
+host, mode `0700`, with its own `HOME`, XDG directories and `DOCKER_CONFIG`,
+so it reads no registry configuration of the host's own; the lent auth
+document, its `REGISTRY_AUTH_FILE`, and the anchor are in a private `0700`
+directory beneath `/run`, a tmpfs a reboot clears, never on the host's disk.
+Both are emptied and removed in an `always` whatever the copy did, and a copy
+killed before its `always` leaves them only until the next copy on that host
+removes every other run's copy scratch and lent directory older than any run
+lives (`test_prepare_sweeps_what_a_killed_copy_left_once_no_run_can_still_hold_it`).
+The controller derives in Go, per attempt, an auth document holding exactly two
+entries: the `quay.io` token of the cluster's pull secret and the Registry's
+credential for its own location. That document alone is lent, written there
+`0600` in that tmpfs directory and passed to `oc -a`; the pull secret itself never leaves the
+controller, and a pull secret with no `quay.io` token refuses before any run
+(`TestTheReleaseFillLendsATwoEntryAuthDocumentToTheApplyAlone`). The document
+is cleared from the controller's memory when the run returns; no record,
+evidence, argument or environment variable holds it.
+
 **Ordering.** The controller stage splits around the mirror: its host
 packages first, then the mirror server's block and the fill, which run no
 controller-installed client, then the stage's clients, which it reads from
@@ -1014,7 +1070,10 @@ since nothing it reads is an image. Each managed service, artifact server and
 libvirt machine block that pulls through the mirror waits for the Registry and
 its fill, and every image pulled on the mirror host stays its origin's, so no
 mirror block waits for itself
-(`TestAManagedImageMirrorIsFilledAfterTheControllerStageAndBeforeItsConsumers`).
+(`TestAManagedImageMirrorIsFilledAfterTheControllerStageAndBeforeItsConsumers`). A cluster's image build and
+installation wait for its release copy, which waits for the Registry and the
+controller stage
+(`TestAClusterUnderAManagedImageMirrorWaitsForItsReleaseCopy`).
 
 **Trust.** Every consumer verifies the artifact mirror against the `caBundle`
 that issues the server's serving certificate, the
@@ -1025,9 +1084,9 @@ against the issuer of the Registry's serving certificate unless the Registry's
 no issuer when none is named, and Bootwright creates no Secret for it.
 
 Not yet met: a managed image mirror on a Machine Bootwright installs, whose
-fill takes the SSH arm, refuses, a managed image mirror may sit on the controller, which installs no `skopeo`, and the
-mirror host may mirror an OpenShift release for a cluster under a managed
-image mirror; tracked as [B1249](milestones/backlog.md#b1249).
+fill takes the SSH arm, refuses, and a managed image mirror may sit on the
+controller, which installs no `skopeo`; tracked as
+[B1249](milestones/backlog.md#b1249).
 
 ## Adapter boundary
 

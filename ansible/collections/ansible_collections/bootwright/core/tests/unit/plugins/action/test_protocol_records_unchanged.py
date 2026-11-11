@@ -61,6 +61,9 @@ MIRROR_FILE = {"path": "helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz", "sha256": D
 MIRROR_STAT = {"exists": True, "isreg": True, "islnk": False, "size": 5, "checksum": DIGEST}
 MIRROR_IMAGE = {"repository": "docker.io/library/registry", "digest": "sha256:" + DIGEST, "source": "docker.io/library/registry@sha256:" + DIGEST}
 MIRROR_HELD = {"repository": "docker.io/library/registry", "digest": "sha256:" + DIGEST, "verified": True}
+MIRROR_RELEASE = {"components": "quay.io/openshift-release-dev/ocp-v4.0-art-dev", "repository": "quay.io/openshift-release-dev/ocp-release",
+                  "tag": "4.21.15-x86_64", "version": "4.21.15"}
+RELEASE_HELD = {"digest": "sha256:" + DIGEST, "components": [{"name": "cli", "digest": "sha256:" + DIGEST}], "missing": 0}
 RUNNING = {"unit": "active", "contentRoot": True, "startedAfterFiles": True, "container": "quay.io/x"}
 ANSWERS = [{"address": "192.0.2.1", "answer": "192.0.2.10", "port": 53}]
 LISTENERS = [{"address": "192.0.2.1", "fingerprint": "", "name": "http", "port": 80, "protocol": "http", "status": "200"}]
@@ -175,6 +178,16 @@ CASES = {
         {"images": [MIRROR_IMAGE], "held": []},
         {"images": [MIRROR_IMAGE], "held": [MIRROR_HELD]},
         {"images": [MIRROR_IMAGE], "held": [dict(MIRROR_HELD, repository="docker.io/library/other")]},
+    ),
+    "infrastructureservices_mirror_release_protocol": common([
+        {"reason": "client-unreachable"}, {"reason": "client-digest-mismatch"}, {"reason": "release-unreachable"},
+        {"reason": "release-incomplete"}, {"reason": "release-digest-mismatch"}, {"reason": "mirror-unreadable"},
+    ]) + completions(
+        {"release": MIRROR_RELEASE, "held": RELEASE_HELD},
+        {"release": MIRROR_RELEASE, "held": dict(RELEASE_HELD, missing=3)},
+        {"release": MIRROR_RELEASE, "held": {}},
+        {"release": MIRROR_RELEASE, "held": RELEASE_HELD},
+        {"release": MIRROR_RELEASE, "held": dict(RELEASE_HELD, components=[{"name": "../cli", "digest": "sha256:" + DIGEST}])},
     ),
     "managedos_tree_protocol": common([
         {"reason": "media-changed-tree"}, {"reason": "tree-source-drift"}, {"reason": "artifact-server-not-applied"},

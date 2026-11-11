@@ -32,6 +32,7 @@ type Requirements struct {
 	Machines        []string
 	NTPServers      []string
 	Proxies         []string
+	MirroredRelease string
 }
 
 // Refusals refuses every selected cluster this contract cannot install, with
@@ -359,6 +360,9 @@ func projectMediaFeatures(catalog api.Catalog, cluster api.Object, controllerMac
 		buildEgress = map[string]string{"HTTP_PROXY": egress.HTTPProxy, "HTTPS_PROXY": egress.HTTPSProxy, "NO_PROXY": strings.Join(egress.NoProxy, ",")}
 	}
 	request.RegistryMirror, request.InstallProxy = mirror, proxy
+	if _, managed := MirroredRelease(catalog, cluster); managed {
+		needs.MirroredRelease = cluster.Name()
+	}
 	request.BuildEgress, request.DiskEncryption = buildEgress, diskEncryption(cluster)
 	return nil
 }

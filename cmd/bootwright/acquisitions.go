@@ -29,7 +29,10 @@ const (
 	classMediaStore       = "media store"
 )
 
-var openShiftReleaseRepositories = []string{"quay.io/openshift-release-dev/ocp-release", "quay.io/openshift-release-dev/ocp-v4.0-art-dev"}
+var releaseSignatureStores = []string{"https://storage.googleapis.com/openshift-release/official/signatures/openshift/release",
+	"https://mirror.openshift.com/pub/openshift-v4/signatures/openshift/release"}
+
+var openShiftReleaseRepositories = []string{infrastructureservices.OpenShiftReleaseRepository, infrastructureservices.OpenShiftComponentRepository}
 
 func listAcquisitions(catalog api.Catalog) ([]cli.Acquisition, error) {
 	var acquired []cli.Acquisition
@@ -48,6 +51,11 @@ func listAcquisitions(catalog api.Catalog) ([]cli.Acquisition, error) {
 		return nil, err
 	}
 	acquired = append(acquired, images...)
+	releases, err := mirrorReleaseAcquisitions(catalog)
+	if err != nil {
+		return nil, err
+	}
+	acquired = append(acquired, releases...)
 	acquired = append(acquired, clusterAcquisitions(catalog, controllerMachine)...)
 	acquired = append(acquired, storageAcquisitions(catalog, controllerMachine)...)
 	acquired = append(acquired, operatorAcquisitions(catalog)...)
@@ -204,6 +212,66 @@ func mirrorImageArtifacts(catalog api.Catalog) ([]mirrorfill.Image, error) {
 		images = append(images, mirrorfill.Image{Digest: "sha256:" + digest, Repository: repository, Source: source})
 	}
 	return images, nil
+}
+
+func mirrorReleases(catalog api.Catalog) ([]mirrorfill.Release, error) {
+	if mirror, declared := infrastructureservices.ImageMirrorOf(catalog); !declared || !mirror.Managed {
+		return nil, nil
+	}
+	tools, err := controller.SelectTools(catalog)
+	if err != nil {
+		return nil, err
+	}
+	var releases []mirrorfill.Release
+	for _, cluster := range catalog.OfKind(api.OpenShiftCluster) {
+		digest, managed := agentinstall.MirroredRelease(catalog, cluster)
+		if !managed {
+			continue
+		}
+		version := cluster.Spec().Get("distribution", "release", "version").Text()
+		index := slices.IndexFunc(tools, func(tool controller.ToolRequest) bool {
+			return tool.Kind == "openshift-clients" && tool.Compatibility == "openshift" && tool.Version == version
+		})
+		location := ""
+		if index >= 0 {
+			if location, err = bundlelocal.SourceURL(tools[index]); err != nil {
+				return nil, err
+			}
+		}
+		releases = append(releases, mirrorfill.Release{Client: mirrorfill.ReleaseClientFor(version, location), Cluster: cluster.Name(), Digest: digest,
+			PullSecretRef: cluster.Spec().Get("install", "pullSecretRef").Text(), Version: version})
+	}
+	return releases, nil
+}
+
+func mirrorReleaseAcquisitions(catalog api.Catalog) ([]cli.Acquisition, error) {
+	releases, err := mirrorReleases(catalog)
+	if err != nil || len(releases) == 0 {
+		return nil, err
+	}
+	mirror, _ := infrastructureservices.ImageMirrorOf(catalog)
+	host := []string{mirror.Registry.Spec().Get("machineRef").Text()}
+	var rows []cli.Acquisition
+	for _, release := range releases {
+		if err := release.Refusal(); err != nil {
+			return nil, err
+		}
+		consumer := api.NewObject(api.OpenShiftCluster, release.Cluster, api.Value{}, api.Value{}).Identity()
+		for _, repository := range openShiftReleaseRepositories {
+			rows = append(rows, cli.Acquisition{Kind: "mirror release", Artifact: repository, Version: release.Version, Origin: repository, Class: originClass("https://" + repository),
+				Machines: host, Consumer: consumer})
+		}
+		rows = append(rows,
+			cli.Acquisition{Kind: "mirror release client", Artifact: "openshift-clients", Version: release.Version, Origin: release.Client.URL, Class: originClass(release.Client.URL),
+				Machines: host, Consumer: consumer},
+			cli.Acquisition{Kind: "mirror release client checksums", Artifact: "openshift-clients", Version: release.Version, Origin: release.Client.Checksums,
+				Class: originClass(release.Client.Checksums), Machines: host, Consumer: consumer})
+		for _, store := range releaseSignatureStores {
+			rows = append(rows, cli.Acquisition{Kind: "mirror release signatures", Artifact: infrastructureservices.OpenShiftReleaseRepository, Version: release.Version,
+				Origin: store, Class: originClass(store), Machines: host, Consumer: consumer})
+		}
+	}
+	return rows, nil
 }
 
 func clusterAcquisitions(catalog api.Catalog, controllerMachine string) []cli.Acquisition {

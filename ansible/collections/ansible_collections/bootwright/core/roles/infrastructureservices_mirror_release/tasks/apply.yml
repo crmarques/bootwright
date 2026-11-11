@@ -1,0 +1,196 @@
+---
+- name: Validate the frozen release copy request
+  ansible.builtin.assert:
+    that:
+      - bootwright_mirror_release_request.version == 'mirror-release-v1'
+      - bootwright_mirror_release_request.identity.context is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_release_request.identity.environment is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_release_request.identity.registry is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_release_request.identity.cluster is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_release_request.mirror.host is match('^([a-z0-9]([a-z0-9.-]*[a-z0-9])?|\[[0-9a-f:.]+\]):[0-9]{1,5}$(?!\n)')
+      - bootwright_mirror_release_request.mirror.credentialsType == 'usernamePassword'
+      - bootwright_mirror_release_request.release.repository == 'quay.io/openshift-release-dev/ocp-release'
+      - bootwright_mirror_release_request.release.components == 'quay.io/openshift-release-dev/ocp-v4.0-art-dev'
+      - bootwright_mirror_release_request.release.version is match('^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$(?!\n)')
+      - bootwright_mirror_release_request.release.tag == bootwright_mirror_release_request.release.version ~ '-x86_64'
+      - (bootwright_mirror_release_request.release.digest | default('')) == ''
+        or bootwright_mirror_release_request.release.digest is match('^sha256:[0-9a-f]{64}$(?!\n)')
+      - bootwright_mirror_release_request.client.file == 'openshift-client-linux-' ~ bootwright_mirror_release_request.release.version ~ '.tar.gz'
+      - bootwright_mirror_release_request.client.url is match('^https://[^\s?#"\x27\\]+$(?!\n)')
+      - bootwright_mirror_release_request.client.url.endswith('/' ~ bootwright_mirror_release_request.client.file)
+      - bootwright_mirror_release_request.client.checksums == 'https://mirror.openshift.com/pub/openshift-v4/clients/ocp/'
+        ~ bootwright_mirror_release_request.release.version ~ '/sha256sum.txt'
+      - bootwright_mirror_release_digest is match('^[0-9a-f]{64}$(?!\n)')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.infrastructureservices_mirror_release_protocol:
+    phase: loaded
+  no_log: true
+
+# The mirror is read first, and a release it holds with every component its
+# image references name is not copied again.
+- name: Read which part of the release the image mirror holds
+  bootwright.core.infrastructureservices_mirror_release:
+    mode: read
+    release: '{{ bootwright_mirror_release_request.release }}'
+    client: '{{ bootwright_mirror_release_request.client }}'
+    mirror: '{{ bootwright_mirror_release_request.mirror.host }}'
+    egress: '{{ bootwright_mirror_release_request.egress }}'
+    username: "{{ lookup('ansible.builtin.file', bootwright_mirror_release_material.imageUsername, rstrip=false) }}"
+    password: "{{ lookup('ansible.builtin.file', bootwright_mirror_release_material.imagePassword, rstrip=false) }}"
+    trust: "{{ lookup('ansible.builtin.file', bootwright_mirror_release_material.imageTrust, rstrip=false) }}"
+    timeout: '{{ infrastructureservices_mirror_release_read_timeout | int }}'
+  register: infrastructureservices_mirror_release_found
+  failed_when: false
+  no_log: true
+
+- name: Name a mirror the release could not be read from
+  bootwright.core.infrastructureservices_mirror_release_protocol:
+    phase: refused
+    reason: '{{ infrastructureservices_mirror_release_found.reason | default("mirror-unreadable") }}'
+  when: infrastructureservices_mirror_release_unreadable | bool
+  no_log: true
+
+- name: Refuse the copy after naming why
+  ansible.builtin.fail:
+    msg: the image mirror could not be read, so the release copy did not start
+  when: infrastructureservices_mirror_release_unreadable | bool
+
+# The copy runs in a private directory this run creates and removes whatever
+# its result, with the release's own oc, checked against its publisher's list,
+# and a private home; the lent two-entry auth document and the mirror's anchor
+# sit in a private directory on tmpfs beside it. Nothing reaches the host's
+# registry configuration, and the copy verifies the mirror's certificate, never
+# passing --insecure. A damaged release the mirror holds is copied over.
+- name: Copy the release into the image mirror
+  when: not (infrastructureservices_mirror_release_whole | bool)
+  block:
+    - name: Prepare the private run directory of the copy
+      bootwright.core.lifecycle_scratch:
+        root: '{{ bootwright_run_scratch }}'
+        scope: mirror-release
+      register: infrastructureservices_mirror_release_run
+
+    - name: Prepare the release's own oc and the files lent to it
+      bootwright.core.infrastructureservices_mirror_release:
+        mode: prepare
+        scratch: '{{ infrastructureservices_mirror_release_scratch }}'
+        auth: "{{ lookup('ansible.builtin.file', bootwright_mirror_release_material.releaseAuth, rstrip=false) }}"
+        release: '{{ bootwright_mirror_release_request.release }}'
+        client: '{{ bootwright_mirror_release_request.client }}'
+        mirror: '{{ bootwright_mirror_release_request.mirror.host }}'
+        egress: '{{ bootwright_mirror_release_request.egress }}'
+        username: "{{ lookup('ansible.builtin.file', bootwright_mirror_release_material.imageUsername, rstrip=false) }}"
+        password: "{{ lookup('ansible.builtin.file', bootwright_mirror_release_material.imagePassword, rstrip=false) }}"
+        trust: "{{ lookup('ansible.builtin.file', bootwright_mirror_release_material.imageTrust, rstrip=false) }}"
+        timeout: '{{ infrastructureservices_mirror_release_read_timeout | int }}'
+      register: infrastructureservices_mirror_release_prepared
+      failed_when: false
+      no_log: true
+
+    - name: Name a client that could not be prepared
+      bootwright.core.infrastructureservices_mirror_release_protocol:
+        phase: refused
+        reason: '{{ infrastructureservices_mirror_release_prepared.reason | default("client-unreachable") }}'
+      when: infrastructureservices_mirror_release_prepared.failed | default(false)
+      no_log: true
+
+    - name: Refuse the copy without a verified client
+      ansible.builtin.fail:
+        msg: the release's oc could not be read and verified, so nothing was copied
+      when: infrastructureservices_mirror_release_prepared.failed | default(false)
+
+    - name: Copy the release and its components with the release's own oc
+      ansible.builtin.command:
+        argv:
+          - '{{ infrastructureservices_mirror_release_client }}'
+          - adm
+          - release
+          - mirror
+          - -a
+          - '{{ infrastructureservices_mirror_release_auth }}'
+          - '--from={{ infrastructureservices_mirror_release_source }}'
+          - '--to={{ infrastructureservices_mirror_release_target }}/{{ bootwright_mirror_release_request.release.components }}'
+          - >-
+            --to-release-image={{ infrastructureservices_mirror_release_target }}/{{ bootwright_mirror_release_request.release.repository
+            }}:{{ bootwright_mirror_release_request.release.tag }}
+          - --insecure=false
+        expand_argument_vars: false
+      environment: '{{ infrastructureservices_mirror_release_environment }}'
+      register: infrastructureservices_mirror_release_copied
+      changed_when: infrastructureservices_mirror_release_copied.rc == 0
+      failed_when: false
+
+    - name: Name a copy that failed
+      bootwright.core.infrastructureservices_mirror_release_protocol:
+        phase: refused
+        reason: release-unreachable
+      when: infrastructureservices_mirror_release_copied.rc != 0
+      no_log: true
+
+    - name: Refuse the copy after naming why
+      ansible.builtin.fail:
+        msg: the release's oc could not copy the release into the image mirror
+      when: infrastructureservices_mirror_release_copied.rc != 0
+
+    - name: Read the release back from the image mirror
+      bootwright.core.infrastructureservices_mirror_release:
+        mode: read
+        release: '{{ bootwright_mirror_release_request.release }}'
+        client: '{{ bootwright_mirror_release_request.client }}'
+        mirror: '{{ bootwright_mirror_release_request.mirror.host }}'
+        egress: '{{ bootwright_mirror_release_request.egress }}'
+        username: "{{ lookup('ansible.builtin.file', bootwright_mirror_release_material.imageUsername, rstrip=false) }}"
+        password: "{{ lookup('ansible.builtin.file', bootwright_mirror_release_material.imagePassword, rstrip=false) }}"
+        trust: "{{ lookup('ansible.builtin.file', bootwright_mirror_release_material.imageTrust, rstrip=false) }}"
+        timeout: '{{ infrastructureservices_mirror_release_read_timeout | int }}'
+      register: infrastructureservices_mirror_release_verified
+      failed_when: false
+      no_log: true
+
+    - name: Name a release the mirror does not hold whole after the copy
+      bootwright.core.infrastructureservices_mirror_release_protocol:
+        phase: refused
+        reason: '{{ infrastructureservices_mirror_release_verified.reason | default("release-incomplete") }}'
+      when: >-
+        infrastructureservices_mirror_release_verified.digest | default('') == ''
+        or infrastructureservices_mirror_release_verified.missing | default(1) | int != 0
+        or infrastructureservices_mirror_release_verified.components | default([]) | length == 0
+      no_log: true
+
+    - name: Refuse a release the mirror does not hold whole
+      ansible.builtin.fail:
+        msg: the image mirror lacks the release or one of its components after the copy
+      when: >-
+        infrastructureservices_mirror_release_verified.digest | default('') == ''
+        or infrastructureservices_mirror_release_verified.missing | default(1) | int != 0
+        or infrastructureservices_mirror_release_verified.components | default([]) | length == 0
+  always:
+    - name: Remove the client and everything lent into the private run directory
+      bootwright.core.infrastructureservices_mirror_release:
+        mode: clean
+        scratch: '{{ infrastructureservices_mirror_release_scratch }}'
+        lent: '{{ infrastructureservices_mirror_release_lent }}'
+      when: infrastructureservices_mirror_release_run is succeeded
+
+    - name: Remove the private run directory
+      bootwright.core.lifecycle_scratch:
+        root: '{{ bootwright_run_scratch }}'
+        scope: mirror-release
+        state: absent
+        remove_root: "{{ bootwright_mirror_release_request.placement.connection == 'ssh' }}"
+      when: infrastructureservices_mirror_release_run is succeeded
+
+- name: Publish bounded release copy completion evidence
+  bootwright.core.infrastructureservices_mirror_release_protocol:
+    phase: completed
+    outcome: "{{ 'changed' if infrastructureservices_mirror_release_copied.changed | default(false) else 'unchanged' }}"
+    digest: '{{ bootwright_mirror_release_digest }}'
+    release: '{{ bootwright_mirror_release_request.release }}'
+    held:
+      digest: '{{ infrastructureservices_mirror_release_held.digest }}'
+      components: '{{ infrastructureservices_mirror_release_held.components }}'
+      missing: '{{ infrastructureservices_mirror_release_held.missing | int }}'
+  no_log: true

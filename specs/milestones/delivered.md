@@ -14960,3 +14960,96 @@ area that lost its mark. A request is frozen per operation, so such a rebuild
 inside the operation that recorded the boot happens only when the published
 image or its receipt went missing, and it reads unknown, the safe direction; a
 new operation's install block holds no recorded boot.
+
+### X430 — OpenShift releases copied into the managed image mirror
+
+**Item:** B1249 (2026-11-11, [D250](backlog.md#d250) (8),
+[D251](backlog.md#d251) (6) and (36) to (40)), partly delivered in-tree, so
+the item stays in the backlog with its remaining slices (c) and (d). The slice
+is the session plan's second slice, part (b) of the item. D251 (34) and (35)
+are unused, since X409, in flight beside it, took (31) to (33). A managed
+image mirror on a Machine Bootwright installs stays refused (D251 (33)), so
+the copy runs only over SSH or locally.
+
+*Registry mirror.* A managed Registry is a cluster's registry mirror when it
+is the Environment's image mirror: `infrastructureservices.ImageMirrorOf`
+gives its `<address>:<port>` host and anchor, its `credentialsRef` joins the
+install pull secret, the anchor joins the cluster's trust bundles, and both
+release repositories map beneath that host, as
+[X357](#x357--release-repositories-from-the-image-mirror) maps an external
+one; no media or install request shape moved. A managed Registry selected
+outside the image mirror refuses, and under it a release image outside
+`quay.io/openshift-release-dev/ocp-release`, or pinned by a tag other than
+`<version>-x86_64`, refuses (three rows of the
+[refusal table](../openshift-clusters.md#refusal-table), D251 (36)).
+
+*Release fill.* The `mirrorfill` capability gains implementation
+`mirror-release-v1`, block `mirror-release-<cluster>` keyed by the cluster in
+the `mirror-fill` family, planned through a port composition binds
+(`mirrorReleases`) from the clusters `agentinstall.MirroredRelease` admits and
+the controller stage's own `openshift-clients` source. It requires the
+Registry's block and holds its push exclusively; the cluster's image build
+requires it, the installation after that build, and it waits for the
+controller stage (D251 (37)). The role
+`infrastructureservices_mirror_release` reads the mirror first through the
+module `infrastructureservices_mirror_release`, which proves the release and
+each component its image references name by digest, so a replay runs nothing;
+otherwise it prepares the run's private `mirror-release` scratch with the
+release's `oc`, checked against the publisher's `sha256sum.txt`, runs `oc adm
+release mirror` with `-a`, private home and XDG directories, `SSL_CERT_DIR`
+naming the anchor beside the system roots and `--insecure=false`, reads the
+mirror back, refusing a missing component with `lifecycle.state`, and empties
+and removes the scratch in an `always` (D251 (38), (39)). Each layer read is
+bounded in bytes, headers and time and must hash to its digest, and a damaged
+copy the first read finds is copied over rather than refused. The protocol action
+`infrastructureservices_mirror_release_protocol` publishes the evidence: the
+release digest, each component and how many are missing.
+
+*Custody.* The controller derives per attempt an auth document of the pull
+secret's `quay.io` token and the Registry's credential for its own location
+alone, lends it under a material name no Secret has and clears it when the run
+returns; the pull secret itself is never lent, and one with no `quay.io` token
+refuses before any run. On the mirror host the document and the anchor sit in
+a private directory on tmpfs beneath `/run`, and the next copy sweeps one a
+killed copy left, with its stale scratch (D251 (40),
+`TestTheReleaseFillLendsATwoEntryAuthDocumentToTheApplyAlone`).
+
+*Records.* Specs: the [mirror host](../infrastructure-services.md#mirror-host)
+release fill, custody and ordering, the
+[registry mirrors](../openshift-clusters.md#installation-features) and
+refusal table (its BMC trust prose moved to a leaf of its own to keep the
+table's leaf in budget), the reference-edge rows, the acquisition origins row
+and custody paragraph of [security](../security.md#sensitive-material), the
+[image mirror](../api/environment.md#image-mirror) and the deferred page. The
+example `openshift-clusters/lab-sno-release-mirror` carries the shape;
+`render acquisitions` lists the mirror host's `mirror release` rows from
+`quay.io` with its delivery hosts, its client and checksum reads and the
+release signature stores oc reads. A cluster under the mirror with no pull
+secret, or whose release the stage selects no `oc` for, refuses naming what to
+set, and a release image naming a tag other than its version's beside a
+digest refuses too. The
+pre-existing gap that the image fill's rows name no delivery hosts is
+[B1336](backlog.md#b1336). Contracts: the new `mirror-release-v1` golden; no
+other request or digest moved, since a cluster under a managed image mirror
+refused before.
+
+*Review.* An independent review found no Blocking or High findings; its two
+Medium and six Low findings are fixed here: the lent document on tmpfs and the
+sweep of what a killed copy left (M1), a damaged copy repaired (M2), bounded
+and hashed layer reads (L1), the refusals of a cluster with no pull secret or
+client (L2), a tag beside a digest (L3), the signature rows (L4), and the
+deprecation and log notes (L5, L6).
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** no host has run the copy: `oc adm release mirror`
+against a Distribution registry, the release's layer layout the read-back
+assumes, oc's behaviour under `SSL_CERT_DIR` and a private `HOME`, a static
+`oc` on a FIPS-mode mirror host, the Registry's disk for a whole release, and
+the controller build's fallback to `quay.io` past a failing mirror
+([B1326](backlog.md#b1326)) are proved by unit tests of the module, role and
+capability alone. `oc adm release mirror` is deprecated in 4.22, to be removed
+in 6.0 in favour of `oc-mirror`, so a later release needs the copy moved; oc's
+report of what it copied enters the run's log unbounded, holding no
+credential; `skopeo` on the controller and an installed mirror host
+remain on [B1249](backlog.md#b1249), and the live proof is
+[B1250](backlog.md#b1250).

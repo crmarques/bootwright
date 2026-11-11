@@ -173,6 +173,15 @@ file as its source, and a template named by a variable that resolves to no
 checked role template is refused (`test_no_file_transfer_carries_lent_material`,
 `test_no_playbook_transfer_carries_lent_material`).
 
+A pull secret reaches a mirror host's release copy only as an auth document
+the controller derives in Go for that attempt, holding the pull secret's
+`quay.io` token and the image mirror Registry's credential for its own
+location and nothing else, lent as one file the copy's module writes `0600` in
+a private directory on tmpfs beneath `/run` and passes to `oc -a` with a
+private `HOME`; it is removed in an `always`, a later copy sweeps one a killed
+copy left, and the controller clears the document when the run returns
+([release custody](infrastructure-services.md#mirror-host)).
+
 A managed-OS registration's organization and
 activation key are read from their lent material files by the controller
 module that opens the guest connection; they cross that pinned SSH session
@@ -904,7 +913,7 @@ states its route:
 | A managed service's image | The executable's compiled default | The [image mirror](api/environment.md#image-mirror) for a public-origin image, or the service's `spec.image.local` ([management and placement](api/infrastructure-services.md#management-and-placement)); a managed mirror's own [mirror host](infrastructure-services.md#mirror-host) copies the image from its origin by digest, with the Registry's credential and anchor lent to that copy alone, and its own services read their origins |
 | The emulated BMC's image | The executable's compiled default | The [image mirror](api/environment.md#image-mirror); without it the provider host acquires the image, and only when it does not hold it ([Machine realization](substrates.md#machine-realization)) |
 | Operating-system media | The file or URL the operator names | The operator's own choice of source ([media store](managed-os.md#media-store)) |
-| A container cluster's release images | The release's publisher registries | The cluster's [registry policy](api/openshift-clusters.md#registry-policy) |
+| A container cluster's release images | The release's publisher registries | The cluster's [registry policy](api/openshift-clusters.md#registry-policy); under a managed image mirror the [mirror host](infrastructure-services.md#mirror-host) copies the release from `quay.io` with the release's own `oc`, checked against its publisher's `sha256sum.txt`, lent only the pull secret's `quay.io` token and the Registry's credential |
 | An add-on's catalog image | The `catalogSource` image the add-on authors, on the registry its author chose | The catalog's contents are the cluster's mirror tooling's (`oc-mirror`); the image's registry is classed by its host, so only `icr.io` and Red Hat's are vendor origins |
 | A connected cluster's default OperatorHub catalogs and update service | `registry.redhat.io` and `api.openshift.com`, vendor origins, which Bootwright leaves enabled | The cluster's own GitOps, which disables the defaults ([OLM installation](add-ons.md#olm-installation)) |
 | An installed Machine's repositories | `cdn.redhat.com` and `subscription.rhsm.redhat.com` for a hosted subscription, a vendor origin | The Entitlement's Satellite, or the profile's `repositories.configure` entries ([registration](managed-os.md#registration)) |
