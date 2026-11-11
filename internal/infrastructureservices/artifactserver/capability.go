@@ -57,7 +57,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			ID:             request.Identity.Block,
 			Description:    description(input.Verb, request),
 			Stage:          reconciliation.StageInfrastructureServices,
-			Requires:       managedservice.PlacementRequirements(catalog, request.Placement, probedAddresses(request)),
+			Requires:       append(managedservice.PlacementRequirements(catalog, request.Placement, probedAddresses(request)), managedservice.MirrorRequirements(catalog, request.ImageSource)...),
 			Impacts:        impacts(input.Verb, request),
 			Groups:         groups(input.Verb, request),
 			Kind:           Kind,

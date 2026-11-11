@@ -40,7 +40,7 @@ func TestAnImageMirrorServesEveryPublicOriginImageUnderItsOriginAtTheSameDigest(
 		"localhost:5000/squid" + digest:               "localhost:5000/squid" + digest,
 		"registry.access.redhat.com/ubi9" + digest:    "registry.access.redhat.com/ubi9" + digest,
 	} {
-		got, source := MirroredImage(catalog, origin)
+		got, source := MirroredImage(catalog, origin, "controller")
 		if got == origin && source == nil && got == want {
 			continue
 		}
@@ -48,7 +48,7 @@ func TestAnImageMirrorServesEveryPublicOriginImageUnderItsOriginAtTheSameDigest(
 			t.Fatalf("%s mirrored to %s with %+v, want %s", origin, got, source, want)
 		}
 	}
-	if got, source := MirroredImage(catalogOf(), "quay.io/a/b"+digest); got != "quay.io/a/b"+digest || source != nil {
+	if got, source := MirroredImage(catalogOf(), "quay.io/a/b"+digest, "controller"); got != "quay.io/a/b"+digest || source != nil {
 		t.Fatalf("an undeclared mirror moved the image to %s (%+v)", got, source)
 	}
 }
@@ -123,5 +123,49 @@ func TestAManagedServicePullsFromTheMirrorWithItsSecretsBound(t *testing.T) {
 	requests, err := capability.Requests(pinned, "controller", testContext)
 	if err != nil || requests[0].Image != local || requests[0].ImageSource != nil {
 		t.Fatalf("a local image moved: %+v (%v)", requests, err)
+	}
+}
+
+func managedMirror(extra ...api.FieldValue) []api.Object {
+	return []api.Object{
+		api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue(
+			field("mirror", api.MapValue(field("registry", api.MapValue(text("registryRef", "mirror"), text("endpointRef", "ip"))))))),
+		api.NewObject(api.Machine, "mirror-host", api.Value{}, api.MapValue(field("network", api.MapValue(field("addresses",
+			api.ListValue(api.MapValue(text("name", "ip"), text("address", "203.0.113.20")))))))),
+		api.NewObject(api.Registry, "mirror", api.Value{}, api.MapValue(append([]api.FieldValue{
+			text("management", "managed"), text("machineRef", "mirror-host"), field("port", api.IntegerValue("5000")),
+			field("tls", api.MapValue(text("secretRef", "mirror-tls"))), text("credentialsRef", "mirror-push"),
+			field("endpoints", api.ListValue(api.MapValue(text("name", "ip"), text("addressRef", "ip")))),
+		}, extra...)...)),
+		api.NewObject(api.Secret, "mirror-push", api.Value{}, api.MapValue(text("type", "usernamePassword"))),
+		api.NewObject(api.Secret, "mirror-ca", api.Value{}, api.MapValue(text("type", "caBundle"))),
+		api.NewObject(api.Secret, "mirror-tls", api.Value{}, api.MapValue(text("type", "tlsCertificate"),
+			field("source", api.MapValue(field("generated", api.MapValue(text("issuerRef", "mirror-ca"))))))),
+	}
+}
+
+// A managed Registry is the image mirror at its selected endpoint's address
+// and port, trusted through its certificate's issuer and read with its own
+// credential; every image pulled on its own Machine stays at its origin, so
+// the mirror never waits for itself, and every other pull requires it.
+func TestAManagedImageMirrorIsReadAtItsEndpointAndNeverByItsOwnHost(t *testing.T) {
+	origin := "quay.io/metal3-io/sushy-tools@sha256:" + strings.Repeat("a", 64)
+	catalog := catalogOf(managedMirror()...)
+	got, source := MirroredImage(catalog, origin, "controller")
+	if got != "203.0.113.20:5000/"+origin || source == nil || *source != (ImageSource{Host: "203.0.113.20:5000", CredentialsRef: "mirror-push", CredentialsType: "usernamePassword", TrustBundleRef: "mirror-ca"}) {
+		t.Fatalf("mirrored to %s with %+v", got, source)
+	}
+	if required := MirrorRequirements(catalog, source); !slices.Equal(required, []reconciliation.ObjectRef{{Kind: "Registry", Object: "mirror"}}) {
+		t.Fatalf("a consumer requires %+v", required)
+	}
+	if got, source := MirroredImage(catalog, origin, "mirror-host"); got != origin || source != nil || MirrorRequirements(catalog, source) != nil {
+		t.Fatalf("the mirror host pulls %s (%+v)", got, source)
+	}
+	authored := catalogOf(managedMirror(text("trustBundleRef", "corporate-ca"))...)
+	if _, source := MirroredImage(authored, origin, "controller"); source == nil || source.TrustBundleRef != "corporate-ca" {
+		t.Fatalf("an authored anchor was replaced: %+v", source)
+	}
+	if required := MirrorRequirements(catalogOf(mirrorEnvironment(), mirrorRegistry()), &ImageSource{Host: "m"}); required != nil {
+		t.Fatalf("an external mirror requires %+v", required)
 	}
 }

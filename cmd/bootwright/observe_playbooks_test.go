@@ -48,32 +48,33 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 		allow[observeTaskKey{role, file, module}] = observeAllowance{reason, holds}
 	}
 	for role, protocol := range map[string]string{
-		"cluster_objects":                    "cluster_objects_protocol",
-		"containercluster_install_agent":     "containercluster_install_protocol",
-		"containercluster_media_agent":       "containercluster_media_protocol",
-		"infra_artifact_server_nginx":        "artifact_server_protocol",
-		"infra_managed_service":              "infra_service_protocol",
-		"infrastructureservices_mirror_fill": "infrastructureservices_mirror_files_protocol",
-		"managedos_install_anaconda":         "managedos_install_protocol",
-		"managedos_package_tree":             "managedos_tree_protocol",
-		"managedos_host_firewall":            "managedos_firewall_protocol",
-		"storage_ceph_core":                  "ceph_cluster_protocol",
-		"storage_ceph_host":                  "ceph_cluster_protocol",
-		"storage_ceph_image":                 "ceph_image_protocol",
-		"storage_ceph_smb":                   "ceph_smb_protocol",
-		"storage_ceph_replication":           "ceph_replication_protocol",
-		"storage_ceph_consumer":              "ceph_export_protocol",
-		"substrate_baremetal_machine":        "substrate_physical_protocol",
-		"substrate_libvirt_host":             "substrate_host_protocol",
-		"substrate_libvirt_machine":          "substrate_libvirt_machine_protocol",
-		"substrate_kubevirt_host":            "substrate_kubevirt_protocol",
-		"substrate_kubevirt_machine":         "substrate_kubevirt_protocol",
+		"cluster_objects":                      "cluster_objects_protocol",
+		"containercluster_install_agent":       "containercluster_install_protocol",
+		"containercluster_media_agent":         "containercluster_media_protocol",
+		"infra_artifact_server_nginx":          "artifact_server_protocol",
+		"infra_managed_service":                "infra_service_protocol",
+		"infrastructureservices_mirror_fill":   "infrastructureservices_mirror_files_protocol",
+		"infrastructureservices_mirror_images": "infrastructureservices_mirror_images_protocol",
+		"managedos_install_anaconda":           "managedos_install_protocol",
+		"managedos_package_tree":               "managedos_tree_protocol",
+		"managedos_host_firewall":              "managedos_firewall_protocol",
+		"storage_ceph_core":                    "ceph_cluster_protocol",
+		"storage_ceph_host":                    "ceph_cluster_protocol",
+		"storage_ceph_image":                   "ceph_image_protocol",
+		"storage_ceph_smb":                     "ceph_smb_protocol",
+		"storage_ceph_replication":             "ceph_replication_protocol",
+		"storage_ceph_consumer":                "ceph_export_protocol",
+		"substrate_baremetal_machine":          "substrate_physical_protocol",
+		"substrate_libvirt_host":               "substrate_host_protocol",
+		"substrate_libvirt_machine":            "substrate_libvirt_machine_protocol",
+		"substrate_kubevirt_host":              "substrate_kubevirt_protocol",
+		"substrate_kubevirt_machine":           "substrate_kubevirt_protocol",
 	} {
 		add(role, "observe.yml", observeCollection+protocol, "publishes the handoff and evidence on the runner's own channel", read)
 	}
 	for _, role := range []string{
 		"addons_instance", "containercluster_network", "containercluster_install_agent", "containercluster_media_agent", "managedos_install_anaconda", "managedos_host_firewall",
-		"managedos_package_tree", "infrastructureservices_mirror_fill", "storage_ceph_core", "storage_ceph_host", "storage_ceph_image",
+		"managedos_package_tree", "infrastructureservices_mirror_fill", "infrastructureservices_mirror_images", "storage_ceph_core", "storage_ceph_host", "storage_ceph_image",
 		"storage_ceph_smb", "storage_ceph_replication", "storage_ceph_consumer", "substrate_baremetal_machine", "substrate_libvirt_host", "substrate_libvirt_machine",
 		"substrate_kubevirt_host", "substrate_kubevirt_machine",
 	} {
@@ -132,6 +133,10 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("containercluster_media_agent", "observe.yml", "ansible.builtin.copy", "hands the kept kubeconfig to custody through the declared output", observeCustodyCopy)
 	add("infra_artifact_server_nginx", "observe.yml", observeCollection+"artifact_server_inspect", "reads the served unit, container and content", read)
 	add("infra_managed_service", "observe.yml", observeCollection+"infra_service_inspect", "reads the managed service's unit, container and answers", read)
+	add("infrastructureservices_mirror_images", "observe.yml", observeCollection+"infrastructureservices_mirror_image", "asks the image mirror for each manifest by digest and copies nothing", func(params, _ map[string]any) bool {
+		return params["observe"] == true
+	})
+	add("infrastructureservices_mirror_images", "observe.yml", "ansible.builtin.fail", "refuses an observation that could not read the mirror without touching it", read)
 	add("managedos_install_anaconda", "observe.yml", observeCollection+"managedos_install_inspect", "reads the published installation content", read)
 	add("managedos_install_anaconda", "observe.yml", "ansible.builtin.set_fact", "names, in memory, a removal's read of a machine holding nothing of this installation", read)
 	add("managedos_install_anaconda", "observe.yml", observeCollection+"hosted_area", "proves the work area's hosted ancestors without creating one", func(params, _ map[string]any) bool {

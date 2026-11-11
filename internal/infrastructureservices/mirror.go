@@ -43,6 +43,57 @@ func ArtifactMirrorOf(c api.Catalog) (ArtifactMirror, bool) {
 	return mirror, true
 }
 
+type ImageMirror struct {
+	Location       string
+	CredentialsRef string
+	TrustBundleRef string
+	Registry       api.Object
+	Managed        bool
+}
+
+func ImageMirrorOf(c api.Catalog) (ImageMirror, bool) {
+	environments := c.OfKind(api.Environment)
+	if len(environments) != 1 {
+		return ImageMirror{}, false
+	}
+	selection := environments[0].Spec().Get("mirror", "registry")
+	registry, found := c.Find(api.Registry, selection.Get("registryRef").Text())
+	if !selection.Has("registryRef") || !found {
+		return ImageMirror{}, false
+	}
+	spec := registry.Spec()
+	mirror := ImageMirror{Registry: registry, CredentialsRef: spec.Get("credentialsRef").Text(), TrustBundleRef: spec.Get("trustBundleRef").Text()}
+	if spec.Get("management").Text() != "managed" {
+		mirror.Location = spec.Get("url").Text()
+		return mirror, true
+	}
+	mirror.Managed = true
+	if mirror.TrustBundleRef == "" {
+		mirror.TrustBundleRef = IssuingAuthority(c, spec.Get("tls", "secretRef").Text())
+	}
+	endpoint, selected := namedEntry(spec.Get("endpoints"), selection.Get("endpointRef").Text())
+	machine, placed := c.Find(api.Machine, spec.Get("machineRef").Text())
+	port, numbered := spec.Get("port").Int64()
+	if !selected || !placed || !numbered || port < 1 || port > 65535 {
+		return mirror, true
+	}
+	if address := machineAddress(machine, endpoint.Get("addressRef").Text()); address != "" {
+		if strings.Contains(address, ":") {
+			address = "[" + address + "]"
+		}
+		mirror.Location = address + ":" + strconv.FormatInt(port, 10)
+	}
+	return mirror, true
+}
+
+func ImageMirrorHost(c api.Catalog) string {
+	mirror, declared := ImageMirrorOf(c)
+	if !declared || !mirror.Managed {
+		return ""
+	}
+	return mirror.Registry.Spec().Get("machineRef").Text()
+}
+
 func MirrorHost(c api.Catalog) string {
 	mirror, declared := ArtifactMirrorOf(c)
 	if !declared || !mirror.Managed {

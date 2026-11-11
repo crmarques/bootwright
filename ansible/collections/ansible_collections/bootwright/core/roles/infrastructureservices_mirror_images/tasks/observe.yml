@@ -1,0 +1,54 @@
+---
+- name: Validate the frozen image mirror request
+  ansible.builtin.assert:
+    that:
+      - bootwright_mirror_images_request.version == 'mirror-images-v1'
+      - bootwright_mirror_images_request.identity.context is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_images_request.identity.environment is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_images_request.identity.registry is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_images_request.mirror.host is match('^([a-z0-9]([a-z0-9.-]*[a-z0-9])?|\[[0-9a-f:.]+\]):[0-9]{1,5}$(?!\n)')
+      - bootwright_mirror_images_request.mirror.credentialsType == 'usernamePassword'
+      - bootwright_mirror_images_request.images | length > 0
+      - bootwright_mirror_images_request.images | length <= 64
+      - infrastructureservices_mirror_images_sources | unique | list | length == infrastructureservices_mirror_images_count | int
+      - infrastructureservices_mirror_images_valid_repositories | length == infrastructureservices_mirror_images_count | int
+      - infrastructureservices_mirror_images_valid_digests | length == infrastructureservices_mirror_images_count | int
+      - infrastructureservices_mirror_images_paired_sources == infrastructureservices_mirror_images_sources
+      - bootwright_mirror_images_digest is match('^[0-9a-f]{64}$(?!\n)')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.infrastructureservices_mirror_images_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Read which pinned images the image mirror holds
+  bootwright.core.infrastructureservices_mirror_image:
+    images: '{{ bootwright_mirror_images_request.images }}'
+    mirror: '{{ bootwright_mirror_images_request.mirror.host }}'
+    egress: '{{ bootwright_mirror_images_request.egress }}'
+    username: "{{ lookup('ansible.builtin.file', bootwright_mirror_images_material.imageUsername, rstrip=false) }}"
+    password: "{{ lookup('ansible.builtin.file', bootwright_mirror_images_material.imagePassword, rstrip=false) }}"
+    trust: "{{ lookup('ansible.builtin.file', bootwright_mirror_images_material.imageTrust, rstrip=false) }}"
+    timeout: '{{ infrastructureservices_mirror_images_read_timeout | int }}'
+    observe: true
+  register: infrastructureservices_mirror_images_observed
+  failed_when: false
+  no_log: true
+
+- name: Publish bounded image mirror observation
+  bootwright.core.infrastructureservices_mirror_images_protocol:
+    phase: completed
+    outcome: unchanged
+    digest: '{{ bootwright_mirror_images_digest }}'
+    images: '{{ bootwright_mirror_images_request.images }}'
+    held: '{{ infrastructureservices_mirror_images_observed.images | default([]) }}'
+    observed: true
+  when: infrastructureservices_mirror_images_observed.images is defined
+  no_log: true
+
+- name: Refuse an observation that could not read the image mirror
+  ansible.builtin.fail:
+    msg: the image mirror could not be read, so what it holds is unknown
+  when: infrastructureservices_mirror_images_observed.images is not defined

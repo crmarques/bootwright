@@ -7,6 +7,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -213,7 +214,7 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 // the same host whose managed bridge carries the emulated BMC's bind address,
 // because that listener cannot open before the bridge exists.
 func machineRequires(catalog api.Catalog, provider string, request MachineRequest) []reconciliation.ObjectRef {
-	requires := []reconciliation.ObjectRef{{Kind: HostKind, Object: provider}}
+	requires := append([]reconciliation.ObjectRef{{Kind: HostKind, Object: provider}}, managedservice.MirrorRequirements(catalog, request.Controller.ImageSource)...)
 	for _, bridged := range substrate.BridgeProviders(catalog, request.Placement.Machine, request.Controller.Address) {
 		if bridged != provider {
 			requires = append(requires, reconciliation.ObjectRef{Kind: HostKind, Object: bridged})

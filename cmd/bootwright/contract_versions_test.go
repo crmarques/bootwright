@@ -60,6 +60,7 @@ func contractVersions() []contractVersion {
 		{agentinstall.InstallImplementation, agentinstall.InstallContentDigest(), reflect.TypeFor[agentinstall.InstallRequest](), reflect.TypeFor[agentinstall.InstallEvidence]()},
 		{artifactserver.Implementation, artifactserver.ContentDigest(), reflect.TypeFor[artifactserver.Request](), reflect.TypeFor[artifactserver.Evidence]()},
 		{mirrorfill.FilesImplementation, mirrorfill.FilesContentDigest(), reflect.TypeFor[mirrorfill.FilesRequest](), reflect.TypeFor[mirrorfill.FilesEvidence]()},
+		{mirrorfill.ImagesImplementation, mirrorfill.ImagesContentDigest(), reflect.TypeFor[mirrorfill.ImagesRequest](), reflect.TypeFor[mirrorfill.ImagesEvidence]()},
 		{ceph.Implementation, ceph.ContentDigest(), reflect.TypeFor[ceph.Request](), reflect.TypeFor[ceph.Evidence]()},
 		{ceph.ImageImplementation, ceph.ImageContentDigest(), reflect.TypeFor[ceph.ImageRequest](), reflect.TypeFor[ceph.ImageEvidence]()},
 		{ceph.HostImplementation, ceph.HostContentDigest(), reflect.TypeFor[ceph.HostRequest](), reflect.TypeFor[ceph.HostEvidence]()},
@@ -210,6 +211,8 @@ func automationFormats() map[string]automationFormat {
 		"bootwright-pull-broker-v1":                  transient("the pull broker's User-Agent"),
 		"bootwright-contained-public-label-probe-v1": transient("the bytes the label probe writes in its own scratch and reads back"),
 		"bootwright-image-":                          transient("the private directory one image pull is lent its credential and trust anchor in, removed after it"),
+		"bootwright-mirror-":                         transient("the private directory one image mirror fill lends skopeo the mirror's credential and trust anchor in, removed after it"),
+		"bootwright-mirror-trust-":                   transient("the private directory the image mirror's reads are lent its trust anchor in, removed after them"),
 		"ceph-package-transaction-v1":                transient("the guest package transaction policy ceph_packages.transaction_request builds and the shared resolver reads within one run"),
 
 		"export-prerequisite-monitor-v2": transient("the MON v2 prerequisite refusal token, read from the result channel within one adapter run"),
@@ -226,6 +229,7 @@ func automationFormats() map[string]automationFormat {
 		"ceph-smb-evidence-v1":         {class: formatMirrored},
 		"os-package-tree-evidence-v1":  {class: formatMirrored},
 		"mirror-files-evidence-v1":     {class: formatMirrored},
+		"mirror-images-evidence-v1":    {class: formatMirrored},
 		"ceph-replication-v1":          {class: formatMirrored},
 		"ceph-replication-evidence-v1": {class: formatMirrored},
 		// The request versions each role refuses unless its request names.
@@ -240,6 +244,7 @@ func automationFormats() map[string]automationFormat {
 		"substrate-access-kubevirt-evidence-v1": {class: formatMirrored},
 		"os-package-tree-v1":                    {class: formatMirrored},
 		"mirror-files-v1":                       {class: formatMirrored},
+		"mirror-images-v1":                      {class: formatMirrored},
 		"os-install-anaconda-v2":                {class: formatMirrored},
 		"physical-erase-v3":                     {class: formatMirrored},
 		"physical-erase-v1":                     {class: formatMirrored},

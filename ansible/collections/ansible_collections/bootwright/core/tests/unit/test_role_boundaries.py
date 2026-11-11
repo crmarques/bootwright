@@ -91,6 +91,7 @@ EXECUTABLES = frozenset({
     "/usr/bin/podman",
     "/usr/bin/qemu-img",
     "/usr/bin/rmdir",
+    "/usr/bin/skopeo",
     "/usr/bin/ssh",
     "/usr/bin/systemctl",
     "/usr/bin/timeout",

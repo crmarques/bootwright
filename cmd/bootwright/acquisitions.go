@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/url"
+	"slices"
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -15,6 +16,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/mirrorfill"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
 	cephnative "github.com/crmarques/bootwright/internal/storage/ceph"
@@ -41,12 +43,11 @@ func listAcquisitions(catalog api.Catalog) ([]cli.Acquisition, error) {
 		return nil, err
 	}
 	acquired = append(acquired, fills...)
-	services, err := serviceAcquisitions(catalog)
+	images, err := imageAcquisitions(catalog)
 	if err != nil {
 		return nil, err
 	}
-	acquired = append(acquired, services...)
-	acquired = append(acquired, emulatorAcquisitions(catalog)...)
+	acquired = append(acquired, images...)
 	acquired = append(acquired, clusterAcquisitions(catalog, controllerMachine)...)
 	acquired = append(acquired, storageAcquisitions(catalog, controllerMachine)...)
 	acquired = append(acquired, operatorAcquisitions(catalog)...)
@@ -119,12 +120,16 @@ func mirrorFillAcquisitions(catalog api.Catalog) ([]cli.Acquisition, error) {
 	return rows, nil
 }
 
-func serviceAcquisitions(catalog api.Catalog) ([]cli.Acquisition, error) {
+type imagePull struct {
+	kind, origin, pulled, machine, consumer string
+}
+
+func imagePulls(catalog api.Catalog) ([]imagePull, error) {
 	compiled := map[api.Kind]string{
 		api.ArtifactServer: artifactserver.DefaultImage(), api.DNSServer: dnsserver.Definition(nil).Image,
 		api.NTPServer: ntpserver.Definition().Image, api.Proxy: proxy.Definition().Image, api.Registry: registryDefinition().Image,
 	}
-	var rows []cli.Acquisition
+	var pulls []imagePull
 	for _, kind := range []api.Kind{api.ArtifactServer, api.DNSServer, api.NTPServer, api.Proxy, api.Registry} {
 		for _, service := range catalog.OfKind(kind) {
 			if service.Spec().Get("management").Text() != "managed" {
@@ -134,29 +139,71 @@ func serviceAcquisitions(catalog api.Catalog) ([]cli.Acquisition, error) {
 			if err != nil {
 				return nil, err
 			}
+			machine, pulled := service.Spec().Get("machineRef").Text(), reference
 			if !service.Spec().Get("image", "local").Present() {
-				reference, _ = managedservice.MirroredImage(catalog, reference)
+				pulled, _ = managedservice.MirroredImage(catalog, reference, machine)
 			}
-			rows = append(rows, imageAcquisition("service image", reference, []string{service.Spec().Get("machineRef").Text()}, service.Identity()))
+			pulls = append(pulls, imagePull{kind: "service image", origin: reference, pulled: pulled, machine: machine, consumer: service.Identity()})
 		}
 	}
-	return rows, nil
-}
-
-func emulatorAcquisitions(catalog api.Catalog) []cli.Acquisition {
 	referenced := map[string]bool{}
 	for _, machine := range catalog.OfKind(api.Machine) {
 		referenced[machine.Spec().Get("substrate", "providerRef").Text()] = true
 	}
-	var rows []cli.Acquisition
 	for _, provider := range catalog.OfKind(api.InfraProvider) {
 		if substrate.Variant(provider) != substrate.ArmLibvirt || !referenced[provider.Name()] {
 			continue
 		}
-		reference, _ := managedservice.MirroredImage(catalog, libvirt.EmulatorImage())
-		rows = append(rows, imageAcquisition("emulated BMC image", reference, []string{substrate.HostMachine(provider)}, provider.Identity()))
+		machine := substrate.HostMachine(provider)
+		pulled, _ := managedservice.MirroredImage(catalog, libvirt.EmulatorImage(), machine)
+		pulls = append(pulls, imagePull{kind: "emulated BMC image", origin: libvirt.EmulatorImage(), pulled: pulled, machine: machine, consumer: provider.Identity()})
 	}
-	return rows
+	return pulls, nil
+}
+
+func imageAcquisitions(catalog api.Catalog) ([]cli.Acquisition, error) {
+	pulls, err := imagePulls(catalog)
+	if err != nil {
+		return nil, err
+	}
+	var rows []cli.Acquisition
+	for _, pull := range pulls {
+		rows = append(rows, imageAcquisition(pull.kind, pull.pulled, []string{pull.machine}, pull.consumer))
+	}
+	images, err := mirrorImageArtifacts(catalog)
+	if err != nil || len(images) == 0 {
+		return rows, err
+	}
+	mirror, _ := infrastructureservices.ImageMirrorOf(catalog)
+	for _, image := range images {
+		rows = append(rows, imageAcquisition("mirror image", image.Source, []string{mirror.Registry.Spec().Get("machineRef").Text()}, mirror.Registry.Identity()))
+	}
+	return rows, nil
+}
+
+func mirrorImageArtifacts(catalog api.Catalog) ([]mirrorfill.Image, error) {
+	mirror, declared := infrastructureservices.ImageMirrorOf(catalog)
+	if !declared || !mirror.Managed || mirror.Location == "" {
+		return nil, nil
+	}
+	pulls, err := imagePulls(catalog)
+	if err != nil {
+		return nil, err
+	}
+	var images []mirrorfill.Image
+	for _, pull := range pulls {
+		mirrored, beneath := strings.CutPrefix(pull.pulled, mirror.Location+"/")
+		repository, digest, pinned := strings.Cut(mirrored, "@sha256:")
+		if tag := strings.LastIndex(repository, ":"); tag > strings.LastIndex(repository, "/") {
+			repository = repository[:tag]
+		}
+		source := repository + "@sha256:" + digest
+		if !beneath || !pinned || slices.ContainsFunc(images, func(image mirrorfill.Image) bool { return image.Source == source }) {
+			continue
+		}
+		images = append(images, mirrorfill.Image{Digest: "sha256:" + digest, Repository: repository, Source: source})
+	}
+	return images, nil
 }
 
 func clusterAcquisitions(catalog api.Catalog, controllerMachine string) []cli.Acquisition {

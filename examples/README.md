@@ -11,6 +11,7 @@ names the case that runs its scenario, if any.
 | Type | Example | Outcome |
 | --- | --- | --- |
 | `machines/` | [lab-rhel](machines/lab-rhel/README.md) | Install RHEL on one libvirt guest through an emulated Redfish BMC. |
+| `machines/` | [lab-rhel-mirror-host](machines/lab-rhel-mirror-host/README.md) | Prepare one libvirt RHEL guest whose managed services and emulated BMC pull their images from a managed image mirror on an SSH Machine. |
 | `machines/` | [lab-rhel-external-services](machines/lab-rhel-external-services/README.md) | Install RHEL on one libvirt guest against an external proxy, DNS resolver and time source chosen through Environment kind defaults. |
 | `machines/` | [lab-rhel-3-nodes](machines/lab-rhel-3-nodes/README.md) | Install three RHEL guests concurrently using a shared package tree. |
 | `machines/` | [lab-baremetal](machines/lab-baremetal/README.md) | Install RHEL on one physical server through its Redfish BMC. |

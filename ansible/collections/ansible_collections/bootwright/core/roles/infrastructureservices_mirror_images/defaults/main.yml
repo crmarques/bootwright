@@ -1,0 +1,15 @@
+---
+infrastructureservices_mirror_images_count: '{{ bootwright_mirror_images_request.images | length }}'
+infrastructureservices_mirror_images_sources: "{{ bootwright_mirror_images_request.images | map(attribute='source') | list }}"
+# Each image is a lowercase repository beneath its origin host, pinned by its
+# sha256 digest, and its source is exactly that repository at that digest.
+infrastructureservices_mirror_images_valid_repositories: >-
+  {{ bootwright_mirror_images_request.images | map(attribute='repository')
+     | select('match', '^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?(/[a-z0-9]+([._-]+[a-z0-9]+)*)+$(?!\n)') | list }}
+infrastructureservices_mirror_images_valid_digests: >-
+  {{ bootwright_mirror_images_request.images | map(attribute='digest') | select('match', '^sha256:[0-9a-f]{64}$(?!\n)') | list }}
+infrastructureservices_mirror_images_paired_sources: >-
+  {{ bootwright_mirror_images_request.images | map(attribute='repository')
+     | zip(bootwright_mirror_images_request.images | map(attribute='digest')) | map('join', '@') | list }}
+# The seconds one read of the mirror may take before the fill names it unreadable.
+infrastructureservices_mirror_images_read_timeout: 60

@@ -913,12 +913,17 @@ mirror, and Bootwright fills it; tracked as
 ## Mirror host
 
 The mirror host is the Machine an Environment's managed
-[artifact mirror](api/environment.md#artifact-mirror) is placed on: an OS-ready
+[artifact mirror](api/environment.md#artifact-mirror) and managed
+[image mirror](api/environment.md#image-mirror) are placed on: an OS-ready
 Machine reached over SSH whose managed `ArtifactServer`
-`spec.mirror.artifacts.serverRef` and `endpointRef` select. It holds exactly
-the files the acquisition list names, the public-origin clients the controller
-stage installs at the releases the build's tool table pins, and is never a
-pass-through to a publisher
+`spec.mirror.artifacts.serverRef` selects and whose managed `Registry`
+`spec.mirror.registry.registryRef` selects. When both are managed they share
+one `machineRef`, and plan refuses two Machines
+([refusal table](api/environment.md#refusal-table)). It holds exactly what
+the acquisition list names: the public-origin clients the controller stage
+installs at the releases the build's tool table pins, and the public-origin
+images the managed services and emulated BMCs off the mirror host pull, each
+by the digest the build pins. It is never a pass-through to a publisher
 ([controlled network supply](deferred/controlled-network.md#the-mirror-host)).
 
 **Fill.** One block of the `mirror-fill` family, implementation
@@ -941,6 +946,32 @@ unknown (`TestTheFillReadsItsEffectFromTheFilesTheMirrorHolds`). The fill's
 removal deletes `mirror/<environment>` alone, before the server's own removal.
 No Secret material reaches the mirror host beyond its placement's SSH access.
 
+**Image fill.** One block of the same family, implementation
+`mirrorfill.ImagesImplementation`, named `mirror-images-<environment>`, runs on
+the mirror host after the Registry's own block and copies each image a
+consumer pulls through the mirror, once per digest. It first proves
+`/usr/bin/skopeo` there and otherwise refuses, naming the `skopeo` package to
+install, before any copy. For each image it asks the Registry for
+`/v2/<repository>/manifests/<digest>` with `HEAD`; a manifest the Registry
+serves at that digest is not copied again, so a replay copies nothing and
+reports unchanged. Any other image is copied with
+`skopeo copy --all --preserve-digests` from `docker://<origin>@<digest>`,
+read anonymously over verified HTTPS through the mirror host's frozen egress
+route, to `docker://<registry location>/<origin>:sha256-<hex>`, a tag the
+digest spells, and the Registry's manifest digest under that tag is then read
+back: one other than the pin fails the attempt with `lifecycle.state` on the
+Registry, an origin the host cannot copy from fails it with
+`lifecycle.unknown`, and so does a Registry it cannot read. The Registry's
+credential and trust anchor are lent to that one task as material, written by
+its module into a private directory beside the copy as an auth file and a
+certificate directory and removed after it whatever its result, and reach the
+Registry alone, never the origin; no record or evidence holds them. The
+evidence names, in request order, each image the Registry holds by repository
+and digest (`TestTheImageFillReadsItsEffectFromTheImagesTheMirrorHolds`). The
+fill's removal takes nothing back and contacts no host, because the Registry's
+own removal deletes what was pushed; pruning an image no longer listed is
+[B1323](milestones/backlog.md#b1323).
+
 **Ordering.** The controller stage splits around the mirror: its host
 packages first, then the mirror server's block and the fill, which run no
 controller-installed client, then the stage's clients, which it reads from
@@ -949,17 +980,26 @@ them; every other block waits for both controller blocks
 `TestASplitControllerStageOrdersTheMirrorBetweenItsBlocks`). The mirror host
 may be the controller Machine, where the server and the fill run locally; a
 Machine with `access.local`, or SSH at a controller address, that is not the
-controller Machine refuses.
+controller Machine refuses. The
+Registry and the image fill are not among the blocks the stage waits for,
+since nothing it reads is an image. Each managed service, artifact server and
+libvirt machine block that pulls through the mirror waits for the Registry and
+its fill, and every image pulled on the mirror host stays its origin's, so no
+mirror block waits for itself
+(`TestAManagedImageMirrorIsFilledAfterTheControllerStageAndBeforeItsConsumers`).
 
-**Trust.** Every consumer verifies the mirror against the `caBundle` that issues
-the server's serving certificate, the `spec.source.generated.issuerRef` of its
-`tls.secretRef`, unless `spec.mirror.artifacts.trustBundleRef` names another;
-admission refuses a serving certificate with no issuer when none is named, and
-Bootwright creates no Secret for it.
+**Trust.** Every consumer verifies the artifact mirror against the `caBundle`
+that issues the server's serving certificate, the
+`spec.source.generated.issuerRef` of its `tls.secretRef`, unless
+`spec.mirror.artifacts.trustBundleRef` names another, and the image mirror
+against the issuer of the Registry's serving certificate unless the Registry's
+`trustBundleRef` names another; admission refuses a serving certificate with
+no issuer when none is named, and Bootwright creates no Secret for it.
 
-Not yet met: the mirror host may be a Machine Bootwright installs, a managed Registry on it may be the Environment's image mirror,
-filled with service and BMC images, and it may mirror an OpenShift release;
-tracked as [B1249](milestones/backlog.md#b1249).
+Not yet met: the mirror host may be a Machine Bootwright installs, a managed
+image mirror may sit on the controller, which installs no `skopeo`, and the
+mirror host may mirror an OpenShift release for a cluster under a managed
+image mirror; tracked as [B1249](milestones/backlog.md#b1249).
 
 ## Adapter boundary
 

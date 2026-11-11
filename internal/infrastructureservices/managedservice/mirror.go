@@ -5,6 +5,8 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/acquisition"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
+	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
 )
@@ -28,8 +30,8 @@ func ImageMirror(catalog api.Catalog) (api.Object, bool) {
 	return catalog.Find(api.Registry, reference.Text())
 }
 
-func MirroredImage(catalog api.Catalog, reference string) (string, *ImageSource) {
-	registry, found := ImageMirror(catalog)
+func MirroredImage(catalog api.Catalog, reference, machine string) (string, *ImageSource) {
+	mirror, found := infrastructureservices.ImageMirrorOf(catalog)
 	qualified := reference
 	if first, _, _ := strings.Cut(reference, "/"); !strings.ContainsAny(first, ".:") && first != "localhost" {
 		qualified = "docker.io/" + reference
@@ -40,18 +42,25 @@ func MirroredImage(catalog api.Catalog, reference string) (string, *ImageSource)
 	if origin, _, _ := strings.Cut(qualified, "/"); !found || acquisition.OriginClass(origin) != acquisition.ClassPublic {
 		return reference, nil
 	}
-	location := registry.Spec().Get("url").Text()
-	if location == "" {
+	if mirror.Location == "" || mirror.Managed && machine == mirror.Registry.Spec().Get("machineRef").Text() {
 		return reference, nil
 	}
-	host, _, _ := strings.Cut(location, "/")
-	source := &ImageSource{Host: host, CredentialsRef: registry.Spec().Get("credentialsRef").Text(), TrustBundleRef: registry.Spec().Get("trustBundleRef").Text()}
+	host, _, _ := strings.Cut(mirror.Location, "/")
+	source := &ImageSource{Host: host, CredentialsRef: mirror.CredentialsRef, TrustBundleRef: mirror.TrustBundleRef}
 	if source.CredentialsRef != "" {
 		if declaration, found := catalog.Find(api.Secret, source.CredentialsRef); found {
 			source.CredentialsType = declaration.Spec().Get("type").Text()
 		}
 	}
-	return location + "/" + qualified, source
+	return mirror.Location + "/" + qualified, source
+}
+
+func MirrorRequirements(catalog api.Catalog, source *ImageSource) []reconciliation.ObjectRef {
+	mirror, found := infrastructureservices.ImageMirrorOf(catalog)
+	if source == nil || !found || !mirror.Managed {
+		return nil
+	}
+	return []reconciliation.ObjectRef{{Kind: string(api.Registry), Object: mirror.Registry.Name()}}
 }
 
 func (s *ImageSource) SecretReferences() []string {

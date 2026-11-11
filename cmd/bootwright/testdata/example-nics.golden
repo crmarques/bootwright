@@ -4487,6 +4487,23 @@
       ]
     }
   },
+  "lab-rhel-mirror-host": {
+    "libvirtMachines": {
+      "rhel-01": [
+        {
+          "bridge": "virbr-lab",
+          "macAddress": "52:54:00:83:2c:63",
+          "name": "enp1s0",
+          "network": "bootwright-lab-lab-guests"
+        }
+      ]
+    },
+    "installations": {
+      "rhel-01": [
+        "ifname=enp1s0:52:54:00:83:2c:63"
+      ]
+    }
+  },
   "lab-services": {},
   "lab-sno": {
     "libvirtMachines": {

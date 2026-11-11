@@ -236,6 +236,10 @@ func contractRows() []contractRow {
 		{kind: mirrorfill.Kind, implementation: mirrorfill.FilesImplementation, example: "lab-sno-mirror-host", presence: contractMirrorFilesPresence,
 			noEffect: map[string]any{"version": mirrorfill.FilesEvidenceVersion}, absence: map[string]any{"version": mirrorfill.FilesEvidenceVersion},
 			drift: map[string]any{"files": []any{map[string]any{"path": "foreign/v1/file", "verified": true}}}},
+		{kind: mirrorfill.ImagesKind, implementation: mirrorfill.ImagesImplementation, example: "lab-rhel-mirror-host", presence: contractMirrorImagesPresence,
+			noEffect: map[string]any{"images": []any{}, "version": mirrorfill.ImagesEvidenceVersion}, absence: map[string]any{"images": []any{}, "version": mirrorfill.ImagesEvidenceVersion},
+			removalObservesNothing: "specs/infrastructure-services.md, Mirror host: the image fill's removal takes back nothing, because its Registry's removal deletes what was pushed",
+			drift:                  map[string]any{"images": []any{map[string]any{"repository": "docker.io/foreign/image", "digest": "sha256:" + strings.Repeat("f", 64), "verified": true}}}},
 	}
 }
 
@@ -1770,6 +1774,19 @@ func TestEveryReferencedSecretIsClassified(t *testing.T) {
 			}
 		}
 	}
+}
+
+func contractMirrorImagesPresence(t *testing.T, execution lifecycle.Execution) map[string]any {
+	t.Helper()
+	request, err := mirrorfill.DecodeImagesRequest(execution.Block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	images := []any{}
+	for _, image := range request.Images {
+		images = append(images, map[string]any{"repository": image.Repository, "digest": image.Digest, "verified": true})
+	}
+	return map[string]any{"postcondition": true, "images": images, "version": mirrorfill.ImagesEvidenceVersion}
 }
 
 func contractMirrorFilesPresence(t *testing.T, execution lifecycle.Execution) map[string]any {

@@ -1,0 +1,53 @@
+implementation: mirror-images-v1
+content-digest: c45de799c2c391b50126647a5dba104b0e2b84fdaa1af59833cfd4f912934eb6
+request-version: mirror-images-v1
+automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  none
+request-identity:
+  identity.context
+  identity.environment
+  identity.registry
+  mirror.host
+  images[].repository
+  images[].digest
+  placement.machine
+request-schema:
+  egress struct managedservice.Egress
+  egress.httpProxy string omitempty
+  egress.httpsProxy string omitempty
+  egress.noProxy []string
+  identity struct mirrorfill.ImagesIdentity
+  identity.context string
+  identity.environment string
+  identity.registry string
+  images []struct mirrorfill.Image
+  images[].digest string
+  images[].repository string
+  images[].source string
+  mirror struct managedservice.ImageSource
+  mirror.credentialsRef string omitempty
+  mirror.credentialsType string omitempty
+  mirror.host string
+  mirror.trustBundleRef string omitempty
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  version string
+evidence-schema:
+  absent bool
+  images []struct mirrorfill.ImageEvidence
+  images[].digest string
+  images[].repository string
+  images[].verified bool
+  postcondition bool
+  request string
+  version string

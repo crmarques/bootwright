@@ -59,6 +59,8 @@ def common(refusals):
 MIRROR_FILE = {"path": "helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz", "sha256": DIGEST, "bytes": 5,
                "source": "https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz"}
 MIRROR_STAT = {"exists": True, "isreg": True, "islnk": False, "size": 5, "checksum": DIGEST}
+MIRROR_IMAGE = {"repository": "docker.io/library/registry", "digest": "sha256:" + DIGEST, "source": "docker.io/library/registry@sha256:" + DIGEST}
+MIRROR_HELD = {"repository": "docker.io/library/registry", "digest": "sha256:" + DIGEST, "verified": True}
 RUNNING = {"unit": "active", "contentRoot": True, "startedAfterFiles": True, "container": "quay.io/x"}
 ANSWERS = [{"address": "192.0.2.1", "answer": "192.0.2.10", "port": 53}]
 LISTENERS = [{"address": "192.0.2.1", "fingerprint": "", "name": "http", "port": 80, "protocol": "http", "status": "200"}]
@@ -164,6 +166,15 @@ CASES = {
         {"files": [MIRROR_FILE], "stats": [{"exists": False}], "root": {"exists": False}},
         {"files": [MIRROR_FILE], "stats": [MIRROR_STAT], "root": {"exists": True}},
         {"files": [MIRROR_FILE], "stats": []},
+    ),
+    "infrastructureservices_mirror_images_protocol": common([
+        {"reason": "skopeo-missing"}, {"reason": "image-digest-mismatch"}, {"reason": "image-unreachable"}, {"reason": "mirror-unreadable"},
+    ]) + completions(
+        {"images": [MIRROR_IMAGE], "held": [MIRROR_HELD]},
+        {"images": [MIRROR_IMAGE], "held": [dict(MIRROR_HELD, verified=False)]},
+        {"images": [MIRROR_IMAGE], "held": []},
+        {"images": [MIRROR_IMAGE], "held": [MIRROR_HELD]},
+        {"images": [MIRROR_IMAGE], "held": [dict(MIRROR_HELD, repository="docker.io/library/other")]},
     ),
     "managedos_tree_protocol": common([
         {"reason": "media-changed-tree"}, {"reason": "tree-source-drift"}, {"reason": "artifact-server-not-applied"},

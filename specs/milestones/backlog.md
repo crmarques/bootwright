@@ -294,7 +294,7 @@ Alias cell.
 | [B1237](#b1237) | new, 2026-11-09 (D248 (5)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's default image comes from a Red Hat registry wherever Red Hat publishes one | Red Hat publishes no dnsmasq, chrony or sushy-tools image, and its squid image needs a `registry.redhat.io` login no managed-service pull carries |
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
 | [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355, X361 and X401 on 2026-11-10 | product | Controller, with Desired state | A managed artifact server may serve the artifact mirror, and one declaration replaces the download mirrors | The declaration (X355), the preflight probe and the private trust anchor (X361) and a managed server on an SSH Machine (X401) landed; folding `spec.downloads` awaits the owner (D251 (5)) |
-| [B1249](#b1249) | new, 2026-11-10 (D250 (8)); partly delivered by X401 on 2026-11-10 and X408 on 2026-11-11 | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | X401 built and fills a managed artifact mirror on an SSH Machine and X408 split the controller stage around one on the controller; the image mirror, releases and the installed placement remain, which D251 (6) authorizes slice by slice |
+| [B1249](#b1249) | new, 2026-11-10 (D250 (8)); partly delivered by X401 on 2026-11-10 and X408 and X407 on 2026-11-11 | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | X401 built and fills a managed artifact mirror on an SSH Machine, X408 split the controller stage around one on the controller and X407 built and fills a managed image mirror beside it; releases, `skopeo` on the controller and the installed placement remain, which D251 (6) authorizes slice by slice |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
 | [B1267](#b1267) | new, 2026-11-10 (X348, audit 004 REC-74) | safety | Substrate and Machine, with Infrastructure services | A context driving a server by its BMC and one reaching it as an OS-ready Machine over SSH conflict | Needs a cross-mechanism machine identity whose byte order is settled first |
 | [B1299](#b1299) | new, 2026-11-10 (split from B1263, D253) | product | Controller, with State reconciliation | A running environment takes a raised client minimum without a destroy | An open owner question: a completed apply settles (D153), so replacing a client is a fresh apply today |
@@ -3346,26 +3346,27 @@ placement's stage split, `controller-prerequisites` and
 `controller-mirrored-clients` around the mirror's server and fill, with the
 mirror on the controller Machine run locally between them
 ([X408](delivered.md#x408--the-controller-stage-split-around-its-mirror)).
-**Remaining**, from the session's plan of 2026-11-10, each slice through its
-own review: (a) the image mirror: a managed Registry beside the artifact
-server on the same Machine as `spec.mirror.registry`, with a required
+**Delivered in-tree by X407** ([D251](#d251) (26) to (30)): the image mirror,
+a managed Registry on the same Machine as `spec.mirror.registry` with its
 `endpointRef` and the issuer anchor, filled by `mirror-images-<environment>`
-after the controller stage with every service and emulated BMC image copied
-by digest (`skopeo copy --all --preserve-digests`, then the manifest digest
-read back; a replay checks `HEAD /v2/<repository>/manifests/<digest>`), the
-mirror host's own services exempt from the mirrored reference, each consumer
-off the mirror host requiring the Registry and its fill, and `skopeo` proved
-on an SSH host and refused naming its package; (b) an OpenShift release into
+after the controller stage with every service and emulated BMC image its
+consumers pull, copied by digest and read back, the mirror host's own
+services exempt, each consumer off the mirror host requiring the Registry and
+its fill, and `skopeo` proved on the host
+([X407](delivered.md#x407--a-managed-image-mirror-on-the-mirror-host)).
+**Remaining**, from the session's plan of 2026-11-10, each slice through its
+own review: (b) an OpenShift release into
 that Registry by the release's own `oc` (`--to` the `ocp-v4.0-art-dev`
 repository and `--to-release-image` the `ocp-release` one), its pull secret
 lent per attempt as a two-entry auth document with a private `HOME`, removed
 in an `always`, and the cluster's registry mirror refusal lifted; (c) `skopeo` a
-stage package when the image mirror is on the controller, with (a); (d) a Bootwright-installed mirror host, its placement requiring the
+stage package so the image mirror may sit on the controller, whose plan
+refuses it until then ([D251](#d251) (30)); (d) a Bootwright-installed mirror host, its placement requiring the
 installation and its host key read from the installation's evidence, and
 [B1250](#b1250)'s profile row. **Exit evidence:** the plan-order, replay and
-verification tests for the SSH placement landed with X401 and the controller
-placement's order with X408; the installed placement's order, the image and
-release tests and the profile row remain.
+verification tests for the SSH placement landed with X401, the controller
+placement's order with X408 and the image tests with X407; the installed
+placement's order, the release tests and the profile row remain.
 
 ### B1250
 
@@ -8475,6 +8476,61 @@ the owner's review:
     local service waits only for a provider whose bridge carries its address,
     which still refuses. `skopeo` as a stage package belongs to the image fill
     and stays with B1249's (a).
+26. Taken by the session for B1249 (X407), pending the owner's review:
+    `spec.mirror.registry` takes the registry-selection shape a cluster's
+    mirror uses, `registryRef` with an `endpointRef` that a managed Registry
+    needs unless it declares exactly one endpoint and an external one refuses,
+    rather than an `endpointRef` always required, so one rule holds for every
+    registry selection. A managed mirror's location is
+    `<endpoint address>:<port>` at the Registry's own port, with no path,
+    derived purely by `infrastructureservices.ImageMirrorOf`, which the
+    mirrored reference, a managed Proxy's destinations and
+    `render acquisitions` read; its anchor is the Registry's `trustBundleRef`
+    or else the issuer of its serving certificate, refused at admission when
+    it has none, as (18) holds for the artifact mirror; and consumers pull
+    with the Registry's `credentialsRef`, the credential the fill pushes
+    with, until [B1319](#b1319).
+27. Taken by the session for B1249 (X407): every image pulled on the image
+    mirror's Machine reads its origin, whatever its service, rather than an
+    exemption for the Registry's own image and the artifact server's alone,
+    so no block on the mirror host waits for the fill and a provider's
+    emulated BMC there needs no exception; the fill copies exactly the images
+    a consumer off that host pulls through the mirror, read from the same
+    derivation the consumers' requests take, so the two never disagree.
+28. Taken by the session for B1249 (X407): the fill is one block,
+    `mirror-images-<environment>` of the `mirror-fill` family on the
+    Registry's Machine, after the Registry's block and, as no controller
+    precursor, after the controller stage; a consumer requires the Registry
+    without a family, which resolves to its block and the fill. Each image is
+    copied to the tag `sha256-<hex>` its digest spells, because `skopeo` was
+    not shown to push to a reference by digest, and `--preserve-digests`
+    keeps the digest every consumer pulls by; the read-back is a `HEAD` of
+    that tag compared with the pin, and a replay a `HEAD` by digest, both by
+    the module in Python over TLS verified against the anchor alone, so only
+    the copy needs `skopeo`. The credential and anchor are lent to the module
+    task as material and written by it into a private directory removed
+    after the run, as `image_acquire` does.
+29. Taken by the session for B1249 (X407): the fill's removal contacts no
+    host and takes nothing back, and its removal's resolution reads nothing,
+    because Distribution runs with deletion disabled and the Registry's own
+    removal deletes its content root; enabling deletion would move every
+    managed service's content digest, and an Environment that drops the
+    mirror but keeps the Registry is [B1323](#b1323)'s pruning.
+30. Taken by the session for B1249 (X407): plan refuses, as (20) does for
+    the artifact mirror, a managed image mirror on a provider host, behind a
+    managed Proxy or at an endpoint naming no address, and one placed on
+    another Machine than a managed artifact mirror, since both are the one
+    mirror host. One on the controller host, its Machine or another name for
+    it, stays refused although (25) admits the artifact mirror there: its
+    Registry would run after `controller-prerequisites`, but the controller
+    stage installs no `skopeo`, which B1249's (c) adds, so an artifact mirror
+    on the controller Machine beside a managed image mirror refuses as well.
+    The artifact server of a mirror host is on that host and pulls its
+    origin, so no Registry becomes an ancestor of a controller block and the
+    Registry needs no `ControllerPrecursor`. A container cluster under a
+    managed image mirror still refuses until its release is mirrored, B1249's
+    (b). The reference edge catalog's rows may name several block kinds of one
+    family, which kept its section within its budget.
 
 ### D252
 

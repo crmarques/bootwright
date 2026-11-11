@@ -60,3 +60,41 @@ func TestTheArtifactMirrorIsDerivedFromItsManagedServer(t *testing.T) {
 		t.Error("an empty declaration names a mirror")
 	}
 }
+
+// A managed image mirror is read at its selected endpoint's address and the
+// Registry's port, an IPv6 address bracketed, trusted through its serving
+// certificate's issuer unless an anchor is authored; an external one is its
+// url as written, and its Machine is the image mirror host only when managed.
+func TestTheImageMirrorIsDerivedFromItsManagedRegistry(t *testing.T) {
+	graph := func(address string, registry ...any) api.Catalog {
+		return api.NewCatalog([]api.Object{
+			obj(api.Environment, "lab", m("mirror", m("registry", m("registryRef", "mirror", "endpointRef", "ip")))),
+			obj(api.Machine, "mirror", m("network", m("addresses", list(m("name", "ip", "address", address))))),
+			obj(api.Registry, "mirror", m(append([]any{"machineRef", "mirror", "port", api.IntegerValue("5000"), "tls", m("secretRef", "mirror-tls"),
+				"credentialsRef", "mirror-push", "endpoints", list(m("name", "ip", "addressRef", "ip"))}, registry...)...)),
+			obj(api.Secret, "mirror-ca", m("type", "caBundle")),
+			obj(api.Secret, "mirror-tls", m("type", "tlsCertificate", "source", m("generated", m("issuerRef", "mirror-ca")))),
+		})
+	}
+	for name, test := range map[string]struct {
+		catalog               api.Catalog
+		location, trust, host string
+		managed               bool
+	}{
+		"managed":        {graph("203.0.113.20", "management", "managed"), "203.0.113.20:5000", "mirror-ca", "mirror", true},
+		"ipv6":           {graph("2001:db8::20", "management", "managed"), "[2001:db8::20]:5000", "mirror-ca", "mirror", true},
+		"authored trust": {graph("203.0.113.20", "management", "managed", "trustBundleRef", "corporate-ca"), "203.0.113.20:5000", "corporate-ca", "mirror", true},
+		"external":       {graph("203.0.113.20", "management", "external", "url", "mirror.example.test/images"), "mirror.example.test/images", "", "", false},
+	} {
+		mirror, declared := ImageMirrorOf(test.catalog)
+		if !declared || mirror.Location != test.location || mirror.TrustBundleRef != test.trust || mirror.Managed != test.managed || mirror.CredentialsRef != "mirror-push" {
+			t.Errorf("%s: mirror = %+v (%v)", name, mirror, declared)
+		}
+		if host := ImageMirrorHost(test.catalog); host != test.host {
+			t.Errorf("%s: mirror host %q", name, host)
+		}
+	}
+	if _, declared := ImageMirrorOf(mirrorGraph("203.0.113.20", 443, m("url", "https://mirror.example.test"), "")); declared {
+		t.Error("an Environment without spec.mirror.registry names an image mirror")
+	}
+}

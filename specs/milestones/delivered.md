@@ -14777,3 +14777,69 @@ and the fill run locally through the same role and runner as an SSH host, and
 the ordering is proved by planning alone; `skopeo` as a stage package for an
 image mirror on the controller, the image fill, releases and an installed
 mirror host remain on [B1249](backlog.md#b1249).
+### X407 — A managed image mirror on the mirror host
+
+**Item:** B1249 (2026-11-11, [D250](backlog.md#d250) (8),
+[D251](backlog.md#d251) (6) and (26) to (30)), partly delivered in-tree, so
+the item stays in the backlog with its remaining slices (b) to (d). The slice
+is the remaining part (a) of the plan's first slice, which
+[X401](#x401--a-managed-artifact-mirror-on-an-ssh-machine) cut to the
+artifact mirror.
+
+*Declaration and trust.* `spec.mirror.registry` takes the registry-selection
+shape, `registryRef` and an `endpointRef` a managed Registry needs unless it
+declares one endpoint, and the managed image mirror refusal is gone. The
+mirror's location is `<endpoint address>:<port>`, derived purely by
+`infrastructureservices.ImageMirrorOf`, which the mirrored reference, a
+managed Proxy's destinations and `render acquisitions` read. Its anchor is
+the Registry's `trustBundleRef` or the issuer of its serving certificate,
+which admission requires, and consumers pull with its `credentialsRef`, the
+push credential, until [B1319](backlog.md#b1319) (D251 (26)).
+
+*Exemption and consumers.* `managedservice.MirroredImage` takes the Machine
+an image is pulled on, and every pull on the mirror host reads its origin, so
+the Registry never pulls itself (D251 (27)). Each managed service, artifact
+server and libvirt machine block that pulls through a managed mirror
+requires its Registry, which resolves to the Registry's block and the fill;
+managed services' definitions now carry the managed-service family.
+`TestAManagedImageMirrorIsFilledAfterTheControllerStageAndBeforeItsConsumers`
+plans the new `lab-rhel-mirror-host` example through this build's
+capabilities: the controller stage first, then the Registry, its fill and
+every consumer, with the fill no ancestor of the stage.
+
+*Fill.* The `mirrorfill` capability gains implementation `mirror-images-v1`,
+block `mirror-images-<environment>`, planned from the acquisition list
+through a port composition binds (`mirrorImageArtifacts`, sharing
+`imagePulls` with `render acquisitions`). The role
+`infrastructureservices_mirror_images` proves `/usr/bin/skopeo`, refusing
+with the package to install, and the module
+`infrastructureservices_mirror_image` asks the Registry for each manifest by
+digest, copies one it lacks with `skopeo copy --all --preserve-digests` to
+the tag `sha256-<hex>` and reads its digest back, failing a mismatch with
+`lifecycle.state` and an unreadable origin or mirror with `lifecycle.unknown`;
+the credential and anchor are lent as material and removed after the run.
+The removal takes nothing back and reads nothing (D251 (28), (29)). The
+protocol action `infrastructureservices_mirror_images_protocol` publishes the
+evidence.
+
+*Refusals.* Plan refuses a managed image mirror on the controller host, where
+the controller stage installs no `skopeo` although X408 admits the artifact
+mirror there, on a provider host, behind a managed Proxy or at an endpoint
+naming no address, and one on another Machine than a managed artifact mirror (five rows of the
+[refusal table](../api/environment.md#refusal-table), D251 (30)).
+
+*Records.* Specs: the [image mirror](../api/environment.md#image-mirror)
+section and refusal table, the [mirror host](../infrastructure-services.md#mirror-host)
+image fill, ordering and trust, the reference-edge rows (a row may now name
+several kinds of one family), the acquisition origins row and the deferred
+page. Contracts: the new `mirror-images-v1` golden; no other request or
+digest moved, since a managed image mirror refused before and a requirement
+is not frozen.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** no host has run the fill: `skopeo` against a
+Distribution registry, the tag read-back of a manifest list, proxied origin
+reads and the SELinux and TLS behaviour of the lent certificate directory are
+proved by unit tests of the module and role, not on a host; releases, `skopeo`
+on the controller and an installed mirror host remain on
+[B1249](backlog.md#b1249).

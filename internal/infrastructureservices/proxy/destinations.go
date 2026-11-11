@@ -46,10 +46,8 @@ func mirrorHosts(catalog api.Catalog) []string {
 	if mirror, declared := infrastructureservices.ArtifactMirrorOf(catalog); declared && mirror.URL != "" {
 		hosts = append(hosts, httpsHost(mirror.URL))
 	}
-	if registry, found := managedservice.ImageMirror(catalog); found {
-		if location := registry.Spec().Get("url").Text(); location != "" {
-			hosts = append(hosts, httpsHost("https://"+location))
-		}
+	if mirror, declared := infrastructureservices.ImageMirrorOf(catalog); declared && mirror.Location != "" {
+		hosts = append(hosts, httpsHost("https://"+mirror.Location))
 	}
 	return slices.DeleteFunc(hosts, func(host string) bool { return host == "" })
 }

@@ -1,0 +1,13 @@
+{
+  "absent": false,
+  "images": [
+    {
+      "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "repository": "docker.io/library/registry",
+      "verified": true
+    }
+  ],
+  "postcondition": true,
+  "request": "e071f9bc2a4db50de0aa5ead4b66d49867bc1f9cad690c14db43f4fbfbffffa2",
+  "version": "mirror-images-evidence-v1"
+}

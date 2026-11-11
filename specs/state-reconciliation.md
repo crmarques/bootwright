@@ -979,7 +979,7 @@ union a plan consumes.
 ### Reference edges
 
 Each row is one requirement class a capability family emits: the block (its
-family and block kind), the API object it requires (narrowed to one family
+family and each block kind it names), the API object it requires (narrowed to one family
 where stated), and the reference or rule that names that object. A
 requirement resolves only to a block that realizes its target, so an external
 service orders nothing. A reference no row names is
@@ -996,6 +996,7 @@ one a row's field path names on its object while a block realizes the target.
 | Block | Requires | Named by |
 | --- | --- | --- |
 | `substrate-machine` `Machine` | `InfraProvider` | `spec.substrate.providerRef` |
+| `substrate-machine` `Machine` | `Registry` | the managed image mirror its emulated BMC's image is pulled through |
 | `os-install` `Machine` | `Machine` from `substrate-machine` | the Machine itself, realized by its substrate |
 | `os-install` `Machine` | `Machine` from `physical-erase` | the Machine itself, when it declares `spec.hardware.eraseOnRemoval` |
 | `os-install` `Machine` | `MachineInstallProfile` | `spec.os.installProfileRef`, realized when its package tree is hosted |
@@ -1012,11 +1013,10 @@ one a row's field path names on its object while a block realizes the target.
 | `os-package-tree` `MachineInstallProfile` | `ArtifactServer` | `spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint.serverRef`, `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint.serverRef` |
 | `os-package-tree` `MachineInstallProfile` | `Environment` | the selected Environment, whose controller stage prepares the host |
 | `controller-prerequisites` `Environment` | `ArtifactServer` | `spec.mirror.artifacts.serverRef` |
-| `managed-service` `ArtifactServer` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
+| `managed-service` `ArtifactServer`, `DNSServer`, `NTPServer`, `Proxy` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
+| `managed-service` `DNSServer`, `NTPServer`, `Proxy` | `Registry` | the managed image mirror its image is pulled through |
 | `mirror-fill` `ArtifactServer` | `ArtifactServer` from `managed-service` | the mirror it fills |
-| `managed-service` `DNSServer` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
-| `managed-service` `NTPServer` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
-| `managed-service` `Proxy` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
+| `mirror-fill` `Registry` | `Registry` from `managed-service` | the image mirror it fills |
 | `substrate-host` `InfraProvider` | `OpenShiftCluster` | `spec.kubevirt.hostClusterRef` |
 | `substrate-host` `InfraProvider` | `ClusterAddonBinding` | non-last instances on that host |
 | `substrate-host` `InfraProvider` | `OpenShiftClusterNetwork` | that host's network block |

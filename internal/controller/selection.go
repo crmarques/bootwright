@@ -442,12 +442,7 @@ func releasesBelowMinimum(environment api.Object, catalog api.Catalog) []Unsuppo
 }
 
 func mirrorShapes(environment api.Object, catalog api.Catalog) []UnsupportedShape {
-	shapes := []UnsupportedShape{}
-	if registry, found := catalog.Find(api.Registry, environment.Spec().Get("mirror", "registry", "registryRef").Text()); found && registry.Spec().Get("management").Text() != "external" {
-		shapes = append(shapes, UnsupportedShape{Object: environment, Field: "$.spec.mirror.registry.registryRef",
-			Reason:      "this executable pulls images only from an external image mirror, and " + registry.Identity() + " is managed",
-			Remediation: "select an external Registry in spec.mirror.registry.registryRef of " + environment.Identity() + ", or remove spec.mirror.registry"})
-	}
+	shapes := managedImageMirrorShapes(environment, catalog)
 	if !environment.Spec().Get("mirror", "artifacts").Present() {
 		return shapes
 	}
@@ -519,6 +514,49 @@ func managedMirrorShapes(environment api.Object, catalog api.Catalog) []Unsuppor
 			Reason: "the artifact mirror is filled before the controller stage, and " + server.Identity() + " on " + machine.Identity() +
 				" waits for InfraProvider/" + providers[0] + ", which that Machine hosts or whose bridge carries its address",
 			Remediation: "place " + server.Identity() + " on a Machine that hosts no InfraProvider and whose address no provider bridges, or select an artifact mirror the operator fills in spec.mirror.artifacts.url of " + environment.Identity()}}
+	}
+	return nil
+}
+
+func managedImageMirrorShapes(environment api.Object, catalog api.Catalog) []UnsupportedShape {
+	mirror, declared := infrastructureservices.ImageMirrorOf(catalog)
+	if !declared || !mirror.Managed {
+		return nil
+	}
+	const field = "$.spec.mirror.registry.registryRef"
+	registry, host := mirror.Registry, mirror.Registry.Spec().Get("machineRef").Text()
+	if artifacts, declared := infrastructureservices.ArtifactMirrorOf(catalog); declared && artifacts.Managed {
+		if other := artifacts.Server.Spec().Get("machineRef").Text(); other != host {
+			return []UnsupportedShape{{Object: environment, Field: field,
+				Reason:      "the image and artifact mirrors share one mirror host, and " + registry.Identity() + " is on Machine/" + host + " while " + artifacts.Server.Identity() + " is on Machine/" + other,
+				Remediation: "place " + registry.Identity() + " and " + artifacts.Server.Identity() + " on one Machine"}}
+		}
+	}
+	controllerName := environment.Spec().Get("controller", "machineRef").Text()
+	machine, found := catalog.Find(api.Machine, host)
+	if host == controllerName || found && onControllerHost(catalog, machine, controllerName) {
+		return []UnsupportedShape{{Object: environment, Field: field,
+			Reason:      "the controller stage installs no skopeo to fill a managed image mirror, and " + registry.Identity() + " is placed on Machine/" + host + ", which is the controller host",
+			Remediation: "place " + registry.Identity() + " on another Machine reached over SSH, or select an external Registry in spec.mirror.registry.registryRef of " + environment.Identity()}}
+	}
+	if mirror.Location == "" {
+		return []UnsupportedShape{{Object: environment, Field: field,
+			Reason:      "the image mirror is read at " + registry.Identity() + "'s selected endpoint, and that endpoint names no address on Machine/" + host,
+			Remediation: "select an endpoint of " + registry.Identity() + " with an address of Machine/" + host + " in spec.mirror.registry.endpointRef"}}
+	}
+	if !found {
+		return nil
+	}
+	if proxy, found := catalog.Find(api.Proxy, machine.Spec().Get("proxy", "proxyRef").Text()); found && proxy.Spec().Get("management").Text() == "managed" {
+		return []UnsupportedShape{{Object: machine, Field: "$.spec.proxy.proxyRef",
+			Reason:      "the image mirror on " + machine.Identity() + " is filled before the services that pull from it, and " + machine.Identity() + " reaches the origins through the managed " + proxy.Identity(),
+			Remediation: "select direct: {} or an external Proxy in spec.proxy on " + machine.Identity()}}
+	}
+	if providers := mirrorProviders(catalog, registry, host, false); len(providers) != 0 {
+		return []UnsupportedShape{{Object: environment, Field: field,
+			Reason: "the image mirror is filled before the emulated BMCs that pull from it, and " + registry.Identity() + " on " + machine.Identity() +
+				" waits for InfraProvider/" + providers[0] + ", which that Machine hosts or whose bridge carries its address",
+			Remediation: "place " + registry.Identity() + " on a Machine no InfraProvider hosts or bridges, or select an external Registry in spec.mirror.registry.registryRef of " + environment.Identity()}}
 	}
 	return nil
 }

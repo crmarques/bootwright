@@ -444,30 +444,52 @@ tracked as [B1249](../milestones/backlog.md#b1249).
 
 ## Image mirror
 
-`spec.mirror.registry.registryRef` selects one external
+`spec.mirror.registry.registryRef` selects one
 [Registry](infrastructure-services.md) as the image mirror. Each managed
 service's image, the artifact server's and the emulated BMC's whose origin is
 a [public origin](../security.md#acquisition-origins) is then pulled and run as
-`<registry url>/<origin registry>/<repository>@<digest>`, the digest the build
+`<registry location>/<origin registry>/<repository>@<digest>`, the digest the build
 pins, so a short Docker Hub name takes `docker.io` as its origin registry: for
 example `mirror.example.test/images/quay.io/metal3-io/sushy-tools@sha256:…`. An
 image of a vendor origin, such as the artifact server's from
 `registry.access.redhat.com`, stays on its vendor, and a service's own
-`spec.image.local` stays its image.
+`spec.image.local` stays its image. An external Registry's location is its
+`url`.
+
+A managed Registry is filled on its
+[mirror host](../infrastructure-services.md#mirror-host) with every image its
+consumers pull through it. The selection takes the registry-selection shape:
+`endpointRef` names one of the Registry's endpoints, required unless it
+declares exactly one, and refused beside an external Registry. The location is
+`<endpoint address>:<port>`, the Registry's own port, so a consumer reads
+`203.0.113.20:5000/quay.io/metal3-io/sushy-tools@sha256:…`. Without the
+Registry's `trustBundleRef` the anchor is the generated `caBundle` that issues
+its serving certificate, and admission refuses at
+`$.spec.mirror.registry.registryRef` a certificate with no issuer. Every pull
+binds the Registry's `credentialsRef`, the credential the fill pushes with,
+because Distribution's password file grants each user every action; a pull-only
+credential is [B1319](../milestones/backlog.md#b1319). An image pulled on the
+mirror host itself, the Registry's own and the artifact server's there, stays
+its origin's, so the mirror never waits for itself, and every consumer on
+another Machine waits for the Registry and its fill.
 
 The pull goes over HTTPS with TLS verification on, through the placement
 Machine's frozen egress route, and binds the Registry's `credentialsRef` and
-`trustBundleRef`: the operation lends them for that one pull, in a private
+trust anchor: the operation lends them for that one pull, in a private
 directory the pull removes after it, never through an insecure-registry
 setting or the host's registry configuration. A host already holding the
 mirrored reference pulls nothing; one holding only the origin's copy pulls the
 same digest once from the mirror. A pull the mirror cannot serve fails naming
-the reference. A cluster's release repositories map to the same mirror
-([registry mirrors](../openshift-clusters.md#installation-features)). A managed Registry refuses as the mirror
-([refusal table](#refusal-table)). `bootwright render acquisitions` names each
-mirrored reference.
+the reference. A cluster's release repositories map to an external mirror
+([registry mirrors](../openshift-clusters.md#installation-features)). A
+managed image mirror's placement refuses at plan as its
+[refusal table](#refusal-table) rows say. `bootwright render acquisitions`
+names each mirrored reference and, for a managed mirror, each image the mirror
+host copies from its origin.
 
-Not yet met: a Bootwright-managed Registry may be the image mirror; tracked as
+Not yet met: a container cluster under a managed image mirror refuses until the
+mirror host copies its release, and the mirror host may be the controller or a
+Machine Bootwright installs; tracked as
 [B1249](../milestones/backlog.md#b1249).
 
 ## Controller Machine
@@ -586,11 +608,15 @@ Environment.
 | Per-client mirror beside the artifact mirror | `spec.downloads.helmMirror`, `govcMirror` or `virtctlMirror` with `spec.mirror.artifacts` | `spec.mirror.artifacts of <environment> names where every public-origin client comes from, and spec.downloads.<field> names it again` | `remove spec.downloads.<field> from <environment>` |
 | Unpinned client behind the artifact mirror | a selected public-origin client at a release the tool table does not pin, with `spec.mirror.artifacts` | `with spec.mirror.artifacts, this executable acquires a public-origin client only at a release its tool table pins, and <environment> selects <tool> <release>, whose checksum only its publisher holds` | `declare no <tool> release in spec.dependencyVersions of <environment> so it takes this build's pinned default, or remove spec.mirror.artifacts` |
 | OKD clients behind the artifact mirror | an OKD cluster's clients, with `spec.mirror.artifacts` | `with spec.mirror.artifacts, this executable acquires a public-origin client only at a release its tool table pins, and <environment> selects <tool> <release>, whose checksum only its publisher holds` | `select an openshift distribution, whose clients come from their vendor, or remove spec.mirror.artifacts from <environment>` |
-| Managed artifact mirror on another name for the controller host | `spec.mirror.artifacts.serverRef` naming a managed `ArtifactServer` placed on a Machine other than the controller `Machine` with `access.local`, or on one whose SSH endpoint is port 22 at an address of the controller | `this executable places a managed artifact mirror on the controller host only through its controller Machine, and <server> is placed on <host>, another name for that host` | `place <server> on <machine> or on another Machine reached over SSH` |
-| Managed artifact mirror on a provider host | the managed artifact mirror's `Machine`, other than the controller `Machine`, hosts a libvirt `InfraProvider`, or a provider's bridge carries the server's address | `the artifact mirror is filled before the controller stage, and <server> on <host> waits for <provider>, which that Machine hosts or whose bridge carries its address` | `place <server> on a Machine that hosts no InfraProvider and whose address no provider bridges, or select an artifact mirror the operator fills in spec.mirror.artifacts.url of <environment>` |
-| Managed artifact mirror behind a managed Proxy | `spec.proxy.proxyRef` of the managed artifact mirror's `Machine` naming a managed `Proxy` | `the artifact mirror on <host> is filled before any managed service runs, and <host> reaches the publishers through the managed <proxy>` | `select direct: {} or an external Proxy in spec.proxy on <host>` |
-| Managed artifact mirror without an HTTPS URL | `spec.mirror.artifacts.endpointRef` naming no endpoint of the managed `ArtifactServer` that resolves to an HTTPS URL a client path fits beneath | `the artifact mirror is read over HTTPS beneath <server>'s selected endpoint, and that endpoint names no HTTPS URL a client path fits beneath` | `select an https endpoint of <server> in spec.mirror.artifacts.endpointRef of <environment>` |
-| Managed image mirror | `spec.mirror.registry.registryRef` selecting a managed Registry | `this executable pulls images only from an external image mirror, and <registry> is managed` | `select an external Registry in spec.mirror.registry.registryRef of <environment>, or remove spec.mirror.registry` |
+| Managed artifact mirror on another name for the controller host | a managed `spec.mirror.artifacts` on a Machine other than the controller `Machine` with `access.local`, or reached on SSH port 22 at a controller address | `this executable places a managed artifact mirror on the controller host only through its controller Machine, and <server> is placed on <host>, another name for that host` | `place <server> on <machine> or on another Machine reached over SSH` |
+| Managed artifact mirror on a provider host | its `Machine`, other than the controller `Machine`, hosting or bridged by a libvirt provider | `the artifact mirror is filled before the controller stage, and <server> on <host> waits for <provider>, which that Machine hosts or whose bridge carries its address` | `place <server> on a Machine that hosts no InfraProvider and whose address no provider bridges, or select an artifact mirror the operator fills in spec.mirror.artifacts.url of <environment>` |
+| Managed artifact mirror behind a managed Proxy | its `Machine` selecting a managed `Proxy` | `the artifact mirror on <host> is filled before any managed service runs, and <host> reaches the publishers through the managed <proxy>` | `select direct: {} or an external Proxy in spec.proxy on <host>` |
+| Managed artifact mirror without an HTTPS URL | `spec.mirror.artifacts.endpointRef` resolving to no HTTPS URL a client path fits beneath | `the artifact mirror is read over HTTPS beneath <server>'s selected endpoint, and that endpoint names no HTTPS URL a client path fits beneath` | `select an https endpoint of <server> in spec.mirror.artifacts.endpointRef of <environment>` |
+| Mirror services on two Machines | a managed image and artifact mirror on two Machines | `the image and artifact mirrors share one mirror host, and <registry> is on <host> while <server> is on <other>` | `place <registry> and <server> on one Machine` |
+| Managed image mirror on the controller | a managed `spec.mirror.registry` on the controller host or another name for it | `the controller stage installs no skopeo to fill a managed image mirror, and <registry> is placed on <host>, which is the controller host` | `place <registry> on another Machine reached over SSH, or select an external Registry in spec.mirror.registry.registryRef of <environment>` |
+| Managed image mirror without an address | `spec.mirror.registry.endpointRef` resolving to no address | `the image mirror is read at <registry>'s selected endpoint, and that endpoint names no address on <host>` | `select an endpoint of <registry> with an address of <host> in spec.mirror.registry.endpointRef` |
+| Managed image mirror behind a managed Proxy | its `Machine` selecting a managed `Proxy` | `the image mirror on <host> is filled before the services that pull from it, and <host> reaches the origins through the managed <proxy>` | `select direct: {} or an external Proxy in spec.proxy on <host>` |
+| Managed image mirror on a provider host | its `Machine` hosting, or bridged by, a libvirt provider | `the image mirror is filled before the emulated BMCs that pull from it, and <registry> on <host> waits for <provider>, which that Machine hosts or whose bridge carries its address` | `place <registry> on a Machine no InfraProvider hosts or bridges, or select an external Registry in spec.mirror.registry.registryRef of <environment>` |
 
 ## Lifecycle rescue declaration
 

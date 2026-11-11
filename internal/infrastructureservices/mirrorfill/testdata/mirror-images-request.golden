@@ -1,0 +1,38 @@
+{
+  "egress": {
+    "noProxy": []
+  },
+  "identity": {
+    "context": "lab",
+    "environment": "lab",
+    "registry": "mirror-registry"
+  },
+  "images": [
+    {
+      "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "repository": "docker.io/library/registry",
+      "source": "docker.io/library/registry@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    {
+      "digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "repository": "quay.io/metal3-io/sushy-tools",
+      "source": "quay.io/metal3-io/sushy-tools@sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    }
+  ],
+  "mirror": {
+    "credentialsRef": "mirror-registry-credentials",
+    "credentialsType": "usernamePassword",
+    "host": "203.0.113.20:5000",
+    "trustBundleRef": "mirror-ca"
+  },
+  "placement": {
+    "address": "203.0.113.20",
+    "connection": "ssh",
+    "knownHostsRef": "mirror-known-hosts",
+    "machine": "mirror",
+    "port": 22,
+    "privateKeyRef": "mirror-access-key",
+    "user": "root"
+  },
+  "version": "mirror-images-v1"
+}

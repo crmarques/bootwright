@@ -31,6 +31,7 @@ func Validate(object api.Object, catalog api.Catalog, members func(api.Object) (
 	issues := fleetKeyIssues(spec.Get("remoteMachinesAccessKey", "keyRef"), catalog)
 	issues = append(issues, validateController(object, catalog, Members(members))...)
 	issues = append(issues, validateArtifactMirror(object, catalog)...)
+	issues = append(issues, validateImageMirror(object, catalog)...)
 	if rescue := spec.Get("lifecycle", "rescue"); rescue.Present() {
 		// The schema keeps the declaration for a later journey; until one
 		// exists, no lifecycle could act on it.
@@ -154,6 +155,24 @@ func validateArtifactMirror(environment api.Object, catalog api.Catalog) []api.I
 	if !artifacts.Has("trustBundleRef") && infrastructureservices.IssuingAuthority(catalog, certificate) == "" {
 		return []api.Issue{{Code: "api.invariant", Field: field + ".serverRef", Message: "every consumer of the managed artifact mirror trusts the authority that issues its certificate, and Secret/" + certificate + " of " + server.Identity() + " names no generated caBundle issuer",
 			Remediation: "declare a generated caBundle Secret and set spec.source.generated.issuerRef of Secret/" + certificate + " to it, or set spec.mirror.artifacts.trustBundleRef on " + environment.Identity()}}
+	}
+	return nil
+}
+
+func validateImageMirror(environment api.Object, catalog api.Catalog) []api.Issue {
+	const field = "$.spec.mirror.registry"
+	selection := environment.Spec().Get("mirror", "registry")
+	if issues := infrastructureservices.ValidateRegistrySelection(selection, catalog, field); len(issues) != 0 {
+		return issues
+	}
+	registry, found := catalog.Find(api.Registry, selection.Get("registryRef").Text())
+	if !found || registry.Spec().Get("management").Text() != "managed" {
+		return nil
+	}
+	certificate := registry.Spec().Get("tls", "secretRef").Text()
+	if !registry.Spec().Has("trustBundleRef") && certificate != "" && infrastructureservices.IssuingAuthority(catalog, certificate) == "" {
+		return []api.Issue{{Code: "api.invariant", Field: field + ".registryRef", Message: "every consumer of the managed image mirror trusts the authority that issues its certificate, and Secret/" + certificate + " of " + registry.Identity() + " names no generated caBundle issuer",
+			Remediation: "declare a generated caBundle Secret and set spec.source.generated.issuerRef of Secret/" + certificate + " to it, or set spec.trustBundleRef on " + registry.Identity()}}
 	}
 	return nil
 }

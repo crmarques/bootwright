@@ -188,3 +188,63 @@ func TestAControllerStageWaitingForAProviderHostRefuses(t *testing.T) {
 		t.Fatalf("refusal = %+v", reported)
 	}
 }
+
+// A managed image mirror on an SSH Machine is built and filled after the
+// controller stage, which reads no image, and before every consumer off the
+// mirror host: each managed service and emulated BMC that pulls through it
+// waits for the Registry and its fill, the Registry on its own host pulls its
+// own image from its origin and waits for nothing but the stage, and the plan
+// holds no cycle.
+func TestAManagedImageMirrorIsFilledAfterTheControllerStageAndBeforeItsConsumers(t *testing.T) {
+	const name = "lab-rhel-mirror-host"
+	state, _ := compileAcceptance(t, exampleDirectory(t, name))
+	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
+	resolved, err := reconciliation.ResolveRequirements(productionDefinitions(t, state, name))
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	ordered, err := lifecycle.DependOnController(resolver, resolved)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	plan, err := reconciliation.NewPlan(reconciliation.Apply, ordered)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	waits := map[string][]string{}
+	var order []string
+	for _, block := range plan.Blocks {
+		waits[block.ID], order = block.Dependencies, append(order, block.ID)
+	}
+	const registry, fill, stage = "registry-mirror-registry", "mirror-images-lab-rhel-mirror-host", "controller-prerequisites"
+	if order[0] != stage || len(waits[stage]) != 0 {
+		t.Fatalf("the controller stage waits %v in order %v", waits[stage], order)
+	}
+	if !slices.Equal(waits[registry], []string{stage}) || !slices.Equal(waits[fill], []string{stage, registry}) {
+		t.Fatalf("the Registry waits %v and its fill %v", waits[registry], waits[fill])
+	}
+	for _, consumer := range []string{"dns-lab-dns", "ntp-lab-ntp", "proxy-lab-proxy", "machine-rhel-01"} {
+		if !slices.Contains(waits[consumer], registry) || !slices.Contains(waits[consumer], fill) {
+			t.Errorf("%s does not wait for the image mirror and its fill: %v", consumer, waits[consumer])
+		}
+	}
+	for _, id := range []string{"artifact-server-lab-artifacts", "substrate-host-lab-libvirt"} {
+		if slices.Contains(waits[id], fill) {
+			t.Errorf("%s, which pulls nothing through the mirror, waits for its fill: %v", id, waits[id])
+		}
+	}
+}
+
+// The same example planned through the whole lifecycle service, with its
+// unsupported-shape checks, claims and host checks, previews the controller
+// stage, the Registry, its fill and then a consumer.
+func TestAManagedImageMirrorExamplePlansThroughTheLifecycleService(t *testing.T) {
+	const name = "lab-rhel-mirror-host"
+	services, _ := productionExampleContext(t, name, name)
+	out, _ := contextRun(t, services, 0, "plan", "--context", name, "--output", "json")
+	stage, registry, fill, consumer := strings.Index(out, `"controller-prerequisites"`), strings.Index(out, `"registry-mirror-registry"`),
+		strings.Index(out, `"mirror-images-lab-rhel-mirror-host"`), strings.Index(out, `"dns-lab-dns"`)
+	if stage < 0 || registry < 0 || fill < 0 || consumer < 0 || !(stage < registry && registry < fill && fill < consumer) {
+		t.Fatalf("the plan does not preview the stage, the Registry, its fill and a consumer in that order:\n%s", out)
+	}
+}

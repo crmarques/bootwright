@@ -1,0 +1,42 @@
+---
+argument_specs:
+  apply:
+    short_description: Fill one managed image mirror with its pinned images.
+    options: &request
+      bootwright_mirror_images_request:
+        type: dict
+        required: true
+        options:
+          egress:
+            type: dict
+            required: true
+          identity:
+            type: dict
+            required: true
+          images:
+            type: list
+            elements: dict
+            required: true
+          mirror:
+            type: dict
+            required: true
+          placement:
+            type: dict
+            required: true
+          version:
+            type: str
+            required: true
+            choices:
+              - mirror-images-v1
+      bootwright_mirror_images_digest:
+        type: str
+        required: true
+      bootwright_mirror_images_material:
+        type: dict
+        required: true
+  observe:
+    short_description: Observe which pinned images one managed image mirror holds.
+    options: *request
+  destroy:
+    short_description: Release one managed image mirror's fill, whose Registry's removal deletes its images.
+    options: *request

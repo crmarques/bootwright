@@ -38,10 +38,10 @@ func edgeCatalog(t *testing.T) []edgeRow {
 	var rows []edgeRow
 	for _, cells := range markdownTable(t, reconciliationSpec, "### Reference edges", []string{"Block", "Requires", "Named by"}) {
 		block, requires := edgeCode.FindAllStringSubmatch(cells["Block"], -1), edgeCode.FindAllStringSubmatch(cells["Requires"], -1)
-		if len(block) != 2 || len(requires) < 1 || len(requires) > 2 {
+		if len(block) < 2 || len(requires) < 1 || len(requires) > 2 {
 			t.Fatalf("edge row %v names no family, kind and target", cells)
 		}
-		row := edgeRow{family: block[0][1], kind: block[1][1], target: requires[0][1]}
+		row := edgeRow{family: block[0][1], target: requires[0][1]}
 		if len(requires) == 2 {
 			row.targetFamily = requires[1][1]
 		}
@@ -50,7 +50,10 @@ func edgeCatalog(t *testing.T) []edgeRow {
 				row.paths = append(row.paths, match[1])
 			}
 		}
-		rows = append(rows, row)
+		for _, kind := range block[1:] {
+			row.kind = kind[1]
+			rows = append(rows, row)
+		}
 	}
 	return rows
 }
@@ -251,6 +254,9 @@ func unorderedReferences() map[string]string {
 		"DNSServer spec.machineRef":                                                          placement,
 		"NTPServer spec.machineRef":                                                          placement,
 		"Proxy spec.machineRef":                                                              placement,
+		"Registry spec.machineRef":                                                           placement,
+		"Environment spec.mirror.registry.registryRef":                                       "each consumer that pulls through a managed image mirror requires its Registry, so the Environment's selection orders nothing itself (specs/infrastructure-services.md, Mirror host)",
+		"OpenShiftCluster spec.install.registries.mirror.registryRef":                        "a cluster installs through an external registry mirror alone, which no block realizes, and a managed one refuses (specs/openshift-clusters.md, Installation features)",
 		"InfraProvider spec.libvirt.machineRef":                                              "the libvirt provider host is an OS-ready Machine (specs/substrates.md), so no block of the plan readies it",
 		"Environment spec.controller.machineRef":                                             "the controller Machine is the host that runs Bootwright, which no block of its own plan realizes",
 		"Environment spec.lifecycle.rescue.artifactServerEndpoint.serverRef":                 "admission refuses a present rescue until a rescue journey exists (specs/api/environment.md, Lifecycle rescue declaration)",

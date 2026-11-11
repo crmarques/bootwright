@@ -225,6 +225,18 @@ lab-rhel-external-services:
   os-install-rhel-01
   os-package-tree-rhel-9-8
   substrate-host-lab-libvirt
+lab-rhel-mirror-host:
+  artifact-server-lab-artifacts
+  controller-prerequisites
+  dns-lab-dns
+  machine-rhel-01
+  mirror-images-lab-rhel-mirror-host
+  ntp-lab-ntp
+  os-install-rhel-01
+  os-package-tree-rhel-9-8
+  proxy-lab-proxy
+  registry-mirror-registry
+  substrate-host-lab-libvirt
 lab-services:
   artifact-server-lab-artifacts
   controller-prerequisites

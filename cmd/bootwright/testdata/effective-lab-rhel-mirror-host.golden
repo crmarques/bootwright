@@ -1,0 +1,433 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Environment
+metadata:
+  name: lab-rhel-mirror-host
+spec:
+  domains:
+    base: lab.example.test
+    machines: lab.example.test
+    clusters: lab.example.test
+    containerClusters: lab.example.test
+    storageClusters: lab.example.test
+  remoteMachinesAccessKey:
+    keyRef: bootwright-machine-key
+  mirror:
+    registry:
+      registryRef: mirror-registry
+      endpointRef: ip
+  controller:
+    machineRef: controller
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: controller
+spec:
+  os:
+    provided: true
+  proxy:
+    direct: {}
+  network:
+    addresses:
+      - name: ip
+        address: 192.0.2.1
+      - name: fqdn
+        address: controller.lab.example.test
+  access:
+    local: true
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: mirror
+spec:
+  os:
+    provided: true
+  proxy:
+    direct: {}
+  network:
+    addresses:
+      - name: fqdn
+        address: mirror.lab.example.test
+      - name: ip
+        address: 203.0.113.20
+  access:
+    ssh:
+      addressRef: ip
+      port: 22
+      user: root
+      auth:
+        privateKeyRef: mirror-access-key
+      knownHostsRef: mirror-known-hosts
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: rhel-01
+spec:
+  substrate:
+    providerRef: lab-libvirt
+    libvirt:
+      profileRef: rhel
+      nics:
+        - nicRef: enp1s0
+          segmentRef: lab-guests
+  hardware:
+    nics:
+      - name: enp1s0
+    rootDevice:
+      deviceName: /dev/vda
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+    install:
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+  proxy:
+    direct: {}
+  network:
+    configRef: lab-guests
+    installAddressRef: ip
+    addresses:
+      - name: ip
+        address: 198.51.100.11
+        interface: enp1s0
+      - name: fqdn
+        address: rhel-01.lab.example.test
+    interfaceMatches:
+      - interface: enp1s0
+        nicRef: enp1s0
+  access:
+    ssh:
+      addressRef: ip
+      port: 22
+      user: bootwright
+      auth:
+        privateKeyRef: bootwright-machine-key
+    rootLogin: keep
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineImage
+metadata:
+  name: rhel-9-8-boot
+spec:
+  bootMedia: local-media:rhel-9.8-x86_64-boot.iso
+---
+apiVersion: bootwright.io/v1alpha1
+kind: MachineInstallProfile
+metadata:
+  name: rhel-9-8
+spec:
+  os:
+    family: rhel
+    version: "9.8"
+    architecture: x86_64
+  installer:
+    anaconda:
+      imageRef: rhel-9-8-boot
+      redfishVirtualMedia:
+        artifactServerEndpoint:
+          serverRef: lab-artifacts
+          endpointRef: ip-https
+      packageSource:
+        hostedTree:
+          fromMedia: local-media:rhel-9.8-x86_64-dvd.iso
+          artifactServerEndpoint:
+            serverRef: lab-artifacts
+            endpointRef: ip-http
+  customizations:
+    localization:
+      language: en_US.UTF-8
+      formats: en_US.UTF-8
+      keyboard: us
+      timezone: Etc/UTC
+    ssh:
+      passwordAuthentication: false
+    packages:
+      install:
+        - chrony
+        - qemu-guest-agent
+      excludeDocs: true
+      installWeakDeps: false
+    services:
+      enabled:
+        - chronyd
+        - qemu-guest-agent
+        - sshd
+    security:
+      selinux:
+        mode: enforcing
+  proxy:
+    direct: {}
+  ntp:
+    - serverRef: lab-ntp
+      endpointRef: ip
+  updates:
+    policy: none
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Network
+metadata:
+  name: lab-guests
+spec:
+  provided: false
+  description: The guest network lab-libvirt defines on its host.
+  mtu: 1500
+  ipv4:
+    cidr: 198.51.100.0/24
+    gateway: 198.51.100.1
+  libvirt:
+    providerRef: lab-libvirt
+    bridge: virbr-lab
+    forward: nat
+    hostAddress: 198.51.100.1
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NetworkConfig
+metadata:
+  name: lab-guests
+spec:
+  dns:
+    - serverRef: lab-dns
+      endpointRef: ip
+  nmstate:
+    dns-resolver:
+      config:
+        search:
+          - lab.example.test
+    interfaces:
+      - ipv4:
+          dhcp: false
+          enabled: true
+        ipv6:
+          enabled: false
+        mtu: 1500
+        name: enp1s0
+        state: up
+        type: ethernet
+    routes:
+      config:
+        - destination: 0.0.0.0/0
+          metric: 100
+          next-hop-address: 198.51.100.1
+          next-hop-interface: enp1s0
+          table-id: 254
+---
+apiVersion: bootwright.io/v1alpha1
+kind: InfraProvider
+metadata:
+  name: lab-libvirt
+spec:
+  libvirt:
+    machineRef: controller
+    uri: qemu:///system
+    capacityReserve:
+      cpu: 1
+      memoryMiB: 2048
+      diskGiB: 10
+    bmcEmulation:
+      bindAddress: 127.0.0.1
+      certificateRef: lab-bmc-tls
+      port: 8000
+      auth:
+        credentialsRef: lab-bmc-credentials
+    machineProfiles:
+      - name: rhel
+        cpu: 4
+        memoryMiB: 8192
+        diskGiB: 60
+        tpm: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Proxy
+metadata:
+  name: lab-proxy
+spec:
+  management: managed
+  machineRef: controller
+  implementation: squid
+  bindAddress: 192.0.2.1
+  port: 3128
+  endpoints:
+    - name: ip
+      addressRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: DNSServer
+metadata:
+  name: lab-dns
+spec:
+  management: managed
+  machineRef: controller
+  implementation: dnsmasq
+  bindAddress: 192.0.2.1
+  port: 53
+  endpoints:
+    - name: ip
+      addressRef: ip
+  forwarders:
+    - 192.0.2.53
+---
+apiVersion: bootwright.io/v1alpha1
+kind: NTPServer
+metadata:
+  name: lab-ntp
+spec:
+  management: managed
+  machineRef: controller
+  implementation: chrony
+  bindAddress: 192.0.2.1
+  port: 123
+  endpoints:
+    - name: ip
+      addressRef: ip
+  upstreamSources:
+    - 192.0.2.123
+---
+apiVersion: bootwright.io/v1alpha1
+kind: ArtifactServer
+metadata:
+  name: lab-artifacts
+spec:
+  management: managed
+  machineRef: controller
+  bindAddress: 192.0.2.1
+  retention: persistent
+  tls:
+    secretRef: artifact-server-tls
+    minVersion: TLSv1.2
+  listeners:
+    - name: https
+      protocol: https
+      port: 8443
+    - name: http
+      protocol: http
+      port: 8080
+  endpoints:
+    - name: ip-https
+      listenerRef: https
+      addressRef: ip
+    - name: ip-http
+      listenerRef: http
+      addressRef: ip
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Registry
+metadata:
+  name: mirror-registry
+spec:
+  management: managed
+  machineRef: mirror
+  implementation: distribution
+  bindAddress: 203.0.113.20
+  port: 5000
+  endpoints:
+    - name: ip
+      addressRef: ip
+  tls:
+    secretRef: mirror-tls
+    minVersion: TLSv1.2
+  credentialsRef: mirror-registry-credentials
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: artifact-server-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: controller.lab.example.test
+      dnsNames:
+        - controller.lab.example.test
+      ipAddresses:
+        - 192.0.2.1
+      validityDays: 3650
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: bootwright-machine-key
+spec:
+  type: sshKeyPair
+  source:
+    generated:
+      keyType: ed25519
+      comment: bootwright-machine-key
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-credentials
+spec:
+  type: usernamePassword
+  source:
+    generated:
+      username: admin
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: lab-bmc-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      commonName: localhost
+      dnsNames:
+        - localhost
+      ipAddresses:
+        - 127.0.0.1
+      validityDays: 3650
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: mirror-access-key
+spec:
+  type: sshKeyPair
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: mirror-ca
+spec:
+  type: caBundle
+  source:
+    generated:
+      commonName: Lab mirror authority
+      validityDays: 3650
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: mirror-known-hosts
+spec:
+  type: opaque
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: mirror-registry-credentials
+spec:
+  type: usernamePassword
+  source:
+    generated:
+      username: mirror
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: mirror-tls
+spec:
+  type: tlsCertificate
+  source:
+    generated:
+      issuerRef: mirror-ca
+      commonName: mirror.lab.example.test
+      ipAddresses:
+        - 203.0.113.20
+      validityDays: 3650

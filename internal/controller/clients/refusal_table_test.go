@@ -83,9 +83,20 @@ func TestControllerRefusalTableMatchesUnsupported(t *testing.T) {
 			withValues(names, "<host>", "Machine/mirror", "<proxy>", "Proxy/egress")},
 		"Managed artifact mirror without an HTTPS URL": {append([]api.Object{environment(managedArtifactMirror("missing")), machine(), cluster(), mirrorMachine()}, mirrorServer("mirror")...),
 			withValues(names, "<server>", "ArtifactServer/mirror")},
-		"Managed image mirror": {[]api.Object{environment(field("mirror", api.MapValue(field("registry", api.MapValue(text("registryRef", "mirror")))))), machine(), cluster(),
-			api.NewObject(api.Registry, "mirror", api.Value{}, api.MapValue(text("management", "managed"), text("machineRef", "controller")))},
-			withValues(names, "<registry>", "Registry/mirror")},
+		"Mirror services on two Machines": {append(append([]api.Object{environment(imageMirror("ip", true)), machine(), cluster(), mirrorMachine(),
+			api.NewObject(api.Machine, "other", api.Value{}, api.MapValue(field("network", api.MapValue(field("addresses", api.ListValue(api.MapValue(text("name", "ip"), text("address", "203.0.113.21")))))))),
+		}, mirrorServer("other")...), mirrorRegistry("mirror")...),
+			withValues(names, "<registry>", "Registry/mirror-registry", "<host>", "Machine/mirror", "<server>", "ArtifactServer/mirror", "<other>", "Machine/other")},
+		"Managed image mirror on the controller": {append([]api.Object{environment(imageMirror("ip", false)), machine(), cluster()}, mirrorRegistry("controller")...),
+			withValues(names, "<registry>", "Registry/mirror-registry", "<host>", "Machine/controller")},
+		"Managed image mirror without an address": {append([]api.Object{environment(imageMirror("missing", false)), machine(), cluster(), mirrorMachine()}, mirrorRegistry("mirror")...),
+			withValues(names, "<registry>", "Registry/mirror-registry", "<host>", "Machine/mirror")},
+		"Managed image mirror behind a managed Proxy": {append([]api.Object{environment(imageMirror("ip", false)), machine(), cluster(), mirrorMachine(text("proxyRef", "egress")),
+			api.NewObject(api.Proxy, "egress", api.Value{}, api.MapValue(text("management", "managed")))}, mirrorRegistry("mirror")...),
+			withValues(names, "<host>", "Machine/mirror", "<proxy>", "Proxy/egress")},
+		"Managed image mirror on a provider host": {append([]api.Object{environment(imageMirror("ip", false)), machine(), cluster(), mirrorMachine(),
+			api.NewObject(api.InfraProvider, "lab-libvirt", api.Value{}, api.MapValue(field("libvirt", api.MapValue(text("machineRef", "mirror")))))}, mirrorRegistry("mirror")...),
+			withValues(names, "<registry>", "Registry/mirror-registry", "<host>", "Machine/mirror", "<provider>", "InfraProvider/lab-libvirt")},
 	}
 	for _, row := range refusalTable(t) {
 		test, found := cases[row.name]
@@ -208,6 +219,25 @@ func mirrorServer(host string) []api.Object {
 			field("tls", api.MapValue(text("secretRef", "mirror-tls"))),
 			field("listeners", api.ListValue(api.MapValue(text("name", "https"), text("protocol", "https"), field("port", api.IntegerValue("443"))))),
 			field("endpoints", api.ListValue(api.MapValue(text("name", "ip"), text("listenerRef", "https"), text("addressRef", "ip")))))),
+		api.NewObject(api.Secret, "mirror-ca", api.Value{}, api.MapValue(text("type", "caBundle"))),
+		api.NewObject(api.Secret, "mirror-tls", api.Value{}, api.MapValue(text("type", "tlsCertificate"), field("source", api.MapValue(field("generated", api.MapValue(text("issuerRef", "mirror-ca"))))))),
+	}
+}
+
+func imageMirror(endpoint string, artifacts bool) api.FieldValue {
+	mirror := api.MapValue(field("registry", api.MapValue(text("registryRef", "mirror-registry"), text("endpointRef", endpoint))))
+	if artifacts {
+		mirror = mirror.With("artifacts", api.MapValue(text("serverRef", "mirror"), text("endpointRef", "ip")))
+	}
+	return field("mirror", mirror)
+}
+
+func mirrorRegistry(host string) []api.Object {
+	return []api.Object{
+		api.NewObject(api.Registry, "mirror-registry", api.Value{}, api.MapValue(text("management", "managed"), text("machineRef", host), field("port", api.IntegerValue("5000")),
+			field("tls", api.MapValue(text("secretRef", "mirror-tls"))), text("credentialsRef", "mirror-registry-credentials"),
+			field("endpoints", api.ListValue(api.MapValue(text("name", "ip"), text("addressRef", "ip")))))),
+		api.NewObject(api.Secret, "mirror-registry-credentials", api.Value{}, api.MapValue(text("type", "usernamePassword"))),
 		api.NewObject(api.Secret, "mirror-ca", api.Value{}, api.MapValue(text("type", "caBundle"))),
 		api.NewObject(api.Secret, "mirror-tls", api.Value{}, api.MapValue(text("type", "tlsCertificate"), field("source", api.MapValue(field("generated", api.MapValue(text("issuerRef", "mirror-ca"))))))),
 	}

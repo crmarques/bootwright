@@ -1,0 +1,87 @@
+---
+- name: Validate the frozen image mirror request
+  ansible.builtin.assert:
+    that:
+      - bootwright_mirror_images_request.version == 'mirror-images-v1'
+      - bootwright_mirror_images_request.identity.context is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_images_request.identity.environment is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_images_request.identity.registry is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_images_request.mirror.host is match('^([a-z0-9]([a-z0-9.-]*[a-z0-9])?|\[[0-9a-f:.]+\]):[0-9]{1,5}$(?!\n)')
+      - bootwright_mirror_images_request.mirror.credentialsType == 'usernamePassword'
+      - bootwright_mirror_images_request.images | length > 0
+      - bootwright_mirror_images_request.images | length <= 64
+      - infrastructureservices_mirror_images_sources | unique | list | length == infrastructureservices_mirror_images_count | int
+      - infrastructureservices_mirror_images_valid_repositories | length == infrastructureservices_mirror_images_count | int
+      - infrastructureservices_mirror_images_valid_digests | length == infrastructureservices_mirror_images_count | int
+      - infrastructureservices_mirror_images_paired_sources == infrastructureservices_mirror_images_sources
+      - bootwright_mirror_images_digest is match('^[0-9a-f]{64}$(?!\n)')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.infrastructureservices_mirror_images_protocol:
+    phase: loaded
+  no_log: true
+
+# Nothing installs skopeo on a Machine reached over SSH, so the mirror host
+# proves the executable that copies the images before any copy. The runner
+# reports the refusal named first as the fill's own diagnostic.
+- name: Prove the image copier the fill runs
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/skopeo
+      - --version
+  register: infrastructureservices_mirror_images_copier
+  changed_when: false
+  failed_when: false
+
+- name: Name a missing image copier to the runner
+  bootwright.core.infrastructureservices_mirror_images_protocol:
+    phase: refused
+    reason: skopeo-missing
+  when: (infrastructureservices_mirror_images_copier.rc | default(127)) != 0
+  no_log: true
+
+- name: Refuse a mirror host that cannot run skopeo
+  ansible.builtin.fail:
+    msg: >-
+      the mirror host has no working /usr/bin/skopeo; install the skopeo package there;
+      nothing was copied
+  when: (infrastructureservices_mirror_images_copier.rc | default(127)) != 0
+
+# Each image is read from the mirror by its digest first, and only one the
+# mirror lacks is copied, by digest with every platform, then read back. The
+# mirror's credential and anchor are lent for this one task and removed after.
+- name: Copy and verify each pinned image in the image mirror
+  bootwright.core.infrastructureservices_mirror_image:
+    images: '{{ bootwright_mirror_images_request.images }}'
+    mirror: '{{ bootwright_mirror_images_request.mirror.host }}'
+    egress: '{{ bootwright_mirror_images_request.egress }}'
+    username: "{{ lookup('ansible.builtin.file', bootwright_mirror_images_material.imageUsername, rstrip=false) }}"
+    password: "{{ lookup('ansible.builtin.file', bootwright_mirror_images_material.imagePassword, rstrip=false) }}"
+    trust: "{{ lookup('ansible.builtin.file', bootwright_mirror_images_material.imageTrust, rstrip=false) }}"
+    timeout: '{{ infrastructureservices_mirror_images_read_timeout | int }}'
+  register: infrastructureservices_mirror_images_filled
+  failed_when: false
+  no_log: true
+
+- name: Name the refusal of an image that could not be held
+  bootwright.core.infrastructureservices_mirror_images_protocol:
+    phase: refused
+    reason: '{{ infrastructureservices_mirror_images_filled.reason | default("image-unreachable") }}'
+  when: infrastructureservices_mirror_images_filled.images is not defined
+  no_log: true
+
+- name: Refuse the fill after naming why
+  ansible.builtin.fail:
+    msg: the image mirror fill holds no image it could not verify by its digest
+  when: infrastructureservices_mirror_images_filled.images is not defined
+
+- name: Publish bounded image mirror completion evidence
+  bootwright.core.infrastructureservices_mirror_images_protocol:
+    phase: completed
+    outcome: "{{ 'changed' if infrastructureservices_mirror_images_filled.changed else 'unchanged' }}"
+    digest: '{{ bootwright_mirror_images_digest }}'
+    images: '{{ bootwright_mirror_images_request.images }}'
+    held: '{{ infrastructureservices_mirror_images_filled.images }}'
+  no_log: true

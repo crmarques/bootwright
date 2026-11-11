@@ -204,6 +204,7 @@ func operationPlaybook() map[string]string {
 	}
 	for _, operation := range []string{"apply", "observe", "destroy"} {
 		bindings[mirrorfill.FilesImplementation+"/"+operation] = "infrastructureservices/mirror_files_" + operation + ".yml"
+		bindings[mirrorfill.ImagesImplementation+"/"+operation] = "infrastructureservices/mirror_images_" + operation + ".yml"
 	}
 	bindings[ceph.ConsumerImplementation+"/apply"] = "storage/export_apply.yml"
 	bindings[ceph.ConsumerImplementation+"/observe"] = "storage/export_observe.yml"
@@ -324,6 +325,10 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	resolver = append(resolver, boundCapability{
 		kind: mirrorfill.Kind, implementation: mirrorfill.FilesImplementation, family: mirrorfill.Family,
 		capability: mirrorfill.NewFiles(runner, mirrorFileArtifacts),
+	})
+	resolver = append(resolver, boundCapability{
+		kind: mirrorfill.ImagesKind, implementation: mirrorfill.ImagesImplementation, family: mirrorfill.Family,
+		capability: mirrorfill.NewImages(runner, mirrorImageArtifacts),
 	})
 	return bindInstallations(resolver, runner, records)
 }

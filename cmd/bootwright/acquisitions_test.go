@@ -6,12 +6,14 @@ import (
 	"strings"
 	"testing"
 
+	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/acquisition"
 	"github.com/crmarques/bootwright/internal/addons"
 	"github.com/crmarques/bootwright/internal/cli"
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/mirrorfill"
 )
 
 func TestTheAcquisitionListNamesWhatEachOwnerAcquiresWithItsOrigin(t *testing.T) {
@@ -131,6 +133,41 @@ func TestAManagedArtifactMirrorIsFilledFromThePublisherOnItsHostAndReadByTheCont
 	}
 }
 
+// A managed image mirror is filled on its host from each public origin a
+// consumer off that host pulls, the consumer reads the mirror's copy at the
+// same digest, and the mirror host's own services read their origins.
+func TestAManagedImageMirrorIsFilledFromThePublicOriginsOnItsHostAndReadByItsConsumers(t *testing.T) {
+	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-rhel-mirror-host"))
+	acquired, err := listAcquisitions(state.Effective())
+	if err != nil {
+		t.Fatal(err)
+	}
+	images, err := mirrorImageArtifacts(state.Effective())
+	if err != nil || len(images) == 0 {
+		t.Fatalf("the fill copies %+v (%v)", images, err)
+	}
+	for _, image := range images {
+		filled := slices.IndexFunc(acquired, func(item cli.Acquisition) bool {
+			return item.Kind == "mirror image" && item.Artifact == image.Repository
+		})
+		if filled < 0 || acquired[filled].Class != acquisition.ClassPublic || !slices.Equal(acquired[filled].Machines, []string{"mirror"}) ||
+			acquired[filled].Consumer != "Registry/mirror-registry" || "sha256:"+acquired[filled].SHA256 != image.Digest {
+			t.Errorf("the mirror host fills %s from %+v", image.Source, acquired)
+		}
+		if !slices.ContainsFunc(acquired, func(item cli.Acquisition) bool {
+			return item.Kind != "mirror image" && item.Artifact == "203.0.113.20:5000/"+image.Repository && !slices.Contains(item.Machines, "mirror")
+		}) {
+			t.Errorf("no consumer off the mirror host reads %s from the mirror", image.Repository)
+		}
+	}
+	own := slices.IndexFunc(acquired, func(item cli.Acquisition) bool {
+		return item.Consumer == "Registry/mirror-registry" && item.Kind == "service image"
+	})
+	if own < 0 || acquired[own].Artifact != "docker.io/library/registry" || slices.ContainsFunc(images, func(image mirrorfill.Image) bool { return image.Repository == "docker.io/library/registry" }) {
+		t.Errorf("the mirror's own image is read through itself: %+v", acquired[own])
+	}
+}
+
 func TestAShortImageNameIsClassedByTheRegistryItResolvesTo(t *testing.T) {
 	row := imageAcquisition("service image", "ubuntu/squid@sha256:"+strings.Repeat("a", 64), []string{"controller"}, "Proxy/egress")
 	if row.Artifact != "docker.io/ubuntu/squid" || row.Class != acquisition.ClassPublic {
@@ -246,5 +283,20 @@ func TestAnAuthoredAddOnNamesItsCatalogImageAloneOnTheRegistryItsAuthorChose(t *
 func TestARepositoryKeyURLIsListedWithoutItsCredentialOrQuery(t *testing.T) {
 	if got := redactedLocation("https://user:secret@keys.example.test/RPM-GPG-KEY?token=abc#frag"); got != "https://keys.example.test/RPM-GPG-KEY" {
 		t.Fatalf("a credentialed key URL is listed as %s", got)
+	}
+}
+
+// An image authored by tag and digest is copied by its digest alone into its
+// repository, which a consumer's tagged reference resolves within.
+func TestAMirroredImageNamedByTagAndDigestIsCopiedByItsDigest(t *testing.T) {
+	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-rhel-mirror-host"))
+	digest := strings.Repeat("c", 64)
+	catalog := state.Effective()
+	proxy, _ := catalog.Find(api.Proxy, "lab-proxy")
+	tagged := api.NewCatalog(append(slices.DeleteFunc(catalog.Objects(), func(object api.Object) bool { return object.Identity() == proxy.Identity() }),
+		proxy.WithSpec(proxy.Spec().With("image", api.MapValue(api.FieldValue{Name: "public", Value: api.StringValue("quay.io/example/squid:6.1@sha256:" + digest)})))))
+	images, err := mirrorImageArtifacts(tagged)
+	if err != nil || !slices.Contains(images, mirrorfill.Image{Digest: "sha256:" + digest, Repository: "quay.io/example/squid", Source: "quay.io/example/squid@sha256:" + digest}) {
+		t.Fatalf("images = %+v (%v)", images, err)
 	}
 }

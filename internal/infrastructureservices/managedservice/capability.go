@@ -109,11 +109,12 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			ID:             request.Identity.Block,
 			Description:    c.definition.describe(input.Verb, request),
 			Stage:          reconciliation.StageInfrastructureServices,
-			Requires:       PlacementRequirements(catalog, request.Placement, request.ProbeTargets()),
+			Requires:       append(PlacementRequirements(catalog, request.Placement, request.ProbeTargets()), MirrorRequirements(catalog, request.ImageSource)...),
 			Impacts:        impacts(input.Verb, request),
 			Groups:         groups(input.Verb, request),
 			Kind:           string(c.definition.Kind),
 			Object:         request.Identity.Service,
+			Family:         Family,
 			Implementation: c.definition.Implementation,
 			ContentDigest:  digest,
 			Request:        canonical,
@@ -177,7 +178,7 @@ func (c Capability) requestFor(catalog api.Catalog, object api.Object, controlle
 	}
 	var source *ImageSource
 	if !spec.Get("image", "local").Present() {
-		image, source = MirroredImage(catalog, image)
+		image, source = MirroredImage(catalog, image, machine.Name())
 	}
 	egress, err := EgressFor(catalog, machine)
 	if err != nil {
