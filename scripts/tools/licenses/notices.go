@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -183,7 +184,7 @@ func buildNotices(sbom []byte, table moduleTable, wheels string) ([]byte, error)
 		return nil, errors.New("the bill of materials names no embedded third-party component")
 	}
 	var out bytes.Buffer
-	fmt.Fprintf(&out, "Third-party notices of %s %s\n\nThe executable embeds the components below, each under the license named here. The\nlicense texts follow as their authors published them.\n", document.Metadata.Component.Name, document.Metadata.Component.Version)
+	fmt.Fprintf(&out, "Third-party notices of %s %s\n\nThe executable embeds the components below, each under the license named here. The\nlicense texts follow as their authors published them.\n\nBill of materials: sha256:%x\n", document.Metadata.Component.Name, document.Metadata.Component.Version, sha256.Sum256(sbom))
 	for _, key := range slices.Sorted(func(yield func(string) bool) {
 		for key := range sections {
 			if !yield(key) {

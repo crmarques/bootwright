@@ -308,7 +308,6 @@ Alias cell.
 | [B1304](#b1304) | new, 2026-11-10 (X395 review, D255 (16)) | safety | Substrate | A routing unit that fails at boot leaves no VLAN leg up without its table | Making NetworkManager wait on the unit stops all host networking when nft fails, which can cut a remote host off; activating the legs only after the table loads changes how they come up and is the owner's choice |
 | [B1315](#b1315) | new, 2026-11-10 (X395 verification review) | defect | Substrate | A tagged managed Network whose `vlan` or trunk `bridge` changes redefines its own leg instead of refusing it as foreign | The refusal comes before any effect, so no isolation is lost; the e2e case never changes a leg, and a redefinition while guests use the old VLAN needs its own drift and quiescence rule |
 | [B1313](#b1313) | new, 2026-11-10 (X376) | enabling | Architecture | Bootwright names its own license, which the bill of materials and the notices carry | An owner decision: no file of the repository declares one |
-| [B1314](#b1314) | new, 2026-11-10 (X376 review) | enabling | Architecture | A release recipe builds, refuses a build that is unchecked or lacks its notices, and ships both documents with the executable | No release recipe exists; `make build` already refuses a build without notices, but nothing releases |
 | [B1317](#b1317) | new, 2026-11-10 (X400 review) | enabling | Architecture | A default client whose binary names no Go module has its third-party dependencies judged | virtctl 1.9.1 is built so its build information holds only the toolchain; the gate judges its Go dependencies by its top-level module alone |
 | [B1328](#b1328) | new, 2026-11-10 (X410 review) | defect | Storage | A pool no applied object declares raises no placement group check that keeps every Ceph block from ready | outside D256's pool and filesystem scope; needs a bounded mapping from a PG ID to its pool |
 | [B1316](#b1316) | new, 2026-11-10 (X370 review) | defect | Storage, with Secrets | A storage consumer or replication block names every Secret its binding pins | Safe as it stands: the hold walks the applied lineage, whose cluster and host blocks class those keys as effect material |
@@ -3566,23 +3565,6 @@ executable and the collection, and the notices state. **Exit evidence:** the
 decision recorded as a clause of [D251](#d251) or its successor, then the
 declared files and a test that every component, the first-party ones included,
 names a license.
-
-### B1314
-
-**Owner:** Architecture. **Kind:** enabling. **Requires:** none.
-**Definition:** Candidate, from the review of
-[X376](delivered.md#x376--component-licenses-notices-and-the-pinned-go-image).
-No release recipe exists: `make build` refuses a build whose components lack a
-license or text, but no step produces a release, so nothing yet refuses a
-release build that is stamped `unchecked` by the
-[vulnerability gate](../security.md#the-vulnerability-gate)
-([X400](delivered.md#x400--client-binary-scan-and-scheduled-image-scan) left that
-part of the former B1244 here) or that ships without
-`bootwright.notices.txt`. **Outcome:** a release recipe builds with the
-vulnerability gate on, refuses an executable stamped `unchecked` or a build
-without its notices, and ships the executable, its bill of materials and its
-notices together. **Exit evidence:** the recipe, and a test that it refuses each
-of the two builds.
 
 ### B1326
 
@@ -8294,12 +8276,12 @@ the owner's review:
     version 2 or 3; the license of the rest of an image's content is not
     claimed. The project's own license is declared nowhere, so the first-party
     collection names none and the notices cover third-party components alone,
-    parked as [B1313](#b1313). The release recipe that would also refuse an
-    `unchecked` build is parked as [B1314](#b1314). The notices are `bootwright.notices.txt`,
+    parked as [B1313](#b1313). The release recipe that also refuses an
+    `unchecked` build is delivered by [X406](delivered.md#x406--a-release-recipe-that-refuses-an-unchecked-build). The notices are `bootwright.notices.txt`,
     composed by `make build` from the bill of materials it just wrote, for each
     component marked `required`, and the build fails when one has no license
-    or no text; no release recipe exists, so that failure is how a release
-    cannot omit them. The Go image is pinned by tag and digest in the
+    or no text; at that commit no release recipe existed, so that failure
+    was how a release could not omit them. The Go image is pinned by tag and digest in the
     Dockerfile alone, `GO_VERSION` is gone, and the digest is the tag's
     manifest list, which every architecture shares.
 12. Taken by the session for B68 (X360), pending the owner's review. B68 is
@@ -8362,8 +8344,8 @@ the owner's review:
     new pin cannot be left out, and reporting high and critical findings in
     the job summary without failing a build, and marking the job when a scan
     could not run; the scan of the mirror registry's images joins
-    [B1250](#b1250)'s profile, and the release that refuses an `unchecked`
-    build stays with [B1314](#b1314).
+    [B1250](#b1250)'s profile, and the release recipe that refuses an
+    `unchecked` build is [X406](delivered.md#x406--a-release-recipe-that-refuses-an-unchecked-build).
 14. Taken by the session for B1269 (X402), pending the owner's review: the
     installer runs each `oc` call that reads the release with
     `--insecure=true`, which skips the registry's certificate check, so lending
@@ -8457,6 +8439,26 @@ the owner's review:
     one-Machine rule for the mirror's two services) moves to B1249's
     remaining work with the plan's slices 2 to 4, so the managed image mirror
     refusal stays, and no surface is admitted that nothing fills.
+23. Taken by the session for B1314 (X406), pending the owner's review: the
+    release recipe is `make release`, which builds on the host by default and
+    in the pinned Go image with `RELEASE_BUILD=container`, so it runs without
+    a container engine and neither build is declared more authoritative; it
+    names no version of its own, because the tags of the repository are
+    unreachable from its history and `git describe` yields none, so
+    `VERSION=<version>` is required, a version containing `dirty` refuses, and
+    so does an executable that reports another; it refuses any modified or
+    untracked file, not only a modified tracked one, since either changes what
+    the build compiles, and on the host build an ignored file under
+    `ansible/collections`, which the executable would embed; it refuses `make
+    -n`, `-i`, `-t` and `-q` and a `VULNDB`, `GO`, `STAMP` or verdict that does
+    not come from the Makefile, because each would let a build be stamped
+    passed without the gate; the host build drops `GOFLAGS`, `GOEXPERIMENT`,
+    `GOOS` and `GOARCH` from its environment; and the
+    third-party notices name the SHA-256 of the bill of materials they were
+    composed from, which is how a release proves the two were written by one
+    build in either path, so every notices file differs from its predecessor
+    by one line. The release has no signature and no reproducibility note
+    beyond the commit the executable reports.
 
 ### D252
 

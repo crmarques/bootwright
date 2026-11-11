@@ -13008,7 +13008,7 @@ occurred. **Limitations:** a pinned client is judged by its top-level Go module 
 not by the toolchain and modules its binary holds; the images are not scanned
 yet; and no release recipe refuses an `unchecked` executable.
 [X400](#x400--client-binary-scan-and-scheduled-image-scan) delivered the first two
-and [B1314](backlog.md#b1314) owns the third.
+and [X406](#x406--a-release-recipe-that-refuses-an-unchecked-build) delivered the third.
 
 ### X345 — The acquisition list
 
@@ -13723,7 +13723,7 @@ alone ([B1313](backlog.md#b1313)); the embedded `ansible-core` is
 GPL-3.0-or-later, which that decision weighs; an image's license is its
 program's, not that of the rest of its content; and no release recipe exists, so
 the notices are refused by the build, not by a release step
-([B1314](backlog.md#b1314)).
+([X406](#x406--a-release-recipe-that-refuses-an-unchecked-build) added the release recipe).
 
 ### X369 — WWN root
 
@@ -13818,8 +13818,8 @@ because each start draws a new upload secret.
 [D251](backlog.md#d251) (6) and (13)), delivered in-tree, so the item leaves the
 backlog. Each default client is judged by what its own binary holds, and the
 pinned images are scanned on a schedule. The third part of the item, a release
-build that refuses an executable stamped `unchecked`, needs a release recipe,
-which [B1314](backlog.md#b1314) owns; the scan of the images in the mirror
+build that refuses an executable stamped `unchecked`, needed a release recipe,
+which [X406](#x406--a-release-recipe-that-refuses-an-unchecked-build) delivered; the scan of the images in the mirror
 registry joins [B1250](backlog.md#b1250)'s profile.
 
 *Clients.* `make vulngate` hands `scripts/tools/vulngate` the tool table, a
@@ -13881,8 +13881,8 @@ prints what it did.
 occurred, the container build was not run, and the image job ran in no
 workflow. **Limitations:** the scanner's own database is the one it downloads
 at each run, unpinned by nature; an image's finding is not judged by an
-exception; and no release recipe refuses an `unchecked` executable
-([B1314](backlog.md#b1314)).
+exception; and no release recipe refused an `unchecked` executable
+until [X406](#x406--a-release-recipe-that-refuses-an-unchecked-build).
 
 ### X370 — Secret classes
 
@@ -14641,3 +14641,69 @@ evidence or contract version moved; the collection's automation digest did.
 
 **Commits:** this record's commit. Gates: listed in its message. No live run or
 push occurred.
+
+### X406 — A release recipe that refuses an unchecked build
+
+**Item:** B1314 (2026-11-10, from the review of
+[X376](#x376--component-licenses-notices-and-the-pinned-go-image),
+[D251](backlog.md#d251) (13) and (23)), delivered in-tree, so the item leaves
+the backlog. **Kind:** enabling. **Owners:** Architecture. `make build` already
+refused a build without notices and stamped the
+[vulnerability gate's](../security.md#the-vulnerability-gate) verdict, but
+nothing refused an executable stamped `unchecked`, and nothing shipped the
+executable with the documents that describe it.
+
+`make release` ships `bootwright`, `bootwright.cdx.json`,
+`bootwright.notices.txt` and a `SHA256SUMS` over the three into `dist`
+(`RELEASE_DIR`, ignored by Git). It is one recipe run by one shell, not
+prerequisites or sub-makes, so `-n`, `-i`, `-t` and `-q`, which would run only
+the lines that name `$(MAKE)` or ignore a refusal, cannot skip a check; the
+Makefile refuses them while it is read. The independent review of the first
+version found that and the other defects fixed here. Before the build it refuses
+`VULNCHECK` other than `on`, a `VULNDB`, `GO`, `STAMP` or `VULNERABILITY_CHECK`
+that the command line or environment sets, a `RELEASE_BUILD` other than
+`native` (`make build` on the host, with `GOFLAGS`, `GOEXPERIMENT`, `GOOS` and
+`GOARCH` removed from its environment and `GOFLAGS=-mod=readonly`) or
+`container` (`make container-build`), no `VERSION` or one containing `dirty`, a
+`COMMIT` that is not `HEAD`, any modified or untracked file, a `SOURCE` that is
+not clean, and on the host build an ignored file under `ansible/collections`.
+The build runs into a private `dist/.build.XXXXXX` with the gate forced on, the
+tree is required clean again, and the recipe then runs the built executable and
+refuses unless its `version` reports a `passed <date>` vulnerability check, the
+requested version, `HEAD` and a clean source; unless `bootwright.cdx.json` is
+byte for byte what its `sbom` writes; and unless the notices carry the line
+`Bill of materials: sha256:<digest>` of that file. The `licenses notices` tool
+now writes that line, so a notices file from another build, an older one
+included, no longer passes. It then writes `SHA256SUMS`, verifies it with
+`sha256sum --check --strict`, and only then replaces the shipped files, removing
+the old `SHA256SUMS` first and moving the new one last, so a release killed
+mid-move leaves `dist` without a `SHA256SUMS` and fails closed; a refused
+release leaves the previous files untouched and the staging directory removed.
+Tests: `TestReleaseShipsTheExecutableItsBillOfMaterialsItsNoticesAndTheirDigests`,
+`TestReleaseTurnsTheVulnerabilityGateOnForTheBuild`,
+`TestReleaseRefusesWhatItMustNotShip` (stamped `unchecked` and failed, a bill
+of materials and notices of another build, a dirty source, another version or
+commit, an export without the executable or the notices, an empty or
+non-executable one, `VULNCHECK=skip`, a `VULNDB`, `GO`, `STAMP` or verdict
+override, no or dirty version, a foreign commit, a modified or untracked file,
+a directory in place of a shipped file, an unknown build kind),
+`TestReleaseRefusesAMakeThatWouldRunOnlyPartOfIt`,
+`TestReleaseRefusesATreeThatChangesDuringTheBuild`,
+`TestReleaseOnTheHostRunsTheBuildWithAnEnvironmentThatCannotChangeTheCompile`,
+`TestReleaseOnTheHostRefusesAnIgnoredFileTheCollectionWouldEmbed` and
+`TestTheReleaseRecipeIsOneRecipeThatRunsTheBuildWithTheVulnerabilityGateOn`,
+which run the real Makefile in a throwaway Git checkout against a stand-in
+container engine and a stand-in `scripts/go`. A real native `make release`
+probe on the clean branch shipped the set and `make -n release` refused. The
+foreign-owner refusal is not tested.
+
+No contract version, request, evidence or content digest moved.
+
+**Commits:** this commit. Gates: listed in its message. No tag, push or
+publication occurred. **Limitations:** the release carries no signature, no
+provenance statement and no reproducibility check across hosts, and its
+reproducibility note is the commit and version the executable reports; it is
+built for the building host's architecture alone; the vulnerability verdict is
+the one the build's own gate wrote, so a release rests on the databases of that
+run; the shipped files are checked against each other and the executable, not
+against an earlier release.

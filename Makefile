@@ -1,4 +1,4 @@
-.PHONY: build wheels vulngate licenses licenses-check tool-table tool-table-outdated container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check focus quick race check-offline check check-go
+.PHONY: build release wheels vulngate licenses licenses-check tool-table tool-table-outdated container-build test vet fmt-check modules-check tidy-check completion-test vulncheck ansible-check docs-check focus quick race check-offline check check-go
 
 GO := ./scripts/go
 VULNDB ?= https://vuln.go.dev
@@ -6,7 +6,8 @@ VULNDB ?= https://vuln.go.dev
 # A release build overrides these; an ordinary build identifies the working tree
 # it came from. Outside a repository they stay empty and `version` reports an
 # unidentified build instead of claiming a revision it cannot prove. Every one
-# is expanded by the two build recipes alone, so no other target runs Git.
+# is expanded by the two build recipes and the release recipes alone, so no
+# other target runs Git.
 VERSION ?= $(shell git describe --tags --dirty 2>/dev/null)
 COMMIT ?= $(shell git rev-parse HEAD 2>/dev/null)
 SOURCE ?= $(if $(COMMIT),$(if $(shell git status --porcelain --untracked-files=no 2>/dev/null),modified,clean))
@@ -120,6 +121,98 @@ container-build:
 	mv -f -- "$$stage/bootwright.cdx.json" "$$out/bootwright.cdx.json"; \
 	mv -f -- "$$stage/bootwright.notices.txt" "$$out/bootwright.notices.txt"; \
 	mv -f -- "$$stage/bootwright" "$$out/bootwright"
+
+# A release ships what one clean, committed checkout built with the
+# vulnerability gate on: the executable, its bill of materials, its third-party
+# notices and the SHA-256 of the three. It is one recipe, run by one shell, so
+# no check is a prerequisite or a sub-make that a flag could turn into a
+# no-op: it refuses under -n, -i, -t and -q, which would otherwise run only
+# the lines that name $(MAKE) or ignore a refusal; refuses a VULNDB, GO, STAMP
+# or VULNERABILITY_CHECK that does not come from this file, VULNCHECK other
+# than on, a missing VERSION, a COMMIT or SOURCE that is not the checkout's
+# and any modified or untracked file, before and after the build; builds into a
+# private directory of RELEASE_DIR; refuses the build unless its executable
+# reports a passed vulnerability verdict, the version and commit it was asked
+# for and a clean source, and unless the bill of materials is the one the
+# executable composes and the notices name that bill's digest; and only then
+# replaces the shipped files. RELEASE_BUILD selects the host build (native),
+# which runs with the Go settings that change what is compiled removed from its
+# environment, or the container build (container); either runs the gate.
+RELEASE_DIR ?= dist
+RELEASE_BUILD ?= native
+RELEASE_FILES = bootwright bootwright.cdx.json bootwright.notices.txt
+RELEASE_FLAGS = $(findstring n,$(firstword -$(MAKEFLAGS)))$(findstring i,$(firstword -$(MAKEFLAGS)))$(findstring t,$(firstword -$(MAKEFLAGS)))$(findstring q,$(firstword -$(MAKEFLAGS)))
+
+# -i would turn a refusal into a successful make, so the flags are refused while
+# the Makefile is read, which no flag ignores; the recipe checks them again.
+ifneq ($(filter release,$(MAKECMDGOALS)),)
+ifneq ($(RELEASE_FLAGS),)
+$(error release: make was run with -$(RELEASE_FLAGS), which would run only part of the recipe or ignore a refusal; run it without -n, -i, -t and -q)
+endif
+endif
+
+release:
+	@set -eu; \
+	refuse() { echo "release: $$*" >&2; exit 1; }; \
+	test -z '$(RELEASE_FLAGS)' || refuse "make was run with -$(RELEASE_FLAGS), which would run only part of the recipe or ignore a refusal; run it without -n, -i, -t and -q"; \
+	$(foreach variable,VULNDB GO STAMP VULNERABILITY_CHECK,test '$(origin $(variable))' = file || refuse "$(variable) comes from the $(origin $(variable)), which could change what the gate checks or what is stamped; a release takes it from the Makefile"; ) \
+	test '$(VULNCHECK)' = on || refuse "VULNCHECK=$(VULNCHECK) is refused; a release is built with the vulnerability gate on"; \
+	case '$(RELEASE_BUILD)' in native|container) ;; *) refuse "RELEASE_BUILD=$(RELEASE_BUILD) is neither native nor container" ;; esac; \
+	case '$(VERSION)' in ''|*dirty*) refuse "name the release with VERSION=<version>; '$(VERSION)' is none or names a dirty tree" ;; esac; \
+	head="$$(git rev-parse HEAD 2>/dev/null)" || refuse "this is no Git checkout, so no commit identifies the build"; \
+	test "$$head" = '$(COMMIT)' || refuse "COMMIT=$(COMMIT) is not the checkout's commit $$head"; \
+	tree_clean() { \
+		changes="$$(git status --porcelain)" || refuse "git status failed"; \
+		test -z "$$changes" || refuse "the tree has modified or untracked files, so the build would not be its commit:$$(printf '\n%s' "$$changes")"; \
+	}; \
+	tree_clean; \
+	test '$(SOURCE)' = clean || refuse "SOURCE=$(SOURCE) is not clean"; \
+	if test '$(RELEASE_BUILD)' = native; then \
+		embedded="$$(git status --porcelain --ignored -- ansible/collections)" || refuse "git status failed"; \
+		test -z "$$embedded" || refuse "ignored files under ansible/collections would be embedded in the executable:$$(printf '\n%s' "$$embedded")"; \
+	fi; \
+	out='$(RELEASE_DIR)'; \
+	mkdir -p -- "$$out"; \
+	for name in $(RELEASE_FILES) SHA256SUMS; do \
+		if test -d "$$out/$$name" || { test -e "$$out/$$name" && ! test -O "$$out/$$name"; }; then \
+			refuse "$$out/$$name is a directory or belongs to another user; remove it or choose another RELEASE_DIR"; \
+		fi; \
+	done; \
+	stage="$$(mktemp -d "$$out/.build.XXXXXX")"; \
+	trap 'rm -rf -- "$$stage"' EXIT; \
+	trap 'exit 130' INT TERM; \
+	case '$(RELEASE_BUILD)' in \
+	native) \
+		rm -f -- $(addprefix bin/,$(RELEASE_FILES)); \
+		env -u GOFLAGS -u GOEXPERIMENT -u GOOS -u GOARCH GOFLAGS=-mod=readonly $(MAKE) --no-print-directory build VULNCHECK=on; \
+		for name in $(RELEASE_FILES); do cp -- "bin/$$name" "$$stage/$$name"; done ;; \
+	container) $(MAKE) --no-print-directory container-build VULNCHECK=on CONTAINER_OUT="$$stage" ;; \
+	esac; \
+	tree_clean; \
+	for name in $(RELEASE_FILES); do \
+		{ test -f "$$stage/$$name" && test -s "$$stage/$$name"; } || refuse "$$stage/$$name is missing or empty"; \
+	done; \
+	test -x "$$stage/bootwright" || refuse "$$stage/bootwright is not executable"; \
+	identity="$$("$$stage/bootwright" version --output json)" || refuse "the built executable cannot report its version"; \
+	field() { printf '%s\n' "$$identity" | sed -n 's/.*"'"$$1"'":"\([^"]*\)".*/\1/p'; }; \
+	verdict="$$(field vulnerabilityCheck)"; \
+	case "$$verdict" in \
+	passed\ [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;; \
+	*) refuse "the executable's vulnerability check is '$$verdict', not a pass; a release needs the gate to have passed" ;; \
+	esac; \
+	test "$$(field version)" = '$(VERSION)' || refuse "the executable reports version '$$(field version)', not '$(VERSION)'"; \
+	test "$$(field commit)" = "$$head" || refuse "the executable reports commit '$$(field commit)', not this checkout's $$head"; \
+	test "$$(field source)" = clean || refuse "the executable reports source '$$(field source)', not clean"; \
+	"$$stage/bootwright" sbom --format cyclonedx-json >"$$stage/.sbom" || refuse "the built executable cannot write its bill of materials"; \
+	cmp -s "$$stage/.sbom" "$$stage/bootwright.cdx.json" || refuse "bootwright.cdx.json is not the bill of materials of this executable"; \
+	digest="$$(sha256sum "$$stage/bootwright.cdx.json")"; \
+	grep -Fxq "Bill of materials: sha256:$${digest%% *}" "$$stage/bootwright.notices.txt" || refuse "bootwright.notices.txt was not composed from this bill of materials"; \
+	rm -f -- "$$stage/.sbom"; \
+	( cd "$$stage" && sha256sum $(RELEASE_FILES) >SHA256SUMS ); \
+	{ test -f "$$stage/SHA256SUMS" && ( cd "$$stage" && sha256sum --check --strict SHA256SUMS >/dev/null ); } || refuse "SHA256SUMS does not verify the staged files"; \
+	rm -f -- "$$out/SHA256SUMS"; \
+	for name in bootwright.cdx.json bootwright.notices.txt bootwright SHA256SUMS; do mv -f -- "$$stage/$$name" "$$out/$$name"; done; \
+	echo "release: $$out holds $(RELEASE_FILES) SHA256SUMS of $(VERSION), commit $$head"
 
 test:
 	$(GO) test ./...

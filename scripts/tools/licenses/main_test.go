@@ -238,6 +238,14 @@ func TestTheNoticesReproduceEveryEmbeddedComponentsLicenseAndRefuseWhatTheyCanno
 	if strings.Count(text, "MarkupSafe text") != 1 || strings.Contains(text, "helm") || strings.Contains(text, "bootwright.core") {
 		t.Error("the notices repeat a distribution or name a component the executable does not embed")
 	}
+	sum := sha256.Sum256(compose(good...))
+	if !strings.Contains(text, "\nBill of materials: sha256:"+hex.EncodeToString(sum[:])+"\n") {
+		t.Error("the notices do not name the digest of the bill of materials they were composed from")
+	}
+	other, err := buildNotices(append(compose(good...), '\n'), table, wheels)
+	if err != nil || strings.Contains(string(other), hex.EncodeToString(sum[:])) {
+		t.Errorf("the notices of a different bill of materials name the same digest (%v)", err)
+	}
 	again, _ := buildNotices(compose(good...), table, wheels)
 	if string(again) != text {
 		t.Error("two compositions of one input differ")

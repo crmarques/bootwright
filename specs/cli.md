@@ -698,6 +698,8 @@ but the first-party collection to a reviewed SPDX license. `make build` writes
 it beside the executable as `bin/bootwright.cdx.json`, and `make container-build`
 beside its executable; each also writes `bootwright.notices.txt`, the
 third-party notices of every component the executable embeds, scope `required`,
+naming, in the line `Bill of materials: sha256:<digest>`, the document they
+were composed from, which `make release` checks,
 with the license text its authors published and each module's `NOTICE`. The
 notices are composed from the document and fail the build when a component names
 no license or has no text, so a release cannot omit them. They carry nothing for

@@ -157,6 +157,57 @@ those of `golang:<new version>-trixie`: the digest is the
 with an anonymous pull token, and which `skopeo inspect --format '{{.Digest}}'`
 or `docker buildx imagetools inspect` print as well.
 
+## Releasing
+
+`make release` builds the executable for a release and ships it with the
+documents that describe it. It writes four files into `dist` (`RELEASE_DIR`,
+ignored by Git) and only these: `bootwright`, its bill of materials
+`bootwright.cdx.json`, its third-party notices `bootwright.notices.txt` and a
+`SHA256SUMS` over the three, which `sha256sum --check SHA256SUMS` verifies from
+that directory. It tags, signs, pushes and publishes nothing.
+
+```sh
+make release VERSION=v1.2.3
+make release VERSION=v1.2.3 RELEASE_BUILD=container
+```
+
+`VERSION` is required, because the tags of this repository are not reachable
+from its history and `git describe` names none. The host build (`native`, the
+default) is `make build` and needs no container engine; `RELEASE_BUILD=container`
+runs `make container-build` in the pinned Go image, with the settings above.
+Either runs the [vulnerability gate](../specs/security.md#the-vulnerability-gate),
+which needs network for `vuln.go.dev` and `api.osv.dev`.
+
+The recipe refuses, and writes nothing into `dist`, when:
+
+| Refused | Because |
+| --- | --- |
+| `VULNCHECK=skip`, or any value but `on`; a `VULNDB`, `GO`, `STAMP` or `VULNERABILITY_CHECK` that the command line or environment sets | A release is built with the gate on, against the database and verdict the Makefile names. |
+| `make -n`, `-i`, `-t` or `-q` | They would run only the lines that name `$(MAKE)`, or ignore a refusal; the Makefile refuses them while it is read. |
+| A modified or untracked file, before or after the build, or a `COMMIT` or `SOURCE` that is not the checkout's; on the host build, an ignored file under `ansible/collections` | The build would not be the commit it names, or would embed a file the commit does not hold. |
+| No `VERSION`, or one containing `dirty` | The release has no name. |
+| An executable whose `version` does not report `Vulnerability check  passed <date>`, the requested version, `HEAD` and a clean source | The gate did not pass for this build. |
+| A `bootwright.cdx.json` that is not what the executable's `sbom` writes | The document describes another build. |
+| A `bootwright.notices.txt` missing, empty or naming another bill of materials | The notices were not composed from this build's document. |
+
+The host build runs with `GOFLAGS`, `GOEXPERIMENT`, `GOOS` and `GOARCH` removed
+from its environment and `GOFLAGS=-mod=readonly`, as the container build does,
+so nothing inherited changes what is compiled. All checks are one recipe run
+by one shell, not prerequisites or sub-makes, so no flag can skip one.
+
+It builds into a private `dist/.build.XXXXXX`, so two releases cannot clobber
+each other, runs the checks there, verifies the staged `SHA256SUMS`, and
+replaces the shipped files only when all pass, `SHA256SUMS` last. A refused
+release leaves the previous one whole. A release killed while it moves the
+files leaves `dist` without a `SHA256SUMS` (the old one is removed first), which
+is a release that fails closed: verify nothing from it and run the recipe
+again. `TestReleaseRefusesWhatItMustNotShip`,
+`TestReleaseRefusesAMakeThatWouldRunOnlyPartOfIt`,
+`TestReleaseRefusesATreeThatChangesDuringTheBuild` and the host-build tests run
+the real Makefile in a throwaway Git checkout against a stand-in container
+engine and a stand-in `scripts/go`; they do not run a real compile, which the
+release probe of the commit that added them did.
+
 ## Verification tiers
 
 | Command | Result |
@@ -166,6 +217,7 @@ or `docker buildx imagetools inspect` print as well.
 | `make licenses-check` | Recompute that table from the module cache and fail when `cmd/bootwright/go-licenses.json` differs; `make check` runs it. |
 | `make wheels` | Place the runtime lock's wheels where the executable embeds them, each checked against the lock, from the shared cache or, on a cold cache, `files.pythonhosted.org`; [carried wheels](../specs/controller.md#the-runtime-lock). |
 | `make container-build` | Build the same executable into `CONTAINER_OUT` with Docker or Podman only; [building in a container](#building-in-a-container). |
+| `make release` | Build a release into `dist` and ship the executable, its bill of materials, its notices and their `SHA256SUMS`, refusing an unchecked or unclean build; [releasing](#releasing). |
 | `make focus` | Run the inner loop: the narrowest checks of the branch's diff, in concurrent lanes. It is no gate; [the tiers](../.agents/skills/code-implementation/references/verification.md#focus) say what it selects and what it leaves to `make check`. |
 | `make quick` | Run formatting, vet, the architecture suite and the packages a change on this branch reaches; [the tiers](../.agents/skills/code-implementation/references/verification.md) say when to run it and [architecture verification](../specs/architecture.md#architecture-verification) how it selects them. |
 | `make docs-check` | Check guidance links, anchors, cited paths and tests, documented command lines, skill frontmatter and byte budgets over the files Git tracks, every capability's refusal table and the engine's table of unclaimed objects against the code that refuses, beside the working-tree walks [architecture verification](../specs/architecture.md#architecture-verification) names, and hold the pages to the [milestone rules](../specs/milestones.md) (`TestDocsMilestonePagesAgreeWithTheirStatus`): each milestone's Status Delivery agrees with its page and its Next names only open work; a done milestone keeps no item or planned slice and requires only done milestones; every item has one row of a known Kind, one detail section and no delivered record, and leaves its page when it completes; each planned slice has one row of a known Kind naming only its page's items; and an item's Delivery names a planned slice exactly when that slice's row lists the item, with no empty slice suffix. |
@@ -306,7 +358,9 @@ materials the new executable prints with `bootwright sbom --format
 cyclonedx-json` ([bill of materials](../specs/cli.md#bill-of-materials)), and
 `bin/bootwright.notices.txt`, its [third-party notices](#license-sources-and-notices);
 `make container-build` writes both beside its executable. A scanner reads the
-pinned components from the first.
+pinned components from the first. The notices name the SHA-256 of that
+document in a `Bill of materials: sha256:` line, which [`make release`](#releasing)
+checks.
 
 ### License sources and notices
 

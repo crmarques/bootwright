@@ -760,7 +760,9 @@ artifacts before distribution. Each build's
 and pinned component but the project's own collection, from a table beside the lock that pins it, which the tool
 that refreshes the lock reads from the component and a check holds to it, so a
 build needs no network to know them; the build writes the third-party notices
-of every embedded component beside the executable and fails without them. The
+of every embedded component beside the executable and fails without them, and
+they name the digest of the bill of materials they were composed from, which
+the [release recipe](#the-vulnerability-gate) checks before it ships either. The
 container build's Go image is pinned by tag and digest like every other
 artifact, and a test holds its tag to the `go` directive of `go.mod`.
 
@@ -849,10 +851,26 @@ embeds the exceptions, which its bill of materials carries as VEX, and the
 build stamps the verdict `version` prints. `VULNCHECK=skip` builds without the
 databases and stamps the executable `unchecked`.
 
+`make release` is the only recipe that ships a build, and it refuses what the
+gate did not pass. It refuses `VULNCHECK=skip`, a `VULNDB`, `GO`, `STAMP` or
+verdict that does not come from the Makefile, `make -n`, `-i`, `-t` and `-q`, a
+tree with any modified or untracked file (again after the build), a missing
+`VERSION` and a `COMMIT` that is not `HEAD` before it builds, with the gate
+forced on, in either the host build (the default, with the Go settings that
+change a compile removed from its environment) or the container build
+(`RELEASE_BUILD=container`). It then runs the executable and
+refuses unless `version` reports a passed vulnerability check, the requested
+version, `HEAD` and a clean source, unless `bootwright.cdx.json` is what that
+executable's `sbom` writes, and unless `bootwright.notices.txt` names the
+SHA-256 of that document. It ships the executable, the two documents and a
+`SHA256SUMS` over them, and nothing else, into `dist` (`RELEASE_DIR`)
+([`TestReleaseRefusesWhatItMustNotShip`](../test/architecture/release_recipe_test.go),
+which runs the real Makefile against stand-ins for the engine and `scripts/go`).
+The release is unsigned and no provenance statement accompanies it; the
+verdict it carries is the one the gate wrote during that build.
+
 Not yet met: the images in the mirror registry are not scanned, which
-[B1250](milestones/backlog.md#b1250)'s profile carries, and no release recipe
-refuses an executable stamped `unchecked`, which
-[B1314](milestones/backlog.md#b1314) owns.
+[B1250](milestones/backlog.md#b1250)'s profile carries.
 
 ### Acquisition origins
 
