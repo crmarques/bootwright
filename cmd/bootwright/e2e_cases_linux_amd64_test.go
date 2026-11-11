@@ -137,10 +137,42 @@ func renderE2ECase(t *testing.T, script, name string, render e2eRender) []string
 	for _, set := range render.sets {
 		arguments = append(arguments, "--set", set)
 	}
-	if combined, err := exec.Command(script, arguments...).CombinedOutput(); err != nil {
+	command := exec.Command(script, arguments...)
+	command.Env = append(os.Environ(), "PATH="+e2eFixtureRouteTools(t)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if combined, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("render.sh %s: %v\n%s", strings.Join(arguments, " "), err, combined)
 	}
 	return e2eInputDirectories(t, output)
+}
+
+func e2eFixtureRouteTools(t *testing.T) string {
+	t.Helper()
+	tools := t.TempDir()
+	script := `#!/bin/sh
+set -eu
+if [ "$#" -ne 4 ] || [ "$1" != -4 ] || [ "$2" != route ] || [ "$3" != get ] || [ "$4" != 192.0.2.1 ]; then
+    exit 2
+fi
+printf '%s\n' '192.0.2.1 dev fixture0 src 192.0.2.10'
+`
+	if err := os.WriteFile(filepath.Join(tools, "ip"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	return tools
+}
+
+func TestE2ECaseRenderingDoesNotReadTheHostsRoutes(t *testing.T) {
+	tools := t.TempDir()
+	marker := filepath.Join(tools, "route-read")
+	if err := os.WriteFile(filepath.Join(tools, "ip"), []byte("#!/bin/sh\n: > \"$BOOTWRIGHT_E2E_ROUTE_PROBE\"\nexit 2\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BOOTWRIGHT_E2E_ROUTE_PROBE", marker)
+	t.Setenv("PATH", tools+string(os.PathListSeparator)+os.Getenv("PATH"))
+	renderE2ECase(t, e2eRenderScript(t), "lab-rhel", e2eRender{name: "no host routes"})
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("fixture rendering read the host's routes: %v", err)
+	}
 }
 
 func e2eRenderScript(t *testing.T) string {

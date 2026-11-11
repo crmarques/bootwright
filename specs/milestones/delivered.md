@@ -13640,6 +13640,15 @@ recorded directory is now its inode on its parent's filesystem
 [lesson](../../.agents/knowledge/btrfs-anonymous-device-numbers.md)), with no
 record version, request or automation digest moved. The resumed integration
 skips E2E execution; both fixes await operator acceptance.
+
+**Gate repair (B1347, 2026-11-11):** fixture renders use a synthetic route
+through a per-command tool directory, so an unavailable host route cannot
+fail an in-tree gate. `TestE2ECaseRenderingDoesNotReadTheHostsRoutes` proves
+that a fixture renders while the ambient route tool refuses and records
+calls, with no call reaching that tool. The test failed before the helper
+supplied its fixture route. Production rendering is unchanged; this test
+repair has no operator gate. Its commit records the verification results.
+
 **Limitations:** NetworkManager and kernel behaviour are
 proved only against fakes and an unprivileged nft namespace, never a live
 host; the loaded-table proof compares rule counts, not rule contents
