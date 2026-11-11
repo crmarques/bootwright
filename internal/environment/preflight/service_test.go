@@ -361,7 +361,7 @@ func TestEveryStageMergesInfrastructureAndClusterChecks(t *testing.T) {
 	service, controller, budget, clusters := fixture()
 	ssh := machine.SSHOptions{User: "operator"}
 	clusters.report.Checks = append(clusters.report.Checks, capacity.Check{ID: "capacity.memory", Target: "host", Status: capacity.Failed, Reason: "from clusters"})
-	result, err := service.Preflight(context.Background(), PreflightRequest{TrustOnFirstUse: true, SSH: ssh})
+	result, err := service.Preflight(context.Background(), PreflightRequest{ObserveHostKeys: true, SSH: ssh})
 	found := diagnostics.Of(err)
 	if result == nil || len(found) != 1 || found[0].Code != "preflight.failed" || found[0].Remediation != "resolve the reported prerequisites and repeat bootwright preflight --context lab" {
 		t.Fatalf("result %+v, error %#v", result, err)
@@ -369,7 +369,7 @@ func TestEveryStageMergesInfrastructureAndClusterChecks(t *testing.T) {
 	if result.Context != "lab" || result.Target != "controller,infrastructure-services,substrates,machines,clusters" {
 		t.Fatalf("report %+v", result)
 	}
-	if want := (clusterpreflight.PreflightRequest{ContextName: "lab", TrustOnFirstUse: true, SSH: ssh}); !reflect.DeepEqual(clusters.request, want) {
+	if want := (clusterpreflight.PreflightRequest{ContextName: "lab", ObserveHostKeys: true, SSH: ssh}); !reflect.DeepEqual(clusters.request, want) {
 		t.Fatalf("clusters request %+v", clusters.request)
 	}
 	if controller.request.ContextName != "lab" || controller.calls != 1 || budget.calls != 1 || clusters.calls != 1 {

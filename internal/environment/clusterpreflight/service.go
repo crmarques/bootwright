@@ -53,7 +53,7 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 	}
 	if runStorage {
 		storagePart = func(checks context.Context) (*Report, error) {
-			return s.Storage.Check(checks, storagepreflight.PreflightRequest{ContextName: selected, Clusters: storageNames, DryRun: request.DryRun, TrustOnFirstUse: request.TrustOnFirstUse, SSH: request.SSH})
+			return s.Storage.Check(checks, storagepreflight.PreflightRequest{ContextName: selected, Clusters: storageNames, DryRun: request.DryRun, ObserveHostKeys: request.ObserveHostKeys, SSH: request.SSH})
 		}
 	}
 	reports, err := RunTogether(ctx, containerPart, storagePart)

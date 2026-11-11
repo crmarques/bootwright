@@ -121,7 +121,7 @@ The three `media` commands follow the host-wide
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
 | `bootwright validate` | repeatable `-f, --file <file-or-dir>` | validation summary with admission counts, exclusions and advisories | read the supplied input, or the selected context's input when `-f` is omitted; no write |
-| `bootwright preflight` | `--stage <list>` default every stage but `add-ons`; `--clusters <list>` default all; `--dry-run` false; `--trust-on-first-use=<bool>` default `true` | [one report](output.md#preflight) of the checks of each selected stage: `controller` the controller host and this context's controller-stage prerequisites, `infrastructure-services` the firewall admission of the controller's managed service sockets, `substrates` the capacity of the hosts that hold its Machines, `machines` none, `clusters` the selected OpenShiftClusters and CephClusters | observe unless `--dry-run`, which is local-only |
+| `bootwright preflight` | `--stage <list>` default every stage but `add-ons`; `--clusters <list>` default all; `--dry-run` false; `--observe-host-keys=<bool>` default `true` | [one report](output.md#preflight) of the checks of each selected stage: `controller` the controller host and this context's controller-stage prerequisites, `infrastructure-services` the firewall admission of the controller's managed service sockets, `substrates` the capacity of the hosts that hold its Machines, `machines` none, `clusters` the selected OpenShiftClusters and CephClusters | observe unless `--dry-run`, which is local-only |
 | `bootwright plan` | `--stage <list>` default all stages; `--until <cluster>.<package>` | next legal full-context plan, the additive plan or exact continuation point, with the steps each block waits for, how wide the plan is and how many blocks it starts at a time, and the blocks a stage or `--until` selection would start | none |
 | `bootwright status` | `--paths` false | controller setup readiness, lifecycle state of the lineage, each running block's newest output and the bytes it holds, and next safe commands; with `--paths`, each root that holds the context's data on this host and whether it is present; beside no operation it also names each declared Secret whose material is missing or stale and each named installer image the media store lacks, with the remedy command ahead of `plan`, from keyring metadata and media records alone; it checks neither Secret material nor image bytes, which `secret check` and `media list --checksums` report | read local state, keyring metadata and media records under shared locks; `--paths` examines whether each root's entry exists and reads none |
 | `bootwright logs` | `--operation <op-id>` default the current operation; `--block <block-id>`; `--raw` false; `--attempt <N>`; `--follow` false; `--run <run-NNNNNN>`; `--install` the newest controller install, or `--install=<install-NNNNNN>` | an operation's events as lines, one block's newest retained adapter output with `--raw`, a bounded run's or setup's output, or, with `--follow`, those lines streamed until the operation, run or setup ends, as [reading and following logs](output.md#reading-and-following-logs) states | read local state under short shared root locks and the log root through no-follow handles, `--install` under no root lock; never a lease, never a write |
@@ -448,11 +448,8 @@ interface for a deliberately changed key, and every replacement name must also
 be in that command's selected Machine set. `--expect` and a `--replace` member
 of the form `<machine>=SHA256:<fingerprint>` name the fingerprint the operator
 verified out of band; a fingerprint that is not `SHA256:` and 43 base64
-characters, or two different fingerprints for one Machine, are usage errors. The preflight `--trust-on-first-use`
-flag permits bounded anonymous retrieval and presentation of an unknown SSH host
-key from the exact authorized endpoint, as the
-[storage preflight result](output.md#json-output) shows; it never accepts,
-persists or uses the key.
+characters, or two different fingerprints for one Machine, are usage errors. Preflight's
+`--observe-host-keys` follows the [preflight observation and refusal rule](output.md#preflight).
 
 `--sensitive` authorizes materialization, not disclosure in normal output. It
 applies only to the render rows that list it. Sensitive installer artifacts use

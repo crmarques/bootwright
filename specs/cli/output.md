@@ -361,10 +361,10 @@ single `host.access` check `unknown` naming the key to authorize
 prerequisite probe whose command exits nonzero reports its check `failed`,
 and a read that does not complete `unknown`; a `host.peer-names` check lists the Ceph node names a
 host's resolver does not answer. Anonymous key observation under
-`--trust-on-first-use` neither enrolls nor accepts a key: a host whose key the
+`--observe-host-keys` neither enrolls nor accepts a key: a host whose key the
 context does not trust reports its `host.trust` check `unknown` with the
 observed fingerprint and the `machine trust` request that enrolls it, and
-without the flag the check names no fingerprint.
+with `--observe-host-keys=false` the check names no fingerprint.
 
 A `controller install --dry-run --output json` that the host or the state root refuses
 writes the same fields with `ok` `false` and the refusal in `diagnostics`,
@@ -649,11 +649,12 @@ set of checks before it reports, which stops the other sets, and when several
 stop, the first in the order controller checks, capacity checks, cluster
 checks, and within the cluster checks the OpenShiftCluster checks', is the one
 reported; a controller check that is not ready is its rows, and one that
-errors with every row ready is the error. `--trust-on-first-use` and the SSH
-overrides reach the CephCluster checks alone, because the OpenShiftCluster
-checks observe the controller and take neither: SSH overrides when the
-clusters stage is not selected, or no CephCluster is declared or named, are a
-`cli.usage` refusal given before any check runs
+errors with every row ready is the error. `--observe-host-keys` defaults to
+`true`; either explicit value is accepted for every stage and cluster
+selection. It permits anonymous unknown-key observation only in CephCluster
+checks; other checks take no observation option, and dry-run observes no key.
+SSH overrides reach the CephCluster checks alone. They are a `cli.usage`
+refusal before any check runs unless the clusters stage selects a CephCluster
 (`TestTheControllerAndSubstrateStagesReportTheControllerAndCapacityChecksAndNothingTheyDoNotObserve`,
 `TestTheListenerRowsAreTheInfrastructureServicesStageAndTheOthersTheControllerStage`,
 `TestPreflightRefusesSSHOverridesNoCephClusterReachesBeforeAnyCheckRuns`,

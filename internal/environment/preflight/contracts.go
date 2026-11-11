@@ -17,7 +17,7 @@ type PreflightRequest struct {
 	Stages          []string
 	Clusters        []string
 	DryRun          bool
-	TrustOnFirstUse bool
+	ObserveHostKeys bool
 	SSH             machine.SSHOptions
 }
 

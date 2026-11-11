@@ -189,8 +189,8 @@ func unregisteredFlag() flagSpec {
 	return flag
 }
 
-func trustFlag() flagSpec {
-	flag := boolFlag("trust-on-first-use", "Observe unknown SSH keys without accepting them")
+func observeHostKeysFlag() flagSpec {
+	flag := boolFlag("observe-host-keys", "Observe unknown SSH keys without accepting them")
 	flag.defaultValue = "true"
 	return flag
 }

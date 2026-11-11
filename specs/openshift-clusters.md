@@ -1191,7 +1191,8 @@ readiness.
 
 With `--dry-run` every check is `pending`, its `reason` names the record or the
 quantity it would check, and nothing is resolved or observed. These controller
-checks refuse `--trust-on-first-use` and borrowed SSH options.
+checks take neither a host-key observation option nor borrowed SSH options;
+the [preflight rule](cli/output.md#preflight) owns their routing and refusal.
 
 ## Post-installation network configuration
 

@@ -89,7 +89,7 @@ func fixture() (Service, *containerFake, *storageFake) {
 func TestClustersRunsBothChecksAndReportsTheirUnion(t *testing.T) {
 	service, container, storage := fixture()
 	ssh := machine.SSHOptions{User: "operator"}
-	result, err := service.Check(context.Background(), PreflightRequest{DryRun: true, TrustOnFirstUse: true, SSH: ssh})
+	result, err := service.Check(context.Background(), PreflightRequest{DryRun: true, ObserveHostKeys: true, SSH: ssh})
 	if err != nil || result == nil {
 		t.Fatalf("result %+v, error %v", result, err)
 	}
@@ -105,7 +105,7 @@ func TestClustersRunsBothChecksAndReportsTheirUnion(t *testing.T) {
 	if want := (containerpreflight.PreflightRequest{ContextName: "lab", DryRun: true}); !reflect.DeepEqual(container.request, want) {
 		t.Fatalf("the controller checks take no SSH or trust options: %+v", container.request)
 	}
-	if want := (storagepreflight.PreflightRequest{ContextName: "lab", DryRun: true, TrustOnFirstUse: true, SSH: ssh}); !reflect.DeepEqual(storage.request, want) {
+	if want := (storagepreflight.PreflightRequest{ContextName: "lab", DryRun: true, ObserveHostKeys: true, SSH: ssh}); !reflect.DeepEqual(storage.request, want) {
 		t.Fatalf("storage request %+v", storage.request)
 	}
 }
@@ -215,7 +215,7 @@ func TestClustersStopsOnACancelledContext(t *testing.T) {
 func TestClustersRefusesSSHOverridesWhenNoStorageClusterIsSelected(t *testing.T) {
 	ssh := machine.SSHOptions{User: "operator"}
 	service, container, storage := fixture()
-	_, err := service.Check(context.Background(), PreflightRequest{Clusters: []string{"sno"}, SSH: ssh, TrustOnFirstUse: true})
+	_, err := service.Check(context.Background(), PreflightRequest{Clusters: []string{"sno"}, SSH: ssh, ObserveHostKeys: true})
 	found := diagnostics.Of(err)
 	if len(found) != 1 || found[0].Code != "cli.usage" || found[0].Remediation == "" || container.calls+storage.calls != 0 {
 		t.Fatalf("error %#v, calls %d %d", err, container.calls, storage.calls)
@@ -225,9 +225,11 @@ func TestClustersRefusesSSHOverridesWhenNoStorageClusterIsSelected(t *testing.T)
 	if _, err = service.Check(context.Background(), PreflightRequest{SSH: ssh}); len(diagnostics.Of(err)) != 1 || container.calls+storage.calls != 0 {
 		t.Fatalf("a context with no storage cluster accepted SSH overrides: %v", err)
 	}
-	service, container, storage = fixture()
-	if _, err = service.Check(context.Background(), PreflightRequest{Clusters: []string{"sno"}, TrustOnFirstUse: true}); err != nil || container.calls != 1 {
-		t.Fatalf("the default trust option alone must not refuse: %v", err)
+	for _, observe := range []bool{false, true} {
+		service, container, storage = fixture()
+		if _, err = service.Check(context.Background(), PreflightRequest{Clusters: []string{"sno"}, ObserveHostKeys: observe}); err != nil || container.calls != 1 || storage.calls != 0 {
+			t.Fatalf("host-key observation %t alone must not refuse or reach storage: %v", observe, err)
+		}
 	}
 	service, _, storage = fixture()
 	if _, err = service.Check(context.Background(), PreflightRequest{Clusters: []string{"sno", "store"}, SSH: ssh}); err != nil || storage.calls != 1 || storage.request.SSH != ssh {

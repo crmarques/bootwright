@@ -10,6 +10,26 @@ import (
 	"github.com/spf13/pflag"
 )
 
+func TestOnlyTheTrustStoreCommandNamesAFlagForTrust(t *testing.T) {
+	root, err := newCommandTree(New(Config{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var walk func(*cobra.Command)
+	walk = func(command *cobra.Command) {
+		path := strings.TrimPrefix(command.CommandPath(), "bootwright ")
+		command.LocalFlags().VisitAll(func(flag *pflag.Flag) {
+			if strings.Contains(flag.Name, "trust") && path != "machine trust" {
+				t.Errorf("%s --%s names trust but does not write the trust store", path, flag.Name)
+			}
+		})
+		for _, child := range command.Commands() {
+			walk(child)
+		}
+	}
+	walk(root)
+}
+
 func TestPublicCatalog(t *testing.T) {
 	expected := map[string]string{
 		"context init": "file input-dir name", "context update": "file input-dir name yes", "context use": "name", "context list": "", "context current": "short", "context delete": "allow-orphans name purge yes",
@@ -17,7 +37,7 @@ func TestPublicCatalog(t *testing.T) {
 		"secret set": "certificate-file name password-file password-stdin private-key-file public-key-file username value-file value-stdin yes", "secret generate": "name renew yes", "secret check": "", "secret list": "", "secret info": "name", "secret show": "name part", "secret delete": "name yes",
 		"secret encryption init": "", "secret encryption status": "", "secret encryption rotate": "yes",
 		"media add": "from-file from-url from-url-file name sha256 yes", "media list": "checksums", "media delete": "name yes",
-		"validate": "file", "preflight": "clusters dry-run stage trust-on-first-use",
+		"validate": "file", "preflight": "clusters dry-run observe-host-keys stage",
 		"plan": "stage until", "status": "paths", "logs": "attempt block follow install operation raw run", "diff": "exit-code observe output-dir tool", "render effective": "input-dir origins output-dir sensitive", "render acquisitions": "input-dir", "render installer": "clusters sensitive", "render storage": "clusters", "apply": "authorize stage until yes", "destroy": "authorize unregistered yes",
 		"machine list": "clusters power-status short", "machine info": "name", "machine rsh": "name", "machine cp": "name overwrite",
 		"machine exec": "name", "machine start": "name", "machine stop": "force name yes", "machine restart": "force name yes", "machine trust": "dry-run expect name replace yes", "controller install": "dry-run yes", "controller check": "", "controller rebind": "machine-id product-uuid recorded-host-retired root-uuid yes", "controller uninstall": "discard-unreadable keep-packages yes",

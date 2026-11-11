@@ -73,7 +73,7 @@ func parsedCommand(t *testing.T, args []string) *cobra.Command {
 
 func TestResolvedValuesAndDefaults(t *testing.T) {
 	command := parsedCommand(t, []string{"preflight", "--stage", "clusters", "--clusters", " one, two,one, ", "--ssh-user", " account "})
-	if stringValue(command.Flags(), "clusters") != "one,two" || stringValue(command.Flags(), "ssh-user") != "account" || !boolValue(command.Flags(), "trust-on-first-use") || stringValue(command.Flags(), "output") != "text" {
+	if stringValue(command.Flags(), "clusters") != "one,two" || stringValue(command.Flags(), "ssh-user") != "account" || !boolValue(command.Flags(), "observe-host-keys") || stringValue(command.Flags(), "output") != "text" {
 		t.Fatal("preflight normalized values or defaults")
 	}
 	command = parsedCommand(t, []string{"machine", "list", "--clusters", "one", "--clusters", ",,"})

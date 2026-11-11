@@ -8,7 +8,7 @@
       --clusters selects, or all of them. add-ons has no checks yet and is refused. It reports
       only what it observes: external services, a Registry or LoadBalancer and managed services
       on other Machines are not checked, and apply checks them itself. The SSH and
-      trust-on-first-use options apply to the CephCluster checks. --dry-run runs no process and
+      observe-host-keys options apply to the CephCluster checks. --dry-run runs no process and
       reports every check pending. For the controller host alone, before any context exists,
       run controller check.
 
@@ -16,12 +16,12 @@
     bootwright preflight [flags]
 
   Command flags
-      --clusters            Select comma-separated cluster names (default: all)
-      --dry-run             Limit work to the command's dry-run boundary
-      --stage               Select comma-separated stages to check (default: every stage but
-                            add-ons) (values: controller, infrastructure-services, substrates,
-                            machines, clusters, add-ons)
-      --trust-on-first-use  Observe unknown SSH keys without accepting them · default true
+      --clusters           Select comma-separated cluster names (default: all)
+      --dry-run            Limit work to the command's dry-run boundary
+      --observe-host-keys  Observe unknown SSH keys without accepting them · default true
+      --stage              Select comma-separated stages to check (default: every stage but
+                           add-ons) (values: controller, infrastructure-services, substrates,
+                           machines, clusters, add-ons)
 
   Common flags
       --ascii       Use ASCII status markers

@@ -89,7 +89,7 @@ func (s Service) Preflight(ctx context.Context, request PreflightRequest) (*Repo
 	}
 	if clusters {
 		parts = append(parts, func(checks context.Context) (*Report, error) {
-			return s.Clusters.Check(checks, clusterpreflight.PreflightRequest{ContextName: selected, Clusters: request.Clusters, DryRun: request.DryRun, TrustOnFirstUse: request.TrustOnFirstUse, SSH: request.SSH})
+			return s.Clusters.Check(checks, clusterpreflight.PreflightRequest{ContextName: selected, Clusters: request.Clusters, DryRun: request.DryRun, ObserveHostKeys: request.ObserveHostKeys, SSH: request.SSH})
 		})
 	}
 	reports, err := clusterpreflight.RunTogether(ctx, parts...)

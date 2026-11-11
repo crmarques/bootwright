@@ -50,7 +50,7 @@ func (g GuestChecks) CheckGuest(ctx context.Context, contextName string, host ap
 		}
 	}
 	read := func(argv []string) ([]byte, error) {
-		return g.Commands.Read(ctx, CommandRequest{ContextName: contextName, Machine: host.Name(), Address: ssh.Address, Port: ssh.Port, ObserveUntrusted: request.TrustOnFirstUse, SSH: request.SSH, Argv: argv, Fleet: requirements.Fleet})
+		return g.Commands.Read(ctx, CommandRequest{ContextName: contextName, Machine: host.Name(), Address: ssh.Address, Port: ssh.Port, ObserveUntrusted: request.ObserveHostKeys, SSH: request.SSH, Argv: argv, Fleet: requirements.Fleet})
 	}
 	checks := make([]Check, 0, len(probes)+1)
 	elevate := false

@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
-	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
 )
 
@@ -178,14 +177,5 @@ func TestSelectionRejectsUnknownClusterBeforeResolution(t *testing.T) {
 	s := fixture(t, false)
 	if report, err := s.Check(context.Background(), PreflightRequest{ContextName: "lab", Clusters: []string{"absent"}}); err == nil || report != nil {
 		t.Fatalf("%+v %v", report, err)
-	}
-}
-
-func TestControllerPreflightRefusesUnusedRemoteOptions(t *testing.T) {
-	for _, request := range []PreflightRequest{{ContextName: "lab", TrustOnFirstUse: true}, {ContextName: "lab", SSH: machine.SSHOptions{User: "operator"}}} {
-		s := fixture(t, false)
-		if report, err := s.Check(context.Background(), request); err == nil || report != nil {
-			t.Fatalf("unused remote options accepted: %+v %v", report, err)
-		}
 	}
 }

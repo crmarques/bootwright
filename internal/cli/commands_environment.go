@@ -14,7 +14,7 @@ import (
 func preflightCommand() commandSpec {
 	stage := stringFlag("stage", "Select comma-separated stages to check (default: every stage but add-ons)")
 	stage.enum, stage.enumList = stageFlag().enum, true
-	return available(commandSpec{path: "preflight", short: "Check the selected context's readiness for apply, stage by stage", flags: []flagSpec{stage, clustersFlag(), dryRunFlag(), trustFlag()},
+	return available(commandSpec{path: "preflight", short: "Check the selected context's readiness for apply, stage by stage", flags: []flagSpec{stage, clustersFlag(), dryRunFlag(), observeHostKeysFlag()},
 		long: "Check, without changing anything, whether the selected context is ready for the stages apply runs, in one report." +
 			" controller checks the controller host's prerequisites, the target tools this context's controller stage selects and its host binding;" +
 			" infrastructure-services checks the firewall admission of the controller's managed service sockets;" +
@@ -22,7 +22,7 @@ func preflightCommand() commandSpec {
 			" machines has no checks; clusters checks the OpenShiftClusters and CephClusters that --clusters selects, or all of them." +
 			" add-ons has no checks yet and is refused." +
 			" It reports only what it observes: external services, a Registry or LoadBalancer and managed services on other Machines are not checked, and apply checks them itself." +
-			" The SSH and trust-on-first-use options apply to the CephCluster checks. --dry-run runs no process and reports every check pending." +
+			" The SSH and observe-host-keys options apply to the CephCluster checks. --dry-run runs no process and reports every check pending." +
 			" For the controller host alone, before any context exists, run controller check."})
 }
 
@@ -86,7 +86,7 @@ func (s Services) invokeEnvironmentPreflight(ctx context.Context, values *reques
 		Stages:          values.names("stage"),
 		Clusters:        values.names("clusters"),
 		DryRun:          values.boolean("dry-run"),
-		TrustOnFirstUse: values.boolean("trust-on-first-use"),
+		ObserveHostKeys: values.boolean("observe-host-keys"),
 		SSH:             values.ssh(),
 	}, s.EnvironmentPreflight.Preflight)
 	return commandResult{storagePreflight: report}, err

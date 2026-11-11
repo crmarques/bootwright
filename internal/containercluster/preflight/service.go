@@ -34,9 +34,6 @@ func (s Service) Check(ctx context.Context, request PreflightRequest) (*Report, 
 	if s.Graph == nil || s.Project == nil || s.Capacity == nil {
 		return nil, availability.ErrNotImplemented
 	}
-	if request.TrustOnFirstUse || request.SSH.Borrowed() {
-		return nil, diagnostics.NewFailureWithRemediation("cli.usage", "container-cluster preflight checks the controller and accepts no SSH or trust-on-first-use options", "", "repeat without --trust-on-first-use or SSH overrides")
-	}
 	selected, err := machine.SelectedContext(ctx, s.Selection, request.ContextName)
 	if err != nil {
 		return nil, err

@@ -15,6 +15,7 @@ import (
 	containeraccess "github.com/crmarques/bootwright/internal/containercluster/access"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	environmentaccess "github.com/crmarques/bootwright/internal/environment/access"
+	environmentpreflight "github.com/crmarques/bootwright/internal/environment/preflight"
 	"github.com/crmarques/bootwright/internal/machine"
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 )
@@ -152,6 +153,39 @@ func TestWithdrawnFlagsAreUsageErrors(t *testing.T) {
 	}
 	if err := json.Unmarshal([]byte(out), &envelope); err != nil || code != 2 || errOut != "" || record.calls != 0 || envelope.Command != "status" || envelope.OK || envelope.ExitCode != 2 || len(envelope.Diagnostics) != 1 || envelope.Diagnostics[0].Code != "cli.usage" {
 		t.Fatalf("JSON usage: code=%d out=%q err=%q calls=%d decode=%v", code, out, errOut, record.calls, err)
+	}
+}
+
+func TestTheRetiredTrustOnFirstUseSpellingIsAnUnknownFlag(t *testing.T) {
+	for _, args := range [][]string{
+		{"preflight", "--trust-on-first-use"}, {"preflight", "--trust-on-first-use=false"}, {"preflight", "--stage", "clusters", "--trust-on-first-use=true"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			code, out, errOut, record := runRecorded(args)
+			if code != 2 || out != "" || record.calls != 0 || errOut != "  error  cli.usage\n    unknown flag\nUsage: bootwright preflight [flags]\nRun 'bootwright help' for available commands.\n" {
+				t.Fatalf("code=%d out=%q stderr=%q calls=%d", code, out, errOut, record.calls)
+			}
+		})
+	}
+}
+
+func TestPreflightPassesHostKeyObservationAndNeverRefusesIt(t *testing.T) {
+	for _, test := range []struct {
+		args []string
+		want bool
+	}{
+		{[]string{"preflight"}, true},
+		{[]string{"preflight", "--stage", "controller", "--observe-host-keys"}, true},
+		{[]string{"preflight", "--stage", "controller", "--observe-host-keys=false"}, false},
+		{[]string{"preflight", "--stage", "clusters", "--observe-host-keys=true"}, true},
+	} {
+		t.Run(strings.Join(test.args, " "), func(t *testing.T) {
+			code, _, _, record := runRecorded(test.args)
+			request, ok := record.request.(environmentpreflight.PreflightRequest)
+			if code != 1 || record.calls != 1 || !ok || request.ObserveHostKeys != test.want {
+				t.Fatalf("code=%d calls=%d request=%#v", code, record.calls, record.request)
+			}
+		})
 	}
 }
 

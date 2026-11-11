@@ -15407,3 +15407,21 @@ The downstream `environment-ha` and `ceph-cluster` charts author no
 **Commits:** this commit. Gates: listed in its message. **Limitations:** the
 shared artifact declaration mirrors public-origin clients at build-pinned
 releases; vendor clients remain direct. No live run or push occurred.
+
+### X417 — Observe host keys
+
+**Item:** B1332 ([D257](backlog.md#d257) (5)), delivered in-tree.
+**Kind:** product. **Owners:** CLI, with Storage and Container cluster.
+Audit 004 CLI-08 and CLI-29: `preflight --observe-host-keys` replaces the old
+flag with no alias. Its default remains true. The
+[preflight rule](../cli/output.md#preflight) accepts either explicit value for
+every selection, routes observation only to Ceph checks, and refuses SSH
+overrides that reach no Ceph cluster before checks run. The container checker
+accepts neither option in its request. Observation never accepts, persists or
+uses an unknown key.
+
+Catalog, help, dispatch and preflight tests hold the spelling, routing and
+refusal rule; the runner refuses the old spelling through its ordinary unknown
+flag diagnostic. **Commits:** this commit. **Gates:** listed in its message.
+**Limitations:** breaking CLI change; use `--observe-host-keys`. No live run or
+push.
