@@ -20,11 +20,11 @@ import (
 // mirrorOrder plans sources through this build's own capabilities and the
 // engine's ordering, and returns the plan's block order with each block's
 // dependencies.
-func mirrorOrder(t *testing.T, sources desiredstate.Sources) ([]string, map[string][]string) {
+func mirrorOrder(t *testing.T, name string, sources desiredstate.Sources) ([]string, map[string][]string) {
 	t.Helper()
 	state, _ := compileAcceptance(t, sources)
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
-	resolved, err := reconciliation.ResolveRequirements(productionDefinitions(t, state, "lab-sno-mirror-host"))
+	resolved, err := reconciliation.ResolveRequirements(productionDefinitions(t, state, name))
 	if err != nil {
 		t.Fatal(diagnostics.Of(err))
 	}
@@ -69,7 +69,7 @@ func requireSplitOrder(t *testing.T, order []string, waits map[string][]string) 
 // this build's own capabilities plan the example, the engine orders it and
 // the plan holds no cycle.
 func TestAManagedArtifactMirrorPrecedesTheControllerStageThatReadsIt(t *testing.T) {
-	order, waits := mirrorOrder(t, exampleDirectory(t, "lab-sno-mirror-host"))
+	order, waits := mirrorOrder(t, "lab-sno-mirror-host", exampleDirectory(t, "lab-sno-mirror-host"))
 	requireSplitOrder(t, order, waits)
 }
 
@@ -106,7 +106,7 @@ func controllerPlacedMirror(t *testing.T) desiredstate.Sources {
 // and its fill runs locally after it, both before the clients read from it.
 func TestAManagedArtifactMirrorOnTheControllerSitsBetweenTheStagesBlocks(t *testing.T) {
 	sources := controllerPlacedMirror(t)
-	order, waits := mirrorOrder(t, sources)
+	order, waits := mirrorOrder(t, "lab-sno-mirror-host", sources)
 	requireSplitOrder(t, order, waits)
 	state, _ := compileAcceptance(t, sources)
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
@@ -168,9 +168,10 @@ func TestAManagedArtifactMirrorExamplePlansThroughTheLifecycleService(t *testing
 }
 
 // A controller block that would wait for work run only after its stage, here
-// a provider host block the mirror's server was made to wait for, refuses the
-// plan through this build's own capabilities rather than ordering a cycle.
-func TestAControllerStageWaitingForAProviderHostRefuses(t *testing.T) {
+// the cluster's media block, which runs the stage's clients, that the mirror's
+// server was made to wait for, refuses the plan through this build's own
+// capabilities rather than ordering a cycle.
+func TestAControllerStageWaitingForTheClusterMediaRefuses(t *testing.T) {
 	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-sno-mirror-host"))
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	resolved, err := reconciliation.ResolveRequirements(productionDefinitions(t, state, "lab-sno-mirror-host"))
@@ -179,12 +180,12 @@ func TestAControllerStageWaitingForAProviderHostRefuses(t *testing.T) {
 	}
 	for index := range resolved {
 		if resolved[index].ID == "artifact-server-mirror-artifacts" {
-			resolved[index].Dependencies = []string{"substrate-host-lab-libvirt"}
+			resolved[index].Dependencies = []string{"cluster-media-sno"}
 		}
 	}
 	_, err = lifecycle.DependOnController(resolver, resolved)
 	reported := diagnostics.Of(err)
-	if len(reported) != 1 || reported[0].Code != "controller.unsupported" || !strings.Contains(reported[0].Message, "waits for block substrate-host-lab-libvirt") {
+	if len(reported) != 1 || reported[0].Code != "controller.unsupported" || !strings.Contains(reported[0].Message, "waits for block cluster-media-sno") {
 		t.Fatalf("refusal = %+v", reported)
 	}
 }
@@ -246,5 +247,81 @@ func TestAManagedImageMirrorExamplePlansThroughTheLifecycleService(t *testing.T)
 		strings.Index(out, `"mirror-images-lab-rhel-mirror-host"`), strings.Index(out, `"dns-lab-dns"`)
 	if stage < 0 || registry < 0 || fill < 0 || consumer < 0 || !(stage < registry && registry < fill && fill < consumer) {
 		t.Fatalf("the plan does not preview the stage, the Registry, its fill and a consumer in that order:\n%s", out)
+	}
+}
+
+// The managed artifact mirror's host on each placement, an OS-ready Machine
+// over SSH, the controller Machine and a Machine Bootwright installs, planned
+// through this build's capabilities and the engine: exactly the mirror's server
+// and fill, and on the installed Machine its realization and installation with
+// what they wait for, run between the stage's host packages and its clients,
+// and every other block waits for both.
+func TestAManagedArtifactMirrorPlansBetweenTheStagesBlocksOnEachPlacement(t *testing.T) {
+	const packages, clients = "controller-prerequisites", "controller-mirrored-clients"
+	for name, placement := range map[string]struct {
+		context string
+		sources func(*testing.T) desiredstate.Sources
+		between []string
+		waits   map[string][]string
+	}{
+		"an OS-ready Machine over SSH": {"lab-sno-mirror-host", func(t *testing.T) desiredstate.Sources { return exampleDirectory(t, "lab-sno-mirror-host") },
+			[]string{"artifact-server-mirror-artifacts", "mirror-files-lab-sno-mirror-host"},
+			map[string][]string{"artifact-server-mirror-artifacts": {packages}, "mirror-files-lab-sno-mirror-host": {"artifact-server-mirror-artifacts", packages}}},
+		"the controller Machine": {"lab-sno-mirror-host", controllerPlacedMirror,
+			[]string{"artifact-server-mirror-artifacts", "mirror-files-lab-sno-mirror-host"},
+			map[string][]string{"artifact-server-mirror-artifacts": {packages}, "mirror-files-lab-sno-mirror-host": {"artifact-server-mirror-artifacts", packages}}},
+		"a Machine Bootwright installs": {"lab-sno-installed-mirror-host",
+			func(t *testing.T) desiredstate.Sources { return exampleDirectory(t, "lab-sno-installed-mirror-host") },
+			[]string{"artifact-server-lab-artifacts", "artifact-server-mirror-artifacts", "dns-lab-dns", "machine-mirror", "mirror-files-lab-sno-installed-mirror-host",
+				"ntp-lab-ntp", "os-install-mirror", "os-package-tree-rhel-9-8-mirror", "substrate-host-lab-libvirt"},
+			map[string][]string{
+				"artifact-server-mirror-artifacts":           {packages, "os-install-mirror"},
+				"mirror-files-lab-sno-installed-mirror-host": {"artifact-server-mirror-artifacts", packages, "os-install-mirror"},
+				"os-install-mirror":                          {"artifact-server-lab-artifacts", packages, "dns-lab-dns", "machine-mirror", "ntp-lab-ntp", "os-package-tree-rhel-9-8-mirror"},
+				"machine-mirror":                             {packages, "substrate-host-lab-libvirt"},
+			}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			order, waits := mirrorOrder(t, placement.context, placement.sources(t))
+			at := func(id string) int { return slices.Index(order, id) }
+			if at(packages) != 0 || at(clients) != len(placement.between)+1 {
+				t.Fatalf("plan order = %v", order)
+			}
+			if between := slices.Sorted(slices.Values(order[1 : len(placement.between)+1])); !slices.Equal(between, placement.between) {
+				t.Fatalf("between the stage's blocks run %v, want %v", between, placement.between)
+			}
+			for id, want := range placement.waits {
+				if !slices.Equal(waits[id], want) {
+					t.Errorf("%s waits for %v, want %v", id, waits[id], want)
+				}
+			}
+			for _, id := range placement.between {
+				if !slices.Contains(waits[id], packages) || slices.Contains(waits[id], clients) {
+					t.Errorf("%s, before the stage's clients, waits for %v", id, waits[id])
+				}
+			}
+			for _, id := range order[len(placement.between)+2:] {
+				if !slices.Contains(waits[id], packages) || !slices.Contains(waits[id], clients) {
+					t.Errorf("%s does not wait for both controller blocks: %v", id, waits[id])
+				}
+			}
+		})
+	}
+}
+
+// The installed mirror host's example planned through the whole lifecycle
+// service, with its unsupported-shape checks, claims and host checks, previews
+// the mirror host's installation, the mirror's server and its fill between the
+// stage's host packages and its clients.
+func TestAnInstalledMirrorHostPlansThroughTheLifecycleService(t *testing.T) {
+	const name = "lab-sno-installed-mirror-host"
+	services, _ := productionExampleContext(t, name, name)
+	out, _ := contextRun(t, services, 0, "plan", "--context", name, "--output", "json")
+	var at []int
+	for _, id := range []string{"controller-prerequisites", "os-install-mirror", "artifact-server-mirror-artifacts", "mirror-files-" + name, "controller-mirrored-clients"} {
+		at = append(at, strings.Index(out, `"`+id+`"`))
+	}
+	if slices.Contains(at, -1) || !slices.IsSorted(at) {
+		t.Fatalf("the plan does not preview the installation, the mirror's server and its fill between the stage's blocks:\n%s", out)
 	}
 }

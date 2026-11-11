@@ -129,6 +129,17 @@ func PlacementFor(catalog api.Catalog, server api.Object, controllerMachine stri
 	return machineref.PlacementFor(machine, controllerMachine)
 }
 
+// ServicePlacementFor is the arm the server's own block and its mirror fill run
+// through, which reaches a Machine this context installs as well.
+func ServicePlacementFor(catalog api.Catalog, server api.Object, controllerMachine string) (machineref.Placement, error) {
+	machine, ok := catalog.Find(api.Machine, server.Spec().Get("machineRef").Text())
+	if !ok {
+		return machineref.Placement{}, refusal("api.reference", "the artifact server's placement Machine is not in the selected graph",
+			"declare it or correct machineRef on "+server.Identity())
+	}
+	return machineref.ServicePlacementFor(machine, controllerMachine)
+}
+
 func named(values api.Value, name string) (api.Value, bool) {
 	if name == "" {
 		if values.Len() != 1 {

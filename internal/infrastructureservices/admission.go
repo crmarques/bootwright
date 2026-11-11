@@ -231,9 +231,9 @@ func listenerProtocol(value api.Value, name string) string {
 // run and to the addresses its consumers can reach there.
 func validatePlacement(kind api.Kind, value api.Value, machine api.Object) []api.Issue {
 	issues := []api.Issue{}
-	if provided := machine.Spec().Get("os", "provided"); provided.Type() == api.Boolean && !provided.Bool() {
-		issues = add(issues, issue("$.spec.machineRef", machine.Identity()+" does not provide its operating system (os.provided: false), and a managed service runs only on a Machine whose OS is ready",
-			"set spec.machineRef to a Machine with os.provided: true"))
+	if provided := machine.Spec().Get("os", "provided"); provided.Type() == api.Boolean && !provided.Bool() && !machine.Spec().Has("os", "installProfileRef") {
+		issues = add(issues, issue("$.spec.machineRef", machine.Identity()+" does not provide its operating system (os.provided: false) and names no install profile, so another installer owns it, and a managed service runs only on a Machine whose OS is ready or that Bootwright installs",
+			"set spec.machineRef to a Machine with os.provided: true, or to one with os.installProfileRef"))
 	}
 	bind, bound := boundAddress(value)
 	for index, endpoint := range value.Get("endpoints").Items() {

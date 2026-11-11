@@ -289,6 +289,10 @@ func publishedSSHClaims(catalog api.Catalog, controller string, placed []SSHRese
 					", is too long to be keyed by that host's SSH host key as well, within the "+strconv.Itoa(prerequisites.MaxReservationKeyBytes)+" bytes each key holds",
 				"place "+reservation.Kind+" "+reservation.Service+" on the controller Machine, or give it a shorter name")
 		}
+		if claim.Installed {
+			published = append(published, reservation)
+			continue
+		}
 		if claim.KnownHostsRef == "" {
 			return nil, nil, failure("lifecycle.state", "lifecycle placement requires a bound SSH host key",
 				"author access.ssh.knownHostsRef on Machine/"+claim.Machine)

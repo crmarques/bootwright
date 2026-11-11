@@ -64,6 +64,7 @@ type Capability struct {
 	definition Definition
 	runner     Runner
 	clock      lifecycle.Clock
+	hostKeys   lifecycle.InstalledHostKey
 }
 
 func NewCapability(definition Definition, runner Runner) Capability {
@@ -72,6 +73,11 @@ func NewCapability(definition Definition, runner Runner) Capability {
 
 func (c Capability) WithClock(clock lifecycle.Clock) Capability {
 	c.clock = clock
+	return c
+}
+
+func (c Capability) WithInstalledHostKeys(hostKeys lifecycle.InstalledHostKey) Capability {
+	c.hostKeys = hostKeys
 	return c
 }
 
@@ -131,7 +137,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		if !request.Placement.Local() {
 			plan.SSHReservations = append(plan.SSHReservations, lifecycle.SSHReservation{
 				Machine: request.Placement.Machine, Address: request.Placement.Address, Port: request.Placement.Port,
-				KnownHostsRef: request.Placement.KnownHostsRef, Reservation: claim,
+				KnownHostsRef: request.Placement.KnownHostsRef, Installed: request.Placement.Installed(), Reservation: claim,
 			})
 			continue
 		}
@@ -168,7 +174,7 @@ func (c Capability) requestFor(catalog api.Catalog, object api.Object, controlle
 	if !found {
 		return Request{}, Refusal("api.reference", "the managed service's placement Machine is not in the selected graph", "declare "+spec.Get("machineRef").Text()+" or change the reference")
 	}
-	placement, err := machineref.PlacementFor(machine, controllerMachine)
+	placement, err := machineref.ServicePlacementFor(machine, controllerMachine)
 	if err != nil {
 		return Request{}, err
 	}
@@ -236,6 +242,9 @@ func PlacementRequirements(catalog api.Catalog, placement machineref.Placement, 
 	var references []reconciliation.ObjectRef
 	for _, provider := range slices.Compact(providers) {
 		references = append(references, reconciliation.ObjectRef{Kind: string(api.InfraProvider), Object: provider})
+	}
+	if placement.Installed() {
+		references = append(references, reconciliation.ObjectRef{Kind: string(api.Machine), Object: machine, Family: machineref.InstallFamily})
 	}
 	return references
 }
@@ -487,12 +496,18 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	if fingerprint != "" {
 		values["fingerprint"] = fingerprint
 	}
+	execution, placement, err := lifecycle.PinInstalledHost(execution, request.Placement, c.hostKeys)
+	if err != nil {
+		return lifecycle.RunResult{}, err
+	}
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: c.definition.Implementation, Operation: operation, Variable: c.definition.Variable,
-		Canonical: canonical, Placement: request.Placement, Materials: materials, Values: values,
+		Canonical: canonical, Placement: placement, Materials: materials, Values: values,
 		Refusals: ReadinessRefusals(request.Kind, request.Identity.Service, request.Placement.Machine, request.BindAddress, []int{request.Port}),
 	}))
 }
+
+func (Capability) PrecedesController(reconciliation.BlockDefinition) bool { return true }
 
 // Quiescent is derived rather than probed. What consumes a managed service is
 // the Machines and installations of this same context, and a removal probes

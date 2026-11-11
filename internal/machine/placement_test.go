@@ -52,7 +52,7 @@ func TestALifecyclePlacementHostConnectsAsRoot(t *testing.T) {
 		"libvirt provider host as another account": {providedHost("hypervisor", m("user", "operator", "auth", key)), "$.spec.access.ssh.user"},
 		"operator identity as another account":     {providedHost("services", m("user", "operator", "auth", m("operatorIdentity", m()))), "$.spec.access.ssh.user"},
 		"root host with an escalation Secret":      {providedHost("services", m("user", "root", "auth", key, "sudoPasswordRef", "services-sudo")), "$.spec.access.ssh.sudoPasswordRef"},
-		"installed host of a managed service":      {object(api.Machine, "services", m("os", m("provided", false, "installProfileRef", "rhel"))), "$.spec.access.ssh.user"},
+		"installed host of a libvirt provider":     {object(api.Machine, "hypervisor", m("os", m("provided", false, "installProfileRef", "rhel"))), "$.spec.access.ssh.user"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if issues := admitPlacementHost(tc.machine); !slices.Equal(privilegeInvariants(issues), []string{tc.field}) {
@@ -70,6 +70,9 @@ func TestALifecyclePlacementHostConnectsAsRoot(t *testing.T) {
 				t.Fatalf("issues = %v", issues)
 			}
 		})
+	}
+	if issues := admitPlacementHost(object(api.Machine, "services", m("os", m("provided", false, "installProfileRef", "rhel")))); len(privilegeInvariants(issues)) != 0 {
+		t.Fatalf("an installed host of a managed service, whose services escalate as its installation configured, was refused its account: %v", issues)
 	}
 	host := func(ssh api.Value) api.Object {
 		return object(api.Machine, "services", m("os", m("provided", true), "network", m("addresses", list(m("name", "ip", "address", "192.0.2.2"))), "access", m("ssh", ssh)))
@@ -112,5 +115,47 @@ func TestAPlacementNeverBindsAnEscalationSecret(t *testing.T) {
 	}
 	if got := frozen.SecretReferences(); !slices.Equal(got, []string{"services-key", "services-host-key"}) {
 		t.Fatalf("secret references = %v", got)
+	}
+}
+
+// A service on a Machine Bootwright installs takes the installed arm: its
+// install address on port 22 as the account and fleet key its effective access
+// names, with no host-key Secret, while an OS-ready Machine and the controller
+// keep PlacementFor's arms and a consumer's PlacementFor still refuses it.
+func TestAServiceOnAnInstalledMachineTakesTheInstalledArm(t *testing.T) {
+	addresses := list(m("name", "fqdn", "address", "mirror.example.test"), m("name", "ip", "address", "198.51.100.20"))
+	installed := func(ssh api.Value) api.Object {
+		spec := m("os", m("provided", false, "installProfileRef", "rhel"), "network", m("installAddressRef", "ip", "addresses", addresses))
+		if ssh.Present() {
+			spec = spec.With("access", m("ssh", ssh))
+		}
+		return object(api.Machine, "mirror", spec)
+	}
+	effective := m("addressRef", "ip", "port", api.IntegerValue("22"), "user", "bootwright", "auth", m("privateKeyRef", "fleet-key"))
+	placement, err := ServicePlacementFor(installed(effective), "controller")
+	want := Placement{Address: "198.51.100.20", Connection: ConnectionInstalled, Machine: "mirror", Port: 22, PrivateKeyRef: "fleet-key", User: "bootwright"}
+	if err != nil || placement != want || !placement.Installed() || len(placement.SecretReferences()) != 1 {
+		t.Fatalf("placement = %+v (%v)", placement, err)
+	}
+	for name, ssh := range map[string]api.Value{
+		"another address": effective.With("addressRef", api.StringValue("fqdn")),
+		"another port":    effective.With("port", api.IntegerValue("2222")),
+		"no key":          effective.With("auth", m("operatorIdentity", m())),
+		"no access":       {},
+	} {
+		if _, err := ServicePlacementFor(installed(ssh), "controller"); err == nil {
+			t.Fatalf("a service on an installed Machine reached by %s was placed", name)
+		}
+	}
+	if _, err := PlacementFor(installed(effective), "controller"); err == nil {
+		t.Fatal("a consumer's placement reached a Machine Bootwright installs")
+	}
+	if placement, err := ServicePlacementFor(installed(effective), "mirror"); err != nil || !placement.Local() {
+		t.Fatalf("the controller Machine was placed %+v (%v)", placement, err)
+	}
+	provided := providedHost("services", m("addressRef", "ip", "auth", m("privateKeyRef", "services-key"), "knownHostsRef", "services-host-key"))
+	provided = provided.WithSpec(provided.Spec().With("network", m("addresses", addresses)))
+	if placement, err := ServicePlacementFor(provided, "controller"); err != nil || placement.Connection != ConnectionSSH {
+		t.Fatalf("an OS-ready Machine was placed %+v (%v)", placement, err)
 	}
 }

@@ -61,7 +61,7 @@ func requestFor(catalog api.Catalog, server api.Object, controllerMachine, conte
 	if !found {
 		return Request{}, refusal("api.reference", "the artifact server's placement Machine is not in the selected graph", "declare "+spec.Get("machineRef").Text()+" or change the reference")
 	}
-	placement, err := machineref.PlacementFor(machine, controllerMachine)
+	placement, err := machineref.ServicePlacementFor(machine, controllerMachine)
 	if err != nil {
 		return Request{}, err
 	}

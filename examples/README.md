@@ -30,6 +30,7 @@ names the case that runs its scenario, if any.
 | `ceph-clusters/` | [libvirt-3-nodes-ceph-disconnected](ceph-clusters/libvirt-3-nodes-ceph-disconnected/README.md) | P6: consume an operator-prepared mirror for every package and image, with monitoring, ingress and isolated networking. |
 | `ceph-clusters/` | [libvirt-6-nodes-ceph-services](ceph-clusters/libvirt-6-nodes-ceph-services/README.md) | P2: six storage guests and an independent client allocation, CephFS layouts, TLS RGW ingress, multi-active NFS and clustered SMB. |
 | `openshift-clusters/` | [lab-sno](openshift-clusters/lab-sno/README.md) | Install single-node OpenShift on a libvirt guest. |
+| `openshift-clusters/` | [lab-sno-installed-mirror-host](openshift-clusters/lab-sno-installed-mirror-host/README.md) | Prepare single-node OpenShift whose controller clients come from a managed artifact mirror on a libvirt guest Bootwright installs first. |
 | `openshift-clusters/` | [lab-sno-mirror-host](openshift-clusters/lab-sno-mirror-host/README.md) | Prepare single-node OpenShift whose controller clients come from a managed artifact mirror on an SSH Machine. |
 | `openshift-clusters/` | [lab-compact](openshift-clusters/lab-compact/README.md) | Install compact OpenShift on three libvirt masters with installer-owned virtual IPs. |
 | `openshift-clusters/` | [lab-anysize](openshift-clusters/lab-anysize/README.md) | Prepare the bonded ten-node OpenShift acceptance topology. |

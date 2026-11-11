@@ -52,6 +52,9 @@ func BridgedGuests(arm string) bool { return armFacts[arm].bridgedGuests }
 
 func ProviderTools(provider api.Object) []string { return armFacts[Variant(provider)].tools }
 
+// ClientsOf names the controller clients one substrate arm runs its effects with.
+func ClientsOf(arm string) []string { return slices.Clone(armFacts[arm].tools) }
+
 func IsRealized(provider api.Object) bool {
 	return slices.Contains(Realized(), Variant(provider))
 }

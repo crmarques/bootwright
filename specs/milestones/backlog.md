@@ -294,7 +294,7 @@ Alias cell.
 | [B1237](#b1237) | new, 2026-11-09 (D248 (5)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's default image comes from a Red Hat registry wherever Red Hat publishes one | Red Hat publishes no dnsmasq, chrony or sushy-tools image, and its squid image needs a `registry.redhat.io` login no managed-service pull carries |
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
 | [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355, X361 and X401 on 2026-11-10 | product | Controller, with Desired state | A managed artifact server may serve the artifact mirror, and one declaration replaces the download mirrors | The declaration (X355), the preflight probe and the private trust anchor (X361) and a managed server on an SSH Machine (X401) landed; folding `spec.downloads` awaits the owner (D251 (5)) |
-| [B1249](#b1249) | new, 2026-11-10 (D250 (8)); partly delivered by X401 on 2026-11-10 and X408 and X407 on 2026-11-11 | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | X401 built and fills a managed artifact mirror on an SSH Machine, X408 split the controller stage around one on the controller and X407 built and fills a managed image mirror beside it; releases, `skopeo` on the controller and the installed placement remain, which D251 (6) authorizes slice by slice |
+| [B1249](#b1249) | new, 2026-11-10 (D250 (8)); partly delivered by X401 on 2026-11-10 and X408 and X407 on 2026-11-11 | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | X401 built and fills a managed artifact mirror on an SSH Machine, X408 split the controller stage around one on the controller and X407 built and fills a managed image mirror beside it; X409 placed the artifact mirror on a Machine Bootwright installs; releases, `skopeo` on the controller and an image mirror on an installed Machine remain, which D251 (6) authorizes slice by slice |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
 | [B1267](#b1267) | new, 2026-11-10 (X348, audit 004 REC-74) | safety | Substrate and Machine, with Infrastructure services | A context driving a server by its BMC and one reaching it as an OS-ready Machine over SSH conflict | Needs a cross-mechanism machine identity whose byte order is settled first |
 | [B1299](#b1299) | new, 2026-11-10 (split from B1263, D253) | product | Controller, with State reconciliation | A running environment takes a raised client minimum without a destroy | An open owner question: a completed apply settles (D153), so replacing a client is a fresh apply today |
@@ -318,6 +318,7 @@ Alias cell.
 | [B1323](#b1323) | new, 2026-11-10 (X401) | product | Infrastructure services | A mirror's content is pruned and bounded | A managed mirror keeps every file and image until its server is destroyed |
 | [B1324](#b1324) | new, 2026-11-10 (X401) | product | Container cluster | A disconnected cluster verifies release signatures for its upgrades | A mirrored release's signatures stay on the vendor's signature store |
 | [B1325](#b1325) | new, 2026-11-10 (X401) | product | Infrastructure services | Several mirror hosts, or a mirror on a cluster | One Environment names one artifact mirror and one image mirror, each on one OS-ready Machine |
+| [B1329](#b1329) | new, 2026-11-11 (X409) | product | Infrastructure services, with Managed OS | A managed service on a Machine Bootwright installs opens its ports in that host's firewall | No managed service publishes host port requirements, so an installed host's profile must disable its firewall |
 
 ### B82
 
@@ -3361,12 +3362,18 @@ repository and `--to-release-image` the `ocp-release` one), its pull secret
 lent per attempt as a two-entry auth document with a private `HOME`, removed
 in an `always`, and the cluster's registry mirror refusal lifted; (c) `skopeo` a
 stage package so the image mirror may sit on the controller, whose plan
-refuses it until then ([D251](#d251) (30)); (d) a Bootwright-installed mirror host, its placement requiring the
-installation and its host key read from the installation's evidence, and
-[B1250](#b1250)'s profile row. **Exit evidence:** the plan-order, replay and
-verification tests for the SSH placement landed with X401, the controller
-placement's order with X408 and the image tests with X407; the installed
-placement's order, the release tests and the profile row remain.
+refuses it until then ([D251](#d251) (30)); (d) a managed image mirror on a
+Bootwright-installed Machine, whose image fill takes the SSH arm and which
+plan refuses until then ([D251](#d251) (33)). **Delivered in-tree by X409** ([D251](#d251) (31) to (33)): the
+artifact mirror, and any managed service, on a Machine Bootwright installs,
+its placement requiring the installation and its host key read from the
+installation's evidence, and the `lab-sno-installed-mirror-host` example as
+[B1250](#b1250)'s mirror-host row
+([X409](delivered.md#x409--a-managed-artifact-mirror-on-a-machine-bootwright-installs)).
+**Exit evidence:** the plan-order, replay and verification tests for the SSH
+placement landed with X401, the controller placement's order with X408, the
+image tests with X407 and the installed placement's order with X409; the
+release tests remain.
 
 ### B1250
 
@@ -3381,7 +3388,10 @@ scan of the images in the mirror registry that reports each image's findings
 like the scheduled scan of the pinned images
 ([X400](delivered.md#x400--client-binary-scan-and-scheduled-image-scan)). Its
 mirror row also shows whether a release read on the controller reached the
-source repository past the mirror ([B1326](#b1326)).
+source repository past the mirror ([B1326](#b1326)). Its mirror-host row starts
+from `examples/openshift-clusters/lab-sno-installed-mirror-host`, whose
+mirror host Bootwright installs
+([X409](delivered.md#x409--a-managed-artifact-mirror-on-a-machine-bootwright-installs)).
 
 ### B1267
 
@@ -3690,6 +3700,18 @@ KubeVirt guest serves, with a declared order between them and the same fill and
 trust. **Exit evidence:** a plan-order test for each new placement and a
 failover row of [B1250](#b1250)'s profile.
 
+### B1329
+
+**Owner:** Infrastructure services, with Managed OS. **Kind:** product.
+**Requires:** none. **Definition:** Candidate, from
+[X409](delivered.md#x409--a-managed-artifact-mirror-on-a-machine-bootwright-installs).
+**Outcome:** a managed service or artifact server on a Machine Bootwright
+installs publishes its sockets as host port requirements, so the
+`os-host-firewall` block opens them, and the
+[refusal table](../infrastructure-services.md#refusal-table)'s firewall row
+goes. **Exit evidence:** a plan test that an installed host with its firewall
+enabled plans the firewall block with the service's ports before the service.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/001-spec/report-final.md) ordered its
@@ -3975,7 +3997,9 @@ overturns it, and an overturned clause reopens the work it shaped as a new item
 holding such a clause, the clauses pending and the work they enable.
 
 - [D7](#d7): the 2026-09-29 reading that non-root SSH accounts refuse on
-  lifecycle placement hosts (X22).
+  lifecycle placement hosts (X22), which D251 (31) narrows for a
+  Machine Bootwright installs, whose `bootwright` account escalates through
+  its installation's own sudo rule (X409).
 - [D134](#d134): the 2026-10-11 readings that D134 waives M2's Requires for
   X47, X52, X53 and X54 and excepts M2b from the WIP limit; moot since D165
   returned those slices and D183 counts the WIP limit per program.
@@ -8531,6 +8555,63 @@ the owner's review:
     managed image mirror still refuses until its release is mirrored, B1249's
     (b). The reference edge catalog's rows may name several block kinds of one
     family, which kept its section within its budget.
+31. Taken by the session for B1249 (X409), pending the owner's review, from
+    (31) so as not to collide with X407's numbers: a managed service,
+    artifact server or fill on a Machine Bootwright installs takes a third
+    placement arm, `installed`, which connects at the install address on
+    port 22 as the installation's `bootwright` account with the fleet key and
+    becomes root through the passwordless sudo rule that installation wrote,
+    in place of the plan's root login: the account already holds every
+    privilege through that rule, and authorizing the fleet key for root in
+    the Kickstart would change every such installation and add a root login.
+    This reads [D7](#d7) as refusing a non-root account Bootwright did not
+    configure. The arm binds no `knownHostsRef`: each run is lent, as its one
+    known-hosts entry, the host key the installation's evidence proved, read
+    through a composition-bound reader as the Ceph hosts read theirs, and the
+    block requires the Machine's `os-install` block. Its host reservations are
+    qualified by address and port alone, since the key exists only once the
+    Machine is installed and only this context installs it. The arm is a
+    `connection` value, so no placement field, request version or content
+    digest moved, unlike the plan's `managed-service-v4`; an earlier build
+    reads it as the SSH arm and refuses it before connecting, for want of a
+    bound host key, with the generic `lifecycle.state` refusal of an SSH
+    placement whose `knownHostsRef` is unbound rather than one naming the
+    arm. A consumer publishing into a server keeps the SSH arm. Every run of a
+    managed service, artifact server or fill on such a Machine is lent the
+    fleet key's private half, as the installation's own later steps already
+    are. The reservations skip the host-key qualifier and the check that an
+    SSH host is not the controller under another name because the Machine is
+    this context's own: its libvirt domain or BMC claim already keeps another
+    context from installing it, and its install address is one this context
+    assigns. Should the owner reject the escalation, the alternative is a root
+    login with the fleet key written by the Kickstart for each placement host,
+    which moves the os-install request of every such installation and adds a
+    root SSH login to it.
+32. Taken by the session for B1249 (X409): an installed mirror host's
+    realization runs between the controller stage's two blocks, so the
+    libvirt provider host and machine, the managed services, the package
+    tree and an installation whose substrate arm runs no controller client
+    declare `lifecycle.ControllerPrecursor`; each waits for
+    `controller-prerequisites`, whose packages they use, through the engine's
+    own edge. The package tree's explicit requirement on the Environment is
+    dropped, because it named both controller blocks and so closed a cycle,
+    while the engine's edge already orders it after the stage everywhere else.
+33. Taken by the session for B1249 (X409): plan refuses a managed service on
+    an installed Machine whose install profile leaves its firewall enabled,
+    since no service opens a port yet ([B1329](#b1329)), a DNSServer or
+    NTPServer that Machine's own installation uses, an ArtifactServer there
+    other than the managed artifact mirror's or one an
+    `artifactServerEndpoint` publishes into, and a mirror host installed
+    through a vSphere or KubeVirt provider, whose `govc` or `virtctl` the
+    stage installs after the fill, or on bare metal, whose machine and erase
+    blocks were not shown to precede the stage and so are not
+    `ControllerPrecursor`s, a managed image mirror there, whose image fill
+    takes the SSH arm, and an installed host whose profile does not install
+    `podman`; an installation's media served from the
+    mirror host is already refused, because installer media is built and
+    published on the controller. These rows live in the managed-service
+    refusal table, whose capabilities refuse them, because the Environment
+    table's leaf was at its budget.
 
 ### D252
 

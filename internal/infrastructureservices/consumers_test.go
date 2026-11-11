@@ -168,16 +168,21 @@ func TestAWildcardBindNeedsAnEndpointPerServiceAndListener(t *testing.T) {
 	}
 }
 
-func TestAManagedServiceRunsOnlyWhereItsMachineProvidesTheOS(t *testing.T) {
+func TestAManagedServiceRunsOnlyWhereItsMachineProvidesTheOSOrBootwrightInstallsIt(t *testing.T) {
 	for _, kind := range []api.Kind{api.Proxy, api.DNSServer, api.NTPServer, api.Registry, api.ArtifactServer, api.LoadBalancer} {
 		t.Run(string(kind), func(t *testing.T) {
 			service := managedService(kind, consumerSpec(kind, m("name", "contact", "addressRef", "ip")))
 			found := refusalsAt(admit(service, consumerHost(false, consumerAddresses()...)), "$.spec.machineRef")
-			if len(found) != 1 || !mentionsAll(found[0].Message, "Machine/host", "os.provided: false") || found[0].Remediation != "set spec.machineRef to a Machine with os.provided: true" {
-				t.Fatalf("placement on a Machine without its OS = %#v, want one refusal at $.spec.machineRef", found)
+			if len(found) != 1 || !mentionsAll(found[0].Message, "Machine/host", "os.provided: false", "names no install profile") ||
+				found[0].Remediation != "set spec.machineRef to a Machine with os.provided: true, or to one with os.installProfileRef" {
+				t.Fatalf("placement on a Machine another installer owns = %#v, want one refusal at $.spec.machineRef", found)
 			}
 			if issues := admit(service, consumerHost(true, consumerAddresses()...)); len(issues) != 0 {
 				t.Fatalf("placement on a Machine that provides its OS was refused: %v", issues)
+			}
+			installed := obj(api.Machine, "host", m("os", m("provided", false, "installProfileRef", "rhel"), "network", m("addresses", list(consumerAddresses()...))))
+			if found := refusalsAt(admit(service, installed), "$.spec.machineRef"); len(found) != 0 {
+				t.Fatalf("placement on a Machine Bootwright installs was refused: %v", found)
 			}
 			undeclared := obj(api.Machine, "host", m("network", m("addresses", list(consumerAddresses()...))))
 			if found := refusalsAt(admit(service, undeclared), "$.spec.machineRef"); len(found) != 0 {

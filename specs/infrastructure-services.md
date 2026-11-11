@@ -17,8 +17,9 @@ the service kind with its `spec.implementation`, which an ArtifactServer lacks
 and an external service forbids ([API](api/infrastructure-services.md)).
 
 A managed service becomes a block only when its placement Machine has effective
-`os.provided: true` and the service's declared requirements hold; admission
-refuses a placement Machine without it at `$.spec.machineRef`
+`os.provided: true`, or is one Bootwright installs, whose installation its
+block then requires, and the service's declared requirements hold; admission
+refuses another placement Machine at `$.spec.machineRef`
 ([placement](api/infrastructure-services.md#management-and-placement)). Reference
 resolution alone is not a readiness edge: an endpoint's Machine address supplies
 a value, while deployment requires the host itself. One realization edge does
@@ -46,7 +47,12 @@ NTPServer and Registry capabilities' to every row except the artifact socket bou
 which only an ArtifactServer declares. Reason and
 remedy are the diagnostic's message and remediation (`lifecycle.unsupported` on
 the refused service), in which `<server>` is the refused service, `<machine>`
-its placement Machine and `<proxy>` the Proxy that Machine selects. A placement
+its placement Machine and `<proxy>` the Proxy that Machine selects. The
+installed-host rows hold the ArtifactServer alone, except the firewall row, and
+the own-installation row the DNSServer and NTPServer alone; `<profile>`,
+`<kind>`, `<consumer>` and `<provider>` name the install profile, the
+service's kind, the publishing object and the provider; the image mirror row
+holds the Registry alone. A placement
 Machine that is the Environment's controller is reached locally, so the SSH
 rows never refuse a service placed there.
 
@@ -58,6 +64,13 @@ rows never refuse a service placed there.
 | Operator SSH identity | `spec.access.ssh.auth.operatorIdentity` on a placement `Machine` other than the controller, the default of a provided Machine without authored access included | `this executable reaches a placement host other than the controller only with a bound SSH private key, and <machine>, where <server> runs, uses spec.access.ssh.auth.operatorIdentity` | `author spec.access.ssh.auth.privateKeyRef and spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
 | Password SSH authentication | `spec.access.ssh.auth.passwordRef` on a placement `Machine` other than the controller | `this executable reaches a placement host other than the controller only with a bound SSH private key, and <machine>, where <server> runs, uses spec.access.ssh.auth.passwordRef` | `author spec.access.ssh.auth.privateKeyRef and spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
 | No bound host key | `spec.access.ssh` without `knownHostsRef` on a placement `Machine` other than the controller | `this executable connects to a placement host other than the controller only against a bound SSH host key, and <machine>, where <server> runs, declares no spec.access.ssh.knownHostsRef` | `author spec.access.ssh.knownHostsRef on <machine>, or place <server> on the controller Machine` |
+| Host firewall on an installed Machine | the placement `Machine` is installed by Bootwright through a `MachineInstallProfile` whose `spec.customizations.security.firewall.enabled` is not `false` | `this executable opens no host firewall port for a managed service, and <machine>, where <server> runs, is installed by <profile>, which leaves its firewall enabled` | `set spec.customizations.security.firewall.enabled: false on <profile>, or place <server> on an OS-ready Machine` |
+| Service of its host's own installation | a managed `DNSServer` or `NTPServer` on an installed `Machine` that the `dns` selections of that Machine's network configuration, or its installation's `ntp` selections, name | `the installation of <machine> uses <server>, which runs on <machine> and so answers only once that installation completes` | `select a <kind> placed on another Machine for the installation of <machine>, or place <server> on another Machine` |
+| Artifact server on an installed Machine | a managed `ArtifactServer` on an installed `Machine` that `spec.mirror.artifacts.serverRef` does not select | `an ArtifactServer on a Machine Bootwright installs serves only the Environment's managed artifact mirror, and <server> on <machine> is not the server spec.mirror.artifacts.serverRef selects` | `place <server> on the controller Machine or on an OS-ready Machine reached over SSH` |
+| Publication into a mirror on an installed Machine | an `artifactServerEndpoint` naming the managed artifact mirror's server on an installed `Machine` | `the artifact mirror on a Machine Bootwright installs is filled by its own fill alone, and <consumer> publishes into <server> on <machine> through an artifactServerEndpoint` | `select a server on the controller Machine or on an OS-ready Machine in that artifactServerEndpoint of <consumer>` |
+| Mirror host installed off libvirt | the managed artifact mirror's server on a `Machine` Bootwright installs through a vSphere, KubeVirt or bare-metal `InfraProvider` | `the artifact mirror is filled before the controller stage installs its clients, and <machine>, where <server> runs, is installed through <provider>, whose machine blocks this executable runs only after that stage` | `place <server> on an OS-ready Machine or on one a libvirt provider realizes` |
+| Image mirror on an installed Machine | the managed `Registry` `spec.mirror.registry.registryRef` selects on a `Machine` Bootwright installs | `this executable fills a managed image mirror only on an OS-ready Machine or the controller, and <server> is on <machine>, which Bootwright installs` | `place <server> on an OS-ready Machine reached over SSH, or select an external Registry in spec.mirror.registry.registryRef` |
+| Container runtime on an installed Machine | the placement `Machine`'s install profile without `podman` in `spec.customizations.packages.install` | `a managed service runs as a container, and <machine>, where <server> runs, is installed by <profile>, which does not install podman` | `add podman to spec.customizations.packages.install of <profile>, or place <server> on an OS-ready Machine` |
 | Endpoint addresses beyond the host reservation | a managed `Proxy`, `DNSServer`, `NTPServer` or `Registry` bound to a wildcard with more than 61 distinct endpoint addresses | `a managed service bound to a wildcard claims one host reservation key for each distinct endpoint address beside its unit, its content root and its bind socket, within the 64 keys one reservation holds, so it declares at most 61 distinct endpoint addresses` | `declare at most 61 distinct endpoint addresses in spec.endpoints of <server>` |
 | Artifact sockets beyond the host reservation | a managed `ArtifactServer` whose listeners and, under a wildcard `bindAddress`, distinct endpoint addresses of each listener claim more than 62 sockets | `an artifact server claims one host reservation key for each listener and, under a wildcard bindAddress, for each distinct endpoint address of each listener, beside its unit and its content root, within the 64 keys one reservation holds, so its listeners and endpoints claim at most 62 sockets` | `declare fewer listeners in spec.listeners or fewer endpoints with distinct addresses in spec.endpoints of <server>, so they claim at most 62 sockets` |
 
@@ -67,6 +80,7 @@ rows never refuse a service placed there.
 | --- | --- | --- | --- |
 | Controller | The placement Machine is the [Environment controller](api/environment.md#controller-machine) | Local, through the private controller runtime under [Controller's execution boundary](controller.md#the-controller-runtime) | The Workspace root lock, the context lease, the verified host binding and the host reservations below |
 | SSH | The placement Machine authors `access.ssh` | Remote, over SSH from the controller | The context lease and the SSH-qualified [host reservations](#host-reservations) below |
+| Installed | The placement Machine is one Bootwright installs | Remote, over SSH from the controller, after its installation | The context lease and host reservations qualified by its address and port |
 
 The controller arm requires this context's verified
 [host binding](contexts.md#controller-relationship-and-host-binding) and the
@@ -109,6 +123,16 @@ white space and OpenSSH as part of a host could hide a second entry, such as
 `\v#x,*`, that ssh honours for every host
 (`TestKnownHostsMaterialOpenSSHReadsOtherwiseRefuses`). No SSH
 configuration, agent, ambient `known_hosts` or user identity is consulted.
+
+The installed arm reaches a managed service's, artifact server's or fill's
+Machine that Bootwright installs at its install address and port 22, as the
+`bootwright` account with the Environment's fleet key, and becomes root
+through the passwordless sudo rule its installation wrote; no password and no
+`knownHostsRef` is bound. Its block requires the Machine's `os-install`
+block, and each run is lent, as its one known-hosts entry, the host key that
+installation's evidence proved, read through a reader composition binds
+(`TestAnInstalledPlacementConnectsOnlyAgainstItsProvedHostKey`). A consumer
+publishing into a server keeps the SSH arm and so cannot reach such a Machine.
 
 Two contexts targeting one SSH host are coordinated by the
 [host reservations](#host-reservations) below, which an SSH host's blocks
@@ -915,7 +939,7 @@ mirror, and Bootwright fills it; tracked as
 The mirror host is the Machine an Environment's managed
 [artifact mirror](api/environment.md#artifact-mirror) and managed
 [image mirror](api/environment.md#image-mirror) are placed on: an OS-ready
-Machine reached over SSH whose managed `ArtifactServer`
+Machine reached over SSH, or one Bootwright installs, whose managed `ArtifactServer`
 `spec.mirror.artifacts.serverRef` selects and whose managed `Registry`
 `spec.mirror.registry.registryRef` selects. When both are managed they share
 one `machineRef`, and plan refuses two Machines
@@ -980,7 +1004,11 @@ them; every other block waits for both controller blocks
 `TestASplitControllerStageOrdersTheMirrorBetweenItsBlocks`). The mirror host
 may be the controller Machine, where the server and the fill run locally; a
 Machine with `access.local`, or SSH at a controller address, that is not the
-controller Machine refuses. The
+controller Machine refuses. On a Machine Bootwright installs, its
+realization and installation, with what they wait for, run between the stage's
+two blocks too, and the server and the fill wait for that installation;
+an installation whose substrate runs a controller client refuses
+(`TestAManagedArtifactMirrorPlansBetweenTheStagesBlocksOnEachPlacement`). The
 Registry and the image fill are not among the blocks the stage waits for,
 since nothing it reads is an image. Each managed service, artifact server and
 libvirt machine block that pulls through the mirror waits for the Registry and
@@ -996,8 +1024,8 @@ against the issuer of the Registry's serving certificate unless the Registry's
 `trustBundleRef` names another; admission refuses a serving certificate with
 no issuer when none is named, and Bootwright creates no Secret for it.
 
-Not yet met: the mirror host may be a Machine Bootwright installs, a managed
-image mirror may sit on the controller, which installs no `skopeo`, and the
+Not yet met: a managed image mirror on a Machine Bootwright installs, whose
+fill takes the SSH arm, refuses, a managed image mirror may sit on the controller, which installs no `skopeo`, and the
 mirror host may mirror an OpenShift release for a cluster under a managed
 image mirror; tracked as [B1249](milestones/backlog.md#b1249).
 

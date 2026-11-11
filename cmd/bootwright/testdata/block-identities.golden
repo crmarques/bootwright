@@ -264,6 +264,22 @@ lab-sno-authored:
   ntp-lab-ntp
   proxy-lab-proxy
   substrate-host-lab-libvirt
+lab-sno-installed-mirror-host:
+  artifact-server-lab-artifacts
+  artifact-server-mirror-artifacts
+  cluster-install-sno
+  cluster-media-sno
+  controller-mirrored-clients
+  controller-prerequisites
+  dns-lab-dns
+  machine-mirror
+  machine-sno-01
+  mirror-files-lab-sno-installed-mirror-host
+  ntp-lab-ntp
+  os-install-mirror
+  os-package-tree-rhel-9-8-mirror
+  proxy-lab-proxy
+  substrate-host-lab-libvirt
 lab-sno-metallb:
   addon-metallb-sno
   artifact-server-lab-artifacts

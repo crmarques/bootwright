@@ -1,6 +1,8 @@
 package machine
 
 import (
+	"slices"
+
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
@@ -9,8 +11,10 @@ import (
 )
 
 const (
-	ConnectionLocal = "local"
-	ConnectionSSH   = "ssh"
+	ConnectionLocal     = "local"
+	ConnectionSSH       = "ssh"
+	ConnectionInstalled = "installed"
+	InstallFamily       = "os-install"
 )
 
 // Placement fixes where one block's effect runs. The local arm needs no
@@ -27,6 +31,12 @@ type Placement struct {
 }
 
 func (p Placement) Local() bool { return p.Connection == ConnectionLocal }
+
+// Installed reports the arm that reaches a Machine this context installs: over
+// SSH as the account its installation created, which escalates through the
+// passwordless sudo rule that installation wrote, against the host key its
+// installation proved, so the placement binds no host-key Secret.
+func (p Placement) Installed() bool { return p.Connection == ConnectionInstalled }
 
 // SecretReferences names every declaration a placement needs bound before the
 // operation registers. An escalation Secret is never one of them.
@@ -88,6 +98,19 @@ func PlacementFor(machine api.Object, controllerMachine string) (Placement, erro
 	}, nil
 }
 
+func ServicePlacementFor(machine api.Object, controllerMachine string) (Placement, error) {
+	if machine.Name() == controllerMachine || !installed(machine) {
+		return PlacementFor(machine, controllerMachine)
+	}
+	ssh, found := SSH(machine)
+	install, declared := Address(machine, machine.Spec().Get("network", "installAddressRef").Text())
+	if !found || !declared || ssh.Address != install || ssh.Port != 22 || ssh.PrivateKeyRef == "" || ssh.User == "" {
+		return Placement{}, placementFailure("lifecycle.state", "a service on a Machine Bootwright installs is reached at its install address on port 22 with the fleet key, as its installation configured it",
+			"remove spec.access.ssh from "+machine.Identity()+" so its access is the installation's own")
+	}
+	return Placement{Address: ssh.Address, Connection: ConnectionInstalled, Machine: machine.Name(), Port: ssh.Port, PrivateKeyRef: ssh.PrivateKeyRef, User: ssh.User}, nil
+}
+
 // privilegeFields names the access.ssh fields that keep a host from connecting
 // as root without escalation: a user other than root, and an escalation Secret.
 func privilegeFields(ssh api.Value) []string {
@@ -116,7 +139,7 @@ var privilegeRemediations = map[string]string{
 // such as a cluster node, a storage node or a session target, keeps any account.
 func validatePlacementHost(o api.Object, c api.Catalog) []api.Issue {
 	ssh := o.Spec().Get("access", "ssh")
-	if !ssh.Present() || !placementHost(o, c) {
+	if !ssh.Present() || !placementHost(o, c) || installed(o) && !providerHost(o, c) {
 		return nil
 	}
 	var issues []api.Issue
@@ -139,6 +162,10 @@ func placementHost(o api.Object, c api.Catalog) bool {
 		}
 	}
 	return false
+}
+
+func providerHost(o api.Object, c api.Catalog) bool {
+	return slices.ContainsFunc(c.OfKind(api.InfraProvider), func(provider api.Object) bool { return substrate.HostMachine(provider) == o.Name() })
 }
 
 // ResolveAddress answers the address one reference names on its Machine.

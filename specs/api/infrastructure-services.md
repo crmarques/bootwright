@@ -54,8 +54,10 @@ about the image's release.
 Every managed service runs as a container, so its placement Machine is a
 container-runtime host by that placement, with no role declared on the Machine
 ([substrate arm](machines.md#substrate-arm)). That Machine also has effective
-`os.provided: true`, because a managed service runs only where the operating
-system is ready; validate refuses any other placement at `spec.machineRef`.
+`os.provided: true`, or Bootwright installs it through
+`os.installProfileRef`, because a managed service runs only where the
+operating system is ready or after its installation; validate refuses any
+other placement, such as a cluster node, at `spec.machineRef`.
 An external service forbids managed placement, implementation, image and
 listener configuration. Managed-only intrinsic defaults do not materialize on
 external declarations. An explicit management choice suppresses incompatible

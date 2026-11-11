@@ -44,12 +44,10 @@ func TestThreeInstallationsHaveOneSharedPublication(t *testing.T) {
 	if !slices.Contains(block.Requires, reconciliation.ObjectRef{Kind: "ArtifactServer", Object: "lab-artifacts"}) {
 		t.Fatal(block.Requires)
 	}
-	controller := false
 	for _, reference := range block.Requires {
-		controller = controller || reference.Kind == "Environment"
-	}
-	if !controller {
-		t.Fatal("no controller dependency")
+		if reference.Kind == "Environment" {
+			t.Fatalf("the tree requires the controller stage %+v, whose packages the engine's own edge already precedes it with", reference)
+		}
 	}
 	machines, err := New(nil).WithMedia(labMedia()).Plan(context.Background(), input)
 	if err != nil {

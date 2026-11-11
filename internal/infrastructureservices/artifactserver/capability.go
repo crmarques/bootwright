@@ -17,12 +17,18 @@ import (
 // Capability realizes managed artifact servers. It owns what completion,
 // readiness and absence mean for this kind and nothing else.
 type Capability struct {
-	runner Runner
-	clock  lifecycle.Clock
+	runner   Runner
+	clock    lifecycle.Clock
+	hostKeys lifecycle.InstalledHostKey
 }
 
 func New(runner Runner, clock lifecycle.Clock) Capability {
 	return Capability{runner: runner, clock: clock}
+}
+
+func (c Capability) WithInstalledHostKeys(hostKeys lifecycle.InstalledHostKey) Capability {
+	c.hostKeys = hostKeys
+	return c
 }
 
 func (c Capability) now() time.Time {
@@ -79,7 +85,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		if request.Placement.Connection != connectionLocal {
 			plan.SSHReservations = append(plan.SSHReservations, lifecycle.SSHReservation{
 				Machine: request.Placement.Machine, Address: request.Placement.Address, Port: request.Placement.Port,
-				KnownHostsRef: request.Placement.KnownHostsRef, Reservation: claim,
+				KnownHostsRef: request.Placement.KnownHostsRef, Installed: request.Placement.Installed(), Reservation: claim,
 			})
 			continue
 		}
@@ -293,9 +299,13 @@ func (c Capability) run(ctx context.Context, execution lifecycle.Execution, oper
 	if fingerprint != "" {
 		values["fingerprint"] = fingerprint
 	}
+	execution, placement, err := lifecycle.PinInstalledHost(execution, request.Placement, c.hostKeys)
+	if err != nil {
+		return lifecycle.RunResult{}, err
+	}
 	return c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: Implementation, Operation: operation, Variable: variablePrefix,
-		Canonical: canonical, Placement: request.Placement, Materials: materials(request, operation), Values: values,
+		Canonical: canonical, Placement: placement, Materials: materials(request, operation), Values: values,
 		Refusals: managedservice.ReadinessRefusals(Kind, request.Identity.Service, request.Placement.Machine, request.BindAddress, listenerPorts(request)),
 	}))
 }
@@ -338,5 +348,5 @@ func (Capability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiesce
 
 func (Capability) PrecedesController(definition reconciliation.BlockDefinition) bool {
 	request, err := DecodeRequest(definition.Request)
-	return err == nil && (request.Placement.Connection == connectionSSH || request.Placement.Connection == connectionLocal)
+	return err == nil && (request.Placement.Connection == connectionSSH || request.Placement.Connection == connectionLocal || request.Placement.Installed())
 }

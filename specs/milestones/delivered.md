@@ -14843,3 +14843,66 @@ reads and the SELinux and TLS behaviour of the lent certificate directory are
 proved by unit tests of the module and role, not on a host; releases, `skopeo`
 on the controller and an installed mirror host remain on
 [B1249](backlog.md#b1249).
+
+### X409 — A managed artifact mirror on a Machine Bootwright installs
+
+**Item:** B1249 (2026-11-11, [D250](backlog.md#d250) (14),
+[D251](backlog.md#d251) (6) and (31) to (33)), partly delivered in-tree, so
+the item stays in the backlog with its remaining slices. The slice is the
+fourth of the session's plan for B1249: a mirror host Bootwright installs.
+
+*Admission and placement.* A managed service may name a Machine with
+`os.provided: false` and an `os.installProfileRef`; one another installer
+owns still refuses. `machine.ServicePlacementFor` gives a service, an artifact
+server or the fill on such a Machine the new `installed` arm: its install
+address on port 22, the `bootwright` account and the fleet key, becoming root
+through its installation's sudo rule (D251 (31)). The runner sets
+`ansible_become` for that arm alone (`TestOnlyTheInstalledArmBecomesRoot`), and
+`lifecycle.PinInstalledHost` lends each run the host key the installation
+proved, through `installation.ProvedHostKey`, which composition binds to the
+managed-service, artifact-server and fill capabilities
+(`TestAnInstalledPlacementConnectsOnlyAgainstItsProvedHostKey`,
+`TestAFillOnAnInstalledMirrorHostConnectsAgainstItsInstallationsHostKey`). The
+blocks require the Machine's `os-install` block, and their claims are
+qualified by address and port alone
+(`TestAnInstalledHostsClaimsAreQualifiedByItsAddressAlone`).
+
+*Ordering.* The libvirt provider host and machine, the managed services, the
+package tree and an installation whose arm runs no controller client declare
+`lifecycle.ControllerPrecursor`, and the package tree no longer requires the
+Environment (D251 (32)). The new `lab-sno-installed-mirror-host` example
+plans the stage's packages, the provider host, the guest, its tree, media
+server, resolver, time source and installation, the mirror's server and fill,
+then the stage's clients;
+`TestAManagedArtifactMirrorPlansBetweenTheStagesBlocksOnEachPlacement` holds
+that order for the SSH, controller and installed placements, and
+`TestAnInstalledMirrorHostPlansThroughTheLifecycleService` plans it through
+the whole service. The provider-host refusal test now uses the cluster media,
+which runs the stage's clients.
+
+*Refusals.* Seven managed-service refusal rows (D251 (33)): a firewall the
+profile leaves enabled, a profile without `podman`, a service the host's own
+installation uses, an installed ArtifactServer other than the mirror's, a
+publication into it, a mirror host installed off libvirt (vSphere, KubeVirt
+or bare metal) and a managed image mirror on an installed Machine. The
+independent review found nothing blocking; its findings added the bare-metal,
+image-mirror and `podman` rows, the installed-arm exception in
+[machines](../api/machines.md#addresses-and-access), the D7 entry among the
+open session clauses and D251 (31)'s rationale and alternative.
+
+*Records.* Specs: placement arms and the mirror host in
+[infrastructure services](../infrastructure-services.md#placement-arms-and-credentials),
+the placement rule of the
+[API](../api/infrastructure-services.md#management-and-placement) and
+[machines](../api/machines.md#addresses-and-access), two reference-edge rows,
+the deferred page. Parked: [B1329](backlog.md#b1329). Contracts: none moved,
+because the arm is a `connection` value and requirements are not frozen.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** no host has run the installed arm: sudo becoming
+root under Ansible on an installed RHEL guest, `podman` from the profile and
+the host-key proof of a first apply are proved by tests alone; a managed image
+mirror there and releases remain on [B1249](backlog.md#b1249). A service on
+an installed Machine that is powered off stalls its removal at the connection,
+because the managed-service capabilities take no retirement with their hosts;
+an earlier build refuses the arm with the generic unbound-host-key message.

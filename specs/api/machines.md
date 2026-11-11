@@ -537,15 +537,15 @@ identity supplied by the managed storage-cluster relationship; it is invalid
 on a Bootwright-installed machine or a machine without that successor login.
 
 A lifecycle placement host connects as root and never escalates
-([owner decision D7](../milestones/backlog.md#d7)). A Machine with
-`access.ssh` is a lifecycle placement host when a `management: managed`
-infrastructure service names it as `spec.machineRef`, or an `InfraProvider`
-names it as `spec.libvirt.machineRef`. On such a host an effective
+([D7](../milestones/backlog.md#d7)), save a Bootwright-installed service
+host's `bootwright`, through its installation's `NOPASSWD: ALL` sudo rule
+([D251](../milestones/backlog.md#d251) (31)). A Machine with
+`access.ssh` is a lifecycle placement host when a managed
+service names it as `spec.machineRef`, or an `InfraProvider`
+as `spec.libvirt.machineRef`. There an effective
 `access.ssh.user` other than `root` refuses with `api.invariant` at
 `$.spec.access.ssh.user`, and an authored `access.ssh.sudoPasswordRef` refuses
-at `$.spec.access.ssh.sudoPasswordRef`. The effective user of a
-Bootwright-installed machine is `bootwright`, so one named as a placement host
-refuses. An operator-identity host that authors no user has no effective user
+at `$.spec.access.ssh.sudoPasswordRef`. An operator-identity host that authors no user has no effective user
 here; its placement refuses before planning under the
 [SSH arm](../infrastructure-services.md#placement-arms-and-credentials).
 Machines that are only cluster nodes, storage nodes or session targets keep

@@ -595,6 +595,7 @@ type SSHReservation struct {
 	Address       string
 	Port          int
 	KnownHostsRef string
+	Installed     bool
 	Reservation   prerequisites.HostReservation
 }
 

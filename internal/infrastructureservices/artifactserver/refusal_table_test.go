@@ -39,8 +39,12 @@ func TestArtifactServerRefusalTableMatchesUnsupported(t *testing.T) {
 		catalog, values, _ := placementRowGraph(row, placedArtifactServer)
 		cases[row] = refusalCase{catalog, "ArtifactServer/lab-artifacts", values}
 	}
+	for _, row := range []string{"Host firewall on an installed Machine", "Artifact server on an installed Machine", "Publication into a mirror on an installed Machine", "Mirror host installed off libvirt", "Container runtime on an installed Machine"} {
+		catalog, values, _ := installedRowGraph(row, api.ArtifactServer, placedArtifactServer)
+		cases[row] = refusalCase{catalog, "ArtifactServer/lab-artifacts", values}
+	}
 	for _, row := range refusalTable(t) {
-		if networkOnlyRows[row.name] {
+		if networkOnlyRows[row.name] || registryOnlyRows[row.name] {
 			continue
 		}
 		test, found := cases[row.name]

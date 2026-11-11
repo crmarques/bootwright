@@ -315,16 +315,16 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	for _, definition := range managedServiceDefinitions() {
 		resolver = append(resolver, boundCapability{
 			kind: string(definition.Kind), implementation: definition.Implementation, family: managedservice.Family,
-			capability: managedservice.NewCapability(definition, runner).WithClock(clock),
+			capability: managedservice.NewCapability(definition, runner).WithClock(clock).WithInstalledHostKeys(installation.ProvedHostKey),
 		})
 	}
 	resolver = append(resolver, boundCapability{
 		kind: artifactserver.Kind, implementation: artifactserver.Implementation, family: managedservice.Family,
-		capability: artifactserver.New(runner, clock),
+		capability: artifactserver.New(runner, clock).WithInstalledHostKeys(installation.ProvedHostKey),
 	})
 	resolver = append(resolver, boundCapability{
 		kind: mirrorfill.Kind, implementation: mirrorfill.FilesImplementation, family: mirrorfill.Family,
-		capability: mirrorfill.NewFiles(runner, mirrorFileArtifacts),
+		capability: mirrorfill.NewFiles(runner, mirrorFileArtifacts).WithInstalledHostKeys(installation.ProvedHostKey),
 	})
 	resolver = append(resolver, boundCapability{
 		kind: mirrorfill.ImagesKind, implementation: mirrorfill.ImagesImplementation, family: mirrorfill.Family,

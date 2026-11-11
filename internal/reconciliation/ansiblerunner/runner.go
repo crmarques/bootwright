@@ -63,6 +63,11 @@ func inventory(placement machineref.Placement, interpreter string, paths map[str
 		host["ansible_user"] = placement.User
 		host["ansible_ssh_private_key_file"] = paths["id"]
 		host["ansible_python_interpreter"] = "/usr/bin/python3"
+		if placement.Installed() {
+			host["ansible_become"] = true
+			host["ansible_become_method"] = "sudo"
+			host["ansible_become_user"] = "root"
+		}
 		host["ansible_ssh_common_args"] = strings.Join([]string{
 			"-F", paths["ssh_config"],
 			"-o", "UserKnownHostsFile=" + paths["known_hosts"],
@@ -112,7 +117,7 @@ func phaseInventory(request lifecycle.RunRequest, paths map[string]string) (map[
 
 // variables carries the frozen request and the paths its material was written
 // to. Material values themselves never enter this file, and neither does an
-// escalation password: a placement connects as root and never escalates. Each
+// escalation password: a placement connects as root, or escalates without one. Each
 // number keeps its canonical text, which a float64 rounds above 2^53.
 func variables(request lifecycle.RunRequest, paths map[string]string) (map[string]any, error) {
 	decoder := json.NewDecoder(bytes.NewReader(request.Canonical))

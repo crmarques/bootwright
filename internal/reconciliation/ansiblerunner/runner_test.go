@@ -9,6 +9,7 @@ import (
 	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/trust"
 )
 
 func localRequest() lifecycle.RunRequest {
@@ -202,5 +203,59 @@ func TestTheSSHArmUsesAGeneratedConfigurationAndKeepalives(t *testing.T) {
 		if !options[required] {
 			t.Fatalf("ssh arguments = %q, missing %q", arguments, required)
 		}
+	}
+}
+
+// The installed arm is the SSH arm as the account a Machine's installation
+// created, which becomes root through the passwordless sudo rule that
+// installation wrote; the SSH arm and the local arm never escalate.
+func TestOnlyTheInstalledArmBecomesRoot(t *testing.T) {
+	paths := map[string]string{"id": "/job/id", "known_hosts": "/job/known_hosts", "ssh_config": "/job/ssh_config"}
+	installed := sshRequest().Placement
+	installed.Connection, installed.User, installed.Port = machineref.ConnectionInstalled, "bootwright", 22
+	value := inventory(installed, "/interpreter", paths)
+	host := value["all"].(map[string]any)["children"].(map[string]any)["bootwright_target"].(map[string]any)["hosts"].(map[string]any)["services"].(map[string]any)
+	if host["ansible_connection"] != "ssh" || host["ansible_user"] != "bootwright" || host["ansible_become"] != true ||
+		host["ansible_become_method"] != "sudo" || host["ansible_become_user"] != "root" || host["ansible_ssh_private_key_file"] != "/job/id" {
+		t.Fatalf("installed host = %+v", host)
+	}
+	if arguments, _ := host["ansible_ssh_common_args"].(string); !strings.Contains(arguments, "UserKnownHostsFile=/job/known_hosts") || !strings.Contains(arguments, "StrictHostKeyChecking=yes") {
+		t.Fatalf("installed ssh arguments = %q", arguments)
+	}
+	for name, placement := range map[string]machineref.Placement{"ssh": sshRequest().Placement, "local": localRequest().Placement} {
+		value := inventory(placement, "/interpreter", paths)
+		for _, host := range value["all"].(map[string]any)["children"].(map[string]any)["bootwright_target"].(map[string]any)["hosts"].(map[string]any) {
+			for _, key := range []string{"ansible_become", "ansible_become_method", "ansible_become_user"} {
+				if _, present := host.(map[string]any)[key]; present {
+					t.Fatalf("the %s arm sets %s", name, key)
+				}
+			}
+		}
+	}
+}
+
+// An installed placement pinned to the host key its installation proved passes
+// the runner's host-key check with that one entry for its address and port,
+// and one left unpinned refuses before any connection.
+func TestAnInstalledPlacementConnectsOnlyAgainstItsProvedHostKey(t *testing.T) {
+	placement := machineref.Placement{Address: "198.51.100.20", Connection: machineref.ConnectionInstalled, Machine: "mirror", Port: 22, PrivateKeyRef: "services-key", User: "bootwright"}
+	proved := func(_ []lifecycle.BlockEvidence, machine, address string) (trust.HostKey, error) {
+		if machine != "mirror" || address != "198.51.100.20" {
+			t.Fatalf("the proof was read for %s at %s", machine, address)
+		}
+		return trust.ParseAuthorizedKey(pinnedHostKey)
+	}
+	execution, pinned, err := lifecycle.PinInstalledHost(lifecycle.Execution{Material: material()}, placement, proved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: "artifact-server-nginx-v1", Operation: "apply", Placement: pinned})
+	line, err := checkHostKey(request)
+	if err != nil || line != "198.51.100.20 "+pinnedHostKey+"\n" {
+		t.Fatalf("host key line = %q (%v)", line, err)
+	}
+	unpinned := lifecycle.RunFor(lifecycle.Execution{Material: material()}, lifecycle.Invocation{Implementation: "artifact-server-nginx-v1", Operation: "apply", Placement: placement})
+	if _, err := checkHostKey(unpinned); err == nil {
+		t.Fatal("an installed placement with no proved host key was admitted")
 	}
 }

@@ -987,9 +987,9 @@ resolved and validated but orders nothing; each such field that can name a
 realized object needs its family's own ordering or a stated reason, which
 `TestEveryReferenceFieldHasAnEdgeRowOrAReason` holds. Not yet met: six
 storage references emit requirements no row names; tracked as
-[B969](milestones/backlog.md#b969). Destroy inverts every edge. Rows within one family that the family orders by its own block
-dependencies, such as a storage child after its cluster, are not requirements,
-so not listed. `TestEveryRequirementMatchesTheEdgeCatalog` plans every
+[B969](milestones/backlog.md#b969). Destroy inverts every edge. A family
+ordering its own blocks, as a storage child after its cluster, is not listed.
+`TestEveryRequirementMatchesTheEdgeCatalog` plans every
 example and fails when a capability emits a requirement no row names, or omits
 one a row's field path names on its object while a block realizes the target.
 
@@ -1011,11 +1011,12 @@ one a row's field path names on its object while a block realizes the target.
 | `physical-erase` `Machine` | `NTPServer` | `spec.os.install.ntp[].serverRef` |
 | `physical-erase` `Machine` | `CephCluster` from `storage-physical-retirement` | a storage cluster whose retirement must release this physical Machine first |
 | `os-package-tree` `MachineInstallProfile` | `ArtifactServer` | `spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint.serverRef`, `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint.serverRef` |
-| `os-package-tree` `MachineInstallProfile` | `Environment` | the selected Environment, whose controller stage prepares the host |
 | `controller-prerequisites` `Environment` | `ArtifactServer` | `spec.mirror.artifacts.serverRef` |
 | `managed-service` `ArtifactServer`, `DNSServer`, `NTPServer`, `Proxy` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
+| `managed-service` `ArtifactServer` | `Machine` from `os-install` | `spec.machineRef`, if installed |
 | `managed-service` `DNSServer`, `NTPServer`, `Proxy` | `Registry` | the managed image mirror its image is pulled through |
 | `mirror-fill` `ArtifactServer` | `ArtifactServer` from `managed-service` | the mirror it fills |
+| `mirror-fill` `ArtifactServer` | `Machine` from `os-install` | `spec.machineRef`, if installed |
 | `mirror-fill` `Registry` | `Registry` from `managed-service` | the image mirror it fills |
 | `substrate-host` `InfraProvider` | `OpenShiftCluster` | `spec.kubevirt.hostClusterRef` |
 | `substrate-host` `InfraProvider` | `ClusterAddonBinding` | non-last instances on that host |

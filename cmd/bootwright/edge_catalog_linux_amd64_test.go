@@ -247,10 +247,10 @@ func referenceFields(kind api.Kind, shape *api.Shape, prefix string, depth int) 
 // orders nothing or, for B969's storage requirements, why no row names it yet
 // (specs/state-reconciliation.md, Reference edges).
 func unorderedReferences() map[string]string {
-	placement := "a managed service's placement Machine is OS-ready (os.provided: true), so no block of the plan readies it (specs/infrastructure-services.md, Selection and refusal)"
+	placement := "an OS-ready placement Machine has no block that readies it, and a service on a Machine Bootwright installs requires that installation, " +
+		"which no example plans for this kind, so no row names it (specs/infrastructure-services.md, Selection and refusal)"
 	unplanned := "the storage capability requires it, but no example plans it and a catalog row needs one that does, so no row names it yet (B969)"
 	return map[string]string{
-		"ArtifactServer spec.machineRef":                                                     placement,
 		"DNSServer spec.machineRef":                                                          placement,
 		"NTPServer spec.machineRef":                                                          placement,
 		"Proxy spec.machineRef":                                                              placement,

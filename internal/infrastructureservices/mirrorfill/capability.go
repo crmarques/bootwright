@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -30,10 +31,16 @@ func filesDeadline(request FilesRequest) time.Duration {
 type Files struct {
 	runner    Runner
 	artifacts Artifacts
+	hostKeys  lifecycle.InstalledHostKey
 }
 
 func NewFiles(runner Runner, artifacts Artifacts) Files {
 	return Files{runner: runner, artifacts: artifacts}
+}
+
+func (c Files) WithInstalledHostKeys(hostKeys lifecycle.InstalledHostKey) Files {
+	c.hostKeys = hostKeys
+	return c
 }
 
 func (c Files) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
@@ -54,12 +61,20 @@ func (c Files) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.C
 	}
 	plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{
 		ID: FilesBlockID(request.Identity.Environment), Description: filesDescription(input.Verb, request), Stage: reconciliation.StageInfrastructureServices,
-		Requires:  []reconciliation.ObjectRef{{Kind: Kind, Object: request.Identity.Server, Family: managedservice.Family}},
+		Requires:  filesRequires(request),
 		Exclusive: []string{"path:" + request.Root}, Impacts: filesImpacts(input.Verb, request), Consumes: []string{},
 		Kind: Kind, Object: request.Identity.Server, Family: Family, Implementation: FilesImplementation, ContentDigest: FilesContentDigest(), Request: canonical,
 	})
 	plan.Secrets = lifecycle.SecretNames(request.SecretReferences()...)
 	return plan, nil
+}
+
+func filesRequires(request FilesRequest) []reconciliation.ObjectRef {
+	requires := []reconciliation.ObjectRef{{Kind: Kind, Object: request.Identity.Server, Family: managedservice.Family}}
+	if request.Placement.Installed() {
+		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.Machine), Object: request.Placement.Machine, Family: machine.InstallFamily})
+	}
+	return requires
 }
 
 func (c Files) Request(catalog api.Catalog, controllerMachine, contextName string) (FilesRequest, bool, error) {
@@ -79,7 +94,7 @@ func (c Files) Request(catalog api.Catalog, controllerMachine, contextName strin
 	if !found {
 		return FilesRequest{}, false, refusal("api.reference", "the artifact mirror's placement Machine is not in the selected graph", "declare it or correct machineRef on "+server.Identity())
 	}
-	placement, err := artifactserver.PlacementFor(catalog, server, controllerMachine)
+	placement, err := artifactserver.ServicePlacementFor(catalog, server, controllerMachine)
 	if err != nil {
 		return FilesRequest{}, false, err
 	}
@@ -158,8 +173,12 @@ func (c Files) run(ctx context.Context, execution lifecycle.Execution, operation
 	if operation == "apply" {
 		refusals = filesRefusals(execution.Context, request)
 	}
+	execution, placement, err := lifecycle.PinInstalledHost(execution, request.Placement, c.hostKeys)
+	if err != nil {
+		return lifecycle.RunResult{}, request, err
+	}
 	result, err := c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: FilesImplementation,
-		Operation: operation, Variable: "bootwright_mirror_files", Canonical: canonical, Placement: request.Placement,
+		Operation: operation, Variable: "bootwright_mirror_files", Canonical: canonical, Placement: placement,
 		Refusals: refusals, Deadline: filesDeadline(request),
 	}))
 	return result, request, err

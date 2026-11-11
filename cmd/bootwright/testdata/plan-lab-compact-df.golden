@@ -185,8 +185,7 @@
     "id": "os-package-tree-rhel-9-8",
     "stage": "machines",
     "dependencies": [
-      "artifact-server-lab-artifacts",
-      "controller-prerequisites"
+      "artifact-server-lab-artifacts"
     ],
     "impacts": [
       "publish-content /var/lib/bootwright-hosted/lab-compact-df/services/artifact-server/lab-artifacts/public/os/rhel-9-8/tree"

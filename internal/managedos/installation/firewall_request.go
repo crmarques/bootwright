@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	InstallFamily           = "os-install"
+	InstallFamily           = machineref.InstallFamily
 	EraseFamily             = "physical-erase"
 	FirewallFamily          = "os-host-firewall"
 	FirewallImplementation  = "os-host-firewall-v1"
