@@ -15511,3 +15511,25 @@ management-gateway projection expectation follows the corrected order. The
 complete gate and local integration commands are recorded in the commit.
 **Contract:** unchanged; no request version or content digest moves. No live
 operation or hardware qualification is claimed.
+
+### X437 — Hostname listener firewall inspection
+
+**Item:** B1351 (2026-11-11). **Kind:** safety. **Owner:** Controller.
+The listener check refused DNS service endpoints before dispatching to its
+native inspector. It now passes a hostname to the inspector, which resolves
+under its existing deadline and requires one distinct global-unicast address
+on exactly one local interface before the unchanged runtime firewalld proof.
+The [controller contract](../controller.md#results-and-qualification) owns
+the resolution bounds and refusal rules. No firewall configuration, frozen
+request, operation state, ownership identity or content digest changes.
+
+**Verification:** `TestHostnameSocketsReachTheInspector` and
+`TestHostnameAdmissionRequiresOneLocalAddressAndTheRuntimeZone` fail before
+the correction. Resolution errors, cancellation, empty, invalid, oversized,
+loopback, multicast, foreign and ambiguous answers do not authorize a socket;
+IPv4, IPv6, duplicate and mapped-equivalent local answers reach the runtime
+proof. A closed runtime port remains closed. Literal IPs perform no lookup.
+The independent safety review found no issue. Complete and race gates are
+recorded in the commit. **Limitations:** native DNS and firewall behavior,
+network-path reachability and real-host acceptance remain operator evidence;
+no host was contacted or configured.

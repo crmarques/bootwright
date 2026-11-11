@@ -18,6 +18,7 @@ type Interface struct {
 type Inspector struct {
 	Read       func(context.Context, []string) ([]byte, error)
 	Interfaces func() ([]Interface, error)
+	LookupIP   func(context.Context, string) ([]netip.Addr, error)
 }
 
 func (i Inspector) Inspect(ctx context.Context, socket firewall.Socket) (firewall.Observation, error) {
@@ -40,7 +41,23 @@ func (i Inspector) Inspect(ctx context.Context, socket firewall.Socket) (firewal
 	}
 	address, err := netip.ParseAddr(socket.Address)
 	if err != nil {
-		return unknown("the listener has no exact interface address")
+		lookup := i.LookupIP
+		if lookup == nil {
+			lookup = lookupIP
+		}
+		addresses, err := lookup(ctx, socket.Address)
+		if err != nil || ctx.Err() != nil || len(addresses) == 0 || len(addresses) > 64 {
+			return unknown("the listener hostname could not be resolved within the inspection bound")
+		}
+		address = addresses[0].Unmap()
+		if !address.IsGlobalUnicast() {
+			return unknown("the listener hostname does not resolve to a unicast interface address")
+		}
+		for _, candidate := range addresses {
+			if candidate.Unmap() != address {
+				return unknown("the listener hostname resolves to multiple addresses")
+			}
+		}
 	}
 	link := ""
 	for _, candidate := range links {

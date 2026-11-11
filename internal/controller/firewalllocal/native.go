@@ -69,6 +69,10 @@ func localInterfaces() ([]Interface, error) {
 	return result, nil
 }
 
+func lookupIP(ctx context.Context, host string) ([]netip.Addr, error) {
+	return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+}
+
 func qualifiedNegative(args []string, output, failure string, exitCode int) bool {
 	if len(args) != 1 {
 		return false

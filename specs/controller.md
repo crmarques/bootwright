@@ -1217,7 +1217,13 @@ Context preflight and public `plan` inspect the controller's managed DNS
 (TCP and UDP), NTP (UDP), proxy (TCP), artifact listeners (TCP), and locally
 hosted emulated BMC listeners. Loopback listeners require no ingress admission.
 Exact bind addresses, or every declared endpoint of a wildcard listener, must
-belong to one local interface. Inspection reads that interface's runtime
+belong to one local interface. A hostname endpoint is resolved under the
+inspection deadline, with at most 64 returned addresses; it must give one
+distinct global-unicast address on exactly one local interface. Duplicate
+records and IPv4-mapped equivalents name the same address. Failed, empty,
+oversized, non-local or ambiguous answers remain `unknown`; DNS names receive
+no loopback omission. Every inspection resolves the name anew, including the
+exclusive-transaction recheck. Inspection reads that interface's runtime
 firewalld zone and reports the socket, interface, zone and `open`, `closed` or
 `unknown` result. It never changes firewall configuration.
 

@@ -53,7 +53,7 @@ func CheckSockets(ctx context.Context, inspector Inspector, sockets []Socket) ([
 			continue
 		}
 		observed := Observation{Status: "unknown", Reason: "read-only firewall inspection is unavailable"}
-		if inspector != nil && ctx.Err() == nil && err == nil && !address.IsUnspecified() && socket.Port > 0 && socket.Port <= 65535 && (socket.Protocol == "tcp" || socket.Protocol == "udp") {
+		if inspector != nil && ctx.Err() == nil && socket.Address != "" && (err != nil || !address.IsUnspecified()) && socket.Port > 0 && socket.Port <= 65535 && (socket.Protocol == "tcp" || socket.Protocol == "udp") {
 			observed, err = inspector.Inspect(ctx, socket)
 			if err != nil {
 				if parent.Err() != nil {

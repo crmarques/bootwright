@@ -26,3 +26,12 @@ func TestLoopbackOmissionAndUnknownNeverPass(t *testing.T) {
 		t.Fatal(checks, err)
 	}
 }
+
+func TestHostnameSocketsReachTheInspector(t *testing.T) {
+	probe := &observed{status: "open"}
+	socket := Socket{Address: "controller.example.test", Protocol: "tcp", Port: 8443}
+	checks, err := CheckSockets(context.Background(), probe, []Socket{socket})
+	if err != nil || len(checks) != 1 || probe.calls != 1 || checks[0].Observation.Status != "open" || checks[0].Socket != socket {
+		t.Fatalf("checks=%+v, calls=%d, err=%v", checks, probe.calls, err)
+	}
+}

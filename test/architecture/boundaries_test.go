@@ -501,8 +501,10 @@ func effectGrants() map[string][]string {
 		"internal/nativeexec":                      {"os", "syscall"},
 		"internal/acquisition":                     {"net/http", "net.Conn", "net.DefaultResolver", "net.DNSError", "net.JoinHostPort", "net.SplitHostPort"},
 		"internal/containercluster/preflightlocal": {"io", "os/exec"},
-		"internal/controller/firewalllocal":        {"os/exec", "net.Interfaces"},
-		"internal/cli":                             {"fmt.Fprintf", "fmt.Fprintln", "github.com/spf13/cobra", "github.com/spf13/pflag", "io"},
+		// Listener hostnames resolve in the native inspector, under its deadline;
+		// this grants the resolver member, not arbitrary networking.
+		"internal/controller/firewalllocal": {"os/exec", "net.Interfaces", "net.DefaultResolver"},
+		"internal/cli":                      {"fmt.Fprintf", "fmt.Fprintln", "github.com/spf13/cobra", "github.com/spf13/pflag", "io"},
 		// The input adapter reads through the handles it holds and names no
 		// other os member.
 		readOnlyInput:                      {"io", "os.File", "os.NewFile", "syscall"},
