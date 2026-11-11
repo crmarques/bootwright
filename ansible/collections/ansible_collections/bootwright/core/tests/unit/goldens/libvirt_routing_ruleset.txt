@@ -1,0 +1,33 @@
+# Bootwright owned routing: bootwright-lab-lab-libvirt-routing.service
+table inet bootwright-lab-lab-libvirt-routing
+delete table inet bootwright-lab-lab-libvirt-routing
+table inet bootwright-lab-lab-libvirt-routing {
+comment "Bootwright owned routing: bootwright-lab-lab-libvirt-routing.service"
+set trunks { type ifname; elements = { "br-trunk" }; }
+set legs { type ifname; elements = { "br-trunk.150", "br-trunk.140" }; }
+set nat_legs { type ifname; elements = { "br-trunk.140" }; }
+set managed { type ifname; elements = { "br-trunk", "br-trunk.140", "br-trunk.150", "virbr-lab" }; }
+set routed { type ifname . ifname; elements = { "br-trunk.140" . "br-trunk.150", "br-trunk.150" . "br-trunk.140" }; }
+set nat_prefixes { type ipv4_addr; flags interval; auto-merge; elements = { 203.0.113.64/26 }; }
+set kept_prefixes { type ipv4_addr; flags interval; auto-merge; elements = { 198.51.100.0/24, 203.0.113.0/26, 203.0.113.64/26, 203.0.113.128/26 }; }
+chain input {
+type filter hook input priority filter - 10; policy accept;
+iifname @trunks drop
+}
+chain forward {
+type filter hook forward priority filter - 10; policy accept;
+iifname @trunks drop
+oifname @trunks drop
+meta nfproto ipv6 iifname @legs reject
+meta nfproto ipv6 oifname @legs reject
+ct state established,related accept
+iifname . oifname @routed accept
+oifname @legs reject
+iifname @nat_legs oifname != @managed ip daddr != @kept_prefixes accept
+iifname @legs reject
+}
+chain postrouting {
+type nat hook postrouting priority srcnat - 10; policy accept;
+ip saddr @nat_prefixes ip daddr != @kept_prefixes oifname != @managed masquerade
+}
+}

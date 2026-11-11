@@ -134,11 +134,28 @@ def listing(table):
     return items
 
 
-class Host:
-    """A host whose systemd runs the unit's nft input and whose nft keeps tables as the kernel does."""
+def earlier_unit(table):
+    """The earlier unit format, with its ruleset as StandardInputText= lines."""
+    lines = [routing.MARK + table["unit"], "[Unit]", "Description=Bootwright routes and isolates the VLAN legs on owned trunks",
+             "Before=network-pre.target NetworkManager.service", "Wants=network-pre.target", "",
+             "[Service]", "Type=oneshot", "RemainAfterExit=yes", "StandardInput=data"]
+    lines += ["StandardInputText=" + line for line in routing.ruleset(table).splitlines()]
+    lines += ["ExecStart=/usr/sbin/nft -f -", "ExecStartPost=/usr/sbin/sysctl -w net.ipv4.ip_forward=1", "ExecReload=/usr/sbin/nft -f -",
+              "ExecReload=/usr/sbin/sysctl -w net.ipv4.ip_forward=1", "ExecStopPost=-/usr/sbin/nft delete table inet " + table["table"],
+              "", "[Install]", "WantedBy=multi-user.target", ""]
+    return "\n".join(lines)
 
-    def __init__(self, root, forwarding):
+
+class Host:
+    """A host whose systemd runs the unit's commands and whose nft keeps tables as the kernel does.
+
+    As under SELinux, an `nft -f -` the unit feeds from StandardInputText=
+    reads nothing and exits 0; `nft -f <file>` loads the file it names.
+    """
+
+    def __init__(self, root, rules, forwarding):
         self.root = root
+        self.rules = rules
         self.forwarding = forwarding
         forwarding.write_text("0\n")
         self.state = ""
@@ -147,37 +164,57 @@ class Host:
         self.dropins = ""
         self.fail = ""
         self.loadable = {}
+        self.stale = False
 
     def expect(self, frozen):
         table = routing.model(frozen)
-        self.loadable[routing.ruleset(table)] = table
+        self.loadable[routing.rules_content(table)] = table
 
     def unit_lines(self, prefix):
         path = self.root / UNIT
         return [line[len(prefix):] for line in path.read_text().splitlines() if line.startswith(prefix)] if path.exists() else []
 
+    def load(self, command):
+        """One `nft -f`: True when it exited 0, having loaded the file it names or, from standard input, nothing."""
+        source = command[len(routing.NFT + " -f "):]
+        if source == "-":
+            return True
+        try:
+            content = open(source, "rb").read()
+        except OSError:
+            return False
+        if self.fail == "load" or content not in self.loadable:
+            return False
+        self.tables[TABLE] = listing(self.loadable[content])
+        return True
+
+    def steps(self, commands):
+        """Run the unit's commands in order, as systemd does, until one fails."""
+        for command in commands:
+            if command.startswith(routing.NFT + " -f "):
+                if not self.load(command):
+                    return False
+            elif command == "%s list table inet %s" % (routing.NFT, TABLE):
+                if TABLE not in self.tables:
+                    return False
+            elif command.endswith("net.ipv4.ip_forward=1"):
+                self.forwarding.write_text("1\n")
+        return True
+
     def start(self):
-        rules = "\n".join(self.unit_lines("StandardInputText=")) + "\n"
-        if self.fail == "load" or rules not in self.loadable:
+        if not self.steps(self.unit_lines("ExecStart=") + self.unit_lines("ExecStartPost=")):
             self.state = "failed"
             self.tables.pop(TABLE, None)
-            return 1, "", "Error: syntax error"
-        self.tables[TABLE] = listing(self.loadable[rules])
-        if any("net.ipv4.ip_forward=1" in line for line in self.unit_lines("ExecStartPost=")):
-            self.forwarding.write_text("1\n")
+            return 1, "", "Job for the unit failed"
         self.state = "active"
         return 0, "", ""
 
     def reload(self):
-        """A reload loads the unit's input in one transaction: a refused one leaves the table it would replace."""
+        """A reload loads the unit's file in one transaction: a refused one leaves the table it would replace."""
         if self.state != "active":
             return 1, "", "Job for the unit failed: not active"
-        rules = "\n".join(self.unit_lines("StandardInputText=")) + "\n"
-        if self.fail == "load" or rules not in self.loadable:
-            return 1, "", "Error: syntax error"
-        self.tables[TABLE] = listing(self.loadable[rules])
-        if any("net.ipv4.ip_forward=1" in line for line in self.unit_lines("ExecReload=")):
-            self.forwarding.write_text("1\n")
+        if not self.steps(self.unit_lines("ExecReload=")):
+            return 1, "", "Job for the unit failed"
         return 0, "", ""
 
     def stop(self):
@@ -195,8 +232,11 @@ class Host:
             return 1, "", "injected failure"
         if action == "show":
             present = (self.root / UNIT).exists()
-            return 0, "LoadState=%s\nActiveState=%s\nFragmentPath=%s\nDropInPaths=%s\n" % (
-                "loaded" if present else "not-found", self.state or "inactive", str(self.root / UNIT) if present else "", self.dropins), ""
+            return 0, "LoadState=%s\nActiveState=%s\nFragmentPath=%s\nDropInPaths=%s\nNeedDaemonReload=%s\n" % (
+                "loaded" if present else "not-found", self.state or "inactive", str(self.root / UNIT) if present else "", self.dropins,
+                "yes" if self.stale else "no"), ""
+        if action == "daemon-reload":
+            self.stale = False
         if action == "stop":
             self.stop()
         elif action == "restart":
@@ -223,10 +263,13 @@ class Host:
         return 1, "", "Error: No such file or directory"
 
     def manage(self, state, frozen=None):
-        return routing.manage(self.run, frozen or REQUEST, state, str(self.root), os.geteuid())
+        return routing.manage(self.run, frozen or REQUEST, state, str(self.root), os.geteuid(), str(self.rules))
 
     def observe(self, frozen=None):
-        return routing.observe(self.run, frozen or REQUEST, str(self.root), os.geteuid())
+        return routing.observe(self.run, frozen or REQUEST, str(self.root), os.geteuid(), str(self.rules))
+
+    def rules_file(self):
+        return self.rules / (TABLE + ".nft")
 
     def effects(self):
         return [call for call in self.calls if call[0] != routing.NFT and call[1] not in ("show",)
@@ -240,7 +283,8 @@ def host(tmp_path, monkeypatch):
     monkeypatch.setattr(routing, "executable", lambda path: True)
     systemd = tmp_path / "systemd"
     systemd.mkdir()
-    found = Host(systemd, forwarding)
+    (tmp_path / "etc").mkdir()
+    found = Host(systemd, tmp_path / "etc" / "bootwright" / "routing", forwarding)
     found.expect(REQUEST)
     return found
 
@@ -308,17 +352,30 @@ def test_the_unit_loads_the_table_before_the_network_and_deletes_it_when_stopped
     content = routing.unit_content(routing.model(REQUEST)).decode()
     lines = content.splitlines()
     assert lines[0] == "# Bootwright owned routing: " + UNIT
-    for line in ("Type=oneshot", "RemainAfterExit=yes", "StandardInput=data", "ExecStart=/usr/sbin/nft -f -",
-                 "ExecStartPost=/usr/sbin/sysctl -w net.ipv4.ip_forward=1", "ExecReload=/usr/sbin/nft -f -",
-                 "ExecReload=/usr/sbin/sysctl -w net.ipv4.ip_forward=1", "ExecStopPost=-/usr/sbin/nft delete table inet " + TABLE,
+    load = "/usr/sbin/nft -f /etc/bootwright/routing/%s.nft" % TABLE
+    listed = "/usr/sbin/nft list table inet " + TABLE
+    for line in ("Type=oneshot", "RemainAfterExit=yes", "ExecStart=" + load,
+                 "ExecStopPost=-/usr/sbin/nft delete table inet " + TABLE,
                  "Wants=network-pre.target", "Before=network-pre.target NetworkManager.service",
                  "WantedBy=multi-user.target"):
         assert line in lines, line
-    assert "\n".join(line[len("StandardInputText="):] for line in lines if line.startswith("StandardInputText=")) + "\n" == RULESET
+    assert [line for line in lines if line.startswith("ExecStartPost=")] == [
+        "ExecStartPost=" + listed, "ExecStartPost=/usr/sbin/sysctl -w net.ipv4.ip_forward=1"]
+    assert [line for line in lines if line.startswith("ExecReload=")] == [
+        "ExecReload=" + load, "ExecReload=" + listed, "ExecReload=/usr/sbin/sysctl -w net.ipv4.ip_forward=1"]
     without = routing.unit_content(routing.model(dict(copy.deepcopy(REQUEST), legs=[dict(leg, forward="none") for leg in REQUEST["legs"]],
                                                       routing=dict(REQUEST["routing"], forwarding=False, natPrefixes=[], routed=[])))).decode()
-    assert "ExecStartPost" not in without and "sysctl" not in without
-    assert [line for line in without.splitlines() if line.startswith("ExecReload=")] == ["ExecReload=/usr/sbin/nft -f -"]
+    assert "sysctl" not in without
+    assert [line for line in without.splitlines() if line.startswith("ExecReload=")] == ["ExecReload=" + load, "ExecReload=" + listed]
+
+
+def test_the_unit_reads_no_standard_input_and_its_ruleset_file_is_the_mark_then_the_ruleset():
+    """B1335: under SELinux nft may not read systemd's StandardInputData memfd, so it loaded nothing and exited 0."""
+    table = routing.model(REQUEST)
+    content = routing.unit_content(table).decode()
+    assert "StandardInput" not in content and " -f -" not in content
+    assert routing.rules_path(table) == "/etc/bootwright/routing/%s.nft" % TABLE
+    assert routing.rules_content(table).decode() == "# Bootwright owned routing: %s\n" % UNIT + RULESET
 
 
 def test_apply_replay_and_owned_removal(host):
@@ -336,6 +393,54 @@ def test_apply_replay_and_owned_removal(host):
     assert host.observe()[0] == held(table="", present=False, owned=False, enabled=False, state="", loaded=False)
     assert unrelated.read_text() == "unrelated"
     assert not (host.root / UNIT).exists()
+    assert not host.rules_file().exists() and not host.rules.exists() and host.rules.parent.is_dir()
+
+
+def test_the_ruleset_file_and_its_directories_are_owned_and_written_atomically(host):
+    host.manage("present")
+    path = host.rules_file()
+    assert path.read_bytes() == routing.rules_content(routing.model(REQUEST))
+    assert oct(path.stat().st_mode & 0o7777) == "0o644" and path.stat().st_nlink == 1
+    for directory in (host.rules, host.rules.parent):
+        assert directory.is_dir() and not directory.is_symlink() and oct(directory.stat().st_mode & 0o7777) == "0o755"
+    assert sorted(entry.name for entry in host.rules.iterdir()) == [TABLE + ".nft"]
+
+
+def test_a_host_holding_the_earlier_standard_input_unit_with_no_table_converges_by_reloading(host):
+    """B1335: an earlier unit can be enabled and active without a table or ruleset file."""
+    table = routing.model(REQUEST)
+    (host.root / UNIT).write_text(earlier_unit(table))
+    (host.root / UNIT).chmod(0o644)
+    (host.root / "multi-user.target.wants").mkdir()
+    (host.root / "multi-user.target.wants" / UNIT).symlink_to(host.root / UNIT)
+    assert host.start() == (0, "", "") and host.state == "active" and host.tables == {}
+    evidence, refusals = host.observe()
+    assert refusals == [] and evidence == held(table="", loaded=False, forwarding=True)
+    host.calls.clear()
+    assert host.manage("present")
+    systemctl = [call[1:] for call in host.calls if call[0] == routing.SYSTEMCTL and call[1] != "show"]
+    assert systemctl == [["daemon-reload"], ["reload", UNIT]]
+    assert host.observe() == (held(), [])
+    assert host.rules_file().read_bytes() == routing.rules_content(table)
+    assert not host.manage("present")
+
+
+def test_an_apply_cut_off_before_its_daemon_reload_repeats_it(host):
+    host.manage("present")
+    del host.tables[TABLE]
+    host.stale = True
+    host.calls.clear()
+    assert host.manage("present")
+    systemctl = [call[1:] for call in host.calls if call[0] == routing.SYSTEMCTL and call[1] != "show"]
+    assert systemctl == [["daemon-reload"], ["reload", UNIT]]
+    assert host.observe() == (held(), [])
+
+
+def test_a_unit_whose_load_leaves_no_table_fails_rather_than_succeeding(host):
+    host.manage("present")
+    host.stop()
+    host.load = lambda command: True
+    assert host.start()[0] == 1 and host.state == "failed" and host.tables == {}
 
 
 @pytest.mark.parametrize("drift", ["deleted", "edited", "forwarding"])
@@ -354,14 +459,17 @@ def test_a_drifted_table_is_reloaded_in_place_and_never_stopped(host, drift):
     assert host.observe() == (held(), [])
 
 
-def test_a_changed_request_rewrites_the_unit_and_reloads_it_without_dropping_the_table(host):
+def test_a_changed_request_rewrites_the_ruleset_file_and_reloads_it_without_dropping_the_table(host):
     host.manage("present")
+    unit = (host.root / UNIT).read_bytes()
     narrowed = request(routed=[])
     host.expect(narrowed)
     host.calls.clear()
     assert host.manage("present", narrowed)
     systemctl = [call[1:] for call in host.calls if call[0] == routing.SYSTEMCTL and call[1] != "show"]
-    assert systemctl == [["daemon-reload"], ["reload", UNIT]]
+    assert systemctl == [["reload", UNIT]]
+    assert (host.root / UNIT).read_bytes() == unit
+    assert host.rules_file().read_bytes() == routing.rules_content(routing.model(narrowed))
     assert host.observe(narrowed) == (held(), [])
     assert not host.manage("present", narrowed)
 
@@ -430,6 +538,77 @@ def test_a_foreign_unit_refuses_before_mutation(host, collision):
         with pytest.raises(ValueError, match="not this provider's"):
             host.manage(state)
     assert host.effects() == [] and host.tables == {}
+
+
+@pytest.mark.parametrize("collision", ["content", "mark", "symlink", "mode", "hardlink", "directory"])
+def test_a_foreign_file_at_the_ruleset_path_refuses_before_any_effect(host, collision):
+    host.rules.mkdir(parents=True)
+    path = host.rules_file()
+    owned = routing.rules_content(routing.model(REQUEST))
+    if collision == "content":
+        path.write_text("flush ruleset\n")
+    elif collision == "mark":
+        path.write_bytes(owned.replace(UNIT.encode(), b"other.service", 1))
+    elif collision == "symlink":
+        (host.rules / "elsewhere").write_bytes(owned)
+        path.symlink_to(host.rules / "elsewhere")
+    elif collision == "mode":
+        path.write_bytes(owned)
+        path.chmod(0o666)
+    elif collision == "hardlink":
+        path.write_bytes(owned)
+        os.link(path, host.rules / "second")
+    else:
+        path.mkdir()
+    if collision not in ("mode", "symlink", "directory"):
+        path.chmod(0o644)
+    before = os.lstat(path)
+    for state in ("present", "absent"):
+        with pytest.raises(ValueError, match="ruleset file .* is not this provider's"):
+            host.manage(state)
+    assert host.effects() == [] and host.tables == {} and not (host.root / UNIT).exists()
+    assert os.lstat(path).st_ino == before.st_ino
+    evidence = host.observe()[0]
+    assert evidence["present"] and not evidence["owned"]
+
+
+def test_an_unsafe_ruleset_directory_refuses_unread(host):
+    host.rules.mkdir(parents=True)
+    host.rules.chmod(0o777)
+    with pytest.raises(ValueError, match="unsafe routing ruleset directory"):
+        host.manage("present")
+    assert host.effects() == [] and not (host.root / UNIT).exists()
+    evidence, refusals = host.observe()
+    assert evidence["answered"] is False and refusals
+
+
+def test_an_owned_ruleset_file_left_without_its_unit_is_removed_or_adopted(host):
+    host.manage("present")
+    host.manage("absent")
+    host.rules.mkdir()
+    host.rules_file().write_bytes(routing.rules_content(routing.model(REQUEST)))
+    host.rules_file().chmod(0o644)
+    evidence = host.observe()[0]
+    assert evidence["present"] and evidence["owned"] and not evidence["enabled"]
+    assert host.manage("absent")
+    assert not host.rules_file().exists() and host.observe()[0]["present"] is False
+    host.rules.mkdir()
+    host.rules_file().write_bytes(routing.rules_content(routing.model(REQUEST)))
+    host.rules_file().chmod(0o644)
+    assert host.manage("present")
+    assert host.observe() == (held(), [])
+
+
+def test_an_edited_ruleset_file_is_rewritten_and_reloaded_without_rewriting_the_unit(host):
+    host.manage("present")
+    unit = (host.root / UNIT).read_bytes()
+    host.rules_file().write_bytes(routing.rules_content(routing.model(REQUEST)) + b"flush ruleset\n")
+    host.calls.clear()
+    assert host.manage("present")
+    systemctl = [call[1:] for call in host.calls if call[0] == routing.SYSTEMCTL and call[1] != "show"]
+    assert systemctl == [["reload", UNIT]]
+    assert (host.root / UNIT).read_bytes() == unit
+    assert host.observe() == (held(), [])
 
 
 def test_an_unanswered_nft_read_proves_nothing(host):

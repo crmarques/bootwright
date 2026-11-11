@@ -89,7 +89,7 @@ HOST = {
     "provisioned": True,
     "services": ["virtnetworkd.socket", "virtqemud.socket", "virtstoraged.socket"],
     "uri": "qemu:///system",
-    "version": "substrate-host-libvirt-v1",
+    "version": "substrate-host-libvirt-v2",
 }
 
 MACHINE = {

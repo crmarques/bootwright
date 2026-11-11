@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # GNU General Public License v3.0+ (see https://www.gnu.org/licenses/gpl-3.0.txt)
-"""Manage only one frozen provider's owned nftables routing table and the unit that holds it."""
+"""Manage only one frozen provider's owned nftables routing table, its ruleset file and the unit that holds it."""
 
 from __future__ import annotations
 
@@ -9,9 +9,10 @@ module: libvirt_routing
 short_description: Hold or remove an owned nftables routing table
 version_added: "0.1.0"
 description:
-  - Installs or removes the exact frozen provider's routing unit, whose ruleset routes the declared pairs of VLAN legs,
-    translates the NAT legs to the uplink and refuses every other path into or out of a leg.
-  - Refuses a foreign unit, a table of its name the owned running unit does not hold, and an unanswered read.
+  - Installs or removes the exact frozen provider's routing unit and the owned ruleset file it loads, which routes the
+    declared pairs of VLAN legs, translates the NAT legs to the uplink and refuses every other path into or out of a leg.
+  - Refuses a foreign unit or ruleset file, a table of its name the owned running unit does not hold, and an unanswered
+    read.
 options:
   request:
     description: The frozen provider host request.
@@ -36,7 +37,7 @@ EXAMPLES = r"""
 
 RETURN = r"""
 changed:
-  description: Whether the owned unit or its table changed.
+  description: Whether the owned unit, its ruleset file or its table changed.
   returned: always
   type: bool
 """

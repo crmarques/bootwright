@@ -2,18 +2,25 @@
 
 Each provider with a tagged managed Network holds one table,
 `inet bootwright-<context>-<provider>-routing`, in one owned oneshot unit of
-that name. The ruleset travels inside the unit as standard input, so `nft -f -`
-replaces the whole table in one transaction at boot and at apply, before
-NetworkManager brings any leg up, and stopping the unit deletes it. Firewalld's
+that name. The unit loads the ruleset with `nft -f` from an owned file under
+/etc/bootwright/routing, so nft replaces the whole table in one transaction at
+boot and at apply, before NetworkManager brings any leg up, and stopping the
+unit deletes it. The ruleset is a file under /etc rather than the unit's
+standard input because SELinux confines nft to iptables_t, which may not read
+the memfd systemd passes as StandardInputData, while a file created under /etc
+takes etc_t, which it may read. Firewalld's
 own configuration is never changed: the table is an extra set of base chains
 whose drop and reject verdicts are final whatever another table accepts.
 """
 
 from __future__ import annotations
 
+import errno
 import ipaddress
 import json
 import os
+import stat
+import tempfile
 
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_firewall_ready import vendor_dropins
 from ansible_collections.bootwright.core.plugins.module_utils.libvirt_nm_connections import DEVICE, identity, legs_of, trunks_of
@@ -24,6 +31,9 @@ NFT = "/usr/sbin/nft"
 SYSCTL = "/usr/sbin/sysctl"
 FORWARDING = "/proc/sys/net/ipv4/ip_forward"
 MARK = "# Bootwright owned routing: "
+RULES = "/etc/bootwright/routing"
+MAX_RULES = 1 << 16
+WRITE_ATTEMPTS = 3
 TABLE_MARK = "Bootwright owned routing: "
 MAX_OUTPUT = 1 << 20
 MAX_DEVICES = 64
@@ -204,33 +214,140 @@ def ruleset(table):
     return "\n".join(lines) + "\n"
 
 
-def unit_content(table):
-    """The owned unit: the ruleset as its standard input, loaded before the network comes up.
+def rules_path(table, rules=RULES):
+    return os.path.join(rules, table["table"] + ".nft")
 
-    systemd resolves C escapes and specifiers in StandardInputText=, and the
-    ruleset carries neither a percent sign nor a backslash, so each line
-    reaches nft as written. Every process of the unit reads that input, so a
-    reload loads the same ruleset in place: nft applies it in one
-    transaction, and one it refuses leaves the table it replaced loaded,
-    while a stop deletes the table.
+
+def rules_content(table):
+    """The owned ruleset file: the mark line naming the unit, then the ruleset nft loads."""
+    return (MARK + table["unit"] + "\n" + ruleset(table)).encode()
+
+
+def unit_content(table, rules=RULES):
+    """The owned unit: it loads the ruleset file before the network comes up and fails when no table results.
+
+    The start and every reload load the same file in place: nft applies it in
+    one transaction, and one it refuses leaves the table it replaced loaded,
+    while a stop deletes the table. The listing after each load fails the
+    start or reload when nft exited 0 having loaded nothing.
     """
-    rules = ruleset(table)
-    if "%" in rules or "\\" in rules:
-        raise ValueError("the ruleset carries a character systemd would rewrite")
-    name = table["table"]
+    name, path = table["table"], rules_path(table, rules)
     lines = [MARK + table["unit"], "[Unit]", "Description=Bootwright routes and isolates the VLAN legs on owned trunks",
              "Before=network-pre.target NetworkManager.service", "Wants=network-pre.target", "",
-             "[Service]", "Type=oneshot", "RemainAfterExit=yes", "StandardInput=data"]
-    lines += ["StandardInputText=" + line for line in rules.splitlines()]
-    forwarding_line = "%s -w net.ipv4.ip_forward=1" % SYSCTL
-    lines.append("ExecStart=%s -f -" % NFT)
+             "[Service]", "Type=oneshot", "RemainAfterExit=yes"]
+    load, listed, forwarding_line = "%s -f %s" % (NFT, path), "%s list table inet %s" % (NFT, name), "%s -w net.ipv4.ip_forward=1" % SYSCTL
+    lines += ["ExecStart=" + load, "ExecStartPost=" + listed]
     if table["forwarding"]:
         lines.append("ExecStartPost=" + forwarding_line)
-    lines.append("ExecReload=%s -f -" % NFT)
+    lines += ["ExecReload=" + load, "ExecReload=" + listed]
     if table["forwarding"]:
         lines.append("ExecReload=" + forwarding_line)
     lines += ["ExecStopPost=-%s delete table inet %s" % (NFT, name), "", "[Install]", "WantedBy=multi-user.target", ""]
     return "\n".join(lines).encode()
+
+
+def proved_directory(path, owner):
+    """Whether one ruleset directory exists; one that is a link, not root's or writable by another user is refused."""
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        return False
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != owner or stat.S_IMODE(info.st_mode) & 0o022:
+        raise ValueError("unsafe routing ruleset directory %s" % path)
+    return True
+
+
+def rules_file(table, rules=RULES, owner=0):
+    """What lies at the ruleset path: present, owned by its mark, and holding exactly the frozen ruleset.
+
+    The owned file is a regular root file of mode 0644 with one link whose
+    first line is the mark naming the unit; a link or anything else at the
+    path is present and never owned.
+    """
+    if not all(proved_directory(path, owner) for path in (os.path.dirname(rules), rules)):
+        return False, True, False
+    expected = rules_content(table)
+    try:
+        fd = os.open(rules_path(table, rules), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    except FileNotFoundError:
+        return False, True, False
+    except OSError:
+        return True, False, False
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            return True, False, False
+        content = os.read(fd, max(MAX_RULES, len(expected) + 1))
+    finally:
+        os.close(fd)
+    owned = (info.st_uid == owner and info.st_nlink == 1 and stat.S_IMODE(info.st_mode) == 0o644
+             and content.startswith((MARK + table["unit"] + "\n").encode()))
+    return True, owned, owned and content == expected
+
+
+def ensure_directory(path, owner):
+    """Create one missing ruleset directory root:root 0755, then prove it."""
+    if not proved_directory(path, owner):
+        try:
+            os.mkdir(path, 0o755)
+        except FileExistsError:
+            pass
+        else:
+            os.chmod(path, 0o755)
+        if not proved_directory(path, owner):
+            raise FileNotFoundError(errno.ENOENT, "a routing ruleset directory vanished", path)
+
+
+def write_rules(table, rules, owner):
+    """Publish the ruleset file atomically through a hidden stage in its own directory.
+
+    A file created under /etc takes etc_t, the directory's default type, which
+    the iptables_t domain nft runs in may read; os.replace keeps the stage's
+    type, so nothing is relabeled. A removal on another provider may take back
+    the shared, empty ruleset directory between its creation and the stage,
+    so the write starts again a bounded number of times.
+    """
+    for attempt in range(WRITE_ATTEMPTS):
+        try:
+            for path in (os.path.dirname(rules), rules):
+                ensure_directory(path, owner)
+            fd, stage = tempfile.mkstemp(prefix=".bootwright-routing-", dir=rules)
+        except FileNotFoundError:
+            if attempt == WRITE_ATTEMPTS - 1:
+                raise
+            continue
+        try:
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(rules_content(table))
+                stream.flush()
+                os.fchmod(stream.fileno(), 0o644)
+                os.fsync(stream.fileno())
+            os.replace(stage, rules_path(table, rules))
+            directory = os.open(rules, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        finally:
+            if os.path.lexists(stage):
+                os.unlink(stage)
+        return
+
+
+def remove_rules(table, rules, owner):
+    """Remove the owned ruleset file, then the ruleset directory while it is empty, never its parent."""
+    removed = False
+    path = rules_path(table, rules)
+    if os.path.lexists(path):
+        os.unlink(path)
+        removed = True
+    if proved_directory(rules, owner):
+        try:
+            os.rmdir(rules)
+        except OSError as error:
+            if error.errno not in (errno.ENOTEMPTY, errno.EEXIST, errno.ENOENT):
+                raise
+    return removed
 
 
 def nft_json(runner, arguments):
@@ -338,9 +455,13 @@ def blank(name="", table=""):
 
 
 def unit_state(runner, name, root):
-    """The unit's active state and whether systemd loads only its own file, or None when systemd did not answer."""
+    """The unit's active state, whether systemd loads only its own file and whether it loaded it, or None when systemd did not answer.
+
+    A loaded unit whose file changed since systemd read it (NeedDaemonReload)
+    counts as not loaded, so an apply cut off before its daemon-reload repeats it.
+    """
     code, output, _error = command(runner, [SYSTEMCTL, "show", "--property=LoadState", "--property=ActiveState",
-                                            "--property=FragmentPath", "--property=DropInPaths", name])
+                                            "--property=FragmentPath", "--property=DropInPaths", "--property=NeedDaemonReload", name])
     values = dict(line.split("=", 1) for line in output.splitlines() if "=" in line)
     if code not in (0, 4) or values.get("LoadState") not in ("loaded", "not-found"):
         return None
@@ -348,31 +469,39 @@ def unit_state(runner, name, root):
     if values.get("LoadState") == "not-found" and state == "inactive":
         state = ""
     own = vendor_dropins(values.get("DropInPaths")) and values.get("FragmentPath", "") in ("", os.path.join(root, name))
-    return state, own, values.get("LoadState") == "loaded"
+    return state, own, values.get("LoadState") == "loaded", values.get("NeedDaemonReload") == "yes"
 
 
-def inspect(runner, request, root=SYSTEMD, owner=0):
-    """The frozen table's unit, enablement and live table, read-only, or a blank answer when there is none."""
+def inspect(runner, request, root=SYSTEMD, owner=0, rules=RULES):
+    """The frozen table's unit, ruleset file, enablement and live table, read-only, or a blank answer when there is none."""
     table = model(request)
     if table is None:
         return blank(), None
-    return inspect_table(runner, table, root, owner), table
+    return inspect_table(runner, table, root, owner, rules), table
 
 
-def inspect_table(runner, table, root=SYSTEMD, owner=0):
-    """The unit, its enablement and the live table: `held` is whether the host lists the table at all."""
+def inspect_table(runner, table, root=SYSTEMD, owner=0, rules=RULES):
+    """The unit, its ruleset file, its enablement and the live table: `held` is whether the host lists the table at all.
+
+    The ruleset file counts as part of the unit: present when either is, owned
+    only while every one present carries this provider's mark, and current
+    only while both hold exactly the frozen content.
+    """
     result = blank(table["unit"])
     try:
-        present, owned, current, enabled = unit_files(table["unit"], MARK, unit_content(table), root, owner)
+        present, owned, current, enabled = unit_files(table["unit"], MARK, unit_content(table, rules), root, owner)
     except OSError:
         # A symbolic link or another file that cannot be opened as a regular one is never the owned unit.
         present, owned, current, enabled = True, False, False, os.path.lexists(os.path.join(root, WANTS, table["unit"]))
-    result.update(present=present or enabled, owned=owned and (present or enabled), enabled=enabled, current=current, held=False)
+    filed, file_owned, file_current = rules_file(table, rules, owner)
+    held_any = present or enabled or filed
+    result.update(present=held_any, owned=owned and file_owned and held_any, enabled=enabled, current=current and file_current,
+                  unit_current=current, rules_current=file_current, filed=filed, held=False)
     shown = unit_state(runner, table["unit"], root)
     if shown is None:
         result["answered"] = False
         return result
-    result["state"] = shown[0]
+    result["state"], result["stale"] = shown[0], shown[3]
     if not shown[1] or (not present and shown[2]):
         result.update(present=True, owned=False)
     listed = table_listed(runner, table["table"])
@@ -404,10 +533,10 @@ def evidence(result):
     return {key: result[key] for key in ("name", "table", "answered", "present", "owned", "enabled", "state", "loaded", "forwarding")}
 
 
-def observe(runner, request, root=SYSTEMD, owner=0):
+def observe(runner, request, root=SYSTEMD, owner=0, rules=RULES):
     """The routing evidence and why an apply or removal would refuse."""
     try:
-        result, table = inspect(runner, request, root, owner)
+        result, table = inspect(runner, request, root, owner, rules)
     except (ValueError, KeyError, TypeError, OSError):
         unit = (request.get("routing") or {}).get("unit") if isinstance(request.get("routing"), dict) else ""
         return dict(blank(unit if isinstance(unit, str) else ""), answered=False), ["the frozen routing table could not be read"]
@@ -427,7 +556,8 @@ def refusals(result, table):
         found.append("nftables table inet %s exists while its owned unit %s does not run, so nothing proves it this provider's; "
                      "remove it with nft delete table inet %s and repeat" % (table["table"], table["unit"], table["table"]))
     elif result["present"] and not result["owned"]:
-        found.append("routing unit %s is not this provider's, or carries a drop-in or another enablement; remove it and repeat" % table["unit"])
+        found.append("routing unit %s or its ruleset file under %s is not this provider's, or the unit carries a drop-in or another "
+                     "enablement; remove it and repeat" % (table["unit"], RULES))
     return found
 
 
@@ -437,25 +567,29 @@ def require(runner, arguments):
         raise ValueError("a routing table operation failed; check systemctl status of the unit and repeat")
 
 
-def settle(runner, table, root, owner):
-    """Install, enable and start the unit, or reload it while its file or live table drifted.
+def settle(runner, table, root, owner, rules):
+    """Install, enable and start the unit, or reload it while its files or live table drifted.
 
-    A reload replaces the table in place and never stops the unit, whose stop
-    deletes the table, so the legs are never left without one; only a unit
-    that does not run is started.
+    The ruleset file is written before the unit that loads it. A reload
+    replaces the table in place and never stops the unit, whose stop deletes
+    the table, so the legs are never left without one; only a unit that does
+    not run is started.
     """
     name, path = table["unit"], os.path.join(root, table["unit"])
-    before = inspect_table(runner, table, root, owner)
+    before = inspect_table(runner, table, root, owner, rules)
     changed = False
-    if not before["current"]:
-        write_unit(root, path, unit_content(table))
+    if not before["rules_current"]:
+        write_rules(table, rules, owner)
+        changed = True
+    if not before["unit_current"]:
+        write_unit(root, path, unit_content(table, rules))
         changed = True
     if not before["enabled"]:
         wants = os.path.join(root, WANTS)
         os.makedirs(wants, mode=0o755, exist_ok=True)
         os.symlink(path, os.path.join(wants, name))
         changed = True
-    if not before["current"] or not before["enabled"]:
+    if not before["unit_current"] or not before["enabled"] or before.get("stale"):
         require(runner, [SYSTEMCTL, "daemon-reload"])
     if before["state"] != "active":
         require(runner, [SYSTEMCTL, "start", name])
@@ -463,17 +597,17 @@ def settle(runner, table, root, owner):
     elif not before["current"] or not before["loaded"] or (table["forwarding"] and not before["forwarding"]):
         require(runner, [SYSTEMCTL, "reload", name])
         changed = True
-    after = inspect_table(runner, table, root, owner)
+    after = inspect_table(runner, table, root, owner, rules)
     if not (after["answered"] and after["owned"] and after["enabled"] and after["state"] == "active" and after["loaded"]
             and (after["forwarding"] or not table["forwarding"])):
         raise ValueError("the host does not hold the frozen routing table %s under its owned unit" % table["table"])
     return changed
 
 
-def retire(runner, table, root, owner):
-    """Stop and remove the unit, delete the table it held, and prove both gone."""
+def retire(runner, table, root, owner, rules):
+    """Stop and remove the unit, delete the table it held, then remove its ruleset file, and prove all gone."""
     name, path = table["unit"], os.path.join(root, table["unit"])
-    before = inspect_table(runner, table, root, owner)
+    before = inspect_table(runner, table, root, owner, rules)
     changed = False
     if before["state"] not in ("", "inactive"):
         require(runner, [SYSTEMCTL, "stop", name])
@@ -488,21 +622,22 @@ def retire(runner, table, root, owner):
         command(runner, [SYSTEMCTL, "reset-failed", name])
     if before["state"] == "active" and table_listed(runner, table["table"]):
         require(runner, [NFT, "delete", "table", "inet", table["table"]])
-    after = inspect_table(runner, table, root, owner)
-    if not after["answered"] or after["present"] or after["enabled"] or after["state"] or after["held"]:
-        raise ValueError("routing unit %s or table inet %s remains after removal" % (name, table["table"]))
+    changed = remove_rules(table, rules, owner) or changed
+    after = inspect_table(runner, table, root, owner, rules)
+    if not after["answered"] or after["present"] or after["filed"] or after["enabled"] or after["state"] or after["held"]:
+        raise ValueError("routing unit %s, its ruleset file or table inet %s remains after removal" % (name, table["table"]))
     return changed
 
 
-def manage(runner, request, state, root=SYSTEMD, owner=0):
-    """Hold the frozen table under its owned unit, or remove both, refusing what is not this provider's."""
+def manage(runner, request, state, root=SYSTEMD, owner=0, rules=RULES):
+    """Hold the frozen table under its owned unit and ruleset file, or remove them, refusing what is not this provider's."""
     table = model(request)
     if table is None:
         return False
-    result = inspect_table(runner, table, root, owner)
+    result = inspect_table(runner, table, root, owner, rules)
     found = refusals(result, table)
     if found:
         raise ValueError("the routing table refuses before any change: %s" % "; ".join(found))
     if state == "absent":
-        return retire(runner, table, root, owner)
-    return settle(runner, table, root, owner)
+        return retire(runner, table, root, owner, rules)
+    return settle(runner, table, root, owner, rules)

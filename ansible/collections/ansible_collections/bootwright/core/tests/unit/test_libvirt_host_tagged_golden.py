@@ -5,10 +5,11 @@ goldens/libvirt_host_tagged.json is written by Go
 internal/substrate/libvirt): its request is the one the planner freezes for a
 provider with two VLAN legs on one trunk and its evidence the completed
 evidence Go's ValidateHostPresence accepts. A field either side renames, adds
-or drops alone fails here or there. goldens/libvirt_routing_unit.txt is the
-routing unit this collection renders for that request; Go holds it byte for
-byte to the unit and ruleset specs/substrates.md "Routing table" states
-(TestTheRoutingUnitTheCollectionRendersMatchesSpec). Rewrite it after an
+or drops alone fails here or there. goldens/libvirt_routing_unit.txt and
+goldens/libvirt_routing_ruleset.txt are the routing unit and the ruleset file
+this collection renders for that request; Go holds both byte for byte to the
+unit and ruleset file specs/substrates.md "Routing table" states
+(TestTheRoutingUnitTheCollectionRendersMatchesSpec). Rewrite them after an
 intended change with BOOTWRIGHT_UPDATE_GOLDENS=1.
 """
 
@@ -27,6 +28,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import libvirt_vla
 
 GOLDEN = pathlib.Path(__file__).resolve().parent / "goldens" / "libvirt_host_tagged.json"
 ROUTING_UNIT = GOLDEN.parent / "libvirt_routing_unit.txt"
+ROUTING_RULESET = GOLDEN.parent / "libvirt_routing_ruleset.txt"
 UPDATE = os.environ.get("BOOTWRIGHT_UPDATE_GOLDENS") == "1"
 
 
@@ -63,7 +65,7 @@ def test_the_frozen_routing_table_is_accepted_and_rendered_as_the_unit_go_holds_
     table = libvirt_routing.model(request)
     assert table["unit"] == request["routing"]["unit"] and table["forwarding"] is request["routing"]["forwarding"]
     assert table["routed"] == [(pair["from"], pair["to"]) for pair in request["routing"]["routed"]]
-    content = libvirt_routing.unit_content(table)
-    if UPDATE:
-        ROUTING_UNIT.write_bytes(content)
-    assert ROUTING_UNIT.read_bytes() == content
+    for golden, content in ((ROUTING_UNIT, libvirt_routing.unit_content(table)), (ROUTING_RULESET, libvirt_routing.rules_content(table))):
+        if UPDATE:
+            golden.write_bytes(content)
+        assert golden.read_bytes() == content

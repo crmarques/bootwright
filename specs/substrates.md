@@ -686,11 +686,11 @@ Wants=network-pre.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-StandardInput=data
-StandardInputText=<one line per ruleset line, in order>
-ExecStart=/usr/sbin/nft -f -
+ExecStart=/usr/sbin/nft -f /etc/bootwright/routing/<table>.nft
+ExecStartPost=/usr/sbin/nft list table inet <table>
 ExecStartPost=/usr/sbin/sysctl -w net.ipv4.ip_forward=1
-ExecReload=/usr/sbin/nft -f -
+ExecReload=/usr/sbin/nft -f /etc/bootwright/routing/<table>.nft
+ExecReload=/usr/sbin/nft list table inet <table>
 ExecReload=/usr/sbin/sysctl -w net.ipv4.ip_forward=1
 ExecStopPost=-/usr/sbin/nft delete table inet <table>
 
@@ -698,14 +698,35 @@ ExecStopPost=-/usr/sbin/nft delete table inet <table>
 WantedBy=multi-user.target
 ```
 
-The `ExecStartPost=` line and the second `ExecReload=` line are present only
-with `forwarding`. Every process of the unit reads the ruleset as its standard
-input, so a reload loads it in place. Forwarding is the
+The `sysctl` lines are present only with `forwarding`. The start and every
+reload load the same ruleset file, so a reload replaces the table in place,
+and the listing after each load fails the start or reload when `nft` exited 0
+having loaded no table. Forwarding is the
 one host setting outside its NetworkManager connections and table that
-Bootwright sets, as libvirt's network driver does, and it is never reset. The
-ruleset replaces the table atomically, each line one `StandardInputText=`:
+Bootwright sets, as libvirt's network driver does, and it is never reset.
+
+#### Routing ruleset file
+
+The ruleset is the file `/etc/bootwright/routing/<table>.nft`, never the
+unit's standard input: SELinux runs `nft` in the `iptables_t` domain, which
+may not read the memfd systemd passes as `StandardInputData`, so `nft -f -`
+reads nothing and exits 0
+([lesson](../.agents/knowledge/selinux-nft-standard-input.md)), whereas a file
+under `/etc` takes `etc_t`, as Fedora's own `/etc/sysconfig/nftables.conf`
+does, which that domain reads. The file is created through a hidden stage in
+its own directory and renamed into place, so it takes the directory's default
+type when created and Bootwright never relabels anything. It is a regular
+root file of mode 0644 with one link whose first line is the mark; anything
+else at the path is foreign and refuses apply and destroy before any effect.
+`/etc/bootwright` and `/etc/bootwright/routing` are root's directories of
+mode 0755, created when absent, and must be real directories owned by root
+and writable by no one else, or the observation refuses unread. The ruleset
+file counts as part of the unit: the unit is present while either is, owned
+while each present one is, and current only while both hold exactly the
+frozen content. The file replaces the table atomically and is exactly:
 
 ```text
+# Bootwright owned routing: <unit>
 table inet <table>
 delete table inet <table>
 table inet <table> {
@@ -756,24 +777,36 @@ carry guest traffic, and it neither loads nor configures that module; where it
 does pass them, a frame bridged between two ports of one trunk meets these
 chains with the trunk as its interfaces, which no in-tree test proves.
 
+#### Routing apply, removal and observation
+
 Before any effect, on apply and on destroy, a table of the name while the unit
 is not owned and running, and an `nft` read that does not answer, refuse
-`lifecycle.state`; `/usr/sbin/nft` must be present. An apply rewrites the unit
-when its content differs and reloads systemd, starts the unit while it does
-not run, and otherwise reloads it while its content differed, its loaded
-table differs or, with `forwarding`, `net.ipv4.ip_forward` is not 1; it never
-restarts or stops it, because only a stop deletes the table. `nft -f -`
-applies the ruleset in one transaction, so a ruleset it refuses on a reload
-leaves the table it would replace loaded and the unit active, and the apply
-refuses; one it refuses on a start leaves no table and the unit failed
+`lifecycle.state`; `/usr/sbin/nft` must be present. An apply writes the
+ruleset file when its content differs, then rewrites the unit when its content
+differs and reloads systemd, as it also does while systemd reports the unit
+needs a daemon reload, starts the unit while it does not run, and
+otherwise reloads it while either file differed, its loaded table differs or,
+with `forwarding`, `net.ipv4.ip_forward` is not 1; it never restarts or stops
+it, because only a stop deletes the table. An earlier build's unit that fed
+the ruleset as standard input, active with no table, is owned by its mark and
+converges this way by a reload
+(`test_a_host_holding_the_earlier_standard_input_unit_with_no_table_converges_by_reloading`).
+`nft -f` applies the ruleset in one transaction, so a ruleset it refuses on a
+reload leaves the table it would replace loaded and the unit active, and the
+apply refuses; one it refuses on a start leaves no table and the unit failed
 (`test_a_failed_reload_keeps_the_table_it_would_replace_and_a_replay_converges`).
+A removal stops, disables and removes the unit, whose stop deletes the table,
+then removes the ruleset file and `/etc/bootwright/routing` while it is empty;
+it never removes `/etc/bootwright`, which a managed operating system's records
+share and whose creator nothing proves.
 Not yet met: a unit that fails at boot leaves no table while NetworkManager
 still brings the legs up, which then reach whatever firewalld's trusted zone
 and libvirt's rules admit; tracked as
 [B1304](milestones/backlog.md#b1304). The observation reports `routing` `{name, table,
 answered, present, owned, enabled, state, loaded, forwarding}`: the unit, the
 table's name when `nft` lists one of it, whether systemd and `nft` answered,
-the unit's ownership, enablement and state, whether the live table carries
+the presence and ownership of the unit with its ruleset file, the unit's
+enablement and state, whether the live table carries
 exactly the frozen comment, chains, hooks, priorities, policies, set elements
 and each chain's rule count, and whether `net.ipv4.ip_forward` is 1. Not yet
 met: `loaded` counts each chain's rules without comparing their expressions,
@@ -782,7 +815,8 @@ never repaired; tracked as [B1302](milestones/backlog.md#b1302). Presence
 requires the unit owned, enabled and active, the table loaded and, with
 `forwarding`, forwarding on, in the collection's postcondition as in Go's
 judgment, or nothing reported without `routing`; removal
-requires an answered observation with unit, enablement and table gone; a
+requires an answered observation with unit, ruleset file, enablement and table
+gone; a
 removal took nothing back while the unit is owned and enabled; and a table or
 unit of the name without this provider's ownership is foreign
 (`TestTheRoutingTableIsProvedOwnedLoadedAndForwarding`).

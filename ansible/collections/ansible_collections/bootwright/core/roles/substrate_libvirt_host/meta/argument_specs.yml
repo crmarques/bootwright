@@ -59,7 +59,7 @@ argument_specs:
             type: str
             required: true
             choices:
-              - substrate-host-libvirt-v1
+              - substrate-host-libvirt-v2
           vlanRefusalUnit:
             type: str
             required: false

@@ -13588,8 +13588,9 @@ public, so a vendor-only network must allow them, which
 
 ### X395 — Tagged managed Networks on an owned trunk, routed through an owned table
 
-[B1281](m1.md#b1281), [B1282](m1.md#b1282), [B1283](m1.md#b1283) and
-[B1295](m1.md#b1295) are implemented in-tree (2026-11-10) and stay on the M1
+[B1281](m1.md#b1281), [B1282](m1.md#b1282), [B1283](m1.md#b1283),
+[B1295](m1.md#b1295) and [B1335](m1.md#b1335) are implemented in-tree
+(2026-11-10; B1335 2026-11-11) and stay on the M1
 page awaiting the owner's lab-6-nodes-ceph-network-matrix run, under the
 owner's approval and the session clauses of [D255](backlog.md#d255). B1281: a managed `Network` with `vlan` is
 a VLAN leg holding its `hostAddress` on a trunk bridge Bootwright creates, both
@@ -13607,10 +13608,16 @@ uplink and refuses every other path into a leg, the user network's included
 lab-6-nodes-ceph-network-matrix case declares every network as a `Network`.
 B1295: the host protocol publishes the VLAN refusal evidence the Go side has
 required since X332, without which no provider with a managed network proved
-its presence. The content digest of `substrate-host-libvirt-v1` moved through
-the effect pins `nm-trunk-legs-v1`, `routing-table-v1` and
-`nm-unfrozen-connections-v1`; a shared request and evidence golden and a
-byte-for-byte spec test hold the Go and Ansible sides to one contract.
+its presence. B1335: the routing unit loads its table with `nft -f` from an
+owned ruleset file under `/etc/bootwright/routing/`, because SELinux can
+prevent `nft` from reading the unit's `StandardInputText=`, and it lists the
+table after each load so a load that leaves nothing fails the unit
+([lesson](../../.agents/knowledge/selinux-nft-standard-input.md)). The content
+digest of `substrate-host-libvirt-v1` moved through the effect pins
+`nm-trunk-legs-v1`, `routing-table-v1`, `nm-unfrozen-connections-v1` and, with
+B1335, `routing-ruleset-file-v1`, whose new fixed place also moved the host
+request version; a shared request and evidence golden and a byte-for-byte spec
+test hold the Go and Ansible sides to one contract.
 
 **Commits:** the slice's commits from `docs(milestones): record D255` to this
 record. Two independent reviews ran. The first found a dropped leg left up
@@ -13621,7 +13628,9 @@ Python refused, a postcondition that ignored forwarding and runbook claims the
 table did not support; all were fixed with regression tests, and the second
 review confirmed the fixes. Gates: `make check`, `make race` and
 `scripts/check-commits main HEAD` passed on the integrated branch; no live run
-or push occurred. **Limitations:** NetworkManager and kernel behaviour are
+or push occurred. B1335 is its own commit, `fix(substrate)!: load the routing
+table from an owned file nft can read under SELinux`, whose gates its message
+lists. **Limitations:** NetworkManager and kernel behaviour are
 proved only against fakes and an unprivileged nft namespace, never a live
 host; the loaded-table proof compares rule counts, not rule contents
 ([B1302](backlog.md#b1302)); the trunk filters no VLAN per guest

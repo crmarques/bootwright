@@ -10,6 +10,7 @@ import (
 const (
 	routingSpec        = "../../../specs/substrates.md"
 	collectionRouting  = "../../../ansible/collections/ansible_collections/bootwright/core/tests/unit/goldens/libvirt_routing_unit.txt"
+	collectionRuleset  = "../../../ansible/collections/ansible_collections/bootwright/core/tests/unit/goldens/libvirt_routing_ruleset.txt"
 	routingSpecSection = "### Routing table\n"
 )
 
@@ -38,7 +39,7 @@ func routingSpecBlocks(t *testing.T) []string {
 		section = after
 	}
 	if len(blocks) != 2 {
-		t.Fatalf("the routing table section holds %d text blocks, want the unit file and the ruleset", len(blocks))
+		t.Fatalf("the routing table section holds %d text blocks, want the unit file and the ruleset file", len(blocks))
 	}
 	return blocks
 }
@@ -82,13 +83,7 @@ func specRuleset(template string, request HostRequest) string {
 
 func specUnit(blocks []string, request HostRequest) string {
 	routing := *request.Routing
-	var input strings.Builder
-	for _, line := range strings.SplitAfter(specRuleset(blocks[1], request), "\n") {
-		if line != "" {
-			input.WriteString("StandardInputText=" + line)
-		}
-	}
-	unit := strings.Replace(blocks[0], "StandardInputText=<one line per ruleset line, in order>\n", input.String(), 1)
+	unit := blocks[0]
 	if !routing.Forwarding {
 		unit = strings.Replace(unit, "ExecStartPost=/usr/sbin/sysctl -w net.ipv4.ip_forward=1\n", "", 1)
 		unit = strings.Replace(unit, "ExecReload=/usr/sbin/sysctl -w net.ipv4.ip_forward=1\n", "", 1)
@@ -101,15 +96,35 @@ func TestTheRoutingUnitTheCollectionRendersMatchesSpec(t *testing.T) {
 	if request.Routing == nil {
 		t.Fatal("the tagged request freezes no routing table")
 	}
-	want := specUnit(routingSpecBlocks(t), request)
-	if at := strings.Index(want, "<"); at >= 0 {
-		t.Fatalf("the spec's unit keeps a placeholder: %q", want[at:min(len(want), at+40)])
+	blocks := routingSpecBlocks(t)
+	for _, file := range []struct{ what, path, want string }{
+		{"unit", collectionRouting, specUnit(blocks, request)},
+		{"ruleset file", collectionRuleset, specRuleset(blocks[1], request)},
+	} {
+		if at := strings.Index(file.want, "<"); at >= 0 {
+			t.Fatalf("the spec's %s keeps a placeholder: %q", file.what, file.want[at:min(len(file.want), at+40)])
+		}
+		got, err := os.ReadFile(file.path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, []byte(file.want)) {
+			t.Errorf("%s differs from the %s %s states (-spec +collection):\n%s", file.path, file.what, routingSpec, lineDiff(file.want, string(got)))
+		}
 	}
-	got, err := os.ReadFile(collectionRouting)
-	if err != nil {
-		t.Fatal(err)
+}
+
+func TestTheRoutingUnitReadsNoStandardInputAndLoadsItsRulesetFile(t *testing.T) {
+	request := taggedHostRequest(t, taggedObjects()...)
+	unit := specUnit(routingSpecBlocks(t), request)
+	if strings.Contains(unit, "StandardInput") || strings.Contains(unit, " -f -") {
+		t.Errorf("the routing unit feeds nft its standard input, which SELinux keeps nft from reading (B1335):\n%s", unit)
 	}
-	if !bytes.Equal(got, []byte(want)) {
-		t.Errorf("%s differs from the unit %s states (-spec +collection):\n%s", collectionRouting, routingSpec, lineDiff(want, string(got)))
+	path := "/etc/bootwright/routing/" + RoutingTable(*request.Routing) + ".nft"
+	for _, line := range []string{"ExecStart=/usr/sbin/nft -f " + path, "ExecReload=/usr/sbin/nft -f " + path,
+		"ExecStartPost=/usr/sbin/nft list table inet " + RoutingTable(*request.Routing)} {
+		if !strings.Contains(unit, line+"\n") {
+			t.Errorf("the routing unit lacks %q", line)
+		}
 	}
 }

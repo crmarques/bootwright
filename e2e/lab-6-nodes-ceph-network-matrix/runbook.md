@@ -230,6 +230,7 @@ nmcli -t -f NAME,UUID,TYPE,DEVICE connection show --active | grep "^bootwright-$
 ip -br address show "$TRUNK.$PUBLIC_VLAN"; ip -br address show "$TRUNK.$ARBITER_VLAN"; ip -br link show "$TRUNK"
 for i in "$TRUNK" "$TRUNK.$PUBLIC_VLAN" "$TRUNK.$ARBITER_VLAN"; do sudo firewall-cmd --get-zone-of-interface="$i"; done
 sudo nft list table inet "bootwright-$CONTEXT-lab-libvirt-routing"
+head -1 /etc/bootwright/routing/"bootwright-$CONTEXT-lab-libvirt-routing.nft"
 ip -4 route show "$GUEST_CIDR" table all
 ip -4 route show "$CLUSTER_CIDR" table all
 systemctl list-units --all --no-legend 'bootwright-*'
@@ -244,7 +245,10 @@ connections, the trunk and the two legs, with 198.51.100.1/26 on `br-nm.110`,
 198.51.100.129/26 on `br-nm.150`, no address on `br-nm` and `trusted` for all
 three; (B1282) the owned table with its `input`, `forward` and `postrouting`
 chains, the two legs in `legs` and `nat_legs`, both directions of the leg pair
-in `routed`, and `virbr-user` among `managed`; and (B1215) `unreachable` routes
+in `routed`, and `virbr-user` among `managed`, loaded (B1335) from the ruleset
+file whose first line is `# Bootwright owned routing:
+bootwright-lab-6-nodes-ceph-network-matrix-lab-libvirt-routing.service`; and
+(B1215) `unreachable` routes
 for 203.0.113.64/26 and 203.0.113.0/26 held by Bootwright's refusal unit the
 listing shows, with the routing unit beside it: the host refuses both subnets
 it holds no address in instead of routing them out of its uplink. Require (B1221)
@@ -823,6 +827,7 @@ ip -4 route show "$CLUSTER_CIDR" table all                    # no output
 nmcli -t -f NAME connection show | grep "^bootwright-$CONTEXT-"   # no output
 ip -br link | grep -E "^$TRUNK(\.|\b)"                          # no output
 sudo nft list tables | grep "bootwright-$CONTEXT-"            # no output
+ls /etc/bootwright/routing/ | grep "bootwright-$CONTEXT-"     # no output
 systemctl list-units --all --no-legend 'bootwright-*'          # no unit of the refused subnet
 sudo ls /var/lib/bootwright-hosted/                            # no directory of this context
 ```
@@ -830,7 +835,8 @@ sudo ls /var/lib/bootwright-hosted/                            # no directory of
 Require no domain, disk, libvirt network or `virbr-user` of the context;
 (B1215) no unreachable route and no unit holding one; (B1281) no
 `bootwright-lab-6-nodes-ceph-network-matrix-*` connection and no `br-nm` link;
-(B1282) no routing table or unit; and (B1221) the context's hosted directory
+(B1282) no routing table or unit and (B1335) no ruleset file; and (B1221) the
+context's hosted directory
 removed. Then:
 
 ```sh
@@ -879,6 +885,7 @@ failure leaves the run an observation. Keep host-specific evidence private.
 | --- | --- |
 | [B1281](../../specs/milestones/m1.md#b1281) | The trunk and both legs as owned NetworkManager connections in `trusted`, every install shape over a leg segment, and destroy leaving no connection or link |
 | [B1282](../../specs/milestones/m1.md#b1282) | The owned table routing the two legs, masquerading both, refusing the user network into the legs, and its removal |
+| [B1335](../../specs/milestones/m1.md#b1335) | The routing table loaded from its owned ruleset file under SELinux enforcing, and the file removed with the unit |
 | [B1283](../../specs/milestones/m1.md#b1283) | This case declaring every network as a `Network`, with no trunk, table or route built by hand |
 | [B74](../../specs/milestones/m1.md#b74) | The bond (`client-01`), VLAN (`ceph-01`, `ceph-03`, `ceph-04`, `app-01`) and VLAN-over-bond (`ceph-02`) install shapes, MAC pins, the 802.3ad refusal, links and routes, reboot and the install Ctrl-C and replay |
 | [B326](../../specs/milestones/m1.md#b326) | Final network on six shapes, reboot, MTU drift and restoration, the convergence Ctrl-C and replay, and lab-network-variants' cut-off drill |
