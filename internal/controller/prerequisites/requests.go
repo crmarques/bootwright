@@ -25,7 +25,7 @@ const (
 func CheckIDs() []string {
 	return []string{
 		"host", "installed-host", "fips-mode", "host-packages", "python-runtime", "target-tools",
-		"container-runtime", "libvirt-client", "hypervisor", "installer-media", "nmstate", "iputils", "controller-binding", "state-root", "setup-state", "listener-firewall",
+		"container-runtime", "libvirt-client", "hypervisor", "installer-media", "image-mirror", "nmstate", "iputils", "controller-binding", "state-root", "setup-state", "listener-firewall",
 	}
 }
 

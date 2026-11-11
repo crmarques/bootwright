@@ -25,10 +25,16 @@ type ReleaseFill struct {
 	runner   Runner
 	releases Releases
 	auth     ReleaseAuth
+	hostKeys lifecycle.InstalledHostKey
 }
 
 func NewReleases(runner Runner, releases Releases, auth ReleaseAuth) ReleaseFill {
 	return ReleaseFill{runner: runner, releases: releases, auth: auth}
+}
+
+func (c ReleaseFill) WithInstalledHostKeys(hostKeys lifecycle.InstalledHostKey) ReleaseFill {
+	c.hostKeys = hostKeys
+	return c
 }
 
 func (c ReleaseFill) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
@@ -51,7 +57,7 @@ func (c ReleaseFill) Plan(ctx context.Context, input lifecycle.PlanInput) (lifec
 		}
 		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{
 			ID: ReleaseBlockID(request.Identity.Cluster), Description: releaseDescription(input.Verb, request), Stage: reconciliation.StageInfrastructureServices,
-			Requires:  []reconciliation.ObjectRef{{Kind: ImagesKind, Object: request.Identity.Registry, Family: managedservice.Family}},
+			Requires:  placedRequires(request.Identity.Registry, request.Placement),
 			Exclusive: []string{"registry-push:" + request.Identity.Registry}, Impacts: releaseImpacts(input.Verb, request), Consumes: []string{},
 			Kind: ReleaseKind, Object: request.Identity.Cluster, Family: Family, Implementation: ReleaseImplementation, ContentDigest: ReleaseContentDigest(), Request: canonical,
 		})
@@ -78,7 +84,7 @@ func (c ReleaseFill) Requests(catalog api.Catalog, controllerMachine, contextNam
 	if !found {
 		return nil, refusal("api.reference", "the image mirror's placement Machine is not in the selected graph", "declare it or correct machineRef on "+registry.Identity())
 	}
-	placement, err := machineref.PlacementFor(host, controllerMachine)
+	placement, err := machineref.ServicePlacementFor(host, controllerMachine)
 	if err != nil {
 		return nil, err
 	}
@@ -169,8 +175,12 @@ func (c ReleaseFill) run(ctx context.Context, execution lifecycle.Execution, ope
 		execution = lent
 		materials = append(materials, lifecycle.MaterialFile{Name: "release-auth", Part: secrets.ValuePart, Secret: releaseAuthMaterial, Variable: "releaseAuth"})
 	}
+	execution, placement, err := lifecycle.PinInstalledHost(execution, request.Placement, c.hostKeys)
+	if err != nil {
+		return lifecycle.RunResult{}, request, err
+	}
 	result, err := c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: ReleaseImplementation,
-		Operation: operation, Variable: "bootwright_mirror_release", Canonical: canonical, Placement: request.Placement,
+		Operation: operation, Variable: "bootwright_mirror_release", Canonical: canonical, Placement: placement,
 		Materials: materials, Refusals: refusals, Deadline: releaseDeadline(),
 	}))
 	return result, request, err

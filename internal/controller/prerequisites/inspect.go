@@ -136,6 +136,9 @@ func (i *inspection) declare(host HostInspector, lock RuntimeLock) {
 	if i.native.InstallerMedia {
 		checks = append(checks, Check{"installer-media", closureRequirement("installer-media"), "unverified", "unverified", ContextScope, ""})
 	}
+	if i.native.ImageMirror {
+		checks = append(checks, Check{"image-mirror", closureRequirement("image-mirror"), "unverified", "unverified", ContextScope, ""})
+	}
 	if i.native.NMState {
 		checks = append(checks, Check{"nmstate", closureRequirement("nmstate"), "unverified", "unverified", ContextScope, ""})
 	}
@@ -591,7 +594,7 @@ func (s Service) settleContext(ctx context.Context, current *inspection, settle 
 }
 
 func closureRequirements(id string) NativeRequirements {
-	return NativeRequirements{ContainerRuntime: id == "container-runtime", LibvirtClient: id == "libvirt-client", Hypervisor: id == "hypervisor", InstallerMedia: id == "installer-media", NMState: id == "nmstate", IPUtils: id == "iputils"}
+	return NativeRequirements{ContainerRuntime: id == "container-runtime", LibvirtClient: id == "libvirt-client", Hypervisor: id == "hypervisor", InstallerMedia: id == "installer-media", NMState: id == "nmstate", IPUtils: id == "iputils", ImageMirror: id == "image-mirror"}
 }
 
 func closureRequirement(id string) string {
@@ -606,6 +609,8 @@ func closureRequirement(id string) string {
 		return "NMState network configuration generator"
 	case "installer-media":
 		return "installer-media tooling (lorax, xorriso)"
+	case "image-mirror":
+		return "image mirror copy tool (skopeo)"
 	}
 	return "libvirt client"
 }

@@ -2,12 +2,14 @@ package managedservice
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -167,5 +169,52 @@ func TestAManagedImageMirrorIsReadAtItsEndpointAndNeverByItsOwnHost(t *testing.T
 	}
 	if required := MirrorRequirements(catalogOf(mirrorEnvironment(), mirrorRegistry()), &ImageSource{Host: "m"}); required != nil {
 		t.Fatalf("an external mirror requires %+v", required)
+	}
+}
+
+// A mirror host Bootwright installs waits for its provider host's emulated
+// BMC and every managed server its installation selects, and those wait for
+// their own hosts' installations in turn, so every pull on each of those
+// Machines stays at its origin while a pull anywhere else reads the mirror.
+func TestAnInstalledMirrorHostsInstallationPullsFromTheOrigins(t *testing.T) {
+	origin := "quay.io/metal3-io/sushy-tools@sha256:" + strings.Repeat("a", 64)
+	installed := func(name, profile string, extra ...api.FieldValue) api.Object {
+		return api.NewObject(api.Machine, name, api.Value{}, api.MapValue(append([]api.FieldValue{
+			field("os", api.MapValue(field("provided", api.BoolValue(false)), text("installProfileRef", profile))),
+			field("network", api.MapValue(text("configRef", "guests"), field("addresses", api.ListValue(api.MapValue(text("name", "ip"), text("address", "203.0.113.20")))))),
+		}, extra...)...))
+	}
+	server := func(kind api.Kind, name, machine string) api.Object {
+		return api.NewObject(kind, name, api.Value{}, api.MapValue(text("management", "managed"), text("machineRef", machine)))
+	}
+	selecting := func(server string) api.Value { return api.ListValue(api.MapValue(text("serverRef", server))) }
+	endpoint := api.MapValue(field("artifactServerEndpoint", api.MapValue(text("serverRef", "media"))))
+	objects := slices.DeleteFunc(managedMirror(), func(object api.Object) bool { return object.Kind() == api.Machine })
+	objects = append(objects,
+		installed("mirror-host", "mirror", field("substrate", api.MapValue(text("providerRef", "lab-libvirt")))),
+		installed("time-host", "time"),
+		api.NewObject(api.InfraProvider, "lab-libvirt", api.Value{}, api.MapValue(field("libvirt", api.MapValue(text("machineRef", "hypervisor"))))),
+		api.NewObject(api.MachineInstallProfile, "mirror", api.Value{}, api.MapValue(field("installer", api.MapValue(field("anaconda", api.MapValue(field("redfishVirtualMedia", endpoint))))),
+			field("ntp", selecting("time")))),
+		api.NewObject(api.MachineInstallProfile, "time", api.Value{}, api.MapValue(field("ntp", selecting("deep-time")))),
+		api.NewObject(api.NetworkConfig, "guests", api.Value{}, api.MapValue(field("dns", selecting("resolver")))),
+		server(api.ArtifactServer, "media", "media-host"), server(api.NTPServer, "time", "time-host"), server(api.NTPServer, "deep-time", "deep-host"),
+		server(api.DNSServer, "resolver", "resolver-host"),
+		api.NewObject(api.DNSServer, "external-resolver", api.Value{}, api.MapValue(text("management", "external"), text("machineRef", "elsewhere"))),
+	)
+	catalog := catalogOf(objects...)
+	mirror, _ := infrastructureservices.ImageMirrorOf(catalog)
+	hosts := OriginHosts(catalog, mirror)
+	want := []string{"deep-host", "hypervisor", "media-host", "mirror-host", "resolver-host", "time-host"}
+	if got := slices.Sorted(maps.Keys(hosts)); !slices.Equal(got, want) {
+		t.Fatalf("the origin hosts are %v, want %v", got, want)
+	}
+	for _, host := range want {
+		if got, source := MirroredImage(catalog, origin, host); got != origin || source != nil {
+			t.Errorf("%s pulls %s (%+v)", host, got, source)
+		}
+	}
+	if got, source := MirroredImage(catalog, origin, "controller"); got != "203.0.113.20:5000/"+origin || source == nil {
+		t.Fatalf("the controller pulls %s (%+v)", got, source)
 	}
 }

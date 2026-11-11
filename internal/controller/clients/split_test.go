@@ -112,12 +112,12 @@ func TestRetirementNeverRemovesTheOtherBlocksTools(t *testing.T) {
 	}
 }
 
-// A single-block stage an earlier build froze at controller-clients-v4 is not
+// A single-block stage an earlier build froze at controller-clients-v5 is not
 // continued: it refuses by its version, and the build that applied it destroys it.
 func TestARetainedSingleBlockStageOfTheEarlierVersionRefuses(t *testing.T) {
 	block := planBlock(t, unwired(), stateOf(environment(), machine(), cluster()), reconciliation.Apply)
 	earlier := stageRequest(t, block)
-	earlier.Version = "controller-clients-v4"
+	earlier.Version = "controller-clients-v5"
 	data, err := earlier.Canonical()
 	if err != nil {
 		t.Fatal(err)
@@ -125,13 +125,46 @@ func TestARetainedSingleBlockStageOfTheEarlierVersionRefuses(t *testing.T) {
 	_, err = DecodeRequest(data)
 	reported := diagnostics.Of(err)
 	if len(reported) != 1 || reported[0].Code != "lifecycle.state" ||
-		reported[0].Message != "the frozen controller prerequisites request has an unsupported version: controller-clients-v4" ||
+		reported[0].Message != "the frozen controller prerequisites request has an unsupported version: controller-clients-v5" ||
 		reported[0].Remediation != "destroy it with the build that applied it" {
-		t.Fatalf("a retained v4 stage refused as %+v", reported)
+		t.Fatalf("a retained v5 stage refused as %+v", reported)
 	}
 }
 
 func err0(_ Request, err error) error { return err }
+
+// With the image mirror's Registry beside the artifact mirror on the
+// controller, the host packages half installs skopeo for the image fill, which
+// runs after the stage, and the clients half selects no host package.
+func TestAnImageMirrorOnTheControllerAddsItsCopyToolToThePackagesHalf(t *testing.T) {
+	objects := controllerMirrorState()
+	objects[0] = environment(imageMirror("ip", true))
+	objects = append(objects, mirrorRegistry("controller")...)
+	contribution, err := unwired().Plan(context.Background(), planInput(stateOf(objects...), reconciliation.Apply))
+	if err != nil || len(contribution.Definitions) != 2 {
+		t.Fatalf("plan contributed %d blocks (%v)", len(contribution.Definitions), diagnostics.Of(err))
+	}
+	packages, err := DecodeRequest(contribution.Definitions[0].Request)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	clients, err := DecodeRequest(contribution.Definitions[1].Request)
+	if err != nil {
+		t.Fatal(diagnostics.Of(err))
+	}
+	if !packages.ImageMirror || !slices.Contains(packages.Packages, "skopeo") || clients.ImageMirror || len(clients.Packages) != 0 {
+		t.Fatalf("the packages half froze %+v and the clients half %+v", packages, clients)
+	}
+	withoutTool := packages
+	withoutTool.Packages = slices.DeleteFunc(slices.Clone(packages.Packages), func(name string) bool { return name == "skopeo" })
+	data, err := withoutTool.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reported := diagnostics.Of(err0(DecodeRequest(data))); len(reported) != 1 || reported[0].Code != "lifecycle.state" {
+		t.Fatalf("a packages half that dropped skopeo decoded as %+v", reported)
+	}
+}
 
 // A frozen half that holds what the other half owns refuses, so neither can
 // ask dnf for packages or publish clients it was not planned with.

@@ -230,6 +230,8 @@ func controllerActionLabel(id string) string {
 		return "Hypervisor"
 	case "installer-media":
 		return "Installer media"
+	case "image-mirror":
+		return "Image mirror copy tool"
 	case "iputils":
 		return "Virtual IP probe tooling"
 	case "nmstate":

@@ -1,6 +1,6 @@
 implementation: controller-prerequisites
-content-digest: 951ef5ecaec40a877ca5cc82dd0c745d3e1c8e8edc96a29de37fc701af4238f7
-request-version: controller-clients-v5
+content-digest: 78e3e9a71e60370f076976047be21be23a002c0ec545bc1199428955d5d36931
+request-version: controller-clients-v6
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -17,6 +17,7 @@ request-schema:
   egress.httpsProxy string
   egress.noProxy []string
   hypervisor bool
+  imageMirror bool omitempty
   installerMedia bool
   iputils bool omitempty
   libvirt string

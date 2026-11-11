@@ -13145,7 +13145,7 @@ Registry as the mirror, a new row of the Environment refusal table, and
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** a managed Registry cannot be the mirror until
-[B1249](backlog.md#b1249); a host holding only the origin's copy pulls the
+[B1249](#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs); a host holding only the origin's copy pulls the
 mirror's once; the live proof is [B1250](backlog.md#b1250).
 
 ### X348 — BMC claims
@@ -13806,7 +13806,7 @@ its own two beside the image mirror's that
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** no consumer selects a managed Registry and the
-certificate is the operator's to declare until [B1249](backlog.md#b1249); the
+certificate is the operator's to declare until [B1249](#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs); the
 Distribution configuration, the pinned SELinux level and storage label on an
 enforcing host and the probe against a real registry are proved against
 goldens and fakes only. A restart in the middle of a push loses that upload,
@@ -14571,7 +14571,7 @@ proxy, the SELinux label a served file takes and a publisher's redirect are
 proved by tests of the role's tasks, not on a host, and a redirect to plain HTTP takes the
 same proxy; the image fill, releases,
 the controller placement and an installed mirror host remain on
-[B1249](backlog.md#b1249).
+[B1249](#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs).
 ### X410 — Ceph health checks scoped to their owners
 
 **Item:** [B1311](m2.md#b1311) (defect, owner Storage), delivered in-tree
@@ -14776,7 +14776,7 @@ occurred. **Limitations:** no controller has run the split: the managed server
 and the fill run locally through the same role and runner as an SSH host, and
 the ordering is proved by planning alone; `skopeo` as a stage package for an
 image mirror on the controller, the image fill, releases and an installed
-mirror host remain on [B1249](backlog.md#b1249).
+mirror host remain on [B1249](#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs).
 ### X407 — A managed image mirror on the mirror host
 
 **Item:** B1249 (2026-11-11, [D250](backlog.md#d250) (8),
@@ -14842,7 +14842,7 @@ Distribution registry, the tag read-back of a manifest list, proxied origin
 reads and the SELinux and TLS behaviour of the lent certificate directory are
 proved by unit tests of the module and role, not on a host; releases, `skopeo`
 on the controller and an installed mirror host remain on
-[B1249](backlog.md#b1249).
+[B1249](#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs).
 
 ### X409 — A managed artifact mirror on a Machine Bootwright installs
 
@@ -14902,7 +14902,7 @@ because the arm is a `connection` value and requirements are not frozen.
 occurred. **Limitations:** no host has run the installed arm: sudo becoming
 root under Ansible on an installed RHEL guest, `podman` from the profile and
 the host-key proof of a first apply are proved by tests alone; a managed image
-mirror there and releases remain on [B1249](backlog.md#b1249). A service on
+mirror there and releases remain on [B1249](#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs). A service on
 an installed Machine that is powered off stalls its removal at the connection,
 because the managed-service capabilities take no retirement with their hosts;
 an earlier build refuses the arm with the generic unbound-host-key message.
@@ -15051,5 +15051,77 @@ capability alone. `oc adm release mirror` is deprecated in 4.22, to be removed
 in 6.0 in favour of `oc-mirror`, so a later release needs the copy moved; oc's
 report of what it copied enters the run's log unbounded, holding no
 credential; `skopeo` on the controller and an installed mirror host
-remain on [B1249](backlog.md#b1249), and the live proof is
+remain on [B1249](#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs), and the live proof is
+[B1250](backlog.md#b1250).
+
+### X431 — The image mirror on the controller and on a Machine Bootwright installs
+
+**Item:** B1249 (2026-11-11, [D250](backlog.md#d250) (8),
+[D251](backlog.md#d251) (6), (34) and (35)), delivered in-tree: with
+[X430](#x430--openshift-releases-copied-into-the-managed-image-mirror)'s
+release copy nothing of B1249 remains but its live proof,
+[B1250](backlog.md#b1250), so B1249 leaves the backlog and this record is its
+final one. The slice is the plan's `skopeo` line of its third slice and the
+image half of its fourth: the managed image mirror on the controller and on a
+Machine Bootwright installs.
+
+*Controller.* A managed image mirror `Registry` on the controller Machine
+selects the stage's new `image-mirror` closure, `skopeo`, reported as the
+`image-mirror` preflight check, in the packages half when the stage splits
+(`TestTheImageMirrorCopyToolFollowsTheMirrorRegistrysMachine`,
+`TestAnImageMirrorOnTheControllerAddsItsCopyToolToThePackagesHalf`). The
+controller-host refusal is lifted for that Machine alone; another name for
+the controller host still refuses, renamed in the
+[refusal table](../api/environment.md#refusal-table) (D251 (34)). The
+Registry and the image fill run locally after the stage, which waits for no
+image; `TestAManagedImageMirrorOnTheControllerIsFilledLocallyAfterTheStage`
+plans `lab-rhel-mirror-host` with both mirrors moved to the controller and its
+resolver to the former mirror host, through this build's capabilities and the
+whole lifecycle service.
+
+*Installed Machine.* The image fill takes `machine.ServicePlacementFor`'s
+installed arm, requires the Machine's `os-install` block and is lent the host
+key its installation proved, as the file fill is
+(`TestAnImageFillOnAnInstalledMirrorHostConnectsAgainstItsInstallationsHostKey`).
+X409's refusal of an image mirror there became the row of an install profile
+without `skopeo` in the
+[managed-service table](../infrastructure-services.md#refusal-table). The
+emulated BMC of the mirror's own guest, and the resolver, time source and
+media server its installation selects on the controller, pulled through the
+mirror and closed a dependency cycle at plan, the generic
+`lifecycle.state` refusal; `managedservice.OriginHosts` now keeps every pull
+on a Machine running what that installation waits for at its origin, so no
+row is needed (D251 (35),
+`TestAnInstalledMirrorHostsInstallationPullsFromTheOrigins`).
+`TestAManagedImageMirrorOnAnInstalledMachinePlansAfterItsInstallation` plans
+`lab-sno-installed-mirror-host` with an image mirror, `skopeo` in its profile,
+an edge resolver and no cluster, through the lifecycle service.
+
+*Release copy.* X430's release copy takes the same installed arm, waits for
+the installation and is lent its host key beside its auth document
+(`TestAReleaseCopyOnAnInstalledMirrorHostConnectsAgainstItsInstallationsHostKey`);
+`TestAReleaseCopyOnAnInstalledMirrorHostPlansAfterItsInstallation` plans the
+same example with its cluster kept, the copy after the installation and before
+the cluster's media.
+
+*Records.* Specs: the [image mirror](../api/environment.md#image-mirror) and
+[artifact mirror](../api/environment.md#artifact-mirror) placements, whose
+stale installed-Machine line went, the
+[mirror host](../infrastructure-services.md#mirror-host) image fill and
+ordering, [host packages](../controller.md#host-packages), the context checks
+the deferred page and the managed Registry's consumers, whose stale Not yet
+met line went. Parked: [B1340](backlog.md#b1340). Contracts:
+`controller-clients-v5` moved to `controller-clients-v6` with `imageMirror`,
+which moved the stage's content digest; a stage an earlier build froze
+refuses by its version, and the build that applied it destroys it.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** no host has run either placement: `skopeo` from
+the controller's repositories, the local fill against a Registry on the same
+host and the installed arm's sudo under the image fill are proved by tests
+alone. A Machine that runs a managed server an installed mirror host's
+installation selects pulls every image from its origin
+([B1340](backlog.md#b1340)); in the common lab shape, a libvirt provider on
+the controller, that is every pull on the controller, so B1250's
+no-public-route profile waits for B1340 as well. The live proof is
 [B1250](backlog.md#b1250).

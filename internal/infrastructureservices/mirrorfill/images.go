@@ -27,12 +27,18 @@ func imagesDeadline(request ImagesRequest) time.Duration {
 }
 
 type ImageFill struct {
-	runner Runner
-	images Images
+	runner   Runner
+	images   Images
+	hostKeys lifecycle.InstalledHostKey
 }
 
 func NewImages(runner Runner, images Images) ImageFill {
 	return ImageFill{runner: runner, images: images}
+}
+
+func (c ImageFill) WithInstalledHostKeys(hostKeys lifecycle.InstalledHostKey) ImageFill {
+	c.hostKeys = hostKeys
+	return c
 }
 
 func (c ImageFill) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecycle.CapabilityPlan, error) {
@@ -53,12 +59,20 @@ func (c ImageFill) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecyc
 	}
 	plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{
 		ID: ImagesBlockID(request.Identity.Environment), Description: imagesDescription(input.Verb, request), Stage: reconciliation.StageInfrastructureServices,
-		Requires: []reconciliation.ObjectRef{{Kind: ImagesKind, Object: request.Identity.Registry, Family: managedservice.Family}},
+		Requires: placedRequires(request.Identity.Registry, request.Placement),
 		Impacts:  imagesImpacts(input.Verb, request), Consumes: []string{},
 		Kind: ImagesKind, Object: request.Identity.Registry, Family: Family, Implementation: ImagesImplementation, ContentDigest: ImagesContentDigest(), Request: canonical,
 	})
 	plan.Secrets = lifecycle.SecretNames(request.SecretReferences()...)
 	return plan, nil
+}
+
+func placedRequires(registry string, placement machineref.Placement) []reconciliation.ObjectRef {
+	requires := []reconciliation.ObjectRef{{Kind: ImagesKind, Object: registry, Family: managedservice.Family}}
+	if placement.Installed() {
+		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.Machine), Object: placement.Machine, Family: machineref.InstallFamily})
+	}
+	return requires
 }
 
 func (c ImageFill) Request(catalog api.Catalog, controllerMachine, contextName string) (ImagesRequest, bool, error) {
@@ -78,7 +92,7 @@ func (c ImageFill) Request(catalog api.Catalog, controllerMachine, contextName s
 	if !found {
 		return ImagesRequest{}, false, refusal("api.reference", "the image mirror's placement Machine is not in the selected graph", "declare it or correct machineRef on "+registry.Identity())
 	}
-	placement, err := machineref.PlacementFor(host, controllerMachine)
+	placement, err := machineref.ServicePlacementFor(host, controllerMachine)
 	if err != nil {
 		return ImagesRequest{}, false, err
 	}
@@ -157,8 +171,12 @@ func (c ImageFill) run(ctx context.Context, execution lifecycle.Execution, opera
 	if operation == "apply" {
 		refusals = imagesRefusals(execution.Context, request)
 	}
+	execution, placement, err := lifecycle.PinInstalledHost(execution, request.Placement, c.hostKeys)
+	if err != nil {
+		return lifecycle.RunResult{}, request, err
+	}
 	result, err := c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{Implementation: ImagesImplementation,
-		Operation: operation, Variable: "bootwright_mirror_images", Canonical: canonical, Placement: request.Placement,
+		Operation: operation, Variable: "bootwright_mirror_images", Canonical: canonical, Placement: placement,
 		Materials: materials, Refusals: refusals, Deadline: imagesDeadline(request),
 	}))
 	return result, request, err

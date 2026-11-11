@@ -32,7 +32,7 @@ var networkOnlyRows = map[string]bool{"Endpoint addresses beyond the host reserv
 // installationRowKinds are the kinds the row of a service its host's own
 // installation uses refuses: the resolver and the time source it selects.
 // registryOnlyRows are the refusal-table rows only a Registry declares.
-var registryOnlyRows = map[string]bool{"Image mirror on an installed Machine": true}
+var registryOnlyRows = map[string]bool{"Image copy tool on an installed Machine": true}
 
 var installationRowKinds = map[api.Kind]bool{api.DNSServer: true, api.NTPServer: true}
 
@@ -57,7 +57,7 @@ func installedRowGraph(row string, kind api.Kind, place func(machine string) api
 	case "":
 	case "Container runtime on an installed Machine":
 		packages = nil
-	case "Image mirror on an installed Machine":
+	case "Image copy tool on an installed Machine":
 		imageMirror = true
 	case "Artifact server on an installed Machine":
 		mirrored = false

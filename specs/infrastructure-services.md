@@ -51,8 +51,8 @@ its placement Machine and `<proxy>` the Proxy that Machine selects. The
 installed-host rows hold the ArtifactServer alone, except the firewall row, and
 the own-installation row the DNSServer and NTPServer alone; `<profile>`,
 `<kind>`, `<consumer>` and `<provider>` name the install profile, the
-service's kind, the publishing object and the provider; the image mirror row
-holds the Registry alone. A placement
+service's kind, the publishing object and the provider; the image copy tool
+row holds the Registry alone. A placement
 Machine that is the Environment's controller is reached locally, so the SSH
 rows never refuse a service placed there.
 
@@ -69,7 +69,7 @@ rows never refuse a service placed there.
 | Artifact server on an installed Machine | a managed `ArtifactServer` on an installed `Machine` that `spec.mirror.artifacts.serverRef` does not select | `an ArtifactServer on a Machine Bootwright installs serves only the Environment's managed artifact mirror, and <server> on <machine> is not the server spec.mirror.artifacts.serverRef selects` | `place <server> on the controller Machine or on an OS-ready Machine reached over SSH` |
 | Publication into a mirror on an installed Machine | an `artifactServerEndpoint` naming the managed artifact mirror's server on an installed `Machine` | `the artifact mirror on a Machine Bootwright installs is filled by its own fill alone, and <consumer> publishes into <server> on <machine> through an artifactServerEndpoint` | `select a server on the controller Machine or on an OS-ready Machine in that artifactServerEndpoint of <consumer>` |
 | Mirror host installed off libvirt | the managed artifact mirror's server on a `Machine` Bootwright installs through a vSphere, KubeVirt or bare-metal `InfraProvider` | `the artifact mirror is filled before the controller stage installs its clients, and <machine>, where <server> runs, is installed through <provider>, whose machine blocks this executable runs only after that stage` | `place <server> on an OS-ready Machine or on one a libvirt provider realizes` |
-| Image mirror on an installed Machine | the managed `Registry` `spec.mirror.registry.registryRef` selects on a `Machine` Bootwright installs | `this executable fills a managed image mirror only on an OS-ready Machine or the controller, and <server> is on <machine>, which Bootwright installs` | `place <server> on an OS-ready Machine reached over SSH, or select an external Registry in spec.mirror.registry.registryRef` |
+| Image copy tool on an installed Machine | the managed `Registry` `spec.mirror.registry.registryRef` selects on a `Machine` whose install profile lacks `skopeo` in `spec.customizations.packages.install` | `the image mirror's fill copies its images with skopeo, and <machine>, where <server> runs, is installed by <profile>, which does not install skopeo` | `add skopeo to spec.customizations.packages.install of <profile>, or place <server> on an OS-ready Machine` |
 | Container runtime on an installed Machine | the placement `Machine`'s install profile without `podman` in `spec.customizations.packages.install` | `a managed service runs as a container, and <machine>, where <server> runs, is installed by <profile>, which does not install podman` | `add podman to spec.customizations.packages.install of <profile>, or place <server> on an OS-ready Machine` |
 | Endpoint addresses beyond the host reservation | a managed `Proxy`, `DNSServer`, `NTPServer` or `Registry` bound to a wildcard with more than 61 distinct endpoint addresses | `a managed service bound to a wildcard claims one host reservation key for each distinct endpoint address beside its unit, its content root and its bind socket, within the 64 keys one reservation holds, so it declares at most 61 distinct endpoint addresses` | `declare at most 61 distinct endpoint addresses in spec.endpoints of <server>` |
 | Artifact sockets beyond the host reservation | a managed `ArtifactServer` whose listeners and, under a wildcard `bindAddress`, distinct endpoint addresses of each listener claim more than 62 sockets | `an artifact server claims one host reservation key for each listener and, under a wildcard bindAddress, for each distinct endpoint address of each listener, beside its unit and its content root, within the 64 keys one reservation holds, so its listeners and endpoints claim at most 62 sockets` | `declare fewer listeners in spec.listeners or fewer endpoints with distinct addresses in spec.endpoints of <server>, so they claim at most 62 sockets` |
@@ -925,14 +925,10 @@ without bound material proves no presence, so it reads a running registry as a
 partial realization the next apply converges, and an unresolved observation is
 explained without comparing a certificate.
 
-**Consumers.** The cluster
-[registry mirror](openshift-clusters.md#installation-features) and the
-Environment [image mirror](api/environment.md#image-mirror) each refuse a
-managed Registry.
-
-Not yet met: a cluster or the Environment may select a managed Registry as its
-mirror, and Bootwright fills it; tracked as
-[B1249](milestones/backlog.md#b1249).
+**Consumers.** The Environment [image mirror](api/environment.md#image-mirror)
+may select a managed Registry, which its [mirror host](#mirror-host) fills,
+and a cluster's [registry mirror](openshift-clusters.md#installation-features)
+is then that Registry.
 
 ## Mirror host
 
@@ -976,7 +972,8 @@ No Secret material reaches the mirror host beyond its placement's SSH access.
 the mirror host after the Registry's own block and copies each image a
 consumer pulls through the mirror, once per digest. It first proves
 `/usr/bin/skopeo` there and otherwise refuses, naming the `skopeo` package to
-install, before any copy. For each image it asks the Registry for
+install, before any copy; the controller stage installs it on the controller
+Machine, and plan refuses an installed mirror host whose profile lacks it. For each image it asks the Registry for
 `/v2/<repository>/manifests/<digest>` with `HEAD`; a manifest the Registry
 serves at that digest is not copied again, so a replay copies nothing and
 reports unchanged. Any other image is copied with
@@ -1000,7 +997,8 @@ own removal deletes what was pushed; pruning an image no longer listed is
 **Release fill.** One block of the same family per such cluster,
 implementation `mirrorfill.ReleaseImplementation`, named
 `mirror-release-<cluster>`, runs on the mirror host after the Registry's own
-block and copies the cluster's release, `quay.io/openshift-release-dev/ocp-release`
+block, and on a Machine Bootwright installs over the installed arm after its
+installation (`TestAReleaseCopyOnAnInstalledMirrorHostPlansAfterItsInstallation`), and copies the cluster's release, `quay.io/openshift-release-dev/ocp-release`
 at the digest its `spec.distribution.release.image` pins or else at the tag
 `<version>-x86_64`, with the release's own `oc`. It first reads the mirror:
 the release manifest at that reference, the image references in the release's
@@ -1068,11 +1066,18 @@ an installation whose substrate runs a controller client refuses
 Registry and the image fill are not among the blocks the stage waits for,
 since nothing it reads is an image. Each managed service, artifact server and
 libvirt machine block that pulls through the mirror waits for the Registry and
-its fill, and every image pulled on the mirror host stays its origin's, so no
-mirror block waits for itself
-(`TestAManagedImageMirrorIsFilledAfterTheControllerStageAndBeforeItsConsumers`). A cluster's image build and
-installation wait for its release copy, which waits for the Registry and the
-controller stage
+its fill, and every image pulled on the mirror host stays its origin's, as
+does, when Bootwright installs that host, every image pulled on a Machine
+that runs its libvirt provider or a managed server its installation selects,
+and so on for each such Machine it installs, so no mirror block waits for
+itself (`TestAManagedImageMirrorIsFilledAfterTheControllerStageAndBeforeItsConsumers`,
+`TestAnInstalledMirrorHostsInstallationPullsFromTheOrigins`). On the
+controller Machine the Registry and the image fill run locally after the
+stage (`TestAManagedImageMirrorOnTheControllerIsFilledLocallyAfterTheStage`);
+on a Machine Bootwright installs they take the installed arm after that
+installation (`TestAManagedImageMirrorOnAnInstalledMachinePlansAfterItsInstallation`). A cluster's image
+build and installation wait for its release copy, which waits for the Registry
+and the controller stage
 (`TestAClusterUnderAManagedImageMirrorWaitsForItsReleaseCopy`).
 
 **Trust.** Every consumer verifies the artifact mirror against the `caBundle`
@@ -1082,11 +1087,6 @@ that issues the server's serving certificate, the
 against the issuer of the Registry's serving certificate unless the Registry's
 `trustBundleRef` names another; admission refuses a serving certificate with
 no issuer when none is named, and Bootwright creates no Secret for it.
-
-Not yet met: a managed image mirror on a Machine Bootwright installs, whose
-fill takes the SSH arm, refuses, and a managed image mirror may sit on the
-controller, which installs no `skopeo`; tracked as
-[B1249](milestones/backlog.md#b1249).
 
 ## Adapter boundary
 

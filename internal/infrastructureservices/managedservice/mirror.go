@@ -6,9 +6,11 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/acquisition"
 	"github.com/crmarques/bootwright/internal/infrastructureservices"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 type ImageSource struct {
@@ -42,7 +44,7 @@ func MirroredImage(catalog api.Catalog, reference, machine string) (string, *Ima
 	if origin, _, _ := strings.Cut(qualified, "/"); !found || acquisition.OriginClass(origin) != acquisition.ClassPublic {
 		return reference, nil
 	}
-	if mirror.Location == "" || mirror.Managed && machine == mirror.Registry.Spec().Get("machineRef").Text() {
+	if mirror.Location == "" || mirror.Managed && OriginHosts(catalog, mirror)[machine] {
 		return reference, nil
 	}
 	host, _, _ := strings.Cut(mirror.Location, "/")
@@ -53,6 +55,65 @@ func MirroredImage(catalog api.Catalog, reference, machine string) (string, *Ima
 		}
 	}
 	return mirror.Location + "/" + qualified, source
+}
+
+func OriginHosts(catalog api.Catalog, mirror infrastructureservices.ImageMirror) map[string]bool {
+	host := mirror.Registry.Spec().Get("machineRef").Text()
+	hosts, pending := map[string]bool{host: true}, []string{host}
+	for len(pending) != 0 {
+		machine, found := catalog.Find(api.Machine, pending[0])
+		pending = pending[1:]
+		if !found || !machineref.Installed(machine) {
+			continue
+		}
+		for _, next := range installationHosts(catalog, machine) {
+			if next != "" && !hosts[next] {
+				hosts[next] = true
+				pending = append(pending, next)
+			}
+		}
+	}
+	return hosts
+}
+
+func installationHosts(catalog api.Catalog, machine api.Object) []string {
+	var hosts []string
+	if provider, realized := machineref.Provider(machine, catalog); realized {
+		hosts = append(hosts, substrate.HostMachine(provider))
+	}
+	place := func(kind api.Kind, selections []api.Value) {
+		for _, selection := range selections {
+			if server, found := catalog.Find(kind, selection.Get("serverRef").Text()); found && server.Spec().Get("management").Text() == "managed" {
+				hosts = append(hosts, server.Spec().Get("machineRef").Text())
+			}
+		}
+	}
+	profile, _ := catalog.Find(api.MachineInstallProfile, machine.Spec().Get("os", "installProfileRef").Text())
+	place(api.ArtifactServer, artifactEndpoints(profile.Spec()))
+	ntp := profile.Spec().Get("ntp")
+	if override := machine.Spec().Get("os", "install", "ntp"); override.Present() {
+		ntp = override
+	}
+	place(api.NTPServer, ntp.Items())
+	if network, err := substrate.NetworkSpec(catalog, machine); err == nil {
+		place(api.DNSServer, network.Get("dns").Items())
+	}
+	return hosts
+}
+
+func artifactEndpoints(value api.Value) []api.Value {
+	var endpoints []api.Value
+	for _, field := range value.Fields() {
+		if field.Name == "artifactServerEndpoint" {
+			endpoints = append(endpoints, field.Value)
+		} else {
+			endpoints = append(endpoints, artifactEndpoints(field.Value)...)
+		}
+	}
+	for _, item := range value.Items() {
+		endpoints = append(endpoints, artifactEndpoints(item)...)
+	}
+	return endpoints
 }
 
 func MirrorRequirements(catalog api.Catalog, source *ImageSource) []reconciliation.ObjectRef {

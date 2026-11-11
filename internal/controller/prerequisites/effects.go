@@ -24,7 +24,8 @@ type NativeRequirements struct {
 	// Hypervisor is the closure a libvirt provider hosted on this Machine runs:
 	// the daemon with its drivers, the emulator and the TPM helper, beside the
 	// client LibvirtClient selects.
-	Hypervisor bool `json:"hypervisor"`
+	Hypervisor  bool `json:"hypervisor"`
+	ImageMirror bool `json:"imageMirror,omitempty"`
 	// InstallerMedia is the tooling an Anaconda installation published through
 	// an artifact server on this Machine builds its image with.
 	InstallerMedia bool `json:"installerMedia"`

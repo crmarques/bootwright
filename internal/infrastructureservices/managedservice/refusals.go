@@ -78,10 +78,11 @@ func InstalledHostRefusals(catalog api.Catalog, service, machine api.Object) []l
 			"a managed service runs as a container, and "+host+", where "+server+" runs, is installed by "+profile.Identity()+", which does not install podman",
 			"add podman to spec.customizations.packages.install of "+profile.Identity()+", or place "+server+" on an OS-ready Machine"))
 	}
-	if mirror, declared := infrastructureservices.ImageMirrorOf(catalog); service.Kind() == api.Registry && declared && mirror.Managed && mirror.Registry.Name() == service.Name() {
+	if mirror, declared := infrastructureservices.ImageMirrorOf(catalog); service.Kind() == api.Registry && declared && mirror.Managed && mirror.Registry.Name() == service.Name() &&
+		found && !slices.Contains(profile.Spec().Get("customizations", "packages", "install").Strings(), "skopeo") {
 		refused = append(refused, lifecycle.RefusalOf(service,
-			"this executable fills a managed image mirror only on an OS-ready Machine or the controller, and "+server+" is on "+host+", which Bootwright installs",
-			"place "+server+" on an OS-ready Machine reached over SSH, or select an external Registry in spec.mirror.registry.registryRef"))
+			"the image mirror's fill copies its images with skopeo, and "+host+", where "+server+" runs, is installed by "+profile.Identity()+", which does not install skopeo",
+			"add skopeo to spec.customizations.packages.install of "+profile.Identity()+", or place "+server+" on an OS-ready Machine"))
 	}
 	if service.Kind() == api.ArtifactServer {
 		mirror, declared := infrastructureservices.ArtifactMirrorOf(catalog)

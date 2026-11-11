@@ -23,6 +23,7 @@ type Selection struct {
 	containerRuntime bool
 	libvirtClient    bool
 	hypervisor       bool
+	imageMirror      bool
 	installerMedia   bool
 	iputils          bool
 	nmstate          bool
@@ -35,6 +36,7 @@ func (s Selection) MachineName() string          { return s.machineName }
 func (s Selection) ContainerRuntime() bool       { return s.containerRuntime }
 func (s Selection) LibvirtClient() bool          { return s.libvirtClient }
 func (s Selection) Hypervisor() bool             { return s.hypervisor }
+func (s Selection) ImageMirror() bool            { return s.imageMirror }
 func (s Selection) IPUtils() bool                { return s.iputils }
 func (s Selection) NMState() bool                { return s.nmstate }
 func (s Selection) InstallerMedia() bool         { return s.installerMedia }
@@ -46,7 +48,7 @@ func (s Selection) Versions() DependencyVersions { return s.versions }
 // libvirt client, the hypervisor closure or the installer-media tooling, and a
 // context selecting none of them has nothing for it to run.
 func HasStage(selection Selection, tools []ToolRequest) bool {
-	return len(tools) != 0 || selection.ContainerRuntime() || selection.LibvirtClient() || selection.Hypervisor() || selection.InstallerMedia() || selection.NMState() || selection.IPUtils()
+	return len(tools) != 0 || selection.ContainerRuntime() || selection.LibvirtClient() || selection.Hypervisor() || selection.InstallerMedia() || selection.NMState() || selection.IPUtils() || selection.ImageMirror()
 }
 
 // Route contains explicit setup acquisition policy without Secret references or
@@ -132,7 +134,7 @@ func Select(catalog api.Catalog) (Selection, error) {
 	return Selection{
 		environmentName: environment.Name(), machineName: machine.Name(),
 		containerRuntime: requiresContainerRuntime(catalog, machine), libvirtClient: requiresLibvirtClient(catalog, machine),
-		hypervisor: requiresHypervisor(catalog, machine), installerMedia: requiresInstallerMedia(catalog, machine),
+		hypervisor: requiresHypervisor(catalog, machine), installerMedia: requiresInstallerMedia(catalog, machine), imageMirror: requiresImageMirror(catalog, machine),
 		route: route, versions: versions, nmstate: requiresNMState(catalog), iputils: requiresIPUtils(catalog, machine.Name()),
 	}, nil
 }
@@ -185,6 +187,10 @@ func requiresInstallerMedia(catalog api.Catalog, controllerMachine api.Object) b
 		}
 	}
 	return false
+}
+
+func requiresImageMirror(catalog api.Catalog, controllerMachine api.Object) bool {
+	return infrastructureservices.ImageMirrorHost(catalog) == controllerMachine.Name()
 }
 
 // requiresLibvirtClient reports whether this Machine needs virsh. A provider
@@ -534,10 +540,10 @@ func managedImageMirrorShapes(environment api.Object, catalog api.Catalog) []Uns
 	}
 	controllerName := environment.Spec().Get("controller", "machineRef").Text()
 	machine, found := catalog.Find(api.Machine, host)
-	if host == controllerName || found && onControllerHost(catalog, machine, controllerName) {
+	if host != controllerName && found && onControllerHost(catalog, machine, controllerName) {
 		return []UnsupportedShape{{Object: environment, Field: field,
-			Reason:      "the controller stage installs no skopeo to fill a managed image mirror, and " + registry.Identity() + " is placed on Machine/" + host + ", which is the controller host",
-			Remediation: "place " + registry.Identity() + " on another Machine reached over SSH, or select an external Registry in spec.mirror.registry.registryRef of " + environment.Identity()}}
+			Reason:      "this executable places a managed image mirror on the controller host only through its controller Machine, and " + registry.Identity() + " is placed on Machine/" + host + ", another name for that host",
+			Remediation: "place " + registry.Identity() + " on Machine/" + controllerName + " or on another Machine reached over SSH"}}
 	}
 	if mirror.Location == "" {
 		return []UnsupportedShape{{Object: environment, Field: field,
@@ -552,7 +558,7 @@ func managedImageMirrorShapes(environment api.Object, catalog api.Catalog) []Uns
 			Reason:      "the image mirror on " + machine.Identity() + " is filled before the services that pull from it, and " + machine.Identity() + " reaches the origins through the managed " + proxy.Identity(),
 			Remediation: "select direct: {} or an external Proxy in spec.proxy on " + machine.Identity()}}
 	}
-	if providers := mirrorProviders(catalog, registry, host, false); len(providers) != 0 {
+	if providers := mirrorProviders(catalog, registry, host, host == controllerName); len(providers) != 0 {
 		return []UnsupportedShape{{Object: environment, Field: field,
 			Reason: "the image mirror is filled before the emulated BMCs that pull from it, and " + registry.Identity() + " on " + machine.Identity() +
 				" waits for InfraProvider/" + providers[0] + ", which that Machine hosts or whose bridge carries its address",

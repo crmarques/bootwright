@@ -28,6 +28,7 @@ var (
 		"libvirt-daemon-driver-storage-core", "qemu-img", "qemu-kvm-core", "swtpm", "swtpm-tools",
 	}
 	installerMediaRequirements = []string{"lorax", "xorriso"}
+	imageMirrorRequirements    = []string{"skopeo"}
 	hostRequirement            = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]*(\([A-Za-z0-9._+-]+\))?( = [0-9]+:?[A-Za-z0-9._+~^-]*)?$`)
 	hostPythonMinor            = regexp.MustCompile(`^3\.(0|[1-9][0-9]*)$`)
 	hostPythonRequirement      = regexp.MustCompile(`^python(3\.(0|[1-9][0-9]*))$`)
@@ -69,6 +70,9 @@ func StageHostRequirements(selected NativeRequirements) []string {
 	}
 	if selected.InstallerMedia {
 		requirements = append(requirements, installerMediaRequirements...)
+	}
+	if selected.ImageMirror {
+		requirements = append(requirements, imageMirrorRequirements...)
 	}
 	if selected.NMState {
 		requirements = append(requirements, "nmstate")

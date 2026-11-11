@@ -329,11 +329,11 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	})
 	resolver = append(resolver, boundCapability{
 		kind: mirrorfill.ImagesKind, implementation: mirrorfill.ImagesImplementation, family: mirrorfill.Family,
-		capability: mirrorfill.NewImages(runner, mirrorImageArtifacts),
+		capability: mirrorfill.NewImages(runner, mirrorImageArtifacts).WithInstalledHostKeys(installation.ProvedHostKey),
 	})
 	resolver = append(resolver, boundCapability{
 		kind: mirrorfill.ReleaseKind, implementation: mirrorfill.ReleaseImplementation, family: mirrorfill.Family,
-		capability: mirrorfill.NewReleases(runner, mirrorReleases, material.RegistryAuth),
+		capability: mirrorfill.NewReleases(runner, mirrorReleases, material.RegistryAuth).WithInstalledHostKeys(installation.ProvedHostKey),
 	})
 	return bindInstallations(resolver, runner, records)
 }

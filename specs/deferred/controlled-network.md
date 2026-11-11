@@ -57,10 +57,10 @@ row: the build decides what is acquired, the declaration only where from.
 ## The mirror host
 
 Its artifact mirror, image mirror and release copies on an OS-ready Machine
-reached over SSH, and its artifact mirror on the controller or a Machine
-Bootwright installs, are specified in [mirror host](../infrastructure-services.md#mirror-host); the
-rest of this section stays deferred with
-[B1249](../milestones/backlog.md#b1249).
+reached over SSH, the controller or a Machine Bootwright installs are
+specified in [mirror host](../infrastructure-services.md#mirror-host), and
+[B1249](../milestones/delivered.md#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs) is delivered in-tree; the
+rest of this section stays deferred with the items each part names.
 
 The mirror host is a Machine like any other: its operating system is provided
 or installed by Bootwright, Bootwright reaches it over SSH, or locally when it
@@ -111,7 +111,9 @@ for an image and `<endpoint>/<kind>/<version>/<file>` for a tool:
 With the declaration present no public origin is dialed: an artifact the
 mirror does not hold refuses in preflight, naming it and the command that
 fills the mirror. Vendor origins stay direct. Without it, every consumer keeps
-its own route, as today.
+its own route, as today. Until [B1340](../milestones/backlog.md#b1340), a
+Machine that runs what an installed mirror host's installation waits for,
+often the controller, still pulls its service images from their origins.
 
 ## Filling the mirror
 
@@ -190,7 +192,7 @@ Each step leaves a working product.
    [B724](../milestones/m3.md#b724).
 3. Bootwright builds and fills the mirror host:
    [B1236](../milestones/delivered.md#x358--container-runtime-on-an-ssh-placement-host), [B68](../milestones/delivered.md#x360--a-managed-registry-on-its-placement-machine)
-   and [B1249](../milestones/backlog.md#b1249).
+   and [B1249](../milestones/delivered.md#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs).
 4. Proof: [B1250](../milestones/backlog.md#b1250), with
    [B1251](../milestones/delivered.md#x359--destinations-a-managed-proxy-admits) as the lab's vendor-only gate.
 

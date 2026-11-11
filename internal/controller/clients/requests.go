@@ -21,7 +21,7 @@ const (
 	Implementation         = "controller-prerequisites"
 	BlockID                = "controller-prerequisites"
 	MirroredClientsBlockID = "controller-mirrored-clients"
-	Version                = "controller-clients-v5"
+	Version                = "controller-clients-v6"
 )
 
 const (
@@ -52,6 +52,7 @@ type Request struct {
 	// the graph selects: the runtime a libvirt provider hosted here needs, and
 	// the tooling an Anaconda installation published here builds with.
 	Hypervisor     bool          `json:"hypervisor"`
+	ImageMirror    bool          `json:"imageMirror,omitempty"`
 	InstallerMedia bool          `json:"installerMedia"`
 	IPUtils        bool          `json:"iputils,omitempty"`
 	Libvirt        string        `json:"libvirt"`
@@ -116,6 +117,7 @@ func NewRequest(selection controller.Selection, requests []controller.ToolReques
 		ContainerRuntime: selection.ContainerRuntime(),
 		Egress:           prerequisites.SetupEgress{HTTPProxy: route.HTTPProxy(), HTTPSProxy: route.HTTPSProxy(), NoProxy: bypass},
 		Hypervisor:       selection.Hypervisor(),
+		ImageMirror:      selection.ImageMirror(),
 		InstallerMedia:   selection.InstallerMedia(),
 		NMState:          selection.NMState(),
 		IPUtils:          selection.IPUtils(),
@@ -140,7 +142,7 @@ func NewRequest(selection controller.Selection, requests []controller.ToolReques
 // prerequisites.StageNativeOf reads it, so the stage and preflight ask the
 // host for the same requirements.
 func (r Request) native() prerequisites.StageNative {
-	return prerequisites.StageNative{ContainerRuntime: r.ContainerRuntime, LibvirtClient: r.LibvirtClient, Hypervisor: r.Hypervisor, InstallerMedia: r.InstallerMedia, NMState: r.NMState, IPUtils: r.IPUtils}
+	return prerequisites.StageNative{ContainerRuntime: r.ContainerRuntime, LibvirtClient: r.LibvirtClient, Hypervisor: r.Hypervisor, InstallerMedia: r.InstallerMedia, NMState: r.NMState, IPUtils: r.IPUtils, ImageMirror: r.ImageMirror}
 }
 
 // ToolRequests restores the catalog's own request shape from the frozen block.

@@ -309,3 +309,43 @@ func TestInstallerMediaToolingFollowsTheArtifactServersMachine(t *testing.T) {
 		t.Fatal("context-free scope invented an installer-media requirement")
 	}
 }
+
+// The image mirror's fill copies with skopeo where its Registry runs, so only
+// a managed mirror Registry on the controller Machine selects the copy tool.
+func TestTheImageMirrorCopyToolFollowsTheMirrorRegistrysMachine(t *testing.T) {
+	address := api.ListValue(api.MapValue().With("name", api.StringValue("ip")).With("address", api.StringValue("203.0.113.20")))
+	registry := func(management, machine string) api.Object {
+		return api.NewObject(api.Registry, "mirror-registry", api.Value{}, api.MapValue().With("management", api.StringValue(management)).With("machineRef", api.StringValue(machine)).
+			With("port", api.IntegerValue("5000")).With("endpoints", api.ListValue(api.MapValue().With("name", api.StringValue("ip")).With("addressRef", api.StringValue("ip")))))
+	}
+	mirrored := func(objects []api.Object) []api.Object {
+		environment, controllerMachine := objects[0], objects[1]
+		objects[0] = environment.WithSpec(environment.Spec().WithPath(api.StringValue("mirror-registry"), "mirror", "registry", "registryRef").
+			WithPath(api.StringValue("ip"), "mirror", "registry", "endpointRef"))
+		objects[1] = controllerMachine.WithSpec(controllerMachine.Spec().WithPath(address, "network", "addresses"))
+		return append(objects, api.NewObject(api.Machine, "mirror", api.Value{}, api.MapValue().WithPath(api.MapValue(), "proxy", "direct").WithPath(address, "network", "addresses")))
+	}
+	for _, test := range []struct {
+		name    string
+		objects []api.Object
+		want    bool
+	}{
+		{"a managed mirror on the controller", append(mirrored(selectionObjects()), registry("managed", "controller")), true},
+		{"a managed mirror elsewhere", append(mirrored(selectionObjects()), registry("managed", "mirror")), false},
+		{"an external mirror", append(mirrored(selectionObjects()), registry("external", "controller")), false},
+		{"a managed Registry that is no mirror", append(selectionObjects(), registry("managed", "controller")), false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			selection, err := controller.Select(api.NewCatalog(test.objects))
+			if err != nil || selection.ImageMirror() != test.want {
+				t.Fatalf("the copy tool selected %v (%v)", selection.ImageMirror(), diagnostics.Of(err))
+			}
+			if test.want && !controller.HasStage(selection, nil) {
+				t.Fatal("the copy tool alone gives the graph a controller stage")
+			}
+		})
+	}
+	if controller.Baseline().ImageMirror() {
+		t.Fatal("context-free scope invented the image mirror's copy tool")
+	}
+}

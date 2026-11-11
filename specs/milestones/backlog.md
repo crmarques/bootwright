@@ -294,7 +294,6 @@ Alias cell.
 | [B1237](#b1237) | new, 2026-11-09 (D248 (5)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's default image comes from a Red Hat registry wherever Red Hat publishes one | Red Hat publishes no dnsmasq, chrony or sushy-tools image, and its squid image needs a `registry.redhat.io` login no managed-service pull carries |
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
 | [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355, X361 and X401 on 2026-11-10 | product | Controller, with Desired state | A managed artifact server may serve the artifact mirror, and one declaration replaces the download mirrors | The declaration (X355), the preflight probe and the private trust anchor (X361) and a managed server on an SSH Machine (X401) landed; folding `spec.downloads` awaits the owner (D251 (5)) |
-| [B1249](#b1249) | new, 2026-11-10 (D250 (8)); partly delivered by X401 on 2026-11-10 and X408, X407, X409 and X430 on 2026-11-11 | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | X401 built and fills a managed artifact mirror on an SSH Machine, X408 split the controller stage around one on the controller and X407 built and fills a managed image mirror beside it; X409 placed the artifact mirror on a Machine Bootwright installs and X430 copies a cluster's release into the image mirror; `skopeo` on the controller and an image mirror on an installed Machine remain, which D251 (6) authorizes slice by slice |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
 | [B1300](#b1300) | new, 2026-11-10 (X363) | product | CLI | The acquisition list names `cp.icr.io`'s blob delivery host | The list landed (X363); the host answers only an entitled client, which this session could not use |
 | [B1301](#b1301) | new, 2026-11-10 (X363 review) | product | Controller, with Infrastructure services and Container clusters | A vendor registry's delivery hosts are admitted as fetch-only exceptions, or vendor images get a mirror route | A controlled network that denies public origins breaks a vendor image pull today; the owner decides how |
@@ -318,6 +317,8 @@ Alias cell.
 | [B1324](#b1324) | new, 2026-11-10 (X401) | product | Container cluster | A disconnected cluster verifies release signatures for its upgrades | A mirrored release's signatures stay on the vendor's signature store |
 | [B1325](#b1325) | new, 2026-11-10 (X401) | product | Infrastructure services | Several mirror hosts, or a mirror on a cluster | One Environment names one artifact mirror and one image mirror, each on one OS-ready Machine |
 | [B1329](#b1329) | new, 2026-11-11 (X409) | product | Infrastructure services, with Managed OS | A managed service on a Machine Bootwright installs opens its ports in that host's firewall | No managed service publishes host port requirements, so an installed host's profile must disable its firewall |
+| [B1340](#b1340) | new, 2026-11-11 (X431) | product | Infrastructure services | Only what an installed mirror host's installation waits for pulls its origin | Every pull on a Machine running such a service reads its origin, its other services' included: with a libvirt provider on the controller, every pull on the controller, so B1250's no-public-route profile cannot pass until this lands |
+| [B1345](#b1345) | new, 2026-11-12 (X431 gate) | defect | Cluster objects | `test_real_ansible_action_module_handoff` runs a real playbook under a 30-second subprocess timeout that host load exceeds | It timed out once in `make check` at a load average near 40 and passed twice alone |
 
 ### B82
 
@@ -3316,72 +3317,16 @@ mirror beside the system trust store, lent to each download and the probe
 `endpointRef` name a managed ArtifactServer as the mirror, filled on its
 [mirror host](../infrastructure-services.md#mirror-host)
 ([X401](delivered.md#x401--a-managed-artifact-mirror-on-an-ssh-machine)); its
-other placements stay with [B1249](#b1249). **Remaining:** `spec.downloads`
+other placements came with [B1249](delivered.md#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs). **Remaining:** `spec.downloads`
 folded into the declaration before 1.0, which awaits the owner
 ([D251](#d251) (5)). **Exit evidence:** the preflight and private-trust tests
 landed with X361, and a managed mirror's acquisition test and effective-state
 golden with X401.
 
-### B1249
-
-**Owner:** Infrastructure services, with State reconciliation. **Kind:**
-product. **Requires:** [B1245](delivered.md#x363--the-rest-of-the-acquisition-list) (delivered), B1246, [B68](delivered.md#x360--a-managed-registry-on-its-placement-machine) (delivered), [B1236](delivered.md#x358--container-runtime-on-an-ssh-placement-host) (delivered).
-**Definition:** Needs definition, from [D250](#d250) (8), (14) and (16): the
-[design](../deferred/controlled-network.md#the-mirror-host). **Outcome:** a
-context that places its mirror Registry and artifact server on a Machine,
-whose operating system is provided or installed by Bootwright and which may be
-the controller, drives that Machine as any other, over SSH or locally, builds
-both services serving HTTPS with a generated certificate whose authority every
-consumer trusts, and copies its acquisition list into them on that Machine,
-each artifact verified before it is published, before its controller stage
-acquires a tool. **Delivered in-tree by X401**
-([D251](#d251) (16) to (22)): a managed artifact mirror on an OS-ready
-Machine reached over SSH, `spec.mirror.artifacts.serverRef` and
-`endpointRef`, trusted through its certificate's issuer and filled with the
-controller stage's public-origin clients by `mirror-files-<environment>`
-before that stage, which the engine orders after resolving requirements
-([X401](delivered.md#x401--a-managed-artifact-mirror-on-an-ssh-machine)).
-**Delivered in-tree by X408** ([D251](#d251) (24) and (25)): the controller
-placement's stage split, `controller-prerequisites` and
-`controller-mirrored-clients` around the mirror's server and fill, with the
-mirror on the controller Machine run locally between them
-([X408](delivered.md#x408--the-controller-stage-split-around-its-mirror)).
-**Delivered in-tree by X407** ([D251](#d251) (26) to (30)): the image mirror,
-a managed Registry on the same Machine as `spec.mirror.registry` with its
-`endpointRef` and the issuer anchor, filled by `mirror-images-<environment>`
-after the controller stage with every service and emulated BMC image its
-consumers pull, copied by digest and read back, the mirror host's own
-services exempt, each consumer off the mirror host requiring the Registry and
-its fill, and `skopeo` proved on the host
-([X407](delivered.md#x407--a-managed-image-mirror-on-the-mirror-host)).
-**Delivered in-tree by X430** ([D251](#d251) (36) to (40)): part (b), the
-managed image mirror as a cluster's registry mirror and
-`mirror-release-<cluster>`, which copies the cluster's release into it with
-the release's own verified `oc` (`--to` the `ocp-v4.0-art-dev` repository and
-`--to-release-image` the `ocp-release` one), lent a two-entry auth document
-in a private scratch removed in an `always`, and proves every component there
-before the cluster's image build
-([X430](delivered.md#x430--openshift-releases-copied-into-the-managed-image-mirror)).
-**Remaining**, from the session's plan of 2026-11-10, each slice through its
-own review: (c) `skopeo` a
-stage package so the image mirror may sit on the controller, whose plan
-refuses it until then ([D251](#d251) (30)); (d) a managed image mirror on a
-Bootwright-installed Machine, whose image fill takes the SSH arm and which
-plan refuses until then ([D251](#d251) (33)). **Delivered in-tree by X409** ([D251](#d251) (31) to (33)): the
-artifact mirror, and any managed service, on a Machine Bootwright installs,
-its placement requiring the installation and its host key read from the
-installation's evidence, and the `lab-sno-installed-mirror-host` example as
-[B1250](#b1250)'s mirror-host row
-([X409](delivered.md#x409--a-managed-artifact-mirror-on-a-machine-bootwright-installs)).
-**Exit evidence:** the plan-order, replay and verification tests for the SSH
-placement landed with X401, the controller placement's order with X408, the
-image tests with X407, the installed placement's order with X409 and the
-release tests with X430.
-
 ### B1250
 
 **Owner:** Controller, with each consumer's owner. **Kind:** enabling.
-**Requires:** B1246, B1249, [B1301](#b1301). **Definition:** Candidate, from
+**Requires:** B1246, [B1249](delivered.md#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs) (delivered), [B1301](#b1301), [B1340](#b1340). **Definition:** Candidate, from
 [D250](#d250) (10). **Outcome:** a lab profile whose controller and Machines
 have no route but to their package repositories, the vendor origins and the
 mirror host installs an OpenShift cluster and a Ceph cluster, and its evidence
@@ -3701,6 +3646,19 @@ installs publishes its sockets as host port requirements, so the
 goes. **Exit evidence:** a plan test that an installed host with its firewall
 enabled plans the firewall block with the service's ports before the service.
 
+### B1340
+
+**Owner:** Infrastructure services. **Kind:** product. **Requires:** none.
+**Definition:** Candidate, from
+[X431](delivered.md#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs)
+and [D251](#d251) (35). **Outcome:** under a managed image mirror on a Machine
+Bootwright installs, only the emulated BMC of that Machine and the managed
+servers its installation waits for pull their origins, and every other
+service on the Machines they run on pulls through the mirror, the fill and
+`render acquisitions` reading the same per-consumer derivation. **Exit
+evidence:** a plan test in which a controller hosting the installation's
+resolver and an unrelated proxy pulls the proxy's image through the mirror.
+
 ## Audit remediation (2026-10-26)
 
 The [2026-10-26 spec audit](../../audits/001-spec/report-final.md) ordered its
@@ -3711,6 +3669,19 @@ roadmap step or batch, and the Not yet met lines in the specs point to them.
 Like every parked item, these authorize nothing: a lane, an item or a set of
 lanes runs on an explicit request, which attaches its items to a slice.
 
+
+### B1345
+
+**Owner:** Cluster objects. **Kind:** defect. **Requires:** none.
+**Definition:** Candidate, from X431's `make check`:
+`test_real_ansible_action_module_handoff[]` in
+`ansible/collections/ansible_collections/bootwright/core/tests/unit/test_cluster_objects.py`
+runs `ansible-playbook` in a subprocess with a 30-second timeout, which
+expired once at a load average near 40; the file then passed twice alone
+(68 passed in about 12 s). **Outcome:** the test bounds the real playbook
+by a deadline that host load does not exceed, or waits on the module's own
+handoff record, so the plain lane no longer fails on a loaded host.
+**Exit evidence:** the test passes under a parallel CPU load.
 
 ### B1237
 
@@ -8173,7 +8144,7 @@ the owner's review:
    proof, [B1250](#b1250), stays the owner's. Taken by the session for
    B1247 (X356), pending the owner's review: the image mirror is
    `spec.mirror.registry.registryRef`, an external Registry alone until
-   [B1249](#b1249) builds a managed one; only an image of a public origin is
+   [B1249](delivered.md#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs) builds a managed one; only an image of a public origin is
    mirrored, so a vendor image stays direct as D250 (4) keeps it; the
    mirrored reference is the one pulled and run, so a host holding only the
    origin's copy pulls the same digest once; and the credential and trust
@@ -8288,7 +8259,7 @@ the owner's review:
 12. Taken by the session for B68 (X360), pending the owner's review. B68 is
     a Candidate whose definition the slice's record supplies: a managed
     `Registry` on its placement Machine through the shared managed-service
-    capability, its consumers left to [B1249](#b1249). The implementation is
+    capability, its consumers left to [B1249](delivered.md#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs). The implementation is
     CNCF Distribution 3.1.2, the `registry` image pinned by its index digest
     (`implementation: distribution`, renamed from `mirror-registry`, which no
     product of that name realized), because it serves TLS and a bcrypt password
@@ -8603,8 +8574,36 @@ the owner's review:
     published on the controller. These rows live in the managed-service
     refusal table, whose capabilities refuse them, because the Environment
     table's leaf was at its budget.
+34. Taken by the session for B1249 (X431), pending the owner's review, from
+    (34) since X430 holds (36) to (40): when the managed image mirror's
+    Registry is placed on the controller Machine, the controller stage
+    selects a closure of its own, `image-mirror`, whose host package is
+    `skopeo`, in the packages half when the stage splits; the image fill and
+    the Registry stay after the stage and run locally. (30)'s controller
+    refusal is lifted for that Machine alone, and a Machine with
+    `access.local`, or SSH port 22 at a controller address, that is not the
+    controller Machine still refuses, as (25) holds for the artifact mirror.
+    The request moves to `controller-clients-v6` with `imageMirror`, which an
+    earlier build's stage refuses by its version. An installed mirror host's
+    image fill takes (31)'s installed arm, and (33)'s refusal of a managed
+    image mirror there becomes the refusal of an install profile that does
+    not install `skopeo`, which the fill proves before any copy; the release
+    copy of (37) takes the same arm and waits for that installation.
+35. Taken by the session for B1249 (X431): under a managed image mirror on a
+    Machine Bootwright installs, every image pulled on a Machine that runs
+    its libvirt provider, which runs its emulated BMC, or a managed server
+    its installation selects, and so on for each such Machine Bootwright
+    installs, reads its origin, extending (27)'s exemption of the mirror host
+    itself; otherwise those blocks, which the installation waits for, would
+    wait for the mirror and close a cycle the engine reports only as a
+    dependency cycle. The exemption is by Machine, as (27)'s is, because
+    `MirroredImage` takes the Machine an image is pulled on and the fill
+    copies exactly what the consumers' own derivation mirrors; its cost, that
+    such a Machine's other services pull their origins too, is
+    [B1340](#b1340). No named refusal row is needed, since no such cycle
+    remains.
 
-Clauses (34) and (35) are unused: X430 took (36) onward while X409, which took (31) to (33), was in flight beside it.
+X430 took (36) onward while X409, which took (31) to (33), was in flight beside it, and X431 took (34) and (35).
 
 36. Taken by the session for B1249 (X430), pending the owner's review: a
     managed Registry is a cluster's registry mirror only as the Environment's
