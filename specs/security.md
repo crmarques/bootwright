@@ -412,7 +412,13 @@ of generation.
 The installer process of a cluster's image build receives its route under the
 same rule: it reaches the release payload through the controller Machine's
 proxy choice, given as `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY` from its
-frozen request, never from the environment.
+frozen request, never from the environment. Each release read
+verifies its registry's certificate against the system roots and the trust
+bundles the cluster selects, though the installer asks its `oc` to skip that
+check. The build lends those bundles in a private directory named by
+`SSL_CERT_DIR`, which makes them trusted for every peer it reaches over TLS,
+and removes it when it ends; a base-image read that fails refuses the build
+([adapter boundary](openshift-clusters.md#adapter-boundary)).
 
 ## Local context privilege
 

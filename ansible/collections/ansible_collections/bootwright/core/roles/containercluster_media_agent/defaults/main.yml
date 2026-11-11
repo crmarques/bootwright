@@ -29,11 +29,26 @@ containercluster_media_agent_foreign: >-
      and containercluster_media_agent_built_by != bootwright_cluster_media_material.incarnation | default('') }}
 containercluster_media_agent_installer: '{{ bootwright_cluster_media_material.installer }}'
 # The installer reads the release payload through `oc`, which it finds by name
-# on its search path, so the build's path leads with the client the controller
-# stage published for the same release. The build egress adds only its route.
+# on its search path, and runs every such read with --insecure=true, which turns
+# off the check of the registry's certificate (pkg/asset/agent/image/releaseextract.go
+# for 4.20 and 4.21, pkg/asset/rhcos/releaseextract.go for 4.22 and later, and
+# pkg/asset/agent/common.go in openshift/installer). The build's path leads
+# with a wrapper that drops that flag and runs the client the controller stage
+# published for the same release, so the read verifies the registry against
+# Go's system roots. Go reads those from SSL_CERT_DIR as well as the system
+# bundle file, so the build adds the directory holding the trust bundles the
+# cluster selects, lent for this build alone, and the system directories after
+# it. The selected bundles are then trusted for every peer the installer
+# reaches over TLS, the publisher registry, the base image host and an HTTPS
+# proxy among them, as additionalTrustBundlePolicy Always makes them on the
+# nodes. The build egress adds only its route.
+containercluster_media_agent_aids: '{{ containercluster_media_agent_work }}/.bootwright-build'
+containercluster_media_agent_lent_trust: '{{ containercluster_media_agent_aids }}/trust'
+containercluster_media_agent_wrapper: '{{ containercluster_media_agent_aids }}/bin'
 containercluster_media_agent_environment: >-
   {{ bootwright_cluster_media_request.buildEgress | default({})
-     | combine({'PATH': (bootwright_cluster_media_material.oc | dirname) ~ ':/usr/bin:/usr/sbin'}) }}
+     | combine({'PATH': containercluster_media_agent_wrapper ~ ':' ~ (bootwright_cluster_media_material.oc | dirname) ~ ':/usr/bin:/usr/sbin',
+                'SSL_CERT_DIR': containercluster_media_agent_lent_trust ~ ':/etc/pki/tls/certs:/etc/ssl/certs'}) }}
 # The unguessable directory this attempt publishes in. The token is minted by
 # the attempt, so it names a path that exists in no request and no log.
 containercluster_media_agent_directory: >-

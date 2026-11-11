@@ -110,6 +110,22 @@ accepted that on one node in [B722](../../specs/milestones/delivered.md#x294--a-
   appears in the 4.21 branch and later (R6:C26, C2).
 - An offline image build without `oc` on the path silently falls back to a
   network download of the base image (R6:C29).
+- The image build's own release reads, `oc adm release info` and
+  `oc image extract`, run with `--insecure=true`
+  (`pkg/asset/agent/image/releaseextract.go` in 4.20 and 4.21,
+  `pkg/asset/rhcos/releaseextract.go` in 4.22 and later,
+  `pkg/asset/agent/common.go`), so oc verifies no registry certificate and
+  ignores `--certificate-authority`; `additionalTrustBundle` never reaches the
+  controller. The media role's wrapper drops the flag and lends the selected
+  bundles through `SSL_CERT_DIR`
+  ([X402](../../specs/milestones/delivered.md#x402--release-reads-verified-against-the-clusters-trust)).
+- A failed base-image extraction other than a missing file only warns ("Failed
+  to extract base ISO from release payload") and the build goes on with
+  "Downloading base ISO" from the compiled stream URL (`retrieveBaseIso`), and a
+  failed `DetermineReleaseImageArch` only warns; `oc image extract --icsp-file`
+  tries the source repository after the mirrors (`addSourceAsLastAlternate` in
+  oc's `strategy/explicit.go`), so a mirror with a wrong CA can build from
+  `quay.io` while the nodes then fail on the mirror ([B1326](../../specs/milestones/backlog.md#b1326)).
 - With the single-repository mirror layout, release component images live under
   `quay.io/openshift-release-dev/ocp-v4.0-art-dev`. Mapping only `ocp-release`
   lets disconnected nodes resolve components past the mirror (observed by the v1

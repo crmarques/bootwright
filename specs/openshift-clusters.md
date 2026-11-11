@@ -453,10 +453,6 @@ refuses, because one install pull secret carries one mirror credential. An
 `additionalTrustBundlePolicy` still needs an authored
 `additionalTrustBundleRefs` entry.
 
-Not yet met: the image build on the controller verifies a mirror against the
-trust bundles the cluster selects, rather than the controller's own trust
-store; tracked as [B1269](milestones/backlog.md#b1269).
-
 Not yet met: under the image mirror, a node's default time pool is replaced by
 the selected time servers rather than kept beside them; tracked as
 [B1268](milestones/backlog.md#b1268).
@@ -1231,9 +1227,28 @@ substrate's pre-boot, boot and disk-boot entry points by fixed qualified name.
 Go locates the exact installer executable and the same release's `oc`; the
 adapter substitutes bound material into the installer inputs and invokes the
 installer with exact argument vectors. The installer reads the release payload
-through `oc`, which it finds by name, so the image build's search path is that
-client's directory followed by `/usr/bin:/usr/sbin`, and it finds that `oc`
-before any other on the controller. No pull secret, private key or captured credential enters an
+through `oc`, which it finds by name and runs with `--insecure=true`, which
+turns off the check of the registry's certificate. The image build's search
+path therefore leads with a wrapper, private to the build, that drops that flag,
+runs that client by its path and ends its arguments with `--insecure=false`,
+followed by the client's directory and `/usr/bin:/usr/sbin`, so the build finds
+no other `oc` on the controller and every release read verifies its registry's
+certificate, a mirror's among them. The build's `SSL_CERT_DIR` names a private
+directory holding the trust bundles the cluster selects, the same bundles as
+`additionalTrustBundle`, followed by the system directories, and the system
+bundle file is still read, so a registry verifies against the system roots or
+a selected bundle and a mirror under a private authority needs nothing in the
+controller's trust store. The selected bundles are thereby trusted for every
+peer the installer reaches over TLS, the publisher registry, the base image's
+host and an HTTPS proxy among them, as `additionalTrustBundlePolicy: Always`
+trusts them on the nodes. A base-image read from the release that fails, for
+an unverified certificate or a mirror without the release, only warns, and the
+installer downloads the base image from its compiled stream URL instead; the
+build refuses when the installer's log records that fallback, and nothing is
+published. A release read that `oc` retries against the source repository
+after its mirrors fail is not refused; tracked as
+[B1326](milestones/backlog.md#b1326). The wrapper and the bundles are removed
+when the build ends, whatever its outcome. No pull secret, private key or captured credential enters an
 argument, an environment variable, the evidence or a log.
 
 Both frozen requests carry the controller arm alone: connection `local` and the

@@ -282,9 +282,16 @@ Fill it with `oc adm release mirror --from=quay.io/openshift-release-dev/ocp-rel
 --to=<registry url>/quay.io/openshift-release-dev/ocp-v4.0-art-dev
 --to-release-image=<registry url>/quay.io/openshift-release-dev/ocp-release:<version>-x86_64`,
 whose two repositories are the two the install maps. The registry must accept
-repository paths that deep, as Docker Distribution, Harbor and Quay do, and
-the controller's own trust store must hold its certificate authority while
-the image build reads from it. Otherwise,
+repository paths that deep, as Docker Distribution, Harbor and Quay do. The
+image build on the controller verifies it against the Registry's trust bundle,
+lent to the build alone, so the controller's own trust store needs nothing
+added. An apply that refuses because the installer downloaded the base image
+means the build could not read it from the release: check that the selected
+trust bundle holds the authority that signed the registry's certificate, and
+that the mirror holds the release, with the read that failed named in the work
+area's `.openshift_install.log`, then repeat the apply. Under FIPS, the
+mirror's certificate chain must keep to FIPS algorithms, with no SHA-1
+signature, as each node requires. Otherwise,
 `spec.install.registries.mirror` selects a declared
 Registry, and `imageDigestSources` maps the release's repositories to it; a
 `sourcePolicy` of `NeverContactSource` keeps a node from falling back to the

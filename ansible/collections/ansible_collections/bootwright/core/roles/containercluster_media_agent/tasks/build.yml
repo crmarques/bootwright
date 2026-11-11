@@ -128,6 +128,65 @@
       no_log: true
       changed_when: true
 
+    # The installer's release reads verify the registry, a mirror among them,
+    # against the trust bundles the cluster selects as well as the system
+    # roots, so a mirror under a private authority needs nothing in the
+    # controller's trust store. The bundles and the wrapper live in a private
+    # directory of the work area, which the always section removes and the next
+    # build's discard would.
+    - name: Create the private directories the build's trust and client wrapper live in
+      ansible.builtin.file:
+        path: '{{ item }}'
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+      loop:
+        - '{{ containercluster_media_agent_aids }}'
+        - '{{ containercluster_media_agent_lent_trust }}'
+        - '{{ containercluster_media_agent_wrapper }}'
+      changed_when: false
+
+    # The same bundles as the install configuration's additionalTrustBundle, in
+    # the order the cluster selects them; Go reads every file of the directory.
+    - name: Lend the cluster's selected trust bundles to the build
+      vars:
+        containercluster_media_agent_trust_bundles: >-
+          {{ range(bootwright_cluster_media_request.trustBundleRefs | default([]) | length)
+             | map('string') | map('regex_replace', '^', 'trustBundle')
+             | map('extract', bootwright_cluster_media_material) | list }}
+        containercluster_media_agent_line_break: "\n"
+      bootwright.core.private_file:
+        content: >-
+          {{ query('ansible.builtin.file', *containercluster_media_agent_trust_bundles)
+             | map('trim') | join(containercluster_media_agent_line_break) ~ containercluster_media_agent_line_break }}
+        path: '{{ containercluster_media_agent_lent_trust }}/selected.pem'
+      when: bootwright_cluster_media_request.trustBundleRefs | default([]) | length > 0
+      changed_when: false
+
+    # The installer passes --insecure=true to every oc call that reads the
+    # release, and oc then ignores both the system roots and a certificate
+    # authority, so the wrapper drops it, runs the published client by its path
+    # with every other argument unchanged, and ends with --insecure=false,
+    # since the last value of a flag wins, so no other spelling turns it on.
+    - name: Write the client wrapper the installer finds as oc
+      ansible.builtin.copy:
+        content: |
+          #!/bin/sh
+          for argument do
+            shift
+            case $argument in
+              --insecure | --insecure=true) ;;
+              *) set -- "$@" "$argument" ;;
+            esac
+          done
+          exec {{ bootwright_cluster_media_material.oc | quote }} "$@" --insecure=false
+        dest: '{{ containercluster_media_agent_wrapper }}/oc'
+        owner: root
+        group: root
+        mode: '0700'
+      changed_when: false
+
     - name: Read the start of the shared media build budget
       ansible.builtin.set_fact:
         containercluster_media_agent_started: >-
@@ -222,6 +281,37 @@
           work area and builds the image again.
       when: containercluster_media_agent_built.rc in containercluster_media_agent_budget_spent_codes
 
+    # A base-image read from the release that fails for any reason but a
+    # missing file only warns, and the installer then downloads the base image
+    # from its compiled stream URL (retrieveBaseIso in
+    # pkg/asset/agent/image/baseiso.go for 4.20 and 4.21,
+    # pkg/asset/rhcos/iso.go for 4.22), so a mirror whose certificate does not
+    # verify would build an image its nodes cannot install from. Its log is the
+    # only sign, and the build's own output is never shown. The search matches
+    # each line from its start, so the pattern leads with any prefix.
+    - name: Read whether the installer fell back from the release's base image
+      ansible.builtin.find:
+        paths: '{{ containercluster_media_agent_work }}'
+        patterns: .openshift_install.log
+        hidden: true
+        file_type: file
+        contains: '.*(Downloading base ISO|Failed to extract base ISO from release payload)'
+      register: containercluster_media_agent_fallback
+
+    - name: Refuse an image built from a downloaded base image
+      ansible.builtin.fail:
+        msg: >-
+          the installer could not read the base image of cluster
+          {{ bootwright_cluster_media_request.identity.cluster }} from its
+          release and downloaded one instead, so its nodes would not install
+          from the release registry. The likely cause is that the release
+          registry's certificate verifies against neither the controller's
+          system roots nor the cluster's additionalTrustBundleRefs, or that the
+          mirror lacks the release; the work area's .openshift_install.log
+          names the read that failed. Nothing was published; fix the trust
+          bundle or the mirror, then repeat bootwright apply.
+      when: containercluster_media_agent_fallback.matched | int > 0
+
     - name: Find the image the installer produced
       ansible.builtin.find:
         paths: '{{ containercluster_media_agent_work }}'
@@ -235,6 +325,13 @@
           - containercluster_media_agent_products.files | length == 1
         fail_msg: the installer produced no single agent image for this cluster
         quiet: true
+
+  always:
+    - name: Remove the trust and client wrapper lent to the build
+      ansible.builtin.file:
+        path: '{{ containercluster_media_agent_aids }}'
+        state: absent
+      changed_when: false
 
 - name: Publish fetched media through its private listener
   ansible.builtin.include_tasks: publish.yml

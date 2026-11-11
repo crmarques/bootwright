@@ -299,7 +299,6 @@ Alias cell.
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
 | [B1267](#b1267) | new, 2026-11-10 (X348, audit 004 REC-74) | safety | Substrate and Machine, with Infrastructure services | A context driving a server by its BMC and one reaching it as an OS-ready Machine over SSH conflict | Needs a cross-mechanism machine identity whose byte order is settled first |
 | [B1268](#b1268) | new, 2026-11-10 (D251 (7)) | product | Container cluster | Under the image mirror, a node's default time pool is replaced by the selected time servers | The agent install adds time sources beside the pool, and its manifest path admits only the Network kind, so no MachineConfig replaces it |
-| [B1269](#b1269) | new, 2026-11-10 (X357 review) | product | Container cluster | The controller's image build verifies a mirror against the cluster's selected trust bundles | The installer's own release extraction may read only the controller's trust store; B1250's run shows which |
 | [B1273](#b1273) | new, 2026-11-10 (X359 gate) | defect | Controller | `test_a_killed_lifecycle_supervisor_leaves_no_playbook_worker_or_task` reads a surviving process tree under heavy host load | It failed once under a load average near 30 and passed three times alone; the stopped-tree poll has no settle bound |
 | [B1299](#b1299) | new, 2026-11-10 (split from B1263, D253) | product | Controller, with State reconciliation | A running environment takes a raised client minimum without a destroy | An open owner question: a completed apply settles (D153), so replacing a client is a fresh apply today |
 | [B1300](#b1300) | new, 2026-11-10 (X363) | product | CLI | The acquisition list names `cp.icr.io`'s blob delivery host | The list landed (X363); the host answers only an entitled client, which this session could not use |
@@ -315,6 +314,7 @@ Alias cell.
 | [B1314](#b1314) | new, 2026-11-10 (X376 review) | enabling | Architecture | A release recipe builds, refuses a build that is unchecked or lacks its notices, and ships both documents with the executable | No release recipe exists; `make build` already refuses a build without notices, but nothing releases |
 | [B1317](#b1317) | new, 2026-11-10 (X400 review) | enabling | Architecture | A default client whose binary names no Go module has its third-party dependencies judged | virtctl 1.9.1 is built so its build information holds only the toolchain; the gate judges its Go dependencies by its top-level module alone |
 | [B1316](#b1316) | new, 2026-11-10 (X370 review) | defect | Storage, with Secrets | A storage consumer or replication block names every Secret its binding pins | Safe as it stands: the hold walks the applied lineage, whose cluster and host blocks class those keys as effect material |
+| [B1326](#b1326) | new, 2026-11-10 (X402 review) | safety | Container cluster | A release read on the controller never reaches the source repository past a failing mirror | oc's `--icsp-file` strategy tries the source last, which no wrapper argument stops; only a live run shows it happening |
 
 ### B82
 
@@ -3341,20 +3341,6 @@ nodes with those servers alone, through a chrony MachineConfig the install's
 manifest path admits beside the Network kind. **Exit evidence:** a projection golden of the
 manifest and a node row of [B1250](#b1250)'s profile.
 
-### B1269
-
-**Owner:** Container cluster. **Kind:** product. **Requires:** none.
-**Definition:** Candidate, from the independent review of
-[X357](delivered.md#x357--release-repositories-from-the-image-mirror): the
-media role hands `openshift-install agent create image` its build egress and
-`PATH` alone, and `additionalTrustBundle` reaches the nodes' image, so whether
-the installer's own release extraction trusts a private-CA mirror is unproved.
-**Outcome:** the build lends the cluster's selected trust bundles to that
-extraction, as a certificate file the build step reads, so a mirror under a
-private authority needs nothing in the controller's trust store. **Exit
-evidence:** a role test that the build step names the lent bundle, and the
-mirror row of [B1250](#b1250)'s profile.
-
 ### B1249
 
 **Owner:** Infrastructure services, with State reconciliation. **Kind:**
@@ -3386,7 +3372,9 @@ shows each denied attempt. **Exit evidence:** the profile's example, an
 in-tree test in which every public origin refuses, an owner-accepted run, and a
 scan of the images in the mirror registry that reports each image's findings
 like the scheduled scan of the pinned images
-([X400](delivered.md#x400--client-binary-scan-and-scheduled-image-scan)).
+([X400](delivered.md#x400--client-binary-scan-and-scheduled-image-scan)). Its
+mirror row also shows whether a release read on the controller reached the
+source repository past the mirror ([B1326](#b1326)).
 
 ### B1267
 
@@ -3602,6 +3590,26 @@ vulnerability gate on, refuses an executable stamped `unchecked` or a build
 without its notices, and ships the executable, its bill of materials and its
 notices together. **Exit evidence:** the recipe, and a test that it refuses each
 of the two builds.
+
+### B1326
+
+**Owner:** Container cluster. **Kind:** safety. **Requires:** none.
+**Definition:** Candidate, from the review of
+[X402](delivered.md#x402--release-reads-verified-against-the-clusters-trust).
+`oc image extract --icsp-file` and `oc adm release info --icsp-file` resolve
+an image through `NewICSPExplicitStrategy`, which adds the source repository
+as the last alternate (`addSourceAsLastAlternate` in oc's
+`pkg/cli/image/strategy/explicit.go`), so a mirror whose certificate does not
+verify, or that lacks an image, lets the controller's image build read it from
+`quay.io` when the build egress reaches it, while the nodes, under
+`NeverContactSource`, fail on the mirror. The base-image fallback refuses
+([X402](delivered.md#x402--release-reads-verified-against-the-clusters-trust)),
+but a component read that succeeded from the source does not. **Outcome:** the
+build refuses, or never makes, a release read from a source that the cluster's
+`imageDigestSources` maps with `NeverContactSource`, for instance by handing
+`oc` a configuration with no source alternate or by denying those hosts to the
+build's egress. **Exit evidence:** a test in which a mapped source is never
+dialled by the build, and the mirror row of [B1250](#b1250)'s profile.
 
 ### B1317
 
@@ -8275,6 +8283,21 @@ the owner's review:
     could not run; the scan of the mirror registry's images joins
     [B1250](#b1250)'s profile, and the release that refuses an `unchecked`
     build stays with [B1314](#b1314).
+14. Taken by the session for B1269 (X402), pending the owner's review: the
+    installer runs each `oc` call that reads the release with
+    `--insecure=true`, which skips the registry's certificate check, so lending
+    the selected trust bundles alone would change nothing. The image build
+    leads its search path with a private wrapper that drops that flag, runs
+    the published `oc` and ends with `--insecure=false`, and names the lent
+    bundles in `SSL_CERT_DIR` beside the system roots, which trusts them for
+    every peer the installer reaches over TLS. Each release read then verifies
+    its registry's certificate, so the mirror's credential in the pull secret
+    reaches only a verified peer, and a read from a registry whose certificate
+    verifies against neither, or one served over plain HTTP, fails. The
+    installer goes on after a failed base-image read by downloading the base
+    image, so the build refuses when its log records that fallback; `oc`'s own
+    retry of the source repository after its mirrors is not refused
+    ([B1326](#b1326)).
 
 ### D252
 

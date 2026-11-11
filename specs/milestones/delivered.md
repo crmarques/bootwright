@@ -13201,7 +13201,8 @@ request or install configuration moves, so no contract moved.
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** operator catalogs stay authored; the nodes' default
 time pool stays beside the selected servers ([B1268](backlog.md#b1268)); the
-controller's image build trusts its own store alone ([B1269](backlog.md#b1269)); the
+controller's image build trusted its own store alone until
+[X402](#x402--release-reads-verified-against-the-clusters-trust); the
 live proof is [B1250](backlog.md#b1250).
 
 ### X349 — Holds, uninstall
@@ -14179,3 +14180,69 @@ for the spelling.
 
 **Commits:** this record's commit. Gates: listed in its message. No live run or
 push occurred.
+
+### X402 — Release reads verified against the cluster's trust
+
+**Item:** B1269 (2026-11-10, [D251](backlog.md#d251) (6) and (14)), delivered
+in-tree; its live proof is the mirror row of [B1250](backlog.md#b1250)'s
+profile. `openshift-install agent create image` reads the release through
+`oc adm release info` and `oc image extract`, each run by name with
+`--insecure=true` (`pkg/asset/agent/image/releaseextract.go` in 4.20 and 4.21,
+`pkg/asset/rhcos/releaseextract.go` in 4.22 and later, and
+`DetermineReleaseImageArch` in `pkg/asset/agent/common.go`, openshift/installer),
+and with that flag oc's registry client takes a transport that skips the
+certificate check and may fall back to plain HTTP
+(`SecurityOptions.NewContext` in `pkg/cli/image/manifest/manifest.go`,
+openshift/oc; `Context.Ping` in `pkg/image/registryclient/client.go`,
+openshift/library-go). The controller's trust store was therefore never read,
+and neither would a lent certificate file be, so the build's release reads
+verified nothing: the mirror credential in the pull secret reached whatever
+answered. `additionalTrustBundle` only reaches the nodes, through the
+installer's `CaBundle` asset.
+
+The media role now creates, in a 0700 directory of the cluster's work area,
+`.bootwright-build/trust/selected.pem`, written private by `private_file` with
+the bundles the cluster selects in their order (the same `trustBundle<index>`
+materials as `additionalTrustBundle`), and `.bootwright-build/bin/oc`, a 0700
+wrapper that drops `--insecure` and `--insecure=true` and runs the published
+client by its quoted path with every other argument unchanged and
+`--insecure=false` last, since pflag keeps a flag's last value. Both installer
+steps run with `PATH` led by the wrapper's directory, then the client's, and
+with `SSL_CERT_DIR` set to the lent directory followed by `/etc/pki/tls/certs`
+and `/etc/ssl/certs`. Go's `crypto/x509` on Linux reads the system bundle file
+and every file of each `SSL_CERT_DIR` entry into its system pool, and oc's
+default transport uses that pool, so a registry verifies against the system
+roots or a selected bundle; the selected bundles are thereby trusted for every
+peer the installer reaches over TLS, as `additionalTrustBundlePolicy: Always`
+trusts them on the nodes. A release read whose certificate does not verify
+fails, but the installer only warns when its base-image read fails and then
+downloads the base image from its compiled stream URL (`retrieveBaseIso` in
+`pkg/asset/agent/image/baseiso.go` for 4.20 and 4.21, `pkg/asset/rhcos/iso.go`
+for 4.22), so after the build the role searches `.openshift_install.log`
+with the find module and refuses, publishing nothing, when it records "Downloading base ISO"
+or "Failed to extract base ISO from release payload", naming the release
+registry's certificate and the mirror's contents as the likely causes. The
+block's `always` section removes the
+directory whatever the build's outcome, and the next build's discard of the
+work area would. Nothing in `/etc` or the containers configuration changes.
+`test_containercluster_media_build_trust.py` renders the real tasks: both
+build steps name the lent directory, the bundle holds eleven selections in
+order, a cluster selecting none lends nothing, the file is 0600 in 0700
+directories and is gone after the removal, and the rendered wrapper, run
+against a stand-in client, drops only the flag, ends with `--insecure=false`
+so no later spelling such as `--insecure=True` or `--insecure=1` turns insecure
+reads back on, and passes `--insecure=false` through; the fallback search,
+run by the real find module over installer logs, refuses either message and
+builds on an extraction, whatever another file of the work area holds. The work-area name is
+classified transient in the contract literal table. No request field, contract
+or content digest moved.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** only a live run proves that the installer's `oc`
+calls accept the release from a private-authority mirror with the flag
+dropped, that no other installer read needs it, and that an egress proxy's
+interception authority, if any, is in the system roots; that is the mirror
+row of [B1250](backlog.md#b1250)'s profile. `oc` retries a release read
+against the source repository after its mirrors fail, which the wrapper cannot
+stop, so a component read from `quay.io` past a failing mirror is not refused
+([B1326](backlog.md#b1326)).
