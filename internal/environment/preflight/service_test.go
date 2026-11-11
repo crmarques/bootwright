@@ -449,6 +449,16 @@ func TestADryRunOfEveryStageRunsNoControllerCheck(t *testing.T) {
 	}
 }
 
+func TestPreflightRefusesSSHOverridesWhenOnlyAnOpenShiftClusterIsNamedBeforeAnyCheckRuns(t *testing.T) {
+	service, controller, budget, clusters := fixture()
+	service.Graph = graph{api.NewCatalog([]api.Object{object(api.CephCluster, "store"), object(api.OpenShiftCluster, "sno")})}
+	result, err := service.Preflight(context.Background(), PreflightRequest{Clusters: []string{"sno"}, SSH: machine.SSHOptions{User: "operator"}})
+	found := diagnostics.Of(err)
+	if result != nil || len(found) != 1 || found[0].Code != "cli.usage" || controller.calls+budget.calls+clusters.calls != 0 {
+		t.Fatalf("result %+v, error %#v, calls %d %d %d", result, err, controller.calls, budget.calls, clusters.calls)
+	}
+}
+
 func TestPreflightRefusesSSHOverridesNoCephClusterReachesBeforeAnyCheckRuns(t *testing.T) {
 	ssh := machine.SSHOptions{User: "operator"}
 	service, controller, budget, clusters := fixture()

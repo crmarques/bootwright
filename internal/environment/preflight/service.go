@@ -65,7 +65,10 @@ func (s Service) Preflight(ctx context.Context, request PreflightRequest) (*Repo
 	if err != nil {
 		return nil, err
 	}
-	if err := clusterpreflight.RefuseUnreachedSSH(request.SSH, clusters && len(catalog.OfCategory(api.StorageClusterCategory)) > 0); err != nil {
+	storageSelected := clusters && slices.ContainsFunc(catalog.OfCategory(api.StorageClusterCategory), func(cluster api.Object) bool {
+		return len(request.Clusters) == 0 || slices.Contains(request.Clusters, cluster.Name())
+	})
+	if err := clusterpreflight.RefuseUnreachedSSH(request.SSH, storageSelected); err != nil {
 		return nil, err
 	}
 	var parts []clusterpreflight.Part

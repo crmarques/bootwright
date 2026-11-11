@@ -15425,3 +15425,17 @@ refusal rule; the runner refuses the old spelling through its ordinary unknown
 flag diagnostic. **Commits:** this commit. **Gates:** listed in its message.
 **Limitations:** breaking CLI change; use `--observe-host-keys`. No live run or
 push.
+
+### X435 — Preflight selected-cluster refusal
+
+**Item:** B1348 (found by X417), delivered in-tree. **Kind:** defect.
+**Owners:** CLI and Environment. The
+[preflight refusal rule](../cli/output.md#preflight) is checked before any
+checker starts against the selected CephCluster names, rather than every
+CephCluster declared in the context. An OpenShift-only selection with borrowed
+SSH options now refuses `cli.usage` even beside an unselected CephCluster.
+The regression fails on the prior source with all three checkers called, and
+passes with zero controller, capacity and cluster calls.
+
+**Commits:** this commit. **Gates:** listed in its message. The independent
+review of X417 included this correction. **Limitations:** no live run or push.
