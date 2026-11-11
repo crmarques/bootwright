@@ -208,8 +208,8 @@ eligible device identity. The label is not permission to discover new hosts
 or disks after the authorization is frozen.
 
 The core OSD projection preserves explicit `db_devices.paths`,
-`wal_devices.paths`, `encrypted` and `tpm2`, and refuses by name an
-`osds_per_device` above its native 1 and a `crush_device_class`
+`wal_devices.paths`, `encrypted`, `tpm2` and `crush_device_class`, and
+refuses by name an `osds_per_device` above its native 1
 ([device contract](ceph.md#devices-and-destructive-ownership)).
 Every selected data, DB and WAL path receives the same independent identity
 proof before its per-host stable alias enters the native service document.

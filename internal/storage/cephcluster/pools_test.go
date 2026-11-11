@@ -184,12 +184,38 @@ func TestPolicyDeviceClassAdmitsNvmeAndDeclaredClasses(t *testing.T) {
 	}
 	noIssues(t, admitted(fixtureCatalog(), policy("nvme")))
 	onlyIssue(t, admitted(fixtureCatalog(), policy("fast")), "$.spec.crushDeviceClass", "device class fast is neither an automatic class (hdd, ssd, nvme) nor a crush_device_class an OSD service of this cluster declares", "use hdd, ssd or nvme, or declare crush_device_class: fast on the OSD service that owns those devices")
-	onlyIssue(t, admitted(fixtureCatalog(), policy("fa st")), "$.spec.crushDeviceClass", "device class fa st is not a native CRUSH class name (letters, digits, '-', '_' and '.')", "rename the device class here and on the OSD service that declares it")
+	onlyIssue(t, admitted(fixtureCatalog(), policy("fa st")), "$.spec.crushDeviceClass", "device class fa st is not a native CRUSH class name of at most 64 letters, digits, '-', '_' and '.'", "rename the device class here and on the OSD service that declares it")
 	storage := m("label", "storage")
 	specLevel := osdWithClass(storage, m("crush_device_class", "fast", "data_devices", m("paths", api.StringList("/dev/vdb"))))
 	pathLevel := osdWithClass(storage, m("data_devices", m("paths", []api.Value{m("path", "/dev/vdb", "crush_device_class", "fast")})))
 	noIssues(t, admitted(clusterOf(t, 3, "", specLevel), policy("fast")))
 	noIssues(t, admitted(clusterOf(t, 3, "", pathLevel), policy("fast")))
+}
+
+func TestOSDDeclaredClassesAdmitOnlyNativeNamesOnDataDevices(t *testing.T) {
+	storage := m("label", "storage")
+	cluster := func(spec api.Value) api.Object {
+		catalog := clusterOf(t, 3, "", osdWithClass(storage, spec))
+		return find(t, catalog, api.CephCluster, "storage")
+	}
+	admit := func(spec api.Value) []api.Issue {
+		object := cluster(spec)
+		return Validate(object, replace(clusterOf(t, 3, "", osdWithClass(storage, spec)), object))
+	}
+	onlyIssue(t, admit(m("crush_device_class", "fa st", "data_devices", m("paths", api.StringList("/dev/vdb")))), "$.spec.services[2].spec.crush_device_class",
+		"device class fa st is not a native CRUSH class name of at most 64 letters, digits, '-', '_' and '.'", "rename the device class here and in every placement policy or pool that selects it")
+	onlyIssue(t, admit(m("data_devices", m("paths", []api.Value{m("path", "/dev/vdb", "crush_device_class", strings.Repeat("f", 65))}))), "$.spec.services[2].spec.data_devices.paths[0].crush_device_class",
+		"device class "+strings.Repeat("f", 65)+" is not a native CRUSH class name of at most 64 letters, digits, '-', '_' and '.'", "rename the device class here and in every placement policy or pool that selects it")
+	onlyIssue(t, admit(m("data_devices", m("paths", api.StringList("/dev/vdb")), "db_devices", m("paths", []api.Value{m("path", "/dev/vdc", "crush_device_class", "fast")}))), "$.spec.services[2].spec.db_devices.paths[0].crush_device_class",
+		"cephadm gives a CRUSH device class only to the OSD a data device holds, so a db_devices path's crush_device_class has no effect", "write this path as a plain device path, and set crush_device_class on the data_devices path or at spec level")
+	noIssues(t, admit(m("crush_device_class", "fast", "data_devices", m("paths", []api.Value{m("path", "/dev/vdb", "crush_device_class", "slow")}))))
+}
+
+func TestAPathClassOverridesItsServiceClassInCapacity(t *testing.T) {
+	overridden := osdWithClass(m("label", "storage"), m("crush_device_class", "fast", "data_devices", m("paths", []api.Value{m("path", "/dev/vdb", "crush_device_class", "slow")})))
+	policy := placementPolicy("fast-policy", "ruleName", "fast-rule", "crushDeviceClass", "fast")
+	onlyIssue(t, admitted(clusterOf(t, 3, "", overridden), policy), "$.spec.crushDeviceClass", "device class fast is neither an automatic class (hdd, ssd, nvme) nor a crush_device_class an OSD service of this cluster declares", "use hdd, ssd or nvme, or declare crush_device_class: fast on the OSD service that owns those devices")
+	noIssues(t, admitted(clusterOf(t, 3, "", overridden), placementPolicy("slow-policy", "ruleName", "slow-rule", "crushDeviceClass", "slow")))
 }
 
 func TestDeclaredClassCapacityCountsOnlyDeclaringHosts(t *testing.T) {

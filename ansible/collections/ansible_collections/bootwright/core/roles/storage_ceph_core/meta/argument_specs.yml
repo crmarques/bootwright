@@ -809,7 +809,7 @@ argument_specs:
             type: str
             required: true
             choices:
-              - ceph-core-v1
+              - ceph-core-v2
       bootwright_ceph_digest:
         type: str
         required: true

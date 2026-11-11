@@ -16,7 +16,7 @@ CURRENT = "20.2.1-405.el9cp"
 
 @pytest.fixture
 def stage_request():
-    return {"version": "ceph-core-v1", "clusterSSHTransport": "verifiedTunnel", "owner": "apply-example",
+    return {"version": "ceph-core-v2", "clusterSSHTransport": "verifiedTunnel", "owner": "apply-example",
             "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "20.2.1-405.el9cp"},
             "bootstrap": "node-1.example.test", "monIP": "192.0.2.1", "clusterNetworks": [], "callHome": "enabled",
@@ -109,7 +109,7 @@ def test_bootstrap_has_no_native_ssh_or_host_enrollment_path(stage_request):
     assert staging.bootstrap_argv(stage_request, scratch(stage_request), chosen())[-2:] == ["--cluster-network", "198.51.100.0/24"]
 
 
-@pytest.mark.parametrize("field,value", [("version", "ceph-core-v2"), ("clusterSSHTransport", "native"),
+@pytest.mark.parametrize("field,value", [("version", "ceph-core-v1"), ("clusterSSHTransport", "native"),
                                          ("owner", "../owner"), ("fsid", "../../foreign"), ("bootstrap", "foreign"),
                                          ("monIP", "192.0.2.99"), ("image", "registry.example.test/ceph:latest")])
 def test_invalid_request_never_produces_staging_argv(stage_request, field, value):

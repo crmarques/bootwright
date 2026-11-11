@@ -72,7 +72,19 @@ func (a *admission) nativeOSD(spec api.Value, field string, nodes []api.Value, p
 			}
 		}
 	}
+	a.crushClass(spec.Get("crush_device_class"), field+".crush_device_class")
+	for i, path := range spec.Get("data_devices", "paths").Items() {
+		if path.Type() == api.Mapping {
+			a.crushClass(path.Get("crush_device_class"), indexed(field+".data_devices.paths", i)+".crush_device_class")
+		}
+	}
 	for _, key := range []string{"db_devices", "wal_devices"} {
+		for i, path := range spec.Get(key, "paths").Items() {
+			if path.Type() == api.Mapping && path.Has("crush_device_class") {
+				a.invalid(indexed(field+"."+key+".paths", i)+".crush_device_class", "cephadm gives a CRUSH device class only to the OSD a data device holds, so a "+key+" path's crush_device_class has no effect",
+					"write this path as a plain device path, and set crush_device_class on the data_devices path or at spec level")
+			}
+		}
 		for _, device := range nativeDevicePaths(spec.Get(key)) {
 			if slices.Contains(nativeDevicePaths(spec.Get("data_devices")), device) {
 				a.invalid(field+"."+key, "OSD data allocation cannot overlap its DB or WAL devices", "select disjoint data_devices and db_devices/wal_devices paths")

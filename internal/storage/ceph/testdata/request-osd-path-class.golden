@@ -1,0 +1,21 @@
+{
+  "placement": {
+    "hosts": [
+      "node-1",
+      "node-2",
+      "node-3"
+    ]
+  },
+  "service_id": "data",
+  "service_type": "osd",
+  "spec": {
+    "data_devices": {
+      "paths": [
+        {
+          "crush_device_class": "fast",
+          "path": "/dev/vdb"
+        }
+      ]
+    }
+  }
+}

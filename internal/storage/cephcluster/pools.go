@@ -48,11 +48,12 @@ func declaredClassHosts(cluster api.Object) map[string][]string {
 		if textOf(service, "service_type") != "osd" {
 			continue
 		}
-		classes := []string{textOf(service, "spec", "crush_device_class")}
+		classes := []string{}
 		for _, path := range service.Get("spec", "data_devices", "paths").Items() {
-			if path.Type() == api.Mapping {
-				classes = append(classes, textOf(path, "crush_device_class"))
-			}
+			classes = append(classes, effectiveClass(service, path))
+		}
+		if len(classes) == 0 {
+			classes = append(classes, textOf(service, "spec", "crush_device_class"))
 		}
 		names, issues := ResolveServicePlacement(cluster, service)
 		for _, class := range classes {
@@ -95,15 +96,14 @@ func automaticClassCapacity(cluster api.Object, class string) (int64, bool) {
 		if len(issues) != 0 {
 			return osdHostCount(cluster), false
 		}
-		assigned := textOf(service, "spec", "crush_device_class")
-		couldMatch := assigned == class
-		paths := service.Get("spec", "data_devices", "paths").Items()
-		unknown := assigned == "" && len(paths) == 0
-		for _, path := range paths {
-			pathClass := textOf(path, "crush_device_class")
-			couldMatch = couldMatch || pathClass == class
-			unknown = unknown || assigned == "" && pathClass == ""
+		assigned := []string{}
+		for _, path := range service.Get("spec", "data_devices", "paths").Items() {
+			assigned = append(assigned, effectiveClass(service, path))
 		}
+		if len(assigned) == 0 {
+			assigned = append(assigned, textOf(service, "spec", "crush_device_class"))
+		}
+		couldMatch, unknown := slices.Contains(assigned, class), slices.Contains(assigned, "")
 		if couldMatch || unknown {
 			for _, host := range names {
 				possible[host] = true
@@ -114,13 +114,30 @@ func automaticClassCapacity(cluster api.Object, class string) (int64, bool) {
 	return count, count < osdHostCount(cluster)
 }
 
+func effectiveClass(service, path api.Value) string {
+	if class := textOf(path, "crush_device_class"); path.Type() == api.Mapping && class != "" {
+		return class
+	}
+	return textOf(service, "spec", "crush_device_class")
+}
+
+func validCrushClass(class string) bool {
+	return len(class) <= 64 && crushClassName.MatchString(class)
+}
+
+func (a *admission) crushClass(value api.Value, field string) {
+	if value.Present() && !validCrushClass(value.Text()) {
+		a.issue("api.invariant", field, "device class "+value.Text()+" is not a native CRUSH class name of at most 64 letters, digits, '-', '_' and '.'", "rename the device class here and in every placement policy or pool that selects it")
+	}
+}
+
 func (a *admission) deviceClass(cluster api.Object, value api.Value, field string) {
 	if !value.Present() {
 		return
 	}
 	class := value.Text()
-	if !crushClassName.MatchString(class) {
-		a.issue("api.invariant", field, "device class "+class+" is not a native CRUSH class name (letters, digits, '-', '_' and '.')", "rename the device class here and on the OSD service that declares it")
+	if !validCrushClass(class) {
+		a.issue("api.invariant", field, "device class "+class+" is not a native CRUSH class name of at most 64 letters, digits, '-', '_' and '.'", "rename the device class here and on the OSD service that declares it")
 		return
 	}
 	if _, declared := declaredClassHosts(cluster)[class]; declared || slices.Contains(automaticClasses, class) {

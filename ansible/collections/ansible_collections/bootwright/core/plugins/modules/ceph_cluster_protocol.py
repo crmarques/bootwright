@@ -136,6 +136,7 @@ options:
       - osd-clear-unproved
       - osd-orphan-booted
       - osd-orphan-unproved
+      - osd-class-drift
       - device-serial-absent
       - device-serial-ambiguous
       - device-serial-mismatch

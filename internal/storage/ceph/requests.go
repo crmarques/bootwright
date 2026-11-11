@@ -1,9 +1,11 @@
 package ceph
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/netip"
 	"slices"
 	"strconv"
@@ -17,7 +19,7 @@ import (
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
-const Version = "ceph-core-v1"
+const Version = "ceph-core-v2"
 const Implementation = "storage-ceph-core-v1"
 
 type Device struct {
@@ -178,16 +180,61 @@ type nativePlacement struct {
 	CountPerHost *int64   `json:"count_per_host,omitempty"`
 	Hosts        []string `json:"hosts"`
 }
+type nativePath struct {
+	Class string
+	Path  string
+}
+type nativePathRecord struct {
+	CrushDeviceClass string `json:"crush_device_class"`
+	Path             string `json:"path"`
+}
+
+func (p nativePath) MarshalJSON() ([]byte, error) {
+	if p.Class == "" {
+		return json.Marshal(p.Path)
+	}
+	return json.Marshal(nativePathRecord{CrushDeviceClass: p.Class, Path: p.Path})
+}
+
+func (p *nativePath) UnmarshalJSON(data []byte) error {
+	if path, err := reconciliation.DecodeEvidence[string](data, 4096, "Ceph native OSD path"); err == nil {
+		*p = nativePath{Path: path}
+		return nil
+	}
+	record, err := reconciliation.DecodeEvidence[nativePathRecord](data, 4096, "Ceph native OSD path")
+	if err != nil {
+		return err
+	}
+	if record.CrushDeviceClass == "" || record.Path == "" {
+		return errors.New("a native OSD path record carries no path or no crush_device_class")
+	}
+	*p = nativePath{Class: record.CrushDeviceClass, Path: record.Path}
+	return nil
+}
+
+func nativePaths(paths api.Value) []nativePath {
+	out := []nativePath{}
+	for _, path := range paths.Items() {
+		if path.Type() == api.Mapping {
+			out = append(out, nativePath{Class: path.Get("crush_device_class").Text(), Path: path.Get("path").Text()})
+		} else {
+			out = append(out, nativePath{Path: path.Text()})
+		}
+	}
+	return out
+}
+
 type nativeDevices struct {
-	Paths []string `json:"paths"`
+	Paths []nativePath `json:"paths"`
 }
 type nativeSpec struct {
-	CrushLocations map[string][]string `json:"crush_locations,omitempty"`
-	DataDevices    *nativeDevices      `json:"data_devices,omitempty"`
-	DBDevices      *nativeDevices      `json:"db_devices,omitempty"`
-	Encrypted      bool                `json:"encrypted,omitempty"`
-	TPM2           bool                `json:"tpm2,omitempty"`
-	WALDevices     *nativeDevices      `json:"wal_devices,omitempty"`
+	CrushDeviceClass string              `json:"crush_device_class,omitempty"`
+	CrushLocations   map[string][]string `json:"crush_locations,omitempty"`
+	DataDevices      *nativeDevices      `json:"data_devices,omitempty"`
+	DBDevices        *nativeDevices      `json:"db_devices,omitempty"`
+	Encrypted        bool                `json:"encrypted,omitempty"`
+	TPM2             bool                `json:"tpm2,omitempty"`
+	WALDevices       *nativeDevices      `json:"wal_devices,omitempty"`
 }
 type nativeService struct {
 	Placement   nativePlacement `json:"placement"`
@@ -534,11 +581,7 @@ func selectDevices(r *Request) {
 func checkDevices(r Request, names []string, cluster api.Object, service api.Value) error {
 	osd := cephcluster.NativeServiceName(service)
 	for _, field := range service.Get("spec").Fields() {
-		if field.Name == "crush_device_class" {
-			return failure("lifecycle.unsupported", "OSD service "+osd+" sets spec.crush_device_class, and the core adapter does not yet carry a custom CRUSH device class into its OSD projection",
-				"remove spec.crush_device_class so each OSD takes its detected class (hdd, ssd or nvme), and select that class in the placement policy or pool")
-		}
-		if !slices.Contains([]string{"data_devices", "db_devices", "wal_devices", "encrypted", "tpm2", "osds_per_device"}, field.Name) {
+		if !slices.Contains([]string{"data_devices", "db_devices", "wal_devices", "encrypted", "tpm2", "osds_per_device", "crush_device_class"}, field.Name) {
 			return failure("lifecycle.unsupported", "OSD service "+osd+" sets spec."+field.Name+", an OSD allocation option the core adapter does not model", "remove spec."+field.Name+" and use explicit data, DB and WAL paths and one OSD per data disk")
 		}
 	}
@@ -548,7 +591,8 @@ func checkDevices(r Request, names []string, cluster api.Object, service api.Val
 	if service.Get("spec", "tpm2").Bool() && !service.Get("spec", "encrypted").Bool() {
 		return failure("api.invariant", "TPM2 OSDs require encryption", "set encrypted: true")
 	}
-	paths := []api.Value{}
+	paths := []string{}
+	classes := map[string]bool{}
 	for _, field := range []string{"data_devices", "db_devices", "wal_devices"} {
 		selector := service.Get("spec", field)
 		if field != "data_devices" && !selector.Present() {
@@ -559,22 +603,31 @@ func checkDevices(r Request, names []string, cluster api.Object, service api.Val
 		}
 		for i, path := range selector.Get("paths").Items() {
 			member := field + ".paths[" + strconv.Itoa(i) + "]"
-			if path.Type() == api.Mapping && path.Has("crush_device_class") {
-				return failure("lifecycle.unsupported", "OSD service "+osd+" declares "+member+" as a {path, crush_device_class} record, and the core adapter does not yet carry a custom CRUSH device class into its OSD projection",
-					"write "+member+" as a plain device path so its OSD takes its detected class (hdd, ssd or nvme)")
+			if path.Type() == api.Mapping && field == "data_devices" {
+				class := cmp.Or(path.Get("crush_device_class").Text(), service.Get("spec", "crush_device_class").Text())
+				classes[class] = true
+				paths = append(paths, path.Get("path").Text())
+				continue
 			}
 			if path.Type() != api.String {
 				return failure("lifecycle.unsupported", "OSD service "+osd+" declares "+member+" as something other than a plain device string", "use plain owned data-disk paths: /dev/sd* for explicit-media disks, /dev/vd* otherwise")
 			}
-			paths = append(paths, path)
+			if field == "data_devices" {
+				classes[service.Get("spec", "crush_device_class").Text()] = true
+			}
+			paths = append(paths, path.Text())
 		}
+	}
+	if len(classes) > 1 && (service.Get("spec", "db_devices").Present() || service.Get("spec", "wal_devices").Present()) {
+		return failure("lifecycle.unsupported", "OSD service "+osd+" gives its data devices more than one CRUSH device class and declares db_devices or wal_devices; the core adapter submits one native OSD document per class, and those documents cannot share DB or WAL devices",
+			"declare one OSD service per device class, each with its own db_devices and wal_devices")
 	}
 	seenPaths := map[string]bool{}
 	for _, path := range paths {
-		if seenPaths[path.Text()] {
+		if seenPaths[path] {
 			return failure("api.invariant", "OSD data, DB and WAL paths overlap", "select distinct explicit devices for every OSD allocation")
 		}
-		seenPaths[path.Text()] = true
+		seenPaths[path] = true
 	}
 	count, hasCount := service.Get("placement", "count").Int64()
 	if hasCount && count != int64(len(names)) {
@@ -587,8 +640,7 @@ func checkDevices(r Request, names []string, cluster api.Object, service api.Val
 				native = cephcluster.NativeHostname(node)
 			}
 		}
-		for _, path := range paths {
-			p := path.Text()
+		for _, p := range paths {
 			found := false
 			for _, h := range r.Hosts {
 				if h.Name == native {
@@ -619,14 +671,12 @@ func hostRequirements(hosts ...Host) []reconciliation.ObjectRef {
 
 func osdPaths(spec *nativeSpec, dataOnly bool) []string {
 	paths := []string{}
-	if spec.DataDevices != nil {
-		paths = append(paths, spec.DataDevices.Paths...)
-	}
-	if !dataOnly {
-		for _, devices := range []*nativeDevices{spec.DBDevices, spec.WALDevices} {
-			if devices != nil {
-				paths = append(paths, devices.Paths...)
-			}
+	for i, devices := range []*nativeDevices{spec.DataDevices, spec.DBDevices, spec.WALDevices} {
+		if devices == nil || dataOnly && i > 0 {
+			continue
+		}
+		for _, path := range devices.Paths {
+			paths = append(paths, path.Path)
 		}
 	}
 	return paths

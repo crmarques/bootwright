@@ -68,12 +68,13 @@ func projectServices(r *Request, cluster api.Object) error {
 			if err := checkDevices(*r, names, cluster, svc); err != nil {
 				return err
 			}
-			projected.Spec = &nativeSpec{DataDevices: &nativeDevices{Paths: svc.Get("spec", "data_devices", "paths").Strings()}, Encrypted: svc.Get("spec", "encrypted").Bool(), TPM2: svc.Get("spec", "tpm2").Bool()}
+			projected.Spec = &nativeSpec{CrushDeviceClass: svc.Get("spec", "crush_device_class").Text(), DataDevices: &nativeDevices{Paths: nativePaths(svc.Get("spec", "data_devices", "paths"))},
+				Encrypted: svc.Get("spec", "encrypted").Bool(), TPM2: svc.Get("spec", "tpm2").Bool()}
 			if svc.Get("spec").Has("db_devices") {
-				projected.Spec.DBDevices = &nativeDevices{Paths: svc.Get("spec", "db_devices", "paths").Strings()}
+				projected.Spec.DBDevices = &nativeDevices{Paths: nativePaths(svc.Get("spec", "db_devices", "paths"))}
 			}
 			if svc.Get("spec").Has("wal_devices") {
-				projected.Spec.WALDevices = &nativeDevices{Paths: svc.Get("spec", "wal_devices", "paths").Strings()}
+				projected.Spec.WALDevices = &nativeDevices{Paths: nativePaths(svc.Get("spec", "wal_devices", "paths"))}
 			}
 			for _, host := range hosts {
 				for _, path := range osdPaths(projected.Spec, false) {

@@ -1175,9 +1175,18 @@ shared-device allocation.
 
 The bounded core profile accepts explicit `data_devices.paths`, optional
 `db_devices.paths` and `wal_devices.paths`, `encrypted` and `tpm2`, with one
-OSD per data device. A custom CRUSH device class, as `spec.crush_device_class`
-or a `{path, crush_device_class}` path record, refuses at plan by that member's
-name ([CephPlacementPolicy](ceph-resources.md#cephplacementpolicy)). All
+OSD per data device. A `crush_device_class` at spec level, or on a
+`{path, crush_device_class}` data path record, which takes precedence as in
+ceph-volume, is the CRUSH class each such OSD takes: since cephadm's stored
+spec keeps no path's class, the adapter submits one native OSD document per
+host and class, with the class at spec level. Read-only readiness requires each
+declared class in `ceph osd tree`; an OSD still starting without it stays
+unready, and a booted OSD of another class refuses `osd-class-drift`
+(`lifecycle.unknown`), because cephadm classes only the OSDs it creates. A
+class is a native CRUSH name of at most 64 letters, digits, `-`, `_` and `.`;
+a DB or WAL path record's class refuses at validation, since cephadm classes
+only data OSDs, and data devices of more than one class beside DB or WAL
+devices refuse at plan, since per-class documents cannot share them. All
 selected paths are distinct within a drive group and across services on a
 host; dynamic selectors, slots and sizes remain
 unsupported. TPM2 requires encryption and a declared TPM profile. Omitted

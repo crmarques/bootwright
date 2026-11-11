@@ -247,16 +247,14 @@ at bootstrap, is reserved; two policies of one cluster never share a rule; and
 no rule takes the name of an erasure-coded pool of the cluster, which derives
 its own rule. A device class is `hdd`, `ssd` or `nvme`, which OSDs set
 automatically, or a `crush_device_class` that an OSD service of the cluster
-declares at spec or path level. For a declared class, host-domain replicas
-count only the hosts whose OSD services declare it. A failure domain other
+declares at spec or path level, a path's class overriding its service's, which
+its OSDs take ([device contract](ceph.md#devices-and-destructive-ownership)).
+For a declared class, host-domain replicas count only the hosts whose OSD
+services declare it. A failure domain other
 than `host` refuses at plan; site and rack domains are parked by D160 (OD25).
 A stretch cluster places every pool with its own stretch rule, so a policy
 whose `clusterRef` names one refuses at validation and at plan
 ([stretch topology](ceph.md#stretch-topology)).
-
-Not yet met: the core OSD projection carries no `crush_device_class`, so an
-OSD service that declares one refuses at plan; tracked as
-[B1264](milestones/m2.md#b1264).
 
 | Field | Contract |
 | --- | --- |

@@ -253,3 +253,111 @@ def test_existing_host_readiness_round_requires_variant_proof(core_request):
     native.prove_completed_osd_variants = refuse
     with pytest.raises(ceph_native.Refusal, match="foreign-osd"):
         native.host_state()
+
+
+def classed(request, spec_class="", path_classes=()):
+    """Give the OSD service a spec-level class and, per data path, a {path, crush_device_class} record."""
+    spec = request["services"][-1]["spec"]
+    for host in request["hosts"]:
+        host["devices"].append({"path": "/dev/vdc", "serial": host["name"] + "-fast", "sizeBytes": 1024 ** 3})
+    paths = ["/dev/vdb", "/dev/vdc"]
+    spec["data_devices"]["paths"] = [{"path": path, "crush_device_class": c} if c else path
+                                     for path, c in zip(paths, list(path_classes) + [""] * (2 - len(path_classes)))]
+    if spec_class:
+        spec["crush_device_class"] = spec_class
+    return request
+
+
+def test_a_spec_class_stays_one_native_document_per_host(core_request):
+    classed(core_request, spec_class="fast")
+    assert ceph_native.validate(core_request) is core_request
+    native, calls = fixtures.worker(core_request, {})
+    plain = copy.deepcopy(core_request["services"][-1])
+    del plain["spec"]["crush_device_class"]
+    projected, unclassed = native.service_spec(core_request["services"][-1]), native.service_spec(plain)
+    assert [s["service_id"] for s in projected] == [s["service_id"] for s in unclassed]
+    assert all(s["spec"]["crush_device_class"] == "fast" and len(s["spec"]["data_devices"]["paths"]) == 2 for s in projected)
+    assert all("crush_device_class" not in s["spec"] for s in unclassed)
+    assert calls == []
+
+
+def test_path_classes_become_one_spec_class_document_per_class(core_request):
+    classed(core_request, spec_class="slow", path_classes=("fast",))
+    assert ceph_native.validate(core_request) is core_request
+    native, unused = fixtures.worker(core_request, {})
+    projected = native.service_spec(core_request["services"][-1])
+    assert len(projected) == 6 and len({s["service_id"] for s in projected}) == 6
+    for host, pair in zip(core_request["hosts"], (projected[i:i + 2] for i in range(0, 6, 2))):
+        assert [(s["spec"]["crush_device_class"], s["spec"]["data_devices"]["paths"]) for s in pair] == [
+            ("fast", ["/dev/disk/by-id/virtio-" + host["devices"][0]["serial"]]),
+            ("slow", ["/dev/disk/by-id/virtio-" + host["devices"][1]["serial"]])]
+        assert all(s["placement"] == {"hosts": [host["name"]]} and len(s["service_id"]) <= 63 for s in pair)
+
+
+@pytest.mark.parametrize("damage", ["spec-name", "path-name", "db-record", "unknown-member", "shared-db"])
+def test_an_osd_class_refuses_where_cephadm_cannot_realize_it(core_request, damage):
+    classed(core_request, path_classes=("fast",))
+    spec = core_request["services"][-1]["spec"]
+    if damage == "spec-name":
+        spec["crush_device_class"] = "fa st"
+    elif damage == "path-name":
+        spec["data_devices"]["paths"][0]["crush_device_class"] = "f" * 65
+    elif damage == "db-record":
+        for host in core_request["hosts"]:
+            host["devices"].append({"path": "/dev/vdd", "serial": host["name"] + "-db", "sizeBytes": 1024 ** 3})
+        spec["data_devices"]["paths"] = ["/dev/vdb", "/dev/vdc"]
+        spec["db_devices"] = {"paths": [{"path": "/dev/vdd", "crush_device_class": "fast"}]}
+    elif damage == "unknown-member":
+        spec["data_devices"]["paths"][0]["weight"] = 1
+    else:
+        for host in core_request["hosts"]:
+            host["devices"].append({"path": "/dev/vdd", "serial": host["name"] + "-db", "sizeBytes": 1024 ** 3})
+        spec["db_devices"] = {"paths": ["/dev/vdd"]}
+    with pytest.raises(ceph_native.Refusal):
+        ceph_native.validate(core_request)
+
+
+@pytest.mark.parametrize("damage", [None, "class"])
+def test_native_normalization_cannot_drop_a_declared_class(core_request, monkeypatch, damage):
+    import json
+    from ansible_collections.bootwright.core.plugins.module_utils import ceph_host_runtime
+    classed(core_request, path_classes=("fast",))
+    native, unused = fixtures.worker(core_request, {})
+    groups = [native.service_spec(value) for value in core_request["services"]]
+    native.runtime_profile = lambda: {"imageID": "sha256:" + "a" * 64, "uid": 100, "gid": 100}
+
+    def contained(self, image, user, source, arguments):
+        result = json.loads(arguments[0])
+        if damage:
+            for value in result[-1]:
+                value["spec"].pop("crush_device_class", None)
+        return result
+
+    monkeypatch.setattr(ceph_host_runtime.HostRuntime, "contained", contained)
+    if damage is None:
+        assert native.normalized_services(groups) == groups
+    else:
+        with pytest.raises(ceph_native.Refusal, match="^osd-unqualified$"):
+            native.normalized_services(groups)
+
+
+@pytest.mark.parametrize("realized,up,ready", [("fast", 1, True), (None, 0, False), ("ssd", 0, False), (None, 1, False), ("ssd", 1, "osd-class-drift")])
+def test_osd_readiness_proves_the_declared_class(core_request, realized, up, ready):
+    core_request["services"][-1]["spec"]["crush_device_class"] = "fast"
+    core_request["config"] = fixtures.memory_config()
+    answers = fixtures.memory_observation_answers(core_request)
+    answers[("osd", "dump")]["osds"][0]["up"] = up
+    nodes = [{"id": -1, "type": "root", "name": "default"}]
+    nodes += [{"id": i, "type": "osd", "name": "osd." + str(i), **({"device_class": "fast"} if i else {})} for i in range(3)]
+    if realized:
+        nodes[1]["device_class"] = realized
+    answers[("osd", "tree")] = {"nodes": nodes}
+    native, calls = fixtures.worker(core_request, answers)
+    if isinstance(ready, str):
+        with pytest.raises(ceph_native.Refusal, match="^" + ready + "$"):
+            native.observe()
+        return
+    observed = native.observe()
+    assert observed["ready"] is ready and len(observed["osds"]) == 3
+    assert sum("osd" in argv and "tree" in argv for argv in calls) == 1
+    assert native.markers.writes == []

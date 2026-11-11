@@ -82,26 +82,61 @@ func TestNonStringOSDPathRemedyNamesOwnedDataDiskPaths(t *testing.T) {
 	}
 }
 
-func TestACustomCRUSHDeviceClassRefusesAtPlanByName(t *testing.T) {
+func TestACustomCRUSHDeviceClassPlansIntoTheNativeOSDSpecGolden(t *testing.T) {
 	for _, test := range []struct {
-		name, member string
-		change       func(api.Value) api.Value
+		golden string
+		spec   func(path string) api.Value
 	}{
-		{"service level", "sets spec.crush_device_class", func(osd api.Value) api.Value {
-			return osd.WithPath(api.StringValue("fast"), "spec", "crush_device_class")
+		{"request-osd-class", func(path string) api.Value {
+			return requestMap("crush_device_class", "fast", "data_devices", requestMap("paths", api.StringList(path)))
 		}},
-		{"path record", "declares data_devices.paths[0] as a {path, crush_device_class} record", func(osd api.Value) api.Value {
-			path := osd.Get("spec", "data_devices", "paths").Items()[0]
-			record := requestMap("path", path.Text(), "crush_device_class", "fast")
-			return osd.WithPath(api.ListValue(record), "spec", "data_devices", "paths")
+		{"request-osd-path-class", func(path string) api.Value {
+			return requestMap("data_devices", requestMap("paths", api.ListValue(requestMap("path", path, "crush_device_class", "fast"))))
 		}},
 	} {
-		t.Run(test.name, func(t *testing.T) {
-			d := osdRefusal(t, test.change)
-			if d.Code != "lifecycle.unsupported" || !strings.Contains(d.Message, "OSD service osd.data "+test.member) || !strings.Contains(d.Message, "custom CRUSH device class") || !strings.Contains(d.Remediation, "hdd, ssd or nvme") {
-				t.Fatalf("device class refusal: %+v", d)
+		t.Run(test.golden, func(t *testing.T) {
+			policy := childOf(api.CephPlacementPolicy, "fast", "ruleName", "fast-hosts", "crushDeviceClass", "fast", "replicated", requestMap("size", 2, "minSize", 2))
+			catalog := planCatalog(3, 3, func(spec api.Value) api.Value {
+				services := spec.Get("services").Items()
+				services[2] = services[2].With("spec", test.spec(services[2].Get("spec", "data_devices", "paths").Items()[0].Text()))
+				return withCorePair(spec.WithPath(api.ListValue(services...), "services"))
+			}, policy)
+			r, err := planned(t, catalog, api.CephCluster, "example")
+			if err != nil {
+				t.Fatal(diagnostics.Of(err))
+			}
+			matchesGolden(t, test.golden, r.Services[2], false)
+			var service nativeService
+			if err := json.Unmarshal(r.Services[2], &service); err != nil {
+				t.Fatal(err)
+			}
+			again, err := json.Marshal(service)
+			if err != nil || !bytes.Equal(again, r.Services[2]) || len(dataDeviceSet(r)) != 3 {
+				t.Fatalf("the native OSD document does not read back as itself: %s (%v)", again, err)
+			}
+			placed, err := planned(t, catalog, api.CephPlacementPolicy, "fast")
+			if err != nil || placed.Policy == nil || placed.Policy.DeviceClass != "fast" {
+				t.Fatalf("a policy on a declared class planned as %+v (%v)", placed.Policy, diagnostics.Of(err))
 			}
 		})
+	}
+}
+
+func TestOSDClassesRefuseWhereCephadmCannotRealizeThem(t *testing.T) {
+	d := osdRefusal(t, func(osd api.Value) api.Value {
+		path := osd.Get("spec", "data_devices", "paths").Items()[0].Text()
+		return osd.WithPath(requestMap("crush_device_class", "fast", "data_devices", requestMap("paths", api.ListValue(requestMap("path", path, "crush_device_class", "slow"), api.StringValue("/dev/vdc"))),
+			"db_devices", requestMap("paths", api.StringList("/dev/vdd"))), "spec")
+	})
+	if d.Code != "lifecycle.unsupported" || !strings.Contains(d.Message, "OSD service osd.data gives its data devices more than one CRUSH device class and declares db_devices or wal_devices") ||
+		d.Remediation != "declare one OSD service per device class, each with its own db_devices and wal_devices" {
+		t.Fatalf("a multi-class OSD service with a DB device planned as %+v", d)
+	}
+	d = osdRefusal(t, func(osd api.Value) api.Value {
+		return osd.WithPath(requestMap("paths", api.ListValue(requestMap("path", "/dev/vdd", "crush_device_class", "fast"))), "spec", "db_devices")
+	})
+	if d.Message != "OSD service osd.data declares db_devices.paths[0] as something other than a plain device string" {
+		t.Fatalf("a DB path record planned as %+v", d)
 	}
 }
 

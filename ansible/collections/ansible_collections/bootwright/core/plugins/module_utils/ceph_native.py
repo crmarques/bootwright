@@ -50,6 +50,8 @@ ADMIN_LABEL, ADMIN_ENTITY = "_admin", "client.admin"
 HOST_LABEL = re.compile(r"(?:_admin|[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127})\Z")
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 DEVICE = re.compile(r"/dev/(?:disk/by-id/|disk/by-serial/)?[a-zA-Z0-9_.:+-]{1,200}\Z")
+# A native CRUSH device class name (CrushWrapper::is_valid_crush_name), bounded.
+DEVICE_CLASS = re.compile(r"[A-Za-z0-9_.-]{1,64}\Z")
 # The reserved form naming, by its serial number, a disk the host's Machine declares; host preparation binds it to a disk.
 SERIAL_DEVICE = re.compile(r"/dev/disk/by-serial/([A-Za-z0-9._:+-]{1,128})\Z")
 REGISTRY_DIRECTORY = "/etc/ceph"
@@ -626,7 +628,7 @@ def package_url(value):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v1")
+    require(request["version"] == "ceph-core-v2")
     if "security" in request:
         security = request["security"]
         require(isinstance(security, dict) and set(security) == {"fips", "cephxKeyType"})
@@ -857,8 +859,10 @@ def validate_services(request, hosts, seen):
         require(placement.get("count", len(placement["hosts"])) == len(placement["hosts"]), "device-unproved")
         spec = service.get("spec")
         require(isinstance(spec, dict) and "data_devices" in spec
-                and not set(spec) - {"data_devices", "db_devices", "wal_devices", "encrypted", "tpm2"}, "osd-unqualified")
+                and not set(spec) - {"data_devices", "db_devices", "wal_devices", "encrypted", "tpm2", "crush_device_class"}, "osd-unqualified")
         require(all(type(spec.get(field, False)) is bool for field in ("encrypted", "tpm2")), "osd-unqualified")
+        require("crush_device_class" not in spec or isinstance(spec["crush_device_class"], str)
+                and DEVICE_CLASS.fullmatch(spec["crush_device_class"]) is not None, "osd-unqualified")
         require(not spec.get("tpm2") or spec.get("encrypted"), "osd-unqualified")
         for field in ("data_devices", "db_devices", "wal_devices"):
             if field not in spec:
@@ -866,12 +870,15 @@ def validate_services(request, hosts, seen):
             selection = spec[field]
             require(isinstance(selection, dict) and set(selection) == {"paths"}, "osd-unqualified")
             require(isinstance(selection["paths"], list) and bool(selection["paths"]))
+            require(field == "data_devices" or all(isinstance(path, str) for path in selection["paths"]), "osd-unqualified")
             for name in placement["hosts"]:
                 host = next(h for h in hosts if h["name"] == name)
                 for path in selection["paths"]:
                     selected = selected_device(host, path)
                     require((name, selected["path"]) not in selected_devices, "device-overlap")
                     selected_devices.add((name, selected["path"]))
+        # One native document per device class cannot share a DB or WAL device with another.
+        require(len(class_groups(spec)) == 1 or not ({"db_devices", "wal_devices"} & set(spec)), "osd-unqualified")
     require(kinds >= {"mon", "mgr"})
     require(request["bootstrap"] in next(s["placement"]["hosts"] for s in services if s["service_type"] == "mon"))
     if request["clusterSSHTransport"] == "verifiedTunnel":
@@ -902,10 +909,36 @@ def osd_device_group(request, host, data_path):
 
 def device_path(value):
     if isinstance(value, dict):
-        require(set(value) == {"path"}, "device-unqualified")
+        require(set(value) in ({"path"}, {"path", "crush_device_class"}), "device-unqualified")
+        require(isinstance(value.get("crush_device_class", ""), str) and DEVICE_CLASS.fullmatch(value.get("crush_device_class", "-")) is not None,
+                "device-unqualified")
         value = value["path"]
     require(isinstance(value, str) and DEVICE.fullmatch(value) is not None, "device-unproved")
     return value
+
+
+def device_class(spec, value):
+    """The class cephadm gives a data path's OSD: the path record's own, else the service's (ceph-volume's precedence)."""
+    if isinstance(value, dict) and value.get("crush_device_class"):
+        return value["crush_device_class"]
+    return spec.get("crush_device_class", "")
+
+
+def class_groups(spec):
+    """A drive group's data paths by the class their OSDs take, in class order."""
+    groups = {}
+    for path in spec["data_devices"]["paths"]:
+        groups.setdefault(device_class(spec, path), []).append(path)
+    return dict(sorted(groups.items()))
+
+
+def osd_device_class(request, host, data_path):
+    for service in request["services"]:
+        if service["service_type"] == "osd" and host["name"] in service["placement"]["hosts"]:
+            for path in service["spec"]["data_devices"]["paths"]:
+                if selected_device(host, path)["path"] == data_path:
+                    return device_class(service["spec"], path)
+    raise Refusal("device-unproved")
 
 
 def selected_device(host, value):
@@ -1853,7 +1886,7 @@ class Worker:
         for service in services:
             spec, allocations = service["spec"], {}
             for field, role in (("data_devices", "block"), ("db_devices", "db"), ("wal_devices", "wal")):
-                for path in spec.get(field, {}).get("paths", []):
+                for path in map(device_path, spec.get(field, {}).get("paths", [])):
                     device = physical.get(path) or next(d for d in self.host["devices"] if d["path"] == path)
                     node = self.node_of(path, physical)
                     disks = [d for d in observed["blockdevices"] if d.get("path") == node]
@@ -2217,7 +2250,7 @@ class Worker:
 
     def osd_data_specs(self, actual):
         return [s["spec"] for s in self.request["services"] if s["service_type"] == "osd" and self.host["name"] in s["placement"]["hosts"]
-                and any(self.node_of(path, self.bound_devices) == actual for path in s["spec"]["data_devices"]["paths"])]
+                and any(self.node_of(device_path(path), self.bound_devices) == actual for path in s["spec"]["data_devices"]["paths"])]
 
     def owned_partial_osd(self, actual, item, signatures, listed, rows, device, alias):
         """The clear of a declared data disk that holds only this operation's own interrupted OSD creation; any other
@@ -3622,7 +3655,8 @@ class Worker:
 
     def service_specs(self, limit=None):
         values = self.ceph("orch", "ls", "--export")
-        limit = len(self.request["services"]) * len(self.request["hosts"]) if limit is None else limit
+        width = max([len(class_groups(s["spec"])) for s in self.request["services"] if s["service_type"] == "osd"] + [1])
+        limit = len(self.request["services"]) * len(self.request["hosts"]) * width if limit is None else limit
         require(isinstance(values, list) and len(values) <= limit, "foreign-service")
         result = {}
         for value in values:
@@ -3644,19 +3678,26 @@ class Worker:
         if value["service_type"] != "osd":
             return [value]
         result = []
+        # cephadm keeps no path's class in its stored spec, so each class is one document with a spec-level class.
+        groups = class_groups(value["spec"])
         for host in self.request["hosts"]:
             if host["name"] not in value["placement"]["hosts"]:
                 continue
-            projected = json.loads(canonical(value))
-            projected["placement"] = {"hosts": [host["name"]]}
-            projected["service_id"] = value["service_id"][:46] + "-" + hashlib.sha256(canonical([value["service_id"], host["name"]])).hexdigest()[:16]
-            for field in ("data_devices", "db_devices", "wal_devices"):
-                if field in value["spec"]:
-                    projected["spec"][field]["paths"] = [
-                        self.stable_device_path(host, selected_device(host, path), submission=True)
-                        for path in value["spec"][field]["paths"]
-                    ]
-            result.append(projected)
+            for crush_class, paths in groups.items():
+                projected = json.loads(canonical(value))
+                projected["placement"] = {"hosts": [host["name"]]}
+                seed = [value["service_id"], host["name"]] + ([crush_class] if len(groups) > 1 else [])
+                projected["service_id"] = value["service_id"][:46] + "-" + hashlib.sha256(canonical(seed)).hexdigest()[:16]
+                projected["spec"].pop("crush_device_class", None)
+                if crush_class:
+                    projected["spec"]["crush_device_class"] = crush_class
+                for field in ("data_devices", "db_devices", "wal_devices"):
+                    if field in value["spec"]:
+                        projected["spec"][field]["paths"] = [
+                            self.stable_device_path(host, selected_device(host, path), submission=True)
+                            for path in (paths if field == "data_devices" else value["spec"][field]["paths"])
+                        ]
+                result.append(projected)
         return result
 
     def normalized_services(self, groups, record="service-inputs.json"):
@@ -3691,6 +3732,7 @@ class Worker:
                     require(isinstance(spec, dict) and spec.get("data_devices") == original["spec"]["data_devices"]
                             and all(spec.get(field) == original["spec"].get(field) for field in ("db_devices", "wal_devices"))
                             and all(spec.get(field, False) == original["spec"].get(field, False) for field in ("encrypted", "tpm2"))
+                            and spec.get("crush_device_class") == original["spec"].get("crush_device_class")
                             and not any(spec.get(field) for field in ("journal_devices", "data_directories"))
                             and spec.get("osds_per_device", 1) == 1, "osd-unqualified")
         if retained is None:
@@ -4399,6 +4441,18 @@ class Worker:
         require(len(unplaced) <= UNPLACED_LIMIT, "foreign-osd")
         return sorted(unplaced, key=lambda osd: osd["id"])
 
+    def osd_classes(self):
+        """Each OSD's CRUSH device class in the OSD tree; an OSD the tree lists without one is absent."""
+        tree = self.ceph("osd", "tree")
+        require(isinstance(tree, dict) and isinstance(tree.get("nodes"), list) and len(tree["nodes"]) <= 65536, "native-output")
+        classes = {}
+        for node in tree["nodes"]:
+            require(isinstance(node, dict) and type(node.get("id")) is int and isinstance(node.get("type"), str), "native-output")
+            if node["type"] == "osd" and node.get("device_class") is not None:
+                require(isinstance(node["device_class"], str) and node["id"] not in classes, "native-output")
+                classes[node["id"]] = node["device_class"]
+        return classes
+
     def observe_osds(self, evidence, running, ready):
         self.unplaced = []
         running_osds = {daemon.get("daemon_id"): daemon for daemon in running if daemon["daemon_type"] == "osd"}
@@ -4416,7 +4470,7 @@ class Worker:
             # Before services publish the identities no OSD may exist to prove.
             require(not metadata and not running_osds, "device-identity")
             return False
-        matched = set()
+        matched, classes = set(), None
         for host, device in devices:
             device_id = self.metadata_device_name(host, device) + "=" + self.expected_device_id(host, device)
             groups = osd_device_group(self.request, host, device["path"])
@@ -4445,6 +4499,13 @@ class Worker:
             osd_ready = type(osd.get("up")) is int and osd["up"] == 1 and type(osd.get("in")) is int and osd["in"] == 1
             osd_ready = (osd_ready and daemon is not None and daemon.get("hostname") == host["name"] and type(daemon.get("status")) is int and
                          daemon["status"] == 1 and self.request["image"] in (daemon.get("container_image_digests") or []))
+            declared = osd_device_class(self.request, host, device["path"])
+            if declared:
+                # A booted OSD keeps the class it took; only one still starting may yet take the declared one.
+                classes = self.osd_classes() if classes is None else classes
+                realized = classes.get(item["id"])
+                require(realized in (None, declared) or not osd_ready, "osd-class-drift")
+                osd_ready = osd_ready and realized == declared
             ready = ready and osd_ready
             if osd_ready:
                 # The manager serves each daemon's running configuration.

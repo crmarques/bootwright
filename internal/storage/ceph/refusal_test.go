@@ -538,3 +538,14 @@ func TestAnSSHPolicyRefusalReachesTheOperatorWithItsRemedy(t *testing.T) {
 		})
 	}
 }
+
+func TestAnOSDClassDriftRefusalNamesTheNativeRepair(t *testing.T) {
+	r := coreRequest()
+	e := withMaterial(executionFor(t, r), r)
+	_, err := New(api.CephCluster, &refusingRunner{reason: "osd-class-drift"}).Observe(context.Background(), e)
+	d := diagnostics.Of(err)
+	if len(d) != 1 || d[0].Code != "lifecycle.unknown" || !strings.Contains(d[0].Message, "carries a CRUSH device class other than the crush_device_class its OSD service declares") ||
+		!strings.Contains(d[0].Remediation, "ceph osd crush set-device-class <class> osd.<id>") || lifecycle.AttemptOutcome(err) != reconciliation.OutcomeUnknown {
+		t.Fatalf("an osd-class-drift refusal reached the operator as %+v", d)
+	}
+}

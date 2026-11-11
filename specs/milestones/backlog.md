@@ -8329,7 +8329,7 @@ COR-36, NEW-15, CLI-37, API-38, API-121 and API-54. The owner's answers:
 
 Taken by the session, pending the owner's review: a custom CRUSH device class
 refuses at plan by name with a Not yet met line, and its realization is parked
-as [B1264](m2.md#b1264); a stored receipt whose shape changes moves its version,
+as [B1264](delivered.md#x374--crush-classes); a stored receipt whose shape changes moves its version,
 and before 1.0 an earlier receipt refuses with the `controller uninstall`
 exit it already names.
 
@@ -8348,7 +8348,7 @@ items you listed". This authorizes, out of sequence for implementation, X368
 (M1, [B1298](delivered.md#x368--mac-claims)), X369 (M1, [B1274](delivered.md#x369--wwn-root)), X370 (M1,
 [B1270](delivered.md#x370--secret-classes)), X371 (M1, [B1271](delivered.md#x371--added-set-across-failures) and
 [B1272](delivered.md#x371--added-set-across-failures)), X372 (M1, [B1275](delivered.md#x372--serial-root-wwn)), X373 (M1,
-[B1263](delivered.md#x373--clients-below-the-minimum)), X374 (M2, [B1264](m2.md#b1264)) and X375 (M3,
+[B1263](delivered.md#x373--clients-below-the-minimum)), X374 (M2, [B1264](delivered.md#x374--crush-classes)) and X375 (M3,
 [B1265](m3.md#b1265)), no more than two active at once. The owner's answers:
 
 1. Every physical server claims its MAC addresses as exclusive `bmc-mac:` keys,

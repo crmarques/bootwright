@@ -13445,14 +13445,14 @@ A topology node takes its Machine's effective `fqdn` and its Machine's
 naming both ([normalization](../api/ceph.md#normalization)). `serviceBindings`
 routing is one [table](../ceph-native-api.md#secret-bindings). A custom CRUSH
 device class refuses at plan by its member's name, and its realization is
-parked as [B1264](m2.md#b1264).
+parked as [B1264](#x374--crush-classes).
 
 | Finding | Change |
 | --- | --- |
 | API-06 | `normalizeCluster` defaults a node's `fqdn` from `machine.Address(…, "fqdn")` before composing; `topology` refuses a mismatch on an installed Machine at `topology.nodes[i].fqdn`; api/ceph.md Normalization and invariants, api/environment.md composition; the restated `fqdn` lines and their comments leave the examples, e2e templates and admission fixtures, and the multidc example's placement hosts take the Machine names; `TestATopologyNodeTakesItsMachineFQDNAndSite`, `TestAnAuthoredNodeFQDNDifferingFromItsInstalledMachineRefuses`, `TestExampleCephNodesRegisterUnderTheirMachineFQDN`, `TestExampleCephNodeRefusesARestatedIdentity` |
 | API-54 | `ValidateAuthored` refuses `topology.nodes[i].site`; normalization always derives it from the Machine; ceph-native-api.md Hosts, api/machines.md `placement.site` names its consumers; the multidc example and stretch e2e template drop node sites; `TestAnAuthoredTopologyNodeSiteRefuses` |
 | API-05 | the routing table in ceph-native-api.md#secret-bindings, linked from api/ceph.md; `TestExampleServiceBindingsPlanByTheRoutingTable` plans the observability bindings and NVMe-oF mTLS bindings and refuses an nfs binding |
-| API-07 | `checkDevices` names `spec.crush_device_class`, `spec.<field>` and `<member>.paths[i]`; Not yet met line under CephPlacementPolicy; ceph.md core profile and ceph-native-api.md OSD projection name the refusal; `TestACustomCRUSHDeviceClassRefusesAtPlanByName` |
+| API-07 | `checkDevices` names `spec.crush_device_class`, `spec.<field>` and `<member>.paths[i]`; Not yet met line under CephPlacementPolicy; ceph.md core profile and ceph-native-api.md OSD projection name the refusal; a plan refusal test, which [X374](#x374--crush-classes) inverted |
 | DOC-02 | the disconnected example README: carried wheels, the isolated host's dnf repositories, a link to Prepare a host |
 | DOC-03 | operator guide: `cluster exec` without `--node` runs on each cluster's administrator node |
 
@@ -14246,3 +14246,46 @@ row of [B1250](backlog.md#b1250)'s profile. `oc` retries a release read
 against the source repository after its mirrors fail, which the wrapper cannot
 stop, so a component read from `quay.io` past a failing mirror is not refused
 ([B1326](backlog.md#b1326)).
+
+
+### X374 — CRUSH classes
+
+**Items:** B1264 (2026-11-10, [D253](backlog.md#d253)), delivered in-tree.
+**Kind:** product. **Owners:** Storage.
+An OSD service's `spec.crush_device_class` and its `{path, crush_device_class}`
+data path records reach the core OSD projection in their native form, so a
+placement policy or pool on an OSD-declared class plans and realizes
+([device contract](../ceph.md#devices-and-destructive-ownership)). The
+collection submits one native OSD document per host and class with the class
+at spec level, because cephadm's stored spec (`DeviceSelection.to_json`)
+keeps no path's class; readiness reads `ceph osd tree` and holds an OSD
+unready until it carries its declared class, and a booted OSD of another class
+refuses `osd-class-drift`. Admission refuses a class name the CRUSH map
+refuses (or longer than the collection's 64) and a DB or WAL path record's
+class; plan refuses data devices of more than one class beside DB or WAL
+devices. Placement-policy and erasure-pool capacity count each data path by
+its effective class (a path's overrides its service's). The request moves
+from `ceph-core-v1` to `ceph-core-v2`.
+
+| Finding | Change |
+| --- | --- |
+| API-07 | `checkDevices` no longer refuses a class; `nativePath` carries a path record and `nativeSpec.CrushDeviceClass` the spec-level class; the collection's `validate_services`, `class_groups`, `service_spec`, `normalized_services` and `observe_osds` (`osd_classes`); `effectiveClass` and `crushClass` in cephcluster admission; ceph.md core profile, ceph-native-api.md OSD projection and ceph-resources.md CephPlacementPolicy; the Not yet met line is deleted |
+
+Tests: `TestACustomCRUSHDeviceClassPlansIntoTheNativeOSDSpecGolden` (goldens
+`request-osd-class` and `request-osd-path-class`), which inverts X353's plan
+refusal test,
+`TestOSDClassesRefuseWhereCephadmCannotRealizeThem`,
+`TestAnOSDClassDriftRefusalNamesTheNativeRepair`,
+`TestOSDDeclaredClassesAdmitOnlyNativeNamesOnDataDevices`,
+`TestAPathClassOverridesItsServiceClassInCapacity`, and the collection's
+`test_a_spec_class_stays_one_native_document_per_host`,
+`test_path_classes_become_one_spec_class_document_per_class`,
+`test_an_osd_class_refuses_where_cephadm_cannot_realize_it`,
+`test_native_normalization_cannot_drop_a_declared_class` and
+`test_osd_readiness_proves_the_declared_class`.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** an OSD that cephadm later re-creates on a replaced
+disk takes its class from the per-class document, not from the authored path
+record; the class of an existing OSD never changes, so a changed class needs
+the OSD re-created outside Bootwright. A live run on IBM Storage Ceph is owed.
