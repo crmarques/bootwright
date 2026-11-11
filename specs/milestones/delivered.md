@@ -15533,3 +15533,24 @@ The independent safety review found no issue. Complete and race gates are
 recorded in the commit. **Limitations:** native DNS and firewall behavior,
 network-path reachability and real-host acceptance remain operator evidence;
 no host was contacted or configured.
+
+### X438 — Bare-metal logical-root request admission
+
+**Item:** B1352 (2026-11-11). **Kind:** defect. **Owner:** Substrate.
+The bare-metal lifecycle role's shared argument spec omitted `rootVolumeRef`,
+which the frozen Go request already carries and the native apply and observe
+already consume. Ansible refused the field before the first role task. The
+spec now admits that optional dictionary with its typed `firmware`,
+`storageId` and `volumeId` members for apply, observe and destroy. The existing
+[logical-root proof](../api/machines.md#existing-logical-root-volumes) and
+physical-machine tasks are unchanged.
+
+**Verification:** `test_baremetal_lifecycle_accepts_the_frozen_root_volume_selector`
+fails before the correction for both selector forms at all three entry points.
+Ansible's argument validator now accepts those forms and the omitted-selector
+request, while `test_baremetal_lifecycle_still_refuses_unknown_request_and_selector_fields`
+keeps both dictionary boundaries closed. The complete gate is recorded in the
+commit. **Contract:** unchanged; no request bytes, version, content digest,
+identity proof or destructive effect changes, so a failed operation can retry
+with the rebuilt automation. **Limitations:** no real BMC was contacted; B1193's
+operator qualification remains open.

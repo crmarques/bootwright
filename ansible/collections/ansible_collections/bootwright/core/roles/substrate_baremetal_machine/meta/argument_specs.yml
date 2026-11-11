@@ -35,6 +35,16 @@ argument_specs:
           provider:
             type: str
             required: true
+          rootVolumeRef:
+            type: dict
+            required: false
+            options:
+              firmware:
+                type: bool
+              storageId:
+                type: str
+              volumeId:
+                type: str
           version:
             type: str
             required: true
