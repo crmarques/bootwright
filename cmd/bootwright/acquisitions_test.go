@@ -203,11 +203,11 @@ func TestAnInstalledMachineNamesItsHostedSubscriptionAndItsConfiguredRepositorie
 
 func TestAMachineRegisteringWithASatelliteNamesTheSatelliteAndItsContentRoot(t *testing.T) {
 	sources := exampleDirectory(t, "libvirt-3-nodes-ceph-host-variants")
-	satellite := "    connectToInsights: false\n\n    satellite:\n      hostname: satellite.example.test\n      trustBundleRef: satellite-ca\n"
+	satellite := "    activationKeyRef: rhsm-key\n\n    satellite:\n      hostname: satellite.example.test\n      trustBundleRef: satellite-ca\n"
 	bundle := "apiVersion: bootwright.io/v1alpha1\nkind: Secret\nmetadata:\n  name: satellite-ca\n\nspec:\n  type: caBundle\n\n  source:\n    contextStore: {}\n"
 	for index, file := range sources.Files {
 		if strings.Contains(string(file.Bytes()), "name: rhel-rhsm\n") {
-			sources.Files[index] = desiredstate.NewSourceFile(file.Path(), []byte(mustReplaceOnce(t, file.Path(), string(file.Bytes()), "    connectToInsights: false\n", satellite)))
+			sources.Files[index] = desiredstate.NewSourceFile(file.Path(), []byte(mustReplaceOnce(t, file.Path(), string(file.Bytes()), "    activationKeyRef: rhsm-key\n", satellite)))
 		}
 	}
 	sources.Files = append(sources.Files, desiredstate.NewSourceFile(filepath.Join(sources.Roots[0], "satellite-ca.yaml"), []byte(bundle)))

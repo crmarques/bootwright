@@ -38,7 +38,6 @@ spec:
     management: managed
     organizationRef: rhsm-org
     activationKeyRef: rhsm-key
-    connectToInsights: false
 ---
 apiVersion: bootwright.io/v1alpha1
 kind: Machine
@@ -261,8 +260,6 @@ spec:
       formats: en_US.UTF-8
       keyboard: us
       timezone: Etc/UTC
-    ssh:
-      passwordAuthentication: false
     packages:
       install:
         - chrony

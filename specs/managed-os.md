@@ -196,8 +196,8 @@ and physical Machines under the key and disk boundaries in
 Every installation installs the profile's exact `spec.os.version`, which each
 image it boots or installs from names ([media store](#media-store)), and, by
 default, updates it within that release, as
-[Update within release](#update-within-release) states. A profile enabling `ssh.passwordAuthentication` refuses too, because
-this executable sets no password on an installed system. A Machine whose
+[Update within release](#update-within-release) states. An installed system
+sets no password and admits no SSH password authentication. A Machine whose
 profile configures a repository refuses while its effective proxy names a
 Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, because
 a `.repo` file carries a proxy URL and nothing else; it refuses the same way,
@@ -1024,10 +1024,10 @@ virtual or physical Machine, and the contract below is what its installation
 performs. Physical registration uses the delivered host key and original
 installation marker, never an independently discovered identity. An
 Entitlement whose `spec.rhsm.management` is `external`
-registers nothing and freezes nothing. An Entitlement setting
-`spec.rhsm.connectToInsights` refuses, and so does a Machine whose effective
-proxy names a Proxy, because the registration has no route but a direct one to
-the hosted subscription service or the declared Satellite;
+registers nothing and freezes nothing. No registration connects Insights. A
+Machine whose effective proxy names a Proxy refuses, because the registration
+has no route but a direct one to the hosted subscription service or the
+declared Satellite;
 subscription repositories on an `external`
 Entitlement refuse, because this executable applies them only to a
 registration it performs. Each of these refusals names the field that selects
@@ -2036,13 +2036,11 @@ the length of that many bytes in base64url without padding.
 | A VLAN install interface on another VLAN than a leg's | on a `libvirt` provider, a `vlan` install interface whose NICs select a [tagged managed `Network`](api/networks.md#tagged-managed-networks) whose `vlan` is not its `vlan.id`; one whose `vlan.id` is the leg's is reached through the host's leg, and other VLANs the leg's segment carries stack beside it (`TestAVLANInstallOnALegSegmentIsReachedThroughTheLeg`) | `tagged managed <network> gives its host an address only on VLAN <vlan> of trunk <bridge>, so the controller cannot reach the VLAN <id> install address of <machine>` | `install <machine> over a VLAN <vlan> interface on that trunk, or attach it to a segment whose host carries VLAN <id>` |
 | Two owners of the installed name servers | a network with DNS server selections whose composed native document also authors `dns-resolver.config.server` | `the installed name servers of <machine> are its network's DNS server selections, and its native dns-resolver.config.server declares them a second time` | `remove dns-resolver.config.server from the network of <machine>, or remove its DNS server selections` |
 | Another installer | a profile's `spec.installer` without `anaconda`, such as `templateClone` | `this executable installs an operating system only through the anaconda installer, which the install profile does not select` | `select spec.installer.anaconda on <profile>` |
-| Password authentication | a profile's `spec.customizations.ssh.passwordAuthentication: true` | `the install profile enables spec.customizations.ssh.passwordAuthentication, but this executable sets no password on an installed system` | `set spec.customizations.ssh.passwordAuthentication to false on <profile>` |
 | An Ed25519 delivered host key under FIPS | a FIPS profile on a delivered-key Machine whose host-key Secret generates Ed25519, the default included | `a FIPS-mode installation refuses Ed25519 keys, and the delivered host key <secret> generates one` | `declare spec.source.generated.keyType as ecdsaP256, ecdsaP384, ecdsaP521 or rsa on <secret>` |
 | An Ed25519 fleet key under FIPS | a profile's `spec.customizations.security.fips.enabled: true` while the Environment's `spec.remoteMachinesAccessKey.keyRef` names a Secret whose `spec.source.generated.keyType` is `ed25519`, the default included | `a FIPS-mode installation refuses Ed25519 keys, and the fleet key <secret> generates one` | `declare spec.source.generated.keyType as ecdsaP256, ecdsaP384, ecdsaP521 or rsa on <secret>` |
 | A hostname artifact endpoint under disk encryption | a profile selecting `spec.customizations.security.diskEncryption` whose `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` resolves to a URL whose host is not an IP literal | `the installer fetches the recovery passphrase before it configures name resolution, so the artifact server endpoint of <profile> must be addressed by IP` | `select an artifact server endpoint whose address is an IP literal in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |
 | A generated recovery passphrase too long | a profile selecting `spec.customizations.security.diskEncryption` whose `recoveryPassphraseRef` names a `token` Secret generating more than 192 bytes | `the recovery passphrase is limited to 256 characters, and <recovery secret> generates <bytes> bytes, which encode to <length> characters` | `set spec.source.generated.bytes to at most 192 on <recovery secret>` |
 | Subscription repositories with external registration | a profile's `spec.customizations.repositories.subscription` with a `spec.subscription` Entitlement whose `spec.rhsm.management` is `external` | `subscription repositories are enabled on a registration this executable performs, and <entitlement> sets spec.rhsm.management to external` | `remove spec.customizations.repositories.subscription from <profile>, or set spec.rhsm.management to managed on <entitlement>` |
-| Insights enrollment | a `spec.subscription` Entitlement with `spec.rhsm.connectToInsights: true` | `this executable does not enroll a Machine in Insights, a second remote identity it neither proves nor removes, and <entitlement> sets spec.rhsm.connectToInsights to true` | `set spec.rhsm.connectToInsights to false on <entitlement>, or remove spec.subscription from <profile>` |
 | Registration through a proxy | a registering profile on a Machine whose effective `spec.proxy` names a Proxy | `this executable registers only over a direct route to the hosted subscription service or the declared Satellite, and <machine> reaches the network through <proxy>` | `select direct: {} in spec.proxy of <machine> or of <profile>, or remove spec.subscription from <profile>` |
 | A credentialed proxy | a Machine's effective `spec.proxy` naming a Proxy with `spec.connection.auth` or `spec.connection.trustBundleRef`, while its profile configures a repository | `the installed system's repositories would reach <proxy> through a credential or private trust anchor, which an installation cannot carry` | `select direct: {} or an external Proxy without spec.connection.auth and spec.connection.trustBundleRef in spec.proxy of <machine> or of <profile>` |
 | An installer image server off the controller | the `spec.machineRef` of the server a profile's `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint` selects, other than the controller Machine | `a managed-OS installation builds and publishes its installer image on the controller, and <server> is placed on <server host>` | `place <server> on the controller Machine, or select a server placed there in spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint on <profile>` |

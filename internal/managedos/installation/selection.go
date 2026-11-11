@@ -23,10 +23,6 @@ func refusedProfile(profile api.Object) (reason, remediation string) {
 		return "this executable installs an operating system only through the anaconda installer, which the install profile does not select",
 			"select spec.installer.anaconda on " + profile.Identity()
 	}
-	if spec.Get("customizations", "ssh", "passwordAuthentication").Bool() {
-		return "the install profile enables spec.customizations.ssh.passwordAuthentication, but this executable sets no password on an installed system",
-			"set spec.customizations.ssh.passwordAuthentication to false on " + profile.Identity()
-	}
 	return "", ""
 }
 

@@ -407,7 +407,6 @@ func NormalizeRHSM(o api.Object) api.Object {
 	s := o.Spec()
 	rhsm := s.Get("rhsm").Default("management", api.StringValue("managed"))
 	if rhsm.Get("management").Text() == "managed" {
-		rhsm = rhsm.Default("connectToInsights", api.BoolValue(false))
 		satellite := rhsm.Get("satellite")
 		if satellite.Present() && satellite.Has("hostname") && !satellite.Has("contentBaseURL") {
 			host := satellite.Get("hostname").Text()
@@ -436,7 +435,7 @@ func ValidateRHSM(o api.Object, authored bool) []api.Issue {
 		management = "managed"
 	}
 	if management == "external" {
-		for _, key := range []string{"organizationRef", "activationKeyRef", "connectToInsights", "satellite"} {
+		for _, key := range []string{"organizationRef", "activationKeyRef", "satellite"} {
 			if rhsm.Has(key) {
 				issues = add(issues, externalRHSMField(key))
 			}

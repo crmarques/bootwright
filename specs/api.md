@@ -60,11 +60,9 @@ proves each row warned and refused at `plan`.
 | ClusterAddon | `spec.inputs` | none tracked |
 | ClusterAddon | `spec.steps` | none tracked |
 | CustomPlaybook | `spec.enabled: true` | [B102](milestones/backlog.md#b102) |
-| Entitlement | `spec.rhsm.connectToInsights: true` | none tracked |
 | Environment | `spec.dependencyVersions.libvirt other than latest` | [B676](milestones/backlog.md#b676) |
 
-An install-profile row is refused on each Machine that selects the profile, and
-an Entitlement row on each Machine whose install profile subscribes to it.
+An install-profile row is refused on each Machine that selects the profile.
 A `ClusterAddon` row is refused on each binding that selects it, directly or
 through a profile. The OperatorGroup shapes of a `ClusterAddon` that no
 declaration path names, none and other target namespaces, are refused at `plan`

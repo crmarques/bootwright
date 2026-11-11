@@ -83,8 +83,6 @@ func unrealizedFixtures(t *testing.T) map[string]desiredstate.Sources {
 			"          endpointRef: ip-https\n\n      bootArtifacts:\n        artifactServerEndpoint:\n          serverRef: lab-artifacts\n          endpointRef: ip-https\n\n    # pullSecretRef", nil),
 		"a pinned libvirt release": patchedSources(t, exampleDirectory(t, hostVariants), "environment.yaml",
 			"  controller:\n    machineRef: controller\n", "  controller:\n    machineRef: controller\n\n  dependencyVersions:\n    libvirt: 10.0.0\n", nil),
-		"Insights enrollment": patchedSources(t, exampleDirectory(t, hostVariants), "storage/rhel-entitlement.yaml",
-			"connectToInsights: false", "connectToInsights: true", nil),
 		"a manifest-set add-on": addOnSources(t, unrealizedAddOnHead+"  manifestSet:\n    manifests:\n      - path: manifests/extra.yaml\n", map[string]string{}),
 		"an external namespace": addOnSources(t, unrealizedAddOnHead+fmt.Sprintf(unrealizedAddOnOLM, "      management: external"), map[string]string{}),
 		"an add-on with inputs": addOnSources(t, unrealizedAddOnHead+fmt.Sprintf(unrealizedAddOnOLM, "")+"  inputs:\n    - name: machine\n      resourceKind: Machine\n      required: false\n", map[string]string{}),

@@ -15208,3 +15208,30 @@ occurred. **Limitations:** a consumer, SMB resource or replication applied
 before this build is refused by its moved digest; the guard covers the
 bindings the contract examples plan, and the planning refusal leaves out the
 `knownHostsRef` the engine adds from SSH placement claims.
+
+### X415 — Single-value fields leave v1alpha1
+
+**Item:** B1330 (2026-11-11, [D257](backlog.md#d257) (4), audit 004 API-75
+and API-30 in part), delivered in-tree. **Kind:** product, breaking API.
+**Owners:** Machine and Managed OS, with Secrets. A MachineInstallProfile's
+`spec.customizations.ssh` block, whose one field `passwordAuthentication`
+admitted only `false`, and an Entitlement's `spec.rhsm.connectToInsights`,
+which admitted only `false`, are no longer fields of v1alpha1. An authored one
+is refused by the closed decoder as any unknown field is, `api.field` with
+the remedy `remove it or use a permitted field`; under
+[D241](backlog.md#d241) (1) and (2) no retired-path table names them. What
+held stays: an installed system admits no SSH password authentication
+([supported shape](../managed-os.md#supported-shape)), and a
+registration never connects a Machine to Insights
+([registration](../managed-os.md#registration)). The examples and e2e
+templates no longer author either field, and the `environment-ha` and
+`ceph-cluster` input charts drop them in the template-inputs repository.
+
+| Finding | Change |
+| --- | --- |
+| API-75 | `machineInstallSchema` drops `ssh`, `entitlementSchema` drops `connectToInsights` and its suppression, `NormalizeRHSM` adds no default, the external-RHSM lists in `managedos` and `cephcluster` drop it, `refusedProfile` and `refusedRegistration` lose their refusals, the two refusal-table rows leave managed-os.md; `TestRemovedSingleValueFieldsRefuseAsUnknownFields`; machines.md, secrets.md, managed-os.md |
+| API-30 (in part) | the Entitlement row leaves `UnrealizedDeclarations` and the api.md unrealized table, held by `TestUnrealizedTableMatchesUnsupported`; the ClusterAddon rows are B1331's |
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** none; requests and rendered installer bytes of
+admitted inputs are unchanged, so no digest moved.

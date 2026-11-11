@@ -667,30 +667,6 @@ func TestAFrozenRequestOfAnyOtherVersionRefuses(t *testing.T) {
 	}
 }
 
-// This executable sets no password on an installed system, so a profile that
-// enables password authentication would install a system that cannot honor
-// it; it refuses before registration through the Machine.
-func TestPasswordAuthenticationTrueRefuses(t *testing.T) {
-	profile := installProfile(field("customizations", installProfile().Spec().Get("customizations").With("ssh", api.MapValue(
-		field("passwordAuthentication", api.BoolValue(true)),
-	))))
-	want := []lifecycle.Refusal{{Kind: "Machine", Name: "rhel-01",
-		Reason:      "the install profile enables spec.customizations.ssh.passwordAuthentication, but this executable sets no password on an installed system",
-		Remediation: "set spec.customizations.ssh.passwordAuthentication to false on MachineInstallProfile/rhel-9-8"}}
-	if refused := Refusals(labCatalog(profile)); !slices.Equal(refused, want) {
-		t.Fatalf("refusals = %+v, want %+v", refused, want)
-	}
-	if unsupported := lifecycle.Identities(Refusals(labCatalog(profile))); !slices.Equal(unsupported, []string{"Machine/rhel-01"}) {
-		t.Fatalf("unsupported = %v", unsupported)
-	}
-	disabled := installProfile(field("customizations", installProfile().Spec().Get("customizations").With("ssh", api.MapValue(
-		field("passwordAuthentication", api.BoolValue(false)),
-	))))
-	if unsupported := lifecycle.Identities(Refusals(labCatalog(disabled))); len(unsupported) != 0 {
-		t.Fatalf("passwordAuthentication false reported %v", unsupported)
-	}
-}
-
 // A .repo file carries a proxy URL and nothing else, so a Proxy that needs a
 // credential or a private trust anchor refuses while a repository would reach
 // it, both before registration and in the request builder.

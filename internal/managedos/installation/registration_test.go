@@ -28,7 +28,6 @@ const (
 func rhelEntitlement(overrides ...api.FieldValue) api.Object {
 	rhsm := api.MapValue(
 		text("management", "managed"), text("organizationRef", "rhel-org"), text("activationKeyRef", "rhel-key"),
-		field("connectToInsights", api.BoolValue(false)),
 	)
 	for _, override := range overrides {
 		rhsm = rhsm.With(override.Name, override.Value)
@@ -146,10 +145,6 @@ func TestRegistrationRefusalsNameTheEntitlementField(t *testing.T) {
 		"satellite proxy": {labCatalog(registeringProfile(), satelliteEntitlement(), corporate, proxiedGuest()), proxiedGuest(), agent, [2]string{
 			"this executable registers only over a direct route to the hosted subscription service or the declared Satellite, and Machine/rhel-01 reaches the network through Proxy/corporate",
 			"select direct: {} in spec.proxy of Machine/rhel-01 or of MachineInstallProfile/rhel-9-8, or remove spec.subscription from MachineInstallProfile/rhel-9-8",
-		}},
-		"insights": {labCatalog(registeringProfile(), rhelEntitlement(field("connectToInsights", api.BoolValue(true)))), guest(), agent, [2]string{
-			"this executable does not enroll a Machine in Insights, a second remote identity it neither proves nor removes, and Entitlement/rhel sets spec.rhsm.connectToInsights to true",
-			"set spec.rhsm.connectToInsights to false on Entitlement/rhel, or remove spec.subscription from MachineInstallProfile/rhel-9-8",
 		}},
 		"external with repositories": {labCatalog(registeringProfile(), externalEntitlement()), guest(), agent, [2]string{
 			"subscription repositories are enabled on a registration this executable performs, and Entitlement/rhel sets spec.rhsm.management to external",

@@ -138,19 +138,17 @@ or storage-cluster field.
 ### RHSM
 
 `rhsm` contains fields in the order `management`, `organizationRef`,
-`activationKeyRef`, `connectToInsights`, then `satellite`:
+`activationKeyRef`, then `satellite`:
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `management` | string | no | `managed` | `managed` or `external`; identifies who runs registration. |
 | `organizationRef` | string | conditional | — | Required for managed RHSM; `opaque` Secret containing the organization identifier. Access credential: registration presents it. |
 | `activationKeyRef` | string | conditional | — | Required for managed RHSM; `opaque` or `token` Secret containing the activation key. Access credential: registration presents it. |
-| `connectToInsights` | boolean | no | `false` | Future managed-registration enrollment intent. |
 | `satellite` | object | no | omitted | The Satellite or Capsule a managed registration uses instead of the hosted subscription service. |
 
 An external RHSM arm may contain only `management: external`.
-`organizationRef`, `activationKeyRef`, `connectToInsights`, and `satellite`
-are rejected there.
+`organizationRef`, `activationKeyRef` and `satellite` are rejected there.
 
 `satellite` contains `hostname`, `trustBundleRef`, `contentBaseURL`,
 `contentView`, then `lifecycleEnvironment`.
@@ -191,9 +189,8 @@ created
 ([managed OS](../managed-os.md#registration)); `management: external` is a
 declaration and runs no registration. With `satellite` the registration
 reaches that server over its declared CA bundle
-([registration](../managed-os.md#registration)). `connectToInsights: true` is
-admitted and refuses before registration, as a row of the managed-OS
-installation's [refusal table](../managed-os.md#refusal-table).
+([registration](../managed-os.md#registration)), which never connects the
+Machine to Insights.
 
 ### Registry and license
 

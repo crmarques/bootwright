@@ -37,9 +37,6 @@ spec:
       timezone: Etc/UTC
       additionalLocales: []
 
-    ssh:
-      passwordAuthentication: false
-
     packages:
       installWeakDeps: false
       excludeDocs: true

@@ -11,7 +11,6 @@ func machineInstallSchema() *Shape {
 	configure := &Shape{Type: Sequence, Atomic: true, NameKey: "id", Element: record(required("id", nonempty()), required("baseURL", lexical("repository-url")), field("displayName", nonempty()), defaulted("enabled", boolean(), BoolValue(true)), defaulted("gpgCheck", boolean(), BoolValue(true)), field("gpgKeyURL", nonempty()))}
 	customizations := record(
 		field("localization", record(defaulted("language", nonempty(), StringValue("en_US.UTF-8")), field("formats", nonempty()), defaulted("keyboard", nonempty(), StringValue("us")), defaulted("timezone", nonempty(), StringValue("UTC")), field("additionalLocales", set(nonempty())))),
-		field("ssh", record(defaulted("passwordAuthentication", boolean(), BoolValue(false)))),
 		field("packages", record(field("install", set(nonempty())), defaulted("excludeDocs", boolean(), BoolValue(false)), field("installWeakDeps", boolean()))),
 		field("repositories", record(field("configure", configure), field("subscription", record(field("enable", set(nonempty())), field("disable", set(nonempty())))))),
 		field("services", record(field("enabled", set(nonempty())), field("disabled", set(nonempty())))),

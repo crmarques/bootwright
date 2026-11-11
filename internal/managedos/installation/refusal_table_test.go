@@ -32,7 +32,6 @@ type refusalCase struct {
 // its graph with exactly its reason and remedy, and a row added or removed on
 // either side fails here.
 func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
-	customizations := installProfile().Spec().Get("customizations")
 	untrusting := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
 	untrusting = untrusting.WithSpec(untrusting.Spec().WithPath(api.StringValue(substrate.TrustDisableVerification),
 		"substrate", "baremetal", "bmc", "virtualMedia", "tls", "trust"))
@@ -84,11 +83,8 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 		"Another installer": {labCatalog(installProfile(field("installer", api.MapValue(field("templateClone", api.MapValue(
 			field("seed", api.MapValue(field("cloudInit", api.MapValue()))),
 		)))))), "Machine/rhel-01", onProfile},
-		"Password authentication": {labCatalog(installProfile(field("customizations", customizations.With("ssh", api.MapValue(
-			field("passwordAuthentication", api.BoolValue(true))))))), "Machine/rhel-01", onProfile},
 
 		"Subscription repositories with external registration": {labCatalog(registeringProfile(), externalEntitlement()), "Machine/rhel-01", map[string]string{"<entitlement>": "Entitlement/rhel", "<profile>": "MachineInstallProfile/rhel-9-8"}},
-		"Insights enrollment": {labCatalog(registeringProfile(), rhelEntitlement(field("connectToInsights", api.BoolValue(true)))), "Machine/rhel-01", map[string]string{"<entitlement>": "Entitlement/rhel", "<profile>": "MachineInstallProfile/rhel-9-8"}},
 		"Registration through a proxy": {labCatalog(registeringProfile(), rhelEntitlement(), externalProxy("corporate", text("httpsProxy", "http://192.0.2.80:3128")), proxiedGuest()),
 			"Machine/rhel-01", map[string]string{"<machine>": "Machine/rhel-01", "<profile>": "MachineInstallProfile/rhel-9-8", "<proxy>": "Proxy/corporate"}},
 		"A credentialed proxy": {labCatalog(externalProxy("corporate", text("httpsProxy", "http://proxy.example.test:3128"),

@@ -224,9 +224,6 @@ func TestOnlyTheFirstRefusalAMachineMeetsIsReported(t *testing.T) {
 		api.MapValue(text("deviceName", "/dev/vda"), field("rotational", api.BoolValue(false))), "hardware", "rootDevice"))
 	kernelNamed := networkWith(declaredInterface("enp1s0", "ethernet"), declaredInterface("eth0", "ethernet"))
 	kernel, kernelRemedy := kernelReason("eth0")
-	passworded := installProfile(field("customizations", installProfile().Spec().Get("customizations").With("ssh", api.MapValue(
-		field("passwordAuthentication", api.BoolValue(true)),
-	))))
 	onServices := artifactServer(text("machineRef", "services"), text("bindAddress", "192.0.2.2"))
 	for name, test := range map[string]struct {
 		catalog             api.Catalog
@@ -235,10 +232,10 @@ func TestOnlyTheFirstRefusalAMachineMeetsIsReported(t *testing.T) {
 		"a target before its network": {labCatalog(hinted, kernelNamed),
 			"a managed-OS installation selects its root disk by deviceName on a virtual Machine or, on a physical Machine, by wwn, serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the other root-device hints the Machine declares",
 			"remove spec.hardware.rootDevice.rotational from Machine/rhel-01"},
-		"a network before its profile": {labCatalog(kernelNamed, passworded), kernel, kernelRemedy},
-		"a profile before its servers": {labCatalog(passworded, servicesHost(), onServices),
-			"the install profile enables spec.customizations.ssh.passwordAuthentication, but this executable sets no password on an installed system",
-			"set spec.customizations.ssh.passwordAuthentication to false on MachineInstallProfile/rhel-9-8"},
+		"a network before its profile": {labCatalog(kernelNamed, registeringProfile(), externalEntitlement()), kernel, kernelRemedy},
+		"a profile before its servers": {labCatalog(registeringProfile(), externalEntitlement(), servicesHost(), onServices),
+			"subscription repositories are enabled on a registration this executable performs, and Entitlement/rhel sets spec.rhsm.management to external",
+			"remove spec.customizations.repositories.subscription from MachineInstallProfile/rhel-9-8, or set spec.rhsm.management to managed on Entitlement/rhel"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			want := []lifecycle.Refusal{{Kind: "Machine", Name: "rhel-01", Reason: test.reason, Remediation: test.remediation}}

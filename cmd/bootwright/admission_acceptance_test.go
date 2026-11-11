@@ -475,9 +475,6 @@ func TestActualAdmissibleProjectionNormalizesAndDefaultsItsExtras(t *testing.T) 
 			t.Errorf("service %s missing default port %s", service.name, service.port)
 		}
 	}
-	if requireObject(t, state.Effective(), api.Entitlement, "acceptance-redhat-ceph").Spec().Get("rhsm").Has("connectToInsights") {
-		t.Fatal("external RHSM acquired managed intent")
-	}
 	if requireObject(t, state.Effective(), api.CephCluster, "acceptance-external-storage").Spec().Has("ceph") {
 		t.Fatal("external storage acquired managed configuration")
 	}

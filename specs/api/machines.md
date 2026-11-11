@@ -911,7 +911,6 @@ separate cluster proxy and NTP choices and does not inherit Machine fields.
 | `localization.keyboard` | string | no | `us` | Kickstart token. |
 | `localization.timezone` | string | no | `UTC` | Kickstart token. |
 | `localization.additionalLocales` | array of strings | no | `[]` | Unique Kickstart tokens. |
-| `ssh.passwordAuthentication` | boolean | no | `false` | `true` is refused: the installation sets no password, and the `bootwright` account is reached by the key of `remoteMachinesAccessKey`. |
 | `packages.install` | array of strings | no | `[]` | Unique entries, each a package name, glob or `@group`; no whitespace, quote or `#`, and no leading `%` or `-`. |
 | `packages.excludeDocs` | boolean | no | `false` | Exclude package documentation. |
 | `packages.installWeakDeps` | boolean | no | OS/package-manager default | Absence is distinct from `false`. |

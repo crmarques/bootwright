@@ -31,7 +31,7 @@ func (a *admission) intrinsic() {
 				a.invalid("$.spec.license.accept", "IBM storage entitlement requires explicit license acceptance", "set $.spec.license.accept to true on this ibmStorageCeph Entitlement after accepting its license")
 			}
 		} else if textOf(spec, "rhsm", "management") == "external" {
-			a.forbid(spec.Get("rhsm"), "$.spec.rhsm", "organizationRef", "activationKeyRef", "connectToInsights", "satellite")
+			a.forbid(spec.Get("rhsm"), "$.spec.rhsm", "organizationRef", "activationKeyRef", "satellite")
 		}
 		return
 	}

@@ -13,7 +13,7 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 			return nil
 		}
 		issues := []api.Issue{}
-		for _, key := range []string{"organizationRef", "activationKeyRef", "connectToInsights", "satellite"} {
+		for _, key := range []string{"organizationRef", "activationKeyRef", "satellite"} {
 			if o.Spec().Has("rhsm", key) {
 				issues = add(issues, externalRHSMField(key))
 			}

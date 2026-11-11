@@ -10,7 +10,6 @@ spec:
     management: managed
     organizationRef: satellite-org
     activationKeyRef: satellite-activation-key
-    connectToInsights: false
 
     satellite:
       hostname: subscription.example.com

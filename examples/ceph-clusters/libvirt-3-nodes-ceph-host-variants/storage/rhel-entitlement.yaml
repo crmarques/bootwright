@@ -10,4 +10,3 @@ spec:
     management: managed
     organizationRef: rhsm-org
     activationKeyRef: rhsm-key
-    connectToInsights: false

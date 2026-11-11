@@ -123,7 +123,7 @@ func TestRHSMManagedExternalAndSatellite(t *testing.T) {
 	if issues := ValidateRHSM(normalized, false); len(issues) > 0 {
 		t.Fatal(issues)
 	}
-	for _, key := range []string{"organizationRef", "activationKeyRef", "connectToInsights", "satellite"} {
+	for _, key := range []string{"organizationRef", "activationKeyRef", "satellite"} {
 		bad := external.WithSpec(external.Spec().WithPath(api.StringValue("supplied"), "rhsm", key))
 		if issues := ValidateRHSM(bad, true); len(issues) == 0 {
 			t.Fatalf("external accepted %s", key)

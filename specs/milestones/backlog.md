@@ -8929,7 +8929,7 @@ fix it now", "proceed with 6 and 7" and "proceed with packages 11 and 12"
 ([audit 004](../../audits/004-spec-api/report-fable.md) sections 15.2 and 15.3). This authorizes, out of sequence for
 implementation, X412 (M1, [B1267](delivered.md#x412--server-claims-over-ssh)), X413 (M3,
 [B1327](delivered.md#x413--rebuild-a-never-inserted-area)), X414 (M2, [B1316](delivered.md#x414--ceph-host-keys)), X415 (M1,
-[B1330](m1.md#b1330)), X416 (M4, [B1331](m4.md#b1331)), X417 (M1,
+[B1330](delivered.md#x415--single-value-fields-leave-v1alpha1)), X416 (M4, [B1331](m4.md#b1331)), X417 (M1,
 [B1332](m1.md#b1332)), X418 (M1, [B1333](m1.md#b1333)) and X419 (M1,
 [B1334](m1.md#b1334)), no more than two active at once. The owner's answers:
 

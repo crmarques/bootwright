@@ -97,17 +97,12 @@ func refusedRegistration(catalog api.Catalog, machine, profile api.Object, deriv
 	if !found {
 		return "", ""
 	}
-	rhsm := entitlement.Spec().Get("rhsm")
 	if externalRHSM(entitlement) {
 		if !profile.Spec().Has("customizations", "repositories", "subscription") {
 			return "", ""
 		}
 		return "subscription repositories are enabled on a registration this executable performs, and " + entitlement.Identity() + " sets spec.rhsm.management to external",
 			"remove " + subscriptionReposField + " from " + profile.Identity() + ", or set spec.rhsm.management to managed on " + entitlement.Identity()
-	}
-	if rhsm.Get("connectToInsights").Bool() {
-		return "this executable does not enroll a Machine in Insights, a second remote identity it neither proves nor removes, and " + entitlement.Identity() + " sets spec.rhsm.connectToInsights to true",
-			"set spec.rhsm.connectToInsights to false on " + entitlement.Identity() + ", or " + withoutSubscription
 	}
 	choice := effectiveProxy(machine, profile)
 	if proxy, found := catalog.Find(api.Proxy, choice.Get("proxyRef").Text()); found && !choice.Has("direct") {

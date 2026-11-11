@@ -79,7 +79,6 @@ spec:
     management: managed
     organizationRef: satellite-org
     activationKeyRef: satellite-activation-key
-    connectToInsights: false
     satellite:
       hostname: subscription.example.com
       trustBundleRef: satellite-ca-bundle
@@ -1897,8 +1896,6 @@ spec:
       keyboard: us
       timezone: Etc/UTC
       additionalLocales: []
-    ssh:
-      passwordAuthentication: false
     packages:
       install:
         - podman
