@@ -398,7 +398,7 @@ func TestWarningsAreBoundedRegisteredLifecycleCompletionData(t *testing.T) {
 		completion(`[{"code":"substrate.shadowed-route","message":"m","object":{"kind":"InfraProvider","name":"lab","uid":"x"}}]`),
 		completion(`[{"message":"m","code":"substrate.shadowed-route"}]`),
 	)
-	if got := WarningCodes(); !slices.Equal(got, []string{"storage.not-ready", "substrate.shadowed-route"}) {
+	if got := WarningCodes(); !slices.Equal(got, []string{"storage.health", "storage.not-ready", "substrate.shadowed-route"}) {
 		t.Fatalf("registered warning codes = %v", got)
 	}
 }

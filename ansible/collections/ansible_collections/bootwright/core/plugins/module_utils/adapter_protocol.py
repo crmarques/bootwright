@@ -30,7 +30,7 @@ MAX_DETAIL = 160
 # each message printable ASCII of at most MAX_WARNING_MESSAGE bytes and an
 # optional object of a kind and a name. The dispatch drops or clips anything
 # else rather than failing the completion a warning only advises on.
-WARNING_CODES = ("storage.not-ready", "substrate.shadowed-route")
+WARNING_CODES = ("storage.health", "storage.not-ready", "substrate.shadowed-route")
 MAX_WARNINGS = 16
 MAX_WARNING_MESSAGE = 1024
 MAX_WARNING_KIND = 63

@@ -44,7 +44,7 @@ type WarningObject struct {
 	Name string `json:"name"`
 }
 
-var warningCodes = []string{"storage.not-ready", "substrate.shadowed-route"}
+var warningCodes = []string{"storage.health", "storage.not-ready", "substrate.shadowed-route"}
 
 func WarningCodes() []string { return slices.Clone(warningCodes) }
 

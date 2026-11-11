@@ -502,6 +502,22 @@ func TestAnObservationsWarningsReadAsItsBlocksNotes(t *testing.T) {
 	}
 }
 
+func TestAReadyObservationsHealthWarningReadsAsItsNote(t *testing.T) {
+	f, projecting, _ := observedFixture(t, "alpha")
+	ready := imageObservation("v1", reconciliation.EffectCompleted)
+	ready.warnings = []operationstore.Warning{{Code: "storage.health", Message: "health: POOL_APP_NOT_ENABLED names pool e2e-hand-pool"}}
+	projecting.answers["alpha"] = ready
+	alpha := objectOf(t, f.observe(t), api.ArtifactServer, "alpha")
+	if alpha.Real.State != "present" || !slices.Contains(alpha.Real.Notes, "alpha: health: POOL_APP_NOT_ENABLED names pool e2e-hand-pool") {
+		t.Fatalf("a ready observation's health warning is not its note: %+v", alpha.Real)
+	}
+	block := reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Kind: "CephCluster", Object: "storage"}}
+	reported, ok := adapterWarning(reconciliation.Plan{Blocks: []reconciliation.Block{block}}, block, ready.warnings[0])
+	if !ok || reported.Code != "storage.health" || reported.Severity != "warning" || reported.Object.Kind != "CephCluster" {
+		t.Fatalf("a health warning reports %+v (%v)", reported, ok)
+	}
+}
+
 func TestObservationsStayWithinTheConcurrencyBound(t *testing.T) {
 	f, _, _ := observedFixture(t, "alpha", "bravo", "charlie", "delta", "echo")
 	f.service.options.Concurrency = 2

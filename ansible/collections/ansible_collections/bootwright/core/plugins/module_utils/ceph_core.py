@@ -114,8 +114,9 @@ def unsettled(error):
 
 def blocking_entry(value):
     """A blocking health check code, a daemon a host has not yet running, a never-booted OSD naming no device, an OSD no declared
-    service places, or a service unit's or gateway's unmet daemon count or endpoint."""
+    service places, a service unit's or gateway's unmet daemon count or endpoint, or a scoped health check's note."""
     return isinstance(value, str) and (ceph_native.HEALTH_CHECK.fullmatch(value) is not None or ceph_native.PENDING_DAEMON.fullmatch(value) is not None
+                                       or ceph_native.HEALTH_NOTE.fullmatch(value) is not None
                                        or ceph_native.PENDING_OSD.fullmatch(value) is not None or ceph_native.UNPLACED_OSD.fullmatch(value) is not None
                                        or ceph_native_units.PENDING.fullmatch(value) is not None or ceph_native_object.PENDING.fullmatch(value) is not None)
 

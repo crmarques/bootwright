@@ -2001,6 +2001,144 @@ def test_call_home_egress_alone_never_blocks_readiness_and_every_other_check_is_
         native.observe()
 
 
+APP_TIP = ("use 'ceph osd pool application enable <pool-name> <app-name>', where <app-name> is 'cephfs', 'rbd', 'rgw', "
+           "or freeform for custom applications.")
+
+
+def health_detail(**lines):
+    return {"status": "HEALTH_ERR", "mutes": [], "checks": {name: {"severity": "HEALTH_WARN", "summary": {"message": "synthetic", "count": len(found)},
+                                                                   "detail": [{"message": line} for line in found], "muted": False}
+                                                            for name, found in lines.items()}}
+
+
+def test_a_check_naming_only_an_undeclared_pool_keeps_no_block_from_ready_and_a_cluster_read_notes_it(core_request):
+    core_request["config"] = memory_config()
+    answers = memory_observation_answers(core_request)
+    answers[("status",)]["health"] = health("POOL_APP_NOT_ENABLED", "CHA_ERROR_SENDING_REPORT")
+    answers[("health", "detail")] = health_detail(POOL_APP_NOT_ENABLED=["application not enabled on pool 'e2e-hand-pool'", APP_TIP],
+                                                  CHA_ERROR_SENDING_REPORT=["synthetic"])
+    native, unused = worker(core_request, answers)
+    result = native.observe()
+    assert result["ready"] is True and result["health"] == "HEALTH_ERR" and native.blocking == []
+    native.reading = True
+    assert native.readiness_health(answers[("status",)]["health"]) == ("HEALTH_ERR", True)
+    assert native.blocking == ["POOL_APP_NOT_ENABLED@pool.e2e-hand-pool"]
+
+
+@pytest.mark.parametrize("action,resource,owners", [
+    ("pool", {"pool": {"name": "rbd-data"}}, ({"rbd-data"}, set())),
+    ("rbd", {"rbd": {"pool": "rbd-data", "dataPool": ""}}, ({"rbd-data"}, set())),
+    ("filesystem", {"filesystem": {"name": "files", "metadataPool": "files-meta", "dataPools": ["files-data", "files-extra"]}},
+     ({"files-meta", "files-data", "files-extra"}, {"files"})),
+    ("subvolume", {"subvolume": {"filesystem": "files", "pool": "files-data"}}, ({"files-data"}, {"files"})),
+    ("gateway", {"gateway": {"indexPool": "dc1.rgw.buckets.index", "dataPool": "dc1.rgw.buckets.data", "dataExtraPool": "",
+                             "zonePools": ["dc1.rgw.meta", "dc1.rgw.buckets.index", "dc1.rgw.buckets.data"]}},
+     ({"dc1.rgw.buckets.index", "dc1.rgw.buckets.data", "dc1.rgw.meta", ".rgw.root"}, set())),
+    ("client", {"client": {"pool": "rbd-data", "dataPools": ["rbd-ec"], "filesystem": ""}}, ({"rbd-data", "rbd-ec"}, set())),
+    ("client", {"client": {"pool": "", "dataPools": [], "filesystem": "files"}}, (set(), {"files"})),
+    ("nfs-export", {"nfsExport": {"filesystem": "files"}}, (set(), {"files"})),
+    ("nfs-export", {"nfsExport": {"filesystem": ""}}, (set(), set())),
+    ("nvmeof", {"nvmeof": {"pool": "nvme-state", "namespaces": [{"id": 1, "image": {"pool": "rbd-data", "dataPool": ""}},
+                                                                {"id": 2, "image": {"pool": "rbd-other", "dataPool": "rbd-ec"}}]}},
+     ({"nvme-state", "rbd-data", "rbd-other", "rbd-ec"}, set())),
+    ("object-user", {"objectUser": {"gateway": "objects"}}, (set(), set())),
+    ("cluster", {}, (set(), set())),
+], ids=["pool", "rbd", "filesystem", "subvolume", "gateway", "client-rbd", "client-filesystem", "nfs-export", "object-export", "nvmeof",
+        "object-user", "cluster"])
+def test_each_block_is_held_by_the_pools_and_filesystems_it_owns_or_its_request_depends_on(action, resource, owners):
+    assert ceph_native.health_owned(dict(resource, action=action)) == owners
+
+
+@pytest.mark.parametrize("action,resource,status,lines,blocking", [
+    ("pool", {"pool": {"name": "rbd-data"}}, ("POOL_NEARFULL",), {"POOL_NEARFULL": ["pool 'rbd-data' is nearfull"]}, ["POOL_NEARFULL"]),
+    ("pool", {"pool": {"name": "other"}}, ("POOL_NEARFULL",), {"POOL_NEARFULL": ["pool 'rbd-data' is nearfull"]}, []),
+    ("rbd", {"rbd": {"pool": "rbd-data", "dataPool": ""}}, ("POOL_FULL",),
+     {"POOL_FULL": ["pool 'other' has 9.5 GiB (max 10 GiB)", "pool 'rbd-data' is full (running out of quota)"]}, ["POOL_FULL"]),
+    ("filesystem", {"filesystem": {"name": "files", "metadataPool": "files-meta", "dataPools": ["files-data"]}}, ("FS_DEGRADED",),
+     {"FS_DEGRADED": ["fs files is degraded"]}, ["FS_DEGRADED"]),
+    ("subvolume", {"subvolume": {"filesystem": "files", "pool": "files-data"}}, ("MDS_ALL_DOWN",),
+     {"MDS_ALL_DOWN": ["fs files is offline because no MDS is active for it."]}, ["MDS_ALL_DOWN"]),
+    ("subvolume", {"subvolume": {"filesystem": "other", "pool": "other-data"}}, ("FS_DEGRADED",), {"FS_DEGRADED": ["fs files is degraded"]}, []),
+    ("pool", {"pool": {"name": "rbd-data"}}, ("FS_DEGRADED",), {"FS_DEGRADED": ["fs rbd-data is degraded"]}, []),
+    ("pool", {"pool": {"name": "other"}}, ("MON_DOWN", "POOL_APP_NOT_ENABLED"),
+     {"POOL_APP_NOT_ENABLED": ["application not enabled on pool 'e2e-hand-pool'"]}, ["MON_DOWN"]),
+    ("pool", {"pool": {"name": "other"}}, ("MDS_INSUFFICIENT_STANDBY",), {"MDS_INSUFFICIENT_STANDBY": ["have 0; want 1 more"]},
+     ["MDS_INSUFFICIENT_STANDBY"]),
+    ("pool", {"pool": {"name": "other"}}, ("POOL_APP_NOT_ENABLED",),
+     {"POOL_APP_NOT_ENABLED": ["application not enabled on pool 'e2e-hand-pool'", APP_TIP + "\n3 more pools..."]}, ["POOL_APP_NOT_ENABLED"]),
+    ("pool", {"pool": {"name": "other"}}, ("POOL_APP_NOT_ENABLED",), {"POOL_APP_NOT_ENABLED": [APP_TIP]}, ["POOL_APP_NOT_ENABLED"]),
+    ("pool", {"pool": {"name": "other"}}, ("POOL_NO_REDUNDANCY",), {}, ["POOL_NO_REDUNDANCY"]),
+    ("pool", {"pool": {"name": "other"}}, ("POOL_NO_REDUNDANCY",), {"POOL_NO_REDUNDANCY": ["pool '.mgr' has no replicas configured"]},
+     ["POOL_NO_REDUNDANCY"]),
+    ("pool", {"pool": {"name": "other"}}, ("CHA_ERROR_SENDING_REPORT",), {}, []),
+    ("gateway", {"gateway": {"indexPool": "dc1.rgw.buckets.index", "dataPool": "dc1.rgw.buckets.data", "dataExtraPool": "", "zonePools": []}},
+     ("POOL_NO_REDUNDANCY",), {"POOL_NO_REDUNDANCY": ["pool '.rgw.root' has no replicas configured"]}, ["POOL_NO_REDUNDANCY"]),
+    ("pool", {"pool": {"name": "other"}}, ("POOL_NO_REDUNDANCY",), {"POOL_NO_REDUNDANCY": ["pool '.rgw.root' has no replicas configured"]}, []),
+    ("pool", {"pool": {"name": "rbd-data"}}, ("POOL_APP_NOT_ENABLED", "POOL_NEARFULL"),
+     {"POOL_APP_NOT_ENABLED": ["application not enabled on pool 'e2e-hand-pool'", APP_TIP], "POOL_NEARFULL": ["pool 'rbd-data' is nearfull"]},
+     ["POOL_NEARFULL"]),
+    ("nfs-export", {"nfsExport": {"filesystem": "files"}}, ("MDS_ALL_DOWN",),
+     {"MDS_ALL_DOWN": ["fs files is offline because no MDS is active for it."]}, ["MDS_ALL_DOWN"]),
+    ("client", {"client": {"pool": "rbd-data", "dataPools": [], "filesystem": ""}}, ("POOL_FULL",),
+     {"POOL_FULL": ["pool 'rbd-data' is full (no space)"]}, ["POOL_FULL"]),
+    ("client", {"client": {"pool": "rbd-other", "dataPools": [], "filesystem": ""}}, ("POOL_FULL",),
+     {"POOL_FULL": ["pool 'rbd-data' is full (no space)"]}, []),
+], ids=["own-pool", "other-pool", "rbd-pool-among-others", "own-filesystem", "subvolume-filesystem", "other-filesystem", "pool-name-as-filesystem",
+        "mon-down", "unscoped-mds-standby", "truncated-tip", "only-the-tip", "omitted-from-detail", "system-pool", "tolerated", "rgw-root-gateway",
+        "rgw-root-pool", "passing-beside-owned", "nfs-export-filesystem", "client-pool", "client-other-pool"])
+def test_a_scoped_check_keeps_exactly_its_owners_from_ready_and_every_other_check_gates_every_block(core_request, action, resource, status, lines,
+                                                                                                    blocking):
+    native, unused = worker(core_request, {("health", "detail"): health_detail(**lines)})
+    native.request = dict(native.request, action=action, **resource)
+    assert native.readiness_health(health(*status)) == ("HEALTH_ERR", not blocking)
+    assert native.blocking == blocking
+
+
+# One real detail line of each scoped check, as Ceph tentacle writes it (src/mon/PGMap.cc, src/osd/OSDMap.cc, src/mds/MDSMap.cc,
+# src/mds/FSMap.cc, src/pybind/mgr/pg_autoscaler/module.py), and the name it carries.
+TENTACLE_DETAIL = [
+    ("POOL_APP_NOT_ENABLED", "application not enabled on pool 'hand'", "hand"),
+    ("POOL_FULL", "pool 'q' is full (running out of quota)", "q"),
+    ("POOL_FULL", "pool 'q' is full (no space)", "q"),
+    ("POOL_FULL", "pool 'q' has 1000 objects (max 1024)", "q"),
+    ("POOL_FULL", "pool 'q' has 9.5 GiB (max 10 GiB)", "q"),
+    ("POOL_NEAR_FULL", "pool 'q' has 800 objects (max 1024)", "q"),
+    ("POOL_NEAR_FULL", "pool 'q' has 812 MiB (max 1 GiB)", "q"),
+    ("POOL_NEARFULL", "pool 'q' is nearfull", "q"),
+    ("POOL_BACKFILLFULL", "pool 'q' is backfillfull", "q"),
+    ("POOL_PG_NUM_NOT_POWER_OF_TWO", "pool 'q' pg_num 12 is not a power of two", "q"),
+    ("POOL_NO_REDUNDANCY", "pool 'q' has no replicas configured", "q"),
+    ("POOL_TOO_FEW_PGS", "Pool q has 8 placement groups, should have 32", "q"),
+    ("POOL_TOO_MANY_PGS", "Pool q has 256 placement groups, should have 32", "q"),
+    ("POOL_HAS_TARGET_SIZE_BYTES_AND_RATIO", "Pool q has target_size_bytes and target_size_ratio set", "q"),
+    ("SMALLER_PGP_NUM", "pool q pg_num 64 > pgp_num 32", "q"),
+    ("MANY_OBJECTS_PER_PG", "pool q objects per pg (1200) is more than 1.2e+06 times cluster average (1)", "q"),
+    ("MANY_OBJECTS_PER_PG", "pool q objects per pg (1200) is more than 12.5 times cluster average (96)", "q"),
+    ("FS_DEGRADED", "fs files is degraded", "files"),
+    ("FS_WITH_FAILED_MDS", "fs files has 1 failed mds", "files"),
+    ("FS_WITH_FAILED_MDS", "fs files has 2 failed mdss", "files"),
+    ("FS_INLINE_DATA_DEPRECATED", "fs files has deprecated feature inline_data enabled.", "files"),
+    ("MDS_ALL_DOWN", "fs files is offline because no MDS is active for it.", "files"),
+    ("MDS_DAMAGE", "fs files mds.0 is damaged", "files"),
+    ("MDS_UP_LESS_THAN_MAX", "fs files has 1 MDS online, but wants 2", "files"),
+]
+
+
+@pytest.mark.parametrize("code,line,name", TENTACLE_DETAIL, ids=[code + "-" + str(index) for index, (code, unused, unused) in enumerate(TENTACLE_DETAIL)])
+def test_each_scoped_check_reads_the_name_from_its_tentacle_detail_line(code, line, name):
+    assert ceph_native.health_names(health_detail(**{code: [line]}), [code]) == {code: {name}}
+
+
+def test_every_scoped_check_has_a_tentacle_detail_line():
+    assert {code for code, unused, unused in TENTACLE_DETAIL} == set(ceph_native.SCOPED_HEALTH)
+
+
+def test_a_failed_health_detail_read_refuses_as_a_failed_status_read(core_request):
+    native, unused = worker(core_request, {("health", "detail"): (1, b"synthetic native failure")})
+    with pytest.raises(ceph_native.NativeFailure, match="^native-command$"):
+        native.readiness_health(health("POOL_APP_NOT_ENABLED"))
+
+
 def test_a_readiness_timeout_names_the_checks_still_blocking(core_request):
     clock = ReadinessClock()
 

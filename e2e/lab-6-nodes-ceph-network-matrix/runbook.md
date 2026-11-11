@@ -787,7 +787,13 @@ profile, the one profile only `app-01` uses
 and (B1114) `e2e-hand-pool`
 listed as a pool no applied object declares, nothing else differing, the
 declared pools' size, minimum size, application and autoscale mode read
-(B600), and exit `0` after both are removed. If the pool delete is refused,
+(B600), and exit `0` after both are removed. Once the monitor raises
+`POOL_APP_NOT_ENABLED` for the hand pool (after
+`mon_warn_on_pool_no_app_grace`, five minutes by default), require (B1311)
+the CephCluster block's note
+`health: POOL_APP_NOT_ENABLED names pool e2e-hand-pool` and no block noted
+`not ready: POOL_APP_NOT_ENABLED`
+([scoped checks](../../specs/ceph.md#scoped-health-checks)). If the pool delete is refused,
 set `mon_allow_pool_delete` true for the delete and false again. The release
 change and the destroy-and-apply half of B1118 stay outside this case.
 

@@ -133,6 +133,47 @@ LICENSE_STORE_FLOOR = 1 << 20
 # Health checks that never block day-0 readiness: call-home egress is the operator's network, not the cluster's state.
 TOLERATED_HEALTH = frozenset(("CHA_ERROR_SENDING_REPORT",))
 HEALTH_CHECK = re.compile(r"[A-Z][A-Z0-9_]{0,63}\Z")
+# Health checks whose detail names the pools or filesystems they are about, as Ceph tentacle (which IBM Storage Ceph 9
+# ships) documents them in doc/rados/operations/health-checks.rst and doc/cephfs/health-messages.rst, with every detail
+# line each one writes (src/mon/PGMap.cc, src/osd/OSDMap.cc, src/mds/MDSMap.cc and the pg_autoscaler module). Such a check
+# keeps from ready only the blocks that own or depend on what it names; a line none of its patterns matches, a check the detail omits and
+# a system pool other than `.rgw.root` keep every block from ready.
+POOL_NAMED = r"([a-zA-Z0-9_.][a-zA-Z0-9_.-]{0,127})"
+FS_NAMED = r"([a-zA-Z0-9][a-zA-Z0-9_.-]{0,127})"
+COUNT = r"[0-9]{1,20}"
+BYTES = r"[0-9]{1,20}(?:\.[0-9]{1,6})? (?:[KMGTPE]i)?B"
+RATIO = r"[0-9]{1,20}(?:\.[0-9]{1,9})?(?:e[+-][0-9]{1,3})?"
+POOL_QUOTA = (r"pool '" + POOL_NAMED + r"' has " + COUNT + r" objects \(max " + COUNT + r"\)",
+              r"pool '" + POOL_NAMED + r"' has " + BYTES + r" \(max " + BYTES + r"\)")
+POOL_PG_COUNT = r"Pool " + POOL_NAMED + r" has " + COUNT + r" placement groups, should have " + COUNT
+SCOPED_HEALTH = {code: (kind, tuple(re.compile(pattern + r"\Z") for pattern in patterns)) for code, kind, patterns in (
+    ("POOL_APP_NOT_ENABLED", "pool", (r"application not enabled on pool '" + POOL_NAMED + r"'",
+                                      re.escape("use 'ceph osd pool application enable <pool-name> <app-name>', where <app-name> is "
+                                                "'cephfs', 'rbd', 'rgw', or freeform for custom applications."))),
+    ("POOL_FULL", "pool", (r"pool '" + POOL_NAMED + r"' is full \((?:running out of quota|no space)\)",) + POOL_QUOTA),
+    ("POOL_NEAR_FULL", "pool", POOL_QUOTA),
+    ("POOL_NEARFULL", "pool", (r"pool '" + POOL_NAMED + r"' is nearfull",)),
+    ("POOL_BACKFILLFULL", "pool", (r"pool '" + POOL_NAMED + r"' is backfillfull",)),
+    ("POOL_PG_NUM_NOT_POWER_OF_TWO", "pool", (r"pool '" + POOL_NAMED + r"' pg_num " + COUNT + r" is not a power of two",)),
+    ("POOL_NO_REDUNDANCY", "pool", (r"pool '" + POOL_NAMED + r"' has no replicas configured",)),
+    ("POOL_TOO_FEW_PGS", "pool", (POOL_PG_COUNT,)),
+    ("POOL_TOO_MANY_PGS", "pool", (POOL_PG_COUNT,)),
+    ("POOL_HAS_TARGET_SIZE_BYTES_AND_RATIO", "pool", (r"Pool " + POOL_NAMED + r" has target_size_bytes and target_size_ratio set",)),
+    ("SMALLER_PGP_NUM", "pool", (r"pool " + POOL_NAMED + r" pg_num " + COUNT + r" > pgp_num " + COUNT,)),
+    ("MANY_OBJECTS_PER_PG", "pool", (r"pool " + POOL_NAMED + r" objects per pg \(" + COUNT + r"\) is more than " + RATIO
+                                     + r" times cluster average \(" + COUNT + r"\)",)),
+    ("FS_DEGRADED", "fs", (r"fs " + FS_NAMED + r" is degraded",)),
+    ("FS_WITH_FAILED_MDS", "fs", (r"fs " + FS_NAMED + r" has " + COUNT + r" failed mdss?",)),
+    ("FS_INLINE_DATA_DEPRECATED", "fs", (r"fs " + FS_NAMED + r" has deprecated feature inline_data enabled\.",)),
+    ("MDS_ALL_DOWN", "fs", (r"fs " + FS_NAMED + r" is offline because no MDS is active for it\.",)),
+    ("MDS_DAMAGE", "fs", (r"fs " + FS_NAMED + r" mds\." + COUNT + r" is damaged",)),
+    ("MDS_UP_LESS_THAN_MAX", "fs", (r"fs " + FS_NAMED + r" has " + COUNT + r" MDS online, but wants " + COUNT,)),
+)}
+MAX_HEALTH_DETAIL = 1024
+MAX_HEALTH_MESSAGE = 1024
+HEALTH_RGW_ROOT = ".rgw.root"
+# A scoped check an unrecorded cluster observation reports as a note, naming one pool or filesystem it is about.
+HEALTH_NOTE = re.compile(r"([A-Z][A-Z0-9_]{0,63})@(pool|fs)\.([a-zA-Z0-9_.][a-zA-Z0-9_.-]{0,127})\Z")
 # When the monitor map was created, as `ceph mon dump` renders it, and the one
 # UTC form evidence carries, so a rendering change between releases moves no
 # identity (B867 confirms the value on a live cluster).
@@ -402,6 +443,58 @@ def store_bound(value):
 
 def named(value):
     return isinstance(value, str) and NAME.fullmatch(value) is not None
+
+
+def health_owned(request):
+    """The pools and filesystems whose scoped health checks keep this block from ready: those it owns (declares or derives) and
+    those its frozen request names as what it depends on. A service unit, settings, a placement policy, an object user or bucket
+    (which name only their gateway) and the cluster block name none."""
+    action = request["action"]
+    pools, filesystems = set(), set()
+    if action == "pool":
+        pools = {request["pool"]["name"]}
+    elif action == "rbd":
+        pools = {request["rbd"]["pool"], request["rbd"]["dataPool"]}
+    elif action == "filesystem":
+        filesystem = request["filesystem"]
+        pools, filesystems = {filesystem["metadataPool"], *filesystem["dataPools"]}, {filesystem["name"]}
+    elif action == "subvolume":
+        pools, filesystems = {request["subvolume"]["pool"]}, {request["subvolume"]["filesystem"]}
+    elif action == "gateway":
+        gateway = request["gateway"]
+        pools = {gateway["indexPool"], gateway["dataPool"], gateway["dataExtraPool"], *gateway["zonePools"], HEALTH_RGW_ROOT}
+    elif action == "client":
+        client = request["client"]
+        pools, filesystems = {client["pool"], *client["dataPools"]}, {client["filesystem"]}
+    elif action == "nfs-export":
+        filesystems = {request["nfsExport"]["filesystem"]}
+    elif action == "nvmeof":
+        nvmeof = request["nvmeof"]
+        pools = {nvmeof["pool"]} | {name for item in nvmeof["namespaces"] for name in (item["image"]["pool"], item["image"]["dataPool"])}
+    return pools - {""}, filesystems - {""}
+
+
+def health_names(detail, codes):
+    """Each scoped check's pool or filesystem names from `ceph health detail`; None for a check this detail omits or whose
+    detail holds a line none of its patterns matches."""
+    checks = detail.get("checks") if isinstance(detail, dict) else None
+    named_by = {}
+    for code in codes:
+        lines = checks.get(code, {}).get("detail") if isinstance(checks, dict) and isinstance(checks.get(code), dict) else None
+        names = set()
+        if not isinstance(lines, list) or not lines or len(lines) > MAX_HEALTH_DETAIL:
+            names = None
+        for line in lines if names is not None else ():
+            message = line.get("message") if isinstance(line, dict) else None
+            match = None
+            if isinstance(message, str) and len(message) <= MAX_HEALTH_MESSAGE:
+                match = next(filter(None, (pattern.fullmatch(message) for pattern in SCOPED_HEALTH[code][1])), None)
+            if match is None:
+                names = None
+                break
+            names.update(match.groups())
+        named_by[code] = names or None
+    return named_by
 
 
 def digest(value):
@@ -4258,13 +4351,28 @@ class Worker:
         return evidence
 
     def readiness_health(self, health):
-        """HEALTH_OK, or only checks that never block day-0 readiness; every other check is named as blocking."""
+        """HEALTH_OK, or only checks that never block day-0 readiness or that name only pools or filesystems this block neither
+        owns nor depends on; every other check is named as blocking. An unrecorded cluster observation names each scoped check it passed as a note."""
         status = health.get("status", "")
         require(status in ("HEALTH_OK", "HEALTH_WARN", "HEALTH_ERR"), "native-output")
         checks = health.get("checks", {})
         require(isinstance(checks, dict) and len(checks) <= 256 and all(isinstance(name, str) for name in checks), "native-output")
         blocking = set() if status == "HEALTH_OK" else set(checks) - TOLERATED_HEALTH
+        scoped = sorted(name for name in blocking if name in SCOPED_HEALTH)
+        notes = []
+        if scoped:
+            named_by = health_names(self.ceph("health", "detail"), scoped)
+            pools, filesystems = health_owned(self.request)
+            for name in scoped:
+                kind, names = SCOPED_HEALTH[name][0], named_by[name]
+                if names is None or names & (pools if kind == "pool" else filesystems) or any(
+                        kind == "pool" and entry.startswith(".") and entry != HEALTH_RGW_ROOT for entry in names):
+                    continue
+                blocking.discard(name)
+                notes += [name + "@" + kind + "." + entry for entry in sorted(names)]
         self.blocking = sorted(name for name in blocking if HEALTH_CHECK.fullmatch(name))[:16]
+        if self.reading and self.request["action"] == "cluster":
+            self.blocking = (self.blocking + [note for note in notes if HEALTH_NOTE.fullmatch(note)])[:16]
         return status, status == "HEALTH_OK" or bool(checks) and not blocking
 
     def prove_cluster_policy(self):

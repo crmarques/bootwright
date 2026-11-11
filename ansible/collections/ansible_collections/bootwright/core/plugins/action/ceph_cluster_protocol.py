@@ -6,7 +6,7 @@ from __future__ import annotations
 # pylint: disable=unidiomatic-typecheck
 
 from ansible.plugins.action import ActionBase
-from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol, ceph_core
+from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol, ceph_core, ceph_native
 from ansible_collections.bootwright.core.plugins.module_utils.controller_channel import emit
 
 
@@ -28,11 +28,19 @@ def completion(arguments):
 
 
 def pending(arguments):
-    """Each check that kept a read-only observation from ready, as a warning; a mutation reaches ready or refuses, so it reports none."""
+    """Each check that kept a read-only observation from ready, and each scoped health check a cluster's unrecorded observation
+    passed, as a warning; a mutation reaches ready or refuses, so it reports none."""
     entries = arguments.get("pending")
     if arguments.get("observed") is not True or arguments.get("removed") or not isinstance(entries, list):
         return []
-    return [{"code": "storage.not-ready", "message": "not ready: " + entry} for entry in entries if ceph_core.blocking_entry(entry)]
+    return [warning(entry) for entry in entries if ceph_core.blocking_entry(entry)]
+
+
+def warning(entry):
+    note = ceph_native.HEALTH_NOTE.fullmatch(entry)
+    if note is None:
+        return {"code": "storage.not-ready", "message": "not ready: " + entry}
+    return {"code": "storage.health", "message": "health: " + note[1] + " names " + ("pool " if note[2] == "pool" else "filesystem ") + note[3]}
 
 
 REFUSALS = tuple(dict.fromkeys(ceph_core.HOST_REASONS + ceph_core.CLUSTER_REASONS))

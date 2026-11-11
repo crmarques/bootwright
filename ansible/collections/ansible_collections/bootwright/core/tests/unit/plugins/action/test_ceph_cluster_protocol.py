@@ -52,6 +52,13 @@ def test_an_observation_reports_each_check_that_kept_it_from_ready_as_a_warning(
                         {"code": "storage.not-ready", "message": "not ready: MON_DOWN"}]
 
 
+def test_a_scoped_health_check_a_cluster_read_passed_is_a_health_note_not_a_readiness_entry():
+    reported = ceph_cluster_protocol.pending({"observed": True, "removed": False,
+                                              "pending": ["POOL_APP_NOT_ENABLED@pool.e2e-hand-pool", "FS_DEGRADED@fs.files", "POOL_FULL@pool.a b"]})
+    assert reported == [{"code": "storage.health", "message": "health: POOL_APP_NOT_ENABLED names pool e2e-hand-pool"},
+                        {"code": "storage.health", "message": "health: FS_DEGRADED names filesystem files"}]
+
+
 @pytest.mark.parametrize("arguments", [
     {"observed": False, "removed": False, "pending": ["MON_DOWN"]},
     {"observed": True, "removed": True, "pending": ["MON_DOWN"]},

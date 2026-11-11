@@ -14572,3 +14572,44 @@ proved by tests of the role's tasks, not on a host, and a redirect to plain HTTP
 same proxy; the image fill, releases,
 the controller placement and an installed mirror host remain on
 [B1249](backlog.md#b1249).
+### X410 — Ceph health checks scoped to their owners
+
+**Item:** [B1311](m2.md#b1311) (defect, owner Storage), delivered in-tree
+(2026-11-10) and awaiting operator acceptance under
+[D256](backlog.md#d256) (1). A Ceph health check whose detail names pools or
+filesystems now keeps from ready only the blocks that own what it names or
+whose frozen request depends on it, as the
+[scoped checks](../ceph.md#scoped-health-checks) specify; every
+other check, `MON_DOWN` included, still gates every block, and the tolerated
+set is unchanged. When `ceph status` raises a scoped check, the observation
+reads `ceph health detail` once and takes the names from each detail line by
+an exact pattern per check (`SCOPED_HEALTH`, from Ceph tentacle's health-check
+list and the source of each detail line); a check the detail omits, a line no
+pattern matches and a system pool other than `.rgw.root` keep every block from
+ready, as before. A cluster block's `diff --observe` read reports each check
+it passed as a new `storage.health` warning (`health: <check> names pool
+<name>`), registered in the
+[diagnostic codes](../cli/output.md) and shown as a note. The core content
+digest moved by the effect pin `health-scoped-to-owned-pools-and-filesystems-v1`;
+no request, evidence or format version moved, so only an incomplete apply an
+earlier build registered with a Ceph core block refuses to continue under this
+build; finish or destroy it with that build. Such an apply stuck on a scoped
+check about a pool no object declares cannot finish under that build until
+the operator removes the cause (deletes the hand-made pool or enables its
+application).
+
+Decisions taken by the session, pending the owner's review: which blocks a
+pool or filesystem holds (one owning it, or whose frozen request names it as a
+dependency: a client's capability scope, a CephFS-backed NFS export's
+filesystem, an NVMe-oF subsystem's pools; object users and buckets name only
+their gateway and rely on it, and SMB resources read no cluster health); a
+malformed or partial
+detail gates every block instead of refusing `native-output`; and
+`MDS_INSUFFICIENT_STANDBY` and `POOL_TARGET_SIZE_BYTES_OVERCOMMITTED` stay
+unscoped, because their detail names no filesystem or names a CRUSH subtree's
+pools as a list. The independent review's findings were applied before
+integration; a hand pool's PG checks still gate every block, parked as
+[B1328](backlog.md#b1328).
+
+**Commits:** this record's commit. Gates: listed in its message. No live run or
+push occurred.

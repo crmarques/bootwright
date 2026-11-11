@@ -1,5 +1,5 @@
 implementation: storage-ceph-core-v1
-content-digest: de41ea6b1b6a67a26b3417500ed6f9a13acd7509a1a4e03247354a27ed29b5b4
+content-digest: 3096c3dcc3c7b0572272738001fe0f9e1f38e71af27a1baad86c37a1bd18ce76
 request-version: ceph-core-v2
 automation-formats: -custody-v1, ceph-bootstrap-recovery-v1, ceph-bootstrap-state-v1, ceph-client-auth-v1, ceph-cluster-device-identities-v1, ceph-dashboard-port-attempt-v1, ceph-dashboard-port-repair-v1, ceph-dashboard-redeploy-v1, ceph-dashboard-user-v1, ceph-device-identities-v1, ceph-filesystem-attempt-v1, ceph-host-cache-v1, ceph-native-teardown-v1, ceph-osd-device-clear-v1, ceph-osd-device-intent-v1, ceph-physical-device-binding-v1, ceph-policy-attempt-v1, ceph-pool-attempt-v1, ceph-rbd-image-attempt-v1, ceph-registry-v1, ceph-runtime-profile-v1, ceph-service-inputs-v1, ceph-subvolume-attempt-v1, ceph-subvolume-group-attempt-v1, ceph-tiebreaker-removal-v1, ceph-tunnel-custody-v1, ceph-tunnel-redeploy-v1, ceph-tunnel-relabel-v1, ceph-tunnel-stage-v1, ceph-tunnel-v1
 mark-formats: .bootwright-registry-, bootwright-owner, bootwright:
@@ -7,6 +7,7 @@ proof-ids: bootwright-bound:, bootwright-bound:/spec/ssl_cert, bootwright-bound:
 fixed-places: .bootwright-cephadm-, /run/bootwright-ceph-ssh, /var/lib/bootwright/ceph, /var/lib/bootwright/ceph-host, 05-bootwright-ceph-
 effect-pins:
   selected-tunnel-image-v1
+  health-scoped-to-owned-pools-and-filesystems-v1
 request-identity:
   cluster
   fsid

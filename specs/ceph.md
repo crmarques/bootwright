@@ -1956,9 +1956,10 @@ time, polling, response size, cancellation and any native asynchronous work.
 Timeout reports unfinished or unknown according to evidence.
 B472 fixes predicates, limits and explicitly tolerated warnings/transitions;
 blanket warning acceptance cannot claim readiness. The core profile requires
-`HEALTH_OK`, or a health whose every check is in a closed tolerated set. That
-set holds only `CHA_ERROR_SENDING_REPORT`: IBM Call Home's egress is the
-operator's network, not the cluster's state. A readiness timeout names the
+`HEALTH_OK`, or a health whose every check is in a closed tolerated set or is a
+[scoped check](#scoped-health-checks) naming nothing the block owns. The
+tolerated set holds only `CHA_ERROR_SENDING_REPORT`: IBM Call Home's egress is
+the operator's network, not the cluster's state. A readiness timeout names the
 checks still blocking in its refusal detail. A read-only observation that is
 not ready reports the same entries, at most 16, as `storage.not-ready`
 warnings `not ready: <entry>` beside its evidence, which `diff --observe`
@@ -2062,6 +2063,48 @@ ambiguous. Bootwright creates no test data, and read-only readiness,
 preflight, status, health and unknown-effect resolution never do. Passing
 native readiness does not claim the client-data acceptance gate passed; that
 gate is the owner-accepted run of [B476](milestones/delivered.md#x94--post-destroy-cluster-inspection).
+
+## Scoped health checks
+
+A *scoped check* is a Ceph health check whose detail names the pools or
+filesystems it is about, from a closed table (`SCOPED_HEALTH` in the
+collection's `ceph_native` module, after the Ceph tentacle health-check list
+and the detail lines its monitor, OSD map, MDS map and `pg_autoscaler` module
+write): `POOL_APP_NOT_ENABLED`, `POOL_FULL`, `POOL_NEAR_FULL`,
+`POOL_NEARFULL`, `POOL_BACKFILLFULL`, `POOL_PG_NUM_NOT_POWER_OF_TWO`,
+`POOL_NO_REDUNDANCY`, `POOL_TOO_FEW_PGS`, `POOL_TOO_MANY_PGS`,
+`POOL_HAS_TARGET_SIZE_BYTES_AND_RATIO`, `SMALLER_PGP_NUM` and
+`MANY_OBJECTS_PER_PG` name pools; `FS_DEGRADED`, `FS_WITH_FAILED_MDS`,
+`FS_INLINE_DATA_DEPRECATED`, `MDS_ALL_DOWN`, `MDS_DAMAGE` and
+`MDS_UP_LESS_THAN_MAX` name filesystems (D256). When one is raised, the
+observation reads `ceph health detail` once and takes the names from each of
+the check's detail lines by an exact pattern per check. The check keeps a block
+from [ready](#resources-readiness-and-access) only when it names a pool or
+filesystem that holds the block: one the block owns, by declaring or deriving
+it, or one its frozen request names as what it depends on. A CephPool is held
+by its pool; a CephObjectGateway by its zone and placement pools and
+`.rgw.root`; a CephFilesystem by itself and its metadata and data pools; a
+CephRBDImage by its pool and data pool; a CephSubvolume by its filesystem and
+pool; a CephClient by the pool, data pools or filesystem its capabilities
+scope; a CephFS-backed NFS export by its filesystem; an NVMe-oF subsystem by
+its pool and its namespaces' image pools and data pools. A service unit, the
+settings block, a placement policy, an RGW-backed NFS export, an object user
+or bucket (whose requests name only their gateway, which is held) and the
+cluster block are held by none, and a CephSMBResource's observation reads no
+cluster health. A request names only declared objects, so a check naming only
+pools or filesystems no applied object declares holds no block. A scoped check keeps every block
+from ready, as any other check does, when the detail omits it, when one of its
+lines matches none of its patterns, or when it names a system pool (a name
+starting with `.`) other than `.rgw.root`. Every other check, `MON_DOWN` and
+`MDS_INSUFFICIENT_STANDBY` included, keeps every block of the cluster from
+ready.
+
+A cluster block's read under `diff --observe` names each scoped check it
+passed, one per pool or filesystem, as a `storage.health` warning
+`health: <check> names pool <name>` (or `filesystem <name>`), which
+`diff --observe` shows as a note, so a check on a pool no object declares
+stays visible beside the reading's
+[undeclared pools](milestones/m2.md#b1114).
 
 ## Ingress host firewall
 
@@ -2371,8 +2414,11 @@ command's own answer, and refuses as before,
 only when the available manager it was sent to still holds one interval
 later, its orchestrator answers with cephadm, and the declaring `nfs`, `smb`
 or `dashboard` module answers a read-only command. A concurrent manager
-restart therefore never fails an unclaimed block. Readiness stays cluster-wide: a sibling's transient
-health check delays, and never fails, a block before its readiness deadline.
+restart therefore never fails an unclaimed block. Readiness stays cluster-wide
+except for the [scoped checks](#scoped-health-checks), which keep from
+ready only the blocks owning the pools or filesystems they name: a sibling's
+transient health check delays, and never fails, a block before its readiness
+deadline.
 Per-invocation scratch is private. Reservations prevent conflicting local
 contexts from claiming the same target; a native name, process-local mutex or
 context lease alone cannot coordinate another controller. B79 qualifies the
