@@ -33,7 +33,11 @@ func hostPortRequirements(catalog api.Catalog) ([]installation.HostPortRequireme
 		}
 		requirements = append(requirements, installation.HostPortRequirement{Machine: requirement.Machine, Publisher: requirement.Publisher, Networks: slices.Clone(requirement.Networks), Protocols: slices.Clone(requirement.Protocols), Ports: ports})
 	}
-	return requirements, nil
+	services, err := serviceHostPorts(catalog)
+	if err != nil {
+		return nil, err
+	}
+	return append(requirements, services...), nil
 }
 
 func preflightHostPorts(catalog api.Catalog) ([]preflight.HostPortRequirement, error) {
@@ -79,9 +83,16 @@ func hostPortChecks(catalog api.Catalog, requirements installation.HostPortRequi
 		machine := "Machine/" + requirement.Machine
 		admits := hostPortAdmission(requirement)
 		networks := hostPortInterface(requirement.Networks)
+		if len(requirement.Addresses) != 0 {
+			networks = "the interface holding " + strings.Join(requirement.Addresses, ", ")
+		}
 		summary := machine + " admits " + admits + " on " + networks + " for " + requirement.Publisher
 		if installation.RealizesHostPorts(catalog, requirement.Machine) {
-			rows = append(rows, lifecycle.PlanCheck{ID: hostPortCheck, Status: hostPortRealized, Summary: summary + ": realized by the managed OS before the clusters stage"})
+			realization := ": realized by the managed OS before the clusters stage"
+			if len(requirement.Addresses) != 0 {
+				realization = ": realized by the host firewall before its consumers"
+			}
+			rows = append(rows, lifecycle.PlanCheck{ID: hostPortCheck, Status: hostPortRealized, Summary: summary + realization})
 			continue
 		}
 		remedy := "permit " + admits + " in the firewalld zone of " + networks + " of " + machine

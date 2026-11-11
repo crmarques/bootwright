@@ -1,6 +1,6 @@
-implementation: os-host-firewall-v1
-content-digest: ef74fbe8098b01389b0dcef264da682b89702c0bc590db7d5a40412626a3c9cd
-request-version: os-host-firewall-v1
+implementation: os-host-firewall-v2
+content-digest: 57c43ef135d2e05f0b0214e3aadc70a9786756c5efa88516f97027f3419a21b7
+request-version: os-host-firewall-v2
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -19,6 +19,7 @@ request-identity:
   placement.machine
 request-schema:
   address string
+  direct bool
   fleetKeyRef string
   identity struct installation.FirewallIdentity
   identity.block string
@@ -32,7 +33,9 @@ request-schema:
   placement.port int omitempty
   placement.privateKeyRef string omitempty
   placement.user string omitempty
+  preparation bool
   services []struct installation.FirewallService
+  services[].addresses []string omitempty
   services[].name string
   services[].networks []string
   services[].ports []struct installation.FirewallPort
@@ -45,6 +48,7 @@ request-schema:
 evidence-schema:
   absent bool
   postcondition bool
+  ready bool
   request string
   retired bool omitempty
   services []struct installation.FirewallServiceEvidence

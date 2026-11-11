@@ -5,7 +5,7 @@ from ansible.plugins.action import ActionBase
 from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol, managedos_firewall_worker as worker
 from ansible_collections.bootwright.core.plugins.module_utils.controller_channel import emit
 
-VERSION = "os-host-firewall-evidence-v1"
+VERSION = "os-host-firewall-evidence-v2"
 
 
 def proves(services, removed):
@@ -20,7 +20,10 @@ def completion(arguments):
     if not worker.valid_evidence(services):
         raise ValueError("host firewall services")
     removed = bool(arguments.get("removed"))
-    evidence = {"absent": removed, "postcondition": proves(services, removed),
+    ready = arguments.get("ready", True)
+    if type(ready) is not bool:  # pylint: disable=unidiomatic-typecheck
+        raise ValueError("host firewall readiness")
+    evidence = {"ready": ready, "absent": removed, "postcondition": (ready or removed) and proves(services, removed),
                 "request": adapter_protocol.request_digest(arguments.get("digest")),
                 "services": [dict(entry, memberships=[dict(item) for item in entry["memberships"]]) for entry in services],
                 "version": VERSION}

@@ -314,12 +314,12 @@ Alias cell.
 | [B1323](#b1323) | new, 2026-11-10 (X401) | product | Infrastructure services | A mirror's content is pruned and bounded | A managed mirror keeps every file and image until its server is destroyed |
 | [B1324](#b1324) | new, 2026-11-10 (X401) | product | Container cluster | A disconnected cluster verifies release signatures for its upgrades | A mirrored release's signatures stay on the vendor's signature store |
 | [B1325](#b1325) | new, 2026-11-10 (X401) | product | Infrastructure services | Several mirror hosts, or a mirror on a cluster | One Environment names one artifact mirror and one image mirror, each on one OS-ready Machine |
-| [B1329](#b1329) | new, 2026-11-11 (X409) | product | Infrastructure services, with Managed OS | A managed service on a Machine Bootwright installs opens its ports in that host's firewall | No managed service publishes host port requirements, so an installed host's profile must disable its firewall |
 | [B1345](#b1345) | new, 2026-11-12 (X431 gate) | defect | Cluster objects | `test_real_ansible_action_module_handoff` runs a real playbook under a 30-second subprocess timeout that host load exceeds | It timed out once in `make check` at a load average near 40 and passed twice alone |
 | [B1346](#b1346) | new, 2026-11-11 (B1338 review) | safety | Workspace | A same-inode snapshot or rollback of the store within one boot is detected | Inode and same-filesystem checks cannot tell it from the store; detection needs a record format change |
 | [B1341](#b1341) | new, 2026-11-11 (B1338 review) | safety | Workspace | A freed inode reused by a recreated directory is not taken for the recorded one | Pre-existing on ext4 and xfs; detection needs a record format change |
 | [B1342](#b1342) | new, 2026-11-11 (B1338 review) | defect | Ceph | The Ansible records of managed Ceph hosts survive a reboot that renumbers a device | Fixing them moves the automation digest; the Ceph hosts that renumber devices are not yet qualified |
 | [B1349](#b1349) | new, 2026-11-11 (X418; audit 004 API-34) | product | Add-ons | Reserved authored steps gain an explicitly authorized lifecycle | D183 keeps the shapes admitted and inert; no concrete execution journey is promoted |
+| [B1354](#b1354) | new, 2026-11-11 (firewall review) | defect | E2E | Sample application teardown removes only a rule its setup created | Separate application fixture ownership, beyond controller listener preparation |
 
 ### B82
 
@@ -3585,18 +3585,6 @@ KubeVirt guest serves, with a declared order between them and the same fill and
 trust. **Exit evidence:** a plan-order test for each new placement and a
 failover row of [B1250](#b1250)'s profile.
 
-### B1329
-
-**Owner:** Infrastructure services, with Managed OS. **Kind:** product.
-**Requires:** none. **Definition:** Candidate, from
-[X409](delivered.md#x409--a-managed-artifact-mirror-on-a-machine-bootwright-installs).
-**Outcome:** a managed service or artifact server on a Machine Bootwright
-installs publishes its sockets as host port requirements, so the
-`os-host-firewall` block opens them, and the
-[refusal table](../infrastructure-services.md#refusal-table)'s firewall row
-goes. **Exit evidence:** a plan test that an installed host with its firewall
-enabled plans the firewall block with the service's ports before the service.
-
 ### B1346
 
 **Owner:** Workspace. **Kind:** safety. **Requires:** none. **Definition:**
@@ -3927,6 +3915,18 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | B1124 | 2026-11-09 | Retired under [D246](#d246): keeping a node's networks apart is segregation the estate's GitOps owns; Bootwright's part, forwarding on a pool's own interface alone, is [B1231](m4.md#b1231). |
 | B1286 | 2026-11-10 | Found while recording X395 ([D255](#d255)) and fixed in the same docs commit, so it never held an open item: the [Reservations](../substrates.md#provider-host-realization) text said a provider uses at most 63 of the 64 keys, while the code claims 64 (4 + 3 × 20) because the VLAN-refusal unit's key counts, as `TestTheManagedNetworkBoundKeepsTheHostReservationWithinItsKeys` asserts; the text now counts both unit keys. |
 | B1299 | 2026-11-11 | Declined under [D257](#d257) (1): a completed environment keeps the client release its apply proved, `status` and `diff` report one below the build's minimum ([X373](delivered.md#x373--clients-below-the-minimum)), and the remedy stays a destroy and a fresh apply, or the build that applied it. |
+
+### B1354
+
+**Owner:** E2E. **Kind:** defect. **Requires:** none. **Definition:** Candidate.
+The [sample application setup](../../e2e/lab-5-nodes-ceph-networks/app/app-setup.sh)
+preserves an existing matching rich rule but its
+[teardown](../../e2e/lab-5-nodes-ceph-networks/app/app-teardown.sh) removes it.
+**Outcome:** teardown removes only a grant whose creation the setup recorded,
+using the intended interface zone. **Exit evidence:** an isolated fixture
+covering a pre-existing grant, a newly created one and replay. Parked because
+X439 manages capability-published host listeners, not this application's
+separate fixture lifecycle.
 
 ## Decisions
 
@@ -8549,7 +8549,7 @@ the owner's review:
     while the engine's edge already orders it after the stage everywhere else.
 33. Taken by the session for B1249 (X409): plan refuses a managed service on
     an installed Machine whose install profile leaves its firewall enabled,
-    since no service opens a port yet ([B1329](#b1329)), a DNSServer or
+    since no service opens a port yet ([B1329](m1.md#b1329)), a DNSServer or
     NTPServer that Machine's own installation uses, an ArtifactServer there
     other than the managed artifact mirror's or one an
     `artifactServerEndpoint` publishes into, and a mirror host installed
@@ -8963,3 +8963,13 @@ already implemented by B1079; it authorizes no additional removal.
 **Exit evidence:** each item's in-tree evidence and `make check` on each
 integration tree, with an independent review and `make race` for each safety
 slice. No push.
+
+### D258
+
+**owner** (2026-11-11): implement managed host firewall preparation so the
+operator need not enable firewalld, discover its zones or add runtime and
+permanent artifact listener ports manually. X439 delivers B1353 and promotes
+B1329 from parked. Provided-host management is explicit; host/OS ownership,
+foreign configuration preservation and consumer-before-firewall removal
+remain required. This extends D110's operator-only controller policy by an
+explicit management choice; it grants no environment execution or push.

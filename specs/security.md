@@ -639,11 +639,12 @@ in inventory, facts, caches, evidence, logs, or adapter results.
 
 ### Listener exposure
 
-The operator owns the firewall policy of the controller and of every host
-Bootwright does not install with its firewall enabled; Bootwright opens no port
-and changes no zone there. On a Machine it installs with the firewall enabled,
-the managed OS realizes other capabilities' requirements as owned firewalld
-services ([host firewall requirements](managed-os.md#host-firewall-requirements)). A listener serves only its declared consumers. A privileged
+The Machine's host/OS firewall owner realizes capability-published listener
+requirements when its [firewall policy](managed-os.md#host-firewall-requirements)
+is managed. Provided hosts require explicit opt-in; otherwise the operator
+owns their firewall policy and Bootwright makes no change. On an installed
+Machine, the enabled install profile selects automatic realization unless
+its Machine policy is external. A listener serves only its declared consumers. A privileged
 listener or one carrying cleartext credentials binds loopback or a host-only
 address unless the operator explicitly places it on a trusted network. A
 wildcard bind exposes all matching host interfaces and requires source
@@ -664,8 +665,10 @@ Private URL capabilities travel over verified TLS, subject only to the
 [emulated-controller boot-media exception](openshift-clusters.md#boot-media).
 Public package trees carry no credentials.
 Preflight and plan report each declared controller listener's runtime firewall
-admission. Closed or unknown required sockets refuse before listener or
-dependent-consumer registration; inspection changes no firewall rules. The
+admission. Closed or unknown required sockets refuse before registration unless the frozen
+plan will first realize their managed firewall prerequisite. Live admission is
+then rechecked before a listener or dependent consumer starts; inspection
+changes no firewall rules. The
 [controller contract](controller.md#results-and-qualification) owns the bounded
 firewalld query and manual remedy. [B318](milestones/delivered.md#x62--controller-listener-firewall-inspection)
 records its in-tree evidence; B78 retains real-hardware qualification.

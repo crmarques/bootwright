@@ -1225,7 +1225,9 @@ oversized, non-local or ambiguous answers remain `unknown`; DNS names receive
 no loopback omission. Every inspection resolves the name anew, including the
 exclusive-transaction recheck. Inspection reads that interface's runtime
 firewalld zone and reports the socket, interface, zone and `open`, `closed` or
-`unknown` result. It never changes firewall configuration.
+`unknown` result. Inspection never changes firewall configuration. Explicitly managed host
+firewalls are prepared by the controller stage through the
+[host firewall capability](managed-os.md#host-firewall-requirements).
 
 Only an explicit runtime port/range or an accepting zone proves admission in
 the bounded interface-zone shape. An active policy with target `CONTINUE`,
@@ -1245,7 +1247,7 @@ Source-bound zones, other policies, direct or passthrough rules, rich rules,
 admission depending on unresolved service expansion, and unsupported or
 ambiguous inspection report `unknown`. A stopped, missing or inaccessible
 firewalld also reports `unknown`; another firewall's presence or absence is
-never inferred safe. The operator must verify the declared port from every
+never inferred safe. On an operator-managed host, the operator must verify the declared port from every
 BMC, installer and client, configure the operator-owned firewall, and repeat
 preflight. These rows inspect the local zone, not end-to-end reachability.
 
@@ -1253,9 +1255,10 @@ Unknown and closed required sockets cannot pass preflight. Public `plan`
 retains its preview and includes the observations and manual remedy. Before
 claims or registration, `apply` checks every starting listener and the
 listeners its starting consumers depend on, including listeners already
-proved ready. It repeats inspection under the exclusive transaction. A
-controller-only stage with no listener dependency has no listener admission
-requirement. The native queries use the runtime semantics documented by
+proved ready. It repeats inspection under the exclusive transaction. An explicitly managed firewall prerequisite may prepare closed sockets before
+its dependent listener starts; live admission is rechecked at that boundary. A
+controller-only stage prepares the declared host firewall and needs no listener
+admission unless one of its own dependencies serves a listener. The native queries use the runtime semantics documented by
 [firewall-cmd](https://firewalld.org/documentation/man-pages/firewall-cmd.html)
 and [zone targets](https://firewalld.org/documentation/man-pages/firewalld.zone.html).
 

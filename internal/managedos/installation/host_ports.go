@@ -2,6 +2,7 @@ package installation
 
 import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 )
 
 type HostPort struct {
@@ -10,6 +11,7 @@ type HostPort struct {
 }
 
 type HostPortRequirement struct {
+	Addresses []string
 	Machine   string
 	Publisher string
 	Networks  []string
@@ -20,12 +22,5 @@ type HostPortRequirement struct {
 type HostPortRequirements func(api.Catalog) ([]HostPortRequirement, error)
 
 func RealizesHostPorts(catalog api.Catalog, machine string) bool {
-	for _, object := range InstalledMachines(catalog) {
-		if object.Name() != machine {
-			continue
-		}
-		profile, found := catalog.Find(api.MachineInstallProfile, object.Spec().Get("os", "installProfileRef").Text())
-		return found && firewallChoice(profile.Spec().Get("customizations")) == "enabled"
-	}
-	return false
+	return machineref.ManagesFirewall(catalog, machine)
 }

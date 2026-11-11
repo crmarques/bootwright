@@ -52,13 +52,14 @@ MAX_COMMAND_OUTPUT = 1 << 20
 COMMAND_TIMEOUT = 120
 MAX_SERVICES = 64
 MAX_NETWORKS = 16
+MAX_ADDRESSES = 64
 MAX_ZONES = 64
 MAX_MEMBERSHIPS = 4096
 MAX_MARK = 256
 OPERATIONS = ("apply", "inspect", "remove")
 STATES = ("owned", "absent", "foreign")
 REASONS = ("host-firewall-foreign", "host-firewall-no-interface", "host-firewall-inactive", "host-firewall-failed", "transport")
-CAUSES = {"host-firewall-failed": ("tooling", "reload", "zone", "write", "address")}
+CAUSES = {"host-firewall-failed": ("tooling", "reload", "zone", "write", "address", "runtime-drift", "enable", "ssh-admission")}
 DETAILED = ("host-firewall-foreign", "host-firewall-no-interface")
 KEYS = frozenset(("operation", "mark", "services"))
 SERVICE_KEYS = frozenset(("name", "networks", "content"))
@@ -69,6 +70,33 @@ ZONE = re.compile(r"[A-Za-z0-9_-]{1,17}")
 DIGEST = re.compile(r"[0-9a-f]{64}")
 MARK_FORBIDDEN = frozenset("<>&\"'")
 NOT_LISTED = (1, 101)
+
+
+# The system Python and firewalld's own client library read every native
+# registry in one bounded process, avoiding hundreds of firewall-cmd launches.
+REGISTRY_COMPARISON = r"""
+def registries_equal(client, owned):
+    config = client.config()
+    descriptors = (
+        ("listServices", "getServiceSettings", "getServiceNames", "getServiceByName"),
+        ("listIcmpTypes", "getIcmpTypeSettings", "getIcmpTypeNames", "getIcmpTypeByName"),
+        ("getIPSets", "getIPSetSettings", "getIPSetNames", "getIPSetByName"),
+        ("getHelpers", "getHelperSettings", "getHelperNames", "getHelperByName"),
+    )
+    for listing, setting, names, by_name in descriptors:
+        runtime = set(getattr(client, listing)())
+        permanent = set(getattr(config, names)())
+        excluded = set(owned) if listing == "listServices" else set()
+        runtime, permanent = runtime - excluded, permanent - excluded
+        if len(runtime | permanent) > 4096 or runtime != permanent:
+            return False
+        for name in sorted(runtime):
+            live = getattr(client, setting)(name).settings
+            saved = getattr(config, by_name)(name).getSettings().settings
+            if live != saved:
+                return False
+    return True
+"""
 
 
 class Refused(Exception):
@@ -121,13 +149,22 @@ def valid_content(value):
             and all(character < "\x80" for character in value))
 
 
+def valid_addresses(value):
+    return (isinstance(value, list) and 0 < len(value) <= MAX_ADDRESSES
+            and all(isinstance(item, str) and 0 < len(item) <= 253
+                    and re.fullmatch(r"[A-Za-z0-9_.:-]+", item) for item in value))
+
+
 def valid_service(value):
-    return (isinstance(value, dict) and set(value) == SERVICE_KEYS and valid_name(value["name"])
-            and valid_networks(value["networks"]) and valid_content(value["content"]))
+    if not isinstance(value, dict) or not SERVICE_KEYS <= set(value) <= SERVICE_KEYS | {"addresses"}:
+        return False
+    selectors = (valid_addresses(value["addresses"]) and not value["networks"] if "addresses" in value
+                 else valid_networks(value["networks"]))
+    return valid_name(value["name"]) and selectors and valid_content(value["content"])
 
 
 def valid_services(value):
-    return isinstance(value, list) and 0 < len(value) <= MAX_SERVICES and all(valid_service(item) for item in value)
+    return isinstance(value, list) and 0 <= len(value) <= MAX_SERVICES and all(valid_service(item) for item in value)
 
 
 def valid_membership(value):
@@ -159,7 +196,7 @@ def valid_entry(value):
 
 def valid_evidence(value, names=None):
     """The evidence list of a result: one valid entry per service, in request order when the names are given."""
-    if not isinstance(value, list) or not 0 < len(value) <= MAX_SERVICES or not all(valid_entry(item) for item in value):
+    if not isinstance(value, list) or not 0 <= len(value) <= MAX_SERVICES or not all(valid_entry(item) for item in value):
         return False
     return names is None or [item["name"] for item in value] == list(names)
 
@@ -205,7 +242,9 @@ def token(data, pattern):
 class Guest:
     """The installed machine's firewall; every dependency is injectable."""
 
-    def __init__(self, run=run_command, directory=SERVICES_DIRECTORY, owner=0):
+    def __init__(self, run=run_command, directory=SERVICES_DIRECTORY, owner=0, preserve_runtime=False):
+        self.preserve_runtime = preserve_runtime
+        self.owned_names = set()
         self.run = run
         self.directory = directory
         self.owner = owner
@@ -261,12 +300,43 @@ class Guest:
                 raise failed("tooling")
         return sorted(names), bool(names)
 
+    def service_interfaces(self, service, found):
+        if "addresses" not in service:
+            return self.interfaces(service["networks"], found)
+        names = set()
+        for address in service["addresses"]:
+            resolved = self.resolve(address)
+            matches = {name for name, interface in found if interface.ip == resolved}
+            if len(matches) != 1:
+                return [], False
+            names.update(matches)
+        if not all(isinstance(name, str) and INTERFACE.fullmatch(name) for name in names):
+            raise failed("address")
+        return sorted(names), bool(names)
+
+    def resolve(self, address):
+        try:
+            return ipaddress.ip_address(address)
+        except ValueError:
+            code, output = self.run(["/usr/bin/getent", "ahosts", address])
+        if code != 0:
+            raise failed("address")
+        try:
+            addresses = {ipaddress.ip_address(line.split()[0].decode("ascii")) for line in output.splitlines()}
+        except (ValueError, IndexError, UnicodeError):
+            raise failed("address") from None
+        if len(addresses) != 1:
+            raise failed("address")
+        return addresses.pop()
+
     def zone_of(self, interface):
         code, output = self.command("--get-zone-of-interface=" + interface)
-        if code != 0:
+        if code == 2:
             code, output = self.command("--get-default-zone")
             if code != 0:
                 raise failed("tooling")
+        if code != 0:
+            raise failed("tooling")
         return token(output, ZONE)
 
     def zones(self, permanent=True):
@@ -366,9 +436,41 @@ class Guest:
             raise failed("write") from None
 
     def reload(self):
+        if self.preserve_runtime:
+            self.require_reload_safe()
         code, _output = self.command("--reload")
         if code != 0:
             raise failed("reload")
+
+    def require_reload_safe(self):
+        snapshots = []
+        for permanent in (False, True):
+            arguments = (["--permanent"] if permanent else []) + ["--list-all-zones"]
+            code, output = self.command(*arguments)
+            if code != 0:
+                raise failed("tooling")
+            snapshots.append(zone_snapshot(output, self.owned_names))
+        if snapshots[0] != snapshots[1]:
+            raise failed("runtime-drift")
+        for arguments in (["--direct", "--get-all-rules"], ["--direct", "--get-all-passthroughs"], ["--direct", "--get-all-chains"], ["--list-all-policies"]):
+            values = []
+            for permanent in (False, True):
+                code, output = self.command(*((["--permanent"] if permanent else []) + arguments))
+                if code != 0:
+                    raise failed("tooling")
+                values.append(zone_snapshot(output, set()))
+            if values[0] != values[1]:
+                raise failed("runtime-drift")
+        self.require_registries_safe()
+
+    def require_registries_safe(self):
+        source = REGISTRY_COMPARISON + ("\nimport sys\nfrom firewall.client import FirewallClient\n"
+                                        "print('same' if registries_equal(FirewallClient(), sys.argv[1:]) else 'different')\n")
+        code, output = self.run(["/usr/bin/python3", "-I", "-c", source] + sorted(self.owned_names))
+        if code != 0:
+            raise failed("tooling")
+        if output != b"same\n":
+            raise failed("runtime-drift")
 
     def alter(self, zone, name, verb):
         code, _output = self.command("--permanent", "--zone=" + zone, "--" + verb + "-service=" + name)
@@ -379,7 +481,7 @@ class Guest:
         """One service's inspect evidence: a zone that lists it permanently or at runtime is a membership."""
         name = service["name"]
         state, data = self.ownership(name, mark)
-        interfaces, covered = self.interfaces(service["networks"], found)
+        interfaces, covered = self.service_interfaces(service, found)
         memberships, held = [], set()
         for interface in interfaces:
             zone = self.zone_of(interface)
@@ -408,9 +510,9 @@ class Guest:
         for service in payload["services"]:
             name = service["name"]
             state, data = self.ownership(name, payload["mark"])
-            if state == "foreign":
+            if state == "foreign" or state == "absent" and self.known([name]):
                 raise Refused("host-firewall-foreign", detail=name)
-            interfaces, complete = self.interfaces(service["networks"], found)
+            interfaces, complete = self.service_interfaces(service, found)
             if not complete:
                 raise Refused("host-firewall-no-interface", detail=name)
             planned.append((state, data, sorted({self.zone_of(interface) for interface in interfaces})))
@@ -425,8 +527,30 @@ class Guest:
         return any(self.lists(zone, service["name"], False) for service in payload["services"] for zone in live)
 
 
+def zone_snapshot(output, owned):
+    """Reload preserves interface bindings; all other foreign zone intent must match."""
+    try:
+        text = output.decode("ascii")
+    except UnicodeError:
+        raise failed("tooling") from None
+    result = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("interfaces:"):
+            continue
+        if stripped.startswith("services:"):
+            stripped = "services: " + " ".join(sorted(set(stripped.split()[1:]) - owned))
+        elif not line.startswith(" "):
+            header = re.fullmatch(r"([A-Za-z0-9_-]+) \((?:default|active|disabled)(?:, (?:default|active|disabled))*\)", stripped)
+            if header:
+                stripped = header[1]
+        result.append(stripped)
+    return result
+
+
 def apply_operation(guest, payload):
     guest.require_running()
+    guest.owned_names = {service["name"] for service in payload["services"]}
     planned = guest.targets(payload, guest.addresses())
     changed = False
     for service, (state, data, _zones) in zip(payload["services"], planned):
@@ -451,6 +575,7 @@ def apply_operation(guest, payload):
 
 def remove_operation(guest, payload):
     guest.require_running()
+    guest.owned_names = {service["name"] for service in payload["services"]}
     states = []
     for service in payload["services"]:
         state, _data = guest.ownership(service["name"], payload["mark"])

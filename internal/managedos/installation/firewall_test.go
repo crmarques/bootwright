@@ -282,7 +282,7 @@ func firewallServiceEvidence(t *testing.T, block reconciliation.Block, state str
 	if err != nil {
 		t.Fatal(err)
 	}
-	evidence := FirewallEvidence{Request: block.RequestDigest, Version: FirewallEvidenceVersion}
+	evidence := FirewallEvidence{Ready: true, Request: block.RequestDigest, Version: FirewallEvidenceVersion}
 	for _, service := range request.Services {
 		entry := FirewallServiceEvidence{Name: service.Name, State: firewallAbsent, Memberships: []FirewallMembership{}}
 		switch state {
@@ -495,5 +495,50 @@ func TestAFirewallRemovalRefusalNamesDestroyAsItsRemedy(t *testing.T) {
 func TestTheFirewallMarkSpellsItsContextBlockAndApplyOperation(t *testing.T) {
 	if mark := FirewallMark("context", FirewallBlockID("machine"), "operation"); mark != "bootwright-host-firewall context=context block=os-firewall-machine apply=operation" {
 		t.Fatalf("mark = %q", mark)
+	}
+}
+
+func TestExplicitProvidedFirewallPlansWithoutAnInstallationAndRequiresDaemonReadiness(t *testing.T) {
+	objects := labCatalog().Objects()
+	for i, object := range objects {
+		if object.Kind() == api.Machine && object.Name() == "controller" {
+			objects[i] = object.WithSpec(object.Spec().WithPath(api.StringValue("managed"), "firewall", "management"))
+		}
+	}
+	catalog := api.NewCatalog(objects)
+	plan := firewallPlan(t, catalog, staticPorts())
+	if len(plan.Definitions) != 1 {
+		t.Fatalf("definitions = %+v", plan.Definitions)
+	}
+	definition := plan.Definitions[0]
+	request, err := DecodeFirewallRequest(definition.Request)
+	if err != nil || !request.Direct || !request.Placement.Local() || definition.Stage != reconciliation.StageInfrastructureServices || len(definition.Requires) != 0 || len(request.Services) != 0 || len(plan.Secrets) != 0 {
+		t.Fatalf("provided host: %+v, %+v, %v", definition, request, err)
+	}
+	block := reconciliation.Block{BlockDefinition: definition, RequestDigest: strings.Repeat("1", 64)}
+	evidence := FirewallEvidence{Ready: true, Request: block.RequestDigest, Version: FirewallEvidenceVersion, Postcondition: true, Services: []FirewallServiceEvidence{}}
+	runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "changed", Evidence: mustJSON(t, evidence)}}
+	execution := lifecycle.Execution{Context: testContext, ApplyOperation: firewallApplyOp, Block: block}
+	result, err := NewFirewall(runner).Apply(context.Background(), execution)
+	if err != nil || result.Outcome != reconciliation.OutcomeChanged || len(runner.requests) != 1 {
+		t.Fatalf("apply = %+v, %v", result, diagnostics.Of(err))
+	}
+	if runner.requests[0].MaterialValues["hostKey"] != "" {
+		t.Fatal("provided firewall requested an installation proof")
+	}
+	before := len(runner.requests)
+	if removed, err := NewFirewall(runner).Destroy(context.Background(), execution); err != nil || removed.Outcome != reconciliation.OutcomeUnchanged {
+		t.Fatal(removed, err)
+	}
+	if observed, err := NewFirewall(runner).ObserveRemoval(context.Background(), execution); err != nil || observed.Effect != reconciliation.EffectCompleted {
+		t.Fatal(observed, err)
+	}
+	if len(runner.requests) != before {
+		t.Fatal("retention contacted the host")
+	}
+	evidence.Ready = false
+	runner.result.Evidence = mustJSON(t, evidence)
+	if _, err := NewFirewall(runner).Apply(context.Background(), execution); err == nil {
+		t.Fatal("accepted an unready daemon")
 	}
 }

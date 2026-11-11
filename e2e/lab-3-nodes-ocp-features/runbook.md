@@ -159,10 +159,6 @@ fi
 
 ```sh
 ./bin/bootwright apply --context "$CONTEXT" --stage controller --yes
-FIREWALL_PORTS=(53/tcp 53/udp 123/udp 8080/tcp 8443/tcp)
-if [ "$PROXY_ENABLED" = "true" ]; then
-    FIREWALL_PORTS+=(3128/tcp)
-fi
 ```
 
 Complete [Prepare listener firewall](../README.md#prepare-listener-firewall)

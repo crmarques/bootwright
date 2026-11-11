@@ -32,7 +32,7 @@ def walk(tasks):
     ("infrastructureservices_mirror_release", "mirror-release"),
 ])
 def test_private_role_files_are_cleaned_even_after_a_task_fails(role, scope):
-    tasks = load(role, "tasks/apply.yml")
+    tasks = load(role, "tasks/installed_apply.yml" if role == "managedos_host_firewall" else "tasks/apply.yml")
     blocks = [task for task in tasks if "block" in task
               and any(SCRATCH in child for child in task["block"])]
     assert len(blocks) == 1

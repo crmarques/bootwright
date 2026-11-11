@@ -145,12 +145,8 @@ record_budget() (
 record_budget a
 ```
 
-Set the listener ports, then complete
-[Prepare listener firewall](../README.md#prepare-listener-firewall):
-
-```bash
-FIREWALL_PORTS=(53/tcp 53/udp 123/udp 3128/tcp 8080/tcp 8443/tcp)
-```
+The controller stage prepares the listener firewall. See
+[Prepare listener firewall](../README.md#prepare-listener-firewall).
 
 Require controller preflight to report `ready`:
 

@@ -17,7 +17,10 @@ import (
 
 // HostCapability realizes libvirt provider hosts: the hypervisor closure, the
 // networks their segments declare and their virtual-media pool.
-type HostCapability struct{ runner Runner }
+type HostCapability struct {
+	runner            Runner
+	hostPrerequisites func(api.Catalog, machineref.Placement) []string
+}
 
 // MachineCapability realizes one virtual machine together with its own
 // management controller, so a machine and the controller that manages it appear
@@ -27,6 +30,11 @@ type MachineCapability struct{ runner Runner }
 func NewHost(runner Runner) HostCapability { return HostCapability{runner: runner} }
 
 func NewMachine(runner Runner) MachineCapability { return MachineCapability{runner: runner} }
+
+func (c HostCapability) WithHostPrerequisites(requirements func(api.Catalog, machineref.Placement) []string) HostCapability {
+	c.hostPrerequisites = requirements
+	return c
+}
 
 const (
 	hostVariable    = "bootwright_substrate_host"
@@ -58,6 +66,7 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 			Description:    hostDescription(input.Verb, request),
 			Stage:          reconciliation.StageSubstrates,
 			Requires:       hardwareRequirements(input.State.Effective(), request.Placement),
+			Dependencies:   c.hostRequirements(input.State.Effective(), request.Placement),
 			Impacts:        hostImpacts(input.Verb, request),
 			Groups:         hostGroups(input.Verb, request),
 			Kind:           HostKind,
@@ -89,6 +98,13 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)
 	return plan, nil
+}
+
+func (c HostCapability) hostRequirements(catalog api.Catalog, placement machineref.Placement) []string {
+	if c.hostPrerequisites == nil {
+		return nil
+	}
+	return c.hostPrerequisites(catalog, placement)
 }
 
 func hardwareRequirements(catalog api.Catalog, placement machineref.Placement) []reconciliation.ObjectRef {

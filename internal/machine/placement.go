@@ -152,6 +152,9 @@ func validatePlacementHost(o api.Object, c api.Catalog) []api.Issue {
 // placementHost reports whether a managed infrastructure service or a libvirt
 // provider places its lifecycle effects on the Machine.
 func placementHost(o api.Object, c api.Catalog) bool {
+	if o.Spec().Get("firewall", "management").Text() == "managed" {
+		return true
+	}
 	for _, candidate := range c.Objects() {
 		spec := candidate.Spec()
 		if infrastructureservices.IsService(candidate.Kind()) && spec.Get("management").Text() == "managed" && spec.Get("machineRef").Text() == o.Name() {

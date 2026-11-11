@@ -86,7 +86,7 @@ class FakeFirewalld:
             return (0, b"running\n") if self.running else (252, b"")
         if verb.startswith("--get-zone-of-interface="):
             zone = self.zones.get(verb.partition("=")[2])
-            return (0, zone.encode() + b"\n") if zone else (1, b"")
+            return (0, zone.encode() + b"\n") if zone else (2, b"")
         if verb == "--get-default-zone":
             return 0, self.default.encode() + b"\n"
         if verb == "--get-zones":
@@ -462,7 +462,7 @@ def test_a_malformed_ip_listing_is_an_address_or_tooling_failure():
     b"", b"not json", b"[]", b'{"operation": "apply"}',
     json.dumps({"operation": "wipe", "mark": MARK, "services": [service()]}).encode(),
     json.dumps({"operation": "apply", "mark": "a<b", "services": [service()]}).encode(),
-    json.dumps({"operation": "apply", "mark": MARK, "services": []}).encode(),
+    json.dumps({"operation": "apply", "mark": MARK, "services": [service()] * (worker.MAX_SERVICES + 1)}).encode(),
     json.dumps({"operation": "apply", "mark": MARK, "services": [service(), service()]}).encode(),
     json.dumps({"operation": "apply", "mark": MARK, "services": [service("Bad_Name")]}).encode(),
     json.dumps({"operation": "apply", "mark": MARK, "services": [service(networks=("192.0.2.5/24",))]}).encode(),
@@ -678,9 +678,9 @@ def test_a_proved_realization_publishes_exactly_the_evidence_the_engine_reads(mo
     result, published = publish(completed(), monkeypatch)
     assert result == {"changed": False}
     assert published == [{"phase": "completed", "outcome": "changed", "evidence": {
-        "absent": False, "postcondition": True, "request": DIGEST, "services": evidence(RGW, NFS),
-        "version": "os-host-firewall-evidence-v1"}}]
-    assert list(published[0]["evidence"]) == ["absent", "postcondition", "request", "services", "version"]
+        "ready": True, "absent": False, "postcondition": True, "request": DIGEST, "services": evidence(RGW, NFS),
+        "version": "os-host-firewall-evidence-v2"}}]
+    assert list(published[0]["evidence"]) == ["ready", "absent", "postcondition", "request", "services", "version"]
 
 
 @pytest.mark.parametrize("broken", [
@@ -697,8 +697,8 @@ def test_a_realization_that_is_not_proved_fails_instead_of_publishing_but_an_obs
 def test_a_removal_is_proved_only_when_every_service_is_absent_and_held_by_no_zone(monkeypatch):
     gone = [entry(RGW, "absent", False, ()), entry(NFS, "absent", False, ())]
     _result, published = publish(completed(services=gone, removed=True), monkeypatch)
-    assert published[0]["evidence"] == {"absent": True, "postcondition": True, "request": DIGEST, "services": gone,
-                                        "version": "os-host-firewall-evidence-v1"}
+    assert published[0]["evidence"] == {"ready": True, "absent": True, "postcondition": True, "request": DIGEST, "services": gone,
+                                        "version": "os-host-firewall-evidence-v2"}
     for left in (dict(gone[0], memberships=[{"interface": "", "zone": "drop"}]), dict(evidence(RGW)[0])):
         result, published = publish(completed(services=[left], removed=True), monkeypatch)
         assert result["failed"] is True and published == []
@@ -707,7 +707,7 @@ def test_a_removal_is_proved_only_when_every_service_is_absent_and_held_by_no_zo
 
 
 @pytest.mark.parametrize("arguments", [
-    completed(services=None), completed(services=[]), completed(services=[{"name": RGW}]), completed(digest="abc"),
+    completed(services=None), completed(services=""), completed(services=[{"name": RGW}]), completed(digest="abc"),
     completed(outcome="maybe"), completed(services=[dict(evidence(RGW)[0], state="mine")]),
 ], ids=range(6))
 def test_evidence_the_engine_would_refuse_is_never_published(arguments, monkeypatch):
@@ -742,7 +742,10 @@ DEFAULTS = LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as
 
 
 def tasks(name):
-    return LOADER.load_from_file(str(ROLE / "tasks" / name), trusted_as_template=True)
+    root = LOADER.load_from_file(str(ROLE / "tasks" / name), trusted_as_template=True)
+    if name in ("apply.yml", "observe.yml", "destroy.yml"):
+        return root[:2] + LOADER.load_from_file(str(ROLE / "tasks" / ("installed_" + name)), trusted_as_template=True)
+    return root
 
 
 def flattened(listed):
@@ -760,7 +763,7 @@ def calls(name, fqcn):
 
 def variables(**extra):
     services = [service(), service(NFS, port=2049)]
-    request = {"version": "os-host-firewall-v1", "address": "192.0.2.10", "user": "fleet", "fleetKeyRef": "fleet-key",
+    request = {"version": "os-host-firewall-v2", "direct": False, "preparation": False, "address": "192.0.2.10", "user": "fleet", "fleetKeyRef": "fleet-key",
                "identity": {"block": "os-firewall-ceph-01", "context": "lab", "object": "ceph-01"},
                "placement": {"connection": "ssh"}, "services": [{"name": RGW}, {"name": NFS}]}
     values = dict(DEFAULTS, bootwright_run_scratch="/var/tmp/bootwright-scratch-1-1", bootwright_os_firewall_request=request,
@@ -788,7 +791,7 @@ def test_every_entry_point_validates_the_request_before_the_handoff_and_any_scra
     assert listed[1]["bootwright.core.managedos_firewall_protocol"] == {"phase": "loaded"}
     conditions = listed[0]["ansible.builtin.assert"]["that"]
     assert holds(conditions)
-    for override in ({"version": "os-host-firewall-v2"}, {"identity": {"context": "Lab", "object": "ceph-01"}},
+    for override in ({"version": "os-host-firewall-v3"}, {"identity": {"context": "Lab", "object": "ceph-01"}},
                      {"identity": {"context": "lab", "object": "../x"}}, {"services": []}, {"services": "text"}):
         request = dict(variables()["bootwright_os_firewall_request"], **override)
         assert not holds(conditions, bootwright_os_firewall_request=request), override
@@ -804,8 +807,8 @@ def test_the_argument_specification_declares_the_same_request_for_every_entry_po
     options = declared["apply"]["options"]
     assert all(declared[name]["options"] == options for name in declared)
     request = options["bootwright_os_firewall_request"]["options"]
-    assert sorted(request) == ["address", "fleetKeyRef", "identity", "placement", "services", "user", "version"]
-    assert request["version"]["choices"] == ["os-host-firewall-v1"]
+    assert sorted(request) == ["address", "direct", "fleetKeyRef", "identity", "placement", "preparation", "services", "user", "version"]
+    assert request["version"]["choices"] == ["os-host-firewall-v2"]
     assert options["bootwright_os_firewall_digest"]["type"] == "str" and options["bootwright_os_firewall_material"]["type"] == "dict"
 
 
@@ -912,3 +915,180 @@ def test_the_playbooks_import_their_entry_point_by_the_declared_key():
         plays = yaml.safe_load((COLLECTION / "playbooks" / "managedos" / ("firewall_%s.yml" % operation)).read_text())
         assert len(plays) == 1 and plays[0]["hosts"] == "bootwright_target"
         assert plays[0]["tasks"][0]["ansible.builtin.import_role"] == {"name": "bootwright.core.managedos_host_firewall", "tasks_from": operation}
+
+
+class ProvidedFirewalld(FakeFirewalld):
+    """Shared worker target plus daemon preparation and reload preservation reads."""
+
+    def __init__(self, directory, running=False):
+        super().__init__(directory, running=running)
+        self.enabled = running
+        self.runtime_ports = ""
+        self.permanent_ports = ""
+
+    def __call__(self, argv):
+        if argv[0] == "/usr/bin/systemctl":
+            self.calls.append(list(argv))
+            if argv[1] == "enable":
+                self.running = self.enabled = True
+                return 0, b""
+            if argv[1] == "is-enabled":
+                return (0, b"enabled\n") if self.enabled else (1, b"disabled\n")
+            return 3, b"inactive\n"
+        if argv[0] == "/usr/bin/python3":
+            self.calls.append(list(argv))
+            return 0, b"same\n"
+        if argv[0] == "/usr/bin/firewall-offline-cmd":
+            self.calls.append(list(argv))
+            return 1, b""
+        if argv[0] == "/usr/bin/nmcli":
+            self.calls.append(list(argv))
+            return 1, b""
+        if "--list-all-zones" in argv:
+            self.calls.append(list(argv))
+            permanent = "--permanent" in argv
+            table = self.permanent if permanent else self.runtime
+            ports = self.permanent_ports if permanent else self.runtime_ports
+            return 0, "\n".join("%s\n  services: %s\n  ports: %s" % (self.header(zone, permanent), " ".join(sorted(names)), ports)
+                                for zone, names in sorted(table.items())).encode()
+        if "--get-all-rules" in argv or "--get-all-passthroughs" in argv or "--get-all-chains" in argv or "--list-all-policies" in argv:
+            self.calls.append(list(argv))
+            return 0, b""
+        return super().__call__(argv)
+
+    def header(self, zone, permanent):
+        attributes = ["default"] if zone == self.default else []
+        if not permanent and zone in self.zones.values():
+            attributes.append("active")
+        return zone + (" (%s)" % ", ".join(attributes) if attributes else "")
+
+
+def provided(host, operation="apply", services=None, ssh_port=0):
+    from ansible_collections.bootwright.core.plugins.modules import managedos_host_firewall as direct
+    wanted = dict(service(), networks=[], addresses=["192.0.2.10"])
+    params_ = {"operation": operation, "mark": MARK, "services": [wanted] if services is None else services,
+               "ssh_address": "192.0.2.10" if ssh_port else "", "ssh_port": ssh_port}
+    target = worker.Guest(run=host, directory=str(host.directory), owner=os.getuid(), preserve_runtime=True)
+    return direct.execute(params_, target)
+
+
+def test_provided_host_prepares_both_configs_replays_and_removes_only_owned_services(directory):
+    host = ProvidedFirewalld(directory)
+    host.permanent["public"].add("foreign-service")
+    host.runtime["public"].add("foreign-service")
+    assert provided(host)["ready"] is True
+    assert host.enabled and host.running
+    assert RGW in host.permanent["public"] and host.runtime["public"] == host.permanent["public"]
+    host.calls.clear()
+    assert provided(host)["changed"] is False
+    assert host.verbs() == []
+    assert provided(host, "remove")["ok"]
+    assert host.enabled and host.running
+    assert host.permanent["public"] == host.runtime["public"] == {"foreign-service"}
+    assert not (directory / (RGW + ".xml")).exists()
+
+
+def test_provided_host_selects_the_exact_listener_interface_not_any_interface_in_its_subnet(directory):
+    host = ProvidedFirewalld(directory, running=True)
+    host.addresses["eth2"] = ["192.0.2.11"]
+    host.zones["eth2"] = "internal"
+    answer_ = provided(host)
+    assert answer_["ok"] and answer_["evidence"]["services"][0]["memberships"] == [{"interface": "eth0", "zone": "public"}]
+    assert host.permanent["internal"] == set()
+
+
+def test_provided_host_refuses_to_reload_away_a_foreign_runtime_port_and_can_resume(directory):
+    host = ProvidedFirewalld(directory, running=True)
+    host.runtime_ports = "9999/tcp"
+    answer_ = provided(host)
+    assert (answer_["reason"], answer_["cause"]) == ("host-firewall-failed", "runtime-drift")
+    assert "--reload" not in host.verbs() and host.runtime_ports == "9999/tcp"
+    host.permanent_ports = "9999/tcp"
+    assert provided(host)["ok"]
+
+
+def test_provided_host_repairs_its_lost_runtime_grant_without_discarding_foreign_grants(directory):
+    host = ProvidedFirewalld(directory, running=True)
+    assert provided(host)["ok"]
+    host.runtime["public"].remove(RGW)
+    assert provided(host)["changed"]
+    assert host.runtime["public"] == {RGW}
+
+
+def test_provided_host_with_no_listener_still_prepares_the_shared_daemon(directory):
+    host = ProvidedFirewalld(directory)
+    assert provided(host, services=[])["ready"]
+    assert host.running and host.enabled and host.verbs() == []
+    assert provided(host, "remove", services=[])["ok"]
+    assert host.running and host.enabled
+
+
+def test_foreign_ownership_refuses_before_starting_a_provided_firewall(directory):
+    host = ProvidedFirewalld(directory)
+    (directory / (RGW + ".xml")).write_text(xml(RGW, mark="foreign-owner"))
+    answer_ = provided(host)
+    assert answer_["reason"] == "host-firewall-foreign" and not host.running
+    assert not any(call[0] == "/usr/bin/systemctl" for call in host.calls)
+
+
+def test_provided_host_inspection_never_enables_or_changes_a_daemon(directory):
+    host = ProvidedFirewalld(directory)
+    answer_ = provided(host, "inspect")
+    assert answer_["reason"] == "host-firewall-inactive"
+    assert not host.enabled and host.verbs() == []
+    assert not any("enable" in call for call in host.calls)
+
+
+def test_remote_firewall_startup_requires_ssh_admission_before_enabling(directory):
+    host = ProvidedFirewalld(directory)
+    answer_ = provided(host, ssh_port=2222)
+    assert answer_["reason"] == "host-firewall-failed" and answer_["cause"] == "ssh-admission"
+    assert not host.running and not any("enable" in call for call in host.calls)
+
+
+def test_reload_snapshot_detects_runtime_changes_inside_a_foreign_service_definition():
+    namespace = {}
+    exec(worker.REGISTRY_COMPARISON, namespace)  # pylint: disable=exec-used
+    live, saved = ["", "", "", [("22", "tcp")]], ["", "", "", [("22", "tcp")]]
+    config = SimpleNamespace(getServiceNames=lambda: ["ssh"],
+                             getServiceByName=lambda _name: SimpleNamespace(getSettings=lambda: SimpleNamespace(settings=saved)))
+    client = SimpleNamespace(config=lambda: config, listServices=lambda: ["ssh"],
+                             getServiceSettings=lambda _name: SimpleNamespace(settings=live))
+    for runtime, permanent in (("listIcmpTypes", "getIcmpTypeNames"), ("getIPSets", "getIPSetNames"), ("getHelpers", "getHelperNames")):
+        setattr(client, runtime, lambda: [])
+        setattr(config, permanent, lambda: [])
+    assert namespace["registries_equal"](client, set())
+    live[3].append(("9999", "tcp"))
+    assert not namespace["registries_equal"](client, set())
+    assert namespace["registries_equal"](client, {"ssh"})
+
+
+def test_an_overridden_ssh_service_name_does_not_prove_ssh_port_admission():
+    from ansible_collections.bootwright.core.plugins.modules import managedos_host_firewall as direct
+    target = SimpleNamespace(run=lambda _argv: (0, b"ssh\n  ports: 9999/tcp\n  destination:\n  includes:\n"))
+    assert not direct.service_ssh_port(target, 22)
+    target.run = lambda _argv: (0, b"ssh\n  ports: 22/tcp\n  destination:\n  includes:\n")
+    assert direct.service_ssh_port(target, 22)
+
+
+def test_daemon_preparation_does_not_require_an_interface_the_provider_will_create(directory):
+    host = ProvidedFirewalld(directory)
+    assert provided(host, services=[])["ok"]
+    wanted = dict(service(), networks=[], addresses=["203.0.113.1"])
+    answer_ = provided(host, services=[wanted])
+    assert answer_["reason"] == "host-firewall-no-interface"
+    assert not (directory / (RGW + ".xml")).exists()
+    host.addresses["virbr-test"] = ["203.0.113.1/24"]
+    host.zones["virbr-test"] = "internal"
+    assert provided(host, services=[wanted])["ok"]
+    assert host.permanent["internal"] == {RGW}
+
+
+def test_runtime_zone_status_annotations_are_not_configuration_drift():
+    runtime = b"public (default, active)\n  interfaces: eth0\n  services: ssh\n"
+    permanent = b"public (default)\n  interfaces:\n  services: ssh\n"
+    assert worker.zone_snapshot(runtime, set()) == worker.zone_snapshot(permanent, set())
+    assert worker.zone_snapshot(b"internal (active)\n  services: ssh\n", set()) == worker.zone_snapshot(
+        b"internal\n  services: ssh\n", set())
+    assert worker.zone_snapshot(runtime.replace(b"services: ssh", b"services: https"), set()) != worker.zone_snapshot(permanent, set())
+    assert worker.zone_snapshot(b"public (unqualified)\n", set()) != worker.zone_snapshot(b"public\n", set())

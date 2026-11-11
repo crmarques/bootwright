@@ -68,10 +68,10 @@ func InstalledHostRefusals(catalog api.Catalog, service, machine api.Object) []l
 	server, host := service.Identity(), machine.Identity()
 	var refused []lifecycle.Refusal
 	profile, found := catalog.Find(api.MachineInstallProfile, machine.Spec().Get("os", "installProfileRef").Text())
-	if enabled := profile.Spec().Get("customizations", "security", "firewall", "enabled"); found && (enabled.Type() != api.Boolean || enabled.Bool()) {
+	if enabled := profile.Spec().Get("customizations", "security", "firewall", "enabled"); found && enabled.Type() != api.Boolean && !machineref.ManagesFirewall(catalog, machine.Name()) {
 		refused = append(refused, lifecycle.RefusalOf(service,
-			"this executable opens no host firewall port for a managed service, and "+host+", where "+server+" runs, is installed by "+profile.Identity()+", which leaves its firewall enabled",
-			"set spec.customizations.security.firewall.enabled: false on "+profile.Identity()+", or place "+server+" on an OS-ready Machine"))
+			"a managed service on an installed host requires an explicit firewall choice, and "+host+", where "+server+" runs, is installed by "+profile.Identity()+", which leaves its firewall choice implicit",
+			"set spec.customizations.security.firewall.enabled: true or false on "+profile.Identity()+", or place "+server+" on an OS-ready Machine"))
 	}
 	if found && !slices.Contains(profile.Spec().Get("customizations", "packages", "install").Strings(), "podman") {
 		refused = append(refused, lifecycle.RefusalOf(service,

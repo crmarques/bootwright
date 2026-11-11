@@ -19,15 +19,16 @@ import (
 const (
 	InstallFamily           = machineref.InstallFamily
 	EraseFamily             = "physical-erase"
-	FirewallFamily          = "os-host-firewall"
-	FirewallImplementation  = "os-host-firewall-v1"
-	FirewallEvidenceVersion = "os-host-firewall-evidence-v1"
+	FirewallFamily          = machineref.FirewallFamily
+	FirewallImplementation  = "os-host-firewall-v2"
+	FirewallEvidenceVersion = "os-host-firewall-evidence-v2"
 	FirewallServiceRoot     = "/etc/firewalld/services"
 	firewallVariable        = "bootwright_os_firewall"
 	firewallServicePrefix   = "bootwright-"
 	firewallMarkPrefix      = "bootwright-host-firewall"
 	maxFirewallServices     = 64
 	maxFirewallNetworks     = 16
+	maxFirewallAddresses    = 64
 	maxFirewallPorts        = 64
 	maxFirewallProtocols    = 16
 	maxFirewallName         = 63
@@ -52,6 +53,7 @@ type FirewallPort struct {
 }
 
 type FirewallService struct {
+	Addresses []string       `json:"addresses,omitempty"`
 	Name      string         `json:"name"`
 	Networks  []string       `json:"networks"`
 	Ports     []FirewallPort `json:"ports"`
@@ -61,9 +63,11 @@ type FirewallService struct {
 
 type FirewallRequest struct {
 	Address     string               `json:"address"`
+	Direct      bool                 `json:"direct"`
 	FleetKeyRef string               `json:"fleetKeyRef"`
 	Identity    FirewallIdentity     `json:"identity"`
 	Placement   machineref.Placement `json:"placement"`
+	Preparation bool                 `json:"preparation"`
 	Services    []FirewallService    `json:"services"`
 	User        string               `json:"user"`
 	Version     string               `json:"version"`
@@ -102,6 +106,17 @@ func FirewallContentDigest() string {
 
 func FirewallBlockID(machine string) string {
 	return reconciliation.BlockIdentity("os-firewall-", machine)
+}
+
+func FirewallPreparationBlockID(machine string) string {
+	return reconciliation.BlockIdentity("os-firewall-prepare-", machine)
+}
+
+func firewallRequestBlockID(request FirewallRequest) string {
+	if request.Preparation {
+		return FirewallPreparationBlockID(request.Identity.Object)
+	}
+	return FirewallBlockID(request.Identity.Object)
 }
 
 func FirewallServiceName(contextName, publisher string) string {
@@ -150,6 +165,13 @@ func FirewallRequests(catalog api.Catalog, controllerMachine, contextName string
 		}
 		byMachine[requirement.Machine] = append(byMachine[requirement.Machine], requirement)
 	}
+	for _, object := range catalog.OfKind(api.Machine) {
+		if object.Spec().Get("firewall", "management").Text() == "managed" && object.Spec().Get("os", "provided").Bool() {
+			if _, found := byMachine[object.Name()]; !found {
+				byMachine[object.Name()] = nil
+			}
+		}
+	}
 	var machines []string
 	for machine := range byMachine {
 		if RealizesHostPorts(catalog, machine) {
@@ -167,12 +189,31 @@ func FirewallRequests(catalog api.Catalog, controllerMachine, contextName string
 	var requests []FirewallRequest
 	for _, machine := range machines {
 		at := slices.IndexFunc(installs, func(install Request) bool { return install.Identity.Object == machine })
-		if at < 0 {
-			return nil, refusal("lifecycle.state", "Machine/"+machine+" realizes host port requirements but plans no installation", "")
+		install := Request{Identity: Identity{Object: machine}}
+		if at >= 0 {
+			install = installs[at]
 		}
-		request, err := firewallRequestFor(installs[at], contextName, byMachine[machine])
+		request, err := firewallRequestFor(install, contextName, byMachine[machine])
+		if at < 0 {
+			object, _ := catalog.Find(api.Machine, machine)
+			placement, placementErr := machineref.PlacementFor(object, controllerMachine)
+			if placementErr != nil {
+				return nil, placementErr
+			}
+			request.Direct, request.Placement = true, placement
+			err = validFirewallRequest(request)
+		}
 		if err != nil {
 			return nil, err
+		}
+		if request.Direct {
+			preparation := request
+			preparation.Preparation, preparation.Services = true, []FirewallService{}
+			preparation.Identity.Block = FirewallPreparationBlockID(machine)
+			requests = append(requests, preparation)
+			if len(request.Services) == 0 {
+				continue
+			}
 		}
 		requests = append(requests, request)
 	}
@@ -188,6 +229,7 @@ func firewallRequestFor(install Request, contextName string, requirements []Host
 	request := FirewallRequest{
 		Address: install.Address, FleetKeyRef: install.FleetKeyRef, Placement: install.Placement, User: install.User, Version: FirewallImplementation,
 		Identity: FirewallIdentity{Block: FirewallBlockID(machine), Context: contextName, Object: machine},
+		Services: []FirewallService{},
 	}
 	for _, requirement := range requirements {
 		ports := make([]FirewallPort, 0, len(requirement.Ports))
@@ -200,7 +242,7 @@ func firewallRequestFor(install Request, contextName string, requirements []Host
 		protocols := slices.Clone(requirement.Protocols)
 		slices.Sort(protocols)
 		request.Services = append(request.Services, FirewallService{
-			Name: FirewallServiceName(contextName, requirement.Publisher), Networks: slices.Clone(requirement.Networks),
+			Addresses: slices.Clone(requirement.Addresses), Name: FirewallServiceName(contextName, requirement.Publisher), Networks: slices.Clone(requirement.Networks),
 			Ports: slices.Compact(ports), Protocols: slices.Compact(protocols), Publisher: requirement.Publisher,
 		})
 	}
@@ -212,9 +254,9 @@ func validRequirement(requirement HostPortRequirement) error {
 	switch {
 	case requirement.Machine == "" || !firewallPublisher.MatchString(requirement.Publisher):
 		return refusal("lifecycle.state", "a host port requirement names no Machine or publishing block", "")
-	case len(requirement.Networks) == 0 || len(requirement.Networks) > maxFirewallNetworks:
+	case len(requirement.Addresses) == 0 && len(requirement.Networks) == 0 || len(requirement.Networks) > maxFirewallNetworks || len(requirement.Addresses) > maxFirewallAddresses:
 		return refusal("lifecycle.state", subject+" names no network or more than "+strconv.Itoa(maxFirewallNetworks), "")
-	case !singleHost(requirement.Networks[0]):
+	case len(requirement.Networks) != 0 && !singleHost(requirement.Networks[0]):
 		return refusal("lifecycle.state", subject+" does not name its virtual address as a single-host prefix first", "")
 	case len(requirement.Ports)+len(requirement.Protocols) == 0 || len(requirement.Ports) > maxFirewallPorts || len(requirement.Protocols) > maxFirewallProtocols:
 		return refusal("lifecycle.state", subject+" admits nothing or more than its bound", "")
@@ -226,13 +268,34 @@ func validFirewallRequest(request FirewallRequest) error {
 	invalid := func(message string) error {
 		return refusal("lifecycle.state", "the host firewall request of Machine/"+request.Identity.Object+" "+message, "")
 	}
-	if request.Version != FirewallImplementation || request.Identity.Block != FirewallBlockID(request.Identity.Object) || !api.ValidLexical("name", request.Identity.Context) {
+	if request.Version != FirewallImplementation || request.Identity.Block != firewallRequestBlockID(request) || !api.ValidLexical("name", request.Identity.Context) {
 		return invalid("names another block or version")
 	}
-	if _, err := netip.ParseAddr(request.Address); err != nil || request.User == "" || request.FleetKeyRef == "" {
+	if request.Preparation && (!request.Direct || len(request.Services) != 0) {
+		return invalid("has an invalid daemon preparation")
+	}
+	if request.Direct {
+		placement := request.Placement
+		if placement.Machine != request.Identity.Object || request.Address != "" || request.User != "" || request.FleetKeyRef != "" {
+			return invalid("mixes direct placement with an installation session")
+		}
+		switch placement.Connection {
+		case machineref.ConnectionLocal:
+			if placement != (machineref.Placement{Connection: machineref.ConnectionLocal, Machine: request.Identity.Object}) {
+				return invalid("has unexpected local access fields")
+			}
+		case machineref.ConnectionSSH:
+			if placement.User != "root" || !api.ValidLexical("host", placement.Address) || placement.Port < 1 || placement.Port > 65535 || !api.ValidLexical("name", placement.PrivateKeyRef) || !api.ValidLexical("name", placement.KnownHostsRef) {
+				return invalid("has no pinned root SSH placement")
+			}
+		default:
+			return invalid("has an unsupported direct placement")
+		}
+	}
+	if _, err := netip.ParseAddr(request.Address); !request.Direct && (err != nil || request.User == "" || request.FleetKeyRef == "") {
 		return invalid("names no guest address, account or fleet key")
 	}
-	if len(request.Services) == 0 || len(request.Services) > maxFirewallServices {
+	if !request.Direct && len(request.Services) == 0 || len(request.Services) > maxFirewallServices {
 		return invalid("holds no service or more than its bound")
 	}
 	names := map[string]bool{}
@@ -249,12 +312,20 @@ func validFirewallRequest(request FirewallRequest) error {
 }
 
 func validService(service FirewallService) error {
-	if len(service.Networks) == 0 || len(service.Networks) > maxFirewallNetworks || len(service.Ports)+len(service.Protocols) == 0 ||
+	if len(service.Networks) == 0 && len(service.Addresses) == 0 || len(service.Networks) > maxFirewallNetworks || len(service.Addresses) > maxFirewallAddresses || len(service.Ports)+len(service.Protocols) == 0 ||
 		len(service.Ports) > maxFirewallPorts || len(service.Protocols) > maxFirewallProtocols {
 		return refusal("lifecycle.state", "holds a service outside its bounds", "")
 	}
-	if !singleHost(service.Networks[0]) {
+	if len(service.Networks) > 0 && !singleHost(service.Networks[0]) {
 		return refusal("lifecycle.state", "does not name its virtual address as a single-host prefix first", "")
+	}
+	if len(service.Addresses) != 0 && len(service.Networks) != 0 {
+		return refusal("lifecycle.state", "a firewall service mixes exact addresses and interface networks", "")
+	}
+	for _, address := range service.Addresses {
+		if !api.ValidLexical("host", address) {
+			return refusal("lifecycle.state", "a firewall service names an invalid listener address", "")
+		}
 	}
 	seen := map[string]bool{}
 	for _, network := range service.Networks {

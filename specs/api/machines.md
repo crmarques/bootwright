@@ -21,6 +21,23 @@ A field that references a Secret names its
 [class](../secrets.md#immutable-binding-and-contexts), effect material,
 access credential or trust anchor.
 
+## Host firewall policy
+
+`spec.firewall.management` is `managed` or `external`. On a provided Machine,
+omission keeps the firewall operator-owned. On a Bootwright-installed Machine,
+omission follows its install profile's explicit `security.firewall.enabled`;
+`external` suppresses automatic host grants. Empty `firewall: {}` has the
+omission meaning. Null and unknown values refuse.
+
+`managed` authorizes installation and enablement of firewalld on an OS-ready
+provided host and the [host firewall capability](../managed-os.md#host-firewall-requirements)'s
+owned, persistent admission for that Machine's declared listeners. It
+requires a controller-local placement or pinned root SSH access. On an
+installed Machine it requires an explicitly enabled install profile. It is
+refused on a downstream-installer Machine. No zone name or port list is
+authored here: listener ports and addresses come from their owning capabilities.
+No setting changes upstream firewalls or the service's bind addresses.
+
 ## Kinds
 
 | Kind | Declares |

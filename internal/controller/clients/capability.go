@@ -22,14 +22,21 @@ import (
 // artifact server here selects. It owns nothing context-independent, and it
 // never uninstalls: what it installs is shared by every context on this host.
 type Capability struct {
-	tools     ToolCatalog
-	packages  HostPackages
-	setup     SetupLock
-	installer Installer
+	hostPrerequisites func(api.Catalog) ([]string, error)
+	tools             ToolCatalog
+	packages          HostPackages
+	setup             SetupLock
+	installer         Installer
 }
 
 func New(tools ToolCatalog, packages HostPackages, setup SetupLock, installer Installer) Capability {
 	return Capability{tools: tools, packages: packages, setup: setup, installer: installer}
+}
+
+// WithHostPrerequisites binds host preparation which must precede this stage.
+func (c Capability) WithHostPrerequisites(requirements func(api.Catalog) ([]string, error)) Capability {
+	c.hostPrerequisites = requirements
+	return c
 }
 
 // Plan contributes one block when the selected graph adds a controller
@@ -53,7 +60,14 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	if err != nil {
 		return empty, err
 	}
-	if !controller.HasStage(selection, requests) {
+	var prerequisites []string
+	if c.hostPrerequisites != nil {
+		prerequisites, err = c.hostPrerequisites(catalog)
+		if err != nil {
+			return empty, err
+		}
+	}
+	if !controller.HasStage(selection, requests) && len(prerequisites) == 0 {
 		return empty, nil
 	}
 	if selection.MachineName() != input.Controller {
@@ -66,6 +80,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		if err != nil {
 			return empty, err
 		}
+		definition.Dependencies = prerequisites
 		return lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{definition}}, nil
 	}
 	packages, clients := request.Split()
@@ -73,6 +88,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	if err != nil {
 		return empty, err
 	}
+	first.Dependencies = prerequisites
 	second, err := stageBlock(input.Verb, selection.EnvironmentName(), MirroredClientsBlockID, clients,
 		[]reconciliation.ObjectRef{{Kind: string(api.ArtifactServer), Object: mirror.Server.Name()}})
 	if err != nil {

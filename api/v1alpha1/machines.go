@@ -67,6 +67,7 @@ func machineSchema() *Shape {
 		field("hardware", record(field("clearOnInstall", machineClearSchema()), field("eraseOnRemoval", machineEraseSchema()), field("nics", named(record(required("name", nonempty())))), field("rootDevice", record(field("deviceName", lexical("device-path")), field("model", nonempty()), field("vendor", nonempty()), field("minSizeGigabytes", integer("0", "")), field("rotational", boolean()))))),
 		required("os", record(required("provided", boolean()), field("installProfileRef", ref(MachineInstallProfile)), field("install", record(field("hostKeyRef", secret("sshKeyPair")), field("ntp", serverSelections(NTPServer)))))),
 		field("proxy", proxySelection()),
+		field("firewall", record(field("management", enumeration("managed", "external")))),
 		field("network", network), field("access", access),
 	)
 }

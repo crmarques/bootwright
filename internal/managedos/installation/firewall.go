@@ -13,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
+	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 const (
@@ -36,6 +37,7 @@ type FirewallServiceEvidence struct {
 type FirewallEvidence struct {
 	Absent        bool                      `json:"absent"`
 	Postcondition bool                      `json:"postcondition"`
+	Ready         bool                      `json:"ready"`
 	Request       string                    `json:"request"`
 	Retired       bool                      `json:"retired,omitempty"`
 	Services      []FirewallServiceEvidence `json:"services"`
@@ -67,7 +69,7 @@ func (c FirewallCapability) Plan(ctx context.Context, input lifecycle.PlanInput)
 	}
 	catalog := input.State.Effective()
 	requirements, err := c.ports(catalog)
-	if err != nil || len(requirements) == 0 {
+	if err != nil {
 		return plan, err
 	}
 	requests, err := FirewallRequests(catalog, input.Controller, input.Context.Name, requirements)
@@ -79,10 +81,20 @@ func (c FirewallCapability) Plan(ctx context.Context, input lifecycle.PlanInput)
 		if err != nil {
 			return plan, err
 		}
+		stage := reconciliation.StageMachines
+		requires := []reconciliation.ObjectRef{{Kind: Kind, Object: request.Identity.Object, Family: InstallFamily}}
+		var dependencies []string
+		if request.Direct {
+			stage, requires = reconciliation.StageInfrastructureServices, nil
+			if !request.Preparation {
+				dependencies = []string{FirewallPreparationBlockID(request.Identity.Object)}
+				requires = FirewallProviderRequirements(catalog, request)
+			}
+		}
 		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{
-			ID: request.Identity.Block, Description: firewallDescription(input.Verb, request), Stage: reconciliation.StageMachines,
-			Requires: []reconciliation.ObjectRef{{Kind: Kind, Object: request.Identity.Object, Family: InstallFamily}},
-			Family:   FirewallFamily, Kind: Kind, Object: request.Identity.Object, Implementation: FirewallImplementation, ContentDigest: FirewallContentDigest(),
+			ID: request.Identity.Block, Description: firewallDescription(input.Verb, request), Stage: stage,
+			Requires: requires, Dependencies: dependencies,
+			Family: FirewallFamily, Kind: Kind, Object: request.Identity.Object, Implementation: FirewallImplementation, ContentDigest: FirewallContentDigest(),
 			Request: canonical, Impacts: firewallImpacts(input.Verb, request),
 		})
 		plan.Secrets = append(plan.Secrets, request.SecretReferences()...)
@@ -93,6 +105,12 @@ func (c FirewallCapability) Plan(ctx context.Context, input lifecycle.PlanInput)
 }
 
 func firewallDescription(verb reconciliation.Verb, request FirewallRequest) string {
+	if request.Preparation {
+		if verb == reconciliation.Destroy {
+			return "retain the shared host firewall daemon of " + request.Identity.Object
+		}
+		return "prepare the shared host firewall daemon of " + request.Identity.Object
+	}
 	if verb == reconciliation.Destroy {
 		return "remove the host firewall services of " + request.Identity.Object
 	}
@@ -100,6 +118,9 @@ func firewallDescription(verb reconciliation.Verb, request FirewallRequest) stri
 }
 
 func firewallImpacts(verb reconciliation.Verb, request FirewallRequest) []string {
+	if request.Preparation && verb == reconciliation.Destroy {
+		return nil
+	}
 	action := "configure-host-firewall "
 	if verb == reconciliation.Destroy {
 		action = "remove-host-firewall "
@@ -116,8 +137,8 @@ func (c FirewallCapability) Claimed(catalog api.Catalog) []string {
 		return nil
 	}
 	var claimed []string
-	for _, requirement := range requirements {
-		if object, found := catalog.Find(api.Machine, requirement.Machine); found && RealizesHostPorts(catalog, requirement.Machine) {
+	for _, object := range catalog.OfKind(api.Machine) {
+		if RealizesHostPorts(catalog, object.Name()) && (object.Spec().Get("os", "provided").Bool() && object.Spec().Get("firewall", "management").Text() == "managed" || slices.ContainsFunc(requirements, func(r HostPortRequirement) bool { return r.Machine == object.Name() })) {
 			claimed = append(claimed, object.Identity())
 		}
 	}
@@ -152,7 +173,10 @@ func (FirewallCapability) SecretClasses(block reconciliation.Block) (secrets.Cla
 	return request.Placement.SecretClasses().Add(secrets.EffectMaterial, request.FleetKeyRef), nil
 }
 
-func (FirewallCapability) RequiresOnlineRemoval(reconciliation.Block) bool { return true }
+func (FirewallCapability) RequiresOnlineRemoval(block reconciliation.Block) bool {
+	request, err := DecodeFirewallRequest(block.Request)
+	return err != nil || !request.Preparation
+}
 
 func (FirewallCapability) HostMachines(block reconciliation.Block) ([]string, error) {
 	request, err := DecodeFirewallRequest(block.Request)
@@ -177,6 +201,15 @@ func (c FirewallCapability) Apply(ctx context.Context, execution lifecycle.Execu
 }
 
 func (c FirewallCapability) Destroy(ctx context.Context, execution lifecycle.Execution) (lifecycle.Result, error) {
+	if err := ctx.Err(); err != nil {
+		return lifecycle.Result{Outcome: reconciliation.OutcomeCanceled}, err
+	}
+	if evidence, retained, err := retainedFirewall(execution); retained || err != nil {
+		if err != nil {
+			return lifecycle.Result{Outcome: reconciliation.OutcomeFailed}, err
+		}
+		return lifecycle.Result{Outcome: reconciliation.OutcomeUnchanged, Evidence: evidence}, nil
+	}
 	if execution.RetiredWithHosts {
 		evidence, err := retiredFirewall(execution)
 		if err != nil {
@@ -192,6 +225,15 @@ func (c FirewallCapability) Observe(ctx context.Context, execution lifecycle.Exe
 }
 
 func (c FirewallCapability) ObserveRemoval(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
+	if err := ctx.Err(); err != nil {
+		return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
+	}
+	if evidence, retained, err := retainedFirewall(execution); retained || err != nil {
+		if err != nil {
+			return lifecycle.Observation{Effect: reconciliation.EffectUnknown}, err
+		}
+		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: evidence}, nil
+	}
 	if execution.RetiredWithHosts {
 		evidence, err := retiredFirewall(execution)
 		if err != nil {
@@ -200,6 +242,15 @@ func (c FirewallCapability) ObserveRemoval(ctx context.Context, execution lifecy
 		return lifecycle.Observation{Effect: reconciliation.EffectCompleted, Evidence: evidence}, nil
 	}
 	return c.observe(ctx, execution, true)
+}
+
+func retainedFirewall(execution lifecycle.Execution) (json.RawMessage, bool, error) {
+	request, err := DecodeFirewallRequest(execution.Block.Request)
+	if err != nil || !request.Preparation {
+		return nil, false, err
+	}
+	evidence, err := json.Marshal(FirewallEvidence{Absent: true, Postcondition: true, Request: execution.Block.RequestDigest, Services: []FirewallServiceEvidence{}, Version: FirewallEvidenceVersion})
+	return evidence, true, err
 }
 
 func retiredFirewall(execution lifecycle.Execution) (json.RawMessage, error) {
@@ -211,7 +262,7 @@ func retiredFirewall(execution lifecycle.Execution) (json.RawMessage, error) {
 	for _, service := range request.Services {
 		services = append(services, FirewallServiceEvidence{Name: service.Name, State: firewallAbsent, Memberships: []FirewallMembership{}})
 	}
-	return json.Marshal(FirewallEvidence{Absent: true, Postcondition: true, Request: execution.Block.RequestDigest, Retired: true, Services: services, Version: FirewallEvidenceVersion})
+	return json.Marshal(FirewallEvidence{Ready: true, Absent: true, Postcondition: true, Request: execution.Block.RequestDigest, Retired: true, Services: services, Version: FirewallEvidenceVersion})
 }
 
 func (c FirewallCapability) mutate(ctx context.Context, execution lifecycle.Execution, operation string) (lifecycle.Result, error) {
@@ -257,13 +308,19 @@ func (c FirewallCapability) run(ctx context.Context, execution lifecycle.Executi
 	if execution.ApplyOperation == "" {
 		return lifecycle.RunResult{}, request, nil, refusal("lifecycle.state", "the host firewall of Machine/"+request.Identity.Object+" has no original apply operation", "")
 	}
-	proofs := execution.ApplyProved
-	if len(proofs) == 0 {
-		proofs = execution.Proved
-	}
-	key, err := ProvedHostKey(proofs, request.Identity.Object, request.Address)
-	if err != nil {
-		return lifecycle.RunResult{}, request, nil, err
+	values := map[string]string{}
+	var materials []lifecycle.MaterialFile
+	if !request.Direct {
+		proofs := execution.ApplyProved
+		if len(proofs) == 0 {
+			proofs = execution.Proved
+		}
+		key, err := ProvedHostKey(proofs, request.Identity.Object, request.Address)
+		if err != nil {
+			return lifecycle.RunResult{}, request, nil, err
+		}
+		values["hostKey"] = key.Type + " " + key.PublicKey
+		materials = []lifecycle.MaterialFile{{Name: "fleet-id", Part: secrets.PrivateKeyPart, Secret: request.FleetKeyRef, Variable: "fleetIdentity"}}
 	}
 	mark := FirewallMark(request.Identity.Context, request.Identity.Block, execution.ApplyOperation)
 	services, digests, err := firewallContents(request, mark)
@@ -274,10 +331,11 @@ func (c FirewallCapability) run(ctx context.Context, execution lifecycle.Executi
 	if err != nil {
 		return lifecycle.RunResult{}, request, nil, err
 	}
+	values["mark"], values["services"] = mark, services
 	result, err := c.runner.Run(ctx, lifecycle.RunFor(execution, lifecycle.Invocation{
 		Implementation: FirewallImplementation, Operation: operation, Variable: firewallVariable, Canonical: canonical, Placement: request.Placement,
-		Materials: []lifecycle.MaterialFile{{Name: "fleet-id", Part: secrets.PrivateKeyPart, Secret: request.FleetKeyRef, Variable: "fleetIdentity"}},
-		Values:    map[string]string{"hostKey": key.Type + " " + key.PublicKey, "mark": mark, "services": services},
+		Materials: materials,
+		Values:    values,
 		Refusals:  firewallRefusals(execution.Context, request, removal), Deadline: 10 * time.Minute,
 	}))
 	return result, request, digests, err
@@ -285,9 +343,10 @@ func (c FirewallCapability) run(ctx context.Context, execution lifecycle.Executi
 
 func firewallContents(request FirewallRequest, mark string) (string, map[string]string, error) {
 	type content struct {
-		Content  string   `json:"content"`
-		Name     string   `json:"name"`
-		Networks []string `json:"networks"`
+		Addresses []string `json:"addresses,omitempty"`
+		Content   string   `json:"content"`
+		Name      string   `json:"name"`
+		Networks  []string `json:"networks"`
 	}
 	contents := make([]content, 0, len(request.Services))
 	digests := map[string]string{}
@@ -295,7 +354,7 @@ func firewallContents(request FirewallRequest, mark string) (string, map[string]
 		text := FirewallServiceContent(service, mark)
 		sum := sha256.Sum256([]byte(text))
 		digests[service.Name] = hex.EncodeToString(sum[:])
-		contents = append(contents, content{Content: text, Name: service.Name, Networks: service.Networks})
+		contents = append(contents, content{Addresses: service.Addresses, Content: text, Name: service.Name, Networks: append([]string{}, service.Networks...)})
 	}
 	data, err := json.Marshal(contents)
 	if err != nil {
@@ -316,8 +375,11 @@ func decodeFirewallEvidence(data []byte, digest string) (FirewallEvidence, error
 }
 
 func firewallEffect(evidence FirewallEvidence, request FirewallRequest, digests map[string]string, removal bool) reconciliation.EffectState {
-	if len(evidence.Services) != len(request.Services) {
+	if !evidence.Ready && !removal || len(evidence.Services) != len(request.Services) {
 		return reconciliation.EffectUnknown
+	}
+	if len(request.Services) == 0 {
+		return reconciliation.EffectCompleted
 	}
 	complete, clean := true, true
 	for index, service := range evidence.Services {
@@ -388,15 +450,34 @@ func firewallRefusals(contextName string, request FirewallRequest, removal bool)
 		}),
 		"host-firewall-no-interface": service(func(s FirewallService) error {
 			return refused(machine+" has no interface whose network holds "+strings.Join(s.Networks, " or is ")+", which firewalld service "+s.Name+" admits traffic on",
-				"give "+machine+" an address on the network of "+s.Networks[0]+" in its network configuration, "+again)
+				"give "+machine+" the declared listener address or required network in its network configuration, "+again)
 		}),
 		"host-firewall-inactive": refused("firewalld is not running on "+machine+", whose install profile enables it",
 			"start firewalld on "+machine+" with systemctl enable --now firewalld, "+again),
 		"host-firewall-failed": updateRefusal{render: func(detail string) error {
 			cause := detailOr(detail, func(value string) bool {
-				return slices.Contains([]string{"tooling", "reload", "zone", "write", "address"}, value)
+				return slices.Contains([]string{"tooling", "reload", "zone", "write", "address", "runtime-drift", "enable", "ssh-admission"}, value)
 			})
 			return refused("firewalld refused a change on "+machine+": "+cause, "read the firewalld journal on "+machine+", correct it, "+again)
 		}},
 	}
+}
+
+func (FirewallCapability) PrecedesController(reconciliation.BlockDefinition) bool { return true }
+
+// FirewallProviderRequirements names the providers which create a listener's
+// addressed bridge. Daemon preparation intentionally has no such dependency.
+func FirewallProviderRequirements(catalog api.Catalog, request FirewallRequest) []reconciliation.ObjectRef {
+	var providers []string
+	for _, service := range request.Services {
+		for _, address := range service.Addresses {
+			providers = append(providers, substrate.BridgeProviders(catalog, request.Identity.Object, address)...)
+		}
+	}
+	slices.Sort(providers)
+	var requires []reconciliation.ObjectRef
+	for _, provider := range slices.Compact(providers) {
+		requires = append(requires, reconciliation.ObjectRef{Kind: string(api.InfraProvider), Object: provider})
+	}
+	return requires
 }

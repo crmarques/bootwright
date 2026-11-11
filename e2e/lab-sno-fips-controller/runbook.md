@@ -143,7 +143,6 @@ CONTROLLER_ADDRESS="$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*
 ./bin/bootwright plan --context "$CTX_BOOT"
 ./bin/bootwright apply --context "$CTX_BOOT" --stage controller --yes
 CONTEXT="$CTX_BOOT"
-FIREWALL_PORTS=(53/tcp 53/udp 123/udp 8080/tcp 8443/tcp)
 ```
 
 Complete [Prepare listener firewall](../README.md#prepare-listener-firewall)
@@ -274,11 +273,10 @@ bootwright plan --context "$CTX_FIPS"          # no controller.unsupported: this
 bootwright apply --context "$CTX_FIPS" --stage controller --yes
 CONTEXT="$CTX_FIPS"
 CONTROLLER_ADDRESS="198.51.100.10"
-FIREWALL_PORTS=(53/tcp 53/udp 8080/tcp 8443/tcp)
 ```
 
 Complete [Prepare listener firewall](../README.md#prepare-listener-firewall)
-in this session with interface `enp1s0`. Then build the services and the
+for the controller stage's automatic grants. Then build the services and the
 substrate on `libvirt-host`:
 
 ```sh

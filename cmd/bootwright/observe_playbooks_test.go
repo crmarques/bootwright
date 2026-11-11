@@ -115,6 +115,18 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 	add("containercluster_install_agent", "port.yml", "ansible.builtin.set_fact", "retains the port answer in memory", read)
 	addObserveReads(add, read)
 	addObserveScratch(add, read)
+	for key, allowance := range maps.Clone(allow) {
+		if key.role == "managedos_host_firewall" && key.file == "observe.yml" && key.module != "ansible.builtin.assert" && key.module != observeCollection+"managedos_firewall_protocol" {
+			delete(allow, key)
+			key.file = "installed_observe.yml"
+			allow[key] = allowance
+		}
+	}
+	for _, module := range []string{"ansible.builtin.fail", observeCollection + "managedos_firewall_protocol"} {
+		add("managedos_host_firewall", "provided_observe.yml", module, "validates or publishes a read-only host observation", read)
+	}
+	add("managedos_host_firewall", "installed_observe.yml", observeCollection+"managedos_firewall_protocol", "publishes bounded read-only service evidence", read)
+	add("managedos_host_firewall", "provided_observe.yml", observeCollection+"managedos_host_firewall", "runs only the read-only shared host firewall inspection", observeRegistrationInspect)
 	return allow
 }
 

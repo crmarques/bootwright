@@ -1880,39 +1880,72 @@ run ([dependency safety](state-reconciliation.md#dependency-safety-during-recove
 
 ## Host firewall requirements
 
-A Machine whose operating system Bootwright installs with
-[`security.firewall.enabled`](api/machines.md) has its firewalld rules for
-other capabilities realized by the managed OS ([D220](milestones/backlog.md#d220)).
-A capability publishes a host port requirement through a neutral port that
-composition binds, so the managed OS names no consumer: the Machine, the
-network whose interface carries it, IP protocols, and TCP or UDP ports, never
-a zone, a rich rule or a source restriction. Each publishing block's
-requirement becomes one firewalld service named for its context and block,
-holding exactly those protocols and ports, added permanently to the runtime
-zone of the interface on that network, then reloaded. The service file and
-its zone membership are recorded as owned: a changed requirement rewrites only
-that service, and removal or destroy deletes only an owned service and its
-membership, never an operator rule. A same-named service the operation did not
-record refuses. A Machine Bootwright does not install, or whose firewall is not
-enabled, receives no change, and the consumer's read-only check reports what
-is missing. Bootwright configures no switch, router or upstream firewall: the
-site provides layer-2 adjacency between the hosts of one virtual address,
-admits that address's MAC moving between ports on failover, and routes clients
-to it.
+### Selection
 
-**Implementation.** `os-host-firewall-v1`, family `os-host-firewall`, plans one
-block per realizing Machine that holds at least one requirement, identified
-`os-firewall-<machine>` in the machines stage; a context whose capabilities
-publish no requirement plans exactly what it planned before. The block waits
-for the Machine's `os-install` block, and a consumer that waits for the
-Machine, such as a Ceph cluster on it, waits for this block too, so the
-services exist before the clusters stage and a removal takes them back after
-the consumer's own removal and before the installation's and the Machine's.
-Its frozen request carries, per requirement, the service name, networks,
-protocols and ports, and the guest address, fleet account, fleet key and
-placement of the installation, whose original apply proof supplies the pinned
-host key the session is opened on, as the
-[update within release](#update-within-release) worker's session is.
+Host firewall policy belongs to the Machine's OS owner. A provided Machine
+opts in with `spec.firewall.management: managed`; omission and `external`
+leave its firewall operator-owned. A Machine whose OS Bootwright installs
+with [`security.firewall.enabled`](api/machines.md#customizations) true
+realizes capability requirements by default; an explicit Machine policy of
+`external` leaves them to the operator. An explicit managed policy on an
+installed Machine requires that enabled install profile. It cannot manage a
+Machine whose OS a downstream installer owns.
+
+Capabilities publish requirements through a neutral port which composition
+binds: the Machine, publishing block, TCP/UDP ports and IP protocols, and
+one interface selector. Ceph ingress selects by its virtual address and
+fallback networks. Managed infrastructure services and emulated BMCs select
+by their exact listener addresses; a hostname must resolve to one address
+assigned to exactly one interface. Loopback listeners need no grant. Network
+selectors choose interfaces, not permitted client sources: these services
+admit every client reaching the selected zones. Bind services on a network
+whose clients are appropriate under [listener exposure](security.md#listener-exposure).
+No authored zone name or duplicated port list is needed.
+
+### Implementations
+
+`installation.FirewallImplementation`, family `os-host-firewall`, realizes
+a daemon-preparation block per explicitly managed provided host, including
+one with no listener, and a grant block `os-firewall-<machine>` per host
+holding requirements. Each publisher
+becomes one owned firewalld service with exactly its protocols and ports.
+Infrastructure services wait for that block. The installed-host block runs
+in the machines stage after OS installation and before consumers. Provided-host blocks run in infrastructure-services. The controller stage
+requires daemon preparation and grants for already-existing interfaces, so a
+controller-only selection includes them. A grant for a provider-created bridge
+waits for that provider instead; the provider waits only for daemon preparation.
+The block can precede controller clients, while every ancestor installation
+still proves its own substrate can do so.
+
+On an explicitly managed provided host, apply installs firewalld and enables
+and starts its daemon. It refuses to start alongside another active firewall
+service. Before starting over SSH, it proves the connection's port admitted
+in its interface's configured NetworkManager zone; ambiguous or unproved
+access refuses. Destroy retains the shared package and daemon enablement.
+Preflight, plan and observation never prepare a daemon or change a rule.
+
+The frozen `installation.FirewallRequest` carries either direct local or
+pinned root SSH placement, or the installation's fleet session reached
+through its original placement and pinned host-key proof. It freezes the
+context, Machine, publisher identities, selectors, protocols and ports.
+Removal waits for consumers, deletes only owned service memberships and
+files, and runs before the installation or Machine is removed. An unreachable
+retained host keeps removal incomplete. A host deleted or erased by the same
+removal takes its services with its disks and needs no contact.
+
+A provided host's reload compares complete runtime and permanent zones,
+policies, direct rules and chains, and service, ICMP, helper and IP-set
+definitions first, excluding only this block's service grants
+and interface bindings which firewalld preserves across reload. A difference
+refuses `host-firewall-failed` with cause `runtime-drift`; it never overwrites
+permanent configuration with runtime state. A retry completes owned partial
+work after the operator resolves that difference. Other contexts' persistent
+grants and operator policy remain intact. The reload behavior follows the
+[firewalld runtime/permanent contract](https://firewalld.org/documentation/configuration/runtime-versus-permanent.html).
+
+Bootwright configures no switch, router or upstream firewall: the site
+provides adjacency, virtual-address MAC movement and client routing. On an
+operator-managed host, existing read-only checks still report what is missing.
 
 **Service.** The service name is `bootwright-<context>-<publisher block>`, cut
 to 63 characters with a 16-digit hash suffix, like a block identity, when it
@@ -1946,7 +1979,7 @@ retired with it without contacting the guest; on a retained Machine the removal
 runs while the guest answers, and an unreachable guest fails it and keeps the
 Machine's removal waiting, as an installation's unregistration does.
 
-**Evidence.** `os-host-firewall-evidence-v1` lists, per service in request
+**Evidence.** `installation.FirewallEvidence` proves current daemon readiness and lists, per service in request
 order, its name, its state (`owned`, `absent` or `foreign`), the SHA-256 of the
 file's bytes, its `{interface, zone}` memberships, each a zone that lists it
 permanently or at runtime, and whether every selected interface's zone holds
@@ -1955,15 +1988,17 @@ service owned with the frozen content and covered is completion; nothing
 present is no effect for an apply and completion for a removal; owned remnants
 are partial; a foreign file, or a membership without its file, is unknown.
 
+### Refusal table
+
 | Refusal | Message | Remedy |
 | --- | --- | --- |
 | `host-firewall-foreign` | `Machine/<machine> holds a firewalld service <service> this context did not write, so its firewall was left unchanged` | `remove /etc/firewalld/services/<service>.xml and its zone memberships from Machine/<machine> after confirming nothing else uses it, then run bootwright <verb> --context <context> again` |
-| `host-firewall-no-interface` | `Machine/<machine> has no interface whose network holds <networks>, which firewalld service <service> admits traffic on` | `give Machine/<machine> an address on the network of <address> in its network configuration, then run bootwright <verb> --context <context> again` |
+| `host-firewall-no-interface` | `Machine/<machine> has no interface whose network holds <networks>, which firewalld service <service> admits traffic on` | `give Machine/<machine> the declared listener address or required network in its network configuration, then run bootwright <verb> --context <context> again` |
 | `host-firewall-inactive` | `firewalld is not running on Machine/<machine>, whose install profile enables it` | `start firewalld on Machine/<machine> with systemctl enable --now firewalld, then run bootwright <verb> --context <context> again` |
 | `host-firewall-failed` | `firewalld refused a change on Machine/<machine>: <cause>` | `read the firewalld journal on Machine/<machine>, correct it, then run bootwright <verb> --context <context> again` |
 
 `<networks>` is the requirement's networks joined by ` or is `, `<address>` its
-first, `<verb>` is `destroy` for a removal and `apply` otherwise, and `<cause>` is `tooling`, `reload`, `zone`, `write` or `address`, else
+first, `<verb>` is `destroy` for a removal and `apply` otherwise, and `<cause>` is `tooling`, `reload`, `zone`, `write`, `address`, `runtime-drift`, `enable` or `ssh-admission`, else
 `unknown`. `plan` reports one `host-port` row per requirement and reads no
 host: on a realizing Machine, that the managed OS realizes it before the
 clusters stage; on any other host, the ports and protocols to permit in the

@@ -75,10 +75,9 @@ Use these names consistently:
 | `CONTEXT` | Bootwright context being tested |
 | `INPUT_DIR` | Rendered desired-state directory |
 | `CONTROLLER_ADDRESS` | Host address on which the services listen |
-| `RUN_DIR` | Private temporary directory for case files and firewall cleanup records |
+| `RUN_DIR` | Private temporary directory for case files and evidence |
 | `EVIDENCE_CONTEXT` | Context whose completed run is being preserved before purge |
 | `HOST_CHECKS` | Private record of diagnostic packages installed for this run |
-| `FIREWALL_PORTS` | Case's array of listener ports to admit |
 
 Keep the same shell and private directories through cleanup. Configure inputs
 where the runbook introduces them; prompts ask for values discovered on the
@@ -225,23 +224,17 @@ Review the package transaction before confirming. Preserve any working
 `curl-minimal` installation. Additional case-specific tools are named in the
 case's preparation step.
 
-### 4. Prepare firewalld
+### 4. Select managed host firewall preparation
 
-Use a lab host selected to use firewalld. An existing firewall managed by
-another service must be migrated by its administrator before this run.
-
-```sh
-if ! rpm -q firewalld; then
-    sudo dnf install firewalld
-fi
-sudo systemctl enable --now firewalld.service
-sudo systemctl is-enabled firewalld.service
-sudo firewall-cmd --state
-```
-
-Require `enabled` and `running`. Bootwright checks this prerequisite but does
-not enable the host firewall. Firewalld stays installed and enabled after the
-case. Listener rules are prepared later, after the context's controller stage.
+The case templates select `Machine.spec.firewall.management: managed` on the
+controller and its provided libvirt host. The controller stage installs,
+enables and starts firewalld, resolves each listener's interface and runtime
+zone, and publishes owned permanent and runtime admission before services
+start. No manual firewalld setup is needed. The shared daemon remains enabled
+after cleanup; destroy removes only the context's owned listener services.
+An existing firewall managed by another service requires an administrator's
+migration before opting in. Unrelated runtime-only rules are preserved: a
+reload which would discard them refuses rather than overwriting that policy.
 
 ### 5. Check ports, address and capacity
 
@@ -300,102 +293,23 @@ Host preparation is complete. Return to the next step of the case runbook.
 
 ## Prepare listener firewall
 
-Run this step when the case asks, after `apply --stage controller` and before
-context preflight. The case has set `CONTEXT`, `CONTROLLER_ADDRESS`, `RUN_DIR`
-and `FIREWALL_PORTS`. For two contexts, the array contains both plans' listener
-ports; loopback BMC ports need no opening.
+The case's `apply --stage controller` prepares its explicitly managed host
+firewalls, including both the runtime and permanent grants derived from the
+context's effective listeners. Port overrides need no separate list, and a
+reload retains these grants. Run the case's next preflight step and require
+`ready` before starting its services. Preflight and plan remain read-only.
 
-Inspect the plan and find the interface carrying the printed listener address:
-
-```sh
-./bin/bootwright plan --context "${CONTEXT:?Set CONTEXT in the case runbook}"
-printf 'Listener address: %s\n' "${CONTROLLER_ADDRESS:?Set CONTROLLER_ADDRESS in the case runbook}"
-ip -br address
-sudo firewall-cmd --get-active-zones
-sudo firewall-cmd --get-default-zone
-```
-
-Enter the interface name, then its runtime zone. If the first query reports
-`no zone` (exit 2), enter the default zone shown above. Any other query failure
-stops the run.
-
-```bash
-read -r -p "Interface carrying $CONTROLLER_ADDRESS: " FIREWALL_INTERFACE
-sudo firewall-cmd --get-zone-of-interface="${FIREWALL_INTERFACE:?Enter the interface name}"
-read -r -p 'Runtime zone for that interface: ' FIREWALL_ZONE
-sudo firewall-cmd --zone="${FIREWALL_ZONE:?Enter the zone name}" --list-all
-```
-
-The following rules admit every client reaching this zone. Use a lab interface
-whose reachable clients are appropriate for these services, as described in
-[network exposure](../docs/operator-guide.md#network-exposure). The inspector
-requires an accepting zone or explicit port/range admission. Rich rules,
-source-selected zones and unsupported policies remain `unknown`; preserve them
-and prepare a suitable lab interface before starting the run. A managed bridge
-in `trusted` does not replace this check of the listener's host interface.
-
-Review `FIREWALL_PORTS` against the plan, including any port overrides. Save
-which ports were absent before adding rules, so cleanup preserves existing
-grants and ranges:
-
-```bash
-(
-    set -e
-    : "${RUN_DIR:?Set RUN_DIR in the case runbook}"
-    : "${FIREWALL_ZONE:?Enter the runtime zone}"
-    : "${FIREWALL_PORTS[0]:?Set FIREWALL_PORTS in the case runbook}"
-    test ! -e "$RUN_DIR/firewall-added-ports"
-    sudo firewall-cmd --zone="$FIREWALL_ZONE" --list-all > "$RUN_DIR/firewall-before"
-    : > "$RUN_DIR/firewall-added-ports.pending"
-    for socket in "${FIREWALL_PORTS[@]}"; do
-        if sudo firewall-cmd --zone="$FIREWALL_ZONE" --query-port="$socket"; then
-            continue
-        else
-            query_status=$?
-            [ "$query_status" -eq 1 ] || exit "$query_status"
-            printf '%s\n' "$socket" >> "$RUN_DIR/firewall-added-ports.pending"
-        fi
-    done
-    printf '%s\n' "$FIREWALL_ZONE" > "$RUN_DIR/firewall-zone"
-    mv "$RUN_DIR/firewall-added-ports.pending" "$RUN_DIR/firewall-added-ports"
-    while IFS= read -r socket; do
-        sudo firewall-cmd --zone="$FIREWALL_ZONE" --add-port="$socket"
-    done < "$RUN_DIR/firewall-added-ports"
-)
-```
-
-These are runtime rules; keep the host running without a firewall reload
-through the case. No permanent rule or zone assignment is changed. Return to
-the case's preflight step and require `ready` before starting services.
+A missing grant on an operator-managed host still refuses with its manual
+remedy. A managed bridge's trusted zone does not replace inspection of the
+interface holding the controller listener address.
 
 ## Restore listener firewall
 
-Run this after destroying every context in the case and before removing
-`RUN_DIR`. Review `firewall-before`, the recorded ports and the current zone.
-Remove only grants this run added; a grant another workload now needs must be
-retained and recorded as incomplete cleanup.
-
-```bash
-(
-    set -e
-    : "${RUN_DIR:?Keep RUN_DIR until cleanup completes}"
-    if [ -f "$RUN_DIR/firewall-added-ports" ]; then
-        FIREWALL_ZONE=$(cat "$RUN_DIR/firewall-zone")
-        sudo firewall-cmd --zone="$FIREWALL_ZONE" --list-all
-        while IFS= read -r socket; do
-            if sudo firewall-cmd --zone="$FIREWALL_ZONE" --query-port="$socket"; then
-                sudo firewall-cmd --zone="$FIREWALL_ZONE" --remove-port="$socket"
-            else
-                query_status=$?
-                [ "$query_status" -eq 1 ] || exit "$query_status"
-            fi
-        done < "$RUN_DIR/firewall-added-ports"
-    fi
-)
-```
-
-Keep the record until cleanup succeeds. Leave shared firewalld service state
-and permanent rules in place. Return to the case's next cleanup step.
+The case's destroy stops consumers and removes its owned firewalld services
+and memberships. It preserves other contexts' grants, operator rules and the
+shared daemon's installation and enablement. Require destroy to complete
+before removing the case's evidence directory; no firewall-cmd cleanup is
+needed.
 
 ## Remove diagnostic tools
 

@@ -157,14 +157,66 @@ func inspectZone(query func(...string) (string, error), link string, socket fire
 		}
 		allowed = allowed || match
 	}
+	if !allowed && services != "" {
+		qualified := true
+		if len(strings.Fields(services)) > 64 {
+			qualified = false
+		} else {
+			for _, service := range strings.Fields(services) {
+				match, valid := serviceAdmission(query, service, socket)
+				allowed = allowed || match
+				qualified = qualified && valid
+			}
+		}
+		if !allowed && !qualified {
+			result.Reason = "service expansion has not qualified admission for this socket"
+			return result, nil
+		}
+	}
 	if allowed {
 		result.Status, result.Reason = "open", "runtime interface zone explicitly admits this socket"
-	} else if services != "" {
-		result.Reason = "service expansion has not qualified admission for this socket"
 	} else {
 		result.Status, result.Reason = "closed", "runtime interface zone does not admit this socket"
 	}
 	return result, nil
+}
+
+func serviceAdmission(query func(...string) (string, error), name string, socket firewall.Socket) (bool, bool) {
+	if !safeName(name) {
+		return false, false
+	}
+	text, err := query("--info-service=" + name)
+	if err != nil {
+		return false, false
+	}
+	fields := map[string]string{}
+	known := map[string]bool{"ports": true, "protocols": true, "source-ports": true, "modules": true, "destination": true, "includes": true, "helpers": true, "description": true, "summary": true}
+	for index, line := range strings.Split(text, "\n") {
+		if index == 0 && strings.TrimSpace(line) == name {
+			continue
+		}
+		key, value, ok := strings.Cut(strings.TrimSpace(line), ":")
+		if !ok || !known[key] {
+			return false, false
+		}
+		if _, duplicate := fields[key]; duplicate {
+			return false, false
+		}
+		fields[key] = strings.TrimSpace(value)
+	}
+	ports, found := fields["ports"]
+	if !found || fields["protocols"] != "" || fields["destination"] != "" || fields["source-ports"] != "" || fields["includes"] != "" || fields["modules"] != "" || fields["helpers"] != "" {
+		return false, false
+	}
+	allowed := false
+	for _, entry := range strings.Fields(ports) {
+		match, valid := admits(entry, socket.Port, socket.Protocol)
+		if !valid {
+			return false, false
+		}
+		allowed = allowed || match
+	}
+	return allowed, true
 }
 
 func safeName(value string) bool {

@@ -97,6 +97,11 @@ options:
         type: list
         elements: str
         required: true
+      addresses:
+        description: Exact listener addresses or hostnames, used instead of networks.
+        type: list
+        elements: str
+        required: false
       content:
         description: The exact bytes of the service file, ASCII starting with an XML declaration, at most 16384 bytes.
         type: str
@@ -196,11 +201,13 @@ def worker_source():
 
 
 def check_service(service):
-    if not isinstance(service, dict) or set(service) != worker.SERVICE_KEYS:
+    if isinstance(service, dict) and service.get("addresses") is None:
+        service = {key: value for key, value in service.items() if key != "addresses"}
+    if not isinstance(service, dict) or not worker.SERVICE_KEYS <= set(service) <= worker.SERVICE_KEYS | {"addresses"}:
         raise ArgumentError("a service is not a name, networks and content")
     if not worker.valid_name(service["name"]):
         raise ArgumentError("a service name is not a firewalld service name")
-    if not worker.valid_networks(service["networks"]):
+    if not (worker.valid_addresses(service["addresses"]) and not service["networks"] if "addresses" in service else worker.valid_networks(service["networks"])):
         raise ArgumentError("a service has no network or a network is not a CIDR with its host bits clear")
     if not worker.valid_content(service["content"]):
         raise ArgumentError("a service file is not ASCII XML of at most %d bytes" % worker.MAX_CONTENT)
@@ -284,7 +291,7 @@ def execute(params, run=managedos_guest_ssh.run):
     """The module result; only the operation, the mark and the services reach the worker."""
     check_arguments(params)
     names = [service["name"] for service in params["services"]]
-    services = [{"content": service["content"], "name": service["name"], "networks": list(service["networks"])}
+    services = [dict({key: value for key, value in service.items() if key != "addresses" or value is not None}, networks=list(service["networks"] or []))
                 for service in params["services"]]
     payload = canonical({"mark": params["mark"], "operation": params["operation"], "services": services})
     remote_argv = remote_command.fixed_worker_argv(worker_source())
@@ -314,6 +321,7 @@ def main():
                 "name": {"type": "str", "required": True},
                 "networks": {"type": "list", "elements": "str", "required": True},
                 "content": {"type": "str", "required": True},
+                "addresses": {"type": "list", "elements": "str"},
             }},
             "timeout": {"type": "int", "default": 300},
         },

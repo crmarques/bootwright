@@ -2,16 +2,20 @@
 - name: Validate the frozen host firewall request
   ansible.builtin.assert:
     that:
-      - bootwright_os_firewall_request.version == 'os-host-firewall-v1'
+      - bootwright_os_firewall_request.direct is boolean
+      - bootwright_os_firewall_request.preparation is boolean
+      - not bootwright_os_firewall_request.preparation or bootwright_os_firewall_request.direct
+      - not bootwright_os_firewall_request.direct or bootwright_os_firewall_request.placement.connection in ['local', 'ssh']
+      - bootwright_os_firewall_request.version == 'os-host-firewall-v2'
       - bootwright_os_firewall_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
       - bootwright_os_firewall_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
       - bootwright_os_firewall_digest is match('^[0-9a-f]{64}$(?!\n)')
       - bootwright_os_firewall_request.services is sequence
       - bootwright_os_firewall_request.services is not string
-      - bootwright_os_firewall_request.services | length > 0
+      - bootwright_os_firewall_request.services | length > 0 or bootwright_os_firewall_request.preparation
       - bootwright_os_firewall_material.mark is string
-      - bootwright_os_firewall_material.fleetIdentity is string
-      - bootwright_os_firewall_material.hostKey is string
+      - bootwright_os_firewall_request.direct or bootwright_os_firewall_material.fleetIdentity is string
+      - bootwright_os_firewall_request.direct or bootwright_os_firewall_material.hostKey is string
       - managedos_host_firewall_services | map(attribute='name') | list
         == bootwright_os_firewall_request.services | map(attribute='name') | list
     quiet: true
@@ -22,32 +26,10 @@
     phase: loaded
   no_log: true
 
-- name: Realize the host firewall services through this invocation's private connection files
-  block:
-    - name: Prepare private connection files
-      bootwright.core.lifecycle_scratch:
-        root: '{{ bootwright_run_scratch }}'
-        scope: managedos-firewall
-      register: managedos_host_firewall_scratch_ready
+- name: Run the installed Machine firewall operation
+  ansible.builtin.import_tasks: installed_apply.yml
+  when: not bootwright_os_firewall_request.direct
 
-    - name: Realize the services on the installed machine
-      ansible.builtin.include_tasks: session.yml
-      vars:
-        managedos_host_firewall_operation: apply
-
-  always:
-    - name: Remove private connection files
-      bootwright.core.lifecycle_scratch:
-        root: '{{ bootwright_run_scratch }}'
-        scope: managedos-firewall
-        state: absent
-        remove_root: "{{ bootwright_os_firewall_request.placement.connection == 'ssh' }}"
-      when: managedos_host_firewall_scratch_ready is succeeded
-
-- name: Publish bounded host firewall completion evidence
-  bootwright.core.managedos_firewall_protocol:
-    phase: completed
-    outcome: "{{ 'changed' if managedos_host_firewall_answer.changed else 'unchanged' }}"
-    digest: '{{ bootwright_os_firewall_digest }}'
-    services: '{{ managedos_host_firewall_answer.evidence.services }}'
-  no_log: true
+- name: Run the explicitly managed provided host firewall operation
+  ansible.builtin.import_tasks: provided_apply.yml
+  when: bootwright_os_firewall_request.direct

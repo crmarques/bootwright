@@ -96,17 +96,9 @@ Require the controller block to finish successfully.
 
 ### 5. Prepare listener firewall and require readiness
 
-Set the listener ports for this case:
-
-```bash
-FIREWALL_PORTS=(53/tcp 53/udp 123/udp 3128/tcp 8080/tcp 8443/tcp)
-```
-
-Complete
-[Prepare listener firewall](../README.md#prepare-listener-firewall) in this
-same shell using `CONTROLLER_ADDRESS`, `CONTEXT` and `RUN_DIR` above.
-It records the runtime port rules this run adds. `CONTROLLER_ADDRESS` must
-match the address in the rendered input.
+The controller stage prepares the listener firewall automatically; see
+[Prepare listener firewall](../README.md#prepare-listener-firewall).
+`CONTROLLER_ADDRESS` must match the address in the rendered input.
 
 Then check controller readiness:
 
@@ -417,10 +409,8 @@ fi
 
 ### 12. Restore the host and record the result
 
-First run [Restore listener firewall](../README.md#restore-listener-firewall)
-with the retained `RUN_DIR`. It reads `$RUN_DIR/firewall-zone` and
-`$RUN_DIR/firewall-added-ports` so existing rules are preserved. Do not delete that
-record before restoring the rules.
+The completed destroy performs [listener firewall cleanup](../README.md#restore-listener-firewall)
+and preserves operator rules. No separate firewall cleanup record is needed.
 
 Complete [Remove diagnostic tools](../README.md#remove-diagnostic-tools)
 using the `HOST_CHECKS` record created in step 2. It removes only diagnostic

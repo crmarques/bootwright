@@ -122,13 +122,12 @@ operation consumes:
 ./bin/bootwright apply --context "$CTX_ARB" --stage controller --yes
 ```
 
-Prepare the union of both contexts' listener ports now. Set the context used
-for the shared inspection, then complete
-[Prepare listener firewall](../README.md#prepare-listener-firewall):
+Each controller stage prepares only its context's owned listener services.
+Review both plans and see
+[Prepare listener firewall](../README.md#prepare-listener-firewall).
 
 ```bash
 CONTEXT="$CTX_ARB"
-FIREWALL_PORTS=(53/tcp 53/udp 123/udp 3128/tcp 8080/tcp 8081/tcp 8443/tcp 8444/tcp)
 ./bin/bootwright plan --context "$CTX_CEPH"
 ```
 

@@ -316,9 +316,9 @@ VLAN leg on a trunk instead, as [trunks and VLAN legs](#trunks-and-vlan-legs)
 specifies.
 
 **Firewall readiness.** A provider with a managed network or a VLAN leg
-requires firewalld already enabled and running. Bootwright never enables
-firewalld or changes its configuration: on the host firewall it owns only its
-own NetworkManager connections, whose trusted-zone binding NetworkManager
+requires firewalld enabled and running, prepared by a
+[managed host firewall](managed-os.md#host-firewall-requirements) or the
+operator. It owns only its NetworkManager connections, whose trusted-zone binding NetworkManager
 makes when it activates them, and its own nftables
 [routing table](#routing-table).
 It owns one readiness unit named

@@ -272,7 +272,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		kind: instance.Kind, implementation: instance.Implementation, family: "addon-instance", capability: instance.New(runner, packages.Builtin(), addonFacts),
 	}, {
 		kind: clients.Kind, implementation: clients.Implementation, family: "controller-prerequisites",
-		capability: clients.New(controller.Tools, controller.StagePackages, controller.Setup, controller.ClientInstaller),
+		capability: clients.New(controller.Tools, controller.StagePackages, controller.Setup, controller.ClientInstaller).WithHostPrerequisites(providedHostFirewalls),
 	}, {
 		kind: libvirt.MachineKind, implementation: libvirt.MachineImplementation, family: substrate.MachineFamily,
 		capability: libvirt.NewMachine(runner),
@@ -297,7 +297,7 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 		capability: installation.NewFirewall(runner).WithHostPorts(hostPortRequirements),
 	}, {
 		kind: libvirt.HostKind, implementation: libvirt.HostImplementation, family: "substrate-host",
-		capability: libvirt.NewHost(runner),
+		capability: libvirt.NewHost(runner).WithHostPrerequisites(providerHostFirewall),
 	}, {
 		kind: agentinstall.Kind, implementation: agentinstall.MediaImplementation, family: "cluster-media",
 		capability: agentinstall.NewMedia(runner, material.AuthorizedKey).WithIdentities(provedIdentities{}),
@@ -384,6 +384,7 @@ func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies
 	options := lifecycleOptions(deps, clock, runner)
 	options.ApplyAdmission = fipsApplyAdmission(controller.Host, libvirtCapacityAdmission(deps.Capacity))
 	options.ListenerAdmission = firewallApplyAdmission(controller.Firewall)
+	options.BlockAdmission = firewallBlockAdmission(controller.Firewall)
 	options.HostKeys = deps.HostKeys
 	options.PlanInspection = fipsPlanInspection(controller.Host, hostPortPlanInspection(hostPortRequirements, firewallPlanInspection(controller.Firewall)))
 	if binder != nil {

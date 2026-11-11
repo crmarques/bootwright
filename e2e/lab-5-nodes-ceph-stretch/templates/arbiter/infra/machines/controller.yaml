@@ -4,6 +4,9 @@ metadata:
   name: controller
 
 spec:
+  firewall:
+    management: managed
+
   os:
     provided: true
 

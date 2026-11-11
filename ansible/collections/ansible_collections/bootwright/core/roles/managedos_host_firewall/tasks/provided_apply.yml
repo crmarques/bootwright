@@ -1,0 +1,44 @@
+---
+- name: Install the explicitly selected firewall implementation
+  ansible.builtin.package:
+    name: firewalld
+    state: present
+  register: managedos_host_firewall_packages
+
+- name: Converge the provided host firewall
+  bootwright.core.managedos_host_firewall:
+    operation: apply
+    mark: '{{ bootwright_os_firewall_material.mark }}'
+    services: '{{ managedos_host_firewall_services }}'
+    ssh_address: "{{ bootwright_os_firewall_request.placement.address | default('') }}"
+    ssh_port: '{{ bootwright_os_firewall_request.placement.port | default(0) }}'
+  register: managedos_host_firewall_answer
+  failed_when: false
+  no_log: true
+
+- name: Publish a bounded host firewall refusal
+  bootwright.core.managedos_firewall_protocol:
+    phase: refused
+    reason: '{{ managedos_host_firewall_answer.reason }}'
+    detail: >-
+      {{ managedos_host_firewall_answer.detail | default('')
+         if managedos_host_firewall_answer.reason in ['host-firewall-foreign', 'host-firewall-no-interface']
+         else managedos_host_firewall_answer.cause | default('') }}
+  when:
+    - not (managedos_host_firewall_answer.ok | default(false) | bool)
+    - managedos_host_firewall_answer.reason | default('') in managedos_host_firewall_refusals
+  no_log: true
+
+- name: Refuse a provided host firewall which did not answer
+  ansible.builtin.fail:
+    msg: 'The explicitly managed host firewall did not answer with bounded evidence'
+  when: not (managedos_host_firewall_answer.ok | default(false) | bool)
+
+- name: Publish bounded provided host firewall evidence
+  bootwright.core.managedos_firewall_protocol:
+    phase: completed
+    digest: '{{ bootwright_os_firewall_digest }}'
+    services: '{{ managedos_host_firewall_answer.evidence.services }}'
+    ready: '{{ managedos_host_firewall_answer.ready }}'
+    outcome: "{{ 'changed' if managedos_host_firewall_answer.changed or managedos_host_firewall_packages.changed else 'unchanged' }}"
+  no_log: true

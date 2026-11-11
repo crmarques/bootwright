@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"net/netip"
 	"slices"
 	"strings"
 	"time"
@@ -242,6 +243,12 @@ func PlacementRequirements(catalog api.Catalog, placement machineref.Placement, 
 	var references []reconciliation.ObjectRef
 	for _, provider := range slices.Compact(providers) {
 		references = append(references, reconciliation.ObjectRef{Kind: string(api.InfraProvider), Object: provider})
+	}
+	if machineref.ManagesFirewall(catalog, machine) && slices.ContainsFunc(addresses, func(address string) bool {
+		parsed, err := netip.ParseAddr(address)
+		return err != nil || !parsed.IsLoopback()
+	}) {
+		references = append(references, reconciliation.ObjectRef{Kind: string(api.Machine), Object: machine, Family: machineref.FirewallFamily})
 	}
 	if placement.Installed() {
 		references = append(references, reconciliation.ObjectRef{Kind: string(api.Machine), Object: machine, Family: machineref.InstallFamily})

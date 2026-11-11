@@ -14923,7 +14923,7 @@ open session clauses and D251 (31)'s rationale and alternative.
 the placement rule of the
 [API](../api/infrastructure-services.md#management-and-placement) and
 [machines](../api/machines.md#addresses-and-access), two reference-edge rows,
-the deferred page. Parked: [B1329](backlog.md#b1329). Contracts: none moved,
+the deferred page. Parked: [B1329](m1.md#b1329). Contracts: none moved,
 because the arm is a `connection` value and requirements are not frozen.
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
@@ -15554,3 +15554,21 @@ commit. **Contract:** unchanged; no request bytes, version, content digest,
 identity proof or destructive effect changes, so a failed operation can retry
 with the rebuilt automation. **Limitations:** no real BMC was contacted; B1193's
 operator qualification remains open.
+
+## X439 — Managed host firewall preparation
+
+[B1353](m1.md#b1353) and [B1329](m1.md#b1329) deliver the
+[host firewall policy](../managed-os.md#host-firewall-requirements): explicit
+provided-host management, persistent owned service grants, daemon preparation
+before providers, bridge grants after providers and live admission before
+listener effects. Infrastructure services publish their effective sockets;
+the E2E controllers select management and need no manual firewall preparation.
+
+**Evidence:** controller and bridge plan ordering, loopback-only placements,
+first apply, replay, ownership refusal, foreign runtime preservation, SSH
+startup protection and retained-daemon removal have isolated regression
+coverage. Independent safety review approved the diff. Exact verification
+commands and results are recorded in the commit body. No real host was changed
+and operator acceptance remains due. The firewall request/evidence contract
+moves to `installation.FirewallImplementation`; existing operations with its
+previous identity must finish or be removed with their original executable.

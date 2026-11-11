@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
@@ -50,5 +51,33 @@ func TestListenerAdmissionRefusesBeforeRegistrationAndRechecksExclusive(t *testi
 		if err != nil || index.Current != "" || len(h.capability.applies) != 0 || calls != reject {
 			t.Fatalf("index=%+v effects=%v calls=%d err=%v", index, h.capability.applies, calls, err)
 		}
+	}
+}
+
+func TestBlockAdmissionRefusesBeforeTheEffectAndCanBeRetried(t *testing.T) {
+	h := newHarness(t, "artifact-server-lab")
+	refused := failure("preflight.failed", "live prerequisite disappeared", "restore the prerequisite and retry")
+	calls := 0
+	h.service.options.BlockAdmission = func(_ context.Context, plan reconciliation.Plan, block reconciliation.Block) error {
+		calls++
+		if len(plan.Blocks) != 1 || block.ID != "artifact-server-lab" {
+			t.Fatal("lost frozen block")
+		}
+		return refused
+	}
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err == nil {
+		t.Fatal("live admission passed")
+	} else if reported := diagnostics.Of(err); len(reported) == 0 || reported[0].Code != "preflight.failed" {
+		t.Fatal(reported)
+	}
+	if calls != 1 || len(h.capability.applies) != 0 {
+		t.Fatal("effect crossed failed live admission")
+	}
+	h.service.options.BlockAdmission = nil
+	if _, err := h.service.Apply(context.Background(), ApplyRequest{ContextName: testContextName, SkipConfirmation: true}); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.capability.applies) != 1 {
+		t.Fatal("refused pending block did not retry")
 	}
 }

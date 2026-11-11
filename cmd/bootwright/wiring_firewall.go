@@ -14,8 +14,10 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
+	"github.com/crmarques/bootwright/internal/substrate"
 	"github.com/crmarques/bootwright/internal/substrate/libvirt"
 )
 
@@ -106,6 +108,18 @@ func socketTarget(socket firewall.Socket) string {
 	return fmt.Sprintf("%s %s:%d/%s", socket.Object, address, socket.Port, socket.Protocol)
 }
 
+func listenerFirewallRemedy(catalog api.Catalog, name string, socket firewall.Socket) string {
+	selected, err := controller.Select(catalog)
+	if err != nil || !machineref.ManagesFirewall(catalog, selected.MachineName()) {
+		return firewall.ManualRemedy
+	}
+	stages := "controller"
+	if len(substrate.BridgeProviders(catalog, selected.MachineName(), socket.Address)) != 0 {
+		stages = "controller,substrates,infrastructure-services"
+	}
+	return "run bootwright apply --context " + name + " --stage " + stages + " to prepare the managed host firewall, then repeat preflight"
+}
+
 func firewallPreflight(inspector firewall.Inspector) prerequisites.ListenerChecks {
 	return func(ctx context.Context, catalog api.Catalog, name string) ([]prerequisites.Check, error) {
 		checks, err := inspectControllerSockets(ctx, inspector, catalog, name)
@@ -122,7 +136,7 @@ func firewallPreflight(inspector firewall.Inspector) prerequisites.ListenerCheck
 			if check.Observation.Status == "open" {
 				status = "ready"
 			} else {
-				observed += "; " + firewall.ManualRemedy
+				observed += "; " + listenerFirewallRemedy(catalog, name, check.Socket)
 			}
 			rows = append(rows, prerequisites.Check{ID: "listener-firewall", Required: check.Socket.Object + " inbound socket", Observed: observed, Status: status, Scope: prerequisites.ContextScope, Target: socketTarget(check.Socket)})
 		}
@@ -140,7 +154,7 @@ func firewallPlanInspection(inspector firewall.Inspector) lifecycle.PlanInspecti
 		for _, check := range checks {
 			remedy := ""
 			if check.Observation.Status != "open" {
-				remedy = firewall.ManualRemedy
+				remedy = listenerFirewallRemedy(catalog, name, check.Socket)
 			}
 			rows = append(rows, lifecycle.PlanCheck{ID: "listener-firewall", Status: check.Observation.Status, Summary: check.Summary(), Remedy: remedy})
 		}
@@ -172,7 +186,17 @@ func firewallApplyAdmission(inspector firewall.Inspector) lifecycle.ListenerAdmi
 		if err != nil {
 			return err
 		}
-		sockets = slices.DeleteFunc(sockets, func(socket firewall.Socket) bool { return !required[socket.Block] })
+		startingIDs := map[string]bool{}
+		for _, block := range starting {
+			startingIDs[block.ID] = true
+		}
+		sockets = slices.DeleteFunc(sockets, func(socket firewall.Socket) bool {
+			if !required[socket.Block] {
+				return true
+			}
+			request, managed := frozenHostFirewall(plan, socket.Block)
+			return managed && startingIDs[request.Identity.Block]
+		})
 		checks, err := firewall.CheckSockets(ctx, inspector, sockets)
 		if err != nil {
 			return err

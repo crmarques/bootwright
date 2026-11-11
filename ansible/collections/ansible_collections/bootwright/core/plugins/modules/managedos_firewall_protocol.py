@@ -49,6 +49,10 @@ options:
     type: list
     elements: dict
     required: false
+  ready:
+    description: Whether the host firewall is enabled and answering.
+    type: bool
+    required: false
   removed:
     description: Whether the completion proves removal rather than presence.
     type: bool

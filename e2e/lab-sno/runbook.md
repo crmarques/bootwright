@@ -147,7 +147,6 @@ CONTROLLER_ADDRESS="$(ip -4 route get 192.0.2.1 | sed -n 's/.* src \([0-9.]*\).*
 
 ```sh
 ./bin/bootwright apply --context "$CONTEXT" --stage controller --yes
-FIREWALL_PORTS=(53/tcp 53/udp 123/udp 3128/tcp 8080/tcp 8443/tcp)
 ```
 
 Complete [Prepare listener firewall](../README.md#prepare-listener-firewall)

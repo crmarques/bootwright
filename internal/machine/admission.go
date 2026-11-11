@@ -296,6 +296,7 @@ func Validate(o api.Object, c api.Catalog) []api.Issue {
 	issues = appendIssues(issues, validateInstallNetwork(o, c, provider, found, variant, configured)...)
 	issues = appendIssues(issues, validateNetworkMembership(o, c)...)
 	issues = appendIssues(issues, validateAccess(o, c)...)
+	issues = appendIssues(issues, validateFirewall(o, c)...)
 	issues = appendIssues(issues, validatePlacementHost(o, c)...)
 	issues = appendIssues(issues, validateHostKey(o, c)...)
 	return appendIssues(issues, validateBMC(substrate.MachineBMC(o), s.Has("substrate", "providerRef") && !found)...)

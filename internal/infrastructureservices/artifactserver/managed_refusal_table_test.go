@@ -86,6 +86,9 @@ func installedRowGraph(row string, kind api.Kind, place func(machine string) api
 	profile := api.NewObject(api.MachineInstallProfile, "rhel", api.Value{}, api.MapValue(field("ntp", api.ListValue(ntp...)),
 		field("customizations", api.MapValue(field("packages", api.MapValue(field("install", api.ListValue(packages...)))),
 			field("security", api.MapValue(field("firewall", api.MapValue(field("enabled", api.BoolValue(firewall))))))))))
+	if firewall {
+		profile = profile.WithSpec(profile.Spec().WithPath(api.MapValue(), "customizations", "security", "firewall"))
+	}
 	config := api.NewObject(api.NetworkConfig, "guests", api.Value{}, api.MapValue(field("dns", api.ListValue(dns...))))
 	service := place("mirror")
 	environment := labEnvironment()

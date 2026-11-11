@@ -34,6 +34,7 @@ type Options struct {
 	Selection         CurrentSelection
 	ApplyAdmission    ApplyAdmission
 	ListenerAdmission ListenerAdmission
+	BlockAdmission    func(context.Context, reconciliation.Plan, reconciliation.Block) error
 	PlanInspection    PlanInspection
 	Readiness         Readiness
 	EffectBearing     EffectBearing

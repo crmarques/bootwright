@@ -104,7 +104,7 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 			return capability.Destroy(inner, execution)
 		}
 		execution.Warn = warnings.collect
-		return capability.Apply(inner, execution)
+		return s.applyAdmitted(inner, plan, capability, execution)
 	})
 	runErr = stageReading(runErr, block, operation.Verb, tx.Identity().Name)
 	outcome := result.Outcome
@@ -135,6 +135,15 @@ func (s Service) attempt(ctx context.Context, tx Transaction, store OperationSto
 	}
 	s.report(ctx, ProgressEvent{Block: block.ID, Description: block.Description, Status: string(state), Position: position, Total: total})
 	return state, runErr
+}
+
+func (s Service) applyAdmitted(ctx context.Context, plan reconciliation.Plan, capability Capability, execution Execution) (Result, error) {
+	if s.options.BlockAdmission != nil {
+		if err := s.options.BlockAdmission(ctx, plan, execution.Block); err != nil {
+			return Result{Outcome: reconciliation.OutcomeFailed}, err
+		}
+	}
+	return capability.Apply(ctx, execution)
 }
 
 func admitAttempt(ctx context.Context, tx Transaction, store OperationStore, operation operationstore.Operation, plan reconciliation.Plan, block string, removal bool) (func(), error) {

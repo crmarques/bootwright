@@ -609,8 +609,12 @@ busy; repeat it. The full contract is
 
 ## Network exposure
 
-Bootwright binds the listeners the graph declares and leaves the host firewall
-to the operator. Read the
+Bootwright binds the listeners the graph declares. Set
+`Machine.spec.firewall.management: managed` on an existing controller host to
+have `apply --stage controller` install and enable firewalld, resolve listener
+zones, and prepare owned runtime and permanent service grants. On other
+provided hosts the same explicit policy selects preparation. Omission keeps
+their firewall operator-owned. Read the
 [listener contract](../specs/security.md#listener-exposure) before choosing a
 bind address: wildcard addresses expose every matching interface, DNS has no
 client authentication, and the emulated BMC has root access to libvirt and
@@ -633,12 +637,13 @@ that address and certificate.
 | Installer network | `8080/tcp`, or the declared public artifact port | Public package tree, when declared |
 | Controller on the provider host | Loopback `8000/tcp` | Emulated BMC; no remote access |
 
-With firewalld, inspect the interface holding the declared bind address, its
+For an operator-managed host, inspect the interface holding the declared bind address, its
 runtime zone and existing grants first. The controller's
 [bounded inspection](../specs/controller.md#results-and-qualification)
 requires an accepting zone or an explicit port/range grant for each socket.
-It reports `unknown` for source-selected zones, rich rules, unresolved service
-expansion and unqualified policies. Adding a source-scoped rich rule therefore
+It expands simple runtime firewalld services to prove their ports. It reports
+`unknown` for source-selected zones, rich rules, unresolved service expansion
+and unqualified policies. Adding a source-scoped rich rule therefore
 does not make that configuration pass preflight. Preserve required source
 restrictions; select a suitable isolated controller interface for a lab whose
 policy the inspector can qualify.
