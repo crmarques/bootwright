@@ -8516,3 +8516,23 @@ review with the others:
 
 **Exit evidence:** each item's in-tree evidence and the operator run of
 [B1283](m1.md#b1283), then the owner's review of (1) to (18).
+
+### D256
+
+**owner** (2026-11-10): after the
+[lab-6-nodes-ceph-network-matrix](../../e2e/lab-6-nodes-ceph-network-matrix/runbook.md)
+run of 2026-11-10 the owner asked to "fix every issue you found in this
+session", then decided the two choices that left open:
+
+1. [B1311](m2.md#b1311), "Scope to named objects": a Ceph health check whose
+   detail names pools or filesystems affects the readiness only of the objects
+   that own those pools or filesystems, so a warning about a pool no applied
+   object declares, as the run's hand-made pool raised, marks no managed object
+   not ready; every other check, `MON_DOWN` included, still gates every object.
+   This narrows, for those checks only, the cluster-wide readiness rule of
+   [Ceph claims and throttle](../ceph.md#claims-and-throttle).
+2. [B1312](m1.md#b1312), "Share host reads": one `diff --observe` reads each
+   Ceph cluster host once and every block of that cluster uses that reading,
+   in place of each block's own read of every host.
+
+It authorizes both implementations out of sequence. No push.
