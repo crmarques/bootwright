@@ -61,7 +61,7 @@ func (s ReadSurvey) Canonical() ([]byte, error) {
 // another.
 func ReadContentDigest() string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
-		"bootwright.machine.power-read-v1", ReadImplementation, ReadOperation, ReadVariable,
+		"bootwright.machine.power-read-v1", ReadImplementation, ReadRequestVersion, ReadOperation, ReadVariable,
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }
@@ -105,7 +105,7 @@ func readSurveysFor(catalog api.Catalog, contextName string, names []string, rea
 			key += "\x00" + controller.HostCluster + "\x00" + hostedNamespace(controller)
 		}
 		survey := grouped[key]
-		survey.Context, survey.Placement, survey.Version = contextName, placement, ReadImplementation
+		survey.Context, survey.Placement, survey.Version = contextName, placement, ReadRequestVersion
 		index := strconv.Itoa(len(survey.Targets))
 		target := ReadTarget{Arm: managed.Port, Controller: controller, Object: object.Name(), UserVariable: "controllerUser" + index}
 		if substrate.PortPinned(managed.Port) && pinned != nil {

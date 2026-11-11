@@ -15572,3 +15572,22 @@ commands and results are recorded in the commit body. No real host was changed
 and operator acceptance remains due. The firewall request/evidence contract
 moves to `installation.FirewallImplementation`; existing operations with its
 previous identity must finish or be removed with their original executable.
+
+## X440 — Public TLS trust and endpoint verification
+
+B1355 delivers the [client TLS trust API](../secrets.md#client-tls-trust)
+authorized by [D259](backlog.md#d259): public server-certificate material and
+per-connection verification policy. BMC certificate identity is checked before
+HTTP authentication. Other consumers retain full verification and refuse
+unqualified exceptions. CA issuance remains separate.
+
+**Evidence:** material admission, loopback handshakes, frozen requests, shared
+port rendering and native-consumer refusal tests; independent security review.
+Exact full-gate and race commands and results are recorded in the delivering
+commit body. No real host was changed and this record grants no operator
+acceptance or native-client qualification beyond the tested boundary.
+The claim, OS installation, agent installation and physical erase request
+versions move; existing frozen operations require their original executable.
+The downstream ceph-cluster input chart needs a separate repository update.
+[B1356](m1.md#b1356) retains the hidden-checkout lint discovery defect; X440
+explicitly supplies every tracked collection YAML file to lint.

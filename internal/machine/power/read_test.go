@@ -74,7 +74,7 @@ func TestASurveyGroupsEveryReachableControllerByTheHostThatReachesIt(t *testing.
 		t.Fatalf("remote survey = %+v", surveys[1].Targets)
 	}
 	for _, survey := range surveys {
-		if survey.Context != "lab" || survey.Version != ReadImplementation {
+		if survey.Context != "lab" || survey.Version != ReadRequestVersion {
 			t.Fatalf("survey = %+v", survey)
 		}
 		canonical, err := survey.Canonical()

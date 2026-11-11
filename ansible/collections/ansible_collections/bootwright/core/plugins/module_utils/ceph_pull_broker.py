@@ -28,7 +28,7 @@ import threading
 import time
 import urllib.parse
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, native_diagnostics
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, native_diagnostics, tls_trust
 
 MAX_HEADERS = 16384
 MAX_METADATA = 1 << 20
@@ -148,11 +148,11 @@ def bundle_context(bundle):
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     try:
-        context.load_verify_locations(cadata=bundle)
+        tls_trust.load_anchors(context, bundle)
     except (ssl.SSLError, ValueError, TypeError):
         raise BrokerError("registry trust bundle") from None
     require(context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname)
-    require(context.cert_store_stats()["x509_ca"] > 0)
+    require(context.cert_store_stats()["x509"] > 0)
     return context
 
 

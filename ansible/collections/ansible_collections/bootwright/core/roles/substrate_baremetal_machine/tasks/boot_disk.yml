@@ -16,6 +16,7 @@
     user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_disk_user) }}'
     password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_disk_password) }}'
     verify: '{{ substrate_baremetal_machine_disk_verify }}'
+    verification: "{{ bootwright_machine_port.verification | default(omit, true) }}"
     ca_data: >-
       {{ lookup('ansible.builtin.file', substrate_baremetal_machine_disk_ca)
          if substrate_baremetal_machine_disk_ca | length > 0 else '' }}
@@ -44,6 +45,7 @@
     user: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_disk_user) }}'
     password: '{{ lookup("ansible.builtin.file", substrate_baremetal_machine_disk_password) }}'
     verify: '{{ substrate_baremetal_machine_disk_verify }}'
+    verification: "{{ bootwright_machine_port.verification | default(omit, true) }}"
     ca_data: >-
       {{ lookup('ansible.builtin.file', substrate_baremetal_machine_disk_ca)
          if substrate_baremetal_machine_disk_ca | length > 0 else '' }}

@@ -1022,15 +1022,15 @@ def test_broker_bundle_that_does_not_verify_names_registry_and_secret(tmp_path, 
 
 
 def leaf_certificate(tmp_path):
-    """A self-signed end-entity certificate: parseable, but never a CA anchor."""
+    """A self-signed end-entity certificate: a public leaf trust anchor."""
     key, cert = tmp_path / "leaf.key", tmp_path / "leaf.crt"
     openssl(["/usr/bin/openssl", "req", "-new", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=leaf.example.test",
              "-addext", "basicConstraints=critical,CA:FALSE", "-keyout", str(key), "-out", str(cert)], 30, 65536)
     return cert.read_text(encoding="ascii")
 
 
-@pytest.mark.parametrize("kind", ["empty", "no-certificate", "malformed", "oversized", "leaf-only", "not-text", "non-ascii-comment"])
-def test_bundle_context_refuses_a_bundle_without_a_ca_anchor(tmp_path, kind):
+@pytest.mark.parametrize("kind", ["empty", "no-certificate", "malformed", "oversized", "not-text", "non-ascii-comment"])
+def test_bundle_context_refuses_invalid_public_trust(tmp_path, kind):
     bundles = {
         "empty": "",
         "no-certificate": "# a comment and no certificate block\n",
@@ -1039,7 +1039,7 @@ def test_bundle_context_refuses_a_bundle_without_a_ca_anchor(tmp_path, kind):
         "not-text": SYNTHETIC_CA.encode("ascii"),
         "non-ascii-comment": "# caf\u00e9 anchor\n" + SYNTHETIC_CA,
     }
-    bundle = leaf_certificate(tmp_path) if kind == "leaf-only" else bundles[kind]
+    bundle = bundles[kind]
     with pytest.raises(broker.BrokerError, match="^registry (trust bundle|credential boundary)$"):
         broker.bundle_context(bundle)
 
@@ -1068,3 +1068,9 @@ def test_disconnected_monitoring_and_ingress_pull_set_has_no_public_egress(tmp_p
             value.path("GET", "/v2/public/foreign/manifests/sha256:" + "f" * 64)
         assert len(connections.calls) == 1
         assert PASSWORD.encode() not in output.getvalue() and TOKEN.encode() not in output.getvalue()
+
+
+def test_bundle_context_accepts_a_directly_trusted_server_certificate(tmp_path):
+    context = broker.bundle_context(leaf_certificate(tmp_path))
+    assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
+    assert context.cert_store_stats()["x509"] == 1

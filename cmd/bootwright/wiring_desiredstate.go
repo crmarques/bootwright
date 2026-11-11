@@ -32,6 +32,9 @@ func wireCompiler() compilation.Compiler { return wireCompilerWithRegistry(addon
 
 func wireCompilerWithRegistry(registry addons.Registry) compilation.Compiler {
 	members := clusterMembers()
+	trustAdmission := func(o api.Object, c api.Catalog) []api.Issue {
+		return secrets.ValidateTrust(o, c, substrate.ClientTLSExceptions)
+	}
 	attachments := func(catalog api.Catalog) []addons.Attachment { return addons.StorageAttachments(catalog, registry) }
 	selection := compilation.NewGraphSelector(attachments, func(catalog api.Catalog, attachments []environment.Attachment) environment.Selection {
 		return environment.Select(catalog, attachments, members)
@@ -43,6 +46,7 @@ func wireCompilerWithRegistry(registry addons.Registry) compilation.Compiler {
 			normalized, issues := secrets.Normalize(o, c)
 			return secrets.DeriveCertificateNames(normalized, c, infrastructureservices.CertificateNames, substrate.CertificateNames), issues
 		}, ValidateAuthored: secrets.ValidateAuthored, ValidatePartial: secrets.ValidatePartial, Validate: secrets.Validate},
+		compilation.Rules{ValidateAuthored: trustAdmission, ValidatePartial: trustAdmission, Validate: trustAdmission},
 		compilation.Rules{Normalize: func(o api.Object, c api.Catalog) (api.Object, []api.Issue) {
 			normalized, issues := addons.Normalize(o, c)
 			normalized, packageIssues := addons.NormalizePackages(normalized, registry)

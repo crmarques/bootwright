@@ -48,9 +48,18 @@ options:
     description: Whether the controller's own transport is verified.
     type: bool
     default: true
+  verification:
+    description:
+      - Client TLS policy; V(certificate) requires the exact declared server certificate without matching its name.
+      - O(verify) must agree; V(none) requires O(verify=false) and no O(ca_data).
+    type: str
+    choices:
+      - full
+      - certificate
+      - none
   ca_data:
     description:
-      - PEM CA certificates that are the only anchors the controller's own
+      - Public PEM CA or server certificates that are the only anchors the controller's own
         transport is verified against.
       - Empty verifies against the system trust store. Refused beside I(verify=false).
     type: str
@@ -108,6 +117,7 @@ def main():
             "password": {"type": "str", "required": True, "no_log": True},
             "verify": {"type": "bool", "default": True},
             "ca_data": {"type": "str", "default": ""},
+            "verification": {"type": "str", "choices": ["full", "certificate", "none"]},
             "media": {"type": "bool", "default": False},
         },
         supports_check_mode=True,
@@ -115,7 +125,7 @@ def main():
     params = module.params
     try:
         client = redfish_control.Client(params["endpoint"], params["user"], params["password"],
-                                        verify=bool(params["verify"]), ca_data=params["ca_data"] or "")
+                                        verify=bool(params["verify"]), ca_data=params["ca_data"] or "", verification=params.get("verification") or "")
         power, media = read(client, bool(params["media"]))
     except redfish_control.ControllerError as failure:
         module.fail_json(msg="the management controller could not be read: %s" % failure)

@@ -366,7 +366,7 @@ not pin, a declared `spec.dependencyVersions` override or the OKD clients,
 refuses at plan ([refusal table](#refusal-table)). `bootwright render acquisitions`
 names each file the mirror must hold.
 
-`spec.mirror.artifacts.trustBundleRef`, optional, names a `caBundle`
+`spec.mirror.artifacts.trustBundleRef`, optional, names a `caBundle` or `trustBundle`
 [Secret](secrets.md), a [trust anchor](../secrets.md#immutable-binding-and-contexts) whose certificates verify the mirror beside the system
 trust store, as the image mirror Registry's `trustBundleRef` adds to it, so a
 mirror whose certificate an enterprise authority issued needs no change to
@@ -376,6 +376,10 @@ Secret's name is frozen into the controller stage's request; its certificate
 is lent to the attempt that downloads, as a private file the run removes
 after it, and to the preflight probe, and no record or evidence holds it.
 Without it the mirror verifies against the system trust store alone.
+
+Mirror artifact `tlsVerification` is an optional sibling of `trustBundleRef`,
+defaulting to `full`. Other modes refuse under
+[client TLS trust](../secrets.md#client-tls-trust).
 
 Before the stage runs, [`preflight`](../cli/output.md#preflight) reads the
 size of each file the stage would read from the mirror, with no body: an

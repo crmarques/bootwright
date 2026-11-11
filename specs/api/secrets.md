@@ -23,7 +23,7 @@ validation and built-in defaults.
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
-| `type` | string | yes | — | `opaque`, `token`, `usernamePassword`, `dockerConfigJson`, `caBundle`, `tlsCertificate`, or `sshKeyPair`. |
+| `type` | string | yes | — | `opaque`, `token`, `usernamePassword`, `dockerConfigJson`, `caBundle`, `trustBundle`, `tlsCertificate`, or `sshKeyPair`. |
 | `source` | object | no | `contextStore` | Closed source union described below. |
 
 The type is explicit; Bootwright never infers it from a consumer or source.
@@ -100,6 +100,14 @@ stable retry binding.
 The [runtime Secrets contract](../secrets.md) owns implementation selection,
 acquisition, encrypted custody and immutable bindings.
 
+### Verification trust material
+
+`type: trustBundle` is contextStore-only and takes `secret set --certificate-file`.
+It holds CA and/or server certificates without private keys. Its
+[validation and client policy](../secrets.md#client-tls-trust) differ from CA
+issuance and from a `tlsCertificate` serving identity. A leaf without a matching
+hostname/IP requires the consuming connection's explicit certificate identity.
+
 ## Entitlement
 
 `Entitlement` declares named vendor-controlled access for one product. Its
@@ -150,12 +158,11 @@ or storage-cluster field.
 An external RHSM arm may contain only `management: external`.
 `organizationRef`, `activationKeyRef` and `satellite` are rejected there.
 
-`satellite` contains `hostname`, `trustBundleRef`, `contentBaseURL`,
+`satellite` contains `hostname`, `trustBundleRef`, `tlsVerification`, `contentBaseURL`,
 `contentView`, then `lifecycleEnvironment`.
 `hostname` is required when the block is present, names the Satellite or a
 Capsule, and is a bare host with no scheme, path, whitespace, or surrounding
-whitespace. `trustBundleRef` names a `caBundle` Secret holding the CA that
-signs that server's certificate, such as the Satellite's
+whitespace. `trustBundleRef` names a `caBundle` or `trustBundle` Secret holding CA signing anchors for that server's certificate, such as the Satellite's
 `katello-server-ca.crt`, a trust anchor; on a `redhatRhel` Entitlement
 it is required whenever `satellite` is present. `contentBaseURL` is the content
 root rhsm appends every repository path to (`rhsm.baseurl`); omission derives
@@ -192,15 +199,24 @@ reaches that server over its declared CA bundle
 ([registration](../managed-os.md#registration)), which never connects the
 Machine to Insights.
 
+The native Satellite registration client requires CA anchors, including when
+the material is held by a `trustBundle`. A directly trusted server leaf
+refuses before the worker runs.
+
+Satellite `tlsVerification` is an optional sibling of `trustBundleRef`,
+defaulting to `full`; its native registration consumer refuses `certificate`
+and `none` under [client TLS trust](../secrets.md#client-tls-trust).
+
 ### Registry and license
 
-`registry` contains `url`, `credentialsRef`, then `trustBundleRef`:
+`registry` contains `url`, `credentialsRef`, `trustBundleRef`, then `tlsVerification`:
 
 | Field | Type | Required | Default | Rule |
 | --- | --- | --- | --- | --- |
 | `url` | string | no | `registry.redhat.io` for `redhatCeph`; `cp.icr.io/cp` for `ibmStorageCeph` | Scheme-less `host[:port][/namespace]`. |
 | `credentialsRef` | string | conditional | — | Required for `redhatCeph` and `ibmStorageCeph`; `usernamePassword` registry credential Secret. Access credential: the registry login, which cephadm also retains [native-side](../secrets.md#native-side-retention). |
-| `trustBundleRef` | string | no | — | `caBundle` Secret. When set, it is the only TLS anchor that Ceph image resolution and the guest pull broker use for this registry, for the Ceph image and every auxiliary image; without it they verify against the host trust store ([storage](../ceph.md#bootstrap-identity-and-continuation)). Trust anchor. |
+| `trustBundleRef` | string | no | — | `caBundle` or `trustBundle` Secret. When set, it is the only TLS anchor that Ceph image resolution and the guest pull broker use for this registry, for the Ceph image and every auxiliary image; without it they verify against the host trust store ([storage](../ceph.md#bootstrap-identity-and-continuation)). Trust anchor. |
+| `tlsVerification` | string | no | `full` | [Client TLS policy](../secrets.md#client-tls-trust); this registry consumer currently refuses `certificate` and `none`. |
 
 A registry address contains no scheme, inline credentials, query, fragment,
 whitespace, leading or trailing slash, empty path segment, `.` segment, or

@@ -266,7 +266,7 @@ def test_the_managed_os_hands_its_proof_the_pin_or_nothing(tmp_path):
             ({"pinnedUUIDBase64": encoded(UUID), "pinnedSerialBase64": encoded(SERIAL)}, (encoded(UUID), encoded(SERIAL))),
             ({}, ("", ""))):
         rendering = Templar(loader=LOADER, variables=managed_os(tmp_path, pins, DECLARED))
-        assert tuple(rendering.template(arguments[name]) for name in ("pinned_uuid_base64", "pinned_serial_base64")) == want
+        assert tuple(rendering.template(arguments)[name] for name in ("pinned_uuid_base64", "pinned_serial_base64")) == want
 
 
 # The repeated proof names what it lacks from the declaration and the client's

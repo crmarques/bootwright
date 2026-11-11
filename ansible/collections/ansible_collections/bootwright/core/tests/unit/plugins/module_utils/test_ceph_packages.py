@@ -358,6 +358,7 @@ def test_acquisition_never_uses_proxy_redirect_or_unverified_tls(package_request
         return SimpleNamespace()
 
     monkeypatch.setattr(sources.ssl, "create_default_context", context)
+    monkeypatch.setattr(sources.tls_trust, "context", lambda certificate: (sources.ssl.create_default_context(cadata=certificate), None))
     monkeypatch.setattr(sources.urllib.request, "build_opener", lambda *handlers: openers.append(handlers) or SimpleNamespace())
     sources.Acquisition(package_request["packages"]["sources"][0], "public-certificate", repository=sources.IBM_BASE, repository_key=sources.IBM_KEY)
     assert contexts == [{"cadata": "public-certificate"}, {}]
@@ -374,6 +375,7 @@ def recording_openers(monkeypatch):
         return SimpleNamespace(minimum_version=None)
 
     monkeypatch.setattr(sources.ssl, "create_default_context", context)
+    monkeypatch.setattr(sources.tls_trust, "context", lambda certificate: (sources.ssl.create_default_context(cadata=certificate), None))
     monkeypatch.setattr(sources.urllib.request, "build_opener", lambda *handlers: openers.append(handlers) or SimpleNamespace(handlers=handlers))
     return contexts, openers
 

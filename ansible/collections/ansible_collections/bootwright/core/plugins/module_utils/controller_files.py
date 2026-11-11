@@ -20,6 +20,7 @@ import tarfile
 import time
 import urllib.parse
 
+from ansible_collections.bootwright.core.plugins.module_utils import tls_trust
 from ansible_collections.bootwright.core.plugins.module_utils.canonical_json import canonical
 
 MAX_SOURCE = 1 << 30
@@ -312,10 +313,11 @@ def trusted_roots(anchor=()):
     blocks = CERTIFICATE.findall(data)
     if not blocks or len(blocks) > MAX_TRUSTED_ROOTS:
         raise Refused("system TLS trust")
-    blocks += list(anchor)
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     try:
+        if anchor:
+            tls_trust.load_anchors(context, "\n".join(block.decode("ascii") for block in anchor))
         context.load_verify_locations(
             cadata="\n".join(block.decode("ascii") for block in blocks) + "\n"
         )

@@ -45,7 +45,8 @@ spec:
         credentialsRef: lab-bmc-credentials
         tls:
           verify: true
-          trustBundleRef: lab-bmc-ca
+          trustBundleRef: physical-01-bmc-trust
+          verification: certificate
         virtualMedia:
           tls:
             trust: importCertificate
@@ -491,6 +492,15 @@ metadata:
   name: openshift-pull-secret
 spec:
   type: dockerConfigJson
+  source:
+    contextStore: {}
+---
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: physical-01-bmc-trust
+spec:
+  type: trustBundle
   source:
     contextStore: {}
 ---

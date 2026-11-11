@@ -384,7 +384,7 @@ def test_tls_roots_are_held_explicit_and_ignore_ambient_ssl_paths(monkeypatch):
             calls.append(options)
 
         def cert_store_stats(self):
-            return {"x509_ca": 1}
+            return {"x509_ca": 1, "x509": 1}
 
     class Handle:
         def read(self, maximum):
@@ -1035,13 +1035,15 @@ def test_resolution_trusts_only_the_bound_bundle_when_declared(tmp_path, monkeyp
             calls.append(options)
 
         def cert_store_stats(self):
-            return {"x509_ca": 1}
+            return {"x509_ca": 1, "x509": 1}
 
     with monkeypatch.context() as patch:
         patch.setattr(discovery.ssl, "SSLContext", Context)
         with discovery.bundle_proof(bundle):
             pass
-    assert calls == [ssl.PROTOCOL_TLS_CLIENT, {"cadata": SYNTHETIC_BLOCK}]
+    loaded = [call for call in calls if isinstance(call, dict)]
+    assert loaded and all(set(call) == {"cadata"} and call["cadata"].strip() == SYNTHETIC_BLOCK.strip() for call in loaded)
+    assert all(call == ssl.PROTOCOL_TLS_CLIENT or isinstance(call, dict) for call in calls)
     monkeypatch.setattr(discovery, "tls_proof", lambda *args: pytest.fail("host trust store with a bound bundle"))
     contexts, client = [], Client()
     monkeypatch.setattr(discovery, "Registry", lambda context, request: contexts.append(context) or client)

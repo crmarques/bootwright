@@ -154,6 +154,14 @@ func satelliteBundle(execution lifecycle.Execution, request Request) error {
 			"replace "+secret+" with the PEM certificates of the CA that signs the certificate of "+satellite.Hostname+
 				", such as the Satellite's katello-server-ca.crt, then run bootwright apply --context "+execution.Context+" again")
 	}
+	certificates, _ := secrets.CertificateBundle(value)
+	for _, certificate := range certificates {
+		if !certificate.IsCA {
+			return refusal("api.value", "Satellite registration requires CA anchors; directly trusted server certificates are not supported by its native registration client",
+				"set Secret/"+satellite.TrustBundleRef+" to the CA signing certificates of "+satellite.Hostname+" before repeating apply")
+		}
+	}
+
 	return nil
 }
 

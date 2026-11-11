@@ -1,5 +1,5 @@
-enum: api.value 6:9 [Secret/probe] ($.spec.type) value is not one of the permitted choices: opaque, token, usernamePassword, dockerConfigJson, caBundle, tlsCertificate, sshKeyPair; next: use one of the permitted values
-case-only enum: api.value 6:9 [Secret/probe] ($.spec.type) value is not one of the permitted choices: opaque, token, usernamePassword, dockerConfigJson, caBundle, tlsCertificate, sshKeyPair; next: use sshKeyPair (values are case-sensitive)
+enum: api.value 6:9 [Secret/probe] ($.spec.type) value is not one of the permitted choices: opaque, token, usernamePassword, dockerConfigJson, caBundle, trustBundle, tlsCertificate, sshKeyPair; next: use one of the permitted values
+case-only enum: api.value 6:9 [Secret/probe] ($.spec.type) value is not one of the permitted choices: opaque, token, usernamePassword, dockerConfigJson, caBundle, trustBundle, tlsCertificate, sshKeyPair; next: use sshKeyPair (values are case-sensitive)
 range: api.value 7:31 [Secret/probe] ($.spec.source.generated.bytes) number must be between 16 and 1024; next: use a value in that range
 quoted integer: api.type 7:31 [Secret/probe] ($.spec.source.generated.bytes) expected integer, found string; a quoted value is a string; next: remove the quotes
 quoted boolean: api.type 5:18 [Machine/probe] ($.spec.os.provided) expected boolean, found string; a quoted value is a string; next: remove the quotes

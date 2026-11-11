@@ -1,6 +1,6 @@
 implementation: machine-baremetal-v1
-content-digest: 6e57381a45700b2ebe2c119278761057eea0347af980ff6f84c5b759b3e43ed8
-request-version: machine-baremetal-v1
+content-digest: dabbd5551b8fca30542db587e6de89f307edf83a3dd6493338a37f87cd55a829
+request-version: machine-baremetal-v2
 automation-formats: none
 mark-formats: none
 proof-ids: none
@@ -18,6 +18,7 @@ request-schema:
   controller struct baremetal.Controller
   controller.credentialsRef string
   controller.endpoint string
+  controller.tlsVerification string omitempty
   controller.tlsVerify bool
   controller.trustBundleRef string omitempty
   hardware []struct baremetal.Interface

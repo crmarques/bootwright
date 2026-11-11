@@ -1,0 +1,10 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: physical-01-bmc-trust
+
+spec:
+  type: trustBundle
+
+  source:
+    contextStore: {}

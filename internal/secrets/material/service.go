@@ -155,6 +155,12 @@ func (s *Service) Validate(ctx context.Context, declaration secrets.Declaration,
 		} else {
 			err = dockerConfig(parts[secrets.ValuePart])
 		}
+	case "trustBundle":
+		if declaration.Source == "generated" {
+			err = failure("source", "declared secret type does not permit generation", "")
+		} else {
+			err = validateTrust(parts[secrets.CertificatePart], s.now())
+		}
 	case "caBundle":
 		if declaration.Source == "generated" {
 			err = s.validateGeneratedCertificate(declaration, parts[secrets.CertificatePart], parts[secrets.PrivateKeyPart])
@@ -354,7 +360,7 @@ func acquisition(declaration secrets.Declaration, input secrets.Input) ([]fileRe
 	case "usernamePassword":
 		one(input.PasswordFile, secrets.PasswordPart, transportOptionalFinalLF)
 		literal[secrets.UsernamePart] = []byte(input.Username)
-	case "caBundle":
+	case "caBundle", "trustBundle":
 		requests = append(requests, fileRequest{Part: secrets.CertificatePart, Path: input.CertificateFile})
 	case "tlsCertificate":
 		requests = append(requests, fileRequest{Part: secrets.CertificatePart, Path: input.CertificateFile}, fileRequest{Part: secrets.PrivateKeyPart, Path: input.PrivateKeyFile})

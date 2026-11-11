@@ -104,7 +104,7 @@ func TestAnEmulatedControllerIsReachedFromItsProviderHost(t *testing.T) {
 	if request.Placement.Machine != "host" || request.Placement.Local() {
 		t.Fatalf("placement = %+v", request.Placement)
 	}
-	if request.Verb != Stop || request.Force || request.Version != Implementation {
+	if request.Verb != Stop || request.Force || request.Version != RequestVersion {
 		t.Fatalf("request = %+v", request)
 	}
 	if canonical, err := request.Canonical(); err != nil || strings.Contains(string(canonical), "bmc-password") {

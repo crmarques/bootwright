@@ -22,7 +22,7 @@ func shapeOf(kind string) (inputShape, bool) {
 		return inputShape{ValueFileInput | ValueStdinInput, "--value-file <path> or --value-stdin", "--value-file <path>"}, true
 	case "usernamePassword":
 		return inputShape{UsernameInput | PasswordFileInput | PasswordStdinInput, "--username <username> with --password-file <path> or --password-stdin", "--username <username> --password-file <path>"}, true
-	case "caBundle":
+	case "caBundle", "trustBundle":
 		return inputShape{CertificateFileInput, "--certificate-file <path>", "--certificate-file <path>"}, true
 	case "tlsCertificate":
 		flags := "--certificate-file <path> --private-key-file <path>"
@@ -51,7 +51,7 @@ func ValidInput(kind string, input Input) bool {
 		return value && noPassword && noKeys
 	case "usernamePassword":
 		return password && input.Username != "" && noValue && noKeys
-	case "caBundle":
+	case "caBundle", "trustBundle":
 		return input.CertificateFile != "" && input.PrivateKeyFile == "" && input.PublicKeyFile == "" && noValue && noPassword
 	case "tlsCertificate":
 		return input.CertificateFile != "" && input.PrivateKeyFile != "" && input.PublicKeyFile == "" && noValue && noPassword

@@ -15,7 +15,7 @@ line naming what was being done, where and the status, never a body or the
 credential. Its one subclass, UnverifiedCertificate, is a controller whose
 certificate the declared trust refuses, which is never read as no answer.
 
-The controller's own transport is verified against the declared CA bundle
+The controller's own transport is verified against the declared public trust bundle
 alone when one is given, against the system trust store otherwise, and not at
 all only when verification is declared off. The leg on which the controller
 fetches media from the artifact server is set on the discovered device around
@@ -37,7 +37,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
-from ansible_collections.bootwright.core.plugins.module_utils import redfish_discovery, redfish_remote_ca, transport_faults
+from ansible_collections.bootwright.core.plugins.module_utils import redfish_discovery, redfish_remote_ca, transport_faults, tls_trust
 
 MAX_BODY = 1 << 20
 REQUEST_TIMEOUT = 30
@@ -134,17 +134,12 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise urllib.error.HTTPError(req.full_url, code, "redirect refused", headers, fp)
 
 
-def _trust_context(verify, ca_data):
-    """The TLS context a controller is reached with, or None for urllib's own.
-
-    A declared bundle is the only anchor: create_default_context loads the
-    cadata it is given and, given some, never the system store, while keeping
-    CERT_REQUIRED and the hostname check. No bundle leaves urllib's default,
-    which verifies against the system store, and verification turned off is
-    the one context that verifies nothing. A bundle beside verification turned
-    off, and one ssl cannot load, are refused here rather than read as a
-    controller that did not answer.
-    """
+def _trust_context(verify, ca_data, verification=""):
+    """A declared bundle is the sole anchor; exceptions are endpoint scoped."""
+    if verification not in ("", "full", "certificate", "none"):
+        raise ControllerError("unsupported BMC TLS verification")
+    if verification and verify != (verification != "none"):
+        raise ControllerError("BMC TLS verification settings disagree")
     if ca_data and not verify:
         raise ControllerError("a BMC trust bundle requires verification, and verification is off")
     if not verify:
@@ -152,15 +147,17 @@ def _trust_context(verify, ca_data):
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
         return context
+    if verification == "certificate" and not ca_data:
+        raise ControllerError("certificate verification requires a server certificate trust bundle")
     if not ca_data:
         return None
     try:
-        return ssl.create_default_context(cadata=ca_data)
+        return tls_trust.context(ca_data, verification or "full")[0]
     except (OSError, ValueError, TypeError) as refused:
-        raise ControllerError("the controller trust bundle cannot be loaded as PEM CA certificates") from refused
+        raise ControllerError("the controller trust bundle cannot be loaded for the selected TLS verification") from refused
 
 
-def _opener(verify=True, ca_data=""):
+def _opener(verify=True, ca_data="", verification=""):
     """An opener that reaches exactly one endpoint with exactly one trust.
 
     The empty proxy handler is load-bearing rather than tidiness: urllib reads
@@ -170,9 +167,13 @@ def _opener(verify=True, ca_data=""):
     urllib's own environment-reading handler from the chain.
     """
     handlers = [NoRedirect(), urllib.request.ProxyHandler({})]
-    context = _trust_context(verify, ca_data)
+    context = _trust_context(verify, ca_data, verification)
     if context is not None:
-        handlers.append(urllib.request.HTTPSHandler(context=context))
+        if verification == "certificate":
+            _context, certificate = tls_trust.context(ca_data, verification)
+            handlers.append(tls_trust.CertificateHandler(context, certificate))
+        else:
+            handlers.append(urllib.request.HTTPSHandler(context=context))
     return urllib.request.build_opener(*handlers)
 
 
@@ -219,10 +220,13 @@ class Client:
     reported, which is what an operation reports back.
     """
 
-    def __init__(self, endpoint, user, password, verify=True, ca_data=""):
+    def __init__(self, endpoint, user, password, verify=True, ca_data="", verification=""):
         self.endpoint = endpoint.rstrip("/")
         self.user, self.password, self.verify, self.ca_data = user, password, verify, ca_data or ""
-        _trust_context(self.verify, self.ca_data)
+        if verification == "certificate" and urlsplit(self.endpoint).scheme != "https":
+            raise ControllerError("certificate verification requires an HTTPS controller endpoint")
+        self.verification = verification
+        _trust_context(self.verify, self.ca_data, verification)
         self.home = _authority(self.endpoint)
         self.root = redfish_discovery.service_root(self.endpoint) if self.home else ""
         self.sleep, self.clock = time.sleep, time.monotonic
@@ -255,7 +259,7 @@ class Client:
         if method != "GET":
             self._system = self._member = None
         try:
-            with _opener(self.verify, self.ca_data).open(
+            with (_opener(self.verify, self.ca_data, self.verification) if self.verification else _opener(self.verify, self.ca_data)).open(
                     self._request(url, method, payload, headers), timeout=timeout) as answer:
                 return answer.status, _body(answer.read(MAX_BODY + 1), method), _lowered(answer.headers)
         except urllib.error.HTTPError as refused:

@@ -20,7 +20,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, native_signatures, transport_faults
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, native_signatures, transport_faults, tls_trust
 
 IBM_BASE = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64"
 IBM_KEY = "https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH"
@@ -208,7 +208,7 @@ class Acquisition:
         self.deadline = time.monotonic() + budget
         self.total = 0
         self.expanded = 0
-        local = ssl.create_default_context(cadata=certificate)
+        local, _certificate = tls_trust.context(certificate)
         local.minimum_version = ssl.TLSVersion.TLSv1_2
         self.local = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect(), urllib.request.HTTPSHandler(context=local))
         public = ssl.create_default_context()
@@ -221,7 +221,7 @@ class Acquisition:
             return
         ceph_native.require(isinstance(trust, str) and 0 < len(trust.encode()) <= 1 << 20 and ceph_native.named(trust_ref), "material")
         try:
-            bundle = ssl.create_default_context(cadata=trust)
+            bundle, _certificate = tls_trust.context(trust)
         except (ssl.SSLError, ValueError, TypeError):
             raise ceph_native.Refusal("material") from None
         bundle.minimum_version = ssl.TLSVersion.TLSv1_2

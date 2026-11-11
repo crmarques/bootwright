@@ -49,7 +49,7 @@ var bindingSlots = []BindingSlot{
 	{ServiceType: "oauth2-proxy", Path: "/spec/cookie_secret", SecretTypes: valueSecretTypes, Part: secrets.ValuePart, Required: &BindingRule{Holds: always, Message: "oauth2-proxy needs the /spec/cookie_secret binding, so continuation never depends on a secret cephadm generated"}},
 	{ServiceType: "oauth2-proxy", Path: "/spec/ssl_cert", SecretTypes: []string{"tlsCertificate"}, Part: secrets.CertificatePart, Pair: "/spec/ssl_key"},
 	{ServiceType: "oauth2-proxy", Path: "/spec/ssl_key", SecretTypes: []string{"tlsCertificate"}, Part: secrets.PrivateKeyPart, Pair: "/spec/ssl_cert"},
-	{ServiceType: "oauth2-proxy", Path: "/custom_configs/0/content", SecretTypes: []string{"caBundle"}, Part: secrets.CertificatePart,
+	{ServiceType: "oauth2-proxy", Path: "/custom_configs/0/content", SecretTypes: []string{"caBundle", "trustBundle"}, Part: secrets.CertificatePart,
 		Required: &BindingRule{OnService: oauth2ProxyCAMounted, Field: "custom_configs", Message: "an oauth2-proxy custom_configs entry needs its identity provider's CA bundle bound at /custom_configs/0/content"},
 		Allowed:  &BindingRule{OnService: oauth2ProxyCAMounted, Message: "/custom_configs/0/content is read only with the oauth2-proxy custom_configs entry for the identity provider's CA bundle", Remedy: "declare custom_configs with mount_path /etc/pki/tls/certs/oauth2-proxy-idp-ca.pem on this oauth2-proxy service, or remove this binding"}},
 }

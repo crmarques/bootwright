@@ -36,7 +36,7 @@ def port(target, material):
     arguments = loaded[0]["vars"]["bootwright_machine_port"]
     variables = {"machine_power_read_target": target, "bootwright_machine_power_read_material": material}
     rendering = Templar(loader=LOADER, variables=variables)
-    return {key: rendering.template(arguments[key]) for key in ("user", "pinned_uuid_base64", "pinned_serial_base64")}
+    return {key: rendering.template(arguments)[key] for key in ("user", "pinned_uuid_base64", "pinned_serial_base64")}
 
 
 def target(index, pinned=True):

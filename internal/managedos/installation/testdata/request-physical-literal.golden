@@ -83,6 +83,7 @@
     "controller": {
       "credentialsRef": "lab-bmc-credentials",
       "endpoint": "https://bmc-01.lab.example.test/redfish/v1/Systems/1",
+      "tlsVerification": "certificate",
       "tlsVerify": true,
       "trustBundleRef": "lab-bmc-ca",
       "virtualMedia": {
@@ -144,5 +145,5 @@
   },
   "tlsCertificateRef": "lab-artifacts-tls",
   "user": "bootwright",
-  "version": "os-install-anaconda-v2"
+  "version": "os-install-anaconda-v3"
 }

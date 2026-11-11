@@ -19,13 +19,14 @@
       {{ containercluster_install_agent_port_access
          | combine(containercluster_install_agent_node_pin if containercluster_install_agent_node.portPinned | default(false) else {})
          | combine(containercluster_install_agent_port_arguments[containercluster_install_agent_port_operation]) }}
-    containercluster_install_agent_port_access:
-      endpoint: '{{ containercluster_install_agent_node.controller.endpoint }}'
-      user: '{{ containercluster_install_agent_user }}'
-      password: '{{ containercluster_install_agent_password }}'
-      ca: '{{ containercluster_install_agent_ca }}'
-      verify: '{{ containercluster_install_agent_node.controller.tlsVerify }}'
-
+    containercluster_install_agent_port_access: >-
+      {{ {'endpoint': (containercluster_install_agent_node.controller.endpoint),
+          'user': (containercluster_install_agent_user),
+          'password': (containercluster_install_agent_password),
+          'ca': (containercluster_install_agent_ca),
+          'verify': (containercluster_install_agent_node.controller.tlsVerify)}
+         | combine({'verification': containercluster_install_agent_node.controller.tlsVerification | default('')}
+                   if (containercluster_install_agent_node.controller.tlsVerification | default('')) | length > 0 else {}) }}
     containercluster_install_agent_port_arguments:
       state_read: >-
         {{ {'media': true, 'media_identity': bootwright_cluster_install_request.imageIdentity}

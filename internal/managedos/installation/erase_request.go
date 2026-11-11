@@ -16,7 +16,7 @@ import (
 )
 
 const EraseImplementation = "physical-erase-v1"
-const eraseRequestVersion = "physical-erase-v3"
+const eraseRequestVersion = "physical-erase-v4"
 const eraseVariable = "bootwright_physical_erase"
 
 const (

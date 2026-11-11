@@ -16,8 +16,8 @@ EJECT_SECONDS = 300
 
 
 class Client(redfish_control.Client):
-    def __init__(self, endpoint, user, password, ca_data, deadline, clock=time.monotonic, pause=time.sleep):
-        super().__init__(endpoint, user, password, verify=True, ca_data=ca_data)
+    def __init__(self, endpoint, user, password, ca_data, deadline, clock=time.monotonic, pause=time.sleep, verification=""):
+        super().__init__(endpoint, user, password, verify=True, ca_data=ca_data, verification=verification)
         self.deadline, self.clock, self.pause = deadline, clock, pause
         self.sleep = self.bounded_sleep
 

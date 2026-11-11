@@ -24,7 +24,13 @@ is claimed. The accepted [lab-sno](../lab-sno/) and
 - Each server must meet the actual release's CPU, memory and disk
   requirements. The controller needs at least 4 vCPU, 16 GiB memory and 100 GiB
   free storage for tools and artifacts.
-- Bind `lab-bmc-credentials` and `lab-bmc-ca` through context Secrets. BMC
+- Bind `lab-bmc-credentials` and `lab-bmc-ca` through context Secrets.
+  `physical-01` additionally binds `physical-01-bmc-trust`, a public
+  `trustBundle` holding its exact server certificate; `tls.verification:
+  certificate` accepts that certificate even without a matching hostname/IP.
+  The remaining BMCs use full CA and name verification. See
+  [client TLS trust](../../../specs/secrets.md#client-tls-trust).
+  BMC
   transport and virtual-media delivery must verify TLS; keep the default
   certificate-import policy or prove established trust.
 - The controller must reach every installation address and BMC, and every BMC
@@ -38,3 +44,9 @@ is claimed. The accepted [lab-sno](../lab-sno/) and
   ([D224](../../../specs/milestones/backlog.md#d224)). Removal ejects media and deletes
   Bootwright-owned delivery state but retains the operating system and data on
   the disks.
+
+For a connection that intentionally skips certificate checks, set
+`substrate.baremetal.bmc.tls.verification: none` on that Machine and author no
+`trustBundleRef`. This is the per-connection YAML setting; it is available for
+claims and power operations. This installation profile's private delivery and
+logical-root/erase proofs require verified BMC identity and refuse that mode.

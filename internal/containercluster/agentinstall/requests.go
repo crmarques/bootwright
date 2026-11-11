@@ -45,12 +45,13 @@ type Tool struct {
 // Controller is the management controller one node is booted through, and the
 // trust each of its two transport legs carries. No material is named here.
 type Controller struct {
-	CredentialsRef string       `json:"credentialsRef"`
-	Endpoint       string       `json:"endpoint"`
-	HostCluster    string       `json:"hostCluster,omitempty"`
-	TLSVerify      bool         `json:"tlsVerify"`
-	TrustBundleRef string       `json:"trustBundleRef,omitempty"`
-	VirtualMedia   VirtualMedia `json:"virtualMedia"`
+	CredentialsRef  string       `json:"credentialsRef"`
+	Endpoint        string       `json:"endpoint"`
+	HostCluster     string       `json:"hostCluster,omitempty"`
+	TLSVerification string       `json:"tlsVerification,omitempty"`
+	TLSVerify       bool         `json:"tlsVerify"`
+	TrustBundleRef  string       `json:"trustBundleRef,omitempty"`
+	VirtualMedia    VirtualMedia `json:"virtualMedia"`
 }
 
 // VirtualMedia is how the controller is made to trust the artifact server it

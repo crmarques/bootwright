@@ -17,7 +17,7 @@ REQUEST = {
     "identity": {"block": "machine-server", "context": "example", "object": "server"},
     "placement": {"connection": "local", "machine": "controller"},
     "provider": "floor",
-    "version": "machine-baremetal-v1",
+    "version": "machine-baremetal-v2",
 }
 
 

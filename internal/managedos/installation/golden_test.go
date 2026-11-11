@@ -136,7 +136,7 @@ func TestAPhysicalLiteralRequestReadsBackFromItsGolden(t *testing.T) {
 			Channel: substrate.ChannelDeliveredKey,
 			Controller: Controller{
 				CredentialsRef: "lab-bmc-credentials", Endpoint: "https://bmc-01.lab.example.test/redfish/v1/Systems/1",
-				TLSVerify: true, TrustBundleRef: "lab-bmc-ca",
+				TLSVerify: true, TrustBundleRef: "lab-bmc-ca", TLSVerification: "certificate",
 				VirtualMedia: VirtualMedia{RemoveCertificate: true, Trust: substrate.TrustImportCertificate},
 			},
 			Hardware: &Hardware{ClearOnInstall: []ClearTarget{clearTarget("5000000000000001", "SYNTHETIC-CEPH-01", 2000398934016)},

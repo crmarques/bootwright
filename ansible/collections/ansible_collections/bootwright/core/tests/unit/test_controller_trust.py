@@ -103,6 +103,8 @@ def test_every_redfish_call_passes_the_controller_bundle(role):
     missing = ["%s: %s" % (name, task.get("name")) for name, _module, arguments, task in found if "ca_data" not in arguments]
     assert not missing, "tasks reaching a controller without its bundle:\n" + "\n".join(missing)
     assert len(found) == BUNDLED[role]
+    if role == "substrate_baremetal_machine":
+        assert all("verification" in arguments for _name, _module, arguments, _task in found)
 
 
 # Each lifecycle role renders the bundle's PEM from the material file the
@@ -135,11 +137,12 @@ def test_each_read_target_reads_its_own_bundle(lookups, tmp_path):
     [port] = [task["vars"]["bootwright_machine_port"] for task in walk(loaded(ROLES / "machine_power_read" / "tasks" / "read_one.yml"))
               if "ansible.builtin.include_role" in task]
     first, second = tmp_path / "bmc-ca-0", tmp_path / "bmc-ca-1"
-    material = {"controllerCA0": str(first), "controllerCA2": str(second)}
+    material = {"controllerCA0": str(first), "controllerCA2": str(second), "controllerUser": "/run/user"}
     for target, expected in (({"caVariable": "controllerCA0"}, str(first)), ({"caVariable": "controllerCA2"}, str(second)),
                              ({}, "")):
+        target = dict(target, userVariable="controllerUser", controller={"endpoint": "https://bmc.example.test", "tlsVerify": True})
         variables = {"bootwright_machine_power_read_material": material, "machine_power_read_target": target}
-        assert Templar(loader=LOADER, variables=variables).template(port["ca"]) == expected
+        assert Templar(loader=LOADER, variables=variables).template(port)["ca"] == expected
 
 
 # Every include of the bare-metal port hands it the path of the controller's

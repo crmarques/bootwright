@@ -62,7 +62,7 @@ func TestAForeignRequestVersionRefuses(t *testing.T) {
 // and even its destroy, run only on the build that registered it.
 func TestAnInstallRequestOfAnotherVersionRefuses(t *testing.T) {
 	_, install, _ := onlyRequests(t, singleNodeCatalog())
-	install.Version = "cluster-install-agent-v2"
+	install.Version = "cluster-install-agent-v1"
 	data, err := install.Canonical()
 	if err != nil {
 		t.Fatal(err)
@@ -233,9 +233,9 @@ func TestAMediaRequestOfAnotherVersionWithAnUndeclaredFieldRefusesByItsVersion(t
 
 func TestAnInstallRequestOfAnotherVersionWithAnUndeclaredFieldRefusesByItsVersion(t *testing.T) {
 	_, install, _ := onlyRequests(t, singleNodeCatalog())
-	install.Version = "cluster-install-agent-v2"
+	install.Version = "cluster-install-agent-v1"
 	_, err := DecodeInstallRequest(withAnUndeclaredField(t, install.Canonical))
-	expectVersionRefusal(t, err, "cluster install", "cluster-install-agent-v2")
+	expectVersionRefusal(t, err, "cluster install", "cluster-install-agent-v1")
 }
 
 func TestMediaAndInstallRequestsOfOtherVersionsRefuse(t *testing.T) {

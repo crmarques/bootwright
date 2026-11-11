@@ -176,7 +176,7 @@ func goldenCatalog(tls map[string]api.Value) api.Catalog {
 // it acts, so their exact bytes are pinned, and each golden reads back as
 // itself.
 func TestPowerRequestsMatchTheirGoldens(t *testing.T) {
-	bundled := map[string]api.Value{"metal": m("verify", true, "trustBundleRef", "metal-bmc-ca")}
+	bundled := map[string]api.Value{"metal": m("verify", true, "trustBundleRef", "metal-bmc-ca", "verification", "certificate")}
 	for name, catalog := range map[string]api.Catalog{
 		"request-power": goldenCatalog(nil), "request-power-bundle": goldenCatalog(bundled),
 	} {

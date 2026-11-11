@@ -25,6 +25,9 @@ func ValidatePartial(o api.Object, c api.Catalog) []api.Issue {
 	if network.Has("inline") && network.Has("overrides") {
 		issues = appendIssues(issues, invariant("$.spec.network.overrides", "inline configuration forbids reusable-template overrides", "remove network.overrides, or select a reusable configuration with network.configRef instead of network.inline"))
 	}
+	if mode := substrate.MachineBMC(o).Get("tls", "verification").Text(); mode != "" && mode != "full" {
+		issues = appendIssues(issues, invariant("$."+substrate.BMCPath+".tls.verification", "non-full TLS verification is per-Machine intent and never a kind default", "declare tls.verification on each Machine that needs it"))
+	}
 	issues = appendIssues(issues, validateDefaultMediaTrust(substrate.MachineBMC(o))...)
 	issues = appendIssues(issues, validateDefaultFirmware(o)...)
 	if o.Spec().Get("os", "provided").Bool() {

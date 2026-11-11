@@ -26,7 +26,7 @@ func dependencyVersions() *Shape {
 
 func artifactMirror() *Shape {
 	mirror := atomic(choice(field("url", lexical("artifact-mirror-url")), field("serverRef", ref(ArtifactServer))))
-	mirror.Fields = append(mirror.Fields, field("endpointRef", endpointOf("serverRef", ArtifactServer)), field("trustBundleRef", secret("caBundle")))
+	mirror.Fields = append(mirror.Fields, field("endpointRef", endpointOf("serverRef", ArtifactServer)), field("trustBundleRef", secret("caBundle", "trustBundle")), field("tlsVerification", tlsVerification()))
 	return mirror
 }
 

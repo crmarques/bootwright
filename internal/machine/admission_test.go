@@ -798,3 +798,24 @@ func TestPhysicalAgentSerialAndSizeRejectsAmbiguousDeclarations(t *testing.T) {
 		t.Fatalf("unrealizable exact agent size = %+v", issues)
 	}
 }
+
+// The new policy and legacy boolean both preserve Machine-local precedence.
+func TestBMCTLSVerificationPolicyPreservesLocalOverrides(t *testing.T) {
+	machine, catalog := withProviderBMC(m("credentialsRef", "bmc", "tls", m("verification", "full", "verify", true, "trustBundleRef", "metal-ca")))
+	for _, test := range []struct {
+		tls            api.Value
+		verify         bool
+		policy, bundle string
+	}{
+		{m("verify", false), false, "", ""},
+		{m("verification", "none"), false, "none", ""},
+		{m("verification", "certificate", "trustBundleRef", "node-trust"), true, "certificate", "node-trust"},
+	} {
+		local := machine.WithSpec(machine.Spec().WithPath(test.tls, "substrate", "baremetal", "bmc", "tls"))
+		normalized, _ := Normalize(local, catalog)
+		got := normalized.Spec().Get("substrate", "baremetal", "bmc", "tls")
+		if got.Get("verify").Bool() != test.verify || got.Get("verification").Text() != test.policy || got.Get("trustBundleRef").Text() != test.bundle {
+			t.Fatalf("local TLS override lost: %v", got)
+		}
+	}
+}

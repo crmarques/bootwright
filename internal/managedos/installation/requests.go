@@ -43,8 +43,9 @@ type Publication struct {
 // declaration whose credential answers it, and the trust each of its two
 // transport legs carries. No material is named here.
 type Controller struct {
-	CredentialsRef string `json:"credentialsRef"`
-	Endpoint       string `json:"endpoint"`
+	CredentialsRef  string `json:"credentialsRef"`
+	Endpoint        string `json:"endpoint"`
+	TLSVerification string `json:"tlsVerification,omitempty"`
 	// TLSVerify covers the controller's own transport, and TrustBundleRef,
 	// when set, names the one anchor it verifies against; VirtualMedia covers
 	// the separate leg on which it fetches what this block publishes.

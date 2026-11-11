@@ -10,8 +10,7 @@ const Implementation = "machine-power-v1"
 // for starting, stopping and restarting a Machine.
 const Operation = "power"
 
-// Variable prefixes the frozen request, its digest and its material paths in
-// the adapter's own variable space.
+// Variable prefixes a run's frozen request, digest and material paths.
 const Variable = "bootwright_machine_power"
 
 // The verbs a power request carries. Each converges the Machine to the power
@@ -33,4 +32,10 @@ const ReadImplementation = "machine-power-read-v1"
 const (
 	ReadOperation = "read"
 	ReadVariable  = "bootwright_machine_power_read"
+)
+
+// RequestVersion and ReadRequestVersion identify frozen command inputs.
+const (
+	RequestVersion     = "machine-power-v2"
+	ReadRequestVersion = "machine-power-read-v2"
 )

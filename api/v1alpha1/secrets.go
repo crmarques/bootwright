@@ -5,13 +5,13 @@ import "slices"
 func secretSchema() *Shape {
 	source := atomic(choice(field("contextStore", record()), field("generated", record(field("issuerRef", secret("caBundle")), field("username", nonempty()), field("commonName", nonempty()), field("dnsNames", array(dns())), field("ipAddresses", array(ip())), field("validityDays", integer("1", "36500")), field("keyType", enumeration("ed25519", "rsa", "ecdsaP256", "ecdsaP384", "ecdsaP521")), field("comment", text()), field("bytes", integer("16", "1024"))))))
 	source.AllowEmpty = true
-	return record(required("type", enumeration("opaque", "token", "usernamePassword", "dockerConfigJson", "caBundle", "tlsCertificate", "sshKeyPair")), field("source", source))
+	return record(required("type", enumeration("opaque", "token", "usernamePassword", "dockerConfigJson", "caBundle", "trustBundle", "tlsCertificate", "sshKeyPair")), field("source", source))
 }
 
 func entitlementSchema() *Shape {
-	rhsm := record(defaulted("management", enumeration("managed", "external"), StringValue("managed")), field("organizationRef", secret("opaque")), field("activationKeyRef", secret("opaque", "token")), field("satellite", record(required("hostname", lexical("host")), field("trustBundleRef", secret("caBundle")), field("contentBaseURL", url()), field("contentView", nonempty()), field("lifecycleEnvironment", nonempty()))))
+	rhsm := record(defaulted("management", enumeration("managed", "external"), StringValue("managed")), field("organizationRef", secret("opaque")), field("activationKeyRef", secret("opaque", "token")), field("satellite", record(required("hostname", lexical("host")), field("trustBundleRef", secret("caBundle", "trustBundle")), field("tlsVerification", tlsVerification()), field("contentBaseURL", url()), field("contentView", nonempty()), field("lifecycleEnvironment", nonempty()))))
 	rhsm.Suppress = []Suppression{{Field: "management", Value: StringValue("external"), Fields: []string{"organizationRef", "activationKeyRef", "satellite"}}}
-	entitlement := record(required("type", enumeration("redhatRhel", "redhatCeph", "ibmStorageCeph")), field("rhsm", rhsm), field("registry", record(field("url", lexical("registry")), field("credentialsRef", secret("usernamePassword")), field("trustBundleRef", secret("caBundle")))), field("license", record(defaulted("accept", boolean(), BoolValue(false)))))
+	entitlement := record(required("type", enumeration("redhatRhel", "redhatCeph", "ibmStorageCeph")), field("rhsm", rhsm), field("registry", record(field("url", lexical("registry")), field("credentialsRef", secret("usernamePassword")), field("trustBundleRef", secret("caBundle", "trustBundle")), field("tlsVerification", tlsVerification()))), field("license", record(defaulted("accept", boolean(), BoolValue(false)))))
 	entitlement.Permits = []Permission{{Field: "type", Value: "redhatRhel", Arms: []string{"rhsm"}}, {Field: "type", Value: "redhatCeph", Arms: []string{"rhsm", "registry"}}, {Field: "type", Value: "ibmStorageCeph", Arms: []string{"registry", "license"}}}
 	entitlement.Suppress = permittedOnly(entitlement.Permits)
 	return entitlement

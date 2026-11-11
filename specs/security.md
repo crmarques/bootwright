@@ -504,7 +504,10 @@ Bootwright never passes `--allowerasing`, `--nogpgcheck`, `--repofrompath`,
 `--enablerepo` or `--releasever` ([host packages](controller.md#host-packages)).
 
 TLS certificate and name verification and SSH host identity verification fail
-closed. An insecure exception must be explicit, endpoint-scoped, visible in
+closed by default. The [client TLS trust contract](secrets.md#client-tls-trust)
+permits an explicit endpoint-scoped exact-certificate identity without matching
+the endpoint name, or an explicit unverified connection where the consuming
+capability allows it. An insecure exception must be explicit, endpoint-scoped, visible in
 effective intent, and incapable of becoming a global default. DNS resolution
 and every connection target are checked against the same authorization so
 rebinding or alternate-address retries cannot expand scope.
@@ -522,7 +525,7 @@ BMC's own provider host, so the unverified fetch never leaves that host. A
 emulated BMC on another Machine imports the server's certificate and verifies
 the fetch; the [managed-OS installation](managed-os.md#refusal-table) refuses
 before registration there. A
-BMC's own transport verifies against its declared CA bundle alone, or
+BMC's own transport verifies against its declared public trust bundle alone, or
 against the system trust store when it declares none
 ([Machine BMC trust](api/machines.md#bmc-and-root-device-shape)).
 

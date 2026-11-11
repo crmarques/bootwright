@@ -207,7 +207,7 @@ func TestTheClaimReadsTheControllerThroughItsBundle(t *testing.T) {
 // of another version refuses both its continuation and its removal here.
 func TestAFrozenClaimOfAnotherVersionRefuses(t *testing.T) {
 	current := planOf(t, reconciliation.Apply).Definitions[0].Request
-	for _, version := range []string{"machine-baremetal-v0", "machine-baremetal-v2"} {
+	for _, version := range []string{"machine-baremetal-v0", "machine-baremetal-v1"} {
 		frozen := []byte(strings.Replace(string(current), `"version":"`+requestVersion+`"`, `"version":"`+version+`"`, 1))
 		if string(frozen) == string(current) {
 			t.Fatalf("the fixture claim does not carry %s", requestVersion)

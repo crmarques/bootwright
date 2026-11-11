@@ -72,7 +72,7 @@ Effective service fields emit in this order, omitting inapplicable fields:
 | DNSServer | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `address`, `additionalIngressHosts`, `forwarders`. |
 | NTPServer | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `address`, `upstreamSources`. |
 | ArtifactServer | `management`, `machineRef`, `image`, `bindAddress`, `retention`, `tls`, `listeners`, `endpoints`. |
-| Registry | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `tls`, `url`, `credentialsRef`, `trustBundleRef`. |
+| Registry | `management`, `machineRef`, `image`, `implementation`, `bindAddress`, `port`, `endpoints`, `tls`, `url`, `credentialsRef`, `trustBundleRef`, `tlsVerification`. |
 | LoadBalancer | `management`, `machineRef`, `image`, `implementation`, `bindAddresses`. |
 
 ## Proxy, DNS, NTP and registry deployment
@@ -143,7 +143,7 @@ External forms have these exact connection fields:
 
 | Kind | Fields | Rule |
 | --- | --- | --- |
-| `Proxy` | `connection.httpProxy`, `connection.httpsProxy`, `connection.auth.proxyAuthRef`, `connection.trustBundleRef` | `connection` sets at least one bare HTTP(S) proxy endpoint: at most 4096 ASCII bytes with a host and no userinfo, path, query or fragment, under the [context-free route's grammar](../controller.md#the-context-free-acquisition-route); validate refuses another at that field, naming the field and never the value. Authentication names a `usernamePassword` Secret; trust names a `caBundle` Secret. `proxyAuthRef` names an access credential and `trustBundleRef` a trust anchor. |
+| `Proxy` | `connection.httpProxy`, `connection.httpsProxy`, `connection.auth.proxyAuthRef`, `connection.trustBundleRef`, `connection.tlsVerification` | `connection` sets at least one bare HTTP(S) proxy endpoint: at most 4096 ASCII bytes with a host and no userinfo, path, query or fragment, under the [context-free route's grammar](../controller.md#the-context-free-acquisition-route); validate refuses another at that field, naming the field and never the value. Authentication names a `usernamePassword` Secret; trust names a `caBundle` or `trustBundle` Secret. `proxyAuthRef` names an access credential and `trustBundleRef` a trust anchor. |
 | `DNSServer` | `address`, optional `additionalIngressHosts[]` | Required resolver IP, canonicalized in effective state. |
 | `NTPServer` | `address` | Required IP or DNS hostname. |
 | `Registry` | `url` | Required registry location without embedded credentials. |
@@ -155,7 +155,7 @@ upstream sources. DNS names and list order remain unchanged.
 Proxy bypass policy belongs to the consumer's proxy choice, never to
 `Proxy.spec.connection`. Registry additionally accepts `credentialsRef` to a
 `usernamePassword` or `dockerConfigJson` Secret and `trustBundleRef` to a
-`caBundle` Secret in either management mode, an access credential and a trust
+`caBundle` or `trustBundle` Secret in either management mode, an access credential and a trust
 anchor of the consumers that reach the registry. Those fields are service facts; consumers do
 not duplicate them. A managed Registry adds the fields of the
 [managed registry](#managed-registry) below.
@@ -180,6 +180,11 @@ A managed Registry without `tls` or `credentialsRef` refuses at that field,
 selects plain HTTP, an insecure registry, a pull-through cache or deletion.
 `trustBundleRef` stays the trust anchor its consumers dial it with, normally
 the authority that signed `tls.secretRef`.
+
+Registry `tlsVerification` and Proxy `connection.tlsVerification` select
+[client TLS trust](../secrets.md#client-tls-trust), defaulting to `full`;
+these native consumers currently refuse other modes. Registry `tls` still
+configures the serving certificate, independently of client verification.
 
 ## ArtifactServer
 

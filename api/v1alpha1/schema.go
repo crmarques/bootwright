@@ -73,6 +73,8 @@ func (s *Shape) Field(name string) (Field, bool) {
 	return Field{}, false
 }
 
+func tlsVerification() *Shape { return enumeration("full", "certificate", "none") }
+
 func text() *Shape                        { return &Shape{Type: String} }
 func nonempty() *Shape                    { return &Shape{Type: String, MinLength: 1} }
 func boolean() *Shape                     { return &Shape{Type: Boolean} }

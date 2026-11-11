@@ -27,7 +27,7 @@ func infrastructureServiceSchema(kind Kind) *Shape {
 	}
 	switch kind {
 	case Proxy:
-		fields = append(fields, field("connection", record(field("httpProxy", url()), field("httpsProxy", url()), field("auth", record(required("proxyAuthRef", secret("usernamePassword")))), field("trustBundleRef", secret("caBundle")))), field("allowedDestinations", nonemptyArray(set(lexical("proxy-destination")))))
+		fields = append(fields, field("connection", record(field("httpProxy", url()), field("httpsProxy", url()), field("auth", record(required("proxyAuthRef", secret("usernamePassword")))), field("trustBundleRef", secret("caBundle", "trustBundle")), field("tlsVerification", tlsVerification()))), field("allowedDestinations", nonemptyArray(set(lexical("proxy-destination")))))
 		external = append(external, "connection")
 		managed = append(managed, "allowedDestinations")
 	case DNSServer:
@@ -45,7 +45,7 @@ func infrastructureServiceSchema(kind Kind) *Shape {
 		managed = append(managed, "retention", "tls", "listeners")
 	case Registry:
 		fields = append(fields, field("tls", record(required("secretRef", secret("tlsCertificate")), field("minVersion", enumeration("TLSv1.2", "TLSv1.3")))))
-		fields = append(fields, field("url", lexical("registry")), field("credentialsRef", secret("usernamePassword", "dockerConfigJson")), field("trustBundleRef", secret("caBundle")))
+		fields = append(fields, field("url", lexical("registry")), field("credentialsRef", secret("usernamePassword", "dockerConfigJson")), field("trustBundleRef", secret("caBundle", "trustBundle")), field("tlsVerification", tlsVerification()))
 		managed = append(managed, "tls")
 		external = append(external, "url")
 	case LoadBalancer:

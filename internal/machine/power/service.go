@@ -577,7 +577,7 @@ func pinValues(pin machine.HardwareIdentity) map[string]string {
 // another.
 func ContentDigest() string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
-		"bootwright.machine.power-v1", Implementation, Operation, Variable,
+		"bootwright.machine.power-v1", Implementation, RequestVersion, Operation, Variable,
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }

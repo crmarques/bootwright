@@ -24,9 +24,10 @@ type Identity struct {
 // declaration or host cluster whose credential answers it, and how its
 // transport is verified. No material is named here.
 type Access struct {
-	CredentialsRef string `json:"credentialsRef"`
-	Endpoint       string `json:"endpoint"`
-	HostCluster    string `json:"hostCluster,omitempty"`
+	CredentialsRef  string `json:"credentialsRef"`
+	Endpoint        string `json:"endpoint"`
+	HostCluster     string `json:"hostCluster,omitempty"`
+	TLSVerification string `json:"tlsVerification,omitempty"`
 	// TLSVerify and TrustBundleRef carry the Machine's declared trust to the
 	// adapter: a controller whose certificate an internal authority issued is
 	// verified against the bundle naming that authority alone, one with no

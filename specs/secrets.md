@@ -68,6 +68,7 @@ type can use a [generated source](api/secrets.md#generated-source):
 | token | One of `--value-file` or `--value-stdin` | value | yes |
 | usernamePassword | `--username` and one of `--password-file` or `--password-stdin` | username, password | yes |
 | caBundle | `--certificate-file` | certificate | yes |
+| trustBundle | `--certificate-file` | certificate | no |
 | tlsCertificate | `--certificate-file` and `--private-key-file` | certificate, private-key | yes |
 | sshKeyPair | `--private-key-file`, optional `--public-key-file` | private-key, public-key | yes |
 
@@ -179,7 +180,15 @@ The limits apply to decoded, normalized parts. A token/password transport may
 carry one extra final LF; an extra non-LF byte still exceeds the part limit.
 Preflight transport bounds before reads and normalized bounds before material
 copies; this does not enlarge logical material limits.
-CA PEM contains CA certificates; TLS validates key agreement and server-auth
+CA PEM contains CA signing certificates only. A `trustBundle` contains public
+CA certificates, server certificates, or both, in any order; it accepts no
+private key and cannot be generated or used as a signing issuer. Every member
+is currently valid, has no unsupported critical extension, and is suitable
+for its CA or server role; server RSA keys require at least 2048 bits.
+No chain adjacency or bundle order is inferred.
+`TestTrustBundleAcceptsPublicLeavesAndUnorderedMixedAnchors` in
+[material tests](../internal/secrets/material/trust_test.go) holds this boundary.
+TLS validates key agreement and server-auth
 suitability, and a TLS leaf with an RSA key needs at least 2048 bits, refusing
 with `secret.input` naming the key's size; a CA bundle's roots are not held to
 that floor. SSH accepts one unencrypted Ed25519, RSA >=3072 or API-supported
@@ -269,6 +278,54 @@ derived in the same package with the selected `golang.org/x/crypto` bcrypt
 package ([managed registry](infrastructure-services.md#managed-registry)). The
 standard library owns AES-GCM, X.509, key generation and entropy. Do not import
 unrelated x/crypto packages.
+
+## Client TLS trust
+
+Trust material and endpoint identity are separate declarations. A verification
+`trustBundleRef` accepts either a CA-only `caBundle` or a public `trustBundle`;
+`issuerRef` remains a generated `caBundle` reference. Each consumer preserves
+its declared replacement-versus-addition of system roots. A server certificate
+in a bundle does not suppress matching the endpoint name.
+
+Client `tlsVerification`, BMC `tls.verification`, and Ceph repository
+`packageRepositoryTLSVerification` select these semantics:
+
+| Mode | Rule |
+| --- | --- |
+| `full` | Default when omitted. Require certificate validation, server purpose, TLS crypto policy and matching hostname/IP. |
+| `certificate` | Require an explicit bundle with exactly one non-CA server certificate, optionally beside CA certificates. Only that server certificate anchors this connection; compare the peer's exact DER before sending HTTP or credentials. Check dates, server purpose and TLS crypto policy; omit hostname matching. |
+| `none` | Explicitly skip certificate and hostname checks on this connection. A trust-bundle reference is contradictory and refused. Encryption alone supplies no endpoint identity. |
+
+Only an individual Machine's BMC currently realizes all three modes; provider
+and kind defaults cannot select a non-full mode. Other connections refuse
+non-full policies during validation, naming the field and supported remedy;
+they never translate certificate identity into an insecure native-tool flag.
+Native Satellite registration requires CA anchors even inside a `trustBundle`;
+a direct server leaf refuses before its worker runs.
+The installed OpenShift `additionalTrustBundleRefs` carries material, not an
+endpoint policy, and cannot relax name verification across a cluster.
+
+The BMC's existing `tls.verify` boolean remains supported: omission means true,
+and false corresponds to `verification: none`. Explicitly supplying both
+requires agreement. Physical private installation, logical-root proofs and
+physical erase retain their refusal of an unverified BMC. Exact-certificate
+identity authenticates that BMC and satisfies verified transport; `none` does
+not. None of these client settings changes the separate BMC-to-media-server
+verification policy.
+
+The [shared admission](../internal/secrets/admission.go) and its
+[consumer-coverage tests](../internal/secrets/trust_test.go) hold every trust
+reference to these rules. The [TLS handshake tests](../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_tls_trust.py)
+prove rejection before credentials, different certificates with the same key
+or issuer, unusable names, invalid dates and wrong purpose on the controller
+and managed-host Python floor. Public test keys are synthetic fixed scalars.
+OpenSSL partial-chain verification is enabled only when explicit trust
+contains a non-CA anchor; host-only and CA-only trust keep their prior policy.
+
+Replacing current Secret material does not replace the version an operation
+already bound. Trust-policy changes require a new plan, and incompatible frozen
+requests are retired with the build that created them under
+[continuation and removal](state-reconciliation.md#continuation-and-removal).
 
 ## Immutable binding and contexts
 

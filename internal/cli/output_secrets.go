@@ -39,7 +39,7 @@ func validSecretParts(parts []secrets.Part) bool {
 
 func validSecretIdentity(secretType, source string) bool {
 	switch secretType {
-	case "opaque", "token", "usernamePassword", "dockerConfigJson", "caBundle", "tlsCertificate", "sshKeyPair":
+	case "opaque", "token", "usernamePassword", "dockerConfigJson", "caBundle", "trustBundle", "tlsCertificate", "sshKeyPair":
 	default:
 		return false
 	}

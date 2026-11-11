@@ -521,11 +521,12 @@ func frozenNodes(nodes []nodeProjection) []Node {
 		frozen = append(frozen, Node{
 			Address: node.address, ControllerKind: controllerKind(node.target.Substrate), Firmware: nodeFirmware(node.target.Firmware),
 			Controller: Controller{
-				CredentialsRef: node.target.Controller.CredentialsRef,
-				Endpoint:       node.target.Controller.Endpoint,
-				HostCluster:    node.target.Controller.HostCluster,
-				TLSVerify:      node.target.Controller.TLSVerify,
-				TrustBundleRef: node.target.Controller.TrustBundleRef,
+				CredentialsRef:  node.target.Controller.CredentialsRef,
+				Endpoint:        node.target.Controller.Endpoint,
+				HostCluster:     node.target.Controller.HostCluster,
+				TLSVerify:       node.target.Controller.TLSVerify,
+				TrustBundleRef:  node.target.Controller.TrustBundleRef,
+				TLSVerification: node.target.Controller.TLSVerification,
 				VirtualMedia: VirtualMedia{
 					RemoveCertificate:   node.target.Controller.VirtualMedia.RemoveCertificate,
 					RestoreVerification: node.target.Controller.VirtualMedia.RestoreVerification,

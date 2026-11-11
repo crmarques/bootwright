@@ -45,7 +45,7 @@ func requestFor(catalog api.Catalog, contextName, name, verb string, force bool,
 	return Request{
 		Arm: arm, Controller: controller, Force: force,
 		Identity:  Identity{Context: contextName, Object: object.Name()},
-		Placement: placement, Verb: verb, Version: Implementation,
+		Placement: placement, Verb: verb, Version: RequestVersion,
 	}, physical, removed, nil
 }
 
@@ -132,10 +132,11 @@ func endpointFor(target substrate.Target, controllerMachine string) (Access, mac
 		return Access{}, machine.Placement{}, false, err
 	}
 	return Access{
-		CredentialsRef: target.Controller.CredentialsRef,
-		Endpoint:       target.Controller.Endpoint,
-		HostCluster:    target.Controller.HostCluster,
-		TLSVerify:      target.Controller.TLSVerify,
-		TrustBundleRef: target.Controller.TrustBundleRef,
+		CredentialsRef:  target.Controller.CredentialsRef,
+		Endpoint:        target.Controller.Endpoint,
+		HostCluster:     target.Controller.HostCluster,
+		TLSVerify:       target.Controller.TLSVerify,
+		TrustBundleRef:  target.Controller.TrustBundleRef,
+		TLSVerification: target.Controller.TLSVerification,
 	}, placement, target.Physical, nil
 }

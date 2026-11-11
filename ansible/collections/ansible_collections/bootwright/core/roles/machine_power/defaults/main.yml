@@ -52,11 +52,13 @@ machine_power_reports_declared: >-
           == ((bootwright_machine_power_material.expectedMACsBase64 | default('') | b64decode).split(',')
               | reject('equalto', '') | unique | sort)) }}
 
-machine_power_access:
-  endpoint: '{{ bootwright_machine_power_request.controller.endpoint }}'
-  user: '{{ bootwright_machine_power_material.controllerUser }}'
-  password: "{{ bootwright_machine_power_material.controllerPassword | default('') }}"
-  ca: "{{ bootwright_machine_power_material.controllerCA | default('') }}"
-  verify: '{{ bootwright_machine_power_request.controller.tlsVerify }}'
-  pinned_uuid_base64: "{{ bootwright_machine_power_material.pinnedUUIDBase64 | default('') }}"
-  pinned_serial_base64: "{{ bootwright_machine_power_material.pinnedSerialBase64 | default('') }}"
+machine_power_access: >-
+  {{ {'endpoint': (bootwright_machine_power_request.controller.endpoint),
+      'user': (bootwright_machine_power_material.controllerUser),
+      'password': (bootwright_machine_power_material.controllerPassword | default('')),
+      'ca': (bootwright_machine_power_material.controllerCA | default('')),
+      'verify': (bootwright_machine_power_request.controller.tlsVerify),
+      'pinned_uuid_base64': (bootwright_machine_power_material.pinnedUUIDBase64 | default('')),
+      'pinned_serial_base64': (bootwright_machine_power_material.pinnedSerialBase64 | default(''))}
+     | combine({'verification': bootwright_machine_power_request.controller.tlsVerification | default('')}
+               if (bootwright_machine_power_request.controller.tlsVerification | default('')) | length > 0 else {}) }}

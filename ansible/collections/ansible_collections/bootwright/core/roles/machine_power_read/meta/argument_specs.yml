@@ -43,6 +43,13 @@ argument_specs:
                   tlsVerify:
                     type: bool
                     required: true
+                  tlsVerification:
+                    type: str
+                    required: false
+                    choices:
+                      - full
+                      - certificate
+                      - none
                   trustBundleRef:
                     type: str
                     required: false
@@ -65,7 +72,7 @@ argument_specs:
             type: str
             required: true
             choices:
-              - machine-power-read-v1
+              - machine-power-read-v2
       bootwright_machine_power_read_digest:
         type: str
         required: true

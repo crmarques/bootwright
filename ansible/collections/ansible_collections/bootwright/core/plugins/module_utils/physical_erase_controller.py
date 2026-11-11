@@ -22,7 +22,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import physical_er
 from ansible_collections.bootwright.core.plugins.module_utils import ssh_key_policy
 
 ROOT = Path(hosted_area.ROOT)
-REQUEST_VERSION = "physical-erase-v3"
+REQUEST_VERSION = "physical-erase-v4"
 MEDIA = Path("/var/lib/bootwright/media")
 
 
@@ -353,7 +353,7 @@ class Controller:
         certificate = read(Path(self.material["artifactCertificate"])).decode()
 
         def factory(seconds):
-            return redfish.Client(config["endpoint"], user, password, ca, time.monotonic() + seconds)
+            return redfish.Client(config["endpoint"], user, password, ca, time.monotonic() + seconds, verification=config.get("tlsVerification", ""))
 
         if phase == "start":
             image = self.request["install"]["private"]["url"] + "/" + state["token"] + "/erase.iso"

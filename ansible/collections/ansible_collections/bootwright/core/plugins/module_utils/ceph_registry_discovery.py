@@ -26,7 +26,7 @@ import types
 import urllib.parse
 
 from ansible_collections.bootwright.core.plugins.module_utils import (
-    ceph_native_worker, ceph_package_sources, ceph_pull_broker, native_diagnostics, transport_faults,
+    ceph_native_worker, ceph_package_sources, ceph_pull_broker, native_diagnostics, transport_faults, tls_trust,
 )
 
 PLATFORM = "linux/amd64"
@@ -329,9 +329,8 @@ def bundle_proof(path):
             prove()
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             context.minimum_version = ssl.TLSVersion.TLSv1_2
-            for block in bundle_blocks(data):
-                context.load_verify_locations(cadata=block)
-            require(context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname and context.cert_store_stats()["x509_ca"] > 0, "material")
+            tls_trust.load_anchors(context, "".join(bundle_blocks(data)))
+            require(context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname and context.cert_store_stats()["x509"] > 0, "material")
             yield context, prove
             prove()
     except DiscoveryRefusal as error:

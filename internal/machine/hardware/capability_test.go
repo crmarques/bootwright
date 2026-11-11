@@ -164,7 +164,7 @@ func physicalClaim(t *testing.T, contextName, endpoint string, macs ...string) p
 		Controller: baremetal.Controller{CredentialsRef: "metal-bmc", Endpoint: endpoint, TLSVerify: true},
 		Identity:   baremetal.Identity{Block: baremetal.BlockID("server"), Context: contextName, Object: "server"},
 		Placement:  machine.Placement{Connection: machine.ConnectionLocal, Machine: "controller"},
-		Version:    "machine-baremetal-v1",
+		Version:    "machine-baremetal-v2",
 	}
 	for index, mac := range macs {
 		request.Hardware = append(request.Hardware, baremetal.Interface{MACAddress: mac, Name: fmt.Sprintf("eno%d", index+1)})

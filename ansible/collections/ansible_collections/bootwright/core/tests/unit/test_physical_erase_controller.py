@@ -23,7 +23,7 @@ class ControllerTests(unittest.TestCase):
                 if create:
                     path.mkdir(mode=0o700)
 
-            request = {"version": "physical-erase-v3", "install": {"identity": {"context": "lab", "object": "metal-01"}}}
+            request = {"version": "physical-erase-v4", "install": {"identity": {"context": "lab", "object": "metal-01"}}}
             material = {"applyOperation": "op-" + "0" * 32}
             with patch.object(controller, "ROOT", root), patch.object(controller, "directory", side_effect=proved):
                 instance = controller.Controller(request, "a" * 64, material, create=True)
@@ -33,9 +33,10 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(visited, [(path, True) for path in expected])
             self.assertEqual(instance.root, expected[-1])
             self.assertEqual(str(controller.ROOT), "/var/lib/bootwright-hosted")
-            for version in ("physical-erase-v2", "physical-erase-v4"):
-                with self.assertRaises(controller.worker.Refusal):
-                    controller.Controller(dict(request, version=version), "a" * 64, material)
+            for version in ("physical-erase-v2", "physical-erase-v3"):
+                with patch.object(controller, "directory", side_effect=AssertionError("retired request reached filesystem")):
+                    with self.assertRaises(controller.worker.Refusal):
+                        controller.Controller(dict(request, version=version), "a" * 64, material)
 
     def test_the_worker_compares_the_root_wwn_go_names_and_the_root_serial_number(self):
         hardware = {"interfaces": [{"macAddress": "52:54:00:9A:1B:01"}], "serialNumber": "ZC1A2B3C"}

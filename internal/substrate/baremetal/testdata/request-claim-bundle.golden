@@ -2,6 +2,7 @@
   "controller": {
     "credentialsRef": "server-bmc",
     "endpoint": "https://bmc.example.test/redfish/v1/Systems/1",
+    "tlsVerification": "certificate",
     "tlsVerify": true,
     "trustBundleRef": "server-bmc-ca"
   },
@@ -25,5 +26,5 @@
     "machine": "controller"
   },
   "provider": "floor",
-  "version": "machine-baremetal-v1"
+  "version": "machine-baremetal-v2"
 }

@@ -19,8 +19,13 @@ func machineVirtualMediaSchema() *Shape {
 }
 
 func machineBMCTLSSchema() *Shape {
-	tls := record(field("verify", boolean()), field("trustBundleRef", secret("caBundle")))
-	tls.Suppress = []Suppression{{Field: "verify", Value: BoolValue(false), Fields: []string{"trustBundleRef"}}}
+	tls := record(field("verify", boolean()), field("trustBundleRef", secret("caBundle", "trustBundle")), field("verification", tlsVerification()))
+	tls.Suppress = []Suppression{
+		{Field: "verify", Value: BoolValue(false), Fields: []string{"trustBundleRef"}},
+		{Match: func(value, fallback Value) bool { return value.Has("verify") }, Fields: []string{"verification"}},
+		{Match: func(value, fallback Value) bool { return value.Has("verification") }, Fields: []string{"verify"}},
+		{Field: "verification", Value: StringValue("none"), Fields: []string{"trustBundleRef"}},
+	}
 	return tls
 }
 

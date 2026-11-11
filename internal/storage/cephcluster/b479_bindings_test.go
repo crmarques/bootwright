@@ -17,7 +17,7 @@ const (
 
 func b479BindingCatalog() api.Catalog {
 	catalog := bindingCatalog()
-	for name, kind := range map[string]string{"token-a": "token", "user-a": "usernamePassword", "user-b": "usernamePassword", "ssh-a": "sshKeyPair", "ca-a": "caBundle"} {
+	for name, kind := range map[string]string{"token-a": "token", "user-a": "usernamePassword", "user-b": "usernamePassword", "ssh-a": "sshKeyPair", "ca-a": "caBundle", "trust-a": "trustBundle"} {
 		catalog = replace(catalog, object(api.Secret, name, m("type", kind)))
 	}
 	return catalog
@@ -143,14 +143,15 @@ func TestPrivateCAIdPNeedsItsBoundCABundle(t *testing.T) {
 	const s3 = "$.spec.services[3]"
 	const content = "/custom_configs/0/content"
 	mounted := []api.Value{caMountedProxy(m("mount_path", OAuth2ProxyCABundlePath)), authGateway()}
-	requireOnly(t, b479Issues(t, false, mounted, proxyLeaves()), s3+".custom_configs", "api.invariant", "an oauth2-proxy custom_configs entry needs its identity provider's CA bundle bound at /custom_configs/0/content", "add a spec.serviceBindings entry for this service that binds /custom_configs/0/content to a caBundle Secret")
+	requireOnly(t, b479Issues(t, false, mounted, proxyLeaves()), s3+".custom_configs", "api.invariant", "an oauth2-proxy custom_configs entry needs its identity provider's CA bundle bound at /custom_configs/0/content", "add a spec.serviceBindings entry for this service that binds /custom_configs/0/content to a caBundle or trustBundle Secret")
 	if found := issuesAt(b479Issues(t, true, mounted, proxyLeaves()), s3+".custom_configs"); len(found) != 0 {
 		t.Fatalf("partial input checked the CA bundle binding: %#v", found)
 	}
 	plain := []api.Value{oauth2Proxy(), authGateway()}
 	requireOnly(t, b479Issues(t, false, plain, proxyLeaves(content, "ca-a")), "$.spec.serviceBindings[0].secrets[2].path", "api.invariant", "/custom_configs/0/content is read only with the oauth2-proxy custom_configs entry for the identity provider's CA bundle", "declare custom_configs with mount_path /etc/pki/tls/certs/oauth2-proxy-idp-ca.pem on this oauth2-proxy service, or remove this binding")
-	requireOnly(t, b479Issues(t, false, mounted, proxyLeaves(content, "tls-a")), "$.spec.serviceBindings[0].secrets[2].secretRef", "api.invariant", "this binding leaf accepts only caBundle Secrets", "bind a caBundle Secret at this path")
+	requireOnly(t, b479Issues(t, false, mounted, proxyLeaves(content, "tls-a")), "$.spec.serviceBindings[0].secrets[2].secretRef", "api.invariant", "this binding leaf accepts only caBundle or trustBundle Secrets", "bind a caBundle or trustBundle Secret at this path")
 	requireB479Admits(t, b479Issues(t, false, mounted, proxyLeaves(content, "ca-a")))
+	requireB479Admits(t, b479Issues(t, false, mounted, proxyLeaves(content, "trust-a")))
 }
 
 func TestCustomConfigsAdmittedOnlyForTheBoundCABundle(t *testing.T) {

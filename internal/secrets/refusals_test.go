@@ -46,6 +46,7 @@ func TestInputTableOwnsAllowedFieldsAndFileRemedies(t *testing.T) {
 		{"token", ValueFileInput | ValueStdinInput, "--value-file <path>", []Input{{ValueFile: "v"}, {ValueStdin: true}}},
 		{"dockerConfigJson", ValueFileInput | ValueStdinInput, "--value-file <path>", []Input{{ValueFile: "v"}, {ValueStdin: true}}},
 		{"usernamePassword", UsernameInput | PasswordFileInput | PasswordStdinInput, "--username <username> --password-file <path>", []Input{{Username: "u", PasswordFile: "p"}, {Username: "u", PasswordStdin: true}}},
+		{"trustBundle", CertificateFileInput, "--certificate-file <path>", []Input{{CertificateFile: "c"}}},
 		{"caBundle", CertificateFileInput, "--certificate-file <path>", []Input{{CertificateFile: "c"}}},
 		{"tlsCertificate", CertificateFileInput | PrivateKeyFileInput, "--certificate-file <path> --private-key-file <path>", []Input{{CertificateFile: "c", PrivateKeyFile: "k"}}},
 		{"sshKeyPair", PrivateKeyFileInput | PublicKeyFileInput, "--private-key-file <path> [--public-key-file <path>]", []Input{{PrivateKeyFile: "k"}, {PrivateKeyFile: "k", PublicKeyFile: "p"}}},

@@ -46,6 +46,33 @@ func validateCA(certificate, privateKey []byte, now time.Time) error {
 	return nil
 }
 
+// validateTrust admits unordered public trust anchors, including server leaves.
+// A certificate used as an identity is selected by the consuming connection.
+func validateTrust(certificate []byte, now time.Time) error {
+	certificates, err := parseCertificates(certificate)
+	if err != nil {
+		return err
+	}
+	for _, cert := range certificates {
+		if !validAt(cert, now) || len(cert.UnhandledCriticalExtensions) != 0 {
+			return failure("input", "trust bundle must contain currently valid certificates without unsupported critical extensions", "")
+		}
+		if cert.IsCA {
+			if !cert.BasicConstraintsValid || cert.KeyUsage&x509.KeyUsageCertSign == 0 {
+				return failure("input", "trust bundle contains a certificate that cannot sign as a CA", "")
+			}
+		} else {
+			if !serverAuth(cert.ExtKeyUsage) || !serverKeyUsage(cert.KeyUsage) {
+				return failure("input", "trust bundle server certificate is not suitable for server authentication", "")
+			}
+			if key, ok := cert.PublicKey.(*rsa.PublicKey); ok && key.N.BitLen() < minimumServingRSABits {
+				return failure("input", "trust bundle server certificate requires at least 2048 RSA bits", "")
+			}
+		}
+	}
+	return nil
+}
+
 func validateTLS(certificate, privateKey []byte, now time.Time) error {
 	certificates, err := parseCertificates(certificate)
 	if err != nil {

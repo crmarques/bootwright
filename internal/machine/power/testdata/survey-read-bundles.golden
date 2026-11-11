@@ -11,6 +11,7 @@
       "controller": {
         "credentialsRef": "metal-bmc",
         "endpoint": "https://bmc.example.test/redfish/v1/Systems/1",
+        "tlsVerification": "certificate",
         "tlsVerify": true,
         "trustBundleRef": "metal-bmc-ca"
       },
@@ -43,5 +44,5 @@
       "userVariable": "controllerUser2"
     }
   ],
-  "version": "machine-power-read-v1"
+  "version": "machine-power-read-v2"
 }

@@ -152,7 +152,7 @@ def test_restart_boots_the_installed_disk_through_the_substrate():
              if (task.get("ansible.builtin.include_role") or {}).get("tasks_from") == "boot_disk"]
     assert len(disks) == 1
     include = tasks[disks[0]]
-    assert include["vars"]["bootwright_machine_port"]["power_on"] is True
+    assert "'power_on': (True)" in include["vars"]["bootwright_machine_port"]
     assert include["ansible.builtin.include_role"]["name"] == "bootwright.core.substrate_machine"
     assert "when" not in include
     for arm in ("libvirt", "baremetal"):

@@ -94,9 +94,13 @@ rules apply to it, and
 | `spec.install.registries` | object | no | — | Cluster-owned mirror selection and image-source policy below. |
 | `spec.install.pullSecretRef` | string | OpenShift | environment/convention | `dockerConfigJson` `Secret`; not required for OKD. Effect material: the installation writes it into the cluster. |
 | `spec.install.nodeSSH` | object | normalized | environment/convention | Cluster administration public/private SSH material. |
-| `spec.install.additionalTrustBundleRefs` | array of strings | no | `[]` | Ordered unique `caBundle` Secret references for this cluster's native installation trust. Effect material: the installation adds them to the cluster's trust. |
+| `spec.install.additionalTrustBundleRefs` | array of strings | no | `[]` | Ordered unique `caBundle` or `trustBundle` Secret references for this cluster's native installation trust. Effect material: the installation adds them to the cluster's trust. |
 | `spec.install.additionalTrustBundlePolicy` | string | no | — | `Always` or `Proxyonly`; requires non-empty `additionalTrustBundleRefs`. Written to the installer only when selected. |
 | `spec.install.servingCertificates` | object | no | — | Typed API and ingress serving-certificate refs below. |
+
+`additionalTrustBundleRefs` distributes public trust material; it does not
+select a relaxed endpoint identity or disable certificate checks. See
+[client TLS trust](../secrets.md#client-tls-trust).
 
 Disconnected mode requires `spec.install.registries.mirror`, whose Registry
 declares `trustBundleRef`, and a managed agent boot-artifacts endpoint.
@@ -322,7 +326,7 @@ adapter runs and names the Secret, effect material, to correct.
 
 `spec.install.additionalTrustBundleRefs` selects additional CA bundles for this
 cluster's native install rendering. Each scalar reference resolves directly to
-a `caBundle` Secret, effect material the installation adds to the cluster's
+a `caBundle` or `trustBundle` Secret, effect material the installation adds to the cluster's
 trust, and authored order is retained. The complete list is the
 cluster's additional trust selection; there is no Environment trust list to
 append to it.

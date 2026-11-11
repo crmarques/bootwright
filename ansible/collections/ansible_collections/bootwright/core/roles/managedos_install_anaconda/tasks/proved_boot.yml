@@ -41,14 +41,15 @@
     tasks_from: boot_disk
   vars:
     bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
-    bootwright_machine_port:
-      endpoint: '{{ managedos_install_anaconda_endpoint }}'
-      verify: '{{ managedos_install_anaconda_verify }}'
-      ca: '{{ managedos_install_anaconda_controller_ca }}'
-      user: '{{ bootwright_os_install_material.controllerUser }}'
-      password: '{{ bootwright_os_install_material.controllerPassword }}'
-      power_on: true
-
+    bootwright_machine_port: >-
+      {{ {'endpoint': (managedos_install_anaconda_endpoint),
+          'verify': (managedos_install_anaconda_verify),
+          'ca': (managedos_install_anaconda_controller_ca),
+          'user': (bootwright_os_install_material.controllerUser),
+          'password': (bootwright_os_install_material.controllerPassword),
+          'power_on': (True)}
+         | combine({'verification': bootwright_os_install_request.target.controller.tlsVerification | default('')}
+                   if (bootwright_os_install_request.target.controller.tlsVerification | default('')) | length > 0 else {}) }}
 - name: Read the proved machine through its own channel once its disk booted
   ansible.builtin.include_tasks: identity_until_answered.yml
 

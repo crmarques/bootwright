@@ -242,7 +242,7 @@ func automationFormats() map[string]automationFormat {
 		// The request versions each role refuses unless its request names.
 		"substrate-host-libvirt-v2":  {class: formatMirrored},
 		"machine-libvirt-v3":         {class: formatMirrored},
-		"machine-baremetal-v1":       {class: formatMirrored},
+		"machine-baremetal-v2":       {class: formatMirrored},
 		"substrate-host-kubevirt-v1": {class: formatMirrored},
 		"machine-kubevirt-v1":        {class: formatMirrored},
 		// The lend a hosted KubeVirt provider's runs take their access from:
@@ -254,19 +254,19 @@ func automationFormats() map[string]automationFormat {
 		"mirror-images-v1":                      {class: formatMirrored},
 		"mirror-release-v1":                     {class: formatMirrored},
 		"machine-hardware-v1":                   {class: formatMirrored},
-		"os-install-anaconda-v2":                {class: formatMirrored},
-		"physical-erase-v3":                     {class: formatMirrored},
+		"os-install-anaconda-v3":                {class: formatMirrored},
+		"physical-erase-v4":                     {class: formatMirrored},
 		"physical-erase-v1":                     {class: formatMirrored},
 		"os-host-firewall-v2":                   {class: formatMirrored},
 		"os-host-firewall-evidence-v2":          {class: formatMirrored},
 		"cluster-media-agent-v1":                {class: formatMirrored},
-		"cluster-install-agent-v1":              {class: formatMirrored},
+		"cluster-install-agent-v2":              {class: formatMirrored},
 		"artifact-server-nginx-v2":              {class: formatMirrored},
 		"managed-service-v4":                    {class: formatMirrored},
 		// Power is no plan block: each run binds its request to the power
 		// content digest these implementations feed, and nothing is retained.
-		"machine-power-v1":      {class: formatMirrored},
-		"machine-power-read-v1": {class: formatMirrored},
+		"machine-power-v2":      {class: formatMirrored},
+		"machine-power-read-v2": {class: formatMirrored},
 
 		"controller-prerequisites-v1": {class: formatController, reason: "the controller stage's request, which setup applies and no plan block retains"},
 	}

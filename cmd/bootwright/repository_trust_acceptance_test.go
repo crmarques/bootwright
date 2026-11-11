@@ -10,7 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
-func TestPackageRepositoryTrustBundleMustBeACABundleSecret(t *testing.T) {
+func TestPackageRepositoryTrustBundleMustBePublicTrust(t *testing.T) {
 	sources := admissibleExampleSources(t, false)
 	replaced := 0
 	for i, file := range sources.Files {
@@ -31,7 +31,7 @@ func TestPackageRepositoryTrustBundleMustBeACABundleSecret(t *testing.T) {
 	for _, d := range diagnostics.Of(err) {
 		if d.Code == "api.reference" && d.Field == "$.spec.packageRepositoryTrustBundleRef" && d.Object != nil &&
 			d.Object.Kind == string(api.CephCluster) && d.Object.Name == "ceph-multidc-01" &&
-			d.Message == "Secret/ceph-registry-credentials is declared as usernamePassword; this field accepts caBundle" {
+			d.Message == "Secret/ceph-registry-credentials is declared as usernamePassword; this field accepts caBundle, trustBundle" {
 			return
 		}
 	}

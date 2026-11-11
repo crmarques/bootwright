@@ -20,10 +20,11 @@ type Identity struct {
 // anchor its transport verifies against when declared. No material is named
 // here.
 type Controller struct {
-	CredentialsRef string `json:"credentialsRef"`
-	Endpoint       string `json:"endpoint"`
-	TLSVerify      bool   `json:"tlsVerify"`
-	TrustBundleRef string `json:"trustBundleRef,omitempty"`
+	CredentialsRef  string `json:"credentialsRef"`
+	Endpoint        string `json:"endpoint"`
+	TLSVerification string `json:"tlsVerification,omitempty"`
+	TLSVerify       bool   `json:"tlsVerify"`
+	TrustBundleRef  string `json:"trustBundleRef,omitempty"`
 }
 
 // Interface is one NIC the hardware must report for this to be the machine the

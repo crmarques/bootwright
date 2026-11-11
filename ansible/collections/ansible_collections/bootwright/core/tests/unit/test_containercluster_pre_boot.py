@@ -84,7 +84,9 @@ def rendering(tmp_path, current, index=1, material=None):
     """What boot.yml renders for one node: the role's defaults, the material the
     runner wrote, the loop's own variables and the node it is on."""
     written = tmp_path / "request.json"
-    written.write_text(json.dumps({"bootwright_cluster_install_material": material or {}}))
+    handed = dict(material_files(), controllerUserNode2="/run/user-2", controllerPasswordNode2="/run/password-2")
+    handed.update(material or {})
+    written.write_text(json.dumps({"bootwright_cluster_install_material": handed}))
     variables = dict(LOADER.load_from_file(str(ROLE / "defaults" / "main.yml"), trusted_as_template=True))
     # The loader caches by path, and every case writes the same path.
     variables.update(LOADER.load_from_file(str(written), cache="none", trusted_as_template=True))
@@ -96,7 +98,7 @@ def rendering(tmp_path, current, index=1, material=None):
     return Templar(loader=LOADER, variables=variables)
 
 
-def material():
+def material_files():
     """Two nodes' credentials, and a pin for each, so a node reading another's shows."""
     return {
         "controllerUserNode0": "/run/bootwright/bmc-user-metal-01",
@@ -129,19 +131,19 @@ def test_each_arm_is_proved_before_the_insert_under_the_skip_and_the_boot_budget
 
 def test_a_physical_node_is_proved_against_the_nics_its_request_froze(tmp_path):
     task, _parents = proof("baremetal")
-    expected = task["vars"]["bootwright_machine_port"]["expected"]
+    expected = task["vars"]["bootwright_machine_port"]
     hardware = {"interfaces": [{"macAddress": MACS[0], "name": "enp2s0"}, {"macAddress": MACS[1], "name": "enp1s0"}]}
-    assert rendering(tmp_path, node(hardware=hardware)).template(expected) == MACS
+    assert rendering(tmp_path, node(hardware=hardware)).template(expected)["expected"] == MACS
     # A physical node frozen without hardware would prove nothing, so it fails
     # when its proof's input is rendered rather than comparing an empty set.
-    assert rendering(tmp_path, node()).template(expected) == []
+    assert rendering(tmp_path, node()).template(expected)["expected"] == []
 
 
 def test_each_proof_reaches_the_nodes_own_controller_with_its_own_credential(tmp_path):
     hardware = {"interfaces": [{"macAddress": MACS[0], "name": "enp2s0"}]}
     for arm in sorted(ARMS):
         task, _parents = proof(arm)
-        scope = rendering(tmp_path, node(arm, hardware), material=material())
+        scope = rendering(tmp_path, node(arm, hardware), material=material_files())
         rendered = scope.template(task["vars"]["bootwright_machine_port"])
         assert (rendered["endpoint"], rendered["verify"]) == (ENDPOINT, False), arm
         assert (rendered["user"], rendered["password"]) == (
@@ -156,14 +158,14 @@ def test_each_proof_reaches_the_nodes_own_controller_with_its_own_credential(tmp
 # (specs/substrates.md, Physical firmware).
 def test_a_nodes_frozen_firmware_reaches_its_proof_whole(tmp_path):
     task, _parents = proof("baremetal")
-    declared = task["vars"]["bootwright_machine_port"]["firmware"]
+    declared = task["vars"]["bootwright_machine_port"]
     firmware = {"mode": "enforce", "secureBoot": True, "bootMode": "UEFI", "biosAttributes": [
         {"name": "AcPwrRcvryUserDelay", "boolean": False}, {"name": "PowerCycleDelay", "integer": 5},
         {"name": "ProcVirtualization", "string": "Enabled"}]}
     frozen = dict(node(), firmware=firmware)
     # JSON compares type as well as value, so False never passes for 0.
-    assert json.dumps(rendering(tmp_path, frozen).template(declared), sort_keys=True) == json.dumps(firmware, sort_keys=True)
-    assert json.dumps(rendering(tmp_path, node()).template(declared), sort_keys=True) == json.dumps({}, sort_keys=True)
+    assert json.dumps(rendering(tmp_path, frozen).template(declared)["firmware"], sort_keys=True) == json.dumps(firmware, sort_keys=True)
+    assert json.dumps(rendering(tmp_path, node()).template(declared)["firmware"], sort_keys=True) == json.dumps({}, sort_keys=True)
 
 
 # Each node reads only the pin under its own position in the frozen order, and
@@ -175,18 +177,18 @@ def test_a_nodes_frozen_firmware_reaches_its_proof_whole(tmp_path):
 ])
 def test_each_physical_node_is_held_to_its_own_pin(tmp_path, index, uuid, serial):
     task, _parents = proof("baremetal")
-    scope = rendering(tmp_path, node(hardware={"interfaces": []}), index=index, material=material())
+    scope = rendering(tmp_path, node(hardware={"interfaces": []}), index=index, material=material_files())
     arguments = task["vars"]["bootwright_machine_port"]
-    assert scope.template(arguments["pinned_uuid_base64"]) == uuid
-    assert scope.template(arguments["pinned_serial_base64"]) == serial
+    assert scope.template(arguments)["pinned_uuid_base64"] == uuid
+    assert scope.template(arguments)["pinned_serial_base64"] == serial
 
 
 def test_a_nodes_frozen_root_disk_proof_reaches_the_pre_boot_port(tmp_path):
     task, _parents = proof("baremetal")
-    expected = task["vars"]["bootwright_machine_port"]["root_disk"]
+    expected = task["vars"]["bootwright_machine_port"]
     disk = {"serialNumber": "SYNTHETIC-ROOT-01", "sizeBytes": 8192}
-    assert rendering(tmp_path, node(hardware={"interfaces": [], "rootDisk": disk})).template(expected) == disk
-    assert rendering(tmp_path, node()).template(expected) == {}
+    assert rendering(tmp_path, node(hardware={"interfaces": [], "rootDisk": disk})).template(expected)["root_disk"] == disk
+    assert rendering(tmp_path, node()).template(expected)["root_disk"] == {}
 
 
 # The ordering invariant the Unknown resolution reads (specs/openshift-clusters.md,

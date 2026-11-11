@@ -70,12 +70,13 @@ type Controller struct {
 	// TLSVerify covers the controller-to-BMC leg. An opt-out is declared per
 	// endpoint and never becomes a default.
 	TLSVerify bool
-	// TrustBundleRef names a physical endpoint's caBundle Secret or the
+	// TrustBundleRef names a physical endpoint's public trust Secret or the
 	// emulated controller's tlsCertificate Secret as the one anchor of the
 	// controller-to-BMC leg when set; the system trust store anchors it
 	// otherwise. Admission refuses it beside TLSVerify false.
-	TrustBundleRef string
-	VirtualMedia   VirtualMedia
+	TrustBundleRef  string
+	TLSVerification string
+	VirtualMedia    VirtualMedia
 }
 
 // VirtualMedia is the BMC-to-artifact-server leg: how the controller is made
@@ -216,9 +217,10 @@ func authoredController(machine api.Object) (Controller, error) {
 	}
 	return Controller{
 		Endpoint: endpoint, CredentialsRef: credentials,
-		TLSVerify:      !bmc.Get("tls").Has("verify") || bmc.Get("tls", "verify").Bool(),
-		TrustBundleRef: bmc.Get("tls", "trustBundleRef").Text(),
-		VirtualMedia:   virtualMediaTrust(bmc.Get("virtualMedia", "tls")),
+		TLSVerify:       !bmc.Get("tls").Has("verify") || bmc.Get("tls", "verify").Bool(),
+		TrustBundleRef:  bmc.Get("tls", "trustBundleRef").Text(),
+		TLSVerification: bmc.Get("tls", "verification").Text(),
+		VirtualMedia:    virtualMediaTrust(bmc.Get("virtualMedia", "tls")),
 	}, nil
 }
 

@@ -150,7 +150,7 @@ def connect(monkeypatch, firmware, verify=True, ca_data=""):
     records rather than a loadable CA, so building its context is skipped."""
     monkeypatch.setattr(redfish_control, "_opener", firmware.opener)
     if ca_data:
-        monkeypatch.setattr(redfish_control, "_trust_context", lambda verify, ca_data: None)
+        monkeypatch.setattr(redfish_control, "_trust_context", lambda verify, ca_data, verification="": None)
     client = redfish_control.Client(firmware.endpoint, "operator", PASSWORD, verify=verify, ca_data=ca_data)
     client.sleep = firmware.pauses.append
     return client
@@ -1864,7 +1864,7 @@ def test_the_bundle_reaches_the_client_from_every_module(monkeypatch, module, ex
                    "ca_data": BUNDLE}, **extra)
     built_with = []
     monkeypatch.setattr(redfish_control, "_opener", firmware.opener)
-    monkeypatch.setattr(redfish_control, "_trust_context", lambda verify, ca_data: built_with.append(ca_data))
+    monkeypatch.setattr(redfish_control, "_trust_context", lambda verify, ca_data, verification="": built_with.append(ca_data))
     ending = Module(params)
     monkeypatch.setattr(module, "AnsibleModule", ending.build)
     module.main()

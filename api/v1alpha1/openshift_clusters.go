@@ -38,7 +38,7 @@ func openShiftClusterSchema() *Shape {
 		defaulted("agent", record(field("redfishVirtualMedia", record(required("artifactServerEndpoint", artifactEndpoint()))), field("bootArtifacts", record(required("artifactServerEndpoint", artifactEndpoint())))), MapValue()),
 		field("pullSecretRef", secret("dockerConfigJson")),
 		field("nodeSSH", nodeSSH),
-		defaulted("additionalTrustBundleRefs", set(secret("caBundle")), ListValue()),
+		defaulted("additionalTrustBundleRefs", set(secret("caBundle", "trustBundle")), ListValue()),
 		field("additionalTrustBundlePolicy", enumeration("Always", "Proxyonly")),
 		field("servingCertificates", certificates),
 	)

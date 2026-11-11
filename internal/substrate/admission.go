@@ -108,9 +108,13 @@ func defaultedNetworkRef(ref, namespace api.Value) api.Value {
 }
 
 func NormalizeBMCDefaults(bmc api.Value) api.Value {
-	bmc = bmc.With("tls", bmc.Get("tls").Default("verify", api.BoolValue(true)))
+	tls := bmc.Get("tls")
+	if mode := tls.Get("verification").Text(); mode != "" {
+		tls = tls.Default("verify", api.BoolValue(mode != "none"))
+	}
+	bmc = bmc.With("tls", tls.Default("verify", api.BoolValue(true)))
 	media := bmc.Get("virtualMedia")
-	tls := media.Get("tls").Default("trust", api.StringValue(TrustImportCertificate))
+	tls = media.Get("tls").Default("trust", api.StringValue(TrustImportCertificate))
 	switch tls.Get("trust").Text() {
 	case "disableVerification":
 		tls = tls.Default("restoreVerificationAfterBoot", api.BoolValue(true))
@@ -145,12 +149,16 @@ func ValidateBMCDefaults(bmc api.Value, path string, authored bool) []api.Issue 
 // inherited either half are held to the same rule.
 func validateControllerTrust(bmc api.Value, path string) []api.Issue {
 	tls := bmc.Get("tls")
-	if !tls.Has("trustBundleRef") || !tls.Has("verify") || tls.Get("verify").Bool() {
-		return nil
+	var issues []api.Issue
+	if tls.Get("verification").Text() == "certificate" && bmc.Has("address") && !strings.HasPrefix(bmc.Get("address").Text(), "https://") {
+		issues = append(issues, api.Issue{Code: "api.invariant", Field: path + ".tls.verification", Message: "certificate verification requires an HTTPS controller endpoint", Remediation: "set the BMC address to its HTTPS ComputerSystem endpoint"})
 	}
-	return []api.Issue{{Code: "api.invariant", Field: path + ".tls.trustBundleRef",
+	if !tls.Has("trustBundleRef") || !tls.Has("verify") || tls.Get("verify").Bool() {
+		return issues
+	}
+	return append(issues, api.Issue{Code: "api.invariant", Field: path + ".tls.trustBundleRef",
 		Message:     "a BMC trust bundle requires verification, and tls.verify is false here, whether authored or inherited",
-		Remediation: "set tls.verify: true where the bundle is declared, or remove tls.trustBundleRef"}}
+		Remediation: "set tls.verify: true where the bundle is declared, or remove tls.trustBundleRef"})
 }
 
 // validateProviderMediaTrust refuses the one virtual-media trust that is an
@@ -496,4 +504,8 @@ func reference(field, message string) api.Issue {
 
 func add(issues []api.Issue, more ...api.Issue) []api.Issue {
 	return append(issues, more[:min(len(more), 999-len(issues))]...)
+}
+
+func ClientTLSExceptions(object api.Object, path string) bool {
+	return object.Kind() == api.Machine && path == "$."+BMCPath+".tls"
 }

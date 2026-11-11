@@ -1,6 +1,6 @@
 implementation: cluster-install-agent-v1
-content-digest: 1f1b128e9a28bdb8df8ecc034c5132ef08c2d37a5ef9406fd79c22208e2ca307
-request-version: cluster-install-agent-v1
+content-digest: 70a4a5ebdd0bd321b850019b323f6f7a5ae932d53466d623725ccd5311d979e7
+request-version: cluster-install-agent-v2
 automation-formats: none
 mark-formats: bootwright.io/lend
 proof-ids: .bootwright-booted, .bootwright-inserted-, /.bootwright-booted, /.bootwright-inserted-, bootwright/containercluster/identity/v1
@@ -51,6 +51,7 @@ request-schema:
   nodes[].controller.credentialsRef string
   nodes[].controller.endpoint string
   nodes[].controller.hostCluster string omitempty
+  nodes[].controller.tlsVerification string omitempty
   nodes[].controller.tlsVerify bool
   nodes[].controller.trustBundleRef string omitempty
   nodes[].controller.virtualMedia struct agentinstall.VirtualMedia

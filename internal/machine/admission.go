@@ -1008,10 +1008,16 @@ func inherit(local, defaults api.Value) api.Value {
 // bundle is an anchor only for a verified leg.
 func providerBMCDefaults(bmc api.Value, provider api.Object) api.Value {
 	defaults := provider.Spec().Get("baremetal", "defaults", "bmc")
+	if bmc.Get("tls").Has("verification") {
+		defaults = defaults.With("tls", defaults.Get("tls").Without("verify"))
+	}
+	if bmc.Get("tls").Has("verify") {
+		defaults = defaults.With("tls", defaults.Get("tls").Without("verification"))
+	}
 	if bmc.Has("virtualMedia") {
 		defaults = defaults.Without("virtualMedia")
 	}
-	if bmc.Get("tls").Has("verify") && !bmc.Get("tls", "verify").Bool() && defaults.Get("tls").Has("trustBundleRef") {
+	if (bmc.Get("tls").Has("verify") && !bmc.Get("tls", "verify").Bool() || bmc.Get("tls", "verification").Text() == "none") && defaults.Get("tls").Has("trustBundleRef") {
 		defaults = defaults.With("tls", defaults.Get("tls").Without("trustBundleRef"))
 	}
 	return defaults

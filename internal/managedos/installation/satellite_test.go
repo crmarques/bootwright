@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -243,5 +244,19 @@ func TestSatelliteSelectionRefusalsNameTheSelectionAndNativeSupport(t *testing.T
 	}
 	if !strings.Contains(diagnostics.Of(refusals["registration-refused"])[0].Remediation, "environment_names") {
 		t.Fatal("the refusal does not name the required native registration option")
+	}
+}
+
+func TestSatelliteDirectServerTrustRefusesBeforeTheRunner(t *testing.T) {
+	request := pinnedRequest(t, labCatalog(registeringProfile(), satelliteEntitlement()))
+	// The public fixture is a suitable server leaf, with no environment material.
+	bundle, err := os.ReadFile("../../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/fixtures/tls-trust/issued.pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &fakeRunner{}
+	_, err = New(runner).Apply(context.Background(), satelliteExecution(t, request, bundle))
+	if err == nil || !strings.Contains(diagnostics.Of(err)[0].Message, "requires CA anchors") || len(runner.requests) != 0 {
+		t.Fatalf("native leaf trust was not refused before effects: %v", err)
 	}
 }

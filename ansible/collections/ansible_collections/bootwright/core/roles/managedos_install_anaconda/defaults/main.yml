@@ -259,13 +259,14 @@ managedos_install_anaconda_network_recovery: >-
   if bootwright_os_install_request.target.physical
   else 'run bootwright destroy, which erases the Machines this context installed' }}
 
-managedos_install_anaconda_port_access:
-  endpoint: '{{ managedos_install_anaconda_endpoint }}'
-  user: '{{ bootwright_os_install_material.controllerUser }}'
-  password: '{{ bootwright_os_install_material.controllerPassword }}'
-  ca: '{{ managedos_install_anaconda_controller_ca }}'
-  verify: '{{ managedos_install_anaconda_verify }}'
-
+managedos_install_anaconda_port_access: >-
+  {{ {'endpoint': (managedos_install_anaconda_endpoint),
+      'user': (bootwright_os_install_material.controllerUser),
+      'password': (bootwright_os_install_material.controllerPassword),
+      'ca': (managedos_install_anaconda_controller_ca),
+      'verify': (managedos_install_anaconda_verify)}
+     | combine({'verification': bootwright_os_install_request.target.controller.tlsVerification | default('')}
+               if (bootwright_os_install_request.target.controller.tlsVerification | default('')) | length > 0 else {}) }}
 managedos_install_anaconda_reboot_poweroff_attempts: '{{ bootwright_os_install_request.budgets.reboot.attempts }}'
 managedos_install_anaconda_reboot_return_attempts: '{{ bootwright_os_install_request.budgets.reboot.attempts }}'
 

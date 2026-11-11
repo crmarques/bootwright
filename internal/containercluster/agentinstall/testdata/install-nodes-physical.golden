@@ -5,7 +5,9 @@
       "controller": {
         "credentialsRef": "metal-bmc",
         "endpoint": "https://metal-01-bmc.lab.example.test/redfish/v1/Systems/1",
+        "tlsVerification": "certificate",
         "tlsVerify": true,
+        "trustBundleRef": "bmc-server-trust",
         "virtualMedia": {
           "removeCertificate": false,
           "restoreVerification": false,

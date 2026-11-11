@@ -16,5 +16,5 @@
     "machine": "controller"
   },
   "verb": "restart",
-  "version": "machine-power-v1"
+  "version": "machine-power-v2"
 }

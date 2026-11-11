@@ -3,6 +3,7 @@ package secrets
 import (
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -113,7 +114,7 @@ func validate(object api.Object, partial bool) []api.Issue {
 			}
 		case "sshKeyPair":
 			allowed = []string{"keyType", "comment"}
-		case "opaque", "dockerConfigJson":
+		case "opaque", "dockerConfigJson", "trustBundle":
 			add("source.generated", "the declared Secret type does not permit generation")
 		default:
 			return issues
@@ -174,4 +175,58 @@ func SSHComment(value string) bool {
 	return utf8.ValidString(value) && !strings.ContainsAny(value, `"\`) && strings.IndexFunc(value, func(r rune) bool {
 		return unicode.IsControl(r) || r == '\u2028' || r == '\u2029'
 	}) < 0
+}
+
+func ValidateTrust(object api.Object, catalog api.Catalog, exceptions func(api.Object, string) bool) []api.Issue {
+	var issues []api.Issue
+	var walk func(*api.Shape, api.Value, string)
+	walk = func(shape *api.Shape, value api.Value, path string) {
+		if shape == nil || !value.Present() {
+			return
+		}
+		if shape.Element != nil && shape.Type == api.Sequence {
+			for index, entry := range value.Items() {
+				walk(shape.Element, entry, path+"["+strconv.Itoa(index)+"]")
+			}
+		}
+		for _, field := range shape.Fields {
+			current := value.Get(field.Name)
+			switch field.Name {
+			case "verification", "tlsVerification", "packageRepositoryTLSVerification":
+				if !current.Present() {
+					continue
+				}
+				mode := current.Text()
+				refField := "trustBundleRef"
+				if field.Name == "packageRepositoryTLSVerification" {
+					refField = "packageRepositoryTrustBundleRef"
+				}
+				full := path + "." + field.Name
+				add := func(message, remedy string) {
+					issues = append(issues, api.Issue{Code: "api.invariant", Field: full, Message: message, Remediation: remedy})
+				}
+				allowsExceptions := exceptions != nil && exceptions(object, path)
+				if mode == "certificate" && !value.Has(refField) {
+					add("certificate verification requires an explicit server certificate trust bundle", "set "+path+"."+refField+" to a trustBundle Secret containing exactly one server certificate")
+				}
+				if mode == "certificate" {
+					if secret, ok := catalog.Find(api.Secret, value.Get(refField).Text()); ok && secret.Spec().Get("type").Text() != "trustBundle" {
+						add("certificate verification requires a trustBundle Secret containing a server certificate", "reference a contextStore trustBundle Secret instead of a CA-only or serving-key Secret")
+					}
+				}
+				if mode == "none" && value.Has(refField) {
+					add("disabled TLS verification cannot use a trust bundle", "remove "+path+"."+refField+" or select full or certificate verification")
+				}
+				if allowsExceptions && value.Has("verify") && value.Get("verify").Bool() != (mode != "none") {
+					add("tls.verify and tls.verification disagree", "remove tls.verify and use tls.verification alone, or make both settings agree")
+				}
+				if !allowsExceptions && mode != "full" {
+					add("this connection's consumer does not implement "+mode+" TLS verification", "select full verification and use a certificate matching this endpoint")
+				}
+			}
+			walk(field.Shape, current, path+"."+field.Name)
+		}
+	}
+	walk(api.Schema(object.Kind()), object.Spec(), "$.spec")
+	return issues
 }

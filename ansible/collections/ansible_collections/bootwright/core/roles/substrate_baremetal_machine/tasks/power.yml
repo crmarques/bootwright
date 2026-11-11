@@ -10,6 +10,7 @@
     user: '{{ lookup("ansible.builtin.file", bootwright_machine_port.user) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_machine_port.password) }}'
     verify: '{{ bootwright_machine_port.verify }}'
+    verification: "{{ bootwright_machine_port.verification | default(omit, true) }}"
     ca_data: >-
       {{ lookup('ansible.builtin.file', bootwright_machine_port.ca)
          if bootwright_machine_port.ca | default('') | length > 0 else '' }}
@@ -32,6 +33,7 @@
     user: '{{ lookup("ansible.builtin.file", bootwright_machine_port.user) }}'
     password: '{{ lookup("ansible.builtin.file", bootwright_machine_port.password) }}'
     verify: '{{ bootwright_machine_port.verify }}'
+    verification: "{{ bootwright_machine_port.verification | default(omit, true) }}"
     ca_data: >-
       {{ lookup('ansible.builtin.file', bootwright_machine_port.ca)
          if bootwright_machine_port.ca | default('') | length > 0 else '' }}

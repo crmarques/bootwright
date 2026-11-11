@@ -134,7 +134,7 @@ func lineDiff(want, got string) string {
 func TestClaimRequestsMatchTheirGoldens(t *testing.T) {
 	for name, catalog := range map[string]api.Catalog{
 		"request-claim":        catalogOf(),
-		"request-claim-bundle": catalogWithControllerTLS(m("verify", true, "trustBundleRef", "server-bmc-ca")),
+		"request-claim-bundle": catalogWithControllerTLS(m("verify", true, "trustBundleRef", "server-bmc-ca", "verification", "certificate")),
 	} {
 		t.Run(name, func(t *testing.T) {
 			matchesGolden(t, name, planIn(t, reconciliation.Apply, catalog).Definitions[0].Request, false)

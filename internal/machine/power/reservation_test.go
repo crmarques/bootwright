@@ -88,7 +88,7 @@ func TestAPinLessPowerCommandRefusesAServerAnotherSpellingProvedByItsUUID(t *tes
 		Hardware:   []baremetal.Interface{{MACAddress: "52-54-00-9A-1B-01", Name: "eno1"}},
 		Identity:   baremetal.Identity{Block: baremetal.BlockID("server"), Context: "other", Object: "server"},
 		Placement:  machine.Placement{Connection: machine.ConnectionLocal, Machine: "controller"},
-		Version:    "machine-baremetal-v1",
+		Version:    "machine-baremetal-v2",
 	}.Canonical()
 	if err != nil {
 		t.Fatal(err)

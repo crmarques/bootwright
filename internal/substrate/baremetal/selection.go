@@ -50,10 +50,11 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	slices.SortFunc(hardware, func(x, y Interface) int { return strings.Compare(x.MACAddress, y.MACAddress) })
 	return Request{
 		Controller: Controller{
-			CredentialsRef: target.Controller.CredentialsRef,
-			Endpoint:       target.Controller.Endpoint,
-			TLSVerify:      target.Controller.TLSVerify,
-			TrustBundleRef: target.Controller.TrustBundleRef,
+			CredentialsRef:  target.Controller.CredentialsRef,
+			Endpoint:        target.Controller.Endpoint,
+			TLSVerify:       target.Controller.TLSVerify,
+			TrustBundleRef:  target.Controller.TrustBundleRef,
+			TLSVerification: target.Controller.TLSVerification,
 		},
 		Hardware:      hardware,
 		RootVolumeRef: target.RootDeviceHints.VolumeRef,

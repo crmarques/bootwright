@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestPackageRepositoryTrustBundleMustBeACABundleSecret(t *testing.T) {
+func TestPackageRepositoryTrustBundleMustBePublicTrust(t *testing.T) {
 	ceph := Field{Shape: Schema(CephCluster)}
 	index := slices.IndexFunc(ceph.Shape.Fields, func(f Field) bool { return f.Name == "packageRepositoryTrustBundleRef" })
 	if index < 1 || ceph.Shape.Fields[index-1].Name != "packageRepository" {
@@ -15,8 +15,8 @@ func TestPackageRepositoryTrustBundleMustBeACABundleSecret(t *testing.T) {
 	if field.Required || field.Default.Present() {
 		t.Fatal("ceph.packageRepositoryTrustBundleRef must be optional without a default")
 	}
-	if !slices.Equal(field.Shape.Reference, []Kind{Secret}) || !slices.Equal(field.Shape.SecretTypes, []string{"caBundle"}) {
-		t.Fatalf("ceph.packageRepositoryTrustBundleRef must reference only a caBundle Secret: %v %v", field.Shape.Reference, field.Shape.SecretTypes)
+	if !slices.Equal(field.Shape.Reference, []Kind{Secret}) || !slices.Equal(field.Shape.SecretTypes, []string{"caBundle", "trustBundle"}) {
+		t.Fatalf("ceph.packageRepositoryTrustBundleRef must reference a caBundle or trustBundle Secret: %v %v", field.Shape.Reference, field.Shape.SecretTypes)
 	}
 }
 

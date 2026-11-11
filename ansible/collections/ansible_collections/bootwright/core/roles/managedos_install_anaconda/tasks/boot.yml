@@ -18,21 +18,21 @@
     tasks_from: pre_boot
   vars:
     bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
-    bootwright_machine_port:
-      endpoint: '{{ managedos_install_anaconda_endpoint }}'
-      verify: '{{ managedos_install_anaconda_verify }}'
-      ca: '{{ managedos_install_anaconda_controller_ca }}'
-      user: '{{ bootwright_os_install_material.controllerUser }}'
-      password: '{{ bootwright_os_install_material.controllerPassword }}'
-      expected: '{{ managedos_install_anaconda_expected }}'
-      pinned_uuid_base64: '{{ bootwright_os_install_material.pinnedUUIDBase64 | default("") }}'
-      pinned_serial_base64: '{{ bootwright_os_install_material.pinnedSerialBase64 | default("") }}'
-      firmware: '{{ bootwright_os_install_request.target.firmware | default({}) }}'
-      root_volume: >-
-        {{ {'ref': bootwright_os_install_request.target.hardware.rootVolumeRef,
-            'proof': bootwright_os_install_material.pinnedRootVolumeBase64 | b64decode | from_json}
-           if bootwright_os_install_request.target.hardware.rootVolumeRef is defined else {} }}
-
+    bootwright_machine_port: >-
+      {{ {'endpoint': (managedos_install_anaconda_endpoint),
+          'verify': (managedos_install_anaconda_verify),
+          'ca': (managedos_install_anaconda_controller_ca),
+          'user': (bootwright_os_install_material.controllerUser),
+          'password': (bootwright_os_install_material.controllerPassword),
+          'expected': (managedos_install_anaconda_expected),
+          'pinned_uuid_base64': (bootwright_os_install_material.pinnedUUIDBase64 | default("")),
+          'pinned_serial_base64': (bootwright_os_install_material.pinnedSerialBase64 | default("")),
+          'firmware': (bootwright_os_install_request.target.firmware | default({})),
+          'root_volume': ({'ref': bootwright_os_install_request.target.hardware.rootVolumeRef,
+              'proof': bootwright_os_install_material.pinnedRootVolumeBase64 | b64decode | from_json}
+              if bootwright_os_install_request.target.hardware.rootVolumeRef is defined else {})}
+         | combine({'verification': bootwright_os_install_request.target.controller.tlsVerification | default('')}
+                   if (bootwright_os_install_request.target.controller.tlsVerification | default('')) | length > 0 else {}) }}
 # Published only here, after the substrate proved the target and before the
 # media is inserted, so a replay or an apply that finds the machine installed
 # never publishes it again; the withdrawal of the private subtree removes it.
@@ -93,10 +93,12 @@
     tasks_from: boot_media
   vars:
     bootwright_machine_arm: '{{ bootwright_os_install_request.target.substrate }}'
-    bootwright_machine_port:
-      endpoint: '{{ managedos_install_anaconda_endpoint }}'
-      verify: '{{ managedos_install_anaconda_verify }}'
-      ca: '{{ managedos_install_anaconda_controller_ca }}'
-      user: '{{ bootwright_os_install_material.controllerUser }}'
-      password: '{{ bootwright_os_install_material.controllerPassword }}'
-      installer_powers_off: true
+    bootwright_machine_port: >-
+      {{ {'endpoint': (managedos_install_anaconda_endpoint),
+          'verify': (managedos_install_anaconda_verify),
+          'ca': (managedos_install_anaconda_controller_ca),
+          'user': (bootwright_os_install_material.controllerUser),
+          'password': (bootwright_os_install_material.controllerPassword),
+          'installer_powers_off': (True)}
+         | combine({'verification': bootwright_os_install_request.target.controller.tlsVerification | default('')}
+                   if (bootwright_os_install_request.target.controller.tlsVerification | default('')) | length > 0 else {}) }}

@@ -534,10 +534,11 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 	target := Target{
 		Channel: derived.Identity.Channel,
 		Controller: Controller{
-			CredentialsRef: derived.Controller.CredentialsRef,
-			Endpoint:       derived.Controller.Endpoint,
-			TLSVerify:      derived.Controller.TLSVerify,
-			TrustBundleRef: derived.Controller.TrustBundleRef,
+			CredentialsRef:  derived.Controller.CredentialsRef,
+			Endpoint:        derived.Controller.Endpoint,
+			TLSVerify:       derived.Controller.TLSVerify,
+			TrustBundleRef:  derived.Controller.TrustBundleRef,
+			TLSVerification: derived.Controller.TLSVerification,
 			VirtualMedia: VirtualMedia{
 				RemoveCertificate:   derived.Controller.VirtualMedia.RemoveCertificate,
 				RestoreVerification: derived.Controller.VirtualMedia.RestoreVerification,

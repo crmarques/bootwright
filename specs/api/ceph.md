@@ -172,7 +172,11 @@ every metadata path the host fetches stays within 2048 bytes. Omission uses
 source default, not a release catalog. Independent publisher signatures remain
 required for its selected RPMs.
 
-`packageRepositoryTrustBundleRef` optionally names a `caBundle` Secret,
+`packageRepositoryTLSVerification` selects
+[client TLS trust](../secrets.md#client-tls-trust), defaulting to `full`;
+non-full policies currently refuse before package acquisition.
+
+`packageRepositoryTrustBundleRef` optionally names a `caBundle` or `trustBundle` Secret,
 a trust anchor, that is the only TLS trust anchor for the authored `packageRepository`:
 host package acquisition verifies that repository's metadata and package
 downloads against the bundle alone (no host trust store, default path or

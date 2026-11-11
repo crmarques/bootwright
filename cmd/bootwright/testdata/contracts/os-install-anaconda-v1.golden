@@ -1,6 +1,6 @@
 implementation: os-install-anaconda-v1
-content-digest: ffaa7202524164ab5321798276fa78488ae13ca548af3a7311e6704d95fd70b9
-request-version: os-install-anaconda-v2
+content-digest: 6714193379c2ff201af10fb6f0278a7fad0369eaea5a12c8c6ac9d69386bc693
+request-version: os-install-anaconda-v3
 automation-formats: none
 mark-formats: none
 proof-ids: .bootwright-tree-identity, /etc/bootwright/registration.json, /etc/bootwright/root-wwn, /etc/bootwright/update.json
@@ -112,6 +112,7 @@ request-schema:
   target.controller struct installation.Controller
   target.controller.credentialsRef string
   target.controller.endpoint string
+  target.controller.tlsVerification string omitempty
   target.controller.tlsVerify bool
   target.controller.trustBundleRef string omitempty
   target.controller.virtualMedia struct installation.VirtualMedia

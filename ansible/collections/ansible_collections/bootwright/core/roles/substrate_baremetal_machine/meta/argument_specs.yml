@@ -19,6 +19,13 @@ argument_specs:
               tlsVerify:
                 type: bool
                 required: true
+              tlsVerification:
+                type: str
+                required: false
+                choices:
+                  - full
+                  - certificate
+                  - none
               trustBundleRef:
                 type: str
                 required: false
@@ -49,7 +56,7 @@ argument_specs:
             type: str
             required: true
             choices:
-              - machine-baremetal-v1
+              - machine-baremetal-v2
       bootwright_substrate_physical_digest:
         type: str
         required: true
@@ -89,6 +96,9 @@ argument_specs:
           password:
             type: path
             required: true
+          verification:
+            type: str
+            required: false
           verify:
             type: bool
             required: true
@@ -165,6 +175,9 @@ argument_specs:
           password:
             type: path
             required: true
+          verification:
+            type: str
+            required: false
           verify:
             type: bool
             required: true
@@ -207,6 +220,9 @@ argument_specs:
           password:
             type: path
             required: true
+          verification:
+            type: str
+            required: false
           verify:
             type: bool
             required: true
@@ -280,6 +296,9 @@ argument_specs:
             required: true
           ca:
             type: path
+          verification:
+            type: str
+            required: false
           verify:
             type: bool
             required: true
@@ -323,6 +342,9 @@ argument_specs:
             required: true
           ca:
             type: path
+          verification:
+            type: str
+            required: false
           verify:
             type: bool
             required: true
@@ -364,6 +386,9 @@ argument_specs:
             required: true
           ca:
             type: path
+          verification:
+            type: str
+            required: false
           verify:
             type: bool
             required: true
@@ -396,6 +421,9 @@ argument_specs:
             required: true
           ca:
             type: path
+          verification:
+            type: str
+            required: false
           verify:
             type: bool
             required: true

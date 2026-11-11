@@ -120,6 +120,8 @@ func (d VersionDeclaration) Parts() []Part {
 		return []Part{ValuePart}
 	case "usernamePassword":
 		return []Part{PasswordPart, UsernamePart}
+	case "trustBundle":
+		return []Part{CertificatePart}
 	case "caBundle":
 		if d.Source == "generated" {
 			return []Part{CertificatePart, PrivateKeyPart}

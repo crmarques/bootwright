@@ -1,6 +1,6 @@
 implementation: physical-erase-v1
-content-digest: e3cb651bcca26600cdc8372763a566a2b2af820b932ca038772ffdffacda2a24
-request-version: physical-erase-v3
+content-digest: 13908219706a39f5ac748ecedf7b233bf452ff46f7d759b747cc557c4abf7328
+request-version: physical-erase-v4
 automation-formats: none
 mark-formats: none
 proof-ids: bootwright.erase=1
@@ -96,6 +96,7 @@ request-schema:
   install.target.controller struct installation.Controller
   install.target.controller.credentialsRef string
   install.target.controller.endpoint string
+  install.target.controller.tlsVerification string omitempty
   install.target.controller.tlsVerify bool
   install.target.controller.trustBundleRef string omitempty
   install.target.controller.virtualMedia struct installation.VirtualMedia

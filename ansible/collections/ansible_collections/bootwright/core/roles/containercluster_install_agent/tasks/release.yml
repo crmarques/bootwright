@@ -54,4 +54,6 @@
                        bootwright_cluster_install_material['pinnedUUIDBase64Node' ~ containercluster_install_agent_index] | default(''),
                      'pinned_serial_base64':
                        bootwright_cluster_install_material['pinnedSerialBase64Node' ~ containercluster_install_agent_index] | default('')}
-                   if containercluster_install_agent_node.portPinned | default(false) else {}) }}
+                   if containercluster_install_agent_node.portPinned | default(false) else {})
+         | combine({'verification': containercluster_install_agent_node.controller.tlsVerification | default('')}
+                   if (containercluster_install_agent_node.controller.tlsVerification | default('')) | length > 0 else {}) }}

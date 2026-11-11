@@ -2,12 +2,16 @@ package bundlelocal
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -166,5 +170,40 @@ func TestTheMirrorAnchorVerifiesOnlyTheMirrorsOwnAuthority(t *testing.T) {
 	defer closeIdle()
 	if reading := readMirror(context.Background(), client, origin, []MirrorFile{{URL: mirror.URL + "/tools/present", Bytes: 1024}})[0]; reading.Status != 200 || reading.Served != 1024 {
 		t.Fatalf("the anchored mirror was not read: %+v", reading)
+	}
+}
+
+func TestMirrorTLSAcceptsPublicServerAnchorsAndRetainsFullVerification(t *testing.T) {
+	fixtures := "../../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/fixtures/tls-trust"
+	for _, name := range []string{"issued", "self-signed", "wrong-name", "expired", "client-only"} {
+		t.Run(name, func(t *testing.T) {
+			certificate, err := os.ReadFile(filepath.Join(fixtures, name+".pem"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			key, err := os.ReadFile(filepath.Join(fixtures, "server.key"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			pair, err := tls.X509KeyPair(certificate, key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var reached atomic.Int32
+			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached.Add(1); w.Header().Set("Content-Length", "1024") }))
+			server.TLS = &tls.Config{Certificates: []tls.Certificate{pair}}
+			server.StartTLS()
+			defer server.Close()
+			roots := x509.NewCertPool()
+			if !roots.AppendCertsFromPEM(certificate) {
+				t.Fatal("fixture is not PEM")
+			}
+			client, origin := probeClient(t, server, roots)
+			reading := readMirror(context.Background(), client, origin, []MirrorFile{{URL: server.URL + "/tool", Bytes: 1024}})[0]
+			valid := name == "issued" || name == "self-signed"
+			if (reading.Status == 200) != valid || (reached.Load() > 0) != valid {
+				t.Fatalf("%s: full TLS proof failed: %+v, HTTP count %d", name, reading, reached.Load())
+			}
+		})
 	}
 }

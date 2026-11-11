@@ -8973,3 +8973,14 @@ B1329 from parked. Provided-host management is explicit; host/OS ownership,
 foreign configuration preservation and consumer-before-firewall removal
 remain required. This extends D110's operator-only controller policy by an
 explicit management choice; it grants no environment execution or push.
+
+### D259
+
+**owner** (2026-11-11): requests public server certificates as verification
+trust across trust-bundle consumers, including certificates without matching
+hostname/IP, adjustable trust, and an explicit per-connection YAML setting
+that skips certificate checks. This authorizes X440 (M1, B1355): separate
+public trust material from endpoint verification policy; preserve full
+verification by default, exact-certificate identity where implemented, and
+existing capability restrictions on unverified transport. Unsupported native
+policies refuse before effects. No machine operation or push is authorized.

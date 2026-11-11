@@ -1660,8 +1660,8 @@ and spliced, like the gateway's, into the one apply stream after the
 so the `cookie_secret` one holds 32 bytes; a bound `cookie_secret` that
 validation refuses, neither 16, 24 nor 32 bytes after URL-safe base64
 decoding when it decodes, else as text, refuses `material` before any effect.
-The identity provider's CA bundle reaches the
-container only through that document's `custom_configs` entry, which cephadm
+The identity provider's public trust bundle, held by a `caBundle` or
+`trustBundle` Secret, reaches the container only through that document's `custom_configs` entry, which cephadm
 mounts at `/etc/pki/tls/certs/oauth2-proxy-idp-ca.pem`; no plan, record,
 argument, evidence or diagnostic carries a bundle or secret byte or a hash of
 one. After the apply, and before any dashboard write, each host of the proxy's
