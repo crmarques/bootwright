@@ -1,5 +1,5 @@
 implementation: cluster-media-agent-v1
-content-digest: db641632342c170783b4a217aa14dc198138743938bd6965492b7020dba39b2e
+content-digest: 9cc635edd8410397e96582c7a68d34c40c6323d63ddba65101a192b6e60d7c04
 request-version: cluster-media-agent-v1
 automation-formats: none
 mark-formats: none
@@ -11,6 +11,7 @@ effect-pins:
   /var/lib/bootwright-hosted
   clusters
   openshift-install
+  rebuild-never-over-insert
 request-identity:
   identity.context
   identity.cluster

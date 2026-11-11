@@ -6,7 +6,8 @@
 
 # The installer consumes its inputs into its own asset state, so a build always
 # starts from the frozen bytes rather than from what a previous one left. The
-# apply refused before this when the cluster's installation marked the area.
+# apply refused before this when a node may have been handed the image built
+# in the area, and the discard reads that rule again before it removes anything.
 - name: Build the image from the frozen inputs
   when: not (containercluster_media_agent_published | bool)
   vars:
@@ -24,9 +25,9 @@
       - -9
   block:
     - name: Discard the installer work area a previous build left
-      ansible.builtin.file:
+      bootwright.core.containercluster_work_area:
         path: '{{ containercluster_media_agent_work }}'
-        state: absent
+        refuse_inserted: true
       changed_when: false
 
     - name: Create the context's private hosted cluster directories top-down

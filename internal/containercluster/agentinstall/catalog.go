@@ -101,7 +101,7 @@ func WorkRoot(contextName, cluster string) string {
 // layout invalidates a frozen plan.
 func MediaContentDigest() string {
 	return contentDigest("bootwright.containercluster.media-agent-v1",
-		MediaImplementation, mediaRequestVersion, consumerPrefix, ImageFile, HostedRoot, clustersArea, installerTool)
+		MediaImplementation, mediaRequestVersion, consumerPrefix, ImageFile, HostedRoot, clustersArea, installerTool, rebuildRule)
 }
 
 func InstallContentDigest() string {
@@ -114,6 +114,7 @@ const (
 	hostAccessBound = "lend-bound-secret"
 	bootRecord      = "booted-never-no-effect"
 	insertRecord    = "insert-recorded-before-media"
+	rebuildRule     = "rebuild-never-over-insert"
 )
 
 func contentDigest(parts ...string) string {

@@ -61,7 +61,8 @@ def test_the_removal_refuses_an_area_another_incarnation_built_before_it_removes
     entries = tasks("destroy.yml")
     read = position(entries, lambda task: task.get("register") == "containercluster_media_agent_built")
     refuse = position(entries, lambda task: "ansible.builtin.fail" in task)
-    removals = [index for index, task in enumerate(entries) if (task.get("ansible.builtin.file") or {}).get("state") == "absent"]
+    removals = [index for index, task in enumerate(entries) if (task.get("ansible.builtin.file") or {}).get("state") == "absent"
+                or "bootwright.core.containercluster_work_area" in task]
     assert len(removals) == 2 and read < refuse < min(removals)
     assert entries[read]["ansible.builtin.slurp"] == {"src": "{{ containercluster_media_agent_receipt }}"}
     assert holds(scope({"incarnation": EARLIER}), entries[refuse]["when"])

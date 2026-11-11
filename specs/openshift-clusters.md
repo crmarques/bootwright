@@ -523,7 +523,7 @@ installation later needs, whose admin client certificate is the cluster's
 [identity](#installation), so the area outlives the attempt that created it, is
 never enumerated in evidence, progress output or a log, and is discarded and
 rebuilt rather than reused whenever the inputs it was built from are not the
-inputs frozen now, unless an installation has booted from it. The build
+inputs frozen now, unless a node may have been handed the image built there. The build
 receipt also records the context's incarnation: the device and inode the
 registry holds for the context's directory with that directory's birth time,
 or its inode generation where the filesystem reports no birth time, since a
@@ -534,22 +534,28 @@ predecessor left, refuses before any effect, naming the area and keeping it,
 and the hand-over of a kept kubeconfig to custody before a removal refuses
 naming such an area rather than skipping it.
 
-**A work area an installation booted from is never rebuilt.** The area also
+**A work area a node may have been handed the image in is never rebuilt.** The area also
 holds the state the [installation](#installation) boots its nodes into and the
 installer's own copy of the administrator access to the cluster they install,
 the only one until the installation block proves the installation complete,
 and a rebuild starts by discarding it. The installation block therefore marks
-the area with the file `.bootwright-booted` before it hands any node the image, whether or not that
-attempt then boots one, and this block's observation reports the mark. An
-attempt that finds the area marked and would build again, because no image
-built there is published, no receipt there records what it was built from, or
-the inputs or installer version it records are not the ones frozen now, refuses
-before any effect, naming each reason and directing the operator to destroy the
-cluster's installation first. A marked area whose published image is this
-request's is replayed as below, and an unmarked area is rebuilt as before. The
-mark leaves only with the area itself, in this block's inverse, which a
-removal starts only once the installation's own inverse has completed, because
-a removal [waits on its dependents](state-reconciliation.md#continuation-and-removal).
+the area with the file `.bootwright-booted` before it hands any node the image,
+and records each node's insert there, and this block's observation reports
+whether a node may have been handed the image by the rule its
+[Unknown resolution](#installation) reads. An attempt that finds such an area
+and would build again, because no image built there is published, no receipt
+there records what it was built from, or the inputs or installer version it
+records are not the ones frozen now, refuses before any effect, naming each
+reason and directing the operator to destroy the cluster's installation first;
+the discard reads the rule again and keeps such an area whole. A published
+image that is this request's is replayed as below, and any other area,
+unmarked or carrying only this build's mark with no insert record, is rebuilt. The mark and the records leave only with the area itself, in this
+block's inverse, which a removal starts only once the installation's own
+inverse has completed, because a removal
+[waits on its dependents](state-reconciliation.md#continuation-and-removal). It
+removes what says a node was handed the image last: the rest of the area, then
+this build's mark, then the insert records, then any other mark, so a removal
+stopped at any step leaves an area that still held an insert reading as one.
 
 **Publication is private.** The image embeds the pull secret and the cluster
 SSH key in its own ignition, so it is confidential on every substrate and is
@@ -668,7 +674,6 @@ as stranding the installation (observed by v1; re-verify, in
 [knowledge](../.agents/knowledge/openshift-agent-install-waits.md)).
 Installations of different contexts on one controller are not coordinated.
 
-
 A node whose realized target is
 [physical](substrates.md#physical-machine-realization) makes this block consume
 `data-loss` on **apply**: the agent installer writes the release image to that
@@ -718,8 +723,7 @@ is still being read after the node answers on the network, and removing it
 early corrupts the running installer. A node that fails a step fails the block
 naming it once the other nodes of its round have finished.
 
-**Virtual IPs are free before boot.** When the boot is a fresh one, so no
-declared node is powered on, the block first proves that no host answers
+**Virtual IPs are free before boot.** When no declared node is powered on, the block first proves that no host answers
 a virtual IP of a multi-node `baremetal` cluster, for each such address inside a
 managed libvirt network whose provider host is the controller: it sends
 duplicate-address ARP probes from that network's bridge, three within three
@@ -729,11 +733,10 @@ anything is inserted. The assisted service refuses a virtual IP another host
 answers only after every node has registered, and the installer reports that
 as a timeout naming no address. Bootwright never assigns a virtual IP to a host
 interface. An IPv6 virtual IP and one on any other network is not probed, and
-the evidence names the addresses that were not probed. Once any declared node is
+the evidence names each. Once any declared node is
 powered on, whether it runs this cluster's image or belongs to an installed
 cluster whose media was released, nothing is probed: the cluster's own nodes
 may answer its virtual IPs.
-
 
 **Each insert has its own token.** A management controller holds the URL it is
 handed until its media is ejected, and an emulated one writes it to its journal
@@ -1060,7 +1063,8 @@ is positive no effect only while no node was handed the image: no
 `.bootwright-booted` area mark and no boot
 [before-state](state-reconciliation.md#operation-records) recorded, or this
 build's mark and no `.bootwright-inserted-<index>` record, which a node writes
-durably after its pre-boot proof and before its insert. Otherwise it stays
+durably after its pre-boot proof and before its insert; its stage, another
+mark or an unlistable area reads as one. Otherwise it stays
 unknown and boots nothing; remedy: destroy before installing again, or start
 installed nodes. That same cluster
 answering while the completion is not yet true is a positive partial

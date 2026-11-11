@@ -141,7 +141,7 @@ func contractRecipes() map[string]digestRecipe {
 			partVersion("kickstart-anaconda-v2"), partPin("os"), partPin("private"), partPin("public"), partPin(installation.MarkerPath), partPin(installation.HostKeyPath),
 			partPin(installation.NetworkDocumentPath), partPin(installation.NetworkMarkerPath), partPin(strconv.Itoa(300)), partPin("proved-installation-disk-boot,replay-safe-unread-registration")),
 		agentinstall.MediaImplementation: digestOf(partDomain("bootwright.containercluster.media-agent-v1"), partImplementation(agentinstall.MediaImplementation), partRequest("cluster-media-agent-v1"),
-			partPin("clusters"), partPin(agentinstall.ImageFile), partPin("/var/lib/bootwright-hosted"), partPin("clusters"), partPin("openshift-install")),
+			partPin("clusters"), partPin(agentinstall.ImageFile), partPin("/var/lib/bootwright-hosted"), partPin("clusters"), partPin("openshift-install"), partPin("rebuild-never-over-insert")),
 		agentinstall.InstallImplementation: digestOf(partDomain("bootwright.containercluster.install-agent-v1"), partImplementation(agentinstall.InstallImplementation), partRequest("cluster-install-agent-v1"),
 			partPin("clusters"), partPin(agentinstall.ImageFile), partPin("/var/lib/bootwright-hosted"), partPin("clusters"), partPin("openshift-install"), partPin("openshift-clients"), partPin("substrate-access-kubevirt-v1"), partPin("lend-bound-secret"), partPin("booted-never-no-effect"), partPin("insert-recorded-before-media")),
 		artifactserver.Implementation: digestOf(partDomain("bootwright.infrastructureservices.artifact-server-v1"), partImplementation(artifactserver.Implementation), partRequest("artifact-server-nginx-v2"),

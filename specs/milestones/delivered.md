@@ -14395,7 +14395,7 @@ Python `test_each_node_records_its_insert_durably_after_its_proof_and_before_the
 occurred. **Limitations:** an insert the controller refused still reads
 unknown and needs a destroy; a retry whose corrected Machine changes the
 media inputs still meets the media rebuild's refusal of a marked area
-([B1327](m3.md#b1327)); a
+([B1327](#x413--rebuild-a-never-inserted-area)); a
 recorded boot stopped between its `prepared` record and the mark stays unknown
 as under X346; firmware a node's proof applied before refusing stays applied,
 as desired state the retry proves again.
@@ -14906,3 +14906,57 @@ mirror there and releases remain on [B1249](backlog.md#b1249). A service on
 an installed Machine that is powered off stalls its removal at the connection,
 because the managed-service capabilities take no retirement with their hosts;
 an earlier build refuses the arm with the generic unbound-host-key message.
+
+### X413 — Rebuild a never-inserted area
+
+**Item:** B1327 (2026-11-10, from the independent review of
+[X375](#x375--no-insert-no-effect); [D257](backlog.md#d257)), delivered
+in-tree. **Kind:** defect, delivered as safety. **Owners:** Container
+clusters. The media block's rebuild of `cluster-media-<cluster>` refused any
+work area carrying the `.bootwright-booted` mark, so an attempt whose every
+node refused its pre-boot proof, which X375 reads as no effect, still needed
+a destroy once correcting the refused NICs or identity changed the media
+inputs. The rebuild now refuses only an area a node may have been handed the
+image in, by the one rule the installation's
+[Unknown resolution](../openshift-clusters.md#installation) reads: an insert
+record or its stage, a mark holding anything but `inserts-recorded` or not a
+regular file, or an area that cannot be listed
+([boot media](../openshift-clusters.md#boot-media)). The rule moved from
+`containercluster_install_inspect` into the module utility
+`containercluster_work_area`, which both inspections import; the media
+observation gains `inserted`, which reaches no evidence. The build's discard
+and the media removal go through the new module `containercluster_work_area`:
+the discard reads the rule again and keeps such an area whole, and the removal
+deletes the rest of the area, then this build's mark, then the insert
+records, then any other mark, each step synced, so a removal stopped at any
+step leaves an area that held an insert reading as one. The plain recursive
+removal it replaces could leave this build's mark and the kept kubeconfig
+with no record. The content digest of `cluster-media-agent-v1` moved (pin
+`rebuild-never-over-insert`), and with it each install request's
+`imageIdentity`.
+
+| Finding | Change |
+| --- | --- |
+| B1327 (the X375 review of REC-01) | `containercluster_work_area` module utility (rule, ordered `remove`) and module; `containercluster_media_inspect` `inserted`; media `apply.yml` refusal on `inserted`; `build.yml` discard and `destroy.yml` removal through the module; openshift-clusters.md boot media and Unknown resolution |
+
+Tests: Python
+`test_a_rebuild_over_a_marked_area_refuses_only_when_a_node_may_have_been_handed_the_image`,
+`test_a_marked_area_no_node_was_handed_the_image_in_is_rebuilt`,
+`test_an_area_a_node_may_have_been_handed_the_image_in_refuses_naming_why_and_the_remedy`,
+`test_the_removal_removes_the_work_area_by_the_rule_that_keeps_an_insert_readable`,
+the media inspection's `test_the_observation_reports_a_node_that_may_have_been_handed_the_image`
+and `test_an_area_that_cannot_be_listed_reads_as_a_node_handed_the_image`,
+and the work area's
+`test_a_removal_stopped_at_any_step_never_reads_as_never_handed_the_image`,
+`test_the_mark_this_build_wrote_leaves_before_the_records_and_the_rest_before_both`,
+`test_a_rebuild_keeps_an_area_a_node_may_have_been_handed_the_image_in_whole`
+and `test_a_symlinked_mark_is_removed_last_and_its_target_kept`.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** an operation that recorded a boot of its
+installation and whose marked area a rebuild then discarded reads that
+installation unknown, as [X346](#x346--boot-before-no-effect) states for an
+area that lost its mark. A request is frozen per operation, so such a rebuild
+inside the operation that recorded the boot happens only when the published
+image or its receipt went missing, and it reads unknown, the safe direction; a
+new operation's install block holds no recorded boot.

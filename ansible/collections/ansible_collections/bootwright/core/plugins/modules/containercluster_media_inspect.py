@@ -10,8 +10,9 @@ version_added: "0.1.0"
 description:
   - Reports whether the agent boot image is published beneath the served root,
     whether the installer's work area exists, what the receipt says the
-    published image was built from, and whether the cluster's installation
-    marked the work area as one its nodes were booted from.
+    published image was built from, whether the cluster's installation
+    marked the work area, and whether a node may have been handed the image
+    built there.
   - Performs no change and is safe to repeat.
 options:
   request:
@@ -43,6 +44,10 @@ from ansible_collections.bootwright.core.plugins.module_utils.containercluster_p
     LayoutError,
     prove_push,
 )
+from ansible_collections.bootwright.core.plugins.module_utils.containercluster_work_area import (
+    MARKER,
+    inserted,
+)
 
 # IMAGE is the name the attempt publishes the image under, inside the
 # unguessable directory it minted. RECEIPT is what that attempt recorded about
@@ -51,12 +56,6 @@ from ansible_collections.bootwright.core.plugins.module_utils.containercluster_p
 IMAGE = "agent.iso"
 RECEIPT = "bootwright-media.json"
 MAX_RECEIPT = 65536
-# MARKER is what the cluster's installation writes into the same work area
-# before it hands any node the image (containercluster_install_agent). From then
-# on the area holds the state those nodes install from and the only
-# administrator access to the cluster, so anything at that name counts: a
-# rebuild refuses rather than discarding an area it cannot prove unbooted.
-MARKER = ".bootwright-booted"
 
 
 def published(root):
@@ -100,6 +99,7 @@ def observe(request):
     return {
         "booted": os.path.lexists(os.path.join(work, MARKER)),
         "image": image,
+        "inserted": inserted(work),
         "inputs": str(recorded.get("inputs") or ""),
         "installer": str(recorded.get("installer") or ""),
         "work": os.path.isdir(work),

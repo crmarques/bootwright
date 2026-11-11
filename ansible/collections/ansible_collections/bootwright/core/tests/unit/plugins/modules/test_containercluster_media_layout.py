@@ -102,7 +102,7 @@ def test_pushed_media_replay_reads_only_the_private_image_and_bounded_receipt(tm
     receipt.write_text(json.dumps({'inputs': 'a' * 64, 'installer': '4.21.10'}))
     receipt.chmod(0o600)
     assert inspect.observe(frozen) == {
-        'booted': False, 'image': True, 'inputs': 'a' * 64, 'installer': '4.21.10', 'work': True,
+        'booted': False, 'image': True, 'inserted': False, 'inputs': 'a' * 64, 'installer': '4.21.10', 'work': True,
     }
     receipt.write_bytes(b'x' * (inspect.MAX_RECEIPT + 1))
     assert inspect.observe(frozen)['inputs'] == ''

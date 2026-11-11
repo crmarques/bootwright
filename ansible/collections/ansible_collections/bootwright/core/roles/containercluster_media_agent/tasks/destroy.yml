@@ -73,10 +73,13 @@
   when: bootwright_cluster_media_request.deliveryKind == 'fetch'
   register: containercluster_media_agent_image_removed
 
+# What says a node may have been handed the image leaves last: the rest of the
+# area, then this build's mark, then the insert records, then any other mark,
+# so a removal stopped at any step never leaves an area that held an insert
+# record reading as one no node was handed the image in.
 - name: Remove the work area this cluster's installer kept its state in
-  ansible.builtin.file:
+  bootwright.core.containercluster_work_area:
     path: '{{ containercluster_media_agent_work }}'
-    state: absent
   register: containercluster_media_agent_work_removed
 
 - name: Remove the clusters' and the context's directories once empty

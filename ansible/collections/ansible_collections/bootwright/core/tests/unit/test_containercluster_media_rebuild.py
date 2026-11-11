@@ -1,4 +1,4 @@
-"""A work area an installation booted from is never discarded by a rebuild.
+"""A work area a node may have been handed the image in is never discarded by a rebuild.
 
 A cluster's media and install blocks share one installer work area (`WorkRoot`
 in internal/containercluster/agentinstall/catalog.go, set on both requests in
@@ -6,8 +6,10 @@ selection.go). `openshift-install agent create image` leaves its asset state
 and the administrator kubeconfig there
 (.agents/knowledge/openshift-agent-work-area.md), and a media build starts by
 discarding the area. These cases pin the rule's three parts: the installation
-marks the area before any node is handed the image, the inspection reports the
-mark, and the media apply refuses to build over it. They also pin the replay
+marks the area before any node is handed the image, the inspection reports
+whether a node may have been handed it, and the media apply refuses to build
+over such an area while it rebuilds a marked one no node was handed the image
+in. They also pin the replay
 that skips the build: the image already published still gets its served mode
 and label and is fetched through the listener, from the directory the
 inspection found it in.
@@ -36,6 +38,7 @@ from ansible.template import Templar
 
 from ansible_collections.bootwright.core.tests.unit.install_phase_tasks import apply_tasks
 from ansible_collections.bootwright.core.plugins.action import containercluster_media_protocol as protocol
+from ansible_collections.bootwright.core.plugins.module_utils import containercluster_work_area as work_area
 from ansible_collections.bootwright.core.plugins.modules import containercluster_install_inspect
 from ansible_collections.bootwright.core.plugins.modules import containercluster_media_inspect as inspect
 
@@ -232,7 +235,7 @@ def refuses(tmp_path, observation):
     return all(rendering.evaluate_conditional(condition) for condition in task["when"])
 
 
-PUBLISHED = {"booted": False, "image": True, "inputs": DIGEST, "installer": RELEASE, "work": True}
+PUBLISHED = {"booted": False, "image": True, "inserted": False, "inputs": DIGEST, "installer": RELEASE, "work": True}
 CHANGES = {
     "no image": ({"image": False}, "no image built there is published any more"),
     "no receipt": ({"inputs": "", "installer": ""}, "no receipt there records what its image was built from"),
@@ -246,23 +249,70 @@ CHANGES = {
 
 
 @pytest.mark.parametrize("change, cause", CHANGES.values(), ids=CHANGES.keys())
-def test_a_marked_area_that_would_be_rebuilt_refuses_naming_why_and_the_remedy(tmp_path, change, cause):
-    observation = dict(PUBLISHED, booted=True, **change)
+def test_an_area_a_node_may_have_been_handed_the_image_in_refuses_naming_why_and_the_remedy(tmp_path, change, cause):
+    observation = dict(PUBLISHED, booted=True, inserted=True, **change)
     assert refuses(tmp_path, observation) is True
     task = refusal()
     message = Templar(loader=LOADER, variables=media_scope(tmp_path, observation, **task["vars"])).template(
         task["ansible.builtin.fail"]["msg"])
     assert message == (
-        "the installation of cluster sno marked the work area its boot image is built in before it booted any node "
-        "from that image, so the area holds the state those nodes install from and the cluster's only "
-        "administrator access, and building the image again would start by discarding it; it would be built "
-        "again because %s. Nothing was changed. Destroy the cluster's installation first: bootwright destroy "
-        "--context lab ejects its media before the work area is discarded, and the apply after it builds the "
-        "image afresh" % cause)
+        "a node of cluster sno may have been handed the boot image built in its work area, so the area holds the "
+        "state that node installs from and the cluster's only administrator access, and building the image again "
+        "would start by discarding it; it would be built again because %s. Nothing was changed. Destroy the "
+        "cluster's installation first: bootwright destroy --context lab ejects its media before the work area is "
+        "discarded, and the apply after it builds the image afresh" % cause)
+
+
+@pytest.mark.parametrize("change", [change for change, _cause in CHANGES.values()], ids=list(CHANGES))
+def test_a_marked_area_no_node_was_handed_the_image_in_is_rebuilt(tmp_path, change):
+    assert refuses(tmp_path, dict(PUBLISHED, booted=True, **change)) is False
+
+
+def handed(work):
+    (work / (work_area.INSERTED + "0")).write_text("sno-01\n")
+
+
+def staged(work):
+    (work / ("." + work_area.INSERTED + "0.0123456789abcdef")).write_text("")
+
+
+def foreign(work):
+    (work / work_area.MARKER).write_bytes(b"")
+
+
+def linked(work):
+    (work / "vouch").write_bytes(work_area.VOUCH)
+    (work / work_area.MARKER).unlink()
+    (work / work_area.MARKER).symlink_to(work / "vouch")
+
+
+AREAS = {
+    "this build's mark alone": (None, False),
+    "an insert record": (handed, True),
+    "a record's stage": (staged, True),
+    "a mark another build wrote": (foreign, True),
+    "a symlinked mark": (linked, True),
+}
+
+
+# The area as the installation leaves it, read by the real inspection and the
+# real refusal: an attempt whose every node refused its pre-boot proof leaves
+# this build's mark and no record, and is rebuilt when its inputs changed.
+@pytest.mark.parametrize("make, refused", AREAS.values(), ids=AREAS.keys())
+def test_a_rebuild_over_a_marked_area_refuses_only_when_a_node_may_have_been_handed_the_image(tmp_path, make, refused):
+    frozen = built(tmp_path)
+    work = pathlib.Path(frozen["workRoot"])
+    (work / work_area.MARKER).write_bytes(work_area.VOUCH)
+    if make is not None:
+        make(work)
+    observation = inspect.observe(frozen)
+    assert observation["booted"] is True
+    assert refuses(tmp_path, dict(observation, inputs="b" * 64)) is refused
+    assert refuses(tmp_path, observation) is False
 
 
 def test_a_marked_area_whose_image_is_this_requests_is_replayed(tmp_path):
-    assert refuses(tmp_path, dict(PUBLISHED, booted=True)) is False
+    assert refuses(tmp_path, dict(PUBLISHED, booted=True, inserted=True)) is False
 
 
 @pytest.mark.parametrize("change", [change for change, _cause in CHANGES.values()] + [{}],
@@ -287,9 +337,20 @@ def test_the_refusal_comes_before_anything_a_build_discards():
     build = tasks(MEDIA, "build.yml")
     assert build[0]["when"] == BUILD
     discards = [task for task in expanded(MEDIA, "apply.yml")
-                if (task.get("ansible.builtin.file") or {}).get("state") == "absent"
-                and task["ansible.builtin.file"]["path"] == "{{ containercluster_media_agent_work }}"]
+                if (task.get("ansible.builtin.file") or {}) == {"path": "{{ containercluster_media_agent_work }}", "state": "absent"}
+                or "bootwright.core.containercluster_work_area" in task]
     assert discards == [build[0]["block"][0]]
+    # The discard reads the same rule again and keeps an area it holds whole.
+    assert discards[0]["bootwright.core.containercluster_work_area"] == {
+        "path": "{{ containercluster_media_agent_work }}", "refuse_inserted": True}
+
+
+def test_the_removal_removes_the_work_area_by_the_rule_that_keeps_an_insert_readable():
+    removals = [task for task in tasks(MEDIA, "destroy.yml")
+                if (task.get("ansible.builtin.file") or {}) == {"path": "{{ containercluster_media_agent_work }}", "state": "absent"}
+                or "bootwright.core.containercluster_work_area" in task]
+    assert [task.get("bootwright.core.containercluster_work_area") for task in removals] == [
+        {"path": "{{ containercluster_media_agent_work }}"}]
 
 
 def argv(task):

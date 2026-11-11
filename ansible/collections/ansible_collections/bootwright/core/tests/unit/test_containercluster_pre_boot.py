@@ -219,11 +219,11 @@ def test_each_node_records_its_insert_durably_after_its_proof_and_before_the_ins
 # and an existing mark is never rewritten, so a mark another build wrote keeps
 # reading as an area a node may have been handed the image from.
 def test_the_boot_mark_vouches_for_the_insert_records_and_is_never_rewritten():
-    from ansible_collections.bootwright.core.plugins.modules import containercluster_install_inspect as inspect
+    from ansible_collections.bootwright.core.plugins.module_utils import containercluster_work_area as rule
 
     prepare = LOADER.load_from_file(str(ROLE / "tasks" / "prepare_boot.yml"))
     marks = [task["ansible.builtin.copy"] for task in prepare
              if str((task.get("ansible.builtin.copy") or {}).get("dest", "")).endswith("/.bootwright-booted")]
     assert len(marks) == 1
     assert marks[0]["force"] is False
-    assert marks[0]["content"].encode() == inspect.VOUCH
+    assert marks[0]["content"].encode() == rule.VOUCH

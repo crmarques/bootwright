@@ -28,6 +28,7 @@ import time
 import pytest
 from ansible.module_utils.testing import patch_module_args
 
+from ansible_collections.bootwright.core.plugins.module_utils import containercluster_work_area as rule
 from ansible_collections.bootwright.core.plugins.modules import containercluster_install_inspect as inspect
 from ansible_collections.bootwright.core.plugins.modules.containercluster_install_inspect import (
     AGENT_CONFIG, AUTH_CONFIG, KEPT, MAX_KUBECONFIG, REFUSED, RESTORED, STATE, UNTOUCHED, admitted, fetch, keep, named,
@@ -835,26 +836,26 @@ def test_the_observation_reports_the_boot_mark(tmp_path):
 def test_the_observation_reports_a_node_that_may_have_been_handed_the_image(tmp_path):
     work = work_area(tmp_path / "work", kubeconfig())
     assert observe(request(tmp_path, work))["inserted"] is False
-    (work / inspect.MARKER).write_bytes(inspect.VOUCH)
+    (work / inspect.MARKER).write_bytes(rule.VOUCH)
     found = observe(request(tmp_path, work))
     assert (found["booted"], found["inserted"]) == (True, False)
-    (work / (inspect.INSERTED + "0")).write_text("sno-01\n")
+    (work / (rule.INSERTED + "0")).write_text("sno-01\n")
     assert observe(request(tmp_path, work))["inserted"] is True
-    (work / (inspect.INSERTED + "0")).unlink()
-    (work / ("." + inspect.INSERTED + "1.0123456789abcdef")).write_text("")
+    (work / (rule.INSERTED + "0")).unlink()
+    (work / ("." + rule.INSERTED + "1.0123456789abcdef")).write_text("")
     assert observe(request(tmp_path, work))["inserted"] is True
-    assert inspect.INSERTED == ".bootwright-inserted-" and inspect.VOUCH == b"inserts-recorded\n"
+    assert rule.INSERTED == ".bootwright-inserted-" and rule.VOUCH == b"inserts-recorded\n"
 
 
 @pytest.mark.parametrize("mark", [b"", b"inserts-recorded", b"inserts-recorded\n\n", b"other\n", None], ids=repr)
 def test_a_mark_this_build_did_not_write_reads_as_a_node_handed_the_image(tmp_path, mark):
     work = work_area(tmp_path / "work", kubeconfig())
     if mark is None:
-        (tmp_path / "vouch").write_bytes(inspect.VOUCH)
+        (tmp_path / "vouch").write_bytes(rule.VOUCH)
         (work / inspect.MARKER).symlink_to(tmp_path / "vouch")
     else:
         (work / inspect.MARKER).write_bytes(mark)
-    assert inspect.inserted(str(work)) is True
+    assert rule.inserted(str(work)) is True
 
 
 def test_an_area_that_cannot_be_listed_reads_as_a_node_handed_the_image(tmp_path, monkeypatch):
@@ -863,8 +864,8 @@ def test_an_area_that_cannot_be_listed_reads_as_a_node_handed_the_image(tmp_path
     def refused(path):
         raise PermissionError(13, "denied")
 
-    monkeypatch.setattr(inspect.os, "listdir", refused)
-    assert inspect.inserted(str(work)) is True
-    assert inspect.inserted(str(tmp_path / "absent")) is True
+    monkeypatch.setattr(rule.os, "listdir", refused)
+    assert rule.inserted(str(work)) is True
+    assert rule.inserted(str(tmp_path / "absent")) is True
     monkeypatch.undo()
-    assert inspect.inserted(str(tmp_path / "absent")) is False
+    assert rule.inserted(str(tmp_path / "absent")) is False

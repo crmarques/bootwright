@@ -109,18 +109,21 @@
       repeat bootwright apply --context {{ bootwright_cluster_media_request.identity.context }}
   when: containercluster_media_agent_foreign | bool
 
-# A build starts by discarding the work area. Once the cluster's installation
-# has marked it, the area holds the state that installation's nodes install
+# A build starts by discarding the work area. Once a node of the cluster may
+# have been handed the image built there, by the inspection's `inserted` rule
+# (containercluster_work_area), the area holds the state that node installs
 # from and the only administrator access to the cluster, so nothing builds in
 # it again: this refuses before any effect, naming why a build would be needed.
-- name: Refuse to rebuild a work area an installation already booted from
+# A marked area no node was handed the image in, an attempt whose every node
+# refused its pre-boot proof, is rebuilt.
+- name: Refuse to rebuild a work area a node may have been handed the image in
   ansible.builtin.fail:
     msg: >-
-      the installation of cluster {{ bootwright_cluster_media_request.identity.cluster }}
-      marked the work area its boot image is built in before it booted any
-      node from that image, so the area holds the state those nodes install
-      from and the cluster's only administrator access, and building the image
-      again would start by discarding it; it would be built again because
+      a node of cluster {{ bootwright_cluster_media_request.identity.cluster }}
+      may have been handed the boot image built in its work area, so the area
+      holds the state that node installs from and the cluster's only
+      administrator access, and building the image again would start by
+      discarding it; it would be built again because
       {{ containercluster_media_agent_rebuild_causes | join(', and ') }}.
       Nothing was changed. Destroy the cluster's installation first: bootwright
       destroy --context {{ bootwright_cluster_media_request.identity.context }}
@@ -146,7 +149,7 @@
             else []) }}
   when:
     - not (containercluster_media_agent_published | bool)
-    - containercluster_media_agent_before.observation.booted
+    - containercluster_media_agent_before.observation.inserted
 
 # A replay builds nothing, and build.yml still repairs and proves what it
 # serves, so the published image is fetched through the listener before it is
