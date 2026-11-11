@@ -350,6 +350,35 @@ Bootwright does not realize CephFS snapshot mirroring
 ([B483](milestones/m2.md#b483)).
 The [resource contract](ceph-resources.md) owns those relationships.
 
+### Service families
+
+`TestNativeServiceFamilyTableMatchesAdmission` holds this closed admission
+list to `nativeServiceTypes`. The records below own each family's fields;
+admission claims no lifecycle beyond its owning refusal table.
+
+| Family | Service ID |
+| --- | --- |
+| `mon` | forbidden |
+| `mgr` | forbidden |
+| `osd` | Bootwright-owned |
+| `mds` | required native ID |
+| `rgw` | required native ID |
+| `ingress` | required native ID |
+| `nvmeof` | required native ID |
+| `nfs` | required native ID |
+| `prometheus` | forbidden |
+| `alertmanager` | forbidden |
+| `grafana` | forbidden |
+| `node-exporter` | forbidden |
+| `ceph-exporter` | forbidden |
+| `snmp-gateway` | forbidden |
+| `mgmt-gateway` | forbidden |
+| `oauth2-proxy` | forbidden |
+| `loki` | forbidden |
+| `alloy` | forbidden |
+| `promtail` | forbidden |
+| `rbd-mirror` | forbidden |
+
 ### RGW, ingress and NFS records
 
 Admission accepts `rgw`, `ingress` and `nfs` documents under closed records
@@ -425,7 +454,8 @@ because cephadm compares it with the host's network keys as text
 and lies inside the declared public CIDRs; `keepalive_only` and
 `enable_haproxy_protocol` exclude each other. Unless `keepalive_only: true`,
 `frontend_port` and `monitor_port` are required, and the frontend, monitor
-and peer ports differ (an NFS ingress reserves 1024 for HAProxy peers unless
+and peer ports differ (NFS ingress uses the
+[HAProxy peer default](api/ceph.md#listener-registry) unless
 `haproxy_peer_communication_port` names another). The ingress placement
 selects at least two eligible hosts.
 
@@ -503,7 +533,7 @@ the [one name rule](api.md#object-names) whatever services it declares.
 | --- | --- |
 | `pool` | Required: the `metadata.name` of a same-cluster replicated CephPool with role `rbd`. cephadm refuses to deploy a gateway whose pool is absent and does not retry ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/nvmeof.py#L28-L39)); the gateway keeps its state in omap there, which an erasure-coded pool does not support. |
 | `group` | Required, `[A-Za-z0-9][A-Za-z0-9_.-]*`: cephadm accepts an empty group, but Bootwright requires a named one. `group` is unique among the cluster's nvmeof services. |
-| `port`, `discovery_port` | Optional, 1-65535; omitted, the gateway uses 5500 and 8009. |
+| `port`, `discovery_port` | Optional, 1-65535; omitted values follow the [listener registry](api/ceph.md#listener-registry). |
 | `transports` | Optional; only `tcp`, the one value the native validation admits. |
 | `enable_auth` | Optional; true requires the five protected gateway mTLS service bindings below. Omitted or false selects native managed certificates through derived `enable_mtls: true`; no plaintext fallback is allowed. |
 
@@ -528,8 +558,7 @@ that runs a gateway of another nvmeof service
 NVMe-oF service observation adds a bounded native gateway read for each placed
 host to the shared cluster observation budget; its readiness retry window and
 adapter deadline include that complete observation.
-Each gateway host reserves, in the shared listener registry, `port`, the
-NVMe/TCP listener port 4420, `discovery_port` and the exporter port 10008:
+Each gateway host reserves the [NVMe-oF listeners](api/ceph.md#listener-registry):
 cephadm reserves exactly these daemon ports, checks them free and opens them
 in the host firewall
 ([`get_port_start`](https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/deployment/service_spec.py#L1672-L1673),
@@ -607,21 +636,20 @@ member of the schema refuses at its own field with an owner:
   at that key, because cephadm reads only that one
   ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L314-L324)).
 
-Value rules mirror the native `validate` methods, refused earlier at their
-field: prometheus `retention_time` is digits and one of `y`, `w`, `d`, `h`,
+Native field rules: prometheus `retention_time` is digits and one of `y`, `w`, `d`, `h`,
 `m`, `s`, and `retention_size` digits and one of `B`, `KB`, `MB`, `GB`, `TB`,
-`PB`, `EB`, in exactly that form; alertmanager `port` is never 9094, which
-cephadm reserves for the cluster listener; each `default_webhook_urls` entry
-is an `http` or `https` URL without user information; snmp-gateway
+`PB`, `EB`, in exactly that form; alertmanager `port` cannot equal its fixed
+[cluster listener](api/ceph.md#listener-registry);
+each `default_webhook_urls` entry is an `http` or `https` URL without user information; snmp-gateway
 `snmp_destination` is an IPv4 address or DNS name and a port, `engine_id` is
 10 to 64 hexadecimal characters of even length, and `snmp_version: V3` needs
 an `engine_id`; `only_bind_port_on_networks` needs service `networks`.
 Bootwright adds: the management gateway refuses `ssl: false`, because it would
 carry dashboard credentials in plaintext, and an empty `ssl_ciphers`; its
 `virtual_ip` is a bare address inside a declared public network; oauth2-proxy
-`https_address` is `host:port` with port 4180, the port cephadm reserves
-whatever the address names; `oidc_issuer_url` and `redirect_url` are `https`
-URLs without user information; and each `allowlist_domains` entry is
+`https_address` is `host:port` with the fixed
+[oauth2-proxy port](api/ceph.md#listener-registry), whatever the address names;
+`oidc_issuer_url` and `redirect_url` are `https` URLs without user information; and each `allowlist_domains` entry is
 `[.|*.]host[:port|:*]`.
 
 Across services, an snmp-gateway needs an alertmanager service, an

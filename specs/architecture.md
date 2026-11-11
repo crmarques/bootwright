@@ -433,6 +433,8 @@ in `wiring_<domain>.go`. `TestPublicCatalog` and
 `TestEveryCatalogCommandHasApplicationDispatch` fails until dispatch has the
 case, and implementing a stub removes it from `stubCapabilities`.
 
+## Extending capabilities
+
 ### Adding a lifecycle capability
 
 1. Create the package in the lifecycle-capability shape above, implementing
@@ -478,13 +480,22 @@ installation method touches only this list:
 5. Its role, playbooks and protocol plugin, named as the
    [collection](#ansible-collection-structure) states. A substrate arm's role
    provides the substrate's machine entry points, and the substrate's
-   dispatcher role gains its row and its arm in each entry point's argument
-   choices; no consumer changes.
+   dispatcher gains its table row, and `machine_power` and `machine_power_read`
+   gain the arm in their argument-spec choices; no other consumer changes
+   ([machine port](#roles)).
 6. Its tests, which run the shared contract suites of every port it
    implements: for `Capability`, its row in
    `TestEveryCapabilityHonoursTheCapabilityContract`, which holds every
    binding and one synthetic double to planning, removal, failure, unknown
    outcome, cancellation, replay and evidence.
+7. For a substrate arm, its arm in the `api/v1alpha1` schema and
+   [Machine API](api/machines.md) tables; its `Arms`, `Realized`, `armFacts`
+   and machine-bound rows in the general substrate package; each admission
+   file `armSupportFiles` names; and its `cmd/bootwright` composition.
+   The [identity exemptions](#architecture-verification) and
+   `armSupportFiles` in
+   [the identity guard](../test/architecture/implementation_identity_test.go)
+   own the permitted file set, rather than a copy here.
 
 It answers, from their owners, what it converges
 ([converging an effect](state-reconciliation.md#converging-an-effect)), when
@@ -498,8 +509,8 @@ material it produces ([produced material](secrets.md#produced-material)) and
 its process and remote boundaries
 ([process boundary](security.md#process-boundary)).
 
-An edit to another domain or to the general flow means a seam is missing. The
-seam lands in the same slice as its first consumer, as a separate reviewed
+An edit outside this touch set to another domain's general flow means a seam
+is missing. The seam lands in the same slice as its first consumer, as a separate reviewed
 step, and never as a branch on the new implementation.
 
 ### Context admission and compilation
@@ -912,13 +923,13 @@ The substrate owns the machine port as role entry points validated by their
 argument specs (decision D1). The dispatcher's table is the only place an
 arm's role is named: its argument specs carry no arm choices, an arm it does
 not list ends in a named terminal fail before any lookup by it, and it
-republishes the arm's answer under its own names. Adding an arm edits the
-dispatcher's table and the argument-spec choices of the two power roles,
-`machine_power` and `machine_power_read`, and nothing else. A consumer also refuses such
-an arm through the dispatcher's `admit` entry point before its own first
-effect. An arm added to the table reaches every consumer, machine power
-included, and no consumer changes. Go consumers likewise read the
-[realized target](substrates.md#selection-and-refusal) and the substrate's
+republishes the arm's answer under its own names. The
+[implementation touch set](#adding-an-implementation-of-an-existing-capability)
+owns adding an arm. A consumer refuses an unknown arm through the dispatcher's
+`admit` entry point before its own first effect; every other consumer reaches
+an added arm through that dispatcher.
+Go consumers likewise read the
+[realized target](substrates.md#realized-target-fields) and the substrate's
 capability facts rather than an arm name.
 
 ### Ansible collection plugins and results

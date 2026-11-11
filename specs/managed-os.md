@@ -167,9 +167,8 @@ guest resolves names and time through them while installing. An external
 adds no requirement, because no block of this product realizes it.
 
 One installation contract covers every substrate. The
-[realized target](substrates.md#selection-and-refusal) supplies the substrate
-arm, the management controller to boot through, the identity channel to prove
-completion with, and whether the machine is physical. The installation
+[realized target](substrates.md#realized-target-fields) supplies its frozen
+Machine facts. The installation
 hands the frozen arm to the substrate's machine port dispatcher, which fails
 closed on an arm it has no port for, as the
 [adapter boundary](#adapter-boundary) states.

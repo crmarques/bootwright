@@ -245,45 +245,52 @@ schemas, ordering and escaping remain stable.
 | `diagnostics` | Ordered diagnostic objects; empty when none. |
 | `logs` | Ordered safe paths relative to the [log root](../contexts/log-root.md) for private logs actually created; empty when none. |
 
-Successful result objects have stable top-level fields:
+Successful result objects have stable top-level fields. `TestCommandResultFieldRegistryMatchesSpec`
+derives this registry from the CLI-owned DTO JSON tags and checks every available
+non-session command and every result type. Conditional variants contribute
+optional fields; unavailable commands return a null result. Explicit `--help`
+uses the `help` result row. Nested shapes
+are pinned by the [CLI result types](../../internal/cli/json_results_test.go)
+and their output goldens:
 
 | Command | Result fields |
 | --- | --- |
-| `help` and explicit help | `command`, `usage`, `description`, `commands`, `flags` |
-| `version` | `version`, `commit`, `source`, `go`, `target`, `dependencyBundle`, `vulnerabilityCheck` |
-| `schema` | `format`, `schema` |
-| `sbom` | `format`, `bom` |
-| `render acquisitions` | `acquisitions` |
-| `completion <shell>`, `secret show`, `cluster kubeconfig`, `cluster keyring` | `export` |
-| `context init`, `context update` | `context`, `counts`, `filesCopied`, `inputChanged` |
-| `context use`, `context current` | `context` |
-| `context list` | `contexts` |
-| `context delete` | `name`, `outcome`, `currentCleared`, `orphansAbandoned`, `releasedReservations` |
-| `secret set`, `secret generate`, `secret delete` | `context`, optional `name`, `changed`, `unchanged`, `changedNames`, `unchangedNames`, `parts` |
-| `secret encryption init`, `secret encryption rotate` | `context`, `implementation`, `activeKey`, `changed`, `retiredKeys`, `reencryptedVersions`, `reencryptedParts` |
-| `media add`, `media delete` | `name`, `outcome`, `size`, optional `sha256` |
-| `plan` | `context`, `verb`, `steps`, `stages`, optional `until`, `waves`, `widest`, `bound`, `startable`, `deferred`, `continuation`, `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, `stops`, `stopsAfterOnline`, optional `checks`, `receipt` |
+| `add-ons info` | `package` |
+| `add-ons list` | `addOns` |
 | `apply`, `destroy` | `context`, `verb`, `steps`, `blocks`, `settled`, `recovered`, `next`, `receipt` |
-| `add-ons list` | `addOns` (each: `name`, `provides`, `requires`, `olmPackage`, `defaultSource`, `configuration`) |
-| `add-ons info` | `package` (`name`, `summary`, `provides`, `requires`, `requiresMeaning`, `olmPackage`, `defaultSource`, `secretNamespaces`, `lookup`, `configuration`, `binding`; each configuration entry: `path`, `type`, `required`, `requiredWithin`, `default`, `values`) |
-| `secret check`, `secret list`, `secret info` | `context`, `secrets` |
-| `secret encryption status` | `initialized`, `implementation`, `activeKey`, `keys`, `items` |
-| `media list` | `media` |
-| `validate` | `counts`, `excludedContainerClusters`, `excludedStorageClusters`, `advisories` |
-| `preflight` | `context`, `target`, `checks`, `summary` |
-| `status` | `context`, `setupChecks`, `desired`, `clusters`, `storageClusters`, `shared`, `secrets`, `readiness`, `nextSteps`, `lifecycle`, `handoff`, `contradictions`, and with `--paths` `paths` |
-| `logs` | `context`, `operation`, `verb`, `state`, `events`; with `--raw`, `--run` or `--install` instead `source`, `path`, `bytes`, `truncated` (an attempt's output only) and `output` |
-| `diff` | `context`, `operation`, `input`, optional `adds`, `plan`, `observed`, `blocks`, `objects`, `summary` |
-| `render effective` | `counts`, `effectiveState`, and with `--origins` `origins`; with `--output-dir`, optional `inputDir`, `outputDir`, `effectiveStatePath`, `objects` instead |
-| `render installer` | `clusters` |
-| `render storage` | `clusters` |
-| `controller install` (mutation), `controller check` | optional `context`, optional `machine`, optional `route`, `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files`, optional `preview`, `progress`, optional `receipt`, `next` |
-| `controller install` (with `--dry-run`) | `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files` |
-| `machine list`, `machine info` | `context`, `machines`, `powerRead` |
-| `machine trust` | `context`, `dryRun`, `pending`, `recorded`, `hosts` |
-| `machine start`, `machine stop`, `machine restart` | `context`, `verb`, `machines` |
-| `cluster list` | `context`, `clusters` |
 | `cluster info` | `context`, `clusters`, `storage` |
+| `cluster keyring`, `cluster kubeconfig`, `completion bash`, `completion fish`, `completion powershell`, `completion zsh`, `secret show` | `export` |
+| `cluster list` | `context`, `clusters` |
+| `context current`, `context use` | `context` |
+| `context delete` | `name`, `outcome`, `currentCleared`, `orphansAbandoned`, `releasedReservations` |
+| `context init`, `context update` | `context`, `counts`, `filesCopied`, `inputChanged` |
+| `context list` | `contexts` |
+| `controller check` | optional `context`, optional `machine`, optional `route`, `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files`, optional `preview`, `progress`, optional `receipt`, `next` |
+| `controller install` | optional `context`, optional `machine`, optional `route`, `dryRun`, `outcome`, `platform`, `checks`, `actions`, `requirements`, `files`, optional `preview`, optional `progress`, optional `receipt`, optional `next` |
+| `controller rebind` | `outcome`, `bindings`, `reservations` |
+| `controller uninstall` | `outcome`, `packages`, `paths`, `kept` |
+| `diff` | `context`, `operation`, `input`, optional `adds`, `plan`, `observed`, `blocks`, `objects`, `files`, `summary`, optional `outdatedClients` |
+| `help` | `command`, `usage`, `description`, `commands`, `flags` |
+| `logs` | optional `context`, optional `operation`, optional `verb`, optional `state`, optional `events`, optional `source`, optional `path`, optional `bytes`, optional `truncated`, optional `output` |
+| `machine cp` | `context`, `source`, `machines` |
+| `machine info`, `machine list` | `context`, `machines`, `powerRead` |
+| `machine restart`, `machine start`, `machine stop` | `context`, `verb`, `machines` |
+| `machine trust` | `context`, `dryRun`, `pending`, `recorded`, `hosts` |
+| `media add`, `media delete` | `name`, `outcome`, `size`, optional `sha256` |
+| `media list` | `media` |
+| `plan` | optional `checks`, `context`, `verb`, `steps`, `stages`, optional `until`, `waves`, `widest`, `bound`, `startable`, `deferred`, `continuation`, `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, `stops`, `stopsAfterOnline`, optional `authorizations`, `receipt` |
+| `preflight` | `context`, `target`, `checks`, `summary` |
+| `render acquisitions` | `acquisitions` |
+| `render effective` | optional `counts`, optional `effectiveState`, optional `origins`, optional `inputDir`, optional `outputDir`, optional `effectiveStatePath`, optional `objects` |
+| `sbom` | `format`, `bom` |
+| `schema` | `format`, `schema` |
+| `secret check`, `secret info`, `secret list` | `context`, `secrets` |
+| `secret delete`, `secret generate`, `secret set` | `context`, optional `name`, `changed`, `unchanged`, `changedNames`, `unchangedNames`, `parts` |
+| `secret encryption init`, `secret encryption rotate` | `context`, `implementation`, `activeKey`, `changed`, `retiredKeys`, `reencryptedVersions`, `reencryptedParts` |
+| `secret encryption status` | `initialized`, `implementation`, `activeKey`, `keys`, `items` |
+| `status` | `context`, `setupChecks`, `desired`, `clusters`, `storageClusters`, `shared`, `secrets`, `readiness`, `nextSteps`, `lifecycle`, `handoff`, `contradictions`, optional `outdatedClients`, optional `paths` |
+| `validate` | `counts`, `excludedContainerClusters`, `excludedStorageClusters`, `advisories` |
+| `version` | `version`, `commit`, `source`, `go`, `target`, `dependencyBundle`, `vulnerabilityCheck` |
 
 A `contexts` entry of `context list` whose context holds an operation that has
 not completed also carries `unfinished`, with the operation's `id`, `verb` and

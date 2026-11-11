@@ -163,7 +163,6 @@ var docsSectionExceptions = map[string]docsSectionException{
 	"specs/ceph-native-api.md ## Cluster and service ownership": {ceiling: 43942, since: "2026-10-27"},
 	"specs/api/machines.md ## Machine":                          {ceiling: 26652, since: "2026-10-27"},
 	"specs/openshift-clusters.md ## Installation":               {ceiling: 30134, since: "2026-10-27"},
-	"specs/architecture.md ## Go package structure":             {ceiling: 28975, since: "2026-10-27"},
 }
 
 // specLeafBudget bounds a leaf of a spec page, a heading from level 3 down

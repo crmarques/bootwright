@@ -94,34 +94,12 @@ engine, so it has no `type` and no `ceph` block. A managed cluster requires `rel
 `cephadm` (with `cephadm.bootstrap.nodeRef`), `topology` and nonempty
 `services`; an external one (`management: external`) declares none of the
 managed fields, each of which refuses at its path, and kind defaults never
-introduce them. Core MON, MGR and
-OSD documents are admitted, and so are MDS documents that a CephFilesystem
-of the same cluster binds by name. RGW, ingress and NFS documents are admitted under their
-[native records](../ceph-native-api.md#rgw-ingress-and-nfs-records).
-NVMe-oF gateway documents (`service_type: nvmeof`) are admitted under their
-[native record](../ceph-native-api.md#nvme-of-gateway-record) and plan as a
-`ceph-service` nvmeof [unit](../ceph.md#nvme-of-subsystems) once the
-`nvmeof` image is authored under `spec.images`
-([refusal table](../ceph.md#refusal-table)).
-Prometheus, Alertmanager, Grafana, node-exporter, ceph-exporter, snmp-gateway,
-mgmt-gateway and oauth2-proxy documents are admitted under their
-[native records](../ceph-native-api.md#observability-and-management-gateway-records);
-each that needs an auxiliary image plans once that image is authored under
-`spec.images` and refuses at planning without it;
-ceph-exporter runs the Ceph image, and it and the other monitoring services
-realize through the
-[monitoring unit](../ceph.md#resources-readiness-and-access); mgmt-gateway
-and oauth2-proxy realize through the
-[management gateway unit](../ceph.md#resources-readiness-and-access). The
-core request lists each of them only by its qualified name and eligible hosts,
-outside the host request, so that core observation
-[tolerates its daemons](../ceph-native-api.md#service-identity-and-references);
-planning realizes an rgw service a CephObjectGateway binds, with its TLS
-bindings, through the gateway block and an nfs service through its unit; an
-ingress plans once its auxiliary images are authored under `spec.images`
-and refuses at planning without them
-([refusal table](../ceph.md#refusal-table)). Each `spec.serviceBindings`
-entry plans by the [binding routing table](../ceph-native-api.md#secret-bindings).
+introduce them. Native service documents follow the
+[service-family registry](../ceph-native-api.md#service-families) and its
+linked records. The [native service contract](../ceph-native-api.md) owns
+their projection and bindings; [service lifecycles](../ceph.md#resources-readiness-and-access)
+own planning, auxiliary images and readiness. Each `spec.serviceBindings`
+entry follows the [binding routing table](../ceph-native-api.md#secret-bindings).
 An RGW document must be bound by a CephObjectGateway of the same
 cluster whose `spec.serviceRef` names it; an unbound one refuses at its
 `service_id`, because cephadm would deploy it before its realm, zone group and
@@ -367,48 +345,9 @@ checks:
   equal, after parsing, to no Machine address and no other ingress virtual
   IP; a management gateway ingress instead carries a bare address inside a
   declared public CIDR, equal after parsing to the gateway's `virtual_ip`;
-- the listener registry resolves every native listener with the release
-  defaults before comparing (IBM's `get_port_start`): on every storage host
-  the Ceph monitors (3300, 6789), the messenger range 6800-7568
-  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/common/options/global.yaml.in#L1221-L1234))
-  and, unless a ceph-exporter service is declared, ceph-exporter (9926); on
-  the MGR service's hosts the MGR dashboard (8443), cephadm service discovery
-  (8765) and, when a prometheus service is declared, the prometheus manager
-  module (9283)
-  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L476));
-  on the management gateway's hosts its internal listener (29443)
-  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/mgmt_gateway.py#L21));
-  the `port` of prometheus (9095), alertmanager (9093), grafana (3000),
-  node-exporter (9100), ceph-exporter (9926), snmp-gateway (9464), loki
-  (3100), promtail (9080), alloy (its authored `port` only) and the
-  management gateway (required, no default), the Alertmanager cluster
-  listener (9094) and oauth2-proxy (4180, whatever `https_address` names), as
-  IBM's ServiceSpec defaults them; on a loki service's hosts its fixed HTTP
-  (3100) and gRPC (8080) listeners and on a promtail service's hosts its fixed
-  listener (9080), whatever `port` is authored, because cephadm's loki and
-  promtail configuration binds them and uses `port` only for its own port
-  check and firewall opening
-  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/templates/services/loki.yml.j2)); an RGW service's `rgw_frontend_port` (80, or 443
-  with `ssl`); an NFS service's `port` (2049), `monitoring_port` (9587) and
-  its fixed cluster QoS listener (31311); and an ingress service's
-  `frontend_port`, `monitor_port` and HAProxy peer port (1024 for an NFS
-  backend unless `haproxy_peer_communication_port` names another). Each
-  listener holds every eligible host of its service's placement. An ingress
-  frontend binds its virtual IP
-  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/ingress.py#L206-L211)),
-  an NFS `port` with a `virtual_ip` and without the HAProxy protocol binds
-  that `virtual_ip`
-  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/nfs.py#L100-L113)),
-  an RGW service with `only_bind_port_on_networks` binds the host's Machine
-  address inside its `networks` when one is declared
-  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/cephadmservice.py#L1139-L1150)),
-  and so do grafana
-  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L62-L67))
-  and prometheus
-  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L591-L596)),
-  and every other listener binds all addresses. Two listeners on one port of
-  one host refuse unless both bind distinct specific addresses; the refusal
-  names the host and the other listener;
+- the [listener registry](#listener-registry) resolves every listener and its
+  release defaults before comparing host and bind-address overlap; a conflict
+  names its host and the other listener;
 - two ingress services of any CephCluster whose networks (the virtual
   IP's network and `virtual_interface_networks`) overlap use different
   keepalived virtual router IDs; an omitted `first_virtual_router_id` is 50,
@@ -434,11 +373,8 @@ checks:
   `fsal.name: RGW` and path `/`, and its cluster declares exactly one
   CephObjectGateway
   ([field record](../ceph-resources.md#cephnfsexport));
-- SMB clusters of one storage cluster place on disjoint hosts, and each
-  holds the SMB port (445) and SMB metrics port (9922) on every eligible
-  host, and CTDB (4379) when clustered
-  ([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/python-common/ceph/smb/constants.py#L39-L41)),
-  binding all addresses, in the listener comparison above;
+- SMB clusters of one storage cluster place on disjoint hosts and hold the
+  [SMB listeners](#listener-registry) on every eligible host, binding all addresses;
 - SMB public addresses are `address/prefix` inside a declared public CIDR
   with its prefix length, neither its network nor its broadcast address, and
   equal to no Machine address, no ingress virtual IP and no other SMB public
@@ -499,3 +435,61 @@ These checks qualify desired intent only. Live capacity, device safety,
 external-cluster identity and native-output interpretation remain gates of
 the owning lifecycle slices. They do not authorize version-combination
 screening: native tools determine version availability and compatibility.
+
+### Listener registry
+
+`TestCephListenerTableMatchesRegistry` derives this table from the reserved
+listeners, every native listener source and SMB's fixed listeners. The last
+column names authored `spec` members and the fixed listeners that remain.
+A default of none reserves no omitted port; admission can still require one.
+CTDB applies only to clustered SMB.
+
+| Listener source | Default ports | Authored port members and fixed ports |
+| --- | --- | --- |
+| the Ceph monitors (3300 and 6789) | 3300, 6789 | fixed |
+| the Ceph messenger range 6800-7568 of OSD, MGR and MDS daemons | 6800-7568 | fixed |
+| ceph-exporter (9926) | 9926 | fixed |
+| the MGR dashboard (8443) | 8443 | fixed |
+| cephadm service discovery (8765) | 8765 | fixed |
+| the prometheus manager module (9283) | 9283 | fixed |
+| the management gateway internal listener (29443) | 29443 | fixed |
+| `alertmanager` | `port`: 9093, the Alertmanager cluster listener (9094) | `port`, the Alertmanager cluster listener (9094) |
+| `alloy` | none | `port` |
+| `ceph-exporter` | `port`: 9926 | `port` |
+| `grafana` | `port`: 3000 | `port` |
+| `ingress` (NFS backend) | `haproxy_peer_communication_port`: 1024 | `frontend_port`, `haproxy_peer_communication_port`, `monitor_port` |
+| `loki` | `port`: 3100, the loki HTTP listener (3100), the loki gRPC listener (8080) | `port`, the loki HTTP listener (3100), the loki gRPC listener (8080) |
+| `mgmt-gateway` | none | `port` |
+| `nfs` | `monitoring_port`: 9587, `port`: 2049, the NFS cluster QoS listener (31311) | `monitoring_port`, `port`, the NFS cluster QoS listener (31311) |
+| `node-exporter` | `port`: 9100 | `port` |
+| `nvmeof` | `discovery_port`: 8009, `port`: 5500, the NVMe-oF gateway exporter (10008), the NVMe/TCP subsystem listener port (4420) | `discovery_port`, `port`, the NVMe-oF gateway exporter (10008), the NVMe/TCP subsystem listener port (4420) |
+| `oauth2-proxy` | oauth2-proxy (4180) | oauth2-proxy (4180) |
+| `prometheus` | `port`: 9095 | `port` |
+| `promtail` | `port`: 9080, the promtail listener (9080) | `port`, the promtail listener (9080) |
+| `rgw` | `rgw_frontend_port`: 80; ssl: `rgw_frontend_port`: 443 | `rgw_frontend_port` |
+| `snmp-gateway` | `port`: 9464 | `port` |
+| CTDB (4379) | 4379 | fixed |
+| SMB (445) | 445 | fixed |
+| SMB metrics (9922) | 9922 | fixed |
+
+Reserved monitor, messenger and implicit exporter listeners hold every storage
+host. Dashboard and service-discovery listeners hold MGR hosts; the manager's
+Prometheus listener applies only beside a declared Prometheus service. The
+management gateway's internal listener holds that service's hosts.
+
+Each listener holds every eligible host of its service's placement. An ingress
+frontend binds its virtual IP
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/ingress.py#L206-L211)),
+an NFS `port` with a `virtual_ip` and without the HAProxy protocol binds
+that `virtual_ip`
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/nfs.py#L100-L113)),
+an RGW service with `only_bind_port_on_networks` binds the host's Machine
+address inside its `networks` when one is declared
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/cephadmservice.py#L1139-L1150)),
+and so do grafana
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L62-L67))
+and prometheus
+([upstream](https://github.com/ceph/ceph/blob/v20.2.1/src/pybind/mgr/cephadm/services/monitoring.py#L591-L596)),
+and every other listener binds all addresses. Two listeners on one port of
+one host refuse unless both bind distinct specific addresses; the refusal
+names the host and the other listener.

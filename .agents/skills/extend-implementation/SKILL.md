@@ -19,10 +19,10 @@ says, and state the choice and why.
 
 - A new capability follows
   [adding a lifecycle capability](../../../specs/architecture.md#adding-a-lifecycle-capability).
-- A new implementation of an existing capability touches its package, its
-  registry entry, composition and playbook bindings, its role, the domain's
-  support statement and its contract suite. Until architecture names this
-  touch set, read it from the family's existing implementation.
+- A new implementation follows the canonical
+  [implementation touch set](../../../specs/architecture.md#adding-an-implementation-of-an-existing-capability),
+  including its extra schema, facts, admission and composition owners for a
+  substrate arm.
 - List every other file the change needs. A change in another domain's general
   code means a seam is missing: add the seam as its own reviewed step first, in
   the same slice, and say so in the commit body.

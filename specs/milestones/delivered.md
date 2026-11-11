@@ -15463,3 +15463,31 @@ review of X417 included this correction. **Limitations:** no live run or push.
 **Commits:** this commit. **Gates:** listed in its message. The new marker and
 missing-item regressions fail on the prior implementation. **Limitations:**
 no step execution, new removal behavior, operator acceptance or push is claimed.
+
+### X419 — Checked spec inventories
+
+**Item:** B1334 ([D257](backlog.md#d257) (6)), delivered in-tree.
+**Kind:** defect. **Owners:** Spec corpus and Architecture, with CLI.
+
+- CLI-16: the result-field registry covers every available non-session command
+  and every CLI result DTO. Its guard derives fields from JSON tags, checks
+  successful emitted JSON against the command's DTO variants, and pins the
+  table. Controller rebind/uninstall, machine copy and plan authorizations are
+  included.
+- CLI-20: the command catalog defines baseline and flag-qualified Effects
+  clauses once, including the exact run-nothing rule. Security links to that
+  rule instead of restating it.
+- API-44 and API-46: one listener registry covers fixed, native and clustered
+  SMB listeners, including NVMe-oF; one admitted service-family registry names
+  every family and its service-ID ownership. Tests derive both from the
+  implementation, and other pages link to them.
+- CON-04: every exported realized-target field has one checked table. The
+  management-controller slot describes physical and virtual management APIs
+  consistently; consumers link to those frozen facts.
+- ARC-07 and ARC-28: the canonical adding-an-implementation procedure owns the
+  substrate-arm touch set, including admission, composition and dispatch.
+  Other guidance links to it; only the two power roles select arms.
+
+**Commits:** this commit. **Gates:** listed in its message. Each new inventory
+check fails against the earlier spec. **Limitations:** no new runtime effects,
+operator acceptance or push is claimed.

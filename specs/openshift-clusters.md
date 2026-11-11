@@ -16,9 +16,8 @@ the material it consumes.
 
 One installation contract covers every substrate, as
 [managed-OS installation](managed-os.md#installation) does. Each node's
-[realized target](substrates.md#selection-and-refusal) supplies its substrate
-arm, the management controller to boot through, the NICs the node reports, and
-whether the machine is physical. The installation hands the frozen arm to
+[realized target](substrates.md#realized-target-fields) supplies its frozen
+Machine facts. The installation hands the frozen arm to
 the substrate's machine port dispatcher, which fails closed on an arm it has no
 port for, before any media is inserted.
 
@@ -71,7 +70,7 @@ server is placed on boots under a verified fetch of the private
 [boot image](#boot-media) instead of its emulated BMC's unverified one. The placement, install-profile and physical-node refusals
 and the root-device refusals name the bound Machine in the remediation the
 refusal carries, because it is what the operator changes. A node whose
-[realized target](substrates.md#selection-and-refusal) does not derive, other
+[realized target](substrates.md#realized-target-fields) does not derive, other
 than on an unrealized substrate, refuses with the substrate's own reason and
 remedy, which name the object to change. Node `labels` and `taints` reach no
 installer input, because the agent installer has none for them; the

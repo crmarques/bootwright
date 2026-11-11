@@ -13,9 +13,8 @@ its modifier wherever two of its senses can meet; elsewhere context decides. A n
   Bare "controller" never names anything else.
 - **BMC** or **management controller**: a Machine's out-of-band Redfish
   endpoint, physical or emulated ([substrates](substrates.md)).
-- **Realized target**: what a substrate derives for a Machine: the management
-  controller it boots through, its identity channel, whether it is physical and
-  the block that realizes it ([substrates](substrates.md#selection-and-refusal)).
+- **Realized target**: the substrate's [frozen Machine facts](substrates.md#realized-target-fields),
+  read by consumers without deriving the arm's facts again.
 - **Substrate**, **provider** and **infrastructure service**: a substrate is a
   kind of infrastructure that realizes Machines (`baremetal`, `libvirt`,
   `vsphere`, `kubevirt`); a provider is one declared `InfraProvider` of one

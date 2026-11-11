@@ -42,29 +42,39 @@ states.
 
 ### Implementations
 
-Which arm realizes a Machine is settled once, from the substrate its provider
-declares, and frozen into the realized target every consumer reads: the
-Machine's substrate arm, its management controller, its identity channel, the
-interfaces the machine presents with the hardware addresses they report, and
-the block that realizes it, and the arm whose port reaches it. No consumer
-derives any of it again. Consumers hand the frozen arm to the substrate's one
-machine port dispatcher, and an arm it has no machine port for fails closed
-before anything is published, inserted or booted. A substrate added later
-supplies those entry points, one row in the dispatcher's table, the matching
-arm choice in the argument specs of `machine_power` and `machine_power_read`
-and its answers to the facts Go consumers ask the substrate lifecycle capability, and no
-consumer, such as the [cluster installation](openshift-clusters.md#installation) or the
-[managed-OS installation](managed-os.md#installation), changes
-([roles](architecture.md#roles)).
+Which arm realizes a Machine is settled once from its provider and frozen in
+the realized target. No consumer derives those facts again. Consumers hand
+the frozen arm to the machine port dispatcher, which fails closed on an
+unknown arm before publication, media insertion or boot. A new arm follows
+the [implementation touch set](architecture.md#adding-an-implementation-of-an-existing-capability).
+
+### Realized target fields
+
+`TestRealizedTargetFieldTableMatchesTarget` holds this sole field inventory
+to [`substrate.Target`](../internal/substrate/target.go).
+
+| Field | Meaning |
+| --- | --- |
+| `Delivery` | The arm's boot-media delivery method. |
+| `Provider` | The selected InfraProvider's name, when one is declared. |
+| `Substrate` | The Machine's authored substrate arm. |
+| `Port` | The arm whose machine port reaches it. |
+| `Physical` | Whether operator-owned hardware exists before and outlives this context. |
+| `Controller` | The exact management endpoint, its credential and transport trust, including an arm's management API. |
+| `Identity` | The channel and handles that prove the Machine's contents. |
+| `Interfaces` | Presented interface names and reported hardware addresses, in declared order. |
+| `RootDeviceHints` | The Machine's whole-root-disk selectors. |
+| `Firmware` | The selected firmware settings, when present. |
+| `PlacementMachine` | The Machine whose host reaches the management endpoint. |
 
 The KubeVirt and vSphere arms realize installer-provisioned Machines, those
 with `os.provided: false` and no install profile, as
 [KubeVirt machine realization](#kubevirt-machine-realization) and
 [vSphere machine realization](#vsphere-machine-realization) state. Their
-realized target names no management controller: it names the arm's own
-management API and access, an identity channel of none, the interfaces the
-realization derived, the delivery kind `push`, and the controller Machine as
-placement. A Bootwright-installed Machine on either arm refuses before
+management-controller slot holds the arm's management API endpoint and
+credential instead of a BMC: for KubeVirt, `kubevirt:<namespace>/<vm>` and its
+kubeconfig. The other facts follow the record above.
+A Bootwright-installed Machine on either arm refuses before
 registration, because the arm defines no identity channel for it.
 
 Not yet met: a vSphere provider and its Machines refuse before registration;

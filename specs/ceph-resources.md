@@ -1175,13 +1175,9 @@ Cross-object rules, each refusal naming the other object by its
   exactly one usersgroups member by `users_groups_id`; a reference with no
   match or several matches refuses, and so does a member no native reference
   consumes. Several SMB clusters may name one auth resource.
-- SMB clusters of one CephCluster place on disjoint hosts: each binds the
-  SMB port on every eligible host. Each cluster holds SMB (445) and SMB
-  metrics (9922), and CTDB (4379) when clustered, on every eligible host,
-  binding all addresses, in the
-  [listener comparison](api/ceph.md#complete-graph-invariants); another
-  listener on one of those ports and hosts refuses, naming the port, the
-  host and the other listener.
+- SMB clusters of one CephCluster place on disjoint hosts. Their listeners
+  follow the [listener registry](api/ceph.md#listener-registry); a collision
+  names the port, host and other listener.
 - `public_addrs[].address` is `address/prefix`, also in a fragment; a
   non-empty `public_addrs` needs clustering, also in a fragment, because CTDB
   assigns the addresses. Each address lies inside a declared public CIDR with
@@ -1304,7 +1300,7 @@ images before effects; native identity and readiness proofs guard completion.
 | `clusterRef` | Required managed CephCluster. |
 | `serviceRef` | Required qualified native name `nvmeof.<service_id>` of a declared nvmeof service of that cluster; an absent or other-type target is a field error. It fixes the gateway pool and group. |
 | `nqn` | Required subsystem NQN: `nqn.yyyy-mm.<reverse domain>:<name>` or `nqn.2014-08.org.nvmexpress:uuid:<UUID>`, 11 to 223 printable ASCII characters, never the discovery NQN; unique among the cluster's subsystems, which is stricter than the gateway's per-group scope because an initiator identifies a subsystem by its NQN alone. |
-| `listeners` | Required set keyed by `host`, a topology node name, with optional `trsvcid`. The hosts are exactly the hosts the service places gateways on: a gateway serves only the namespaces of the load-balancing groups it owns, so a namespace is reachable only through a listener on its owning gateway ([upstream](https://github.com/ceph/ceph-nvmeof/blob/tentacle_9.0_base/control/grpc.py#L5040-L5080)). `trsvcid` is 4420 when given, the one listener port cephadm reserves and opens on a gateway host. |
+| `listeners` | Required set keyed by `host`, a topology node name, with optional `trsvcid`. The hosts are exactly the hosts the service places gateways on: a gateway serves only the namespaces of the load-balancing groups it owns, so a namespace is reachable only through a listener on its owning gateway ([upstream](https://github.com/ceph/ceph-nvmeof/blob/tentacle_9.0_base/control/grpc.py#L5040-L5080)). `trsvcid`, when given, is the fixed NVMe/TCP port in the [listener registry](api/ceph.md#listener-registry), which cephadm reserves and opens on a gateway host. |
 | `hosts` | Required nonempty set of at most 128 initiator host NQNs, in the `nqn` grammar; `*`, which would let any host connect, refuses. |
 | `namespaces` | Required nonempty set of at most 128 entries keyed by `nsid` (an NVMe namespace ID, 1 to 4294967294), each with a required `imageRef` naming a CephRBDImage of the same cluster. An image backs at most one namespace across every subsystem. |
 

@@ -8931,7 +8931,7 @@ implementation, X412 (M1, [B1267](delivered.md#x412--server-claims-over-ssh)), X
 [B1327](delivered.md#x413--rebuild-a-never-inserted-area)), X414 (M2, [B1316](delivered.md#x414--ceph-host-keys)), X415 (M1,
 [B1330](delivered.md#x415--single-value-fields-leave-v1alpha1)), X416 (M4, [B1331](delivered.md#x416--add-on-inputs-leave-v1alpha1)), X417 (M1,
 [B1332](delivered.md#x417--observe-host-keys)), X418 (M1, [B1333](delivered.md#x418--truthful-unrealized-state)) and X419 (M1,
-[B1334](m1.md#b1334)), no more than two active at once. The owner's answers:
+[B1334](delivered.md#x419--checked-spec-inventories)), no more than two active at once. The owner's answers:
 
 1. A completed environment keeps the client release its apply proved; the
    report of one below a later build's minimum stays the answer, and B1299 is
