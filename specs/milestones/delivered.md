@@ -15491,3 +15491,23 @@ no step execution, new removal behavior, operator acceptance or push is claimed.
 **Commits:** this commit. **Gates:** listed in its message. Each new inventory
 check fails against the earlier spec. **Limitations:** no new runtime effects,
 operator acceptance or push is claimed.
+
+### X436 — Canonical ingress network selections
+
+**Item:** B1350 (2026-11-11). **Kind:** defect. **Owner:** Storage.
+Ingress projections carrying both `virtual_interface_networks` and
+`virtual_ip` emitted the latter member first, so the canonical frozen-request
+proof refused ordinary planning. The RGW, NFS and management-gateway
+serializers now order those members lexically, preserving the declared network
+selection and VIP under the existing [native ingress](../ceph-native-api.md)
+contract. The canonical proof remains unchanged.
+
+**Verification:** `TestIngressNetworkSelectionsFreezeThroughCapabilityPlanning`
+fails before the correction for all three families and passes afterwards,
+including decoding every planned request and proving each native document
+canonical. Existing requests omitting network selections retain their bytes;
+only documents that could not previously freeze are corrected. The explicit
+management-gateway projection expectation follows the corrected order. The
+complete gate and local integration commands are recorded in the commit.
+**Contract:** unchanged; no request version or content digest moves. No live
+operation or hardware qualification is claimed.

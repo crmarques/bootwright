@@ -171,8 +171,8 @@ type nfsIngressSpec struct {
 	HealthCheckInterval          string   `json:"health_check_interval,omitempty"`
 	KeepaliveOnly                bool     `json:"keepalive_only,omitempty"`
 	MonitorPort                  *int64   `json:"monitor_port,omitempty"`
-	VirtualIP                    string   `json:"virtual_ip"`
 	VirtualInterfaceNetworks     []string `json:"virtual_interface_networks,omitempty"`
+	VirtualIP                    string   `json:"virtual_ip"`
 }
 
 func integerOf(v api.Value) *int64 {
@@ -585,8 +585,8 @@ type gatewayIngressSpec struct {
 	FirstVirtualRouterID     *int64   `json:"first_virtual_router_id,omitempty"`
 	HealthCheckInterval      string   `json:"health_check_interval,omitempty"`
 	KeepaliveOnly            bool     `json:"keepalive_only"`
-	VirtualIP                string   `json:"virtual_ip"`
 	VirtualInterfaceNetworks []string `json:"virtual_interface_networks,omitempty"`
+	VirtualIP                string   `json:"virtual_ip"`
 }
 
 func canonicalVIP(text string) string {

@@ -56,8 +56,8 @@ type rgwIngressSpec struct {
 	HealthCheckInterval      string   `json:"health_check_interval,omitempty"`
 	MonitorPort              *int64   `json:"monitor_port,omitempty"`
 	SSL                      bool     `json:"ssl,omitempty"`
-	VirtualIP                string   `json:"virtual_ip"`
 	VirtualInterfaceNetworks []string `json:"virtual_interface_networks,omitempty"`
+	VirtualIP                string   `json:"virtual_ip"`
 }
 
 func GatewayBlockID(gateway string) string {

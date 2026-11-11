@@ -459,7 +459,7 @@ func TestGatewayProjectionRefusesUnrealizedMembers(t *testing.T) {
 		"ssl_protocols", api.StringList("TLSv1.3"), "virtual_ip", "192.0.2.60")
 	ingress := mgmtIngress("192.0.2.60", "first_virtual_router_id", 60, "health_check_interval", "2s", "virtual_interface_networks", api.StringList("192.0.2.0/24"))
 	unit := gatewayUnitOf(t, delegatedCatalog([]api.Value{mgmtGateway(admitted), ingress}, nil))
-	want := []string{`{"placement":{"count":2,"hosts":["node-1","node-2","node-3"]},"service_id":"mgmt","service_type":"ingress","spec":{"backend_service":"mgmt-gateway","first_virtual_router_id":60,"health_check_interval":"2s","keepalive_only":true,"virtual_ip":"192.0.2.60","virtual_interface_networks":["192.0.2.0/24"]}}`,
+	want := []string{`{"placement":{"count":2,"hosts":["node-1","node-2","node-3"]},"service_id":"mgmt","service_type":"ingress","spec":{"backend_service":"mgmt-gateway","first_virtual_router_id":60,"health_check_interval":"2s","keepalive_only":true,"virtual_interface_networks":["192.0.2.0/24"],"virtual_ip":"192.0.2.60"}}`,
 		`{"placement":{"count":2,"hosts":["node-1","node-2","node-3"]},"service_type":"mgmt-gateway","spec":{"enable_health_check_endpoint":true,"port":9443,"ssl":true,"ssl_ciphers":["ECDHE-ECDSA-AES256-GCM-SHA384"],"ssl_protocols":["TLSv1.3"],"virtual_ip":"192.0.2.60"}}`}
 	if !slices.Equal(documentsOf(unit), want) {
 		t.Fatalf("the gateway unit renders:\n%s", strings.Join(documentsOf(unit), "\n"))
