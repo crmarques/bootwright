@@ -7,6 +7,9 @@
   ],
   "cluster": "example",
   "controller": "controller",
+  "hostSecretRefs": [
+    "fleet-key"
+  ],
   "id": "join",
   "machines": [
     "node-1",
@@ -22,5 +25,5 @@
   },
   "object": "smb-join",
   "resourceType": "ceph.smb.join.auth",
-  "version": "ceph-smb-v1"
+  "version": "ceph-smb-v2"
 }

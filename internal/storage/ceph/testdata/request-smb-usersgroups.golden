@@ -11,6 +11,9 @@
   ],
   "cluster": "example",
   "controller": "controller",
+  "hostSecretRefs": [
+    "fleet-key"
+  ],
   "id": "users",
   "machines": [
     "node-1",
@@ -34,5 +37,5 @@
   },
   "object": "smb-users",
   "resourceType": "ceph.smb.usersgroups",
-  "version": "ceph-smb-v1"
+  "version": "ceph-smb-v2"
 }

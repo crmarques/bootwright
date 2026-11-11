@@ -152,7 +152,7 @@ func automationFormats() map[string]automationFormat {
 	host, core := persistedBy(ceph.HostImplementation), persistedBy(ceph.Implementation)
 	formats := map[string]automationFormat{
 		"addon-instance-request-v1":  {class: formatMirrored},
-		"ceph-export-request-v1":     {class: formatMirrored},
+		"ceph-export-request-v2":     {class: formatMirrored},
 		"ceph-export-evidence-v1":    {class: formatMirrored},
 		"cluster-network-request-v1": {class: formatMirrored},
 		"cluster-objects-v1":         {class: formatMirrored},
@@ -230,14 +230,14 @@ func automationFormats() map[string]automationFormat {
 		"ceph-host-reading-v1":         {class: formatMirrored},
 		"ceph-packages-v1":             {class: formatMirrored},
 		"ceph-image-v1":                {class: formatMirrored},
-		"ceph-smb-v1":                  {class: formatMirrored},
+		"ceph-smb-v2":                  {class: formatMirrored},
 		"ceph-smb-evidence-v1":         {class: formatMirrored},
 		"os-package-tree-evidence-v1":  {class: formatMirrored},
 		"mirror-files-evidence-v1":     {class: formatMirrored},
 		"mirror-images-evidence-v1":    {class: formatMirrored},
 		"mirror-release-evidence-v1":   {class: formatMirrored},
 		"machine-hardware-evidence-v1": {class: formatMirrored},
-		"ceph-replication-v1":          {class: formatMirrored},
+		"ceph-replication-v2":          {class: formatMirrored},
 		"ceph-replication-evidence-v1": {class: formatMirrored},
 		// The request versions each role refuses unless its request names.
 		"substrate-host-libvirt-v1":  {class: formatMirrored},

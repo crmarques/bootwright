@@ -18,7 +18,7 @@ import (
 )
 
 const ConsumerImplementation = "ceph-export-v1"
-const ConsumerVersion = "ceph-export-request-v1"
+const ConsumerVersion = "ceph-export-request-v2"
 const ConsumerEvidenceVersion = "ceph-export-evidence-v1"
 const ConsumerOutput = "external-details"
 
@@ -46,6 +46,7 @@ type ConsumerRequest struct {
 	DefaultDataPool string                       `json:"defaultDataPool"`
 	Filesystem      string                       `json:"filesystem"`
 	Gateway         *ConsumerGateway             `json:"gateway,omitempty"`
+	HostSecretRefs  []string                     `json:"hostSecretRefs"`
 	KeyType         string                       `json:"keyType"`
 	Machines        []string                     `json:"machines"`
 	MonitoringHosts []string                     `json:"monitoringHosts"`
@@ -65,17 +66,18 @@ func (r ConsumerRequest) Canonical() ([]byte, error) {
 }
 
 func (r ConsumerRequest) SecretReferences() []string {
-	if r.Gateway == nil {
-		return nil
+	references := slices.Clone(r.HostSecretRefs)
+	if r.Gateway != nil {
+		references = append(references, r.Gateway.CertificateRef)
 	}
-	return lifecycle.SecretNames(r.Gateway.CertificateRef)
+	return lifecycle.SecretNames(references...)
 }
 func DecodeConsumerRequest(data []byte) (ConsumerRequest, error) {
 	r, err := reconciliation.ThawVersion[ConsumerRequest](data, "Ceph consumer", ConsumerVersion)
 	if err != nil {
 		return r, err
 	}
-	if r.Cluster == "" || r.Controller == "" || !reconciliation.ValidSegment(r.Name) || r.Filesystem == "" || r.Pool == "" || r.DefaultDataPool == "" || !strictlySorted(r.Machines) || !validProvided(r.Machines, r.Provided) || len(r.Scope) != 0 || (r.KeyType != "aes" && r.KeyType != "aes256k") {
+	if r.Cluster == "" || r.Controller == "" || !reconciliation.ValidSegment(r.Name) || r.Filesystem == "" || r.Pool == "" || r.DefaultDataPool == "" || !strictlySorted(r.Machines) || !validProvided(r.Machines, r.Provided) || !strictlySorted(r.HostSecretRefs) || len(r.Scope) != 0 || (r.KeyType != "aes" && r.KeyType != "aes256k") {
 		return r, failure("lifecycle.state", "the frozen Ceph consumer request is inconsistent", "")
 	}
 	if len(r.Monitors) == 0 || len(r.Monitors) > 64 || !strictlySorted(r.MonitoringHosts) || r.MonitoringPort != 9283 {
@@ -169,7 +171,7 @@ func (c ConsumerCapability) Plan(ctx context.Context, input lifecycle.PlanInput)
 		if len(data) == 0 {
 			return plan, failure("lifecycle.state", "Ceph consumer has no filesystem default data pool", "")
 		}
-		r := ConsumerRequest{Cluster: cluster.Name(), Controller: input.Controller, DefaultDataPool: nativePoolRef(catalog, data[0]), Filesystem: fs.Name(), KeyType: refs.Get("cephxKeyType").Text(), Machines: requestMachines(base), Name: obj.Name(), PhysicalHosts: physicalHosts(base.Hosts), Provided: providedMachines(base), Pool: nativePoolRef(catalog, refs.Get("rbdPoolRef").Text()), Version: ConsumerVersion}
+		r := ConsumerRequest{Cluster: cluster.Name(), Controller: input.Controller, DefaultDataPool: nativePoolRef(catalog, data[0]), Filesystem: fs.Name(), KeyType: refs.Get("cephxKeyType").Text(), Machines: requestMachines(base), Name: obj.Name(), HostSecretRefs: hostSecretRefs(base.Hosts), PhysicalHosts: physicalHosts(base.Hosts), Provided: providedMachines(base), Pool: nativePoolRef(catalog, refs.Get("rbdPoolRef").Text()), Version: ConsumerVersion}
 		if err := exportMonitoring(catalog, cluster, &r); err != nil {
 			return plan, err
 		}
@@ -211,14 +213,7 @@ func (c ConsumerCapability) Plan(ctx context.Context, input lifecycle.PlanInput)
 			consumes = []string{reconciliation.AuthorizationDataLoss}
 		}
 		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: ConsumerBlockID(obj.Name()), Description: impacts[0], Stage: reconciliation.StageClusters, Kind: string(api.CephConsumer), Object: obj.Name(), Implementation: ConsumerImplementation, ContentDigest: ConsumerContentDigest(), Request: canonical, Requires: requires, Dependencies: dependencies, Exclusive: exclusiveFor("consumer", Request{Cluster: r.Cluster}), Throttle: ThrottleKey(r.Cluster), Impacts: impacts, Consumes: consumes})
-		for _, host := range base.Hosts {
-			plan.Secrets = append(plan.Secrets, host.SSHKeyRef)
-			for _, ref := range []string{host.HostKeyRef, host.KnownHostsRef} {
-				if ref != "" {
-					plan.Secrets = append(plan.Secrets, ref)
-				}
-			}
-		}
+		plan.Secrets = append(plan.Secrets, r.HostSecretRefs...)
 	}
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)
@@ -249,8 +244,8 @@ func (c ConsumerCapability) runExport(ctx context.Context, e lifecycle.Execution
 	if err != nil {
 		return lifecycle.RunResult{}, r, err
 	}
-	if !slices.Equal(r.Machines, scope.Machines) || !slices.Equal(r.Provided, scope.Provided) {
-		return lifecycle.RunResult{}, r, failure("lifecycle.state", "Ceph consumer host set differs from its proved cluster", "")
+	if !slices.Equal(r.Machines, scope.Machines) || !slices.Equal(r.Provided, scope.Provided) || !slices.Equal(r.HostSecretRefs, hostSecretRefs(scope.Scope.Hosts)) {
+		return lifecycle.RunResult{}, r, failure("lifecycle.state", "Ceph consumer host set or its host keys differ from its proved cluster", "")
 	}
 	if err = bindPhysicalHosts(scope.Scope.Hosts, e, c.proofs); err != nil {
 		return lifecycle.RunResult{}, r, err

@@ -74,7 +74,10 @@ Every Secret a realized field of this page references is effect material under
 which is a trust anchor: the cluster SSH key and each service binding's secret
 are placed on the hosts or in the cluster, a host's `knownHostsRef` pin is
 written into the cluster's tunnel `known_hosts`, the package repository trust
-bundle anchors their package fetches, and none is an access credential. The `externalDetails` secret belongs to an arm that
+bundle anchors their package fetches, and none is an access credential. A
+consumer, SMB resource or replication block freezes the SSH key, host key and
+`knownHostsRef` of each host of the clusters it reaches as `hostSecretRefs`,
+and its run refuses a proved cluster whose hosts name others. The `externalDetails` secret belongs to an arm that
 refuses.
 
 Storage children select their owner through `spec.clusterRef`; they do not

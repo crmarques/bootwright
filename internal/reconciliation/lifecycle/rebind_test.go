@@ -208,6 +208,9 @@ func TestAnUnreportedRequestStringIsNoUseOfTheSecret(t *testing.T) {
 	h.binder.versions = map[string]string{"bmc": "ver-1"}
 	h.binder.versionMaterial = map[string]secrets.Material{"ver-1": password("first"), "ver-2": password("second")}
 	completeApply(t, h)
+	h.capability.mutex.Lock()
+	h.capability.requestOnly = true
+	h.capability.mutex.Unlock()
 	h.binder.versions["bmc"] = "ver-2"
 	err := destroyWith(h, RebindAuthorization+"bmc")
 	reported := diagnostics.Of(err)

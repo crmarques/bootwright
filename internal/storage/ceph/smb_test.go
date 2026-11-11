@@ -176,6 +176,7 @@ func smbBlock(t *testing.T, r SMBRequest) reconciliation.Block {
 
 func smbExecution(t *testing.T, r SMBRequest, value string) lifecycle.Execution {
 	t.Helper()
+	r.HostSecretRefs = hostSecretRefs(sambaCore().Hosts)
 	e := lifecycle.Execution{ApplyOperation: "apply-original", Operation: "apply-original", Context: "example", Block: smbBlock(t, r), ApplyProved: sambaProofs(t)}
 	e = withMaterial(e, sambaCore())
 	for _, b := range r.Bindings {
@@ -451,10 +452,10 @@ func TestSMBSecretValueRefusesBeforeTheRun(t *testing.T) {
 }
 
 func TestSMBContentDigestMovesWithItsContract(t *testing.T) {
-	if SMBImplementation != "storage-ceph-smb-v1" || SMBVersion != "ceph-smb-v1" || SMBEvidenceVersion != "ceph-smb-evidence-v1" || SMBManagerModule != "smb" {
+	if SMBImplementation != "storage-ceph-smb-v1" || SMBVersion != "ceph-smb-v2" || SMBEvidenceVersion != "ceph-smb-evidence-v1" || SMBManagerModule != "smb" {
 		t.Fatalf("the SMB contract is %s %s %s %s", SMBImplementation, SMBVersion, SMBEvidenceVersion, SMBManagerModule)
 	}
-	d := sha256.Sum256([]byte("storage-ceph-smb-v1\x00ceph-smb-v1\x00ceph-smb-evidence-v1\x00storage-ceph-physical-retirement-v1"))
+	d := sha256.Sum256([]byte("storage-ceph-smb-v1\x00ceph-smb-v2\x00ceph-smb-evidence-v1\x00storage-ceph-physical-retirement-v1"))
 	if SMBContentDigest() != hex.EncodeToString(d[:]) {
 		t.Fatalf("the SMB content digest is %s", SMBContentDigest())
 	}

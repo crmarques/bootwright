@@ -109,7 +109,7 @@ func (r sharedResolver) Resolve(kind, implementation string) (Capability, bool) 
 	case position < 0:
 		return nil, false
 	case position == 0:
-		return plannedCapability{Capability: r.bound[0].Capability, plan: r.plan}, true
+		return plannedCapability{Capability: r.bound[0].Capability, plan: r.plan, peers: r.bound}, true
 	}
 	return plannedCapability{Capability: r.bound[position].Capability, plan: CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}}, true
 }
@@ -139,11 +139,25 @@ func (j *CapabilityJourney) Reservations() []prerequisites.HostReservation {
 // it wraps, its explanation of an unresolved observation included.
 type plannedCapability struct {
 	Capability
-	plan CapabilityPlan
+	plan  CapabilityPlan
+	peers []BoundCapability
 }
 
 func (p plannedCapability) Plan(context.Context, PlanInput) (CapabilityPlan, error) {
 	return p.plan, nil
+}
+
+func (p plannedCapability) SecretReferences(block reconciliation.Block) ([]string, error) {
+	capability := p.Capability
+	for _, peer := range p.peers {
+		if peer.Binding == (CapabilityBinding{Kind: block.Kind, Implementation: block.Implementation}) {
+			capability = peer.Capability
+		}
+	}
+	if referencer, ok := capability.(SecretReferencer); ok {
+		return referencer.SecretReferences(block)
+	}
+	return nil, nil
 }
 
 func (p plannedCapability) Keeps(block reconciliation.Block) (KeptEntry, bool, error) {

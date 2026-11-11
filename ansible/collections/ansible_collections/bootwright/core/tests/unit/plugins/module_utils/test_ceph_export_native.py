@@ -15,7 +15,8 @@ def request():
     cluster = scope()
     value = {"version": export.VERSION, "cluster": "example", "controller": "controller", "name": "consumer", "filesystem": "files",
              "pool": "block", "defaultDataPool": "fs-data", "keyType": "aes", "machines": [host["machine"] for host in cluster["hosts"]],
-             "providedMachines": [], "scope": cluster, "physicalHosts": False, "monitors": {"node-1": "192.0.2.1"},
+             "providedMachines": [], "hostSecretRefs": ceph_native.host_secret_refs(cluster["hosts"]), "scope": cluster,
+             "physicalHosts": False, "monitors": {"node-1": "192.0.2.1"},
              "monitoringHosts": ["192.0.2.1", "192.0.2.2"], "monitoringPort": 9283}
     value["principals"] = export.caps_for(value)
     return value
@@ -197,6 +198,7 @@ def with_provided_tiebreaker(value):
     value["scope"]["hosts"].append({"name": "tie", "machine": "tie", "address": "198.51.100.10", "user": "operator", "port": 22, "devices": [],
                                     "labels": ["mon"], "location": {}, "sshKeyRef": "fleet-key", "knownHostsRef": "tie-known-hosts", "provided": True})
     value["machines"] = sorted(value["machines"] + ["tie"])
+    value["hostSecretRefs"] = ["fleet-key", "tie-known-hosts"]
     return value
 
 
@@ -208,6 +210,15 @@ def test_the_provided_machines_are_exactly_the_scope_s_provided_hosts():
     export.validate(dict(value, providedMachines=["tie"]))
     with pytest.raises(ceph_native.Refusal):
         export.validate(dict(request(), providedMachines=["machine-1"]))
+
+
+def test_the_host_secret_refs_are_exactly_the_scope_s_host_keys():
+    value = with_provided_tiebreaker(request())
+    value["providedMachines"] = ["tie"]
+    export.validate(value)
+    for refs in (["fleet-key"], ["fleet-key", "other-key", "tie-known-hosts"], ["tie-known-hosts", "fleet-key"]):
+        with pytest.raises(ceph_native.Refusal):
+            export.validate(dict(value, hostSecretRefs=refs))
 
 
 def prerequisite_worker(monkeypatch):

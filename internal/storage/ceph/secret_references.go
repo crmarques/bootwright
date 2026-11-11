@@ -46,8 +46,11 @@ func (SMBCapability) SecretReferences(block reconciliation.Block) ([]string, err
 }
 
 func (ReplicationCapability) SecretReferences(block reconciliation.Block) ([]string, error) {
-	_, err := DecodeReplicationRequest(block.Request)
-	return nil, err
+	request, err := DecodeReplicationRequest(block.Request)
+	if err != nil {
+		return nil, err
+	}
+	return request.SecretReferences(), nil
 }
 
 func (PhysicalRetirementCapability) SecretReferences(block reconciliation.Block) ([]string, error) {
@@ -115,7 +118,7 @@ func (ConsumerCapability) SecretClasses(block reconciliation.Block) (secrets.Cla
 	if err != nil {
 		return nil, err
 	}
-	classes := secrets.Classes{}
+	classes := secrets.Classes{}.Add(secrets.EffectMaterial, r.HostSecretRefs...)
 	if r.Gateway != nil {
 		classes.Add(secrets.EffectMaterial, r.Gateway.CertificateRef)
 	}
@@ -127,7 +130,7 @@ func (SMBCapability) SecretClasses(block reconciliation.Block) (secrets.Classes,
 	if err != nil {
 		return nil, err
 	}
-	classes := secrets.Classes{}
+	classes := secrets.Classes{}.Add(secrets.EffectMaterial, r.HostSecretRefs...)
 	for _, binding := range r.Bindings {
 		classes.Add(secrets.EffectMaterial, binding.SecretRef)
 	}
@@ -135,8 +138,11 @@ func (SMBCapability) SecretClasses(block reconciliation.Block) (secrets.Classes,
 }
 
 func (ReplicationCapability) SecretClasses(block reconciliation.Block) (secrets.Classes, error) {
-	_, err := DecodeReplicationRequest(block.Request)
-	return secrets.Classes{}, err
+	r, err := DecodeReplicationRequest(block.Request)
+	if err != nil {
+		return nil, err
+	}
+	return secrets.Classes{}.Add(secrets.EffectMaterial, r.SecretReferences()...), nil
 }
 
 func (PhysicalRetirementCapability) SecretClasses(block reconciliation.Block) (secrets.Classes, error) {

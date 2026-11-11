@@ -20,6 +20,9 @@
   "object": "replica",
   "primary": {
     "cluster": "example",
+    "hostSecretRefs": [
+      "fleet-key"
+    ],
     "machines": [
       "node-1",
       "node-2",
@@ -62,6 +65,9 @@
   },
   "secondary": {
     "cluster": "secondary",
+    "hostSecretRefs": [
+      "fleet-key"
+    ],
     "machines": [
       "peer-node-1",
       "peer-node-2",
@@ -102,5 +108,5 @@
     "poolObject": "secondary-volumes",
     "providedMachines": []
   },
-  "version": "ceph-replication-v1"
+  "version": "ceph-replication-v2"
 }

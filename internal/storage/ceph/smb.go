@@ -19,7 +19,7 @@ import (
 
 const (
 	SMBImplementation  = "storage-ceph-smb-v1"
-	SMBVersion         = "ceph-smb-v1"
+	SMBVersion         = "ceph-smb-v2"
 	SMBEvidenceVersion = "ceph-smb-evidence-v1"
 	SMBManagerModule   = "smb"
 )
@@ -48,19 +48,20 @@ type SMBService struct {
 }
 
 type SMBRequest struct {
-	Bindings     []SMBBinding    `json:"bindings"`
-	Cluster      string          `json:"cluster"`
-	ClusterIDs   []string        `json:"clusterIDs,omitempty"`
-	Controller   string          `json:"controller"`
-	ID           string          `json:"id"`
-	Images       []SMBImage      `json:"images,omitempty"`
-	Machines     []string        `json:"machines"`
-	Native       json.RawMessage `json:"native"`
-	Object       string          `json:"object"`
-	ResourceType string          `json:"resourceType"`
-	Scope        json.RawMessage `json:"scope,omitempty"`
-	Service      *SMBService     `json:"service,omitempty"`
-	Version      string          `json:"version"`
+	Bindings       []SMBBinding    `json:"bindings"`
+	Cluster        string          `json:"cluster"`
+	ClusterIDs     []string        `json:"clusterIDs,omitempty"`
+	Controller     string          `json:"controller"`
+	HostSecretRefs []string        `json:"hostSecretRefs"`
+	ID             string          `json:"id"`
+	Images         []SMBImage      `json:"images,omitempty"`
+	Machines       []string        `json:"machines"`
+	Native         json.RawMessage `json:"native"`
+	Object         string          `json:"object"`
+	ResourceType   string          `json:"resourceType"`
+	Scope          json.RawMessage `json:"scope,omitempty"`
+	Service        *SMBService     `json:"service,omitempty"`
+	Version        string          `json:"version"`
 }
 
 var smbIdentityLeaves = map[string]string{api.SMBCluster: "cluster_id", api.SMBShare: "share_id", api.SMBJoinAuth: "auth_id", api.SMBUsersGroups: "users_groups_id"}
@@ -72,7 +73,7 @@ var smbUserPassword = regexp.MustCompile(`\A/values/users/(?:0|[1-9][0-9]{0,3})/
 func (r SMBRequest) Canonical() ([]byte, error) { return reconciliation.Freeze(r, "Ceph SMB") }
 
 func (r SMBRequest) SecretReferences() []string {
-	references := make([]string, 0, len(r.Bindings))
+	references := slices.Clone(r.HostSecretRefs)
 	for _, binding := range r.Bindings {
 		references = append(references, binding.SecretRef)
 	}
@@ -114,7 +115,7 @@ func (r SMBRequest) nativeLeaf(name string) string {
 func (r SMBRequest) consistent() bool {
 	leaf, known := smbIdentityLeaves[r.ResourceType]
 	if !known || r.Cluster == "" || r.Controller == "" || r.Object == "" || r.ID == "" || len(r.Scope) != 0 || !reconciliation.ValidSegment(r.Object) ||
-		!strictlySorted(r.Machines) || r.Bindings == nil || canonicaljson.ProveObject(r.Native) != nil || r.nativeLeaf("resource_type") != r.ResourceType || r.nativeLeaf(leaf) != r.ID {
+		!strictlySorted(r.Machines) || !strictlySorted(r.HostSecretRefs) || r.Bindings == nil || canonicaljson.ProveObject(r.Native) != nil || r.nativeLeaf("resource_type") != r.ResourceType || r.nativeLeaf(leaf) != r.ID {
 		return false
 	}
 	switch r.ResourceType {
@@ -299,7 +300,7 @@ func smbRequest(c api.Catalog, object api.Object, base Request, controller strin
 	rt := spec.Get("native", "resource_type").Text()
 	cluster, _ := c.Find(api.CephCluster, base.Cluster)
 	r := SMBRequest{Version: SMBVersion, Object: object.Name(), Cluster: base.Cluster, Controller: controller, ResourceType: rt, ID: spec.Get("native", smbIdentityLeaves[rt]).Text(),
-		Machines: requestMachines(base), Bindings: []SMBBinding{}}
+		HostSecretRefs: hostSecretRefs(base.Hosts), Machines: requestMachines(base), Bindings: []SMBBinding{}}
 	native, err := smbNative(c, cluster, object)
 	if err != nil {
 		return SMBRequest{}, err
@@ -399,18 +400,7 @@ func smbDefinition(c api.Catalog, object api.Object, input lifecycle.PlanInput) 
 	removal := smbRemoval(input.Verb, r)
 	dependencies := []string{ClusterBlockID(r.Cluster), ImageBlockID(r.Cluster), SettingsBlockID(r.Cluster)}
 	slices.Sort(dependencies)
-	secrets := []string{}
-	for _, b := range r.Bindings {
-		secrets = append(secrets, b.SecretRef)
-	}
-	for _, h := range base.Hosts {
-		secrets = append(secrets, h.SSHKeyRef)
-		for _, ref := range []string{h.HostKeyRef, h.KnownHostsRef} {
-			if ref != "" {
-				secrets = append(secrets, ref)
-			}
-		}
-	}
+	secrets := r.SecretReferences()
 	return reconciliation.BlockDefinition{ID: SMBBlockID(object.Name()), Description: removal.Description, Stage: reconciliation.StageClusters, Requires: smbRequires(object.Spec(), r.ResourceType),
 		Dependencies: dependencies, Exclusive: exclusiveFor("smb", Request{Cluster: r.Cluster}), Throttle: ThrottleKey(r.Cluster), Impacts: removal.Impacts, Consumes: removal.Consumes, Kind: string(api.CephSMBResource), Object: object.Name(),
 		Implementation: SMBImplementation, ContentDigest: SMBContentDigest(), Request: canonical}, secrets, nil
@@ -455,8 +445,8 @@ func (c SMBCapability) prepare(ctx context.Context, e lifecycle.Execution) (SMBR
 	if err != nil {
 		return SMBRequest{}, ProvedClusterScope{}, err
 	}
-	if !slices.Equal(r.Machines, scope.Machines) {
-		return SMBRequest{}, ProvedClusterScope{}, failure("lifecycle.state", "CephSMBResource "+r.Object+" froze another Machine set than the creation proof of CephCluster "+r.Cluster, "restore the original apply evidence")
+	if !slices.Equal(r.Machines, scope.Machines) || !slices.Equal(r.HostSecretRefs, hostSecretRefs(scope.Scope.Hosts)) {
+		return SMBRequest{}, ProvedClusterScope{}, failure("lifecycle.state", "CephSMBResource "+r.Object+" froze another Machine set or host keys than the creation proof of CephCluster "+r.Cluster, "restore the original apply evidence")
 	}
 	if r.Service != nil && len(r.Images) == 0 {
 		return SMBRequest{}, ProvedClusterScope{}, failure("lifecycle.state", "CephSMBResource "+r.Object+" froze no samba image", "")

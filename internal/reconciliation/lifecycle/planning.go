@@ -154,6 +154,9 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 		if err != nil {
 			return reconciliation.Plan{}, capabilityBinding{}, err
 		}
+		if err := refuseUnnamedSecrets(bound.Implementation, capability, contribution); err != nil {
+			return reconciliation.Plan{}, capabilityBinding{}, err
+		}
 		claimed.record(bound, contribution.Definitions)
 		for _, definition := range contribution.Definitions {
 			if definition.Family != "" && definition.Family != bound.family() {

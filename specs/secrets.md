@@ -385,7 +385,11 @@ effect material or leaves unclassified, the classes the
 reads. An access credential and a trust anchor are never held, so a libvirt
 host's SSH key and `known_hosts` entry renew and are replaced while it stays
 applied. A block whose capability cannot name or classify its Secrets holds
-every version its binding pins, and a `caBundle` is always a trust anchor. A binding no
+every version its binding pins, and a `caBundle` is always a trust anchor.
+Every Secret a capability's plan binds is named by one of the blocks it
+planned, so a block's hold never rests on another block of the lineage;
+planning refuses `lifecycle.state` for a capability that binds one none of its
+blocks names, a defect of the build. A binding no
 registered operation names holds every version it pins while an apply has
 raised its running evidence and is not yet registered, when the keyring did
 not list it yet as the command read the holds, before any prompt or input
@@ -395,7 +399,9 @@ rest it holds nothing
 `TestAnUnnamedBindingHoldsWhileAnApplyRegisters`,
 `TestSecretHoldsNameTheEffectMaterialACompletedApplyBound`,
 `TestSecretHoldsCoverEffectMaterialAlone`,
-`TestALibvirtHostBindingHoldsNeitherItsSSHKeyNorItsKnownHosts`).
+`TestALibvirtHostBindingHoldsNeitherItsSSHKeyNorItsKnownHosts`,
+`TestEveryBoundSecretIsNamedByABlockThatBindsIt`,
+`TestPlanningRefusesACapabilityThatBindsASecretNoBlockNames`).
 
 ## Produced material
 

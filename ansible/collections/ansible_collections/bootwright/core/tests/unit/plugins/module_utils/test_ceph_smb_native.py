@@ -67,8 +67,8 @@ def service(hosts=("node-1", "node-2"), clustered=False):
 def request(resource_type, transport="native", **served):
     """One completed request of a resource type, as the Go SMB capability completes it."""
     base = {"cluster": "example", "controller": "controller", "machines": ["machine-1", "machine-2", "machine-3"],
-            "object": "smb-" + resource_type.split(".")[-1], "resourceType": resource_type, "scope": scope(transport), "version": "ceph-smb-v1",
-            "bindings": []}
+            "object": "smb-" + resource_type.split(".")[-1], "resourceType": resource_type, "scope": scope(transport), "version": "ceph-smb-v2",
+            "bindings": [], "hostSecretRefs": ["fleet-key"]}
     if resource_type == "ceph.smb.cluster":
         native = {"resource_type": resource_type, "cluster_id": "files", "auth_mode": "user", "placement": {"count": 2, "hosts": ["node-2", "node-1"]},
                   "user_group_settings": [{"ref": "users"}]}
@@ -820,7 +820,7 @@ def test_smb_worker_ships_after_its_imports():
 
 
 def test_core_keeps_the_smb_names_as_aliases():
-    assert ceph_core.SMB_VERSION == ceph_smb_native.VERSION == "ceph-smb-v1"
+    assert ceph_core.SMB_VERSION == ceph_smb_native.VERSION == "ceph-smb-v2"
     assert ceph_core.SMB_EVIDENCE_VERSION == ceph_smb_native.EVIDENCE_VERSION == "ceph-smb-evidence-v1"
     assert ceph_core.SMB_TYPES is ceph_smb_native.TYPES
     value = request("ceph.smb.share")

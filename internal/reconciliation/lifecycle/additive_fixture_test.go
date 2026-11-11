@@ -64,7 +64,7 @@ func (c *planningCapability) SecretReferences(block reconciliation.Block) ([]str
 	if strings.HasPrefix(block.ID, "addon-") {
 		return []string{addonSecret}, nil
 	}
-	return nil, nil
+	return c.testCapability.SecretReferences(block)
 }
 
 type addonCapability struct{ *planningCapability }

@@ -1803,6 +1803,60 @@ func contractHardwarePresence(t *testing.T, execution lifecycle.Execution) map[s
 	return map[string]any{"postcondition": true, "addresses": []any{"52:54:00:00:00:21"}, "version": hardware.EvidenceVersion}
 }
 
+// TestEveryBoundSecretIsNamedByABlockThatBindsIt keeps a live binding's hold
+// from leaning on another block: every Secret a capability's plan of a contract
+// example binds, and every known_hosts pin its SSH placements claim, is named
+// by a block that capability planned, so a plan holding that block alone holds
+// it by its class.
+func TestEveryBoundSecretIsNamedByABlockThatBindsIt(t *testing.T) {
+	runner := &contractRunner{}
+	resolver := withContractHostPorts(buildCapabilitiesWith(systemClock{}, exampleControllerPorts(t), runner, exampleMediaRecords{}), runner)
+	offered := buildCapabilities(systemClock{}, controllerDependencies{}, nil)
+	examples := map[string]contractExample{}
+	checked := 0
+	for _, row := range contractRows() {
+		example, built := examples[row.example]
+		if !built {
+			example = contractExampleOf(t, resolver, runner, row.example)
+			examples[row.example] = example
+		}
+		contribution, planned := example.plans[row.binding()]
+		if !planned {
+			continue
+		}
+		capability, _ := offered.Resolve(row.kind, row.implementation)
+		named := map[string]bool{}
+		for _, block := range example.plan.Blocks {
+			if !slices.ContainsFunc(contribution.Definitions, func(definition reconciliation.BlockDefinition) bool { return definition.ID == block.ID }) {
+				continue
+			}
+			references, err := capability.(lifecycle.SecretReferencer).SecretReferences(block)
+			if err != nil {
+				t.Fatalf("%s: %v", block.ID, err)
+			}
+			for _, reference := range references {
+				named[reference] = true
+			}
+		}
+		bound := slices.Clone(contribution.Secrets)
+		for _, claim := range contribution.SSHReservations {
+			bound = append(bound, claim.KnownHostsRef)
+		}
+		for _, reference := range bound {
+			if reference == "" {
+				continue
+			}
+			checked++
+			if !named[reference] {
+				t.Errorf("%s/%s binds Secret %s in example %s, which none of its blocks names", row.kind, row.implementation, reference, row.example)
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no contract example binds a Secret")
+	}
+}
+
 func contractMirrorImagesPresence(t *testing.T, execution lifecycle.Execution) map[string]any {
 	t.Helper()
 	request, err := mirrorfill.DecodeImagesRequest(execution.Block.Request)

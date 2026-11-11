@@ -134,7 +134,7 @@ func TestAReplicationEndpointWhoseProvidedMachinesDifferFromItsClusterProofRefus
 	r.Primary.Provided = []string{r.Primary.Machines[2]}
 	e.Block.Request = mustCanonical(t, r)
 	_, _, err := NewReplication(nil).prepare(context.Background(), e)
-	refusedWith(t, err, "lifecycle.state", "replication machines do not match original cluster creation evidence", "")
+	refusedWith(t, err, "lifecycle.state", "replication machines or their host keys do not match original cluster creation evidence", "")
 }
 
 func TestAConsumerWhoseProvidedMachinesDifferFromItsClusterProofRefuses(t *testing.T) {
@@ -159,7 +159,7 @@ func TestAConsumerWhoseProvidedMachinesDifferFromItsClusterProofRefuses(t *testi
 			frozen.Request = mustCanonical(t, changed)
 			e := lifecycle.Execution{Block: reconciliation.Block{BlockDefinition: frozen}, ApplyOperation: "apply-original", Operation: "apply-retry", ApplyProved: proofs}
 			_, _, err := NewConsumer(nil).runExport(context.Background(), e, "observe")
-			mismatch := len(diagnostics.Of(err)) == 1 && diagnostics.Of(err)[0].Message == "Ceph consumer host set differs from its proved cluster"
+			mismatch := len(diagnostics.Of(err)) == 1 && diagnostics.Of(err)[0].Message == "Ceph consumer host set or its host keys differ from its proved cluster"
 			if mismatch != (provided != nil) {
 				t.Fatalf("run %+v", diagnostics.Of(err))
 			}

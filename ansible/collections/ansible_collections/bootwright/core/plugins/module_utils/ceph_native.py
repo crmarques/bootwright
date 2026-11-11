@@ -448,6 +448,10 @@ def named(value):
     return isinstance(value, str) and NAME.fullmatch(value) is not None
 
 
+def host_secret_refs(hosts):
+    return sorted({ref for host in hosts for ref in (host["sshKeyRef"], host.get("hostKeyRef"), host.get("knownHostsRef")) if ref})
+
+
 def health_owned(request):
     """The pools and filesystems whose scoped health checks keep this block from ready: those it owns (declares or derives) and
     those its frozen request names as what it depends on. A service unit, settings, a placement policy, an object user or bucket

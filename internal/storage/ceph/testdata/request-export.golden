@@ -3,6 +3,9 @@
   "controller": "controller",
   "defaultDataPool": "fs-data",
   "filesystem": "files",
+  "hostSecretRefs": [
+    "fleet-key"
+  ],
   "keyType": "aes",
   "machines": [
     "node-1",
@@ -53,5 +56,5 @@
     }
   },
   "providedMachines": [],
-  "version": "ceph-export-request-v1"
+  "version": "ceph-export-request-v2"
 }

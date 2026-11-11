@@ -15167,3 +15167,44 @@ meets a context driving it through an emulated BMC.
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** a plan an earlier build froze keeps the dependencies it
 froze.
+
+### X414 — Ceph host keys
+
+**Item:** B1316 (2026-11-10, from the independent review of
+[X370](#x370--secret-classes); [D257](backlog.md#d257)), delivered in-tree.
+**Kind:** defect. **Owners:** Storage, with Secrets. A Ceph consumer, SMB
+resource and replication block bound the SSH key, host key and
+`knownHostsRef` of every host of the clusters they reach, but named none of
+them, so the [effect-material hold](../secrets.md#effect-material-under-a-live-binding)
+held them only through the cluster and host blocks of the same lineage. Each
+request now freezes them as `hostSecretRefs` (a replication per endpoint),
+which its plan binds, its `SecretReferences` names and its `SecretClasses`
+classes as effect material, as the host block classes them
+([Ceph Secret classes](../api/ceph.md)); its run, and the collection's
+validation, refuse a proved cluster whose hosts name others. The SMB block
+had the same defect, which the general guard found, so it is fixed with
+them. Request versions `ceph-export-request-v2`, `ceph-smb-v2` and
+`ceph-replication-v2` move the content digests of `ceph-export-v1`,
+`storage-ceph-smb-v1` and `storage-ceph-replication-v1`.
+
+| Finding | Change |
+| --- | --- |
+| B1316 (the X370 review of REC-12) | `hostSecretRefs` on `ConsumerRequest`, `SMBRequest` and `ReplicationEndpoint`, `hostSecretRefs(hosts)`; the three capabilities' `SecretReferences` and `SecretClasses`; `ceph_native.host_secret_refs` checked by the export, SMB and replication validators; argument specs; secrets.md and api/ceph.md |
+| the class of defect | planning (`refuseUnnamedSecrets`) refuses `lifecycle.state` when a capability binds a Secret none of its blocks names, or binds one and cannot name any; `TestEveryBoundSecretIsNamedByABlockThatBindsIt`: every Secret a capability's contract-example plan binds, and every `knownHostsRef` its SSH placements claim, is named by a block it planned; the lifecycle test doubles name what they bind |
+
+Tests: Go `TestAConsumerBindingAloneHoldsTheHostKeysItPins`,
+`TestAReplicationBindingAloneHoldsBothEndpointsHostKeys`,
+`TestAnSMBBindingAloneHoldsTheHostKeysItPins`,
+`TestAPlannedConsumerOrReplicationHoldsEverySecretItNames`,
+`TestEveryBoundSecretIsNamedByABlockThatBindsIt`,
+`TestACapabilityThatBindsASecretNoBlockNamesRefusesToPlan` and
+`TestPlanningRefusesACapabilityThatBindsASecretNoBlockNames`; Python
+`test_the_host_secret_refs_are_exactly_the_scope_s_host_keys` and the
+replication endpoint case of
+`test_each_endpoint_names_exactly_its_scope_s_provided_hosts`.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** a consumer, SMB resource or replication applied
+before this build is refused by its moved digest; the guard covers the
+bindings the contract examples plan, and the planning refusal leaves out the
+`knownHostsRef` the engine adds from SSH placement claims.

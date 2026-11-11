@@ -2,7 +2,7 @@
 - name: Validate the frozen Ceph SMB request
   ansible.builtin.assert:
     that:
-      - bootwright_ceph_smb_request.version == 'ceph-smb-v1'
+      - bootwright_ceph_smb_request.version == 'ceph-smb-v2'
       - bootwright_ceph_smb_digest is match('^[0-9a-f]{64}$(?!\n)')
       - ansible_connection == 'local'
     quiet: true

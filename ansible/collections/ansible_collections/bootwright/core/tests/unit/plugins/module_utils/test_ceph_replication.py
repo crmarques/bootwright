@@ -43,7 +43,8 @@ def request(mode="image", count=1):
                           "features": ["layering", "exclusive-lock", "object-map", "fast-diff", "deep-flatten", "journaling"]} for i in range(count)]}
     for side, scope in (("primary", primary), ("secondary", secondary)):
         result[side] = {"cluster": scope["cluster"], "machines": sorted(host["machine"] for host in scope["hosts"]),
-                        "pool": pools.pool_value(object=side + "-volumes"), "poolObject": side + "-volumes", "providedMachines": [], "scope": scope}
+                        "pool": pools.pool_value(object=side + "-volumes"), "poolObject": side + "-volumes", "providedMachines": [], "scope": scope,
+                        "hostSecretRefs": ceph_native.host_secret_refs(scope["hosts"])}
     return native.validate(result)
 
 
@@ -180,6 +181,7 @@ def test_each_endpoint_names_exactly_its_scope_s_provided_hosts():
                                                "labels": ["mon"], "location": {}, "sshKeyRef": "fleet-key", "knownHostsRef": "tie-known-hosts",
                                                "provided": True})
     value["primary"]["machines"] = sorted(value["primary"]["machines"] + ["tie"])
+    value["primary"]["hostSecretRefs"] = ["fleet-key", "tie-known-hosts"]
     for side, provided in (("primary", []), ("primary", ["machine-1"]), ("secondary", ["tie"])):
         changed = copy.deepcopy(value)
         changed["primary"]["providedMachines"] = ["tie"]
@@ -188,6 +190,11 @@ def test_each_endpoint_names_exactly_its_scope_s_provided_hosts():
             native.validate(changed)
     value["primary"]["providedMachines"] = ["tie"]
     native.validate(value)
+    for side in ("primary", "secondary"):
+        changed = copy.deepcopy(value)
+        changed[side]["hostSecretRefs"] = ["fleet-key", "other-key"]
+        with pytest.raises(ceph_native.Refusal):
+            native.validate(changed)
 
 
 @pytest.mark.parametrize("mode", ["image", "pool"])

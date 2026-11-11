@@ -25,6 +25,14 @@ func TestConsumerRefusalsNameTheMissingPrerequisite(t *testing.T) {
 	for i := range base.Hosts {
 		base.Hosts[i].HostKeyRef = base.Hosts[i].Name + "-host-key"
 	}
+	request, err := DecodeConsumerRequest(block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.HostSecretRefs = hostSecretRefs(base.Hosts)
+	if block.Request, err = request.Canonical(); err != nil {
+		t.Fatal(err)
+	}
 	e := lifecycle.Execution{Block: reconciliation.Block{BlockDefinition: block}, ApplyOperation: "apply-original", Operation: "apply-retry", ApplyProved: []lifecycle.BlockEvidence{coreClusterProof(t, base, nil), imageProof(t, "example", base.Image, resolvedDigest)}}
 	e = withMaterial(e, base)
 	for token, want := range map[string]string{

@@ -5,6 +5,9 @@
     "files"
   ],
   "controller": "controller",
+  "hostSecretRefs": [
+    "fleet-key"
+  ],
   "id": "docs",
   "images": [
     {
@@ -44,5 +47,5 @@
     ],
     "name": "smb.files"
   },
-  "version": "ceph-smb-v1"
+  "version": "ceph-smb-v2"
 }

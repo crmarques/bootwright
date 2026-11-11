@@ -19,6 +19,10 @@ argument_specs:
           controller:
             type: str
             required: true
+          hostSecretRefs:
+            type: list
+            elements: str
+            required: true
           id:
             type: str
             required: true
@@ -46,7 +50,7 @@ argument_specs:
             type: str
             required: true
             choices:
-              - ceph-smb-v1
+              - ceph-smb-v2
       bootwright_ceph_smb_digest:
         type: str
         required: true

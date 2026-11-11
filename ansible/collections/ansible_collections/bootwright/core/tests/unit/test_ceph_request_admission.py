@@ -150,6 +150,7 @@ SMB = {
     "cluster": "example",
     "clusterIDs": ["files"],
     "controller": "controller",
+    "hostSecretRefs": ["fleet-key", "node-1-host-key"],
     "id": "docs",
     "images": [{"image": "cp.icr.io/cp/ibm-ceph/samba-synthetic@sha256:" + "b" * 64, "name": "samba"},
                {"image": "cp.icr.io/cp/ibm-ceph/samba-metrics-synthetic@sha256:" + "c" * 64, "name": "samba_metrics"}],
@@ -159,7 +160,7 @@ SMB = {
     "resourceType": "ceph.smb.share",
     "scope": HOST["cluster"],
     "service": {"clustered": False, "hosts": ["node-1"], "name": "smb.files"},
-    "version": "ceph-smb-v1",
+    "version": "ceph-smb-v2",
 }
 
 # Role, its entry points, the request variable and the request carrying every

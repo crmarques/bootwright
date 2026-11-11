@@ -75,6 +75,14 @@ func (s ClusterScope) secretReferences() []string {
 	return lifecycle.SecretNames(append(references, s.Packages.secretReferences()...)...)
 }
 
+func hostSecretRefs(hosts []Host) []string {
+	references := []string{}
+	for _, host := range hosts {
+		references = append(references, host.SSHKeyRef, host.HostKeyRef, host.KnownHostsRef)
+	}
+	return lifecycle.SecretNames(references...)
+}
+
 func DecodeHostRequest(data []byte) (HostRequest, error) {
 	r, err := reconciliation.ThawVersion[HostRequest](data, "Ceph host", HostVersion)
 	if err != nil {

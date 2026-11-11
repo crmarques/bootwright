@@ -30,12 +30,12 @@ import re
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_nfs, ceph_native_resources
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import NativeFailure, Refusal, canonical, named, require, unique_object
 
-VERSION = "ceph-smb-v1"
+VERSION = "ceph-smb-v2"
 EVIDENCE_VERSION = "ceph-smb-evidence-v1"
 # Each SMB manager resource type with the native member naming its identity.
 TYPES = {"ceph.smb.cluster": "cluster_id", "ceph.smb.share": "share_id", "ceph.smb.join.auth": "auth_id", "ceph.smb.usersgroups": "users_groups_id"}
 SERVED = ("ceph.smb.cluster", "ceph.smb.share")
-REQUIRED = frozenset(("bindings", "cluster", "controller", "id", "machines", "native", "object", "resourceType", "scope", "version"))
+REQUIRED = frozenset(("bindings", "cluster", "controller", "hostSecretRefs", "id", "machines", "native", "object", "resourceType", "scope", "version"))
 OPTIONAL = frozenset(("clusterIDs", "images", "service"))
 USER_PASSWORD = re.compile(r"/values/users/(?:0|[1-9][0-9]{0,3})/password\Z")
 IMAGE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]+@sha256:[0-9a-f]{64}\Z")
@@ -120,7 +120,7 @@ def validate(value):
         scope = ceph_native.validate_scope(value["scope"])
     except Refusal:
         raise Refusal("request") from None
-    require(scope["cluster"] == value["cluster"])
+    require(scope["cluster"] == value["cluster"] and value["hostSecretRefs"] == ceph_native.host_secret_refs(scope["hosts"]))
     validate_bindings(value)
     validate_service(value, scope)
     return value

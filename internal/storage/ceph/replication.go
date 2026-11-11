@@ -18,7 +18,7 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
-const ReplicationVersion = "ceph-replication-v1"
+const ReplicationVersion = "ceph-replication-v2"
 const ReplicationImplementation = "storage-ceph-replication-v1"
 const ReplicationEvidenceVersion = "ceph-replication-evidence-v1"
 
@@ -31,12 +31,13 @@ func ReplicationBlockID(name string) string {
 }
 
 type ReplicationEndpoint struct {
-	Cluster    string          `json:"cluster"`
-	Machines   []string        `json:"machines"`
-	Pool       Pool            `json:"pool"`
-	PoolObject string          `json:"poolObject"`
-	Provided   []string        `json:"providedMachines"`
-	Scope      json.RawMessage `json:"scope,omitempty"`
+	Cluster        string          `json:"cluster"`
+	HostSecretRefs []string        `json:"hostSecretRefs"`
+	Machines       []string        `json:"machines"`
+	Pool           Pool            `json:"pool"`
+	PoolObject     string          `json:"poolObject"`
+	Provided       []string        `json:"providedMachines"`
+	Scope          json.RawMessage `json:"scope,omitempty"`
 }
 type ReplicationRequest struct {
 	Controller string              `json:"controller"`
@@ -51,6 +52,9 @@ type ReplicationRequest struct {
 func (r ReplicationRequest) Canonical() ([]byte, error) {
 	return reconciliation.Freeze(r, "Ceph replication")
 }
+func (r ReplicationRequest) SecretReferences() []string {
+	return lifecycle.SecretNames(append(slices.Clone(r.Primary.HostSecretRefs), r.Secondary.HostSecretRefs...)...)
+}
 func DecodeReplicationRequest(data []byte) (ReplicationRequest, error) {
 	r, err := reconciliation.ThawVersion[ReplicationRequest](data, "Ceph replication", ReplicationVersion)
 	if err != nil {
@@ -60,7 +64,7 @@ func DecodeReplicationRequest(data []byte) (ReplicationRequest, error) {
 		return r, failure("lifecycle.state", "the frozen Ceph replication request is inconsistent", "")
 	}
 	for _, end := range []ReplicationEndpoint{r.Primary, r.Secondary} {
-		if len(end.Scope) != 0 || !strictlySorted(end.Machines) || !validProvided(end.Machines, end.Provided) || end.Pool.Name != r.Primary.Pool.Name || end.Pool.Type != "replicated" || end.Pool.Role != "rbd" || end.PoolObject == "" || end.Pool.Object != "" && end.Pool.Object != end.PoolObject || end.Pool.Object == "" && end.Pool.Name != end.PoolObject {
+		if len(end.Scope) != 0 || !strictlySorted(end.HostSecretRefs) || !strictlySorted(end.Machines) || !validProvided(end.Machines, end.Provided) || end.Pool.Name != r.Primary.Pool.Name || end.Pool.Type != "replicated" || end.Pool.Role != "rbd" || end.PoolObject == "" || end.Pool.Object != "" && end.Pool.Object != end.PoolObject || end.Pool.Object == "" && end.Pool.Name != end.PoolObject {
 			return r, failure("lifecycle.state", "the frozen replication endpoint is inconsistent", "")
 		}
 	}
@@ -112,7 +116,7 @@ func (c ReplicationCapability) Plan(ctx context.Context, input lifecycle.PlanInp
 			if err != nil {
 				return plan, err
 			}
-			endpoint := ReplicationEndpoint{Cluster: base.Cluster, Machines: requestMachines(base), Pool: *base.Pool, PoolObject: pool.Name(), Provided: providedMachines(base)}
+			endpoint := ReplicationEndpoint{Cluster: base.Cluster, HostSecretRefs: hostSecretRefs(base.Hosts), Machines: requestMachines(base), Pool: *base.Pool, PoolObject: pool.Name(), Provided: providedMachines(base)}
 			if i == 0 {
 				r.Primary = endpoint
 				r.Mode = pool.Spec().Get("mirroring", "mode").Text()
@@ -122,14 +126,7 @@ func (c ReplicationCapability) Plan(ctx context.Context, input lifecycle.PlanInp
 			requirements = append(requirements, reconciliation.ObjectRef{Kind: string(api.CephPool), Object: pool.Name()})
 			dependencies = append(dependencies, ClusterBlockID(base.Cluster), ImageBlockID(base.Cluster))
 			exclusive = append(exclusive, exclusiveFor("replication", Request{Cluster: base.Cluster})...)
-			for _, host := range base.Hosts {
-				plan.Secrets = append(plan.Secrets, host.SSHKeyRef)
-				for _, ref := range []string{host.HostKeyRef, host.KnownHostsRef} {
-					if ref != "" {
-						plan.Secrets = append(plan.Secrets, ref)
-					}
-				}
-			}
+			plan.Secrets = append(plan.Secrets, endpoint.HostSecretRefs...)
 		}
 		for _, image := range cephcluster.ReplicationImages(catalog, object) {
 			request, err := rbdImageRequest(catalog, image, input.Context.Name)
@@ -198,8 +195,8 @@ func (c ReplicationCapability) prepare(ctx context.Context, e lifecycle.Executio
 		if err != nil {
 			return r, nil, err
 		}
-		if !slices.Equal(proof.Machines, end.Machines) || !slices.Equal(proof.Provided, end.Provided) {
-			return r, nil, failure("lifecycle.state", "replication machines do not match original cluster creation evidence", "")
+		if !slices.Equal(proof.Machines, end.Machines) || !slices.Equal(proof.Provided, end.Provided) || !slices.Equal(end.HostSecretRefs, hostSecretRefs(proof.Scope.Hosts)) {
+			return r, nil, failure("lifecycle.state", "replication machines or their host keys do not match original cluster creation evidence", "")
 		}
 		if err := bindPhysicalHosts(proof.Scope.Hosts, e, c.proofs); err != nil {
 			return r, nil, err

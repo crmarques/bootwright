@@ -342,6 +342,9 @@ func (p plainObserver) Claimed(catalog api.Catalog) []string {
 func (p plainObserver) Plan(ctx context.Context, input PlanInput) (CapabilityPlan, error) {
 	return p.observer.Plan(ctx, input)
 }
+func (p plainObserver) SecretReferences(block reconciliation.Block) ([]string, error) {
+	return p.observer.SecretReferences(block)
+}
 func (p plainObserver) Removal(ctx context.Context, block reconciliation.Block) (Removal, error) {
 	return p.observer.Removal(ctx, block)
 }

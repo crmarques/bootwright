@@ -171,6 +171,10 @@ func (h *killHost) Plan(context.Context, PlanInput) (CapabilityPlan, error) {
 	}, nil
 }
 
+func (*killHost) SecretReferences(reconciliation.Block) ([]string, error) {
+	return []string{"artifact-server-tls"}, nil
+}
+
 func (h *killHost) Removal(_ context.Context, block reconciliation.Block) (Removal, error) {
 	return Removal{
 		Description: "remove the host state of " + block.Object,

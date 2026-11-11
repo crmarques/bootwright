@@ -948,6 +948,7 @@ func (v *testView) RetainDependencies(_ context.Context, sources []prerequisites
 // engine calls it from each running block's own goroutine, so what it records
 // is guarded.
 type testCapability struct {
+	requestOnly  bool
 	mutex        sync.Mutex
 	definitions  []reconciliation.BlockDefinition
 	reservations []prerequisites.HostReservation
@@ -1049,10 +1050,38 @@ func (c *testCapability) SecretClasses(block reconciliation.Block) (secrets.Clas
 }
 
 // SecretReferences answers as a capability does from its own request: the
-// values of the members whose names end in Ref.
+// values of the members whose names end in Ref. Its first block also names
+// each Secret its plan binds that no block's request names, as a capability
+// names every Secret it binds.
 func (c *testCapability) SecretReferences(block reconciliation.Block) ([]string, error) {
+	names, err := requestRefs(block.Request)
+	if err != nil {
+		return nil, err
+	}
+	c.mutex.Lock()
+	definitions, bound, requestOnly := slices.Clone(c.definitions), slices.Clone(c.secrets), c.requestOnly
+	c.mutex.Unlock()
+	if requestOnly || len(definitions) == 0 || definitions[0].ID != block.ID {
+		return names, nil
+	}
+	requested := map[string]bool{}
+	for _, definition := range definitions {
+		refs, _ := requestRefs(definition.Request)
+		for _, ref := range refs {
+			requested[ref] = true
+		}
+	}
+	for _, name := range bound {
+		if !requested[name] {
+			names = append(names, name)
+		}
+	}
+	return SecretNames(names...), nil
+}
+
+func requestRefs(request json.RawMessage) ([]string, error) {
 	var members map[string]any
-	if err := json.Unmarshal(block.Request, &members); err != nil {
+	if err := json.Unmarshal(request, &members); err != nil {
 		return nil, err
 	}
 	var names []string

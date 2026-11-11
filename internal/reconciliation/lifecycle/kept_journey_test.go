@@ -156,6 +156,10 @@ func (c clusterCapabilities) pick(block reconciliation.Block) lifecycle.Capabili
 	return c.install
 }
 
+func (c clusterCapabilities) SecretReferences(block reconciliation.Block) ([]string, error) {
+	return c.pick(block).(lifecycle.SecretReferencer).SecretReferences(block)
+}
+
 func (c clusterCapabilities) Claimed(catalog api.Catalog) []string {
 	return c.install.Claimed(catalog)
 }

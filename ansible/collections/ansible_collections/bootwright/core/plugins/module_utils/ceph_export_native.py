@@ -21,7 +21,7 @@ import urllib.parse
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_resources, ceph_export_dns
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import Custody, Refusal, canonical, require, unique_object
 
-VERSION = "ceph-export-request-v1"
+VERSION = "ceph-export-request-v2"
 EVIDENCE_VERSION = "ceph-export-evidence-v1"
 PHASES = ("export_apply", "export_observe")
 REASONS = ("gateway-dns", "export-foreign-principal", "export-key-type", "export-key-type-aes", "export-key-type-aes256k",
@@ -51,7 +51,7 @@ def caps_for(request):
 
 
 def validate(request):
-    required = {"cluster", "controller", "defaultDataPool", "filesystem", "keyType", "machines", "monitors",
+    required = {"cluster", "controller", "defaultDataPool", "filesystem", "hostSecretRefs", "keyType", "machines", "monitors",
                 "monitoringHosts", "monitoringPort", "name", "physicalHosts", "pool", "principals", "providedMachines", "scope", "version"}
     require(isinstance(request, dict) and set(request) in (required, required | {"gateway"}))
     require(request["version"] == VERSION and request["keyType"] in ("aes", "aes256k"))
@@ -64,6 +64,7 @@ def validate(request):
     scope = ceph_native.validate_scope(request["scope"])
     require(scope["cluster"] == request["cluster"] and sorted(host["machine"] for host in scope["hosts"]) == request["machines"])
     require(request["providedMachines"] == sorted(host["machine"] for host in scope["hosts"] if host.get("provided")))
+    require(request["hostSecretRefs"] == ceph_native.host_secret_refs(scope["hosts"]))
     if "gateway" in request:
         gateway = request["gateway"]
         gateway_fields = {"addresses", "certificateRef", "fqdn", "indexPool", "name", "port", "realm", "tls", "zone", "zoneGroup"}
