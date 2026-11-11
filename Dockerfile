@@ -3,7 +3,7 @@
 # holds its tag to the go directive of go.mod. docs/development.md#building-in-a-container
 # owns the options, proxies and caches included.
 
-ARG GO_IMAGE=docker.io/library/golang:1.26.10-trixie@sha256:fd9a91f0ece5664556f4851d06dce5e5b505a71166dffd385a03ba9d200b6983
+ARG GO_IMAGE=docker.io/library/golang:1.26.11-trixie@sha256:fa340cb59ebeb1d53ac1cccfc334201d938fe5f3458003cccb767096d8e032b8
 
 FROM ${GO_IMAGE} AS build
 

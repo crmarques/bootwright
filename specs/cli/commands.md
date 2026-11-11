@@ -268,7 +268,7 @@ error: the `Bootwright` headline, then exactly these seven fields in this order.
     Version              v0.4.0
     Commit               9f2c1d0e3b5a7c8d9e0f1a2b3c4d5e6f70819293
     Source               clean
-    Go                   go1.26.10
+    Go                   go1.26.11
     Target               linux/amd64
     Dependency bundle    sha256:<64 hexadecimal digits>
     Vulnerability check  passed 2026-11-10
