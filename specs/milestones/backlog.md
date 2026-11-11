@@ -8714,7 +8714,7 @@ items you listed". This authorizes, out of sequence for implementation, X368
 1. Every physical server claims its MAC addresses as exclusive `bmc-mac:` keys,
    not only one that reports no UUID, widening [D252](#d252) (2), so a pin-less
    power command meets the context that holds the server under any spelling of
-   its BMC address ([B1298](delivered.md#x368--mac-claims), split from [B1267](m1.md#b1267), which keeps
+   its BMC address ([B1298](delivered.md#x368--mac-claims), split from [B1267](delivered.md#x412--server-claims-over-ssh), which keeps
    the SSH and cross-mechanism remainder).
 2. `substrate.baremetal.rootDevice.wwn` is the one WWN root form of a bare-metal
    Machine an installer writes, as [audit 004](../../audits/004-spec-api/report-fable.md)
@@ -8927,7 +8927,7 @@ and [D253](#d253) with recommendations, the owner answered "B1299: a",
 "B1267: b", "D235: accept", "D252: accept", "B1327: proceed with fix", "B1316:
 fix it now", "proceed with 6 and 7" and "proceed with packages 11 and 12"
 ([audit 004](../../audits/004-spec-api/report-fable.md) sections 15.2 and 15.3). This authorizes, out of sequence for
-implementation, X412 (M1, [B1267](m1.md#b1267)), X413 (M3,
+implementation, X412 (M1, [B1267](delivered.md#x412--server-claims-over-ssh)), X413 (M3,
 [B1327](delivered.md#x413--rebuild-a-never-inserted-area)), X414 (M2, [B1316](m2.md#b1316)), X415 (M1,
 [B1330](m1.md#b1330)), X416 (M4, [B1331](m4.md#b1331)), X417 (M1,
 [B1332](m1.md#b1332)), X418 (M1, [B1333](m1.md#b1333)) and X419 (M1,

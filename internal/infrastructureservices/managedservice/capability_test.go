@@ -13,6 +13,7 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/machine/hardware"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/reconciliation/operationstore"
@@ -948,18 +949,28 @@ func TestAnApplyOnAnSSHPlacementHandsTheRunnerItsContainerRuntimeRefusal(t *test
 		field("endpoints", api.ListValue(api.MapValue(text("name", "ip"), text("addressRef", "ip")))),
 	))
 	catalog := catalogOf(controller(), remote, placed)
-	plan, err := NewCapability(testDefinition(), nil).Plan(context.Background(), lifecycle.PlanInput{
+	input := lifecycle.PlanInput{
 		Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: testContext},
 		State: compilation.NewState(catalog, catalog, nil), Controller: "controller",
-	})
+	}
+	plan, err := NewCapability(testDefinition(), nil).Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	frozen, err := reconciliation.NewPlan(reconciliation.Apply, plan.Definitions)
+	claimed, err := hardware.New(nil).Plan(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	call := lifecycle.Execution{Operation: "op-1", Attempt: 1, Block: frozen.Blocks[0]}
+	definitions, err := reconciliation.ResolveRequirements(append(plan.Definitions, claimed.Definitions...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	frozen, err := reconciliation.NewPlan(reconciliation.Apply, definitions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, _ := frozen.Block(plan.Definitions[0].ID)
+	call := lifecycle.Execution{Operation: "op-1", Attempt: 1, Block: block}
 	recorder := &scriptedRunner{err: errors.New("unused")}
 	if _, err := NewCapability(testDefinition(), recorder).Apply(context.Background(), call); err == nil {
 		t.Fatal("a failed run was accepted")
@@ -1003,8 +1014,9 @@ func TestAServiceOnAProviderHostMachineReachedOverSSHRequiresTheHostBlock(t *tes
 		machine, host string
 		want          []reconciliation.ObjectRef
 	}{
-		"an SSH Machine that hosts the provider":      {"services", "services", []reconciliation.ObjectRef{{Kind: "InfraProvider", Object: "lab-libvirt"}}},
-		"an SSH Machine that hosts no provider":       {"services", "controller", nil},
+		"an SSH Machine that hosts the provider": {"services", "services", []reconciliation.ObjectRef{{Kind: "InfraProvider", Object: "lab-libvirt"},
+			{Kind: "Machine", Object: "services", Family: "machine-hardware"}}},
+		"an SSH Machine that hosts no provider":       {"services", "controller", []reconciliation.ObjectRef{{Kind: "Machine", Object: "services", Family: "machine-hardware"}}},
 		"the controller Machine hosting the provider": {"controller", "controller", nil},
 	} {
 		catalog := catalogOf(controller(), remote, hosted(test.host), placed(test.machine))

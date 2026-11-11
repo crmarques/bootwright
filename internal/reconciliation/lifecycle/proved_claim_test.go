@@ -65,3 +65,24 @@ func TestKeepProvedCarriesOnlyTheOwnProvedSystemKey(t *testing.T) {
 		t.Fatalf("kept = %+v, planned %+v", kept, planned)
 	}
 }
+
+// An OS-ready Machine reached over SSH plans its hardware claim with no key,
+// because only its read learns the server's permanent addresses: a fresh
+// apply keeps the bmc-mac: keys its own held claim proved, and publishes no
+// claim of a server it has not read yet rather than an empty one (D257 (2)).
+func TestKeepProvedKeepsAnSSHServerClaimAndPublishesNoEmptyOne(t *testing.T) {
+	planned := []prerequisites.HostReservation{
+		{Context: "lab", Kind: "machine-hardware", Service: "mirror"},
+		{Context: "lab", Kind: "machine-hardware", Service: "services"},
+		{Context: "lab", Kind: "proxy", Service: "lab-proxy", Keys: []string{"unit:bootwright-lab-proxy"}},
+	}
+	held := []prerequisites.HostReservation{
+		{Context: "lab", Kind: "machine-hardware", Service: "mirror", Keys: []string{"bmc-mac:52:54:00:9a:1b:01", "bmc-mac:52:54:00:9a:1b:02"}},
+		{Context: "other", Kind: "machine-hardware", Service: "services", Keys: []string{"bmc-mac:52:54:00:9a:1b:03"}},
+	}
+	kept := keepProved(held, "lab", planned)
+	if len(kept) != 2 || kept[0].Service != "mirror" || !slices.Equal(kept[0].Keys, []string{"bmc-mac:52:54:00:9a:1b:01", "bmc-mac:52:54:00:9a:1b:02"}) ||
+		kept[1].Service != "lab-proxy" || len(planned[0].Keys) != 0 {
+		t.Fatalf("kept = %+v, planned %+v", kept, planned)
+	}
+}

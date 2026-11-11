@@ -1,0 +1,17 @@
+{
+  "identity": {
+    "block": "machine-hardware-services",
+    "context": "lab",
+    "object": "services"
+  },
+  "placement": {
+    "address": "192.0.2.9",
+    "connection": "ssh",
+    "knownHostsRef": "services-known-hosts",
+    "machine": "services",
+    "port": 22,
+    "privateKeyRef": "services-key",
+    "user": "root"
+  },
+  "version": "machine-hardware-v1"
+}

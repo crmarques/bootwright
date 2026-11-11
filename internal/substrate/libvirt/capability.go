@@ -8,6 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	machineref "github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -56,6 +57,7 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 			ID:             request.Identity.Block,
 			Description:    hostDescription(input.Verb, request),
 			Stage:          reconciliation.StageSubstrates,
+			Requires:       hardwareRequirements(input.State.Effective(), request.Placement),
 			Impacts:        hostImpacts(input.Verb, request),
 			Groups:         hostGroups(input.Verb, request),
 			Kind:           HostKind,
@@ -87,6 +89,13 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)
 	return plan, nil
+}
+
+func hardwareRequirements(catalog api.Catalog, placement machineref.Placement) []reconciliation.ObjectRef {
+	if !machineref.ProvesHardware(catalog, placement) {
+		return nil
+	}
+	return []reconciliation.ObjectRef{{Kind: string(api.Machine), Object: placement.Machine, Family: machineref.HardwareFamily}}
 }
 
 // hostDescription names what the planned verb does to this provider. A removal

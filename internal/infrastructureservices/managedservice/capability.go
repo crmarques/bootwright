@@ -246,6 +246,9 @@ func PlacementRequirements(catalog api.Catalog, placement machineref.Placement, 
 	if placement.Installed() {
 		references = append(references, reconciliation.ObjectRef{Kind: string(api.Machine), Object: machine, Family: machineref.InstallFamily})
 	}
+	if machineref.ProvesHardware(catalog, placement) {
+		references = append(references, reconciliation.ObjectRef{Kind: string(api.Machine), Object: machine, Family: machineref.HardwareFamily})
+	}
 	return references
 }
 

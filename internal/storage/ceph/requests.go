@@ -659,11 +659,14 @@ func checkDevices(r Request, names []string, cluster api.Object, service api.Val
 	return nil
 }
 
-func hostRequirements(hosts ...Host) []reconciliation.ObjectRef {
+func hostRequirements(controller string, hosts ...Host) []reconciliation.ObjectRef {
 	requires := []reconciliation.ObjectRef{}
 	for _, host := range hosts {
-		if !host.Provided {
+		switch {
+		case !host.Provided:
 			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.Machine), Object: host.Machine})
+		case host.Machine != controller:
+			requires = append(requires, reconciliation.ObjectRef{Kind: string(api.Machine), Object: host.Machine, Family: machine.HardwareFamily})
 		}
 	}
 	return requires

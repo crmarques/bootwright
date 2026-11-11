@@ -1,0 +1,32 @@
+---
+argument_specs:
+  apply:
+    short_description: Read the permanent hardware addresses one OS-ready Machine's host reports, so its context claims the server.
+    options: &request
+      bootwright_machine_hardware_request:
+        type: dict
+        required: true
+        options:
+          identity:
+            type: dict
+            required: true
+          placement:
+            type: dict
+            required: true
+          version:
+            type: str
+            required: true
+            choices:
+              - machine-hardware-v1
+      bootwright_machine_hardware_digest:
+        type: str
+        required: true
+      bootwright_machine_hardware_material:
+        type: dict
+        required: true
+  observe:
+    short_description: Read the permanent hardware addresses one OS-ready Machine's host reports, changing nothing.
+    options: *request
+  destroy:
+    short_description: Release the claim on one OS-ready Machine's server, which stays as it is.
+    options: *request

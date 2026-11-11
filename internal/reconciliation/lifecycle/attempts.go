@@ -882,6 +882,8 @@ func adapterWarning(plan reconciliation.Plan, block reconciliation.Block, warnin
 		reported.Code = "substrate.shadowed-route"
 	case "substrate.lend-not-revoked":
 		reported.Code = "substrate.lend-not-revoked"
+	case "substrate.unclaimed-server":
+		reported.Code = "substrate.unclaimed-server"
 	default:
 		return diagnostics.Diagnostic{}, false
 	}

@@ -310,10 +310,10 @@ func (c HostCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (li
 				return plan, err
 			}
 			description, impacts := hostDescription(input.Verb, cluster.Cluster, host.Name)
-			requires := hostRequirements(host)
+			requires := hostRequirements(cluster.Controller, host)
 			for _, peer := range cluster.Hosts {
 				if peer.Physical {
-					requires = append(requires, hostRequirements(peer)...)
+					requires = append(requires, hostRequirements(cluster.Controller, peer)...)
 				}
 			}
 			for _, profile := range cluster.Packages.Sources {

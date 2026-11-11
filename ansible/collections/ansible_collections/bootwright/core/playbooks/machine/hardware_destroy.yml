@@ -1,0 +1,13 @@
+---
+- name: Release one OS-ready Machine's server
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+
+  tasks:
+    - name: Execute the machine hardware destroy capability
+      ansible.builtin.import_role:
+        name: bootwright.core.machine_hardware
+        tasks_from: destroy

@@ -1,0 +1,9 @@
+{
+  "absent": false,
+  "addresses": [
+    "52:54:00:9a:1b:01"
+  ],
+  "postcondition": true,
+  "request": "03ebb40e09fb0ddf5edd8656878a548c7465a5efc46cda23e0e41401835c8b6b",
+  "version": "machine-hardware-evidence-v1"
+}

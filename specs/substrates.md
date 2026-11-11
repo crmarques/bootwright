@@ -32,7 +32,9 @@ graph, and a machine block for every Machine on any realized provider whose
 effective `os.provided` is `false`. A bare-metal `InfraProvider` plans no block
 of its own: `machine-baremetal-v1` claims it, realized only through its
 Machines. A KubeVirt provider's block only proves the host it is given and
-changes nothing on it. Provided Machines are never realized. A vSphere
+changes nothing on it. Provided Machines are never realized; one reached over
+SSH plans only the [server claim](#physical-machine-realization) of
+`machine-hardware-v1`. A vSphere
 provider, and every non-provided Machine on one, refuses before operation
 registration with one diagnostic per unsupported object, which names the object, why it is refused (a Machine's
 names its provider) and the remedy, as the [refusal table](#refusal-table)
@@ -1192,12 +1194,43 @@ the second registration refuses, and so does a
 [machine power command](cli.md#machine-power-operations) of the second
 context, a pin-less one included, which meets the MAC keys under any spelling
 of the address
-(`TestAPinLessPowerCommandRefusesAServerAnotherSpellingProvedByItsUUID`). A
-context that reaches the server as an OS-ready Machine over SSH holds only
-`ssh/` and `sshkey/` keys, so a context driving that server by its BMC is not
-refused; that is tracked as [B1267](milestones/m1.md#b1267).
+(`TestAPinLessPowerCommandRefusesAServerAnotherSpellingProvedByItsUUID`).
 Contexts in different stores are not coordinated. The claim serializes use; it
 is not ownership of the machine and never authorizes destroying it.
+
+**OS-ready server claim.** A context that uses a server as an OS-ready
+Machine reached over SSH claims it the same way, so it and a context that
+drives the server by its BMC never use it at once ([D257](milestones/backlog.md#d257) (2)).
+Each Machine, other than the controller and a Machine Bootwright installs
+(whose own realization claims it), that a managed service, an artifact server
+or a libvirt provider host is placed on through the SSH arm, or that a
+cluster names as a node with `os.provided: true`, dialed as its `access.ssh` user with the
+Environment's fleet key as Ceph dials an OS-ready node, plans one block `machine-hardware-<machine>` of
+`machine-hardware-v1` in the infrastructure services stage. Every block placed
+there requires it, and so does each Ceph host and core block that names the
+node (`TestACephNodeOnAnOSReadyServerIsClaimedAndMeetsItsBMCDriver`). It
+connects as the placement does, or as Ceph dials the node, without escalation,
+and reads, changing nothing, the address each network interface of the host carries in hardware:
+an Ethernet interface backed by a device, by the permanent address its driver
+reports, or else by its own address when the kernel marks it permanent
+(`addr_assign_type` 0). A bond, VLAN, bridge, veth, tun or other software
+interface, a virtual function and an address that was randomized or set count
+for nothing, and so does a NIC on USB, such as a BMC's Redfish host interface,
+whose address can repeat across servers of one model; a locally administered
+address counts, and a bond member counts by its permanent address
+(`test_only_a_device_backed_nic_by_its_permanent_address_is_reported`). A
+listing it cannot read in full proves nothing and fails the block. The block's
+proof claims one exclusive, unqualified `bmc-mac:<mac>` key per address, in
+colon-separated lower-case form, before any block placed on the Machine
+starts, and a fresh apply keeps the keys its held claim proved; a host
+reporting no such address claims nothing and warns `substrate.unclaimed-server`
+naming the Machine, and one reporting more than 64 refuses `lifecycle.state`. Either context's claim therefore refuses
+`controller.conflict` while the other holds the server, under any spelling of
+its BMC address or of a declared MAC
+(`TestAnSSHReachedServerAndItsBMCDriverConflictInEitherOrder`). A guest
+reached over SSH claims the addresses of its virtual NICs too, so it meets a
+context that drives the same guest through an emulated BMC as a physical
+Machine. Its release reads nothing and retains the server.
 
 **Reservations.** `bmc:<host>:<port>/<system>` and, once proved,
 `bmc-system:<UUID>` when its proof records one, and each `bmc-mac:<mac>`. A physical block owns no path, unit, socket or hypervisor

@@ -27,6 +27,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/registry"
+	"github.com/crmarques/bootwright/internal/machine/hardware"
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
@@ -130,6 +131,8 @@ func contractRecipes() map[string]digestRecipe {
 		installation.TreeImplementation: digestOf(partImplementation(installation.TreeImplementation), partVersion(installation.TreeEvidenceVersion)),
 		mirrorfill.FilesImplementation: digestOf(partDomain("bootwright.infrastructureservices.mirror-fill-v1"), partImplementation(mirrorfill.FilesImplementation),
 			partVersion(mirrorfill.FilesEvidenceVersion)),
+		hardware.Implementation: digestOf(partDomain("bootwright.machine.hardware-v1"), partImplementation(hardware.Implementation), partVersion(hardware.EvidenceVersion),
+			partPin(hardware.AddressRule), partPin(hardware.ClaimRule)),
 		mirrorfill.ImagesImplementation: digestOf(partDomain("bootwright.infrastructureservices.mirror-fill-v1"), partImplementation(mirrorfill.ImagesImplementation),
 			partVersion(mirrorfill.ImagesEvidenceVersion)),
 		mirrorfill.ReleaseImplementation: digestOf(partDomain("bootwright.infrastructureservices.mirror-fill-v1"), partImplementation(mirrorfill.ReleaseImplementation),
@@ -188,6 +191,7 @@ func requestIdentities() map[string][]string {
 		kubevirt.MachineImplementation:      {"identity.context", "identity.object", "identity.block", "provider", "namespace", "name", "rootVolume", "mediaVolume", "interfaces[].macAddress"},
 		installation.TreeImplementation:     {"identity.context", "identity.profile", "media.name", "publication.path", "placement.machine"},
 		mirrorfill.FilesImplementation:      {"identity.context", "identity.environment", "identity.server", "root", "files[].path", "placement.machine"},
+		hardware.Implementation:             {"identity.context", "identity.object", "identity.block", "placement.machine"},
 		mirrorfill.ImagesImplementation:     {"identity.context", "identity.environment", "identity.registry", "mirror.host", "images[].repository", "images[].digest", "placement.machine"},
 		mirrorfill.ReleaseImplementation:    {"identity.context", "identity.cluster", "identity.registry", "mirror.host", "release.repository", "release.components", "release.tag", "placement.machine"},
 		installation.FirewallImplementation: {"identity.context", "identity.object", "identity.block", "services[].name", "address", "placement.machine"},

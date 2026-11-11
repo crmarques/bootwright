@@ -1,0 +1,39 @@
+---
+- name: Validate the frozen machine hardware request
+  ansible.builtin.assert:
+    that:
+      - bootwright_machine_hardware_request.version == 'machine-hardware-v1'
+      - bootwright_machine_hardware_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
+      - bootwright_machine_hardware_request.identity.object is match('^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$(?!\n)')
+      - bootwright_machine_hardware_request.placement.connection == 'ssh'
+      - bootwright_machine_hardware_request.placement.machine == bootwright_machine_hardware_request.identity.object
+      - bootwright_machine_hardware_digest is match('^[0-9a-f]{64}$(?!\n)')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.machine_hardware_protocol:
+    phase: loaded
+  no_log: true
+
+# The read changes nothing: it lists the kernel's network interfaces and the
+# address each device-backed one carries in hardware. A host it cannot read in
+# full proves no claim, so the run fails rather than publish a part of it.
+- name: Read the permanent hardware addresses this host reports
+  bootwright.core.machine_hardware_read:
+  register: machine_hardware_read
+  failed_when: false
+
+- name: Refuse a host whose network interfaces could not be read in full
+  ansible.builtin.fail:
+    msg: the network interfaces of this host could not be read in full, so the server behind it is not claimed
+  when: machine_hardware_read.addresses is not defined
+
+- name: Publish bounded machine hardware observation
+  bootwright.core.machine_hardware_protocol:
+    phase: completed
+    outcome: unchanged
+    digest: '{{ bootwright_machine_hardware_digest }}'
+    addresses: '{{ machine_hardware_read.addresses }}'
+    observed: true
+  no_log: true

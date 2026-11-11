@@ -186,6 +186,7 @@ var conflictKinds = map[string]api.Kind{
 	"substrate-machine":     api.Machine,
 	"substrate-machine-bmc": api.Machine,
 	"substrate-physical":    api.Machine,
+	"machine-hardware":      api.Machine,
 	"os-install":            api.Machine,
 	"proxy":                 api.Proxy,
 	"dns":                   api.DNSServer,

@@ -1,0 +1,35 @@
+implementation: machine-hardware-v1
+content-digest: c4e732ece12ed8edb121aa943d55d7d72b1fae18b451fe8fc34eddef652454f1
+request-version: machine-hardware-v1
+automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  permanent-hardware-address-v1
+  unqualified-bmc-mac-claim
+request-identity:
+  identity.context
+  identity.object
+  identity.block
+  placement.machine
+request-schema:
+  identity struct hardware.Identity
+  identity.block string
+  identity.context string
+  identity.object string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  version string
+evidence-schema:
+  absent bool
+  addresses []string
+  postcondition bool
+  request string
+  version string

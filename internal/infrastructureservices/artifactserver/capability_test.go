@@ -154,8 +154,9 @@ func TestAServerOnAProviderHostMachineRequiresTheHostBlock(t *testing.T) {
 		server, provider api.Object
 		want             []reconciliation.ObjectRef
 	}{
-		"an SSH Machine that hosts the provider":      {artifactServer(text("machineRef", "services")), hosted("services"), []reconciliation.ObjectRef{{Kind: "InfraProvider", Object: "lab-libvirt"}}},
-		"an SSH Machine that hosts no provider":       {artifactServer(text("machineRef", "services")), hosted("controller"), nil},
+		"an SSH Machine that hosts the provider": {artifactServer(text("machineRef", "services")), hosted("services"), []reconciliation.ObjectRef{{Kind: "InfraProvider", Object: "lab-libvirt"},
+			{Kind: "Machine", Object: "services", Family: "machine-hardware"}}},
+		"an SSH Machine that hosts no provider":       {artifactServer(text("machineRef", "services")), hosted("controller"), []reconciliation.ObjectRef{{Kind: "Machine", Object: "services", Family: "machine-hardware"}}},
 		"the controller Machine hosting the provider": {artifactServer(), hosted("controller"), nil},
 	} {
 		plan, err := capability.Plan(context.Background(), planInput(t, reconciliation.Apply, controller(), remote, test.provider, test.server))

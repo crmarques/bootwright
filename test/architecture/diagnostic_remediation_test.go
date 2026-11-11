@@ -10,7 +10,7 @@ import (
 var warningOnlyDiagnosticCodes = []string{
 	"api.deferred", "api.unrealized", "api.unverified", "access.exit", "access.unproved", "context.orphaned",
 	"controller.loader-preload", "controller.outdated-client", "controller.runtime-retention", "controller.untested-release",
-	"input.secrets-directory", "lifecycle.surviving-consumer", "logs.detached", "logs.truncated", "storage.health", "storage.not-ready", "substrate.lend-not-revoked", "substrate.shadowed-route",
+	"input.secrets-directory", "lifecycle.surviving-consumer", "logs.detached", "logs.truncated", "storage.health", "storage.not-ready", "substrate.lend-not-revoked", "substrate.shadowed-route", "substrate.unclaimed-server",
 }
 
 // specs/cli/output.md requires every error diagnostic other than cli.usage to

@@ -70,6 +70,7 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 		"substrate_libvirt_machine":             "substrate_libvirt_machine_protocol",
 		"substrate_kubevirt_host":               "substrate_kubevirt_protocol",
 		"substrate_kubevirt_machine":            "substrate_kubevirt_protocol",
+		"machine_hardware":                      "machine_hardware_protocol",
 	} {
 		add(role, "observe.yml", observeCollection+protocol, "publishes the handoff and evidence on the runner's own channel", read)
 	}
@@ -78,7 +79,7 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 		"managedos_package_tree", "infrastructureservices_mirror_fill", "infrastructureservices_mirror_images",
 		"infrastructureservices_mirror_release", "storage_ceph_core", "storage_ceph_host", "storage_ceph_image",
 		"storage_ceph_smb", "storage_ceph_replication", "storage_ceph_consumer", "substrate_baremetal_machine", "substrate_libvirt_host", "substrate_libvirt_machine",
-		"substrate_kubevirt_host", "substrate_kubevirt_machine",
+		"substrate_kubevirt_host", "substrate_kubevirt_machine", "machine_hardware",
 	} {
 		add(role, "observe.yml", "ansible.builtin.assert", "validates the frozen request in memory", read)
 	}
@@ -135,6 +136,8 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("containercluster_media_agent", "observe.yml", "ansible.builtin.copy", "hands the kept kubeconfig to custody through the declared output", observeCustodyCopy)
 	add("infra_artifact_server_nginx", "observe.yml", observeCollection+"artifact_server_inspect", "reads the served unit, container and content", read)
 	add("infra_managed_service", "observe.yml", observeCollection+"infra_service_inspect", "reads the managed service's unit, container and answers", read)
+	add("machine_hardware", "observe.yml", observeCollection+"machine_hardware_read", "reads each network interface's permanent hardware address", read)
+	add("machine_hardware", "observe.yml", "ansible.builtin.fail", "refuses a host whose interfaces it could not read without touching it", read)
 	add("infrastructureservices_mirror_images", "observe.yml", observeCollection+"infrastructureservices_mirror_image", "asks the image mirror for each manifest by digest and copies nothing", func(params, _ map[string]any) bool {
 		return params["observe"] == true
 	})

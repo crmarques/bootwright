@@ -229,6 +229,7 @@ lab-rhel-mirror-host:
   artifact-server-lab-artifacts
   controller-prerequisites
   dns-lab-dns
+  machine-hardware-mirror
   machine-rhel-01
   mirror-images-lab-rhel-mirror-host
   ntp-lab-ntp
@@ -299,6 +300,7 @@ lab-sno-mirror-host:
   controller-mirrored-clients
   controller-prerequisites
   dns-lab-dns
+  machine-hardware-mirror
   machine-sno-01
   mirror-files-lab-sno-mirror-host
   ntp-lab-ntp
@@ -335,6 +337,7 @@ lab-sno-release-mirror:
   controller-mirrored-clients
   controller-prerequisites
   dns-lab-dns
+  machine-hardware-mirror
   machine-sno-01
   mirror-files-lab-sno-release-mirror
   mirror-images-lab-sno-release-mirror

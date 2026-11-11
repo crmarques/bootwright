@@ -44,6 +44,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/registry"
+	"github.com/crmarques/bootwright/internal/machine/hardware"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -236,6 +237,11 @@ func contractRows() []contractRow {
 		{kind: mirrorfill.Kind, implementation: mirrorfill.FilesImplementation, example: "lab-sno-mirror-host", presence: contractMirrorFilesPresence,
 			noEffect: map[string]any{"version": mirrorfill.FilesEvidenceVersion}, absence: map[string]any{"version": mirrorfill.FilesEvidenceVersion},
 			drift: map[string]any{"files": []any{map[string]any{"path": "foreign/v1/file", "verified": true}}}},
+		{kind: hardware.Kind, implementation: hardware.Implementation, example: "lab-rhel-mirror-host", presence: contractHardwarePresence,
+			retains: true, indivisible: true, absence: map[string]any{"addresses": []any{}, "version": hardware.EvidenceVersion},
+			noEffectUnreported:     "specs/substrates.md, Physical machine realization: the hardware read changes nothing, so its evidence never reports an effect it had",
+			removalObservesNothing: "specs/substrates.md, Physical machine realization: the release of a server reached over SSH reads nothing",
+			drift:                  map[string]any{"postcondition": false}},
 		{kind: mirrorfill.ImagesKind, implementation: mirrorfill.ImagesImplementation, example: "lab-rhel-mirror-host", presence: contractMirrorImagesPresence,
 			noEffect: map[string]any{"images": []any{}, "version": mirrorfill.ImagesEvidenceVersion}, absence: map[string]any{"images": []any{}, "version": mirrorfill.ImagesEvidenceVersion},
 			removalObservesNothing: "specs/infrastructure-services.md, Mirror host: the image fill's removal takes back nothing, because its Registry's removal deletes what was pushed",
@@ -1787,6 +1793,14 @@ func contractMirrorReleasePresence(t *testing.T, execution lifecycle.Execution) 
 	}
 	components := []any{map[string]any{"name": "cli", "digest": "sha256:" + strings.Repeat("1", 64)}}
 	return map[string]any{"postcondition": true, "digest": "sha256:" + strings.Repeat("2", 64), "components": components, "version": mirrorfill.ReleaseEvidenceVersion}
+}
+
+func contractHardwarePresence(t *testing.T, execution lifecycle.Execution) map[string]any {
+	t.Helper()
+	if _, err := hardware.DecodeRequest(execution.Block.Request); err != nil {
+		t.Fatal(err)
+	}
+	return map[string]any{"postcondition": true, "addresses": []any{"52:54:00:00:00:21"}, "version": hardware.EvidenceVersion}
 }
 
 func contractMirrorImagesPresence(t *testing.T, execution lifecycle.Execution) map[string]any {

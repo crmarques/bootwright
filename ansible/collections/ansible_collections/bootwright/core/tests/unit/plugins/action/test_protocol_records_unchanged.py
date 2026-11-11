@@ -240,6 +240,15 @@ CASES = {
         ("unprovable identity", completed(endpoint=ENDPOINT, observation=dict(PHYSICAL, uuid="u" * 129),
                                           expected=["aa:bb:cc:dd:ee:01"])),
     ],
+    "machine_hardware_protocol": common([]) + [
+        ("completed proving", completed(outcome="unchanged", addresses=["aa:bb:cc:dd:ee:02", "aa:bb:cc:dd:ee:01", "aa:bb:cc:dd:ee:02"])),
+        ("completed none", completed(outcome="unchanged", addresses=[])),
+        ("completed observed", completed(outcome="unchanged", observed=True, addresses=["aa:bb:cc:dd:ee:01"])),
+        ("removal", completed(outcome="unchanged", removed=True, addresses=[])),
+        ("removal holding an address", completed(outcome="unchanged", removed=True, addresses=["aa:bb:cc:dd:ee:01"])),
+        ("malformed", completed(outcome="unchanged", addresses=["AA-BB-CC-DD-EE-01"])),
+        ("unbounded", completed(outcome="unchanged", addresses=["aa:bb:cc:dd:%02x:%02x" % (index // 256, index % 256) for index in range(257)])),
+    ],
     "machine_power_protocol": common([{"reason": "identity-mismatch"}]) + [
         ("completed proving", completed(POWER)),
         ("completed unproving", completed(POWER_UNMET)),

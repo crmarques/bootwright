@@ -11,6 +11,7 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/machine/hardware"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -246,7 +247,11 @@ func TestAnEmulatedBMCBoundToABridgeRequiresTheProviderThatCreatesIt(t *testing.
 			if err != nil {
 				t.Fatal(err)
 			}
-			apply, err := reconciliation.NewPlan(reconciliation.Apply, append(hosts.Definitions, machines.Definitions...))
+			claimed, err := hardware.New(nil).Plan(context.Background(), input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			apply, err := reconciliation.NewPlan(reconciliation.Apply, append(append(hosts.Definitions, machines.Definitions...), claimed.Definitions...))
 			if err != nil {
 				t.Fatal(err)
 			}

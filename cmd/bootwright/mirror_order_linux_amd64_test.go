@@ -45,19 +45,28 @@ func mirrorOrder(t *testing.T, name string, sources desiredstate.Sources) ([]str
 }
 
 // requireSplitOrder holds a plan to the split stage's order: the host
-// packages, the mirror's server, its fill, the clients read from it, then
-// every other block, which waits for both controller blocks.
-func requireSplitOrder(t *testing.T, order []string, waits map[string][]string) {
+// packages, the claim of the mirror's SSH host by its hardware when it is
+// reached over SSH, the mirror's server, its fill, the clients read from it,
+// then every other block, which waits for both controller blocks.
+func requireSplitOrder(t *testing.T, order []string, waits map[string][]string, overSSH bool) {
 	t.Helper()
-	const packages, server, fill, clients = "controller-prerequisites", "artifact-server-mirror-artifacts", "mirror-files-lab-sno-mirror-host", "controller-mirrored-clients"
-	if !slices.Equal(order[:4], []string{packages, server, fill, clients}) {
+	const packages, claim, server, fill, clients = "controller-prerequisites", "machine-hardware-mirror", "artifact-server-mirror-artifacts",
+		"mirror-files-lab-sno-mirror-host", "controller-mirrored-clients"
+	want, serverWaits := []string{packages, server, fill, clients}, []string{packages}
+	if overSSH {
+		want, serverWaits = []string{packages, claim, server, fill, clients}, []string{packages, claim}
+		if !slices.Equal(waits[claim], []string{packages}) {
+			t.Fatalf("the claim waits %v", waits[claim])
+		}
+	}
+	if !slices.Equal(order[:len(want)], want) {
 		t.Fatalf("plan order = %v", order)
 	}
-	if len(waits[packages]) != 0 || !slices.Equal(waits[server], []string{packages}) || !slices.Equal(waits[fill], []string{server, packages}) ||
-		!slices.Equal(waits[clients], []string{server, packages, fill}) {
+	if len(waits[packages]) != 0 || !slices.Equal(waits[server], serverWaits) ||
+		!slices.Equal(waits[fill], []string{server, packages}) || !slices.Equal(waits[clients], []string{server, packages, fill}) {
 		t.Fatalf("the packages wait %v, the mirror %v, its fill %v and the clients %v", waits[packages], waits[server], waits[fill], waits[clients])
 	}
-	for _, id := range order[4:] {
+	for _, id := range order[len(want):] {
 		if !slices.Contains(waits[id], packages) || !slices.Contains(waits[id], clients) {
 			t.Errorf("%s does not wait for both controller blocks: %v", id, waits[id])
 		}
@@ -70,7 +79,7 @@ func requireSplitOrder(t *testing.T, order []string, waits map[string][]string) 
 // the plan holds no cycle.
 func TestAManagedArtifactMirrorPrecedesTheControllerStageThatReadsIt(t *testing.T) {
 	order, waits := mirrorOrder(t, "lab-sno-mirror-host", exampleDirectory(t, "lab-sno-mirror-host"))
-	requireSplitOrder(t, order, waits)
+	requireSplitOrder(t, order, waits, true)
 }
 
 // controllerPlacedMirror is the example with its mirror's server on the
@@ -107,7 +116,7 @@ func controllerPlacedMirror(t *testing.T) desiredstate.Sources {
 func TestAManagedArtifactMirrorOnTheControllerSitsBetweenTheStagesBlocks(t *testing.T) {
 	sources := controllerPlacedMirror(t)
 	order, waits := mirrorOrder(t, "lab-sno-mirror-host", sources)
-	requireSplitOrder(t, order, waits)
+	requireSplitOrder(t, order, waits, false)
 	state, _ := compileAcceptance(t, sources)
 	resolver := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{})
 	for _, binding := range resolver.Bindings() {
@@ -221,7 +230,7 @@ func TestAManagedImageMirrorIsFilledAfterTheControllerStageAndBeforeItsConsumers
 	if order[0] != stage || len(waits[stage]) != 0 {
 		t.Fatalf("the controller stage waits %v in order %v", waits[stage], order)
 	}
-	if !slices.Equal(waits[registry], []string{stage}) || !slices.Equal(waits[fill], []string{stage, registry}) {
+	if !slices.Equal(waits[registry], []string{stage, "machine-hardware-mirror"}) || !slices.Equal(waits[fill], []string{stage, registry}) {
 		t.Fatalf("the Registry waits %v and its fill %v", waits[registry], waits[fill])
 	}
 	for _, consumer := range []string{"dns-lab-dns", "ntp-lab-ntp", "proxy-lab-proxy", "machine-rhel-01"} {
@@ -265,8 +274,9 @@ func TestAManagedArtifactMirrorPlansBetweenTheStagesBlocksOnEachPlacement(t *tes
 		waits   map[string][]string
 	}{
 		"an OS-ready Machine over SSH": {"lab-sno-mirror-host", func(t *testing.T) desiredstate.Sources { return exampleDirectory(t, "lab-sno-mirror-host") },
-			[]string{"artifact-server-mirror-artifacts", "mirror-files-lab-sno-mirror-host"},
-			map[string][]string{"artifact-server-mirror-artifacts": {packages}, "mirror-files-lab-sno-mirror-host": {"artifact-server-mirror-artifacts", packages}}},
+			[]string{"artifact-server-mirror-artifacts", "machine-hardware-mirror", "mirror-files-lab-sno-mirror-host"},
+			map[string][]string{"machine-hardware-mirror": {packages}, "artifact-server-mirror-artifacts": {packages, "machine-hardware-mirror"},
+				"mirror-files-lab-sno-mirror-host": {"artifact-server-mirror-artifacts", packages}}},
 		"the controller Machine": {"lab-sno-mirror-host", controllerPlacedMirror,
 			[]string{"artifact-server-mirror-artifacts", "mirror-files-lab-sno-mirror-host"},
 			map[string][]string{"artifact-server-mirror-artifacts": {packages}, "mirror-files-lab-sno-mirror-host": {"artifact-server-mirror-artifacts", packages}}},

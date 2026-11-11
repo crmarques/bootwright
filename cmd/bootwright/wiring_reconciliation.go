@@ -24,6 +24,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/registry"
+	"github.com/crmarques/bootwright/internal/machine/hardware"
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/managedos/media"
@@ -204,6 +205,7 @@ func operationPlaybook() map[string]string {
 	}
 	for _, operation := range []string{"apply", "observe", "destroy"} {
 		bindings[mirrorfill.FilesImplementation+"/"+operation] = "infrastructureservices/mirror_files_" + operation + ".yml"
+		bindings[hardware.Implementation+"/"+operation] = "machine/hardware_" + operation + ".yml"
 		bindings[mirrorfill.ImagesImplementation+"/"+operation] = "infrastructureservices/mirror_images_" + operation + ".yml"
 		bindings[mirrorfill.ReleaseImplementation+"/"+operation] = "infrastructureservices/mirror_release_" + operation + ".yml"
 	}
@@ -326,6 +328,9 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	resolver = append(resolver, boundCapability{
 		kind: mirrorfill.Kind, implementation: mirrorfill.FilesImplementation, family: mirrorfill.Family,
 		capability: mirrorfill.NewFiles(runner, mirrorFileArtifacts).WithInstalledHostKeys(installation.ProvedHostKey),
+	})
+	resolver = append(resolver, boundCapability{
+		kind: hardware.Kind, implementation: hardware.Implementation, family: hardware.Family, capability: hardware.New(runner),
 	})
 	resolver = append(resolver, boundCapability{
 		kind: mirrorfill.ImagesKind, implementation: mirrorfill.ImagesImplementation, family: mirrorfill.Family,

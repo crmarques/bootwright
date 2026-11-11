@@ -1,0 +1,29 @@
+---
+- name: Validate the frozen machine hardware request
+  ansible.builtin.assert:
+    that:
+      - bootwright_machine_hardware_request.version == 'machine-hardware-v1'
+      - bootwright_machine_hardware_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
+      - bootwright_machine_hardware_request.identity.object is match('^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$(?!\n)')
+      - bootwright_machine_hardware_request.placement.connection == 'ssh'
+      - bootwright_machine_hardware_request.placement.machine == bootwright_machine_hardware_request.identity.object
+      - bootwright_machine_hardware_digest is match('^[0-9a-f]{64}$(?!\n)')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.machine_hardware_protocol:
+    phase: loaded
+  no_log: true
+
+# The release reads nothing and changes nothing: the server and whatever runs
+# on it are retained, and the claim this block took leaves with the context's
+# other reservations when the destroy completes.
+- name: Publish the release of the claim on the server
+  bootwright.core.machine_hardware_protocol:
+    phase: completed
+    outcome: unchanged
+    digest: '{{ bootwright_machine_hardware_digest }}'
+    addresses: []
+    removed: true
+  no_log: true

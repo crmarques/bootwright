@@ -11,6 +11,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -88,13 +89,18 @@ func TestAProvidedTiebreakerBindsAsAMONOnlyHostWithItsPinnedKeyAndTheBootstrapDV
 	if !tie.Provided || tie.KnownHostsRef != "tie-known-hosts" || tie.HostKeyRef != "" || len(tie.Devices) != 0 || tie.Physical || tie.Address != tieAddress || tie.SSHKeyRef != "fleet-key" {
 		t.Fatalf("tiebreaker host = %+v", tie)
 	}
-	for _, ref := range hostRequirements(r.Hosts...) {
-		if ref.Object == "tie" {
-			t.Fatal("a provided Machine, which no block realizes, became a block requirement")
+	requires := hostRequirements("controller", r.Hosts...)
+	for _, ref := range requires {
+		if ref.Object == "tie" && ref.Family != machine.HardwareFamily {
+			t.Fatalf("the provided tiebreaker requires %+v, not the claim of its server", ref)
 		}
 	}
-	if len(hostRequirements(r.Hosts...)) != 4 || !strings.Contains(strings.Join(scopeOf(r).secretReferences(), ","), "tie-known-hosts") {
-		t.Fatalf("requirements %v, references %v", hostRequirements(r.Hosts...), scopeOf(r).secretReferences())
+	if len(requires) != 5 || !slices.Contains(requires, reconciliation.ObjectRef{Kind: "Machine", Object: "tie", Family: machine.HardwareFamily}) ||
+		!strings.Contains(strings.Join(scopeOf(r).secretReferences(), ","), "tie-known-hosts") {
+		t.Fatalf("requirements %v, references %v", requires, scopeOf(r).secretReferences())
+	}
+	if len(hostRequirements("tie", r.Hosts...)) != 4 {
+		t.Fatal("a provided tiebreaker on the controller requires a claim of its server")
 	}
 	packages, err := packageSources(catalog, r, "synthetic")
 	if err != nil {

@@ -923,8 +923,8 @@ A plan is written wave by wave. A block's *wave* is one past the deepest block
 it waits for, and a block that waits for nothing is in the first wave. Blocks
 are frozen in wave order and, within one wave, in identity order, so the
 numbered plan an operator confirms is the order the work is started in. A
-wave is never a barrier: a block starts once its own dependencies are done. Equal definitions in any input order still
-produce an identical plan and an identical digest.
+wave is never a barrier: a block starts once its own dependencies are done. Equal definitions in any input order
+produce an identical plan and digest.
 
 A plan holds at most 256 blocks, a block at most 32 groups of at most 512
 Machines each, 128 impacts and 8 resources it will not share, every identifier
@@ -935,9 +935,9 @@ removal's fit the bytes it keeps free; the
 them. A plan past any bound refuses before registration, naming the bound.
 
 A definition may name host resources its block *will not share* while it runs.
-Two blocks that name one resource never run at the same time, however
-independent the graph says they are, because the graph orders what one block
-needs from another and not what two of them would write to at once. The set is
+Two blocks that name one resource never run at once, however independent the
+graph says they are: the graph orders what one block needs from another, not
+what two would write at once. The set is
 bounded, unique, ordered and frozen with the plan, and a removal keeps exactly
 the set its apply froze, because what must not run together to create
 something is what must not run together to remove it.
@@ -952,9 +952,9 @@ A capability names what its blocks depend on in domain terms, not by block
 identity: a definition may carry *requirements*, each the kind and name of an
 API object whose realization must be done first, optionally narrowed to one
 capability family, such as the substrate family that claims a Machine.
-Reconciliation resolves every requirement to the blocks that realize that
-object, or only that family's blocks, before it freezes the plan, and refuses
-before registration when no block realizes it, so a capability never learns
+Reconciliation resolves every requirement to the blocks realizing that
+object, or that family's, before it freezes the plan, and refuses before
+registration when none does, so a capability never learns
 another's block-identity grammar. A requirement is a row of the
 [reference edges](#reference-edges) catalog, which domain pages link rather
 than restate.
@@ -982,10 +982,9 @@ Each row is one requirement class a capability family emits: the block (its
 family and block kinds), the API object it requires (of one family
 where stated), and the reference or rule that names that object. A
 requirement resolves only to a block that realizes its target, so an external
-service orders nothing. A reference no row names is
-resolved and validated but orders nothing; each such field that can name a
-realized object needs its family's own ordering or a stated reason, which
-`TestEveryReferenceFieldHasAnEdgeRowOrAReason` holds. Not yet met: six
+service orders nothing. A reference no row names orders
+nothing; one that can name a realized object needs its family's own ordering
+or a stated reason (`TestEveryReferenceFieldHasAnEdgeRowOrAReason`). Not yet met: six
 storage references emit requirements no row names; tracked as
 [B969](milestones/backlog.md#b969). Destroy inverts every edge. A family
 ordering its own blocks, as a storage child after its cluster, is not listed.
@@ -1014,6 +1013,7 @@ one a row's field path names on its object while a block realizes the target.
 | `controller-prerequisites` `Environment` | `ArtifactServer` | `spec.mirror.artifacts.serverRef` |
 | `managed-service` `ArtifactServer`, `DNSServer`, `NTPServer`, `Proxy` | `InfraProvider` | the provider whose libvirt bridge carries the service's address |
 | `managed-service` `ArtifactServer` | `Machine` from `os-install` | `spec.machineRef`, if installed |
+| `managed-service` `ArtifactServer`, `Registry` | `Machine` from `machine-hardware` | `spec.machineRef`, over SSH |
 | `managed-service` `DNSServer`, `NTPServer`, `Proxy` | `Registry` | the managed image mirror it pulls through |
 | `mirror-fill` `ArtifactServer` | `ArtifactServer` from `managed-service` | the mirror it fills |
 | `mirror-fill` `ArtifactServer` | `Machine` from `os-install` | `spec.machineRef`, if installed |

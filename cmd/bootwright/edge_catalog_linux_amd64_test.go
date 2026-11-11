@@ -247,17 +247,16 @@ func referenceFields(kind api.Kind, shape *api.Shape, prefix string, depth int) 
 // orders nothing or, for B969's storage requirements, why no row names it yet
 // (specs/state-reconciliation.md, Reference edges).
 func unorderedReferences() map[string]string {
-	placement := "an OS-ready placement Machine has no block that readies it, and a service on a Machine Bootwright installs requires that installation, " +
-		"which no example plans for this kind, so no row names it (specs/infrastructure-services.md, Selection and refusal)"
+	placement := "a service on an OS-ready Machine reached over SSH requires its hardware claim and one on a Machine Bootwright installs that installation, " +
+		"neither of which an example plans for this kind, so no row names it (specs/infrastructure-services.md, Selection and refusal)"
 	unplanned := "the storage capability requires it, but no example plans it and a catalog row needs one that does, so no row names it yet (B969)"
 	return map[string]string{
 		"DNSServer spec.machineRef":                                                          placement,
 		"NTPServer spec.machineRef":                                                          placement,
 		"Proxy spec.machineRef":                                                              placement,
-		"Registry spec.machineRef":                                                           placement,
 		"Environment spec.mirror.registry.registryRef":                                       "each consumer that pulls through a managed image mirror requires its Registry, so the Environment's selection orders nothing itself (specs/infrastructure-services.md, Mirror host)",
 		"OpenShiftCluster spec.install.registries.mirror.registryRef":                        "a cluster installs through an external registry mirror, which no block realizes, or the managed image mirror, whose release copy its blocks require instead (specs/openshift-clusters.md, Installation features)",
-		"InfraProvider spec.libvirt.machineRef":                                              "the libvirt provider host is an OS-ready Machine (specs/substrates.md), so no block of the plan readies it",
+		"InfraProvider spec.libvirt.machineRef":                                              "the libvirt provider host is an OS-ready Machine (specs/substrates.md), which only its hardware claim precedes when it is reached over SSH, and no example places a provider there",
 		"Environment spec.controller.machineRef":                                             "the controller Machine is the host that runs Bootwright, which no block of its own plan realizes",
 		"Environment spec.lifecycle.rescue.artifactServerEndpoint.serverRef":                 "admission refuses a present rescue until a rescue journey exists (specs/api/environment.md, Lifecycle rescue declaration)",
 		"Machine spec.network.inline.dns[].serverRef":                                        "the os-install and physical-erase rows order the dns selections of the Machine's network configuration, inline or through spec.network.configRef",

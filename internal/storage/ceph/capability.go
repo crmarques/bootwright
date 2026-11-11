@@ -223,7 +223,7 @@ func placement(object api.Object, request Request) ([]reconciliation.ObjectRef, 
 	switch request.Action {
 	case "cluster":
 		dependencies = []string{ImageBlockID(request.Cluster)}
-		requires = append(requires, hostRequirements(request.Hosts...)...)
+		requires = append(requires, hostRequirements(request.Controller, request.Hosts...)...)
 		for _, host := range request.Hosts {
 			dependencies = append(dependencies, HostBlockID(request.Cluster, host.Machine))
 		}

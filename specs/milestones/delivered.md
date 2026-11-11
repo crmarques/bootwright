@@ -13169,7 +13169,7 @@ the SSH arm publishes its claims as host reservations.
 | REC-41 | `ProvedClaim` claims `bmc-mac:` keys without a `UUID`; `keepProved` keeps them; the bare-metal effect pin gains `mac-claim`; `TestTwoSpellingsOfOneUUIDLessServerConflict` |
 | REC-09 | qualifier exemption in infrastructure-services.md and controller-record.md; `Conflicts` now also refuses an exclusive `bmc:` claim under another context's shared one, so a physical Machine's registration refuses under an emulated BMC; `TestASharedAndAnExclusiveBMCKeyConflictInEitherOrder`, `TestAnSSHHostedEmulatedBMCConflictsWithAPhysicalMachineAtItsEndpoint` |
 | REC-06 | substrates.md provider-host paragraph and the SSH Coordination cell link the host-reservations owner |
-| REC-74 | the promise scoped to two contexts that drive one server by its BMC; cross-mechanism identity parked as [B1267](m1.md#b1267) |
+| REC-74 | the promise scoped to two contexts that drive one server by its BMC; cross-mechanism identity parked as [B1267](#x412--server-claims-over-ssh) |
 
 The collection's proof is unchanged: it already refuses a system that reports
 neither a `UUID` nor a serial, and the claim is made from its evidence in Go.
@@ -13177,7 +13177,7 @@ neither a `UUID` nor a serial, and the claim is made from its evidence in Go.
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** a pin-less power command on a server another
 context holds by `bmc-system:` under another spelling is not refused
-([B1267](m1.md#b1267)). Note: closed by
+([B1267](#x412--server-claims-over-ssh)). Note: closed by
 [X368](#x368--mac-claims).
 
 ### X357 — Release repositories from the image mirror
@@ -13635,7 +13635,7 @@ that drops its last tagged Network keeps its routing unit and table
 
 **Item:** B1298 (2026-11-10, [D253](backlog.md#d253), widening
 [D252](backlog.md#d252) (2)), delivered in-tree, split from
-[B1267](m1.md#b1267). **Kind:** safety. **Owners:** Substrate and
+[B1267](#x412--server-claims-over-ssh). **Kind:** safety. **Owners:** Substrate and
 Machine. `ProvedClaim` claims one exclusive `bmc-mac:<mac>` key per declared
 MAC, in canonical colon lower-case form, for every proved physical system,
 beside `bmc-system:<UUID>` when its proof records one
@@ -13657,7 +13657,7 @@ registered finishes, or is destroyed, with that build.
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** a context reaching the server over SSH still holds
-only `ssh/` keys ([B1267](m1.md#b1267)).
+only `ssh/` keys ([B1267](#x412--server-claims-over-ssh)).
 
 ### X376 — Component licenses, notices and the pinned Go image
 
@@ -15125,3 +15125,45 @@ installation selects pulls every image from its origin
 the controller, that is every pull on the controller, so B1250's
 no-public-route profile waits for B1340 as well. The live proof is
 [B1250](backlog.md#b1250).
+
+### X412 — Server claims over SSH
+
+**Item:** B1267 (2026-11-10, [D257](backlog.md#d257) (2), audit 004 REC-74
+option (b)), delivered in-tree. **Kind:** safety. **Owners:** Substrate and
+Machine, with Infrastructure services. A context that uses a server as an
+OS-ready Machine reached over SSH now claims it by the permanent hardware
+addresses its host reports, so it and a context that drives the same server
+by its BMC refuse `controller.conflict` in either order, under any spelling of
+either address ([OS-ready server claim](../substrates.md#physical-machine-realization),
+[host reservations](../infrastructure-services.md#host-reservations)).
+
+The new implementation `machine-hardware-v1` (`internal/machine/hardware`)
+plans `machine-hardware-<machine>` for each placement host reached through the
+SSH arm, and for each OS-ready Ceph node Ceph dials with the fleet key, other
+than the controller and a Machine Bootwright installs; managed services,
+artifact servers, a libvirt provider host (`machine.ProvesHardware`) and the
+Ceph host and core blocks naming a provided node require it. Its role `machine_hardware` reads, through
+module `machine_hardware_read`, each device-backed Ethernet interface's
+permanent address (`ETHTOOL_GPERMADDR`, else its address when
+`addr_assign_type` is 0), never a bond's, VLAN's, bridge's, veth's, tun's,
+virtual function's or a randomized or set address; a bond member counts by its
+permanent address. Its `ProvedClaim` takes one exclusive, unqualified
+`bmc-mac:` key per address before the first block placed there starts; more
+than 64 refuses `lifecycle.state`, none claims nothing and warns
+`substrate.unclaimed-server`. A NIC on USB, such as a BMC's Redfish host
+interface, counts for nothing, and a cluster node counts only with
+`os.provided: true`, so an OpenShift node plans no read of a server not yet
+installed. No reference-edge row names the Ceph requirement: no planned
+example has an OS-ready Ceph node, which the edge catalog test requires. The block plans an
+empty `machine-hardware` reservation so `keepProved` carries the proved keys
+across a fresh apply; a reservation with no key is no longer published. A
+virtual guest reached over SSH claims its virtual NICs' addresses too, so it
+meets a context driving it through an emulated BMC.
+
+| Finding | Change |
+| --- | --- |
+| REC-74 (remainder) | `hardware.Capability`, `machine.ProvesHardware`/`HardwareHosts`, the requirement in `managedservice.PlacementRequirements` and the libvirt host block, `keepProved` drops keyless reservations, `machine-hardware` names a Machine in conflict diagnostics; `TestAnSSHReachedServerAndItsBMCDriverConflictInEitherOrder`, `TestTheProvedClaimIsOneBMCMACKeyPerPermanentAddress`, `TestKeepProvedKeepsAnSSHServerClaimAndPublishesNoEmptyOne`, `TestACephNodeOnAnOSReadyServerIsClaimedAndMeetsItsBMCDriver`, `TestAClusterNodeWhoseOperatingSystemIsNotProvidedPlansNoClaim`, `TestAHostReportingNoPermanentAddressWarns`, `test_machine_hardware.py`; substrates.md, infrastructure-services.md `bmc-mac:` row, the reference-edge row |
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** a plan an earlier build froze keeps the dependencies it
+froze.

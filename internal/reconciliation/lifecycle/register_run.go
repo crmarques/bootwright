@@ -222,7 +222,9 @@ func keepProved(held []prerequisites.HostReservation, contextName string, planne
 				}
 			}
 		}
-		kept = append(kept, reservation)
+		if len(reservation.Keys) != 0 {
+			kept = append(kept, reservation)
+		}
 	}
 	return kept
 }
