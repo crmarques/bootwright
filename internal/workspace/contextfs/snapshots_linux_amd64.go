@@ -308,7 +308,7 @@ func heldContext(revision *directory, record contexts.Record) bool {
 		}
 		held = held.parent
 	}
-	return record.DirectoryInode == 0 || held.identity.Ino == record.DirectoryInode && uint64(held.identity.Dev) == record.DirectoryDevice
+	return record.DirectoryInode == 0 || held.recorded(record.DirectoryInode)
 }
 
 func readFrozen(ctx context.Context, m manifest, dir *directory) (desiredstate.Sources, error) {

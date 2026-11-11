@@ -58,7 +58,7 @@ func verifyControllerBundleReservations(ctx context.Context, owner *directory, r
 		if err != nil {
 			return err
 		}
-		matches := reservation.DirectoryInode != 0 && reservation.DirectoryInode == dir.identity.Ino && reservation.DirectoryDevice == uint64(dir.identity.Dev)
+		matches := dir.recorded(reservation.DirectoryInode)
 		dir.file.Close()
 		// A reserved entry records intent published before the directory was
 		// created, so an unattributed directory is this store's own interrupted
@@ -166,7 +166,7 @@ func (a *controllerBundleArea) available(ctx context.Context, write bool) error 
 	if err := a.dir.verify(); err != nil {
 		return err
 	}
-	if a.reservation.DirectoryInode != a.dir.identity.Ino || a.reservation.DirectoryDevice != uint64(a.dir.identity.Dev) {
+	if !a.dir.recorded(a.reservation.DirectoryInode) {
 		return state("controller bundle directory was replaced")
 	}
 	return nil

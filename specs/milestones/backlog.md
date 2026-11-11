@@ -316,6 +316,9 @@ Alias cell.
 | [B1325](#b1325) | new, 2026-11-10 (X401) | product | Infrastructure services | Several mirror hosts, or a mirror on a cluster | One Environment names one artifact mirror and one image mirror, each on one OS-ready Machine |
 | [B1329](#b1329) | new, 2026-11-11 (X409) | product | Infrastructure services, with Managed OS | A managed service on a Machine Bootwright installs opens its ports in that host's firewall | No managed service publishes host port requirements, so an installed host's profile must disable its firewall |
 | [B1345](#b1345) | new, 2026-11-12 (X431 gate) | defect | Cluster objects | `test_real_ansible_action_module_handoff` runs a real playbook under a 30-second subprocess timeout that host load exceeds | It timed out once in `make check` at a load average near 40 and passed twice alone |
+| [B1346](#b1346) | new, 2026-11-11 (B1338 review) | safety | Workspace | A same-inode snapshot or rollback of the store within one boot is detected | Inode and same-filesystem checks cannot tell it from the store; detection needs a record format change |
+| [B1341](#b1341) | new, 2026-11-11 (B1338 review) | safety | Workspace | A freed inode reused by a recreated directory is not taken for the recorded one | Pre-existing on ext4 and xfs; detection needs a record format change |
+| [B1342](#b1342) | new, 2026-11-11 (B1338 review) | defect | Ceph | The Ansible records of managed Ceph hosts survive a reboot that renumbers a device | Fixing them moves the automation digest; the Ceph hosts that renumber devices are not yet qualified |
 
 ### B82
 
@@ -3592,6 +3595,46 @@ installs publishes its sockets as host port requirements, so the
 [refusal table](../infrastructure-services.md#refusal-table)'s firewall row
 goes. **Exit evidence:** a plan test that an installed host with its firewall
 enabled plans the firewall block with the service's ports before the service.
+
+### B1346
+
+**Owner:** Workspace. **Kind:** safety. **Requires:** none. **Definition:**
+Candidate, from the review of
+[B1338](m1.md#b1338)'s fix. **Outcome:** a block-level snapshot or rollback of
+the store that keeps every inode within one boot, such as a btrfs snapshot
+renamed onto the path, an LVM snapshot or a snapper rollback, is detected
+instead of opening as the store and its state, which
+[recorded directory identity](../contexts.md#recorded-directory-identity) now
+accepts because inode and same-filesystem checks cannot tell it apart. One
+shape records `/proc/sys/kernel/random/boot_id` beside `directoryDevice` and
+compares the device only when the boot id matches; it needs a record format
+change. **Exit evidence:** a contextfs test that renames a same-inode copy of
+the store onto its path within one boot and expects the refusal, and one that
+changes the boot id and still opens.
+
+### B1341
+
+**Owner:** Workspace. **Kind:** safety. **Requires:** none. **Definition:**
+Candidate, from the review of [B1338](m1.md#b1338)'s fix; the defect predates
+it. **Outcome:** a freed inode reused by a recreated directory on ext4 or xfs
+does not pass the registry's identity check as the recorded directory. A future
+format records the directory's birth time or generation and `recorded()`
+compares it, which needs a record format change. **Exit evidence:** a contextfs
+test whose recreated directory takes the freed inode and refuses as replaced,
+or a recorded reason the filesystem cannot present that case.
+
+### B1342
+
+**Owner:** Ceph. **Kind:** defect. **Requires:** none. **Definition:**
+Candidate, from the review of [B1338](m1.md#b1338)'s fix. **Outcome:** the
+Ansible records on a managed Ceph host that store `st_dev` and compare it with
+a later stat survive a reboot that renumbers the device, as
+[B1338](m1.md#b1338) repaired for the store: the `ceph_tunnel_custody.py`
+metadata, the `cache-directory.json` marker in `ceph_host_runtime.py` and
+`registry_metadata` in `ceph_native.py`. Fixing them changes what an effect
+compares, so it moves the automation digest and the contract version. **Exit
+evidence:** a unit test for each record that a changed `st_dev` with the same
+inode still verifies, and the contract golden moved with the digest.
 
 ## Audit remediation (2026-10-26)
 

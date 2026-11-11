@@ -371,7 +371,7 @@ func verifyControllerEntry(host *directory, registry contexts.Registry) error {
 	if err != nil {
 		return err
 	}
-	replaced := registry.Controller.DirectoryInode != 0 && (registry.Controller.DirectoryInode != dir.identity.Ino || registry.Controller.DirectoryDevice != uint64(dir.identity.Dev))
+	replaced := registry.Controller.DirectoryInode != 0 && !dir.recorded(registry.Controller.DirectoryInode)
 	dir.file.Close()
 	if replaced {
 		return state("controller directory was replaced")
@@ -613,7 +613,7 @@ func verifyContextMapping(ctx context.Context, root *directory, record contexts.
 		return 0, contextDamage(ctx, record.Name, entry, err, restoreStoreRemediation)
 	}
 	defer dir.file.Close()
-	if record.DirectoryInode != 0 && (uint64(dir.identity.Dev) != record.DirectoryDevice || dir.identity.Ino != record.DirectoryInode) {
+	if record.DirectoryInode != 0 && !dir.recorded(record.DirectoryInode) {
 		return 0, contextDamage(ctx, record.Name, entry, state("context directory was replaced"), replacedContextRemediation)
 	}
 	if err := verifyReservation(ctx, dir, record.Name); err != nil {
@@ -677,7 +677,7 @@ func openContext(root *directory, record contexts.Record) (*directory, *director
 		container.file.Close()
 		return nil, nil, err
 	}
-	if record.DirectoryInode != 0 && (uint64(dir.identity.Dev) != record.DirectoryDevice || dir.identity.Ino != record.DirectoryInode) {
+	if record.DirectoryInode != 0 && !dir.recorded(record.DirectoryInode) {
 		dir.file.Close()
 		container.file.Close()
 		return nil, nil, state("context directory was replaced")
@@ -1003,7 +1003,7 @@ func (t *transaction) contextDirectory(ctx context.Context, name string) (*direc
 	if err != nil {
 		return nil, err
 	}
-	if record.DirectoryInode != 0 && (dir.identity.Ino != record.DirectoryInode || uint64(dir.identity.Dev) != record.DirectoryDevice) {
+	if record.DirectoryInode != 0 && !dir.recorded(record.DirectoryInode) {
 		dir.file.Close()
 		return nil, state("context directory was replaced")
 	}

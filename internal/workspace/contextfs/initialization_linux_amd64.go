@@ -117,7 +117,7 @@ func (t *transaction) openContextReservation(ctx context.Context, record context
 		dir.file.Close()
 		return nil, state("context directory already exists and cannot be adopted")
 	}
-	if record.DirectoryInode != 0 && (dir.identity.Ino != record.DirectoryInode || uint64(dir.identity.Dev) != record.DirectoryDevice) {
+	if record.DirectoryInode != 0 && !dir.recorded(record.DirectoryInode) {
 		dir.file.Close()
 		return nil, state("initializing context directory was replaced")
 	}

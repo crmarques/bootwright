@@ -216,6 +216,14 @@ func openDirectory(parent *directory, name string) (*directory, error) {
 	return &directory{file: file, path: filepath.Join(parent.path, name), identity: stat, parent: parent, name: name}, nil
 }
 
+func recordedDirectory(child, parent syscall.Stat_t, inode uint64) bool {
+	return inode != 0 && child.Ino == inode && child.Dev == parent.Dev
+}
+
+func (d *directory) recorded(inode uint64) bool {
+	return d.parent != nil && recordedDirectory(d.identity, d.parent.identity, inode)
+}
+
 func (d *directory) verify() error {
 	stat, err := statHandle(d.file)
 	if err != nil {

@@ -13630,7 +13630,17 @@ review confirmed the fixes. Gates: `make check`, `make race` and
 `scripts/check-commits main HEAD` passed on the integrated branch; no live run
 or push occurred. B1335 is its own commit, `fix(substrate)!: load the routing
 table from an owned file nft can read under SELinux`, whose gates its message
-lists. **Limitations:** NetworkManager and kernel behaviour are
+lists. [B1338](m1.md#b1338) is also its own commit, `fix(workspace): identify a
+stored directory by inode and its parent's filesystem, not a device number a
+reboot renumbers`, whose gates its message lists: btrfs can renumber a
+subvolume's anonymous device at each mount, incorrectly refusing an unchanged
+store as replaced under a recorded-device comparison; a
+recorded directory is now its inode on its parent's filesystem
+([rule](../contexts.md#recorded-directory-identity),
+[lesson](../../.agents/knowledge/btrfs-anonymous-device-numbers.md)), with no
+record version, request or automation digest moved. The resumed integration
+skips E2E execution; both fixes await operator acceptance.
+**Limitations:** NetworkManager and kernel behaviour are
 proved only against fakes and an unprivileged nft namespace, never a live
 host; the loaded-table proof compares rule counts, not rule contents
 ([B1302](backlog.md#b1302)); the trunk filters no VLAN per guest

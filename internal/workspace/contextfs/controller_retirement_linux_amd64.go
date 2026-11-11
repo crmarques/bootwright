@@ -101,7 +101,7 @@ func (t *transaction) removeRetiringAreas(ctx context.Context, areas []controlle
 		if errors.Is(err, syscall.ENOENT) {
 			continue
 		}
-		if err != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFDIR || stat.Ino != area.DirectoryInode || uint64(stat.Dev) != area.DirectoryDevice {
+		if err != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFDIR || !recordedDirectory(stat, parent.identity, area.DirectoryInode) {
 			return state("retiring controller tool area directory was replaced")
 		}
 		held, err := openDirectory(parent, area.ID)

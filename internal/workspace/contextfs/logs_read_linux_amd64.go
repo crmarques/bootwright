@@ -189,7 +189,7 @@ func (s *Store) readLogs(ctx context.Context, name string, callback func(*logsVi
 		return safeError(err)
 	}
 	defer dir.file.Close()
-	if record.DirectoryInode != 0 && (dir.identity.Ino != record.DirectoryInode || uint64(dir.identity.Dev) != record.DirectoryDevice) {
+	if record.DirectoryInode != 0 && !dir.recorded(record.DirectoryInode) {
 		return state("context directory was replaced")
 	}
 	active := true

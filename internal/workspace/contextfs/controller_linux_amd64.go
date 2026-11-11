@@ -79,7 +79,7 @@ func openControllerDirectory(root *directory, registry contexts.Registry) (*dire
 	if err != nil {
 		return nil, state("attributed controller directory is missing or unsafe")
 	}
-	if registry.Controller.DirectoryInode != dir.identity.Ino || registry.Controller.DirectoryDevice != uint64(dir.identity.Dev) {
+	if !dir.recorded(registry.Controller.DirectoryInode) {
 		dir.close()
 		return nil, state("controller directory is unattributable or replaced; preserve the complete store for recovery")
 	}

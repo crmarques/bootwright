@@ -119,7 +119,7 @@ registry attributed, as a file-by-file copy's are not, refuses
 `context.state`, and refuses when the record no longer holds the identity it
 confirmed. That check cannot tell a byte-for-byte clone (a disk image, a
 filesystem snapshot or a cloned VM) from the store, because a clone keeps the
-inodes and device the registry attributed; only the operator's affirmation
+inodes the registry attributed; only the operator's affirmation
 rules out a recorded host still running its copy. It rewrites the record once through the controller
 record's atomic publication: the host identity becomes this host's and each
 binding's host digest follows it, while every binding's context, Machine and
@@ -235,7 +235,7 @@ references or copy, inspect or expand the paths they name.
 
 The registry writes private format version `contexts.RegistryVersion`. Active records hold the name,
 initialization/deletion mode, selected revision and its Environment directory,
-configured secret-store type and reserved directory device/inode. The
+configured secret-store type and reserved directory identity. The
 Controller [descriptor](contexts/controller-record.md#descriptor) is an
 optional trailing member that a host's first binding adds; setup never adds it.
 The 4096-name bound applies to active or reserved contexts, not past creations.
@@ -293,7 +293,7 @@ confirmed setup:
 | `registry.json` | One atomic map of context names to their selected inputs and status, plus the Controller descriptor once a first binding publishes it. |
 | `media/` | Host-wide installer media under the [Managed OS media contract](managed-os.md#media-store): each image's exact bytes beside its canonical record, created by the first `media add`, shared read-only by every context and frozen through shared reservations rather than copied. An image is [acquired](#media-acquisition) into a private stage in this directory while no root lock is held, then published exclusively and atomically with its record; a pinned stage whose publication met another command's lock is kept beside its record for the command's repetition; deletion is guarded by the reservation record. |
 | `controller/` | The host-wide state no context owns, in a plain container no descriptor attributes, created with the setup subtree and, if missing, by the first binding. It holds only `install/` and `record/`, each a private directory; any other entry, either of them of another type, or a `record/` no descriptor declares refuses the store (`TestTheStoreAdmitsControllerWithOnlyInstallAndRecord`). |
-| `controller/record/` | The [Controller record](contexts/controller-record.md), its tool areas and its publication stages, in the directory the descriptor's device and inode name. |
+| `controller/record/` | The [Controller record](contexts/controller-record.md), its tool areas and its publication stages, in the directory the descriptor's inode names. |
 | `controller/install/` | Setup's own [subtree](contexts/controller-record.md#the-setup-subtree), independently versioned and outside the registry: its lock, its `prerequisites.SetupStateFormat` record with the pending intent and receipt, the published runtimes and the locked wheel cache. |
 | `contexts/<name>/context.yaml` | Canonical immutable Context configuration; keeps the authored configuration contract separate from runtime metadata. |
 | `desired-state/revisions/<revision-id>/` | Immutable input snapshot, so publication and protected recovery can retain a complete selected revision. Collect unselected revisions only with disposal proof. |
@@ -828,6 +828,40 @@ exclusive holder writes. At most 16 stages exist at once, live, retained or
 abandoned; a claim beyond them refuses until another `media add` finishes or
 `media delete` removes a retained stage.
 
+## Recorded directory identity
+
+A directory the registry, its Controller descriptor or the controller record's
+tool areas attribute is identified by its inode, proved at each check: the
+directory opened at its expected path, without following a link or crossing a
+mount, is the recorded one only when it has the recorded inode and the device
+of the directory that holds it, the parent's device being the one held when
+the parent was opened and the child's the one read from its own held
+descriptor.
+Every other rule of [storage](#storage-locking-and-publication), its type,
+owner, mode and link count, still applies,
+and a directory with another inode refuses as replaced
+(`TestADirectoryWithAnotherInodeStillRefusesAsReplaced`,
+`TestARecordedDirectoryIsItsInodeOnItsParentsFilesystem`). The recorded
+`directoryDevice` is written once, from the device the directory reports when
+its identity is first recorded, and is informational: it is never compared
+with the device a directory reports later, because btrfs gives each mounted
+subvolume an anonymous device number at mount time, which a reboot changes
+while every inode stays, so a store on btrfs would otherwise refuse as
+replaced after each reboot. The field stays in each record, whose format
+version does not move, and a context's incarnation keeps naming the recorded
+value, so a reboot changes neither
+(`TestAStoreWhoseRecordedDevicesARebootRenumberedOpens`,
+`TestEveryRecordedDirectorySiteOpensAfterARenumbering`). A device comparison
+within one command, between two statuses of a held descriptor or between a
+child and the directory holding it, stays: a mounted filesystem keeps its
+device number while it is mounted. A block-level snapshot or rollback of the
+store that keeps every inode, such as a btrfs snapshot renamed onto the path,
+an LVM snapshot or a snapper rollback, opens as the store and its state,
+because the inode and same-filesystem checks cannot tell it apart
+([B1346](milestones/backlog.md#b1346)); a freed inode that a recreated
+directory reuses on ext4 or xfs passes the registry's identity check the same
+way ([B1341](milestones/backlog.md#b1341)).
+
 ## Roots beside the store
 
 Two roots beside the store hold what is no evidence of it: what a context
@@ -866,7 +900,7 @@ any other format is refused, not upgraded, and unsupported past and future
 formats refuse before effects. A format change states the refusal its
 predecessor now meets.
 
-Device/inode bindings deliberately reject ordinary directory-copy restoration.
+Inode bindings deliberately reject ordinary directory-copy restoration.
 Read-only commands never rebind them. There is no general copy-restore or
 rollback command. A future restore must validate one coherent complete store,
 preserve live context names, explicitly rebind verified filesystem
@@ -878,7 +912,8 @@ silently become current writable state. See the bounded restore outcome in
 A **matching backup**, which every remedy that names a restore of the whole
 store or of a keyring means, is an image of the whole state root, taken while
 no command holds its root lock or any context lease, whose restoration keeps
-the device and inode identity of every object the registry and records bind.
+the inode of every object the registry and records bind, each on the
+filesystem of the directory that holds it.
 No command takes or restores one: until [B103](milestones/backlog.md#b103) a
 restore is the operator's own act outside every supported command, so a remedy
 that names a matching backup is not a supported exit. No new seal may be

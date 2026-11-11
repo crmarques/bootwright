@@ -36,8 +36,11 @@ context commands never infer ownership or remove shared host state. A read
 never introduces Controller state, and ordinary context publications preserve
 an existing descriptor.
 
-The descriptor fixes version `1`, mode `initializing` or `ready`, and the
-device/inode of the Controller directory, `controller/record/`. Its reservation
+The `contexts.ControllerDescriptor` fixes a private version, mode
+`initializing` or `ready`, and the
+inode of the Controller directory, `controller/record/`, with the device it
+reported when recorded, which is
+[never compared](../contexts.md#recorded-directory-identity). Its reservation
 precedes directory creation; a second publication records the actual
 directory identity, and the mode becomes `ready` once the first record is
 durable. An unattributable directory after a crash is preserved and refuses
@@ -67,7 +70,8 @@ hold sealed; a stage that selects no tool clears it.
 Tool sources bind a stable ID to its original credential-free URL, SHA-256 and
 exact byte count, ordered by ID; reusing an ID with different bytes or origin
 refuses. A tool area entry is `reserved` while its area is being published,
-`attributed` once the store owns the directory, with its device and inode,
+`attributed` once the store owns the directory, with its inode and recorded
+device under the same [rule](../contexts.md#recorded-directory-identity),
 `sealed` once its content is immutable, and `retiring` once its
 [retirement](#tool-areas) began; a `reserved` entry records no directory
 identity, and a `retiring` one keeps the identity its directory had.
