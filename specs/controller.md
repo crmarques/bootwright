@@ -305,16 +305,33 @@ refreshes; the install's output and the recorded NEVRAs are the truth.
 **The transaction's added set.** Under `controller/install/lock`, the install
 lists every installed package with `rpm -qa` and its `NAME`, `EPOCHNUM`,
 `VERSION`, `RELEASE`, `ARCH` and `INSTALLTIME` before and after the dnf
-transaction (an imported `gpg-pubkey` is no package and is skipped). The
-packages it added are those listed after whose name and architecture no
-package held before, so an upgrade of a package already on the host is never
-among them; each is recorded by NEVRA and install time in the pending intent
-as soon as the package step completes, and the receipt carries forward every
-earlier install's set beside this one's, at most 1024 packages
-(`TestTheReceiptRecordsWhatTheInstallTransactionAdded`). A package step that
-does not complete, interrupted or failing after dnf ran, or whose set would
-pass the bound, records no set, so its packages stay on uninstall, and the
-pending intent it leaves refuses a plain uninstall as below. The set is never read from dnf's output.
+transaction (an imported `gpg-pubkey` is no package and is skipped). Before dnf
+runs, the pending intent records the transaction's start second and the name
+and architecture of every package held before it, at most 16384, or the
+install refuses `controller.install` naming the bound, with the remedy of
+removing the packages the host no longer needs. The packages it added are
+those listed after whose name and architecture no package held before and
+whose install time lies between the start and the second dnf returned, so an
+upgrade of a package already on the host is never among them; each is
+recorded by NEVRA and install time in the pending intent as soon as the
+package step completes (`TestTheReceiptRecordsWhatTheInstallTransactionAdded`).
+A package step that fails or is interrupted after it recorded the held
+identities leaves them in the pending intent, and the next install, before
+any other step, lists the packages again and records what the transaction
+added against them; the window then ends at that listing or at the start
+plus dnf's one-hour install deadline, whichever is earlier, so a package
+another tool installed later is not counted
+(`TestASetupThatFailsAfterDnfResumesWithItsAddedSet`,
+`TestAResumedTransactionWindowEndsAtTheInstallDeadline`). The receipt carries
+forward every earlier install's set beside this one's, keeping only the
+members a fresh listing still reports with the recorded install time, so a
+package removed, or removed and installed again, drops out
+(`TestACarriedAddedSetDropsWhatIsGone`). The set holds at most 1024 packages;
+past it the install refuses `controller.install` with the remedy of running
+`controller uninstall --keep-packages`, which leaves every host package and
+works while a pending intent remains, then `controller install` again (`TestTheAddedSetBoundNamesARemedy`).
+A package another tool installs during the dnf transaction is
+indistinguishable from the transaction's own and counts as added. The set is never read from dnf's output.
 
 `rpm` and `dnf` get a clean environment, `LC_ALL=C` and
 `PATH=/usr/sbin:/usr/bin`, stdin from `/dev/null`, a bounded run time and
@@ -461,12 +478,14 @@ remedy named, unless it names another code:
   remedy "remove the dependent packages first, or pass --keep-packages".
 
 **Packages.** The packages to remove are the members of the receipt's
-[added set](#host-packages) still installed, matched by name and
-architecture in an `rpm -qa` listing so a later upgrade of one is still
-Bootwright's, each named as rpm and dnf select one installed package,
+[added set](#host-packages) still installed, matched by name, architecture
+and install time in an `rpm -qa` listing, each named as rpm and dnf select one installed package,
 `name-version-release.arch`. A package present before Bootwright, a
 dependency it already had included, is never in the set, and one the host no
-longer has drops out. Before the plan, as root,
+longer has drops out. A member listed with another install time was removed
+and installed again, or updated, since the transaction added it: it is not
+the package Bootwright installed, so it stays, and the plan names it among
+what uninstall keeps (`TestAnUninstallLeavesAPackageInstalledAgain`). Before the plan, as root,
 `rpm --erase --test -- <names>` must succeed; a failure that names a dependent
 outside the set is the refusal above, and any other failure refuses with rpm's
 own message. The plan then shows, as display text bounded to 64 KiB as

@@ -71,6 +71,7 @@ type uninstallInspection struct {
 	packages []string
 	before   []string
 	kept     []InstalledPackage
+	replaced []string
 }
 
 func (i uninstallInspection) empty() bool {
@@ -82,7 +83,8 @@ func (i uninstallInspection) same(other uninstallInspection) bool {
 	a, b := i.view, other.view
 	return a.RootExists == b.RootExists && a.StagingSeen == b.StagingSeen && a.LogsSeen == b.LogsSeen && a.HostedSeen == b.HostedSeen &&
 		a.ImagesSeen == b.ImagesSeen && (a.Unreadable == nil) == (b.Unreadable == nil) && slices.Equal(a.GuestDisks, b.GuestDisks) &&
-		slices.Equal(a.Leftovers, b.Leftovers) && slices.Equal(i.packages, other.packages) && slices.Equal(i.before, other.before) && slices.Equal(i.kept, other.kept)
+		slices.Equal(a.Leftovers, b.Leftovers) && slices.Equal(i.packages, other.packages) && slices.Equal(i.before, other.before) && slices.Equal(i.kept, other.kept) &&
+		slices.Equal(i.replaced, other.replaced)
 }
 
 func (s Service) Uninstall(ctx context.Context, request UninstallRequest) (*UninstallResult, error) {
@@ -199,7 +201,8 @@ func (s Service) inspectUninstall(ctx context.Context, view UninstallView, reque
 		if err != nil {
 			return inspection, err
 		}
-		installed := stillAdded(snapshot, added)
+		installed, replaced := stillAdded(snapshot, added)
+		inspection.replaced = replaced
 		if len(installed) != 0 {
 			if err := removal.EraseTest(ctx, installed); err != nil {
 				return inspection, err
@@ -210,19 +213,26 @@ func (s Service) inspectUninstall(ctx context.Context, view UninstallView, reque
 	return inspection, nil
 }
 
-func stillAdded(snapshot, added []InstalledPackage) []string {
-	ours := map[string]bool{}
+func stillAdded(snapshot, added []InstalledPackage) ([]string, []string) {
+	ours := StillInstalled(snapshot, added)
+	recorded := map[string]bool{}
 	for _, item := range added {
-		ours[packageIdentity(item)] = true
+		recorded[packageIdentity(item)] = true
 	}
-	installed := []string{}
+	installed, replaced := []string{}, []string{}
 	for _, item := range snapshot {
-		if argument := PackageArgument(item); argument != "" && ours[packageIdentity(item)] && !slices.Contains(installed, argument) {
+		argument := PackageArgument(item)
+		switch {
+		case argument == "" || !recorded[packageIdentity(item)]:
+		case slices.Contains(ours, item):
 			installed = append(installed, argument)
+		default:
+			replaced = append(replaced, argument)
 		}
 	}
 	slices.Sort(installed)
-	return installed
+	slices.Sort(replaced)
+	return slices.Compact(installed), slices.Compact(replaced)
 }
 
 func (s Service) ownedObjectsGone(ctx context.Context) error {
@@ -393,6 +403,9 @@ func (i uninstallInspection) keptText() []string {
 	}
 	for _, item := range i.kept {
 		kept = append(kept, item.NEVRA+" (install added it; --keep-packages keeps it)")
+	}
+	for _, argument := range i.replaced {
+		kept = append(kept, argument+" (installed again or updated since install added it, so no longer the package it added)")
 	}
 	if i.discard {
 		kept = append(kept, "every host package: --discard-unreadable removes none")

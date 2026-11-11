@@ -1,5 +1,5 @@
 {
-  "format": "bootwright.setup-state-v2",
+  "format": "bootwright.setup-state-v3",
   "pending": {
     "requested": [
       "podman",
@@ -21,7 +21,14 @@
         "nevra": "podman-5:5.8.1-1.fc44.x86_64",
         "installTime": 1760432400
       }
-    ]
+    ],
+    "transaction": {
+      "start": 1760432390,
+      "held": [
+        "glibc.x86_64",
+        "openssh-clients.x86_64"
+      ]
+    }
   },
   "receipt": {
     "platform": {

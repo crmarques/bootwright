@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -197,19 +198,26 @@ func (s Service) apply(ctx context.Context, tx SetupTransaction, current *inspec
 	requested := slices.Clone(current.requested())
 	started := s.now()
 	var added []InstalledPackage
+	var transaction *PendingTransaction
 	if state.Pending != nil {
-		id, started, added = state.Pending.ID, state.Pending.StartedAt, state.Pending.Added
+		id, started, added, transaction = state.Pending.ID, state.Pending.StartedAt, state.Pending.Added, state.Pending.Transaction
 		requested = append(requested, state.Pending.Requested...)
 	}
 	slices.Sort(requested)
 	requested = slices.Compact(requested)
-	state.Pending = &PendingSetup{ID: id, PlanDigest: current.planDigest(s.ports.Lock), Actions: slices.Clone(steps), StartedAt: started, Requested: requested, Added: MergeAdded(added)}
+	state.Pending = &PendingSetup{ID: id, PlanDigest: current.planDigest(s.ports.Lock), Actions: slices.Clone(steps), StartedAt: started, Requested: requested,
+		Added: MergeAdded(added), Transaction: transaction}
 	current.report.Progress = make([]ActionProgress, len(steps))
 	for index, step := range steps {
 		current.report.Progress[index] = ActionProgress{ID: step, Phase: "planned"}
 	}
 	if err := tx.Record(ctx, state); err != nil {
 		return err
+	}
+	if state.Pending.Transaction != nil {
+		if err := s.settleTransaction(ctx, tx, &state); err != nil {
+			return err
+		}
 	}
 	var installed []HostPackageEvidence
 	for index, step := range steps {
@@ -221,11 +229,7 @@ func (s Service) apply(ctx context.Context, tx SetupTransaction, current *inspec
 		var err error
 		switch step {
 		case packagesStep:
-			var added []InstalledPackage
-			if installed, added, err = s.install(ctx, current, run); err == nil {
-				state.Pending.Added = MergeAdded(state.Pending.Added, added)
-				err = addedBound(state.Pending.Added)
-			}
+			installed, err = s.install(ctx, tx, current, &state, run)
 		case runtimeStep:
 			err = s.prepareRuntime(ctx, tx, current)
 		case receiptStep:
@@ -255,28 +259,60 @@ func (s Service) apply(ctx context.Context, tx SetupTransaction, current *inspec
 	return nil
 }
 
-func (s Service) install(ctx context.Context, current *inspection, run RunOutput) ([]HostPackageEvidence, []InstalledPackage, error) {
+func (s Service) install(ctx context.Context, tx SetupTransaction, current *inspection, state *SetupState, run RunOutput) ([]HostPackageEvidence, error) {
 	requested := current.requested()
+	start := s.clock().Unix()
 	before, err := s.ports.Packages.Snapshot(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
+	}
+	held := HeldIdentities(before)
+	if len(held) > MaxHeldPackages {
+		return nil, failure("controller.install", "the host holds more than "+strconv.Itoa(MaxHeldPackages)+" packages, which the install record cannot hold",
+			"remove the packages this host no longer needs with dnf, then run bootwright controller install again")
+	}
+	state.Pending.Transaction = &PendingTransaction{Start: start, Held: held}
+	if err := tx.Record(ctx, *state); err != nil {
+		return nil, err
 	}
 	evidence, err := s.ports.Packages.Install(ctx, requested, run)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
+	end := s.clock().Unix()
 	still, err := s.ports.Packages.Missing(ctx, requested)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if len(still) != 0 {
-		return nil, nil, failure("controller.install", "dnf finished but nothing provides "+strings.Join(still, ", "), "check the host's dnf configuration, then run bootwright controller install again")
+		return nil, failure("controller.install", "dnf finished but nothing provides "+strings.Join(still, ", "), "check the host's dnf configuration, then run bootwright controller install again")
 	}
 	after, err := s.ports.Packages.Snapshot(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return evidence, TransactionAdded(before, after), nil
+	return evidence, closeTransaction(state.Pending, end, after)
+}
+
+func (s Service) settleTransaction(ctx context.Context, tx SetupTransaction, state *SetupState) error {
+	end := min(s.clock().Unix(), state.Pending.Transaction.Start+int64(InstallDeadline/time.Second))
+	after, err := s.ports.Packages.Snapshot(ctx)
+	if err != nil {
+		return err
+	}
+	if err := closeTransaction(state.Pending, end, after); err != nil {
+		return err
+	}
+	return tx.Record(ctx, *state)
+}
+
+func closeTransaction(pending *PendingSetup, end int64, after []InstalledPackage) error {
+	added := MergeAdded(TransactionAdded(*pending.Transaction, end, after), pending.Added)
+	if err := addedBound(added); err != nil {
+		return err
+	}
+	pending.Added, pending.Transaction = added, nil
+	return nil
 }
 
 func (s Service) prepareRuntime(ctx context.Context, tx SetupTransaction, current *inspection) error {
@@ -333,12 +369,16 @@ func (s Service) recordReceipt(ctx context.Context, tx SetupTransaction, current
 	for _, evidence := range present {
 		packages = append(packages, receiptPackage(evidence, id, installed, previous))
 	}
-	var added []InstalledPackage
-	if previous != nil {
-		added = previous.Added
+	snapshot, err := s.ports.Packages.Snapshot(ctx)
+	if err != nil {
+		return err
 	}
+	var added []InstalledPackage
 	if state.Pending != nil {
-		added = MergeAdded(added, state.Pending.Added)
+		added = StillInstalled(state.Pending.Added, snapshot)
+	}
+	if previous != nil {
+		added = MergeAdded(added, StillInstalled(previous.Added, snapshot))
 	}
 	if err := addedBound(added); err != nil {
 		return err
@@ -435,7 +475,8 @@ func setupOutput(ctx context.Context, tx SetupTransaction) (string, SetupRun, er
 
 func addedBound(added []InstalledPackage) error {
 	if len(added) > MaxAddedPackages {
-		return failure("controller.install", "the install transactions added more than "+strconv.Itoa(MaxAddedPackages)+" packages, which the install record cannot hold", "")
+		return failure("controller.install", "the install transactions added more than "+strconv.Itoa(MaxAddedPackages)+" packages, which the install record cannot hold",
+			"run "+uninstallInvocation+" --keep-packages, which leaves every host package and removes Bootwright's state on this host, then run bootwright controller install again")
 	}
 	return nil
 }

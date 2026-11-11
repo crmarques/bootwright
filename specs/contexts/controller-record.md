@@ -237,8 +237,9 @@ never wait for it and refuse a held lock as busy; a launch's
 polling so that cancellation ends the wait.
 
 `state.json` is the canonical record whose version is `prerequisites.SetupStateFormat`
-(in `internal/controller/prerequisites/setupstore.go`), at most 1 MiB. Its
-`pending` member, `{id, planDigest, actions, startedAt, requested, added}`, is
+(in `internal/controller/prerequisites/setupstore.go`), at most 8 MiB. Its
+`pending` member, `{id, planDigest, actions, startedAt, requested, added}` and,
+while a package transaction is open, `transaction`, is
 written and synchronized before setup's first effect and cleared with the
 receipt it writes last. The `receipt` holds the platform (`id`, `versionId`,
 `like`, `architecture`, `glibc`, `tested`), the lock digest, the runtime
@@ -249,7 +250,11 @@ NEVRA, its repository and `installedBy`, a setup run ID or
 [packages its install transactions added](../controller.md#host-packages),
 each `{nevra, installTime}`, sorted by NEVRA and at most 1024, which alone
 decides what uninstall removes; `pending.added` holds the set of a package
-step that completed before the receipt. `requested` freezes the requirements absent before
+step that completed before the receipt. `pending.transaction`,
+`{start, held}`, is written before dnf runs: the transaction's start in Unix
+seconds and the sorted, distinct `name.arch` of every package held before it,
+at most 16384; the step that records its added set clears it, and an install
+that finds it records that set first. `requested` freezes the requirements absent before
 this setup's package transaction. A resumed setup retains that intent and its
 original ID until it writes the receipt, attributing newly present requested
 providers to that ID. A subsequent setup carries forward every still-installed

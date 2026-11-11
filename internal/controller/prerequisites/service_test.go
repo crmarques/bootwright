@@ -1,6 +1,7 @@
 package prerequisites
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -119,6 +120,8 @@ type hostPackages struct {
 	refuse  map[string]bool
 	preview string
 	pulls   map[string][]string
+	times   map[string]int64
+	broken  error
 }
 
 func (p *hostPackages) Qualify(context.Context) error {
@@ -168,10 +171,13 @@ func (p *hostPackages) Preview(_ context.Context, missing []string) (HostPackage
 }
 
 func (p *hostPackages) Snapshot(context.Context) ([]InstalledPackage, error) {
+	if p.broken != nil && len(p.times) != 0 {
+		return nil, p.broken
+	}
 	installed := []InstalledPackage{}
 	for requirement, present := range p.present {
 		if present {
-			installed = append(installed, InstalledPackage{NEVRA: provider(requirement), InstallTime: 1760000000})
+			installed = append(installed, InstalledPackage{NEVRA: provider(requirement), InstallTime: cmp.Or(p.times[requirement], 1750000000)})
 		}
 	}
 	return installed, nil
@@ -180,10 +186,15 @@ func (p *hostPackages) Snapshot(context.Context) ([]InstalledPackage, error) {
 func (p *hostPackages) Install(_ context.Context, missing []string, _ RunOutput) ([]HostPackageEvidence, error) {
 	p.owner.record("install " + strings.Join(missing, ","))
 	evidence := []HostPackageEvidence{}
+	if p.times == nil {
+		p.times = map[string]int64{}
+	}
 	for _, requirement := range missing {
 		p.present[requirement] = true
+		p.times[requirement] = p.owner.service.clock().Unix()
 		for _, dependency := range p.pulls[requirement] {
 			p.present[dependency] = true
+			p.times[dependency] = p.owner.service.clock().Unix()
 		}
 		evidence = append(evidence, HostPackageEvidence{Requirement: requirement, Package: provider(requirement), Repository: "fedora"})
 	}

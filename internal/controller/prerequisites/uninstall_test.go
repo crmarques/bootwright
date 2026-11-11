@@ -16,6 +16,7 @@ type uninstallFixture struct {
 	inspected  int
 	busy       error
 	installed  []string
+	times      map[string]int64
 	remaining  []string
 	collateral []string
 	previewed  []string
@@ -81,7 +82,11 @@ func (p removalPackages) Snapshot(context.Context) ([]InstalledPackage, error) {
 	p.f.record("rpm -qa")
 	listed := []InstalledPackage{}
 	for _, name := range p.f.installed {
-		listed = append(listed, InstalledPackage{NEVRA: nevra(name), InstallTime: 1762790000})
+		installTime := int64(1762790000)
+		if recorded, found := p.f.times[name]; found {
+			installTime = recorded
+		}
+		listed = append(listed, InstalledPackage{NEVRA: nevra(name), InstallTime: installTime})
 	}
 	return listed, nil
 }
@@ -533,5 +538,22 @@ func TestADiscardOfAReadableStoreRemovesNoPackageAndKeepsTheContextAndMediaRefus
 	uninstallRefusal(t, err, uninstallCode, "takes no --keep-packages")
 	if f.inspected != 0 {
 		t.Fatal("a refused request inspected the host")
+	}
+}
+
+// A member of the added set listed with another install time was removed and
+// installed again, or updated, after the install transaction: it is no longer
+// the package Bootwright installed, so uninstall leaves it and says so.
+func TestAnUninstallLeavesAPackageInstalledAgain(t *testing.T) {
+	view := installReceipt()
+	view.Setup.State.Receipt.Added = MergeAdded(view.Setup.State.Receipt.Added, []InstalledPackage{{NEVRA: nevra("containers-common"), InstallTime: 1762790000}})
+	f := &uninstallFixture{views: []UninstallView{view}, installed: []string{"openssh-clients", "podman", "containers-common"}, times: map[string]int64{"podman": 1762800000}}
+	result, err := f.service().Uninstall(context.Background(), UninstallRequest{SkipConfirmation: true})
+	if err != nil {
+		t.Fatalf("the uninstall failed: %#v", diagnostics.Of(err))
+	}
+	if !slices.Equal(f.removed, []string{argument("containers-common")}) || !slices.Contains(f.installed, "podman") ||
+		!slices.ContainsFunc(result.Kept, func(kept string) bool { return strings.HasPrefix(kept, argument("podman")+" (installed again") }) {
+		t.Fatalf("removed %q, still installed %q, kept %q", f.removed, f.installed, result.Kept)
 	}
 }

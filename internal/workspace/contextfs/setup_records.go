@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	maxSetupState         = 1 << 20
+	maxSetupState         = 8 << 20
 	maxSetupActions       = 64
 	maxSetupPackages      = 128
 	maxSetupPackageOwners = 64
@@ -49,6 +49,11 @@ func normalizedSetupState(value prerequisites.SetupState) prerequisites.SetupSta
 		pending.Actions = nonNil(slices.Clone(pending.Actions))
 		pending.Requested = nonNil(slices.Clone(pending.Requested))
 		pending.Added = addedSet(pending.Added)
+		if pending.Transaction != nil {
+			transaction := *pending.Transaction
+			transaction.Held = nonNil(slices.Clone(transaction.Held))
+			pending.Transaction = &transaction
+		}
 		value.Pending = &pending
 	}
 	if value.Receipt != nil {
@@ -80,6 +85,18 @@ func validAddedSet(values []prerequisites.InstalledPackage) bool {
 	}
 	for index, item := range values {
 		if !prerequisites.ValidInstalledPackage(item) || index > 0 && values[index-1].NEVRA >= item.NEVRA {
+			return false
+		}
+	}
+	return true
+}
+
+func validHeldSet(transaction prerequisites.PendingTransaction) bool {
+	if transaction.Start <= 0 || transaction.Held == nil || len(transaction.Held) > prerequisites.MaxHeldPackages {
+		return false
+	}
+	for index, identity := range transaction.Held {
+		if !prerequisites.ValidPackageIdentity(identity) || index > 0 && transaction.Held[index-1] >= identity {
 			return false
 		}
 	}
@@ -131,6 +148,9 @@ func validatePendingSetup(pending prerequisites.PendingSetup) error {
 	}
 	if !validAddedSet(pending.Added) {
 		return state("pending setup added packages are invalid")
+	}
+	if transaction := pending.Transaction; transaction != nil && !validHeldSet(*transaction) {
+		return state("pending setup package transaction is invalid")
 	}
 	started, err := time.Parse(time.RFC3339Nano, pending.StartedAt)
 	if err != nil || started.UTC().Format(time.RFC3339Nano) != pending.StartedAt {

@@ -21,7 +21,8 @@ func TestSetupPackageIntentGoldenAndUnloggedIdentityRoundTrip(t *testing.T) {
 	state.Pending = &prerequisites.PendingSetup{
 		ID: "install-" + strings.Repeat("a", 32), PlanDigest: setupDigest(4),
 		Actions: []string{"runtime", "receipt"}, StartedAt: "2026-10-14T09:00:00Z", Requested: []string{"podman", "python3.14"},
-		Added: []prerequisites.InstalledPackage{{NEVRA: "containers-common-5:0.64.2-1.fc44.noarch", InstallTime: 1760432400}, {NEVRA: "podman-5:5.8.1-1.fc44.x86_64", InstallTime: 1760432400}},
+		Added:       []prerequisites.InstalledPackage{{NEVRA: "containers-common-5:0.64.2-1.fc44.noarch", InstallTime: 1760432400}, {NEVRA: "podman-5:5.8.1-1.fc44.x86_64", InstallTime: 1760432400}},
+		Transaction: &prerequisites.PendingTransaction{Start: 1760432390, Held: []string{"glibc.x86_64", "openssh-clients.x86_64"}},
 	}
 	state.Receipt.Packages[0].InstalledBy = state.Pending.ID
 	state.Receipt.Added = []prerequisites.InstalledPackage{{NEVRA: "python3.14-0:3.14.8-1.fc44.x86_64", InstallTime: 1760000000}}
@@ -32,12 +33,17 @@ func TestSetupPackageIntentGoldenAndUnloggedIdentityRoundTrip(t *testing.T) {
 	matchesGolden(t, "setup-package-intent", data, true)
 	decoded, foreign := decodeSetupState(data)
 	if foreign != "" || decoded.Pending == nil || !slices.Equal(decoded.Pending.Requested, state.Pending.Requested) || decoded.Receipt.Packages[0].InstalledBy != state.Pending.ID ||
-		!slices.Equal(decoded.Pending.Added, state.Pending.Added) || !slices.Equal(decoded.Receipt.Added, state.Receipt.Added) {
+		!slices.Equal(decoded.Pending.Added, state.Pending.Added) || !slices.Equal(decoded.Receipt.Added, state.Receipt.Added) ||
+		decoded.Pending.Transaction == nil || decoded.Pending.Transaction.Start != 1760432390 || !slices.Equal(decoded.Pending.Transaction.Held, state.Pending.Transaction.Held) {
 		t.Fatalf("round trip = %+v (%s)", decoded, foreign)
 	}
 	state.Pending.Requested[0] = "other"
 	if decoded.Pending.Requested[0] != "podman" {
 		t.Fatal("aliased pending intent")
+	}
+	state.Pending.Transaction.Held = []string{"openssh-clients.x86_64", "glibc.x86_64"}
+	if _, err := encodeSetupState(state); err == nil {
+		t.Fatal("encoded an unsorted held set")
 	}
 }
 

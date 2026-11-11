@@ -31,7 +31,7 @@ const (
 	queryTimeout  = 30 * time.Second
 	repoTimeout   = 2 * time.Minute
 	previewTime   = 20 * time.Minute
-	installTime   = time.Hour
+	installTime   = prerequisites.InstallDeadline
 	queryFormat   = `%{NAME}\t%{EPOCHNUM}:%{VERSION}-%{RELEASE}.%{ARCH}\n`
 	provideFormat = `[\t%{PROVIDENEVRS}\n]`
 	weakDeps      = "--setopt=install_weak_deps=False"

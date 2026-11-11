@@ -211,13 +211,16 @@ func (s Service) stateRoot(ctx context.Context, report *Report) error {
 	return inspection.Refusal
 }
 
-func (s Service) now() string {
-	now := time.Now
+const InstallDeadline = time.Hour
+
+func (s Service) clock() time.Time {
 	if s.options.Now != nil {
-		now = s.options.Now
+		return s.options.Now()
 	}
-	return now().UTC().Format(time.RFC3339Nano)
+	return time.Now()
 }
+
+func (s Service) now() string { return s.clock().UTC().Format(time.RFC3339Nano) }
 
 // report never fails an operation: progress is presentation only.
 func (s Service) report(ctx context.Context, report *Report, event ProgressEvent) {

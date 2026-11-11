@@ -3,9 +3,13 @@ package prerequisites
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/crmarques/bootwright/internal/diagnostics"
 )
 
 func TestSetupRetainsOriginalPackageProvenanceAcrossProviderUpdates(t *testing.T) {
@@ -175,5 +179,94 @@ func TestTheReceiptRecordsWhatTheInstallTransactionAdded(t *testing.T) {
 	added, err := addedNames(f.store.view)
 	if err != nil || !slices.Equal(added, []string{"libfido2", "openssh-clients"}) {
 		t.Fatalf("added = %q (%v)", added, err)
+	}
+}
+
+// A package step that fails after dnf ran leaves the identities the host held
+// before the transaction in the pending intent, so the resumed install still
+// records what that transaction added.
+func TestASetupThatFailsAfterDnfResumesWithItsAddedSet(t *testing.T) {
+	f := newSetupFixture(t)
+	f.packages.present["openssh-clients"] = false
+	f.packages.present["libnet"] = true
+	f.packages.pulls = map[string][]string{"openssh-clients": {"libfido2"}}
+	f.packages.broken = errors.New("injected rpm failure after dnf")
+	if _, err := f.service.Setup(context.Background(), SetupRequest{}); !errors.Is(err, f.packages.broken) {
+		t.Fatalf("setup = %v", err)
+	}
+	pending := f.store.view.State.Pending
+	if pending == nil || pending.Transaction == nil || !slices.Contains(pending.Transaction.Held, "libnet.x86_64") || slices.Contains(pending.Transaction.Held, "openssh-clients.x86_64") {
+		t.Fatalf("pending intent = %+v", pending)
+	}
+	f.packages.broken = nil
+	if _, err := f.service.Setup(context.Background(), SetupRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	added, err := addedNames(f.store.view)
+	if err != nil || !slices.Equal(added, []string{"libfido2", "openssh-clients"}) {
+		t.Fatalf("resumed added = %q (%v)", added, err)
+	}
+}
+
+// A carried set keeps only the members still installed with the install time
+// the transaction recorded: one removed, or removed and installed again, drops.
+func TestACarriedAddedSetDropsWhatIsGone(t *testing.T) {
+	f := newSetupFixture(t)
+	f.prepared()
+	f.python.ready = false
+	f.packages.present["podman"], f.packages.present["buildah"] = true, true
+	f.packages.times = map[string]int64{"buildah": 1755000000}
+	f.store.view.State.Receipt.Added = MergeAdded([]InstalledPackage{
+		{NEVRA: provider("podman"), InstallTime: 1750000000}, {NEVRA: provider("buildah"), InstallTime: 1750000000}, {NEVRA: provider("toolbox"), InstallTime: 1750000000},
+	})
+	if _, err := f.service.Setup(context.Background(), SetupRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	added, err := addedNames(f.store.view)
+	if err != nil || !slices.Equal(added, []string{"podman"}) {
+		t.Fatalf("carried added = %q (%v)", added, err)
+	}
+}
+
+// An added set past its bound refuses with a remedy that empties it.
+func TestTheAddedSetBoundNamesARemedy(t *testing.T) {
+	f := newSetupFixture(t)
+	f.prepared()
+	f.python.ready = false
+	added := []InstalledPackage{}
+	for index := range MaxAddedPackages + 1 {
+		name := fmt.Sprintf("package%04d", index)
+		f.packages.present[name] = true
+		added = append(added, InstalledPackage{NEVRA: provider(name), InstallTime: 1750000000})
+	}
+	f.store.view.State.Receipt.Added = MergeAdded(added)
+	_, err := f.service.Setup(context.Background(), SetupRequest{})
+	reported := diagnostics.Of(err)
+	if len(reported) != 1 || !strings.Contains(reported[0].Message, "more than 1024 packages") || !strings.Contains(reported[0].Remediation, "run bootwright controller uninstall") {
+		t.Fatalf("bound refusal = %#v", reported)
+	}
+}
+
+// A resumed install ends the transaction's window at dnf's own deadline, so a
+// package another tool installed after it, before the install ran again, is
+// not counted as added.
+func TestAResumedTransactionWindowEndsAtTheInstallDeadline(t *testing.T) {
+	f := newSetupFixture(t)
+	f.packages.present["openssh-clients"] = false
+	f.packages.broken = errors.New("injected crash after dnf")
+	if _, err := f.service.Setup(context.Background(), SetupRequest{}); !errors.Is(err, f.packages.broken) {
+		t.Fatalf("setup = %v", err)
+	}
+	start := f.store.view.State.Pending.Transaction.Start
+	f.packages.broken = nil
+	f.packages.present["toolbox"] = true
+	f.packages.times["toolbox"] = start + int64(2*InstallDeadline/time.Second)
+	f.service.options.Now = func() time.Time { return time.Unix(start, 0).Add(72 * time.Hour) }
+	if _, err := f.service.Setup(context.Background(), SetupRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	added, err := addedNames(f.store.view)
+	if err != nil || !slices.Equal(added, []string{"openssh-clients"}) {
+		t.Fatalf("resumed added = %q (%v)", added, err)
 	}
 }

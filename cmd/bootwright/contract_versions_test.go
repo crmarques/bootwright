@@ -486,7 +486,7 @@ func TestEveryStoreFormatIsClassified(t *testing.T) {
 		}
 	}
 	for literal, want := range map[string]string{
-		prerequisites.SetupStateFormat:     "bootwright.setup-state-v2",
+		prerequisites.SetupStateFormat:     "bootwright.setup-state-v3",
 		runtimelock.Format:                 "bootwright.controller.runtime-lock-v1",
 		prerequisites.RuntimeFormat:        "bootwright.controller.runtime-v1",
 		prerequisites.RuntimeClosureFormat: "bootwright.controller.execution-closure-v1",

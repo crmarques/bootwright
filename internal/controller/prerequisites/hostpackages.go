@@ -88,6 +88,8 @@ var installedNEVRA = regexp.MustCompile(`^([A-Za-z0-9][A-Za-z0-9._+-]*)-([0-9]+)
 
 const MaxAddedPackages = 1024
 
+const MaxHeldPackages = 16384
+
 func packageParts(p InstalledPackage) []string {
 	if len(p.NEVRA) > 256 || p.InstallTime <= 0 {
 		return nil
@@ -111,18 +113,53 @@ func PackageArgument(p InstalledPackage) string {
 	return ""
 }
 
-func TransactionAdded(before, after []InstalledPackage) []InstalledPackage {
-	held := map[string]bool{}
-	for _, item := range before {
-		held[packageIdentity(item)] = true
+type PendingTransaction struct {
+	Start int64    `json:"start"`
+	Held  []string `json:"held"`
+}
+
+var packageIdentityForm = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]*\.[A-Za-z0-9_]+$`)
+
+func ValidPackageIdentity(identity string) bool {
+	return len(identity) <= 256 && packageIdentityForm.MatchString(identity)
+}
+
+func HeldIdentities(snapshot []InstalledPackage) []string {
+	held := []string{}
+	for _, item := range snapshot {
+		if identity := packageIdentity(item); identity != "" {
+			held = append(held, identity)
+		}
 	}
+	slices.Sort(held)
+	return slices.Compact(held)
+}
+
+func TransactionAdded(transaction PendingTransaction, end int64, after []InstalledPackage) []InstalledPackage {
 	added := []InstalledPackage{}
 	for _, item := range after {
-		if ValidInstalledPackage(item) && !held[packageIdentity(item)] {
+		identity := packageIdentity(item)
+		if _, held := slices.BinarySearch(transaction.Held, identity); identity != "" && !held && item.InstallTime >= transaction.Start && item.InstallTime <= end {
 			added = append(added, item)
 		}
 	}
 	return MergeAdded(added)
+}
+
+func StillInstalled(added, snapshot []InstalledPackage) []InstalledPackage {
+	current := map[string][]int64{}
+	for _, item := range snapshot {
+		if identity := packageIdentity(item); identity != "" {
+			current[identity] = append(current[identity], item.InstallTime)
+		}
+	}
+	kept := []InstalledPackage{}
+	for _, item := range added {
+		if slices.Contains(current[packageIdentity(item)], item.InstallTime) {
+			kept = append(kept, item)
+		}
+	}
+	return kept
 }
 
 func MergeAdded(sets ...[]InstalledPackage) []InstalledPackage {

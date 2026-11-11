@@ -13242,7 +13242,7 @@ operation names holds its versions only while an apply is registering or the
 records cannot be read, so a context at rest renews freely; a binding the
 keyring did not list when the command read the holds is held too (found by
 the independent review). Parked: [B1270](#x370--secret-classes) and
-[B1271](m1.md#b1271).
+[B1271](#x371--added-set-across-failures).
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred; no `rpm` or `dnf` ran here, so the snapshot format and the
@@ -13958,3 +13958,33 @@ occurred. **Limitations:** an installation completed before this build records
 no WWN and is refused by its moved digest; that the installer image's sysfs
 `wwid` of a serial-declared root equals the RAM worker's is unverified on
 hardware.
+
+### X371 — Added set across failures
+
+**Items:** B1271 and B1272 (2026-11-10, [D253](backlog.md#d253)), delivered
+in-tree, from the [X349](#x349--holds-uninstall) reviews. **Kind:** defect.
+**Owners:** Controller. The install's
+[added set](../controller.md#host-packages) survives a package step that
+fails after dnf ran: before dnf, the pending intent records the transaction's
+start second and the `name.arch` of every package held before it (at most
+16384), and the next install records what that transaction added against
+them before any other step. The set counts only packages whose install time
+lies in the transaction's window, which a resumed install ends no later than
+the start plus dnf's one-hour install deadline (`InstallDeadline`). A receipt carries forward only the members
+a fresh `rpm -qa` still reports with the recorded install time, the bound's
+refusal names `controller uninstall --keep-packages` as its remedy, and uninstall leaves a
+member listed with another install time and names it among what it keeps
+([uninstall packages](../controller.md#the-uninstall-flow)). The setup
+record moved to `bootwright.setup-state-v3` with no converter, at most 8 MiB
+([setup subtree](../contexts/controller-record.md#the-setup-subtree)).
+
+| Finding | Change |
+| --- | --- |
+| REC-08 (B1271, the X349 review) | `PendingSetup.Transaction` (`PendingTransaction`, `HeldIdentities`, `MaxHeldPackages`), recorded before `Install`; `settleTransaction` (window capped at `InstallDeadline`) and `closeTransaction`; `TestASetupThatFailsAfterDnfResumesWithItsAddedSet`, `TestAResumedTransactionWindowEndsAtTheInstallDeadline` |
+| REC-08 (B1272, the X349 second review) | `TransactionAdded` takes the held identities and the install-time window; `StillInstalled` prunes the carried set in `recordReceipt` and decides uninstall's `stillAdded`; `addedBound`'s remedy; `TestACarriedAddedSetDropsWhatIsGone`, `TestTheAddedSetBoundNamesARemedy`, `TestAnUninstallLeavesAPackageInstalledAgain`; controller.md and controller-record.md |
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred; `rpm` and `dnf` are proved against fakes only. **Limitations:** a
+package another tool installs during the dnf transaction still counts as
+added; a member a later `dnf upgrade` replaced is left by uninstall, not
+removed.
