@@ -13169,7 +13169,7 @@ the SSH arm publishes its claims as host reservations.
 | REC-41 | `ProvedClaim` claims `bmc-mac:` keys without a `UUID`; `keepProved` keeps them; the bare-metal effect pin gains `mac-claim`; `TestTwoSpellingsOfOneUUIDLessServerConflict` |
 | REC-09 | qualifier exemption in infrastructure-services.md and controller-record.md; `Conflicts` now also refuses an exclusive `bmc:` claim under another context's shared one, so a physical Machine's registration refuses under an emulated BMC; `TestASharedAndAnExclusiveBMCKeyConflictInEitherOrder`, `TestAnSSHHostedEmulatedBMCConflictsWithAPhysicalMachineAtItsEndpoint` |
 | REC-06 | substrates.md provider-host paragraph and the SSH Coordination cell link the host-reservations owner |
-| REC-74 | the promise scoped to two contexts that drive one server by its BMC; cross-mechanism identity parked as [B1267](backlog.md#b1267) |
+| REC-74 | the promise scoped to two contexts that drive one server by its BMC; cross-mechanism identity parked as [B1267](m1.md#b1267) |
 
 The collection's proof is unchanged: it already refuses a system that reports
 neither a `UUID` nor a serial, and the claim is made from its evidence in Go.
@@ -13177,7 +13177,7 @@ neither a `UUID` nor a serial, and the claim is made from its evidence in Go.
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** a pin-less power command on a server another
 context holds by `bmc-system:` under another spelling is not refused
-([B1267](backlog.md#b1267)). Note: closed by
+([B1267](m1.md#b1267)). Note: closed by
 [X368](#x368--mac-claims).
 
 ### X357 — Release repositories from the image mirror
@@ -13635,7 +13635,7 @@ that drops its last tagged Network keeps its routing unit and table
 
 **Item:** B1298 (2026-11-10, [D253](backlog.md#d253), widening
 [D252](backlog.md#d252) (2)), delivered in-tree, split from
-[B1267](backlog.md#b1267). **Kind:** safety. **Owners:** Substrate and
+[B1267](m1.md#b1267). **Kind:** safety. **Owners:** Substrate and
 Machine. `ProvedClaim` claims one exclusive `bmc-mac:<mac>` key per declared
 MAC, in canonical colon lower-case form, for every proved physical system,
 beside `bmc-system:<UUID>` when its proof records one
@@ -13657,7 +13657,7 @@ registered finishes, or is destroyed, with that build.
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** a context reaching the server over SSH still holds
-only `ssh/` keys ([B1267](backlog.md#b1267)).
+only `ssh/` keys ([B1267](m1.md#b1267)).
 
 ### X376 — Component licenses, notices and the pinned Go image
 
@@ -14008,8 +14008,8 @@ apply, or keeping the build that applied it. Text writes the warning on
 standard error, `diff` now included; a client at or above the minimum, or one
 the table gives no minimum (the OpenShift and OKD clients and installer), adds
 nothing. It reads no host and moves no request, evidence, contract version or
-content digest. Taking a raised release without a destroy stays
-[B1299](backlog.md#b1299).
+content digest. Taking a raised release without a destroy was B1299,
+declined by [D257](backlog.md#d257) (1).
 
 | Finding | Change |
 | --- | --- |

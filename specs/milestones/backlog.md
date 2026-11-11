@@ -296,8 +296,6 @@ Alias cell.
 | [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355, X361 and X401 on 2026-11-10 | product | Controller, with Desired state | A managed artifact server may serve the artifact mirror, and one declaration replaces the download mirrors | The declaration (X355), the preflight probe and the private trust anchor (X361) and a managed server on an SSH Machine (X401) landed; folding `spec.downloads` awaits the owner (D251 (5)) |
 | [B1249](#b1249) | new, 2026-11-10 (D250 (8)); partly delivered by X401 on 2026-11-10 and X408 and X407 on 2026-11-11 | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | X401 built and fills a managed artifact mirror on an SSH Machine, X408 split the controller stage around one on the controller and X407 built and fills a managed image mirror beside it; X409 placed the artifact mirror on a Machine Bootwright installs; releases, `skopeo` on the controller and an image mirror on an installed Machine remain, which D251 (6) authorizes slice by slice |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
-| [B1267](#b1267) | new, 2026-11-10 (X348, audit 004 REC-74) | safety | Substrate and Machine, with Infrastructure services | A context driving a server by its BMC and one reaching it as an OS-ready Machine over SSH conflict | Needs a cross-mechanism machine identity whose byte order is settled first |
-| [B1299](#b1299) | new, 2026-11-10 (split from B1263, D253) | product | Controller, with State reconciliation | A running environment takes a raised client minimum without a destroy | An open owner question: a completed apply settles (D153), so replacing a client is a fresh apply today |
 | [B1300](#b1300) | new, 2026-11-10 (X363) | product | CLI | The acquisition list names `cp.icr.io`'s blob delivery host | The list landed (X363); the host answers only an entitled client, which this session could not use |
 | [B1301](#b1301) | new, 2026-11-10 (X363 review) | product | Controller, with Infrastructure services and Container clusters | A vendor registry's delivery hosts are admitted as fetch-only exceptions, or vendor images get a mirror route | A controlled network that denies public origins breaks a vendor image pull today; the owner decides how |
 | [B1284](#b1284) | new, 2026-11-10 (D255 (8)) | product | Substrate | A tagged managed Network carries an IPv6 prefix on its leg | A leg is IPv4 only and the owned table rejects IPv6 to and from a leg; no tracked input needs it |
@@ -309,7 +307,6 @@ Alias cell.
 | [B1315](#b1315) | new, 2026-11-10 (X395 verification review) | defect | Substrate | A tagged managed Network whose `vlan` or trunk `bridge` changes redefines its own leg instead of refusing it as foreign | The refusal comes before any effect, so no isolation is lost; the e2e case never changes a leg, and a redefinition while guests use the old VLAN needs its own drift and quiescence rule |
 | [B1313](#b1313) | new, 2026-11-10 (X376) | enabling | Architecture | Bootwright names its own license, which the bill of materials and the notices carry | An owner decision: no file of the repository declares one |
 | [B1328](#b1328) | new, 2026-11-10 (X410 review) | defect | Storage | A pool no applied object declares raises no placement group check that keeps every Ceph block from ready | outside D256's pool and filesystem scope; needs a bounded mapping from a PG ID to its pool |
-| [B1316](#b1316) | new, 2026-11-10 (X370 review) | defect | Storage, with Secrets | A storage consumer or replication block names every Secret its binding pins | Safe as it stands: the hold walks the applied lineage, whose cluster and host blocks class those keys as effect material |
 | [B1326](#b1326) | new, 2026-11-10 (X402 review) | safety | Container cluster | A release read on the controller never reaches the source repository past a failing mirror | oc's `--icsp-file` strategy tries the source last, which no wrapper argument stops; only a live run shows it happening |
 | [B1319](#b1319) | new, 2026-11-10 (X401) | safety | Infrastructure services | A managed Registry's consumers pull with a credential that cannot push | Distribution's password file holds one user that both pushes and pulls; a pull-only one needs token authentication or a front end |
 | [B1320](#b1320) | new, 2026-11-10 (X401) | product | Container cluster, with Add-ons | Operator catalogs and an add-on's images reach the image mirror | A catalog's contents are left to the cluster's mirror tooling today |
@@ -3393,35 +3390,6 @@ from `examples/openshift-clusters/lab-sno-installed-mirror-host`, whose
 mirror host Bootwright installs
 ([X409](delivered.md#x409--a-managed-artifact-mirror-on-a-machine-bootwright-installs)).
 
-### B1267
-
-**Owner:** Substrate and Machine, with Infrastructure services. **Kind:**
-safety. **Requires:** none. **Definition:** Candidate, from
-[audit 004](../../audits/004-spec-api/report-fable.md) REC-74 and X348: a
-context that uses a server as an OS-ready Machine over SSH holds only `ssh/`
-and `sshkey/` keys, so it never meets a context that drives that server by its
-BMC and holds it by `bmc:`, `bmc-system:<UUID>` and `bmc-mac:` keys
-([physical machine realization](../substrates.md#physical-machine-realization)).
-The pin-less power case closed in [X368](delivered.md#x368--mac-claims)
-([D253](#d253)).
-**Outcome:** the SSH placement refuses `controller.conflict`; the design settles first
-whether the SMBIOS UUID a host reports and the Redfish UUID can differ in byte
-order, before any equality-keyed key is specified, and keeps `bmc-system:`;
-only real hardware can show it ([D224](#d224)).
-**Exit evidence:** a conflict test of an SSH placement on a server another
-context drives by its BMC.
-
-
-### B1299
-
-**Owner:** Controller, with State reconciliation. **Kind:** product.
-**Requires:** an owner decision. **Definition:** Candidate, split from
-[B1263](delivered.md#x373--clients-below-the-minimum) by [D253](#d253): whether a running environment whose
-completed apply proved a client below a later build's minimum takes the
-raised release without a destroy, which the settle rule of a completed apply
-([lifecycle unit](../state-reconciliation.md#lifecycle-unit)) does not allow
-today. **Exit evidence:** an owner decision, then its tests.
-
 ### B1300
 
 **Owner:** CLI. **Kind:** product. **Requires:** none. **Definition:**
@@ -3615,19 +3583,6 @@ and the same fail-closed rules. **Exit evidence:** unit tests that a PG check
 on an undeclared pool's PGs leaves every block ready, one on a declared pool's
 PGs marks exactly its holders not ready, and an unmapped PG ID gates every
 block.
-
-### B1316
-
-**Owner:** Storage, with Secrets. **Kind:** defect. **Requires:** none.
-**Definition:** Candidate, from the independent review of
-[X370](delivered.md#x370--secret-classes): a Ceph consumer block's plan binds
-every host's `sshKeyRef`, `hostKeyRef` and `knownHostsRef`, but its
-`SecretReferences` names only the gateway certificate, and a replication block
-names none, so the [effect-material hold](../secrets.md#effect-material-under-a-live-binding)
-reads them only through the cluster and host blocks of the applied lineage.
-**Outcome:** a block names, and classes, every Secret its binding pins, or the
-hold covers any pinned Secret no block references. **Exit evidence:** a hold
-test over a consumer binding alone.
 
 ### B1319
 
@@ -3977,6 +3932,7 @@ item, whose Alias cell names the old ID too. Searching an old ID over
 | B1169 | 2026-11-08 | Duplicate of [B1187](m3.md#b1187): the same lend-minted host token, revoked when its run returns. |
 | B1124 | 2026-11-09 | Retired under [D246](#d246): keeping a node's networks apart is segregation the estate's GitOps owns; Bootwright's part, forwarding on a pool's own interface alone, is [B1231](m4.md#b1231). |
 | B1286 | 2026-11-10 | Found while recording X395 ([D255](#d255)) and fixed in the same docs commit, so it never held an open item: the [Reservations](../substrates.md#provider-host-realization) text said a provider uses at most 63 of the 64 keys, while the code claims 64 (4 + 3 × 20) because the VLAN-refusal unit's key counts, as `TestTheManagedNetworkBoundKeepsTheHostReservationWithinItsKeys` asserts; the text now counts both unit keys. |
+| B1299 | 2026-11-11 | Declined under [D257](#d257) (1): a completed environment keeps the client release its apply proved, `status` and `diff` report one below the build's minimum ([X373](delivered.md#x373--clients-below-the-minimum)), and the remedy stays a destroy and a fresh apply, or the build that applied it. |
 
 ## Decisions
 
@@ -7632,7 +7588,8 @@ M2's and M3c's Requires for implementing them, as D234 was for its slices.
 
 Promotion, operator gates and milestone completion keep every Requires.
 
-(13) Session note of 2026-11-10 (X354), pending the owner's review:
+(13) Session note of 2026-11-10 (X354), accepted by the owner on 2026-11-11
+([D257](#d257) (3)):
 [D224](#d224), dated earlier, abolished every emulated stand-in for the
 physical path, so clause (1)'s session clause about B67's emulated rehearsal
 is moot: no such rehearsal runs, and B67's acceptance is
@@ -8641,7 +8598,8 @@ COR-36, NEW-15, CLI-37, API-38, API-121 and API-54. The owner's answers:
    first, and whether a running environment takes a raised minimum without a
    destroy are parked as [B1263](delivered.md#x373--clients-below-the-minimum).
 
-Taken by the session, pending the owner's review: a custom CRUSH device class
+Taken by the session and accepted by the owner on 2026-11-11 ([D257](#d257)
+(3)): a custom CRUSH device class
 refuses at plan by name with a Not yet met line, and its realization is parked
 as [B1264](delivered.md#x374--crush-classes); a stored receipt whose shape changes moves its version,
 and before 1.0 an earlier receipt refuses with the `controller uninstall`
@@ -8668,7 +8626,7 @@ items you listed". This authorizes, out of sequence for implementation, X368
 1. Every physical server claims its MAC addresses as exclusive `bmc-mac:` keys,
    not only one that reports no UUID, widening [D252](#d252) (2), so a pin-less
    power command meets the context that holds the server under any spelling of
-   its BMC address ([B1298](delivered.md#x368--mac-claims), split from [B1267](#b1267), which keeps
+   its BMC address ([B1298](delivered.md#x368--mac-claims), split from [B1267](m1.md#b1267), which keeps
    the SSH and cross-mechanism remainder).
 2. `substrate.baremetal.rootDevice.wwn` is the one WWN root form of a bare-metal
    Machine an installer writes, as [audit 004](../../audits/004-spec-api/report-fable.md)
@@ -8676,8 +8634,8 @@ items you listed". This authorizes, out of sequence for implementation, X368
    `hardware.rootDevice.deviceName` there refuses with a remedy naming `wwn`.
    Ceph OSD device paths and erase targets keep their native path form.
 3. [B1263](delivered.md#x373--clients-below-the-minimum) delivers the reporting of a client below the build's
-   minimum; taking a raised release without a destroy stays open as
-   [B1299](#b1299).
+   minimum; taking a raised release without a destroy stayed open as
+   B1299, which [D257](#d257) (1) declined.
 
 Implementation choices do not authorize a live command, a push or a release.
 **Exit evidence:** each item's in-tree evidence, and `make check` on each
@@ -8873,3 +8831,43 @@ session", then decided the two choices that left open:
    in place of each block's own read of every host.
 
 It authorizes both implementations out of sequence. No push.
+
+### D257
+
+**owner** (2026-11-11): shown the open and parked follow-ups of [D252](#d252)
+and [D253](#d253) with recommendations, the owner answered "B1299: a",
+"B1267: b", "D235: accept", "D252: accept", "B1327: proceed with fix", "B1316:
+fix it now", "proceed with 6 and 7" and "proceed with packages 11 and 12"
+([audit 004](../../audits/004-spec-api/report-fable.md) sections 15.2 and 15.3). This authorizes, out of sequence for
+implementation, X412 (M1, [B1267](m1.md#b1267)), X413 (M3,
+[B1327](m3.md#b1327)), X414 (M2, [B1316](m2.md#b1316)), X415 (M1,
+[B1330](m1.md#b1330)), X416 (M4, [B1331](m4.md#b1331)), X417 (M1,
+[B1332](m1.md#b1332)), X418 (M1, [B1333](m1.md#b1333)) and X419 (M1,
+[B1334](m1.md#b1334)), no more than two active at once. The owner's answers:
+
+1. A completed environment keeps the client release its apply proved; the
+   report of one below a later build's minimum stays the answer, and B1299 is
+   retired.
+2. An OS-ready Machine reached over SSH claims the `bmc-mac:` key of each
+   permanent hardware address its host reports, so it meets a context that
+   drives the same server by its BMC (audit 004 REC-74, option (b)).
+3. D235 (13) and D252's session clauses are accepted.
+4. The audit's decision (6) (b): `ssh.passwordAuthentication` on a
+   MachineInstallProfile and `rhsm.connectToInsights` on an Entitlement, whose
+   only admitted value is the default, leave v1alpha1 (M1, B1330), and so do a
+   ClusterAddon's `spec.inputs` and a binding's `addonConfigs`, which nothing
+   consumes (M4, B1331); `spec.steps` stays (D183, Q115 (c)). A later journey
+   re-adds a field under its own contract.
+5. The audit's decision (7) (b): `preflight --trust-on-first-use` becomes
+   `--observe-host-keys` with no alias, and its refusal rules are made one
+   (CLI-08, CLI-29).
+6. Packages 11 and 12 of the roadmap: truthful unrealized and delivery state,
+   and closed lists derived or checked (B1333, B1334).
+
+Taken by the session, pending the owner's review: package 11's COR-16 follows
+the audit's decision (10) (a), recording B1079's narrowed destroy confirmation
+as a session clause cited by B1079 rather than withdrawing it.
+
+**Exit evidence:** each item's in-tree evidence and `make check` on each
+integration tree, with an independent review and `make race` for each safety
+slice. No push.

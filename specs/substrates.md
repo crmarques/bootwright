@@ -1195,7 +1195,7 @@ of the address
 (`TestAPinLessPowerCommandRefusesAServerAnotherSpellingProvedByItsUUID`). A
 context that reaches the server as an OS-ready Machine over SSH holds only
 `ssh/` and `sshkey/` keys, so a context driving that server by its BMC is not
-refused; that is tracked as [B1267](milestones/backlog.md#b1267).
+refused; that is tracked as [B1267](milestones/m1.md#b1267).
 Contexts in different stores are not coordinated. The claim serializes use; it
 is not ownership of the machine and never authorizes destroying it.
 

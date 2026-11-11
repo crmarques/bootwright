@@ -886,7 +886,7 @@ an earlier build registered refuses, so a retained release moves to the new
 default only after a destroy and a fresh apply. `status` and `diff` report each
 client an apply's completed controller stage proved below this build's minimum
 ([outdated clients](cli.md#outdated-clients)); taking a raised release without
-a destroy is parked as [B1299](milestones/backlog.md#b1299).
+a destroy is declined ([D257](milestones/backlog.md#d257) (1)).
 
 A declared release is compared by its leading `MAJOR.MINOR.PATCH`, a
 prerelease suffix ranking below the release it precedes; one below the

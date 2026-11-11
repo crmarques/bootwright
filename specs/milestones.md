@@ -35,6 +35,8 @@ Slices with an item `in progress`.
 | X143 | M4c | D180 | in progress |
 | X194 | M1 | D192 | in progress |
 | X303 | M4d | D232 | in progress |
+| X412 | M1 | D257 | in progress |
+| X413 | M3 | D257 | in progress |
 
 ## Scope rules
 
