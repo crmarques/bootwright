@@ -45,7 +45,7 @@ def test_real_ansible_leaves_no_worker_or_command(tmp_path, killed):
         "ansible_connection": "local", "ansible_python_interpreter": sys.executable,
         "ansible_remote_tmp": str(tmp_path / "remote"),
     }}}}))
-    command = "import os,time; open(%r, 'w').write(str(os.getpid())); time.sleep(%s)" % (str(record), 30 if killed else 0.3)
+    command = "import os,time; open(%r, 'w').write(str(os.getpid())); time.sleep(%s)" % (str(record), 600 if killed else 0.3)
     playbook.write_text(json.dumps([{"hosts": "all", "gather_facts": False, "tasks": [
         {"name": "Hold a disposable native test process", "ansible.builtin.command": {"argv": [sys.executable, "-c", command]},
          "changed_when": False},
@@ -59,20 +59,20 @@ def test_real_ansible_leaves_no_worker_or_command(tmp_path, killed):
         descendants = set()
         try:
             deadline = time.monotonic() + 15
-            while not record.exists() and process.poll() is None and time.monotonic() < deadline:
+            while not (record.exists() and record.read_text()) and process.poll() is None and time.monotonic() < deadline:
                 time.sleep(0.02)
-            assert record.exists(), output.read_text()
+            assert record.exists() and record.read_text(), output.read_text()
             task = int(record.read_text())
             descendants = supervisor.descendants(process.pid, supervisor.running_parents())
             if killed:
                 assert task in descendants and len(descendants) >= 3
                 assert any(os.getsid(pid) != os.getsid(process.pid) for pid in descendants if running(pid))
                 process.kill()
-                process.wait(timeout=5)
+                process.wait(timeout=30)
             else:
-                assert process.wait(timeout=5) == 0, output.read_text()
+                assert process.wait(timeout=30) == 0, output.read_text()
             descendants.add(task)
-            deadline = time.monotonic() + 5
+            deadline = time.monotonic() + 30
             while any(running(pid) for pid in descendants) and time.monotonic() < deadline:
                 time.sleep(0.02)
             assert not [pid for pid in descendants if running(pid)], output.read_text()

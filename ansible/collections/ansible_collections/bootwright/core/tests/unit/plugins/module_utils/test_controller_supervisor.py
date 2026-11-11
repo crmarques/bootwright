@@ -267,13 +267,13 @@ def playbook():
         os.setsid()
         task = os.fork()
         if task == 0:
-            time.sleep(30)
+            time.sleep(600)
             os._exit(0)
         with open(record, "a") as stream:
             stream.write("%d %d %d\n" % (os.getppid(), os.getpid(), task))
-        time.sleep(30)
+        time.sleep(600)
         os._exit(0)
-    time.sleep(30)
+    time.sleep(600)
 module.main = playbook
 sys.modules["ansible.cli.playbook"] = module
 spec = importlib.util.spec_from_file_location("controller_supervisor_run", source)
@@ -286,8 +286,11 @@ INVOCATION = r"""
 import subprocess, sys, time
 child = subprocess.Popen(sys.argv[1:], start_new_session=True)
 print(child.pid, flush=True)
-time.sleep(30)
+time.sleep(600)
 """
+
+
+SETTLE = 30
 
 
 def running(pid):
@@ -312,7 +315,9 @@ def stopped_tree_runs(tmp_path, marker, stop, watched, settle):
     """Run a supervisor whose worker left its session under an invocation,
     stop it with stop(invocation, supervisor pid), and report whether the
     supervisor, playbook, worker and task each still run once the watched ones
-    have ended or settle seconds pass."""
+    have ended or settle seconds pass. A tree expected to end is given SETTLE
+    seconds, a bound its processes outlast by sleeping far longer, so a loaded
+    host delays the end and only a tree that never empties fails."""
     record = tmp_path / "record"
     record.touch()
     command = [sys.executable, "-I", "-B", "-c", PLAYBOOK]
@@ -323,8 +328,8 @@ def stopped_tree_runs(tmp_path, marker, stop, watched, settle):
     with invocation.stdout:
         pids = [int(invocation.stdout.readline())]
     try:
-        deadline = time.monotonic() + 10
-        while not record.read_text() and time.monotonic() < deadline:
+        deadline = time.monotonic() + SETTLE
+        while record.read_text().count("\n") < 1 and time.monotonic() < deadline:
             time.sleep(0.02)
         pids += [int(value) for value in record.read_text().split()]
         assert len(pids) == 4, "the supervised tree did not start"
@@ -348,7 +353,7 @@ ALL = range(4)
 
 @LINUX
 def test_a_killed_invocation_takes_its_lifecycle_supervisor_tree(tmp_path):
-    runs = stopped_tree_runs(tmp_path, ["--lifecycle"], kill_invocation, ALL, 5)
+    runs = stopped_tree_runs(tmp_path, ["--lifecycle"], kill_invocation, ALL, SETTLE)
     assert runs == [False] * 4
 
 
@@ -357,7 +362,7 @@ def test_a_terminated_lifecycle_supervisor_ends_its_tree(tmp_path):
     # The lifecycle runner cancels and refuses this way, not by a group kill,
     # which never reaches the worker in its own session.
     stop = signal_supervisor(signal.SIGTERM)
-    assert stopped_tree_runs(tmp_path, ["--lifecycle"], stop, ALL, 5) == [False] * 4
+    assert stopped_tree_runs(tmp_path, ["--lifecycle"], stop, ALL, SETTLE) == [False] * 4
 
 
 @LINUX
@@ -365,7 +370,7 @@ def test_a_killed_lifecycle_supervisor_leaves_no_playbook_worker_or_task(tmp_pat
     # The surviving playbook receives the parent-death signal and owns the
     # orphaned worker and task even after their session separation.
     stop = signal_supervisor(signal.SIGKILL)
-    runs = stopped_tree_runs(tmp_path, ["--lifecycle"], stop, ALL, 5)
+    runs = stopped_tree_runs(tmp_path, ["--lifecycle"], stop, ALL, SETTLE)
     assert runs == [False] * 4
 
 
@@ -381,7 +386,7 @@ def test_a_terminated_controller_supervisor_ends_its_tree(tmp_path):
     # The controller runner cancels this way before a native transaction is
     # authorized, so a worker in its own session ends with the tree.
     stop = signal_supervisor(signal.SIGTERM)
-    assert stopped_tree_runs(tmp_path, [], stop, ALL, 5) == [False] * 4
+    assert stopped_tree_runs(tmp_path, [], stop, ALL, SETTLE) == [False] * 4
 
 
 @LINUX

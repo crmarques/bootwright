@@ -14399,3 +14399,27 @@ media inputs still meets the media rebuild's refusal of a marked area
 recorded boot stopped between its `prepared` record and the mark stays unknown
 as under X346; firmware a node's proof applied before refusing stays applied,
 as desired state the retry proves again.
+
+### X404 — A stopped supervisor tree waits to empty
+
+**Items:** B1240 (2026-11-09, X340 gate) and B1273 (2026-11-10, X359 gate),
+delivered in-tree. **Kind:** defect. **Owners:** Controller.
+`test_a_killed_lifecycle_supervisor_leaves_no_playbook_worker_or_task` failed
+once under a load average near 30 with `[False, True, True, True]`, and
+`test_real_ansible_leaves_no_worker_or_command[normal-exit]` once with
+`ValueError: invalid literal for int() with base 10: ''`. Both were test-side
+races, not supervisor defects: the stopped-tree helper gave the parent-death
+signal 5 s to reach the playbook, worker and task, and the native test read its
+task's PID file between the task opening it and writing it.
+
+`stopped_tree_runs` now waits up to the shared `SETTLE` bound of 30 s for an
+expected-empty tree, returning as soon as every process has ended, and waits
+for a complete record line before parsing it. The disposable processes sleep
+600 s instead of 30 s, so they can no longer exit by themselves inside the
+bound and a tree that never empties still fails. The native test parses its
+PID only from a non-empty record and bounds its waits at 30 s the same way. The
+tests that expect a tree to survive keep their 1 s sample.
+
+**Commits:** this commit. Gates: listed in its message, including repeated runs
+of both files under eight busy-loop processes. No product code, contract or
+push changed.

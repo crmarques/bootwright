@@ -293,12 +293,10 @@ Alias cell.
 | [B1230](#b1230) | new, 2026-11-09 (X331) | product | Machine power, with Substrate | A failed revoke of a lent KubeVirt token reaches the operator of a power command or reading | Power results carry no warning channel; the token still ends at its bounded lifetime and the revoke's adapter output is retained |
 | [B1237](#b1237) | new, 2026-11-09 (D248 (5)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's default image comes from a Red Hat registry wherever Red Hat publishes one | Red Hat publishes no dnsmasq, chrony or sushy-tools image, and its squid image needs a `registry.redhat.io` login no managed-service pull carries |
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
-| [B1240](#b1240) | new, 2026-11-09 (X340 gate) | defect | Controller | The native supervisor test reads its task's PID only from a complete record | It failed once in `make check` beside the other lanes and passed when run again alone; the cause is a test-side race, not the supervisor |
 | [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355 and X361 on 2026-11-10 | product | Controller, with Desired state | A managed artifact server may serve the artifact mirror, and one declaration replaces the download mirrors | The declaration (X355), the preflight probe and the private trust anchor (X361) landed; a managed server needs B1249, and folding `spec.downloads` awaits the owner (D251 (5)) |
 | [B1249](#b1249) | new, 2026-11-10 (D250 (8)) | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | D250 parks the controlled-network plan until the owner promotes it; no capability realizes a managed Registry |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
 | [B1267](#b1267) | new, 2026-11-10 (X348, audit 004 REC-74) | safety | Substrate and Machine, with Infrastructure services | A context driving a server by its BMC and one reaching it as an OS-ready Machine over SSH conflict | Needs a cross-mechanism machine identity whose byte order is settled first |
-| [B1273](#b1273) | new, 2026-11-10 (X359 gate) | defect | Controller | `test_a_killed_lifecycle_supervisor_leaves_no_playbook_worker_or_task` reads a surviving process tree under heavy host load | It failed once under a load average near 30 and passed three times alone; the stopped-tree poll has no settle bound |
 | [B1299](#b1299) | new, 2026-11-10 (split from B1263, D253) | product | Controller, with State reconciliation | A running environment takes a raised client minimum without a destroy | An open owner question: a completed apply settles (D153), so replacing a client is a fresh apply today |
 | [B1300](#b1300) | new, 2026-11-10 (X363) | product | CLI | The acquisition list names `cp.icr.io`'s blob delivery host | The list landed (X363); the host answers only an entitled client, which this session could not use |
 | [B1301](#b1301) | new, 2026-11-10 (X363 review) | product | Controller, with Infrastructure services and Container clusters | A vendor registry's delivery hosts are admitted as fetch-only exceptions, or vendor images get a mirror route | A controlled network that denies public origins breaks a vendor image pull today; the owner decides how |
@@ -3293,19 +3291,6 @@ attempt log test whose failed outcome record names its reason, and a `logs`
 golden that renders it. **Outcome:** an operator reading a failed block's
 events sees its cause without opening raw output.
 
-### B1240
-
-**Owner:** Controller. **Kind:** defect. **Requires:** none.
-**Definition:** Candidate, from X340's gate:
-`test_real_ansible_leaves_no_worker_or_command[normal-exit]` in
-`ansible/collections/ansible_collections/bootwright/core/tests/unit/test_controller_supervisor_native.py`
-failed once with `ValueError: invalid literal for int() with base 10: ''`.
-Its disposable task opens its PID record and then writes it, while the test
-waits only for the file to exist and parses it at once, so a check between the
-two reads an empty file. Writing the record under a temporary name and
-renaming it, or waiting until the record holds a PID, closes the window.
-**Exit evidence:** the test parses the PID only from a complete record.
-**Outcome:** the controller units lane no longer fails on this race.
 
 ### B1246
 
@@ -3380,18 +3365,6 @@ only real hardware can show it ([D224](#d224)).
 **Exit evidence:** a conflict test of an SSH placement on a server another
 context drives by its BMC.
 
-### B1273
-
-**Owner:** Controller. **Kind:** defect. **Requires:** none.
-**Definition:** Candidate, from X359's `make check`:
-`test_a_killed_lifecycle_supervisor_leaves_no_playbook_worker_or_task` in
-`ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_controller_supervisor.py`
-asserted `[False, True, True, True] == [False] * 4` once under a load average
-near 30, and passed in three runs alone and in a full units rerun. The poll of
-the stopped process tree reads before a parent-death signal has reached every
-descendant. **Outcome:** the test waits on a bounded condition for the tree to
-empty rather than sampling it, so host load no longer fails the units lane.
-**Exit evidence:** the test passes under a parallel CPU load.
 
 ### B1299
 
