@@ -221,7 +221,7 @@ func contractRows() []contractRow {
 		{kind: agentinstall.Kind, implementation: agentinstall.MediaImplementation, example: "lab-sno", presence: contractMediaPresence,
 			drift: map[string]any{"installer": "0.0.0"}},
 		{kind: agentinstall.Kind, implementation: agentinstall.InstallImplementation, example: "lab-sno", presence: contractClusterPresence,
-			removalKeepsPresence: true, drift: map[string]any{"release": "0.0.0"}},
+			absence: map[string]any{"booted": false, "inserted": false}, removalKeepsPresence: true, drift: map[string]any{"release": "0.0.0"}},
 		{kind: string(proxy.Definition().Kind), implementation: proxy.Definition().Implementation, example: "lab-rhel", presence: contractServicePresence,
 			readiness: "answers", removalPartial: contractStoppedService, drift: contractFailedUnit},
 		{kind: string(dnsServerDefinition().Kind), implementation: dnsServerDefinition().Implementation, example: "lab-rhel", presence: contractServicePresence,
@@ -1414,6 +1414,7 @@ func contractClusterPresence(t *testing.T, execution lifecycle.Execution) map[st
 	identity := "contract-cluster-identity"
 	return map[string]any{
 		"postcondition": true, "identity": identity, "cluster": identity, "release": request.Release.Version, "completed": true,
+		"booted": true, "inserted": true,
 	}
 }
 

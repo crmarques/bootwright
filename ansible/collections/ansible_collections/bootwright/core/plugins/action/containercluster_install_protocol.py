@@ -72,6 +72,11 @@ def evidence(arguments, request_digest, removed):
     writes before it hands any node the image. Only a real boolean false says
     it does not, because an area read as unbooted lets an observation prove
     that nothing was installed.
+
+    `inserted` records that a node may have been handed the image: the area
+    holds a record written before an insert, or a mark that does not vouch for
+    those records. Only a real boolean false says no node was, for the same
+    reason.
     """
     state = arguments.get("state") or {}
     found = {
@@ -80,6 +85,7 @@ def evidence(arguments, request_digest, removed):
         "cluster": bounded(state.get("cluster")),
         "completed": state.get("completed") is True,
         "identity": bounded(arguments.get("identity")),
+        "inserted": arguments.get("inserted") is not False,
         "media": names(state.get("media")),
         "missing": names(state.get("missing")),
         "ownMedia": names(state.get("ownMedia")),

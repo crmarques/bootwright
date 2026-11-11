@@ -106,13 +106,14 @@ func MediaContentDigest() string {
 
 func InstallContentDigest() string {
 	return contentDigest("bootwright.containercluster.install-agent-v1",
-		InstallImplementation, installRequestVersion, consumerPrefix, ImageFile, HostedRoot, clustersArea, installerTool, clientTool, hostAccessLend, hostAccessBound, bootRecord)
+		InstallImplementation, installRequestVersion, consumerPrefix, ImageFile, HostedRoot, clustersArea, installerTool, clientTool, hostAccessLend, hostAccessBound, bootRecord, insertRecord)
 }
 
 const (
 	hostAccessLend  = "substrate-access-kubevirt-v1"
 	hostAccessBound = "lend-bound-secret"
 	bootRecord      = "booted-never-no-effect"
+	insertRecord    = "insert-recorded-before-media"
 )
 
 func contentDigest(parts ...string) string {

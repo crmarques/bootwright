@@ -64,18 +64,24 @@
   when: not (containercluster_install_agent_settled | bool)
 
 # Recorded in the apply's own records before the mark and any boot, so a
-# resolution reads a boot even when the mark is gone, and never proves that
-# nothing was installed once this point was reached.
+# resolution reads a boot even when the mark is gone. From here on only the
+# mark, with no insert record beside it, proves that no node was handed the
+# image (boot.yml writes each record before its node's insert).
 - name: Record durably that this attempt boots its nodes from the image
   bootwright.core.containercluster_install_protocol:
     phase: prepared
     identity: '{{ containercluster_install_agent_before.observation.identity }}'
   no_log: true
 
+# The content vouches that every insert into this area left its record, and an
+# existing mark is never rewritten, so a mark another build wrote, or one a
+# crash left short, keeps reading as an area a node may have been handed the
+# image from.
 - name: Mark the work area as one this cluster's nodes boot from
   ansible.builtin.copy:
-    content: ''
+    content: "inserts-recorded\n"
     dest: '{{ containercluster_install_agent_work }}/.bootwright-booted'
+    force: false
     owner: root
     group: root
     mode: '0600'

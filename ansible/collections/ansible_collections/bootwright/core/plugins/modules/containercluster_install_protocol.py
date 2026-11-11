@@ -61,6 +61,14 @@ options:
         unbooted.
     type: bool
     required: false
+  inserted:
+    description:
+      - Whether any node may have been handed the image, as the record the
+        installation writes before each insert, a mark that does not vouch for
+        those records, or an area that cannot be listed says. Only a real
+        boolean false is recorded as no node handed it.
+    type: bool
+    required: false
   state:
     description: What the cluster and its nodes answered.
     type: dict

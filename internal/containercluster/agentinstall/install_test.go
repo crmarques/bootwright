@@ -349,7 +349,7 @@ func TestInstallObservationClassifiesWhatItFound(t *testing.T) {
 func TestAnInstallStoppedBeforeTheAPIAnswersIsPartialOnlyOnItsOwnImage(t *testing.T) {
 	booted := func(e *InstallEvidence) {
 		*e = InstallEvidence{
-			Booted: true, Identity: anchorIdentity, Media: []string{"sno-01"}, Missing: []string{"master-0"},
+			Booted: true, Identity: anchorIdentity, Inserted: true, Media: []string{"sno-01"}, Missing: []string{"master-0"},
 			OwnMedia: []string{"sno-01"}, Powered: []string{"sno-01"}, Request: testDigest,
 		}
 	}
@@ -383,7 +383,10 @@ func TestAnInstallStoppedBeforeTheAPIAnswersIsPartialOnlyOnItsOwnImage(t *testin
 			e.Media, e.OwnMedia, e.Powered = []string{}, []string{}, []string{}
 		}), reconciliation.EffectUnknown},
 		"no image, nothing running, before the boot mark": {then(func(e *InstallEvidence) {
-			e.Booted, e.Media, e.OwnMedia, e.Powered = false, []string{}, []string{}, []string{}
+			e.Booted, e.Inserted, e.Media, e.OwnMedia, e.Powered = false, false, []string{}, []string{}, []string{}
+		}), reconciliation.EffectNoEffect},
+		"no image, nothing running, marked with no insert record": {then(func(e *InstallEvidence) {
+			e.Inserted, e.Media, e.OwnMedia, e.Powered = false, []string{}, []string{}, []string{}
 		}), reconciliation.EffectNoEffect},
 		"its own image, no identity recorded": {then(func(e *InstallEvidence) {
 			e.Identity = ""
@@ -411,11 +414,11 @@ func TestAnInstallStoppedBeforeTheAPIAnswersIsPartialOnlyOnItsOwnImage(t *testin
 	}
 }
 
-func TestClusterInstallObservationWithBootPreparationNeverReadsNoEffect(t *testing.T) {
-	silent := func(booted bool) json.RawMessage {
+func TestClusterInstallObservationReadsNoEffectOnlyWhenNoNodeWasHandedTheImage(t *testing.T) {
+	silent := func(booted, inserted bool) json.RawMessage {
 		return installEvidence(t, testDigest, func(e *InstallEvidence) {
 			*e = InstallEvidence{
-				Booted: booted, Identity: anchorIdentity, Media: []string{}, Missing: []string{"master-0"},
+				Booted: booted, Identity: anchorIdentity, Inserted: inserted, Media: []string{}, Missing: []string{"master-0"},
 				OwnMedia: []string{}, Powered: []string{}, Request: testDigest,
 			}
 		})
@@ -426,10 +429,13 @@ func TestClusterInstallObservationWithBootPreparationNeverReadsNoEffect(t *testi
 		preparations []json.RawMessage
 		effect       reconciliation.EffectState
 	}{
-		"a marked work area":                    {silent(true), nil, reconciliation.EffectUnknown},
-		"a boot the apply's records hold":       {silent(false), recorded, reconciliation.EffectUnknown},
-		"a marked area and a recorded boot":     {silent(true), recorded, reconciliation.EffectUnknown},
-		"an identity kept before the boot mark": {silent(false), nil, reconciliation.EffectNoEffect},
+		"every pre-boot proof refused after the mark":           {silent(true, false), recorded, reconciliation.EffectNoEffect},
+		"a marked area from an earlier apply with no insert":    {silent(true, false), nil, reconciliation.EffectNoEffect},
+		"a node handed the image under a recorded boot":         {silent(true, true), recorded, reconciliation.EffectUnknown},
+		"an insert record whose insert never answered":          {silent(true, true), nil, reconciliation.EffectUnknown},
+		"an insert record in an area the mark left":             {silent(false, true), nil, reconciliation.EffectUnknown},
+		"a recorded boot whose area no longer carries the mark": {silent(false, false), recorded, reconciliation.EffectUnknown},
+		"an identity kept before the boot mark":                 {silent(false, false), nil, reconciliation.EffectNoEffect},
 	} {
 		t.Run(name, func(t *testing.T) {
 			execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
@@ -444,11 +450,57 @@ func TestClusterInstallObservationWithBootPreparationNeverReadsNoEffect(t *testi
 			}
 		})
 	}
+	t.Run("evidence that does not name the mark or the inserts is unreadable", func(t *testing.T) {
+		whole := string(silent(true, false))
+		for name, changed := range map[string]string{
+			"no booted":     strings.Replace(whole, `"booted":true,`, ``, 1),
+			"null booted":   strings.Replace(whole, `"booted":true`, `"booted":null`, 1),
+			"no inserted":   strings.Replace(whole, `"inserted":false,`, ``, 1),
+			"null inserted": strings.Replace(whole, `"inserted":false`, `"inserted":null`, 1),
+			"text inserted": strings.Replace(whole, `"inserted":false`, `"inserted":"false"`, 1),
+		} {
+			if changed == whole {
+				t.Fatalf("%s: the evidence was not changed", name)
+			}
+			if ValidateInstallNoEffect([]byte(changed), testDigest, false) == nil {
+				t.Fatalf("%s: read as no effect", name)
+			}
+			execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
+			runner := &fakeRunner{result: lifecycle.RunResult{Outcome: "unchanged", Evidence: json.RawMessage(changed)}}
+			observation, err := NewInstall(runner).Observe(context.Background(), execution)
+			if err == nil && observation.Effect != reconciliation.EffectUnknown {
+				t.Fatalf("%s: effect = %q", name, observation.Effect)
+			}
+		}
+	})
+	t.Run("a node holding media or running is never no effect", func(t *testing.T) {
+		for name, mutate := range map[string]func(*InstallEvidence){
+			"media": func(e *InstallEvidence) { e.Media, e.OwnMedia = []string{"sno-01"}, []string{"sno-01"} },
+			"power": func(e *InstallEvidence) { e.Powered = []string{"sno-01"} },
+		} {
+			evidence := installEvidence(t, testDigest, func(e *InstallEvidence) {
+				*e = InstallEvidence{Booted: true, Identity: anchorIdentity, Media: []string{}, Missing: []string{"master-0"},
+					OwnMedia: []string{}, Powered: []string{}, Request: testDigest}
+				mutate(e)
+			})
+			if ValidateInstallNoEffect(evidence, testDigest, true) == nil {
+				t.Fatalf("%s: read as no effect", name)
+			}
+		}
+	})
+	t.Run("an area no node was handed the image in is not explained as booted", func(t *testing.T) {
+		execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
+		block := execution.Block
+		block.Object = "sno"
+		if _, explains := NewInstall(nil).Unresolved(reconciliation.Apply, block, silent(true, false)); explains {
+			t.Fatal("an area no node was handed the image in is explained as booted")
+		}
+	})
 	t.Run("the unknown names its remedy", func(t *testing.T) {
 		execution, _ := installExecution(t, singleNodeCatalog(), testDigest)
 		block := execution.Block
 		block.Object = "sno"
-		got, explains := NewInstall(nil).Unresolved(reconciliation.Apply, block, silent(true))
+		got, explains := NewInstall(nil).Unresolved(reconciliation.Apply, block, silent(true, true))
 		want := lifecycle.Unresolved{
 			Reason: "the installation of OpenShiftCluster sno on Machine controller recorded a boot of its nodes from its image, and now nothing answers, no node runs and no node presents media, so the cluster may be installed on nodes that are off",
 			Remedy: "run bootwright destroy --context " + testContext + " before installing it again, or, if its nodes finished installing, start them with bootwright machine start --context " + testContext + " --name sno-01 so the installed cluster answers",

@@ -88,7 +88,7 @@ func TestAnAuthoredInfraRoleLabelWins(t *testing.T) {
 
 func placedEvidence(install InstallRequest) InstallEvidence {
 	return InstallEvidence{
-		Booted: true, Cluster: anchorIdentity, Completed: true, Identity: anchorIdentity, Media: []string{}, Missing: []string{},
+		Booted: true, Cluster: anchorIdentity, Completed: true, Identity: anchorIdentity, Inserted: true, Media: []string{}, Missing: []string{},
 		OwnMedia: []string{}, Postcondition: true, Release: install.Release.Version, Request: testDigest,
 		Powered: []string{"master-0", "master-1", "master-2", "master-3", "master-4", "master-5"},
 		Placement: []NodePlacement{

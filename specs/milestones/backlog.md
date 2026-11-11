@@ -8347,7 +8347,7 @@ items you listed". This authorizes, out of sequence for implementation, X368
 [B1270](delivered.md#x370--secret-classes)), X371 (M1, [B1271](delivered.md#x371--added-set-across-failures) and
 [B1272](delivered.md#x371--added-set-across-failures)), X372 (M1, [B1275](delivered.md#x372--serial-root-wwn)), X373 (M1,
 [B1263](delivered.md#x373--clients-below-the-minimum)), X374 (M2, [B1264](delivered.md#x374--crush-classes)) and X375 (M3,
-[B1265](m3.md#b1265)), no more than two active at once. The owner's answers:
+[B1265](delivered.md#x375--no-insert-no-effect)), no more than two active at once. The owner's answers:
 
 1. Every physical server claims its MAC addresses as exclusive `bmc-mac:` keys,
    not only one that reports no UUID, widening [D252](#d252) (2), so a pin-less

@@ -732,8 +732,7 @@ interface. An IPv6 virtual IP and one on any other network is not probed, and
 the evidence names the addresses that were not probed. Once any declared node is
 powered on, whether it runs this cluster's image or belongs to an installed
 cluster whose media was released, nothing is probed: the cluster's own nodes
-may answer its virtual IPs, and a running node without this cluster's image
-refuses at its pre-boot proof.
+may answer its virtual IPs.
 
 
 **Each insert has its own token.** A management controller holds the URL it is
@@ -1057,10 +1056,13 @@ configured.
 cluster answering with this operation's identity at the declared release,
 reporting its installation completed, whole and with its media released, is
 positive completion. Nothing answering, no node running and no media inserted
-is positive no effect only with no `.bootwright-booted` work-area mark and no
-boot [before-state](state-reconciliation.md#operation-records) recorded;
-otherwise it stays unknown, boots nothing, naming the remedy: destroy before
-installing again, or start installed nodes. That same cluster
+is positive no effect only while no node was handed the image: no
+`.bootwright-booted` area mark and no boot
+[before-state](state-reconciliation.md#operation-records) recorded, or this
+build's mark and no `.bootwright-inserted-<index>` record, which a node writes
+durably after its pre-boot proof and before its insert. Otherwise it stays
+unknown and boots nothing; remedy: destroy before installing again, or start
+installed nodes. That same cluster
 answering while the completion is not yet true is a positive partial
 realization the next attempt converges. So is nothing answering yet while this
 operation recorded its identity, at least one node presents this cluster's own
@@ -1069,9 +1071,8 @@ or the bootstrap wait leaves. Anything else stays unknown, including a foreign
 answer, a foreign image while nothing answers, and a node running while nothing
 answers and no node presents this cluster's own image, because the first two
 may belong to another installation and the last may be installing now. A
-removal's resolution observes only the media each node's BMC presents,
-because that is what the removal takes back and a completed installation
-already presents none, so it reads nothing of the cluster: no node presenting
+removal's resolution observes only the media each node's BMC presents, which
+is what the removal takes back, and nothing of the cluster: no node presenting
 media is its completion; any of this cluster's declared Machines presenting
 media, this cluster's own image or any other, is a positive partial
 realization, because the removal ejects whatever each node presents and

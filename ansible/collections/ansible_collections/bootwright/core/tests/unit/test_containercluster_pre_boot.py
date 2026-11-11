@@ -187,3 +187,43 @@ def test_a_nodes_frozen_root_disk_proof_reaches_the_pre_boot_port(tmp_path):
     disk = {"serialNumber": "SYNTHETIC-ROOT-01", "sizeBytes": 8192}
     assert rendering(tmp_path, node(hardware={"interfaces": [], "rootDisk": disk})).template(expected) == disk
     assert rendering(tmp_path, node()).template(expected) == {}
+
+
+# The ordering invariant the Unknown resolution reads (specs/openshift-clusters.md,
+# Unknown resolution): a node's insert record is written durably after its proof
+# passed and before its insert, so before any power request, on every path and
+# never excused, so an attempt stopped anywhere after the insert leaves it and
+# one whose every proof refused leaves none.
+@pytest.mark.parametrize("arm", sorted(ARMS))
+def test_each_node_records_its_insert_durably_after_its_proof_and_before_the_insert(tmp_path, arm):
+    task, parents = proof(arm)
+    steps = parents[-1]["block"]
+    records = [index for index, step in enumerate(steps) if "bootwright.core.private_file" in step
+               and ".bootwright-inserted-" in str(step["bootwright.core.private_file"]["path"])]
+    inserts = [index for index, step in enumerate(steps) if step.get("ansible.builtin.include_tasks") == "port.yml"
+               and step.get("vars", {}).get("containercluster_install_agent_port_operation") == "media_insert"]
+    boots = [index for index, step in enumerate(steps)
+             if pathlib.PurePosixPath(str(step.get(INCLUDE, {}).get("tasks_from", ""))).stem == "boot_media"]
+    assert len(records) == len(inserts) == len(boots) == 1
+    assert steps.index(task) < records[0] and records[0] + 1 == inserts[0] < boots[0]
+    record = steps[records[0]]
+    assert not {"when", "failed_when", "ignore_errors", "changed_when", "loop"} & set(record)
+    scope = rendering(tmp_path, node(arm))
+    scope.available_variables = dict(scope.available_variables, bootwright_cluster_install_request={
+        "workRoot": "/var/lib/bootwright-hosted/lab/clusters/sno"})
+    path = scope.template(record["bootwright.core.private_file"]["path"])
+    assert path == "/var/lib/bootwright-hosted/lab/clusters/sno/.bootwright-inserted-1"
+
+
+# The mark vouches for the insert records only in the content this build writes,
+# and an existing mark is never rewritten, so a mark another build wrote keeps
+# reading as an area a node may have been handed the image from.
+def test_the_boot_mark_vouches_for_the_insert_records_and_is_never_rewritten():
+    from ansible_collections.bootwright.core.plugins.modules import containercluster_install_inspect as inspect
+
+    prepare = LOADER.load_from_file(str(ROLE / "tasks" / "prepare_boot.yml"))
+    marks = [task["ansible.builtin.copy"] for task in prepare
+             if str((task.get("ansible.builtin.copy") or {}).get("dest", "")).endswith("/.bootwright-booted")]
+    assert len(marks) == 1
+    assert marks[0]["force"] is False
+    assert marks[0]["content"].encode() == inspect.VOUCH

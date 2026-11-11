@@ -540,7 +540,8 @@ def test_a_removal_observation_of_a_foreign_image_publishes_the_media_alone():
         media_task["ansible.builtin.set_fact"]["containercluster_install_agent_state"])
     found = protocol.evidence(arguments(outcome="unchanged", observed=True, state=resolved), DIGEST, False)
     assert found == {
-        "absent": False, "booted": True, "cluster": "", "completed": False, "identity": IDENTITY, "media": ["sno-01"],
+        "absent": False, "booted": True, "cluster": "", "completed": False, "identity": IDENTITY, "inserted": True,
+        "media": ["sno-01"],
         "missing": ["master-0"], "ownMedia": [], "postcondition": False, "powered": ["sno-01"],
         "release": "", "request": DIGEST, "restored": False,
     }
@@ -572,7 +573,8 @@ def test_the_placement_read_is_published_as_the_go_golden_reads_it():
     powered = ["master-%d" % index for index in range(6)]
     found = protocol.evidence(arguments(state=state(powered=powered), placement=PLACED), DIGEST, False)
     assert found == {
-        "absent": False, "booted": True, "cluster": IDENTITY, "completed": True, "identity": IDENTITY, "media": [],
+        "absent": False, "booted": True, "cluster": IDENTITY, "completed": True, "identity": IDENTITY, "inserted": True,
+        "media": [],
         "missing": [],
         "ownMedia": [], "postcondition": True, "powered": powered, "release": RELEASE, "request": DIGEST,
         "restored": False, "placement": [
@@ -698,3 +700,17 @@ def test_each_publication_names_the_boot_mark():
     assert published("observe.yml")["booted"] == read
     assert published("destroy.yml")["booted"] == read
     assert published("finish.yml")["booted"] is True
+    inserted = "{{ containercluster_install_agent_before.observation.inserted }}"
+    assert published("observe.yml")["inserted"] == inserted
+    assert published("destroy.yml")["inserted"] == inserted
+    assert published("finish.yml")["inserted"] is True
+
+
+# Only a real boolean false records that no node was handed the image, because
+# that is what lets a marked work area prove nothing was installed.
+@pytest.mark.parametrize("inserted, expected", [
+    (False, False), (True, True), ("False", True), (0, True), (None, True),
+], ids=repr)
+def test_only_a_boolean_false_records_no_node_handed_the_image(inserted, expected):
+    assert protocol.evidence(arguments(inserted=inserted), DIGEST, False)["inserted"] is expected
+    assert protocol.evidence(dict(arguments(), inserted=inserted), DIGEST, True)["inserted"] is expected

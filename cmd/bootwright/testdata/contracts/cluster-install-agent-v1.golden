@@ -1,9 +1,9 @@
 implementation: cluster-install-agent-v1
-content-digest: 298e020b99c78e59b5cf74b41242ebd0dace08b912935c2cd70dfbb377d4d108
+content-digest: 1f1b128e9a28bdb8df8ecc034c5132ef08c2d37a5ef9406fd79c22208e2ca307
 request-version: cluster-install-agent-v1
 automation-formats: none
 mark-formats: bootwright.io/lend
-proof-ids: .bootwright-booted, /.bootwright-booted, bootwright/containercluster/identity/v1
+proof-ids: .bootwright-booted, .bootwright-inserted-, /.bootwright-booted, /.bootwright-inserted-, bootwright/containercluster/identity/v1
 fixed-places: .bootwright-kubeconfig, /.bootwright-kubeconfig, bootwright-, bootwright-cluster-install
 effect-pins:
   clusters
@@ -15,6 +15,7 @@ effect-pins:
   substrate-access-kubevirt-v1
   lend-bound-secret
   booted-never-no-effect
+  insert-recorded-before-media
 request-identity:
   identity.context
   identity.cluster
@@ -126,6 +127,7 @@ evidence-schema:
   cluster string
   completed bool
   identity string
+  inserted bool
   media []string
   missing []string
   ownMedia []string

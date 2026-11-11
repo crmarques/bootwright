@@ -138,7 +138,7 @@ func contractRecipes() map[string]digestRecipe {
 		agentinstall.MediaImplementation: digestOf(partDomain("bootwright.containercluster.media-agent-v1"), partImplementation(agentinstall.MediaImplementation), partRequest("cluster-media-agent-v1"),
 			partPin("clusters"), partPin(agentinstall.ImageFile), partPin("/var/lib/bootwright-hosted"), partPin("clusters"), partPin("openshift-install")),
 		agentinstall.InstallImplementation: digestOf(partDomain("bootwright.containercluster.install-agent-v1"), partImplementation(agentinstall.InstallImplementation), partRequest("cluster-install-agent-v1"),
-			partPin("clusters"), partPin(agentinstall.ImageFile), partPin("/var/lib/bootwright-hosted"), partPin("clusters"), partPin("openshift-install"), partPin("openshift-clients"), partPin("substrate-access-kubevirt-v1"), partPin("lend-bound-secret"), partPin("booted-never-no-effect")),
+			partPin("clusters"), partPin(agentinstall.ImageFile), partPin("/var/lib/bootwright-hosted"), partPin("clusters"), partPin("openshift-install"), partPin("openshift-clients"), partPin("substrate-access-kubevirt-v1"), partPin("lend-bound-secret"), partPin("booted-never-no-effect"), partPin("insert-recorded-before-media")),
 		artifactserver.Implementation: digestOf(partDomain("bootwright.infrastructureservices.artifact-server-v1"), partImplementation(artifactserver.Implementation), partRequest("artifact-server-nginx-v2"),
 			partPin("registry.access.redhat.com/ubi9/nginx-124@sha256:bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56"),
 			partPin("/var/lib/bootwright-hosted"), partPin("services"), partPin("bootwright")),

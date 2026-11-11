@@ -130,6 +130,7 @@ type InstallEvidence struct {
 	// answers while it is still installing, reports false.
 	Completed bool   `json:"completed"`
 	Identity  string `json:"identity"`
+	Inserted  bool   `json:"inserted"`
 	// Media names every node whose controller still presents boot media, by
 	// its Machine, and Missing every declared node the cluster does not hold,
 	// by its node name, so a refusal can say which.
@@ -282,8 +283,8 @@ func ValidateInstallReleasePartial(data []byte, request InstallRequest, digest s
 
 // ValidateInstallNoEffect accepts evidence only when it positively proves that
 // nothing was installed: no cluster answers, no node runs, no node holds this
-// operation's media, and nothing was ever booted from its image, which the
-// work area's boot mark and a boot the operation's records hold each say.
+// operation's media, and no node was handed its image: an unmarked area with
+// no recorded boot, or a marked one with no node's insert record.
 func ValidateInstallNoEffect(data []byte, digest string, bootRecorded bool) error {
 	evidence, err := decodeInstallEvidence(data, digest)
 	if err != nil {
@@ -295,8 +296,11 @@ func ValidateInstallNoEffect(data []byte, digest string, bootRecorded bool) erro
 	if len(evidence.Powered) != 0 || len(evidence.Media) != 0 {
 		return refusal("lifecycle.state", "a node is running or still holds boot media", "")
 	}
-	if evidence.Booted || bootRecorded {
-		return refusal("lifecycle.state", "this cluster's nodes were booted from its image, so nodes off and no media inserted do not prove that nothing was installed", "")
+	if evidence.Inserted {
+		return refusal("lifecycle.state", "a node of this cluster was handed its image, so nodes off and no media inserted do not prove that nothing was installed", "")
+	}
+	if bootRecorded && !evidence.Booted {
+		return refusal("lifecycle.state", "this operation recorded a boot of its nodes and its work area no longer carries the mark its insert records are read under, so nodes off and no media inserted do not prove that nothing was installed", "")
 	}
 	return nil
 }
@@ -339,11 +343,22 @@ func ValidateInstallPartial(data []byte, digest string) error {
 	return nil
 }
 
+type namedInstallEvidence struct {
+	InstallEvidence
+	Booted   *bool `json:"booted"`
+	Inserted *bool `json:"inserted"`
+}
+
 func decodeInstallEvidence(data []byte, digest string) (InstallEvidence, error) {
-	evidence, err := reconciliation.DecodeEvidence[InstallEvidence](data, maxEvidenceBytes, "installation")
+	named, err := reconciliation.DecodeEvidence[namedInstallEvidence](data, maxEvidenceBytes, "installation")
 	if err != nil {
 		return InstallEvidence{}, err
 	}
+	if named.Booted == nil || named.Inserted == nil {
+		return InstallEvidence{}, refusal("lifecycle.state", "the installation evidence does not say whether its work area was marked and whether a node was handed the image", "")
+	}
+	evidence := named.InstallEvidence
+	evidence.Booted, evidence.Inserted = *named.Booted, *named.Inserted
 	if evidence.Request != digest {
 		return InstallEvidence{}, refusal("lifecycle.state", "the installation evidence names another request", "")
 	}

@@ -179,6 +179,17 @@
                 mode: '0600'
               no_log: true
 
+        # The ordering invariant of the Unknown resolution: this record is on
+        # disk, file and directory synced, before the insert and so before any
+        # power request, so an attempt stopped anywhere after the proof
+        # passed, a crash between the insert and its answer included, leaves
+        # it, and the resolution never reads such an area as no effect. A
+        # node whose proof refused writes none.
+        - name: Record durably that this node is handed the image before inserting it
+          bootwright.core.private_file:
+            path: '{{ containercluster_install_agent_work }}/.bootwright-inserted-{{ containercluster_install_agent_index }}'
+            content: "{{ containercluster_install_agent_node.machine }}\n"
+
         - name: Insert through the selected substrate machine port
           ansible.builtin.include_tasks: port.yml
           vars:

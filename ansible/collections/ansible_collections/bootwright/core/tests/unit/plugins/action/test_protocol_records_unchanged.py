@@ -186,6 +186,8 @@ CASES = {
     ) + [
         ("completed unbooted observed", completed(observed=True, identity="c" * 64, booted=False,
                                                   state=dict(CLUSTER, cluster="", completed=False, powered=[]))),
+        ("completed marked uninserted observed", completed(observed=True, identity="c" * 64, booted=True, inserted=False,
+                                                           state=dict(CLUSTER, cluster="", completed=False, powered=[]))),
         ("prepared", {"phase": "prepared", "identity": "c" * 64}),
         ("prepared without identity", {"phase": "prepared", "identity": ""}),
     ],

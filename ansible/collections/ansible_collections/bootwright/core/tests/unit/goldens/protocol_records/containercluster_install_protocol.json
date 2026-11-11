@@ -175,6 +175,7 @@
             "cluster": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "completed": true,
             "identity": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "inserted": true,
             "media": [],
             "missing": [],
             "ownMedia": [],
@@ -215,6 +216,7 @@
             "cluster": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             "completed": false,
             "identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "inserted": true,
             "media": [
               "sno-01"
             ],
@@ -251,6 +253,7 @@
             "cluster": "",
             "completed": false,
             "identity": "",
+            "inserted": true,
             "media": [],
             "missing": [],
             "ownMedia": [],
@@ -297,6 +300,38 @@
             "cluster": "",
             "completed": false,
             "identity": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "inserted": true,
+            "media": [],
+            "missing": [],
+            "ownMedia": [],
+            "postcondition": false,
+            "powered": [],
+            "release": "4.21.15",
+            "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "restored": false
+          }
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "completed marked uninserted observed",
+    "records": [
+      [
+        {
+          "phase": "completed",
+          "outcome": "changed",
+          "evidence": {
+            "absent": false,
+            "booted": true,
+            "cluster": "",
+            "completed": false,
+            "identity": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "inserted": false,
             "media": [],
             "missing": [],
             "ownMedia": [],

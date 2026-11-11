@@ -11,8 +11,12 @@ description:
   - Reports this build's identity, a domain-separated SHA-256 of the
     administrator client certificate in the copy of the installer's
     kubeconfig this installation keeps beside it, whether the work area
-    carries the mark the installation writes before it boots any node, and the
-    address of the image its media block published.
+    carries the mark the installation writes before it boots any node, whether
+    any node may have been handed the image, and the address of the image its
+    media block published.
+  - A node may have been handed the image when the work area holds the record
+    the installation writes durably before that node's insert, when its mark
+    is not the one this build writes, or when the area cannot be listed.
   - The kept copy is the installer's file as last seen whole, within the
     64 KiB this module reads and naming the same identity, so it never grows
     past that bound however often C(agent wait-for install-complete) rewrites
@@ -99,7 +103,9 @@ EXAMPLES = r"""
 
 RETURN = r"""
 observation:
-  description: This build's identity, whether the kept copy exists, whether the work area is marked booted, and the published image address.
+  description:
+    - This build's identity, whether the kept copy exists, whether the work area is marked booted,
+      whether any node may have been handed the image, and the published image address.
   returned: always
   type: dict
 restore:
@@ -159,6 +165,15 @@ KEPT = ".bootwright-kubeconfig"
 # refuses on. Anything at that name counts, so an area it cannot prove
 # unbooted never reads as one nothing was installed from.
 MARKER = ".bootwright-booted"
+# VOUCH is the content this build writes at MARKER, never over an existing
+# one. Only a mark holding exactly it vouches that every insert of this area
+# left its INSERTED record, so any other mark reads as a node handed the image.
+VOUCH = b"inserts-recorded\n"
+# INSERTED names the record boot.yml writes durably for a node, before its
+# insert and so before any power request, which an attempt stopped anywhere
+# after it leaves behind. Any entry whose name holds it counts, a stage an
+# interrupted write left included.
+INSERTED = ".bootwright-inserted-"
 # A larger kubeconfig names no identity and is never kept. Each install-complete
 # run grows the installer's file by the base64 of the router CA bundle, so the
 # kept copy follows only as many rewrites as fit within this bound and then
@@ -453,6 +468,41 @@ def published(root, base):
     return ""
 
 
+def vouches(path):
+    """Whether the mark at path is a regular file holding exactly VOUCH."""
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    except OSError:
+        return False
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            return False
+        return os.read(descriptor, len(VOUCH) + 1) == VOUCH
+    except OSError:
+        return False
+    finally:
+        os.close(descriptor)
+
+
+def inserted(work):
+    """Whether any node may have been handed this cluster's image.
+
+    A missing area holds no record and no mark. An area that cannot be listed,
+    one holding an INSERTED record, and one whose mark does not vouch for its
+    records each may hide an insert, so each counts as one.
+    """
+    try:
+        names = os.listdir(work)
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+    if any(INSERTED in name for name in names):
+        return True
+    mark = os.path.join(work, MARKER)
+    return os.path.lexists(mark) and not vouches(mark)
+
+
 def observe(request):
     """What this installation's work area and publication hold now.
 
@@ -464,6 +514,7 @@ def observe(request):
     return {
         "booted": os.path.lexists(os.path.join(request["workRoot"], MARKER)),
         "identity": identity(os.path.join(request["workRoot"], KEPT)),
+        "inserted": inserted(request["workRoot"]),
         "kubeconfig": os.path.isfile(os.path.join(request["workRoot"], KEPT)),
         "url": published(image["path"], image["url"]),
     }

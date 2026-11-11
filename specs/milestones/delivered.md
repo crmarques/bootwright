@@ -13116,7 +13116,7 @@ before any effect and a pre-boot refusal must stay retryable.
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** an attempt whose every node refuses its pre-boot
 proof after the mark stays unknown and needs a destroy before a fresh
-install ([B1265](m3.md#b1265)). An independent review found the window
+install ([B1265](#x375--no-insert-no-effect)). An independent review found the window
 closed and put the destroy first in the remedy.
 
 ### X356 — Service and BMC images from the image mirror
@@ -14348,3 +14348,54 @@ manifest directory were read in the sources for 4.20 to 4.22; only a live
 install proves that the nodes run with the selected servers alone, which is a
 node row of [B1250](backlog.md#b1250)'s profile. A later release whose
 installer sets master's `ntp_sources` would drop the pool upstream.
+
+### X375 — No insert, no effect
+
+**Item:** B1265 (2026-11-10, [D253](backlog.md#d253)), delivered in-tree, from
+the independent review of [X346](#x346--boot-before-no-effect). **Kind:**
+defect, delivered as safety. **Owners:** Container clusters. An OpenShift
+attempt whose every node refused its pre-boot proof after the work area was
+marked now reads positive no effect and its retry proceeds, while an attempt in
+which any node's insert began never does
+([Unknown resolution](../openshift-clusters.md#installation)). Each node's boot
+writes `.bootwright-inserted-<index>` in the work area, file and directory
+synced (`private_file`), after its proof passed and immediately before its
+insert, so before any power request; the mark now holds `inserts-recorded` and
+is never rewritten; the inspection reports `inserted` when a record (or its
+stage) exists, the mark holds anything else, or the area cannot be listed; and
+`ValidateInstallNoEffect` refuses `inserted`, and a recorded boot whose area
+lost its mark. Evidence that lacks `booted` or `inserted`, or holds `null`
+there, is unreadable, so neither defaults to false. The content digest of `cluster-install-agent-v1` moved (pin
+`insert-recorded-before-media`, evidence `inserted`).
+
+The brief's option (a), per-node records, was taken over (b), one record and
+mark before the first passing node's insert: (b) needs a once-only gate across
+the node plays' serial rounds while the runner accepts one `prepared` record
+per run, and its gate is itself a record before an insert, which is (a) for
+one node. With (a) each proof stays adjacent to its insert, the `prepared`
+record and mark stay where X346 put them, and a crash after any insert began
+leaves its record. A mark another build wrote reads as an insert, so an area an
+earlier build booted is never read as no effect.
+
+| Finding | Change |
+| --- | --- |
+| B1265 (the X346 review of REC-01) | `boot.yml` insert record; `prepare_boot.yml` mark content and `force: false`; `containercluster_install_inspect` `inserted`, `vouches`, `VOUCH`, `INSERTED`; the protocol's `inserted` (only a real false); `InstallEvidence.Inserted`; `ValidateInstallNoEffect`; `Unresolved` explains a silent marked area only when a node was handed the image; openshift-clusters.md Unknown resolution |
+
+Tests: Go `TestClusterInstallObservationReadsNoEffectOnlyWhenNoNodeWasHandedTheImage`
+(replacing X346's `...WithBootPreparationNeverReadsNoEffect`) and the marked
+case of `TestAnInstallStoppedBeforeTheAPIAnswersIsPartialOnlyOnItsOwnImage`;
+Python `test_each_node_records_its_insert_durably_after_its_proof_and_before_the_insert`,
+`test_the_boot_mark_vouches_for_the_insert_records_and_is_never_rewritten`,
+`test_the_observation_reports_a_node_that_may_have_been_handed_the_image`,
+`test_a_mark_this_build_did_not_write_reads_as_a_node_handed_the_image`,
+`test_an_area_that_cannot_be_listed_reads_as_a_node_handed_the_image` and
+`test_only_a_boolean_false_records_no_node_handed_the_image`.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** an insert the controller refused still reads
+unknown and needs a destroy; a retry whose corrected Machine changes the
+media inputs still meets the media rebuild's refusal of a marked area
+([B1327](m3.md#b1327)); a
+recorded boot stopped between its `prepared` record and the mark stays unknown
+as under X346; firmware a node's proof applied before refusing stays applied,
+as desired state the retry proves again.

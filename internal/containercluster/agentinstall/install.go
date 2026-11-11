@@ -243,8 +243,8 @@ func offered(produced []lifecycle.Produced, proved bool) []lifecycle.Produced {
 
 // Observe is read-only. The cluster this operation installed, answering at the
 // declared release with every declared node and no media left inserted, is
-// positive completion; nothing running and nothing answering, before any boot
-// the work area's mark or the apply's records hold, is positive no effect;
+// positive completion; nothing running and nothing answering, while no node
+// was handed the image, is positive no effect;
 // that same cluster answering with the completion not yet true is a
 // positive partial realization the next attempt converges.
 func (c InstallCapability) Observe(ctx context.Context, execution lifecycle.Execution) (lifecycle.Observation, error) {
@@ -273,7 +273,7 @@ func (c InstallCapability) ObserveRemoval(ctx context.Context, execution lifecyc
 // in that order. When none accepts the evidence the effect is unknown, and the
 // refusal that decided it comes back with it: the presence check's for an
 // apply, the partial release's for a removal. bootRecorded says the apply's
-// records hold a boot of this block, which forbids no effect.
+// records hold a boot of this block.
 func installEffect(verb reconciliation.Verb, evidence []byte, request InstallRequest, digest string, bootRecorded bool) (reconciliation.EffectState, error) {
 	if verb == reconciliation.Destroy {
 		if ValidateInstallReleased(evidence, digest) == nil {

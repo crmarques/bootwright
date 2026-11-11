@@ -303,7 +303,7 @@ def test_a_kept_copy_changes_only_to_the_identity_it_names(tmp_path, before, exp
 
 def test_an_observation_keeps_nothing_and_reads_only_the_kept_copy(tmp_path):
     work = work_area(tmp_path / "work", rewritten())
-    assert observe(request(tmp_path, work)) == {"booted": False, "identity": "", "kubeconfig": False, "url": ""}
+    assert observe(request(tmp_path, work)) == {"booted": False, "identity": "", "inserted": False, "kubeconfig": False, "url": ""}
     assert not (work / KEPT).exists()
 
 
@@ -386,7 +386,7 @@ def test_a_kubeconfig_the_installer_would_not_write_names_no_identity(tmp_path, 
 def test_a_work_area_without_its_kubeconfig_names_no_identity(tmp_path):
     work = work_area(tmp_path / "work", None)
     observation = observe({"workRoot": str(work), "image": {"path": str(tmp_path), "url": "https://192.0.2.1:8443"}})
-    assert observation == {"booted": False, "identity": "", "kubeconfig": False, "url": ""}
+    assert observation == {"booted": False, "identity": "", "inserted": False, "kubeconfig": False, "url": ""}
 
 
 # The agent installer writes no metadata.json, so one found in the work area is
@@ -825,3 +825,46 @@ def test_the_observation_reports_the_boot_mark(tmp_path):
     (work / inspect.MARKER).symlink_to(tmp_path / "nowhere")
     assert observe(request(tmp_path, work))["booted"] is True
     assert inspect.MARKER == ".bootwright-booted"
+
+
+# A node may have been handed the image when the area holds the record boot.yml
+# writes before its insert (a stage an interrupted write left included), when
+# its mark is not the one this build writes, or when it cannot be listed. A
+# mark this build wrote with no record beside it is an attempt whose every node
+# refused its pre-boot proof.
+def test_the_observation_reports_a_node_that_may_have_been_handed_the_image(tmp_path):
+    work = work_area(tmp_path / "work", kubeconfig())
+    assert observe(request(tmp_path, work))["inserted"] is False
+    (work / inspect.MARKER).write_bytes(inspect.VOUCH)
+    found = observe(request(tmp_path, work))
+    assert (found["booted"], found["inserted"]) == (True, False)
+    (work / (inspect.INSERTED + "0")).write_text("sno-01\n")
+    assert observe(request(tmp_path, work))["inserted"] is True
+    (work / (inspect.INSERTED + "0")).unlink()
+    (work / ("." + inspect.INSERTED + "1.0123456789abcdef")).write_text("")
+    assert observe(request(tmp_path, work))["inserted"] is True
+    assert inspect.INSERTED == ".bootwright-inserted-" and inspect.VOUCH == b"inserts-recorded\n"
+
+
+@pytest.mark.parametrize("mark", [b"", b"inserts-recorded", b"inserts-recorded\n\n", b"other\n", None], ids=repr)
+def test_a_mark_this_build_did_not_write_reads_as_a_node_handed_the_image(tmp_path, mark):
+    work = work_area(tmp_path / "work", kubeconfig())
+    if mark is None:
+        (tmp_path / "vouch").write_bytes(inspect.VOUCH)
+        (work / inspect.MARKER).symlink_to(tmp_path / "vouch")
+    else:
+        (work / inspect.MARKER).write_bytes(mark)
+    assert inspect.inserted(str(work)) is True
+
+
+def test_an_area_that_cannot_be_listed_reads_as_a_node_handed_the_image(tmp_path, monkeypatch):
+    work = work_area(tmp_path / "work", kubeconfig())
+
+    def refused(path):
+        raise PermissionError(13, "denied")
+
+    monkeypatch.setattr(inspect.os, "listdir", refused)
+    assert inspect.inserted(str(work)) is True
+    assert inspect.inserted(str(tmp_path / "absent")) is True
+    monkeypatch.undo()
+    assert inspect.inserted(str(tmp_path / "absent")) is False

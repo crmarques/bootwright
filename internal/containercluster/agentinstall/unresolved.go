@@ -44,7 +44,7 @@ func (InstallCapability) Unresolved(verb reconciliation.Verb, block reconciliati
 		return lifecycle.Unresolved{}, false
 	}
 	subject := "the installation of OpenShiftCluster " + block.Object
-	if verb == reconciliation.Apply && decoded.Cluster == "" && len(decoded.Powered) == 0 && len(decoded.Media) == 0 {
+	if verb == reconciliation.Apply && decoded.Cluster == "" && len(decoded.Powered) == 0 && len(decoded.Media) == 0 && (decoded.Inserted || !decoded.Booted) {
 		return bootedSilence(subject+" on "+lifecycle.PlacedOn(request.Placement), request), true
 	}
 	effect, refused := installEffect(verb, evidence, request, block.RequestDigest, false)

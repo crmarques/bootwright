@@ -11,8 +11,8 @@ import (
 // evidence an earlier build published without the field reads as no restore.
 func TestInstallEvidenceRecordsARestoreOfTheInstallersKubeconfig(t *testing.T) {
 	_, install, _ := onlyRequests(t, singleNodeCatalog())
-	const completed = `{"absent":false,"cluster":"` + anchorIdentity + `","completed":true,"identity":"` +
-		anchorIdentity + `","media":[],"missing":[],"ownMedia":[],"postcondition":true,"powered":["sno-01"],` +
+	const completed = `{"absent":false,"booted":true,"cluster":"` + anchorIdentity + `","completed":true,"identity":"` +
+		anchorIdentity + `","inserted":true,"media":[],"missing":[],"ownMedia":[],"postcondition":true,"powered":["sno-01"],` +
 		`"release":"4.21.15","request":"` + testDigest + `"`
 	for data, restored := range map[string]bool{
 		completed + `,"restored":true}`:  true,
