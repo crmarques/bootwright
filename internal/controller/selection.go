@@ -492,10 +492,10 @@ func managedMirrorShapes(environment api.Object, catalog api.Catalog) []Unsuppor
 	server, host := mirror.Server, mirror.Server.Spec().Get("machineRef").Text()
 	controllerName := environment.Spec().Get("controller", "machineRef").Text()
 	machine, found := catalog.Find(api.Machine, host)
-	if host == controllerName || found && onControllerHost(catalog, machine, controllerName) {
+	if host != controllerName && found && onControllerHost(catalog, machine, controllerName) {
 		return []UnsupportedShape{{Object: environment, Field: field,
-			Reason:      "this executable fills a managed artifact mirror only on a Machine other than the controller host, and " + server.Identity() + " is placed on Machine/" + host + ", which is the controller host",
-			Remediation: "place " + server.Identity() + " on another Machine reached over SSH, or select an artifact mirror the operator fills in spec.mirror.artifacts.url of " + environment.Identity()}}
+			Reason:      "this executable places a managed artifact mirror on the controller host only through its controller Machine, and " + server.Identity() + " is placed on Machine/" + host + ", another name for that host",
+			Remediation: "place " + server.Identity() + " on Machine/" + controllerName + " or on another Machine reached over SSH"}}
 	}
 	if !api.ValidLexical("artifact-mirror-url", mirror.URL) {
 		reason := "the artifact mirror is read over HTTPS beneath " + server.Identity() + "'s selected endpoint, and that endpoint names no HTTPS URL a client path fits beneath"
@@ -514,7 +514,7 @@ func managedMirrorShapes(environment api.Object, catalog api.Catalog) []Unsuppor
 			Reason:      "the artifact mirror on " + machine.Identity() + " is filled before any managed service runs, and " + machine.Identity() + " reaches the publishers through the managed " + proxy.Identity(),
 			Remediation: "select direct: {} or an external Proxy in spec.proxy on " + machine.Identity()}}
 	}
-	if providers := mirrorProviders(catalog, server, host); len(providers) != 0 {
+	if providers := mirrorProviders(catalog, server, host, host == controllerName); len(providers) != 0 {
 		return []UnsupportedShape{{Object: environment, Field: field,
 			Reason: "the artifact mirror is filled before the controller stage, and " + server.Identity() + " on " + machine.Identity() +
 				" waits for InfraProvider/" + providers[0] + ", which that Machine hosts or whose bridge carries its address",
@@ -546,8 +546,11 @@ func onControllerHost(catalog api.Catalog, machine api.Object, controllerName st
 	return address != "" && machineref.ReachesController(own, address, port)
 }
 
-func mirrorProviders(catalog api.Catalog, server api.Object, host string) []string {
-	providers := substrate.ProvidersHostedOn(catalog, host)
+func mirrorProviders(catalog api.Catalog, server api.Object, host string, local bool) []string {
+	var providers []string
+	if !local {
+		providers = substrate.ProvidersHostedOn(catalog, host)
+	}
 	machine, _ := catalog.Find(api.Machine, host)
 	addresses := []string{server.Spec().Get("bindAddress").Text()}
 	for _, endpoint := range server.Spec().Get("endpoints").Items() {

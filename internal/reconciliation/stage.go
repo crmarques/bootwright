@@ -52,10 +52,14 @@ func (s StageSelection) Selects(stage Stage) bool {
 	return len(s) == 0 || slices.Contains(s, stage)
 }
 
+// Selection is a stage selection with an optional add-on instance to stop
+// after. Bound to a plan, a selection of the controller stage also admits the
+// blocks a controller block waits for, which run before that stage finishes.
 type Selection struct {
-	Stages StageSelection
-	Until  string
-	within map[string]bool
+	Stages     StageSelection
+	Until      string
+	within     map[string]bool
+	precursors map[string]bool
 }
 
 func ParseSelection(stages []string, until string) (Selection, error) {
@@ -69,7 +73,10 @@ func ParseSelection(stages []string, until string) (Selection, error) {
 func (s Selection) Empty() bool { return len(s.Stages) == 0 && s.Until == "" }
 
 func (s Selection) Bind(plan Plan) (Selection, bool) {
-	s.within = nil
+	s.within, s.precursors = nil, nil
+	if len(s.Stages) != 0 && s.Stages.Selects(StageController) {
+		s.precursors = controllerPrecursors(plan)
+	}
 	if s.Until == "" {
 		return s, true
 	}
@@ -99,7 +106,27 @@ func (s Selection) Bind(plan Plan) (Selection, bool) {
 }
 
 func (s Selection) Admits(block Block) bool {
-	return s.Stages.Selects(block.Stage) && (s.Until == "" || s.within[block.ID])
+	return (s.Stages.Selects(block.Stage) || s.precursors[block.ID]) && (s.Until == "" || s.within[block.ID])
+}
+
+func controllerPrecursors(plan Plan) map[string]bool {
+	precursors := map[string]bool{}
+	var queue []string
+	for _, block := range plan.Blocks {
+		if block.Stage == StageController {
+			queue = append(queue, block.Dependencies...)
+		}
+	}
+	for ; len(queue) > 0; queue = queue[1:] {
+		if precursors[queue[0]] {
+			continue
+		}
+		precursors[queue[0]] = true
+		if block, ok := plan.Block(queue[0]); ok {
+			queue = append(queue, block.Dependencies...)
+		}
+	}
+	return precursors
 }
 
 func untilTarget(block Block) bool {

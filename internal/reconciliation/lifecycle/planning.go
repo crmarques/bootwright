@@ -49,42 +49,65 @@ func (s Service) compileSources(ctx context.Context, sources desiredstate.Source
 	return state, nil
 }
 
-// dependOnController makes every block outside the controller block's own
-// requirements wait for it once requirements resolve, because the clients it
-// installs are what their adapters run; each block it waits for must be one its
-// capability runs without those clients. It is the one dependency the engine owns.
+// dependOnController makes every block outside each controller block's own
+// requirements wait for it once requirements resolve, the controller blocks
+// taken so each follows those it waits for; any other block a later one waits
+// for must already wait for an earlier one and be one its capability runs
+// without those clients. It is the one dependency the engine owns.
 func (s Service) dependOnController(definitions []reconciliation.BlockDefinition) ([]reconciliation.BlockDefinition, error) {
 	return DependOnController(s.capabilities, definitions)
 }
 
 func DependOnController(capabilities CapabilityResolver, definitions []reconciliation.BlockDefinition) ([]reconciliation.BlockDefinition, error) {
-	prerequisite := slices.IndexFunc(definitions, func(definition reconciliation.BlockDefinition) bool {
-		return definition.Stage == reconciliation.StageController
-	})
-	if prerequisite < 0 {
-		return definitions, nil
-	}
-	identity := definitions[prerequisite].ID
-	ancestors := ancestorsOf(definitions, identity)
-	for _, definition := range definitions {
-		if !ancestors[definition.ID] {
-			continue
+	stages := controllerOrder(definitions)
+	for position, identity := range stages {
+		ancestors := ancestorsOf(definitions, identity)
+		for _, definition := range definitions {
+			if !ancestors[definition.ID] || definition.Stage == reconciliation.StageController {
+				continue
+			}
+			capability, ok := capabilities.Resolve(definition.Kind, definition.Implementation)
+			precursor, precedes := capability.(ControllerPrecursor)
+			if !ok || !precedes || !precursor.PrecedesController(definition) || position > 0 && !waitsForAny(definitions, definition.ID, stages[:position]) {
+				return nil, failure("controller.unsupported", "block "+identity+" waits for block "+definition.ID+", which runs only after the controller stage it waits for",
+					"place "+definition.Kind+"/"+definition.Object+" where the controller stage need not wait for it")
+			}
 		}
-		capability, ok := capabilities.Resolve(definition.Kind, definition.Implementation)
-		if precursor, precedes := capability.(ControllerPrecursor); !ok || !precedes || !precursor.PrecedesController(definition) {
-			return nil, failure("controller.unsupported", "block "+identity+" waits for block "+definition.ID+", which runs only after the controller stage it waits for",
-				"place "+definition.Kind+"/"+definition.Object+" where the controller stage need not wait for it")
+		for index, definition := range definitions {
+			if definition.ID == identity || ancestors[definition.ID] || slices.Contains(definition.Dependencies, identity) {
+				continue
+			}
+			dependencies := append(slices.Clone(definition.Dependencies), identity)
+			slices.Sort(dependencies)
+			definitions[index].Dependencies = dependencies
 		}
-	}
-	for index, definition := range definitions {
-		if definition.ID == identity || ancestors[definition.ID] || slices.Contains(definition.Dependencies, identity) {
-			continue
-		}
-		dependencies := append(slices.Clone(definition.Dependencies), identity)
-		slices.Sort(dependencies)
-		definitions[index].Dependencies = dependencies
 	}
 	return definitions, nil
+}
+
+func controllerOrder(definitions []reconciliation.BlockDefinition) []string {
+	var pending, ordered []string
+	for _, definition := range definitions {
+		if definition.Stage == reconciliation.StageController {
+			pending = append(pending, definition.ID)
+		}
+	}
+	for len(pending) != 0 {
+		next := slices.IndexFunc(pending, func(identity string) bool {
+			ancestors := ancestorsOf(definitions, identity)
+			return !slices.ContainsFunc(pending, func(other string) bool { return ancestors[other] })
+		})
+		if next < 0 {
+			next = 0
+		}
+		ordered, pending = append(ordered, pending[next]), slices.Delete(pending, next, next+1)
+	}
+	return ordered
+}
+
+func waitsForAny(definitions []reconciliation.BlockDefinition, identity string, stages []string) bool {
+	ancestors := ancestorsOf(definitions, identity)
+	return slices.ContainsFunc(stages, func(stage string) bool { return ancestors[stage] })
 }
 
 func ancestorsOf(definitions []reconciliation.BlockDefinition, identity string) map[string]bool {

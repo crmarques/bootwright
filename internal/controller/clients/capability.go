@@ -60,27 +60,46 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		return empty, refuse("lifecycle.state", "the controller prerequisites block does not name the selected controller Machine", "use a compatible executable")
 	}
 	request := NewRequest(selection, requests).WithMirrorTrust(catalog)
-	canonical, err := request.Canonical()
+	mirror, declared := infrastructureservices.ArtifactMirrorOf(catalog)
+	if !declared || !mirror.Managed || !request.MirrorReader() {
+		definition, err := stageBlock(input.Verb, selection.EnvironmentName(), BlockID, request, nil)
+		if err != nil {
+			return empty, err
+		}
+		return lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{definition}}, nil
+	}
+	packages, clients := request.Split()
+	first, err := stageBlock(input.Verb, selection.EnvironmentName(), BlockID, packages, nil)
 	if err != nil {
 		return empty, err
 	}
-	var requires []reconciliation.ObjectRef
-	if mirror, declared := infrastructureservices.ArtifactMirrorOf(catalog); declared && mirror.Managed && request.MirrorReader() {
-		requires = []reconciliation.ObjectRef{{Kind: string(api.ArtifactServer), Object: mirror.Server.Name()}}
+	second, err := stageBlock(input.Verb, selection.EnvironmentName(), MirroredClientsBlockID, clients,
+		[]reconciliation.ObjectRef{{Kind: string(api.ArtifactServer), Object: mirror.Server.Name()}})
+	if err != nil {
+		return empty, err
 	}
-	return lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{{
-		ID:             BlockID,
-		Description:    description(input.Verb, selection.EnvironmentName(), request.Machine),
+	second.Dependencies = []string{BlockID}
+	return lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{first, second}}, nil
+}
+
+func stageBlock(verb reconciliation.Verb, environment, id string, request Request, requires []reconciliation.ObjectRef) (reconciliation.BlockDefinition, error) {
+	canonical, err := request.Canonical()
+	if err != nil {
+		return reconciliation.BlockDefinition{}, err
+	}
+	return reconciliation.BlockDefinition{
+		ID:             id,
+		Description:    description(verb, environment, request),
 		Stage:          reconciliation.StageController,
 		Requires:       requires,
-		Impacts:        impacts(input.Verb, request),
-		Groups:         groups(input.Verb, request.Machine),
+		Impacts:        impacts(verb, request),
+		Groups:         groups(verb, request.Machine),
 		Kind:           Kind,
-		Object:         selection.EnvironmentName(),
+		Object:         environment,
 		Implementation: Implementation,
 		ContentDigest:  ContentDigest(),
 		Request:        canonical,
-	}}}, nil
+	}, nil
 }
 
 // Unsupported refuses, before registration, every controller shape this
@@ -106,11 +125,16 @@ func (Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 // description says what the planned verb does here. A removal retains, so it
 // says so rather than borrowing the install wording for a block that takes
 // nothing away.
-func description(verb reconciliation.Verb, environment, machine string) string {
-	if verb == reconciliation.Destroy {
-		return "retain the shared clients of " + environment + " on " + machine
+func description(verb reconciliation.Verb, environment string, request Request) string {
+	switch {
+	case verb == reconciliation.Destroy:
+		return "retain the shared clients of " + environment + " on " + request.Machine
+	case request.Part == PartPrerequisites:
+		return "install the host packages of " + environment + " on " + request.Machine
+	case request.Part == PartMirroredClients:
+		return "install the clients of " + environment + " on " + request.Machine + " from its artifact mirror"
 	}
-	return "install the controller prerequisites of " + environment + " on " + machine
+	return "install the controller prerequisites of " + environment + " on " + request.Machine
 }
 
 // impacts is empty for a removal: this block uninstalls nothing, so a plan that
@@ -157,7 +181,7 @@ func (c Capability) Removal(ctx context.Context, block reconciliation.Block) (li
 		return lifecycle.Removal{}, err
 	}
 	return lifecycle.Removal{
-		Description: description(reconciliation.Destroy, block.Object, request.Machine),
+		Description: description(reconciliation.Destroy, block.Object, request),
 		Impacts:     impacts(reconciliation.Destroy, request),
 		Groups:      groups(reconciliation.Destroy, request.Machine),
 	}, nil
@@ -558,7 +582,7 @@ func (c Capability) verify(ctx context.Context, execution lifecycle.Execution, r
 	} else if _, err := sealPublished(ctx, execution, tools); err != nil {
 		return unknown, err
 	}
-	if err := execution.Stage.RetireToolAreas(ctx, current(tools, area)); err != nil {
+	if err := retire(ctx, execution, request, current(tools, area)); err != nil {
 		return unknown, err
 	}
 	report(ctx, execution, "verify-clients", "ok")
@@ -581,7 +605,7 @@ func (c Capability) settled(ctx context.Context, execution lifecycle.Execution, 
 	if err != nil {
 		return lifecycle.Result{Outcome: failureOutcome}, err
 	}
-	if err := execution.Stage.RetireToolAreas(ctx, current(tools, prerequisites.ToolsDigest(tools))); err != nil {
+	if err := retire(ctx, execution, request, current(tools, prerequisites.ToolsDigest(tools))); err != nil {
 		return lifecycle.Result{Outcome: failureOutcome}, err
 	}
 	report(ctx, execution, "verify-clients", "ok")
@@ -609,6 +633,13 @@ func sealPublished(ctx context.Context, execution lifecycle.Execution, tools []p
 		return true, err
 	}
 	return true, execution.Stage.SealClientArea(ctx, digest)
+}
+
+func retire(ctx context.Context, execution lifecycle.Execution, request Request, area string) error {
+	if request.Part == PartPrerequisites {
+		return nil
+	}
+	return execution.Stage.RetireToolAreas(ctx, area)
 }
 
 // current is the area a stage's binding names: none when it selects no tool.

@@ -540,32 +540,43 @@ func stageReading(err error, block reconciliation.Block, verb reconciliation.Ver
 	return prerequisites.InStage(err, contextName)
 }
 
-// locateTool asks the controller stage block this plan froze where the closure
-// it proved published one executable. The stage is the one block whose clients
-// every other block's adapter runs, so its capability alone answers; a plan
-// without one has installed nothing to run. The proof is the one that block
-// recorded in the apply whose effects this operation runs over, this apply or
-// the one a removal takes back, because the stage's removal retains and
-// proves no closure, and recovering the closure again from the host's shared
-// sources would move a latest client to a release another context retained.
+// locateTool asks each controller stage block this plan froze, in order, where
+// the closure it proved published one executable; the first that locates it
+// answers, else the last refusal stands, and a plan without one installed
+// nothing to run. The proof is the one each block recorded in the apply whose
+// effects this operation runs over, because the stage's removal proves no
+// closure, and recovering it from the host's shared sources would move a
+// latest client to a release another context retained.
 func (s Service) locateTool(ctx context.Context, store recordReader, view prerequisites.StorageView, contextName string, operation operationstore.Operation, plan reconciliation.Plan, tool controller.InstalledTool) (string, error) {
-	stage, found := controllerStage(plan)
-	if !found {
+	stages := controllerStages(plan)
+	if len(stages) == 0 {
 		held, err := predecessorLineage(ctx, store, operation)
 		if err != nil {
 			return "", err
 		}
 		for _, member := range slices.Backward(held) {
-			if stage, found = controllerStage(member.plan); found {
+			if stages = controllerStages(member.plan); len(stages) != 0 {
 				break
 			}
 		}
 	}
-	if !found {
+	if len(stages) == 0 {
 		return "", failure("controller.state",
 			"the "+tool.Executable+" of release "+tool.Version+" is not installed on this controller",
 			"run "+contextCommand(contextName, string(reconciliation.Apply), "--stage", string(reconciliation.StageController)))
 	}
+	var refused error
+	for _, stage := range stages {
+		path, err := s.locateIn(ctx, store, view, operation, stage, tool)
+		if err == nil {
+			return path, nil
+		}
+		refused = err
+	}
+	return "", refused
+}
+
+func (s Service) locateIn(ctx context.Context, store recordReader, view prerequisites.StorageView, operation operationstore.Operation, stage reconciliation.Block, tool controller.InstalledTool) (string, error) {
 	capability, ok := s.capabilities.Resolve(stage.Kind, stage.Implementation)
 	locator, locates := capability.(ToolLocator)
 	if !ok || !locates {
@@ -584,12 +595,14 @@ func (s Service) locateTool(ctx context.Context, store recordReader, view prereq
 	return locator.LocateTool(ctx, view, stage, proved, tool)
 }
 
-func controllerStage(plan reconciliation.Plan) (reconciliation.Block, bool) {
-	index := slices.IndexFunc(plan.Blocks, func(block reconciliation.Block) bool { return block.Stage == reconciliation.StageController })
-	if index < 0 {
-		return reconciliation.Block{}, false
+func controllerStages(plan reconciliation.Plan) []reconciliation.Block {
+	var stages []reconciliation.Block
+	for _, block := range plan.Blocks {
+		if block.Stage == reconciliation.StageController {
+			stages = append(stages, block)
+		}
 	}
-	return plan.Blocks[index], true
+	return stages
 }
 
 func ownedApplyRecords(ctx context.Context, store recordReader, operation operationstore.Operation, block string) ([]BlockEvidence, []json.RawMessage, error) {

@@ -14707,3 +14707,73 @@ built for the building host's architecture alone; the vulnerability verdict is
 the one the build's own gate wrote, so a release rests on the databases of that
 run; the shipped files are checked against each other and the executable, not
 against an earlier release.
+
+### X408 — The controller stage split around its mirror
+
+**Item:** B1249 (2026-11-11, [D250](backlog.md#d250) (8),
+[D251](backlog.md#d251) (6), (24) and (25)), partly delivered in-tree, so the
+item stays in the backlog with its remaining slices. The slice is the third of
+the session's plan for B1249: the stage split, which lets the managed artifact
+mirror sit on the controller.
+
+*Split.* When the controller stage reads a client from a managed artifact
+mirror, the clients capability plans `controller-prerequisites`, the host
+packages alone, and `controller-mirrored-clients`, the whole client closure
+with vendor clients, which alone requires the mirror's `ArtifactServer`. The
+plan put vendor and non-mirrored clients in the first block; they moved to
+the second because one context's binding on the shared host names one sealed
+client area, and nothing before the second block runs a client (D251 (24)).
+The packages half names no area and never retires one, so it cannot take
+away the closure the clients half bound
+(`TestRetirementNeverRemovesTheOtherBlocksTools`). A stage without a managed
+mirror stays one block that names no part and requires nothing.
+
+*Engine.* `lifecycle.DependOnController` takes the controller blocks in the
+order they wait for each other, whatever order a capability lists them in,
+and adds each one's edge to every block outside its own ancestors; the
+clients half also depends on the packages half explicitly. It admits an
+earlier controller block as an ancestor and refuses any other that is no
+`ControllerPrecursor`, or that, for a later controller block, waits for no
+earlier one (`TestASplitControllerStageOrdersTheMirrorBetweenItsBlocks`,
+`TestASplitControllerStageListedInReverseKeepsItsOrder`,
+`TestAPrecursorOfALaterControllerBlockMustWaitForAnEarlierOne`,
+`TestASplitControllerStageWaitingForWorkThatNeedsItsClientsRefuses`).
+`locateTool` asks each controller block in plan order and the first that
+locates the tool answers (`TestALookupFindsAToolInEitherControllerBlock`); the
+outdated-client warning reads each block. A selection naming `controller`
+admits every block a controller block waits for, so `apply --stage controller`
+finishes the stage (`TestTheControllerStageSelectionAdmitsTheBlocksItWaitsFor`).
+`diff` and preflight needed no change: `diff` hands every controller block a
+read-only stage and preflight reads the selection, not the blocks.
+
+*Placement.* The interim refusal of a managed artifact mirror on the
+controller host is lifted for the controller Machine: its server is placed
+locally after the first block's container runtime and its fill runs locally,
+both before the second block, and a libvirt provider the controller hosts no
+longer refuses it unless that provider's bridge carries the server's address
+(D251 (25)). A Machine with `access.local`, or SSH at a controller address,
+that is not the controller Machine still refuses, now naming that Machine.
+`TestAManagedArtifactMirrorOnTheControllerSitsBetweenTheStagesBlocks` and
+`TestAControllerPlacedMirrorPlansThroughTheLifecycleService` plan
+`lab-sno-mirror-host` with its mirror moved to the controller through this
+build's capabilities and the whole lifecycle service; the SSH placement keeps
+the same order.
+
+*Records.* Specs: the controller exception and stage selection in
+[stages](../state-reconciliation.md#stages-and-the-pause-boundary), the
+[controller stage](../controller.md#the-controller-stage), the
+[mirror host](../infrastructure-services.md#mirror-host) ordering, the
+[artifact mirror](../api/environment.md#artifact-mirror) and the
+[refusal table](../api/environment.md#refusal-table)'s renamed row.
+Contracts: `controller-clients-v4` moved to `controller-clients-v5` with the
+request's `part`, which moved the stage's content digest; a retained v4 stage
+refuses by its version, so the build that applied it destroys it
+(`TestARetainedSingleBlockStageOfTheEarlierVersionRefuses`). No other plan
+golden moved beyond the example's new block identity.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** no controller has run the split: the managed server
+and the fill run locally through the same role and runner as an SSH host, and
+the ordering is proved by planning alone; `skopeo` as a stage package for an
+image mirror on the controller, the image fill, releases and an installed
+mirror host remain on [B1249](backlog.md#b1249).

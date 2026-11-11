@@ -22,10 +22,14 @@ profile](../../../specs/milestones/backlog.md#b1250) owns its acceptance.
 - Its serving certificate `mirror-tls` is issued by the generated authority
   `mirror-ca`, which the controller stage trusts beside its system trust store;
   no `trustBundleRef` is authored, so the mirror's anchor is that issuer.
-- `apply` first starts the mirror's server and fills it on `mirror`, each file
-  fetched from its publisher and published only at its pinned SHA-256, then
-  runs the controller stage, then every other block. `preflight` reports a
-  file the fill has not yet published as pending.
+- `apply` first installs the controller stage's host packages
+  (`controller-prerequisites`), then starts the mirror's server and fills it
+  on `mirror`, each file fetched from its publisher and published only at its
+  pinned SHA-256, then installs the stage's clients
+  (`controller-mirrored-clients`), then every other block. `preflight` reports
+  a file the fill has not yet published as pending. Placing `mirror-artifacts`
+  on `controller`, with `mirror-tls` naming `192.0.2.1`, instead runs the
+  server and the fill locally between the same two blocks.
 - Everything else is [lab-sno](../lab-sno/README.md): its guest, network,
   managed services on the controller and operator inputs. Supply the mirror
   host's SSH key pair (`mirror-access-key`) and its host key

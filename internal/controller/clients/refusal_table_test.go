@@ -72,8 +72,9 @@ func TestControllerRefusalTableMatchesUnsupported(t *testing.T) {
 			withValues(names, "<tool>", "helm", "<release>", "99.0.0")},
 		"OKD clients behind the artifact mirror": {[]api.Object{environment(artifactMirror()), machine(), okdCluster()},
 			withValues(names, "<tool>", "openshift-clients", "<release>", "4.19.3")},
-		"Managed artifact mirror on the controller": {append([]api.Object{environment(managedArtifactMirror("ip")), machine(), cluster()}, mirrorServer("controller")...),
-			withValues(names, "<server>", "ArtifactServer/mirror", "<host>", "Machine/controller")},
+		"Managed artifact mirror on another name for the controller host": {append([]api.Object{environment(managedArtifactMirror("ip")), machine(), cluster(),
+			localMirrorMachine()}, mirrorServer("mirror")...),
+			withValues(names, "<server>", "ArtifactServer/mirror", "<host>", "Machine/mirror")},
 		"Managed artifact mirror on a provider host": {append([]api.Object{environment(managedArtifactMirror("ip")), machine(), cluster(), mirrorMachine(),
 			api.NewObject(api.InfraProvider, "lab-libvirt", api.Value{}, api.MapValue(field("libvirt", api.MapValue(text("machineRef", "mirror")))))}, mirrorServer("mirror")...),
 			withValues(names, "<server>", "ArtifactServer/mirror", "<host>", "Machine/mirror", "<provider>", "InfraProvider/lab-libvirt")},
@@ -235,22 +236,30 @@ func withValues(names map[string]string, pairs ...string) map[string]string {
 	return values
 }
 
+func localMirrorMachine() api.Object {
+	local := mirrorMachine()
+	return local.WithSpec(local.Spec().With("access", api.MapValue(field("local", api.BoolValue(true)))))
+}
+
 // A second name for the controller host, a Machine reached locally or over
-// SSH port 22 at one of the controller's own addresses, is the controller
-// host too, so a managed artifact mirror placed on it refuses as on the
-// controller rather than reaching the engine's ordering refusal.
+// SSH port 22 at one of the controller's own addresses, refuses a managed
+// artifact mirror placed on it, which the controller Machine itself may host
+// once its stage's host packages are installed.
 func TestAManagedArtifactMirrorOnASecondNameForTheControllerHostRefuses(t *testing.T) {
 	controller := machine()
 	controller = controller.WithSpec(controller.Spec().With("network", api.MapValue(field("addresses", api.ListValue(api.MapValue(text("name", "ip"), text("address", "192.0.2.1")))))))
-	local := mirrorMachine()
-	local = local.WithSpec(local.Spec().With("access", api.MapValue(field("local", api.BoolValue(true)))))
+	local := localMirrorMachine()
 	ssh := mirrorMachine()
 	ssh = ssh.WithSpec(ssh.Spec().With("network", api.MapValue(field("addresses", api.ListValue(api.MapValue(text("name", "ip"), text("address", "192.0.2.1")))))).
 		With("access", api.MapValue(field("ssh", api.MapValue(text("addressRef", "ip"), text("knownHostsRef", "known"), field("auth", api.MapValue(text("privateKeyRef", "key"))))))))
 	for name, host := range map[string]api.Object{"local": local, "ssh": ssh} {
 		got := (Capability{}).Unsupported(stateOf(append([]api.Object{environment(managedArtifactMirror("ip")), controller, cluster(), host}, mirrorServer("mirror")...)...))
-		if len(got) != 1 || !strings.Contains(got[0].Reason, "is placed on Machine/mirror, which is the controller host") {
+		if len(got) != 1 || !strings.Contains(got[0].Reason, "is placed on Machine/mirror, another name for that host") {
 			t.Errorf("%s: refusals %+v", name, got)
 		}
+	}
+	controller = controller.WithSpec(controller.Spec().With("network", api.MapValue(field("addresses", api.ListValue(api.MapValue(text("name", "ip"), text("address", "203.0.113.20")))))))
+	if got := (Capability{}).Unsupported(stateOf(append([]api.Object{environment(managedArtifactMirror("ip")), controller, cluster()}, mirrorServer("controller")...)...)); len(got) != 0 {
+		t.Errorf("a managed artifact mirror on the controller Machine refuses: %+v", got)
 	}
 }

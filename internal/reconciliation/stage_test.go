@@ -224,3 +224,46 @@ func TestRemainingSubsetExcludesWhatARemovalProvedGone(t *testing.T) {
 		t.Fatalf("remaining = %v", ids(remaining.Blocks))
 	}
 }
+
+// A selection of the controller stage, bound to a plan whose controller block
+// waits for a managed artifact mirror, admits that mirror's server and fill,
+// so the stage it names can finish; another block of their stage, and a
+// selection without the controller stage, still wait.
+func TestTheControllerStageSelectionAdmitsTheBlocksItWaitsFor(t *testing.T) {
+	plan, err := NewPlan(Apply, []BlockDefinition{
+		staged("controller-prerequisites", StageController),
+		staged("artifact-server-mirror", StageInfrastructureServices, "controller-prerequisites"),
+		staged("mirror-files-lab", StageInfrastructureServices, "artifact-server-mirror", "controller-prerequisites"),
+		staged("controller-mirrored-clients", StageController, "artifact-server-mirror", "controller-prerequisites", "mirror-files-lab"),
+		staged("dns-lab", StageInfrastructureServices, "controller-mirrored-clients", "controller-prerequisites"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	admitted := func(stages ...string) []string {
+		selection, err := ParseSelection(stages, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		bound, ok := selection.Bind(plan)
+		if !ok {
+			t.Fatal("the selection did not bind")
+		}
+		var out []string
+		for _, block := range plan.Blocks {
+			if bound.Admits(block) {
+				out = append(out, block.ID)
+			}
+		}
+		return out
+	}
+	if got := admitted("controller"); !slices.Equal(got, []string{"controller-prerequisites", "artifact-server-mirror", "mirror-files-lab", "controller-mirrored-clients"}) {
+		t.Fatalf("--stage controller admits %v", got)
+	}
+	if got := admitted("machines"); len(got) != 0 {
+		t.Fatalf("--stage machines admits %v", got)
+	}
+	if got := admitted(); len(got) != len(plan.Blocks) {
+		t.Fatalf("no selection admits %v", got)
+	}
+}

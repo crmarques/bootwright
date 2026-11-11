@@ -941,11 +941,15 @@ unknown (`TestTheFillReadsItsEffectFromTheFilesTheMirrorHolds`). The fill's
 removal deletes `mirror/<environment>` alone, before the server's own removal.
 No Secret material reaches the mirror host beyond its placement's SSH access.
 
-**Ordering.** The controller block waits for the mirror server's block and the
-fill, because it reads its clients from them, and neither runs a
-controller-installed client; every other block waits for the controller block
+**Ordering.** The controller stage splits around the mirror: its host
+packages first, then the mirror server's block and the fill, which run no
+controller-installed client, then the stage's clients, which it reads from
+them; every other block waits for both controller blocks
 ([stages and the pause boundary](state-reconciliation.md#stages-and-the-pause-boundary),
-`TestTheControllerBlockWaitsForTheMirrorItReadsAndEveryOtherBlockForIt`).
+`TestASplitControllerStageOrdersTheMirrorBetweenItsBlocks`). The mirror host
+may be the controller Machine, where the server and the fill run locally; a
+Machine with `access.local`, or SSH at a controller address, that is not the
+controller Machine refuses.
 
 **Trust.** Every consumer verifies the mirror against the `caBundle` that issues
 the server's serving certificate, the `spec.source.generated.issuerRef` of its
@@ -953,8 +957,7 @@ the server's serving certificate, the `spec.source.generated.issuerRef` of its
 admission refuses a serving certificate with no issuer when none is named, and
 Bootwright creates no Secret for it.
 
-Not yet met: the mirror host may be the controller or a Machine Bootwright
-installs, a managed Registry on it may be the Environment's image mirror,
+Not yet met: the mirror host may be a Machine Bootwright installs, a managed Registry on it may be the Environment's image mirror,
 filled with service and BMC images, and it may mirror an OpenShift release;
 tracked as [B1249](milestones/backlog.md#b1249).
 

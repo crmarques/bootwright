@@ -1074,12 +1074,12 @@ The capability that plans a block owns its stage. Stages are not strata: a
 block depends on blocks, never on a stage, so a `substrates` block may wait on
 an `add-ons` block when an add-on enables the cluster hosting a provider.
 
-The `controller` stage is the one exception, and the engine owns it. Once
-requirements resolve, every block of a plan with a controller block depends on
-it, since its clients run their adapters, except the blocks it waits for: their
-capability must run each without those clients, as a managed
-[artifact mirror](api/environment.md#artifact-mirror) and its fill do, and any
-other refuses with `controller.unsupported`. The edge is frozen with the plan.
+The `controller` stage is the one exception, owned by the engine. Once
+requirements resolve, each block depends on each controller block, whose
+clients run its adapters, but what it waits for: a controller block, run
+first, or one its capability runs without them, past the first after an
+earlier one, like a managed [artifact mirror](api/environment.md#artifact-mirror)'s
+blocks; any other refuses with `controller.unsupported`.
 A context that selects no client or native closure beyond the host baseline
 contributes no controller block, and a plan without one is ordered by its
 capabilities alone.
@@ -1096,9 +1096,9 @@ No block holds or hands over a native package lock: a launch holds only its
 runtime's shared launch lock, which never blocks the host's package manager.
 
 A stage selection is the set of stages an invocation may start; an omitted
-selection admits every stage. A block is *ready* when it is `pending` and every
-dependency is `done`, and *startable* when it is ready and its stage is
-selected. Execution starts every startable block, in frozen plan order, up to a
+selection admits every stage, and `controller` what its blocks wait for.
+A block is *ready* when it is `pending` and every dependency is `done`, and
+*startable* when it is ready and admitted. Execution starts every startable block, in frozen plan order, up to a
 bound, and re-evaluates as each one settles. A block is admitted only while no
 block already running holds a resource it will not share and fewer running
 blocks than its throttle's capacity name its throttle.

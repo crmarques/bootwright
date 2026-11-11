@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/crmarques/bootwright/internal/cli"
+	"github.com/crmarques/bootwright/internal/desiredstate"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/workspace/contextfs"
 	"github.com/crmarques/bootwright/internal/workspace/contexts"
@@ -32,6 +33,11 @@ func cephExampleContext(t *testing.T, name string) (cli.Services, *contextfs.Sto
 
 func productionExampleContext(t *testing.T, name, example string) (cli.Services, *contextfs.Store) {
 	t.Helper()
+	return productionSourcesContext(t, name, example, exampleDirectory(t, example))
+}
+
+func productionSourcesContext(t *testing.T, name, example string, sources desiredstate.Sources) (cli.Services, *contextfs.Store) {
+	t.Helper()
 	root := filepath.Join(t.TempDir(), "state")
 	repository := testRepository(root)
 	deps := testContextWiring(t, root)
@@ -49,7 +55,7 @@ func productionExampleContext(t *testing.T, name, example string) (cli.Services,
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, file := range exampleDirectory(t, example).Files {
+	for _, file := range sources.Files {
 		relative, err := filepath.Rel(base, file.Path())
 		if err != nil {
 			t.Fatal(err)

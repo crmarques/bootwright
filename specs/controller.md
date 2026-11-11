@@ -604,7 +604,8 @@ nothing. What dnf prints during an uninstall is kept in no setup run.
 ## The controller stage
 
 `apply --stage controller` installs the prerequisites one context's own graph
-selects. It is one block in that context's lifecycle plan, planned by its
+selects. It is one block in that context's lifecycle plan, or two when its
+clients are read from a managed artifact mirror, planned by its
 capability from effective state alone and frozen before any effect: the target
 client requirements the graph names, the closures it selects with the
 [host package](#host-packages) requirements each one names, the libvirt
@@ -651,8 +652,15 @@ public-origin client in place of its publisher, verified against the system
 trust store plus its optional `trustBundleRef` anchor, which the stage's
 request names and its downloading attempt is lent; `preflight` proves the
 mirror holds each file at its pinned size before the stage runs. A managed
-mirror's server and fill run before the stage, on their
-[mirror host](infrastructure-services.md#mirror-host). A client at the default
+mirror splits the stage: `controller-prerequisites` installs its
+[host packages](#host-packages) and `controller-mirrored-clients`, which
+requires the mirror's `ArtifactServer`, publishes the whole client closure,
+vendor clients included, into the one area this context's binding names. The
+mirror's server and fill run between them on their
+[mirror host](infrastructure-services.md#mirror-host), which may be the
+controller Machine: there both run locally, after the container runtime the
+first block installs. The packages half names no area and retires none, and
+`apply --stage controller` runs the mirror's blocks too. A client at the default
 release its tool table names is acquired by the size
 and SHA-256 that table holds, frozen into the stage's request, and no publisher
 metadata is read for it, from its publisher or from a

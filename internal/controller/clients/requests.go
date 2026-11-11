@@ -14,13 +14,19 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation"
 )
 
-// The block this capability plans is the controller stage: one block per
-// context, named by the prerequisites it adds to the host setup prepared.
+// The blocks this capability plans are the controller stage: one per context,
+// or its host packages and then its clients around a managed artifact mirror.
 const (
-	Kind           = string(api.Environment)
-	Implementation = "controller-prerequisites"
-	BlockID        = "controller-prerequisites"
-	Version        = "controller-clients-v4"
+	Kind                   = string(api.Environment)
+	Implementation         = "controller-prerequisites"
+	BlockID                = "controller-prerequisites"
+	MirroredClientsBlockID = "controller-mirrored-clients"
+	Version                = "controller-clients-v5"
+)
+
+const (
+	PartPrerequisites   = "prerequisites"
+	PartMirroredClients = "mirrored-clients"
 )
 
 // ToolRequest is one declared client requirement at its exact release, frozen
@@ -54,6 +60,7 @@ type Request struct {
 	MirrorTrust    *MirrorTrust  `json:"mirrorTrust,omitempty"`
 	NMState        bool          `json:"nmstate,omitempty"`
 	Packages       []string      `json:"packages"`
+	Part           string        `json:"part,omitempty"`
 	Tools          []ToolRequest `json:"tools"`
 	Version        string        `json:"version"`
 }
@@ -77,6 +84,14 @@ func (r Request) MirrorReader() bool {
 	return slices.ContainsFunc(r.Tools, func(tool ToolRequest) bool {
 		return tool.SHA256 != "" && controller.PublicOrigin(tool.catalogRequest()) && tool.Mirror != ""
 	})
+}
+
+func (r Request) Split() (Request, Request) {
+	packages := r
+	packages.Part, packages.Tools, packages.MirrorTrust = PartPrerequisites, []ToolRequest{}, nil
+	clients := Request{Egress: r.Egress, Machine: r.Machine, MirrorTrust: r.MirrorTrust, Part: PartMirroredClients, Tools: r.Tools, Version: r.Version}
+	clients.Packages = prerequisites.StageRequirements(clients.native())
+	return packages, clients
 }
 
 func (t ToolRequest) catalogRequest() controller.ToolRequest {
@@ -161,10 +176,25 @@ func DecodeRequest(data []byte) (Request, error) {
 	if !slices.Equal(request.Packages, prerequisites.StageRequirements(request.native())) {
 		return Request{}, refuse("lifecycle.state", "the frozen controller prerequisites request names host packages its closures do not select", "destroy it with the build that applied it")
 	}
+	if !wholePart(request) {
+		return Request{}, refuse("lifecycle.state", "the frozen controller prerequisites request names a part of the stage it does not hold", "destroy it with the build that applied it")
+	}
 	if trust := request.MirrorTrust; trust != nil && (trust.Host == "" || !api.ValidLexical("name", trust.TrustBundleRef) || !slices.ContainsFunc(request.Tools, func(tool ToolRequest) bool { return mirrorHost(tool.Mirror) == trust.Host })) {
 		return Request{}, refuse("lifecycle.state", "the frozen controller prerequisites request names a mirror trust anchor no client it reads from that mirror uses", "destroy it with the build that applied it")
 	}
 	return request, nil
+}
+
+func wholePart(request Request) bool {
+	switch request.Part {
+	case "":
+		return true
+	case PartPrerequisites:
+		return len(request.Tools) == 0 && request.MirrorTrust == nil
+	case PartMirroredClients:
+		return len(request.Tools) != 0 && len(request.Packages) == 0 && request.native() == prerequisites.StageNative{} && request.Libvirt == "" && !request.LibvirtClient
+	}
+	return false
 }
 
 // ContentDigest hashes only the stage label, Implementation and Version; the

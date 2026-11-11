@@ -294,7 +294,7 @@ Alias cell.
 | [B1237](#b1237) | new, 2026-11-09 (D248 (5)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's default image comes from a Red Hat registry wherever Red Hat publishes one | Red Hat publishes no dnsmasq, chrony or sushy-tools image, and its squid image needs a `registry.redhat.io` login no managed-service pull carries |
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
 | [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355, X361 and X401 on 2026-11-10 | product | Controller, with Desired state | A managed artifact server may serve the artifact mirror, and one declaration replaces the download mirrors | The declaration (X355), the preflight probe and the private trust anchor (X361) and a managed server on an SSH Machine (X401) landed; folding `spec.downloads` awaits the owner (D251 (5)) |
-| [B1249](#b1249) | new, 2026-11-10 (D250 (8)); partly delivered by X401 on 2026-11-10 | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | X401 built and fills a managed artifact mirror on an SSH Machine; the image mirror, releases and the controller and installed placements remain, which D251 (6) authorizes slice by slice |
+| [B1249](#b1249) | new, 2026-11-10 (D250 (8)); partly delivered by X401 on 2026-11-10 and X408 on 2026-11-11 | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | X401 built and fills a managed artifact mirror on an SSH Machine and X408 split the controller stage around one on the controller; the image mirror, releases and the installed placement remain, which D251 (6) authorizes slice by slice |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
 | [B1267](#b1267) | new, 2026-11-10 (X348, audit 004 REC-74) | safety | Substrate and Machine, with Infrastructure services | A context driving a server by its BMC and one reaching it as an OS-ready Machine over SSH conflict | Needs a cross-mechanism machine identity whose byte order is settled first |
 | [B1299](#b1299) | new, 2026-11-10 (split from B1263, D253) | product | Controller, with State reconciliation | A running environment takes a raised client minimum without a destroy | An open owner question: a completed apply settles (D153), so replacing a client is a fresh apply today |
@@ -3341,6 +3341,11 @@ Machine reached over SSH, `spec.mirror.artifacts.serverRef` and
 controller stage's public-origin clients by `mirror-files-<environment>`
 before that stage, which the engine orders after resolving requirements
 ([X401](delivered.md#x401--a-managed-artifact-mirror-on-an-ssh-machine)).
+**Delivered in-tree by X408** ([D251](#d251) (24) and (25)): the controller
+placement's stage split, `controller-prerequisites` and
+`controller-mirrored-clients` around the mirror's server and fill, with the
+mirror on the controller Machine run locally between them
+([X408](delivered.md#x408--the-controller-stage-split-around-its-mirror)).
 **Remaining**, from the session's plan of 2026-11-10, each slice through its
 own review: (a) the image mirror: a managed Registry beside the artifact
 server on the same Machine as `spec.mirror.registry`, with a required
@@ -3354,15 +3359,13 @@ on an SSH host and refused naming its package; (b) an OpenShift release into
 that Registry by the release's own `oc` (`--to` the `ocp-v4.0-art-dev`
 repository and `--to-release-image` the `ocp-release` one), its pull secret
 lent per attempt as a two-entry auth document with a private `HOME`, removed
-in an `always`, and the cluster's registry mirror refusal lifted; (c) the
-controller placement, whose stage splits into `controller-prerequisites` and
-`controller-mirrored-clients` around the fill, with `skopeo` a stage package
-there; (d) a Bootwright-installed mirror host, its placement requiring the
+in an `always`, and the cluster's registry mirror refusal lifted; (c) `skopeo` a
+stage package when the image mirror is on the controller, with (a); (d) a Bootwright-installed mirror host, its placement requiring the
 installation and its host key read from the installation's evidence, and
 [B1250](#b1250)'s profile row. **Exit evidence:** the plan-order, replay and
-verification tests for the SSH placement landed with X401; the order for the
-controller and installed placements, the image and release tests and the
-profile row remain.
+verification tests for the SSH placement landed with X401 and the controller
+placement's order with X408; the installed placement's order, the image and
+release tests and the profile row remain.
 
 ### B1250
 
@@ -8441,6 +8444,37 @@ the owner's review:
     build in either path, so every notices file differs from its predecessor
     by one line. The release has no signature and no reproducibility note
     beyond the commit the executable reports.
+24. Taken by the session for B1249 (X408), pending the owner's review: when
+    the controller stage reads a client from a managed artifact mirror it is
+    two blocks, `controller-prerequisites` with the host packages alone and
+    `controller-mirrored-clients` with the whole client closure, vendor and
+    non-mirrored clients included, requiring the mirror's `ArtifactServer`,
+    in place of the plan's packages-and-vendor-clients first block: one
+    context's binding on the shared host names one sealed client area, so two
+    blocks publishing two areas would either retire each other's or move the
+    host state every context shares, while no block before the second runs a
+    client. The engine takes the controller blocks in the order they wait for
+    each other and adds each one's edge to every block outside its own
+    ancestors, an earlier controller block being an admitted ancestor and any
+    precursor of a later one required to wait for an earlier one; `locateTool` and the outdated-client
+    warning read every controller block; only the clients half names and
+    retires its area. A selection naming `controller` admits every block a
+    controller block waits for, so `apply --stage controller`, every stage
+    remedy's command, still finishes the stage. The request moves to
+    `controller-clients-v5` with a `part` field, and as for every earlier
+    move a context an earlier build applied refuses continuation and destroy
+    at its stage, which the build that applied it destroys.
+25. Taken by the session for B1249 (X408): the managed artifact mirror may be
+    placed on the controller Machine, whose server and fill run locally after
+    the first controller block's container runtime and before the second, so
+    (20)'s controller refusal is lifted for that Machine alone; a Machine with
+    `access.local`, or SSH port 22 at a controller address, that is not the
+    controller Machine still refuses, now naming the controller Machine, since
+    no placement reaches one such host by two names. On the controller
+    Machine a hosted libvirt provider no longer refuses the mirror, because a
+    local service waits only for a provider whose bridge carries its address,
+    which still refuses. `skopeo` as a stage package belongs to the image fill
+    and stays with B1249's (a).
 
 ### D252
 

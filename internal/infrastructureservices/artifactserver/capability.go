@@ -338,5 +338,5 @@ func (Capability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiesce
 
 func (Capability) PrecedesController(definition reconciliation.BlockDefinition) bool {
 	request, err := DecodeRequest(definition.Request)
-	return err == nil && request.Placement.Connection == connectionSSH
+	return err == nil && (request.Placement.Connection == connectionSSH || request.Placement.Connection == connectionLocal)
 }
