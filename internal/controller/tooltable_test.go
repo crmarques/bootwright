@@ -147,9 +147,6 @@ func TestADeclaredArtifactMirrorRefusesWhatItCannotServe(t *testing.T) {
 		field  string
 		phrase string
 	}{
-		"a per-client mirror beside it": {func(spec api.Value) api.Value {
-			return spec.WithPath(api.StringValue("https://other.example.test"), "downloads", "helmMirror")
-		}, []api.Object{openshiftCluster("openshift")}, "$.spec.downloads.helmMirror", "names it again"},
 		"an unpinned client release": {func(spec api.Value) api.Value {
 			return spec.WithPath(api.StringValue("99.0.0"), "dependencyVersions", "helm")
 		}, []api.Object{openshiftCluster("openshift")}, "$.spec.mirror.artifacts", "selects helm 99.0.0"},
@@ -162,6 +159,20 @@ func TestADeclaredArtifactMirrorRefusesWhatItCannotServe(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("%s: %+v", name, shapes)
+		}
+	}
+}
+
+func TestProviderToolsUseTheSharedArtifactMirror(t *testing.T) {
+	catalog := mirroredGraph(func(spec api.Value) api.Value { return spec })
+	for _, kind := range []string{"govc", "virtctl"} {
+		tool, err := controller.ProviderTool(catalog, kind)
+		if err != nil {
+			t.Fatal(err)
+		}
+		expected := defaultTool(t, kind)
+		if tool.Mirror != "https://mirror.example.test/tools/"+kind || tool.Version != expected.Version || tool.SHA256 != expected.SHA256 {
+			t.Errorf("%s does not use its pinned shared mirror: %+v", kind, tool)
 		}
 	}
 }

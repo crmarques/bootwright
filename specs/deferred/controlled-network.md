@@ -103,7 +103,7 @@ for an image and `<endpoint>/<kind>/<version>/<file>` for a tool:
 
 | Consumer | Today's route | With the declaration |
 | --- | --- | --- |
-| Controller stage tools | Three `spec.downloads` fields, and the publisher's metadata | Every public-origin tool from the artifact server |
+| Controller stage tools | The publisher's pinned release or metadata | Every public-origin tool from the artifact server |
 | Managed service image | `spec.image.local` on each service | Derived, with the Registry's credential and trust |
 | Emulated BMC image | The host's own container configuration | Derived |
 | Cluster release images | Authored `imageDigestSources` | Derived for the release repositories |
@@ -186,7 +186,7 @@ Each step leaves a working product.
    operator fills already serves every default tool.
 2. Consuming a mirror the operator fills:
    [B1245](../milestones/delivered.md#x363--the-rest-of-the-acquisition-list),
-   [B1246](../milestones/backlog.md#b1246),
+   [B1246](../milestones/delivered.md#x434--one-artifact-mirror-declaration),
    [B1247](../milestones/delivered.md#x356--service-and-bmc-images-from-the-image-mirror) and
    [B1248](../milestones/delivered.md#x357--release-repositories-from-the-image-mirror), with the acceptance of
    [B724](../milestones/m3.md#b724).

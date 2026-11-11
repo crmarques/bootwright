@@ -32,7 +32,16 @@ func TestServiceShapesNoConsumerCanUseRefuseAtValidate(t *testing.T) {
 		refusedAt(t, serviceSources(env), "api.invariant", "$.spec.defaults.Proxy.image.public")
 	})
 	t.Run("an HTTP mirror with a port and a query", func(t *testing.T) {
-		env := serviceEnvironment + "  downloads: {helmMirror: 'http://mirror.example.test:8080/helm?x=1'}\n"
-		refusedAt(t, serviceSources(env), "api.value", "$.spec.downloads.helmMirror")
+		env := serviceEnvironment + "  mirror:\n    artifacts:\n      url: http://mirror.example.test:8080/tools?x=1\n"
+		refusedAt(t, serviceSources(env), "api.value", "$.spec.mirror.artifacts.url")
 	})
+}
+
+func TestPerToolDownloadMirrorsRefuseAsUnknownFields(t *testing.T) {
+	for _, field := range []string{"openshiftClientsMirror", "helmMirror", "virtctlMirror", "govcMirror"} {
+		t.Run(field, func(t *testing.T) {
+			env := serviceEnvironment + "  downloads:\n    " + field + ": https://mirror.example.test/tools\n"
+			refusedAt(t, serviceSources(env), "api.field", "$.spec.downloads")
+		})
+	}
 }

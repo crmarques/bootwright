@@ -66,8 +66,6 @@ func TestControllerRefusalTableMatchesUnsupported(t *testing.T) {
 			clientRelease(t, names, "1.0.0")},
 		"Client release without MAJOR.MINOR.PATCH": {[]api.Object{environment(field("dependencyVersions", api.MapValue(text("helm", "4.3")))), machine(), cluster()},
 			clientRelease(t, names, "4.3")},
-		"Per-client mirror beside the artifact mirror": {[]api.Object{environment(artifactMirror(), field("downloads", api.MapValue(text("helmMirror", "https://other.example.test")))), machine(), cluster()},
-			withValues(names, "<field>", "helmMirror")},
 		"Unpinned client behind the artifact mirror": {[]api.Object{environment(artifactMirror(), field("dependencyVersions", api.MapValue(text("helm", "99.0.0")))), machine(), cluster()},
 			withValues(names, "<tool>", "helm", "<release>", "99.0.0")},
 		"OKD clients behind the artifact mirror": {[]api.Object{environment(artifactMirror()), machine(), okdCluster()},

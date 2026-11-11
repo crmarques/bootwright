@@ -247,7 +247,13 @@ the system trust store, for the mirror alone. With the mirror declared, a
 release in `spec.dependencyVersions` other than the build's default is
 refused at plan, because its checksum only its publisher holds. The
 OpenShift clients and installer stay on `mirror.openshift.com`, a vendor
-origin, or on `spec.downloads.openshiftClientsMirror`. A newer build may raise
+origin. `spec.mirror.artifacts` replaces the older per-tool mirror fields;
+remove `spec.downloads` from an older input and arrange its public-origin
+files under the shared layout above. An incomplete operation whose frozen
+input still authors `downloads` can refuse continuation with this build;
+finish it with the earlier build, or destroy it under the
+[continuation and removal rules](../specs/state-reconciliation.md#continuation-and-removal),
+then migrate the input for a fresh apply. A newer build may raise
 a client's minimum: `bootwright status` and `bootwright diff` then warn of each
 client an earlier apply installed below it, and a destroy and a fresh apply
 install the new default ([outdated clients](../specs/cli.md#outdated-clients)).

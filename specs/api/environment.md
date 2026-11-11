@@ -28,7 +28,6 @@ Environment fields emit in this order:
 | `spec.storageClusters` | array of strings | no | all loaded storage clusters | Non-empty unique root selection of the `storageCluster` category's kinds: `CephCluster`. |
 | `spec.remoteMachinesAccessKey` | object | conditional | — | Fleet key for the `bootwright` account installed on managed machines. |
 | `spec.defaults` | kind-keyed partial specs | no | `{}` | Omitted object fields inherit the corresponding kind entry under the rules below. |
-| `spec.downloads` | object | no | source-specific | Closed download-mirror policy below. |
 | `spec.dependencyVersions` | object | no | this build's defaults | Version intent for the prerequisites this Environment controller stage installs; closed shape below. |
 | `spec.mirror` | object | no | — | The [artifact mirror](#artifact-mirror) that serves every public-origin client, an operator's `url` or a managed `serverRef` and `endpointRef`, with its optional trust anchor, and the [image mirror](#image-mirror) that serves every public-origin image a Machine runs as a service. |
 | `spec.controller` | object | yes | — | Required controller Machine selection below. |
@@ -338,34 +337,6 @@ file access, Secret read, generation, or materialization. The common API
 [normalization rules](../api.md#defaults-normalization-and-effective-state)
 own expansion limits, canonical output, and immutable source provenance.
 
-## Download mirrors
-
-`spec.downloads` is a closed map with these fields in order:
-
-| Field | Type | Required | Default | Rule |
-| --- | --- | --- | --- | --- |
-| `openshiftClientsMirror` | string | no | upstream source | Absolute HTTPS base URL for OpenShift client downloads. |
-| `virtctlMirror` | string | no | upstream source | Absolute HTTPS base URL for the resolved `virtctl` release. |
-| `helmMirror` | string | no | upstream source | Absolute HTTPS base URL for the resolved Helm release. |
-| `govcMirror` | string | no | upstream source | Absolute HTTPS base URL for the resolved `govc` release. |
-
-A mirror is an [HTTPS URL](../api.md#graph-validation) of at most 4096 bytes on
-the default port or port 443, because the controller stage appends a release
-path to it and fetches only over HTTPS. Validate refuses `http`, any other
-port, userinfo, a query, a fragment, a bare `?` or `#`, and a percent-escaped
-path, and the stage applies the same rule before it contacts any publisher.
-Recovering a stage block an earlier build froze reads its mirror at that
-build's tolerance as well, so a mirror ending in a bare `?` or `#` never
-strands its operation: the block still observes and destroys, and only a new
-resolution refuses it. These fields select download sources; they do not fill
-attributes on cluster objects. Helm archives reside directly under the base URL;
-OpenShift archives, `govc` archives and `virtctl` binaries reside under
-`<base>/<exact-version>/`; the `govc` and `virtctl` directories, and the
-`virtctl` filename, include the release's `v` prefix. A default release is
-fetched by the size and SHA-256 the build's tool table pins, so a mirror
-serves it with no publisher contact; for any other release, publisher metadata
-determines the checksum even when a mirror supplies the artifact bytes.
-
 Secret source and custody declarations belong to
 [each Secret](secrets.md#source-union). `Environment` has no `secretStorage`
 setting. A default may supply an omitted Secret source, but cannot override an
@@ -373,14 +344,16 @@ authored source or copy material.
 
 ## Artifact mirror
 
-`spec.mirror.artifacts.url` names one HTTPS file server, under the
-[download mirror](#download-mirrors) URL rules and 102 bytes shorter so the
-longest client path fits, that serves the clients of a
-[public origin](../security.md#acquisition-origins) the controller stage
-installs: Helm, `govc`, `kubectl` and `virtctl`. The OKD clients, also of a
+`spec.mirror.artifacts.url` names one HTTPS file server that serves the
+clients of a [public origin](../security.md#acquisition-origins) the controller
+stage installs: Helm, `govc`, `kubectl` and `virtctl`. Its absolute HTTPS base
+URL is at most 3994 bytes, leaving room for the longest client path, and uses
+the default port or port 443. Validate refuses `http`, another port,
+userinfo, a query, a fragment, a bare `?` or `#`, and a percent-escaped path;
+the stage applies the same rule before acquisition. The OKD clients, also of a
 public origin, are refused beside it, because no build pins them. A client of
-a vendor origin, the OpenShift clients and installer, stays on its vendor or
-its `openshiftClientsMirror`. Each client is read from
+a vendor origin, the OpenShift clients and installer, stays on its vendor.
+Each mirrored client is read from
 `<url>/<kind>/<release>/<file>`, its release with the `v` prefix and its file
 the publisher's own file name, for example
 `<url>/helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz` and
@@ -390,8 +363,7 @@ Because a client behind the mirror is acquired only by the size and SHA-256
 the build's [tool table](../controller.md#the-tool-table) pins, the stage
 reaches no publisher for any client behind it. A selected client release the table does
 not pin, a declared `spec.dependencyVersions` override or the OKD clients,
-refuses at plan, and so does a `helmMirror`, `govcMirror` or `virtctlMirror`
-beside it ([refusal table](#refusal-table)). `bootwright render acquisitions`
+refuses at plan ([refusal table](#refusal-table)). `bootwright render acquisitions`
 names each file the mirror must hold.
 
 `spec.mirror.artifacts.trustBundleRef`, optional, names a `caBundle`
@@ -412,9 +384,8 @@ through the controller Machine's [proxy choice](machines.md#machine-proxy)
 and the same trust, following a redirect only to HTTPS on the mirror's own
 host, within two minutes for all of them. The stage's download keeps to a
 like rule: a redirect leaves a source's host only from one publisher download
-host to another, so neither the artifact mirror nor a
-[download mirror](#download-mirrors) can redirect the stage to a publisher. It fails a file the mirror lacks or
-serves at a size other than the one the build pins, naming the file's URL and
+host to another, so the artifact mirror cannot redirect the stage to a
+publisher. It fails a file the mirror lacks or serves at a size other than the one the build pins, naming the file's URL and
 the publisher file to copy there, and reports one it could not read, or whose
 size the mirror did not name, as unknown. Without the declaration preflight
 probes nothing.
@@ -436,9 +407,6 @@ served at another size still fails, and a transport or TLS failure stays
 unknown. The server may be placed on the controller Machine, around which the
 [controller stage](../controller.md#the-controller-stage) splits, or on a
 Machine Bootwright installs ([placement](infrastructure-services.md#management-and-placement)).
-
-Not yet met: the declaration replaces `spec.downloads`; tracked as
-[B1246](../milestones/backlog.md#b1246).
 
 ## Image mirror
 
@@ -606,7 +574,6 @@ Environment.
 | Libvirt release pin | `spec.dependencyVersions.libvirt` other than `latest`, with the libvirt client selected | `this executable's controller stage installs the libvirt release the host's repositories provide, and <environment> pins spec.dependencyVersions.libvirt` | `remove spec.dependencyVersions.libvirt from <environment>` |
 | Client release below the minimum | `spec.dependencyVersions.<tool>` older than the minimum this executable's tool table holds, with that client selected | `this executable accepts <tool> <minimum> or newer, and <environment> declares <release> in spec.dependencyVersions.<tool>` | `declare <tool> <minimum> or newer in spec.dependencyVersions.<tool> of <environment>, or remove it for this build's default` |
 | Client release without MAJOR.MINOR.PATCH | `spec.dependencyVersions.<tool>` with no leading `MAJOR.MINOR.PATCH`, with that client selected | `this executable holds <tool> to <minimum> or newer by its MAJOR.MINOR.PATCH, and <environment> declares <release> in spec.dependencyVersions.<tool>, which names none` | `declare <tool> <minimum> or newer in spec.dependencyVersions.<tool> of <environment>, or remove it for this build's default` |
-| Per-client mirror beside the artifact mirror | `spec.downloads.helmMirror`, `govcMirror` or `virtctlMirror` with `spec.mirror.artifacts` | `spec.mirror.artifacts of <environment> names where every public-origin client comes from, and spec.downloads.<field> names it again` | `remove spec.downloads.<field> from <environment>` |
 | Unpinned client behind the artifact mirror | a selected public-origin client at a release the tool table does not pin, with `spec.mirror.artifacts` | `with spec.mirror.artifacts, this executable acquires a public-origin client only at a release its tool table pins, and <environment> selects <tool> <release>, whose checksum only its publisher holds` | `declare no <tool> release in spec.dependencyVersions of <environment> so it takes this build's pinned default, or remove spec.mirror.artifacts` |
 | OKD clients behind the artifact mirror | an OKD cluster's clients, with `spec.mirror.artifacts` | `with spec.mirror.artifacts, this executable acquires a public-origin client only at a release its tool table pins, and <environment> selects <tool> <release>, whose checksum only its publisher holds` | `select an openshift distribution, whose clients come from their vendor, or remove spec.mirror.artifacts from <environment>` |
 | Managed artifact mirror on another name for the controller host | a managed `spec.mirror.artifacts` on a Machine other than the controller `Machine` with `access.local`, or reached on SSH port 22 at a controller address | `this executable places a managed artifact mirror on the controller host only through its controller Machine, and <server> is placed on <host>, another name for that host` | `place <server> on <machine> or on another Machine reached over SSH` |

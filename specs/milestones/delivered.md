@@ -13053,7 +13053,7 @@ its mirror.
 **Commits:** this commit. Gates: listed in its message. No live run or push
 occurred. **Limitations:** preflight does not yet prove the mirror holds every
 file, the mirror must verify against the host's trust store, and a managed
-artifact server cannot be the mirror yet ([B1246](backlog.md#b1246)).
+artifact server cannot be the mirror yet ([B1246](#x434--one-artifact-mirror-declaration)).
 
 ### X347 — Agent effect guard
 
@@ -13538,7 +13538,7 @@ record retains it.
 occurred. **Limitations:** the probe and the anchored download are proved
 against an in-process HTTPS server and a stubbed urllib3, not a real mirror
 or a TLS-inspecting proxy; a managed artifact server as the
-mirror and folding `spec.downloads` stay on [B1246](backlog.md#b1246).
+mirror and folding `spec.downloads` stay on [B1246](#x434--one-artifact-mirror-declaration).
 
 ### X363 — The rest of the acquisition list
 
@@ -14506,7 +14506,7 @@ release's `go.sum` and the replacement of a module by one with its own
 **Item:** B1249 (2026-11-10, [D250](backlog.md#d250) (8),
 [D251](backlog.md#d251) (6) and (16) to (22)), partly delivered in-tree, so
 the item stays in the backlog with its remaining slices; it also delivers
-[B1246](backlog.md#b1246)'s managed-server clause. The slice is the first of
+[B1246](#x434--one-artifact-mirror-declaration)'s managed-server clause. The slice is the first of
 the session's plan for B1249, cut to the artifact mirror and its file fill
 (D251 (22)): the plan's image fill moves to the item's remaining work, so the
 managed image mirror refusal stays.
@@ -15346,3 +15346,36 @@ template-inputs charts declare none of the removed fields and need no edit.
 
 **Commits:** this commit. **Gates:** listed in its message. **Limitations:**
 breaking authoring change; delete the removed fields. No live run or push.
+
+### X434 — One artifact mirror declaration
+
+**Item:** B1246 (2026-11-11, [D251](backlog.md#d251) (42)), delivered
+in-tree after X355, X361 and X401 delivered the declaration, preflight,
+private trust and managed-server placements. The owner's remaining choice
+removes `Environment.spec.downloads` in favor of the shared
+[artifact mirror](../api/environment.md#artifact-mirror).
+
+All four per-tool mirror fields now receive the standard unknown-field
+refusal at validation (`TestPerToolDownloadMirrorsRefuseAsUnknownFields`).
+Tool selection and provider clients derive public-origin mirrors only from
+the shared declaration (`TestProviderToolsUseTheSharedArtifactMirror`);
+OpenShift clients and installer retain their direct vendor source. The
+obsolete duplicate-mirror refusal leaves the controller's table, and the
+release-stamp diagnostic names the available release choice.
+
+The frozen tool request and its mirror member remain unchanged, so an older
+operation retains its own source reference. This preserves decoding and
+removal of a compatible frozen request, not continuation of an older authored
+input: another build replans that input to prove the same blocks, and its
+removed `downloads` field can now refuse compilation. The operator finishes
+with the earlier build or removes the frozen operation under
+[continuation and removal](../state-reconciliation.md#continuation-and-removal)
+before migrating the input for a fresh apply. No tracked example authors
+the removed fields. The operator guide gives the
+input migration and the API page owns the shared URL grammar and layout.
+The downstream `environment-ha` and `ceph-cluster` charts author no
+`downloads` field and need no change for this removal.
+
+**Commits:** this commit. Gates: listed in its message. **Limitations:** the
+shared artifact declaration mirrors public-origin clients at build-pinned
+releases; vendor clients remain direct. No live run or push occurred.

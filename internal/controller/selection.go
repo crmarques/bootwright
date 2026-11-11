@@ -453,13 +453,6 @@ func mirrorShapes(environment api.Object, catalog api.Catalog) []UnsupportedShap
 		return shapes
 	}
 	shapes = append(shapes, managedMirrorShapes(environment, catalog)...)
-	for _, field := range []string{"govcMirror", "helmMirror", "virtctlMirror"} {
-		if environment.Spec().Get("downloads", field).Present() {
-			shapes = append(shapes, UnsupportedShape{Object: environment, Field: "$.spec.downloads." + field,
-				Reason:      "spec.mirror.artifacts of " + environment.Identity() + " names where every public-origin client comes from, and spec.downloads." + field + " names it again",
-				Remediation: "remove spec.downloads." + field + " from " + environment.Identity()})
-		}
-	}
 	tools, err := SelectTools(catalog)
 	if err != nil {
 		return shapes

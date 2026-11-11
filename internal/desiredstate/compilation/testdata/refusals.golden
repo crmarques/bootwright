@@ -15,7 +15,7 @@ kind defaults key: api.field 10:5 [Environment/synthetic] ($.spec.defaults.Machi
 two Secret source arms: api.invariant 7:11 [Secret/probe] ($.spec.source) set at most one of contextStore, generated; next: keep one of them and remove the others
 Proxy implementation enum: api.value 7:19 [Proxy/probe] ($.spec.implementation) value is not one of the permitted choices: squid; next: use one of the permitted values
 Context document: api.kind 2:7 ($.kind) a Context is a standalone context configuration document, not desired state; next: keep it outside the input directory and pass it to context init or context update with -f
-unknown Environment field: api.field 9:3 [Environment/synthetic] ($.spec.machineAccess) unknown field; spec permits domains, sites, containerClusters, storageClusters, remoteMachinesAccessKey, defaults, downloads, dependencyVersions, mirror, controller, lifecycle; next: remove it or use a permitted field
+unknown Environment field: api.field 9:3 [Environment/synthetic] ($.spec.machineAccess) unknown field; spec permits domains, sites, containerClusters, storageClusters, remoteMachinesAccessKey, defaults, dependencyVersions, mirror, controller, lifecycle; next: remove it or use a permitted field
 unregistered kind: api.kind 2:7 ($.kind) kind must name a registered API kind; next: use a registered kind name
 add-on subscription without a starting CSV: api.required 7:19 [ClusterAddon/probe] ($.spec.olm.subscription.startingCSV) required field is absent; next: add startingCSV (string)
 add-on catalog without a priority: api.required 7:20 [ClusterAddon/probe] ($.spec.olm.catalogSource.priority) required field is absent; next: add priority (integer)

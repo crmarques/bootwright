@@ -293,7 +293,6 @@ Alias cell.
 | [B1230](#b1230) | new, 2026-11-09 (X331) | product | Machine power, with Substrate | A failed revoke of a lent KubeVirt token reaches the operator of a power command or reading | Power results carry no warning channel; the token still ends at its bounded lifetime and the revoke's adapter output is retained |
 | [B1237](#b1237) | new, 2026-11-09 (D248 (5)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's default image comes from a Red Hat registry wherever Red Hat publishes one | Red Hat publishes no dnsmasq, chrony or sushy-tools image, and its squid image needs a `registry.redhat.io` login no managed-service pull carries |
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
-| [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355, X361 and X401 on 2026-11-10 | product | Controller, with Desired state | A managed artifact server may serve the artifact mirror, and one declaration replaces the download mirrors | The declaration (X355), the preflight probe and the private trust anchor (X361) and a managed server on an SSH Machine (X401) landed; the owner selected replacement in D251 (42); removing `spec.downloads` remains |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
 | [B1300](#b1300) | new, 2026-11-10 (X363) | product | CLI | The acquisition list names `cp.icr.io`'s blob delivery host | The list landed (X363); the host answers only an entitled client, which this session could not use |
 | [B1284](#b1284) | new, 2026-11-10 (D255 (8)) | product | Substrate | A tagged managed Network carries an IPv6 prefix on its leg | A leg is IPv4 only and the owned table rejects IPv6 to and from a leg; no tracked input needs it |
@@ -3297,34 +3296,10 @@ golden that renders it. **Outcome:** an operator reading a failed block's
 events sees its cause without opening raw output.
 
 
-### B1246
-
-**Owner:** Controller, with Desired state. **Kind:** product. **Requires:**
-none. **Definition:** Specified, from [D250](#d250) (4) and (7) and
-[D251](#d251) (42). **Delivered in-tree by X355:**
-`spec.mirror.artifacts.url` routes every public-origin client to
-`<url>/<kind>/<release>/<file>` by its pinned checksum, and plan refuses an
-unpinned client, the OKD clients and a per-client download mirror beside it
-([artifact mirror](../api/environment.md#artifact-mirror)). **Delivered
-in-tree by X361:** `preflight` reads each mirrored file's size before the
-stage runs, with no body, and fails a file the mirror lacks or serves at
-another size, naming it and the publisher file to copy there; and
-`spec.mirror.artifacts.trustBundleRef`, a `caBundle` Secret, verifies the
-mirror beside the system trust store, lent to each download and the probe
-([D251](#d251) (9)). **Delivered in-tree by X401:** `serverRef` and
-`endpointRef` name a managed ArtifactServer as the mirror, filled on its
-[mirror host](../infrastructure-services.md#mirror-host)
-([X401](delivered.md#x401--a-managed-artifact-mirror-on-an-ssh-machine)); its
-other placements came with [B1249](delivered.md#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs). **Remaining:** `spec.downloads`
-removed in favor of the shared declaration before 1.0, as the owner
-selected in [D251](#d251) (42). **Exit evidence:** the preflight and private-trust tests
-landed with X361, and a managed mirror's acquisition test and effective-state
-golden with X401.
-
 ### B1250
 
 **Owner:** Controller, with each consumer's owner. **Kind:** enabling.
-**Requires:** B1246, [B1249](delivered.md#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs) (delivered), [B1301](delivered.md#x433--vendor-registry-delivery-exceptions) (delivered), [B1340](delivered.md#x432--only-what-an-installed-mirror-hosts-installation-waits-for-pulls-its-origin) (delivered). **Definition:** Candidate, from
+**Requires:** [B1246](delivered.md#x434--one-artifact-mirror-declaration) (delivered), [B1249](delivered.md#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs) (delivered), [B1301](delivered.md#x433--vendor-registry-delivery-exceptions) (delivered), [B1340](delivered.md#x432--only-what-an-installed-mirror-hosts-installation-waits-for-pulls-its-origin) (delivered). **Definition:** Candidate, from
 [D250](#d250) (10). **Outcome:** a lab profile whose controller and Machines
 have no route but to their package repositories, the vendor origins and the
 mirror host installs an OpenShift cluster and a Ceph cluster, and its evidence
@@ -8087,7 +8062,7 @@ the owner's review:
    table, so a declared release older than the build's tested one refuses;
    a later refresh may raise a default and leave its minimum.
 3. `spec.downloads.govcMirror` joins the three mirrors, so every pinned client
-   has a mirror route before [B1246](#b1246) replaces them with one
+   has a mirror route before [B1246](delivered.md#x434--one-artifact-mirror-declaration) replaces them with one
    declaration.
 4. B1245's list is `bootwright render acquisitions`, a command of its own
    beside `render effective` rather than a section of `plan`, so it needs no

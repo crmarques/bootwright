@@ -44,11 +44,11 @@ type ToolFile struct {
 
 // UnreleasedClient refuses an OpenShift client whose oc does not name its
 // frozen release, as proved by the adapter before publication. Published
-// clients are checked for presence only. The same release and mirror reuse the retained source,
-// so restoring sources cannot help; only another release or mirror can.
+// clients are checked for presence only. The same release reuses the retained
+// source, so restoring sources cannot help; select another release.
 func UnreleasedClient(tool ToolDefinition) error {
 	return failure("controller.install", "the oc of OpenShift client release "+tool.Version+" does not name its frozen release",
-		"declare a release.version or downloads.openshiftClientsMirror whose oc passes the release-stamp check; the same release and mirror reuse the retained source and refuse again")
+		"declare a release.version whose oc passes the release-stamp check; the same release reuses the retained source and refuses again")
 }
 
 // LocateInstalledTool answers the absolute path of one executable the exact

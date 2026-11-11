@@ -668,7 +668,7 @@ first block installs. The packages half names no area and retires none, and
 release its tool table names is acquired by the size
 and SHA-256 that table holds, frozen into the stage's request, and no publisher
 metadata is read for it, from its publisher or from a
-[download mirror](api/environment.md#download-mirrors) alike. Every other
+[artifact mirror](api/environment.md#artifact-mirror) alike. Every other
 release's SHA-256 comes from its publisher's own metadata, read over TLS to
 that publisher and never from a mirror
 ([dependency versions](api/environment.md#dependency-versions)). The adapter
@@ -773,9 +773,8 @@ and no unstamped one, or neither `oc` nor `kubectl` is published, and the
 retained source is all the refusal leaves. The adapter names this refusal to
 Go in a [`refused` record](architecture.md#the-adapter-result-protocol) before
 it fails, so its diagnostic's remedy names the release-stamp check and asks
-for a `release.version` or `downloads.openshiftClientsMirror` whose `oc`
-passes it: the same release and mirror reuse the retained source and refuse
-again, so restoring sources cannot help. No downloaded tool is ever executed,
+for a `release.version` whose `oc` passes it: the same release reuses the
+retained source and refuses again, so restoring sources cannot help. No downloaded tool is ever executed,
 so the stamp is read, never asked of the tool. Request, downloads, expanded
 members and callback frames have fixed bounds. One connection pool serves each
 route, direct or through the proxy, for one tool's source.

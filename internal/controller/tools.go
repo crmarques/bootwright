@@ -34,8 +34,8 @@ type InstalledTool struct {
 	Executable    string
 }
 
-// SelectTools consumes only the selected effective graph. Download mirrors
-// change acquisition, never target version or compatibility requirements.
+// SelectTools consumes only the selected effective graph. The artifact mirror
+// changes acquisition, never target version or compatibility requirements.
 func SelectTools(catalog api.Catalog) ([]ToolRequest, error) {
 	return SelectToolsWithRegistry(catalog, addonpackages.Builtin())
 }
@@ -45,12 +45,11 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]T
 	if len(environments) != 1 {
 		return nil, selectionFailure(api.Object{}, "api.invariant", "", "tool selection requires exactly one effective Environment")
 	}
-	downloads := environments[0].Spec().Get("downloads")
 	versions, err := targetToolVersions(environments[0])
 	if err != nil {
 		return nil, err
 	}
-	virtctl := virtctlRequest(versions, downloads)
+	virtctl := virtctlRequest(versions)
 	result := []ToolRequest{}
 	for _, cluster := range catalog.OfCategory(api.ContainerClusterCategory) {
 		facts, _ := containercluster.FactsOf(cluster.Kind())
@@ -63,7 +62,7 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]T
 			if version == "" {
 				version = versions[tool.Kind]
 			}
-			result = append(result, ToolRequest{Kind: tool.Kind, Version: version, Compatibility: tool.Compatibility, Mirror: downloads.Get(tool.Mirror).Text()})
+			result = append(result, ToolRequest{Kind: tool.Kind, Version: version, Compatibility: tool.Compatibility})
 		}
 	}
 	for _, binding := range catalog.OfKind(api.ClusterAddonBinding) {
@@ -101,7 +100,7 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]T
 			if tool == virtctl.Kind {
 				result = append(result, virtctl)
 			} else {
-				result = append(result, ToolRequest{Kind: tool, Version: versions[tool], Mirror: downloads.Get(tool + "Mirror").Text()})
+				result = append(result, ToolRequest{Kind: tool, Version: versions[tool]})
 			}
 		}
 	}
@@ -119,8 +118,8 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]T
 	return result, nil
 }
 
-func virtctlRequest(versions map[string]string, downloads api.Value) ToolRequest {
-	return ToolRequest{Kind: "virtctl", Version: versions["virtctl"], Compatibility: "kubevirt", Mirror: downloads.Get("virtctlMirror").Text()}
+func virtctlRequest(versions map[string]string) ToolRequest {
+	return ToolRequest{Kind: "virtctl", Version: versions["virtctl"], Compatibility: "kubevirt"}
 }
 
 // ProviderTool is the client of one kind the selected Environment's
@@ -134,9 +133,9 @@ func ProviderTool(catalog api.Catalog, kind string) (ToolRequest, error) {
 	if err != nil {
 		return ToolRequest{}, err
 	}
-	request := ToolRequest{Kind: kind, Version: versions[kind], Mirror: environments[0].Spec().Get("downloads", kind+"Mirror").Text()}
+	request := ToolRequest{Kind: kind, Version: versions[kind]}
 	if kind == "virtctl" {
-		request = virtctlRequest(versions, environments[0].Spec().Get("downloads"))
+		request = virtctlRequest(versions)
 	}
 	if request, err = pinned(mirrored(catalog, request)); err != nil {
 		return ToolRequest{}, selectionFailure(environments[0], "controller.state", "", err.Error())

@@ -2,7 +2,7 @@ package openshift
 
 import api "github.com/crmarques/bootwright/api/v1alpha1"
 
-type ControllerTool struct{ Kind, Version, Compatibility, Mirror string }
+type ControllerTool struct{ Kind, Version, Compatibility string }
 
 func ControllerTools(cluster api.Object) ([]ControllerTool, *api.Issue) {
 	distribution := cluster.Spec().Get("distribution")
@@ -18,9 +18,9 @@ func ControllerTools(cluster api.Object) ([]ControllerTool, *api.Issue) {
 		installer = "openshift-install-fips"
 	}
 	return []ControllerTool{
-		{Kind: "openshift-clients", Version: version, Compatibility: kind, Mirror: "openshiftClientsMirror"},
-		{Kind: installer, Version: version, Compatibility: kind, Mirror: "openshiftClientsMirror"},
-		{Kind: "helm", Mirror: "helmMirror"},
+		{Kind: "openshift-clients", Version: version, Compatibility: kind},
+		{Kind: installer, Version: version, Compatibility: kind},
+		{Kind: "helm"},
 	}, nil
 }
 
