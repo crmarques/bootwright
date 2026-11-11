@@ -206,9 +206,12 @@ origins. `bootwright render acquisitions --input-dir <dir>`, or
 state acquires, its origin and class, its digest and the Machines that read
 it ([acquisition list](../specs/cli.md#acquisition-list)), which gives a
 firewall's owner each Machine's destinations, including each registry's
-token, signature and blob delivery hosts as `registry` rows, which a vendor
-registry serves from `quay.io`'s hosts. This is what each step reaches,
-and what moves a public origin to a registry or file server the enterprise
+token, signature and blob delivery hosts as `registry` rows. A vendor
+registry's shared CDN reads are `vendor delivery` exceptions; the same
+hosts used by a public registry remain `public`. The
+[delivery policy](../specs/security.md#acquisition-origins) explains the
+fetch-only restriction and the network filter it requires. This is what each
+step reaches, and what moves a public origin to a registry or file server the enterprise
 runs:
 
 | Step | What connects | Reaches by default | Keeping it off a public origin |

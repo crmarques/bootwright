@@ -6,10 +6,11 @@
       registry's token and delivery hosts, each storage cluster's images and package
       repository, each installed Machine's own package repositories, and the installation media
       of the media store. Each row names the artifact, its version, its origin and that
-      origin's class (vendor, public, declared, host repositories or media store), its SHA-256
-      and size where the build or the desired state pins them, the Machines that read it and
-      the object that selects it. It reads the selected context's input, or with --input-dir a
-      context-free input file or directory, registers nothing and contacts nothing.
+      origin's class (vendor, vendor delivery, public, declared, host repositories or media
+      store), its SHA-256 and size where the build or the desired state pins them, the Machines
+      that read it and the object that selects it. It reads the selected context's input, or
+      with --input-dir a context-free input file or directory, registers nothing and contacts
+      nothing.
 
   Usage
     bootwright render acquisitions [flags]

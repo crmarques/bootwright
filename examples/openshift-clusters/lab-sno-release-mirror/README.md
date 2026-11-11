@@ -25,3 +25,23 @@ profile](../../../specs/milestones/backlog.md#b1250) owns its acceptance.
   the Registry's credential alone, in a private run directory it removes. The
   cluster's image build and installation wait for it.
 - Everything else is [lab-sno-mirror-host](../lab-sno-mirror-host/README.md).
+
+## Vendor delivery policy
+
+The cluster selects `lab-proxy`, whose exact HTTPS destinations admit the
+vendor registries, signature and update services and their shared blob
+hosts. The mirror's internal address bypasses it. `quay.io`, GitHub and
+Docker Hub are absent; the mirror host alone reaches those public origins.
+`bootwright render acquisitions --input-dir examples/openshift-clusters/lab-sno-release-mirror`
+distinguishes a shared CDN's `vendor delivery` rows from the mirror host's
+`public` delivery rows.
+
+The network must deny other direct routes from the controller and nodes;
+the declaration configures no such host firewall. Its proxy limits hosts
+and ports, not methods within an HTTPS tunnel. Enforce fetch-only vendor
+blob delivery in the enterprise filtering layer, including validation of
+vendor-issued redirects when that layer supports it. The policy's scope
+and residual shared-host access are specified in
+[acquisition origins](../../../specs/security.md#acquisition-origins).
+This profile is in-tree evidence, not an accepted controlled-network run;
+[B1250](../../../specs/milestones/backlog.md#b1250) still owns that proof.

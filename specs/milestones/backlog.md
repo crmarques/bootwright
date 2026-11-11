@@ -293,10 +293,9 @@ Alias cell.
 | [B1230](#b1230) | new, 2026-11-09 (X331) | product | Machine power, with Substrate | A failed revoke of a lent KubeVirt token reaches the operator of a power command or reading | Power results carry no warning channel; the token still ends at its bounded lifetime and the revoke's adapter output is retained |
 | [B1237](#b1237) | new, 2026-11-09 (D248 (5)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's default image comes from a Red Hat registry wherever Red Hat publishes one | Red Hat publishes no dnsmasq, chrony or sushy-tools image, and its squid image needs a `registry.redhat.io` login no managed-service pull carries |
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
-| [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355, X361 and X401 on 2026-11-10 | product | Controller, with Desired state | A managed artifact server may serve the artifact mirror, and one declaration replaces the download mirrors | The declaration (X355), the preflight probe and the private trust anchor (X361) and a managed server on an SSH Machine (X401) landed; folding `spec.downloads` awaits the owner (D251 (5)) |
+| [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355, X361 and X401 on 2026-11-10 | product | Controller, with Desired state | A managed artifact server may serve the artifact mirror, and one declaration replaces the download mirrors | The declaration (X355), the preflight probe and the private trust anchor (X361) and a managed server on an SSH Machine (X401) landed; the owner selected replacement in D251 (42); removing `spec.downloads` remains |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
 | [B1300](#b1300) | new, 2026-11-10 (X363) | product | CLI | The acquisition list names `cp.icr.io`'s blob delivery host | The list landed (X363); the host answers only an entitled client, which this session could not use |
-| [B1301](#b1301) | new, 2026-11-10 (X363 review) | product | Controller, with Infrastructure services and Container clusters | A vendor registry's delivery hosts are admitted as fetch-only exceptions, or vendor images get a mirror route | A controlled network that denies public origins breaks a vendor image pull today; the owner decides how |
 | [B1284](#b1284) | new, 2026-11-10 (D255 (8)) | product | Substrate | A tagged managed Network carries an IPv6 prefix on its leg | A leg is IPv4 only and the owned table rejects IPv6 to and from a leg; no tracked input needs it |
 | [B1285](#b1285) | new, 2026-11-10 (D255 (8)) | product | Substrate | A trunk, its legs and the Networks it carries take an MTU other than 1500 | NetworkManager's MTU handling on a bridge and a VLAN is unproved, and no tracked input needs it |
 | [B1287](#b1287) | new, 2026-11-10 (D255 (6)) | product | Substrate | A routed pair reaches an untagged libvirt network or crosses providers, and lab-network-variants' `br-nv` trunk becomes managed Networks | libvirt's reject into its networks cannot be overridden from the owned table, and the case's hand-built trunk still serves it |
@@ -3301,8 +3300,8 @@ events sees its cause without opening raw output.
 ### B1246
 
 **Owner:** Controller, with Desired state. **Kind:** product. **Requires:**
-none. **Definition:** Needs definition, from [D250](#d250) (4) and (7) and
-[D251](#d251) (5). **Delivered in-tree by X355:**
+none. **Definition:** Specified, from [D250](#d250) (4) and (7) and
+[D251](#d251) (42). **Delivered in-tree by X355:**
 `spec.mirror.artifacts.url` routes every public-origin client to
 `<url>/<kind>/<release>/<file>` by its pinned checksum, and plan refuses an
 unpinned client, the OKD clients and a per-client download mirror beside it
@@ -3317,15 +3316,15 @@ mirror beside the system trust store, lent to each download and the probe
 [mirror host](../infrastructure-services.md#mirror-host)
 ([X401](delivered.md#x401--a-managed-artifact-mirror-on-an-ssh-machine)); its
 other placements came with [B1249](delivered.md#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs). **Remaining:** `spec.downloads`
-folded into the declaration before 1.0, which awaits the owner
-([D251](#d251) (5)). **Exit evidence:** the preflight and private-trust tests
+removed in favor of the shared declaration before 1.0, as the owner
+selected in [D251](#d251) (42). **Exit evidence:** the preflight and private-trust tests
 landed with X361, and a managed mirror's acquisition test and effective-state
 golden with X401.
 
 ### B1250
 
 **Owner:** Controller, with each consumer's owner. **Kind:** enabling.
-**Requires:** B1246, [B1249](delivered.md#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs) (delivered), [B1301](#b1301), [B1340](delivered.md#x432--only-what-an-installed-mirror-hosts-installation-waits-for-pulls-its-origin) (delivered). **Definition:** Candidate, from
+**Requires:** B1246, [B1249](delivered.md#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs) (delivered), [B1301](delivered.md#x433--vendor-registry-delivery-exceptions) (delivered), [B1340](delivered.md#x432--only-what-an-installed-mirror-hosts-installation-waits-for-pulls-its-origin) (delivered). **Definition:** Candidate, from
 [D250](#d250) (10). **Outcome:** a lab profile whose controller and Machines
 have no route but to their package repositories, the vendor origins and the
 mirror host installs an OpenShift cluster and a Ceph cluster, and its evidence
@@ -3349,32 +3348,6 @@ delivery host for `cp.icr.io`, which answers only an entitled client.
 **Outcome:** the list names `cp.icr.io`'s delivery host. **Exit evidence:** a
 read of a `cp.icr.io` blob redirect with an entitlement key, run by the owner,
 with the row and test following it.
-
-### B1301
-
-**Owner:** Controller, with Infrastructure services and Container clusters.
-**Kind:** product. **Requires:** an owner decision. **Definition:** Candidate,
-from the review of [X363](delivered.md#x363--the-rest-of-the-acquisition-list).
-The [controlled network rule](../deferred/controlled-network.md#the-rule)
-keeps a vendor origin direct and admits no public one, but Red Hat's
-registries serve their blobs from `cdn.quay.io` and `cdn01.quay.io` to
-`cdn06.quay.io`, which the [origin class](../security.md#acquisition-origins)
-puts in public by serving host, since any account publishes on `quay.io`.
-`dd2.icr.io`, which serves `icr.io`'s blobs, is a vendor origin instead,
-because D250's choice makes `icr.io` a vendor origin by the owner's decision
-and a registry's own delivery host takes its registry's class; Red Hat's
-delivery hosts are not Red Hat's registry host, so no such choice covers them.
-No route removes the difference: `managedservice.MirroredImage` mirrors only
-public-class images, so the artifact server's `registry.access.redhat.com`
-image, the default catalogs and the IBM Ceph images on `cp.icr.io` are never
-mirrored, and a network that denies public origins breaks their pulls.
-**Outcome:** the owner chooses between admitting a vendor registry's delivery
-hosts as fetch-only exceptions of the rule, the Docker Hub and CloudFront
-hosts not applying since Docker Hub is a public origin, and giving vendor
-images a mirror route; the rule, the origin class and
-[B1250](#b1250)'s profile then follow the choice. **Exit evidence:** the
-decision recorded as a clause of [D251](#d251) or its successor, and the
-profile's example.
 
 ### B1284
 
@@ -8643,6 +8616,17 @@ X430 took (36) onward while X409, which took (31) to (33), was in flight beside 
     than seven hours, past any run's deadline. The scratch is the runner's,
     through `lifecycle_scratch`, because a role names no fixed scratch path. A
     pull secret with no `quay.io` token refuses before any run.
+
+41. **owner** (2026-11-11): "Allow vendor registry delivery hosts as fetch-only
+    exceptions" settles B1301. Shared CDN reads reached through a vendor
+    registry are exceptions of the controlled-network rule; public registry
+    and upload endpoints stay denied. The origin list distinguishes those
+    delivery edges without reclassifying a shared host for unrelated pulls.
+42. **owner** (2026-11-11): "Replace the per-tool fields with the shared
+    declaration" settles B1246's remaining decision and supersedes (5)'s
+    temporary retention of the per-client download mirrors. Before 1.0,
+    `spec.mirror.artifacts` is the shared declaration and the old per-tool
+    download-mirror fields leave the API.
 
 ### D252
 

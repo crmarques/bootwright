@@ -13581,7 +13581,7 @@ listed, because it is not yet realized ([B748](backlog.md#b748)); a registry tha
 is not one of the five named, a mirror included, names no companion hosts; a
 vendor image's registry is vendor but its delivery hosts, `quay.io`'s, are
 public, so a vendor-only network must allow them, which
-[B1301](backlog.md#b1301) decides; and
+[B1301](#x433--vendor-registry-delivery-exceptions) decides; and
 `subscription.rhsm.redhat.com` and `cdn.redhat.com` rest on the shipped
 `subscription-manager` configuration, since no request to them was verified.
 
@@ -15304,3 +15304,25 @@ mirror host's own emulated BMC and the servers its installation selects still
 dial their public origins, so B1250's
 no-public-route profile must route those origins from their hosts or place
 them where the profile allows; the live proof is [B1250](backlog.md#b1250).
+
+### X433 — Vendor registry delivery exceptions
+
+**Item:** B1301 (2026-11-11, [D251](backlog.md#d251) (41)), delivered
+in-tree. The owner selected the
+[fetch-only delivery policy](../security.md#acquisition-origins).
+
+`render acquisitions` distinguishes a vendor registry's shared CDN edge as
+`vendor delivery`, and keeps its consumers and Machines separate from a
+public registry's `public` edge to the same host. The host classifier and
+image mirror routes stay unchanged
+(`TestSharedCDNRowsKeepVendorDeliverySeparateFromPublicPulls`). The
+[release-mirror example](../../examples/openshift-clusters/lab-sno-release-mirror/README.md)
+selects a proxy whose exact HTTPS destinations admit vendor services and
+those delivery hosts; the internal image mirror bypasses it. Its effective
+state golden holds the selection and the allowlist.
+
+**Commits:** this commit. Gates: listed in its message. **Limitations:** a
+host-and-port allowlist does not enforce read-only requests inside TLS or
+prove a redirect's vendor provenance; the network filtering layer owns
+that restriction. No host firewall or live run is claimed, and
+[B1250](backlog.md#b1250) retains the operator proof. No push occurred.

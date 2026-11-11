@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/crmarques/bootwright/internal/acquisition"
 	"github.com/crmarques/bootwright/internal/cli"
 )
 
@@ -26,7 +27,7 @@ var registryCompanions = map[string][]registryHost{
 var imagePullKinds = []string{"service image", "emulated BMC image", "release", "mirror release", "storage image", "add-on catalog image", "default catalog image"}
 
 func withRegistryHosts(rows []cli.Acquisition) []cli.Acquisition {
-	type key struct{ kind, host string }
+	type key struct{ kind, host, class string }
 	companions := map[key]*cli.Acquisition{}
 	consumers := map[key][]string{}
 	var order []key
@@ -36,10 +37,14 @@ func withRegistryHosts(rows []cli.Acquisition) []cli.Acquisition {
 		}
 		registry, _, _ := strings.Cut(strings.TrimPrefix(row.Origin, "https://"), "/")
 		for _, companion := range registryCompanions[registry] {
-			name := key{companion.kind, companion.host}
+			class := acquisition.OriginClass(companion.host)
+			if companion.kind == "registry blob host" && acquisition.OriginClass(registry) == acquisition.ClassVendor && class == acquisition.ClassPublic {
+				class = acquisition.ClassVendorDelivery
+			}
+			name := key{companion.kind, companion.host, class}
 			existing, seen := companions[name]
 			if !seen {
-				existing = &cli.Acquisition{Kind: companion.kind, Artifact: companion.host, Origin: companion.host, Class: originClass("https://" + companion.host)}
+				existing = &cli.Acquisition{Kind: companion.kind, Artifact: companion.host, Origin: companion.host, Class: class}
 				companions[name] = existing
 				order = append(order, name)
 			}

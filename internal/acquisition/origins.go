@@ -3,9 +3,10 @@ package acquisition
 import "strings"
 
 const (
-	ClassVendor   = "vendor"
-	ClassPublic   = "public"
-	ClassDeclared = "declared"
+	ClassVendor         = "vendor"
+	ClassPublic         = "public"
+	ClassDeclared       = "declared"
+	ClassVendorDelivery = "vendor delivery"
 )
 
 var vendorHosts = []string{

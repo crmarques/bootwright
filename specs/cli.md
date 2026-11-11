@@ -556,8 +556,8 @@ input or, with `--input-dir`, a context-free input as `validate --file` reads
 it; `--input-dir` conflicts with `--context`. It registers nothing, contacts
 nothing and reads no host. Each row names its kind, the artifact, its
 version, its origin and that origin's
-[class](security.md#acquisition-origins) (`vendor`, `public`, `declared`,
-`host repositories` or `media store`), the SHA-256 and size the build or the
+[class](security.md#acquisition-origins) (`vendor`, `vendor delivery`,
+`public`, `declared`, `host repositories` or `media store`), the SHA-256 and size the build or the
 desired state pins, the Machines that read it and the object that selects it.
 The rows, sorted by kind, artifact and selecting object, cover:
 
@@ -602,8 +602,10 @@ The rows, sorted by kind, artifact and selecting object, cover:
   `registry.redhat.io` and `registry.access.redhat.com`, and the
   `access.redhat.com` signature store of the last; and `dd2.icr.io`, the
   blob host of `icr.io`. A row merges every consumer and Machine that reaches
-  the host. A registry that serves its own token service names none, and a
-  declared registry, a mirror among them, names none the list could verify;
+  the host and class. A vendor registry's shared blob-host edge is
+  `vendor delivery`, kept separate from a public registry's `public` edge
+  to the same host. A registry that serves its own token service names none,
+  and a declared registry, a mirror among them, names none the list could verify;
 - each installed Machine's own package repositories: for a Machine whose
   install profile selects a managed `redhatRhel` Entitlement, its registration
   with `subscription.rhsm.redhat.com` and its subscription repositories on

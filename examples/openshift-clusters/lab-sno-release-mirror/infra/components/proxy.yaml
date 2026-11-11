@@ -12,3 +12,16 @@ spec:
   endpoints:
     - name: ip
       addressRef: ip
+
+  allowedDestinations:
+    - registry.redhat.io:443
+    - registry.access.redhat.com:443
+    - access.redhat.com:443
+    - api.openshift.com:443
+    - cdn.quay.io:443
+    - cdn01.quay.io:443
+    - cdn02.quay.io:443
+    - cdn03.quay.io:443
+    - cdn04.quay.io:443
+    - cdn05.quay.io:443
+    - cdn06.quay.io:443

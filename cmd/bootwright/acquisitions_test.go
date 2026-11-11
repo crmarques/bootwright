@@ -22,9 +22,11 @@ func TestTheAcquisitionListNamesWhatEachOwnerAcquiresWithItsOrigin(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	find := func(kind, artifact string) cli.Acquisition {
+	find := func(kind, artifact string, classes ...string) cli.Acquisition {
 		t.Helper()
-		index := slices.IndexFunc(acquired, func(item cli.Acquisition) bool { return item.Kind == kind && item.Artifact == artifact })
+		index := slices.IndexFunc(acquired, func(item cli.Acquisition) bool {
+			return item.Kind == kind && item.Artifact == artifact && (len(classes) == 0 || item.Class == classes[0])
+		})
 		if index < 0 {
 			t.Fatalf("the list names no %s %s", kind, artifact)
 		}
@@ -88,7 +90,7 @@ func TestTheAcquisitionListNamesWhatEachOwnerAcquiresWithItsOrigin(t *testing.T)
 	if row := find("registry token service", "auth.docker.io"); row.Class != acquisition.ClassPublic || !slices.Contains(row.Machines, "controller") || !strings.Contains(row.Consumer, "Proxy/lab-proxy") {
 		t.Errorf("the Docker Hub token service: %+v", row)
 	}
-	if row := find("registry blob host", "cdn01.quay.io"); row.Class != acquisition.ClassPublic || !strings.Contains(row.Consumer, "OpenShiftCluster/compact") || !slices.Contains(row.Machines, "compact-01") {
+	if row := find("registry blob host", "cdn01.quay.io", acquisition.ClassPublic); row.Class != acquisition.ClassPublic || !strings.Contains(row.Consumer, "OpenShiftCluster/compact") || !slices.Contains(row.Machines, "compact-01") {
 		t.Errorf("a quay.io blob host: %+v", row)
 	}
 	if row := find("registry blob host", "dd2.icr.io"); row.Class != acquisition.ClassVendor || row.Consumer != "ClusterAddonBinding/compact-data-foundation" {
@@ -341,5 +343,83 @@ func TestAReleaseCopiedIntoAManagedImageMirrorIsReadFromQuayOnItsHostAlone(t *te
 		return item.Kind == "registry blob host" && item.Artifact == "cdn.quay.io" && slices.Contains(item.Machines, "mirror")
 	}) {
 		t.Error("the mirror host's quay.io delivery hosts are not listed")
+	}
+}
+
+// A shared CDN remains public for public registry pulls; only a vendor
+// registry's delivery edge is an approved fetch-only exception.
+func TestSharedCDNRowsKeepVendorDeliverySeparateFromPublicPulls(t *testing.T) {
+	rows := withRegistryHosts([]cli.Acquisition{
+		{Kind: "default catalog image", Origin: "registry.redhat.io/redhat/catalog", Machines: []string{"node"}, Consumer: "OpenShiftCluster/vendor"},
+		{Kind: "mirror release", Origin: "quay.io/openshift-release-dev/ocp-release", Machines: []string{"mirror"}, Consumer: "Registry/mirror"},
+	})
+	vendor, public := 0, 0
+	for _, row := range rows[2:] {
+		if row.Kind != "registry blob host" {
+			t.Fatalf("unexpected companion: %+v", row)
+		}
+		switch row.Class {
+		case "vendor delivery":
+			vendor++
+			if !slices.Equal(row.Machines, []string{"node"}) || row.Consumer != "OpenShiftCluster/vendor" {
+				t.Errorf("the vendor edge merged a public pull: %+v", row)
+			}
+		case acquisition.ClassPublic:
+			public++
+			if !slices.Equal(row.Machines, []string{"mirror"}) || row.Consumer != "Registry/mirror" {
+				t.Errorf("the public edge merged a vendor pull: %+v", row)
+			}
+		default:
+			t.Errorf("unexpected shared-host class: %+v", row)
+		}
+		if acquisition.OriginClass(row.Origin) != acquisition.ClassPublic {
+			t.Errorf("the exception reclassified shared host %s globally", row.Origin)
+		}
+	}
+	if vendor != len(quayDeliveryHosts) || public != len(quayDeliveryHosts) {
+		t.Fatalf("got %d vendor and %d public delivery rows, want %d of each", vendor, public, len(quayDeliveryHosts))
+	}
+}
+
+func TestTheReleaseMirrorProfileAdmitsVendorDeliveryAndDeniesPublicRegistries(t *testing.T) {
+	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-sno-release-mirror"))
+	catalog := state.Effective()
+	proxy, found := catalog.Find(api.Proxy, "lab-proxy")
+	if !found {
+		t.Fatal("the profile has no proxy")
+	}
+	allowed := proxy.Spec().Get("allowedDestinations").Strings()
+	acquired, err := listAcquisitions(catalog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{}
+	for _, row := range acquired {
+		if row.Class == acquisition.ClassVendorDelivery && slices.Contains(row.Machines, "sno-01") {
+			want[row.Origin+":443"] = true
+		}
+	}
+	if len(want) != len(quayDeliveryHosts) {
+		t.Fatalf("the profile lists %d vendor delivery hosts, want %d", len(want), len(quayDeliveryHosts))
+	}
+	for destination := range want {
+		if !slices.Contains(allowed, destination) {
+			t.Errorf("the profile omits vendor delivery destination %s", destination)
+		}
+	}
+	for _, destination := range allowed {
+		if acquisition.OriginClass(destination) == acquisition.ClassPublic && !want[destination] {
+			t.Errorf("the profile admits public destination %s without a vendor delivery edge", destination)
+		}
+	}
+	for _, host := range []string{"quay.io", "github.com", "docker.io", "auth.docker.io", "production.cloudfront.docker.com"} {
+		if slices.Contains(allowed, host) || slices.Contains(allowed, host+":443") {
+			t.Errorf("the profile admits public registry destination %s", host)
+		}
+	}
+	cluster, _ := catalog.Find(api.OpenShiftCluster, "sno")
+	selected := cluster.Spec().Get("install", "proxy")
+	if selected.Get("proxyRef").Text() != proxy.Name() || !slices.Contains(selected.Get("noProxy").Strings(), "203.0.113.20") {
+		t.Fatalf("the cluster does not select the restricted proxy and bypass its internal mirror: %v", selected)
 	}
 }

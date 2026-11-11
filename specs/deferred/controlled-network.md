@@ -26,11 +26,11 @@ it goes through the mirror. IBM's `icr.io`, where the Data Foundation catalog
 and operator images live and where IBM's cloud customers also publish, stays a
 direct vendor origin by the owner's choice, so that a cluster keeps taking
 Data Foundation's later updates from it; a firewall that admits it admits that
-whole host. Red Hat's registries serve their blobs from `quay.io`'s delivery
-hosts, which are public by their serving host, so whether those hosts are
-admitted or vendor images take a mirror route is open
-([B1301](../milestones/backlog.md#b1301)). A vendor host that accepts uploads, such as a telemetry or support
-endpoint, is no acquisition origin, so a firewall that serves this rule admits
+whole host. Red Hat's registries' shared blob delivery hosts are admitted as
+[fetch-only vendor-delivery exceptions](../security.md#acquisition-origins),
+without admitting public registry or upload endpoints
+([D251](../milestones/backlog.md#d251) (41)). A vendor host that accepts
+uploads, such as a telemetry or support endpoint, is no acquisition origin, so a firewall that serves this rule admits
 the content hosts alone. Time and name service follow the rule through fields
 that already exist: a Machine or cluster with no NTP selection keeps its
 operating system's public pool, so a controlled network declares one. A

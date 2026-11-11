@@ -923,12 +923,25 @@ A registry's token service and blob delivery hosts take the class of the
 serving host as well: Docker Hub's and `quay.io`'s are public origins, and
 `dd2.icr.io`, which serves `icr.io`'s blobs, and `access.redhat.com`, which
 serves `registry.access.redhat.com`'s signatures, are vendor origins. Red
-Hat's content is served from `quay.io`'s delivery hosts, so a vendor image is
-a vendor origin at its registry and a public one where its bytes come from,
-so a network that denies public origins denies those hosts too, and a vendor
-image then needs a mirror or an exception for them
-([B1301](milestones/backlog.md#b1301)).
-The [acquisition list](cli.md#acquisition-list) names each.
+Hat's registries redirect blob reads to shared `quay.io` delivery hosts.
+A controlled network admits those reads as fetch-only vendor-delivery
+exceptions, as [D251](milestones/backlog.md#d251) (41) decides; it keeps the
+registry and upload endpoints of public registries blocked. The
+[acquisition list](cli.md#acquisition-list) labels that vendor registry's
+shared-host edge `vendor delivery`, separate from `public` rows for a
+`quay.io` pull on the same host. The serving host itself stays public in
+`acquisition.OriginClass`, so the exception changes no image mirror route.
+Docker Hub's token, registry and CloudFront hosts receive no exception.
+
+[Red Hat's delivery protocol](https://access.redhat.com/articles/7084334)
+issues a time-limited redirect to a specific blob. The exception admits
+vendor-issued blob downloads, not an arbitrary URL on a shared host. A
+host-and-port allowlist alone cannot prove that provenance or enforce
+read-only methods inside an HTTPS tunnel: the network's filtering layer
+owns that restriction and its evidence. A shared-host route still permits
+other content when a client obtains another valid signed URL; the
+exception does not promise vendor-only content or eliminate that residual
+fetch risk. [B1250](milestones/backlog.md#b1250) owns the live proof.
 
 Time and name service are no acquisition and follow the same rule through
 their own selections: a managed resolver forwards only to its declared
@@ -936,10 +949,11 @@ forwarders, and a Machine or cluster with no
 [NTP selection](api/infrastructure-services.md#dns-and-ntp-selection-lists)
 keeps its operating system's default sources.
 
-A context that declares one mirror for its public origins dials none of them
-and hands none to a Machine: every public-origin artifact comes from that
-mirror, vendor origins stay direct, and an artifact the mirror lacks refuses
-before any effect. The [controlled network design](deferred/controlled-network.md)
+Public-origin artifacts follow their declared mirror routes; vendor origins
+and their approved delivery exceptions stay direct. The
+[mirror host ordering](infrastructure-services.md#mirror-host) names the
+bootstrap consumers that still read their origins before the mirror can
+serve. The [controlled network design](deferred/controlled-network.md)
 holds the mirror host, its declaration and how it is filled.
 
 ## Logs, output, and diagnostics
