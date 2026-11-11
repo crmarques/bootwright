@@ -981,15 +981,15 @@ union a plan consumes.
 Each row is one requirement class a capability family emits: the block (its
 family and block kind), the API object it requires (narrowed to one family
 where stated), and the reference or rule that names that object. A
-requirement resolves only when some block of the plan realizes its target, so
-an external service never orders anything. A reference no row names is
+requirement resolves only to a block that realizes its target, so an external
+service orders nothing. A reference no row names is
 resolved and validated but orders nothing; each such field that can name a
 realized object needs its family's own ordering or a stated reason, which
 `TestEveryReferenceFieldHasAnEdgeRowOrAReason` holds. Not yet met: six
 storage references emit requirements no row names; tracked as
 [B969](milestones/backlog.md#b969). Destroy inverts every edge. Rows within one family that the family orders by its own block
-dependencies, such as a storage child after its cluster, are not requirements
-and are not listed. `TestEveryRequirementMatchesTheEdgeCatalog` plans every
+dependencies, such as a storage child after its cluster, are not requirements,
+so not listed. `TestEveryRequirementMatchesTheEdgeCatalog` plans every
 example and fails when a capability emits a requirement no row names, or omits
 one a row's field path names on its object while a block realizes the target.
 
@@ -1011,7 +1011,9 @@ one a row's field path names on its object while a block realizes the target.
 | `physical-erase` `Machine` | `CephCluster` from `storage-physical-retirement` | a storage cluster whose retirement must release this physical Machine first |
 | `os-package-tree` `MachineInstallProfile` | `ArtifactServer` | `spec.installer.anaconda.packageSource.hostedTree.artifactServerEndpoint.serverRef`, `spec.installer.anaconda.redfishVirtualMedia.artifactServerEndpoint.serverRef` |
 | `os-package-tree` `MachineInstallProfile` | `Environment` | the selected Environment, whose controller stage prepares the host |
+| `controller-prerequisites` `Environment` | `ArtifactServer` | `spec.mirror.artifacts.serverRef` |
 | `managed-service` `ArtifactServer` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
+| `mirror-fill` `ArtifactServer` | `ArtifactServer` from `managed-service` | the mirror it fills |
 | `managed-service` `DNSServer` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
 | `managed-service` `NTPServer` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
 | `managed-service` `Proxy` | `InfraProvider` | the provider whose libvirt bridge carries the placement Machine's service address |
@@ -1056,8 +1058,8 @@ one a row's field path names on its object while a block realizes the target.
 
 ### Stages and the pause boundary
 
-Every block carries exactly one stage, frozen with the plan and covered by its
-digest. A stage names the kind of platform work its block performs:
+Every block carries one stage, frozen with the plan and covered by its digest,
+naming its block's kind of platform work:
 
 | Stage | Blocks |
 | --- | --- |
@@ -1069,23 +1071,23 @@ digest. A stage names the kind of platform work its block performs:
 | `add-ons` | Add-on instances bound to a cluster, and the cluster configuration they enable. |
 
 The capability that plans a block owns its stage. Stages are not strata: a
-block depends on other blocks, never on a stage, so a `substrates` block may
-legitimately wait on an `add-ons` block when a provider is hosted by a cluster
-that an add-on enables. Ordering always follows the dependency DAG.
+block depends on blocks, never on a stage, so a `substrates` block may wait on
+an `add-ons` block when an add-on enables the cluster hosting a provider.
 
-The `controller` stage is the one exception, and the engine owns it rather than
-any capability. When a plan contains a controller block, every other block in
-that plan depends on it, because the clients it installs are what the other
-blocks' adapters run. The edge is a real block dependency frozen with the plan
-and covered by its digest, not a rule about stages; a plan with no controller
-block has no such edge and is ordered by its capabilities alone. A context that
-selects no client or native closure beyond the host baseline contributes no
-controller block at all.
+The `controller` stage is the one exception, and the engine owns it. Once
+requirements resolve, every block of a plan with a controller block depends on
+it, since its clients run their adapters, except the blocks it waits for: their
+capability must run each without those clients, as a managed
+[artifact mirror](api/environment.md#artifact-mirror) and its fill do, and any
+other refuses with `controller.unsupported`. The edge is frozen with the plan.
+A context that selects no client or native closure beyond the host baseline
+contributes no controller block, and a plan without one is ordered by its
+capabilities alone.
 
-A controller block is the only block whose effects are shared host state rather
-than this context's own. Its closure therefore outlives the context that
-selected it: the block's removal retains what it installed, and the shared area
-it published into is proved, not deleted, by a destroy. Because it extends what
+A controller block is the only block whose effects are shared host state, not
+this context's own, so its closure outlives the context: its removal retains
+what it installed, and a destroy proves, never deletes, the shared area it
+published into. Because it extends what
 [controller setup](controller.md) prepared, the engine hands that block the
 retained setup evidence, the shared publication area and its sealing, the
 durable dependency record that precedes acquisition and the before-state
@@ -1101,10 +1103,10 @@ bound, and re-evaluates as each one settles. A block is admitted only while no
 block already running holds a resource it will not share and fewer running
 blocks than its throttle's capacity name its throttle.
 
-The bound is how much one host is asked to do at the same time, not what the
-plan permits, so it belongs to the executable and is never frozen with the
-plan, never named by desired state, and never a public flag: what may run
-together is the graph's answer and does not change between invocations. A
+The bound is how much one host is asked to do at once, not what the plan
+permits, so it belongs to the executable, never to the plan, desired state or
+a public flag: what may run together is the graph's answer and does not change
+between invocations. A
 continuation of an operation frozen by another build therefore runs under this
 build's bound, which changes no effect, no order and no evidence.
 

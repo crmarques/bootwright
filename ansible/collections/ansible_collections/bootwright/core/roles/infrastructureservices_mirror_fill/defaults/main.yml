@@ -1,0 +1,41 @@
+---
+infrastructureservices_mirror_fill_area: "{{ bootwright_mirror_files_request.servedRoot.split('/')[5:8] }}"
+infrastructureservices_mirror_fill_served_root: >-
+  {{ '/var/lib/bootwright-hosted/' ~ bootwright_mirror_files_request.identity.context
+     ~ '/services/artifact-server/' ~ bootwright_mirror_files_request.identity.server ~ '/public' }}
+infrastructureservices_mirror_fill_root: >-
+  {{ infrastructureservices_mirror_fill_served_root ~ '/mirror/' ~ bootwright_mirror_files_request.identity.environment }}
+# Every publisher is HTTPS, so only the frozen HTTPS proxy routes a download;
+# without one the download ignores any ambient proxy variable. A redirect to
+# plain HTTP takes the same proxy, never a direct route.
+infrastructureservices_mirror_fill_proxied: "{{ (bootwright_mirror_files_request.egress.httpsProxy | default('')) != '' }}"
+infrastructureservices_mirror_fill_environment:
+  https_proxy: "{{ bootwright_mirror_files_request.egress.httpsProxy | default('') }}"
+  HTTPS_PROXY: "{{ bootwright_mirror_files_request.egress.httpsProxy | default('') }}"
+  http_proxy: "{{ bootwright_mirror_files_request.egress.httpsProxy | default('') }}"
+  HTTP_PROXY: "{{ bootwright_mirror_files_request.egress.httpsProxy | default('') }}"
+  no_proxy: "{{ bootwright_mirror_files_request.egress.noProxy | join(',') }}"
+  NO_PROXY: "{{ bootwright_mirror_files_request.egress.noProxy | join(',') }}"
+# The seconds one publisher read may stall before the fill names it unreachable.
+infrastructureservices_mirror_fill_download_timeout: 120
+infrastructureservices_mirror_fill_directories: >-
+  {{ [infrastructureservices_mirror_fill_served_root ~ '/mirror', infrastructureservices_mirror_fill_root]
+     + bootwright_mirror_files_request.files | map(attribute='path') | map('dirname') | unique
+     | map('regex_replace', '^', infrastructureservices_mirror_fill_root ~ '/') | list }}
+# What the failed download reported, to tell a file whose SHA-256 differs from
+# one the host could not read.
+infrastructureservices_mirror_fill_failure: >-
+  {{ (ansible_failed_result.results | default([]) | selectattr('msg', 'defined') | map(attribute='msg') | join(' '))
+     ~ ' ' ~ (ansible_failed_result.msg | default('')) }}
+infrastructureservices_mirror_fill_count: '{{ bootwright_mirror_files_request.files | length }}'
+infrastructureservices_mirror_fill_paths: "{{ bootwright_mirror_files_request.files | map(attribute='path') | list }}"
+# Each file lies beneath the mirror root in segments that start with a letter
+# or digit, so none is empty, `.` or `..`.
+infrastructureservices_mirror_fill_valid_paths: >-
+  {{ infrastructureservices_mirror_fill_paths | select('match', '^[A-Za-z0-9][A-Za-z0-9._+-]*(/[A-Za-z0-9][A-Za-z0-9._+-]*)+$(?!\n)') | list }}
+infrastructureservices_mirror_fill_valid_digests: >-
+  {{ bootwright_mirror_files_request.files | map(attribute='sha256') | select('match', '^[0-9a-f]{64}$(?!\n)') | list }}
+infrastructureservices_mirror_fill_valid_sources: >-
+  {{ bootwright_mirror_files_request.files | map(attribute='source') | select('match', '^https://') | list }}
+infrastructureservices_mirror_fill_valid_sizes: >-
+  {{ bootwright_mirror_files_request.files | map(attribute='bytes') | select('integer') | select('gt', 0) | list }}

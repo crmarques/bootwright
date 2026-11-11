@@ -1,0 +1,44 @@
+argument_specs:
+  apply:
+    short_description: Fill one managed artifact mirror with its pinned client files.
+    options: &request
+      bootwright_mirror_files_request:
+        type: dict
+        required: true
+        options:
+          egress:
+            type: dict
+            required: true
+          files:
+            type: list
+            elements: dict
+            required: true
+          identity:
+            type: dict
+            required: true
+          placement:
+            type: dict
+            required: true
+          root:
+            type: str
+            required: true
+          servedRoot:
+            type: str
+            required: true
+          version:
+            type: str
+            required: true
+            choices:
+              - mirror-files-v1
+      bootwright_mirror_files_digest:
+        type: str
+        required: true
+      bootwright_mirror_files_material:
+        type: dict
+        required: true
+  observe:
+    short_description: Observe one managed artifact mirror's client files.
+    options: *request
+  destroy:
+    short_description: Withdraw one managed artifact mirror's client files.
+    options: *request

@@ -1,0 +1,15 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: mirror-tls
+
+spec:
+  type: tlsCertificate
+
+  source:
+    generated:
+      issuerRef: mirror-ca
+      commonName: mirror.lab.example.test
+
+      ipAddresses:
+        - 203.0.113.20

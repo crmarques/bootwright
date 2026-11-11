@@ -121,3 +121,37 @@ func TestAMirrorThatCannotBeProbedIsUnknownWithItsOwnRemedy(t *testing.T) {
 		t.Fatalf("an unprobed mirror reported %d checks", found)
 	}
 }
+
+// A managed artifact mirror is filled by the apply before the controller
+// stage reads it, so a file it answers it does not hold yet is pending with the
+// apply named, while a file at another size still fails and a transport or TLS
+// failure stays unknown with its own message.
+func TestAManagedArtifactMirrorNotYetFilledIsPending(t *testing.T) {
+	service, _, _, _ := fixture()
+	service.Graph = graph{api.NewCatalog([]api.Object{
+		api.NewObject(api.Environment, "lab", api.Value{}, api.MapValue().WithPath(api.StringValue("mirror"), "mirror", "artifacts", "serverRef").WithPath(api.StringValue("ip"), "mirror", "artifacts", "endpointRef")),
+		api.NewObject(api.ArtifactServer, "mirror", api.Value{}, api.MapValue(field("management", "managed"), field("machineRef", "mirror"),
+			api.FieldValue{Name: "listeners", Value: api.ListValue(api.MapValue(field("name", "https"), field("protocol", "https"), api.FieldValue{Name: "port", Value: api.IntegerValue("443")}))},
+			api.FieldValue{Name: "endpoints", Value: api.ListValue(api.MapValue(field("name", "ip"), field("listenerRef", "https"), field("addressRef", "ip")))})),
+		api.NewObject(api.Machine, "mirror", api.Value{}, api.MapValue(api.FieldValue{Name: "network", Value: api.MapValue(api.FieldValue{Name: "addresses",
+			Value: api.ListValue(api.MapValue(field("name", "ip"), field("address", "203.0.113.20")))})})),
+	})}
+	service.Mirror = &mirrorFake{files: []MirrorFile{
+		mirrorFile("helm 4.3.1", "helm", 404, -1, ""),
+		mirrorFile("kubectl 1.36.1", "kubectl", 206, 7, ""),
+		mirrorFile("virtctl 1.9.1", "virtctl", 0, -1, "artifact mirror mirror.example.test could not be reached from this host"),
+	}}
+	result, err := service.Preflight(context.Background(), PreflightRequest{Stages: []string{"controller"}})
+	if found := diagnostics.Of(err); result == nil || len(found) != 1 || found[0].Code != "preflight.failed" {
+		t.Fatalf("result %+v, error %v", result, err)
+	}
+	for _, check := range result.Checks {
+		want := map[string]string{"https://mirror.example.test/tools/helm": "pending", "https://mirror.example.test/tools/kubectl": "failed", "https://mirror.example.test/tools/virtctl": "unknown"}[check.Target]
+		if want != "" && string(check.Status) != want {
+			t.Errorf("%s is %s, want %s", check.Target, check.Status, want)
+		}
+		if want == "pending" && (!strings.Contains(check.Reason, "managed artifact mirror on Machine/mirror") || check.Next != "run bootwright apply --context lab, which fills the mirror first") {
+			t.Errorf("a pending file: %+v", check)
+		}
+	}
+}

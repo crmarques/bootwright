@@ -30,7 +30,7 @@ Environment fields emit in this order:
 | `spec.defaults` | kind-keyed partial specs | no | `{}` | Omitted object fields inherit the corresponding kind entry under the rules below. |
 | `spec.downloads` | object | no | source-specific | Closed download-mirror policy below. |
 | `spec.dependencyVersions` | object | no | this build's defaults | Version intent for the prerequisites this Environment controller stage installs; closed shape below. |
-| `spec.mirror` | object | no | — | The [artifact mirror](#artifact-mirror) that serves every public-origin client, with its optional trust anchor, and the [image mirror](#image-mirror) that serves every public-origin image a Machine runs as a service. |
+| `spec.mirror` | object | no | — | The [artifact mirror](#artifact-mirror) that serves every public-origin client, an operator's `url` or a managed `serverRef` and `endpointRef`, with its optional trust anchor, and the [image mirror](#image-mirror) that serves every public-origin image a Machine runs as a service. |
 | `spec.controller` | object | yes | — | Required controller Machine selection below. |
 | `spec.lifecycle` | object | no | — | Offline-rescue input; a present `rescue` is refused until a rescue journey exists. |
 
@@ -419,9 +419,28 @@ the publisher file to copy there, and reports one it could not read, or whose
 size the mirror did not name, as unknown. Without the declaration preflight
 probes nothing.
 
-Not yet met: a managed artifact server may be the mirror, and the
-declaration replaces `spec.downloads`; tracked as
-[B1246](../milestones/backlog.md#b1246).
+In place of `url`, `spec.mirror.artifacts.serverRef` names a managed
+[ArtifactServer](infrastructure-services.md) that Bootwright fills on its
+[mirror host](../infrastructure-services.md#mirror-host), with a required
+`endpointRef` naming one of its endpoints; `url` and `serverRef` exclude each
+other, and `endpointRef` beside `url` refuses. The mirror's URL is then
+`https://<endpoint address>/mirror/<environment>`, under the same layout, so
+the endpoint's listener serves HTTPS on port 443, where the controller stage
+reads a mirror, and admission refuses another protocol or port at
+`$.spec.mirror.artifacts.endpointRef`. Without `trustBundleRef` the anchor is
+the generated `caBundle` that issues the server's serving certificate, and
+admission refuses at `$.spec.mirror.artifacts.serverRef` a certificate with
+no issuer. `preflight` reports a file such a mirror answers 404 or 410 for as
+pending, since the apply fills it before the controller stage reads it; a file
+served at another size still fails, and a transport or TLS failure stays
+unknown.
+
+Not yet met: the declaration replaces `spec.downloads`; tracked as
+[B1246](../milestones/backlog.md#b1246). A managed artifact mirror on the
+controller host refuses at plan ([refusal table](#refusal-table)), and one on
+a Machine Bootwright installs at admission, as every managed service there
+does ([placement](infrastructure-services.md#management-and-placement));
+tracked as [B1249](../milestones/backlog.md#b1249).
 
 ## Image mirror
 
@@ -567,6 +586,10 @@ Environment.
 | Per-client mirror beside the artifact mirror | `spec.downloads.helmMirror`, `govcMirror` or `virtctlMirror` with `spec.mirror.artifacts` | `spec.mirror.artifacts of <environment> names where every public-origin client comes from, and spec.downloads.<field> names it again` | `remove spec.downloads.<field> from <environment>` |
 | Unpinned client behind the artifact mirror | a selected public-origin client at a release the tool table does not pin, with `spec.mirror.artifacts` | `with spec.mirror.artifacts, this executable acquires a public-origin client only at a release its tool table pins, and <environment> selects <tool> <release>, whose checksum only its publisher holds` | `declare no <tool> release in spec.dependencyVersions of <environment> so it takes this build's pinned default, or remove spec.mirror.artifacts` |
 | OKD clients behind the artifact mirror | an OKD cluster's clients, with `spec.mirror.artifacts` | `with spec.mirror.artifacts, this executable acquires a public-origin client only at a release its tool table pins, and <environment> selects <tool> <release>, whose checksum only its publisher holds` | `select an openshift distribution, whose clients come from their vendor, or remove spec.mirror.artifacts from <environment>` |
+| Managed artifact mirror on the controller | `spec.mirror.artifacts.serverRef` naming a managed `ArtifactServer` placed on the controller `Machine`, on a Machine with `access.local`, or on one whose SSH endpoint is port 22 at an address of the controller | `this executable fills a managed artifact mirror only on a Machine other than the controller host, and <server> is placed on <host>, which is the controller host` | `place <server> on another Machine reached over SSH, or select an artifact mirror the operator fills in spec.mirror.artifacts.url of <environment>` |
+| Managed artifact mirror on a provider host | the managed artifact mirror's `Machine` hosts a libvirt `InfraProvider`, or a provider's bridge carries the server's address | `the artifact mirror is filled before the controller stage, and <server> on <host> waits for <provider>, which that Machine hosts or whose bridge carries its address` | `place <server> on a Machine that hosts no InfraProvider and whose address no provider bridges, or select an artifact mirror the operator fills in spec.mirror.artifacts.url of <environment>` |
+| Managed artifact mirror behind a managed Proxy | `spec.proxy.proxyRef` of the managed artifact mirror's `Machine` naming a managed `Proxy` | `the artifact mirror on <host> is filled before any managed service runs, and <host> reaches the publishers through the managed <proxy>` | `select direct: {} or an external Proxy in spec.proxy on <host>` |
+| Managed artifact mirror without an HTTPS URL | `spec.mirror.artifacts.endpointRef` naming no endpoint of the managed `ArtifactServer` that resolves to an HTTPS URL a client path fits beneath | `the artifact mirror is read over HTTPS beneath <server>'s selected endpoint, and that endpoint names no HTTPS URL a client path fits beneath` | `select an https endpoint of <server> in spec.mirror.artifacts.endpointRef of <environment>` |
 | Managed image mirror | `spec.mirror.registry.registryRef` selecting a managed Registry | `this executable pulls images only from an external image mirror, and <registry> is managed` | `select an external Registry in spec.mirror.registry.registryRef of <environment>, or remove spec.mirror.registry` |
 
 ## Lifecycle rescue declaration

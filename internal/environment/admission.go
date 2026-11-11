@@ -30,6 +30,7 @@ func Validate(object api.Object, catalog api.Catalog, members func(api.Object) (
 	spec := object.Spec()
 	issues := fleetKeyIssues(spec.Get("remoteMachinesAccessKey", "keyRef"), catalog)
 	issues = append(issues, validateController(object, catalog, Members(members))...)
+	issues = append(issues, validateArtifactMirror(object, catalog)...)
 	if rescue := spec.Get("lifecycle", "rescue"); rescue.Present() {
 		// The schema keeps the declaration for a later journey; until one
 		// exists, no lifecycle could act on it.
@@ -122,6 +123,39 @@ func validateController(environment api.Object, catalog api.Catalog, members fun
 		}
 	}
 	return issues
+}
+
+func validateArtifactMirror(environment api.Object, catalog api.Catalog) []api.Issue {
+	const field = "$.spec.mirror.artifacts"
+	artifacts := environment.Spec().Get("mirror", "artifacts")
+	if !artifacts.Has("serverRef") {
+		if artifacts.Has("endpointRef") {
+			return []api.Issue{{Code: "api.invariant", Field: field + ".endpointRef", Message: "endpointRef selects an endpoint of a managed artifact mirror's serverRef, and spec.mirror.artifacts names the operator's url",
+				Remediation: "remove spec.mirror.artifacts.endpointRef from " + environment.Identity()}}
+		}
+		return nil
+	}
+	if issues := infrastructureservices.ValidateArtifactEndpoint(artifacts, catalog, field, false); len(issues) != 0 {
+		return issues
+	}
+	server, found := catalog.Find(api.ArtifactServer, artifacts.Get("serverRef").Text())
+	if !found {
+		return nil
+	}
+	if location := infrastructureservices.EndpointURL(catalog, server, artifacts.Get("endpointRef").Text()); location != "" && !strings.HasPrefix(location, "https://") {
+		return []api.Issue{{Code: "api.invariant", Field: field + ".endpointRef", Message: "the artifact mirror serves HTTPS alone, and endpoint " + artifacts.Get("endpointRef").Text() + " of " + server.Identity() + " serves HTTP",
+			Remediation: "select an endpoint of " + server.Identity() + " whose listener uses protocol https"}}
+	}
+	if location := infrastructureservices.EndpointURL(catalog, server, artifacts.Get("endpointRef").Text()); strings.HasPrefix(location, "https://") && !strings.HasSuffix(location, ":443") {
+		return []api.Issue{{Code: "api.invariant", Field: field + ".endpointRef", Message: "the controller stage reads an artifact mirror on HTTPS's default port 443 alone, and endpoint " + artifacts.Get("endpointRef").Text() + " of " + server.Identity() + " serves another",
+			Remediation: "set the port of the https listener endpoint " + artifacts.Get("endpointRef").Text() + " selects on " + server.Identity() + " to 443"}}
+	}
+	certificate := server.Spec().Get("tls", "secretRef").Text()
+	if !artifacts.Has("trustBundleRef") && infrastructureservices.IssuingAuthority(catalog, certificate) == "" {
+		return []api.Issue{{Code: "api.invariant", Field: field + ".serverRef", Message: "every consumer of the managed artifact mirror trusts the authority that issues its certificate, and Secret/" + certificate + " of " + server.Identity() + " names no generated caBundle issuer",
+			Remediation: "declare a generated caBundle Secret and set spec.source.generated.issuerRef of Secret/" + certificate + " to it, or set spec.mirror.artifacts.trustBundleRef on " + environment.Identity()}}
+	}
+	return nil
 }
 
 func validateRescueArtifactEndpoint(selection api.Value, catalog api.Catalog) []api.Issue {

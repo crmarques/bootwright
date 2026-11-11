@@ -86,6 +86,10 @@ func ContentRoot(contextName, server string) string {
 	return HostedRoot + "/" + contextName + "/" + servicesArea + "/artifact-server/" + server
 }
 
+func ServedRoot(contextName, server string) string {
+	return ContentRoot(contextName, server) + "/" + servedRoot
+}
+
 // EndpointURL is the base URL one selected endpoint serves at.
 func EndpointURL(catalog api.Catalog, server api.Object, endpointRef, identity string) (string, error) {
 	endpoint, ok := named(server.Spec().Get("endpoints"), endpointRef)

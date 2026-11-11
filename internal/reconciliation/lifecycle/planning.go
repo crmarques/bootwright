@@ -49,30 +49,61 @@ func (s Service) compileSources(ctx context.Context, sources desiredstate.Source
 	return state, nil
 }
 
-// dependOnController makes every other block wait for the controller block,
-// because the clients that block installs are what their adapters run. This is
-// the one dependency the engine owns; a plan without a controller block is
-// ordered by its capabilities alone.
-func dependOnController(definitions []reconciliation.BlockDefinition) []reconciliation.BlockDefinition {
-	prerequisite := ""
+// dependOnController makes every block outside the controller block's own
+// requirements wait for it once requirements resolve, because the clients it
+// installs are what their adapters run; each block it waits for must be one its
+// capability runs without those clients. It is the one dependency the engine owns.
+func (s Service) dependOnController(definitions []reconciliation.BlockDefinition) ([]reconciliation.BlockDefinition, error) {
+	return DependOnController(s.capabilities, definitions)
+}
+
+func DependOnController(capabilities CapabilityResolver, definitions []reconciliation.BlockDefinition) ([]reconciliation.BlockDefinition, error) {
+	prerequisite := slices.IndexFunc(definitions, func(definition reconciliation.BlockDefinition) bool {
+		return definition.Stage == reconciliation.StageController
+	})
+	if prerequisite < 0 {
+		return definitions, nil
+	}
+	identity := definitions[prerequisite].ID
+	ancestors := ancestorsOf(definitions, identity)
 	for _, definition := range definitions {
-		if definition.Stage == reconciliation.StageController {
-			prerequisite = definition.ID
-			break
-		}
-	}
-	if prerequisite == "" {
-		return definitions
-	}
-	for index, definition := range definitions {
-		if definition.ID == prerequisite || slices.Contains(definition.Dependencies, prerequisite) {
+		if !ancestors[definition.ID] {
 			continue
 		}
-		dependencies := append(slices.Clone(definition.Dependencies), prerequisite)
+		capability, ok := capabilities.Resolve(definition.Kind, definition.Implementation)
+		if precursor, precedes := capability.(ControllerPrecursor); !ok || !precedes || !precursor.PrecedesController(definition) {
+			return nil, failure("controller.unsupported", "block "+identity+" waits for block "+definition.ID+", which runs only after the controller stage it waits for",
+				"place "+definition.Kind+"/"+definition.Object+" where the controller stage need not wait for it")
+		}
+	}
+	for index, definition := range definitions {
+		if definition.ID == identity || ancestors[definition.ID] || slices.Contains(definition.Dependencies, identity) {
+			continue
+		}
+		dependencies := append(slices.Clone(definition.Dependencies), identity)
 		slices.Sort(dependencies)
 		definitions[index].Dependencies = dependencies
 	}
-	return definitions
+	return definitions, nil
+}
+
+func ancestorsOf(definitions []reconciliation.BlockDefinition, identity string) map[string]bool {
+	waits := map[string][]string{}
+	for _, definition := range definitions {
+		waits[definition.ID] = definition.Dependencies
+	}
+	ancestors := map[string]bool{}
+	pending := slices.Clone(waits[identity])
+	for len(pending) != 0 {
+		next := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		if ancestors[next] || next == identity {
+			continue
+		}
+		ancestors[next] = true
+		pending = append(pending, waits[next]...)
+	}
+	return ancestors
 }
 
 // planFrom asks every resolvable capability for its blocks. Planning is pure:
@@ -147,7 +178,12 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 	if err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
-	definitions = dependOnController(definitions)
+	if definitions, err = reconciliation.ResolveRequirements(definitions); err != nil {
+		return reconciliation.Plan{}, capabilityBinding{}, err
+	}
+	if definitions, err = s.dependOnController(definitions); err != nil {
+		return reconciliation.Plan{}, capabilityBinding{}, err
+	}
 	plan, err := reconciliation.NewPlan(reconciliation.Apply, definitions)
 	if err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err

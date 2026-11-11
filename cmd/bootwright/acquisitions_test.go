@@ -99,6 +99,38 @@ func TestTheAcquisitionListNamesWhatEachOwnerAcquiresWithItsOrigin(t *testing.T)
 	}
 }
 
+func TestAManagedArtifactMirrorIsFilledFromThePublisherOnItsHostAndReadByTheController(t *testing.T) {
+	state, _ := compileAcceptance(t, exampleDirectory(t, "lab-sno-mirror-host"))
+	acquired, err := listAcquisitions(state.Effective())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kind := range []string{"helm"} {
+		pin, _, err := controller.PinOf(kind)
+		if err != nil {
+			t.Fatal(err)
+		}
+		client := slices.IndexFunc(acquired, func(item cli.Acquisition) bool { return item.Kind == "client" && item.Artifact == kind })
+		fill := slices.IndexFunc(acquired, func(item cli.Acquisition) bool { return item.Kind == "mirror file" && item.Artifact == kind })
+		if client < 0 || fill < 0 {
+			t.Fatalf("%s: the list names no client or mirror file row: %+v", kind, acquired)
+		}
+		read, filled := acquired[client], acquired[fill]
+		if !strings.HasPrefix(read.Origin, "https://203.0.113.20/mirror/lab-sno-mirror-host/"+kind+"/") || !slices.Equal(read.Machines, []string{"controller"}) || read.SHA256 != pin.Default.SHA256 {
+			t.Errorf("the controller reads %s from %+v, not the managed mirror", kind, read)
+		}
+		if filled.Class != acquisition.ClassPublic || strings.Contains(filled.Origin, "203.0.113.20") || !slices.Equal(filled.Machines, []string{"mirror"}) ||
+			filled.Consumer != "ArtifactServer/mirror-artifacts" || filled.SHA256 != pin.Default.SHA256 || filled.Bytes != pin.Default.Bytes {
+			t.Errorf("the mirror host fills %s from %+v, not its publisher", kind, filled)
+		}
+	}
+	if slices.ContainsFunc(acquired, func(item cli.Acquisition) bool {
+		return item.Kind == "mirror file" && strings.HasPrefix(item.Artifact, "openshift")
+	}) {
+		t.Error("a vendor client is filled into the mirror, which serves public origins alone")
+	}
+}
+
 func TestAShortImageNameIsClassedByTheRegistryItResolvesTo(t *testing.T) {
 	row := imageAcquisition("service image", "ubuntu/squid@sha256:"+strings.Repeat("a", 64), []string{"controller"}, "Proxy/egress")
 	if row.Artifact != "docker.io/ubuntu/squid" || row.Class != acquisition.ClassPublic {

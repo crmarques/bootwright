@@ -910,6 +910,54 @@ Not yet met: a cluster or the Environment may select a managed Registry as its
 mirror, and Bootwright fills it; tracked as
 [B1249](milestones/backlog.md#b1249).
 
+## Mirror host
+
+The mirror host is the Machine an Environment's managed
+[artifact mirror](api/environment.md#artifact-mirror) is placed on: an OS-ready
+Machine reached over SSH whose managed `ArtifactServer`
+`spec.mirror.artifacts.serverRef` and `endpointRef` select. It holds exactly
+the files the acquisition list names, the public-origin clients the controller
+stage installs at the releases the build's tool table pins, and is never a
+pass-through to a publisher
+([controlled network supply](deferred/controlled-network.md#the-mirror-host)).
+
+**Fill.** One block of the `mirror-fill` family, implementation
+`mirrorfill.FilesImplementation`, named `mirror-files-<environment>`, runs on
+the mirror host in the `infrastructure-services` stage after the server's own
+block, and publishes beneath the server's served root at
+`mirror/<environment>/<kind>/<release>/<file>`, the path the controller stage
+reads. Each file is read from its publisher over verified HTTPS through the
+mirror host's frozen egress route, direct or an external Proxy and never an
+ambient proxy, into a temporary file whose SHA-256 must equal the build's pin
+before it is renamed into place, owned by root, mode `0644` and labeled like
+the served root. A file already present at its pinned size and SHA-256 is not
+read again, so a replay copies nothing and reports unchanged. A file whose
+SHA-256 differs publishes nothing and fails the attempt with `lifecycle.state`
+on the server; a publisher the host cannot read fails it with
+`lifecycle.unknown` (`TestAFillRefusesAFileItCouldNotVerify`). The evidence
+names, in request order, each file the mirror holds and whether its size and
+SHA-256 match the pin; a held file the request does not name in that place is
+unknown (`TestTheFillReadsItsEffectFromTheFilesTheMirrorHolds`). The fill's
+removal deletes `mirror/<environment>` alone, before the server's own removal.
+No Secret material reaches the mirror host beyond its placement's SSH access.
+
+**Ordering.** The controller block waits for the mirror server's block and the
+fill, because it reads its clients from them, and neither runs a
+controller-installed client; every other block waits for the controller block
+([stages and the pause boundary](state-reconciliation.md#stages-and-the-pause-boundary),
+`TestTheControllerBlockWaitsForTheMirrorItReadsAndEveryOtherBlockForIt`).
+
+**Trust.** Every consumer verifies the mirror against the `caBundle` that issues
+the server's serving certificate, the `spec.source.generated.issuerRef` of its
+`tls.secretRef`, unless `spec.mirror.artifacts.trustBundleRef` names another;
+admission refuses a serving certificate with no issuer when none is named, and
+Bootwright creates no Secret for it.
+
+Not yet met: the mirror host may be the controller or a Machine Bootwright
+installs, a managed Registry on it may be the Environment's image mirror,
+filled with service and BMC images, and it may mirror an OpenShift release;
+tracked as [B1249](milestones/backlog.md#b1249).
+
 ## Adapter boundary
 
 Every managed-service effect crosses the

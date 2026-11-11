@@ -8,6 +8,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -63,10 +64,15 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 	if err != nil {
 		return empty, err
 	}
+	var requires []reconciliation.ObjectRef
+	if mirror, declared := infrastructureservices.ArtifactMirrorOf(catalog); declared && mirror.Managed && request.MirrorReader() {
+		requires = []reconciliation.ObjectRef{{Kind: string(api.ArtifactServer), Object: mirror.Server.Name()}}
+	}
 	return lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{{
 		ID:             BlockID,
 		Description:    description(input.Verb, selection.EnvironmentName(), request.Machine),
 		Stage:          reconciliation.StageController,
+		Requires:       requires,
 		Impacts:        impacts(input.Verb, request),
 		Groups:         groups(input.Verb, request.Machine),
 		Kind:           Kind,

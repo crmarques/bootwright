@@ -1,0 +1,27 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: mirror
+
+spec:
+  os:
+    provided: true
+
+  proxy:
+    direct: {}
+
+  network:
+    addresses:
+      - name: fqdn
+        address: mirror.lab.example.test
+
+      - name: ip
+        address: 203.0.113.20
+
+  access:
+    ssh:
+      addressRef: ip
+      knownHostsRef: mirror-known-hosts
+
+      auth:
+        privateKeyRef: mirror-access-key

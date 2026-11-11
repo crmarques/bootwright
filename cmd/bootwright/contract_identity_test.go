@@ -23,6 +23,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/mirrorfill"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/registry"
@@ -126,7 +127,9 @@ func contractRecipes() map[string]digestRecipe {
 			partPin("spread-preferred-anti-affinity"), partPin("lend-bound-secret")),
 		baremetal.Implementation: digestOf(partDomain("bootwright.substrate.baremetal.machine-v1"), partImplementation(baremetal.Implementation), partRequest("machine-baremetal-v1"),
 			partPin("identity+exact-addresses+power+system-claim+every-mac-claim+logical-volume")),
-		installation.TreeImplementation:  digestOf(partImplementation(installation.TreeImplementation), partVersion(installation.TreeEvidenceVersion)),
+		installation.TreeImplementation: digestOf(partImplementation(installation.TreeImplementation), partVersion(installation.TreeEvidenceVersion)),
+		mirrorfill.FilesImplementation: digestOf(partDomain("bootwright.infrastructureservices.mirror-fill-v1"), partImplementation(mirrorfill.FilesImplementation),
+			partVersion(mirrorfill.FilesEvidenceVersion)),
 		installation.EraseImplementation: {separator: ":", parts: []digestPart{partImplementation(installation.EraseImplementation), partRequest("physical-erase-v3"), partPin("descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v1")}},
 		installation.FirewallImplementation: digestOf(partDomain("bootwright.managedos.host-firewall-v1"), partImplementation(installation.FirewallImplementation),
 			partVersion(installation.FirewallEvidenceVersion), partPin(installation.FirewallServiceRoot),
@@ -179,6 +182,7 @@ func requestIdentities() map[string][]string {
 		kubevirt.HostImplementation:         {"identity.context", "identity.object", "identity.block", "namespace", "kubeconfigRef", "hostCluster"},
 		kubevirt.MachineImplementation:      {"identity.context", "identity.object", "identity.block", "provider", "namespace", "name", "rootVolume", "mediaVolume", "interfaces[].macAddress"},
 		installation.TreeImplementation:     {"identity.context", "identity.profile", "media.name", "publication.path", "placement.machine"},
+		mirrorfill.FilesImplementation:      {"identity.context", "identity.environment", "identity.server", "root", "files[].path", "placement.machine"},
 		installation.FirewallImplementation: {"identity.context", "identity.object", "identity.block", "services[].name", "address", "placement.machine"},
 		installation.EraseImplementation: {"install.identity.context", "install.identity.object", "install.identity.block", "installDigest",
 			"targets[].deviceName", "targets[].serialNumber", "targets[].sizeBytes", "targets[].wwn"},

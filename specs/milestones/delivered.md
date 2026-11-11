@@ -14500,3 +14500,75 @@ only `virtctl` is mapped to a publisher `go.mod`, so another client whose build
 information names no module fails the gate until its source is added; the
 release's `go.sum` and the replacement of a module by one with its own
 `go.mod` are not read.
+
+### X401 — A managed artifact mirror on an SSH Machine
+
+**Item:** B1249 (2026-11-10, [D250](backlog.md#d250) (8),
+[D251](backlog.md#d251) (6) and (16) to (22)), partly delivered in-tree, so
+the item stays in the backlog with its remaining slices; it also delivers
+[B1246](backlog.md#b1246)'s managed-server clause. The slice is the first of
+the session's plan for B1249, cut to the artifact mirror and its file fill
+(D251 (22)): the plan's image fill moves to the item's remaining work, so the
+managed image mirror refusal stays.
+
+*Declaration and trust.* `spec.mirror.artifacts` takes `url` or a managed
+`serverRef` with a required `endpointRef`, which exclude each other. The
+mirror's URL is `<endpoint>/mirror/<environment>`, derived by
+`infrastructureservices.ArtifactMirrorOf`, which the controller stage's tool
+routes and trust, `preflight`, a managed Proxy's destinations and
+`render acquisitions` read. Admission refuses a plain-HTTP endpoint, a port
+other than 443 (the one port the stage reads a mirror on, D251 (17)) and,
+when no `trustBundleRef` is authored, a serving certificate whose generated
+source names no `issuerRef`; the anchor is then that issuing `caBundle`
+(D251 (18)).
+
+*Ordering.* The controller block requires the mirror's `ArtifactServer`,
+which resolves to the server's block and the fill. The engine now adds its
+own edge after resolving requirements, to every block outside the controller
+block's ancestors, and refuses with `controller.unsupported` an ancestor whose
+capability does not declare `lifecycle.ControllerPrecursor`; an artifact
+server placed over SSH and the fill declare it (D251 (16)).
+`TestAManagedArtifactMirrorPrecedesTheControllerStageThatReadsIt` plans the new
+`lab-sno-mirror-host` example through this build's capabilities and holds the
+order server, fill, controller stage, then every other block.
+
+*Fill.* The new capability `internal/infrastructureservices/mirrorfill`
+(implementation `mirror-files-v1`, family `mirror-fill`, block
+`mirror-files-<environment>`) is planned from the acquisition list through a
+port composition binds (`mirrorFileArtifacts`, sharing `mirroredClients` with
+the preflight probe and `render acquisitions`). The role
+`infrastructureservices_mirror_fill` proves the server's hosted area, creates
+the subtree, reads each file with `ansible.builtin.get_url` by its pinned
+SHA-256 through the frozen egress alone, labels it like the served root and
+publishes evidence of the files held, through
+`infrastructureservices_mirror_files_protocol`; a replay reads nothing, a
+file of another SHA-256 publishes nothing and fails with `lifecycle.state`,
+an unreadable publisher fails with `lifecycle.unknown`, and the removal
+deletes the Environment's subtree (D251 (19)). The run's deadline grows with
+its files within `lifecycle.MaxDeadline`. `infrastructureservices` joins the
+role-name domains.
+
+*Refusals and preflight.* Plan refuses a managed artifact mirror on the
+controller host, one on a provider host, one behind a managed Proxy and one
+with no HTTPS URL (D251
+(20)). `preflight` reports a managed mirror's file it answers 404 or 410 for as
+pending, naming the apply that fills it, and a transport failure as unknown (D251 (21)). `render acquisitions`
+adds a `mirror file` row for each client, read from its publisher by the
+mirror host for the ArtifactServer.
+
+*Records.* Specs: the new [mirror host](../infrastructure-services.md#mirror-host)
+section, the artifact mirror fields and three refusal rows of
+[environment](../api/environment.md#artifact-mirror), the controller
+exception in [stages](../state-reconciliation.md#stages-and-the-pause-boundary)
+with two reference-edge rows, the controller stage and preflight output.
+Parked from the plan: [B1319](backlog.md#b1319) to [B1325](backlog.md#b1325).
+Contracts: the new `mirror-files-v1` golden; no other request or digest
+moved, because the controller block's requirement is not frozen.
+
+**Commits:** this commit. Gates: listed in its message. No live run or push
+occurred. **Limitations:** no host has run the fill: `get_url` through a
+proxy, the SELinux label a served file takes and a publisher's redirect are
+proved by tests of the role's tasks, not on a host, and a redirect to plain HTTP takes the
+same proxy; the image fill, releases,
+the controller placement and an installed mirror host remain on
+[B1249](backlog.md#b1249).

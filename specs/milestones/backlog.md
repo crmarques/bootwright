@@ -293,8 +293,8 @@ Alias cell.
 | [B1230](#b1230) | new, 2026-11-09 (X331) | product | Machine power, with Substrate | A failed revoke of a lent KubeVirt token reaches the operator of a power command or reading | Power results carry no warning channel; the token still ends at its bounded lifetime and the revoke's adapter output is retained |
 | [B1237](#b1237) | new, 2026-11-09 (D248 (5)) | product | Infrastructure services, with Substrate | A managed service's and the emulated BMC's default image comes from a Red Hat registry wherever Red Hat publishes one | Red Hat publishes no dnsmasq, chrony or sushy-tools image, and its squid image needs a `registry.redhat.io` login no managed-service pull carries |
 | [B1233](#b1233) | new, 2026-11-09 (X329 plan) | product | Reconciliation, with CLI | A block's attempt log records why its attempt failed, not only the outcome word | `bootwright logs` renders only recorded events (D244); the adapter output retained beside the attempt already holds the cause |
-| [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355 and X361 on 2026-11-10 | product | Controller, with Desired state | A managed artifact server may serve the artifact mirror, and one declaration replaces the download mirrors | The declaration (X355), the preflight probe and the private trust anchor (X361) landed; a managed server needs B1249, and folding `spec.downloads` awaits the owner (D251 (5)) |
-| [B1249](#b1249) | new, 2026-11-10 (D250 (8)) | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | D250 parks the controlled-network plan until the owner promotes it; no capability realizes a managed Registry |
+| [B1246](#b1246) | new, 2026-11-10 (D250 (7)); partly delivered by X355, X361 and X401 on 2026-11-10 | product | Controller, with Desired state | A managed artifact server may serve the artifact mirror, and one declaration replaces the download mirrors | The declaration (X355), the preflight probe and the private trust anchor (X361) and a managed server on an SSH Machine (X401) landed; folding `spec.downloads` awaits the owner (D251 (5)) |
+| [B1249](#b1249) | new, 2026-11-10 (D250 (8)); partly delivered by X401 on 2026-11-10 | product | Infrastructure services, with State reconciliation | Bootwright builds the mirror host's services and fills them before the controller stage needs them | X401 built and fills a managed artifact mirror on an SSH Machine; the image mirror, releases and the controller and installed placements remain, which D251 (6) authorizes slice by slice |
 | [B1250](#b1250) | new, 2026-11-10 (D250 (10)) | enabling | Controller, with each consumer's owner | A controlled-network acceptance profile installs with every public origin denied | D250 parks the controlled-network plan until the owner promotes it |
 | [B1267](#b1267) | new, 2026-11-10 (X348, audit 004 REC-74) | safety | Substrate and Machine, with Infrastructure services | A context driving a server by its BMC and one reaching it as an OS-ready Machine over SSH conflict | Needs a cross-mechanism machine identity whose byte order is settled first |
 | [B1299](#b1299) | new, 2026-11-10 (split from B1263, D253) | product | Controller, with State reconciliation | A running environment takes a raised client minimum without a destroy | An open owner question: a completed apply settles (D153), so replacing a client is a fresh apply today |
@@ -311,6 +311,13 @@ Alias cell.
 | [B1314](#b1314) | new, 2026-11-10 (X376 review) | enabling | Architecture | A release recipe builds, refuses a build that is unchecked or lacks its notices, and ships both documents with the executable | No release recipe exists; `make build` already refuses a build without notices, but nothing releases |
 | [B1316](#b1316) | new, 2026-11-10 (X370 review) | defect | Storage, with Secrets | A storage consumer or replication block names every Secret its binding pins | Safe as it stands: the hold walks the applied lineage, whose cluster and host blocks class those keys as effect material |
 | [B1326](#b1326) | new, 2026-11-10 (X402 review) | safety | Container cluster | A release read on the controller never reaches the source repository past a failing mirror | oc's `--icsp-file` strategy tries the source last, which no wrapper argument stops; only a live run shows it happening |
+| [B1319](#b1319) | new, 2026-11-10 (X401) | safety | Infrastructure services | A managed Registry's consumers pull with a credential that cannot push | Distribution's password file holds one user that both pushes and pulls; a pull-only one needs token authentication or a front end |
+| [B1320](#b1320) | new, 2026-11-10 (X401) | product | Container cluster, with Add-ons | Operator catalogs and an add-on's images reach the image mirror | A catalog's contents are left to the cluster's mirror tooling today |
+| [B1321](#b1321) | new, 2026-11-10 (X401) | product | Storage | A storage cluster's images come from the image mirror | A Ceph cluster's images are read from the registry its entitlement or `image.base` names |
+| [B1322](#b1322) | new, 2026-11-10 (X401) | product | Controller | A client release newer than the build's default comes from a managed mirror | Behind an artifact mirror a release the tool table does not pin refuses, because only its publisher holds its checksum |
+| [B1323](#b1323) | new, 2026-11-10 (X401) | product | Infrastructure services | A mirror's content is pruned and bounded | A managed mirror keeps every file and image until its server is destroyed |
+| [B1324](#b1324) | new, 2026-11-10 (X401) | product | Container cluster | A disconnected cluster verifies release signatures for its upgrades | A mirrored release's signatures stay on the vendor's signature store |
+| [B1325](#b1325) | new, 2026-11-10 (X401) | product | Infrastructure services | Several mirror hosts, or a mirror on a cluster | One Environment names one artifact mirror and one image mirror, each on one OS-ready Machine |
 
 ### B82
 
@@ -3305,11 +3312,15 @@ stage runs, with no body, and fails a file the mirror lacks or serves at
 another size, naming it and the publisher file to copy there; and
 `spec.mirror.artifacts.trustBundleRef`, a `caBundle` Secret, verifies the
 mirror beside the system trust store, lent to each download and the probe
-([D251](#d251) (9)). **Remaining:** a managed ArtifactServer as the mirror
-once [B1249](#b1249) builds one; and `spec.downloads` folded into the
-declaration before 1.0, which awaits the owner ([D251](#d251) (5)). **Exit
-evidence:** the preflight and private-trust tests landed with X361; a managed
-mirror's acquisition test and effective-state goldens remain.
+([D251](#d251) (9)). **Delivered in-tree by X401:** `serverRef` and
+`endpointRef` name a managed ArtifactServer as the mirror, filled on its
+[mirror host](../infrastructure-services.md#mirror-host)
+([X401](delivered.md#x401--a-managed-artifact-mirror-on-an-ssh-machine)); its
+other placements stay with [B1249](#b1249). **Remaining:** `spec.downloads`
+folded into the declaration before 1.0, which awaits the owner
+([D251](#d251) (5)). **Exit evidence:** the preflight and private-trust tests
+landed with X361, and a managed mirror's acquisition test and effective-state
+golden with X401.
 
 ### B1249
 
@@ -3323,13 +3334,35 @@ the controller, drives that Machine as any other, over SSH or locally, builds
 both services serving HTTPS with a generated certificate whose authority every
 consumer trusts, and copies its acquisition list into them on that Machine,
 each artifact verified before it is published, before its controller stage
-acquires a tool. **Open:** the ordering clauses (the mirror's blocks before
-the controller stage's tools, the stage split in two when the mirror is on the
-controller, and a managed service on a Machine whose installation is still to
-run, which admission refuses today); custody of a release's pull secret on the
-mirror host. **Exit evidence:** a test that holds the plan's order for each
-placement, a replay that copies nothing, a verification refusal and a row of
-[B1250](#b1250)'s profile.
+acquires a tool. **Delivered in-tree by X401**
+([D251](#d251) (16) to (22)): a managed artifact mirror on an OS-ready
+Machine reached over SSH, `spec.mirror.artifacts.serverRef` and
+`endpointRef`, trusted through its certificate's issuer and filled with the
+controller stage's public-origin clients by `mirror-files-<environment>`
+before that stage, which the engine orders after resolving requirements
+([X401](delivered.md#x401--a-managed-artifact-mirror-on-an-ssh-machine)).
+**Remaining**, from the session's plan of 2026-11-10, each slice through its
+own review: (a) the image mirror: a managed Registry beside the artifact
+server on the same Machine as `spec.mirror.registry`, with a required
+`endpointRef` and the issuer anchor, filled by `mirror-images-<environment>`
+after the controller stage with every service and emulated BMC image copied
+by digest (`skopeo copy --all --preserve-digests`, then the manifest digest
+read back; a replay checks `HEAD /v2/<repository>/manifests/<digest>`), the
+mirror host's own services exempt from the mirrored reference, each consumer
+off the mirror host requiring the Registry and its fill, and `skopeo` proved
+on an SSH host and refused naming its package; (b) an OpenShift release into
+that Registry by the release's own `oc` (`--to` the `ocp-v4.0-art-dev`
+repository and `--to-release-image` the `ocp-release` one), its pull secret
+lent per attempt as a two-entry auth document with a private `HOME`, removed
+in an `always`, and the cluster's registry mirror refusal lifted; (c) the
+controller placement, whose stage splits into `controller-prerequisites` and
+`controller-mirrored-clients` around the fill, with `skopeo` a stage package
+there; (d) a Bootwright-installed mirror host, its placement requiring the
+installation and its host key read from the installation's evidence, and
+[B1250](#b1250)'s profile row. **Exit evidence:** the plan-order, replay and
+verification tests for the SSH placement landed with X401; the order for the
+controller and installed placements, the image and release tests and the
+profile row remain.
 
 ### B1250
 
@@ -3581,6 +3614,77 @@ reads them only through the cluster and host blocks of the applied lineage.
 **Outcome:** a block names, and classes, every Secret its binding pins, or the
 hold covers any pinned Secret no block references. **Exit evidence:** a hold
 test over a consumer binding alone.
+
+### B1319
+
+**Owner:** Infrastructure services. **Kind:** safety. **Requires:** none.
+**Definition:** Candidate, from the B1249 plan (X401): every consumer of a
+managed Registry would hold the credential the fill pushes with, because
+Distribution's `htpasswd` authentication grants each user every action.
+**Outcome:** the mirror's consumers pull with a credential that cannot push,
+through Distribution's token authentication or a front end that maps one, and
+the push credential stays on the mirror host. **Exit evidence:** a test that a
+consumer's lent credential is refused a push.
+
+### B1320
+
+**Owner:** Container cluster, with Add-ons. **Kind:** product. **Requires:**
+none. **Definition:** Candidate, from the B1249 plan (X401) and [D251](#d251)
+(10): an add-on's catalog is named by its `catalogSource` image and its
+operator images are left to the cluster's mirror tooling. **Outcome:** the
+mirror host copies each selected catalog's pinned image and the operator images
+it names, as `oc-mirror` does, into the managed Registry, and the cluster reads
+them there. **Exit evidence:** an acquisition-list test naming each copied
+image and a profile row installing an add-on with every public origin denied.
+
+### B1321
+
+**Owner:** Storage. **Kind:** product. **Requires:** none. **Definition:**
+Candidate, from the B1249 plan (X401). **Outcome:** a storage cluster under the
+Environment's image mirror reads its images, authored by digest as the [mirror
+host](../infrastructure-services.md#mirror-host) requires, from the managed
+Registry, which the mirror host fills from their origins. **Exit evidence:** a
+request golden naming the mirrored references and a profile row of a storage
+cluster with every public origin denied.
+
+### B1322
+
+**Owner:** Controller. **Kind:** product. **Requires:** none. **Definition:**
+Candidate, from the B1249 plan (X401) and the
+[design](../deferred/controlled-network.md#the-mirror-host), its one exception
+to a mirror trusted for nothing. **Outcome:** a declared release newer than the
+build's default is fetched by the mirror host, which reads its SHA-256 from the
+publisher's metadata, and the controller stage reads it from the mirror by that
+SHA-256, recorded in the fill's evidence. **Exit evidence:** a fill test that
+reads the checksum from a fixture publisher and a stage test that verifies
+against it.
+
+### B1323
+
+**Owner:** Infrastructure services. **Kind:** product. **Requires:** none.
+**Definition:** Candidate, from the B1249 plan (X401). **Outcome:** a release,
+client or image the acquisition list no longer names leaves the mirror, and the
+mirror refuses to grow past a declared bound. **Exit evidence:** a fill test
+that removes a file no longer listed and a refusal past the bound.
+
+### B1324
+
+**Owner:** Container cluster. **Kind:** product. **Requires:** none.
+**Definition:** Candidate, from the B1249 plan (X401). **Outcome:** the mirror
+host mirrors a release's signatures with the release, and the cluster's
+configuration reads them from the mirror, so an upgrade behind a mirror
+verifies the release it takes. **Exit evidence:** a projection golden of the
+signature configuration and a profile row upgrading with every public origin
+denied.
+
+### B1325
+
+**Owner:** Infrastructure services. **Kind:** product. **Requires:** none.
+**Definition:** Candidate, from the B1249 plan (X401). **Outcome:** an
+Environment may name more than one mirror host, or one a container cluster or a
+KubeVirt guest serves, with a declared order between them and the same fill and
+trust. **Exit evidence:** a plan-order test for each new placement and a
+failover row of [B1250](#b1250)'s profile.
 
 ## Audit remediation (2026-10-26)
 
@@ -8251,6 +8355,72 @@ the owner's review:
     `additionalNTPSources` stays, because the booted installer's host checks
     need a reachable source before any MachineConfig applies. Without the
     mirror the default pool stays beside the selected servers, as before.
+16. Taken by the session for B1249 (X401), pending the owner's review: the
+    controller block waits for exactly what its stage reads, a managed
+    artifact mirror's server block and its file fill, through an ordinary
+    requirement on the mirror's `ArtifactServer`, and the engine adds its own
+    edge only after every requirement resolves, to each block outside the
+    controller block's ancestors. Each ancestor's capability must declare
+    that it runs without the stage's clients (`lifecycle.ControllerPrecursor`:
+    an artifact server placed over SSH and the fill do), and any other refuses
+    the plan with `controller.unsupported` naming both blocks, so a mirror
+    whose server waits for a provider host, or any later work, never runs
+    before what it needs. The images and releases a mirror serves are read by
+    blocks already after the controller stage, so they wait for it.
+17. Taken by the session for B1249 (X401): `spec.mirror.artifacts` is an
+    operator's `url` or a managed `serverRef` with a required `endpointRef`,
+    excluding each other, and the managed mirror's URL is
+    `<endpoint>/mirror/<environment>` beneath the server's served root, so the
+    `<url>/<kind>/<release>/<file>` layout and its 102-byte bound hold
+    unchanged. The endpoint must serve HTTPS on port 443, because the
+    controller stage and `preflight` read a mirror only at HTTPS's default
+    port; admission refuses another protocol or port rather than this slice
+    widening the stage's URL rule. The derivation is pure and lives in
+    `internal/infrastructureservices` (`ArtifactMirrorOf`), read by the
+    controller stage's tool routes, its trust, `preflight`, a managed Proxy's
+    destinations and `render acquisitions`. `spec.mirror.registry` keeps its
+    shape until a managed Registry may be the image mirror.
+18. Taken by the session for B1249 (X401): a managed mirror's anchor, when no
+    `trustBundleRef` is authored, is the generated `caBundle` its serving
+    certificate's `issuerRef` names; admission refuses a serving certificate
+    with no issuer, naming the Secret to declare, and Bootwright creates no
+    implicit Secret.
+19. Taken by the session for B1249 (X401): the fill is one block,
+    `mirror-files-<environment>` of the new `mirror-fill` family, on the
+    mirror host after the server's block. Each file is read with
+    `ansible.builtin.get_url`, which verifies the downloaded temporary file
+    against the pinned SHA-256 before it renames it into place and reads
+    nothing for a destination that already matches, in place of the plan's
+    custom `mirror_file` module: the built-in already gives the
+    verify-then-publish and the replay the plan asked for, and a module of
+    our own would repeat it. A file of another SHA-256 publishes nothing and
+    fails as `lifecycle.state`; an unreadable publisher fails as
+    `lifecycle.unknown`. Unlike the plan's no-op removal, the fill removes
+    its own `mirror/<environment>` subtree, as every consumer publishing into
+    an artifact server removes what it published, so an Environment that
+    drops its mirror leaves no files behind a server it keeps.
+20. Taken by the session for B1249 (X401): until the stage split and an
+    installed mirror host land, plan refuses a managed artifact mirror placed
+    on the controller host (the controller Machine, one reached locally, or
+    one whose SSH endpoint is port 22 at a controller address), one on a
+    Machine that hosts a libvirt provider or whose address a provider's bridge
+    carries, one whose Machine reaches the publishers through a managed
+    Proxy, and one whose endpoint names no HTTPS URL a client path fits
+    beneath, each naming the mirror's server and Machine before the engine's
+    ordering refusal is reached ([refusal table](../api/environment.md#refusal-table)).
+21. Taken by the session for B1249 (X401): `preflight` reports a managed
+    mirror's file that the mirror answers 404 or 410 for as `pending`, naming
+    the apply that fills it, while a file at another size still fails and a
+    transport or TLS failure stays unknown with its own message; it decides
+    from what the probe observes rather than from the context's operation
+    records.
+22. Taken by the session for B1249 (X401): the slice delivers the managed
+    artifact mirror and its file fill alone. The plan's image fill (a
+    managed Registry as the image mirror, the `skopeo` copy by digest, the
+    mirror-host self-image exemption, its consumers' requirements and the
+    one-Machine rule for the mirror's two services) moves to B1249's
+    remaining work with the plan's slices 2 to 4, so the managed image mirror
+    refusal stays, and no surface is admitted that nothing fills.
 
 ### D252
 

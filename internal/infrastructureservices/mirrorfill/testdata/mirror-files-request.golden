@@ -1,0 +1,40 @@
+{
+  "egress": {
+    "httpProxy": "http://proxy.example.test:3128",
+    "httpsProxy": "http://proxy.example.test:3128",
+    "noProxy": [
+      ".lab.example.test"
+    ]
+  },
+  "files": [
+    {
+      "bytes": 5,
+      "path": "helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "source": "https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz"
+    },
+    {
+      "bytes": 7,
+      "path": "kubectl/v1.37.2/kubectl",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "source": "https://dl.k8s.io/release/v1.37.2/bin/linux/amd64/kubectl"
+    }
+  ],
+  "identity": {
+    "context": "lab",
+    "environment": "lab",
+    "server": "mirror"
+  },
+  "placement": {
+    "address": "203.0.113.20",
+    "connection": "ssh",
+    "knownHostsRef": "mirror-known-hosts",
+    "machine": "mirror",
+    "port": 22,
+    "privateKeyRef": "mirror-access-key",
+    "user": "root"
+  },
+  "root": "/var/lib/bootwright-hosted/lab/services/artifact-server/mirror/public/mirror/lab",
+  "servedRoot": "/var/lib/bootwright-hosted/lab/services/artifact-server/mirror/public",
+  "version": "mirror-files-v1"
+}

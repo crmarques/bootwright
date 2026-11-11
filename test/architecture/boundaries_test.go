@@ -102,7 +102,7 @@ func packageRoles() map[string]packageRole {
 	}
 	for _, capability := range []string{
 		"addons/catalog",
-		"infrastructureservices/artifactserver", "infrastructureservices/managedservice",
+		"infrastructureservices/artifactserver", "infrastructureservices/managedservice", "infrastructureservices/mirrorfill",
 		"infrastructureservices/dnsserver", "infrastructureservices/ntpserver", "infrastructureservices/proxy", "infrastructureservices/registry",
 		"containercluster/access", "containercluster/agentinstall",
 		"containercluster/installation", "containercluster/preflight",
@@ -156,6 +156,7 @@ func applicationDependencies() map[string][]string {
 		"internal/containercluster/agentinstall":         append(capabilityDependencies(), "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice"),
 		"internal/infrastructureservices/artifactserver": append(capabilityDependencies(), "internal/infrastructureservices/managedservice"),
 		"internal/infrastructureservices/managedservice": {"internal/controller/prerequisites", "internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},
+		"internal/infrastructureservices/mirrorfill":     {"internal/reconciliation/lifecycle", "internal/infrastructureservices/artifactserver", "internal/infrastructureservices/managedservice"},
 		"internal/machine/access":                        {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},
 		"internal/machine/power":                         {"internal/desiredstate/compilation", "internal/reconciliation/lifecycle"},
 		"internal/machine/inventory":                     {"internal/desiredstate/compilation"},

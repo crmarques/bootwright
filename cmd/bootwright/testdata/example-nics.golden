@@ -4710,6 +4710,80 @@
       ]
     }
   },
+  "lab-sno-mirror-host": {
+    "libvirtMachines": {
+      "sno-01": [
+        {
+          "bridge": "virbr-lab",
+          "macAddress": "52:54:00:06:3e:11",
+          "name": "enp1s0",
+          "network": "bootwright-lab-lab-guests"
+        }
+      ]
+    },
+    "agentHosts": {
+      "sno": [
+        {
+          "hostname": "master-0",
+          "interfaces": [
+            {
+              "macAddress": "52:54:00:06:3e:11",
+              "name": "enp1s0"
+            }
+          ],
+          "networkConfig": {
+            "dns-resolver": {
+              "config": {
+                "search": [
+                  "lab.example.test"
+                ],
+                "server": [
+                  "192.0.2.1"
+                ]
+              }
+            },
+            "interfaces": [
+              {
+                "ipv4": {
+                  "address": [
+                    {
+                      "ip": "198.51.100.21",
+                      "prefix-length": 24
+                    }
+                  ],
+                  "dhcp": false,
+                  "enabled": true
+                },
+                "ipv6": {
+                  "enabled": false
+                },
+                "mac-address": "52:54:00:06:3e:11",
+                "mtu": 1500,
+                "name": "enp1s0",
+                "state": "up",
+                "type": "ethernet"
+              }
+            ],
+            "routes": {
+              "config": [
+                {
+                  "destination": "0.0.0.0/0",
+                  "metric": 100,
+                  "next-hop-address": "198.51.100.1",
+                  "next-hop-interface": "enp1s0",
+                  "table-id": 254
+                }
+              ]
+            }
+          },
+          "role": "master",
+          "rootDeviceHints": {
+            "deviceName": "/dev/vda"
+          }
+        }
+      ]
+    }
+  },
   "lab-sno-nmstate": {
     "libvirtMachines": {
       "sno-01": [

@@ -731,6 +731,10 @@ type StageTailConsumer interface {
 	StageTail(reconciliation.BlockDefinition) (reconciliation.ObjectRef, bool, error)
 }
 
+type ControllerPrecursor interface {
+	PrecedesController(reconciliation.BlockDefinition) bool
+}
+
 type OfflineRetirement interface{ RetiresOffline() bool }
 
 type PlanInspection func(context.Context, string, api.Catalog, reconciliation.Plan, []reconciliation.Block) ([]PlanCheck, error)

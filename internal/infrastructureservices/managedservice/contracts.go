@@ -12,3 +12,5 @@ import (
 type Runner interface {
 	Run(context.Context, lifecycle.RunRequest) (lifecycle.RunResult, error)
 }
+
+const Family = "managed-service"

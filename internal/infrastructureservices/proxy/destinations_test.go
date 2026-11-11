@@ -45,6 +45,23 @@ func TestAProxyFreezesItsDeclaredDestinationsAndTheEnvironmentsMirrorHosts(t *te
 	}
 }
 
+// A managed artifact mirror's derived endpoint joins the list as an operator's
+// URL does, at the default HTTPS port its URL leaves implicit.
+func TestAProxyAdmitsAManagedArtifactMirrorAtItsEndpoint(t *testing.T) {
+	environment := api.NewObject(api.Environment, "lab", m(), m("mirror", m("artifacts", m("serverRef", "mirror", "endpointRef", "ip"))))
+	catalog := api.NewCatalog([]api.Object{environment,
+		api.NewObject(api.Machine, "mirror", m(), m("network", m("addresses", api.ListValue(m("name", "ip", "address", "203.0.113.20"))))),
+		api.NewObject(api.ArtifactServer, "mirror", m(), m("management", "managed", "machineRef", "mirror",
+			"listeners", api.ListValue(m("name", "https", "protocol", "https", "port", api.IntegerValue("443"))),
+			"endpoints", api.ListValue(m("name", "ip", "listenerRef", "https", "addressRef", "ip")))),
+	})
+	found, err := destinations(catalog, api.StringList(".redhat.com"))
+	want := []managedservice.Destination{{Domain: ".redhat.com"}, {Address: "203.0.113.20", Port: 443}}
+	if err != nil || !reflect.DeepEqual(found, want) {
+		t.Fatalf("destinations = %+v (%v)", found, err)
+	}
+}
+
 func TestAProxyWithoutAllowedDestinationsFreezesNoneAndAnEmptyListRefuses(t *testing.T) {
 	catalog := mirrored("https://mirror.lab.example.test/tools", "registry.lab.example.test")
 	if found, err := destinations(catalog, api.Value{}); err != nil || found != nil {

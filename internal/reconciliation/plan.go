@@ -108,7 +108,7 @@ func NewPlan(verb Verb, definitions []BlockDefinition) (Plan, error) {
 			return Plan{}, planError("lifecycle plan exceeds its 4 MiB aggregate request limit")
 		}
 	}
-	resolved, err := resolveRequirements(definitions)
+	resolved, err := ResolveRequirements(definitions)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -238,10 +238,10 @@ func RequestDigest(definition BlockDefinition) (string, error) {
 	return hex.EncodeToString(digest[:]), nil
 }
 
-// resolveRequirements turns each capability's API-object requirements into
+// ResolveRequirements turns each capability's API-object requirements into
 // block dependencies. A block never depends on itself, and a requirement no
 // block in this plan realizes refuses before the plan exists.
-func resolveRequirements(definitions []BlockDefinition) ([]BlockDefinition, error) {
+func ResolveRequirements(definitions []BlockDefinition) ([]BlockDefinition, error) {
 	realized := map[ObjectRef][]string{}
 	for _, definition := range definitions {
 		reference := ObjectRef{Kind: definition.Kind, Object: definition.Object}

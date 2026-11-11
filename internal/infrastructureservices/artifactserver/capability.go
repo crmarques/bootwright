@@ -62,6 +62,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			Groups:         groups(input.Verb, request),
 			Kind:           Kind,
 			Object:         request.Identity.Service,
+			Family:         managedservice.Family,
 			Implementation: Implementation,
 			ContentDigest:  digest,
 			Request:        canonical,
@@ -333,4 +334,9 @@ func (Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 // same context, and a removal probes the Machines behind them.
 func (Capability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiescence, error) {
 	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its consumers are probed in this removal"}, nil
+}
+
+func (Capability) PrecedesController(definition reconciliation.BlockDefinition) bool {
+	request, err := DecodeRequest(definition.Request)
+	return err == nil && request.Placement.Connection == connectionSSH
 }

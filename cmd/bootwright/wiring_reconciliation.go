@@ -20,6 +20,7 @@ import (
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/mirrorfill"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/registry"
@@ -201,6 +202,9 @@ func operationPlaybook() map[string]string {
 		ceph.SMBImplementation + "/observe":              "storage/smb_observe.yml",
 		ceph.SMBImplementation + "/destroy":              "storage/smb_destroy.yml",
 	}
+	for _, operation := range []string{"apply", "observe", "destroy"} {
+		bindings[mirrorfill.FilesImplementation+"/"+operation] = "infrastructureservices/mirror_files_" + operation + ".yml"
+	}
 	bindings[ceph.ConsumerImplementation+"/apply"] = "storage/export_apply.yml"
 	bindings[ceph.ConsumerImplementation+"/observe"] = "storage/export_observe.yml"
 	for prefix, definition := range map[string]managedservice.Definition{
@@ -309,13 +313,17 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 	resolver = append(resolver, boundCapability{kind: string(api.CephReplication), implementation: ceph.ReplicationImplementation, family: "storage-replication", capability: ceph.NewReplication(runner).WithProofs(cephDependencyProofs{})})
 	for _, definition := range managedServiceDefinitions() {
 		resolver = append(resolver, boundCapability{
-			kind: string(definition.Kind), implementation: definition.Implementation, family: "managed-service",
+			kind: string(definition.Kind), implementation: definition.Implementation, family: managedservice.Family,
 			capability: managedservice.NewCapability(definition, runner).WithClock(clock),
 		})
 	}
 	resolver = append(resolver, boundCapability{
-		kind: artifactserver.Kind, implementation: artifactserver.Implementation, family: "managed-service",
+		kind: artifactserver.Kind, implementation: artifactserver.Implementation, family: managedservice.Family,
 		capability: artifactserver.New(runner, clock),
+	})
+	resolver = append(resolver, boundCapability{
+		kind: mirrorfill.Kind, implementation: mirrorfill.FilesImplementation, family: mirrorfill.Family,
+		capability: mirrorfill.NewFiles(runner, mirrorFileArtifacts),
 	})
 	return bindInstallations(resolver, runner, records)
 }

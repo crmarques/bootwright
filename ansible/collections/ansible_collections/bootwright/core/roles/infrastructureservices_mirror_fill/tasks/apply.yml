@@ -1,0 +1,123 @@
+---
+- name: Validate the frozen artifact mirror files request
+  ansible.builtin.assert:
+    that:
+      - bootwright_mirror_files_request.version == 'mirror-files-v1'
+      - bootwright_mirror_files_request.identity.context is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_files_request.identity.environment is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_files_request.identity.server is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_files_request.servedRoot == infrastructureservices_mirror_fill_served_root
+      - bootwright_mirror_files_request.root == infrastructureservices_mirror_fill_root
+      - bootwright_mirror_files_request.files | length > 0
+      - bootwright_mirror_files_request.files | length <= 128
+      - infrastructureservices_mirror_fill_paths | unique | list | length == infrastructureservices_mirror_fill_count | int
+      - infrastructureservices_mirror_fill_valid_paths | length == infrastructureservices_mirror_fill_count | int
+      - infrastructureservices_mirror_fill_valid_digests | length == infrastructureservices_mirror_fill_count | int
+      - infrastructureservices_mirror_fill_valid_sources | length == infrastructureservices_mirror_fill_count | int
+      - infrastructureservices_mirror_fill_valid_sizes | length == infrastructureservices_mirror_fill_count | int
+      - bootwright_mirror_files_digest is match('^[0-9a-f]{64}$(?!\n)')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.infrastructureservices_mirror_files_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Prove the artifact server's hosted directories before any effect
+  bootwright.core.hosted_area:
+    context: '{{ bootwright_mirror_files_request.identity.context }}'
+    path: '{{ infrastructureservices_mirror_fill_area }}'
+    state: proved
+
+- name: Read the artifact server's served root
+  ansible.builtin.stat:
+    path: '{{ infrastructureservices_mirror_fill_served_root }}'
+    follow: false
+  register: infrastructureservices_mirror_fill_served
+
+- name: Refuse a served root the artifact server did not create
+  ansible.builtin.assert:
+    that:
+      - infrastructureservices_mirror_fill_served.stat.isdir | default(false)
+      - not (infrastructureservices_mirror_fill_served.stat.islnk | default(true))
+    quiet: true
+
+- name: Create each mirror directory beneath the served root
+  ansible.builtin.file:
+    path: '{{ item }}'
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop: '{{ infrastructureservices_mirror_fill_directories }}'
+  register: infrastructureservices_mirror_fill_created
+
+- name: Fetch and verify each client file from its publisher
+  block:
+    - name: Download each file by its pinned SHA-256 and publish it by rename
+      ansible.builtin.get_url:
+        url: '{{ item.source }}'
+        dest: '{{ infrastructureservices_mirror_fill_root }}/{{ item.path }}'
+        checksum: 'sha256:{{ item.sha256 }}'
+        owner: root
+        group: root
+        mode: '0644'
+        use_proxy: '{{ infrastructureservices_mirror_fill_proxied | bool }}'
+        validate_certs: true
+        follow_redirects: safe
+        timeout: '{{ infrastructureservices_mirror_fill_download_timeout | int }}'
+      environment: '{{ infrastructureservices_mirror_fill_environment if (infrastructureservices_mirror_fill_proxied | bool) else {} }}'
+      loop: '{{ bootwright_mirror_files_request.files }}'
+      loop_control:
+        label: '{{ item.path }}'
+      register: infrastructureservices_mirror_fill_downloaded
+  rescue:
+    - name: Name the refusal of a file that could not be published
+      bootwright.core.infrastructureservices_mirror_files_protocol:
+        phase: refused
+        reason: "{{ 'file-digest-mismatch' if infrastructureservices_mirror_fill_failure is search('checksum') else 'file-unreachable' }}"
+      no_log: true
+
+    - name: Refuse the fill after naming why
+      ansible.builtin.fail:
+        msg: the artifact mirror fill published no file it could not verify
+
+  always:
+    - name: Label the mirror for the artifact server's serving process
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/chcon
+          - --recursive
+          - --reference
+          - '{{ infrastructureservices_mirror_fill_served_root }}'
+          - '{{ infrastructureservices_mirror_fill_served_root }}/mirror'
+        expand_argument_vars: false
+      changed_when: false
+
+- name: Read the mirror root
+  ansible.builtin.stat:
+    path: '{{ infrastructureservices_mirror_fill_root }}'
+    follow: false
+  register: infrastructureservices_mirror_fill_root_stat
+
+- name: Read each mirror file beneath the mirror root
+  ansible.builtin.stat:
+    path: '{{ infrastructureservices_mirror_fill_root }}/{{ item.path }}'
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  loop: '{{ bootwright_mirror_files_request.files }}'
+  loop_control:
+    label: '{{ item.path }}'
+  register: infrastructureservices_mirror_fill_observed
+
+- name: Publish bounded artifact mirror files completion evidence
+  bootwright.core.infrastructureservices_mirror_files_protocol:
+    phase: completed
+    outcome: "{{ 'changed' if infrastructureservices_mirror_fill_created.changed or infrastructureservices_mirror_fill_downloaded.changed else 'unchanged' }}"
+    digest: '{{ bootwright_mirror_files_digest }}'
+    files: '{{ bootwright_mirror_files_request.files }}'
+    stats: "{{ infrastructureservices_mirror_fill_observed.results | map(attribute='stat') | list }}"
+    root: '{{ infrastructureservices_mirror_fill_root_stat.stat }}'
+  no_log: true

@@ -650,7 +650,9 @@ A declared [artifact mirror](api/environment.md#artifact-mirror) serves every
 public-origin client in place of its publisher, verified against the system
 trust store plus its optional `trustBundleRef` anchor, which the stage's
 request names and its downloading attempt is lent; `preflight` proves the
-mirror holds each file at its pinned size before the stage runs. A client at the default
+mirror holds each file at its pinned size before the stage runs. A managed
+mirror's server and fill run before the stage, on their
+[mirror host](infrastructure-services.md#mirror-host). A client at the default
 release its tool table names is acquired by the size
 and SHA-256 that table holds, frozen into the stage's request, and no publisher
 metadata is read for it, from its publisher or from a

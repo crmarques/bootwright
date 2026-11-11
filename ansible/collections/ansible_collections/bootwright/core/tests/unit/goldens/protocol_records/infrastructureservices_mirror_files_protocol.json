@@ -1,0 +1,257 @@
+[
+  {
+    "case": "loaded",
+    "records": [
+      [
+        {
+          "phase": "loaded"
+        },
+        true
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "group running",
+    "records": [
+      [
+        {
+          "phase": "group",
+          "group": "Network",
+          "status": "running"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "group ok",
+    "records": [
+      [
+        {
+          "phase": "group",
+          "group": "Network",
+          "status": "ok"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "group failed",
+    "records": [
+      [
+        {
+          "phase": "group",
+          "group": "Network",
+          "status": "failed"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "group skipped",
+    "records": [
+      [
+        {
+          "phase": "group",
+          "group": "Network",
+          "status": "skipped"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "unknown phase",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "unsupported mirror-files protocol phase"
+    }
+  },
+  {
+    "case": "bad status",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the artifact mirror files result could not be published"
+    }
+  },
+  {
+    "case": "bad outcome",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the artifact mirror files result could not be published"
+    }
+  },
+  {
+    "case": "refused file-digest-mismatch",
+    "records": [
+      [
+        {
+          "phase": "refused",
+          "reason": "file-digest-mismatch"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "refused file-unreachable",
+    "records": [
+      [
+        {
+          "phase": "refused",
+          "reason": "file-unreachable"
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "refused unnamed",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the artifact mirror files result could not be published"
+    }
+  },
+  {
+    "case": "completed proving",
+    "records": [
+      [
+        {
+          "phase": "completed",
+          "outcome": "changed",
+          "evidence": {
+            "absent": false,
+            "files": [
+              {
+                "path": "helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz",
+                "verified": true
+              }
+            ],
+            "postcondition": true,
+            "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "version": "mirror-files-evidence-v1"
+          }
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "completed unproving",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the artifact mirror files did not reach its postcondition; not proved: files"
+    }
+  },
+  {
+    "case": "completed unproving observed",
+    "records": [
+      [
+        {
+          "phase": "completed",
+          "outcome": "changed",
+          "evidence": {
+            "absent": false,
+            "files": [
+              {
+                "path": "helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz",
+                "verified": false
+              }
+            ],
+            "postcondition": false,
+            "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "version": "mirror-files-evidence-v1"
+          }
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "removal",
+    "records": [
+      [
+        {
+          "phase": "completed",
+          "outcome": "changed",
+          "evidence": {
+            "absent": true,
+            "files": [],
+            "postcondition": true,
+            "request": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "version": "mirror-files-evidence-v1"
+          }
+        },
+        false
+      ]
+    ],
+    "result": {
+      "changed": false
+    }
+  },
+  {
+    "case": "removal still present",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the artifact mirror files did not reach its postcondition; not proved: files"
+    }
+  },
+  {
+    "case": "malformed",
+    "records": [],
+    "result": {
+      "failed": true,
+      "msg": "the artifact mirror files result could not be published"
+    }
+  },
+  {
+    "case": "channel refused",
+    "records": [
+      [
+        {
+          "phase": "loaded"
+        },
+        true
+      ]
+    ],
+    "result": {
+      "failed": true,
+      "msg": "the artifact mirror files result could not be published"
+    }
+  }
+]

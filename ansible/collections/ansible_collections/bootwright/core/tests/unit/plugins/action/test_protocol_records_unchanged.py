@@ -56,6 +56,9 @@ def common(refusals):
     return cases
 
 
+MIRROR_FILE = {"path": "helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz", "sha256": DIGEST, "bytes": 5,
+               "source": "https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz"}
+MIRROR_STAT = {"exists": True, "isreg": True, "islnk": False, "size": 5, "checksum": DIGEST}
 RUNNING = {"unit": "active", "contentRoot": True, "startedAfterFiles": True, "container": "quay.io/x"}
 ANSWERS = [{"address": "192.0.2.1", "answer": "192.0.2.10", "port": 53}]
 LISTENERS = [{"address": "192.0.2.1", "fingerprint": "", "name": "http", "port": 80, "protocol": "http", "status": "200"}]
@@ -155,6 +158,13 @@ CASES = {
         ("observed gone", completed(observed=True, observation=MACHINE_GONE)),
         ("removal observed", completed(removed=True, observed=True, observation=MACHINE_GONE)),
     ],
+    "infrastructureservices_mirror_files_protocol": common([{"reason": "file-digest-mismatch"}, {"reason": "file-unreachable"}]) + completions(
+        {"files": [MIRROR_FILE], "stats": [MIRROR_STAT], "root": {"exists": True}},
+        {"files": [MIRROR_FILE], "stats": [dict(MIRROR_STAT, checksum="f" * 64)], "root": {"exists": True}},
+        {"files": [MIRROR_FILE], "stats": [{"exists": False}], "root": {"exists": False}},
+        {"files": [MIRROR_FILE], "stats": [MIRROR_STAT], "root": {"exists": True}},
+        {"files": [MIRROR_FILE], "stats": []},
+    ),
     "managedos_tree_protocol": common([
         {"reason": "media-changed-tree"}, {"reason": "tree-source-drift"}, {"reason": "artifact-server-not-applied"},
     ]) + completions(

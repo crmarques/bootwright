@@ -1,0 +1,81 @@
+---
+- name: Validate the frozen artifact mirror files request
+  ansible.builtin.assert:
+    that:
+      - bootwright_mirror_files_request.version == 'mirror-files-v1'
+      - bootwright_mirror_files_request.identity.context is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_files_request.identity.environment is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_files_request.identity.server is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$(?!\n)')
+      - bootwright_mirror_files_request.servedRoot == infrastructureservices_mirror_fill_served_root
+      - bootwright_mirror_files_request.root == infrastructureservices_mirror_fill_root
+      - bootwright_mirror_files_request.files | length > 0
+      - bootwright_mirror_files_request.files | length <= 128
+      - infrastructureservices_mirror_fill_paths | unique | list | length == infrastructureservices_mirror_fill_count | int
+      - infrastructureservices_mirror_fill_valid_paths | length == infrastructureservices_mirror_fill_count | int
+      - infrastructureservices_mirror_fill_valid_digests | length == infrastructureservices_mirror_fill_count | int
+      - infrastructureservices_mirror_fill_valid_sources | length == infrastructureservices_mirror_fill_count | int
+      - infrastructureservices_mirror_fill_valid_sizes | length == infrastructureservices_mirror_fill_count | int
+      - bootwright_mirror_files_digest is match('^[0-9a-f]{64}$(?!\n)')
+    quiet: true
+  no_log: true
+
+- name: Complete the qualified execution handoff
+  bootwright.core.infrastructureservices_mirror_files_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Prove the artifact server's hosted directories before any effect
+  bootwright.core.hosted_area:
+    context: '{{ bootwright_mirror_files_request.identity.context }}'
+    path: '{{ infrastructureservices_mirror_fill_area }}'
+    state: proved
+
+- name: Remove this Environment's mirror files
+  ansible.builtin.file:
+    path: '{{ infrastructureservices_mirror_fill_root }}'
+    state: absent
+  register: infrastructureservices_mirror_fill_removed
+
+- name: Read the mirror directory before empty directory removal
+  ansible.builtin.stat:
+    path: '{{ infrastructureservices_mirror_fill_served_root }}/mirror'
+    follow: false
+  register: infrastructureservices_mirror_fill_parent
+
+- name: Remove the mirror directory only when empty
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/rmdir
+      - --ignore-fail-on-non-empty
+      - '{{ infrastructureservices_mirror_fill_served_root }}/mirror'
+    expand_argument_vars: false
+  when: infrastructureservices_mirror_fill_parent.stat.isdir | default(false)
+  changed_when: false
+
+- name: Read the mirror root
+  ansible.builtin.stat:
+    path: '{{ infrastructureservices_mirror_fill_root }}'
+    follow: false
+  register: infrastructureservices_mirror_fill_root_stat
+
+- name: Read each mirror file beneath the mirror root
+  ansible.builtin.stat:
+    path: '{{ infrastructureservices_mirror_fill_root }}/{{ item.path }}'
+    follow: false
+    get_checksum: true
+    checksum_algorithm: sha256
+  loop: '{{ bootwright_mirror_files_request.files }}'
+  loop_control:
+    label: '{{ item.path }}'
+  register: infrastructureservices_mirror_fill_observed
+
+- name: Publish bounded artifact mirror files removal evidence
+  bootwright.core.infrastructureservices_mirror_files_protocol:
+    phase: completed
+    outcome: "{{ 'changed' if infrastructureservices_mirror_fill_removed.changed else 'unchanged' }}"
+    digest: '{{ bootwright_mirror_files_digest }}'
+    files: '{{ bootwright_mirror_files_request.files }}'
+    stats: "{{ infrastructureservices_mirror_fill_observed.results | map(attribute='stat') | list }}"
+    root: '{{ infrastructureservices_mirror_fill_root_stat.stat }}'
+    removed: true
+  no_log: true

@@ -9,7 +9,7 @@ func environmentSchema() *Shape {
 		field("defaults", &Shape{Type: Mapping, KindDefaults: true}),
 		field("downloads", record(field("openshiftClientsMirror", lexical("mirror-url")), field("virtctlMirror", lexical("mirror-url")), field("helmMirror", lexical("mirror-url")), field("govcMirror", lexical("mirror-url")))),
 		field("dependencyVersions", dependencyVersions()),
-		field("mirror", record(field("artifacts", record(required("url", lexical("artifact-mirror-url")), field("trustBundleRef", secret("caBundle")))), field("registry", record(required("registryRef", ref(Registry)))))),
+		field("mirror", record(field("artifacts", artifactMirror()), field("registry", record(required("registryRef", ref(Registry)))))),
 		required("controller", record(required("machineRef", ref(Machine)))),
 		field("lifecycle", record(field("rescue", record(required("imageRef", ref(MachineImage)), required("os", record(required("family", enumeration("rhel")), required("version", nonempty()), required("architecture", enumeration("x86_64", "aarch64")))), required("artifactServerEndpoint", artifactEndpoint()))))),
 	)
@@ -23,6 +23,12 @@ func dependencyVersions() *Shape {
 		field("libvirt", lexical("package-version")),
 		field("helm", lexical("cli-version")), field("govc", lexical("cli-version")), field("virtctl", lexical("cli-version")),
 	)
+}
+
+func artifactMirror() *Shape {
+	mirror := atomic(choice(field("url", lexical("artifact-mirror-url")), field("serverRef", ref(ArtifactServer))))
+	mirror.Fields = append(mirror.Fields, field("endpointRef", endpointOf("serverRef", ArtifactServer)), field("trustBundleRef", secret("caBundle")))
+	return mirror
 }
 
 func artifactEndpoint() *Shape {

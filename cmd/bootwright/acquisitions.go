@@ -11,6 +11,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller"
 	"github.com/crmarques/bootwright/internal/controller/bundlelocal"
 	"github.com/crmarques/bootwright/internal/controller/clients"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/dnsserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
@@ -35,6 +36,11 @@ func listAcquisitions(catalog api.Catalog) ([]cli.Acquisition, error) {
 		return nil, err
 	}
 	acquired = append(acquired, controllerRows...)
+	fills, err := mirrorFillAcquisitions(catalog)
+	if err != nil {
+		return nil, err
+	}
+	acquired = append(acquired, fills...)
 	services, err := serviceAcquisitions(catalog)
 	if err != nil {
 		return nil, err
@@ -88,6 +94,29 @@ func controllerAcquisitions(catalog api.Catalog) ([]cli.Acquisition, string, err
 		}
 	}
 	return rows, machine, nil
+}
+
+func mirrorFillAcquisitions(catalog api.Catalog) ([]cli.Acquisition, error) {
+	mirror, declared := infrastructureservices.ArtifactMirrorOf(catalog)
+	if !declared || !mirror.Managed {
+		return nil, nil
+	}
+	tools, err := controller.SelectTools(catalog)
+	if err != nil {
+		return nil, err
+	}
+	mirrored, err := mirroredClients(tools)
+	if err != nil {
+		return nil, err
+	}
+	host := []string{mirror.Server.Spec().Get("machineRef").Text()}
+	var rows []cli.Acquisition
+	for _, client := range mirrored {
+		artifact, version, _ := strings.Cut(client.tool, " ")
+		rows = append(rows, cli.Acquisition{Kind: "mirror file", Artifact: artifact, Version: version, Origin: client.source, Class: originClass(client.source),
+			SHA256: client.sha256, Bytes: client.bytes, Machines: host, Consumer: mirror.Server.Identity()})
+	}
+	return rows, nil
 }
 
 func serviceAcquisitions(catalog api.Catalog) ([]cli.Acquisition, error) {

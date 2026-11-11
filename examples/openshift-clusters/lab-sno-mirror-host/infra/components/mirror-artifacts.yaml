@@ -1,0 +1,22 @@
+apiVersion: bootwright.io/v1alpha1
+kind: ArtifactServer
+metadata:
+  name: mirror-artifacts
+
+spec:
+  management: managed
+  machineRef: mirror
+  retention: persistent
+
+  tls:
+    secretRef: mirror-tls
+
+  listeners:
+    - name: https
+      protocol: https
+      port: 443
+
+  endpoints:
+    - name: ip
+      listenerRef: https
+      addressRef: ip

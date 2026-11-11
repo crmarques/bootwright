@@ -594,7 +594,9 @@ Each stage holds these checks:
   with the file's URL as its target: `passed` when the mirror names the size
   the build pins, `failed` when it answers 404 or 410 or names another size,
   with `next` naming the publisher file to copy to that URL, and `unknown`
-  when no answer, another status or no size came;
+  when no answer, another status or no size came, except that a managed
+  artifact mirror's file it answers 404 or 410 for is `pending`, with `next`
+  naming the apply that fills it;
 - `infrastructure-services`: the context's `listener-firewall` rows, the
   runtime firewall admission of each non-loopback socket of a managed Proxy,
   DNSServer, NTPServer or ArtifactServer the controller hosts, and of each

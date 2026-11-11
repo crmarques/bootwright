@@ -25,6 +25,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/runtimelock"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/mirrorfill"
 	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/storage/ceph"
 	"github.com/crmarques/bootwright/internal/substrate/baremetal"
@@ -58,6 +59,7 @@ func contractVersions() []contractVersion {
 		{agentinstall.MediaImplementation, agentinstall.MediaContentDigest(), reflect.TypeFor[agentinstall.MediaRequest](), reflect.TypeFor[agentinstall.MediaEvidence]()},
 		{agentinstall.InstallImplementation, agentinstall.InstallContentDigest(), reflect.TypeFor[agentinstall.InstallRequest](), reflect.TypeFor[agentinstall.InstallEvidence]()},
 		{artifactserver.Implementation, artifactserver.ContentDigest(), reflect.TypeFor[artifactserver.Request](), reflect.TypeFor[artifactserver.Evidence]()},
+		{mirrorfill.FilesImplementation, mirrorfill.FilesContentDigest(), reflect.TypeFor[mirrorfill.FilesRequest](), reflect.TypeFor[mirrorfill.FilesEvidence]()},
 		{ceph.Implementation, ceph.ContentDigest(), reflect.TypeFor[ceph.Request](), reflect.TypeFor[ceph.Evidence]()},
 		{ceph.ImageImplementation, ceph.ImageContentDigest(), reflect.TypeFor[ceph.ImageRequest](), reflect.TypeFor[ceph.ImageEvidence]()},
 		{ceph.HostImplementation, ceph.HostContentDigest(), reflect.TypeFor[ceph.HostRequest](), reflect.TypeFor[ceph.HostEvidence]()},
@@ -222,6 +224,7 @@ func automationFormats() map[string]automationFormat {
 		"ceph-smb-v1":                  {class: formatMirrored},
 		"ceph-smb-evidence-v1":         {class: formatMirrored},
 		"os-package-tree-evidence-v1":  {class: formatMirrored},
+		"mirror-files-evidence-v1":     {class: formatMirrored},
 		"ceph-replication-v1":          {class: formatMirrored},
 		"ceph-replication-evidence-v1": {class: formatMirrored},
 		// The request versions each role refuses unless its request names.
@@ -235,6 +238,7 @@ func automationFormats() map[string]automationFormat {
 		"substrate-access-kubevirt-v1":          {class: formatMirrored},
 		"substrate-access-kubevirt-evidence-v1": {class: formatMirrored},
 		"os-package-tree-v1":                    {class: formatMirrored},
+		"mirror-files-v1":                       {class: formatMirrored},
 		"os-install-anaconda-v2":                {class: formatMirrored},
 		"physical-erase-v3":                     {class: formatMirrored},
 		"physical-erase-v1":                     {class: formatMirrored},

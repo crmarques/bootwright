@@ -1,0 +1,73 @@
+package environment_test
+
+import (
+	"slices"
+	"strings"
+	"testing"
+
+	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/environment"
+)
+
+func value(fields ...any) api.Value {
+	values := []api.FieldValue{}
+	for index := 0; index+1 < len(fields); index += 2 {
+		next, ok := fields[index+1].(api.Value)
+		if !ok {
+			next = api.StringValue(fields[index+1].(string))
+		}
+		values = append(values, api.FieldValue{Name: fields[index].(string), Value: next})
+	}
+	return api.MapValue(values...)
+}
+
+func mirroredEnvironment(artifacts api.Value, protocol, port string, issuer bool) (api.Object, api.Catalog) {
+	declared := api.NewObject(api.Environment, "lab", api.Value{}, value("mirror", value("artifacts", artifacts)))
+	generated := value()
+	if issuer {
+		generated = value("issuerRef", "mirror-ca")
+	}
+	return declared, api.NewCatalog([]api.Object{declared,
+		api.NewObject(api.Machine, "mirror", api.Value{}, value("network", value("addresses", api.ListValue(value("name", "ip", "address", "203.0.113.20"))))),
+		api.NewObject(api.ArtifactServer, "mirror", api.Value{}, value("management", "managed", "machineRef", "mirror", "tls", value("secretRef", "mirror-tls"),
+			"listeners", api.ListValue(value("name", "served", "protocol", protocol, "port", api.IntegerValue(port))),
+			"endpoints", api.ListValue(value("name", "ip", "listenerRef", "served", "addressRef", "ip")))),
+		api.NewObject(api.Secret, "mirror-ca", api.Value{}, value("type", "caBundle", "source", value("generated", value()))),
+		api.NewObject(api.Secret, "mirror-tls", api.Value{}, value("type", "tlsCertificate", "source", value("generated", generated))),
+	})
+}
+
+// A managed artifact mirror is admitted only on an HTTPS endpoint at the
+// default port, whose certificate an authority every consumer can trust
+// issues, and an endpointRef never stands beside an operator's url.
+func TestAdmissionHoldsAManagedArtifactMirrorToHTTPSOnPort443AndAnIssuer(t *testing.T) {
+	managed := value("serverRef", "mirror", "endpointRef", "ip")
+	for name, test := range map[string]struct {
+		artifacts      api.Value
+		protocol, port string
+		issuer         bool
+		field, says    string
+	}{
+		"admitted":         {managed, "https", "443", true, "", ""},
+		"authored anchor":  {value("serverRef", "mirror", "endpointRef", "ip", "trustBundleRef", "mirror-ca"), "https", "443", false, "", ""},
+		"plain HTTP":       {managed, "http", "80", true, "$.spec.mirror.artifacts.endpointRef", "serves HTTP"},
+		"another port":     {managed, "https", "8443", true, "$.spec.mirror.artifacts.endpointRef", "default port 443"},
+		"no issuer":        {managed, "https", "443", false, "$.spec.mirror.artifacts.serverRef", "names no generated caBundle issuer"},
+		"no endpoint":      {value("serverRef", "mirror"), "https", "443", true, "$.spec.mirror.artifacts.endpointRef", ""},
+		"endpoint and url": {value("url", "https://mirror.example.test/tools", "endpointRef", "ip"), "https", "443", true, "$.spec.mirror.artifacts.endpointRef", "names the operator's url"},
+	} {
+		declared, catalog := mirroredEnvironment(test.artifacts, test.protocol, test.port, test.issuer)
+		issues := environment.Validate(declared, catalog, testClusterMembers)
+		if test.field == "" {
+			if len(issues) != 0 {
+				t.Errorf("%s: refused %+v", name, issues)
+			}
+			continue
+		}
+		if !slices.ContainsFunc(issues, func(issue api.Issue) bool {
+			return issue.Field == test.field && strings.Contains(issue.Message, test.says)
+		}) {
+			t.Errorf("%s: issues %+v name no %s refusal saying %q", name, issues, test.field, test.says)
+		}
+	}
+}

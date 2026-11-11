@@ -1,0 +1,12 @@
+{
+  "absent": true,
+  "files": [
+    {
+      "path": "helm/v4.3.1/helm-v4.3.1-linux-amd64.tar.gz",
+      "verified": true
+    }
+  ],
+  "postcondition": true,
+  "request": "12f74471f788b06b146cac801c7b1779bfdef7271c26191f25079cba178495e2",
+  "version": "mirror-files-evidence-v1"
+}

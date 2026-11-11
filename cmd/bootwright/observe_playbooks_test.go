@@ -48,31 +48,32 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 		allow[observeTaskKey{role, file, module}] = observeAllowance{reason, holds}
 	}
 	for role, protocol := range map[string]string{
-		"cluster_objects":                "cluster_objects_protocol",
-		"containercluster_install_agent": "containercluster_install_protocol",
-		"containercluster_media_agent":   "containercluster_media_protocol",
-		"infra_artifact_server_nginx":    "artifact_server_protocol",
-		"infra_managed_service":          "infra_service_protocol",
-		"managedos_install_anaconda":     "managedos_install_protocol",
-		"managedos_package_tree":         "managedos_tree_protocol",
-		"managedos_host_firewall":        "managedos_firewall_protocol",
-		"storage_ceph_core":              "ceph_cluster_protocol",
-		"storage_ceph_host":              "ceph_cluster_protocol",
-		"storage_ceph_image":             "ceph_image_protocol",
-		"storage_ceph_smb":               "ceph_smb_protocol",
-		"storage_ceph_replication":       "ceph_replication_protocol",
-		"storage_ceph_consumer":          "ceph_export_protocol",
-		"substrate_baremetal_machine":    "substrate_physical_protocol",
-		"substrate_libvirt_host":         "substrate_host_protocol",
-		"substrate_libvirt_machine":      "substrate_libvirt_machine_protocol",
-		"substrate_kubevirt_host":        "substrate_kubevirt_protocol",
-		"substrate_kubevirt_machine":     "substrate_kubevirt_protocol",
+		"cluster_objects":                    "cluster_objects_protocol",
+		"containercluster_install_agent":     "containercluster_install_protocol",
+		"containercluster_media_agent":       "containercluster_media_protocol",
+		"infra_artifact_server_nginx":        "artifact_server_protocol",
+		"infra_managed_service":              "infra_service_protocol",
+		"infrastructureservices_mirror_fill": "infrastructureservices_mirror_files_protocol",
+		"managedos_install_anaconda":         "managedos_install_protocol",
+		"managedos_package_tree":             "managedos_tree_protocol",
+		"managedos_host_firewall":            "managedos_firewall_protocol",
+		"storage_ceph_core":                  "ceph_cluster_protocol",
+		"storage_ceph_host":                  "ceph_cluster_protocol",
+		"storage_ceph_image":                 "ceph_image_protocol",
+		"storage_ceph_smb":                   "ceph_smb_protocol",
+		"storage_ceph_replication":           "ceph_replication_protocol",
+		"storage_ceph_consumer":              "ceph_export_protocol",
+		"substrate_baremetal_machine":        "substrate_physical_protocol",
+		"substrate_libvirt_host":             "substrate_host_protocol",
+		"substrate_libvirt_machine":          "substrate_libvirt_machine_protocol",
+		"substrate_kubevirt_host":            "substrate_kubevirt_protocol",
+		"substrate_kubevirt_machine":         "substrate_kubevirt_protocol",
 	} {
 		add(role, "observe.yml", observeCollection+protocol, "publishes the handoff and evidence on the runner's own channel", read)
 	}
 	for _, role := range []string{
 		"addons_instance", "containercluster_network", "containercluster_install_agent", "containercluster_media_agent", "managedos_install_anaconda", "managedos_host_firewall",
-		"managedos_package_tree", "storage_ceph_core", "storage_ceph_host", "storage_ceph_image",
+		"managedos_package_tree", "infrastructureservices_mirror_fill", "storage_ceph_core", "storage_ceph_host", "storage_ceph_image",
 		"storage_ceph_smb", "storage_ceph_replication", "storage_ceph_consumer", "substrate_baremetal_machine", "substrate_libvirt_host", "substrate_libvirt_machine",
 		"substrate_kubevirt_host", "substrate_kubevirt_machine",
 	} {
@@ -159,6 +160,10 @@ func addObserveReads(add func(string, string, string, string, func(map[string]an
 	add("managedos_install_anaconda", "update_observe.yml", observeCollection+"managedos_update", "runs the update worker's read-only inspect operation over ssh pinned to the reported key", observeRegistrationInspect)
 	add("managedos_package_tree", "observe.yml", observeCollection+"managedos_tree_inspect", "reads the shared tree and its staging area", read)
 	add("managedos_package_tree", "observe.yml", observeCollection+"hosted_area", "proves the artifact server's hosted directories without creating one", func(params, _ map[string]any) bool {
+		return params["state"] == "proved"
+	})
+	add("infrastructureservices_mirror_fill", "observe.yml", "ansible.builtin.stat", "reads the mirror root and each file's type, size and SHA-256 without following links", read)
+	add("infrastructureservices_mirror_fill", "observe.yml", observeCollection+"hosted_area", "proves the artifact server's hosted directories without creating one", func(params, _ map[string]any) bool {
 		return params["state"] == "proved"
 	})
 	add("managedos_host_firewall", "observe.yml", observeCollection+"ssh_key_policy", "reads the host's effective crypto policy", read)

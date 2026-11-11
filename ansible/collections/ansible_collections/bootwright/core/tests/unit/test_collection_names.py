@@ -21,7 +21,7 @@ ROLES = COLLECTION / "roles"
 ACTIONS = COLLECTION / "plugins" / "action"
 
 # The domains a role may open with: the playbook directories a role is bound from.
-DOMAINS = frozenset(("addons", "containercluster", "controller", "machine", "managedos", "storage", "substrate"))
+DOMAINS = frozenset(("addons", "containercluster", "controller", "infrastructureservices", "machine", "managedos", "storage", "substrate"))
 
 # The implementations a role or plugin names; one belongs directly after its domain.
 IMPLEMENTATIONS = frozenset(("anaconda", "baremetal", "ceph", "kubevirt", "libvirt", "nginx", "redfish"))

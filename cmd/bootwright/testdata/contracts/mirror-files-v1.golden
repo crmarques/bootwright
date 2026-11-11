@@ -1,0 +1,49 @@
+implementation: mirror-files-v1
+content-digest: 7f421389ad05c85f01d902ce68f64cb09332ca6d734b7fa7268c72eac8b5206f
+request-version: mirror-files-v1
+automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  none
+request-identity:
+  identity.context
+  identity.environment
+  identity.server
+  root
+  files[].path
+  placement.machine
+request-schema:
+  egress struct managedservice.Egress
+  egress.httpProxy string omitempty
+  egress.httpsProxy string omitempty
+  egress.noProxy []string
+  files []struct mirrorfill.File
+  files[].bytes int64
+  files[].path string
+  files[].sha256 string
+  files[].source string
+  identity struct mirrorfill.Identity
+  identity.context string
+  identity.environment string
+  identity.server string
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  root string
+  servedRoot string
+  version string
+evidence-schema:
+  absent bool
+  files []struct mirrorfill.FileEvidence
+  files[].path string
+  files[].verified bool
+  postcondition bool
+  request string
+  version string

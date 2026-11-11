@@ -73,6 +73,16 @@ func (r Request) WithMirrorTrust(catalog api.Catalog) Request {
 	return r
 }
 
+func (r Request) MirrorReader() bool {
+	return slices.ContainsFunc(r.Tools, func(tool ToolRequest) bool {
+		return tool.SHA256 != "" && controller.PublicOrigin(tool.catalogRequest()) && tool.Mirror != ""
+	})
+}
+
+func (t ToolRequest) catalogRequest() controller.ToolRequest {
+	return controller.ToolRequest{Kind: t.Kind, Version: t.Version, Compatibility: t.Compatibility, Mirror: t.Mirror, SHA256: t.SHA256, Bytes: t.Bytes}
+}
+
 func mirrorHost(mirror string) string {
 	parsed, err := url.Parse(mirror)
 	if mirror == "" || err != nil {

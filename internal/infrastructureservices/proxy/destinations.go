@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
 )
 
@@ -42,10 +43,8 @@ func destinations(catalog api.Catalog, declared api.Value) ([]managedservice.Des
 
 func mirrorHosts(catalog api.Catalog) []string {
 	var hosts []string
-	if environments := catalog.OfKind(api.Environment); len(environments) == 1 {
-		if location := environments[0].Spec().Get("mirror", "artifacts", "url").Text(); location != "" {
-			hosts = append(hosts, httpsHost(location))
-		}
+	if mirror, declared := infrastructureservices.ArtifactMirrorOf(catalog); declared && mirror.URL != "" {
+		hosts = append(hosts, httpsHost(mirror.URL))
 	}
 	if registry, found := managedservice.ImageMirror(catalog); found {
 		if location := registry.Spec().Get("url").Text(); location != "" {

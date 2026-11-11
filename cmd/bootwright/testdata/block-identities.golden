@@ -263,6 +263,18 @@ lab-sno-metallb:
   ntp-lab-ntp
   proxy-lab-proxy
   substrate-host-lab-libvirt
+lab-sno-mirror-host:
+  artifact-server-lab-artifacts
+  artifact-server-mirror-artifacts
+  cluster-install-sno
+  cluster-media-sno
+  controller-prerequisites
+  dns-lab-dns
+  machine-sno-01
+  mirror-files-lab-sno-mirror-host
+  ntp-lab-ntp
+  proxy-lab-proxy
+  substrate-host-lab-libvirt
 lab-sno-nmstate:
   addon-nmstate-sno
   artifact-server-lab-artifacts

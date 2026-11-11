@@ -40,6 +40,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/managedservice"
+	"github.com/crmarques/bootwright/internal/infrastructureservices/mirrorfill"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/ntpserver"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/proxy"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/registry"
@@ -232,6 +233,9 @@ func contractRows() []contractRow {
 			readiness: "answers", removalPartial: contractStoppedService, drift: contractFailedUnit},
 		{kind: artifactserver.Kind, implementation: artifactserver.Implementation, example: "lab-rhel", presence: contractArtifactServerPresence,
 			readiness: "listeners", removalPartial: contractStoppedService, drift: contractFailedUnit},
+		{kind: mirrorfill.Kind, implementation: mirrorfill.FilesImplementation, example: "lab-sno-mirror-host", presence: contractMirrorFilesPresence,
+			noEffect: map[string]any{"version": mirrorfill.FilesEvidenceVersion}, absence: map[string]any{"version": mirrorfill.FilesEvidenceVersion},
+			drift: map[string]any{"files": []any{map[string]any{"path": "foreign/v1/file", "verified": true}}}},
 	}
 }
 
@@ -1766,6 +1770,19 @@ func TestEveryReferencedSecretIsClassified(t *testing.T) {
 			}
 		}
 	}
+}
+
+func contractMirrorFilesPresence(t *testing.T, execution lifecycle.Execution) map[string]any {
+	t.Helper()
+	request, err := mirrorfill.DecodeFilesRequest(execution.Block.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := []any{}
+	for _, file := range request.Files {
+		files = append(files, map[string]any{"path": file.Path, "verified": true})
+	}
+	return map[string]any{"postcondition": true, "files": files, "version": mirrorfill.FilesEvidenceVersion}
 }
 
 func contractTreePresence(t *testing.T, execution lifecycle.Execution) map[string]any {

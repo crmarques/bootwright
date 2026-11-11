@@ -12,6 +12,7 @@ import (
 	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/environment/clusterpreflight"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/machine"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/substrate/capacity"
@@ -164,9 +165,15 @@ func (s Service) mirrorReport(ctx context.Context, catalog api.Catalog, selected
 		}
 		return &Report{Checks: []capacity.Check{check}}, nil
 	}
+	host := infrastructureservices.MirrorHost(catalog)
 	checks := make([]capacity.Check, 0, len(files))
 	for _, file := range files {
-		checks = append(checks, mirrorFileCheck(file, selected))
+		check := mirrorFileCheck(file, selected)
+		if host != "" && file.Failure == "" && (file.Status == 404 || file.Status == 410) {
+			check.Status, check.Reason = capacity.Pending, "the managed artifact mirror on Machine/"+host+" does not serve "+file.Tool+" yet, and apply fills it before the controller stage reads it"
+			check.Next = "run bootwright apply --context " + selected + ", which fills the mirror first"
+		}
+		checks = append(checks, check)
 	}
 	return &Report{Checks: checks}, nil
 }

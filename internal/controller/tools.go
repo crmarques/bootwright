@@ -9,6 +9,7 @@ import (
 	"github.com/crmarques/bootwright/internal/addons"
 	addonpackages "github.com/crmarques/bootwright/internal/addons/packages"
 	"github.com/crmarques/bootwright/internal/containercluster"
+	"github.com/crmarques/bootwright/internal/infrastructureservices"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
 
@@ -105,7 +106,7 @@ func SelectToolsWithRegistry(catalog api.Catalog, registry addons.Registry) ([]T
 		}
 	}
 	for index := range result {
-		result[index] = mirrored(environments[0], result[index])
+		result[index] = mirrored(catalog, result[index])
 		if result[index], err = pinned(result[index]); err != nil {
 			return nil, selectionFailure(environments[0], "controller.state", "", err.Error())
 		}
@@ -137,7 +138,7 @@ func ProviderTool(catalog api.Catalog, kind string) (ToolRequest, error) {
 	if kind == "virtctl" {
 		request = virtctlRequest(versions, environments[0].Spec().Get("downloads"))
 	}
-	if request, err = pinned(mirrored(environments[0], request)); err != nil {
+	if request, err = pinned(mirrored(catalog, request)); err != nil {
 		return ToolRequest{}, selectionFailure(environments[0], "controller.state", "", err.Error())
 	}
 	return request, nil
@@ -154,16 +155,13 @@ func PublicOrigin(request ToolRequest) bool {
 }
 
 func ArtifactMirror(catalog api.Catalog) (string, string) {
-	environments := catalog.OfKind(api.Environment)
-	if len(environments) != 1 {
-		return "", ""
-	}
-	artifacts := environments[0].Spec().Get("mirror", "artifacts")
-	return artifacts.Get("url").Text(), artifacts.Get("trustBundleRef").Text()
+	mirror, _ := infrastructureservices.ArtifactMirrorOf(catalog)
+	return mirror.URL, mirror.TrustBundleRef
 }
 
-func mirrored(environment api.Object, request ToolRequest) ToolRequest {
-	base := strings.TrimRight(environment.Spec().Get("mirror", "artifacts", "url").Text(), "/")
+func mirrored(catalog api.Catalog, request ToolRequest) ToolRequest {
+	location, _ := ArtifactMirror(catalog)
+	base := strings.TrimRight(location, "/")
 	if base == "" || !PublicOrigin(request) {
 		return request
 	}

@@ -72,6 +72,16 @@ func TestControllerRefusalTableMatchesUnsupported(t *testing.T) {
 			withValues(names, "<tool>", "helm", "<release>", "99.0.0")},
 		"OKD clients behind the artifact mirror": {[]api.Object{environment(artifactMirror()), machine(), okdCluster()},
 			withValues(names, "<tool>", "openshift-clients", "<release>", "4.19.3")},
+		"Managed artifact mirror on the controller": {append([]api.Object{environment(managedArtifactMirror("ip")), machine(), cluster()}, mirrorServer("controller")...),
+			withValues(names, "<server>", "ArtifactServer/mirror", "<host>", "Machine/controller")},
+		"Managed artifact mirror on a provider host": {append([]api.Object{environment(managedArtifactMirror("ip")), machine(), cluster(), mirrorMachine(),
+			api.NewObject(api.InfraProvider, "lab-libvirt", api.Value{}, api.MapValue(field("libvirt", api.MapValue(text("machineRef", "mirror")))))}, mirrorServer("mirror")...),
+			withValues(names, "<server>", "ArtifactServer/mirror", "<host>", "Machine/mirror", "<provider>", "InfraProvider/lab-libvirt")},
+		"Managed artifact mirror behind a managed Proxy": {append([]api.Object{environment(managedArtifactMirror("ip")), machine(), cluster(), mirrorMachine(text("proxyRef", "egress")),
+			api.NewObject(api.Proxy, "egress", api.Value{}, api.MapValue(text("management", "managed")))}, mirrorServer("mirror")...),
+			withValues(names, "<host>", "Machine/mirror", "<proxy>", "Proxy/egress")},
+		"Managed artifact mirror without an HTTPS URL": {append([]api.Object{environment(managedArtifactMirror("missing")), machine(), cluster(), mirrorMachine()}, mirrorServer("mirror")...),
+			withValues(names, "<server>", "ArtifactServer/mirror")},
 		"Managed image mirror": {[]api.Object{environment(field("mirror", api.MapValue(field("registry", api.MapValue(text("registryRef", "mirror")))))), machine(), cluster(),
 			api.NewObject(api.Registry, "mirror", api.Value{}, api.MapValue(text("management", "managed"), text("machineRef", "controller")))},
 			withValues(names, "<registry>", "Registry/mirror")},
@@ -187,6 +197,30 @@ func artifactMirror() api.FieldValue {
 	return field("mirror", api.MapValue(field("artifacts", api.MapValue(text("url", "https://mirror.example.test/tools")))))
 }
 
+func managedArtifactMirror(endpoint string) api.FieldValue {
+	return field("mirror", api.MapValue(field("artifacts", api.MapValue(text("serverRef", "mirror"), text("endpointRef", endpoint)))))
+}
+
+func mirrorServer(host string) []api.Object {
+	return []api.Object{
+		api.NewObject(api.ArtifactServer, "mirror", api.Value{}, api.MapValue(text("management", "managed"), text("machineRef", host),
+			field("tls", api.MapValue(text("secretRef", "mirror-tls"))),
+			field("listeners", api.ListValue(api.MapValue(text("name", "https"), text("protocol", "https"), field("port", api.IntegerValue("443"))))),
+			field("endpoints", api.ListValue(api.MapValue(text("name", "ip"), text("listenerRef", "https"), text("addressRef", "ip")))))),
+		api.NewObject(api.Secret, "mirror-ca", api.Value{}, api.MapValue(text("type", "caBundle"))),
+		api.NewObject(api.Secret, "mirror-tls", api.Value{}, api.MapValue(text("type", "tlsCertificate"), field("source", api.MapValue(field("generated", api.MapValue(text("issuerRef", "mirror-ca"))))))),
+	}
+}
+
+func mirrorMachine(proxy ...api.FieldValue) api.Object {
+	choice := api.MapValue(field("direct", api.MapValue()))
+	if len(proxy) != 0 {
+		choice = api.MapValue(proxy...)
+	}
+	return api.NewObject(api.Machine, "mirror", api.Value{}, api.MapValue(field("proxy", choice),
+		field("network", api.MapValue(field("addresses", api.ListValue(api.MapValue(text("name", "ip"), text("address", "203.0.113.20"))))))))
+}
+
 func okdCluster() api.Object {
 	return api.NewObject(api.OpenShiftCluster, "hub", api.Value{}, api.MapValue(
 		field("distribution", api.MapValue(text("type", "okd"), field("release", api.MapValue(text("version", "4.19.3"))))),
@@ -199,4 +233,24 @@ func withValues(names map[string]string, pairs ...string) map[string]string {
 		values[pairs[index]] = pairs[index+1]
 	}
 	return values
+}
+
+// A second name for the controller host, a Machine reached locally or over
+// SSH port 22 at one of the controller's own addresses, is the controller
+// host too, so a managed artifact mirror placed on it refuses as on the
+// controller rather than reaching the engine's ordering refusal.
+func TestAManagedArtifactMirrorOnASecondNameForTheControllerHostRefuses(t *testing.T) {
+	controller := machine()
+	controller = controller.WithSpec(controller.Spec().With("network", api.MapValue(field("addresses", api.ListValue(api.MapValue(text("name", "ip"), text("address", "192.0.2.1")))))))
+	local := mirrorMachine()
+	local = local.WithSpec(local.Spec().With("access", api.MapValue(field("local", api.BoolValue(true)))))
+	ssh := mirrorMachine()
+	ssh = ssh.WithSpec(ssh.Spec().With("network", api.MapValue(field("addresses", api.ListValue(api.MapValue(text("name", "ip"), text("address", "192.0.2.1")))))).
+		With("access", api.MapValue(field("ssh", api.MapValue(text("addressRef", "ip"), text("knownHostsRef", "known"), field("auth", api.MapValue(text("privateKeyRef", "key"))))))))
+	for name, host := range map[string]api.Object{"local": local, "ssh": ssh} {
+		got := (Capability{}).Unsupported(stateOf(append([]api.Object{environment(managedArtifactMirror("ip")), controller, cluster(), host}, mirrorServer("mirror")...)...))
+		if len(got) != 1 || !strings.Contains(got[0].Reason, "is placed on Machine/mirror, which is the controller host") {
+			t.Errorf("%s: refusals %+v", name, got)
+		}
+	}
 }
