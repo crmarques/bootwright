@@ -155,6 +155,13 @@
               }
             ],
             "uri": true,
+            "carrierPolicy": {
+              "answered": true,
+              "definition": true,
+              "name": "90-bootwright-lab-host-vlan-carrier.conf",
+              "owned": false,
+              "present": false
+            },
             "connections": [],
             "connectionsAnswered": true,
             "networkManager": false,
@@ -242,6 +249,13 @@
               }
             ],
             "uri": false,
+            "carrierPolicy": {
+              "answered": true,
+              "definition": true,
+              "name": "90-bootwright-lab-host-vlan-carrier.conf",
+              "owned": false,
+              "present": false
+            },
             "connections": [],
             "connectionsAnswered": true,
             "networkManager": false,
@@ -321,6 +335,13 @@
               }
             ],
             "uri": true,
+            "carrierPolicy": {
+              "answered": true,
+              "definition": true,
+              "name": "90-bootwright-lab-host-vlan-carrier.conf",
+              "owned": false,
+              "present": false
+            },
             "connections": [],
             "connectionsAnswered": true,
             "networkManager": false,
@@ -432,6 +453,13 @@
               }
             ],
             "uri": true,
+            "carrierPolicy": {
+              "answered": true,
+              "definition": true,
+              "name": "90-bootwright-lab-host-vlan-carrier.conf",
+              "owned": false,
+              "present": false
+            },
             "connections": [],
             "connectionsAnswered": true,
             "networkManager": false,
@@ -519,6 +547,13 @@
               }
             ],
             "uri": true,
+            "carrierPolicy": {
+              "answered": true,
+              "definition": true,
+              "name": "90-bootwright-lab-host-vlan-carrier.conf",
+              "owned": false,
+              "present": false
+            },
             "connections": [],
             "connectionsAnswered": true,
             "networkManager": false,
@@ -604,6 +639,13 @@
               }
             ],
             "uri": true,
+            "carrierPolicy": {
+              "answered": true,
+              "definition": true,
+              "name": "90-bootwright-lab-host-vlan-carrier.conf",
+              "owned": false,
+              "present": false
+            },
             "connections": [],
             "connectionsAnswered": true,
             "networkManager": false,

@@ -570,6 +570,46 @@ on that trunk in that VLAN; isolation between the trunk's guests is the guests'
 own configuration, and only the host side of each leg is judged by the
 [routing table](#routing-table).
 
+An empty trunk has no carrier before any guest attaches. Static VLAN legs must
+still activate autonomously after host boot, including their IPv4 addresses
+and trusted-zone bindings. For providers with legs the block owns
+`/etc/NetworkManager/conf.d/90-bootwright-<context>-<provider>-vlan-carrier.conf`,
+a single-link regular root file of mode `0644`, under root-owned directories
+not writable by group or others, read without following links. Its first line
+is `# Bootwright owned VLAN carrier policy: context=<context> provider=<provider>`.
+For each frozen leg, in device-name order, an empty line precedes
+`[device-bootwright-<uuid>]`, `match-device=interface-name:=<device>` and
+`ignore-carrier=yes`, each newline terminated. It contains no trunk or wildcard
+match and changes no operator-owned file. Ownership requires this exact
+canonical grammar and owner; a foreign or unread path refuses before any
+provider mutation, including pruning when no legs remain.
+
+After the routing table is loaded and before connection activation, the block
+atomically publishes this file with the second-line comment
+`# Bootwright carrier reload: apply`, syncs it, and runs
+`nmcli general reload conf` against an active NetworkManager. This is a
+daemon-wide configuration reload: it can also accept pending trusted operator
+configuration, including device settings for other interfaces. It neither
+reloads connection profiles nor deliberately reapplies an unrelated connection.
+The operator owns that ambient configuration. A successful reload removes the
+pending comment by atomic publication; a failure leaves it owned and pending,
+so replay repeats the reload even if the desired device settings already match.
+When NetworkManager is positively stopped, its next start reads the file.
+
+Pruning removes stale profiles and devices before the carrier policy loses their
+matches. Removing the last leg or destroying the provider first proves the
+owned links and profiles gone, then atomically writes an owner-marked empty
+policy with `# Bootwright carrier reload: remove`, reloads configuration, and
+unlinks and syncs the file. Failure preserves the tombstone for replay. No
+policy and no legs is an unchanged no-op, including without NetworkManager.
+An observation reports `carrierPolicy` with exactly `answered`, `definition`,
+`name`, `owned` and `present`; the name is the derived filename above. Presence
+needs its canonical final definition and the live connection/address/zone
+proofs. A pending comment never satisfies the completed definition. Absence
+needs an answered read with no file or ownership; an owned file alone is a
+partial realization. Native acceptance includes boot with an empty trunk and
+positive absence after final removal.
+
 Not yet met: VLAN filtering per tap, which
 would admit only the declared tags on each Machine NIC; tracked as
 [B1303](milestones/backlog.md#b1303).

@@ -210,15 +210,15 @@ func refusedWith(err error) string {
 func TestHostAbsenceRequiresPositiveRemoval(t *testing.T) {
 	forgotten := []NetworkEvidence{{Answered: true, Managed: true, Name: "n"}}
 	for name, gone := range map[string]HostEvidence{
-		"nothing left":   {Absent: true, ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Answered: true}, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true},
-		"network forgot": {Absent: true, ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Answered: true}, Directory: observed(false), Networks: forgotten, PoolAnswered: true, Postcondition: true, Request: "digest", URI: true},
+		"nothing left":   {CarrierPolicy: CarrierPolicyEvidence{Answered: true}, Absent: true, ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Answered: true}, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true},
+		"network forgot": {CarrierPolicy: CarrierPolicyEvidence{Answered: true}, Absent: true, ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Answered: true}, Directory: observed(false), Networks: forgotten, PoolAnswered: true, Postcondition: true, Request: "digest", URI: true},
 	} {
 		if err := ValidateHostAbsence(encode(t, gone), "digest"); err != nil {
 			t.Fatalf("%s: removal evidence was refused: %v", name, err)
 		}
 	}
 	answered := func(damage func(*HostEvidence)) HostEvidence {
-		evidence := HostEvidence{Absent: true, ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Answered: true}, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true}
+		evidence := HostEvidence{CarrierPolicy: CarrierPolicyEvidence{Answered: true}, Absent: true, ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Answered: true}, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true}
 		damage(&evidence)
 		return evidence
 	}
@@ -479,7 +479,7 @@ func TestEvidenceIsBoundedAndStrictlyShaped(t *testing.T) {
 			}
 		})
 	}
-	host := encode(t, HostEvidence{Absent: true, ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Answered: true}, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true})
+	host := encode(t, HostEvidence{CarrierPolicy: CarrierPolicyEvidence{Answered: true}, Absent: true, ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Answered: true}, Directory: observed(false), PoolAnswered: true, Postcondition: true, Request: "digest", URI: true})
 	machine := encode(t, MachineEvidence{Absent: true, Answered: true, Listener: observed(false), Postcondition: true, Request: "digest"})
 	for _, closer := range []string{"}", "]"} {
 		if err := ValidateHostAbsence([]byte(string(host)+closer), "digest"); err == nil {

@@ -78,6 +78,7 @@ ROUTING = {"name": "", "table": "", "answered": True, "present": False, "owned":
            "loaded": False, "forwarding": False}
 HOST = {"firewallReady": READY, "directory": True, "hypervisor": True, "networks": [NETWORK], "pool": "active", "poolAnswered": True,
         "poolAutostart": True, "poolOwned": True, "services": [SERVICE], "uri": True, "vlanRefusal": VLAN_REFUSAL,
+        "carrierPolicy": {"answered": True, "definition": True, "name": "90-bootwright-lab-host-vlan-carrier.conf", "owned": False, "present": False},
         "networkManager": False, "connections": [], "connectionsAnswered": True, "unfrozenConnections": [], "routing": ROUTING}
 HOST_GONE = dict(HOST, firewallReady=dict(READY, present=False, owned=False, enabled=False, ready=False, state=""),
                  pool="", networks=[dict(NETWORK, state="", owned=False)], directory=False)

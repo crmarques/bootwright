@@ -10,13 +10,13 @@ import (
 
 const maxEvidenceBytes = 64 << 10
 
-// HostEvidence is the only result shape the provider host adapter may return.
-// Go validates it strictly, so an adapter cannot widen a postcondition or
-// report a network the operation did not freeze.
+// HostEvidence reports only frozen provider resources. Go validates it strictly
+// so an adapter cannot widen a postcondition or report another resource.
 type HostEvidence struct {
-	Absent              bool                 `json:"absent"`
-	Connections         []ConnectionEvidence `json:"connections"`
-	ConnectionsAnswered bool                 `json:"connectionsAnswered"`
+	Absent              bool                  `json:"absent"`
+	CarrierPolicy       CarrierPolicyEvidence `json:"carrierPolicy"`
+	Connections         []ConnectionEvidence  `json:"connections"`
+	ConnectionsAnswered bool                  `json:"connectionsAnswered"`
 	// Directory is whether anything exists at the pool directory's path, read
 	// whether or not the URI answered. Evidence without it proves the
 	// directory neither present nor absent.
@@ -189,6 +189,9 @@ func ValidateHostPresence(data []byte, request HostRequest, digest string) error
 	if err := matchRouting(evidence.Routing, request, true); err != nil {
 		return err
 	}
+	if err := matchCarrierPolicy(evidence.CarrierPolicy, request); err != nil {
+		return err
+	}
 	if err := matchConnections(evidence, request); err != nil {
 		return err
 	}
@@ -311,6 +314,10 @@ func ValidateHostAbsence(data []byte, digest string) error {
 	}
 	if !evidence.URI {
 		return refusal("lifecycle.state", "the provider host's hypervisor did not answer, so its removal is not proved", "")
+	}
+	carrier := evidence.CarrierPolicy
+	if !carrier.Answered || carrier.Present || carrier.Owned {
+		return refusal("lifecycle.state", "the provider host removal evidence does not prove its VLAN carrier policy gone", "")
 	}
 	ready := evidence.FirewallReady
 	if !ready.Answered || ready.Present || ready.Owned || ready.Enabled || ready.Ready || ready.State != "" {
@@ -468,6 +475,9 @@ func unremoved(evidence HostEvidence, request HostRequest) error {
 			return refusal("lifecycle.state", "the provider host no longer holds every managed network it owns active", "")
 		}
 	}
+	if err := carrierHeld(evidence.CarrierPolicy, request); err != nil {
+		return err
+	}
 	return connectionsHeld(evidence, request)
 }
 
@@ -513,7 +523,11 @@ func holdsOwned(evidence HostEvidence) error {
 	if err != nil {
 		return err
 	}
-	held = held || routed
+	carrier := evidence.CarrierPolicy
+	if carrier.Present && (!carrier.Answered || !carrier.Owned) {
+		return refusal("lifecycle.state", "a VLAN carrier policy exists without this provider's ownership", "")
+	}
+	held = held || routed || (carrier.Answered && carrier.Present && carrier.Owned)
 	vlan := evidence.VLANRefusal
 	present := held || evidence.Pool != "" || (evidence.Directory != nil && *evidence.Directory) || (ready.Answered && ready.Present && ready.Owned) || (vlan.Answered && vlan.Present && vlan.Owned) || (vlan.Answered && len(vlan.Routes) > 0)
 	for _, network := range evidence.Networks {

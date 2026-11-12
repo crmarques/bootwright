@@ -28,10 +28,13 @@ import stat
 import tempfile
 import time
 
+from ansible_collections.bootwright.core.plugins.module_utils import libvirt_nm_carrier as carrier
+
 NMCLI = "/usr/bin/nmcli"
 SYSTEMCTL = "/usr/bin/systemctl"
 SERVICE = "NetworkManager.service"
 CONNECTIONS = "/etc/NetworkManager/system-connections"
+CARRIER_CONFIG = carrier.CONFIG
 NET = "/sys/class/net"
 ENVIRONMENT = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C.UTF-8"}
 MAX_OUTPUT = 1 << 20
@@ -519,6 +522,8 @@ def inspect(runner, request, root=None, owner=0):
     seen = {"ready": False, "answered": True, "records": [], "unfrozen": [], "collisions": []}
     entries = wanted(request)
     context, provider = identity(request)
+    seen["carrierPolicy"] = carrier.inspect(context, provider, [entry for entry in entries if entry["role"] == "leg"],
+                                            CARRIER_CONFIG, owner)
     unfrozen = unfrozen_keyfiles(root, owner, context, provider, {entry["name"] for entry in entries})
     if not entries and not unfrozen:
         return seen
@@ -552,6 +557,10 @@ def evidence(record):
 def refusals(seen, requested):
     """Why the apply may not change any connection, before any effect."""
     found = []
+    try:
+        carrier.require_owned(seen["carrierPolicy"])
+    except ValueError as failure:
+        found.append(str(failure))
     if requested and not seen["ready"]:
         found.append("a tagged managed Network needs NetworkManager.service active and /usr/bin/nmcli installed; "
                      "Bootwright neither installs nor enables them: install NetworkManager, enable and start it, then repeat")
@@ -579,10 +588,12 @@ def observe(runner, request, root=None, owner=0):
             entries = []
         return {"networkManager": False, "connections": [evidence(unanswered(entry)) for entry in entries],
                 "connectionsAnswered": False, "unfrozenConnections": [],
+                "carrierPolicy": {"answered": False, "definition": False, "name": "", "owned": False, "present": False},
                 "refusals": ["the frozen trunks and legs could not be read"], "devices": [], "pseudo": [], "trunks": []}
     held = seen["records"] + [record for record in seen["unfrozen"] if record["owned"]]
     return {
         "networkManager": seen["ready"],
+        "carrierPolicy": seen["carrierPolicy"],
         "connections": [evidence(record) for record in seen["records"]],
         "connectionsAnswered": seen["answered"],
         "unfrozenConnections": sorted(record["name"] for record in seen["unfrozen"]),
@@ -669,7 +680,7 @@ def quiet(record, plugged, action):
 def settle(runner, request, guests, conflicts, root, owner):
     seen = inspect(runner, request, root, owner)
     guard(seen, guests, conflicts)
-    changed = False
+    changed = reconcile_carrier(runner, request, legs_of(request), owner)
     for record in seen["records"]:
         if record["role"] == "trunk":
             changed = converge(runner, record, root) or changed
@@ -753,7 +764,24 @@ def remove(runner, request, guests, root, owner, sleep=time.sleep):
         raise ValueError("NetworkManager still holds a trunk or VLAN leg after removal: %s" % (", ".join(left) or "an nmcli read did not answer"))
     if not links_gone(devices, sleep=sleep):
         raise ValueError("a trunk or VLAN leg device remains after its connection was deleted; check ip link show and repeat")
-    return changed
+    return reconcile_carrier(runner, request, [], owner) or changed
+
+
+def reconcile_carrier(runner, request, legs, owner):
+    """Reload only native configuration, never DNS or connection profiles."""
+    context, provider = identity(request)
+
+    def reload_config():
+        state = service_state(runner)
+        if state is None:
+            raise ValueError("NetworkManager did not answer before reloading VLAN carrier policy")
+        if state[1] == "inactive" or (state[0] == "not-found" and not executable(NMCLI)):
+            return
+        if state[1] != "active":
+            raise ValueError("NetworkManager must be active or stopped before changing VLAN carrier policy")
+        require(runner, [NMCLI, "general", "reload", "conf"], "reload native configuration for VLAN carrier policy")
+
+    return carrier.reconcile(context, provider, legs, reload_config, CARRIER_CONFIG, owner)
 
 
 def prune(runner, request, guests, root, owner, sleep=time.sleep):
@@ -786,9 +814,13 @@ def manage(runner, request, state, guests, conflicts, root=None, owner=0, sleep=
     ours)` is the host's link and route collision check over the trunks and legs.
     """
     root = CONNECTIONS if root is None else root
+    context, provider = identity(request)
+    carrier.require_owned(carrier.inspect(context, provider, legs_of(request), CARRIER_CONFIG, owner))
     if state == "absent":
         return remove(runner, request, guests, root, owner, sleep)
     changed = prune(runner, request, guests, root, owner, sleep)
-    if state == "pruned" or not wanted(request):
+    if state == "pruned":
         return changed
+    if not wanted(request):
+        return reconcile_carrier(runner, request, [], owner) or changed
     return settle(runner, request, guests, conflicts, root, owner) or changed

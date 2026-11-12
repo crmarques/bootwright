@@ -338,3 +338,11 @@ def test_legs_are_removed_before_the_trunk_and_the_table_last():
         assert tasks[index][module]["state"] == "absent"
     outcome = outcome_of(tasks)
     assert "substrate_libvirt_host_routing is changed" in outcome and "substrate_libvirt_host_connections is changed" in outcome
+
+
+def test_carrier_policy_is_guarded_before_any_provider_effect():
+    for tasks in (apply_tasks(), destroy_tasks()):
+        guard = asserting(tasks, "observation.carrierPolicy.answered")
+        first = min(index for index, task in enumerate(tasks)
+                    if "ansible.builtin.command" in task or CONNECTIONS in task or ROUTING in task)
+        assert guard < first

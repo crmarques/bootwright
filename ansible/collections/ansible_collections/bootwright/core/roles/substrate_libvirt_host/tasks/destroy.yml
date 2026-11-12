@@ -2,7 +2,7 @@
 - name: Validate the frozen provider host request
   ansible.builtin.assert:
     that:
-      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v2'
+      - bootwright_substrate_host_request.version == 'substrate-host-libvirt-v3'
       - bootwright_substrate_host_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
       - bootwright_substrate_host_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
       - bootwright_substrate_host_request.poolPath == '/var/lib/libvirt/images/bootwright/'
@@ -27,6 +27,16 @@
   bootwright.core.libvirt_host_inspect:
     request: '{{ bootwright_substrate_host_request }}'
   register: substrate_libvirt_host_before
+
+- name: Refuse to change a foreign or unknown VLAN carrier policy
+  ansible.builtin.assert:
+    that:
+      - substrate_libvirt_host_before.observation.carrierPolicy.answered
+      - not substrate_libvirt_host_before.observation.carrierPolicy.present or substrate_libvirt_host_before.observation.carrierPolicy.owned
+    fail_msg: >-
+      the VLAN carrier policy could not be read safely or is foreign;
+      restore its safe path or remove the foreign file before retrying
+    quiet: true
 
 # A connection that does not answer reports no network and no pool either, which
 # the guard and the owned-network list below read as nothing this context owns.

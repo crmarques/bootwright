@@ -240,7 +240,7 @@ func automationFormats() map[string]automationFormat {
 		"ceph-replication-v2":          {class: formatMirrored},
 		"ceph-replication-evidence-v1": {class: formatMirrored},
 		// The request versions each role refuses unless its request names.
-		"substrate-host-libvirt-v2":  {class: formatMirrored},
+		"substrate-host-libvirt-v3":  {class: formatMirrored},
 		"machine-libvirt-v3":         {class: formatMirrored},
 		"machine-baremetal-v2":       {class: formatMirrored},
 		"substrate-host-kubevirt-v1": {class: formatMirrored},
@@ -293,6 +293,10 @@ func automationIdentities() map[string]automationFormat {
 	eraseRuntime := transient("the erase environment's RAM-only runtime, which exists only while that boot runs")
 	scriptName := transient("the $0 word of a fixed shell probe")
 	identities := map[string]automationFormat{
+		".bootwright-carrier-":                    transient("the hidden stage of one atomic carrier policy publication, removed on failure"),
+		"90-bootwright-%s-%s-vlan-carrier.conf":   fixedBy(kindPlace, "the owned policy filename under the pinned NetworkManager conf.d directory", libvirt.HostImplementation),
+		"device-bootwright-":                      fixedBy(kindMark, "the exact policy section prefix parsed to prove ownership", libvirt.HostImplementation),
+		"device-bootwright-%s":                    fixedBy(kindMark, "the policy section template published from the frozen leg UUID", libvirt.HostImplementation),
 		"bootwright.cluster-objects.owner-v1":     fixedBy(kindMark, "the domain an applied object's owner annotation is derived under", addon, network),
 		"bootwright.io/owner":                     fixedBy(kindMark, "the annotation key of an applied object's owner mark", addon, network, kubevirt.MachineImplementation),
 		"bootwright.substrate.kubevirt.owner-v1":  fixedBy(kindMark, "the domain a VirtualMachine's and its DataVolume's owner annotation is derived under", kubevirt.MachineImplementation),
@@ -424,6 +428,8 @@ func automationCapitalized() map[string]automationFormat {
 		"Bootwright owned readiness barrier":                readiness,
 		"Bootwright owned VLAN refusal":                     fixedBy(kindMark, "the header line of the VLAN refusal unit, which the libvirt host reads to prove the unit its own", libvirt.HostImplementation),
 		"Description=Bootwright refuses host routing":       description,
+		"Bootwright owned VLAN carrier":                     fixedBy(kindMark, "the canonical ownership header of the provider VLAN carrier policy", libvirt.HostImplementation),
+		"Bootwright carrier reload":                         fixedBy(kindMark, "the pending apply or removal reload comment in the owned carrier policy", libvirt.HostImplementation),
 		"Bootwright owned routing":                          fixedBy(kindMark, "the header line of the routing unit and the comment of its nftables table, which the libvirt host reads to prove both its own", libvirt.HostImplementation),
 		"Description=Bootwright routes and isolates":        description,
 		"Description=Bootwright managed network firewall":   readiness,

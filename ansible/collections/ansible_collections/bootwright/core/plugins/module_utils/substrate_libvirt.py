@@ -824,6 +824,7 @@ def observe_host(runner, request):
     return {
         "collisions": collided,
         "collisionsAnswered": probed,
+        "carrierPolicy": connections["carrierPolicy"],
         "connectionRefusals": connections["refusals"],
         "connections": connections["connections"],
         "connectionsAnswered": connections["connectionsAnswered"],

@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -89,6 +90,20 @@ def shown_value(value):
     return {"true": "yes", "false": "no"}.get(value, value)
 
 
+def test_owned_vlan_legs_persist_carrier_independent_boot_policy(host, tmp_path, monkeypatch):
+    policy_root = tmp_path / "conf.d"
+    policy_root.mkdir(mode=0o700)
+    monkeypatch.setattr(nm, "CARRIER_CONFIG", str(policy_root), raising=False)
+    assert manage(host, "present")
+    policy = policy_root / "90-bootwright-lab-host-vlan-carrier.conf"
+    assert policy.is_file(), "static VLAN legs need persistent carrier policy before an empty-trunk boot"
+    content = policy.read_text()
+    assert "match-device=interface-name:=br-lab.110\nignore-carrier=yes" in content
+    assert "match-device=interface-name:=br-lab.150\nignore-carrier=yes" in content
+    assert "match-device=interface-name:=br-lab\n" not in content
+    assert "match-device=*" not in content
+
+
 class NetworkManager:
     """A host whose NetworkManager loads keyfiles by path, activates them and creates their software devices."""
 
@@ -136,6 +151,8 @@ class NetworkManager:
         words = argv[1:]
         if self.fail and self.fail in words:
             return 1, "", "Error: injected"
+        if words == ["general", "reload", "conf"]:
+            return 0, "", ""
         if words[-2:] == ["connection", "show"]:
             return 0, self.listing(), ""
         if words[:2] == ["-t", "-f"] and words[-2] == "uuid":
@@ -170,7 +187,7 @@ class NetworkManager:
         return 0, json.dumps([route for route in self.routes if (":" in route["dst"]) == (family == 6)]), ""
 
     def effects(self):
-        return [call for call in self.calls if call[0] == nm.NMCLI and ("load" in call or "up" in call or "delete" in call)]
+        return [call for call in self.calls if call[0] == nm.NMCLI and ("load" in call or "up" in call or "delete" in call or "reload" in call)]
 
 
 @pytest.fixture
@@ -180,6 +197,9 @@ def host(tmp_path, monkeypatch):
     net.mkdir()
     monkeypatch.setattr(nm, "executable", lambda path: True)
     monkeypatch.setattr(nm, "NET", str(net))
+    policy = tmp_path / "carrier"
+    policy.mkdir(mode=0o700)
+    monkeypatch.setattr(nm, "CARRIER_CONFIG", str(policy))
     return NetworkManager(connections, net)
 
 
@@ -439,6 +459,8 @@ def test_a_dropped_network_leaves_no_leg_up_once_the_apply_prunes_it(host):
     assert UUIDS[ARBITER] not in host.profiles and not (host.root / (ARBITER + ".nmconnection")).exists()
     assert not (host.net / "br-lab.150").exists() and (host.net / "br-lab.110").exists()
     assert observe(host, dropped)["unfrozenConnections"] == []
+    assert manage(host, "present", dropped)
+    assert "br-lab.150" not in (Path(nm.CARRIER_CONFIG) / "90-bootwright-lab-host-vlan-carrier.conf").read_text()
     assert not manage(host, "present", dropped)
 
 
@@ -451,7 +473,7 @@ def test_a_dropped_last_network_removes_its_trunk_and_legs_once_no_machine_runs_
         manage(host, "present", plain, guests={"br-lab": ["Machine rhel-01"]})
     assert host.effects() == []
     assert manage(host, "present", plain)
-    assert [call[-1] for call in host.effects()] == [UUIDS[ARBITER], UUIDS[PUBLIC], UUIDS[TRUNK]]
+    assert [call[-1] for call in host.effects()] == [UUIDS[ARBITER], UUIDS[PUBLIC], UUIDS[TRUNK], "conf"]
     assert host.profiles == {} and os.listdir(host.root) == [] and os.listdir(host.net) == []
 
 
@@ -460,7 +482,7 @@ def test_a_removal_takes_the_owned_connections_its_request_no_longer_freezes_too
     dropped = without_arbiter()
     host.calls.clear()
     assert manage(host, "absent", dropped)
-    assert [call[-1] for call in host.effects()] == [UUIDS[PUBLIC], UUIDS[ARBITER], UUIDS[TRUNK]]
+    assert [call[-1] for call in host.effects()] == [UUIDS[PUBLIC], UUIDS[ARBITER], UUIDS[TRUNK], "conf"]
     observed = observe(host, dropped)
     assert observed["unfrozenConnections"] == [] and observed["connectionsAnswered"]
     assert os.listdir(host.root) == [] and os.listdir(host.net) == []
@@ -515,3 +537,35 @@ def test_a_removal_refuses_a_foreign_keyfile_at_a_frozen_path_before_any_effect(
     with pytest.raises(ValueError, match="keyfile of " + ARBITER):
         manage(host, "absent")
     assert host.effects() == [] and path.exists()
+
+
+def test_foreign_carrier_policy_blocks_prune_remove_and_apply_before_native_writes(host):
+    path = Path(nm.CARRIER_CONFIG) / "90-bootwright-lab-host-vlan-carrier.conf"
+    path.write_text("# foreign\n")
+    for state in ("present", "pruned", "absent"):
+        with pytest.raises(ValueError, match="foreign"):
+            manage(host, state)
+    assert host.effects() == [] and path.read_text() == "# foreign\n"
+
+
+def test_carrier_reload_failure_blocks_connection_activation_and_replays(host):
+    host.fail = "reload"
+    with pytest.raises(ValueError, match="reload"):
+        manage(host, "present")
+    assert not any("up" in call or "load" in call for call in host.calls)
+    assert observe(host)["carrierPolicy"]["owned"] and not observe(host)["carrierPolicy"]["definition"]
+    host.fail = ""
+    assert manage(host, "present") and observe(host)["carrierPolicy"]["definition"]
+    assert not manage(host, "present")
+
+
+@pytest.mark.parametrize("state", ["inactive", "missing"])
+def test_file_only_carrier_policy_is_removed_with_networkmanager_stopped_or_absent(host, monkeypatch, state):
+    path = Path(nm.CARRIER_CONFIG) / "90-bootwright-lab-host-vlan-carrier.conf"
+    path.write_bytes(nm.carrier.content("lab", "host", REQUEST["legs"], "apply"))
+    host.state = state
+    monkeypatch.setattr(nm, "executable", lambda path: state != "missing")
+    plain = {"identity": REQUEST["identity"], "uri": "qemu:///system", "networks": []}
+    assert manage(host, "absent", plain) and not path.exists()
+    assert host.effects() == []
+    assert not manage(host, "absent", plain)

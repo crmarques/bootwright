@@ -47,6 +47,8 @@ def host_observation(**overrides):
     observation.setdefault("connections", [])
     observation.setdefault("connectionsAnswered", True)
     observation.setdefault("unfrozenConnections", [])
+    observation.setdefault("carrierPolicy", {"answered": True, "definition": True, "name": "90-bootwright-lab-host-vlan-carrier.conf",
+                                             "owned": False, "present": False})
     observation.setdefault("routing", dict(ROUTING_ABSENT))
     observation.setdefault("vlanRefusal", dict(VLAN_REFUSAL_ABSENT))
     if "firewallReady" not in observation:
@@ -873,3 +875,16 @@ def test_a_provider_with_only_vlan_legs_needs_its_firewall_barrier():
                                firewallReady={"name": "", "answered": True, "present": False, "owned": False, "enabled": False,
                                               "ready": False, "state": ""})
     assert not substrate_host_protocol.presence(missing, DIGEST)["postcondition"]
+
+
+def test_carrier_policy_evidence_is_required_and_pending_is_never_complete():
+    observed = host_observation()
+    for broken in ({"answered": False}, {"definition": False}, {"present": True, "owned": False}):
+        policy = dict(observed["carrierPolicy"], **broken)
+        assert not substrate_host_protocol.presence(host_observation(carrierPolicy=policy), DIGEST)["postcondition"]
+    for policy in (None, {}, dict(observed["carrierPolicy"], answered="yes")):
+        with pytest.raises(ValueError, match="carrier policy"):
+            substrate_host_protocol.presence(host_observation(carrierPolicy=policy), DIGEST)
+    left = dict(observed["carrierPolicy"], present=True, owned=True, definition=False)
+    assert not substrate_host_protocol.absence(removed_host(carrierPolicy=left), DIGEST)["postcondition"]
+    assert "VLAN carrier policy" in substrate_host_protocol.remaining(removed_host(carrierPolicy=left))

@@ -173,6 +173,17 @@ def connections_left(evidence):
     return bool(evidence["unfrozenConnections"]) or any(entry["present"] or entry["active"] or entry["owned"] for entry in evidence["connections"])
 
 
+def carrier_of(observation):
+    return {"carrierPolicy": flagged(observation.get("carrierPolicy"),
+                                     {"answered", "definition", "name", "owned", "present"},
+                                     ("answered", "definition", "owned", "present"), "VLAN carrier policy evidence")}
+
+
+def carrier_realized(evidence):
+    entry = evidence["carrierPolicy"]
+    return entry["answered"] and entry["definition"] and (not entry["present"] or entry["owned"])
+
+
 def routing_of(observation):
     return {"routing": flagged(observation.get("routing"), OBSERVED_ROUTING, ROUTING_FLAGS, "routing evidence")}
 
@@ -240,6 +251,8 @@ def vlan_refusal_left(evidence):
 # realized, whether anything of it is left, and whether it was answered for.
 Held = namedtuple("Held", ("name", "read", "realized", "left", "answered"))
 HELD = (
+    Held("VLAN carrier policy", carrier_of, carrier_realized, lambda evidence: evidence["carrierPolicy"]["present"],
+         lambda evidence: evidence["carrierPolicy"]["answered"]),
     Held("connections", connections_of, connections_realized, connections_left,
          lambda evidence: evidence["connectionsAnswered"] and all(entry["answered"] for entry in evidence["connections"])),
     Held("routing table", routing_of, routing_realized, routing_left, lambda evidence: evidence["routing"]["answered"]),

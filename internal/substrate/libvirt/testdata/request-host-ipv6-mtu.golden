@@ -40,6 +40,6 @@
     "virtstoraged.service"
   ],
   "uri": "qemu:///system",
-  "version": "substrate-host-libvirt-v2",
+  "version": "substrate-host-libvirt-v3",
   "vlanRefusalUnit": "bootwright-lab-lab-libvirt-vlan-refusal.service"
 }

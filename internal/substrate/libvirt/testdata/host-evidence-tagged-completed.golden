@@ -1,5 +1,12 @@
 {
   "absent": false,
+  "carrierPolicy": {
+    "answered": true,
+    "definition": true,
+    "name": "90-bootwright-lab-lab-libvirt-vlan-carrier.conf",
+    "owned": true,
+    "present": true
+  },
   "connections": [
     {
       "active": true,

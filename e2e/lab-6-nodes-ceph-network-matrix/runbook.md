@@ -264,6 +264,29 @@ it holds no address in instead of routing them out of its uplink. Require (B1221
 the context's directory under `/var/lib/bootwright-hosted/`, holding the served
 content and the emulated BMC state, and forwarding `= 1`.
 
+Before creating any guest, qualify carrier-independent activation (B1357).
+Inspect the owned policy, reboot the controller, then repeat step 4's native
+observations before another apply. Require all three owned profiles active,
+both leg addresses and all trusted bindings to return autonomously while the
+trunk has no guest tap. Preserve the paused operation identity and completed
+blocks across this reboot; an apply that repairs them does not pass this check.
+Preserve the private run directory and non-secret shell variables across reboot
+as the host-preparation procedure requires.
+
+```sh
+sudo cat "/etc/NetworkManager/conf.d/90-bootwright-$CONTEXT-lab-libvirt-vlan-carrier.conf"
+```
+
+Require the context/provider ownership header and exactly the two VLAN device
+sections, each with a literal `interface-name:=` match and `ignore-carrier=yes`.
+There must be no trunk/wildcard match or pending reload comment. This is a
+Bootwright-owned implementation artifact; continue declaring only the Network
+objects through the API. After final destroy, require this policy absent:
+
+```sh
+sudo test ! -e "/etc/NetworkManager/conf.d/90-bootwright-$CONTEXT-lab-libvirt-vlan-carrier.conf"
+```
+
 ## 5. Install the guests through both interruption drills
 
 Two drills interrupt this stage (B74 and B326); a third, the transport-loss
@@ -910,6 +933,7 @@ failure leaves the run an observation. Keep host-specific evidence private.
 | --- | --- |
 | [B1281](../../specs/milestones/m1.md#b1281) | The trunk and both legs as owned NetworkManager connections in `trusted`, every install shape over a leg segment, and destroy leaving no connection or link |
 | [B1282](../../specs/milestones/m1.md#b1282) | The owned table routing the two legs, masquerading both, refusing the user network into the legs, and its removal |
+| [B1357](../../specs/milestones/m1.md#b1357) | Empty-trunk controller reboot restores both leg addresses and trusted bindings without repair; final destroy removes the owned carrier policy |
 | [B1335](../../specs/milestones/m1.md#b1335) | The routing table loaded from its owned ruleset file under SELinux enforcing, and the file removed with the unit |
 | [B1283](../../specs/milestones/m1.md#b1283) | This case declaring every network as a `Network`, with no trunk, table or route built by hand |
 | [B74](../../specs/milestones/m1.md#b74) | The bond (`client-01`), VLAN (`ceph-01`, `ceph-03`, `ceph-04`, `app-01`) and VLAN-over-bond (`ceph-02`) install shapes, MAC pins, the 802.3ad refusal, links and routes, reboot and the install Ctrl-C and replay |

@@ -173,6 +173,7 @@ func TestAnOwnedConnectionAloneIsAPartialRealization(t *testing.T) {
 	}
 	gone := evidenceOf(t, request, func(e *HostEvidence) {
 		trunkOnly(e)
+		e.CarrierPolicy = CarrierPolicyEvidence{Answered: true}
 		e.Absent, e.Postcondition, e.Networks = true, true, []NetworkEvidence{{Answered: true, Managed: true, Name: request.Networks[0].Name}}
 		for index := range e.Connections {
 			e.Connections[index] = ConnectionEvidence{Answered: true, Name: e.Connections[index].Name, Role: e.Connections[index].Role, Device: e.Connections[index].Device}
@@ -212,7 +213,7 @@ func TestAnOwnedConnectionNoLongerFrozenRefusesPresenceAndAbsence(t *testing.T) 
 	if err := ValidateHostPresence(evidenceOf(t, plain, func(e *HostEvidence) { e.ConnectionsAnswered = false }), plain, evidenceDigest); err == nil {
 		t.Error("presence accepted a NetworkManager scan that did not answer")
 	}
-	gone := HostEvidence{Absent: true, ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Answered: true}, Directory: observed(false),
+	gone := HostEvidence{CarrierPolicy: CarrierPolicyEvidence{Answered: true}, Absent: true, ConnectionsAnswered: true, FirewallReady: FirewallReadyEvidence{Answered: true}, Directory: observed(false),
 		PoolAnswered: true, Postcondition: true, Request: "digest", URI: true}
 	if err := ValidateHostAbsence(encode(t, gone), "digest"); err != nil {
 		t.Fatalf("removal evidence was refused: %v", diagnostics.Of(err))

@@ -1,10 +1,10 @@
 implementation: substrate-host-libvirt-v1
-content-digest: 80ce60931a044c0ed0d31b741764d12d40a4a746018a9fc697f498fdb7a47c63
-request-version: substrate-host-libvirt-v2
+content-digest: 851ddd4c810c5dd66d8a95e3ceaa91e323f568ea9da0ab54f76904c0b7ae55e3
+request-version: substrate-host-libvirt-v3
 automation-formats: https://bootwright.io/substrate/v1
-mark-formats: Bootwright owned VLAN refusal, Bootwright owned readiness barrier, Bootwright owned routing, Description=Bootwright managed network firewall, bootwright.io.context, bootwright.io.network, bootwright.io.provider, bootwright.io.role, bootwright.substrate.libvirt.connection-v1, https://bootwright.io/substrate/v1
+mark-formats: Bootwright carrier reload, Bootwright owned VLAN carrier, Bootwright owned VLAN refusal, Bootwright owned readiness barrier, Bootwright owned routing, Description=Bootwright managed network firewall, bootwright.io.context, bootwright.io.network, bootwright.io.provider, bootwright.io.role, bootwright.substrate.libvirt.connection-v1, device-bootwright-, device-bootwright-%s, https://bootwright.io/substrate/v1
 proof-ids: none
-fixed-places: /etc/bootwright/routing
+fixed-places: /etc/bootwright/routing, 90-bootwright-%s-%s-vlan-carrier.conf
 effect-pins:
   podman,libvirt-client,libvirt-daemon,libvirt-daemon-driver-network,libvirt-daemon-driver-qemu,libvirt-daemon-driver-storage-core,qemu-img,qemu-kvm-core,swtpm,swtpm-tools
   /var/lib/libvirt/images/bootwright
@@ -16,6 +16,8 @@ effect-pins:
   routing-table-v1
   nm-unfrozen-connections-v1
   routing-ruleset-file-v1
+  nm-carrier-policy-v1
+  /etc/NetworkManager/conf.d
 request-identity:
   identity.context
   identity.object
@@ -89,6 +91,12 @@ request-schema:
   vlanRefusalUnit string omitempty
 evidence-schema:
   absent bool
+  carrierPolicy struct libvirt.CarrierPolicyEvidence
+  carrierPolicy.answered bool
+  carrierPolicy.definition bool
+  carrierPolicy.name string
+  carrierPolicy.owned bool
+  carrierPolicy.present bool
   connections []struct libvirt.ConnectionEvidence
   connections[].active bool
   connections[].answered bool
