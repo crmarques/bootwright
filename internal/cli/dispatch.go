@@ -13,6 +13,7 @@ import (
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/power"
+	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -49,6 +50,7 @@ type commandResult struct {
 	lifecycleStatus    *lifecycle.StatusResult
 	lifecycleDiff      *lifecycle.DiffResult
 	lifecycleOperation *lifecycle.OperationResult
+	machineDiscovery   *installation.DiscoverResult
 
 	logs       *logview.Result
 	logsFollow *logview.Summary
@@ -136,6 +138,8 @@ func (s Services) invoke(ctx context.Context, path string, flags *pflag.FlagSet,
 		return s.invokeMachineCopy(ctx, &values, args)
 	case "machine rsh", "machine exec":
 		return s.invokeMachineAccess(ctx, path, &values, args)
+	case "machine discover":
+		return s.invokeMachineDiscovery(ctx, &values)
 	case "machine start", "machine stop", "machine restart":
 		return s.invokeMachinePower(ctx, path, &values, args)
 	case "machine trust":

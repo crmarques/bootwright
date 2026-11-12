@@ -226,7 +226,7 @@ func TestHostTrustComesFromOriginalCompletedInstallation(t *testing.T) {
 	r := coreRequest()
 	h := r.Hosts[0]
 	h.HostKeyRef = ""
-	frozen := installation.Request{Version: "os-install-anaconda-v3", Address: h.Address, Identity: installation.Identity{Context: "original", Object: h.Machine, Profile: "profile"}}
+	frozen := installation.Request{Version: "os-install-anaconda-v4", Address: h.Address, Identity: installation.Identity{Context: "original", Object: h.Machine, Profile: "profile"}}
 	request, err := frozen.Canonical()
 	if err != nil {
 		t.Fatal(err)
@@ -260,7 +260,7 @@ func TestHostTrustComesFromOriginalCompletedInstallation(t *testing.T) {
 func TestProvedHostKeyRequiresConvergedNetwork(t *testing.T) {
 	h := coreRequest().Hosts[0]
 	h.HostKeyRef = ""
-	frozen := installation.Request{Version: "os-install-anaconda-v3", Address: h.Address, Identity: installation.Identity{Context: "original", Object: h.Machine, Profile: "profile"}}
+	frozen := installation.Request{Version: "os-install-anaconda-v4", Address: h.Address, Identity: installation.Identity{Context: "original", Object: h.Machine, Profile: "profile"}}
 	request, err := frozen.Canonical()
 	if err != nil {
 		t.Fatal(err)

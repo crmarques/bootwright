@@ -1,0 +1,35 @@
+apiVersion: bootwright.io/v1alpha1
+kind: Machine
+metadata:
+  name: metal-discovery
+spec:
+  substrate:
+    providerRef: lab-metal
+    baremetal:
+      rootDevice:
+        discover: {}
+      bmc:
+        address: https://bmc-erase.metal.example.test/redfish/v1/Systems/1
+      nics:
+        - nicRef: eno1
+          macAddress: 52:54:00:9a:1b:02
+  os:
+    provided: false
+    installProfileRef: rhel-9-8
+    install:
+      hostKeyRef: metal-discovery-host-key
+      ntp:
+        - serverRef: lab-ntp
+          endpointRef: ip
+  hardware:
+    nics:
+      - name: eno1
+  network:
+    configRef: lab-metal
+    installAddressRef: ip
+    addresses:
+      - name: fqdn
+        address: metal-discovery.metal.example.test
+      - name: ip
+        address: 198.51.100.12
+        interface: eno1

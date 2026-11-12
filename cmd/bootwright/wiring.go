@@ -169,6 +169,7 @@ func assembleServices(deps serviceDependencies) cli.Services {
 	})
 	services.MachineInventory, services.MachineAccess = machine.MachineInventory, machine.MachineAccess
 	services.MachineCopy = machine.MachineCopy
+	services.MachineDiscovery = machineDiscovery{lifecycle: reconciler}
 	services.EnvironmentAccess = machine.EnvironmentAccess
 	services.MachinePower, services.MachineTrust = machine.MachinePower, machine.MachineTrust
 	services.ClusterAccess = wireClusterAccess(services.DesiredState, secrets.binder, deps.Selection)

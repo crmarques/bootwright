@@ -1,6 +1,6 @@
 implementation: os-install-anaconda-v1
-content-digest: 6714193379c2ff201af10fb6f0278a7fad0369eaea5a12c8c6ac9d69386bc693
-request-version: os-install-anaconda-v3
+content-digest: d220fce344b7b2601489f97b8eb9c6e5cbcbbf19971a6aa0814faed7769deca0
+request-version: os-install-anaconda-v4
 automation-formats: none
 mark-formats: none
 proof-ids: .bootwright-tree-identity, /etc/bootwright/registration.json, /etc/bootwright/root-wwn, /etc/bootwright/update.json
@@ -59,6 +59,13 @@ request-schema:
   budgets.reboot struct installation.Budget
   budgets.reboot.attempts int
   budgets.reboot.delaySeconds int
+  discoveryProof *struct diskselection.Proof omitempty
+  discoveryProof.reportDigest string
+  discoveryProof.selected struct diskselection.DiskIdentity
+  discoveryProof.selected.serialNumber string omitempty
+  discoveryProof.selected.sizeBytes int64
+  discoveryProof.selected.wwn string omitempty
+  discoveryProof.selectionFingerprint string
   diskEncryption *struct installation.DiskEncryption omitempty
   diskEncryption.recoveryPassphraseRef string
   eraseOnRemoval bool omitempty

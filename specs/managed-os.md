@@ -1473,6 +1473,44 @@ records each arm's result on a registered clean build. Host qualification and
 B70 erase evidence feed [B485](milestones/m2.md#b485)'s complete physical Ceph
 matrix; each retains its own operator exit.
 
+## Automatic root-disk discovery
+
+The [automatic selector](api/machines.md#automatic-root-disk-discovery) obtains
+Linux-visible disk identities through a separately confirmed inventory boot.
+The command requires verified BMC and media delivery, qualified RHEL boot media,
+complete machine identity, and an already powered-off non-controller target.
+It reserves the same hardware as power and lifecycle effects. Boot and media
+changes are explicit effects; the disk inventory makes no storage writes.
+
+The inventory image runs a fixed PID1 entirely from the verified initramfs.
+It starts no systemd, udev, Anaconda or installer second stage and mounts only
+RAM and kernel pseudo-filesystems. Automatic RAID, LVM and swap activation is
+disabled. The worker configures the declared static IPv4 ethernet, bond or VLAN
+and serves only the inventory and its acknowledgement over TCP 9443. The
+controller must reach the target installation address on that port directly;
+enterprise network rules remain operator-managed. The fresh attempt certificate
+is pinned before the bearer token is sent. This procedure contains no installer
+storage or erase operation. It reads identities and exact sizes through bounded read-only
+interfaces. Its authenticated report is bound to the machine UUID/MAC set,
+context incarnation, operation/attempt, nonce, frozen request and media/tool
+identities. The controller persists a complete immutable report before
+acknowledging shutdown, then proves power-off and owned-media cleanup.
+Interrupted custody remains attributable and resumable; an incomplete report
+never becomes an installation target. Discovery never creates RAID volumes.
+
+Selection and installation planning validate protected-disk constraints as well
+as the policy fingerprint. Policy and unowned OSD-device selectors may be refined
+against the same immutable inventory before any installation or erasure is owned.
+Corresponding target arrays in existing Machine erase-on-removal and install-time
+clear policies may change only with their placed Ceph selectors. Policy methods,
+scope and other settings stay fixed; new identities and capacities must also
+match the authenticated inventory. Unrelated
+input changes refuse. A changed policy creates a new selection proof without
+booting again. The installation freezes one selected proof and
+repeats exact disk identity immediately before its first storage write. A
+missing, stale or ambiguous proof reports the explicit discovery command;
+plan and validation do not boot a host or obtain live hardware credentials.
+
 ## Root-disk encryption
 
 A profile selecting `spec.customizations.security.diskEncryption` installs the

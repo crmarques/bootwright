@@ -53,6 +53,16 @@ func (r *Runner) writeResult(ctx context.Context, command *cobra.Command, path s
 		return writeControllerOutcome(out, errOut, path, result, selectedJSON(command))
 	case "plan", "status", "diff", "logs":
 		return r.writeLifecycleInspection(ctx, command, path, result)
+	case "machine discover":
+		if result.machineDiscovery != nil {
+			return true, writeMachineDiscovery(out, path, result.machineDiscovery, selectedStructured(command))
+		}
+		if result.lifecyclePlan != nil {
+			return true, writeLifecyclePlan(out, result.lifecyclePlan)
+		}
+		if result.lifecycleOperation != nil {
+			return true, writeLifecycleOperation(out, result.lifecycleOperation)
+		}
 	case "apply", "destroy":
 		if result.lifecycleOperation != nil {
 			if err := writeHumanDiagnostics(errOut, displayDiagnostics(result.lifecycleOperation.Warnings)); err != nil {
@@ -247,7 +257,7 @@ func (r *Runner) writeNegativeSecretCheck(command *cobra.Command, path string, r
 // Human diagnostics use stderr; structured diagnostics share its envelope.
 // A refusal registers no operation and has no result.
 func (r *Runner) writeExecutedLifecycle(path string, result commandResult, diagnostics []diagnostic) (bool, error) {
-	if path != "apply" && path != "destroy" {
+	if path != "apply" && path != "destroy" && path != "machine discover" {
 		return false, nil
 	}
 	if result.lifecycleOperation == nil {
@@ -266,7 +276,7 @@ func (r *Runner) writeExecutedLifecycle(path string, result commandResult, diagn
 // registered its operation. That operation's records already say what it did,
 // so its result is still evidence the operator continues from.
 func interruptedLifecycle(ctx context.Context, path string, result commandResult) bool {
-	if (path != "apply" && path != "destroy") || result.lifecycleOperation == nil {
+	if (path != "apply" && path != "destroy" && path != "machine discover") || result.lifecycleOperation == nil {
 		return false
 	}
 	operation := result.lifecycleOperation.Receipt.Operation

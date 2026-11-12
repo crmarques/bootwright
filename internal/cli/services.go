@@ -21,6 +21,7 @@ type Services struct {
 	MachineAccess         MachineAccessService
 	MachineCopy           MachineCopyService
 	MachinePower          MachinePowerService
+	MachineDiscovery      MachineDiscoveryService
 	MachineTrust          MachineTrustService
 	ClusterAccess         ClusterAccessService
 	Comparison            ComparisonService

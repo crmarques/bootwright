@@ -34,7 +34,11 @@ func Lineage(plans ...Plan) (Plan, error) {
 			held[block.ID] = true
 		}
 	}
-	return NewPlan(Apply, definitions)
+	result, err := NewPlan(Apply, definitions)
+	if err != nil {
+		return Plan{}, err
+	}
+	return result.WithPreparation(plans[len(plans)-1].Preparation)
 }
 
 func Additive(fresh Plan, owned ...Plan) (Plan, error) {
@@ -74,5 +78,9 @@ func Additive(fresh Plan, owned ...Plan) (Plan, error) {
 	if len(definitions) == 0 {
 		return Plan{}, planError("the plan adds no block to the lineage")
 	}
-	return NewPlan(Apply, definitions)
+	result, err := NewPlan(Apply, definitions)
+	if err != nil {
+		return Plan{}, err
+	}
+	return result.WithPreparation(fresh.Preparation)
 }

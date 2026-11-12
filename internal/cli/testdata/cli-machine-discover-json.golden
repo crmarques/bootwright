@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "v1alpha1",
+  "command": "machine discover",
+  "ok": true,
+  "exitCode": 0,
+  "result": {
+    "operation": {
+      "context": {
+        "name": "lab",
+        "mode": ""
+      },
+      "verb": "apply",
+      "steps": [],
+      "blocks": [
+        {
+          "id": "artifact-server-lab-artifacts",
+          "description": "serve artifacts for lab-artifacts on controller",
+          "stage": "infrastructure-services",
+          "state": "done",
+          "outcome": "",
+          "attempts": 0
+        },
+        {
+          "id": "substrate-host-lab-libvirt",
+          "description": "realize the libvirt host of lab-libvirt on controller",
+          "stage": "substrates",
+          "state": "done",
+          "outcome": "",
+          "attempts": 0
+        },
+        {
+          "id": "machine-rhel-01",
+          "description": "realize the virtual machine rhel-01 and its emulated BMC",
+          "stage": "machines",
+          "state": "done",
+          "outcome": "",
+          "attempts": 0
+        },
+        {
+          "id": "os-install-rhel-01",
+          "description": "install the operating system of rhel-01",
+          "stage": "machines",
+          "state": "done",
+          "outcome": "",
+          "attempts": 0
+        }
+      ],
+      "settled": false,
+      "recovered": "",
+      "next": "",
+      "receipt": {
+        "operation": "op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a",
+        "verb": "apply",
+        "state": "done",
+        "next": "none"
+      }
+    },
+    "inventories": [
+      {
+        "machine": "rhel-01",
+        "disks": [
+          {
+            "wwn": "0x5000000000000001",
+            "serialNumber": "EXAMPLE-OS",
+            "sizeBytes": 1073741824,
+            "model": "EXAMPLE SSD",
+            "controllerPCIAddress": "0000:01:00.0",
+            "transport": "scsi",
+            "fixed": true,
+            "writable": true,
+            "whole": true,
+            "hidden": false
+          }
+        ]
+      }
+    ],
+    "next": "bootwright plan --context lab"
+  },
+  "diagnostics": [],
+  "logs": []
+}

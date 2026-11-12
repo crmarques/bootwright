@@ -95,6 +95,7 @@ func armSupportFiles() map[string]string {
 		"internal/containercluster/openshift/admission.go":        "maps an OpenShiftCluster's substrate arm to the installer platform it supports",
 		"internal/containercluster/openshift/pushed_admission.go": "refuses OpenShiftCluster shapes a push-only KubeVirt cluster does not support",
 		"internal/machine/admission.go":                           "validates the Machine kind's own per-arm spec.substrate blocks against its provider's arm",
+		"internal/machine/disk_discovery.go":                      "refuses unsupported Machine root-discovery shapes and unverified physical controllers",
 		"internal/machine/erase_admission.go":                     "refuses a Machine erase on an arm with no physical disk to erase",
 		"internal/managedos/admission.go":                         "refuses ManagedOS installer and disk-encryption shapes an arm does not support",
 	}

@@ -14,6 +14,7 @@ import (
 
 func machineCommands() []commandSpec {
 	return []commandSpec{
+		available(commandSpec{path: "machine discover", short: "Inventory physical root disks through a temporary RAM boot", long: "Boot inventory-only RHEL media on the selected powered-off physical machines, record authenticated Linux disk identities and power off. --name takes a comma-separated list. --dry-run previews without effects. --prepare-prerequisites also plans controller and infrastructure setup; review the complete plan before confirmation. Discovery never installs an OS or creates RAID volumes.", flags: []flagSpec{machineNamesFlag(), boolFlag("dry-run", "Preview the discovery plan without booting a machine"), boolFlag("prepare-prerequisites", "Also plan and confirm controller and infrastructure prerequisites"), confirmationFlag()}}),
 		available(commandSpec{
 			path: "machine list", short: "List machines and the lifecycle position each has reached",
 			long: "List machines and the lifecycle position each has reached, as this context's own durable " +

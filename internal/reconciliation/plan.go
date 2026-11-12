@@ -87,8 +87,9 @@ type Block struct {
 }
 
 type Plan struct {
-	Verb   Verb    `json:"verb"`
-	Blocks []Block `json:"blocks"`
+	Preparation *PreparationScope `json:"preparation,omitempty"`
+	Verb        Verb              `json:"verb"`
+	Blocks      []Block           `json:"blocks"`
 }
 
 // NewPlan orders definitions deterministically and freezes their request
@@ -194,7 +195,11 @@ func (p Plan) Retain(ids []string) (Plan, error) {
 		})
 		definitions = append(definitions, definition)
 	}
-	return NewPlan(p.Verb, definitions)
+	result, err := NewPlan(p.Verb, definitions)
+	if err != nil {
+		return Plan{}, err
+	}
+	return result.WithPreparation(p.Preparation)
 }
 
 func (p Plan) Block(id string) (Block, bool) {
@@ -207,11 +212,17 @@ func (p Plan) Block(id string) (Block, bool) {
 }
 
 func (p Plan) Digest() (string, error) {
+	if p.Preparation != nil {
+		if _, err := p.WithPreparation(p.Preparation); err != nil {
+			return "", err
+		}
+	}
 	data, err := json.Marshal(struct {
-		Domain string  `json:"domain"`
-		Verb   Verb    `json:"verb"`
-		Blocks []Block `json:"blocks"`
-	}{"bootwright.reconciliation.plan-v1", p.Verb, p.Blocks})
+		Domain      string            `json:"domain"`
+		Verb        Verb              `json:"verb"`
+		Blocks      []Block           `json:"blocks"`
+		Preparation *PreparationScope `json:"preparation,omitempty"`
+	}{"bootwright.reconciliation.plan-v1", p.Verb, p.Blocks, p.Preparation})
 	if err != nil {
 		return "", planError("lifecycle plan cannot be canonically represented")
 	}

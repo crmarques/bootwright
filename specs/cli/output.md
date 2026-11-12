@@ -273,6 +273,7 @@ and their output goldens:
 | `help` | `command`, `usage`, `description`, `commands`, `flags` |
 | `logs` | optional `context`, optional `operation`, optional `verb`, optional `state`, optional `events`, optional `source`, optional `path`, optional `bytes`, optional `truncated`, optional `output` |
 | `machine cp` | `context`, `source`, `machines` |
+| `machine discover` | optional `checks`, optional `context`, optional `verb`, optional `steps`, optional `stages`, optional `until`, optional `waves`, optional `widest`, optional `bound`, optional `startable`, optional `deferred`, optional `continuation`, optional `finalizes`, optional `addsTo`, optional `takesBack`, optional `anotherBuild`, optional `stops`, optional `stopsAfterOnline`, optional `authorizations`, optional `receipt`, optional `operation`, optional `inventories`, optional `next` |
 | `machine info`, `machine list` | `context`, `machines`, `powerRead` |
 | `machine restart`, `machine start`, `machine stop` | `context`, `verb`, `machines` |
 | `machine trust` | `context`, `dryRun`, `pending`, `recorded`, `hosts` |

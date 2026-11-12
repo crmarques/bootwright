@@ -17,6 +17,7 @@ import (
 	machineaccess "github.com/crmarques/bootwright/internal/machine/access"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/power"
+	osinstallation "github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -349,6 +350,7 @@ func dispatchSpies(record *dispatchRecord) Services {
 		MachineAccess:         machineAccessSpy{record},
 		MachineCopy:           machineAccessSpy{record},
 		MachinePower:          machinePowerSpy{record},
+		MachineDiscovery:      machineDiscoverySpy{record},
 		MachineTrust:          machineTrustSpy{record},
 		ClusterAccess:         clusterAccessSpy{record},
 		Logs:                  logsSpy{record},
@@ -386,4 +388,13 @@ func dispatchFlags() *pflag.FlagSet {
 	flags.StringArray("authorize", []string{"data-loss"}, "")
 	flags.StringArray("unregistered", []string{"rhel-01, rhel-02", "rhel-03"}, "")
 	return flags
+}
+
+type machineDiscoverySpy struct{ record *dispatchRecord }
+
+func (s machineDiscoverySpy) Discover(ctx context.Context, r osinstallation.DiscoverRequest) (*osinstallation.DiscoverResult, error) {
+	return s.record.result.machineDiscovery, s.record.called(ctx, "machine discover", r)
+}
+func (s machineDiscoverySpy) PlanDiscovery(ctx context.Context, r osinstallation.DiscoverRequest) (*lifecycle.PlanResult, error) {
+	return s.record.result.lifecyclePlan, s.record.called(ctx, "machine discover", r)
 }

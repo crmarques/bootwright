@@ -50,7 +50,7 @@ func (s Service) register(ctx context.Context, tx Transaction, store OperationSt
 		identity = allocated
 	}
 	closure := located.closure
-	if decided.predecessor == "" {
+	if decided.predecessor == "" || decided.reserveAddition {
 		if err := s.reserve(ctx, tx, decided, material); err != nil {
 			return fail(err)
 		}
@@ -193,7 +193,12 @@ func (s Service) reserve(ctx context.Context, tx Transaction, decided operationP
 	if err != nil {
 		return err
 	}
-	return tx.Reserve(ctx, keepProved(tx.Controller().State.Reservations, tx.Identity().Name, planned))
+	held := tx.Controller().State.Reservations
+	planned = keepProved(held, tx.Identity().Name, planned)
+	if decided.reserveAddition {
+		planned = retainReservations(held, tx.Identity().Name, planned)
+	}
+	return tx.Reserve(ctx, planned)
 }
 
 func reproveRelease(ctx context.Context, tx Transaction, kind, object string) error {
@@ -241,4 +246,26 @@ func (s Service) establishBinding(ctx context.Context, tx Transaction, machine s
 		return failure("controller.identity", "this host has no completed controller setup", "run bootwright controller install")
 	}
 	return tx.Bind(ctx, machine, host)
+}
+
+func retainReservations(held []prerequisites.HostReservation, name string, planned []prerequisites.HostReservation) []prerequisites.HostReservation {
+	for _, old := range held {
+		if old.Context != name {
+			continue
+		}
+		index := slices.IndexFunc(planned, func(next prerequisites.HostReservation) bool {
+			return next.Kind == old.Kind && next.Service == old.Service
+		})
+		if index < 0 {
+			old.Keys = slices.Clone(old.Keys)
+			planned = append(planned, old)
+			continue
+		}
+		for _, key := range old.Keys {
+			if !slices.Contains(planned[index].Keys, key) {
+				planned[index].Keys = append(planned[index].Keys, key)
+			}
+		}
+	}
+	return planned
 }

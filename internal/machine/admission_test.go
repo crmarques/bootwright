@@ -819,3 +819,24 @@ func TestBMCTLSVerificationPolicyPreservesLocalOverrides(t *testing.T) {
 		}
 	}
 }
+
+func TestAutomaticRootDiscoveryRequiresExclusivePolicyAndVerifiedPhysicalInstallation(t *testing.T) {
+	target, catalog := installedFixture()
+	target = rootDeclared(target, "", m("discover", m()))
+	target = target.WithSpec(target.Spec().WithPath(m("verify", true, "verification", "full"), "substrate", "baremetal", "bmc", "tls"))
+	if issues := Validate(target, replaced(catalog, target)); len(issues) != 0 {
+		t.Fatalf("automatic policy refused: %+v", issues)
+	}
+	changes := []api.Object{
+		rootDeclared(target, "", m("discover", m(), "bootVolume", m())),
+		target.WithSpec(target.Spec().WithPath(api.BoolValue(true), "os", "provided")),
+		target.WithSpec(target.Spec().WithPath(m("verify", false, "verification", "none"), "substrate", "baremetal", "bmc", "tls")),
+		rootDeclared(target, "", m("discover", m("match", m("controllerPCIAddress", "unknown")))),
+		rootDeclared(target, "", m("discover", m("match", m("minSizeBytes", api.IntegerValue("8192"), "maxSizeBytes", api.IntegerValue("4096"))))),
+	}
+	for _, changed := range changes {
+		if issues := Validate(changed, replaced(catalog, changed)); !mentions(issues, "$.spec.substrate.baremetal.rootDevice.discover") {
+			t.Fatalf("invalid discovery admitted: %+v", issues)
+		}
+	}
+}

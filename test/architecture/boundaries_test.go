@@ -84,6 +84,7 @@ func packageRoles() map[string]packageRole {
 		"internal/desiredstate":                    domainRole,
 		"internal/environment":                     domainRole,
 		"internal/machine":                         domainRole,
+		"internal/machine/diskselection":           domainRole,
 		"internal/network":                         domainRole,
 		"internal/managedos":                       domainRole,
 		"internal/secrets":                         domainRole,

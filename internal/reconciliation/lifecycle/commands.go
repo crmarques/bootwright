@@ -15,6 +15,18 @@ func contextCommand(contextName, verb string, flags ...string) string {
 	return strings.Join(append([]string{"bootwright", verb, "--context", contextName}, flags...), " ")
 }
 
+func planCommand(contextName string, plan reconciliation.Plan, flags ...string) string {
+	if plan.Preparation == nil {
+		return contextCommand(contextName, string(plan.Verb), flags...)
+	}
+	scope := plan.Preparation
+	scoped := []string{"--name", strings.Join(scope.Targets, ",")}
+	if scope.PreparePrerequisites {
+		scoped = append(scoped, "--prepare-prerequisites")
+	}
+	return contextCommand(contextName, scope.Command, append(scoped, flags...)...)
+}
+
 // resolutionRemedy is what a resolution asks for once it proves its block's
 // effect never performed or, when partial, only partly realized. An apply is
 // continued against its whole frozen plan, so it names that continuation with
@@ -31,7 +43,7 @@ func resolutionRemedy(contextName string, verb reconciliation.Verb, frozen recon
 		}
 		return "run the destroy this result's last diagnostic names, which performs it"
 	}
-	continuation := contextCommand(contextName, string(verb), authorizing(frozen)...)
+	continuation := planCommand(contextName, frozen, authorizing(frozen)...)
 	if partial {
 		return "repeat " + continuation + " to converge it, or take back what it owns with " + contextCommand(contextName, string(reconciliation.Destroy))
 	}
@@ -106,7 +118,7 @@ func continuationCommand(contextName string, operation operationstore.Operation,
 		return contextCommand(contextName, action, authorizingUnfixed(reconciliation.RemainingSubset(frozen, states))...)
 	}
 	if !pendingRemains(frozen, states) {
-		return contextCommand(contextName, string(operation.Verb))
+		return planCommand(contextName, frozen)
 	}
-	return contextCommand(contextName, string(operation.Verb), authorizing(frozen)...)
+	return planCommand(contextName, frozen, authorizing(frozen)...)
 }

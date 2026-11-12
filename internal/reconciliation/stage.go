@@ -241,7 +241,13 @@ func subset(plan Plan, states map[string]BlockState, keep func(BlockState) bool)
 			blocks = append(blocks, cloneBlock(block))
 		}
 	}
-	return Plan{Verb: plan.Verb, Blocks: blocks}
+	selected := Plan{Verb: plan.Verb, Blocks: blocks}
+	if plan.Preparation != nil {
+		scope := *plan.Preparation
+		scope.Targets = slices.Clone(scope.Targets)
+		selected.Preparation = &scope
+	}
+	return selected
 }
 
 // waitingOn names the first dependency, in frozen order, that is not yet done.

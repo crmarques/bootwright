@@ -881,6 +881,19 @@ func killJourneys() []killJourney {
 		rig.host.online = map[string]bool{"storage": true}
 		applied(ctx, t, rig)
 	}
+	prepared := func(ctx context.Context, t *testing.T, rig *killRig) {
+		t.Helper()
+		rig.harness.service.options.Preparations = []PreparationDefinition{{
+			Kind: "example-inventory", Command: "machine discover", Bindings: rig.harness.service.capabilities.Bindings(),
+			Bearing:  func(api.Object) (Bearing, bool) { return Bearing{}, false },
+			Validate: func(context.Context, PlanInput, reconciliation.PreparationScope) error { return nil },
+			Advance:  func(context.Context, PreparationAdvance) error { return nil },
+		}}
+		if _, err := rig.harness.service.Prepare(ctx, requestPreparation()); err != nil {
+			t.Fatal(err)
+		}
+		rig.host.definitions = append(rig.host.definitions, definition("installation"))
+	}
 	return []killJourney{
 		{name: "a", bound: killBoundFreshApply, run: reconciliation.Apply, retry: reconciliation.Apply},
 		{name: "b", bound: killBoundDestroy, start: applied, run: reconciliation.Destroy, retry: reconciliation.Destroy},
@@ -893,6 +906,7 @@ func killJourneys() []killJourney {
 		{name: "i", bound: killBoundPartial, start: lostPartly, run: reconciliation.Destroy, retry: reconciliation.Destroy, reaches: killRemovalResolution()},
 		{name: "j", bound: killBoundUnraised, start: unraised, run: reconciliation.Destroy, retry: reconciliation.Destroy, reaches: killReclaim()},
 		{name: "k", bound: killBoundDestroy, start: online, run: reconciliation.Destroy, retry: reconciliation.Destroy},
+		{name: "preparation-installation", bound: killBoundFreshApply, start: prepared, run: reconciliation.Apply, retry: reconciliation.Apply},
 	}
 }
 

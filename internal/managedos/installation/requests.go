@@ -6,6 +6,7 @@ import (
 	"time"
 
 	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/substrate"
 )
@@ -174,7 +175,8 @@ type Request struct {
 	BootMedia Media  `json:"bootMedia"`
 	// Budgets are the waits the adapter performs, which the run's deadline
 	// is derived from.
-	Budgets Budgets `json:"budgets"`
+	Budgets        Budgets              `json:"budgets"`
+	DiscoveryProof *diskselection.Proof `json:"discoveryProof,omitempty"`
 	// DiskEncryption names the Secret whose value is the recovery passphrase
 	// of an encrypted root disk. The value reaches only the private subtree.
 	DiskEncryption *DiskEncryption `json:"diskEncryption,omitempty"`
@@ -274,7 +276,18 @@ func (r Request) Canonical() ([]byte, error) {
 }
 
 func DecodeRequest(data []byte) (Request, error) {
-	return reconciliation.ThawVersion[Request](data, "installation", requestVersion)
+	r, err := reconciliation.ThawVersion[Request](data, "installation", requestVersion)
+	if err != nil {
+		return Request{}, err
+	}
+	if p := r.DiscoveryProof; p != nil {
+		h := r.Target.Hardware
+		if !r.Target.Physical || h == nil || h.RootVolumeRef != nil || p.Validate() != nil ||
+			h.WWN != p.Selected.WWN || h.SerialNumber != p.Selected.SerialNumber || h.SizeBytes != p.Selected.SizeBytes {
+			return Request{}, refusal("lifecycle.state", "the frozen discovery proof does not name the exact installation root", "")
+		}
+	}
+	return r, nil
 }
 
 // Marker is the proof a completed installation leaves on the guest. Go builds

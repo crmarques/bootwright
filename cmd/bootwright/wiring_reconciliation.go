@@ -144,64 +144,67 @@ func readOnlyOperations() []string {
 
 func operationPlaybook() map[string]string {
 	bindings := map[string]string{
-		networking.Implementation + "/apply":             "containercluster/network_apply.yml",
-		networking.Implementation + "/observe":           "containercluster/network_observe.yml",
-		instance.Implementation + "/apply":               "addons/instance_apply.yml",
-		instance.Implementation + "/observe":             "addons/instance_observe.yml",
-		artifactserver.Implementation + "/apply":         "infrastructureservices/artifact_server_apply.yml",
-		artifactserver.Implementation + "/observe":       "infrastructureservices/artifact_server_observe.yml",
-		artifactserver.Implementation + "/destroy":       "infrastructureservices/artifact_server_destroy.yml",
-		libvirt.HostImplementation + "/apply":            "substrate/libvirt_host_apply.yml",
-		libvirt.HostImplementation + "/observe":          "substrate/libvirt_host_observe.yml",
-		libvirt.HostImplementation + "/destroy":          "substrate/libvirt_host_destroy.yml",
-		libvirt.MachineImplementation + "/apply":         "substrate/libvirt_machine_apply.yml",
-		libvirt.MachineImplementation + "/observe":       "substrate/libvirt_machine_observe.yml",
-		libvirt.MachineImplementation + "/destroy":       "substrate/libvirt_machine_destroy.yml",
-		baremetal.Implementation + "/apply":              "substrate/baremetal_machine_apply.yml",
-		baremetal.Implementation + "/observe":            "substrate/baremetal_machine_observe.yml",
-		baremetal.Implementation + "/destroy":            "substrate/baremetal_machine_destroy.yml",
-		kubevirt.HostImplementation + "/apply":           "substrate/kubevirt_host_apply.yml",
-		kubevirt.HostImplementation + "/observe":         "substrate/kubevirt_host_observe.yml",
-		kubevirt.HostImplementation + "/destroy":         "substrate/kubevirt_host_destroy.yml",
-		kubevirt.HostImplementation + "/lend":            "substrate/kubevirt_host_lend.yml",
-		kubevirt.HostImplementation + "/revoke":          "substrate/kubevirt_host_revoke.yml",
-		kubevirt.MachineImplementation + "/apply":        "substrate/kubevirt_machine_apply.yml",
-		kubevirt.MachineImplementation + "/observe":      "substrate/kubevirt_machine_observe.yml",
-		kubevirt.MachineImplementation + "/destroy":      "substrate/kubevirt_machine_destroy.yml",
-		power.Implementation + "/power":                  "machine/power.yml",
-		power.ReadImplementation + "/read":               "machine/power_read.yml",
-		agentinstall.InstallImplementation + "/apply":    "containercluster/install_apply.yml",
-		agentinstall.InstallImplementation + "/observe":  "containercluster/install_observe.yml",
-		agentinstall.InstallImplementation + "/destroy":  "containercluster/install_destroy.yml",
-		agentinstall.MediaImplementation + "/apply":      "containercluster/media_apply.yml",
-		agentinstall.MediaImplementation + "/observe":    "containercluster/media_observe.yml",
-		agentinstall.MediaImplementation + "/destroy":    "containercluster/media_destroy.yml",
-		installation.TreeImplementation + "/apply":       "managedos/tree_apply.yml",
-		installation.TreeImplementation + "/observe":     "managedos/tree_observe.yml",
-		installation.TreeImplementation + "/destroy":     "managedos/tree_destroy.yml",
-		installation.Implementation + "/apply":           "managedos/install_apply.yml",
-		installation.Implementation + "/observe":         "managedos/install_observe.yml",
-		installation.Implementation + "/destroy":         "managedos/install_destroy.yml",
-		installation.EraseImplementation + "/destroy":    "managedos/erase_destroy.yml",
-		installation.EraseImplementation + "/observe":    "managedos/erase_observe.yml",
-		installation.FirewallImplementation + "/apply":   "managedos/firewall_apply.yml",
-		installation.FirewallImplementation + "/observe": "managedos/firewall_observe.yml",
-		installation.FirewallImplementation + "/destroy": "managedos/firewall_destroy.yml",
-		ceph.Implementation + "/apply":                   "storage/core_apply.yml",
-		ceph.Implementation + "/observe":                 "storage/core_observe.yml",
-		ceph.Implementation + "/destroy":                 "storage/core_destroy.yml",
-		ceph.ImageImplementation + "/apply":              "storage/image_apply.yml",
-		ceph.ImageImplementation + "/observe":            "storage/image_observe.yml",
-		ceph.ImageImplementation + "/destroy":            "storage/image_destroy.yml",
-		ceph.HostImplementation + "/apply":               "storage/host_apply.yml",
-		ceph.HostImplementation + "/observe":             "storage/host_observe.yml",
-		ceph.HostImplementation + "/destroy":             "storage/host_destroy.yml",
-		ceph.ReplicationImplementation + "/apply":        "storage/replication_apply.yml",
-		ceph.ReplicationImplementation + "/observe":      "storage/replication_observe.yml",
-		ceph.ReplicationImplementation + "/destroy":      "storage/replication_destroy.yml",
-		ceph.SMBImplementation + "/apply":                "storage/smb_apply.yml",
-		ceph.SMBImplementation + "/observe":              "storage/smb_observe.yml",
-		ceph.SMBImplementation + "/destroy":              "storage/smb_destroy.yml",
+		networking.Implementation + "/apply":              "containercluster/network_apply.yml",
+		networking.Implementation + "/observe":            "containercluster/network_observe.yml",
+		instance.Implementation + "/apply":                "addons/instance_apply.yml",
+		instance.Implementation + "/observe":              "addons/instance_observe.yml",
+		artifactserver.Implementation + "/apply":          "infrastructureservices/artifact_server_apply.yml",
+		artifactserver.Implementation + "/observe":        "infrastructureservices/artifact_server_observe.yml",
+		artifactserver.Implementation + "/destroy":        "infrastructureservices/artifact_server_destroy.yml",
+		libvirt.HostImplementation + "/apply":             "substrate/libvirt_host_apply.yml",
+		libvirt.HostImplementation + "/observe":           "substrate/libvirt_host_observe.yml",
+		libvirt.HostImplementation + "/destroy":           "substrate/libvirt_host_destroy.yml",
+		libvirt.MachineImplementation + "/apply":          "substrate/libvirt_machine_apply.yml",
+		libvirt.MachineImplementation + "/observe":        "substrate/libvirt_machine_observe.yml",
+		libvirt.MachineImplementation + "/destroy":        "substrate/libvirt_machine_destroy.yml",
+		baremetal.Implementation + "/apply":               "substrate/baremetal_machine_apply.yml",
+		baremetal.Implementation + "/observe":             "substrate/baremetal_machine_observe.yml",
+		baremetal.Implementation + "/destroy":             "substrate/baremetal_machine_destroy.yml",
+		kubevirt.HostImplementation + "/apply":            "substrate/kubevirt_host_apply.yml",
+		kubevirt.HostImplementation + "/observe":          "substrate/kubevirt_host_observe.yml",
+		kubevirt.HostImplementation + "/destroy":          "substrate/kubevirt_host_destroy.yml",
+		kubevirt.HostImplementation + "/lend":             "substrate/kubevirt_host_lend.yml",
+		kubevirt.HostImplementation + "/revoke":           "substrate/kubevirt_host_revoke.yml",
+		kubevirt.MachineImplementation + "/apply":         "substrate/kubevirt_machine_apply.yml",
+		kubevirt.MachineImplementation + "/observe":       "substrate/kubevirt_machine_observe.yml",
+		kubevirt.MachineImplementation + "/destroy":       "substrate/kubevirt_machine_destroy.yml",
+		power.Implementation + "/power":                   "machine/power.yml",
+		power.ReadImplementation + "/read":                "machine/power_read.yml",
+		agentinstall.InstallImplementation + "/apply":     "containercluster/install_apply.yml",
+		agentinstall.InstallImplementation + "/observe":   "containercluster/install_observe.yml",
+		agentinstall.InstallImplementation + "/destroy":   "containercluster/install_destroy.yml",
+		agentinstall.MediaImplementation + "/apply":       "containercluster/media_apply.yml",
+		agentinstall.MediaImplementation + "/observe":     "containercluster/media_observe.yml",
+		agentinstall.MediaImplementation + "/destroy":     "containercluster/media_destroy.yml",
+		installation.TreeImplementation + "/apply":        "managedos/tree_apply.yml",
+		installation.TreeImplementation + "/observe":      "managedos/tree_observe.yml",
+		installation.TreeImplementation + "/destroy":      "managedos/tree_destroy.yml",
+		installation.Implementation + "/apply":            "managedos/install_apply.yml",
+		installation.Implementation + "/observe":          "managedos/install_observe.yml",
+		installation.Implementation + "/destroy":          "managedos/install_destroy.yml",
+		installation.DiscoveryImplementation + "/apply":   "managedos/discovery_apply.yml",
+		installation.DiscoveryImplementation + "/observe": "managedos/discovery_observe.yml",
+		installation.DiscoveryImplementation + "/destroy": "managedos/discovery_destroy.yml",
+		installation.EraseImplementation + "/destroy":     "managedos/erase_destroy.yml",
+		installation.EraseImplementation + "/observe":     "managedos/erase_observe.yml",
+		installation.FirewallImplementation + "/apply":    "managedos/firewall_apply.yml",
+		installation.FirewallImplementation + "/observe":  "managedos/firewall_observe.yml",
+		installation.FirewallImplementation + "/destroy":  "managedos/firewall_destroy.yml",
+		ceph.Implementation + "/apply":                    "storage/core_apply.yml",
+		ceph.Implementation + "/observe":                  "storage/core_observe.yml",
+		ceph.Implementation + "/destroy":                  "storage/core_destroy.yml",
+		ceph.ImageImplementation + "/apply":               "storage/image_apply.yml",
+		ceph.ImageImplementation + "/observe":             "storage/image_observe.yml",
+		ceph.ImageImplementation + "/destroy":             "storage/image_destroy.yml",
+		ceph.HostImplementation + "/apply":                "storage/host_apply.yml",
+		ceph.HostImplementation + "/observe":              "storage/host_observe.yml",
+		ceph.HostImplementation + "/destroy":              "storage/host_destroy.yml",
+		ceph.ReplicationImplementation + "/apply":         "storage/replication_apply.yml",
+		ceph.ReplicationImplementation + "/observe":       "storage/replication_observe.yml",
+		ceph.ReplicationImplementation + "/destroy":       "storage/replication_destroy.yml",
+		ceph.SMBImplementation + "/apply":                 "storage/smb_apply.yml",
+		ceph.SMBImplementation + "/observe":               "storage/smb_observe.yml",
+		ceph.SMBImplementation + "/destroy":               "storage/smb_destroy.yml",
 	}
 	for _, operation := range []string{"apply", "observe", "destroy"} {
 		bindings[mirrorfill.FilesImplementation+"/"+operation] = "infrastructureservices/mirror_files_" + operation + ".yml"
@@ -344,6 +347,8 @@ func buildCapabilitiesWith(clock systemClock, controller controllerDependencies,
 }
 
 func bindInstallations(resolver capabilityResolver, runner capabilityRunner, records installation.MediaRecords) capabilityResolver {
+	discovery := installation.NewDiscovery(runner).WithIdentities(provedIdentities{}).WithMedia(records).WithProtections(cephcluster.RootDiskProtections).WithRefinements(cephcluster.RootDiskRefinement).WithNonces(discoveryNonce)
+	resolver = append(resolver, boundCapability{kind: installation.Kind, implementation: installation.DiscoveryImplementation, family: installation.DiscoveryFamily, capability: discovery})
 	var policies []installation.RetirementPolicy
 	for _, bound := range resolver {
 		if policy, retires := bound.capability.(installation.RetirementPolicy); retires {
@@ -353,9 +358,9 @@ func bindInstallations(resolver capabilityResolver, runner capabilityRunner, rec
 	for index, bound := range resolver {
 		switch {
 		case bound.kind == installation.Kind && bound.implementation == installation.EraseImplementation:
-			resolver[index].capability = installation.NewErase(runner).WithIdentities(provedIdentities{}).WithMedia(records).WithRetirementPolicies(policies...)
+			resolver[index].capability = installation.NewErase(runner).WithIdentities(provedIdentities{}).WithMedia(records).WithRetirementPolicies(policies...).WithDiscoveredRoots(discovery.Roots)
 		case bound.kind == installation.Kind && bound.implementation == installation.Implementation:
-			resolver[index].capability = installation.New(runner).WithIdentities(provedIdentities{}).WithMedia(records).WithRetirementPolicies(policies...)
+			resolver[index].capability = installation.New(runner).WithIdentities(provedIdentities{}).WithMedia(records).WithRetirementPolicies(policies...).WithDiscoveredRoots(discovery.Roots)
 		}
 	}
 	return resolver
@@ -382,6 +387,7 @@ func wireLifecycle(deps lifecycleDependencies, controller controllerDependencies
 		capabilities = deps.Capabilities
 	}
 	options := lifecycleOptions(deps, clock, runner)
+	options.Preparations = discoveryPreparations(capabilities)
 	options.ApplyAdmission = fipsApplyAdmission(controller.Host, libvirtCapacityAdmission(deps.Capacity))
 	options.ListenerAdmission = firewallApplyAdmission(controller.Firewall)
 	options.BlockAdmission = firewallBlockAdmission(controller.Firewall)

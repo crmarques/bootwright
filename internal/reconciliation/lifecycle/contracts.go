@@ -566,12 +566,15 @@ type Clock interface {
 }
 
 // PlanInput is the pure input a capability plans from. It carries no host
-// evidence, credential or endpoint, so planning stays read-only.
+// credential material or live endpoint observations, so planning stays read-only.
 type PlanInput struct {
-	Verb       reconciliation.Verb
-	Context    ContextIdentity
-	State      *compilation.State
-	Controller string
+	// AppliedEvidence reads the locked view's opaque lineage for its owner's validation.
+	AppliedEvidence func(context.Context, string, string) ([]BlockEvidence, error)
+	Preparation     *reconciliation.PreparationScope
+	Verb            reconciliation.Verb
+	Context         ContextIdentity
+	State           *compilation.State
+	Controller      string
 }
 
 // CapabilityPlan is what one capability contributes to an operation: its

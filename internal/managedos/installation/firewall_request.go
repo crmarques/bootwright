@@ -182,7 +182,7 @@ func FirewallRequests(catalog api.Catalog, controllerMachine, contextName string
 		return nil, nil
 	}
 	slices.Sort(machines)
-	installs, _, err := Requests(catalog, controllerMachine, contextName)
+	installs, _, err := intentRequests(catalog, controllerMachine, contextName)
 	if err != nil {
 		return nil, err
 	}

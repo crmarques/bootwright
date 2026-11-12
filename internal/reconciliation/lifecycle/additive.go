@@ -15,10 +15,11 @@ import (
 )
 
 type additiveAdmission struct {
-	plan       reconciliation.Plan
-	merged     reconciliation.Plan
-	secrets    []string
-	controller string
+	preparedBinding *capabilityBinding
+	plan            reconciliation.Plan
+	merged          reconciliation.Plan
+	secrets         []string
+	controller      string
 }
 
 const packagesPath = "spec.packages"
@@ -65,6 +66,9 @@ func addsPackageMembers(previous api.Object, fields []string) bool {
 }
 
 func (s Service) additive(ctx context.Context, view View, store recordReader, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, proveCustody bool) (*additiveAdmission, error) {
+	if frozen.Preparation != nil || s.preparation != nil {
+		return s.preparationAddition(ctx, view, store, operation, frozen, states, proveCustody)
+	}
 	if operation.Verb != reconciliation.Apply || operation.State != reconciliation.OperationDone || inputDrift(view, operation) == "" {
 		return nil, nil
 	}
@@ -278,10 +282,15 @@ func (s Service) additiveTransition(view View, operation operationstore.Operatio
 	if err := refuseStageBoundary(name, admission.plan, nil, selection); err != nil {
 		return operationPlan{}, err
 	}
+	binding := capabilityBinding{controller: admission.controller, secrets: admission.secrets}
+	if admission.preparedBinding != nil {
+		binding = *admission.preparedBinding
+	}
 	return operationPlan{
 		fresh: true, verb: reconciliation.Apply, plan: admission.plan, selection: selection,
-		predecessor: operation.ID, lineagePlan: admission.merged,
-		binding: capabilityBinding{controller: admission.controller, secrets: admission.secrets},
+		reserveAddition: admission.preparedBinding != nil,
+		predecessor:     operation.ID, lineagePlan: admission.merged,
+		binding: binding,
 		basis:   basis{revision: view.Identity().Revision, input: inputDigest(view)},
 	}, nil
 }

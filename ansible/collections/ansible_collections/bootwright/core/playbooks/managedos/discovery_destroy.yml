@@ -1,0 +1,12 @@
+---
+- name: Run one physical RAM disk inventory operation
+  hosts: bootwright_target
+  gather_facts: false
+  any_errors_fatal: true
+  serial: 1
+  strategy: ansible.builtin.linear
+  tasks:
+    - name: Execute the disk discovery capability
+      ansible.builtin.import_role:
+        name: bootwright.core.managedos_disk_discovery
+        tasks_from: destroy

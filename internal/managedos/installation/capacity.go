@@ -78,7 +78,7 @@ func CapacityWrites(sizes MediaSizes) capacity.WriteProjector {
 		if err != nil {
 			return nil, err
 		}
-		requests, _, err := Requests(catalog, controller, contextName)
+		requests, _, err := intentRequests(catalog, controller, contextName)
 		if err != nil {
 			return nil, err
 		}

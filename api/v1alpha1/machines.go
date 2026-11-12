@@ -38,6 +38,12 @@ func machineFirmwareSchema() *Shape {
 	return atomic(record(defaulted("mode", enumeration("enforce", "prove"), StringValue("enforce")), field("secureBoot", boolean()), field("bootMode", enumeration("UEFI")), field("biosAttributes", attributes)))
 }
 
+func machineDiskDiscoverySchema() *Shape {
+	match := record(field("model", nonempty()), field("controllerPCIAddress", nonempty()), field("minSizeBytes", integer("4096", "70368744177664")), field("maxSizeBytes", integer("4096", "70368744177664")))
+	identity := record(field("wwn", nonempty()), field("serialNumber", nonempty()), required("sizeBytes", integer("4096", "70368744177664")))
+	return atomic(record(field("match", match), field("exclude", &Shape{Type: Sequence, Atomic: true, Element: identity})))
+}
+
 func machineSubstrateSchema() *Shape {
 	nicRef := func() Field {
 		return required("nicRef", nestedIn(Scope{Noun: "hardware NIC", Entries: []string{"hardware", "nics"}}))
@@ -46,7 +52,7 @@ func machineSubstrateSchema() *Shape {
 	macs := &Shape{Type: Sequence, Atomic: true, NameKey: "nicRef", Element: record(nicRef(), required("macAddress", lexical("mac")), field("segmentRef", nestedIn(segment)))}
 	segment.Joined = &ScopeJoin{Kind: Network, Field: []string{"libvirt", "providerRef"}}
 	vnics := &Shape{Type: Sequence, Atomic: true, NameKey: "nicRef", Element: record(nicRef(), required("segmentRef", nestedIn(segment)))}
-	baremetal := record(field("bmc", machineBMCSchema()), field("nics", macs), field("rootDevice", record(field("bootVolume", record()), field("volumeRef", atomic(external(record(required("storageId", nonempty()), required("volumeId", nonempty()))))), field("wwn", nonempty()), field("hctl", nonempty()), field("serialNumber", nonempty()), field("sizeBytes", integer("4096", "70368744177664")))), field("firmware", machineFirmwareSchema()))
+	baremetal := record(field("bmc", machineBMCSchema()), field("nics", macs), field("rootDevice", record(field("discover", machineDiskDiscoverySchema()), field("bootVolume", record()), field("volumeRef", atomic(external(record(required("storageId", nonempty()), required("volumeId", nonempty()))))), field("wwn", nonempty()), field("hctl", nonempty()), field("serialNumber", nonempty()), field("sizeBytes", integer("4096", "70368744177664")))), field("firmware", machineFirmwareSchema()))
 	libvirt := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"libvirt"}, Entries: []string{"libvirt", "machineProfiles"}})), field("nics", vnics))
 	kubevirt := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"kubevirt"}, Entries: []string{"kubevirt", "machineProfiles"}})), field("nics", vnics))
 	vsphere := record(field("profileRef", nestedIn(Scope{Noun: "machine profile", Owner: []string{"substrate", "providerRef"}, Kind: InfraProvider, Within: []string{"vsphere"}, Entries: []string{"vsphere", "machineProfiles"}})), field("nics", macs))

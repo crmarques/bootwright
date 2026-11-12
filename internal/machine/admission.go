@@ -687,7 +687,7 @@ func validateBaremetal(o api.Object) []api.Issue {
 	}
 	physical := s.Get("substrate", substrate.ArmBaremetal, "rootDevice")
 	bySerial := physical.Has("serialNumber") && physical.Has("sizeBytes")
-	if !physical.Has("wwn") && !bySerial && !physical.Has("volumeRef") && !physical.Has("bootVolume") {
+	if !physical.Has("wwn") && !bySerial && !physical.Has("volumeRef") && !physical.Has("bootVolume") && !physical.Has("discover") {
 		issues = appendIssues(issues, invariant("$.spec.substrate.baremetal.rootDevice", "bare-metal installation requires a root selector: a wwn, serialNumber with sizeBytes, or a volumeRef or bootVolume logical volume",
 			RootFormsRemedy(" on "+o.Identity())))
 	}
@@ -722,6 +722,9 @@ func AgentRootDeviceRefusal(o api.Object) (string, string) {
 		return reason, remedy
 	}
 	hints := substrate.MachineRootDeviceHints(o)
+	if hints.Discovery {
+		return "automatic root discovery is supported only for a Bootwright RHEL installation", "declare an exact root selector for this agent installation"
+	}
 	if hints.VolumeRef != nil {
 		if hints.VolumeRef.Valid() && len(hints.Names()) == 1 {
 			return "", ""
@@ -1124,6 +1127,9 @@ func validateBondSegments(o api.Object, native api.Value, nicsPath string) []api
 }
 
 func validateVolumeRoot(o api.Object, variant string) []api.Issue {
+	if o.Spec().Has("substrate", "baremetal", "rootDevice", "discover") {
+		return validateDiscoveryRoot(o, variant)
+	}
 	hints := substrate.MachineRootDeviceHints(o)
 	if o.Spec().Has("substrate", "baremetal", "rootDevice", "volumeRef") && o.Spec().Has("substrate", "baremetal", "rootDevice", "bootVolume") {
 		return []api.Issue{invariant("$.spec.substrate.baremetal.rootDevice", "bootVolume and volumeRef are mutually exclusive", "choose one root-volume selector")}

@@ -12,10 +12,19 @@ import (
 // carry it. A string hint is empty when absent, the sizes are the declared
 // decimal text or empty, and Rotational is nil when absent.
 type RootDeviceHints struct {
+	Discovery                                          bool
 	DeviceName, HCTL, Model, Vendor, SerialNumber, WWN string
 	MinSizeGigabytes, SizeBytes                        string
 	Rotational                                         *bool
 	VolumeRef                                          *VolumeRef
+}
+
+func MachineDiscoveryPolicy(machine api.Object) api.Value {
+	return machine.Spec().Get("substrate", ArmBaremetal, "rootDevice", "discover")
+}
+
+func WithMachineDiscoveryPolicy(machine api.Object, policy api.Value) api.Object {
+	return machine.WithSpec(machine.Spec().WithPath(policy, "substrate", ArmBaremetal, "rootDevice", "discover"))
 }
 
 // Names are the admitted names of the hints present, sorted.
@@ -37,6 +46,9 @@ func (h RootDeviceHints) Names() []string {
 			names = append(names, "volumeRef")
 		}
 	}
+	if h.Discovery {
+		names = append(names, "discover")
+	}
 	if h.Rotational != nil {
 		names = append(names, "rotational")
 	}
@@ -48,6 +60,7 @@ func rootDeviceHints(machine api.Object) RootDeviceHints {
 	declared := machine.Spec().Get("hardware", "rootDevice")
 	physical := machine.Spec().Get("substrate", ArmBaremetal, "rootDevice")
 	hints := RootDeviceHints{
+		Discovery:  physical.Has("discover"),
 		DeviceName: declared.Get("deviceName").Text(), HCTL: physical.Get("hctl").Text(),
 		Model: declared.Get("model").Text(), Vendor: declared.Get("vendor").Text(),
 		SerialNumber: physical.Get("serialNumber").Text(), WWN: physical.Get("wwn").Text(),
@@ -67,7 +80,7 @@ func rootDeviceHints(machine api.Object) RootDeviceHints {
 }
 
 func RootDeviceHintPath(name string) string {
-	if slices.Contains([]string{"hctl", "serialNumber", "sizeBytes", "wwn", "volumeRef", "bootVolume"}, name) {
+	if slices.Contains([]string{"hctl", "serialNumber", "sizeBytes", "wwn", "volumeRef", "bootVolume", "discover"}, name) {
 		return "spec.substrate." + ArmBaremetal + ".rootDevice." + name
 	}
 	return "spec.hardware.rootDevice." + name

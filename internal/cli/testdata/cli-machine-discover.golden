@@ -1,0 +1,22 @@
+  ✓ Apply done
+
+  Result
+  Infrastructure
+    [DONE] serve artifacts for lab-artifacts on controller
+  Substrates
+    [DONE] realize the libvirt host of lab-libvirt on controller
+  Machines
+    [DONE] realize the virtual machine rhel-01 and its emulated BMC
+    [DONE] install the operating system of rhel-01
+
+    Logs    /var/log/bootwright/contexts/lab/operations/op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
+    Follow  bootwright logs --context lab --operation op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
+operation: op-6f1c2a9e0b7d4c3f8a5e2d1b0c9f8e7a
+verb: apply
+state: done
+next: none
+
+Disk inventory for rhel-01
+  wwn:0x5000000000000001  sizeBytes=1073741824  model="EXAMPLE SSD"  controller=0000:01:00.0  transport=scsi
+
+Next: bootwright plan --context lab

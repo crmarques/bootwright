@@ -1,6 +1,6 @@
 implementation: physical-erase-v1
-content-digest: 13908219706a39f5ac748ecedf7b233bf452ff46f7d759b747cc557c4abf7328
-request-version: physical-erase-v4
+content-digest: a41dd574470bbe86674035084e04676ddac10fafce219b00bd5a88fad7d4b08a
+request-version: physical-erase-v5
 automation-formats: none
 mark-formats: none
 proof-ids: bootwright.erase=1
@@ -43,6 +43,13 @@ request-schema:
   install.budgets.reboot struct installation.Budget
   install.budgets.reboot.attempts int
   install.budgets.reboot.delaySeconds int
+  install.discoveryProof *struct diskselection.Proof omitempty
+  install.discoveryProof.reportDigest string
+  install.discoveryProof.selected struct diskselection.DiskIdentity
+  install.discoveryProof.selected.serialNumber string omitempty
+  install.discoveryProof.selected.sizeBytes int64
+  install.discoveryProof.selected.wwn string omitempty
+  install.discoveryProof.selectionFingerprint string
   install.diskEncryption *struct installation.DiskEncryption omitempty
   install.diskEncryption.recoveryPassphraseRef string
   install.eraseOnRemoval bool omitempty

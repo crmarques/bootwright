@@ -42,6 +42,9 @@ func (c MachineCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 	plan := lifecycle.CapabilityPlan{Definitions: []reconciliation.BlockDefinition{}}
 	digest := ContentDigest()
 	for _, request := range requests {
+		if input.Preparation != nil && !slices.Contains(input.Preparation.Targets, request.Identity.Object) {
+			continue
+		}
 		canonical, err := request.Canonical()
 		if err != nil {
 			return lifecycle.CapabilityPlan{}, err

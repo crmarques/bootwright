@@ -38,7 +38,7 @@ func TestCommandModesComeFromTheCatalog(t *testing.T) {
 		"plan": true, "status": true, "logs": true, "diff": true, "apply": true, "destroy": true,
 		"machine cp": true, "machine list": true, "machine info": true, "machine rsh": true, "machine exec": true,
 		"cluster rsh": true, "cluster exec": true, "cluster list": true, "cluster info": true,
-		"machine start": true, "machine stop": true, "machine restart": true, "machine trust": true,
+		"machine discover": true, "machine start": true, "machine stop": true, "machine restart": true, "machine trust": true,
 		"cluster kubeconfig": true, "cluster keyring": true,
 	}
 	for _, spec := range commandCatalog() {

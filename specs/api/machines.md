@@ -725,6 +725,27 @@ that NAA and exact capacity before storage. The native agent selects its
 exact WWN; [physical agent proof](../openshift-clusters.md#selection-and-refusal)
 owns its remaining controller-to-installer race and capacity limitation.
 
+### Automatic root-disk discovery
+
+A physical RHEL installation may opt in with
+`substrate.baremetal.rootDevice.discover`. This arm selects alone. Its optional
+`match` record limits exact model, controller PCI address and minimum/maximum
+byte capacity; optional exclusions name stable disk identities. An empty match
+accepts any otherwise eligible disk. Selection requires exactly one fixed,
+writable whole disk with a unique qualified WWN or serial and exact capacity.
+Protected storage claims are excluded before selection; an unresolvable claim
+or ambiguous inventory refuses rather than treating an unknown disk as spare.
+
+The explicit discovery command boots inventory-only media and stores an
+immutable authenticated report. A plan reads a specific matching report and
+freezes the selected disk identity; it performs no discovery effect. A changed
+policy or protected-disk claim invalidates the selection proof; planning may
+re-evaluate the same immutable inventory. Changed media, tool or machine bindings
+require matching inventory before an installation can be planned.
+The installer repeats the exact target checks before storage writes and never
+chooses a replacement when that target changes. The execution boundary is
+[managed OS discovery](../managed-os.md#automatic-root-disk-discovery).
+
 ### Firmware block
 
 `substrate.baremetal.firmware` is atomic and authored only on a Machine: no

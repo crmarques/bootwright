@@ -700,6 +700,9 @@ func (s *Store) ReadPlan(ctx context.Context, id string) (reconciliation.Plan, e
 	// that decodes is still refused unless it is a plan this executable could
 	// have produced.
 	rebuilt, err := reconciliation.NewPlan(plan.Verb, definitions(plan))
+	if err == nil {
+		rebuilt, err = rebuilt.WithPreparation(plan.Preparation)
+	}
 	if err != nil {
 		return reconciliation.Plan{}, err
 	}

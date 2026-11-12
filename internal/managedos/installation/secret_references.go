@@ -75,6 +75,15 @@ func (EraseCapability) SecretClasses(block reconciliation.Block) (secrets.Classe
 	return request.Install.secretClasses(), nil
 }
 
+func (DiscoveryCapability) SecretClasses(block reconciliation.Block) (secrets.Classes, error) {
+	r, err := DecodeDiscoveryRequest(block.Request)
+	if err != nil {
+		return nil, err
+	}
+	return r.Placement.SecretClasses().Add(secrets.AccessCredential, r.Controller.CredentialsRef).
+		Add(secrets.TrustAnchor, r.Controller.TrustBundleRef, r.Private.CertificateRef), nil
+}
+
 func (TreeCapability) SecretReferences(block reconciliation.Block) ([]string, error) {
 	request, err := DecodeTreeRequest(block.Request)
 	if err != nil {

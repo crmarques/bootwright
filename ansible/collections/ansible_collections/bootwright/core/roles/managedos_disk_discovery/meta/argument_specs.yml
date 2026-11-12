@@ -1,0 +1,51 @@
+---
+argument_specs:
+  apply:
+    short_description: Collect an authenticated inventory through a RAM boot
+    options: &discovery_options
+      bootwright_disk_discovery_request:
+        type: dict
+        required: true
+        options:
+          version:
+            type: str
+            required: true
+            choices:
+              - os-disk-discovery-v1
+          identity:
+            type: dict
+            required: true
+          bootMedia:
+            type: dict
+            required: true
+          controller:
+            type: dict
+            required: true
+          interfaces:
+            type: list
+            required: true
+            elements: dict
+          network:
+            type: dict
+            required: true
+          private:
+            type: dict
+            required: true
+          deadlineSeconds:
+            type: int
+            required: true
+          placement:
+            type: dict
+            required: true
+      bootwright_disk_discovery_digest:
+        type: str
+        required: true
+      bootwright_disk_discovery_material:
+        type: dict
+        required: true
+  observe:
+    short_description: Read inventory custody without effects
+    options: *discovery_options
+  destroy:
+    short_description: Remove only the owned discovery boot and its private material
+    options: *discovery_options

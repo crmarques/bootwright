@@ -8984,3 +8984,16 @@ public trust material from endpoint verification policy; preserve full
 verification by default, exact-certificate identity where implemented, and
 existing capability restrictions on unverified transport. Unsupported native
 policies refuse before effects. No machine operation or push is authorized.
+
+
+### D260
+
+**owner** (2026-11-12): authorizes the following delivery.
+
+The owner authorized implementing the recommended automatic inventory boot,
+policy-based root-disk selection and durable exact-target proof. X443 (M1,
+B1359 to B1361) delivers this physical RHEL path. An explicit discovery operation
+precedes an installation plan; inventory boot automates the console steps,
+while installation authorization still names the resolved disk. Existing root
+selectors retain their behavior. Initial scope excludes RAID creation,
+selection on running machines and OpenShift discovery.

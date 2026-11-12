@@ -1,0 +1,29 @@
+---
+- name: Validate the frozen disk discovery request
+  ansible.builtin.assert:
+    that:
+      - bootwright_disk_discovery_request.version == 'os-disk-discovery-v1'
+    quiet: true
+
+- name: Complete the disk discovery execution handoff
+  bootwright.core.managedos_disk_discovery_protocol:
+    phase: loaded
+  no_log: true
+
+- name: Reach the frozen disk discovery operation
+  bootwright.core.disk_discovery:
+    operation: destroy
+    request: '{{ bootwright_disk_discovery_request }}'
+    digest: '{{ bootwright_disk_discovery_digest }}'
+    material: '{{ bootwright_disk_discovery_material }}'
+  register: managedos_disk_discovery_result
+  no_log: true
+
+- name: Publish bounded disk inventory and cleanup evidence
+  bootwright.core.managedos_disk_discovery_protocol:
+    phase: completed
+    digest: '{{ bootwright_disk_discovery_digest }}'
+    evidence: '{{ managedos_disk_discovery_result.evidence }}'
+    observed: false
+    outcome: changed
+  no_log: true

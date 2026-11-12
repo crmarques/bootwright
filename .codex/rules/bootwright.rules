@@ -216,3 +216,9 @@ prefix_rule(
     decision = "prompt",
     justification = "a rebase rewrites history",
 )
+
+prefix_rule(
+    pattern = [["bootwright", "./bin/bootwright", "bin/bootwright"], "machine", "discover"],
+    decision = "prompt",
+    justification = "bootwright machine discover acts beyond a read of local state; the owner asks for it (AGENTS.md)",
+)

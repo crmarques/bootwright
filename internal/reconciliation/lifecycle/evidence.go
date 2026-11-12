@@ -11,6 +11,8 @@ import (
 
 // BlockEvidence carries durable facts decoded only by the evidence-owning capability.
 type BlockEvidence struct {
+	Operation string
+	Attempts  int
 	// Block is the frozen block with its request and digest, carrying
 	// references, never Secret material, for owner validation.
 	Block          reconciliation.Block
@@ -47,6 +49,22 @@ func (s Service) objectEvidence(ctx context.Context, contextName, kind, object s
 	}
 	var found []BlockEvidence
 	err = s.workspace.ReadLifecycle(ctx, name, func(view View) error {
+		var err error
+		found, err = s.objectEvidenceAt(ctx, view, kind, object, owners)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return found, nil
+}
+
+func (s Service) objectEvidenceAt(ctx context.Context, view View, kind, object string, owners ownersOf) ([]BlockEvidence, error) {
+	if kind == "" || object == "" {
+		return nil, failure("lifecycle.state", "an evidence read names no object", "")
+	}
+	var found []BlockEvidence
+	err := func() error {
 		store := s.store(view)
 		index, err := store.Index(ctx)
 		if err != nil || index.Current == "" {
@@ -78,11 +96,8 @@ func (s Service) objectEvidence(ctx context.Context, contextName, kind, object s
 			}
 		}
 		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return found, nil
+	}()
+	return found, err
 }
 
 func evidenceOwners(ctx context.Context, store recordReader, current lineageMember) ([]lineageMember, error) {
@@ -243,7 +258,7 @@ func clonedPreparations(preparations []json.RawMessage) []json.RawMessage {
 // itself. Unstarted or running records carry no evidence from earlier records.
 func blockEvidence(ctx context.Context, store recordReader, operation string, block reconciliation.Block, verb reconciliation.Verb) (BlockEvidence, error) {
 	evidence := BlockEvidence{
-		Kind: block.Kind, Object: block.Object, Implementation: block.Implementation,
+		Operation: operation, Kind: block.Kind, Object: block.Object, Implementation: block.Implementation,
 		Verb: verb, State: reconciliation.BlockPending,
 	}
 	record, err := store.Block(ctx, operation, block.ID)
@@ -251,6 +266,7 @@ func blockEvidence(ctx context.Context, store recordReader, operation string, bl
 		return BlockEvidence{}, err
 	}
 	evidence.State = record.State
+	evidence.Attempts = record.Attempts
 	if record.Attempts < 1 {
 		return evidence, nil
 	}

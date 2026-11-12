@@ -37,6 +37,7 @@
       "Bash(*bootwright *controller uninstall*)",
       "Bash(*bootwright *media add*)",
       "Bash(*bootwright *machine start*)",
+      "Bash(*bootwright *machine discover*)",
       "Bash(*bootwright *machine stop*)",
       "Bash(*bootwright *machine restart*)",
       "Bash(*bootwright *machine trust*)",

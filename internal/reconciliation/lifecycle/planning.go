@@ -136,11 +136,14 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 	if err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
-	bindings := s.capabilities.Bindings()
+	bindings := s.planningBindings()
 	if len(bindings) == 0 {
 		return reconciliation.Plan{}, capabilityBinding{}, failure("lifecycle.state", "no lifecycle capability is available for the selected state", "")
 	}
-	input := PlanInput{Verb: reconciliation.Apply, Context: view.Identity(), State: state, Controller: controller}
+	input := s.planInput(view, state, controller)
+	if err := s.validatePreparationScope(ctx, input); err != nil {
+		return reconciliation.Plan{}, capabilityBinding{}, err
+	}
 	var definitions []reconciliation.BlockDefinition
 	var placed []SSHReservation
 	binding := capabilityBinding{controller: controller}
@@ -159,6 +162,9 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 		}
 		claimed.record(bound, contribution.Definitions)
 		for _, definition := range contribution.Definitions {
+			if s.preparation != nil && len(definition.Consumes) != 0 {
+				return reconciliation.Plan{}, capabilityBinding{}, failure("lifecycle.state", "a preparation cannot authorize gated destructive effects", "prepare only controller, media and inventory prerequisites")
+			}
 			if definition.Family != "" && definition.Family != bound.family() {
 				return reconciliation.Plan{}, capabilityBinding{}, failure("lifecycle.state", "the "+bound.Implementation+" capability planned a block of another family", "")
 			}
@@ -172,6 +178,10 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 				binding.secrets = append(binding.secrets, reference)
 			}
 		}
+	}
+	definitions, err = s.retainPreparedOwnership(ctx, view, definitions)
+	if err != nil {
+		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
 	slices.Sort(binding.secrets)
 	if err := claimed.failure(); err != nil {
@@ -214,7 +224,17 @@ func (s Service) planFrom(ctx context.Context, view View, state *compilation.Sta
 	if err != nil {
 		return reconciliation.Plan{}, capabilityBinding{}, err
 	}
+	plan, err = plan.WithPreparation(s.preparation)
+	if err != nil {
+		return reconciliation.Plan{}, capabilityBinding{}, err
+	}
 	return plan, binding, nil
+}
+
+func (s Service) planInput(view View, state *compilation.State, controller string) PlanInput {
+	return PlanInput{AppliedEvidence: func(ctx context.Context, kind, object string) ([]BlockEvidence, error) {
+		return s.objectEvidenceAt(ctx, view, kind, object, appliedOwners)
+	}, Verb: reconciliation.Apply, Context: view.Identity(), State: state, Controller: controller, Preparation: s.preparation}
 }
 
 // refuseOwnSocketConflicts compares the sockets this context's own blocks claim
@@ -589,6 +609,9 @@ func unsupportedFailure(refused []Refusal) error {
 }
 
 func (s Service) unsupportedRefusals(state *compilation.State) []Refusal {
+	if s.preparation != nil {
+		return Unsupported(preparationResolver{CapabilityResolver: s.capabilities, bindings: s.planningBindings()}, state, s.options.EffectBearing)
+	}
 	return Unsupported(s.capabilities, state, s.options.EffectBearing)
 }
 

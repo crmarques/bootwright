@@ -38,6 +38,7 @@ var cliResults = []reflect.Type{
 	reflect.TypeFor[acquisitionsPresentation](),
 	reflect.TypeFor[planPresentation](),
 	reflect.TypeFor[operationPresentation](),
+	reflect.TypeFor[machineDiscoveryPresentation](),
 
 	reflect.TypeFor[validationResult](),
 	reflect.TypeFor[storagePreflightResult](),

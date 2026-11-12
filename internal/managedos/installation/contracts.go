@@ -5,6 +5,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -58,4 +59,20 @@ func retirementRequirements(policies []RetirementPolicy, catalog api.Catalog, ma
 		found = append(found, references...)
 	}
 	return found, nil
+}
+
+// DiscoveredRoots resolves exact selected disks only from durable owner-validated
+// discovery reports. Its result is frozen into the installation request.
+type DiscoveredRoots func(context.Context, lifecycle.PlanInput) (map[string]diskselection.Proof, error)
+
+func resolvedRequests(ctx context.Context, input lifecycle.PlanInput, roots DiscoveredRoots) ([]Request, []Requirements, error) {
+	var proofs map[string]diskselection.Proof
+	if roots != nil {
+		var err error
+		proofs, err = roots(ctx, input)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return requestsFor(input.State.Effective(), input.Controller, input.Context.Name, proofs, true)
 }

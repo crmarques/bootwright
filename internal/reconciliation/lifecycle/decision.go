@@ -113,12 +113,20 @@ func (s Service) decideOver(ctx context.Context, view View, store OperationStore
 }
 
 func (s Service) decideBy(ctx context.Context, view View, store OperationStore, verb reconciliation.Verb, selection reconciliation.Selection, operation operationstore.Operation, frozen reconciliation.Plan, states map[string]reconciliation.BlockState, attempts map[string]int) (operationPlan, error) {
+	if verb == reconciliation.Apply {
+		if err := s.admitPreparationCommand(frozen, operation); err != nil {
+			return operationPlan{}, err
+		}
+	}
 	name := view.Identity().Name
 	held := standingOf(operation, frozen, states)
 	var admitted *additiveAdmission
 	var refused error
 	if verb == reconciliation.Apply {
 		admitted, refused = s.additive(ctx, view, store, operation, frozen, states, true)
+		if refused != nil && (s.preparation != nil || frozen.Preparation != nil) {
+			return operationPlan{}, refused
+		}
 		held.additive = admitted != nil
 	}
 	switch classify(verb, held) {

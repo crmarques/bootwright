@@ -30,7 +30,7 @@ PROTOCOLS = {
     "controller_protocol", "infra_service_protocol", "infrastructureservices_mirror_files_protocol", "infrastructureservices_mirror_images_protocol",
     "infrastructureservices_mirror_release_protocol",
     "machine_hardware_protocol", "machine_power_protocol", "managedos_firewall_protocol", "managedos_install_protocol",
-    "managedos_tree_protocol",
+    "managedos_tree_protocol", "managedos_disk_discovery_protocol",
     "substrate_host_protocol", "substrate_libvirt_machine_protocol", "substrate_physical_protocol", "physical_erase_protocol",
     "substrate_kubevirt_protocol",
 }

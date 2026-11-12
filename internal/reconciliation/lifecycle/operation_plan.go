@@ -9,8 +9,9 @@ import (
 // transition is the legal step that has nothing left to do: the context
 // already holds the state its verb would leave it in.
 type operationPlan struct {
-	fresh bool
-	noop  bool
+	reserveAddition bool
+	fresh           bool
+	noop            bool
 	// finalize marks an operation whose block records prove it complete while
 	// its record, evidence, reservations or Secret bindings do not yet say so.
 	finalize bool

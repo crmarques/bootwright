@@ -23,7 +23,7 @@ class ControllerTests(unittest.TestCase):
                 if create:
                     path.mkdir(mode=0o700)
 
-            request = {"version": "physical-erase-v4", "install": {"identity": {"context": "lab", "object": "metal-01"}}}
+            request = {"version": "physical-erase-v5", "install": {"identity": {"context": "lab", "object": "metal-01"}}}
             material = {"applyOperation": "op-" + "0" * 32}
             with patch.object(controller, "ROOT", root), patch.object(controller, "directory", side_effect=proved):
                 instance = controller.Controller(request, "a" * 64, material, create=True)

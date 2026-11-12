@@ -10,6 +10,7 @@ import (
 	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/infrastructureservices/artifactserver"
 	machineref "github.com/crmarques/bootwright/internal/machine"
+	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/managedos"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/substrate"
@@ -169,13 +170,25 @@ type Requirements struct {
 // Requests derives one frozen request per Bootwright-installed Machine, in
 // canonical object order. It reads no host, endpoint or Secret material.
 func Requests(catalog api.Catalog, controllerMachine, contextName string) ([]Request, []Requirements, error) {
+	return requestsFor(catalog, controllerMachine, contextName, nil, true)
+}
+
+func intentRequests(catalog api.Catalog, controllerMachine, contextName string) ([]Request, []Requirements, error) {
+	return requestsFor(catalog, controllerMachine, contextName, nil, false)
+}
+
+func requestsFor(catalog api.Catalog, controllerMachine, contextName string, proofs map[string]diskselection.Proof, complete bool) ([]Request, []Requirements, error) {
 	if !api.ValidLexical("name", contextName) {
 		return nil, nil, refusal("lifecycle.state", "the lifecycle context identity is invalid", "")
 	}
 	var requests []Request
 	var requirements []Requirements
 	for _, machine := range InstalledMachines(catalog) {
-		request, needs, err := requestFor(catalog, machine, controllerMachine, contextName)
+		var proof *diskselection.Proof
+		if found, ok := proofs[machine.Name()]; ok {
+			proof = &found
+		}
+		request, needs, err := deriveRequest(catalog, machine, controllerMachine, contextName, proof, complete)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -186,6 +199,10 @@ func Requests(catalog api.Catalog, controllerMachine, contextName string) ([]Req
 }
 
 func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, contextName string) (Request, Requirements, error) {
+	return deriveRequest(catalog, machine, controllerMachine, contextName, nil, true)
+}
+
+func deriveRequest(catalog api.Catalog, machine api.Object, controllerMachine, contextName string, proof *diskselection.Proof, complete bool) (Request, Requirements, error) {
 	name := machine.Name()
 	if !substrate.SafeSegment(name) {
 		return Request{}, Requirements{}, refusal("lifecycle.state", "the Machine name is not a safe host identifier", "rename "+machine.Identity())
@@ -205,6 +222,11 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	target, err := targetFor(catalog, machine, contextName, controllerMachine)
 	if err != nil {
 		return Request{}, Requirements{}, err
+	}
+	if complete {
+		if err := freezeDiscoveredTarget(machine, contextName, proof, &target); err != nil {
+			return Request{}, Requirements{}, err
+		}
 	}
 	imageServer, image, private, certificate, err := installerPublication(catalog,
 		anaconda.Get("redfishVirtualMedia", "artifactServerEndpoint"), privateInstallation(catalog, machine, target.Channel), contextName, name, profile.Identity())
@@ -243,17 +265,8 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	if request.Update, err = updateFor(profile); err != nil {
 		return Request{}, Requirements{}, err
 	}
-	if target.Channel == substrate.ChannelGuestAgent {
-		request.Target.HostKeyType = guestHostKeyType(fipsEnabled(profile))
-	}
-	// A machine proved by a key this installation delivers needs that key, and
-	// the key travels only beneath the private subtree.
-	if target.Channel == substrate.ChannelDeliveredKey {
-		keyType, err := hostKeyType(catalog, machine, target.HostKeyRef)
-		if err != nil {
-			return Request{}, Requirements{}, err
-		}
-		request.Target.HostKeyType = keyType
+	if request.Target.HostKeyType, err = installationHostKey(catalog, machine, profile, target); err != nil {
+		return Request{}, Requirements{}, err
 	}
 	if err := mediaTrustRefusal(machine, request); err != nil {
 		return Request{}, Requirements{}, err
@@ -280,7 +293,36 @@ func requestFor(catalog api.Catalog, machine api.Object, controllerMachine, cont
 	if request.Network, err = networkFor(catalog, machine, install); err != nil {
 		return Request{}, Requirements{}, err
 	}
+	if !complete {
+		return request, needs, nil
+	}
+	if proof != nil {
+		request.DiscoveryProof = proof
+	}
 	return finishInstallationRequest(request, needs, install)
+}
+
+func installationHostKey(catalog api.Catalog, machine, profile api.Object, target Target) (string, error) {
+	switch target.Channel {
+	case substrate.ChannelGuestAgent:
+		return guestHostKeyType(fipsEnabled(profile)), nil
+	case substrate.ChannelDeliveredKey:
+		return hostKeyType(catalog, machine, target.HostKeyRef)
+	default:
+		return target.HostKeyType, nil
+	}
+}
+
+func freezeDiscoveredTarget(machine api.Object, contextName string, proof *diskselection.Proof, target *Target) error {
+	if !substrate.MachineDiscoveryPolicy(machine).Present() {
+		return nil
+	}
+	if proof == nil || proof.Validate() != nil || target.Hardware == nil {
+		return refusal("lifecycle.state", "Machine/"+machine.Name()+" has no completed disk-discovery proof for this policy", "run bootwright machine discover --context "+contextName+" --name "+machine.Name())
+	}
+	target.Hardware.RootDevice = substrate.WWNDevicePath(proof.Selected.WWN)
+	target.Hardware.WWN, target.Hardware.SerialNumber, target.Hardware.SizeBytes = proof.Selected.WWN, proof.Selected.SerialNumber, proof.Selected.SizeBytes
+	return nil
 }
 
 func finishInstallationRequest(request Request, needs Requirements, install Installation) (Request, Requirements, error) {
@@ -596,7 +638,7 @@ func canonicalWWN(declared string) string {
 	return strings.TrimPrefix(strings.ToLower(declared), "0x")
 }
 
-var physicalRootIdentity = []string{"serialNumber", "sizeBytes", "wwn", "volumeRef", "bootVolume"}
+var physicalRootIdentity = []string{"serialNumber", "sizeBytes", "wwn", "volumeRef", "bootVolume", "discover"}
 
 func rootSelectorRemedy(on string) string {
 	return machineref.RootFormsRemedy(on) + "; a device path such as /dev/sda is refused"
@@ -630,7 +672,7 @@ func refusedTarget(machine api.Object, target substrate.Target, private bool) (r
 				"set spec.substrate.baremetal.rootDevice.wwn on " + machine.Identity() + " to the disk's WWN in that form"
 		}
 	}
-	if target.Physical && !durableRootDevice(hints.DeviceName) && !serialRoot(hints) && hints.VolumeRef == nil {
+	if target.Physical && !durableRootDevice(hints.DeviceName) && !serialRoot(hints) && hints.VolumeRef == nil && !hints.Discovery {
 		return "a physical installation erases only a root disk named by its wwn, by its serial number and exact size, or by a volumeRef or bootVolume logical volume, and the Machine names none of them",
 			rootSelectorRemedy(" on " + machine.Identity())
 	}

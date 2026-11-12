@@ -23,6 +23,7 @@ type EraseCapability struct {
 	identities         Identities
 	media              MediaRecords
 	retirementPolicies []RetirementPolicy
+	discoveredRoots    DiscoveredRoots
 }
 
 func NewErase(runner Runner) EraseCapability { return EraseCapability{runner: runner} }
@@ -57,7 +58,7 @@ func (c EraseCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 	if len(selected) == 0 {
 		return plan, nil
 	}
-	installs, requirements, err := Requests(catalog, input.Controller, input.Context.Name)
+	installs, requirements, err := resolvedRequests(ctx, input, c.discoveredRoots)
 	if err != nil {
 		return plan, err
 	}
@@ -372,4 +373,9 @@ func eraseLineage(data json.RawMessage, request EraseRequest, execution lifecycl
 		}
 	}
 	return nil
+}
+
+func (c EraseCapability) WithDiscoveredRoots(roots DiscoveredRoots) EraseCapability {
+	c.discoveredRoots = roots
+	return c
 }

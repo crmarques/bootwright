@@ -149,6 +149,8 @@ Not yet met: `preflight --stage add-ons` runs no add-on prerequisite check and a
 
 ### Resource, access, and general commands
 
+#### Machine commands
+
 | Invocation | Local flags and defaults | Successful result | Effects |
 | --- | --- | --- | --- |
 | `bootwright machine list` | `--clusters <list>` default all; `--power-status` false; `--short` false | Machines with their declared contact and addresses and the evidence-backed lifecycle position each reached, their management-controller-reported power with `--power-status`, or sorted names with `--short` | read local state; with `--power-status`, read each machine's power through its management controller |
@@ -157,9 +159,15 @@ Not yet met: `preflight --stage add-ons` runs no add-on prerequisite check and a
 | `bootwright machine exec` | required `--name <list>` and `<command>...` | the exact argument vector runs on the Machine, or on every listed Machine concurrently, at most the lifecycle bound at a time, with [each line prefixed by its Machine](../cli.md#machine-ssh-sessions); the remote command's exit status is the result, the highest of them for several | same |
 | `bootwright machine cp` | required `--name <list>` and two operands `local:<path> remote:<path>` or the reverse; `--overwrite` false | per-Machine copy outcomes and confirmed file/byte counts; structured output supported | run one pinned SSH client and a fixed file worker; explicit local or remote payload writes under the receiving account; no lifecycle state |
 | `bootwright machine trust` | `--name <list>` default all; `--replace <list>` default none, each member `<machine>` or `<machine>=SHA256:<fingerprint>`; `--expect <machine>=SHA256:<fingerprint>[,...]` default none; `--dry-run` false; `--yes` false | exact host-key trust plan, and the recorded result unless dry-run | bounded SSH host-key observation of the selected Machines; context trust-store write unless dry-run |
+| `bootwright machine discover` | required `--name <list>`; `--dry-run`, `--prepare-prerequisites`, `--yes` false | authenticated RAM disk inventory in durable operation records; the next installation plan freezes exactly one eligible disk | planned mutation: temporary boot and private media, authenticated inventory, power-off and cleanup; with `--prepare-prerequisites`, planned controller and infrastructure setup; `--dry-run` reads only local state |
 | `bootwright machine start` | required `--name <list>` | the power state each Machine's management controller proved once the operation settled | bounded power operation through that management controller, one concurrent [batch](../cli.md#machine-power-operations) for several Machines |
 | `bootwright machine stop` | required `--name <list>`; `--force` false; `--yes` false | same, after the operating system is asked to shut down | same |
 | `bootwright machine restart` | required `--name <list>`; `--force` false; `--yes` false | same, after a proved stop and a proved start | same |
+
+#### Controller and cluster commands
+
+| Invocation | Local flags and defaults | Successful result | Effects |
+| --- | --- | --- | --- |
 | `bootwright controller install` | `--dry-run` false; `--yes` false | [context-independent controller prerequisite plan or completed setup](../controller.md#the-setup-flow); with `--dry-run --output json`, the plan and every locked wheel | host packages through the host's own dnf after its verbatim preview, over the [context-free route](../controller.md#the-context-free-acquisition-route), and the controller runtime from the locked wheels the executable carries, with no download; a ready host makes no request and no change; dry-run only lists requirement names |
 | `bootwright controller check` | none | [baseline controller readiness](../controller.md#the-setup-flow), including the acquisition route it resolved, and `context init` as the next step of a ready host | bounded local observation; no state publication |
 | `bootwright controller rebind` | `--yes` false; `--recorded-host-retired` false, required with `--yes`; `--machine-id <id>`, `--product-uuid <uuid>` and `--root-uuid <uuid>` default none, all three this host's and required with `--yes`, and a remedy repeating the command names them by placeholder | the outcome and the counts of the bindings and reservations it kept | [host identity rewrite](../contexts.md#controller-relationship-and-host-binding) of the controller record, once, under the exclusive root lock, after a confirmation naming the recorded and the new identity and affirming that the recorded host no longer runs this store; refuses a store whose directories are not the ones its registry attributed and an unchanged identity, and cannot tell a byte-for-byte clone from the store |

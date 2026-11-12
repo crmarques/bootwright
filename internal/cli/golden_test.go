@@ -23,9 +23,11 @@ import (
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	stateencoding "github.com/crmarques/bootwright/internal/desiredstate/encoding"
 	"github.com/crmarques/bootwright/internal/diagnostics"
+	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/machine/inventory"
 	"github.com/crmarques/bootwright/internal/machine/power"
 	"github.com/crmarques/bootwright/internal/managedos"
+	"github.com/crmarques/bootwright/internal/managedos/installation"
 	"github.com/crmarques/bootwright/internal/managedos/media"
 	artifactrendering "github.com/crmarques/bootwright/internal/nativeartifacts/rendering"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -789,6 +791,12 @@ func cliGoldens() []cliGolden {
 				AnotherBuild: &lifecycle.AnotherBuild{RegisteredBy: "1.4.0 (9f2c1ab)", Steps: []int{2, 3}},
 				Receipt:      lifecycle.Receipt{Operation: operationID, Verb: "plan", State: "preview", Next: "continue-apply"},
 			}
+		}},
+		{golden: "cli-machine-discover", args: "machine discover --name rhel-01 --yes", record: func(r *dispatchRecord) {
+			r.result.machineDiscovery = &installation.DiscoverResult{Operation: operation("done"), Inventories: []installation.DiscoveryInventory{{Machine: "rhel-01", Disks: []diskselection.Disk{{DiskIdentity: diskselection.DiskIdentity{WWN: "0x5000000000000001", SerialNumber: "EXAMPLE-OS", SizeBytes: 1073741824}, Model: "EXAMPLE SSD", ControllerPCIAddress: "0000:01:00.0", Transport: "scsi", Fixed: true, Writable: true, Whole: true}}}}}
+		}},
+		{golden: "cli-machine-discover-json", args: "machine discover --name rhel-01 --yes --output json", record: func(r *dispatchRecord) {
+			r.result.machineDiscovery = &installation.DiscoverResult{Operation: operation("done"), Inventories: []installation.DiscoveryInventory{{Machine: "rhel-01", Disks: []diskselection.Disk{{DiskIdentity: diskselection.DiskIdentity{WWN: "0x5000000000000001", SerialNumber: "EXAMPLE-OS", SizeBytes: 1073741824}, Model: "EXAMPLE SSD", ControllerPCIAddress: "0000:01:00.0", Transport: "scsi", Fixed: true, Writable: true, Whole: true}}}}}
 		}},
 		{golden: "cli-apply", args: "apply --yes", record: func(r *dispatchRecord) { r.result.lifecycleOperation = operation("done") }},
 		// An adapter's warning reaches standard error beside the result in

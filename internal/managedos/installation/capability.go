@@ -26,6 +26,7 @@ type Capability struct {
 	identities         Identities
 	media              MediaRecords
 	retirementPolicies []RetirementPolicy
+	discoveredRoots    DiscoveredRoots
 }
 
 func New(runner Runner) Capability { return Capability{runner: runner} }
@@ -62,7 +63,7 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 		return lifecycle.CapabilityPlan{}, refusal("lifecycle.state", "lifecycle planning requires compiled desired state", "")
 	}
 	catalog := input.State.Effective()
-	requests, requirements, err := Requests(catalog, input.Controller, input.Context.Name)
+	requests, requirements, err := resolvedRequests(ctx, input, c.discoveredRoots)
 	if err != nil {
 		return lifecycle.CapabilityPlan{}, err
 	}
@@ -105,6 +106,9 @@ func (c Capability) Plan(ctx context.Context, input lifecycle.PlanInput) (lifecy
 			Implementation: Implementation,
 			ContentDigest:  digest,
 			Request:        canonical,
+		}
+		if request.DiscoveryProof != nil {
+			definition.Requires = append(definition.Requires, reconciliation.ObjectRef{Kind: Kind, Object: request.Identity.Object, Family: DiscoveryFamily})
 		}
 		retirement, err := c.retirementRequires(catalog, request)
 		if err != nil {
@@ -507,6 +511,11 @@ func deliveredKeyMatches(request Request, publicLine string) error {
 }
 
 func (c Capability) run(ctx context.Context, execution lifecycle.Execution, operation string, request Request, marker []byte, observes string) (lifecycle.RunResult, error) {
+	if operation == "apply" {
+		if err := c.proveDiscoveredRoot(execution, request); err != nil {
+			return lifecycle.RunResult{}, err
+		}
+	}
 	canonical, err := request.Canonical()
 	if err != nil {
 		return lifecycle.RunResult{}, err
@@ -740,4 +749,9 @@ func (Capability) Unsupported(state *compilation.State) []lifecycle.Refusal {
 // it is one that is running, and its own block is probed in the same removal.
 func (Capability) Quiescent(context.Context, lifecycle.Probe) (lifecycle.Quiescence, error) {
 	return lifecycle.Quiescence{State: lifecycle.Quiescent, Reason: "its machine is probed in this removal"}, nil
+}
+
+func (c Capability) WithDiscoveredRoots(roots DiscoveredRoots) Capability {
+	c.discoveredRoots = roots
+	return c
 }

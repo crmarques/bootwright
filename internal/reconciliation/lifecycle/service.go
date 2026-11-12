@@ -25,6 +25,7 @@ type Executable struct {
 type ApplyAdmission func(context.Context, string, api.Catalog, map[string]ObjectOwnership, []reconciliation.Block) error
 
 type Options struct {
+	Preparations      []PreparationDefinition
 	BeginInvocation   BeginInvocation
 	Confirmer         Confirmer
 	Presenter         PlanPresenter
@@ -55,6 +56,7 @@ type Options struct {
 }
 
 type Service struct {
+	preparation  *reconciliation.PreparationScope
 	workspace    Workspace
 	inputs       Inputs
 	compiler     Compiler

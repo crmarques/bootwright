@@ -171,9 +171,11 @@ func writeAdditionalStructuredResult(out io.Writer, command *cobra.Command, path
 		shown = displayRender(result.rendered)
 	case (path == "controller check" || path == "controller install" && result.controller != nil && !result.controller.DryRun) && validControllerReport(result.controller):
 		return true, writeStructuredController(out, path, result.controller, nil, 0)
-	case path == "plan" && result.lifecyclePlan != nil:
+	case path == "machine discover" && result.machineDiscovery != nil:
+		return true, writeMachineDiscovery(out, path, result.machineDiscovery, true)
+	case (path == "plan" || path == "machine discover") && result.lifecyclePlan != nil:
 		shown, reported = displayPlan(result.lifecyclePlan), result.lifecyclePlan.Warnings
-	case (path == "apply" || path == "destroy") && result.lifecycleOperation != nil:
+	case (path == "apply" || path == "destroy" || path == "machine discover") && result.lifecycleOperation != nil:
 		return true, writeStructuredOperation(out, path, result.lifecycleOperation, nil, 0)
 	case path == "secret show" && result.secretReveal != nil:
 		r := result.secretReveal

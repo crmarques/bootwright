@@ -1,0 +1,66 @@
+implementation: os-disk-discovery-v1
+content-digest: 42c900f8466a0d1fb461c9266f6b9ce3e84e08352ed94680a2caea7b38936ed9
+request-version: os-disk-discovery-v1
+automation-formats: none
+mark-formats: none
+proof-ids: none
+fixed-places: none
+effect-pins:
+  private-custom-init-readonly-inventory-pinned-tls-receipt-cleanup-v1
+request-identity:
+  identity.context
+  identity.object
+  identity.block
+request-schema:
+  bootMedia struct installation.Media
+  bootMedia.name string
+  bootMedia.sha256 string
+  bootMedia.size int64
+  controller struct installation.Controller
+  controller.credentialsRef string
+  controller.endpoint string
+  controller.tlsVerification string omitempty
+  controller.tlsVerify bool
+  controller.trustBundleRef string omitempty
+  controller.virtualMedia struct installation.VirtualMedia
+  controller.virtualMedia.removeCertificate bool
+  controller.virtualMedia.restoreVerification bool
+  controller.virtualMedia.trust string
+  deadlineSeconds int
+  identity struct installation.Identity
+  identity.block string
+  identity.context string
+  identity.object string
+  identity.profile string
+  interfaces []struct installation.Interface
+  interfaces[].macAddress string
+  interfaces[].name string
+  network struct installation.DiscoveryNetwork
+  network.address string
+  network.bondOptions []string omitempty
+  network.bondPorts []string omitempty
+  network.gateway string omitempty
+  network.interface string
+  network.prefix int
+  network.type string
+  network.vlanBase string omitempty
+  network.vlanID int omitempty
+  placement struct machine.Placement
+  placement.address string omitempty
+  placement.connection string
+  placement.knownHostsRef string omitempty
+  placement.machine string
+  placement.port int omitempty
+  placement.privateKeyRef string omitempty
+  placement.user string omitempty
+  private struct installation.Publication
+  private.certificateRef string omitempty
+  private.path string
+  private.url string
+  version string
+evidence-schema:
+  cleaned bool
+  completed bool
+  report opaque omitempty
+  request string
+  version string

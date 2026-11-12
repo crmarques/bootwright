@@ -79,10 +79,16 @@ func observeAllowlist() map[observeTaskKey]observeAllowance {
 		"managedos_package_tree", "infrastructureservices_mirror_fill", "infrastructureservices_mirror_images",
 		"infrastructureservices_mirror_release", "storage_ceph_core", "storage_ceph_host", "storage_ceph_image",
 		"storage_ceph_smb", "storage_ceph_replication", "storage_ceph_consumer", "substrate_baremetal_machine", "substrate_libvirt_host", "substrate_libvirt_machine",
-		"substrate_kubevirt_host", "substrate_kubevirt_machine", "machine_hardware",
+		"substrate_kubevirt_host", "substrate_kubevirt_machine", "machine_hardware", "managedos_disk_discovery",
 	} {
 		add(role, "observe.yml", "ansible.builtin.assert", "validates the frozen request in memory", read)
 	}
+	add("managedos_disk_discovery", "observe.yml", observeCollection+"disk_discovery", "reads immutable local custody without networking, boot, acknowledgement or cleanup", func(params, _ map[string]any) bool {
+		return params["operation"] == "observe"
+	})
+	add("managedos_disk_discovery", "observe.yml", observeCollection+"managedos_disk_discovery_protocol", "publishes loaded or read-only completion on the runner channel", func(params, _ map[string]any) bool {
+		return params["phase"] == "loaded" || params["phase"] == "completed" && params["observed"] == true
+	})
 	for _, role := range []string{"storage_ceph_core", "storage_ceph_host", "storage_ceph_image", "storage_ceph_smb", "storage_ceph_replication", "storage_ceph_consumer"} {
 		add(role, "observe.yml", "ansible.builtin.fail", "refuses an unproved observation without touching the host", read)
 	}

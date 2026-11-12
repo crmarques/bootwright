@@ -13,6 +13,7 @@ import secrets
 import stat
 import time
 
+from ansible_collections.bootwright.core.plugins.module_utils import private_records
 from ansible_collections.bootwright.core.plugins.module_utils import hosted_area
 from ansible_collections.bootwright.core.plugins.module_utils import managedos_guest_ssh as ssh
 from ansible_collections.bootwright.core.plugins.module_utils import physical_erase_boot as boot
@@ -22,7 +23,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import physical_er
 from ansible_collections.bootwright.core.plugins.module_utils import ssh_key_policy
 
 ROOT = Path(hosted_area.ROOT)
-REQUEST_VERSION = "physical-erase-v4"
+REQUEST_VERSION = "physical-erase-v5"
 MEDIA = Path("/var/lib/bootwright/media")
 
 
@@ -34,51 +35,24 @@ def native(argv, timeout=60):
 
 
 def read(path, limit=32768):
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
     try:
-        info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022 or info.st_size > limit:
-            raise worker.Refusal("custody-file")
-        data = os.read(fd, limit + 1)
-        if len(data) > limit:
-            raise worker.Refusal("custody-size")
-        return data
-    finally:
-        os.close(fd)
+        return private_records.read(path, limit)
+    except private_records.Refused as refused:
+        raise worker.Refusal(str(refused)) from None
 
 
 def write(path, data, mode=0o600):
-    stage = path.parent / (".stage-" + secrets.token_hex(16))
-    fd = os.open(stage, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, mode)
     try:
-        if os.write(fd, data) != len(data):
-            raise worker.Refusal("custody-write")
-        os.fsync(fd)
-        os.link(stage, path, follow_symlinks=False)
-    finally:
-        os.close(fd)
-        stage.unlink()
-    parent = os.open(str(Path(path).parent), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-    try:
-        os.fsync(parent)
-    finally:
-        os.close(parent)
+        private_records.write(path, data, mode)
+    except private_records.Refused as refused:
+        raise worker.Refusal(str(refused)) from None
 
 
 def directory(path, create, mode=0o700):
-    # Every ancestor must be a real root-owned directory, never a symlink or
-    # writable by another principal. Only the final component may be created.
-    if create:
-        try:
-            os.mkdir(path, mode)
-        except FileExistsError:
-            pass
-    for ancestor in [path, *path.parents]:
-        info = ancestor.lstat()
-        if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
-            raise worker.Refusal("custody-directory")
-    if mode is not None and stat.S_IMODE(path.stat().st_mode) != mode:
-        raise worker.Refusal("custody-mode")
+    try:
+        private_records.directory(path, create, mode)
+    except private_records.Refused as refused:
+        raise worker.Refusal(str(refused)) from None
 
 
 class Controller:

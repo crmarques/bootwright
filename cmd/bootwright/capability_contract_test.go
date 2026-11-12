@@ -215,6 +215,7 @@ func contractRows() []contractRow {
 			noEffect: map[string]any{"power": "Off"}, drift: map[string]any{"reachable": false}},
 		{kind: installation.Kind, implementation: installation.FirewallImplementation, example: "lab-rhel+firewall",
 			completedFrom: "specs/managed-os.md, Host firewall requirements: each run pins the guest key its original apply's installation proved, and marks its services with that apply operation"},
+		{kind: installation.Kind, implementation: installation.DiscoveryImplementation, example: "lab-baremetal+discovery", completedFrom: "specs/managed-os.md, Automatic root-disk discovery: each inventory boot requires the original physical UUID/MAC proof and durable attempt binding"},
 		{kind: installation.Kind, implementation: installation.EraseImplementation, example: "lab-baremetal+erase",
 			completedFrom: "specs/state-reconciliation.md, Opt-in physical logical overwrite: erase requires the original physical claim UUID before any adapter or receipt can be trusted"},
 		{kind: libvirt.HostKind, implementation: libvirt.HostImplementation, example: "lab-rhel", presence: contractHostPresence,
@@ -261,6 +262,7 @@ const cephSMBCompletedFrom = "specs/ceph.md, SMB resources: an SMB request takes
 // example and a synthetic overlay under testdata, for a kind no tracked example
 // declares yet.
 var contractOverlays = map[string][2]string{
+	"lab-baremetal+discovery":            {"lab-baremetal", filepath.Join("testdata", "capability-overlays", "disk-discovery")},
 	"lab-baremetal+erase":                {"lab-baremetal", filepath.Join("testdata", "capability-overlays", "physical-erase")},
 	"lab-rhel+firewall":                  {"lab-rhel", filepath.Join("testdata", "capability-overlays", "host-firewall")},
 	"lab-rhel+registry":                  {"lab-rhel", filepath.Join("testdata", "capability-overlays", "managed-registry")},
@@ -451,6 +453,9 @@ func contractExampleOf(t *testing.T, resolver capabilityResolver, runner *contra
 		capability, _ := resolver.Resolve(binding.Kind, binding.Implementation)
 		contribution, err := capability.Plan(context.Background(), example.apply)
 		if err != nil {
+			if binding.Implementation == installation.DiscoveryImplementation && name == "lab-baremetal+discovery" {
+				t.Fatalf("discovery fixture planning: %v (%+v)", err, diagnostics.Of(err))
+			}
 			if binding.Implementation == ceph.ConsumerImplementation && name == "lab-compact-df" {
 				t.Fatalf("Ceph export example planning: %v", diagnostics.Of(err))
 			}
