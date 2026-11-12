@@ -31,7 +31,7 @@ def hardware(root, bonded=False):
             (port / "master").symlink_to("../Bond0")
             (port / "bonding_slave").mkdir()
             (port / "bonding_slave/perm_hwaddr").write_text(MACS[index] + "\n")
-            (bond / ("slave_" + name)).symlink_to("../" + name)
+            (bond / ("lower_" + name)).symlink_to("../" + name)
     return directory
 
 
@@ -71,7 +71,7 @@ def test_ambiguous_bond_identity_has_no_current_address_fallback(tmp_path, damag
     elif damage == "missing-master":
         (slave / "master").unlink()
     elif damage == "missing-reciprocal":
-        (bond / "slave_Eth1").unlink()
+        (bond / "lower_Eth1").unlink()
     elif damage == "missing-membership":
         (bond / "bonding/slaves").write_text("Eth0\n")
     elif damage == "duplicate-membership":

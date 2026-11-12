@@ -53,7 +53,7 @@ func EraseBlockID(machine string) string {
 }
 
 func EraseContentDigest() string {
-	digest := sha256.Sum256([]byte(EraseImplementation + ":" + eraseRequestVersion + ":descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v1"))
+	digest := sha256.Sum256([]byte(EraseImplementation + ":" + eraseRequestVersion + ":descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v2"))
 	return hex.EncodeToString(digest[:])
 }
 

@@ -1,5 +1,5 @@
 implementation: os-install-anaconda-v1
-content-digest: d220fce344b7b2601489f97b8eb9c6e5cbcbbf19971a6aa0814faed7769deca0
+content-digest: 896909cce2113b4e5aee071a7b7328d7645d9e00071cc650a66b70b4d8fd4e88
 request-version: os-install-anaconda-v4
 automation-formats: none
 mark-formats: none
@@ -14,7 +14,7 @@ effect-pins:
   /etc/bootwright/network.yml
   /etc/bootwright/network-marker.json
   300
-  proved-installation-disk-boot,replay-safe-unread-registration
+  proved-installation-disk-boot,replay-safe-unread-registration,bond-permanent-lower-links
 request-identity:
   identity.context
   identity.object

@@ -44,7 +44,7 @@ def _bond_address(path, directory, interface, names):
         if member not in names or INTERFACE.fullmatch(member) is None:
             raise ValueError(REFUSAL)
         slave = directory / member
-        link = bond / ("slave_" + member)
+        link = bond / ("lower_" + member)
         if not (slave / "device").exists() or not link.is_symlink() or not link.samefile(slave):
             raise ValueError(REFUSAL)
         if not (slave / "master").is_symlink() or not (slave / "master").samefile(bond):

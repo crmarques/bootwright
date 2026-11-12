@@ -123,7 +123,7 @@ func machineBootDisk(arm string) time.Duration {
 	return substrate.LibvirtBootDiskBound
 }
 
-const provedDiskBoot = "proved-installation-disk-boot,replay-safe-unread-registration"
+const provedDiskBoot = "proved-installation-disk-boot,replay-safe-unread-registration,bond-permanent-lower-links"
 
 // BlockID names the block this capability contributes. A consumer states
 // requirements by API object, never by this identity.

@@ -48,7 +48,7 @@ func DiscoveryBlockID(name string) string {
 	return reconciliation.BlockIdentity("os-disk-discovery-", name)
 }
 func DiscoveryContentDigest() string {
-	h := sha256.Sum256([]byte(DiscoveryImplementation + ":" + discoveryVersion + ":private-custom-init-readonly-inventory-pinned-tls-receipt-cleanup-v1"))
+	h := sha256.Sum256([]byte(DiscoveryImplementation + ":" + discoveryVersion + ":private-custom-init-readonly-inventory-pinned-tls-receipt-cleanup-v2"))
 	return hex.EncodeToString(h[:])
 }
 func (r DiscoveryRequest) Canonical() ([]byte, error) {
