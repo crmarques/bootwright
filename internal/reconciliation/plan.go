@@ -297,9 +297,9 @@ func checkPrerequisites(verb Verb, definitions []BlockDefinition) error {
 
 // order writes the plan wave by wave: every block sits after each block it
 // waits for, and blocks that wait for nothing more than each other's depth sit
-// together in identity order. The result reads as the schedule rather than as
-// one arbitrary sequential walk of the same graph, and the numbered plan an
-// operator confirms is the order the work is actually started in.
+// together in identity order. The result groups work by dependency depth.
+// Numbering stays stable even
+// when execution prefers a later ready block to advance a longer chain.
 func order(definitions []BlockDefinition) ([]BlockDefinition, error) {
 	known := make(map[string]BlockDefinition, len(definitions))
 	for _, definition := range definitions {

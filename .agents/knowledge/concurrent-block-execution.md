@@ -78,8 +78,9 @@ to preserve a safety rule that predates concurrency:
    it ran alone, which serialized independent hosts. A selection that admits
    no failed block refuses before any block is worked; after that, admission
    never depends on which block completes first.
-3. Otherwise every **startable** block starts, in frozen plan order, up to the
-   bound, skipping any whose exclusive resources are in use.
+3. Otherwise **startable** blocks follow the
+   [ready-work priority](../../specs/state-reconciliation.md#stages-and-the-pause-boundary),
+   skipping any whose exclusive resources or throttle are in use.
 
 The `worked` set is what keeps this equal to the old behavior: an invocation
 never retries a block it failed itself, never observes an effect it just left
@@ -101,10 +102,10 @@ unproved one, which is the one state nothing can retry, destroy or delete past.
 the plan, not in desired state and not a flag: the graph decides what may run
 together.
 A continuation of an operation frozen by another build runs under this build's
-bound, which changes no effect, no order and no evidence.
+bound and ready-work priority, which change no dependency, effect or evidence.
 
-The existing journey suite runs at `Concurrency: 1`, which reproduces the old
-order exactly; that is what keeps those goldens meaningful.
+Tests that need serial execution set `Concurrency: 1`; a one-block bound still
+chooses among ready first attempts using the same priority.
 
 ## Wave-major plan order changes every plan digest
 
@@ -145,7 +146,7 @@ minutes. `ScheduleOf` measured waves from dependencies alone, so `plan` read
 "widest 12 steps" for a wave that could run one block. The claim now names
 only the blocks that write cluster-wide orchestrator or manager state
 (`exclusiveFor` in `internal/storage/ceph/capability.go`), every Ceph child
-names the throttle `ceph/<cluster>` (four at once,
+names the throttle `ceph/<cluster>` (the executable capacity
 `lifecycle.MaxThrottledBlocks`), and `ScheduleOf` counts only what claims and
 throttles admit together. `TestCephChildrenOfOneClusterStartTogetherUnderTheThrottle`
 holds the compiled examples' DAG to it and fails under the old claim set.
@@ -197,3 +198,21 @@ job boundary; durable machine work has a separate context/machine path.
 The three-node example's compiled production DAG and controlled real-runner
 barriers qualify these boundaries in-tree. Operator overlap remains an M1
 closing gate; no live run is implied by those tests.
+
+## Ready-work priority without changing the plan (X442)
+
+The cluster throttle still capped Ceph work at four while the global bound
+admitted eight. Separately, frozen-order admission could postpone a longer
+chain behind independent leaves. The in-tree scheduler tests in
+`internal/reconciliation/lifecycle/scheduler_priority_test.go` compare the
+same seven equal-duration blocks on two workers: frozen-order admission takes
+five rounds and chain priority four. This proves the scheduling choice, not
+elapsed-time improvement on a native Ceph cluster.
+
+Keep runtime priority separate from `order()`: changing canonical order changes
+the persisted plan digest, whereas admission priority can continue an existing
+plan. The pre-stop removal tests caught another constraint: a pre-stop inverse
+can complete ahead of its dependencies, making a later Machine appear ready
+before earlier storage retirement. These removals keep their existing order
+throughout the invocation, including on continuation; the membership of
+`removalPhases.preStop` comes from the frozen plan, not its completed state.

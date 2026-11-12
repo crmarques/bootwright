@@ -65,9 +65,7 @@ func TestAThrottleBoundsItsHoldersWhileUnthrottledBlocksFillTheBound(t *testing.
 		definitions = append(definitions, throttled(member, "ceph/example"))
 	}
 	h := scheduled(t, 8, definitions...)
-	if h.service.Throttle() != MaxThrottledBlocks || MaxThrottledBlocks != 4 {
-		t.Fatalf("throttle = %d, default %d", h.service.Throttle(), MaxThrottledBlocks)
-	}
+	h.service.options.Throttle = 4
 	watch := watchThrottle(len(definitions), members...)
 	h.capability.hold, h.capability.released = watch.enter, watch.leave
 	finished := make(chan error, 1)

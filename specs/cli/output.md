@@ -832,7 +832,10 @@ appended object. Check progress retains the check description.
 
 Because the plan is frozen
 [wave by wave](../state-reconciliation.md#plan-and-execution), the numbered
-steps are the order the work is started in. Full detail names each dependency
+steps have stable identities for progress and evidence. The
+[executor](../state-reconciliation.md#stages-and-the-pause-boundary) chooses
+among ready steps by remaining chain length, so progress can start a later
+numbered step first. Full detail names each dependency
 wait by the predecessor's place in that
 list; compact detail keeps the state and invocation selection. A step whose
 consequence consumes an authorization always carries the token and its impacts,

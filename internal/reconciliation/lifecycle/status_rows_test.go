@@ -395,7 +395,7 @@ func TestStatusRowsAfterAReplacingRemoval(t *testing.T) {
 		},
 		{
 			name:        "the first attempt failed on a service the second has not started",
-			definitions: append(rowsDefinitions(), definition("other")),
+			definitions: append(rowsDefinitions(), dependent("other", "artifacts")),
 			arrange:     twoAttempts(secondFailedMedia),
 			want: map[string]RealizationStatus{
 				"OpenShiftCluster/sno": RealizationFailed, "ArtifactServer/other": RealizationFailed, "ArtifactServer/artifacts": RealizationDone,
@@ -418,7 +418,7 @@ func TestStatusRowsAfterAReplacingRemoval(t *testing.T) {
 		},
 		{
 			name:        "a chain",
-			definitions: append(rowsDefinitions(), definition("other")),
+			definitions: append(rowsDefinitions(), dependent("other", "artifacts")),
 			arrange: func(t *testing.T, h *rowsHarness) {
 				twoAttempts(secondFailedMedia)(t, h)
 				registerReplacement(t, h.harness, replacementID)

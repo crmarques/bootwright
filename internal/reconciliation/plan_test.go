@@ -244,8 +244,8 @@ func TestPlanValuesAreCopiedAtTheBoundary(t *testing.T) {
 	}
 }
 
-// The plan is written wave by wave, so the numbered list an operator confirms
-// is the order the work is started in. A block that waits for nothing sits
+// The plan is written wave by wave, keeping step numbers stable independently
+// of ready-work priority. A block that waits for nothing sits
 // with every other block that waits for nothing, however deep its own
 // dependents go, and one arbitrary sequential walk of the graph no longer
 // decides where it is printed.

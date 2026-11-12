@@ -3703,7 +3703,7 @@ func TestDestroyOverAFailedApplyRemovesEveryStartedBlock(t *testing.T) {
 	if result.Receipt.State != string(reconciliation.OperationDone) || result.Receipt.Next != "none" {
 		t.Fatalf("receipt = %+v", result.Receipt)
 	}
-	if !slices.Equal(h.capability.destroys, []string{"artifacts", "host-node", "provider-metal"}) {
+	if !slices.Equal(h.capability.destroys, []string{"host-cluster", "host-node", "provider-metal"}) {
 		t.Fatalf("destroyed blocks = %v, applied = %v", h.capability.destroys, h.capability.applies)
 	}
 	pristine, _ := reconciliation.PristineEvidence().Bytes()
@@ -3770,7 +3770,7 @@ func TestDestroyOverAFailedDestroyCoversOnlyWhatRemains(t *testing.T) {
 	if result.Receipt.State != string(reconciliation.OperationDone) || result.Receipt.Next != "none" {
 		t.Fatalf("receipt = %+v", result.Receipt)
 	}
-	want := []string{"hub-node", "provider-kubevirt", "host-virtualization", "host-cluster", "host-node", "provider-metal"}
+	want := []string{"provider-kubevirt", "host-virtualization", "host-cluster", "host-node", "artifacts", "provider-metal"}
 	if !slices.Equal(h.capability.destroys, want) {
 		t.Fatalf("destroyed blocks = %v", h.capability.destroys)
 	}

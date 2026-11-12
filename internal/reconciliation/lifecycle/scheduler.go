@@ -17,7 +17,7 @@ import (
 // rather than of the plan and is never frozen with it.
 const MaxRunningBlocks = 8
 
-const MaxThrottledBlocks = 4
+const MaxThrottledBlocks = 8
 
 // step is one block this invocation put in flight, and what it proved.
 type step struct {
@@ -194,12 +194,9 @@ func (c *scheduler) admit(ctx context.Context) {
 	}
 }
 
-// next chooses the one block admission may start now. An unproved effect is observed before anything
-// else and admits nothing beside another observation, because no retry, dependent block or removal may
-// start while an effect's outcome is unproved. Then pre-stop inverses alone run until each is done.
-// Otherwise the first block admission takes in frozen order runs, a retry exactly as a first attempt,
-// provided nothing running holds a resource it needs to itself and this invocation has not worked it:
-// a worked block still pending is one whose attempt never ran, and admitting it again meets the same refusal.
+// next preserves recovery and pre-stop admission order; other first attempts
+// advance the longest selected unfinished chain, with frozen order breaking ties.
+// A worked pending block never starts twice: its earlier start was refused.
 func (c *scheduler) next() (reconciliation.Block, int, bool) {
 	kind, admitted := firstAdmission(c.plan, c.states, c.selection, c.observed, c.worked, c.running)
 	switch {
@@ -214,6 +211,12 @@ func (c *scheduler) next() (reconciliation.Block, int, bool) {
 		return reconciliation.Block{}, 0, false
 	case !c.phases.preStopDone(c.states):
 		return c.nextPreStop()
+	}
+	if kind == StepStart && len(c.phases.preStop) == 0 {
+		priority := remainingChains(c.plan, c.states, c.selection)
+		slices.SortStableFunc(admitted, func(first, second int) int {
+			return priority[c.plan.Blocks[second].ID] - priority[c.plan.Blocks[first].ID]
+		})
 	}
 	for _, index := range admitted {
 		block := c.plan.Blocks[index]

@@ -922,7 +922,7 @@ effect an attempt or resolution records is `no-effect`, `partial`,
 A plan is written wave by wave. A block's *wave* is one past the deepest block
 it waits for, and a block that waits for nothing is in the first wave. Blocks
 are frozen in wave order and, within one wave, in identity order, so the
-numbered plan an operator confirms is the order the work is started in. A
+numbered plan gives each step a stable place for presentation and evidence. A
 wave is never a barrier: a block starts once its own dependencies are done. Equal definitions in any input order
 produce an identical plan and digest.
 
@@ -1104,21 +1104,17 @@ runtime's shared launch lock, which never blocks the host's package manager.
 A stage selection is the set of stages an invocation may start; an omitted
 selection admits every stage, and `controller` what its blocks wait for.
 A block is *ready* when it is `pending` and every dependency is `done`, and
-*startable* when it is ready and admitted. Execution starts every startable block, in frozen plan order, up to a
-bound, and re-evaluates as each one settles. A block is admitted only while no
-block already running holds a resource it will not share and fewer running
-blocks than its throttle's capacity name its throttle.
+*startable* when it is ready and admitted. Execution fills the bound from
+startable blocks using [ready-work priority](#ready-work-priority),
+re-evaluating as each settles. A block is admitted only while no running block
+holds a resource it will not share and fewer running blocks than its
+throttle's capacity name its throttle.
 
-The bound is how much one host is asked to do at once, not what the plan
-permits, so it belongs to the executable, never to the plan, desired state or
-a public flag: what may run together is the graph's answer and does not change
-between invocations. A
-continuation of an operation frozen by another build therefore runs under this
-build's bound, which changes no effect, no order and no evidence.
-
-A throttle is a frozen key for a resource that admits several writers, not the
-bound; its capacity of four (`lifecycle.MaxThrottledBlocks`) is the bound's
-kind of executable property.
+The executable sets the host's execution bound and throttle capacity
+(`lifecycle.MaxThrottledBlocks`, eight). They are absent from desired state,
+plans and public flags; each invocation uses this build's limits. Dependencies
+and claims determine what can run together; continuation under another build
+changes no dependency, effect or evidence.
 
 Production uses the engine's bound of eight running blocks. Independent
 services and machines are admitted together; a fast dependency chain advances
@@ -1964,6 +1960,20 @@ The removal reopens one Secret binding: its own if an
 the first binding of the root apply, never the head's. A rebind may name only
 Secrets that binding holds. Its completion releases the bindings of every
 apply of the lineage.
+
+## Ready-work priority
+
+First attempts prefer the ready block heading the longest selected, unfinished
+dependency chain, measured in blocks, with frozen plan order breaking ties.
+This is a scheduling heuristic, not a duration estimate or an optimality
+guarantee. Unselected or completed successors add no priority. A block waiting
+for a claim or throttle never holds back another startable block.
+
+Resolutions, retries and every removal containing a pre-stop phase retain
+their admission order, including after that phase completes ahead of dependency
+order. The frozen plan, dependencies, step numbers and digests stay unchanged
+when admission chooses a later ready step first. Each invocation uses this
+build's priority, including continuation of an operation another build froze.
 
 ## Comparing desired and real state
 

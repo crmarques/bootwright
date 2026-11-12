@@ -28,7 +28,7 @@ func lifecycleFileClasses() map[string]string {
 		"installed_placement.go": "executor", "invocation.go": "executor", "logging.go": "executor", "online_gates.go": "executor", "produced.go": "executor",
 		"rebind.go": "executor", "register_run.go": "executor", "registration.go": "executor",
 		"removal_evidence.go": "executor", "removal_gates.go": "executor", "runtime.go": "executor",
-		"scheduler.go": "executor", "settle.go": "executor",
+		"scheduler.go": "executor", "scheduler_priority.go": "executor", "settle.go": "executor",
 		"execution.go": "orchestrator", "finalization.go": "orchestrator",
 		"diff.go": "reader", "diff_attribution.go": "reader", "diff_compare.go": "reader", "diff_overlay.go": "reader", "diff_observe.go": "reader", "shared_readings.go": "reader", "handoff.go": "reader",
 		"outdated_clients.go": "reader", "projection.go": "reader", "status.go": "reader", "status_live.go": "reader", "status_readiness.go": "reader",
