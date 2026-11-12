@@ -157,16 +157,23 @@ sudo virsh --connect qemu:///system net-list --all --name | grep bootwright-
 systemctl list-units --all --no-legend 'bootwright-*'
 ```
 
-NetworkManager and firewalld must run: Bootwright proves both and installs or
-enables neither. Note the uplink for the B1215 capture:
+NetworkManager must run. The controller Machine declares
+`spec.firewall.management: managed`: the controller apply installs, enables
+and starts firewalld and prepares persistent admission for the declared
+listeners. Do not install firewalld or add listener rules by hand. An existing
+firewall managed by another service needs administrator migration before this
+opt-in; unrelated runtime-only firewalld policy must be reconciled by its owner
+if apply refuses `runtime-drift`.
+See [host firewall policy](../../specs/api/machines.md#host-firewall-policy).
+Note the uplink for the B1215 capture:
 
 ```bash
-systemctl is-active NetworkManager.service firewalld.service
+systemctl is-active NetworkManager.service
 nmcli -t -f NAME connection show | grep '^bootwright-'        # no output
 UPLINK=$(ip -4 route get 192.0.2.1 | sed -n 's/.* dev \([^ ]*\).*/\1/p'); printf 'Uplink: %s\n' "$UPLINK"
 ```
 
-Require `active` twice.
+Require `active`. Firewalld may be inactive before the controller apply.
 
 ## 3. Create the context and refuse a bond mode
 
@@ -212,14 +219,20 @@ run, or the services stop answering.
 
 ```sh
 ./bin/bootwright apply --context "$CONTEXT" --stage controller --yes
+systemctl is-active firewalld.service
+systemctl is-enabled firewalld.service
 ```
 
-Complete [Prepare listener firewall](../README.md#prepare-listener-firewall),
-then require `ready` before starting services:
+Require `active` and `enabled`. The controller stage prepares the daemon and
+the grants for existing listener interfaces; grants on bridges the provider
+creates wait for that provider. Complete
+[Prepare listener firewall](../README.md#prepare-listener-firewall), then
+require `ready` before starting services:
 
 ```sh
 ./bin/bootwright preflight --context "$CONTEXT" --stage controller
 ./bin/bootwright apply --context "$CONTEXT" --stage infrastructure-services,substrates --yes
+./bin/bootwright preflight --context "$CONTEXT" --stage infrastructure-services,substrates
 sudo virsh --connect qemu:///system net-dumpxml "bootwright-$CONTEXT-app-users"
 ip -br address show "$USER_BRIDGE"; sudo firewall-cmd --get-zone-of-interface="$USER_BRIDGE"
 nmcli -t -f NAME,UUID,TYPE,DEVICE connection show --active | grep "^bootwright-$CONTEXT-"
@@ -536,6 +549,15 @@ names three MONs, `ceph-03`'s on the routed arbiter subnet. Require `0 failed`
 from the round trip, the canary write, the power cycle and the canary check,
 and every `sourceAddress` 198.51.100.21. Keep the canaries.
 
+Bootwright derives admission for its declared infrastructure listeners and
+Ceph ingress from the API. The sample HTTP server is an external test
+workload: the current API has no listener declaration for it. Its reused
+setup and teardown scripts therefore still add and remove one runtime-only,
+source-scoped rule for `APP_PORT` on `app-01`. Keep this exception confined to
+the workload; do not duplicate Bootwright's listener grants in those scripts.
+The explicit nftables mutations elsewhere in this case inject temporary
+transport failures for the acceptance drills, rather than declare networking.
+
 **Ceph uses the declared networks.** Every MON on a public subnet, `ceph-03`'s
 on the arbiter subnet, and every OSD's front on the Ceph public subnet and back
 on the replication VLAN:
@@ -826,14 +848,20 @@ sudo nft list tables | grep "bootwright-$CONTEXT-"            # no output
 ls /etc/bootwright/routing/ | grep "bootwright-$CONTEXT-"     # no output
 systemctl list-units --all --no-legend 'bootwright-*'          # no unit of the refused subnet
 sudo ls /var/lib/bootwright-hosted/                            # no directory of this context
+sudo find /etc/firewalld/services -maxdepth 1 -type f -name '*.xml' -exec grep -lF "bootwright-host-firewall context=$CONTEXT " {} +  # no output
+systemctl is-active firewalld.service
+systemctl is-enabled firewalld.service
 ```
 
 Require no domain, disk, libvirt network or `virbr-user` of the context;
 (B1215) no unreachable route and no unit holding one; (B1281) no
 `bootwright-lab-6-nodes-ceph-network-matrix-*` connection and no `br-nm` link;
 (B1282) no routing table or unit and (B1335) no ruleset file; and (B1221) the
-context's hosted directory
-removed. Then:
+context's hosted directory removed. Require no firewalld service file bearing
+this context's ownership mark. Destroy removes the owned listener services
+and their runtime and permanent zone memberships after their consumers; the
+shared firewalld daemon remains `active` and `enabled`. No manual listener
+firewall cleanup record is needed. Then:
 
 ```sh
 EVIDENCE_CONTEXT="$CONTEXT"
@@ -855,11 +883,12 @@ choices `false`, then define `verify_selected_features` and
 [step 7](../lab-network-variants/runbook.md#verify-the-selected-features-on-each-guest)
 and [step 8](../lab-network-variants/runbook.md#8-check-drift-and-reboot):
 under `set +e` a missing function only prints `command not found`. Its
-one-guest context uses only an untagged managed network, and the listener
-firewall rules are still in place.
+one-guest context uses only an untagged managed network and declares its own
+managed controller firewall. Its controller apply prepares its listener grants;
+the matrix context's grants have already been removed.
 
 Then complete [Restore listener firewall](../README.md#restore-listener-firewall),
-which reads its record from `RUN_DIR`, and
+which the completed destroys have already performed, and
 [Remove diagnostic tools](../README.md#remove-diagnostic-tools), and only then
 remove the private directory:
 
