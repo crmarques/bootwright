@@ -87,8 +87,8 @@ guest:
         cluster: 203.0.113.14
 
     cpu: 3
-    memoryMiB: 8192
-    diskGiB: 40
+    memoryMiB: 5632
+    diskGiB: 30
     osdDiskGiB: 15
 
   # ceph-03: a MON only, on the arbiter subnet alone.
@@ -105,7 +105,7 @@ guest:
     user: 198.51.100.70
     guestOnly: 203.0.113.70
     cpu: 2
-    memoryMiB: 2048
+    memoryMiB: 1536
     diskGiB: 15
 
   # client-01: the client container, installed on the user network over a

@@ -9,8 +9,8 @@ runs here on a guest that carries real traffic. A sample server and its client
 reuse the [lab-5-nodes-ceph-networks](../lab-5-nodes-ceph-networks/runbook.md)
 workload on a managed user network, whose guest-only VLAN the host refuses.
 Context `lab-6-nodes-ceph-network-matrix`; 6 guests, 15 host CPUs and
-31.5 GiB available memory including the provider reserve. This expanded
-profile needs a larger host than the earlier networking-only defaults.
+23.5 GiB available memory including the provider reserve. This compact
+profile keeps all default service groups enabled.
 
 The default also deploys NFS with HA ingress, clustered SMB, Prometheus,
 Alertmanager, Grafana, node and Ceph exporters, Loki with Alloy, a two-host
@@ -91,8 +91,8 @@ This path tests whether a clean context reaches the whole desired state in
 one invocation. Complete [host preparation](../README.md#prepare-the-host)
 and the [capacity checks](#2-prepare-the-host) first, with no applied case or
 existing context of this name. Keep the same controller address throughout.
-The default needs 15 available host CPUs, 31.5 GiB of `MemAvailable`, and about
-251 GiB of free disk including installation artifacts. These are admission
+The default needs 15 available host CPUs, 23.5 GiB of `MemAvailable`, and
+190 GiB of free disk plus installation artifacts. These are admission
 figures for a compact rehearsal, not production sizing; raise guest memory
 and root disk sizes for longer retention or larger workloads.
 
@@ -112,12 +112,12 @@ remain enabled for the network workload. NVMe-oF is optional with
 the two gateway hosts' CPU and memory budgets as
 [the NVMe-oF profile](../../specs/ceph-coverage.md#profile-catalog)
 requires. This case uses one shared data-host profile, so a size override
-raises all three hosts. A private values file goes in `VALUES_FILE` below.
-For a constrained host, size that private profile against the current
-`MemAvailable` and free disk, preserve the provider reserve, and keep the
-service switches enabled. This remains a compact deployment experiment;
-admission proves capacity arithmetic, and the live run proves whether the
-colocated daemons remain healthy. Prometheus retention is bounded to one day
+raises all three hosts. The compact defaults need no values override. Put
+other sizing or service choices in a private `VALUES_FILE` below, budget
+them against `MemAvailable` and free disk, and preserve the provider reserve.
+This remains a compact deployment experiment; admission proves capacity
+arithmetic, and the live run proves whether the colocated daemons remain
+healthy. Prometheus retention is bounded to one day
 and 1 GB in this case.
 
 The self-contained profile uses Alloy rather than Promtail: declaring both
@@ -254,15 +254,16 @@ if sudo nft list tables | grep -qx 'table inet bw-e2e-trunk'; then sudo nft dele
 ```
 
 The [capacity gate](../../specs/substrates.md#capacity-admission) counts three
-data hosts (3 vCPU, 8 GiB, 40 GiB root and a 15 GiB OSD disk each), `ceph-03`
-(2 vCPU, 2 GiB, 15 GiB), `app-01` (2 vCPU, 2 GiB, 15 GiB), `client-01`
+data hosts (3 vCPU, 5.5 GiB, 30 GiB root and a 15 GiB OSD disk each), `ceph-03`
+(2 vCPU, 2 GiB, 15 GiB), `app-01` (2 vCPU, 1.5 GiB, 15 GiB), `client-01`
 (1 vCPU, 1.5 GiB, 15 GiB) and the reserve (1 vCPU, 2 GiB, 10 GiB): 15 host
-CPUs, 31.5 GiB of `MemAvailable` and 220 GiB free under `/var/lib/libvirt`,
-plus about 34 GB (31 GiB) for the package tree and the six guests' installer
-media ([disk headroom](../README.md#end-to-end-cases)), so about 251 GiB in
-all. Close large applications first. The host's ports 53, 123, 3128, 8080 and
-8443 on its address and loopback 8000 to 8005 must be free. No other case may
-be applied. Require the two capacity numbers and no output from each check:
+CPUs, 23.5 GiB of `MemAvailable` and 190 GiB free under `/var/lib/libvirt`,
+plus the package tree and the six guests' published and staged installer
+media ([disk headroom](../README.md#end-to-end-cases)). The capacity gate
+reports the total after counting the declared media. Close large applications
+first. The host's ports 53, 123, 3128, 8080 and 8443 on its address and loopback
+8000 to 8005 must be free. No other case may be applied. Require the two
+capacity numbers and no output from each check:
 
 ```sh
 grep MemAvailable /proc/meminfo; df -BG --output=avail /var/lib/libvirt
