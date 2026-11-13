@@ -489,7 +489,7 @@ func monitoringUnits(cluster api.Object) ([]ServiceUnit, error) {
 		unit.ScrapeIngress = map[string]string{}
 		for _, svc := range cluster.Spec().Get("services").Items() {
 			if svc.Get("service_type").Text() == "ingress" {
-				mode := "http" // Admission refuses monitor_ssl; the selected native artifact proves its default.
+				mode := "http"
 				if svc.Get("spec", "keepalive_only").Bool() {
 					mode = "drop"
 				}
@@ -696,7 +696,6 @@ func unitProxied(unit ServiceUnit) bool {
 	return unit.Type == "mgmt-gateway" && slices.ContainsFunc(unitDocuments(Request{Service: &unit}), func(d unitDocument) bool { return d.ServiceType == "oauth2-proxy" })
 }
 
-// Ingress consumes the monitoring unit's owned native configuration, even when a native artifact needs no correction.
 func ingressDependencies(cluster api.Object, unit ServiceUnit) ([]string, error) {
 	if !slices.ContainsFunc(unitDocuments(Request{Service: &unit}), func(d unitDocument) bool { return d.ServiceType == "ingress" }) {
 		return nil, nil

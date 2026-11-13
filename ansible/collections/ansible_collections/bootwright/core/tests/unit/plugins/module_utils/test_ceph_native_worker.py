@@ -24,6 +24,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import (
 
 def source_bundle():
     return {"native_diagnostics": inspect.getsource(native_diagnostics), "native_specializations": inspect.getsource(native_specializations),
+            "ceph_monitoring_template": '"""Fixed fixture."""\n',
             "canonical_json": '"""Fixed fixture."""\n', "tls_trust": '"""Fixed fixture."""\n', "bounded_process": '"""Fixed fixture."""\n',
             "ceph_pull_broker": '"""Fixed fixture."""\n',
             "ceph_tunnel": '"""Fixed fixture."""\n', "ceph_tunnel_staging": '"""Fixed fixture."""\n', "ceph_tunnel_custody": '"""Fixed fixture."""\n',

@@ -61,6 +61,8 @@ options:
       - cache-unproved
       - enrollment-budget
       - dashboard-identity
+      - dashboard-tls-identity
+      - monitoring-template-identity
       - dashboard-drift
       - dashboard-policy
       - dashboard-verify

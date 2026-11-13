@@ -305,7 +305,8 @@ def leaf(value, path):
 def validate(request, hosts):
     """One unit of a known type: 1 to 8 placed documents, each listed in `delegated` with exactly its hosts."""
     unit = request.get("service")
-    require(isinstance(unit, dict) and {"documents", "id", "type"} <= set(unit) <= {"bindings", "config", "documents", "id", "ingressPorts", "scrapeIngress", "type"})
+    require(isinstance(unit, dict) and {"documents", "id", "type"} <= set(unit) <=
+            {"bindings", "config", "documents", "id", "ingressPorts", "scrapeIngress", "type"})
     require(isinstance(unit["type"], str) and unit["type"] in UNIT_TYPES)
     require("config" not in unit or unit["type"] == "monitoring")
     require("scrapeIngress" not in unit or unit["type"] == "monitoring")

@@ -22,9 +22,11 @@ FEATURES = ("--automatically-accept-license", "--disable-ibm-call-home", "setup-
 IBM_OVERRIDE = "IBM_BUILD = True\n"
 OVERRIDE_FORMS = {"assign True": IBM_OVERRIDE}
 BUILDS = {"20.1.0-221.el9cp": False, "20.2.1-405.el9cp": True, "20.2.2-349.el9cp": True, "20.2.2-349.el10cp": True}
-GENERAL = {"ceph.monitoring.scrape-template": "native", "ceph.bootstrap.license-flag": "pass", "ceph.mgr.license-contract": "ibm", "ceph.call-home-model": "opt-out",
+GENERAL = {"ceph.monitoring.scrape-template": "native", "ceph.bootstrap.license-flag": "pass", "ceph.mgr.license-contract": "ibm",
+           "ceph.call-home-model": "opt-out",
            "ceph.mgr.set-user-pre-steps": "skip", "ceph.bootstrap.license-call-refusal": "fail"}
-SPECIALIZED = {"ceph.monitoring.scrape-template": "native", "ceph.bootstrap.license-flag": "omit", "ceph.mgr.license-contract": "absent", "ceph.call-home-model": "opt-in",
+SPECIALIZED = {"ceph.monitoring.scrape-template": "native", "ceph.bootstrap.license-flag": "omit", "ceph.mgr.license-contract": "absent",
+               "ceph.call-home-model": "opt-in",
                "ceph.mgr.set-user-pre-steps": "absent", "ceph.bootstrap.license-call-refusal": "fail"}
 LICENSE_CALL_ID = "ceph-bootstrap-license-call-continues"
 CURRENT_VARIANTS = dict(GENERAL, **{"ceph.bootstrap.license-call-refusal": "continue-seed"})

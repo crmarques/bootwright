@@ -15752,3 +15752,17 @@ completed apply and destroy logs, their digests and the operator checks are
 sealed privately; context purge was not verified. This closes B1365's bounded
 gate. B479's wider observability family and B484's provider matrix remain open;
 no whole-case qualification is claimed.
+
+### X449 — Existing verification gate corrections
+
+B1367 (defect; Verification), discovered while running X448's required gates,
+corrects pre-existing gate failures: the M1 opening and Ceph comment budgets,
+worker source fixtures missing a shipped helper, and protocol documentation
+missing fixed refusal choices, native specialization formatting, and rendering
+tests placed outside the controller suite that provides their Jinja dependency. The
+corrections preserve scope, runtime effects,
+requirements and acceptance gates; the tests exercise the existing contracts.
+
+**Exit evidence:** the delivering commit records the failing baseline probes,
+the targeted reruns and the combined verification results. No capability
+content digest or persisted format changes.
