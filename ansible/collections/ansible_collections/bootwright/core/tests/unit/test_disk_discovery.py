@@ -298,3 +298,80 @@ def test_publication_deletion_is_durable_before_completion(tmp_path, monkeypatch
     instance.finish(False)
     assert not directory.exists()
     assert events.index(("fsync", str(parent))) < events.index(("write", "completed.json"))
+
+
+def test_publication_accepts_the_qualified_initramfs_growth(tmp_path, monkeypatch):
+    instance = controller.Controller.__new__(controller.Controller)
+    instance.root = tmp_path / "custody"
+    instance.root.mkdir()
+    image = tmp_path / "remastered.iso"
+    image.write_bytes(b"synthetic private ISO")
+    destination = tmp_path / "served" / "private" / "os" / "node" / "attempt"
+    destination.mkdir(parents=True)
+    instance.request = {"bootMedia": {"size": 64 << 20}}
+    instance.load = lambda: {"token": "a" * 64}
+    instance.payload = lambda: {}
+    instance.publication = lambda: (destination, "https://example.test/private/discovery.iso")
+    monkeypatch.setattr(controller.media, "build", lambda *args: image)
+    monkeypatch.setattr(controller.media, "native", Mock(return_value=b""))
+    monkeypatch.setattr(controller.records, "directory", lambda *args: None)
+    original_fstat = os.fstat
+    inode = image.stat().st_ino
+
+    def remastered_size(fd):
+        observed = original_fstat(fd)
+        if observed.st_ino == inode:
+            fields = list(observed)
+            fields[6] = instance.request["bootMedia"]["size"] + controller.media.MAX_INITRD // 2
+            return os.stat_result(fields)
+        return observed
+
+    monkeypatch.setattr(controller.os, "fstat", remastered_size)
+    instance.lock = os.open(instance.root, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        instance.publish()
+        assert (destination / "discovery.iso").read_bytes() == b"synthetic private ISO"
+    finally:
+        os.close(instance.lock)
+
+
+def test_publication_still_refuses_images_beyond_the_component_bound(tmp_path):
+    source, target = tmp_path / "image.iso", tmp_path / "published.iso"
+    source.write_bytes(b"oversized synthetic media")
+    with pytest.raises(ValueError, match="publication size"):
+        controller.publish_image(source, target, source.stat().st_size - 1)
+    assert not target.exists() and not list(tmp_path.glob(".stage-*"))
+
+
+@pytest.mark.parametrize("source_size", [True, False, 0, -1, "1024", controller.media.MAX_SOURCE + 1])
+def test_publication_derivation_refuses_invalid_source_sizes(source_size):
+    with pytest.raises(ValueError, match="source size bound"):
+        controller.media.publication_bound(source_size)
+
+
+def test_publication_bound_comes_from_the_qualified_components():
+    source_size = 64 << 20
+    expected = source_size + len(controller.media.SUPPORTED_INITRDS) * (controller.media.MAX_INITRD + boot.MAX_OVERLAY)
+    assert controller.media.publication_bound(source_size) == expected + controller.media.MAX_BOOT_GROWTH
+
+
+def test_exact_publication_limit_is_accepted_but_the_next_byte_is_refused(tmp_path):
+    source, target = tmp_path / "image.iso", tmp_path / "published.iso"
+    source.write_bytes(b"synthetic media at its bound")
+    controller.publish_image(source, target, source.stat().st_size)
+    assert target.read_bytes() == source.read_bytes()
+    target.unlink()
+    with pytest.raises(ValueError, match="publication size"):
+        controller.publish_image(source, target, source.stat().st_size - 1)
+    assert not target.exists()
+
+
+def test_publication_refuses_nonregular_and_symlink_sources(tmp_path):
+    target = tmp_path / "published.iso"
+    with pytest.raises(ValueError, match="publication file"):
+        controller.publish_image(tmp_path, target, 1 << 20)
+    link = tmp_path / "image.iso"
+    link.symlink_to(tmp_path)
+    with pytest.raises(OSError):
+        controller.publish_image(link, target, 1 << 20)
+    assert not target.exists() and not list(tmp_path.glob(".stage-*"))

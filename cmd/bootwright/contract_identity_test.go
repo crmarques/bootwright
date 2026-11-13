@@ -137,7 +137,7 @@ func contractRecipes() map[string]digestRecipe {
 			partVersion(mirrorfill.ImagesEvidenceVersion)),
 		mirrorfill.ReleaseImplementation: digestOf(partDomain("bootwright.infrastructureservices.mirror-fill-v1"), partImplementation(mirrorfill.ReleaseImplementation),
 			partVersion(mirrorfill.ReleaseEvidenceVersion)),
-		installation.DiscoveryImplementation: {separator: ":", parts: []digestPart{partImplementation(installation.DiscoveryImplementation), partRequest("os-disk-discovery-v1"), partPin("private-custom-init-readonly-inventory-pinned-tls-receipt-cleanup-v2")}},
+		installation.DiscoveryImplementation: {separator: ":", parts: []digestPart{partImplementation(installation.DiscoveryImplementation), partRequest("os-disk-discovery-v1"), partPin("private-custom-init-readonly-inventory-pinned-tls-receipt-cleanup-v3")}},
 		installation.EraseImplementation:     {separator: ":", parts: []digestPart{partImplementation(installation.EraseImplementation), partRequest("physical-erase-v5"), partPin("descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v2")}},
 		installation.FirewallImplementation: digestOf(partDomain("bootwright.managedos.host-firewall-v1"), partImplementation(installation.FirewallImplementation),
 			partVersion(installation.FirewallEvidenceVersion), partPin(installation.FirewallServiceRoot),

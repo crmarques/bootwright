@@ -80,6 +80,8 @@ def diagnostic(error, controller):
         "discovery source image identity": "media-identity",
         "discovery source image digest": "media-digest",
         "discovery publication size": "publication-size",
+        "discovery publication file": "publication-file",
+        "discovery source size bound": "source-size",
         "RHEL initrd lacks discovery bootstrap tools": "initrd-tools",
         "unqualified discovery initrd layout": "initrd-layout",
         "discovery report deadline": "inventory-timeout",

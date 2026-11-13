@@ -19,6 +19,9 @@ MEDIA = Path("/var/lib/bootwright/media")
 # Exact integer checks reject Boolean sizes and process statuses.
 # pylint: disable=unidiomatic-typecheck
 MAX_INITRD = 256 << 20
+MAX_SOURCE = 32 << 30
+MAX_BOOT_GROWTH = 64 << 20
+SUPPORTED_INITRDS = frozenset(("/images/pxeboot/initrd.img", "/isolinux/initrd.img"))
 
 
 class CommandFailure(ValueError):
@@ -28,6 +31,12 @@ class CommandFailure(ValueError):
         self.tool = tool if tool in ("xorriso", "lsinitrd", "mkksiso", "openssl", "chcon") else "unknown"
         self.code = code if type(code) is int and -128 <= code <= 255 else -1
         super().__init__("discovery native command refused")
+
+
+def publication_bound(source_size):
+    if type(source_size) is not int or not 0 < source_size <= MAX_SOURCE:
+        raise ValueError("discovery source size bound")
+    return source_size + len(SUPPORTED_INITRDS) * (MAX_INITRD + boot.MAX_OVERLAY) + MAX_BOOT_GROWTH
 
 
 def native(argv, timeout=60, limit=65536):
@@ -51,7 +60,7 @@ def digest_file(path, maximum):
 def initrd_paths(held):
     output = native(["/usr/bin/xorriso", "-indev", held, "-find", "/", "-name", "*initrd*", "-exec", "echo"])
     paths = shlex.split(output.decode("ascii"))
-    if not paths or len(paths) != len(set(paths)) or set(paths) - {"/images/pxeboot/initrd.img", "/isolinux/initrd.img"}:
+    if not paths or len(paths) != len(set(paths)) or set(paths) - SUPPORTED_INITRDS:
         raise ValueError("unqualified discovery initrd layout")
     return sorted(paths)
 

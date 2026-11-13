@@ -1500,6 +1500,10 @@ identities. The controller persists a complete immutable report before
 acknowledging shutdown, then proves power-off and owned-media cleanup.
 Interrupted custody remains attributable and resumable; an incomplete report
 never becomes an installation target. Discovery never creates RAID volumes.
+The private ISO publication limit derives from the pinned source size, both
+qualified initramfs members and overlays, and bounded boot metadata, through
+[`publication_bound`](../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/disk_discovery_media.py).
+Publication proves a regular no-follow source within that limit.
 
 Selection and installation planning validate protected-disk constraints as well
 as the policy fingerprint. Policy and unowned OSD-device selectors may be refined

@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import stat
 import time
 import ssl
 import urllib.request
@@ -260,7 +261,7 @@ class Controller:
                 os.chmod(path, 0o711)
         target = destination / "discovery.iso"
         target.unlink(missing_ok=True)
-        publish_image(image, target, self.request["bootMedia"]["size"] + (64 << 20))
+        publish_image(image, target, media.publication_bound(self.request["bootMedia"]["size"]))
         media.native(["/usr/bin/chcon", "--reference", str(destination.parents[4]), "--recursive", str(destination)])
         os.fsync(self.lock)
 
@@ -474,6 +475,8 @@ def publish_image(source, destination, maximum):
     target_fd = None
     try:
         info = os.fstat(source_fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError("discovery publication file")
         if not 0 < info.st_size <= maximum:
             raise ValueError("discovery publication size")
         target_fd = os.open(stage, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o640)
