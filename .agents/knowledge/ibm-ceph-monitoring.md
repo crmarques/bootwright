@@ -35,7 +35,8 @@ gateway is removed. Bootwright's answer:
   (`test_gateway_document_applied_with_binding_first`);
 - the served leaf's SHA-256 is the postcondition
   (`test_gateway_proof_compares_bound_leaf`);
-- without a binding, the cephadm-signed leaf's digest is only reported
+- without a binding, the native certificate-manager CA authenticates the
+  endpoint before its leaf digest is reported
   (`test_gateway_without_binding_reports_cephadm_issuer`);
 - the bound leaf must name the virtual IP, or every placement host, before a
   fresh apply (`TestGatewayCertificateMustCoverVirtualIP`,
@@ -195,9 +196,12 @@ every placeholder the unit normalizes in a secret's place must pass it
 
 The upstream [certmgr guide](https://github.com/ceph/ceph/blob/v20.2.1/doc/cephadm/certmgr.rst)
 says certmgr does not renew user-provided certificates automatically, so
-renewal is out of the day-0 scope. It documents no root CA retrieval, so
-Bootwright reports only a cephadm-signed leaf's digest. Root CA reporting and
-the certificate-source fields are parked
+renewal is out of the day-0 scope. IBM documents native root CA retrieval as
+`ceph orch certmgr cert get cephadm_root_ca_cert` in its
+[HTTPS procedure](https://www.ibm.com/docs/en/storage-ceph/9.9.1?topic=https-configuring-rgw-multi-site-using-cephadm).
+The unbound gateway proof uses that CA for chain, validity and endpoint identity
+verification, rather than accepting the observed leaf as its own trust anchor.
+Root CA export to operators and the certificate-source fields remain parked
 ([B685](../../specs/milestones/backlog.md#b685)).
 
 ## The retired workaround list

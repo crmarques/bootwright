@@ -121,10 +121,17 @@ class Probes:
     """The served leaf and status line each endpoint answers with, and every probe's target."""
 
     def __init__(self, monkeypatch, answers):
-        self.answers, self.targets = answers, []
+        self.answers, self.targets, self.authorities = answers, [], []
+        monkeypatch.setattr(ceph_native.Worker, "ceph_text", lambda worker, *args: self.authority(*args))
         monkeypatch.setattr(observability, "served", self.served)
 
-    def served(self, address, number, name, *, host=None):
+    @staticmethod
+    def authority(*args):
+        assert args == ("orch", "certmgr", "cert", "get", "cephadm_root_ca_cert")
+        return CERT.encode()
+
+    def served(self, address, number, name, *, host=None, ca=None):
+        self.authorities.append(ca)
         self.targets.append((address, number, name, host))
         return self.answers[address] if isinstance(self.answers, dict) else self.answers
 
@@ -179,6 +186,7 @@ def test_gateway_without_binding_reports_cephadm_issuer(tmp_path, monkeypatch):
     ready, blocking, evidence = observing(monitor, markers)
     endpoint = {"certificateSHA256": hashlib.sha256(first).hexdigest(), "reachable": True}
     assert ready is True and blocking == [] and evidence["endpoint"] == endpoint
+    assert probes.authorities == [CERT, CERT]
     assert probes.targets == [("192.0.2.11", PORT, "node-1", None), ("192.0.2.2", PORT, "node-2", None)]
     value = dict(evidence, request="d" * 64, ready=True, exists=True, hosts=["node-1"])
     assert ceph_core.evidence(copy.deepcopy(value), "d" * 64, request)["endpoint"] == endpoint
@@ -496,3 +504,24 @@ def test_served_names_the_host_header(monkeypatch):
     assert observability.served("2001:db8::60", PORT, "2001:db8::60", host="[2001:db8::60]") == (LEAF, True)
     assert names == ["node-1", "2001:db8::60"]
     assert [channel.sent for channel in channels] == [b"GET / HTTP/1.0\r\nHost: node-1\r\n\r\n", b"GET / HTTP/1.0\r\nHost: [2001:db8::60]\r\n\r\n"]
+
+
+def test_native_ca_read_retries_through_manager_restart(tmp_path, monkeypatch):
+    request = gateway_request(None, bound=False)
+    markers, monitor = applied(tmp_path, request)
+    Probes(monkeypatch, (LEAF, True))
+    attempts = []
+
+    def read(self, *args):
+        del self
+        assert args == ("orch", "certmgr", "cert", "get", "cephadm_root_ca_cert")
+        attempts.append(args)
+        if len(attempts) == 1:
+            raise ceph_native.Refusal("native-command")
+        return CERT.encode()
+
+    monkeypatch.setattr(ceph_native.Worker, "ceph_text", read)
+    with pytest.raises(ceph_native.ManagerRefusal):
+        observing(monitor, markers)
+    assert observing(monitor, markers)[:2] == (True, [])
+    assert len(attempts) == 2

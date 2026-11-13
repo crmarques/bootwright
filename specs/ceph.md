@@ -1641,7 +1641,12 @@ on their frozen images, and an endpoint proof from the bootstrap host: the
 virtual IP at the gateway `port` (TLS name the address, the `Host` header
 bracketing an IPv6 one), else every running gateway daemon at that port with
 TLS name its host. Each endpoint must serve, with a binding, a leaf whose
-SHA-256 equals the bound certificate's, and then an HTTP status line.
+SHA-256 equals the bound certificate's, and then an HTTP status line. Without
+a binding, the worker retrieves `cephadm_root_ca_cert` through native
+`orch certmgr cert get` over the verified administrative channel and checks
+the chain, validity and TLS identity against that CA alone before sending HTTP.
+A generated certificate lacking the endpoint identity remains not ready; supply
+an operator certificate covering every endpoint or use a covered virtual IP.
 Evidence's `endpoint` holds that SHA-256 once every endpoint passed, or without
 a binding the SHA-256 of the cephadm-signed leaf the first endpoint served, and
 the coordinator refuses `evidence` for any other digest of a bound unit. A

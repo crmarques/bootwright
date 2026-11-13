@@ -8997,3 +8997,15 @@ precedes an installation plan; inventory boot automates the console steps,
 while installation authorization still names the resolved disk. Existing root
 selectors retain their behavior. Initial scope excludes RAID creation,
 selection on running machines and OpenShift discovery.
+
+### D261
+
+**owner** (2026-11-13): "proceed with implementation of the plan, using
+projects specs for code/architecture qualilty grounds and contraints".
+The native provisioning audit remediation is authorized, including native
+firewall and prerequisite ownership, endpoint trust, enterprise PKI, supported
+service and topology coverage, and reducing custom protocol ownership.
+X448 starts with B1366; existing safety boundaries remain in force while
+native replacements are qualified. Implementation is authorized out of sequence;
+operator acceptance remains distinct from in-tree delivery. Task-related
+commands are authorized by the owner's follow-up; no push is authorized.

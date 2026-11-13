@@ -330,15 +330,18 @@ def answers(address, number):
         return False
 
 
-def served(address, number, name, *, host=None):
-    """The DER leaf a TLS frontend serves for SNI name and whether an HTTP status line follows; trust is the caller's exact fingerprint.
+def served(address, number, name, *, host=None, ca=None):
+    """The DER leaf a TLS frontend serves for SNI name and whether an HTTP status line follows; trust is the caller's exact fingerprint or its explicit CA.
     The Host header names the SNI name unless host is given."""
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
+    if ca is None:
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
     deadline, presented = time.monotonic() + PROBE_TIMEOUT, None
     try:
+        if ca is not None:
+            context.load_verify_locations(cadata=ca)
         with socket.create_connection((address, number), timeout=PROBE_TIMEOUT) as raw:
             with context.wrap_socket(raw, server_hostname=name) as channel:
                 presented = channel.getpeercert(binary_form=True)
@@ -662,18 +665,24 @@ def gateway_targets(worker, unit, running):
 
 
 def gateway_endpoint(worker, unit, running):
-    """Each endpoint serves the bound leaf, or without a binding a leaf, and an HTTP status line; the digest is the bound leaf's, or
+    """Each endpoint serves the bound leaf, or a valid native-CA leaf for its TLS identity, and an HTTP status line; the digest is the bound leaf's, or
     unbound the first endpoint's cephadm-signed leaf's, and only when every endpoint passed."""
     number = gateway_documents(unit)[1]["spec"]["port"]
     held = worker.bound.get("mgmtGatewayCertificate") if isinstance(worker.bound, dict) else None
     bound = None if held is None else hashlib.sha256(leaf(held)).hexdigest()
+    ca = None
+    if bound is None:
+        with worker.manager_served():
+            raw = worker.ceph_text("orch", "certmgr", "cert", "get", "cephadm_root_ca_cert")
+            require(isinstance(raw, bytes) and 0 < len(raw) <= MAX_CERTIFICATE, "native-output")
+        ca = raw.decode("ascii")
     targets = gateway_targets(worker, unit, running)
     digests = []
     for address, name, host in targets:
         if address is None:
             worker.pending("http@mgmt-gateway")
             continue
-        presented, status = served(address, number, name, host=host)
+        presented, status = served(address, number, name, host=host, ca=ca)
         if not isinstance(presented, bytes) or not 0 < len(presented) <= MAX_LEAF:
             worker.pending("tls@mgmt-gateway")
             continue
