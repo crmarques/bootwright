@@ -215,7 +215,9 @@ release:
 	echo "release: $$out holds $(RELEASE_FILES) SHA256SUMS of $(VERSION), commit $$head"
 
 test:
-	$(GO) test ./...
+	# The timeout bounds a whole package, including the CLI's executable builds
+	# while the full Ansible gate competes for CPU on cold CI runners.
+	$(GO) test -timeout=20m ./...
 	$(GO) -C scripts/tools test ./clientassets/... ./licenses/... ./runtimewheels/... ./tooltable/... ./vulngate/...
 
 vet:

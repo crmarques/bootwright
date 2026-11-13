@@ -43,6 +43,18 @@ inner loop is shaped as it is, and the traps found while measuring it on
 - Narrowing is where the savings are: lint over one role takes 2 s, syntax over
   one playbook directory 3 s, and units over one test file 1.5 s.
 
+## Package alarm includes executable builds
+
+Go's test timeout bounds the whole package, not each test. In
+[check run 43407798572](https://github.com/crmarques/bootwright/actions/runs/43407798572),
+`cmd/bootwright` reached the default ten-minute alarm while
+`TestMakeBuildYieldsAStaticExecutable` had run for 38 seconds. The stack was
+waiting for its child compiler; the package's earlier tests consumed the rest
+of the budget. The [test target](../../Makefile) supplies an explicit bounded
+budget for the main Go suite, including those builds while the Ansible gate
+runs beside it. A package-alarm failure alone does not establish that the
+last named test hung.
+
 ## pytest-xdist is no gate
 
 pytest-xdist is in the reviewed lock, and the plain loop over the whole tree

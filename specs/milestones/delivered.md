@@ -15689,3 +15689,19 @@ unchanged. Earlier operations require their original executable for continuation
 operator acceptance: a fresh native deployment must prove dashboard Prometheus
 and Alertmanager responses through the gateway. This delivery performs no live
 migration or native qualification.
+
+### X446 — CI package test budget
+
+B1364 (defect; Verification tooling), requested after the latest GitHub build
+failed, sets the main Go suite's package budget explicitly in the
+[test target](../../Makefile). The package alarm includes executable builds;
+the [diagnosis](../../.agents/knowledge/inner-loop-check-cost.md#package-alarm-includes-executable-builds)
+records why the final named test was not itself over its budget. No test is
+skipped or retried by the correction.
+
+**Exit evidence:** `./scripts/go test -count=1 -timeout=20m ./cmd/bootwright`
+passed locally in 91.689 seconds, including the static executable test. Only
+the failed package was rerun, as the owner requested; no new broad gate or
+remote workflow run was started. A GitHub run at the corrected commit remains
+unrun until the change is published. This closes B1364's bounded in-tree fix,
+not the existing remote run.
