@@ -1,0 +1,6 @@
+#!/bin/sh
+# Coordinate local integration across every worktree of this clone.
+set -eu
+repository=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$repository"
+exec python3 -I -B "$repository/scripts/tools/integration_guard.py" "$@"

@@ -40,6 +40,12 @@ the targeted-edit rule explicit in every brief.
 
 ## Reviews and unattended runs
 
+- Independent local sessions coordinate through the
+  [integration reservation](git-integration.md#integration-reservation), even
+  when they share no agent mailbox. Within one agent tree, include the task
+  branch, intended destination and readiness in handoffs; one coordinator owns
+  the gate-to-fast-forward window. A ready message is advisory, never a lock or
+  a gate pass. Workers use focus until the coordinator freezes checked inputs.
 - A [safety-class](../SKILL.md#safety-class) diff gets an independent review
   by a model at least as strong as its implementer's. The review flags only
   gaps that affect correctness or the stated requirements; broader findings

@@ -1422,3 +1422,26 @@ owning spec, which names the check.
 Unit or fake-adapter success never qualifies a remote implementation. Every
 supported substrate/component/product/version combination needs its named
 real-system acceptance evidence before production use.
+
+### Parallel local integration
+
+Local sessions coordinate the expensive gate and fast-forward as one exclusive
+window across all worktrees of a clone. A fast preflight reports the active
+owner or whether the destination is an ancestor of the task, before long checks
+start. Busy sessions continue independent work. A stale branch is rebased and
+focused checks run before it requests the window again. Disjoint paths do not
+prove independent behavior. The destination remains unchanged from the
+preflight under the reservation through its final checked fast-forward, or the
+session refuses integration and validates the new combined tree.
+
+The reservation persists while its foreground command survives, including a
+supervisor crash, and interruption stops its command group before release.
+An owner record cannot authorize stealing a live reservation. Coordination
+records remain in the common Git directory, outside tracked content, and a
+reservation certifies no test result. `TestTheIntegrationGuardUnitsPass` drives
+real disposable worktrees through exclusion, staleness, failure, interruption
+and fast-forward. The
+[integration procedure](../.agents/skills/code-implementation/references/git-integration.md#integration-reservation)
+owns commands, external-writer checks and limitations; the
+[tiers](../.agents/skills/code-implementation/references/verification.md)
+own required gates and input-aware reuse. CI retains the full gate.

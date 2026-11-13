@@ -235,6 +235,10 @@ release probe of the commit that added them did.
 
 Reusable check caches live in the directory `scripts/cache-dir` prints: the
 primary checkout's `.cache`, shared by every worktree of the clone.
+Before long local checks, use `./scripts/integration-guard status`; follow the
+[integration reservation](../.agents/skills/code-implementation/references/git-integration.md#integration-reservation)
+to coordinate sessions through the final fast-forward. Focus and quick stay
+outside that reservation so implementation and narrow validation can continue.
 
 In-tree tests are unitary and host-independent, as the
 [completion and verification](../specs/milestones.md#completion-and-verification)

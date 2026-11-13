@@ -5,8 +5,8 @@ description: Deliver any authorized Bootwright tracked change, including specs, 
 
 # Code Implementation
 
-The single owner of verification, commits and integration for tracked changes.
-It never authorizes a push, a release, product scope or a command with effects.
+Owns verification, commits and integration for tracked changes. It authorizes
+no push, release, product scope or command with effects.
 
 ## Before editing
 
@@ -38,8 +38,9 @@ omits.
   together. Add a regression test for a defect. Test contracts and effect
   boundaries, sized like their neighbours; keep no scratch checks. Prefer
   targeted edits to rewrites.
-- Verify by the [tiers](references/verification.md). The commit that integrates
-  into main rests on `make check` plus the safety additions.
+- Verify by the [tiers](references/verification.md); take the
+  [integration reservation](references/git-integration.md#integration-reservation)
+  before the gate.
 - A change to what an effect is moves its content digest (Go and Ansible
   references).
 - Record exact commands and results; failed, skipped, flaky, unavailable and

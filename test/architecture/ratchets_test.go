@@ -257,6 +257,15 @@ func TestTheFocusSelectionUnitsPass(t *testing.T) {
 	}
 }
 
+// Real disposable worktrees exercise cross-session exclusion and refusal
+// before expensive checks, including supervisor interruption and fast-forward.
+func TestTheIntegrationGuardUnitsPass(t *testing.T) {
+	command := exec.Command("python3", "-I", "-B", filepath.Join("..", "..", "scripts", "tools", "integration_guard_test.py"))
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("integration_guard_test.py failed: %v\n%s", err, output)
+	}
+}
+
 // A go:embed directory pattern descends into every subdirectory, one holding
 // another package included, and stops only at a module boundary
 // (https://github.com/golang/go/blob/go1.26.8/src/cmd/go/internal/load/pkg.go#L2247-L2251),

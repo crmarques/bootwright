@@ -18,6 +18,62 @@ reference covers the mechanics.
   does not rebuild the Ansible tool environment.
 - Agent parallelism never authorizes concurrent Bootwright lifecycle execution.
 
+## Integration reservation
+
+All local sessions use `./scripts/integration-guard status` before a long gate.
+It reports the destination tip and whether a rebase is needed. A busy guard
+reports the active session's task branch, PID and start time, giving independent
+sessions a shared local coordination point without a chat service. Exit 75
+means busy, 3 means rebase needed, 1 means blocked, and 0 means ready. Options
+precede the action: `--destination BRANCH` selects a destination other than main.
+Status is advisory; readiness is checked again while acquiring the reservation.
+
+When busy, continue focused checks or review and retry after the owner finishes;
+do not rebase while another session is about to land. When stale, rebase only
+your task branch, inspect incoming changes and resolutions, and run `make
+focus`. Then reserve again; a disjoint path diff never proves a rebase is
+unnecessary. The ancestry check under the reservation decides that. Never
+rebase, terminate, clean or remove another session's work to get a turn.
+
+Use `./scripts/integration-guard run -- /bin/sh /tmp/task-land.sh` for the
+complete foreground gate-and-integration sequence. Prepare and review that
+task-specific script first; the guard executes its argv without shell parsing
+and forwards the command's exit status. It runs no gate and changes no Git ref
+itself. The script must fail on any failed gate and keep the reservation until
+the fast-forward finishes. It performs, in order:
+
+1. `make check` and the safety additions when applicable, on the final rebased
+   inputs. No worker edits the shared task worktree during this window.
+2. Review the complete prospective diff, tree and message, explicitly stage
+   only the task's files, check the staged diff, then create the coherent
+   commit(s) recording the actual results. The committed tree equals the
+   checked tree; no automatic fix or generated change escapes review.
+3. Run `scripts/check-commits "$BOOTWRIGHT_INTEGRATION_BASE" HEAD`; confirm
+   the destination still names that exact base and its worktree is still clean;
+   then fast-forward that checkout to the task's `git rev-parse HEAD`.
+
+The guard supplies `BOOTWRIGHT_INTEGRATION_BASE` (the reserved destination tip),
+`BOOTWRIGHT_INTEGRATION_DESTINATION` (the branch name), and
+`BOOTWRIGHT_INTEGRATION_WORKTREE` (its checkout). Compare the base using
+`git rev-parse "refs/heads/$BOOTWRIGHT_INTEGRATION_DESTINATION"`, and use
+`git -C "$BOOTWRIGHT_INTEGRATION_WORKTREE" merge --ff-only "$task_tip"` for
+the final step, where `task_tip` was read in the task worktree. Do not use
+`HEAD` as that merge's argument: it resolves in the destination checkout.
+
+The reservation is one kernel lock in the clone's common Git directory, shared
+across worktrees and independent of cache overrides. Its owner record stays
+local there; the lock, never a PID's age or leftover record, decides busy.
+Never unlink a live lock. Interrupting the guard stops the command group before
+releasing it, and the foreground command inherits the lock so killing only the
+guard cannot free it while that command survives. Keep the script in the
+foreground; detached commands and separate clones are outside this protocol.
+
+Git does not enforce this advisory lock. A session using older guidance or an
+outside Git writer can still move the destination; the final base and clean-tree
+checks remain mandatory. If it moved, keep the branch, rebase and reserve a new
+gate run; report the discarded run. A blocked destination retains its changes
+and the tested task branch. Pull-request CI keeps its normal full gates.
+
 ## Contract line
 
 `scripts/check-commits` refuses a commit whose diff touches a contract path
@@ -59,15 +115,12 @@ finishing or destroying the operation with the earlier build, or a fresh
 - **Local fast-forward (default).** Under
   [D168](../../../../specs/milestones/backlog.md#d168) a slice that passed
   its checkpoint and is feature complete integrates into local main as soon as
-  it is done, without asking. Rebase the task branch onto the destination tip
-  first, then run `make check` and any safety additions once, on the rebased
-  commit ([D223](../../../../specs/milestones/backlog.md#d223)); a gate run
-  before the rebase proves a commit that is not integrated. Run
-  `scripts/check-commits <destination> HEAD` and advance the destination by
-  fast-forward only. When the destination moves again before the
-  fast-forward, rebase and run the gate again. If the destination has
-  unrelated uncommitted changes or cannot move safely, keep the tested task
-  branch and report the blocker; never bypass it with a merge. This applies
+  it is done, without asking. Follow the [integration reservation](#integration-reservation)
+  from preflight through fast-forward, keeping
+  [D223](../../../../specs/milestones/backlog.md#d223)'s full gate on the
+  combined tree. If the destination has unrelated uncommitted changes or
+  cannot move safely, keep the tested task branch and report the blocker.
+  This applies
   with or without a remote; pushing still waits for the owner.
 - **Pull request.** When the owner or harness asks for one, push the task
   branch, open or update the pull request, and keep CI green. Later fixes are

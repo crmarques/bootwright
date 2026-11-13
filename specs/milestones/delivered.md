@@ -15840,3 +15840,20 @@ version has no built-in flag spelling suggestions, so no suggestion is added.
 **Exit evidence:** the delivering commit records the failing regression probe,
 its passing rerun, the CLI package tests and the full verification gate. This
 change has no operator acceptance gate.
+
+## X455 — Coordinated local integration checks
+
+B1381 (enabling; Verification), authorized by [D262](backlog.md#d262), delivers
+the [parallel integration invariant](../architecture.md#parallel-local-integration)
+and its shared local guard. Independent sessions see an active integration
+owner and detect a required rebase before starting expensive checks; cooperating
+sessions serialize the gate through fast-forward while continuing focused work
+outside that window. The workflow retains full gates, safety additions and
+input-aware tool caches, and omits redundant quick checks immediately before
+the full gate. The guard certifies no test result and cannot lock outside Git
+writers or separate clones.
+
+**Exit evidence:** the delivering commit records the Python guard tests over
+disposable worktrees, their Go architecture entry point, skill validation,
+focused and full gate results, and any integration blocker. No runtime effect,
+persisted product format or operator acceptance changes.

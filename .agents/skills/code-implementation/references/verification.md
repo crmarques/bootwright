@@ -9,8 +9,8 @@ the commands and links here.
 | --- | --- | --- | --- |
 | Probe | the one check that shows the change, below | after every edit | seconds |
 | Focus | `make focus` | before each intermediate commit or handoff | 3 to 40 s |
-| Quick | `make quick` | a Go change many packages import, before the gate | 40 to 110 s |
-| Gate | `make check`, plus `make race` and a review for a [safety change](../SKILL.md#safety-class) | once, on the task branch rebased onto main's tip, before integrating | about 5 min |
+| Quick | `make quick` | while iterating on a Go change many packages import; omit when the gate is next | 40 to 110 s |
+| Gate | `make check`, plus `make race` and a review for a [safety change](../SKILL.md#safety-class) | once, after the [integration reservation](git-integration.md#integration-reservation) confirms the destination is an ancestor; hold it through fast-forward | about 5 min |
 
 Costs were measured on a 16-core host with warm caches: focus took 4.8 s for a
 leaf Go package against 40 s for quick, 15 s for `api/v1alpha1` against 110 s,
@@ -133,6 +133,26 @@ that met it ([D250](../../../../specs/milestones/backlog.md#d250) (15)):
 past a finding.
 
 ## Recording
+
+Before a long run, use the
+[integration reservation](git-integration.md#integration-reservation) to check
+for another session and a required rebase. A busy reservation is an opportunity
+to continue probes, review or unrelated authorized work, not to start a second
+gate. After a rebase, inspect incoming changes and conflict resolutions and run
+focus; do not restart every earlier probe or quick run merely because commit
+IDs changed. The gate still covers the combined tree, including disjoint
+incoming paths whose behavior may interact.
+
+Keep Go's normal test cache and the Ansible input-keyed reuse enabled. Reuse is
+decided by those tools, never by changed-path overlap, an old branch name, a
+commit message or another session's claim. Do not add `-count=1`, clear caches
+or force the Ansible full run simply for a rebase; use them when the check's
+inputs or a reproducibility investigation require them. Focus and quick remain
+inner-loop checks, never substitutes for the gate or safety additions. Freeze
+the checked inputs during the gate-to-fast-forward window; an edit invalidates
+the verdict for those inputs. A commit created after the gate must contain
+exactly the checked tree; recording results in its message needs no second
+gate when that tree and the external inputs are unchanged.
 
 A commit body names the tier commands that ran and their results. An
 intermediate commit on a task branch may rest on `make focus`; the commit that
