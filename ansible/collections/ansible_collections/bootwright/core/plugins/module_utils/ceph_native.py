@@ -1222,6 +1222,22 @@ def dashboard_decode(data):
     return password
 
 
+def dashboard_tls_decode(data):
+    """A bounded native-generated pair; malformed private output never becomes a diagnostic."""
+    require(isinstance(data, bytes) and 0 < len(data) <= 65536, "dashboard-tls-identity")
+    try:
+        pair = json.loads(data)
+    except (ValueError, UnicodeError):
+        raise Refusal("dashboard-tls-identity") from None
+    require(isinstance(pair, dict) and set(pair) == {"cert", "key"}
+            and all(isinstance(value, str) and 0 < len(value) <= 32768 for value in pair.values()), "dashboard-tls-identity")
+    certificate_sha256(pair["cert"].encode("utf-8"))
+    require(any(pair["key"].startswith("-----BEGIN " + label + "-----\n")
+                and pair["key"].rstrip().endswith("-----END " + label + "-----")
+                for label in ("RSA PRIVATE KEY", "PRIVATE KEY")), "dashboard-tls-identity")
+    return pair
+
+
 def certificate_sha256(pem):
     """The SHA-256 of one PEM certificate's DER bytes."""
     require(isinstance(pem, bytes) and 0 < len(pem) <= 65536, "native-output")
@@ -4020,6 +4036,56 @@ class Worker:
             return ""
         return certificate_sha256(self.ceph_text("config-key", "get", DASHBOARD_CERTIFICATE))
 
+    def dashboard_tls_private(self, *args, data=b""):
+        """Private native output never enters NativeFailure, even when a command fails."""
+        proof = self.bootstrap_hold() if self.request["clusterSSHTransport"] == "verifiedTunnel" else contextlib.nullcontext()
+        with proof:
+            code, output = self.run([*self.admin_argv("/usr/bin/ceph"), *args], data=data, timeout=60)
+        require(code == 0, "native-command")
+        require(isinstance(output, bytes) and len(output) <= 65536, "native-output")
+        return output
+
+    def dashboard_tls_keys(self):
+        keys = self.ceph("config-key", "ls")
+        require(isinstance(keys, list) and len(keys) <= 65536 and all(isinstance(key, str) for key in keys), "native-output")
+        selected = {key for key in keys if key.startswith("mgr/dashboard/") and key.rsplit("/", 1)[-1] in ("crt", "key")}
+        require(selected <= {"mgr/dashboard/crt", "mgr/dashboard/key"}, "dashboard-tls-identity")
+        return selected
+
+    def dashboard_gateway_certify(self, scope):
+        """Retain a cephadm-signed client identity before installing it; never adopt or reset native TLS."""
+        store = Custody(self, "dashboard-tls", "", 65536, dashboard_tls_decode)
+        keys = self.dashboard_tls_keys()
+        attempted = self.markers.read(store.name("attempt"))
+        require(not keys or attempted is not None, "dashboard-tls-identity")
+        pair = store.prepare(scope, lambda: self.dashboard_tls_private("orch", "certmgr", "generate-certificates", "dashboard"))
+        binding = store.binding(scope, "ceph-dashboard-tls-v1")
+        applied = self.markers.read(store.name("applied"))
+        require(attempted is None or canonical(attempted) == canonical(binding), "dashboard-tls-identity")
+        require(applied is None or attempted is not None and canonical(applied) == canonical(binding), "dashboard-tls-identity")
+        # Prove the whole observed pair before any setter: a matching half cannot authorize overwriting the other half.
+        for part, name in (("key", "key"), ("cert", "crt")):
+            key = "mgr/dashboard/" + name
+            require(key in keys or applied is None, "dashboard-tls-identity")
+            if key in keys:
+                observed = self.dashboard_tls_private("config-key", "get", key)
+                require(hmac.compare_digest(observed, pair[part].encode("utf-8")), "dashboard-tls-identity")
+        self.markers.write(store.name("attempt"), binding)
+        changed = False
+        for part, name, command in (("key", "key", "set-ssl-certificate-key"), ("cert", "crt", "set-ssl-certificate")):
+            if "mgr/dashboard/" + name in keys:
+                continue
+            require(store.material(scope) == pair, "dashboard-tls-identity")
+            with self.manager_served():
+                self.dashboard_tls_private("dashboard", command, "-i", "-", data=pair[part].encode("utf-8"))
+            changed = True
+        require(self.dashboard_tls_keys() == {"mgr/dashboard/crt", "mgr/dashboard/key"}, "dashboard-tls-identity")
+        for part, name in (("key", "key"), ("cert", "crt")):
+            require(hmac.compare_digest(self.dashboard_tls_private("config-key", "get", "mgr/dashboard/" + name),
+                                        pair[part].encode("utf-8")), "dashboard-tls-identity")
+        self.markers.write(store.name("applied"), binding)
+        return changed
+
     def dashboard_certify(self, deadline):
         """Create Ceph's self-signed certificate only while none is stored, waiting for the module to load."""
         while True:
@@ -4246,7 +4312,9 @@ class Worker:
         require(attempt is None or canonical(attempt) == canonical(binding), "dashboard-identity")
         require(applied is None or canonical(applied) == canonical(binding), "dashboard-identity")
         changed = self.dashboard_settings()
-        if not self.dashboard_certificate():
+        if any(entry["name"] == "mgmt-gateway" for entry in self.request.get("delegated", [])):
+            changed = self.manager_retry(lambda: self.dashboard_gateway_certify(scope)) or changed
+        elif not self.dashboard_certificate():
             self.dashboard_certify(deadline)
             changed = True
         changed = self.dashboard_redeploy(scope, deadline) or changed

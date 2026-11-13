@@ -21,6 +21,8 @@ from ansible_collections.bootwright.core.plugins.module_utils import ceph_core, 
 
 CERTIFICATE_DER = b"synthetic-self-signed-dashboard-certificate"
 CERTIFICATE_PEM = (b"-----BEGIN CERTIFICATE-----\n" + base64.encodebytes(CERTIFICATE_DER) + b"-----END CERTIFICATE-----\n")
+SIGNED_PEM = CERTIFICATE_PEM.replace(base64.encodebytes(CERTIFICATE_DER), base64.encodebytes(b"cephadm-signed-dashboard-certificate"))
+TLS_PAIR = {"cert": SIGNED_PEM.decode(), "key": "-----BEGIN PRIVATE KEY-----\ncHJpdmF0ZS1rZXk=\n-----END PRIVATE KEY-----\n"}
 URL = "https://node-1.example.test:8443/"
 
 
@@ -95,7 +97,7 @@ def dashboard(tmp_path, monkeypatch):
                             publication_delay=0, published=True, last_publication=False, ports={}, repairs=[], repaired={},
                             active="node-2.ghijkl", gid=1, ignored=set(), ignored_calls=[], events=[],
                             managers=2, deferred=0, pending=[], unavailable=0, orchestrating=0, served=True, starting=set(),
-                            standbys=True, promotes=True)
+                            standbys=True, promotes=True, tls={}, tls_generated=0, tls_lose=None, tls_output=None)
     markers = Markers(request)
 
     def manager_rows():
@@ -145,7 +147,27 @@ def dashboard(tmp_path, monkeypatch):
             if state.lose_create:
                 raise ceph_native.Refusal("native-timeout")
             return 0, b""
-        assert data == b"", "only the user creation reads standard input"
+        if args[:2] in (["dashboard", "set-ssl-certificate-key"], ["dashboard", "set-ssl-certificate"]):
+            assert args[2:] == ["-i", "-"]
+            assert "dashboard-tls-attempt.json" in markers.records
+            assert (directory / "dashboard-tls-material.json").read_bytes()
+            part = "key" if args[1].endswith("-key") else "cert"
+            state.tls[part] = data
+            name = "mgr/dashboard/" + ("key" if part == "key" else "crt")
+            if name not in state.keys:
+                state.keys.append(name)
+            if state.tls_lose == part:
+                state.tls_lose = None
+                raise ceph_native.Refusal("native-timeout")
+            return 0, b""
+        assert data == b"", "only credential and TLS setters read standard input"
+        if args == ["orch", "certmgr", "generate-certificates", "dashboard"]:
+            state.tls_generated += 1
+            if state.tls_output is not None:
+                return state.tls_output
+            return 0, json.dumps(TLS_PAIR).encode()
+        if args[:2] == ["config-key", "get"] and args[2] in ("mgr/dashboard/crt", "mgr/dashboard/key") and state.tls:
+            return 0, state.tls["cert" if args[2].endswith("/crt") else "key"]
         if args == ["fsid"]:
             value = {"fsid": request["fsid"]}
         elif args == ["mgr", "module", "ls"]:
@@ -277,7 +299,8 @@ def commands(world):
 
 
 def mutations(world):
-    reads = (["fsid"], ["mgr", "module", "ls"], ["config", "dump"], ["config-key", "ls"], ["config-key", "get", "mgr/dashboard/crt"],
+    reads = (["fsid"], ["mgr", "module", "ls"], ["config", "dump"], ["config-key", "ls"],
+             ["config-key", "get", "mgr/dashboard/crt"], ["config-key", "get", "mgr/dashboard/key"],
              ["orch", "ps", "--daemon_type", "mgr", "--refresh"], ["mgr", "services"], ["dashboard", "ac-user-show"], ["dashboard", "ac-user-show", "admin"],
              ["mgr", "dump"], ["orch", "status"])
     return [args for args in commands(world) if [a for a in args if a not in ("--format", "json")] not in reads]
@@ -1098,3 +1121,96 @@ def test_the_active_manager_is_failed_over_at_most_once_per_apply(dashboard):
     with pytest.raises(ceph_native.Refusal, match="^native-timeout$"):
         dashboard.native.dashboard()
     assert dashboard.state.events.count(("fail", MANAGER_ONE)) == 1
+
+
+def gateway_dashboard(world):
+    world.request["delegated"] = [{"name": "mgmt-gateway", "hosts": ["node-1", "node-2"]}]
+    return world.native.dashboard()
+
+
+def test_gateway_dashboard_uses_cephadm_signed_pair_before_redeploy_and_recaptures_it(dashboard):
+    first = gateway_dashboard(dashboard)
+    assert dashboard.state.tls == {name: value.encode() for name, value in TLS_PAIR.items()}
+    assert dashboard.state.tls_generated == 1
+    calls = commands(dashboard)
+    assert ["dashboard", "create-self-signed-cert"] not in calls
+    assert calls.index(["dashboard", "set-ssl-certificate", "-i", "-"]) < calls.index(["--format", "json", "orch", "redeploy", "mgr"])
+    assert stat.S_IMODE((dashboard.directory / "dashboard-tls-material.json").stat().st_mode) == 0o600
+    assert TLS_PAIR["key"] not in json.dumps(dashboard.markers.records)
+    assert all(TLS_PAIR["key"] not in " ".join(argv) for argv, data in dashboard.state.calls)
+    before = len(mutations(dashboard))
+    assert gateway_dashboard(dashboard) == {"changed": False, "private": first["private"]}
+    assert len(mutations(dashboard)) == before and dashboard.state.tls_generated == 1
+
+
+@pytest.mark.parametrize("part", ["key", "cert"])
+def test_gateway_dashboard_recovers_lost_setter_reply_from_retained_pair(dashboard, part):
+    dashboard.state.tls_lose = part
+    gateway_dashboard(dashboard)
+    assert "dashboard-tls-applied.json" in dashboard.markers.records
+    assert dashboard.state.tls_generated == 1
+    for command in ("set-ssl-certificate-key", "set-ssl-certificate"):
+        assert commands(dashboard).count(["dashboard", command, "-i", "-"]) == 1
+
+
+@pytest.mark.parametrize("key", ["mgr/dashboard/crt", "mgr/dashboard/key", "mgr/dashboard/node-1/crt", "mgr/dashboard/node-1/key"])
+def test_gateway_dashboard_refuses_foreign_or_localized_tls_before_generation(dashboard, key):
+    dashboard.state.keys = [key]
+    with pytest.raises(ceph_native.Refusal, match="dashboard-tls-identity"):
+        gateway_dashboard(dashboard)
+    assert dashboard.state.tls_generated == 0
+    assert not any("set-ssl" in " ".join(args) for args in commands(dashboard))
+
+
+@pytest.mark.parametrize("part", ["key", "cert"])
+@pytest.mark.parametrize("change", ["missing", "drift"])
+def test_gateway_dashboard_never_resets_completed_tls_drift(dashboard, part, change):
+    gateway_dashboard(dashboard)
+    before = len(mutations(dashboard))
+    if change == "missing":
+        dashboard.state.keys.remove("mgr/dashboard/" + ("crt" if part == "cert" else "key"))
+    else:
+        dashboard.state.tls[part] = b"foreign-material"
+    with pytest.raises(ceph_native.Refusal, match="dashboard-tls-identity"):
+        gateway_dashboard(dashboard)
+    assert len(mutations(dashboard)) == before and dashboard.state.tls_generated == 1
+
+
+def test_gateway_dashboard_refuses_missing_retained_pair_even_with_native_certificate(dashboard):
+    gateway_dashboard(dashboard)
+    (dashboard.directory / "dashboard-tls-material.json").unlink()
+    with pytest.raises(ceph_native.Refusal, match="dashboard-tls-identity"):
+        gateway_dashboard(dashboard)
+    assert dashboard.state.tls_generated == 1
+
+
+@pytest.mark.parametrize("output", [(1, b"PRIVATE-NATIVE-KEY"), (0, b"PRIVATE-NATIVE-KEY"), (0, b'{"key":"PRIVATE-NATIVE-KEY"}')])
+def test_gateway_certificate_generation_failure_never_discloses_native_output(dashboard, output):
+    dashboard.state.tls_output = output
+    with pytest.raises(ceph_native.Refusal) as failure:
+        gateway_dashboard(dashboard)
+    assert "PRIVATE-NATIVE-KEY" not in str(failure.value)
+    assert not hasattr(failure.value, "native_cause")
+    assert dashboard.state.tls == {} and dashboard.state.creates == 0
+
+
+@pytest.mark.parametrize("boundary", ["dashboard-tls-id.json", "dashboard-tls-attempt.json", "dashboard-tls-applied.json"])
+def test_gateway_dashboard_recovers_process_loss_at_tls_markers(dashboard, boundary):
+    def interrupt(name, value):
+        if name == boundary:
+            raise SystemExit("interrupted")
+    dashboard.markers.after = interrupt
+    with pytest.raises(SystemExit):
+        gateway_dashboard(dashboard)
+    dashboard.markers.after = lambda name, value: None
+    gateway_dashboard(dashboard)
+    assert dashboard.state.tls_generated == 1
+    assert dashboard.state.tls == {name: value.encode() for name, value in TLS_PAIR.items()}
+
+
+@pytest.mark.parametrize("label", ["RSA PRIVATE KEY", "PRIVATE KEY"])
+def test_gateway_certificate_accepts_native_rsa_and_pkcs8_envelopes(dashboard, monkeypatch, label):
+    key = "-----BEGIN " + label + "-----\ncHJpdmF0ZS1rZXk=\n-----END " + label + "-----\n"
+    monkeypatch.setitem(TLS_PAIR, "key", key)
+    gateway_dashboard(dashboard)
+    assert dashboard.state.tls["key"] == key.encode()

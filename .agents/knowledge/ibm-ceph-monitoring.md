@@ -63,12 +63,23 @@ to `error`. Removing the gateway restores 500 and `redirect`. Bootwright writes
 no dashboard option (`test_gateway_unit_never_writes_a_dashboard_setting`). The
 internal listener is 29443.
 
-Unverified live: whether the self-signed dashboard certificate that the
-bootstrap creates proxies cleanly behind the gateway. IBM's 9.9.1 page
-[reconfigure the dashboard to use cephadm-signed certificates](https://www.ibm.com/docs/en/SSEG27_9.9.1/data-security/reconfigure-the-dashboard-to-use-cephadm-signed-certificates.html)
-recommends cephadm-signed dashboard certificates with the gateway. A live run
-settles it, and the direct dashboard certificate is parked
-([B682](../../specs/milestones/backlog.md#b682)).
+The dashboard also uses its own certificate and key as the TLS client identity
+for Prometheus and Alertmanager (see
+[`get_access_info`](https://github.com/ceph/ceph/blob/v20.2.2/src/pybind/mgr/dashboard/controllers/prometheus.py)).
+The gateway's
+[internal listener](https://github.com/ceph/ceph/blob/v20.2.2/src/pybind/mgr/cephadm/templates/services/mgmt-gateway/internal_server.conf.j2)
+requires a client certificate trusted by the cephadm CA. A self-signed dashboard
+certificate fails that trust: the dashboard may then try to decode an HTML
+error as JSON and report `Error parsing Prometheus Alertmanager response`.
+IBM documents
+[reconfiguring the dashboard to use cephadm-signed certificates](https://www.ibm.com/docs/en/storage-ceph/9.9.0?topic=gateway-reconfigure-dashboard-use-cephadmsigned-certificates).
+The native `orch certmgr generate-certificates dashboard` command returns a
+pair even before gateway deployment; its private output must stay out of
+failure diagnostics. Bootwright's
+[dashboard certificate rule](../../specs/ceph.md#dashboard-and-client-data-test)
+owns custody and replay. Custom operator-provided direct dashboard certificates
+remain parked ([B682](../../specs/milestones/backlog.md#b682)); this generated
+client identity does not add that configuration surface.
 
 ## Peers addressed by host name
 

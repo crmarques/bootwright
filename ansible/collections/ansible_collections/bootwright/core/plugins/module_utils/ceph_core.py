@@ -74,7 +74,7 @@ HOST_REASONS = (
 CLUSTER_REASONS = (
     "fips-policy", "cephx-policy",
     "unsupported-release", "runtime-profile", "device-identity", "cache-unproved", "enrollment-budget",
-    "dashboard-identity", "dashboard-drift", "dashboard-policy",
+    "dashboard-identity", "dashboard-tls-identity", "dashboard-drift", "dashboard-policy",
     "dashboard-verify", "pool-identity", "pool-drift", "client-quiescence-unqualified", "native-option-undeclared", "call-home-unqualified",
     "dashboard-manager",
     "request", "artifact", "ownership", "evidence", "material", "packages", "package-artifact", "package-drift", "package-journal", "package-license",

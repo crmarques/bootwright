@@ -15671,3 +15671,21 @@ later evidence are archived, while unavailable raw evidence remains
 unavailable. Both test contexts completed removal, native absence and archive
 verification before purge; private run data and rendered inputs were removed.
 No milestone or full case is declared complete by this record.
+
+### X445 — Dashboard client certificate for the management gateway
+
+B1363 implements the [dashboard certificate rule](../ceph.md#dashboard-and-client-data-test)
+for fresh deployments with a declared management gateway. It uses cephadm's
+native signer, retains the pair before either setter, transports private
+material through standard input, and proves native readback. Interrupted
+installation reuses custody; foreign material, localized overrides, completed
+material drift and missing custody refuse. Clusters without a gateway retain
+the existing self-signed path. No custom certificate API was added.
+
+The delivering commit records the focused regression, full gate, race gate and
+independent safety review results. The core content digest moves for the new
+retained TLS material; the request shape and existing fixed locations are
+unchanged. Earlier operations require their original executable for continuation or removal. B1363 remains awaiting
+operator acceptance: a fresh native deployment must prove dashboard Prometheus
+and Alertmanager responses through the gateway. This delivery performs no live
+migration or native qualification.

@@ -192,6 +192,7 @@ func automationFormats() map[string]automationFormat {
 		"ceph-dashboard-port-repair-v1":     core,
 		"ceph-dashboard-port-attempt-v1":    core,
 		"ceph-dashboard-user-v1":            core,
+		"ceph-dashboard-tls-v1":             core,
 		"ceph-cluster-device-identities-v1": core,
 		"ceph-osd-device-intent-v1":         core,
 		"ceph-osd-device-clear-v1":          core,

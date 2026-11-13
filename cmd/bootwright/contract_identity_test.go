@@ -155,7 +155,7 @@ func contractRecipes() map[string]digestRecipe {
 			partPin("/var/lib/bootwright-hosted"), partPin("services"), partPin("bootwright")),
 		ceph.Implementation: digestOf(partImplementation(ceph.Implementation), partRequest(ceph.Version), partVersion(ceph.EvidenceVersion), partVersion(ceph.PackageVersion),
 			partVersion(ceph.RetirementVersion), partVersion(ceph.TiebreakerEvidenceVersion), partPin("selected-tunnel-image-v1"),
-			partPin("health-scoped-to-owned-pools-and-filesystems-v1")),
+			partPin("health-scoped-to-owned-pools-and-filesystems-v1"), partPin("gateway-dashboard-cephadm-client-tls-v1")),
 		ceph.ImageImplementation: digestOf(partImplementation(ceph.ImageImplementation), partRequest(ceph.ImageVersion), partPin("selected-artifact-manifest-v1")),
 		ceph.HostImplementation: digestOf(partImplementation(ceph.HostImplementation), partRequest(ceph.HostVersion), partVersion(ceph.HostEvidenceVersion),
 			partPin("selected-packages-runtime-placement-pulls-profile-route-devices-v1")),

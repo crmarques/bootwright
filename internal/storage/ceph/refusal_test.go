@@ -549,3 +549,15 @@ func TestAnOSDClassDriftRefusalNamesTheNativeRepair(t *testing.T) {
 		t.Fatalf("an osd-class-drift refusal reached the operator as %+v", d)
 	}
 }
+
+func TestADashboardTLSRefusalNamesTheRetainedPairAndRefusesReset(t *testing.T) {
+	r := coreRequest()
+	e := withMaterial(executionFor(t, r), r)
+	observation, err := New(api.CephCluster, &refusingRunner{reason: "dashboard-tls-identity"}).Observe(context.Background(), e)
+	d := diagnostics.Of(err)
+	if observation.Effect != reconciliation.EffectUnknown || len(d) != 1 || d[0].Code != "lifecycle.unknown" ||
+		!strings.Contains(d[0].Message, "dashboard TLS pair") ||
+		!strings.Contains(d[0].Remediation, "never adopts or resets") || strings.Contains(d[0].Message, "admin") {
+		t.Fatalf("a dashboard TLS refusal reached the operator as %+v %+v", observation, d)
+	}
+}

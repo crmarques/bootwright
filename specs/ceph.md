@@ -2028,10 +2028,21 @@ custody. Access resolves the selected owned cluster, native tool and trust under
 inspection never mutates or reveals keys.
 Unavailable commands remain unavailable until their slice delivers them.
 
+## Dashboard and client-data test
+
 After readiness, a dashboard phase on the bootstrap host enables the Ceph
 dashboard; bootstrap keeps skipping the dashboard and the monitoring stack, so
 the staged MGR port proof is unchanged. The phase enables the module with TLS,
-creates Ceph's self-signed certificate only when absent, waits for publication
+creates Ceph's self-signed certificate only when absent for a cluster without a
+management gateway. When a management gateway is declared, it instead obtains
+the dashboard certificate and key from cephadm's certificate manager: the
+dashboard also uses that pair as its client identity for monitoring requests
+through the gateway's internal mutual TLS listener. The pair is retained in
+root-only produced custody before either setter, then installed through
+standard input, key first. A retry reuses that pair and proves both native
+values before any missing half is installed; completed material that disappears
+or changes, foreign existing material and localized overrides refuse. Native
+private output never enters diagnostics. The phase waits for publication
 of the dashboard endpoint before an attempt-marked MGR redeploy, and proves
 the dashboard port in every intended running MGR's refreshed deployment
 metadata. If publication changes during failover, one scoped repair plan
