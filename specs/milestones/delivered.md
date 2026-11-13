@@ -15792,3 +15792,34 @@ before and after a permitted read. Exclude access time while preserving exact
 identity, permissions, size and nanosecond modification/change-time checks.
 This fixes a filesystem-dependent assertion without changing the carrier
 implementation or its effect boundary. Verification is recorded in the commit.
+
+## X448 — Ceph gateway trust and cancellation
+
+**Owner:** Storage and Secrets; **items:** B1366 and B1376; **authority:** D261.
+
+Generated management-gateway endpoints authenticate against the native
+certificate-manager CA before HTTP, retaining operator certificate pins and
+manager-restart handling. B1366 remains on [M2](m2.md#b1366) for operator
+acceptance; this delivers neither the full native provisioning audit nor
+wider service qualification. X450 holds the remaining audit work.
+
+### B1376
+
+Image-pull submission defers the deadline through thread/future registration,
+restores signal masks and joins every worker on cancellation. Interrupted
+startup notification cannot strand an initializer. Regression tests reproduce
+both registration windows and interrupted notification before their fixes;
+real process cleanup and the supervisor reserve remain covered. Independent
+safety review approved both changes. Exact full, focused and race gate results
+are recorded in the delivering commits. Existing frozen blocks retain their
+original build for completion or teardown.
+
+## X452 — Monitoring test interpreter ownership
+
+**Owner:** Verification; **item:** B1378.
+
+The managed-host-floor gate exposed controller rendering tests importing Jinja2
+from a native worker test module. Keep pure native recovery/ownership tests on
+the floor and place the rendering checks in the controller test suite, where
+Ansible already supplies the renderer. No managed-host dependency or runtime
+behavior changes. Verification is recorded in the commit.
