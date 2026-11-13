@@ -12216,7 +12216,7 @@ the commit.
 
 ### X315 — Machine file copies
 
-**Item:** [B1189](m1.md#b1189), completed in-tree (2026-11-06); retained on M1
+**Item:** [B1189](delivered.md#x444--owner-acceptance-of-validated-operator-gates), completed in-tree (2026-11-06); retained on M1
 for owner-run acceptance. **Kind:** product, with safety-class privilege and
 filesystem boundaries. **Owners:** Machine and CLI. **Authorization:**
 [D236](backlog.md#d236).
@@ -13588,8 +13588,8 @@ public, so a vendor-only network must allow them, which
 
 ### X395 — Tagged managed Networks on an owned trunk, routed through an owned table
 
-[B1281](m1.md#b1281), [B1282](m1.md#b1282), [B1283](m1.md#b1283),
-[B1295](m1.md#b1295) and [B1335](m1.md#b1335) are implemented in-tree
+[B1281](delivered.md#x444--owner-acceptance-of-validated-operator-gates), [B1282](m1.md#b1282), [B1283](m1.md#b1283),
+[B1295](delivered.md#x444--owner-acceptance-of-validated-operator-gates) and [B1335](delivered.md#x444--owner-acceptance-of-validated-operator-gates) are implemented in-tree
 (2026-11-10; B1335 2026-11-11) and stay on the M1
 page awaiting the owner's lab-6-nodes-ceph-network-matrix run, under the
 owner's approval and the session clauses of [D255](backlog.md#d255). B1281: a managed `Network` with `vlan` is
@@ -14061,7 +14061,7 @@ in progress reports nothing.
 acceptance. The live failure it was opened for, the provider host action
 dropping the [VLAN refusal unit](../substrates.md#provider-host-realization)
 from the evidence it published, was fixed in parallel by
-[B1295](m1.md#b1295) (X395); this slice tightens that proof. The published
+[B1295](delivered.md#x444--owner-acceptance-of-validated-operator-gates) (X395); this slice tightens that proof. The published
 unit is a closed shape of at most 64 route strings, with Boolean flags checked
 by type and every other field a string. An apply's postcondition needs it
 wholly held (answered, named, present, owned, enabled and active, with its
@@ -14602,7 +14602,7 @@ the controller placement and an installed mirror host remain on
 [B1249](#x431--the-image-mirror-on-the-controller-and-on-a-machine-bootwright-installs).
 ### X410 — Ceph health checks scoped to their owners
 
-**Item:** [B1311](m2.md#b1311) (defect, owner Storage), delivered in-tree
+**Item:** [B1311](delivered.md#x444--owner-acceptance-of-validated-operator-gates) (defect, owner Storage), delivered in-tree
 (2026-11-10) and awaiting operator acceptance under
 [D256](backlog.md#d256) (1). A Ceph health check whose detail names pools or
 filesystems now keeps from ready only the blocks that own what it names or
@@ -14923,7 +14923,7 @@ open session clauses and D251 (31)'s rationale and alternative.
 the placement rule of the
 [API](../api/infrastructure-services.md#management-and-placement) and
 [machines](../api/machines.md#addresses-and-access), two reference-edge rows,
-the deferred page. Parked: [B1329](m1.md#b1329). Contracts: none moved,
+the deferred page. Parked: [B1329](delivered.md#x444--owner-acceptance-of-validated-operator-gates). Contracts: none moved,
 because the arm is a `connection` value and requirements are not frozen.
 
 **Commits:** this commit. Gates: listed in its message. No live run or push
@@ -15557,7 +15557,7 @@ operator qualification remains open.
 
 ## X439 — Managed host firewall preparation
 
-[B1353](m1.md#b1353) and [B1329](m1.md#b1329) deliver the
+[B1353](delivered.md#x444--owner-acceptance-of-validated-operator-gates) and [B1329](delivered.md#x444--owner-acceptance-of-validated-operator-gates) deliver the
 [host firewall policy](../managed-os.md#host-firewall-requirements): explicit
 provided-host management, persistent owned service grants, daemon preparation
 before providers, bridge grants after providers and live admission before
@@ -15591,3 +15591,83 @@ versions move; existing frozen operations require their original executable.
 The downstream ceph-cluster input chart needs a separate repository update.
 [B1356](m1.md#b1356) retains the hidden-checkout lint discovery defect; X440
 explicitly supplies every tracked collection YAML file to lint.
+
+### X444 — Owner acceptance of validated operator gates
+
+**Items:** B1020, B1036, B1044, B1113, B1114, B1189, B1213, B1215,
+B1221, B1223, B1266, B1281, B1291, B1292, B1293, B1295,
+B1310, B1311, B1329, B1335, B1353 and B1357, completed.
+**Kind:** safety, with product, defect and enabling items.
+**Owners:** Substrate, Managed OS, Infrastructure services, Storage,
+State reconciliation and CLI.
+
+On 2026-11-12 the owner stated, "i accept all items that were validate by
+this e2e run", and asked to record it. This accepts the validated item gates
+below and the bounded evidence for open items; it does not accept unrun
+conditions or declare a successful whole E2E case. The
+[acceptance ledger](../../docs/acceptance.md#ledger) records clean build
+`3385cc1a5c844eba5b0e9d3da004c563251dafbd` and the private archives'
+operation-log digests. Host, topology, addresses, identities, exact commands,
+outcomes and archive locations are retained locally.
+
+**Baseline registration.** For the completed items above, this record
+retrospectively designates the tested clean build as their bounded operator
+acceptance baseline under the owner's explicit acceptance, following the
+[X290 exception](#x290--owner-acceptance-of-the-vlan-stretch-run-of-2026-11-03).
+The build contains their in-tree deliveries; their implementation, contract
+moves, tests and original safety reviews remain with those deliveries. This
+changes no baseline for an open item and grants no waiver of the
+[complete-case rule](../../docs/acceptance.md#row-format).
+
+| Completed items | Accepted operator gate |
+| --- | --- |
+| B1353, B1329 | Managed controller firewall preparation from an inactive daemon, reload and readiness, owned listener grants and reverse removal with unrelated policy and the shared daemon preserved. In-tree delivery: [X439](#x439--managed-host-firewall-preparation). |
+| B1281 | Declared managed networks, owned trunk and VLAN legs, zones and inverse absence. In-tree delivery: [X395](#x395--tagged-managed-networks-on-an-owned-trunk-routed-through-an-owned-table). |
+| B1357 | Carrier-independent owned VLAN-leg activation through controller reboot, scoped policy and complete inverse cleanup. In-tree delivery: X441, commit `3385cc1a5c844eba5b0e9d3da004c563251dafbd`. |
+| B1215, B1295, B1291, B1292 | Guest-only subnet refusal, published unit/route evidence and complete inverse absence. B1292 requires no operator drill beyond B1291's run. In-tree deliveries: [X332](#x332--reachable-dns-answers-and-refused-vlan-subnets), [X365](#x365--the-provider-hosts-vlan-refusal-evidence) and [X380](#x380--refusing-routes-left-without-their-unit), with X395's protocol correction. |
+| B1335 | Owned routing ruleset loaded under enforcing SELinux and removed with its unit. In-tree delivery: [X395](#x395--tagged-managed-networks-on-an-owned-trunk-routed-through-an-owned-table). |
+| B1293 | Shared package-tree publication completed over the artifact server's normal content-root permissions. In-tree delivery: [X366](#x366--the-package-trees-proved-area). |
+| B1213 | Admission and post-install capacity preflight account for installation artifacts beside guest storage. In-tree delivery: [X326](#x326--capacity-admission-counts-what-the-apply-writes). |
+| B1221, B1223 | Hosted layout and removal, plus a live follower that does not block apply, follower-only interruption and automatic follower completion. In-tree deliveries: [X328](#x328--roots-by-the-nature-of-their-data-and-an-uninstall-that-removes-them) and [X329](#x329--reading-and-following-logs-live-blocks-and-a-contexts-paths). |
+| B1189 | The bounded native file-copy checks, including bytes, modes, ownership, destinations, refusals, structured output, interrupted publication, independent peer completion, confidentiality and fixture cleanup. In-tree delivery: [X315](#x315--machine-file-copies). |
+| B1113, B1114 | An added provider data disk and an unmanaged pool are projected on their correct holders; removal restores a clean observed comparison. In-tree delivery: X300 and X301, commit `e3be16b9ee6fcaed0e8660fdb60b1721de8c2918`. |
+| B1020, B1266 | Administration with the seed MON stopped, and admission and operation of a host with no OSD placement and no replication address. In-tree delivery: [X330](#x330--ceph-administration-past-the-seed-mon-the-default-administrator-node-and-concurrent-proofs), with B1266's admission correction. |
+| B1036, B1044 | Installer-listener and shared-tree fetches retried a short transport interruption and completed; B1044's operator gate permits the tree proof. In-tree deliveries: X284 and X280. |
+| B1310, B1311 | The corrected runbook checks passed; an unmanaged pool's real health warning remained informational while a global MON warning still gated readiness. In-tree deliveries: [X382](#x382--the-network-matrix-runbooks-checks) and [X410](#x410--ceph-health-checks-scoped-to-their-owners). |
+
+**Accepted evidence with items still open.** The owner accepts the exercised
+install-interface, final-network, interruption, drift, rollback/recovery and
+reboot proofs of [B74](m1.md#b74) and [B326](m1.md#b326). Their explicit
+whole-case gates remain open. The initial copy transport-only attempt did not
+complete within its harness bound; a repeat with a terminated transport proved
+the copy boundary. This accepts B1189's exercised contract, not a bounded
+blackhole-detection guarantee. External filesystem-client recovery does not
+prove automatic recovery. The failures and manual recovery are preserved in
+private evidence, not relabeled as successful first attempts.
+
+[B1282](m1.md#b1282)'s routing, NAT egress, isolation and removal proofs are
+accepted, but its literal owned-table counter gate is unproved: the specified
+ruleset counts nothing. Packet counts and temporary fault-table counters do
+not satisfy that condition. [B1283](m1.md#b1283)'s prescribed native checks
+are accepted, with completion pending B1282. This record changes neither gate.
+
+[B1110](m1.md#b1110), [B1111](m1.md#b1111), [B1112](m1.md#b1112) and
+[B600](m2.md#b600) retain their broader comparison, split, UI and pool-value
+gates beyond the exercised native arms. [B1294](m1.md#b1294) retains native
+artifact-server replay: repeated completed apply settles without reaching the
+host. [B1338](m1.md#b1338) retains device-renumber qualification; ordinary
+reboot continuation proves no renumber. [B1312](m1.md#b1312)'s retained
+elapsed times are accepted measurements, not proof of session counts or
+comparative performance. [B559](m1.md#b559), [B1235](m1.md#b1235),
+[B686](m2.md#b686) and [B1037](m2.md#b1037) retain their unexercised host,
+package-absent, broader-profile or transport-loss conditions.
+
+[B1118](m1.md#b1118)'s release-change and observed-tree replay,
+[B626](m2.md#b626)'s remaining full release qualification,
+[B484](m2.md#b484)'s full matrix, physical-host and other unrun profiles
+remain separate. B1358 to B1362 landed after the tested build and gain no
+acceptance here. Earlier scratch evidence was lost; retained recapture and
+later evidence are archived, while unavailable raw evidence remains
+unavailable. Both test contexts completed removal, native absence and archive
+verification before purge; private run data and rendered inputs were removed.
+No milestone or full case is declared complete by this record.

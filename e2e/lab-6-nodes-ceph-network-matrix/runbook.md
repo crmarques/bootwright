@@ -50,7 +50,7 @@ The cluster's `publicCIDRs` are 198.51.100.0/26 and 198.51.100.128/26 and its
 `clusterCIDRs` 203.0.113.0/26. IBM Storage Ceph routes the subnets of one
 network to each other and carries only OSD traffic on the cluster network, so
 the MON-only `ceph-03` holds no replication address
-([B1266](../../specs/milestones/m2.md#b1266)). Three OSD hosts keep the
+([B1266](../../specs/milestones/delivered.md#x444--owner-acceptance-of-validated-operator-gates)). Three OSD hosts keep the
 replicated pools' size 2 one host short of their host count, as the
 [replica-safety rule](../../specs/ceph-resources.md#replicated-protection)
 requires.
@@ -931,22 +931,22 @@ failure leaves the run an observation. Keep host-specific evidence private.
 
 | Item | Evidence this run supplies |
 | --- | --- |
-| [B1281](../../specs/milestones/m1.md#b1281) | The trunk and both legs as owned NetworkManager connections in `trusted`, every install shape over a leg segment, and destroy leaving no connection or link |
+| [B1281](../../specs/milestones/delivered.md#x444--owner-acceptance-of-validated-operator-gates) | The trunk and both legs as owned NetworkManager connections in `trusted`, every install shape over a leg segment, and destroy leaving no connection or link |
 | [B1282](../../specs/milestones/m1.md#b1282) | The owned table routing the two legs, masquerading both, refusing the user network into the legs, and its removal |
-| [B1357](../../specs/milestones/m1.md#b1357) | Empty-trunk controller reboot restores both leg addresses and trusted bindings without repair; final destroy removes the owned carrier policy |
-| [B1335](../../specs/milestones/m1.md#b1335) | The routing table loaded from its owned ruleset file under SELinux enforcing, and the file removed with the unit |
+| [B1357](../../specs/milestones/delivered.md#x444--owner-acceptance-of-validated-operator-gates) | Empty-trunk controller reboot restores both leg addresses and trusted bindings without repair; final destroy removes the owned carrier policy |
+| [B1335](../../specs/milestones/delivered.md#x444--owner-acceptance-of-validated-operator-gates) | The routing table loaded from its owned ruleset file under SELinux enforcing, and the file removed with the unit |
 | [B1283](../../specs/milestones/m1.md#b1283) | This case declaring every network as a `Network`, with no trunk, table or route built by hand |
 | [B74](../../specs/milestones/m1.md#b74) | The bond (`client-01`), VLAN (`ceph-01`, `ceph-03`, `ceph-04`, `app-01`) and VLAN-over-bond (`ceph-02`) install shapes, MAC pins, the 802.3ad refusal, links and routes, reboot and the install Ctrl-C and replay |
 | [B326](../../specs/milestones/m1.md#b326) | Final network on six shapes, reboot, MTU drift and restoration, the convergence Ctrl-C and replay, and lab-network-variants' cut-off drill |
-| [B1266](../../specs/milestones/m2.md#b1266) | The MON-only `ceph-03`, holding no replication address, admitted and running a MON alone on its routed subnet |
-| [B1213](../../specs/milestones/m1.md#b1213) | The machines apply admitted and the storage preflight passing after it, or a refusal naming each byte group |
-| [B1215](../../specs/milestones/m1.md#b1215) | A data host's probe of the guest-only VLAN and the arbiter's of the replication VLAN refused on the host with nothing on the uplink, and a removal leaving no unit or route |
-| [B1020](../../specs/milestones/m2.md#b1020) | `diff --observe`'s Ceph observation answering with the seed MON stopped and quorum held by `ceph-02` and the routed arbiter |
-| [B1044](../../specs/milestones/m2.md#b1044) | The package tree's `.treeinfo` proof made again after the first reset, shown in its retained output |
-| [B1036](../../specs/milestones/m2.md#b1036) | An installation's listener fetch made again after the second reset, shown in its retained output |
-| [B1189](../../specs/milestones/m1.md#b1189) | The file-copy runbook on `app-01` and `client-01` |
-| [B1221](../../specs/milestones/m1.md#b1221) | The context's `/var/lib/bootwright-hosted/` directory during the run (each Machine's `bmc/` state and the served content, no `install/` once the images are built) and its removal at destroy |
-| [B1223](../../specs/milestones/m1.md#b1223) | `logs --follow` beside each apply, which never waits on it |
+| [B1266](../../specs/milestones/delivered.md#x444--owner-acceptance-of-validated-operator-gates) | The MON-only `ceph-03`, holding no replication address, admitted and running a MON alone on its routed subnet |
+| [B1213](../../specs/milestones/delivered.md#x444--owner-acceptance-of-validated-operator-gates) | The machines apply admitted and the storage preflight passing after it, or a refusal naming each byte group |
+| [B1215](../../specs/milestones/delivered.md#x444--owner-acceptance-of-validated-operator-gates) | A data host's probe of the guest-only VLAN and the arbiter's of the replication VLAN refused on the host with nothing on the uplink, and a removal leaving no unit or route |
+| [B1020](../../specs/milestones/delivered.md#x444--owner-acceptance-of-validated-operator-gates) | `diff --observe`'s Ceph observation answering with the seed MON stopped and quorum held by `ceph-02` and the routed arbiter |
+| [B1044](../../specs/milestones/delivered.md#x444--owner-acceptance-of-validated-operator-gates) | The package tree's `.treeinfo` proof made again after the first reset, shown in its retained output |
+| [B1036](../../specs/milestones/delivered.md#x444--owner-acceptance-of-validated-operator-gates) | An installation's listener fetch made again after the second reset, shown in its retained output |
+| [B1189](../../specs/milestones/delivered.md#x444--owner-acceptance-of-validated-operator-gates) | The file-copy runbook on `app-01` and `client-01` |
+| [B1221](../../specs/milestones/delivered.md#x444--owner-acceptance-of-validated-operator-gates) | The context's `/var/lib/bootwright-hosted/` directory during the run (each Machine's `bmc/` state and the served content, no `install/` once the images are built) and its removal at destroy |
+| [B1223](../../specs/milestones/delivered.md#x444--owner-acceptance-of-validated-operator-gates) | `logs --follow` beside each apply, which never waits on it |
 
 Step 9's observation drill rehearses [B1118](../../specs/milestones/m1.md#b1118)
 without its release change or its destroy and apply, so it accepts none.

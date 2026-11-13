@@ -28,4 +28,4 @@ and
 `test_a_host_holding_the_earlier_standard_input_unit_with_no_table_converges_by_reloading`
 in
 [test_libvirt_routing.py](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/module_utils/test_libvirt_routing.py);
-item [B1335](../../specs/milestones/m1.md#b1335).
+item [B1335](../../specs/milestones/delivered.md#x444--owner-acceptance-of-validated-operator-gates).

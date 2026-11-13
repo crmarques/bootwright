@@ -2102,7 +2102,7 @@ passed, one per pool or filesystem, as a `storage.health` warning
 `health: <check> names pool <name>` (or `filesystem <name>`), which
 `diff --observe` shows as a note, so a check on a pool no object declares
 stays visible beside the reading's
-[undeclared pools](milestones/m2.md#b1114).
+[undeclared pools](state-reconciliation.md#readings-and-their-fold).
 
 ## Ingress host firewall
 

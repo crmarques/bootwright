@@ -7119,7 +7119,7 @@ proofs read its tree. [B1029](delivered.md#x289--owner-acceptance-of-the-three-n
 exclude the settings and service members from the bootstrap recovery scope.
 [B1019](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) is [X263](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03): keep standby replay out
 of `fs new`, whose 20.2.1 handler aborts the MON leader on it, and set it after
-creation. [B1020](m2.md#b1020), the seed-only admin configuration, is recorded
+creation. [B1020](delivered.md#x444--owner-acceptance-of-validated-operator-gates), the seed-only admin configuration, is recorded
 for definition, not implemented. [B1021](m2.md#b1021) is
 [X264](m2.md#planned-slices): the runbook permits each ingress's VRRP and
 client port on its guests. [B1023](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03) is [X266](delivered.md#x289--owner-acceptance-of-the-three-node-ceph-run-of-2026-11-03):
@@ -7834,7 +7834,7 @@ lab-5-nodes-ceph-networks run, the owner chose:
    addresses its clients can dial, those on a Network that declares a gateway
    in their family and its installation address; an address on a Network
    without a gateway is published under no name ("Reachable only").
-2. [B1215](m1.md#b1215): the provider host refuses locally the subnet of each
+2. [B1215](delivered.md#x444--owner-acceptance-of-validated-operator-gates): the provider host refuses locally the subnet of each
    tagged Network a managed bridge carries without a host address ("Refuse
    locally").
 
@@ -8549,7 +8549,7 @@ the owner's review:
     while the engine's edge already orders it after the stage everywhere else.
 33. Taken by the session for B1249 (X409): plan refuses a managed service on
     an installed Machine whose install profile leaves its firewall enabled,
-    since no service opens a port yet ([B1329](m1.md#b1329)), a DNSServer or
+    since no service opens a port yet ([B1329](delivered.md#x444--owner-acceptance-of-validated-operator-gates)), a DNSServer or
     NTPServer that Machine's own installation uses, an ArtifactServer there
     other than the managed artifact mirror's or one an
     `artifactServerEndpoint` publishes into, and a mirror host installed
@@ -8748,7 +8748,7 @@ be described as bootwright api objects? if if possible, it must use it", chose
   Networks the host forwards between; `forward: nat` adds NAT to the uplink;
   every undeclared pair stays refused. A tagged Network with no arm (such as
   VLAN 120 on that trunk) stays refused on the host as
-  [B1215](m1.md#b1215)/X332 does today.
+  [B1215](delivered.md#x444--owner-acceptance-of-validated-operator-gates)/X332 does today.
 - Host: the trunk and legs are NetworkManager connections Bootwright owns
   (named `bootwright-<context>-<network>`, marked with NM user data), which NM
   places in firewalld's trusted zone as libvirt does for its bridges;
@@ -8758,7 +8758,7 @@ be described as bootwright api objects? if if possible, it must use it", chose
   untouched; the rule "never reconfigures the host firewall" narrows to "owns
   only its own NM connections and its own nft table".
 
-This authorizes, out of sequence, X395 (M1: [B1281](m1.md#b1281),
+This authorizes, out of sequence, X395 (M1: [B1281](delivered.md#x444--owner-acceptance-of-validated-operator-gates),
 [B1282](m1.md#b1282), [B1283](m1.md#b1283)). No push. Taken by the session,
 pending the owner's review:
 
@@ -8907,7 +8907,7 @@ review with the others:
 run of 2026-11-10 the owner asked to "fix every issue you found in this
 session", then decided the two choices that left open:
 
-1. [B1311](m2.md#b1311), "Scope to named objects": a Ceph health check whose
+1. [B1311](delivered.md#x444--owner-acceptance-of-validated-operator-gates), "Scope to named objects": a Ceph health check whose
    detail names pools or filesystems affects the readiness only of the objects
    that own those pools or filesystems, so a warning about a pool no applied
    object declares, as the run's hand-made pool raised, marks no managed object
