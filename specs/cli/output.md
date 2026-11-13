@@ -844,8 +844,8 @@ including in compact detail. Stage headings may recur across waves so the
 presentation never reorders the frozen plan merely to merge stage groups. A closing `Concurrency`
 field reports the plan's own width, as `4 waves, widest 5 steps`, so a long
 plan that is one chain reads differently from a long plan that is wide, and
-when this build starts fewer blocks at a time than its widest wave holds it
-adds that bound, as `; this build starts 1 block at a time`. A continuation
+when this invocation starts fewer blocks at a time than its widest wave holds it
+adds that bound, as `; this invocation starts 1 block at a time`. A continuation
 that another build than the one that registered the operation proved it freezes
 the same blocks adds a `Build` field after it, naming that build as `version`
 spells it and the steps this build runs, as `1.4.0 (9f2c1ab) registered this

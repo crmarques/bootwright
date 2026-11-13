@@ -15766,3 +15766,19 @@ requirements and acceptance gates; the tests exercise the existing contracts.
 **Exit evidence:** the delivering commit records the failing baseline probes,
 the targeted reruns and the combined verification results. No capability
 content digest or persisted format changes.
+
+### X448 — Invocation lifecycle parallelism
+
+B1366 (safety; Reconciliation and CLI), explicitly requested by the owner,
+delivers the [invocation parallelism flag](../cli/commands.md#command-and-flag-catalog)
+for apply and destroy. The existing default remains; the runtime override does
+not change frozen plans, ownership, dependencies, exclusive claims or group
+throttles. Continuation can choose a different bound. No capability request,
+content digest or persisted format changes.
+
+**Exit evidence:** the delivering commit records CLI parsing, dispatch and
+pre-elevation refusal tests; apply and destroy barriers above the default and
+at one worker; continuation under a changed bound; claim/throttle regressions;
+help goldens; `make check`, `make race` and independent safety review results.
+The tests use controlled adapters; no native performance gain or operator
+acceptance is claimed.

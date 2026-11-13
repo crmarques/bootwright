@@ -11,10 +11,9 @@ import (
 	"github.com/crmarques/bootwright/internal/secrets"
 )
 
-// MaxRunningBlocks bounds how many of an operation's blocks run at once. The
-// graph decides what may run together; this decides how much of that one host
-// is asked to do at the same time, so it is a property of the executable
-// rather than of the plan and is never frozen with it.
+// MaxRunningBlocks defaults the invocation's running-block limit.
+// The graph, exclusive claims and throttles decide what may run together.
+// This host capacity limit can be overridden and is never frozen in the plan.
 const MaxRunningBlocks = 8
 
 const MaxThrottledBlocks = 8

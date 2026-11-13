@@ -7,6 +7,10 @@ import (
 )
 
 func (s Service) Apply(ctx context.Context, request ApplyRequest) (*OperationResult, error) {
+	s, err := s.withParallelism(request.Parallelism)
+	if err != nil {
+		return nil, err
+	}
 	selection, err := reconciliation.ParseSelection(request.Stages, request.Until)
 	if err != nil {
 		return nil, err
@@ -17,6 +21,10 @@ func (s Service) Apply(ctx context.Context, request ApplyRequest) (*OperationRes
 // Destroy removes what an apply recorded as owned. It accepts no stage
 // selection: a removal covers exactly the effects that exist.
 func (s Service) Destroy(ctx context.Context, request DestroyRequest) (*OperationResult, error) {
+	s, err := s.withParallelism(request.Parallelism)
+	if err != nil {
+		return nil, err
+	}
 	return s.mutate(ctx, reconciliation.Destroy, request.ContextName, reconciliation.Selection{}, request.Authorizations, request.Unregistered, request.SkipConfirmation, request.Unattended, request.SSH.Borrowed())
 }
 
@@ -143,4 +151,15 @@ func (s Service) admitApplyView(ctx context.Context, view View, decided operatio
 		return s.options.ApplyAdmission(ctx, view.Identity().Name, state.Effective(), owned, starting)
 	}
 	return nil
+}
+
+// withParallelism changes only this invocation's service copy.
+func (s Service) withParallelism(value int) (Service, error) {
+	if value < 0 {
+		return s, failure("lifecycle.state", "parallelism must not be negative", "use zero for the service default or a positive running-step limit")
+	}
+	if value > 0 {
+		s.options.Concurrency = value
+	}
+	return s, nil
 }

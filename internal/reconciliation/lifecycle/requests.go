@@ -79,6 +79,8 @@ type RealSide struct {
 }
 
 type ApplyRequest struct {
+	// Parallelism overrides the running-block bound for this invocation; zero uses the service default.
+	Parallelism      int
 	ContextName      string
 	Stages           []string
 	Until            string
@@ -89,6 +91,8 @@ type ApplyRequest struct {
 }
 
 type DestroyRequest struct {
+	// Parallelism overrides the running-block bound for this invocation; zero uses the service default.
+	Parallelism      int
 	ContextName      string
 	Authorizations   []string
 	Unregistered     []string

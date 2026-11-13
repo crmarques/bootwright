@@ -204,6 +204,10 @@ func validateCommandFlags(command *cobra.Command, path string) string {
 			return "context delete requires --purge=true"
 		}
 	case "apply", "destroy":
+		parallelism, err := strconv.Atoi(stringValue(flags, "parallelism"))
+		if err != nil || parallelism < 1 {
+			return "--parallelism must be a positive integer"
+		}
 		seen := map[string]bool{}
 		for _, occurrence := range arrayValue(flags, "authorize") {
 			for _, token := range strings.Split(occurrence, ",") {

@@ -273,7 +273,7 @@ func concurrencySummary(result lifecycle.PlanResult) string {
 	}
 	summary := fmt.Sprintf("%d %s, widest %d %s", result.Waves, plural(result.Waves, "wave", "waves"), result.Widest, plural(result.Widest, "step", "steps"))
 	if result.Bound > 0 && result.Bound < result.Widest {
-		summary += fmt.Sprintf("; this build starts %d %s at a time", result.Bound, plural(result.Bound, "block", "blocks"))
+		summary += fmt.Sprintf("; this invocation starts %d %s at a time", result.Bound, plural(result.Bound, "block", "blocks"))
 	}
 	return summary
 }

@@ -370,6 +370,7 @@ func dispatchFlags() *pflag.FlagSet {
 		"username": "", "input-dir": "inputs", "output-dir": "artifacts",
 		"stage": "infrastructure-services,substrates", "until": "compact.gitops",
 		"operation": "", "block": "", "attempt": "", "run": "", "install": "",
+		"parallelism": "16",
 	} {
 		flags.String(name, value, "")
 	}

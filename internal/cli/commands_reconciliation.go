@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"strconv"
 
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
@@ -18,8 +19,8 @@ func lifecycleInspectionCommands() []commandSpec {
 
 func lifecycleMutationCommands() []commandSpec {
 	return []commandSpec{
-		available(commandSpec{path: "apply", short: "Apply the complete selected lifecycle unit", flags: []flagSpec{authorizationFlag(), stageFlag(), untilFlag(), confirmationFlag()}, long: "Realize the complete selected Environment, or continue the exact operation an interruption left behind. The plan is always complete; --stage only gates which blocks this invocation starts, and the operation pauses at that boundary. --until <cluster>.<package> starts only that add-on instance and the blocks it requires, then pauses; a later apply continues the rest. Review the plan before confirming; --yes skips ordinary confirmation."}),
-		available(commandSpec{path: "destroy", short: "Destroy the complete selected lifecycle unit", flags: []flagSpec{authorizationFlag(), unregisteredFlag(), confirmationFlag()}, long: "Remove what this context's apply owns, whether that apply completed or not, proving each removal before it registers; a failed destroy is replaced by a fresh removal. Follow the plan's Stop first and Stop after online cleanup lists (bootwright machine stop): online cleanup, such as storage cleanup, a subscription unregistration or removing the VirtualMachines a host cluster of this context runs, needs its Machines running, and destroy pauses for their stop after it. A plan that deletes disks needs --authorize data-loss; with --yes or without a terminal it must be --authorize data-loss=<digest>, the digest bootwright plan prints for those steps. A rotated management controller or registry login credential is presented at its current version only with --authorize rebind=<secret>, which records a new binding version. A Machine whose subscription registration cannot be read and that you unregistered with the subscription service's own tools is named with --unregistered. Review the plan before confirming; --yes skips ordinary confirmation."}),
+		available(commandSpec{path: "apply", short: "Apply the complete selected lifecycle unit", flags: []flagSpec{authorizationFlag(), stageFlag(), untilFlag(), parallelismFlag(), confirmationFlag()}, long: "Realize the complete selected Environment, or continue the exact operation an interruption left behind. The plan is always complete; --stage only gates which blocks this invocation starts, and the operation pauses at that boundary. --until <cluster>.<package> starts only that add-on instance and the blocks it requires, then pauses; a later apply continues the rest. --parallelism limits running steps (default 8); dependencies, exclusive resources and group throttles still apply. Review the plan before confirming; --yes skips ordinary confirmation."}),
+		available(commandSpec{path: "destroy", short: "Destroy the complete selected lifecycle unit", flags: []flagSpec{authorizationFlag(), unregisteredFlag(), parallelismFlag(), confirmationFlag()}, long: "Remove what this context's apply owns, whether that apply completed or not, proving each removal before it registers; a failed destroy is replaced by a fresh removal. Follow the plan's Stop first and Stop after online cleanup lists (bootwright machine stop): online cleanup, such as storage cleanup, a subscription unregistration or removing the VirtualMachines a host cluster of this context runs, needs its Machines running, and destroy pauses for their stop after it. A plan that deletes disks needs --authorize data-loss; with --yes or without a terminal it must be --authorize data-loss=<digest>, the digest bootwright plan prints for those steps. A rotated management controller or registry login credential is presented at its current version only with --authorize rebind=<secret>, which records a new binding version. A Machine whose subscription registration cannot be read and that you unregistered with the subscription service's own tools is named with --unregistered. --parallelism limits running steps (default 8); dependencies, exclusive resources and group throttles still apply. Review the plan before confirming; --yes skips ordinary confirmation."}),
 	}
 }
 
@@ -57,6 +58,7 @@ func (s Services) invokeLifecycle(ctx context.Context, path string, values *requ
 	case "apply":
 		result.lifecycleOperation, err = invokeResult(ctx, values, lifecycle.ApplyRequest{
 			ContextName:      values.text("context"),
+			Parallelism:      values.parallelism(),
 			Stages:           values.names("stage"),
 			Until:            values.text("until"),
 			Authorizations:   values.authorizations(),
@@ -67,6 +69,7 @@ func (s Services) invokeLifecycle(ctx context.Context, path string, values *requ
 	case "destroy":
 		result.lifecycleOperation, err = invokeResult(ctx, values, lifecycle.DestroyRequest{
 			ContextName:      values.text("context"),
+			Parallelism:      values.parallelism(),
 			Authorizations:   values.authorizations(),
 			Unregistered:     values.unregistered(),
 			SkipConfirmation: values.boolean("yes"),
@@ -77,4 +80,14 @@ func (s Services) invokeLifecycle(ctx context.Context, path string, values *requ
 		return commandResult{}, errors.New("command has no application dispatch")
 	}
 	return result, err
+}
+
+func parallelismFlag() flagSpec {
+	return flagSpec{name: "parallelism", help: "Set the maximum number of running steps (positive integer)", kind: "string", defaultValue: strconv.Itoa(lifecycle.MaxRunningBlocks)}
+}
+
+func (v *requestValues) parallelism() int {
+	value, err := strconv.Atoi(v.text("parallelism"))
+	v.recordFirstError(err)
+	return value
 }

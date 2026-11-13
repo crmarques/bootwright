@@ -99,10 +99,13 @@ unproved one, which is the one state nothing can retry, destroy or delete past.
 
 `MaxRunningBlocks = 8`, overridable through `lifecycle.Options.Concurrency`
 (zero takes the default) so tests pin 1. It is deliberately **not** frozen in
-the plan, not in desired state and not a flag: the graph decides what may run
-together.
-A continuation of an operation frozen by another build runs under this build's
-bound and ready-work priority, which change no dependency, effect or evidence.
+the plan or desired state; the graph decides what may run together.
+`apply --parallelism` and `destroy --parallelism` now supply an invocation-only
+override through their request; omission keeps eight. Group throttles and
+exclusive claims remain.
+A continuation of an operation frozen by another build runs under the
+invocation's bound and this build's ready-work priority, which change no
+dependency, effect or evidence.
 
 Tests that need serial execution set `Concurrency: 1`; a one-block bound still
 chooses among ready first attempts using the same priority.

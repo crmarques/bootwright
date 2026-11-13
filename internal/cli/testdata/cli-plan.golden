@@ -22,7 +22,7 @@
 
     Stages       infrastructure-services, substrates
     Starts       2 of 5 blocks, 3 deferred
-    Concurrency  4 waves, widest 2 steps; this build starts 1 block at a time
+    Concurrency  4 waves, widest 2 steps; this invocation starts 1 block at a time
     Requires     --authorize data-loss (step 3)
 operation: none
 verb: plan

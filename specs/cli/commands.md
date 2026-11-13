@@ -134,8 +134,8 @@ The three `media` commands follow the host-wide
 | `bootwright render acquisitions` | `--input-dir <file or directory>` | every artifact the selected desired state acquires, its origin, class, digest and Machines ([acquisition list](../cli.md#acquisition-list)) | none |
 | `bootwright render installer` | `--clusters <list>` default all OpenShiftClusters; `--sensitive` false | installer artifact manifest | local placeholder files and optional sensitive files |
 | `bootwright render storage` | `--clusters <list>` default all CephClusters | storage artifact manifest | local native files or scripts only; never execution |
-| `bootwright apply` | repeatable `--authorize <token>[=<digest>][,<token>...]`; `--stage <list>` default all stages; `--until <cluster>.<package>`; `--yes` false | completed full apply or additive apply of instances, a pause at the selected stage boundary or after the named add-on instance, exact continued state, or a settled result when the declared state is realized | complete planned mutation, or none when it settles, beyond completing an operation's interrupted finalization |
-| `bootwright destroy` | repeatable `--authorize <token>[=<digest>][,<token>...]`; repeatable `--unregistered <machine>[,<machine>...]`; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles, beyond the same interrupted finalization or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back |
+| `bootwright apply` | repeatable `--authorize <token>[=<digest>][,<token>...]`; `--stage <list>` default all stages; `--until <cluster>.<package>`; `--parallelism <n>` default 8; `--yes` false | completed full apply or additive apply of instances, a pause at the selected stage boundary or after the named add-on instance, exact continued state, or a settled result when the declared state is realized | complete planned mutation, or none when it settles, beyond completing an operation's interrupted finalization |
+| `bootwright destroy` | repeatable `--authorize <token>[=<digest>][,<token>...]`; repeatable `--unregistered <machine>[,<machine>...]`; `--parallelism <n>` default 8; `--yes` false | completed full destroy, exact continued state, or a settled result when the context owns nothing | complete planned removal, or none when it settles, beyond the same interrupted finalization or releasing what an interrupted registration left, and the [housekeeping](../state-reconciliation.md#context-mutation-evidence) of the operation claims that hold nothing; over an apply that did not complete, it first proves the outcome of every effect it takes back |
 
 Not yet met: `render installer` and `render storage` run no use case
 and answer `cli.not-implemented`; their contracts are intent, tracked as
@@ -413,6 +413,16 @@ instance as `<cluster>.<package>`, two lowercase DNS labels, the `object` that
 error. It composes with `--stage`: a block starts only when both admit it.
 What it gates, and its refusals, are owned by
 [state reconciliation](../state-reconciliation.md#stopping-after-an-add-on-instance).
+
+`--parallelism` is accepted only on `apply` and `destroy`. It takes a positive
+integer and defaults to eight; zero, negative, empty, non-integer and overflowing
+values are usage errors before elevation or service dispatch. The last supplied
+value wins, but an empty occurrence is always refused. It bounds running steps
+for this invocation, including continuation and removal checks, without changing
+the frozen plan. Dependencies, exclusive claims and the executable's group
+throttle still apply, so a larger value need not increase concurrency. Use
+`--parallelism 1` to run steps serially, or `--parallelism 16` to admit up to
+sixteen independent steps. Higher values can increase controller and target load.
 
 `--authorize` accepts only `data-loss`, `data-loss=<digest>` with the 16
 lowercase hexadecimal digits a plan prints for the steps it authorizes, and

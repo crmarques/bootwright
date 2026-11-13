@@ -10,8 +10,9 @@
       registry login credential is presented at its current version only with --authorize
       rebind=<secret>, which records a new binding version. A Machine whose subscription
       registration cannot be read and that you unregistered with the subscription service's own
-      tools is named with --unregistered. Review the plan before confirming; --yes skips
-      ordinary confirmation.
+      tools is named with --unregistered. --parallelism limits running steps (default 8);
+      dependencies, exclusive resources and group throttles still apply. Review the plan before
+      confirming; --yes skips ordinary confirmation.
 
   Usage
     bootwright destroy [flags]
@@ -21,6 +22,7 @@
                       the plan shows, required with --yes or without a terminal), or present a
                       rotated access credential at its current version (rebind=<secret>)
                       (values: data-loss)
+      --parallelism   Set the maximum number of running steps (positive integer) · default 8
       --unregistered  Name a Machine whose subscription registration you removed with the
                       subscription service's own tools
       --yes           Confirm the command's ordinary confirmation

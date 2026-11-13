@@ -1110,13 +1110,15 @@ re-evaluating as each settles. A block is admitted only while no running block
 holds a resource it will not share and fewer running blocks than its
 throttle's capacity name its throttle.
 
-The executable sets the host's execution bound and throttle capacity
-(`lifecycle.MaxThrottledBlocks`, eight). They are absent from desired state,
-plans and public flags; each invocation uses this build's limits. Dependencies
-and claims determine what can run together; continuation under another build
-changes no dependency, effect or evidence.
+The executable defaults to eight running blocks (`lifecycle.MaxRunningBlocks`)
+and sets the throttle capacity (`lifecycle.MaxThrottledBlocks`, eight).
+`apply` and `destroy` accept [an invocation-only running-block override](cli/commands.md#command-and-flag-catalog).
+Neither limit enters desired state or frozen plans. Each invocation, including
+continuation, uses its supplied bound or this build's default. Dependencies,
+exclusive claims and group throttles still constrain admission; increasing the
+running-block bound changes no dependency, effect or evidence.
 
-Production uses the engine's bound of eight running blocks. Independent
+Production uses the invocation's running-block bound. Independent
 services and machines are admitted together; a fast dependency chain advances
 while unrelated work remains running. A hosted package tree is its own durable
 block: installations require its completion and hold no exclusive tree claim

@@ -874,17 +874,17 @@ func TestPlanReportsAChainAsOneStepAtATime(t *testing.T) {
 	}
 }
 
-// The plan's own width and the build's bound are two facts: a plan wider than
-// the blocks this build starts at a time says how many it starts, so a wide
+// The plan's own width and the invocation's bound are two facts: a plan wider than
+// the blocks this invocation starts at a time says how many it starts, so a wide
 // plan never reads as running wider than it does, and one the bound covers
 // adds nothing.
-func TestPlanReportsItsWidthAndTheBuildsBound(t *testing.T) {
+func TestPlanReportsItsWidthAndTheInvocationsBound(t *testing.T) {
 	for _, test := range []struct {
 		waves, widest, bound int
 		want                 string
 	}{
-		{4, 5, 1, "4 waves, widest 5 steps; this build starts 1 block at a time"},
-		{4, 5, 2, "4 waves, widest 5 steps; this build starts 2 blocks at a time"},
+		{4, 5, 1, "4 waves, widest 5 steps; this invocation starts 1 block at a time"},
+		{4, 5, 2, "4 waves, widest 5 steps; this invocation starts 2 blocks at a time"},
 		{4, 5, 5, "4 waves, widest 5 steps"},
 		{4, 5, 8, "4 waves, widest 5 steps"},
 		{1, 1, 1, "1 wave, widest 1 step"},
