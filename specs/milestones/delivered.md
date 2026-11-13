@@ -15685,10 +15685,19 @@ the existing self-signed path. No custom certificate API was added.
 The delivering commit records the focused regression, full gate, race gate and
 independent safety review results. The core content digest moves for the new
 retained TLS material; the request shape and existing fixed locations are
-unchanged. Earlier operations require their original executable for continuation or removal. B1363 remains awaiting
-operator acceptance: a fresh native deployment must prove dashboard Prometheus
-and Alertmanager responses through the gateway. This delivery performs no live
-migration or native qualification.
+unchanged. Earlier operations require their original executable for continuation
+or removal. Existing running clusters are not migrated by this fix; custom
+direct certificate configuration remains parked under B682.
+
+**Operator acceptance, 2026-11-13:** The owner accepted B1363's fresh deployment
+gate on clean build `878a10c15cdb700b77a369a2a4424f8040ec65be`, which completed
+one full apply and proved successful dashboard Prometheus and Alertmanager
+responses through the gateway using its retained native client identity.
+The [ledger](../../docs/acceptance.md#ledger) records the explicit exception
+for retrospective registration of baseline
+`b7de953cc5457f0c2f1c93f8e6739cfdac318aa8` and the accepted disk-warning test
+limitation. Native logs and operation digests are sealed privately. This closes
+B1363's bounded gate; it claims no live migration or broader qualification.
 
 ### X446 — CI package test budget
 
@@ -15729,6 +15738,17 @@ review found no blockers. The docs gate found a pre-existing M1 opening byte
 budget failure; it is not a pass. Full `make check` and `make race` were not
 rerun under the owner's focused-verification direction. The owner-run scoped
 repair subsequently verified the rendered correction and every active target
-healthy; its evidence stays private. Fresh deployment verification and accepted
-ledger evidence remain operator gates; B1365 awaits those gates, and this
-delivery closes no wider observability acceptance.
+healthy; its evidence stays private.
+
+**Operator acceptance, 2026-11-13:** The owner accepted B1365's running-cluster
+repair and fresh deployment gates. Clean build and acceptance baseline
+`878a10c15cdb700b77a369a2a4424f8040ec65be` completed one full apply, loaded the
+qualified corrections and proved every active scrape target healthy without an
+operator repair of that fresh deployment. The
+[ledger](../../docs/acceptance.md#ledger) records the explicit retrospective
+baseline exception. Disk forecast warnings were accepted as a test limitation;
+the strict verifier's failure remains preserved, not reported as a pass. The
+completed apply and destroy logs, their digests and the operator checks are
+sealed privately; context purge was not verified. This closes B1365's bounded
+gate. B479's wider observability family and B484's provider matrix remain open;
+no whole-case qualification is claimed.
