@@ -121,14 +121,14 @@ guest:
 # ansiblePackageVersion, image, callHome and the auxiliary images below; the
 # lab-3-nodes-ceph runbook's release table lists the known sets.
 ceph:
-  release: 9.9.2.0
-  packageVersion: 20.2.2-349.el9cp
+  release: 9.9.1.2
+  packageVersion: 20.2.1-405.el9cp
   ansiblePackageVersion: 5.0.3-1.el9cp
   callHome: enabled
 
   image:
-    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel10
-    version: v9.9.2-26947
+    base: cp.icr.io/cp/ibm-ceph/ceph-9-rhel9
+    version: v9.9.1-27200
 
   # The guests' package repository for the release's RPMs.
   repository:
@@ -162,19 +162,19 @@ ceph:
   images:
     haproxy:
       base: cp.icr.io/cp/ibm-ceph/haproxy-rhel10
-      version: sha256:90a29584b593eac133a844ec4f94c7f7d83d127936c91cab0b088e765ed5dad9
+      version: sha256:9d619921af90daf54a44e99feea816f788ad6cec83e4734e195dbffd26fe0746
 
     keepalived:
       base: cp.icr.io/cp/ibm-ceph/keepalived-rhel10
-      version: sha256:ed18865b7c22051db1166e3df3de38effe225244b0bab32dcee429bb7b43f5db
+      version: sha256:8965994f3100cdee9ef19ef4da18b2c0cf51fc0d0e575cab29d695c57410b5a1
 
     samba:
       base: cp.icr.io/cp/ibm-ceph/samba-server-rhel10
-      version: sha256:e91653798ca356348b4b60deac6a8683da885fed583753948cb5a7028527c407
+      version: sha256:89faa86895b619b7a63b62861dcc17190878ba94f4c350a4f12aa056903f6da5
 
     samba_metrics:
       base: cp.icr.io/cp/ibm-ceph/samba-metrics-rhel10
-      version: sha256:57f54c5a21fe98dba6fd4904a4fe1fe6a78e1d6ddbd241050c9e6313ac2f3944
+      version: sha256:c037e4973d8e3ce9f488fbf78a71812117d1ce4433f79de9b644f9bb527d9355
 
     prometheus:
       base: cp.icr.io/cp/ibm-ceph/prometheus
@@ -186,15 +186,15 @@ ceph:
 
     grafana:
       base: cp.icr.io/cp/ibm-ceph/grafana-rhel10
-      version: sha256:05b7009e0a5d794d035ab2d3fd06df767de62c2b57626f2f543885ee24664476
+      version: sha256:ee4ef9f9a42851a439bc9ccc24f9c031536275f8671d54a94c497f382b22a376
 
     node_exporter:
       base: cp.icr.io/cp/ibm-ceph/prometheus-node-exporter
       version: sha256:7ff1de3e3c05df351d86f9b3f1ed143442999602a3668ad513dfcb5436ebb756
 
     nginx:
-      base: cp.icr.io/cp/ibm-ceph/nginx-126-rhel10
-      version: sha256:36372e03d80249571aeaf0bcca29cc9ae0abc8ae1dd82511dee41b9faee39415
+      base: cp.icr.io/cp/ibm-ceph/nginx-124-rhel9
+      version: sha256:221b9390078d3aba61eced03d4fddafd0283363c326774535ce39301dc07fa01
 
     loki:
       base: cp.icr.io/cp/ibm-ceph/logging-loki-rhel8
@@ -202,8 +202,8 @@ ceph:
 
     alloy:
       base: cp.icr.io/cp/ibm-ceph/alloy-rhel10
-      version: sha256:639f6c719715f4c2b2ddfa467adbe41518a32f155739bb4ba1b70fd8992e521a
+      version: sha256:a7c81d10f87c274809489711dce3cfcd62c175b40c1fd5b6a46ed04382049ec8
 
     nvmeof:
-      base: cp.icr.io/cp/ibm-ceph/nvmeof-rhel10
-      version: sha256:fe193a06ca2e76140a991deb9236edd8c1c49e5b9df1539daeac9ba035c29052
+      base: cp.icr.io/cp/ibm-ceph/nvmeof-rhel9
+      version: sha256:18fa12ecfdeae02e64d3f390e0756b8a6c933381a0defe6a633b8edafb5db0d6

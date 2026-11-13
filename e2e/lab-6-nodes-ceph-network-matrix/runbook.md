@@ -96,6 +96,15 @@ The default needs 15 available host CPUs, 31.5 GiB of `MemAvailable`, and about
 figures for a compact rehearsal, not production sizing; raise guest memory
 and root disk sizes for longer retention or larger workloads.
 
+The default release is IBM Storage Ceph 9.9.1.2, package
+`20.2.1-405.el9cp`, with `cephadm-ansible` `5.0.3-1.el9cp` and the RHEL 9
+container tag `v9.9.1-27200`, matching
+[IBM's release table](https://www.ibm.com/support/pages/what-are-red-hat-and-ibm-storage-ceph-releases-and-corresponding-ceph-package-versions).
+The table abbreviates the Ansible RPM release as `5.0.3-1`; values retain its
+full repository release. NFS-Ganesha `9.7-0.22.el9cp` is supplied by the Ceph
+container, rather than a separate host package selector. The auxiliary images
+are pinned from that image's native defaults; move them with the release.
+
 [values.yaml](values.yaml) exposes `ceph.services.nfs`, `smb`,
 `observability` and `rbdMirror`, all true by default. Block, file and object
 remain enabled for the network workload. NVMe-oF is optional with
