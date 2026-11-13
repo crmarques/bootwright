@@ -97,7 +97,8 @@ def test_foreign_or_unknown_path_refuses_before_reload_and_preserves_it(policy, 
     for desired in (LEGS, []):
         with pytest.raises(ValueError, match="policy"):
             reconcile(desired)
-    assert calls == [] and path.lstat() == before
+    after = path.lstat()
+    assert calls == [] and (after[:7], after.st_mtime_ns, after.st_ctime_ns) == (before[:7], before.st_mtime_ns, before.st_ctime_ns)
     assert not inspect()["definition"]
 
 

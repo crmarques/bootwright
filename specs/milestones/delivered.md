@@ -15782,3 +15782,13 @@ at one worker; continuation under a changed bound; claim/throttle regressions;
 help goldens; `make check`, `make race` and independent safety review results.
 The tests use controlled adapters; no native performance gain or operator
 acceptance is claimed.
+
+## X451 — Read-only carrier regression metadata
+
+**Owner:** Substrate verification; **item:** B1377.
+
+The remediation gate exposed a carrier refusal test comparing access time
+before and after a permitted read. Exclude access time while preserving exact
+identity, permissions, size and nanosecond modification/change-time checks.
+This fixes a filesystem-dependent assertion without changing the carrier
+implementation or its effect boundary. Verification is recorded in the commit.
