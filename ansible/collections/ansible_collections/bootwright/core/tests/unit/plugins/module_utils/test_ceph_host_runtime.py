@@ -2419,3 +2419,100 @@ def test_physical_host_evidence_of_serial_selections_at_the_disk_bound_fits_its_
                 "image": IMAGE, "ready": True, "removed": False, "imageID": "c" * 64, "uid": 167, "gid": 167, "label": runtime.SHARED_LABEL,
                 "policySHA256": "f" * 64, "cephadmSHA256": "e" * 64, "planDigest": "a" * 64, "route": True, "devices": devices}
     assert len(ceph_native.canonical(evidence)) <= 24000 < 24576
+
+
+@pytest.mark.parametrize("gap", ["thread", "future"])
+def test_deadline_defers_until_pull_registration_is_complete(request_value, tmp_path, monkeypatch, gap):
+    request_value["auxiliary"] = [{"name": "haproxy", "image": HAPROXY}, {"name": "keepalived", "image": KEEPALIVED}]
+    worker, unused_markers, unused_clock = host_runtime(request_value, tmp_path, lambda *args, **options: None)
+    original_mask = signal.pthread_sigmask(signal.SIG_BLOCK, [])
+    returned, injected, masks = threading.Event(), [], []
+
+    def pull(*args, **options):
+        del args, options
+        masks.append(signal.pthread_sigmask(signal.SIG_BLOCK, []))
+        return True
+
+    def interrupt():
+        if not injected:
+            injected.append(True)
+            signal.pthread_kill(threading.main_thread().ident, signal.SIGALRM)
+            returned.set()
+
+    def elapsed(signum, frame):
+        del signum, frame
+        assert returned.is_set(), "deadline interrupted native worker registration"
+        raise Deadline()
+
+    original_start = threading.Thread.start
+    original_submit = runtime.concurrent.futures.ThreadPoolExecutor.submit
+
+    def start(thread):
+        original_start(thread)
+        if thread.name.startswith("ThreadPoolExecutor"):
+            interrupt()
+
+    def submit(pool, *args, **options):
+        future = original_submit(pool, *args, **options)
+        interrupt()
+        return future
+
+    monkeypatch.setattr(worker, "pull_reference", pull)
+    if gap == "thread":
+        monkeypatch.setattr(threading.Thread, "start", start)
+    else:
+        monkeypatch.setattr(runtime.concurrent.futures.ThreadPoolExecutor, "submit", submit)
+    previous = signal.signal(signal.SIGALRM, elapsed)
+    try:
+        with worker.journal(create=True) as durable, pytest.raises(Deadline):
+            worker.pull_auxiliary(durable, registry(request_value), 4285, ["haproxy", "keepalived"])
+    finally:
+        signal.signal(signal.SIGALRM, previous)
+    assert injected and masks and all(mask == original_mask for mask in masks)
+    assert signal.pthread_sigmask(signal.SIG_BLOCK, []) == original_mask
+
+
+def test_interrupted_notification_releases_every_pull_initializer(request_value, tmp_path, monkeypatch):
+    request_value["auxiliary"] = [{"name": "haproxy", "image": HAPROXY}, {"name": "keepalived", "image": KEEPALIVED}]
+    worker, unused_markers, unused_clock = host_runtime(request_value, tmp_path, lambda *args, **options: None)
+    original_registration = runtime.pull_registration
+    finished, rescued, timers = [], [], []
+
+    @contextlib.contextmanager
+    def registration(ready, mask):
+        original_notify = ready._cond.notify_all
+        interrupted = []
+
+        def notify():
+            if not interrupted:
+                interrupted.append(True)
+                ready._cond.notify(1)
+                raise Deadline()
+            original_notify()
+
+        def rescue():
+            rescued.append(True)
+            ready.set()
+
+        monkeypatch.setattr(ready._cond, "notify_all", notify)
+        timer = threading.Timer(2, rescue)
+        timers.append(timer)
+        timer.start()
+        with original_registration(ready, mask):
+            yield
+
+    def pull(*args, **options):
+        del args, options
+        finished.append(True)
+        return True
+
+    monkeypatch.setattr(runtime, "pull_registration", registration)
+    monkeypatch.setattr(worker, "pull_reference", pull)
+    try:
+        with worker.journal(create=True) as durable, pytest.raises(Deadline):
+            worker.pull_auxiliary(durable, registry(request_value), 4285, ["haproxy", "keepalived"])
+    finally:
+        for timer in timers:
+            timer.cancel()
+            timer.join()
+    assert finished == [True, True] and not rescued

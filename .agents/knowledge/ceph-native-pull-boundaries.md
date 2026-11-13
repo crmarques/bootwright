@@ -266,3 +266,13 @@ makes up to three bounded attempts, and the retained `pull-attempt-N` records
 only show that an attempt began, for crash diagnosis and recovery. A later
 apply whose image is still absent pulls again within its own three attempts,
 so a pull fix continues after an exhausted journal (B648).
+
+## Pull registration at a deadline
+
+A deadline can interrupt `ThreadPoolExecutor.submit` after it starts a thread
+and before its thread set or the caller's future list records it. Joining
+only the recorded futures then permits an active pull to outlive the call.
+Host preparation defers SIGALRM through registration, releases workers only
+after that boundary, restores their signal masks, and joins the executor on
+cancellation. Existing concurrent cleanup and supervisor deadlines retain
+their bounds. The owning contract is [host preparation](../../specs/ceph.md#frozen-release-and-trust).

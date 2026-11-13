@@ -1,5 +1,5 @@
 implementation: storage-ceph-host-v1
-content-digest: 6aaa03f1e510f8e730c0062f3a840311aaf77c3f0dfe0596446c8daa2e4bc60b
+content-digest: 2469d1ad9c460f12913d7d2eb465d6605722b1ff5f6fc2cb47cc7ba64d1f05b6
 request-version: ceph-host-v1
 automation-formats: bootwright.native-plan-v1, ceph-crypto-policy-v1, ceph-device-identities-v1, ceph-host-route-v1, ceph-package-artifacts-v1, ceph-package-complete-v1, ceph-package-decision-v1, ceph-physical-device-binding-v1, ceph-runtime-profile-v1
 mark-formats: none
@@ -7,6 +7,7 @@ proof-ids: .bootwright-tree-identity, marker:-attempt-%d.json, marker:-pulled.js
 fixed-places: /var/lib/bootwright/ceph-host, /var/lib/bootwright/ceph-packages
 effect-pins:
   selected-packages-runtime-placement-pulls-profile-route-devices-v1
+  pull-registration-and-joined-cancellation-v1
 request-identity:
   host
   cluster.cluster

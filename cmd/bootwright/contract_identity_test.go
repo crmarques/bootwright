@@ -158,7 +158,7 @@ func contractRecipes() map[string]digestRecipe {
 			partPin("health-scoped-to-owned-pools-and-filesystems-v1"), partPin("gateway-dashboard-cephadm-client-tls-v1"), partPin("gateway-native-ca-endpoint-proof-v1")),
 		ceph.ImageImplementation: digestOf(partImplementation(ceph.ImageImplementation), partRequest(ceph.ImageVersion), partPin("selected-artifact-manifest-v1")),
 		ceph.HostImplementation: digestOf(partImplementation(ceph.HostImplementation), partRequest(ceph.HostVersion), partVersion(ceph.HostEvidenceVersion),
-			partPin("selected-packages-runtime-placement-pulls-profile-route-devices-v1")),
+			partPin("selected-packages-runtime-placement-pulls-profile-route-devices-v1"), partPin("pull-registration-and-joined-cancellation-v1")),
 		ceph.PhysicalRetirementImplementation: {separator: ":", parts: []digestPart{partImplementation(ceph.PhysicalRetirementImplementation), partPin("original-host-and-completed-erase-proof-v1")}},
 		ceph.SMBImplementation: digestOf(partImplementation(ceph.SMBImplementation), partRequest(ceph.SMBVersion), partVersion(ceph.SMBEvidenceVersion),
 			partPin(ceph.PhysicalRetirementImplementation)),

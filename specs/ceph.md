@@ -512,7 +512,9 @@ resolve to declared nodes) or the image serves a CephSMBResource (`samba`,
 `samba_metrics`), every host pre-pulls it. The host request freezes these
 images as batches; a batch's pulls run at once, each with its own broker,
 scratch and journal records, and its call returns once every pull has,
-raising the first refusal in name order. The images worker's deadline signal
+raising the first refusal in name order. A deadline cannot leave an
+unregistered worker behind, and native pulls retain the caller's original
+signal mask. The images worker's deadline signal
 comes 40 s before its supervisor stops it, so a batch it interrupts cancels
 every pull, which stops its process and leaves its broker, and returns the
 timeout while the worker still runs; a call under 180 s, which can start no

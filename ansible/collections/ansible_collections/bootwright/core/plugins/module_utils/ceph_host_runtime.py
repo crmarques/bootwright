@@ -24,6 +24,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import stat
 import tempfile
 import threading
@@ -439,6 +440,26 @@ def contained_argv(label, mounts_file, hooks, image_id, user, script, arguments=
     return argv + ["--entrypoint=/usr/bin/python3", image_id, "-I", "-B", "-c", script, *arguments]
 
 
+def pull_thread_ready(ready, mask):
+    """Workers inherit the registration mask, then restore their original signal state before any pull."""
+    while not ready.wait(0.1):
+        pass
+    signal.pthread_sigmask(signal.SIG_SETMASK, mask)
+
+
+@contextlib.contextmanager
+def pull_registration(ready, mask):
+    """Defer the deadline until every thread and future is registered, restoring the caller even on interruption."""
+    try:
+        signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGALRM})
+        yield
+    finally:
+        try:
+            ready.set()
+        finally:
+            signal.pthread_sigmask(signal.SIG_SETMASK, mask)
+
+
 class HostRuntime:
     """One host's preparation; the controller supplies only fixed phases."""
 
@@ -545,18 +566,22 @@ class HostRuntime:
         require(0 < len(references) <= PULL_CONCURRENCY, "request")
         discard_residue(durable.path, "auxiliary-scratch-")
         cancel = threading.Event()
-        pool = concurrent.futures.ThreadPoolExecutor(max_workers=PULL_CONCURRENCY)
+        ready = threading.Event()
+        mask = signal.pthread_sigmask(signal.SIG_BLOCK, [])
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=PULL_CONCURRENCY, initializer=pull_thread_ready, initargs=(ready, mask))
         futures = []
         try:
-            for name, reference in references:
-                futures.append(pool.submit(self.pull_reference, durable, private, deadline, name, reference, trust=trust, cancel=cancel))
+            with pull_registration(ready, mask):
+                for name, reference in references:
+                    futures.append(pool.submit(self.pull_reference, durable, private, deadline, name, reference, trust=trust, cancel=cancel))
             concurrent.futures.wait(futures)
         except BaseException:
             cancel.set()
+            ready.set()
             concurrent.futures.wait(futures, timeout=PULL_CANCEL_SECONDS)
             raise
         finally:
-            pool.shutdown(wait=False)
+            pool.shutdown(wait=True)
         changed = False
         for future in futures:
             changed = future.result() or changed
