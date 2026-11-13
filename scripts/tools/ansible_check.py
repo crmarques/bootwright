@@ -569,7 +569,7 @@ def integration_lane(run_: Run, wheelhouse: Path) -> Lane:
         "-I",
         str(run_.executable.parent / "ansible-test"),
     ]
-    names = ["controller_tool", "controller_supervisor"]
+    names = ["controller_tool", "controller_supervisor", "discovery_contract"]
     # native_transaction builds an RPM and drives the running RHEL 9 host's
     # package manager, so it is an operator-run harness rather than part of
     # the unitary gate.

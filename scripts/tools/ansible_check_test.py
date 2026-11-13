@@ -510,6 +510,7 @@ class LanesTest(unittest.TestCase):
             [
                 (["integration", "controller_tool"] + local, copy, "lane"),
                 (["integration", "controller_supervisor"] + local, copy, "lane"),
+                (["integration", "discovery_contract"] + local, copy, "lane"),
             ],
         )
 

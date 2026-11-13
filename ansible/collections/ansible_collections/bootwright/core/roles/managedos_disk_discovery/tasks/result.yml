@@ -1,0 +1,59 @@
+---
+- name: Stop at an unproved disk discovery operation
+  ansible.builtin.assert:
+    that:
+      - not (managedos_disk_discovery_result.failed | default(false) | bool)
+      - managedos_disk_discovery_result.discovery_failure is not defined
+      - managedos_disk_discovery_result.evidence is defined
+    fail_msg: >-
+      disk discovery stopped during
+      {{ managedos_disk_discovery_phases.get(
+         managedos_disk_discovery_result.discovery_phase | default('') | string,
+         'adapter execution') }}:
+      {{ managedos_disk_discovery_failures.get(
+         managedos_disk_discovery_result.discovery_failure | default('') | string,
+         'the adapter returned no bounded result') }}.
+      Preserve the recorded operation and resolve this refusal before continuing it.
+    quiet: true
+  vars:
+    managedos_disk_discovery_phases:
+      custody: request and private custody validation
+      controller: management-controller inspection
+      media: private discovery media construction
+      tls: private inventory TLS preparation
+      media-delivery: private HTTPS media delivery
+      boot: owned virtual-media boot
+      inventory: authenticated inventory transfer
+      acknowledgement: inventory acknowledgement
+      cleanup: owned media and power cleanup
+    managedos_disk_discovery_failures:
+      request: the frozen request shape was refused
+      binding: the attempt binding was refused
+      bmc-tls: the management controller certificate was refused
+      media-tls: private media TLS policy was refused
+      hardware-identity: the complete machine UUID and MAC identity was not proved
+      external-ownership: discovery requires a powered-off target with no attached virtual media before initial custody
+      publication-ownership: the private publication has unresolved ownership
+      target-running: a running target has no matching discovery-media ownership
+      power-unknown: the target power state was not proved
+      foreign-media: virtual media belongs to another operation
+      media-identity: the local source ISO size, ownership or mode was refused
+      media-digest: the local source ISO checksum did not match
+      publication-size: the remastered ISO exceeds its derived component size bound
+      initrd-tools: the RHEL initramfs lacks required discovery tools
+      initrd-layout: the source ISO initramfs layout is unqualified
+      inventory-timeout: no authenticated disk inventory arrived before the deadline
+      custody-directory: a private directory failed its ownership or mode proof
+      custody-mode: a private custody directory has an unexpected mode
+      custody-file: a private record failed its type, ownership, mode or size proof
+      bmc-request: a management-controller request failed
+      missing-file: a required runtime file or executable is missing
+      filesystem: a filesystem or TLS socket operation failed
+      native-process: a bounded native process did not complete
+      native-xorriso: xorriso did not complete ISO inspection or remastering
+      native-lsinitrd: lsinitrd did not complete initramfs inspection
+      native-mkksiso: mkksiso did not complete boot-configuration remastering
+      native-openssl: openssl did not complete inventory certificate preparation
+      native-chcon: chcon did not complete the private publication SELinux labeling
+      native-unknown: a fixed native command failed
+      contract: a bounded discovery contract was refused

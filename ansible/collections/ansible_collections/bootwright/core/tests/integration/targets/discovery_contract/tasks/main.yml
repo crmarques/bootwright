@@ -1,0 +1,64 @@
+---
+- name: Reject a synthetic discovery request before custody or network access
+  bootwright.core.disk_discovery:
+    operation: apply
+    request:
+      version: os-disk-discovery-v1
+    digest: '{{ "a" * 64 }}'
+    material:
+      bindingBase64: e30=
+      syntheticSecret: DISCOVERY-SECRET-SENTINEL
+  register: managedos_disk_discovery_result
+  failed_when: false
+  no_log: true
+
+- name: Verify packaged module returns only bounded diagnostics
+  ansible.builtin.assert:
+    that:
+      - managedos_disk_discovery_result.discovery_failure == 'request'
+      - managedos_disk_discovery_result.discovery_phase == 'custody'
+      - managedos_disk_discovery_result.evidence is not defined
+    quiet: true
+
+- name: Exercise the production refusal boundary
+  block:
+    - name: Report the bounded module refusal
+      ansible.builtin.include_role:
+        name: bootwright.core.managedos_disk_discovery
+        tasks_from: result
+    - name: Refuse a missing discovery assertion
+      ansible.builtin.fail:
+        msg: discovery assertion did not refuse
+  rescue:
+    - name: Prove the production diagnostic reports its safe cause
+      ansible.builtin.assert:
+        that:
+          - "'the frozen request shape was refused' in ansible_failed_result.msg"
+          - "'DISCOVERY-SECRET-SENTINEL' not in ansible_failed_result.msg"
+        quiet: true
+
+- name: Inject untrusted diagnostic strings
+  ansible.builtin.set_fact:
+    managedos_disk_discovery_result:
+      discovery_failure:
+        - DISCOVERY-SECRET-SENTINEL
+      discovery_phase:
+        secret: DISCOVERY-SECRET-SENTINEL
+  no_log: true
+
+- name: Exercise unknown-diagnostic redaction
+  block:
+    - name: Refuse the untrusted result
+      ansible.builtin.include_role:
+        name: bootwright.core.managedos_disk_discovery
+        tasks_from: result
+    - name: Refuse a missing unknown-result assertion
+      ansible.builtin.fail:
+        msg: discovery assertion did not refuse
+  rescue:
+    - name: Prove untrusted result text never crosses the assertion
+      ansible.builtin.assert:
+        that:
+          - "'the adapter returned no bounded result' in ansible_failed_result.msg"
+          - "'DISCOVERY-SECRET-SENTINEL' not in ansible_failed_result.msg"
+        quiet: true

@@ -17,7 +17,11 @@
     digest: '{{ bootwright_disk_discovery_digest }}'
     material: '{{ bootwright_disk_discovery_material }}'
   register: managedos_disk_discovery_result
+  failed_when: false
   no_log: true
+
+- name: Validate the bounded discovery result
+  ansible.builtin.include_tasks: result.yml
 
 - name: Publish bounded disk inventory and cleanup evidence
   bootwright.core.managedos_disk_discovery_protocol:

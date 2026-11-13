@@ -62,6 +62,7 @@ def validate(request, digest, binding):
 
 class Controller:
     def __init__(self, request, digest, material, create=False):
+        self.phase = "custody"
         self.request, self.digest, self.material = request, digest, material
         encoded = material.get("bindingBase64", "")
         if not isinstance(encoded, str) or len(encoded) > 8192:
@@ -154,6 +155,7 @@ class Controller:
         return state
 
     def prepare_tls(self):
+        self.phase = "tls"
         self.reap_tls_stages()
         stage = self.root / (".tls-stage-" + secrets.token_hex(16))
         records.directory(stage, True)
@@ -241,6 +243,7 @@ class Controller:
         return parent / state["token"], self.request["private"]["url"] + "/" + state["token"] + "/discovery.iso"
 
     def publish(self):
+        self.phase = "media"
         state = self.load()
         for name in ("patched.iso", "discovery.iso", "initrd-0", "initrd-1"):
             (self.root / name).unlink(missing_ok=True)
@@ -302,6 +305,7 @@ class Controller:
             connection.close()
 
     def receive(self):
+        self.phase = "inventory"
         existing = self.report()
         if existing is not None:
             return existing
@@ -316,6 +320,7 @@ class Controller:
         raise ValueError("discovery report deadline")
 
     def start(self):
+        self.phase = "controller"
         client = self.client()
         power = self.target(client)
         destination, url = self.publication()
@@ -327,13 +332,16 @@ class Controller:
         if power != "Off":
             raise ValueError("discovery target power is unknown")
         self.publish()
+        self.phase = "controller"
         client = self.client()
         if self.target(client) != "Off":
             raise ValueError("discovery target started before insertion")
         if client.inserted() not in ("", url):
             raise ValueError("foreign virtual media")
         certificate = records.read(Path(self.material["artifactCertificate"])).decode()
+        self.phase = "media-delivery"
         listener_probe(url, certificate)
+        self.phase = "boot"
         client.insert(url, self.request["controller"]["virtualMedia"]["trust"], certificate, private=True)
         client.boot_once("Cd")
         client.power("On", "On")
@@ -417,7 +425,9 @@ class Controller:
         if self.report() is None:
             self.start()
         report = self.receive()  # Immutable and fsynced before the ACK.
+        self.phase = "acknowledgement"
         self.session("ack", hashlib.sha256(report).hexdigest().encode("ascii"))
+        self.phase = "cleanup"
         self.cleanup(True)
         return self.finish(True)
 
@@ -431,6 +441,7 @@ class Controller:
         if before["cleaned"]:
             self.reap()
             return before
+        self.phase = "cleanup"
         self.cleanup(False)
         return self.finish(False)
 
@@ -446,6 +457,7 @@ class Controller:
         return self.finish(False)
 
     def prove_unprepared(self):
+        self.phase = "controller"
         client = self.client()
         if self.target(client) != "Off" or client.inserted():
             raise ValueError("missing discovery custody has unresolved external ownership")

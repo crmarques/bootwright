@@ -26,7 +26,7 @@ shipped playbook through syntax checking, and runs Ansible Lint offline. It
 runs all applicable Ansible sanity checks, the sanity import test again under
 the managed-host floor interpreter, collection unit tests, the module and
 module utility unit tests again under that floor, and the synthetic controller
-tool and supervisor integration targets.
+tool, supervisor and discovery diagnostic integration targets.
 
 Those checks run in lanes beside one another
 ([D223](../../specs/milestones/backlog.md#d223)): syntax, lint, sanity then the

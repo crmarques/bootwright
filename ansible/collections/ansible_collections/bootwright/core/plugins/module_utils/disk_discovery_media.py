@@ -16,13 +16,24 @@ from ansible_collections.bootwright.core.plugins.module_utils import private_rec
 
 ENV = {"PATH": "/usr/bin:/usr/sbin", "LC_ALL": "C"}
 MEDIA = Path("/var/lib/bootwright/media")
+# Exact integer checks reject Boolean sizes and process statuses.
+# pylint: disable=unidiomatic-typecheck
 MAX_INITRD = 256 << 20
+
+
+class CommandFailure(ValueError):
+    """Only a fixed tool name and its exit status may leave this boundary."""
+
+    def __init__(self, tool, code):
+        self.tool = tool if tool in ("xorriso", "lsinitrd", "mkksiso", "openssl", "chcon") else "unknown"
+        self.code = code if type(code) is int and -128 <= code <= 255 else -1
+        super().__init__("discovery native command refused")
 
 
 def native(argv, timeout=60, limit=65536):
     result = bounded_process.run(argv, timeout=timeout, limit=limit, environment=ENV, capture_stderr=False)
     if result.code:
-        raise ValueError("discovery media command refused")
+        raise CommandFailure(Path(argv[0]).name, result.code)
     return result.stdout
 
 
