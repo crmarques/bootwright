@@ -22,12 +22,13 @@ type ServiceBinding struct {
 }
 
 type ServiceUnit struct {
-	Bindings     []ServiceBinding             `json:"bindings,omitempty"`
-	Config       map[string]map[string]string `json:"config,omitempty"`
-	Documents    []json.RawMessage            `json:"documents"`
-	ID           string                       `json:"id"`
-	IngressPorts []int                        `json:"ingressPorts,omitempty"`
-	Type         string                       `json:"type"`
+	Bindings      []ServiceBinding             `json:"bindings,omitempty"`
+	Config        map[string]map[string]string `json:"config,omitempty"`
+	Documents     []json.RawMessage            `json:"documents"`
+	ID            string                       `json:"id"`
+	IngressPorts  []int                        `json:"ingressPorts,omitempty"`
+	ScrapeIngress map[string]string            `json:"scrapeIngress,omitempty"`
+	Type          string                       `json:"type"`
 }
 
 func (u ServiceUnit) name() string {
@@ -51,7 +52,7 @@ var unitTypes = map[string]unitType{
 	"crash":        {units: crashUnits, dependencies: noUnitDependencies, impacts: noUnitImpacts, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 	"mgmt-gateway": {units: gatewayUnits, dependencies: gatewayDependencies, impacts: gatewayImpacts, apply: unitBudget{calls: 3, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 	"monitoring":   {units: monitoringUnits, dependencies: noUnitDependencies, impacts: monitoringImpacts, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
-	"nfs":          {units: nfsUnits, dependencies: noUnitDependencies, impacts: noUnitImpacts, apply: unitBudget{calls: 3, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
+	"nfs":          {units: nfsUnits, dependencies: ingressDependencies, impacts: noUnitImpacts, apply: unitBudget{calls: 3, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 	"rbd-mirror":   {units: mirrorUnits, dependencies: noUnitDependencies, impacts: noUnitImpacts, apply: unitBudget{calls: 2, waits: 1}, observe: unitBudget{calls: 1}, destroy: unitBudget{calls: 2}},
 }
 
@@ -484,6 +485,18 @@ func monitoringUnits(cluster api.Object) ([]ServiceUnit, error) {
 			unit.Config = map[string]map[string]string{"global": {"log_to_file": "true", "mon_cluster_log_to_file": "true"}}
 		}
 	}
+	if slices.Contains(names, "prometheus") {
+		unit.ScrapeIngress = map[string]string{}
+		for _, svc := range cluster.Spec().Get("services").Items() {
+			if svc.Get("service_type").Text() == "ingress" {
+				mode := "http" // Admission refuses monitor_ssl; the selected native artifact proves its default.
+				if svc.Get("spec", "keepalive_only").Bool() {
+					mode = "drop"
+				}
+				unit.ScrapeIngress[cephcluster.NativeServiceName(svc)] = mode
+			}
+		}
+	}
 	for _, binding := range gatewayBindings(cluster, names...) {
 		svc, _ := cephcluster.NativeService(cluster, binding.ServiceRef)
 		if _, known := monitoringLeaves[svc.Get("service_type").Text()+" "+binding.Path]; !known {
@@ -681,4 +694,12 @@ func unitBinds(unit ServiceUnit, ref, path string) bool {
 
 func unitProxied(unit ServiceUnit) bool {
 	return unit.Type == "mgmt-gateway" && slices.ContainsFunc(unitDocuments(Request{Service: &unit}), func(d unitDocument) bool { return d.ServiceType == "oauth2-proxy" })
+}
+
+// Ingress consumes the monitoring unit's owned native configuration, even when a native artifact needs no correction.
+func ingressDependencies(cluster api.Object, unit ServiceUnit) ([]string, error) {
+	if !slices.ContainsFunc(unitDocuments(Request{Service: &unit}), func(d unitDocument) bool { return d.ServiceType == "ingress" }) {
+		return nil, nil
+	}
+	return gatewayDependencies(cluster, unit)
 }

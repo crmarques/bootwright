@@ -15705,3 +15705,30 @@ the failed package was rerun, as the owner requested; no new broad gate or
 remote workflow run was started. A GitHub run at the corrected commit remains
 unrun until the change is published. This closes B1364's bounded in-tree fix,
 not the existing remote run.
+
+### X447 — Qualified plaintext monitoring targets
+
+B1365 implements the [monitoring template rule](../ceph.md#monitoring-scrape-templates).
+A named specialization recognizes the held image's exact qualified source
+contract, inserts target relabels for plaintext exporters and mapped
+keepalive-only ingress, and enables metrics for exact HAProxy services without
+enabling their statistics UI. Other source bytes keep native behavior. The general
+worker owns the required native override through scoped attempt, exact
+readback and completion records, before monitoring service application;
+observation never writes. The complete ingress metrics map is frozen before
+later gateway deployment. The core request version and content digest move;
+earlier operations retain their original executable for continuation or
+removal. A separate scoped operator repair preserves lifecycle records.
+
+Focused verification: the Ceph Go package and contract/marker checks passed;
+the specialization, monitoring, template rendering, ownership and recovery
+regressions passed. Narrow sanity checks passed on the controller and managed
+host floor. The exact qualified native sources were inspected and the patched
+template rendered as valid YAML with discovery TLS retained. Independent safety
+review found no blockers. The docs gate found a pre-existing M1 opening byte
+budget failure; it is not a pass. Full `make check` and `make race` were not
+rerun under the owner's focused-verification direction. The owner-run scoped
+repair subsequently verified the rendered correction and every active target
+healthy; its evidence stays private. Fresh deployment verification and accepted
+ledger evidence remain operator gates; B1365 awaits those gates, and this
+delivery closes no wider observability acceptance.

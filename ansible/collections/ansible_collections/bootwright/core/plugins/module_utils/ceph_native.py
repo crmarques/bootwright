@@ -726,7 +726,7 @@ def package_url(value):
 
 
 def scope_checks(request):
-    require(request["version"] == "ceph-core-v2")
+    require(request["version"] == "ceph-core-v3")
     if "security" in request:
         security = request["security"]
         require(isinstance(security, dict) and set(security) == {"fips", "cephxKeyType"})
@@ -1525,8 +1525,11 @@ class Worker:
         # Only an unrecorded observation reports what no declared service explains instead of refusing it.
         self.reading = False
         self.unplaced = []
-        from ansible_collections.bootwright.core.plugins.module_utils import native_specializations
-        self.selection = native_specializations.Selection({"host-cephadm": self.verified_tool, "image-cephadm": self.image_payload})
+        from ansible_collections.bootwright.core.plugins.module_utils import ceph_monitoring_template, native_specializations
+        self.selection = native_specializations.Selection(
+            {"host-cephadm": self.verified_tool, "image-cephadm": self.image_payload,
+             "image-monitoring": lambda: ceph_monitoring_template.image_sources(self)},
+            {"image-monitoring": ceph_monitoring_template.blanket_https})
         self._tool_bytes = None
         self.packages = None
         if self.host.get("physical"):

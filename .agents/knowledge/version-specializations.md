@@ -26,7 +26,9 @@ and `T/` is
 One row per registry record. The first four are one root cause: IBM Storage
 Ceph `20.1.0-221` is not an IBM licensing build, so its cephadm and MGR lack
 the licensing, opt-out Call Home and sudo-hardening mechanics the `20.2.x`
-builds carry. The fifth is a `20.2.x` workaround. Each fact below is derived
+builds carry. The fifth is a `20.2.x` workaround. The monitoring row recognizes
+one exact qualified native source contract; a byte change, even one retaining
+the defect, leaves the fact unknown. Each fact below is derived
 from the bytes of an artifact the operation has already frozen and proved; the
 release label and the image tag key nothing.
 
@@ -37,6 +39,7 @@ release label and the image tag key nothing.
 | `ceph-call-home-opt-in` | P/native_specializations.py | ceph-cephadm and ceph-image | `host-cephadm.call-home-opt-out` is False and `image-cephadm.ibm-build` is False | matched `20.1.0-221`; not matched the three `20.2.x` builds | behavior | `ceph.call-home-model` to `opt-in` | Call Home on `20.1.0-221` is opt-in (`--enable-ibm-call-home` plus customer identity) and its MGR lacks the commands the `20.2.x` opt-out flow drives. | Cannot have completed: with `enabled` the first `orch enable-call-home` is an invalid command; `disabled` is the native default and needs no step. | Zipapp sha256 `8898bc07ddb5a44684cfd3b4e5681dae6cd1b62d242cebe4a565cc6512f5b33e`: `__main__.py:2795-2830` `verify_call_home_settings` requires contact identity only with `--enable-ibm-call-home`, `:2864-2866` skips the integration otherwise and `:2870-2884` enables `call_home_agent` only when enabled; `20.2.x` declares `--disable-ibm-call-home` (`:6449` in `20.2.1-405`, zipapp sha256 `027222324b11d1af53b72b4ebb17134f58e477f63c39e9d07be40ba1fc2aabc1`; `:6552` in `20.2.2-349`), runs `orch enable-call-home` (`:3157`, `:3246`) and sets `call_home_needs_acceptance` (`:3506-3508`, `:3594-3596`); MGR `orchestrator/module.py:2677-2703` (`20.2.1`) from the SRPM sha256 `4f17060f724aa5b1fd06e4c915b3db376c8062c99d5e583c01f723a7333651d4`, absent in `20.1.0-221` (SRPM sha256 `36703945be8e34502496362957ee9a03f7e98b2a327b0971dc0090a21f346652`) | P/native_specializations.py (record); P/ceph_native.py `Worker.require_call_home_path` (in `claim` and `tunnel_bootstrap`), `call_home_applicable`, `initialize_call_home`, `configure_call_home`, `accept_call_home`, `configuration_complete` and `call_home_state` (seam `ceph.call-home-model`) | T/test_native_specializations.py; T/test_ceph_tunnel_native.py `test_claim_refuses_an_unqualified_call_home_path_before_any_cluster_marker`, `test_a_twenty_one_manager_is_configured_without_pre_steps_or_any_call_home_step`, `test_an_enabled_call_home_agent_on_an_opt_in_manager_is_drift`; T/test_ceph_bootstrap_finalization.py `test_opt_in_call_home_left_disabled_has_no_step_marker_or_effect`, `test_every_other_disabled_call_home_path_keeps_the_enabled_only_guard`, `test_enabled_intent_on_an_opt_in_manager_keeps_the_general_call_home_step`; T/test_ceph_core.py `test_an_enabled_call_home_agent_on_an_opt_in_cluster_is_drift`; T/test_ceph_bootstrap_recovery.py `test_a_refusal_before_the_attempt_record_continues_under_a_corrected_selection` |
 | `ceph-set-user-without-pre-steps` | P/native_specializations.py | ceph-image (MGR modules, image cephadm payload) | `image-cephadm.ssh-user-setup` is False | matched `20.1.0-221` payload; not matched the `20.2.1-405`, `20.2.2-349.el9cp` and `20.2.2-349.el10cp` payloads | workaround | `ceph.mgr.set-user-pre-steps` to `absent` | `cephadm set-user` of `20.1.0-221` has no `--skip-pre-steps` because it has no pre-steps, so the extra argument is rejected. | Cannot have completed: the MGR command parser rejects the undeclared option (`EINVAL`) before any effect. | SRPM [ceph-20.1.0-221.el9cp.src.rpm](https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/source/ceph-20.1.0-221.el9cp.src.rpm) sha256 `36703945be8e34502496362957ee9a03f7e98b2a327b0971dc0090a21f346652`, changes archive `src/pybind/mgr/cephadm/module.py:1353-1355` `set_ssh_user(self, user)`; `20.2.1` `:1506-1507` and `20.2.2` `:1574-1575` `set_ssh_user(self, user, skip_pre_steps=False)` running sudo hardening unless skipped (`20.2.2` `:1587`); the `20.2.x` cephadm zipapps add the `setup-ssh-user` and `prepare-host-sudo-hardening` subcommands, absent from the `20.1.0-221` zipapp (sha256 `8898bc07ddb5a44684cfd3b4e5681dae6cd1b62d242cebe4a565cc6512f5b33e`) | P/native_specializations.py (record); P/ceph_native.py `Worker.configure_values`, the `set-user` command tuple (seam `ceph.mgr.set-user-pre-steps`) | T/test_native_specializations.py; T/test_ceph_tunnel_native.py `test_a_twenty_two_manager_receives_set_user_with_skip_pre_steps`, `test_a_twenty_one_manager_is_configured_without_pre_steps_or_any_call_home_step`, `test_an_unanchored_image_payload_keeps_skip_pre_steps` |
 | `ceph-bootstrap-license-call-continues` | P/native_specializations.py | ceph-cephadm (host RPM zipapp) | `host-cephadm.bootstrap-license-call` is True | matched `20.2.1-405.el9cp`, `20.2.2-349.el9cp`, `20.2.2-349.el10cp`; not matched `20.1.0-221.el9cp` | workaround | `ceph.bootstrap.license-call-refusal` to `continue-seed` | The bootstrap of the IBM `20.2.x` builds calls `orch accept-license --image`, which the MGR refuses with `no hosts defined` on the zero-host seed after the seed exists; the exact owned seed continues in the same apply. | Bootstrap exits 1 after the seed exists; the attempt record and the seed remain and the next apply continues them at stage `seed` (no version move). | RPM [cephadm-20.2.1-405.el9cp](https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/cephadm-20.2.1-405.el9cp.noarch.rpm) sha256 `7acf50c99cf3263c64a103476dcf67a3fd93a7b918472db7df660541ea987287`, zipapp sha256 `027222324b11d1af53b72b4ebb17134f58e477f63c39e9d07be40ba1fc2aabc1`, the call at `__main__.py:3445-3447`; RPM [cephadm-20.2.2-349.el9cp](https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/cephadm-20.2.2-349.el9cp.noarch.rpm) sha256 `1d323901a72b7b56554278f31b53e0400c8b14382daf22efdbdb2f94644a4994`, zipapp sha256 `381a5d2e5b3332f7604de0e7f9118ced26ffeae6e21b07372835a4d2a05c5bfc`, the call at `__main__.py:3534-3535`; the output shape `cephadmlib/call_wrappers.py:280-310` and `cephadmlib/logging.py:118-160`; the MGR refusal `src/pybind/mgr/cephadm/serve.py:2696-2703` (`20.2.2` source RPM, changes archive); the committed lists `T/data/cephadm_declared/20.1.0-221.el9cp.json`, `20.2.1-405.el9cp.json`, `20.2.2-349.el9cp.json`, `20.2.2-349.el10cp.json`. The live operation is unqualified, so no operation id is cited | P/native_specializations.py (record, fact `host-cephadm.bootstrap-license-call`); P/ceph_tunnel_staging.py `license_call_refusal`; P/ceph_native.py `Worker.command` (`recover`), `tunnel_bootstrap` and `Worker.license_call_continues` (the one consult of the seam) | T/test_native_specializations.py `test_bootstrap_license_call_true_on_an_ibm_build_that_lists_it`, `test_twenty_two_shaped_artifacts_keep_the_general_flow_but_continue_the_license_call_refusal`; T/test_ceph_tunnel_staging.py `test_the_ibm_license_call_refusal_is_recognized_exactly`; T/test_ceph_bootstrap_finalization.py `test_ibm_license_call_refusal_continues_the_owned_seed_in_the_same_apply` |
+| `ceph-monitoring-plaintext-exporters` | P/native_specializations.py | ceph-image monitoring templates and service discovery | `image-monitoring.blanket-https-scrapes` is True | matched the six source fingerprints from `20.2.1-405.el9cp`; other bytes unknown | workaround | `ceph.monitoring.scrape-template` to `plaintext-exporters` | The secure template selects HTTPS for plaintext metrics, discovery includes keepalive-only ingress, and HAProxy gates its exporter on unset statistics. | Can complete deployment with unhealthy scrapes; the core request moves to `ceph-core-v3`. | Immutable `cp.icr.io/cp/ibm-ceph/ceph-9-rhel9@sha256:8dae4b5b8f07c7fa95bd1d68b22d4c1dd4c2d323d533d807dc1ceae4e329cb7f`; source locations and fingerprints below; [native template overrides](https://docs.ceph.com/en/tentacle/cephadm/services/monitoring/#using-custom-configuration-files) | P/ceph_monitoring_template.py `QUALIFIED`, `blanket_https`, `desired`, `corrected`; P/ceph_native.py `Worker.__init__` wires the confined source getter | T/test_ceph_monitoring_template.py; T/test_native_specializations.py |
 
 ### Record notes
 
@@ -84,6 +87,44 @@ capture of the bootstrap outputs. Any other failure, an unproved seed or an
 unknown fact keeps the failed native command and its attempt record, and the
 next apply's continuation proves the same seed.
 
+#### ceph-monitoring-plaintext-exporters
+
+The source getter uses the existing confined executor on the held immutable
+image, without mounts or network. Raw source has its own bounded parser;
+zipapp detectors retain their argparse anchor. The selected variant inserts
+target relabels into the packaged Prometheus template and a metrics-only
+HAProxy conditional when `enable_stats` is unset or false. The original HAProxy
+statistics and authentication block stays byte-identical. Exact service names come
+from the general frozen ingress map, so later ingress deployment is covered.
+Unknown or changed source bytes keep the native variant. Ownership and replay
+are outside this seam, as [monitoring templates](../../specs/ceph.md#monitoring-scrape-templates)
+requires; the existing default flow could complete, so this delivery moves
+the core contract version.
+
+The immutable artifact above holds these SHA-256 source fingerprints. Paths
+are image paths; no provider source bytes are shipped in the repository.
+
+| Source | SHA-256 |
+| --- | --- |
+| `template` | `4d2df8cb2afdcd35de5da1bb25c83fbc01649d6f1bd93e1f961a337922cefbbb` |
+| `discovery` | `0c059d38817e0955f1a20b4b160e4d8aa011169c439ba136aad142ee4cdb2915` |
+| `serviceSpec` | `9bf96caa421d680b3bd550897ddc8490309a83b8aa870c4a2b6e5d6621f11dde` |
+| `haproxy` | `5f5142705ab6daf20c822115baae6ac4f447dec3edf4a765e967688f63e0f0f9` |
+| `nfs` | `df37113bb7cf533a997060597a5674f2573ea93f5c4d88740ef04626dd9defdb` |
+| `smb` | `aba61b29639d66c731d24d1e349eee7972ad810f3d67799d4b723266fc01a4ab` |
+
+The `SOURCES` table in P/ceph_monitoring_template.py owns the fixed paths.
+The native Prometheus template's scrape loop applies `scheme: https` whenever
+`security_enabled`; the SDK defaults ingress `monitor_ssl` to false, and the
+HAProxy template only adds TLS to the statistics bind when that flag is true.
+Its exporter line is inside the `enable_stats` block, while the SDK defaults
+that option to unset. The correction adds an exporter line only for a mapped
+ingress when native statistics are disabled; it enables no statistics UI.
+The NFS and SMB service renderers configure plaintext metrics. Discovery
+labels ingress targets with the native `ingress` service name and does not
+exclude keepalive-only services. These facts qualify this exact source
+contract, not another build sharing its release label.
+
 ### General topology rule (OpenShift)
 
 The one rule of a Go-owned component. It is not a specialization: it applies
@@ -111,6 +152,7 @@ D162 clause (b) and the [storage API](../../specs/api/ceph.md).
 
 | seam | variants | general | refusal | call sites |
 | --- | --- | --- | --- | --- |
+| `ceph.monitoring.scrape-template` | `native`, `plaintext-exporters` | `native` | no | P/ceph_monitoring_template.py `desired` |
 | `ceph.bootstrap.license-flag` | `pass`, `omit` | `pass` | no | P/ceph_tunnel_staging.py `bootstrap_argv` |
 | `ceph.mgr.license-contract` | `ibm`, `absent` | `ibm` | no | P/ceph_native.py `Worker.enroll`, `Worker.observe_cluster` |
 | `ceph.call-home-model` | `opt-out`, `opt-in` | `opt-out` | yes | P/ceph_native.py `Worker.require_call_home_path`, `call_home_applicable`, `call_home_state` |

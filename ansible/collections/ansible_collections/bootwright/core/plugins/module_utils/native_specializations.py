@@ -72,7 +72,11 @@ def bootstrap_license_call(data, names):
     return False
 
 
+SOURCE_PARSERS = {"host-cephadm": declared, "image-cephadm": declared}
+
+
 FACTS = {
+    "image-monitoring.blanket-https-scrapes": ("image-monitoring", lambda data, witness: witness),
     "host-cephadm.license-flag": ("host-cephadm", lambda data, names: "--automatically-accept-license" in names),
     "host-cephadm.call-home-opt-out": ("host-cephadm", lambda data, names: "--disable-ibm-call-home" in names),
     "image-cephadm.ibm-build": ("image-cephadm", ibm_build),
@@ -81,6 +85,7 @@ FACTS = {
 }
 
 SEAMS = {
+    "ceph.monitoring.scrape-template": Seam("native", frozenset(("native", "plaintext-exporters")), False),
     "ceph.bootstrap.license-flag": Seam("pass", frozenset(("pass", "omit")), False),
     "ceph.mgr.license-contract": Seam("ibm", frozenset(("ibm", "absent")), False),
     "ceph.call-home-model": Seam("opt-out", frozenset(("opt-out", "opt-in")), True),
@@ -89,6 +94,12 @@ SEAMS = {
 }
 
 SPECIALIZATIONS = (
+    Specialization(
+        id="ceph-monitoring-plaintext-exporters",
+        seam="ceph.monitoring.scrape-template",
+        variant="plaintext-exporters",
+        when={"image-monitoring.blanket-https-scrapes": True},
+    ),
     Specialization(
         id="ceph-bootstrap-without-license-flag",
         seam="ceph.bootstrap.license-flag",
@@ -125,14 +136,15 @@ SPECIALIZATIONS = (
 class Selection:
     """One worker run's seam answers over its proved sources, each read once."""
 
-    def __init__(self, sources):
+    def __init__(self, sources, parsers=None):
         self.sources, self.data, self.names, self.facts, self.applied = sources, {}, {}, {}, set()
+        self.parsers = dict(SOURCE_PARSERS, **(parsers or {}))
 
     def source(self, name):
         if name not in self.data:
-            self.data[name] = self.sources[name]()  # proved bytes, or the source's refusal propagates
+            self.data[name] = self.sources[name]() if name in self.sources else None  # proved bytes, or the source's refusal propagates
             try:
-                self.names[name] = declared(self.data[name])
+                self.names[name] = self.parsers[name](self.data[name])
             except Exception:
                 self.names[name] = None
         return self.data[name], self.names[name]

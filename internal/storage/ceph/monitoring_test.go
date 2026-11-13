@@ -435,3 +435,50 @@ func TestMonitoringAndGatewayPlanWithSelectedImages(t *testing.T) {
 	surplus, _ := authoredDigestCatalog(t, plain, append(slices.Clone(names), "haproxy")...)
 	unneededRefusal(t, compilation.NewState(surplus, surplus, nil), "haproxy")
 }
+
+func TestMonitoringFreezesAllIngressMetricsIntentBeforeGatewayDeployment(t *testing.T) {
+	services := append(monitoringServices(),
+		auxiliaryService("ingress", "objects", requestMap("backend_service", "rgw.objects")),
+		auxiliaryService("ingress", "shares", requestMap("backend_service", "nfs.shares")),
+		auxiliaryService("ingress", "management", requestMap("backend_service", "mgmt-gateway", "keepalive_only", true)))
+	cluster := monitoringCluster(t, services, nil)
+	units, err := monitoringUnits(cluster)
+	if err != nil || len(units) != 1 {
+		t.Fatalf("monitoring units: %v, %v", units, err)
+	}
+	want := map[string]string{"ingress.objects": "http", "ingress.shares": "http", "ingress.management": "drop"}
+	if !maps.Equal(units[0].ScrapeIngress, want) {
+		t.Fatalf("frozen ingress metrics = %v, want %v", units[0].ScrapeIngress, want)
+	}
+	services = slices.DeleteFunc(services, func(s api.Value) bool { return s.Get("service_type").Text() == "prometheus" })
+	units, err = monitoringUnits(monitoringCluster(t, services, nil))
+	if err != nil || len(units) != 1 || len(units[0].ScrapeIngress) != 0 {
+		t.Fatalf("without Prometheus: %v, %v", units, err)
+	}
+}
+
+func TestNFSIngressWaitsForMonitoringTemplatesWithoutACycle(t *testing.T) {
+	services := append(monitoringServices(),
+		auxiliaryService("nfs", "shares", requestMap("port", 12049)),
+		auxiliaryService("ingress", "nfs.shares", requestMap("backend_service", "nfs.shares", "frontend_port", 2049, "monitor_port", 9049, "virtual_ip", "192.0.2.50/24")))
+	cluster := monitoringCluster(t, services, nil)
+	monitoring, err := monitoringUnits(cluster)
+	if err != nil || len(monitoring) != 1 {
+		t.Fatalf("monitoring: %v %v", monitoring, err)
+	}
+	nfs, err := nfsUnits(cluster)
+	if err != nil || len(nfs) != 1 {
+		t.Fatalf("NFS: %v %v", nfs, err)
+	}
+	deps, err := ingressDependencies(cluster, nfs[0])
+	if err != nil || !slices.Equal(deps, []string{ServiceUnitBlockID(cluster.Name(), monitoring[0])}) {
+		t.Fatalf("NFS dependency: %v %v", deps, err)
+	}
+	if deps, err := unitTypes["monitoring"].dependencies(cluster, monitoring[0]); err != nil || len(deps) != 0 {
+		t.Fatalf("monitoring must not depend on ingress: %v %v", deps, err)
+	}
+	without := slices.DeleteFunc(slices.Clone(services), func(s api.Value) bool { return slices.Contains(MonitoringTypes, s.Get("service_type").Text()) })
+	if deps, err := ingressDependencies(monitoringCluster(t, without, nil), nfs[0]); err != nil || len(deps) != 0 {
+		t.Fatalf("without monitoring: %v %v", deps, err)
+	}
+}

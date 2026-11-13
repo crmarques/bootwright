@@ -22,15 +22,15 @@ FEATURES = ("--automatically-accept-license", "--disable-ibm-call-home", "setup-
 IBM_OVERRIDE = "IBM_BUILD = True\n"
 OVERRIDE_FORMS = {"assign True": IBM_OVERRIDE}
 BUILDS = {"20.1.0-221.el9cp": False, "20.2.1-405.el9cp": True, "20.2.2-349.el9cp": True, "20.2.2-349.el10cp": True}
-GENERAL = {"ceph.bootstrap.license-flag": "pass", "ceph.mgr.license-contract": "ibm", "ceph.call-home-model": "opt-out",
+GENERAL = {"ceph.monitoring.scrape-template": "native", "ceph.bootstrap.license-flag": "pass", "ceph.mgr.license-contract": "ibm", "ceph.call-home-model": "opt-out",
            "ceph.mgr.set-user-pre-steps": "skip", "ceph.bootstrap.license-call-refusal": "fail"}
-SPECIALIZED = {"ceph.bootstrap.license-flag": "omit", "ceph.mgr.license-contract": "absent", "ceph.call-home-model": "opt-in",
+SPECIALIZED = {"ceph.monitoring.scrape-template": "native", "ceph.bootstrap.license-flag": "omit", "ceph.mgr.license-contract": "absent", "ceph.call-home-model": "opt-in",
                "ceph.mgr.set-user-pre-steps": "absent", "ceph.bootstrap.license-call-refusal": "fail"}
 LICENSE_CALL_ID = "ceph-bootstrap-license-call-continues"
 CURRENT_VARIANTS = dict(GENERAL, **{"ceph.bootstrap.license-call-refusal": "continue-seed"})
 # The IBM bootstrap's own call as both signed 20.2.x zipapps list it (__main__.py:3445-3447 in 20.2.1-405, :3534-3535 in 20.2.2-349).
 LICENSE_CALL_SOURCE = "def bootstrap(ctx, cli):\n    if ctx.ibm_build:\n        cli(['orch', 'accept-license', '--image', ctx.image])\n"
-SEAM_CALLERS = frozenset(("ceph_native.py", "ceph_native_resources.py", "ceph_tunnel_staging.py"))
+SEAM_CALLERS = frozenset(("ceph_native.py", "ceph_native_resources.py", "ceph_tunnel_staging.py", "ceph_monitoring_template.py"))
 SEAMLESS = ("ceph_tunnel.py", "ceph_tunnel_custody.py", "ceph_pull_broker.py", "ceph_host_route_probe.py", "ceph_crypto_policy.py",
             "native_signatures.py", "native_diagnostics.py")
 UNCONSULTED = frozenset()
@@ -78,7 +78,7 @@ def selection(host, image=None):
 
 
 def facts(value):
-    return {name: value.fact(name) for name in ns.FACTS}
+    return {name: value.fact(name) for name in ns.FACTS if not name.startswith("image-monitoring.")}
 
 
 def variants(value):
@@ -92,14 +92,14 @@ def committed(build):
 
 def test_twenty_one_shaped_artifacts_take_every_specialized_variant():
     chosen = selection(old_shaped())
-    assert facts(chosen) == dict.fromkeys(ns.FACTS, False)
+    assert facts(chosen) == dict.fromkeys([name for name in ns.FACTS if not name.startswith("image-monitoring.")], False)
     assert variants(chosen) == SPECIALIZED
-    assert chosen.applied == {record.id for record in ns.SPECIALIZATIONS} - {LICENSE_CALL_ID}
+    assert chosen.applied == {record.id for record in ns.SPECIALIZATIONS} - {LICENSE_CALL_ID, "ceph-monitoring-plaintext-exporters"}
 
 
 def test_twenty_two_shaped_artifacts_keep_the_general_flow_but_continue_the_license_call_refusal():
     chosen = selection(new_shaped())
-    assert facts(chosen) == dict.fromkeys(ns.FACTS, True)
+    assert facts(chosen) == dict.fromkeys([name for name in ns.FACTS if not name.startswith("image-monitoring.")], True)
     assert variants(chosen) == CURRENT_VARIANTS
     assert chosen.applied == {LICENSE_CALL_ID}
 
@@ -134,7 +134,7 @@ def test_unreadable_or_unanchored_artifacts_are_unknown_and_general(shape):
     data = UNREADABLE[shape]()
     chosen = selection(data)
     assert chosen.declared("host-cephadm") is None
-    assert facts(chosen) == dict.fromkeys(ns.FACTS)
+    assert facts(chosen) == dict.fromkeys([name for name in ns.FACTS if not name.startswith("image-monitoring.")])
     assert variants(chosen) == GENERAL
     assert chosen.applied == set()
 
@@ -208,13 +208,13 @@ def test_synthesized_artifacts_keep_identical_bytes_across_zip_clock_values(buil
 @pytest.mark.parametrize("build", sorted(BUILDS))
 def test_each_signed_build_list_gives_its_recorded_facts(build):
     chosen = selection(synthesized(build))
-    assert facts(chosen) == dict.fromkeys(ns.FACTS, BUILDS[build])
+    assert facts(chosen) == dict.fromkeys([name for name in ns.FACTS if not name.startswith("image-monitoring.")], BUILDS[build])
     assert variants(chosen) == (CURRENT_VARIANTS if BUILDS[build] else SPECIALIZED)
 
 
 @pytest.mark.parametrize("build", sorted(build for build, current in BUILDS.items() if current))
 def test_todays_bootstrap_options_are_declared_by_each_twenty_two_build(build):
-    request = {"version": "ceph-core-v2", "clusterSSHTransport": "verifiedTunnel", "owner": "apply-example",
+    request = {"version": "ceph-core-v3", "clusterSSHTransport": "verifiedTunnel", "owner": "apply-example",
                "fsid": "4c0a4300-aa43-458c-86d7-ac2256d1fc00", "image": "registry.example.test/ceph@sha256:" + "a" * 64,
                "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": build}, "bootstrap": "node-1.example.test",
                "monIP": "192.0.2.1", "clusterNetworks": ["198.51.100.0/24"], "callHome": "enabled",
@@ -300,7 +300,7 @@ def test_a_source_refusal_propagates_unchanged():
 
 
 def test_two_matching_records_are_a_defect_not_a_choice(monkeypatch):
-    record = ns.SPECIALIZATIONS[0]
+    record = next(record for record in ns.SPECIALIZATIONS if record.id == "ceph-bootstrap-without-license-flag")
     monkeypatch.setattr(ns, "SPECIALIZATIONS", ns.SPECIALIZATIONS + (record._replace(id=record.id + "-copy"),))
     with pytest.raises(AssertionError):
         selection(old_shaped()).variant(record.seam)
@@ -345,7 +345,7 @@ def test_refusal_seams_are_pinned():
 
 def test_facts_never_key_on_a_release_tag_or_label():
     for name, (source, unused) in ns.FACTS.items():
-        assert source in ("host-cephadm", "image-cephadm") and name.startswith(source + ".")
+        assert source in ("host-cephadm", "image-cephadm", "image-monitoring") and name.startswith(source + ".")
         assert not re.search(r"release|tag|label|version", name), name
 
 

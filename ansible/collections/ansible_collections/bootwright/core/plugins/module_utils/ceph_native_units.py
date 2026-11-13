@@ -305,9 +305,10 @@ def leaf(value, path):
 def validate(request, hosts):
     """One unit of a known type: 1 to 8 placed documents, each listed in `delegated` with exactly its hosts."""
     unit = request.get("service")
-    require(isinstance(unit, dict) and {"documents", "id", "type"} <= set(unit) <= {"bindings", "config", "documents", "id", "ingressPorts", "type"})
+    require(isinstance(unit, dict) and {"documents", "id", "type"} <= set(unit) <= {"bindings", "config", "documents", "id", "ingressPorts", "scrapeIngress", "type"})
     require(isinstance(unit["type"], str) and unit["type"] in UNIT_TYPES)
     require("config" not in unit or unit["type"] == "monitoring")
+    require("scrapeIngress" not in unit or unit["type"] == "monitoring")
     ingress_ports(unit)
     singletons = UNIT_TYPES[unit["type"]].singletons
     require(unit["id"] == "" or isinstance(unit["id"], str) and ceph_native.NAME.fullmatch(unit["id"]) is not None)
@@ -631,7 +632,7 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
         scope = self.recovery_scope()
         observed = self.bound_specs(self.manager_retry(self.unit_specs))
         self.unit_records(values, observed, scope)
-        hooks.claim(self, unit, checked)
+        claimed = hooks.claim(self, unit, checked)
         names = self.unit_names()
         missing = [(name, value) for name, value in zip(names, values) if name not in observed]
         for name, value in missing:
@@ -647,7 +648,7 @@ class UnitWorker(ceph_native_resources.ResourceWorker):
             if self.markers.read("service-" + name + "-complete.json") is None:
                 self.markers.write("service-" + name + "-complete.json", {"scope": scope, "service": value})
         settled = hooks.settle(self, unit)
-        return {"changed": changed or settled is True}
+        return {"changed": changed or claimed is True or settled is True}
 
     def ingress_frontend(self):
         return frontend(self.request)

@@ -21,7 +21,7 @@ import time
 from ansible_collections.bootwright.core.plugins.module_utils import (
     adapter_protocol, bounded_process, canonical_json, tls_trust,
     ceph_crypto_policy, ceph_host_route_probe, ceph_host_runtime, ceph_host_worker, ceph_native, ceph_native_nfs, ceph_native_nvmeof,
-    ceph_native_observability, ceph_native_stretch,
+    ceph_monitoring_template, ceph_native_observability, ceph_native_stretch,
     ceph_native_resources, ceph_native_observe, ceph_native_units, ceph_native_object, ceph_native_worker, ceph_package_sources, ceph_package_worker,
     ceph_packages, ceph_registry_discovery, ceph_smb_native, ceph_replication_native, ceph_ssh_policy, ceph_tunnel,
     ceph_tunnel_staging, ceph_tunnel_custody, native_apply, native_diagnostics, native_specializations, native_resolution, native_signatures, ceph_pull_broker,
@@ -74,7 +74,7 @@ HOST_REASONS = (
 CLUSTER_REASONS = (
     "fips-policy", "cephx-policy",
     "unsupported-release", "runtime-profile", "device-identity", "cache-unproved", "enrollment-budget",
-    "dashboard-identity", "dashboard-tls-identity", "dashboard-drift", "dashboard-policy",
+    "dashboard-identity", "dashboard-tls-identity", "monitoring-template-identity", "dashboard-drift", "dashboard-policy",
     "dashboard-verify", "pool-identity", "pool-drift", "client-quiescence-unqualified", "native-option-undeclared", "call-home-unqualified",
     "dashboard-manager",
     "request", "artifact", "ownership", "evidence", "material", "packages", "package-artifact", "package-drift", "package-journal", "package-license",
@@ -584,7 +584,7 @@ class Transport:
 
     @staticmethod
     def native_sources():
-        modules = (native_diagnostics, native_specializations, canonical_json, bounded_process, tls_trust,
+        modules = (native_diagnostics, native_specializations, canonical_json, ceph_monitoring_template, bounded_process, tls_trust,
                    ceph_tunnel, ceph_tunnel_staging, ceph_tunnel_custody, ceph_native_observe, ceph_native,
                    ceph_native_resources, ceph_native_stretch, ceph_native_nfs, ceph_native_nvmeof, ceph_native_observability,
                    ceph_native_units, ceph_native_object, ceph_smb_native,

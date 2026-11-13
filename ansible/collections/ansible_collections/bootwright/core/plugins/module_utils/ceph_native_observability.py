@@ -38,7 +38,7 @@ import ssl
 import stat
 import time
 
-from ansible_collections.bootwright.core.plugins.module_utils import ceph_native_nfs
+from ansible_collections.bootwright.core.plugins.module_utils import ceph_monitoring_template, ceph_native_nfs
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import NativeFailure, Refusal, require
 
 MONITORING_TYPES = (
@@ -167,6 +167,10 @@ def validate(unit, request, hosts):
     require(all(kind in MEMBERS for kind in kinds) and kinds == sorted(set(kinds)))
     wanted = {"global": {"log_to_file": "true", "mon_cluster_log_to_file": "true"}} if set(kinds) & {"alloy", "promtail"} else None
     require(unit.get("config") == wanted)
+    ingress = unit.get("scrapeIngress", {})
+    delegated = {entry["name"] for entry in request.get("delegated", []) if entry["name"].startswith("ingress.")}
+    require(isinstance(ingress, dict) and set(ingress) == (delegated if "prometheus" in kinds else set()))
+    require(all(isinstance(mode, str) and mode in ("http", "drop") for mode in ingress.values()))
     for document in documents:
         require("service_id" not in document)
         spec = document.get("spec", {})
@@ -193,6 +197,8 @@ def check(worker, unit):
     """Read-only, before any write: the settings block holds the frozen image setting of every auxiliary image the unit runs."""
     check_images(worker, needed_images(unit))
     logging_state(worker, unit)
+    for descriptor, plan in ceph_monitoring_template.plans(worker, unit):
+        ceph_monitoring_template.state(worker, plan, descriptor)
 
 
 def logging_state(worker, unit):
@@ -228,6 +234,10 @@ def claim(worker, unit, checked):
     state = logging_state(worker, unit)
     if state is not None and state[2] is None:
         worker.markers.write("monitoring-log-config-attempt.json", state[0])
+    changed = False
+    for descriptor, plan in ceph_monitoring_template.plans(worker, unit):
+        changed = ceph_monitoring_template.prepare(worker, plan, descriptor) or changed
+    return changed
 
 
 def settle(worker, unit):
@@ -256,6 +266,8 @@ def expected(unit):
 
 def readiness(worker, unit, blocking):
     """Read-only: with prometheus, an available manager whose map lists the prometheus module's endpoint; nothing enters evidence."""
+    if not all(ceph_monitoring_template.ready(worker, plan, descriptor) for descriptor, plan in ceph_monitoring_template.plans(worker, unit)):
+        return False
     state = logging_state(worker, unit)
     if state is not None and state[3] is None:
         return False

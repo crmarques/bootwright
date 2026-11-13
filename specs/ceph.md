@@ -2028,6 +2028,56 @@ custody. Access resolves the selected owned cluster, native tool and trust under
 inspection never mutates or reveals keys.
 Unavailable commands remain unavailable until their slice delivers them.
 
+## Monitoring scrape templates
+
+The monitoring request freezes `scrapeIngress`, a map of every admitted native
+ingress service name to `http` for HAProxy statistics or `drop` for
+`keepalive_only`. It is derived from all cluster service intent, including
+services deployed after monitoring; admission refuses statistics TLS overrides.
+Without Prometheus no map is carried. The map changes no public input.
+
+The [artifact specialization catalog](../.agents/knowledge/version-specializations.md#ceph-monitoring-plaintext-exporters)
+owns qualification of a native template that incorrectly renders secure-stack
+scrapes as HTTPS for plaintext exporters. Its pure rendering seam inserts
+HTTP target relabels for NFS and SMB and exact mapped HAProxy ingress labels,
+and drops only the mapped keepalive-only ingress labels. On the same qualified
+artifact, an HAProxy template insertion enables `/metrics` for exactly those
+mapped services when native `enable_stats` is unset or false; the statistics UI,
+its authentication and unlisted services retain native behavior. Unlisted ingress,
+other scrape targets, discovery authentication and TLS, Alertmanager,
+federation and remote write retain their native bytes. Any unfamiliar source
+fingerprint keeps the native template; no release string selects a variant.
+
+The general monitoring worker owns a required override at
+`mgr/cephadm/services/prometheus/prometheus.yml` through
+`monitoring-template-attempt.json` and `monitoring-template-complete.json`.
+The HAProxy override at `mgr/cephadm/services/ingress/haproxy.cfg` has separate
+`monitoring-haproxy-attempt.json` and `monitoring-haproxy-complete.json` records
+under the identical protocol. Both complete before any monitoring service
+apply. An NFS unit with ingress depends on the declared monitoring unit,
+as object and management gateways do; this general dependency has no version
+condition.
+Before any monitoring service apply, it binds the recovery scope, held image
+ID, native source digests and desired template digest, records the attempt,
+rechecks the native key and sets it through stdin. Exact readback precedes
+completion and settles a lost reply. Absence is retryable only for an
+incomplete matching attempt. A pre-existing unowned override, even identical,
+a host-specific override, a changed intent or a missing or changed completed
+value refuses `monitoring-template-identity`. Observation only reads these
+proofs. An owned override whose artifact no longer selects the correction
+also refuses; it must not mask a changed native template on upgrade.
+Native config-key provides no compare-and-set contract; concurrent external
+administrators must not edit this key during the operation.
+
+This moves the core request `Version` in `internal/storage/ceph/requests.go`
+and its content digest.
+Operations admitted by an earlier build require their original executable for
+continuation or removal. A separate operator repair of an existing cluster
+must retain its own scoped evidence, preserve lifecycle records, reconfigure
+Prometheus and verify active scrape health. Stored template readback alone
+proves no daemon has reloaded. Inactive alert rules are definitions, not
+firing alerts; they do not authorize certificate changes.
+
 ## Dashboard and client-data test
 
 After readiness, a dashboard phase on the bootstrap host enables the Ceph
