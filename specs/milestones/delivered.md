@@ -15857,3 +15857,18 @@ writers or separate clones.
 disposable worktrees, their Go architecture entry point, skill validation,
 focused and full gate results, and any integration blocker. No runtime effect,
 persisted product format or operator acceptance changes.
+
+## X456 — Cluster access detail emphasis
+
+**Owner:** CLI; **item:** B1382 (product); **authority:** explicit owner request.
+
+The [cluster info presentation](../cli/output.md#cluster-discovery) uses the
+shared renderer's explicit field styling to distinguish access details from
+supporting evidence. Existing plain-text layouts and structured results retain
+their content. This changes presentation only, including already authorized
+credential disclosure, with no change to custody or its access boundaries.
+
+**Exit evidence:** the delivering commit records focused styling and layout
+tests, the CLI suite, documentation checks and the full verification gate.
+Tests cover wrapped output, muted notes, control-character escaping and the
+default hidden password. No operator acceptance gate is required.

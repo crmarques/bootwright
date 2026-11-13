@@ -426,7 +426,7 @@ func writeClusterInfo(out, errOut io.Writer, command string, result *inspection.
 		}
 		records++
 		text.resourceHeading("cluster", cluster.Name, "")
-		text.subsection("Topology")
+		text.emphasizedSubsection("Topology")
 		text.mutedFields(field{Label: "Type", Value: cluster.Kind})
 		writeAccessCommands(&text, result.Context, cluster.Name, cluster.AccessCommands, full)
 	}
@@ -440,7 +440,7 @@ func writeClusterInfo(out, errOut io.Writer, command string, result *inspection.
 		}
 		records++
 		text.resourceHeading("cluster", cluster.Name, status)
-		text.subsection("Topology")
+		text.emphasizedSubsection("Topology")
 		topology := []field{{Label: "Type", Value: cluster.Kind}}
 		if cluster.Ceph != nil {
 			topology = append(topology, managedCephTopology(cluster.Ceph)...)
@@ -483,8 +483,8 @@ func writeManagedCeph(text *display, contextName, cluster string, ceph *inspecti
 	if rows := endpointAccessFields(ceph.Endpoints, full); len(rows) != 0 {
 		text.mutedFields(rows...)
 	}
-	text.subsection("Evidence")
-	fields := []field{{Label: "Status", Value: ceph.Status}}
+	text.emphasizedSubsection("Evidence")
+	fields := []field{{Label: "Status", Value: ceph.Status, Tone: "state"}}
 	if ceph.Status != inspection.StatusReady {
 		fields = append(fields, field{Label: "Reason", Value: ceph.Reason}, field{Label: "Next", Value: ceph.Remedy})
 	} else if full {
@@ -496,19 +496,21 @@ func writeManagedCeph(text *display, contextName, cluster string, ceph *inspecti
 	if ceph.Dashboard != nil {
 		d := ceph.Dashboard
 		password := "hidden; rerun with --secrets --name " + cluster
+		passwordTone := "muted"
 		if d.Revealed {
 			value, _ := d.Password.Part(secrets.ValuePart)
 			password = string(value)
+			passwordTone = "identity"
 			clear(value)
 		}
-		text.subsection("Custody")
-		text.mutedFields(field{Label: "User", Value: d.User}, field{Label: "Password", Value: password})
+		text.emphasizedSubsection("Custody")
+		text.mutedFields(field{Label: "User", Value: d.User, Tone: "identity"}, field{Label: "Password", Value: password, Tone: passwordTone})
 	}
 	for _, user := range ceph.ObjectUsers {
 		access, _ := user.Credentials.Part(secrets.UsernamePart)
 		secret, _ := user.Credentials.Part(secrets.PasswordPart)
-		text.subsection("S3 credentials")
-		text.mutedFields(field{Label: "User", Value: user.Name}, field{Label: "Gateway", Value: user.Gateway}, field{Label: "Access key", Value: string(access)}, field{Label: "Secret key", Value: string(secret)})
+		text.emphasizedSubsection("S3 credentials")
+		text.mutedFields(field{Label: "User", Value: user.Name, Tone: "identity"}, field{Label: "Gateway", Value: user.Gateway, Tone: "identity"}, field{Label: "Access key", Value: string(access), Tone: "identity"}, field{Label: "Secret key", Value: string(secret), Tone: "identity"})
 		clear(access)
 		clear(secret)
 	}
@@ -525,14 +527,14 @@ func writeResources(text *display, resources []inspection.Resource, full bool) {
 	if len(resources) == 0 {
 		return
 	}
-	text.subsection("Resources")
+	text.emphasizedSubsection("Resources")
 	rows := make([]field, 0, len(resources))
 	for _, r := range resources {
-		value := r.Status
+		note := ""
 		if full && r.Scope != "" {
-			value += "  " + r.Scope
+			note = "  " + r.Scope
 		}
-		rows = append(rows, field{Label: r.Kind + "/" + r.Name, Value: value})
+		rows = append(rows, field{Label: r.Kind + "/" + r.Name, Value: r.Status, Tone: "state", Note: note})
 	}
 	text.mutedFields(rows...)
 }
@@ -547,13 +549,13 @@ func dashboardAccessFields(d *inspection.Dashboard) []field {
 		if index == 0 {
 			label, note = "Dashboard", "(active MGR "+url.Host+" at last observation)"
 		}
-		fields = append(fields, field{Label: label, Value: url.URL + "  " + note})
+		fields = append(fields, field{Label: label, Value: url.URL, Tone: "accent", Note: "  " + note})
 	}
-	status := d.Status
+	note := ""
 	if d.Reason != "" {
-		status += ": " + d.Reason
+		note = ": " + d.Reason
 	}
-	fields = append(fields, field{Label: "Dashboard status", Value: status})
+	fields = append(fields, field{Label: "Dashboard status", Value: d.Status, Tone: "state", Note: note})
 	if d.CertificateSHA256 != "" {
 		fields = append(fields, field{Label: "Certificate SHA-256", Value: colonHex(d.CertificateSHA256) + "  (self-signed; compare before accepting the browser warning)"})
 	}
@@ -574,7 +576,7 @@ func endpointAccessFields(endpoints []inspection.Endpoint, full bool) []field {
 			continue
 		}
 		for _, url := range e.URLs {
-			fields = append(fields, field{Value: url})
+			fields = append(fields, field{Value: url, Tone: "accent"})
 		}
 		if e.CertificateSHA256 != "" {
 			note := "(bound certificate)"
@@ -596,9 +598,13 @@ func colonHex(digest string) string {
 }
 
 func writeAccessCommands(text *display, contextName, cluster string, commands []inspection.AccessCommand, full bool) {
-	text.subsection("Access")
+	text.emphasizedSubsection("Access")
 	for _, command := range commands {
-		text.mutedFields(field{Label: command.Command, Value: command.Status})
+		tone := "state"
+		if command.Status == inspection.StatusNotApplicable || command.Status == inspection.StatusNotImplemented {
+			tone = ""
+		}
+		text.mutedFields(field{Label: command.Command, Value: command.Status, Tone: tone})
 		switch command.Status {
 		case inspection.StatusReady:
 			text.mutedVerbatimLines([]string{accessTemplate(contextName, cluster, command)})

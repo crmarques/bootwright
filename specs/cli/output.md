@@ -85,8 +85,9 @@ metadata; the renderer never infers semantics from a header or a value.
 Every command composes the same semantic blocks. Commands supply raw facts;
 one renderer owns escaping, styling, spacing, wrapping and column widths.
 Headlines, section headings and tables begin at two spaces; ordinary fields
-begin at four spaces. Resource info uses a resource heading followed by grey
-group headings at four spaces and grey details at six spaces. One blank line
+begin at four spaces. Resource info uses a resource heading followed by
+group headings at four spaces and details at six spaces, normally grey;
+[cluster info](#cluster-discovery) emphasizes access details. One blank line
 separates top-level groups. Fields align values within their group. Tables use
 three spaces between columns and switch to stacked resource records when the
 available width cannot hold them; every identity, state and detail is retained.
@@ -785,7 +786,12 @@ not prove that access material is available. Sensitive `cluster info --secrets`
 retains its separate explicit disclosure boundary.
 
 Human `cluster info` groups available Topology, Access, Evidence, Resources
-and Custody facts. Resources lists each row as `<Kind>/<name>` with its
+and Custody facts. Section headings, URL labels and credential labels use bold
+neutral text; URLs use the blue accent, usernames and explicitly revealed credentials use
+bold identity text, and applicable status values use semantic colors. Explanatory
+notes, fingerprints, hidden-password guidance and verbose evidence remain muted.
+Unimplemented command families and inapplicable access entries remain muted.
+Resources lists each row as `<Kind>/<name>` with its
 status; full detail appends its scope. Full detail includes verbose frozen
 evidence and access templates; compact detail retains statuses, actionable
 reasons, ready access and the dashboard certificate fingerprint, the evidence

@@ -17,7 +17,10 @@ type display struct {
 	text strings.Builder
 }
 
-type field struct{ Label, Value string }
+type field struct {
+	Label, Value string
+	Tone, Note   string
+}
 type step struct {
 	Text    string
 	Effects []string
@@ -78,6 +81,10 @@ func (d *display) section(title string) {
 
 func (d *display) subsection(title string) {
 	d.custom(func(r *displayRenderer) { r.paragraph(title, "    ", "muted") })
+}
+
+func (d *display) emphasizedSubsection(title string) {
+	d.custom(func(r *displayRenderer) { r.paragraph(title, "    ", "identity") })
 }
 
 func (d *display) separate() { d.section("") }
@@ -247,30 +254,42 @@ func (r *displayRenderer) fields(values []field, muted, verbatim bool) {
 		if muted {
 			indent, tone = "      ", "muted"
 		}
+		labelTone := "muted"
+		if value.Tone != "" {
+			tone = value.Tone
+			if tone != "state" {
+				labelTone = "identity"
+			}
+		}
+		escaped := escapeDisplayLine(value.Value)
+		note := escapeDisplayLine(value.Note)
+		if r.options.ASCII {
+			escaped, note = presentationASCII(escaped), presentationASCII(note)
+		}
+		body := r.tone(escaped, tone)
+		if note != "" {
+			body += styleMuted(note, r.options)
+		}
 		prefix := label + strings.Repeat(" ", labelWidth-displayCellWidth(label)+displayGap)
 		if !verbatim && r.options.columns()-displayCellWidth(indent+prefix) < 12 {
-			r.paragraph(value.Label+": "+value.Value, indent, tone)
+			if value.Tone == "" && value.Note == "" {
+				r.paragraph(value.Label+": "+value.Value, indent, tone)
+			} else {
+				r.styledParagraph(r.tone(label+": ", labelTone)+body, indent, "plain")
+			}
 			continue
 		}
 		width := r.options.columns() - displayCellWidth(indent+prefix)
-		escaped := escapeDisplayLine(value.Value)
-		if r.options.ASCII {
-			escaped = presentationASCII(escaped)
-		}
-		lines := []string{escaped}
+		lines := []string{body}
 		if !verbatim {
-			lines = wrapDisplayText(escaped, width)
+			lines = wrapDisplayText(body, width)
 		}
 		for n, line := range lines {
 			fit := displayCellWidth(line) <= width
 			if n == 0 {
-				if muted {
-					r.emit(indent+styleMuted(prefix+line, r.options), fit)
-				} else {
-					r.emit(indent+styleMuted(prefix, r.options)+line, fit)
-				}
+				r.emit(indent+r.tone(prefix, labelTone)+line, fit)
 			} else {
-				r.emit(indent+strings.Repeat(" ", displayCellWidth(prefix))+r.tone(line, tone), fit)
+				r.emit(indent+strings.Repeat(" ", displayCellWidth(prefix))+line, fit)
 			}
 		}
 	}

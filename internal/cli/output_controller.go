@@ -402,7 +402,7 @@ func controllerPlanText(text *display, report *prerequisites.Report, scope, chec
 	}
 	if table {
 		text.section("")
-		text.fields(field{"Host", report.Table.Host}, field{"Runtime", report.Table.Runtime}, field{"Packages", report.Table.Packages})
+		text.fields(field{Label: "Host", Value: report.Table.Host}, field{Label: "Runtime", Value: report.Table.Runtime}, field{Label: "Packages", Value: report.Table.Packages})
 		if len(report.Actions) == 0 && (report.Outcome == "ready" || report.Outcome == "unchanged") {
 			text.lines([]string{"Nothing to do."})
 		}
