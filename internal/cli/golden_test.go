@@ -798,6 +798,12 @@ func cliGoldens() []cliGolden {
 		{golden: "cli-machine-discover-json", args: "machine discover --name rhel-01 --yes --output json", record: func(r *dispatchRecord) {
 			r.result.machineDiscovery = &installation.DiscoverResult{Operation: operation("done"), Inventories: []installation.DiscoveryInventory{{Machine: "rhel-01", Disks: []diskselection.Disk{{DiskIdentity: diskselection.DiskIdentity{WWN: "0x5000000000000001", SerialNumber: "EXAMPLE-OS", SizeBytes: 1073741824}, Model: "EXAMPLE SSD", ControllerPCIAddress: "0000:01:00.0", Transport: "scsi", Fixed: true, Writable: true, Whole: true}}}}}
 		}},
+		{golden: "cli-apply-prepared-authorization-json", args: "apply --yes --output json", code: 1, record: func(r *dispatchRecord) {
+			r.result.lifecycleOperation = operation("done")
+			r.result.lifecycleOperation.Steps = []lifecycle.PlanStep{{ID: "inventory", Kind: "Machine", Object: "metal-01", Description: "inventory Linux-visible disks of metal-01 in RAM, then power off", Stage: "machines", State: "done"}}
+			r.result.lifecycleOperation.Blocks = []lifecycle.BlockResult{{ID: "inventory", Description: "inventory Linux-visible disks of metal-01 in RAM, then power off", Stage: "machines", State: "done", Outcome: "changed", Attempts: 1}}
+			r.err = unauthorized
+		}},
 		{golden: "cli-apply", args: "apply --yes", record: func(r *dispatchRecord) { r.result.lifecycleOperation = operation("done") }},
 		// An adapter's warning reaches standard error beside the result in
 		// text and the envelope's diagnostics in JSON, and status carries the

@@ -151,77 +151,82 @@ func (c DiscoveryCapability) Roots(ctx context.Context, input lifecycle.PlanInpu
 	}
 	proofs := map[string]diskselection.Proof{}
 	for _, r := range requests {
-		missing := func() error {
-			return refusal("lifecycle.state", "Machine/"+r.Identity.Object+" has no completed disk discovery for the current policy and media", "run bootwright machine discover --context "+input.Context.Name+" --name "+r.Identity.Object)
-		}
-		if input.AppliedEvidence == nil {
-			return nil, missing()
-		}
-		owned, err := input.AppliedEvidence(ctx, Kind, r.Identity.Object)
+		report, found, err := c.completedInventory(ctx, input, r)
 		if err != nil {
 			return nil, err
-		}
-		wire, _ := r.Canonical()
-		digest, err := reconciliation.RequestDigest(reconciliation.BlockDefinition{Kind: Kind, Object: r.Identity.Object, Implementation: DiscoveryImplementation, ContentDigest: DiscoveryContentDigest(), Request: wire})
-		if err != nil {
-			return nil, err
-		}
-		found := false
-		for _, record := range owned {
-			if record.Implementation != DiscoveryImplementation || record.Block.RequestDigest != digest || record.Verb != reconciliation.Apply || record.State != reconciliation.BlockDone {
-				continue
-			}
-			e, report, err := discoveryEvidence(record.Evidence, digest)
-			if err != nil {
-				return nil, err
-			}
-			if !e.Completed || !e.Cleaned {
-				return nil, missing()
-			}
-			expected := report.Binding
-			expected.Context, expected.Incarnation, expected.Machine = input.Context.Name, input.Context.Incarnation, r.Identity.Object
-			expected.RequestDigest, expected.MediaSHA256, expected.ToolDigest = digest, r.BootMedia.SHA256, DiscoveryContentDigest()
-			expected.Operation = record.Operation
-			if c.identities == nil {
-				return nil, missing()
-			}
-			pin, pinned, err := c.identities.PinnedIdentity(r.Identity.Object, owned)
-			if err != nil {
-				return nil, err
-			}
-			if !pinned {
-				return nil, missing()
-			}
-			expected.UUID = strings.ToLower(strings.TrimSpace(pin.UUID))
-			expected.MACs = discoveryMACs(r)
-			m, _ := input.State.Effective().Find(api.Machine, r.Identity.Object)
-			policy, err := diskselection.PolicyFromValue(substrate.MachineDiscoveryPolicy(m))
-			if err != nil {
-				return nil, err
-			}
-			var protected []diskselection.DiskIdentity
-			for _, protect := range c.protections {
-				claims, err := protect(input.State.Effective(), m)
-				if err != nil {
-					return nil, refusal("api.invariant", err.Error(), "select stable explicit Ceph data, DB and WAL paths from the recorded inventory")
-				}
-				protected = append(protected, claims...)
-			}
-			proof, err := diskselection.Prove(report, expected, policy, protected)
-			if err != nil {
-				return nil, refusal("lifecycle.state", "Machine/"+r.Identity.Object+": "+err.Error(), "inspect the recorded inventory, refine rootDevice.discover.match and update the context before planning again")
-			}
-			if found {
-				return nil, refusal("lifecycle.state", "disk discovery has multiple owned proofs", "")
-			}
-			proofs[r.Identity.Object] = proof
-			found = true
 		}
 		if !found {
-			return nil, missing()
+			return nil, refusal("lifecycle.state", "Machine/"+r.Identity.Object+" has no completed disk discovery for the current policy and media", "run bootwright apply --context "+input.Context.Name+" to prepare inventory, or bootwright machine discover --context "+input.Context.Name+" --name "+r.Identity.Object+" --prepare-prerequisites")
 		}
+		m, _ := input.State.Effective().Find(api.Machine, r.Identity.Object)
+		policy, err := diskselection.PolicyFromValue(substrate.MachineDiscoveryPolicy(m))
+		if err != nil {
+			return nil, err
+		}
+		protected, err := c.protectedClaims(input.State.Effective(), m)
+		if err != nil {
+			return nil, refusal("api.invariant", err.Error(), "select stable explicit Ceph data, DB and WAL paths from the recorded inventory")
+		}
+		proof, err := diskselection.Prove(report, report.Binding, policy, protected)
+		if err != nil {
+			return nil, refusal("lifecycle.state", "Machine/"+r.Identity.Object+": "+err.Error(), "inspect the recorded inventory, refine rootDevice.discover.match and update the context before planning again")
+		}
+		proofs[r.Identity.Object] = proof
 	}
 	return proofs, nil
+}
+
+func (c DiscoveryCapability) completedInventory(ctx context.Context, input lifecycle.PlanInput, r DiscoveryRequest) (diskselection.Report, bool, error) {
+	var inventory diskselection.Report
+	if input.AppliedEvidence == nil {
+		return inventory, false, nil
+	}
+	owned, err := input.AppliedEvidence(ctx, Kind, r.Identity.Object)
+	if err != nil {
+		return inventory, false, err
+	}
+	wire, err := r.Canonical()
+	if err != nil {
+		return inventory, false, err
+	}
+	digest, err := reconciliation.RequestDigest(reconciliation.BlockDefinition{Kind: Kind, Object: r.Identity.Object, Implementation: DiscoveryImplementation, ContentDigest: DiscoveryContentDigest(), Request: wire})
+	if err != nil {
+		return inventory, false, err
+	}
+	found := false
+	for _, record := range owned {
+		if record.Implementation != DiscoveryImplementation || record.Block.RequestDigest != digest || record.Verb != reconciliation.Apply || record.State != reconciliation.BlockDone {
+			continue
+		}
+		e, report, err := discoveryEvidence(record.Evidence, digest)
+		if err != nil {
+			return inventory, false, err
+		}
+		if !e.Completed || !e.Cleaned || c.identities == nil {
+			return inventory, false, nil
+		}
+		expected := report.Binding
+		expected.Context, expected.Incarnation, expected.Machine = input.Context.Name, input.Context.Incarnation, r.Identity.Object
+		expected.RequestDigest, expected.MediaSHA256, expected.ToolDigest = digest, r.BootMedia.SHA256, DiscoveryContentDigest()
+		expected.Operation = record.Operation
+		pin, pinned, err := c.identities.PinnedIdentity(r.Identity.Object, owned)
+		if err != nil {
+			return inventory, false, err
+		}
+		if !pinned {
+			return inventory, false, nil
+		}
+		expected.UUID = strings.ToLower(strings.TrimSpace(pin.UUID))
+		expected.MACs = discoveryMACs(r)
+		if expected.Validate() != nil || report.Validate() != nil || !reflect.DeepEqual(report.Binding, expected) {
+			return inventory, false, refusal("lifecycle.state", "the recorded disk inventory does not match its original machine and execution", "retain the original inventory and resolve its ownership before preparing another")
+		}
+		if found {
+			return inventory, false, refusal("lifecycle.state", "disk discovery has multiple owned proofs", "")
+		}
+		inventory, found = report, true
+	}
+	return inventory, found, nil
 }
 
 func discoveryMACs(r DiscoveryRequest) []string {

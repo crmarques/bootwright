@@ -13,6 +13,7 @@ import (
 )
 
 type PreparationDefinition struct {
+	Automatic     func(context.Context, PlanInput, reconciliation.Selection) ([]string, error)
 	Kind          string
 	Command       string
 	Bindings      []CapabilityBinding
@@ -88,7 +89,7 @@ func (s Service) forPreparation(scope reconciliation.PreparationScope) (Service,
 		return Service{}, failure("lifecycle.state", err.Error(), "")
 	}
 	definition, found := s.preparationDefinition(scope.Kind)
-	if !found || !validPreparationDefinition(definition) || scope.Command != definition.Command {
+	if !found || !validPreparationDefinition(definition) || !definition.admitsCommand(scope.Command) {
 		return Service{}, failure("lifecycle.unsupported", "this executable has no registered preparation for "+scope.Kind, "")
 	}
 	s.preparation = &scope
@@ -193,6 +194,9 @@ func (s Service) preparationCommand(name string, plan reconciliation.Plan) strin
 	if !ok {
 		return "use the executable that registered this preparation"
 	}
+	if plan.Preparation.Command == string(reconciliation.Apply) {
+		return contextCommand(name, string(reconciliation.Apply))
+	}
 	flags := []string{"--name", strings.Join(plan.Preparation.Targets, ",")}
 	if plan.Preparation.PreparePrerequisites {
 		flags = append(flags, "--prepare-prerequisites")
@@ -248,7 +252,7 @@ func (s Service) preparationAddition(ctx context.Context, view View, store recor
 		scope = s.preparation
 	}
 	definition, found := s.preparationDefinition(scope.Kind)
-	if !found || !validPreparationDefinition(definition) || scope.Command != definition.Command {
+	if !found || !validPreparationDefinition(definition) || !definition.admitsCommand(scope.Command) {
 		return nil, failure("lifecycle.unsupported", "the preparation owner is not registered or is incomplete", "")
 	}
 	if err := definition.Advance(ctx, PreparationAdvance{AppliedEvidence: s.planInput(view, state, binding.controller).AppliedEvidence, Scope: *scope, Context: view.Identity(), State: state, Before: before, Owned: owned, Fresh: fresh}); err != nil {

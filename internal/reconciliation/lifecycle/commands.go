@@ -16,7 +16,7 @@ func contextCommand(contextName, verb string, flags ...string) string {
 }
 
 func planCommand(contextName string, plan reconciliation.Plan, flags ...string) string {
-	if plan.Preparation == nil {
+	if plan.Preparation == nil || plan.Preparation.Command == string(reconciliation.Apply) {
 		return contextCommand(contextName, string(plan.Verb), flags...)
 	}
 	scope := plan.Preparation

@@ -161,9 +161,13 @@ func (h *killHost) Claimed(catalog api.Catalog) []string {
 	return plannedKinds(h.definitions, catalog)
 }
 
-func (h *killHost) Plan(context.Context, PlanInput) (CapabilityPlan, error) {
+func (h *killHost) Plan(_ context.Context, input PlanInput) (CapabilityPlan, error) {
+	definitions := slices.Clone(h.definitions)
+	if input.Preparation != nil {
+		definitions = slices.DeleteFunc(definitions, func(d reconciliation.BlockDefinition) bool { return d.ID == "installation" })
+	}
 	return CapabilityPlan{
-		Definitions: slices.Clone(h.definitions),
+		Definitions: definitions,
 		Reservations: []prerequisites.HostReservation{{
 			Context: testContextName, Kind: "artifact-server", Service: "a", Keys: []string{"socket:192.0.2.1:8443"},
 		}},
@@ -894,6 +898,28 @@ func killJourneys() []killJourney {
 		}
 		rig.host.definitions = append(rig.host.definitions, definition("installation"))
 	}
+	automatic := func(_ context.Context, t *testing.T, rig *killRig) {
+		t.Helper()
+		rig.host.definitions = append(rig.host.definitions, definition("installation"))
+		rig.harness.service.options.Preparations = []PreparationDefinition{{
+			Kind: "example-inventory", Command: "machine discover", Bindings: rig.harness.service.capabilities.Bindings(),
+			Bearing:  func(api.Object) (Bearing, bool) { return Bearing{}, false },
+			Validate: func(context.Context, PlanInput, reconciliation.PreparationScope) error { return nil },
+			Advance:  func(context.Context, PreparationAdvance) error { return nil },
+			Automatic: func(ctx context.Context, input PlanInput, _ reconciliation.Selection) ([]string, error) {
+				for _, name := range []string{"a", "b", "c"} {
+					records, err := input.AppliedEvidence(ctx, "ArtifactServer", name)
+					if err != nil {
+						return nil, err
+					}
+					if !slices.ContainsFunc(records, func(r BlockEvidence) bool { return r.State == reconciliation.BlockDone }) {
+						return []string{"example-node"}, nil
+					}
+				}
+				return nil, nil
+			},
+		}}
+	}
 	return []killJourney{
 		{name: "a", bound: killBoundFreshApply, run: reconciliation.Apply, retry: reconciliation.Apply},
 		{name: "b", bound: killBoundDestroy, start: applied, run: reconciliation.Destroy, retry: reconciliation.Destroy},
@@ -906,6 +932,8 @@ func killJourneys() []killJourney {
 		{name: "i", bound: killBoundPartial, start: lostPartly, run: reconciliation.Destroy, retry: reconciliation.Destroy, reaches: killRemovalResolution()},
 		{name: "j", bound: killBoundUnraised, start: unraised, run: reconciliation.Destroy, retry: reconciliation.Destroy, reaches: killReclaim()},
 		{name: "k", bound: killBoundDestroy, start: online, run: reconciliation.Destroy, retry: reconciliation.Destroy},
+		{name: "automatic-preparation-installation", bound: killBoundFreshApply, start: automatic, run: reconciliation.Apply, retry: reconciliation.Apply},
+		{name: "automatic-preparation-removal", bound: killBoundSupersede, start: automatic, run: reconciliation.Apply, retry: reconciliation.Destroy, finish: reconciliation.Destroy},
 		{name: "preparation-installation", bound: killBoundFreshApply, start: prepared, run: reconciliation.Apply, retry: reconciliation.Apply},
 	}
 }

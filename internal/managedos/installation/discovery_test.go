@@ -73,6 +73,11 @@ func TestDiscoveryInventoryBecomesAnExactInstallerTarget(t *testing.T) {
 	owner := NewDiscovery(runner).WithNonces(func() (string, error) { return strings.Repeat("a", 64), nil }).WithMedia(labMedia()).WithIdentities(identities).WithProtections(func(api.Catalog, api.Object) ([]diskselection.DiskIdentity, error) {
 		return []diskselection.DiskIdentity{{WWN: data.WWN}}, nil
 	})
+	input.AppliedEvidence = func(context.Context, string, string) ([]lifecycle.BlockEvidence, error) { return nil, nil }
+	pending, err := owner.AutomaticPreparation(ctx, input, reconciliation.Selection{})
+	if err != nil || len(pending) != 1 {
+		t.Fatalf("missing inventory was not prepared: %v %v", pending, err)
+	}
 	plan, err := owner.Plan(ctx, input)
 	if err != nil {
 		t.Fatal(err)
@@ -102,6 +107,40 @@ func TestDiscoveryInventoryBecomesAnExactInstallerTarget(t *testing.T) {
 	input.AppliedEvidence = func(context.Context, string, string) ([]lifecycle.BlockEvidence, error) {
 		return []lifecycle.BlockEvidence{{Operation: op, Block: block, Kind: Kind, Object: block.Object, Implementation: DiscoveryImplementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: runner.evidence}}, nil
 	}
+	t.Run("automatic preparation reuses raw evidence despite selection failure", func(t *testing.T) {
+		pending, err := owner.AutomaticPreparation(ctx, input, reconciliation.Selection{})
+		if err != nil || len(pending) != 0 {
+			t.Fatalf("valid inventory booted again: %v %v", pending, err)
+		}
+		ambiguous := owner.WithProtections()
+		if _, err := ambiguous.Roots(ctx, input); err == nil {
+			t.Fatal("ambiguous inventory selected a root")
+		}
+		pending, err = ambiguous.AutomaticPreparation(ctx, input, reconciliation.Selection{})
+		if err != nil || len(pending) != 0 {
+			t.Fatalf("ambiguous selection requested a new boot: %v %v", pending, err)
+		}
+		pending, err = owner.AutomaticPreparation(ctx, input, reconciliation.Selection{Stages: reconciliation.StageSelection{reconciliation.StageController}})
+		if err != nil || len(pending) != 1 {
+			t.Fatalf("controller stage was forced through installation selection: %v %v", pending, err)
+		}
+		stale := input
+		stale.Context.Incarnation = "another-context"
+		if _, err := owner.AutomaticPreparation(ctx, stale, reconciliation.Selection{}); err == nil {
+			t.Fatal("foreign inventory became boot authority")
+		}
+		for _, implementation := range []string{Implementation, EraseImplementation} {
+			installed := input
+			installed.AppliedEvidence = func(ctx context.Context, kind, name string) ([]lifecycle.BlockEvidence, error) {
+				records, err := input.AppliedEvidence(ctx, kind, name)
+				return append(records, lifecycle.BlockEvidence{Implementation: implementation}), err
+			}
+			pending, err = owner.AutomaticPreparation(ctx, installed, reconciliation.Selection{})
+			if err != nil || len(pending) != 0 {
+				t.Fatalf("installation-owned target prepared: %v %v", pending, err)
+			}
+		}
+	})
 	proofs, err := owner.Roots(ctx, input)
 	if err != nil {
 		t.Fatal(err)

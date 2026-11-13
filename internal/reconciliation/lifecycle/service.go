@@ -119,6 +119,10 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 	if err != nil {
 		return nil, err
 	}
+	s, _, err = s.automaticPreparation(ctx, name, selection)
+	if err != nil {
+		return nil, err
+	}
 	var result *PlanResult
 	var decided operationPlan
 	var read basis

@@ -1,11 +1,14 @@
   bootwright / apply
       Realize the complete selected Environment, or continue the exact operation an
-      interruption left behind. The plan is always complete; --stage only gates which blocks
-      this invocation starts, and the operation pauses at that boundary. --until
-      <cluster>.<package> starts only that add-on instance and the blocks it requires, then
-      pauses; a later apply continues the rest. --parallelism limits running steps (default 8);
-      dependencies, exclusive resources and group throttles still apply. Review the plan before
-      confirming; --yes skips ordinary confirmation.
+      interruption left behind. Missing disk inventory is prepared automatically before
+      installation is planned; the resolved installation needs separate data-loss
+      authorization. Each phase has a complete plan; --stage only gates which blocks this
+      invocation starts, and the operation pauses at that boundary. Controller-only apply
+      leaves inventory pending. After inventory preparation, --until <cluster>.<package> starts
+      only that add-on instance and the blocks it requires, then pauses; a later apply
+      continues the rest. --parallelism limits running steps (default 8); dependencies,
+      exclusive resources and group throttles still apply. Review the plan before confirming;
+      --yes skips ordinary confirmation.
 
   Usage
     bootwright apply [flags]

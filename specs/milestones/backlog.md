@@ -9018,3 +9018,14 @@ avoiding repeated full tests after another session integrates. X455 (B1381)
 adds local coordination and a fast rebase preflight before long validation;
 existing gates, safety additions and CI requirements remain. No machine
 operation or push is authorized.
+
+### D263
+
+**owner** (2026-11-13): authorizes X457 (M1, B1383) to make automatic root-disk
+discovery a preparation step of apply. Reuse the existing inventory boot and
+proofs; preserve read-only plan, stage boundaries and exact disk authorization
+after inventory. Keep the explicit discovery command for inspection.
+
+The same delivery corrects the bounded remaster publication defect (B1385)
+and its concealed diagnostics (B1384), in separate commits. Both apply and
+manual discovery use the existing native procedure.

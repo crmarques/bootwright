@@ -21,6 +21,40 @@ type DiscoverRequest struct {
 	SkipConfirmation     bool
 }
 
+func (c DiscoveryCapability) AutomaticPreparation(ctx context.Context, input lifecycle.PlanInput, selection reconciliation.Selection) ([]string, error) {
+	requests, _, err := c.requests(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	var pending, targets []string
+	for _, r := range requests {
+		if input.AppliedEvidence == nil {
+			return nil, refusal("lifecycle.state", "automatic preparation has no ownership reader", "")
+		}
+		owned, err := input.AppliedEvidence(ctx, Kind, r.Identity.Object)
+		if err != nil {
+			return nil, err
+		}
+		if slices.ContainsFunc(owned, func(record lifecycle.BlockEvidence) bool {
+			return record.Implementation == Implementation || record.Implementation == EraseImplementation
+		}) {
+			continue
+		}
+		targets = append(targets, r.Identity.Object)
+		_, found, err := c.completedInventory(ctx, input, r)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			pending = append(pending, r.Identity.Object)
+		}
+	}
+	if len(pending) == 0 && !selection.Stages.Selects(reconciliation.StageMachines) {
+		return targets, nil
+	}
+	return pending, nil
+}
+
 func (c DiscoveryCapability) ValidatePreparation(ctx context.Context, input lifecycle.PlanInput, scope reconciliation.PreparationScope) error {
 	if input.State == nil || input.AppliedEvidence == nil {
 		return refusal("lifecycle.state", "disk discovery needs compiled state and durable ownership", "")

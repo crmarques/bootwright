@@ -736,8 +736,9 @@ writable whole disk with a unique qualified WWN or serial and exact capacity.
 Protected storage claims are excluded before selection; an unresolvable claim
 or ambiguous inventory refuses rather than treating an unknown disk as spare.
 
-The explicit discovery command boots inventory-only media and stores an
-immutable authenticated report. A plan reads a specific matching report and
+An apply preparation phase, or the explicit discovery command, boots
+inventory-only media and stores an immutable authenticated report. An
+installation plan reads a specific matching report and
 freezes the selected disk identity; it performs no discovery effect. A changed
 policy or protected-disk claim invalidates the selection proof; planning may
 re-evaluate the same immutable inventory. Changed media, tool or machine bindings

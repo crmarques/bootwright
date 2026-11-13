@@ -15,7 +15,14 @@ func (s Service) Apply(ctx context.Context, request ApplyRequest) (*OperationRes
 	if err != nil {
 		return nil, err
 	}
-	return s.mutate(ctx, reconciliation.Apply, request.ContextName, selection, request.Authorizations, nil, request.SkipConfirmation, request.Unattended, request.SSH.Borrowed())
+	if err := s.available(ctx); err != nil {
+		return nil, err
+	}
+	request.ContextName, err = s.resolve(ctx, request.ContextName)
+	if err != nil {
+		return nil, err
+	}
+	return s.applyPrepared(ctx, request, selection)
 }
 
 // Destroy removes what an apply recorded as owned. It accepts no stage

@@ -1476,8 +1476,11 @@ matrix; each retains its own operator exit.
 ## Automatic root-disk discovery
 
 The [automatic selector](api/machines.md#automatic-root-disk-discovery) obtains
-Linux-visible disk identities through a separately confirmed inventory boot.
-The command requires verified BMC and media delivery, qualified RHEL boot media,
+Linux-visible disk identities through a confirmed inventory boot. `apply`
+automatically prepares missing inventory before it plans installation; the
+explicit `machine discover` command runs the same preparation independently.
+Both entry points use the same request derivation, runner and native procedure.
+The procedure requires verified BMC and media delivery, qualified RHEL boot media,
 complete machine identity, and an already powered-off non-controller target.
 It reserves the same hardware as power and lifecycle effects. Boot and media
 changes are explicit effects; the disk inventory makes no storage writes.
@@ -1508,8 +1511,20 @@ match the authenticated inventory. Unrelated
 input changes refuse. A changed policy creates a new selection proof without
 booting again. The installation freezes one selected proof and
 repeats exact disk identity immediately before its first storage write. A
-missing, stale or ambiguous proof reports the explicit discovery command;
-plan and validation do not boot a host or obtain live hardware credentials.
+missing raw inventory opens an automatic preparation phase. `plan` previews
+that complete phase without effects. Controller and infrastructure stage
+selections can prepare prerequisites while leaving inventory pending; only a
+selected machine stage may boot inventory. Interrupted automatic preparation
+continues through `apply` with its frozen target set, while an unfinished manual
+discovery retains its explicit command. After preparation completes, `apply`
+builds and presents the installation plan and requires its own authorization.
+Unused authorization refuses before preparation, so a token for an unresolved
+disk is never carried forward. `--yes` skips ordinary confirmation only.
+An unattended installation still requires the digest of its resolved disk
+consumers. `--until` requires completed preparation before its add-on boundary
+can be planned. An ambiguous selection retains the inventory and refuses
+installation without another boot. Plan and validation never boot a host or
+obtain live hardware credentials.
 
 ## Root-disk encryption
 

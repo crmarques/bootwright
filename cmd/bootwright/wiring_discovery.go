@@ -56,7 +56,7 @@ func discoveryPreparations(resolver lifecycle.CapabilityResolver) []lifecycle.Pr
 	if !found || !ok {
 		return nil
 	}
-	definition := lifecycle.PreparationDefinition{Kind: installation.DiscoveryPreparation, Command: "machine discover", Validate: owner.ValidatePreparation, Advance: owner.AdvancePreparation,
+	definition := lifecycle.PreparationDefinition{Automatic: owner.AutomaticPreparation, Kind: installation.DiscoveryPreparation, Command: "machine discover", Validate: owner.ValidatePreparation, Advance: owner.AdvancePreparation,
 		Bearing: func(api.Object) (lifecycle.Bearing, bool) { return lifecycle.Bearing{}, false }}
 	for _, binding := range resolver.Bindings() {
 		switch binding.Implementation {
