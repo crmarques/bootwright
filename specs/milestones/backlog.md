@@ -9005,7 +9005,7 @@ projects specs for code/architecture qualilty grounds and contraints".
 The native provisioning audit remediation is authorized, including native
 firewall and prerequisite ownership, endpoint trust, enterprise PKI, supported
 service and topology coverage, and reducing custom protocol ownership.
-X448 starts with B1366; existing safety boundaries remain in force while
+X453 starts with B1379; existing safety boundaries remain in force while
 native replacements are qualified. Implementation is authorized out of sequence;
 operator acceptance remains distinct from in-tree delivery. Task-related
 commands are authorized by the owner's follow-up; no push is authorized.

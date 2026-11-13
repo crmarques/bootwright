@@ -15793,13 +15793,13 @@ identity, permissions, size and nanosecond modification/change-time checks.
 This fixes a filesystem-dependent assertion without changing the carrier
 implementation or its effect boundary. Verification is recorded in the commit.
 
-## X448 — Ceph gateway trust and cancellation
+## X453 — Ceph gateway trust and cancellation
 
-**Owner:** Storage and Secrets; **items:** B1366 and B1376; **authority:** D261.
+**Owner:** Storage and Secrets; **items:** B1379 and B1376; **authority:** D261.
 
 Generated management-gateway endpoints authenticate against the native
 certificate-manager CA before HTTP, retaining operator certificate pins and
-manager-restart handling. B1366 remains on [M2](m2.md#b1366) for operator
+manager-restart handling. B1379 remains on [M2](m2.md#b1379) for operator
 acceptance; this delivers neither the full native provisioning audit nor
 wider service qualification. X450 holds the remaining audit work.
 
@@ -15822,4 +15822,7 @@ The managed-host-floor gate exposed controller rendering tests importing Jinja2
 from a native worker test module. Keep pure native recovery/ownership tests on
 the floor and place the rendering checks in the controller test suite, where
 Ansible already supplies the renderer. No managed-host dependency or runtime
-behavior changes. Verification is recorded in the commit.
+behavior changes. Main independently relocated the identical rendering cases;
+the integration retains its controller test module and removes the duplicate
+whose basename prevented plain pytest collection. Verification is recorded in
+the commit.

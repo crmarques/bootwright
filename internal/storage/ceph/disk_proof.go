@@ -5,7 +5,8 @@ import (
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 )
 
-// proveDisks requires the frozen substrate proof; a matching path or size never grants destructive custody.
+// proveDisks borrows the substrate's frozen volume proof. A matching guest
+// path or size alone never grants destructive custody over an OSD device.
 func proveDisks(e lifecycle.Execution, r Request, readers DependencyProofs) error {
 	if readers == nil {
 		return failure("lifecycle.state", "Ceph dependency proof readers are not bound", "")

@@ -6,7 +6,8 @@ import (
 	"github.com/crmarques/bootwright/internal/trust"
 )
 
-// provedHostKey uses the original installation proof, never a fetched key or ambient known_hosts.
+// provedHostKey uses the installed identity the original apply already proved.
+// It never fetches a key from a guest or substitutes ambient known_hosts.
 func provedHostKey(h Host, e lifecycle.Execution, readers DependencyProofs) (trust.HostKey, error) {
 	if h.Provided {
 		return pinnedHostKey(h, e)
