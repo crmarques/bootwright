@@ -109,6 +109,8 @@ options:
       - nfs-export-path-escape
       - nfs-export-realm-default
       - ingress-firewall
+      - monitoring-template-identity
+      - dashboard-tls-identity
       - service-credential-foreign
       - ssh-policy-host-excluded
       - ssh-policy-unavailable
