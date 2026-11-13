@@ -52,6 +52,16 @@ spec:
         - python3
         - firewalld
         - xfsprogs
+{{- if .Values.ceph.services.nfs }}
+        - nfs-utils
+{{- end }}
+{{- if .Values.ceph.services.smb }}
+        - cifs-utils
+        - samba-client
+{{- end }}
+{{- if .Values.ceph.services.nvmeof }}
+        - nvme-cli
+{{- end }}
 
     services:
       enabled:

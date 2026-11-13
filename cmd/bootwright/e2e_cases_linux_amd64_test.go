@@ -53,6 +53,15 @@ var e2eRenders = map[string][]e2eRender{
 	"lab-5-nodes-ceph-networks":      {{name: "default"}},
 	"lab-6-nodes-ceph-network-matrix": {
 		{name: "default"},
+		{name: "nfs off", sets: []string{"ceph.services.nfs=false"}},
+		{name: "smb off", sets: []string{"ceph.services.smb=false"}},
+		{name: "observability off", sets: []string{"ceph.services.observability=false"}},
+		{name: "rbd mirror off", sets: []string{"ceph.services.rbdMirror=false"}},
+		{name: "nvmeof on", sets: []string{"ceph.services.nvmeof=true"}},
+		{name: "additional groups off", sets: []string{
+			"ceph.services.nfs=false", "ceph.services.smb=false",
+			"ceph.services.observability=false", "ceph.services.rbdMirror=false",
+		}},
 		{name: "bond mode refusal", sets: []string{"bond.mode=802.3ad"}, refuses: "qualifies only active-backup bonding"},
 	},
 	"lab-5-nodes-ceph-stretch": {

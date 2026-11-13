@@ -1,4 +1,5 @@
 {{- $c := .Values.ceph -}}
+{{- $s := $c.services -}}
 {{- $dom := .Values.host.domain -}}
 apiVersion: bootwright.io/v1alpha1
 kind: CephCluster
@@ -120,6 +121,152 @@ spec:
         certificate_source: inline
         first_virtual_router_id: 60
 
+{{- if $s.nfs }}
+
+    - service_type: nfs
+      service_id: shares
+
+      placement:
+        count: 2
+        label: ceph-data
+
+      spec:
+        port: 12049
+        enable_haproxy_protocol: true
+
+    - service_type: ingress
+      service_id: nfs.shares
+
+      placement:
+        count: 2
+        label: ceph-data
+
+      spec:
+        backend_service: nfs.shares
+        virtual_ip: {{ $c.nfsVIP }}/{{ .Values.networks.cephPublic.prefix }}
+        frontend_port: 2049
+        monitor_port: 9049
+        enable_haproxy_protocol: true
+        first_virtual_router_id: 61
+{{- end }}
+{{- if $s.rbdMirror }}
+
+    - service_type: rbd-mirror
+
+      placement:
+        hosts:
+          - ceph-04.{{ $dom }}
+{{- end }}
+{{- if $s.observability }}
+
+    - service_type: prometheus
+
+      placement:
+        hosts:
+          - ceph-04.{{ $dom }}
+
+      spec:
+        retention_time: 1d
+        retention_size: 1GB
+        port: 9095
+
+    - service_type: alertmanager
+
+      placement:
+        hosts:
+          - ceph-04.{{ $dom }}
+
+    - service_type: grafana
+
+      placement:
+        hosts:
+          - ceph-02.{{ $dom }}
+
+      spec:
+        anonymous_access: false
+        protocol: https
+
+    - service_type: node-exporter
+
+      placement:
+        hosts:
+          - ceph-01.{{ $dom }}
+          - ceph-02.{{ $dom }}
+          - ceph-04.{{ $dom }}
+
+      spec:
+        port: 9100
+
+    - service_type: ceph-exporter
+
+      placement:
+        hosts:
+          - ceph-01.{{ $dom }}
+          - ceph-02.{{ $dom }}
+          - ceph-04.{{ $dom }}
+
+      spec:
+        prio_limit: 5
+        stats_period: 10
+
+    - service_type: mgmt-gateway
+
+      placement:
+        hosts:
+          - ceph-01.{{ $dom }}
+          - ceph-02.{{ $dom }}
+
+      spec:
+        port: 9443
+        virtual_ip: {{ $c.managementVIP }}
+        enable_auth: false
+
+    - service_type: ingress
+      service_id: mgmt
+
+      placement:
+        hosts:
+          - ceph-01.{{ $dom }}
+          - ceph-02.{{ $dom }}
+
+      spec:
+        backend_service: mgmt-gateway
+        keepalive_only: true
+        virtual_ip: {{ $c.managementVIP }}
+
+    - service_type: loki
+
+      placement:
+        hosts:
+          - ceph-04.{{ $dom }}
+
+      spec:
+        port: 3100
+
+    - service_type: alloy
+
+      placement:
+        hosts:
+          - ceph-01.{{ $dom }}
+          - ceph-02.{{ $dom }}
+          - ceph-04.{{ $dom }}
+{{- end }}
+{{- if $s.nvmeof }}
+
+    - service_type: nvmeof
+      service_id: nvme-config.primary
+
+      placement:
+        hosts:
+          - ceph-02.{{ $dom }}
+          - ceph-04.{{ $dom }}
+
+      spec:
+        pool: nvme-config
+        group: primary
+        enable_auth: false
+{{- end }}
+
   topology:
     nodes:
 {{- range $name := list "ceph-01" "ceph-02" "ceph-04" }}
@@ -147,6 +294,31 @@ spec:
       base: {{ $c.images.keepalived.base }}
       version: {{ $c.images.keepalived.version }}
 
+{{- if $s.smb }}
+{{- range $name := list "samba" "samba_metrics" }}
+{{- $image := index $c.images $name }}
+
+    {{ $name }}:
+      base: {{ $image.base }}
+      version: {{ $image.version }}
+{{- end }}
+{{- end }}
+{{- if $s.observability }}
+{{- range $name := list "prometheus" "alertmanager" "grafana" "node_exporter" "nginx" "loki" "alloy" }}
+{{- $image := index $c.images $name }}
+
+    {{ $name }}:
+      base: {{ $image.base }}
+      version: {{ $image.version }}
+{{- end }}
+{{- end }}
+{{- if $s.nvmeof }}
+
+    nvmeof:
+      base: {{ $c.images.nvmeof.base }}
+      version: {{ $c.images.nvmeof.version }}
+{{- end }}
+
   serviceBindings:
     - serviceRef: ingress.rgw.objects
 
@@ -156,3 +328,20 @@ spec:
 
         - path: /spec/ssl_key
           secretRef: rgw-objects-tls
+{{- if $s.observability }}
+
+    - serviceRef: grafana
+
+      secrets:
+        - path: /spec/initial_admin_password
+          secretRef: grafana-admin
+
+    - serviceRef: mgmt-gateway
+
+      secrets:
+        - path: /spec/ssl_cert
+          secretRef: management-tls
+
+        - path: /spec/ssl_key
+          secretRef: management-tls
+{{- end }}

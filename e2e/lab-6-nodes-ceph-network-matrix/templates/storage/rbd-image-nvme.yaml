@@ -1,0 +1,18 @@
+{{- if .Values.ceph.services.nvmeof }}
+apiVersion: bootwright.io/v1alpha1
+kind: CephRBDImage
+metadata:
+  name: nvme-disk
+
+spec:
+  clusterRef: ceph-e2e
+  poolRef: nvme-data
+  sizeBytes: 1073741824
+
+  features:
+    - layering
+    - exclusive-lock
+    - object-map
+    - fast-diff
+    - deep-flatten
+{{- end }}

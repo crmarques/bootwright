@@ -87,8 +87,8 @@ guest:
         cluster: 203.0.113.14
 
     cpu: 3
-    memoryMiB: 5120
-    diskGiB: 20
+    memoryMiB: 8192
+    diskGiB: 40
     osdDiskGiB: 15
 
   # ceph-03: a MON only, on the arbiter subnet alone.
@@ -137,15 +137,28 @@ ceph:
     baseURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/9/rhel9/x86_64/
     gpgKeyURL: https://public.dhe.ibm.com/ibmdl/export/pub/storage/ceph/RPM-GPG-KEY-IBM-CEPH
 
+  # Core block, file and object resources remain enabled for the network
+  # workload. These additional groups are independently selectable.
+  services:
+    nfs: true
+    smb: true
+    observability: true
+    rbdMirror: true
+    # Requires compatible gateway CPUs and additional CPU/memory headroom;
+    # see the runbook before enabling it.
+    nvmeof: false
+
   osdMemoryTarget: "2147483648"
 
-  # The object ingress VIP, inside networks.cephPublic and outside every
-  # guest. It has no DNS record.
+  # Service VIPs, inside networks.cephPublic and outside every guest.
+  # They have no DNS records.
   objectVIP: 198.51.100.60
+  nfsVIP: 198.51.100.61
+  managementVIP: 198.51.100.62
 
-  # Auxiliary images of the object ingress, authored as linux/amd64 platform
-  # manifest digests of the build above (D171); see the lab-3-nodes-ceph
-  # values for how to read them.
+  # Auxiliary images, authored as linux/amd64 platform manifest digests
+  # of the build above (D171); see the lab-3-nodes-ceph values for how
+  # to read them. Move these with the Ceph release coordinates.
   images:
     haproxy:
       base: cp.icr.io/cp/ibm-ceph/haproxy-rhel10
@@ -154,3 +167,43 @@ ceph:
     keepalived:
       base: cp.icr.io/cp/ibm-ceph/keepalived-rhel10
       version: sha256:ed18865b7c22051db1166e3df3de38effe225244b0bab32dcee429bb7b43f5db
+
+    samba:
+      base: cp.icr.io/cp/ibm-ceph/samba-server-rhel10
+      version: sha256:e91653798ca356348b4b60deac6a8683da885fed583753948cb5a7028527c407
+
+    samba_metrics:
+      base: cp.icr.io/cp/ibm-ceph/samba-metrics-rhel10
+      version: sha256:57f54c5a21fe98dba6fd4904a4fe1fe6a78e1d6ddbd241050c9e6313ac2f3944
+
+    prometheus:
+      base: cp.icr.io/cp/ibm-ceph/prometheus
+      version: sha256:6483d0ca844408e25a0477bf8f0b2ba46105202a080fcf550ee9933189741bf2
+
+    alertmanager:
+      base: cp.icr.io/cp/ibm-ceph/prometheus-alertmanager
+      version: sha256:f5e59e1d0b66178b76afddbd02b75aabe89e2571fd4f642444587fd1dfa6b1ed
+
+    grafana:
+      base: cp.icr.io/cp/ibm-ceph/grafana-rhel10
+      version: sha256:05b7009e0a5d794d035ab2d3fd06df767de62c2b57626f2f543885ee24664476
+
+    node_exporter:
+      base: cp.icr.io/cp/ibm-ceph/prometheus-node-exporter
+      version: sha256:7ff1de3e3c05df351d86f9b3f1ed143442999602a3668ad513dfcb5436ebb756
+
+    nginx:
+      base: cp.icr.io/cp/ibm-ceph/nginx-126-rhel10
+      version: sha256:36372e03d80249571aeaf0bcca29cc9ae0abc8ae1dd82511dee41b9faee39415
+
+    loki:
+      base: cp.icr.io/cp/ibm-ceph/logging-loki-rhel8
+      version: sha256:3a7aa2e879bed7384485c16ac51d788fd3e60bf06e2c927e8cde4401be46e443
+
+    alloy:
+      base: cp.icr.io/cp/ibm-ceph/alloy-rhel10
+      version: sha256:639f6c719715f4c2b2ddfa467adbe41518a32f155739bb4ba1b70fd8992e521a
+
+    nvmeof:
+      base: cp.icr.io/cp/ibm-ceph/nvmeof-rhel10
+      version: sha256:fe193a06ca2e76140a991deb9236edd8c1c49e5b9df1539daeac9ba035c29052

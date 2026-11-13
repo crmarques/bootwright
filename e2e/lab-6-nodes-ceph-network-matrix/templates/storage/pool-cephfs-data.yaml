@@ -7,6 +7,10 @@ spec:
   clusterRef: ceph-e2e
   role: cephfsData
 
+  autoscale:
+    mode: 'on'
+    pgNumMax: 16
+
   replicated:
     size: 2
     minSize: 2

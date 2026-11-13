@@ -1,0 +1,13 @@
+{{- if .Values.ceph.services.observability }}
+apiVersion: bootwright.io/v1alpha1
+kind: Secret
+metadata:
+  name: grafana-admin
+
+spec:
+  type: token
+
+  source:
+    generated:
+      bytes: 32
+{{- end }}

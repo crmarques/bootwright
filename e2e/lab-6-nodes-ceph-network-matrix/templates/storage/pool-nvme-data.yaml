@@ -1,0 +1,18 @@
+{{- if .Values.ceph.services.nvmeof }}
+apiVersion: bootwright.io/v1alpha1
+kind: CephPool
+metadata:
+  name: nvme-data
+
+spec:
+  clusterRef: ceph-e2e
+  role: rbd
+
+  autoscale:
+    mode: 'on'
+    pgNumMax: 8
+
+  replicated:
+    size: 2
+    minSize: 2
+{{- end }}

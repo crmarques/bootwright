@@ -8,7 +8,20 @@ install shape of [lab-network-variants](../lab-network-variants/runbook.md)
 runs here on a guest that carries real traffic. A sample server and its client
 reuse the [lab-5-nodes-ceph-networks](../lab-5-nodes-ceph-networks/runbook.md)
 workload on a managed user network, whose guest-only VLAN the host refuses.
-Context `lab-6-nodes-ceph-network-matrix`; 6 guests, 15 vCPUs, 23 GiB.
+Context `lab-6-nodes-ceph-network-matrix`; 6 guests, 15 host CPUs and
+31.5 GiB available memory including the provider reserve. This expanded
+profile needs a larger host than the earlier networking-only defaults.
+
+The default also deploys NFS with HA ingress, clustered SMB, Prometheus,
+Alertmanager, Grafana, node and Ceph exporters, Loki with Alloy, a two-host
+management gateway with keepalive-only ingress, and an RBD mirror daemon.
+Crash collection is derived on every Ceph host. These join the existing MON,
+MGR, OSD, MDS and RGW services in the same desired state. The three data hosts
+carry the additional services; the arbiter keeps its MON-only role.
+
+For a fresh deployment with **one uninterrupted apply**, use
+[Single full apply](#single-full-apply) after host preparation. The numbered
+qualification procedure below intentionally uses stages and interruptions.
 
 ```text
              this host: libvirt substrate + controller (DNS, NTP, proxy, artifacts on CONTROLLER_ADDRESS)
@@ -27,6 +40,8 @@ Context `lab-6-nodes-ceph-network-matrix`; 6 guests, 15 vCPUs, 23 GiB.
   app-01     nic0.110 .21 (Ceph public)   nic1 198.51.100.70   nic1.140 203.0.113.70                VLAN install
   client-01  bond0 198.51.100.80          bond0.140 203.0.113.80                                    bond install
   RGW ingress VIP 198.51.100.60/26 on VLAN 110 (TLS 443, name s3.e2e.example.test, no DNS record)
+  NFS ingress VIP 198.51.100.61/26 on VLAN 110 (2049)
+  Management VIP 198.51.100.62 on VLAN 110 (TLS 9443)
 ```
 
 | Machine | Install interface | Segment | Converged after the install |
@@ -70,6 +85,99 @@ test, except where a step names a second terminal. An unexpected failure fails
 the run; retain its private records for cleanup and start again from the
 beginning on a clean host.
 
+## Single full apply
+
+This path tests whether a clean context reaches the whole desired state in
+one invocation. Complete [host preparation](../README.md#prepare-the-host)
+and the [capacity checks](#2-prepare-the-host) first, with no applied case or
+existing context of this name. Keep the same controller address throughout.
+The default needs 15 available host CPUs, 31.5 GiB of `MemAvailable`, and about
+251 GiB of free disk including installation artifacts. These are admission
+figures for a compact rehearsal, not production sizing; raise guest memory
+and root disk sizes for longer retention or larger workloads.
+
+[values.yaml](values.yaml) exposes `ceph.services.nfs`, `smb`,
+`observability` and `rbdMirror`, all true by default. Block, file and object
+remain enabled for the network workload. NVMe-oF is optional with
+`ceph.services.nvmeof=true`: first supply compatible gateway CPUs and raise
+the two gateway hosts' CPU and memory budgets as
+[the NVMe-oF profile](../../specs/ceph-coverage.md#profile-catalog)
+requires. This case uses one shared data-host profile, so a size override
+raises all three hosts. A private values file goes in `VALUES_FILE` below.
+For a constrained host, size that private profile against the current
+`MemAvailable` and free disk, preserve the provider reserve, and keep the
+service switches enabled. This remains a compact deployment experiment;
+admission proves capacity arithmetic, and the live run proves whether the
+colocated daemons remain healthy. Prometheus retention is bounded to one day
+and 1 GB in this case.
+
+The self-contained profile uses Alloy rather than Promtail: declaring both
+refuses. OAuth2 SSO and SNMP require an external identity provider or receiver
+and their bound credentials, so they are outside this default. The RBD mirror
+daemon has no peer here and proves deployment only, not cross-cluster
+replication. Native types Bootwright refuses remain outside the case; see
+[service input](../../specs/ceph-native-api.md#observability-and-management-gateway-records).
+
+Run from the checkout being tested. This block fails on setup errors, generates
+the SMB and Grafana passwords in the context store, then runs exactly one
+`apply` without a stage selector. It prints `date` immediately before and
+after the apply, preserves its status even on failure, and records the wall
+clock elapsed seconds. Retain the private evidence directory for diagnostics.
+
+```bash
+(
+    set -euo pipefail
+    umask 077
+    CONTEXT=lab-6-nodes-ceph-network-matrix
+    INPUT_DIR="$HOME/bootwright-e2e/$CONTEXT"
+    IBM_REGISTRY_FILE="$HOME/ibm-ceph-registry.txt"
+    VALUES_FILE='' # Optional private values file; leave empty for defaults.
+    mkdir -p .cache/e2e-full-services
+    RUN_DIR=$(mktemp -d "$PWD/.cache/e2e-full-services/run.XXXXXXXX")
+    printf 'Evidence: %s\n' "$RUN_DIR"
+    trap 'rm -f -- "$RUN_DIR/ibm-password"' EXIT
+
+    make build
+    ./bin/bootwright version > "$RUN_DIR/version.txt"
+    RENDER_ARGS=()
+    if [ -n "$VALUES_FILE" ]; then RENDER_ARGS+=(--values "$VALUES_FILE"); fi
+    e2e/render.sh "$CONTEXT" "${RENDER_ARGS[@]}" --out-dir "$INPUT_DIR"
+    ./bin/bootwright validate -f "$INPUT_DIR"
+    ./bin/bootwright context init --name "$CONTEXT" --input-dir "$INPUT_DIR"
+    ./bin/bootwright secret generate --context "$CONTEXT"
+    cut -d: -f2- "$IBM_REGISTRY_FILE" > "$RUN_DIR/ibm-password"
+    ./bin/bootwright secret set --context "$CONTEXT" --name ibm-registry \
+        --username cp --password-file "$RUN_DIR/ibm-password" --yes
+    rm -f -- "$RUN_DIR/ibm-password"
+    ./bin/bootwright secret check --context "$CONTEXT"
+    ./bin/bootwright plan --context "$CONTEXT" | tee "$RUN_DIR/plan.txt"
+    sudo -v
+
+    START_SECONDS=$(date +%s)
+    date '+Apply started: %Y-%m-%d %H:%M:%S %z' | tee "$RUN_DIR/start.txt"
+    if ./bin/bootwright apply --context "$CONTEXT" --yes 2>&1 | tee "$RUN_DIR/apply.txt"; then
+        APPLY_RC=0
+    else
+        APPLY_RC=$?
+    fi
+    date '+Apply finished: %Y-%m-%d %H:%M:%S %z' | tee "$RUN_DIR/end.txt"
+    END_SECONDS=$(date +%s)
+    printf 'Complete apply: %s seconds; exit status: %s\n' \
+        "$((END_SECONDS - START_SECONDS))" "$APPLY_RC" | tee "$RUN_DIR/timing.txt"
+    printf '%s\n' "$APPLY_RC" > "$RUN_DIR/apply.exit"
+    exit "$APPLY_RC"
+)
+```
+
+Require exit 0, lifecycle `apply/done`, every selected block done, and the
+[cluster and service observations](#7-build-and-verify-the-cluster) plus
+`bootwright diff --observe` showing no differences. If it fails, retain the
+first result and inspect the named block output. A continuation is useful for
+diagnosis but does not pass this one-invocation test. This path does not
+perform the numbered procedure's fault and interruption drills or accept
+their gates. Use its [destroy and cleanup](#10-destroy-and-clean-up) after
+collecting the result; set its shell variables before running those commands.
+
 ## 1. Choose the inputs
 
 [values.yaml](values.yaml) holds the addresses, the VLAN ids, guest sizes and
@@ -90,7 +198,7 @@ USER_BRIDGE=virbr-user; USER_CIDR=198.51.100.64/26; USER_GATEWAY=198.51.100.65
 GUEST_VLAN=140; GUEST_CIDR=203.0.113.64/26
 APP_PUBLIC=198.51.100.21; APP_USER=198.51.100.70; APP_GUEST=203.0.113.70; APP_PORT=8080
 CLIENT=198.51.100.80; CLIENT_GUEST=203.0.113.80
-OBJECT_VIP=198.51.100.60; DOMAIN=e2e.example.test
+OBJECT_VIP=198.51.100.60; NFS_VIP=198.51.100.61; MANAGEMENT_VIP=198.51.100.62; DOMAIN=e2e.example.test
 CLIENT_IMAGE=registry.access.redhat.com/ubi9/python-312:latest
 CASE_DIR="$PWD/e2e/lab-5-nodes-ceph-networks"   # the reused sample server and client
 CONTEXT="lab-6-nodes-ceph-network-matrix"; INPUT_DIR="$HOME/bootwright-e2e/$CONTEXT"
@@ -137,12 +245,12 @@ if sudo nft list tables | grep -qx 'table inet bw-e2e-trunk'; then sudo nft dele
 ```
 
 The [capacity gate](../../specs/substrates.md#capacity-admission) counts three
-data hosts (3 vCPU, 5 GiB, 20 GiB root and a 15 GiB OSD disk each), `ceph-03`
+data hosts (3 vCPU, 8 GiB, 40 GiB root and a 15 GiB OSD disk each), `ceph-03`
 (2 vCPU, 2 GiB, 15 GiB), `app-01` (2 vCPU, 2 GiB, 15 GiB), `client-01`
 (1 vCPU, 1.5 GiB, 15 GiB) and the reserve (1 vCPU, 2 GiB, 10 GiB): 15 host
-CPUs, 22.5 GiB of `MemAvailable` and 160 GiB free under `/var/lib/libvirt`,
+CPUs, 31.5 GiB of `MemAvailable` and 220 GiB free under `/var/lib/libvirt`,
 plus about 34 GB (31 GiB) for the package tree and the six guests' installer
-media ([disk headroom](../README.md#end-to-end-cases)), so about 191 GiB in
+media ([disk headroom](../README.md#end-to-end-cases)), so about 251 GiB in
 all. Close large applications first. The host's ports 53, 123, 3128, 8080 and
 8443 on its address and loopback 8000 to 8005 must be free. No other case may
 be applied. Require the two capacity numbers and no output from each check:
@@ -211,6 +319,10 @@ e2e/render.sh "$CONTEXT" "${RENDER_ARGS[@]}" --set bond.mode=802.3ad --out-dir "
 Require the plan to say that a libvirt bridge qualifies only active-backup
 bonding, naming `bond0` of `Machine/ceph-02` and of `Machine/client-01`, with
 mode 802.3ad. The last command restores the valid input.
+
+The default SMB password is generated by `secret generate`, as are the
+Grafana password and the management gateway TLS keypair. No extra password
+file is needed. Put service switches in `VALUES_FILE` before rendering.
 
 ## 4. Prepare the controller, services and networks
 
@@ -530,6 +642,31 @@ on `ceph-01`, `ceph-02` and `ceph-04`, `files` rank 0 active with one standby,
 two `rgw.objects` daemons and the `ingress.rgw.objects` haproxy and
 keepalived daemons on `ceph-01` and `ceph-02`. B1266: `ceph-03` runs a MON and
 only cephadm's per-host daemons (`crash`, exporters), no OSD, MGR, MDS or RGW.
+
+For each enabled additional group, require the following native observations:
+
+| Group | Required observation |
+| --- | --- |
+| NFS | `nfs.shares` has two running Ganesha daemons over the three data-host candidates; `ingress.nfs.shares` publishes the NFS VIP on 2049; export `docs` references the `docs` subvolume |
+| SMB | the `files` SMB cluster has two running daemons, the generated users resource and the writable `documents` share on its own `smb-documents` subvolume |
+| Observability | Prometheus, Alertmanager, Grafana, node-exporter, ceph-exporter, Loki and Alloy run at their declared placements; Prometheus targets and Loki labels are checked as in [the monitoring checks](../lab-3-nodes-ceph/runbook.md#observability), using this case's hosts |
+| Management | two `mgmt-gateway` daemons and `ingress.mgmt` keepalived publish the management VIP on TLS 9443 with the bound certificate |
+| RBD mirror | a running `rbd-mirror` daemon on `ceph-04`; no replication peer is claimed |
+| NVMe-oF, when selected | two gateways, config and data pools, owned image and subsystem; use [the gateway checks](../lab-3-nodes-ceph/runbook.md#nvme-of) with `ceph-02` and `ceph-04` |
+
+```sh
+ceph_admin orch ls --export
+ceph_admin nfs export ls shares --detailed
+ceph_admin smb show
+ceph_admin orch ps --daemon_type mgmt-gateway --refresh
+ceph_admin orch ps --daemon_type rbd-mirror --refresh
+```
+
+Skip commands for disabled groups. `ceph-03` must still have no gateway,
+ingress, MDS, MGR or OSD. These deployment observations do not replace NFS/SMB
+client protocol and failover qualification. On another selected release record
+any monitoring-target limitation as a failure or qualified limitation; do not
+assume another release's known metrics behavior applies.
 
 **Seed MON loss (B1020).** `ceph-01` bootstrapped the cluster, and the
 retained configuration names only its MON. Stop that MON; the two left in
