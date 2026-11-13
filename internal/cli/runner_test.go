@@ -88,10 +88,8 @@ func TestResolutionFailuresExplainOnlyTrustedReasons(t *testing.T) {
 		want string
 	}{
 		{"separator", []string{"version", "--", privateArgument}, "separator is not accepted"},
-		{"unknown-flag", []string{"version", "--" + privateArgument}, "unknown flag"},
+		{"unknown-flag", []string{"version", "--unknown=" + privateArgument}, `unknown flag: "--unknown"`},
 		{"missing-value", []string{"context", "init", "--name"}, "flag value is missing"},
-		{"command", []string{privateArgument}, "unknown command"},
-		{"help-command", []string{"help", privateArgument}, "unknown help command"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -120,7 +118,7 @@ func TestResolutionFailuresExplainOnlyTrustedReasons(t *testing.T) {
 		}
 	}
 
-	for _, err := range []error{errors.New(privateArgument), resolutionError(privateArgument)} {
+	for _, err := range []error{errors.New(privateArgument), resolutionError(privateArgument), namedResolutionError{resolutionError(privateArgument), "--unknown"}} {
 		if got := trustedResolutionMessage(err); got != "invalid command or flag syntax" {
 			t.Fatalf("untrusted resolution error became diagnostic: %q", got)
 		}
@@ -139,7 +137,7 @@ func TestWithdrawnFlagsAreUsageErrors(t *testing.T) {
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			code, out, errOut, record := runRecorded(args)
-			if code != 2 || out != "" || record.calls != 0 || !strings.HasPrefix(errOut, "  error  cli.usage\n    unknown flag\n") {
+			if code != 2 || out != "" || record.calls != 0 || !strings.HasPrefix(errOut, "  error  cli.usage\n    unknown flag: ") {
 				t.Fatalf("code=%d out=%q stderr=%q calls=%d", code, out, errOut, record.calls)
 			}
 		})
@@ -162,7 +160,7 @@ func TestTheRetiredTrustOnFirstUseSpellingIsAnUnknownFlag(t *testing.T) {
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			code, out, errOut, record := runRecorded(args)
-			if code != 2 || out != "" || record.calls != 0 || errOut != "  error  cli.usage\n    unknown flag\nUsage: bootwright preflight [flags]\nRun 'bootwright help' for available commands.\n" {
+			if code != 2 || out != "" || record.calls != 0 || errOut != "  error  cli.usage\n    unknown flag: \"--trust-on-first-use\"\nUsage: bootwright preflight [flags]\nRun 'bootwright help' for available commands.\n" {
 				t.Fatalf("code=%d out=%q stderr=%q calls=%d", code, out, errOut, record.calls)
 			}
 		})

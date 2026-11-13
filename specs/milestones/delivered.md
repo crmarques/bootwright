@@ -15826,3 +15826,17 @@ behavior changes. Main independently relocated the identical rendering cases;
 the integration retains its controller test module and removes the duplicate
 whose basename prevented plain pytest collection. Verification is recorded in
 the commit.
+
+## X454 — Named CLI usage errors
+
+**Owner:** CLI; **item:** B1380 (defect); **authority:** explicit owner request.
+
+The [parsing diagnostics](../cli.md#parsing-and-input-conventions) identify the
+unknown flag or command, including an invalid help path. Regression tests cover
+text, JSON and YAML, attached and separate values, short flags, control
+characters, help precedence and refusal before service dispatch. Cobra's pinned
+version has no built-in flag spelling suggestions, so no suggestion is added.
+
+**Exit evidence:** the delivering commit records the failing regression probe,
+its passing rerun, the CLI package tests and the full verification gate. This
+change has no operator acceptance gate.

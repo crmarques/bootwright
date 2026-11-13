@@ -2,6 +2,7 @@ package cli
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -53,7 +54,22 @@ const (
 
 func (e resolutionError) Error() string { return string(e) }
 
+type namedResolutionError struct {
+	reason resolutionError
+	name   string
+}
+
+func (e namedResolutionError) Error() string {
+	return e.reason.Error() + ": " + strconv.Quote(e.name)
+}
+
 func trustedResolutionMessage(err error) string {
+	if named, ok := err.(namedResolutionError); ok {
+		switch named.reason {
+		case unknownFlag, unknownCommand, unknownHelpCommand:
+			return named.Error()
+		}
+	}
 	resolution, ok := err.(resolutionError)
 	if ok {
 		switch resolution {
@@ -78,7 +94,7 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 	pathComplete := false
 	helpCommand := false
 	var givenInherited []string
-	failure := func(remaining []string, reason resolutionError) (invocation, error) {
+	failure := func(remaining []string, reason error) (invocation, error) {
 		arguments := append([]string(nil), forwarded...)
 		for i := len(localFlags) - 1; i >= 0; i-- {
 			occurrence := localFlags[i]
@@ -106,7 +122,11 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 				if knownFlag(root, arg) {
 					return failure(args[i:], flagNotAcceptedHere)
 				}
-				return failure(args[i:], unknownFlag)
+				name, _, _ := strings.Cut(arg, "=")
+				if !strings.HasPrefix(arg, "--") {
+					name = arg[:2]
+				}
+				return failure(args[i:], namedResolutionError{unknownFlag, name})
 			}
 			if root.PersistentFlags().Lookup(flag.Name) != nil {
 				givenInherited = append(givenInherited, flag.Name)
@@ -137,7 +157,7 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 				continue
 			}
 			if !current.Runnable() {
-				return failure(args[i:], unknownCommand)
+				return failure(args[i:], namedResolutionError{unknownCommand, arg})
 			}
 		}
 		forwarded = append(forwarded, arg)
@@ -160,22 +180,22 @@ func resolveInvocation(root *cobra.Command, args []string) (invocation, error) {
 	}
 	result := invocation{command: command, arguments: forwarded}
 	if helpCommand {
-		if result.helpTarget = helpTarget(root, helpPath); result.helpTarget == nil {
-			return failure(nil, unknownHelpCommand)
+		if result.helpTarget, err = helpTarget(root, helpPath); err != nil {
+			return failure(nil, err)
 		}
 	}
 	return result, nil
 }
 
-func helpTarget(root *cobra.Command, path []string) *cobra.Command {
+func helpTarget(root *cobra.Command, path []string) (*cobra.Command, error) {
 	target := root
 	for _, token := range path {
 		target = exactChild(target, token)
 		if target == nil || target.Hidden {
-			return nil
+			return nil, namedResolutionError{unknownHelpCommand, token}
 		}
 	}
-	return target
+	return target, nil
 }
 
 func syntaxJSON(command *cobra.Command, args []string) bool {

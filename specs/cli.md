@@ -134,6 +134,12 @@ A non-flag token that is not a declared subcommand of an incomplete parent
 fails command resolution. An explicit `help` path still requires exact
 subcommands.
 
+An unknown flag, command or help subcommand is named in its `cli.usage`
+diagnostic as a quoted string with control characters escaped. Flag diagnostics
+name only the long spelling before `=` or the single short option; attached
+values and subsequent arguments are omitted. These errors retain exit `2`,
+the selected output format and the no-effect boundary.
+
 Scalar flags follow command-line order and the last occurrence wins, including
 the scalar comma-list flags `--clusters`, `--replace`, `--stage`,
 the `--name` that names several Machines and the `--name` and `--node` that name
