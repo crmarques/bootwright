@@ -355,7 +355,7 @@ def test_a_virtual_private_insert_skips_the_verified_fetch_read_back():
     for shape, expected in (("delivered-key", True), ("encrypting", False), ("public", False)):
         arguments = render(insert["vars"]["bootwright_machine_port"], shape,
                            managedos_install_anaconda_port_access={},
-                           managedos_install_anaconda_media_trust={"trust": "defaultCA"},
+                           managedos_install_anaconda_media_trust={"trust": "importCertificate", "enableVerification": False},
                            bootwright_run_scratch="/var/tmp/bootwright-scratch-1-1")
         assert arguments["private"] is expected
 

@@ -59,14 +59,16 @@ def scope(pushed=True, pinned=True):
     or the same node of a fetching libvirt cluster."""
     node = {"address": "198.51.100.32", "machine": "kubevirt-02", "name": "master-1", "physical": False,
             "controller": {"credentialsRef": "host-kubeconfig", "endpoint": "kubevirt:bootwright-guests/kubevirt-02-6fcb7dda",
-                           "tlsVerify": True, "virtualMedia": {"removeCertificate": False, "restoreVerification": False, "trust": ""}},
+                           "tlsVerify": True, "virtualMedia": {"enableVerification": False, "removeCertificate": False,
+                                                               "restoreVerification": False, "trust": ""}},
             "controllerKind": "api", "portPinned": True, "stateReadSeconds": 120, "substrate": "kubevirt"}
     material = {"controllerUserNode1": MATERIAL + "bmc-user-kubevirt-02", "virtctl": VIRTCTL,
                 "pinnedUUIDBase64Node1": encoded(CLUSTER_UID), "pinnedSerialBase64Node1": encoded(VM_UID)}
     request = {"deliveryKind": "push", "image": {"path": IMAGE, "url": ""}, "imageIdentity": IDENTITY, "nodes": [node, node]}
     if not pushed:
         node = dict(node, controller=dict(node["controller"], endpoint="http://192.0.2.1:8000/redfish/v1/Systems/1",
-                                          virtualMedia={"removeCertificate": False, "restoreVerification": False, "trust": "importCertificate"}),
+                                          virtualMedia={"enableVerification": False, "removeCertificate": False,
+                                                        "restoreVerification": False, "trust": "importCertificate"}),
                     controllerKind="emulated", stateReadSeconds=60, substrate="libvirt")
         node.pop("portPinned")
         material = {"controllerUserNode1": MATERIAL + "bmc-user", "controllerPasswordNode1": MATERIAL + "bmc-password",

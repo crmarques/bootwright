@@ -320,6 +320,9 @@ argument_specs:
           private:
             type: bool
             required: true
+          enable_verification:
+            type: bool
+            default: false
           trust:
             type: str
             required: true

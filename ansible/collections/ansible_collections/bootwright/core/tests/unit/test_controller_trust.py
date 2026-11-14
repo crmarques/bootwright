@@ -11,7 +11,7 @@ include of the bare-metal port, to pass it. The walk asserts how many tasks it
 checked, so one that stops seeing them fails rather than passing empty.
 
 Both installation consumers carry frozen virtual-media trust through the
-substrate port; physical nodes require verified private delivery (B67).
+substrate port, including automatic setup and the explicit private-media exception.
 
 Rendering needs Ansible's controller (DataLoader and Templar), which
 ansible-test does not offer to unit tests under tests/unit/plugins, so these
@@ -207,40 +207,47 @@ def test_the_managed_os_installation_sets_and_settles_the_frozen_trust(lookups, 
     assert len(inserts) == 1 and sorted(name for name, _arguments in ejects) == ["apply.yml", "await.yml"]
     served = tmp_path / "artifact-ca"
     served.write_text("SERVED CERTIFICATE\n")
-    for trust, restore, remove, material, certificate in (
-            ("importCertificate", False, True, {"artifactCertificate": str(served)}, "SERVED CERTIFICATE"),
-            ("disableVerification", True, False, {}, ""),
-            ("established", False, False, {}, "")):
+    for trust, enable, restore, remove, material, certificate in (
+            ("importCertificate", True, False, True, {"artifactCertificate": str(served)}, "SERVED CERTIFICATE"),
+            ("importCertificate", False, False, True, {"artifactCertificate": str(served)}, "SERVED CERTIFICATE"),
+            ("disableVerification", False, True, False, {}, ""),
+            ("disableVerification", False, False, False, {}, ""),
+            ("established", True, False, False, {}, ""),
+            ("established", False, False, False, {}, "")):
         variables = dict(defaults("managedos_install_anaconda"), **{
             "bootwright_run_scratch": "/run/private",
             "bootwright_os_install_material": {"controllerUser": "/run/user", "controllerPassword": "/run/password", **material},
             "bootwright_os_install_request": {"target": {"physical": True, "controller": {
                 "endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "tlsVerify": True, "virtualMedia": {
-                    "trust": trust, "restoreVerification": restore, "removeCertificate": remove}}}},
+                    "trust": trust, "enableVerification": enable, "restoreVerification": restore, "removeCertificate": remove}}}},
         })
         rendering = Templar(loader=LOADER, variables=variables)
         inserted = rendering.template(inserts[0])
         assert inserted["trust"] == trust
+        assert inserted["enable_verification"] is enable
         for name, request in [("boot.yml", inserts[0]), *ejects]:
             port = rendering.template(request)
             entry = "media_insert" if name == "boot.yml" else "media_eject"
             if entry == "media_eject":
-                assert "trust" not in port
+                assert "trust" not in port and "enable_verification" not in port
                 assert port["restore_verification"] is restore
                 assert port["remove_certificate"] is remove
             native = next(args for filename, module, args, _task in calls("substrate_baremetal_machine")
                           if filename == entry + ".yml" and module == BOOT)
             assert Templar(loader=LOADER, variables={"bootwright_machine_port": port}).template(native["certificate"]) == certificate
+            if entry == "media_insert":
+                assert Templar(loader=LOADER, variables={"bootwright_machine_port": port}).template(native["enable_verification"]) is enable
 
 
 @pytest.mark.parametrize("physical", [False, True])
-def test_cluster_media_calls_carry_each_nodes_frozen_trust(physical):
+@pytest.mark.parametrize("enable", [False, True])
+def test_cluster_media_calls_carry_each_nodes_frozen_trust(physical, enable):
     tasks = loaded(ROLES / "containercluster_install_agent/tasks/port.yml")
     invocation = next(task for task in tasks if "ansible.builtin.include_role" in task)
     variables = {**invocation["vars"], "bootwright_cluster_install_request": {"deliveryKind": "fetch"},
                  "containercluster_install_agent_node": {"physical": physical, "controller": {
                      "endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "tlsVerify": True,
-                     "virtualMedia": {"trust": "importCertificate", "restoreVerification": False, "removeCertificate": True}}},
+                     "virtualMedia": {"trust": "importCertificate", "enableVerification": enable, "restoreVerification": False, "removeCertificate": True}}},
                  "containercluster_install_agent_user": "/run/user", "containercluster_install_agent_password": "/run/password",
                  "containercluster_install_agent_ca": "/run/ca", "bootwright_run_scratch": "/run/private",
                  "containercluster_install_agent_index": 2,
@@ -251,6 +258,7 @@ def test_cluster_media_calls_carry_each_nodes_frozen_trust(physical):
         assert port["ca"] == "/run/ca"
         if operation == "media_insert":
             assert port["private"] is physical
+            assert port["enable_verification"] is enable
             assert port["trust"] == "importCertificate" and port["certificate"] == "/run/certificate"
         elif operation == "media_eject":
             assert port["remove_certificate"] is True and port["restore_verification"] is False

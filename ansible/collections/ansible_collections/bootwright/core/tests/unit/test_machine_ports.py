@@ -28,6 +28,24 @@ def test_machine_port_contract(arm, entry):
             assert task["failed_when"] is False
 
 
+@pytest.mark.parametrize("arm", ["libvirt", "baremetal"])
+@pytest.mark.parametrize("enable", [False, True])
+def test_media_insert_admits_and_forwards_verification_setup(arm, enable):
+    from ansible.module_utils.common.arg_spec import ArgumentSpecValidator
+    from ansible.parsing.dataloader import DataLoader
+    from ansible.template import Templar, trust_as_template
+
+    role = ROOT / "roles" / ("substrate_" + arm + "_machine")
+    spec = yaml.safe_load((role / "meta/argument_specs.yml").read_text())["argument_specs"]["media_insert"]["options"]
+    port = {"endpoint": "https://bmc.example.test/redfish/v1/Systems/1", "user": "/run/user", "password": "/run/password",
+            "verify": True, "private": True, "image_url_file": "/run/image-url", "trust": "established", "enable_verification": enable}
+    assert not ArgumentSpecValidator(spec).validate({"bootwright_machine_port": port}).error_messages
+    native = next(task["bootwright.core.redfish_boot"] for task in yaml.safe_load((role / "tasks/media_insert.yml").read_text())
+                  if "bootwright.core.redfish_boot" in task)
+    templar = Templar(loader=DataLoader(), variables={"bootwright_machine_port": port})
+    assert templar.template(trust_as_template(native["enable_verification"])) is enable
+
+
 @pytest.mark.parametrize("result,expected", [
     ({"power": "Off", "media": ""}, {"power_state": "off", "media_state": "none"}),
     ({"power": "On", "media": "https://MEDIA.test/image?token=redacted"}, {"power_state": "on", "media_state": "own"}),

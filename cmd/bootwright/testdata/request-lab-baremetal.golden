@@ -111,6 +111,7 @@
           "tlsVerify": true,
           "trustBundleRef": "lab-bmc-ca",
           "virtualMedia": {
+            "enableVerification": true,
             "removeCertificate": false,
             "restoreVerification": false,
             "trust": "importCertificate"

@@ -408,6 +408,7 @@
           "tlsVerify": true,
           "trustBundleRef": "lab-bmc-tls",
           "virtualMedia": {
+            "enableVerification": false,
             "removeCertificate": false,
             "restoreVerification": false,
             "trust": "established"
@@ -600,6 +601,7 @@
           "tlsVerify": true,
           "trustBundleRef": "lab-bmc-tls",
           "virtualMedia": {
+            "enableVerification": false,
             "removeCertificate": false,
             "restoreVerification": false,
             "trust": "established"
@@ -835,6 +837,7 @@
           "tlsVerify": true,
           "trustBundleRef": "lab-bmc-tls",
           "virtualMedia": {
+            "enableVerification": false,
             "removeCertificate": false,
             "restoreVerification": false,
             "trust": "established"

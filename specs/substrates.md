@@ -2237,6 +2237,13 @@ unknown. A requested physical TPM proof accepts only an enabled TPM 2.0 in the
 BMC's `TrustedModules` inventory and otherwise names `tpm-absent` before
 any image is inserted. The TPM proof reads the system after any firmware step.
 
+The fetching arms' `media_insert` entry points admit the boolean
+`enable_verification` and pass it unchanged to the shared Redfish client. A
+port omission supplies no setup authorization; installation consumers carry
+the effective [Machine media policy](api/machines.md#media-transport-trust)
+in their frozen request. Only insertion consumes this setup authorization;
+eject uses its separate restoration policy.
+
 The bare-metal entry points that reach the BMC also take the
 path of its trust-bundle material, empty when it declares none.
 The pre-boot port takes an optional `root_disk` proof with `serialNumber` and

@@ -93,7 +93,8 @@ def test_each_install_port_request_matches_the_selected_arm_entrypoint():
                          containercluster_install_agent_node={
                              'physical': arm == 'baremetal', 'controller': {
                                  'endpoint': 'https://bmc.example.test', 'tlsVerify': True,
-                                 'virtualMedia': {'trust': 'importCertificate', 'restoreVerification': True, 'removeCertificate': True}}},
+                                 'virtualMedia': {'trust': 'importCertificate', 'enableVerification': arm == 'baremetal',
+                                                  'restoreVerification': False, 'removeCertificate': True}}},
                          bootwright_cluster_install_request={'deliveryKind': 'fetch'},
                          containercluster_install_agent_user='/material/user', containercluster_install_agent_password='/material/password',
                          containercluster_install_agent_ca='/material/ca', containercluster_install_agent_index=0,
@@ -101,6 +102,7 @@ def test_each_install_port_request_matches_the_selected_arm_entrypoint():
             request = Templar(loader=loader, variables=scope).template(port['vars']['bootwright_machine_port'])
             if operation == 'media_insert':
                 assert request['private'] is (arm == 'baremetal')
+                assert request['enable_verification'] is (arm == 'baremetal')
             result = ArgumentSpecValidator(specs[operation]['options']).validate({'bootwright_machine_port': request})
             assert not result.error_messages, (arm, operation, result.error_messages)
 

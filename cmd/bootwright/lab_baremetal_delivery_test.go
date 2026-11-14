@@ -142,8 +142,9 @@ func rewritten(t *testing.T, old, replacement string) desiredstate.Sources {
 
 // A delivered-key installation hands its BMC the private installer
 // image URL, so the example with its verification removed, or its controller
-// addressed over plain http, refuses before registration naming the Machine
-// with the one reason and remedy the managed-OS refusal table gives.
+// addressed over plain http, refuses before registration. Automatic media
+// setup refuses an HTTP endpoint during admission; the installation refusal
+// table still owns a management TLS opt-out.
 func TestLabBaremetalExampleRefusesAnUnverifiedController(t *testing.T) {
 	const reason = "a Machine whose installation delivers private material hands its BMC the private installer image URL, " +
 		"so the BMC must be reached over https with its certificate verified"
@@ -160,6 +161,14 @@ func TestLabBaremetalExampleRefusesAnUnverifiedController(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			state, _, err := wireCompiler().Compile(context.Background(), sources(t))
+			if name == "an http controller" {
+				reported := diagnostics.Of(err)
+				if len(reported) != 1 || reported[0].Code != "api.invariant" ||
+					reported[0].Field != "$.spec.substrate.baremetal.bmc.virtualMedia.tls.enableVerification" {
+					t.Fatalf("HTTP setup admission: %v", reported)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("admission: %v", diagnostics.Of(err))
 			}
@@ -180,13 +189,11 @@ func TestLabBaremetalExampleRefusesAnUnverifiedController(t *testing.T) {
 	}
 }
 
-// The example's installation delivers private material, so it refuses before
-// registration when its controller would fetch the installer image without
-// verifying the artifact server: whatever answered would be the installer
-// that receives the key.
-func TestLabBaremetalExampleRefusesItsInstallation(t *testing.T) {
+// An explicitly declared unverified-media policy is frozen per Machine while
+// the private image and management TLS requirements remain enforced.
+func TestLabBaremetalExampleFreezesItsExplicitMediaOptOut(t *testing.T) {
 	const address = "        address: https://bmc-01.metal.example.test/redfish/v1/Systems/1\n"
-	sources := rewritten(t, address, address+"        virtualMedia:\n          tls:\n            trust: disableVerification\n")
+	sources := rewritten(t, address, address+"        virtualMedia:\n          tls:\n            trust: disableVerification\n            restoreVerificationAfterBoot: false\n")
 	if len(sources.Files) != baremetalExampleFiles {
 		t.Fatalf("example discovery: got %d files, want %d", len(sources.Files), baremetalExampleFiles)
 	}
@@ -195,9 +202,19 @@ func TestLabBaremetalExampleRefusesItsInstallation(t *testing.T) {
 		t.Fatalf("admission: %v", diagnostics.Of(err))
 	}
 	capability, _ := buildCapabilities(systemClock{}, exampleControllerPorts(t), exampleMediaRecords{}).Resolve(installation.Kind, installation.Implementation)
-	unsupported := capability.(lifecycle.UnsupportedReporter).Unsupported(state)
-	if len(unsupported) != 1 || unsupported[0].Name != "metal-01" ||
-		unsupported[0].Reason != "a Machine that delivers private material through its installation cannot let its BMC fetch without verifying the artifact server" {
+	if unsupported := capability.(lifecycle.UnsupportedReporter).Unsupported(state); len(unsupported) != 0 {
 		t.Fatalf("unsupported = %+v", unsupported)
+	}
+	plan, err := capability.Plan(context.Background(), lifecycle.PlanInput{
+		Verb: reconciliation.Apply, Context: lifecycle.ContextIdentity{Name: "metal"}, State: state, Controller: "controller",
+	})
+	if err != nil || len(plan.Definitions) != 1 {
+		t.Fatalf("private installation plan: %v %v", plan, err)
+	}
+	request, err := installation.DecodeRequest(plan.Definitions[0].Request)
+	if err != nil || request.Target.Controller.VirtualMedia.Trust != substrate.TrustDisableVerification ||
+		request.Target.Controller.VirtualMedia.EnableVerification || request.Target.Controller.VirtualMedia.RestoreVerification ||
+		!request.Target.Controller.TLSVerify || request.Private == nil || request.Image != nil {
+		t.Fatalf("private media opt-out lost its boundaries: %+v %v", request, err)
 	}
 }
