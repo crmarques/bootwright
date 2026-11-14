@@ -78,6 +78,7 @@ its 63-byte identity.
 | `spec.baremetal.defaults.bmc.tls.verify` | boolean | no | `true` | Default for a machine BMC whose own `tls.verify` is absent. |
 | `spec.baremetal.defaults.bmc.tls.trustBundleRef` | string | no | — | Default `caBundle` or `trustBundle` `Secret` reference for a machine BMC that keeps verification; refused beside `tls.verify: false`. Trust anchor. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.trust` | string | no | `importCertificate` | `importCertificate` or `established`. `disableVerification` is refused here: it is a per-Machine exception and never a provider default. |
+| `spec.baremetal.defaults.bmc.virtualMedia.tls.enableVerification` | boolean | no | `true` with verified BMC access | Automatic media-verification setup inherited with the complete virtual-media block; follows the Machine rule below. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | — | Refused: it is valid only with `disableVerification`, which a provider never defaults. |
 | `spec.baremetal.defaults.bmc.virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Valid only with `importCertificate`. |
 
@@ -610,14 +611,51 @@ erase policy and data-disk clear only a bare-metal Machine admits.
 | `tls.verify` | boolean | no | `true` | Whether the controller-to-BMC TLS leg is verified: against `tls.trustBundleRef` alone when it is set, and against the system trust store otherwise. |
 | `tls.verification` | string | no | `full` | `full`, `certificate`, or `none` under [client TLS trust](../secrets.md#client-tls-trust). Non-full values must be authored on this Machine. Explicit `tls.verify` must agree. |
 | `tls.trustBundleRef` | string | no | configured provider default | `caBundle` or `trustBundle` `Secret`; the one anchor of the controller-to-BMC leg. Refused beside `tls.verify: false`. Trust anchor. |
-| `virtualMedia.tls.trust` | string | no | `importCertificate` | How the BMC is made to trust the artifact server it fetches media from. `importCertificate` uses the device certificate collection or the qualified discovered SecurityService [media trust contract](../substrates.md#identity-and-power-operations); `established` changes nothing, because the BMC already trusts the server; `disableVerification` turns the device's verification off before the insert and is the per-Machine exception below. |
-| `virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | `true` | Only with `disableVerification`; the eject turns verification back on. |
+| `virtualMedia.tls.trust` | string | no | `importCertificate` | How the BMC trusts the artifact server it fetches media from. `importCertificate` uses the device certificate collection or qualified discovered SecurityService [media trust contract](../substrates.md#identity-and-power-operations); `established` imports no certificate; `disableVerification` turns deciding verification off before insertion and is the per-Machine exception below. |
+| `virtualMedia.tls.enableVerification` | boolean | no | `true` with verified BMC access and verified media trust | Authorizes media insertion to enable the deciding verification property with a conditional write and read-back. Requires verified HTTPS BMC access and `importCertificate` or `established`. Explicit `false` requires preconfigured verification. Successful enables remain enabled after cleanup and destroy. |
+| `virtualMedia.tls.restoreVerificationAfterBoot` | boolean | no | `true` | Only with `disableVerification`; eject restores the deciding manager switches, or the device flag when no manager declares one. Explicit `false` retains the disabled state. |
 | `virtualMedia.tls.removeCertificateAfterBoot` | boolean | no | `false` | Only with `importCertificate`; the eject deletes the imported certificate. |
 
-For private media delivery, a manager's published
-`HttpsTransferCertVerification` is authoritative and must read `true`; only
-without that switch does the device's `VerifyCertificate` decide. An
-authoritative manager switch refuses `disableVerification` before any write.
+#### Media transport trust
+
+The default media trust imports the artifact-server authority and enables
+verification automatically under verified BMC access. `enableVerification:
+false` under a verified trust policy instead requires it already configured.
+Every declaring manager's `HttpsTransferCertVerification` decides; only when
+no manager declares it does the device's `VerifyCertificate` decide. Setup
+preflights explicit booleans and usable ETags for every resource needing a
+write, performs conditional writes, and proves read-back before insertion.
+A conflict, privilege denial or unproved state stops insertion. Successful
+changes remain in place when a later step fails, and retry converges.
+
+A Machine may explicitly select `trust: disableVerification`, including for
+private boot media. The deciding settings must then read false. It is never a
+provider or Environment-kind default. This weakens bootstrap provenance: a
+media-path attacker could obtain or replace the ISO's embedded keys and tokens,
+so later worker pinning does not recover the same trusted-boot assurance.
+The frozen request and plan record the exception; inventory under that policy
+cannot satisfy a later verified-policy request. Management BMC TLS, controller
+listener verification, hardware proofs and worker connection pinning remain.
+
+Manager settings may affect other Systems sharing the BMC. Origin-scoped media
+claims serialize Bootwright consumers within and across contexts; they do not
+exclude external BMC users. Read and power commands do not configure these
+settings. With the exception, `restoreVerificationAfterBoot: true` requests
+restoration after release, even after interrupted boot; false keeps it off.
+For an explicit persistent opt-out:
+
+```yaml
+substrate:
+  baremetal:
+    bmc:
+      virtualMedia:
+        tls:
+          trust: disableVerification
+          enableVerification: false
+          restoreVerificationAfterBoot: false
+```
+
+#### BMC endpoint identity
 
 `address` is what a destructive operation is aimed at, so it has one spelling:
 admission accepts only that spelling, and nothing rewrites it before the
@@ -642,11 +680,10 @@ only where a Machine authors it and visible in its effective state: a
 provider default of it is refused at
 `$.spec.baremetal.defaults.bmc.virtualMedia.tls.trust`, and an Environment
 kind default of it, for a Machine or an InfraProvider, is refused at its
-`$.spec.defaults.<Kind>` path. A managed-OS installation that delivers private
-material refuses it before registration
-([managed OS](../managed-os.md#installation)). Under `established` such an
-installation's insert first reads whether the BMC verifies the artifact
-server and refuses unless it does
+`$.spec.defaults.<Kind>` path. Private-media consumers freeze this explicit exception
+([managed OS](../managed-os.md#installation)). Under `established`, insertion
+requires verification, configuring it by default or requiring preconfiguration
+when automatic enabling is explicitly disabled
 ([identity and power operations](../substrates.md#identity-and-power-operations)).
 
 `hardware.rootDevice` admits only `deviceName`, `model`, `vendor`,

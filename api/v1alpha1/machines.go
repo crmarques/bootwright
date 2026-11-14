@@ -9,9 +9,9 @@ func init() {
 }
 
 func machineVirtualMediaSchema() *Shape {
-	tls := record(field("trust", enumeration("disableVerification", "importCertificate", "established")), field("restoreVerificationAfterBoot", boolean()), field("removeCertificateAfterBoot", boolean()))
+	tls := record(field("trust", enumeration("disableVerification", "importCertificate", "established")), field("enableVerification", boolean()), field("restoreVerificationAfterBoot", boolean()), field("removeCertificateAfterBoot", boolean()))
 	tls.Suppress = []Suppression{
-		{Field: "trust", Value: StringValue("disableVerification"), Fields: []string{"removeCertificateAfterBoot"}},
+		{Field: "trust", Value: StringValue("disableVerification"), Fields: []string{"enableVerification", "removeCertificateAfterBoot"}},
 		{Field: "trust", Value: StringValue("importCertificate"), Fields: []string{"restoreVerificationAfterBoot"}},
 		{Field: "trust", Value: StringValue("established"), Fields: []string{"restoreVerificationAfterBoot", "removeCertificateAfterBoot"}},
 	}

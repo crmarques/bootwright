@@ -2083,36 +2083,40 @@ Its private key is bound only for emulator apply. This does not expand the
 authored physical `caBundle` contract to accept a non-CA serving leaf; B446
 and B73 retain that rehearsal gate.
 
-The BMC-to-artifact-server leg follows `bmc.virtualMedia.tls.trust`, which the
-realized target freezes. `importCertificate`, the default, adds the artifact
-server's certificate to the virtual-media device's certificate collection
-unless that certificate is already there and turns the device's certificate
-verification on, before the consumer's insert. Without that collection, the
-qualified SecurityService path below imports the server chain's terminal
-issuer. `disableVerification` turns
-that verification off before the insert when it reads on. `established` changes
-nothing on the device. A manager the system names that links a security
-service publishing `HttpsTransferCertVerification` publishes the switch that
-decides whether the BMC verifies the server it fetches from (D121, which
-amends D104): when any manager publishes it, every published switch decides
-alone and the device's `VerifyCertificate` is not consulted. Only a BMC
-whose managers publish no such switch is decided by the device flag, where an
-absent flag reads as off. `importCertificate` then skips the device flag and
-writes only the certificate, and `disableVerification` refuses before any
-write, naming the manager's switch, because the device flag decides nothing
-there. When the insert carries private material, as a physical installation's
-does, `established` and `importCertificate` first read, and write nothing,
-that deciding setting, which must read `true`. Anything else refuses the insert
-before any write, naming the setting, an unreadable security service included
-because it never supplies proof, and the operator imports the artifact server's
-CA into the BMC out of band when automatic import is unavailable, and
-turns its verification on out of band. Private
-material is never inserted under `disableVerification`. The B447 tests
+The BMC-to-artifact-server leg follows the realized target's frozen
+`bmc.virtualMedia.tls` policy under the
+[Machine contract](api/machines.md#bmc-and-root-device-shape). Its default
+imports trust and enables the deciding verification setting. Device collections
+use the serving leaf; a qualified discovered SecurityService imports the
+chain's terminal issuer. `established` imports no trust. The explicit
+per-Machine `disableVerification` exception instead proves verification off,
+including for private media, with its weaker bootstrap provenance recorded.
+It never changes BMC-management or controller-listener verification.
+
+Configuration discovers and deduplicates every linked SecurityService,
+bounded to four. Declaring manager switches decide instead of the device flag;
+only without any manager switch does the device flag decide. Preflight requires
+strict booleans and an observed usable ETag for every property that must change
+before the first write. Changes use that ETag, never a wildcard retry, and
+read-back must prove the requested state before insertion. Partial changes
+remain attributable; retry reads current state and converges. A firmware HTTP
+400 privilege MessageId is a privilege denial. Shared origin-scoped
+[media reservations](infrastructure-services.md#host-reservations) serialize
+physical-media consumers even when enabling is omitted.
+
+The deciding state is reproved before returning for already attached media
+and before each managed attach attempt. A normal enable is persistent. Under
+the disabling exception, `restoreVerificationAfterBoot` determines whether
+cleanup enables it after proving media empty, including interrupted insertion;
+false causes no cleanup enable. Manager restoration uses the same conditional
+write/read-back path. Read and power entry points never configure verification.
+
+The B447 tests
 `test_private_delivery_accepts_the_manager_switch_with_a_false_readonly_device`,
 `test_private_delivery_refuses_a_manager_that_does_not_verify`,
 `test_private_import_cannot_bypass_a_manager_whose_verification_is_off`,
 `test_import_uses_an_authoritative_manager_without_patching_the_device` and
-`test_disable_verification_refuses_an_authoritative_manager_before_any_write`
+`test_disable_verification_proves_authoritative_state_or_refuses_before_writing`
 in the
 [Redfish client tests](../ansible/collections/ansible_collections/bootwright/core/tests/unit/plugins/modules/test_redfish_boot.py)
 prove it in-tree; a physical capture of the device flag stays

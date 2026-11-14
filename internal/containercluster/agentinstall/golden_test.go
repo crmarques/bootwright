@@ -128,7 +128,8 @@ func TestFrozenRequestsMatchTheirGoldens(t *testing.T) {
 // TestPhysicalNodesAreFrozenAsOperatorOwnedHardware derives them.
 func TestFrozenPhysicalNodesMatchTheirGolden(t *testing.T) {
 	catalog := physicalWithController(func(bmc api.Value) api.Value {
-		return bmc.WithPath(api.StringValue("certificate"), "tls", "verification").WithPath(api.StringValue("bmc-server-trust"), "tls", "trustBundleRef")
+		return bmc.WithPath(api.StringValue("certificate"), "tls", "verification").WithPath(api.StringValue("bmc-server-trust"), "tls", "trustBundleRef").
+			WithPath(api.BoolValue(true), "virtualMedia", "tls", "enableVerification")
 	})
 	declared, _ := catalog.Find(api.OpenShiftCluster, "metal")
 	nodes, err := nodeProjections(catalog, declared, testContext, "controller", &Requirements{})

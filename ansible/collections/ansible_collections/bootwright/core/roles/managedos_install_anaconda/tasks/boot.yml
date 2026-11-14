@@ -64,6 +64,7 @@
       {{ managedos_install_anaconda_port_access | combine({'image_url_file': bootwright_run_scratch ~ '/managedos-media-url',
          'private': bootwright_os_install_request.private is defined and (bootwright_os_install_request.target.physical | bool),
          'trust': managedos_install_anaconda_media_trust.trust,
+         'enable_verification': managedos_install_anaconda_media_trust.enableVerification,
          'certificate': bootwright_os_install_material.artifactCertificate | default('')}) }}
 
 - name: Retain the machine port answer

@@ -57,6 +57,7 @@ type Controller struct {
 // VirtualMedia is how the controller is made to trust the artifact server it
 // fetches the boot image from.
 type VirtualMedia struct {
+	EnableVerification  bool   `json:"enableVerification"`
 	RemoveCertificate   bool   `json:"removeCertificate"`
 	RestoreVerification bool   `json:"restoreVerification"`
 	Trust               string `json:"trust"`

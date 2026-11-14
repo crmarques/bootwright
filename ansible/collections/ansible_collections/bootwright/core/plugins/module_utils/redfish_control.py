@@ -38,6 +38,7 @@ import urllib.request
 from urllib.parse import urlsplit
 
 from ansible_collections.bootwright.core.plugins.module_utils import redfish_discovery, redfish_remote_ca, transport_faults, tls_trust
+from ansible_collections.bootwright.core.plugins.module_utils import redfish_media_verification
 
 MAX_BODY = 1 << 20
 REQUEST_TIMEOUT = 30
@@ -113,7 +114,7 @@ PEM_BEGIN = "-----BEGIN CERTIFICATE-----"
 PEM_END = "-----END CERTIFICATE-----"
 # What importing leaves an operator when a controller cannot take it: no other
 # trust is ever substituted.
-NO_IMPORT = "no fallback: established, or disableVerification on this Machine, which private delivery refuses"
+NO_IMPORT = "no fallback: establish trust, or explicitly select disableVerification on this Machine"
 NO_DISABLE = "verification stays on; use importCertificate or established"
 STALE = ("remove the stale certificate from the controller's virtual-media certificate collection,"
          " or set removeCertificateAfterBoot")
@@ -526,7 +527,7 @@ class Client:
             self.last_image = redfish_discovery.inserted_image(self._member)
         return self.last_image
 
-    def insert(self, image, trust=TRUST_ESTABLISHED, certificate="", private=False):
+    def insert(self, image, trust=TRUST_ESTABLISHED, certificate="", private=False, enable_verification=False):
         """Attach an image and confirm the device presents it; True when it changed.
 
         The response is never the evidence. An accepted request may still be
@@ -544,35 +545,72 @@ class Client:
         between attempts may have lost the trust it was given. A fetch the
         controller reports failed names the causes on its side.
         """
+        if enable_verification is not True and enable_verification is not False:
+            raise ControllerError("media verification setup requires a boolean policy", cause="media-verification-config")
+        if private and trust == TRUST_DISABLED and (self.verify is not True or self.verification == "none" or not self.home or self.home[0] != "https"):
+            raise ControllerError("private media requires verified HTTPS BMC management access", cause="media-verification-config")
         member = self.media_member()
         if not member:
             raise ControllerError("attaching: the controller exposes no virtual-media device")
+        if enable_verification and trust == TRUST_DISABLED:
+            raise ControllerError("enabling media verification conflicts with disableVerification", cause="media-verification-config")
+        delegated = enable_verification or trust == TRUST_DISABLED and (private or bool(self._manager_verification("disabling verification")))
+        configured = self._configure_media_verification(member, image, trust != TRUST_DISABLED) if delegated else False
         if redfish_discovery.image_matches(self.inserted(), image):
-            return False
+            if enable_verification or private and trust != TRUST_DISABLED:
+                self._verified_fetch(member)
+            elif delegated:
+                self._unverified_fetch(member)
+            return configured
         if private and trust == TRUST_ESTABLISHED:
             self._verified_fetch(member)
         manager_verified = trust == TRUST_IMPORT and self._verified_managers()
-        if trust == TRUST_DISABLED:
-            for url, _value in self._manager_verification("disabling verification"):
-                raise ControllerError("disabling verification %s: %s controls media verification; the device flag cannot disable it" % (
-                    _shown(url), redfish_discovery.TRANSFER_VERIFICATION), NO_DISABLE)
         if redfish_discovery.media_present(self._device(member, "attaching")):
             reason = self._release(member)[1]
             if reason:
                 raise ControllerError("attaching: the device presents other media and was not released: " + reason)
-        self._trust_media(member, trust, certificate, manager_verified)
+        if not (delegated and trust == TRUST_DISABLED):
+            self._trust_media(member, trust, certificate, manager_verified)
         reason, fetch_failed = "", False
         for attempt in range(INSERT_ATTEMPTS):
             if attempt:
                 self.sleep(INSERT_RETRY_DELAY)
                 if trust == TRUST_IMPORT and not manager_verified:
                     self._verified_fetch(member)
+            if enable_verification or private and trust != TRUST_DISABLED:
+                self._verified_fetch(member)
+            elif delegated and trust == TRUST_DISABLED:
+                self._unverified_fetch(member)
             reason, fetch_failed = self._attach(member, image)
             if not reason:
                 return True
             if attempt + 1 < INSERT_ATTEMPTS and self._release(member)[1]:
                 raise ControllerError("the device was not released after " + reason)
         raise ControllerError(reason, FETCH_CAUSES if fetch_failed else "", cause="media-fetch" if fetch_failed else "request")
+
+    def _configure_media_verification(self, member, image, wanted):
+        current = self.inserted()
+        if current and not redfish_discovery.image_matches(current, image):
+            raise ControllerError("media verification setup refuses attached foreign media", cause="media-verification-config")
+        try:
+            rows = redfish_media_verification.preflight(self, member, wanted)
+            if (wanted or any(value is not wanted for _url, _name, value, _tag in rows)) and (
+                    self.verify is not True or self.verification == "none" or not self.home or self.home[0] != "https"):
+                raise ControllerError("media verification setup requires verified HTTPS BMC access", cause="media-verification-config")
+            changed = redfish_media_verification.configure(self, member, wanted, rows)
+            self._member = None
+            return changed
+        except redfish_media_verification.Refused as error:
+            raise ControllerError(str(error), cause=error.cause) from None
+
+    def _unverified_fetch(self, member):
+        settings = self._manager_verification("verifying the declared unverified fetch")
+        if settings:
+            proved = all(value is False for _url, value in settings)
+        else:
+            proved = self._read(member, "verifying the declared unverified fetch")[0].get("VerifyCertificate") is False
+        if not proved:
+            raise ControllerError("the requested unverified media fetch was not proved", cause="media-verification-config")
 
     def _verified_fetch(self, member):
         """Prove by reading alone that the controller verifies the server it
@@ -586,7 +624,7 @@ class Client:
         doing = "verifying the fetch"
         if self._verified_managers():
             return
-        device = self._device(member, doing)
+        device = self._read(member, doing)[0]
         if device.get("VerifyCertificate") is not True:
             raise ControllerError("%s %s: VerifyCertificate reads %s" % (
                 doing, _shown(member), "false" if "VerifyCertificate" in device else "nothing"), NO_VERIFIED_FETCH, cause="media-verification")
@@ -595,11 +633,11 @@ class Client:
         """Read every published authoritative switch without changing one."""
         settings = []
         setting = redfish_discovery.TRANSFER_VERIFICATION
-        for _manager, body in self._managers:
-            link = redfish_discovery.security_service(body)
-            if not link:
-                continue
-            url = self._own(link, doing)
+        try:
+            urls = redfish_media_verification.services(self)
+        except redfish_media_verification.Refused as error:
+            raise ControllerError(str(error), cause=error.cause) from None
+        for url in urls:
             service = self._read(url, doing)[0]
             if setting in service:
                 settings.append((url, service[setting]))
@@ -716,15 +754,14 @@ class Client:
     def eject(self, restore_verification=False, remove_certificate=False, certificate=""):
         """Detach whatever the device presents and confirm it reports nothing.
 
-        True when something was detached or settled. A controller that removes
-        the device entirely has ejected it too, so a device answering 404 is
-        empty and has nothing left to settle. Once the device is proved empty,
-        including one found empty already, the per-boot trust is settled.
+        True when something was detached or settled. A removed device proves
+        media absence but never bypasses requested manager restoration. Once
+        media is proved empty, the per-boot trust is settled.
         """
         member = self.media_member()
         if not member:
             self.last_image = ""
-            return False
+            return self._configure_media_verification("", "", True) if restore_verification else False
         changed, reason = self._release(member)
         if reason:
             raise ControllerError(reason)
@@ -778,12 +815,16 @@ class Client:
 
         Each is a convergent target rather than the inverse of this attempt's
         own writes, so the eject after an interrupted attempt settles what that
-        attempt left. Restoring tolerates exactly a controller that cannot write
-        VerifyCertificate; removal deletes only the given certificate.
+        attempt left. Restoration requires conditional writes and read-back;
+        removal deletes only the given certificate.
         """
-        if self._member is None or not (restore or remove):
+        if not (restore or remove):
             return False
-        restored = self._verification(member, True, "restoring verification") if restore else False
+        restored = False
+        if restore:
+            restored = self._configure_media_verification(member, "", True)
+        if not member:
+            return restored
         return (self._remove(member, certificate) if remove else False) or restored
 
     def _remove(self, member, certificate):

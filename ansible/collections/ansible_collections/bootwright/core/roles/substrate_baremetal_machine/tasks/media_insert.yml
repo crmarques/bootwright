@@ -17,6 +17,7 @@
     operation: insert
     image: '{{ lookup("ansible.builtin.file", bootwright_machine_port.image_url_file) }}'
     trust: '{{ bootwright_machine_port.trust | default("established") }}'
+    enable_verification: '{{ bootwright_machine_port.enable_verification | default(false) }}'
     certificate: >-
       {{ lookup('ansible.builtin.file', bootwright_machine_port.certificate)
          if bootwright_machine_port.certificate | default('') | length > 0 else '' }}

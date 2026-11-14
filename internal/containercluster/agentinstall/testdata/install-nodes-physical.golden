@@ -9,6 +9,7 @@
         "tlsVerify": true,
         "trustBundleRef": "bmc-server-trust",
         "virtualMedia": {
+          "enableVerification": true,
           "removeCertificate": false,
           "restoreVerification": false,
           "trust": "importCertificate"
@@ -37,6 +38,7 @@
         "endpoint": "https://metal-02-bmc.lab.example.test/redfish/v1/Systems/1",
         "tlsVerify": true,
         "virtualMedia": {
+          "enableVerification": true,
           "removeCertificate": false,
           "restoreVerification": false,
           "trust": "importCertificate"
@@ -65,6 +67,7 @@
         "endpoint": "https://metal-03-bmc.lab.example.test/redfish/v1/Systems/1",
         "tlsVerify": true,
         "virtualMedia": {
+          "enableVerification": true,
           "removeCertificate": false,
           "restoreVerification": false,
           "trust": "importCertificate"

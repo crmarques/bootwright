@@ -102,6 +102,7 @@
       "endpoint": "https://bmc-01.lab.example.test/redfish/v1/Systems/1",
       "tlsVerify": true,
       "virtualMedia": {
+        "enableVerification": true,
         "removeCertificate": false,
         "restoreVerification": false,
         "trust": "importCertificate"

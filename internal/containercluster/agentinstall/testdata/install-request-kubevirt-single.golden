@@ -39,6 +39,7 @@
         "endpoint": "kubevirt:bootwright-guests/kubevirt-01-ba334887",
         "tlsVerify": true,
         "virtualMedia": {
+          "enableVerification": false,
           "removeCertificate": false,
           "restoreVerification": false,
           "trust": ""

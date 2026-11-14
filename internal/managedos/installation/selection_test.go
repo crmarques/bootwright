@@ -250,27 +250,20 @@ func TestAPhysicalInstallationWithoutANamedRootDeviceRefuses(t *testing.T) {
 	}
 }
 
-// A Machine whose installation delivers private material cannot let its
-// controller fetch the installer without verifying the server, so the
-// per-Machine exception refuses before registration, ahead of the refusal of
-// an unverified controller leg, and Unsupported agrees with the request
-// builder.
-func TestAPrivateInstallationRefusesDisabledVerification(t *testing.T) {
-	metal := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
+// The explicit exception is frozen in the request rather than widening the
+// provider default or management TLS policy.
+func TestAPrivateInstallationFreezesExplicitDisabledVerification(t *testing.T) {
+	metal := metalOn("eno1", hardwareNIC("eno1", "52:54:00:9a:1b:01"))
 	metal = metal.WithSpec(metal.Spec().WithPath(api.StringValue(substrate.TrustDisableVerification),
 		"substrate", "baremetal", "bmc", "virtualMedia", "tls", "trust"))
-	catalog := labCatalog(metalProvider(), metal)
-	if unsupported := lifecycle.Identities(Refusals(catalog)); !slices.Equal(unsupported, []string{"Machine/metal-01"}) {
+	catalog := metalCatalog(metal, metalNetwork(declaredInterface("eno1", "ethernet")))
+	if unsupported := lifecycle.Identities(Refusals(catalog)); len(unsupported) != 0 {
 		t.Fatalf("unsupported = %v", unsupported)
 	}
-	_, _, err := Requests(catalog, "controller", testContext)
-	expectRefusal(t, err, "lifecycle.unsupported")
-	reported := diagnostics.Of(err)[0]
-	if reported.Message != "a Machine that delivers private material through its installation cannot let its BMC fetch without verifying the artifact server" {
-		t.Fatalf("message = %q", reported.Message)
-	}
-	if reported.Remediation != "declare substrate.baremetal.bmc.virtualMedia.tls.trust: importCertificate on Machine/metal-01, or established when its BMC already trusts the server" {
-		t.Fatalf("remediation = %q", reported.Remediation)
+	requests, _, err := Requests(catalog, "controller", testContext)
+	index := slices.IndexFunc(requests, func(request Request) bool { return request.Identity.Object == metal.Name() })
+	if err != nil || index < 0 || requests[index].Target.Controller.VirtualMedia.Trust != substrate.TrustDisableVerification || requests[index].Target.Controller.VirtualMedia.EnableVerification {
+		t.Fatalf("explicit exception lost for the physical target: %v", err)
 	}
 }
 

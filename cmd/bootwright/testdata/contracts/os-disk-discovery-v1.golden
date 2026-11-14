@@ -23,6 +23,7 @@ request-schema:
   controller.tlsVerify bool
   controller.trustBundleRef string omitempty
   controller.virtualMedia struct installation.VirtualMedia
+  controller.virtualMedia.enableVerification bool
   controller.virtualMedia.removeCertificate bool
   controller.virtualMedia.restoreVerification bool
   controller.virtualMedia.trust string

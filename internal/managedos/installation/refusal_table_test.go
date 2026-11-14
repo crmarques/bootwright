@@ -11,7 +11,6 @@ import (
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
-	"github.com/crmarques/bootwright/internal/substrate"
 )
 
 // refusalSpec owns this capability's refusal table, read from this package's
@@ -32,9 +31,6 @@ type refusalCase struct {
 // its graph with exactly its reason and remedy, and a row added or removed on
 // either side fails here.
 func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
-	untrusting := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
-	untrusting = untrusting.WithSpec(untrusting.Spec().WithPath(api.StringValue(substrate.TrustDisableVerification),
-		"substrate", "baremetal", "bmc", "virtualMedia", "tls", "trust"))
 	unverified := server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4")))
 	unverified = unverified.WithSpec(unverified.Spec().WithPath(api.BoolValue(false), "substrate", "baremetal", "bmc", "tls", "verify"))
 	rotational := guest()
@@ -75,7 +71,6 @@ func TestManagedOSRefusalTableMatchesUnsupported(t *testing.T) {
 		"A root-device wwn in another form": {labCatalog(metalProvider(), server(api.MapValue(text("wwn", "0X5000C500A1B2C3D4")))), "Machine/metal-01", onMetal},
 		"A root-device serial number the installer cannot compare": {labCatalog(metalProvider(), server(api.MapValue(text("wwn", "0x5000c500a1b2c3d4"),
 			text("serialNumber", "ZC1A 2B3C")))), "Machine/metal-01", onMetal},
-		"An unverified fetch of private material": {labCatalog(metalProvider(), untrusting), "Machine/metal-01", onMetal},
 		"An unverified BMC leg for private delivery": {
 			labCatalog(metalProvider(), unverified, sshKeySecret(api.MapValue(field("generated", api.MapValue())))), "Machine/metal-01",
 			map[string]string{"<machine>": "Machine/metal-01", "<provider>": "InfraProvider/lab-metal"},

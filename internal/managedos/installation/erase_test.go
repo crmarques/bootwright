@@ -343,7 +343,7 @@ func TestPhysicalEraseResolvesEachTargetMethodAndProvesItsExactCoverage(t *testi
 			canonical, _ := request.Canonical()
 			removal, err := NewErase(nil).Removal(context.Background(), reconciliation.Block{BlockDefinition: reconciliation.BlockDefinition{Request: canonical}})
 			verbs := map[string]string{EraseLogicalOverwrite: "logical-overwrite ", EraseMetadataClear: "metadata-clear "}
-			if err != nil || !slices.Equal(removal.Impacts, []string{"boot-offline-erase " + machine.Name(), verbs[test.root] + root, verbs[test.data] + data}) {
+			if err != nil || !slices.Equal(removal.Impacts, []string{"boot-offline-erase " + machine.Name(), "enable-bmc-media-verification " + machine.Name() + " (BMC-wide; retained)", verbs[test.root] + root, verbs[test.data] + data}) {
 				t.Fatalf("removal impacts %v, %v", removal.Impacts, err)
 			}
 			digest := strings.Repeat("a", 64)
@@ -428,7 +428,7 @@ func TestPhysicalEraseIncludesARootDeclaredBySerialNumberAndSize(t *testing.T) {
 	if len(request.Targets) != 2 || request.Targets[0] != (EraseTarget{Method: EraseMetadataClear, SerialNumber: "ZC1A2B3C", SizeBytes: 480103981056}) || request.Targets[1].DeviceName == "" {
 		t.Fatalf("targets = %+v", request.Targets)
 	}
-	if impacts := eraseImpacts(request); !slices.Equal(impacts, []string{"boot-offline-erase metal-01", "metadata-clear serial:ZC1A2B3C", "metadata-clear /dev/disk/by-id/wwn-0x5000c500a1b2c3d9"}) {
+	if impacts := eraseImpacts(request); !slices.Equal(impacts, []string{"boot-offline-erase metal-01", "enable-bmc-media-verification metal-01 (BMC-wide; retained)", "metadata-clear serial:ZC1A2B3C", "metadata-clear /dev/disk/by-id/wwn-0x5000c500a1b2c3d9"}) {
 		t.Fatalf("impacts = %v", impacts)
 	}
 	canonical, err := request.Canonical()

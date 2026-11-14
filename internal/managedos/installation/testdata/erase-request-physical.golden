@@ -105,6 +105,7 @@
         "endpoint": "https://bmc-01.lab.example.test/redfish/v1/Systems/1",
         "tlsVerify": true,
         "virtualMedia": {
+          "enableVerification": true,
           "removeCertificate": false,
           "restoreVerification": false,
           "trust": "importCertificate"
@@ -138,7 +139,7 @@
     "user": "bootwright",
     "version": "os-install-anaconda-v1"
   },
-  "installDigest": "d03fc200f3d4dc9dc00c6660a5eede39bac7c3d663324a6c16f4a353a3c70eba",
+  "installDigest": "35903ee4ed5ea68de04bb0bc05d4a27d96100d358f1ec70cbfc056ca2db3572f",
   "network": "network --bootproto=static --device=enp1s0 --ip=198.51.100.41 --netmask=255.255.255.0 --hostname=metal-01.lab.example.test --onboot=on --activate --gateway=198.51.100.1 --nameserver=192.0.2.1\n",
   "targets": [
     {

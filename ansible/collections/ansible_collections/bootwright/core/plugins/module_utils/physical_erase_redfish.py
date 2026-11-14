@@ -49,9 +49,9 @@ def target(client, request, off):
     return power
 
 
-def start(factory, request, image, trust, certificate):
+def start(factory, request, image, trust, certificate, enable_verification=False):
     target(factory(INSPECT_SECONDS), request, True)
-    factory(INSERT_SECONDS).insert(image, trust, certificate, private=True)
+    factory(INSERT_SECONDS).insert(image, trust, certificate, private=True, enable_verification=enable_verification)
     factory(BOOT_SECONDS).boot_once("Cd")
     factory(POWER_SECONDS).power("On", "On")
 

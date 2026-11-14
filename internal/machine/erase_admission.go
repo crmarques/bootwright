@@ -24,8 +24,8 @@ func validateErase(o api.Object, variant string) []api.Issue {
 	}
 	bmc := substrate.MachineBMC(o)
 	trust := bmc.Get("virtualMedia", "tls", "trust").Text()
-	if !bmc.Get("tls", "verify").Bool() || trust != "established" && trust != "importCertificate" {
-		return []api.Issue{invariant(path, "physical erase requires verified BMC TLS and verified private virtual media", "set BMC tls.verify true and virtualMedia.tls.trust to established or importCertificate")}
+	if !bmc.Get("tls", "verify").Bool() || trust != "established" && trust != "importCertificate" && trust != "disableVerification" {
+		return []api.Issue{invariant(path, "physical erase requires verified BMC TLS and a declared media trust policy", "set BMC tls.verify true and declare the media trust policy on this Machine")}
 	}
 	issues := []api.Issue{}
 	targets := policy.Get("targets").Items()

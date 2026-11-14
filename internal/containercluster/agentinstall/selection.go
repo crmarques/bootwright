@@ -528,6 +528,7 @@ func frozenNodes(nodes []nodeProjection) []Node {
 				TrustBundleRef:  node.target.Controller.TrustBundleRef,
 				TLSVerification: node.target.Controller.TLSVerification,
 				VirtualMedia: VirtualMedia{
+					EnableVerification:  node.target.Controller.VirtualMedia.EnableVerification,
 					RemoveCertificate:   node.target.Controller.VirtualMedia.RemoveCertificate,
 					RestoreVerification: node.target.Controller.VirtualMedia.RestoreVerification,
 					Trust:               node.target.Controller.VirtualMedia.Trust,

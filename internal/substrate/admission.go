@@ -121,6 +121,10 @@ func NormalizeBMCDefaults(bmc api.Value) api.Value {
 	case "importCertificate":
 		tls = tls.Default("removeCertificateAfterBoot", api.BoolValue(false))
 	}
+	if tls.Get("trust").Text() != TrustDisableVerification {
+		verified := bmc.Get("tls", "verify").Bool() && bmc.Get("tls", "verification").Text() != "none"
+		tls = tls.Default("enableVerification", api.BoolValue(verified))
+	}
 	return bmc.With("virtualMedia", media.With("tls", tls))
 }
 
@@ -140,6 +144,14 @@ func ValidateBMCDefaults(bmc api.Value, path string, authored bool) []api.Issue 
 	}
 	if tls.Has("removeCertificateAfterBoot") && trust != "importCertificate" {
 		issues = add(issues, issue(path+".virtualMedia.tls.removeCertificateAfterBoot", "removing a certificate requires importCertificate trust"))
+	}
+	if tls.Get("enableVerification").Bool() {
+		controllerTLS := bmc.Get("tls")
+		if trust == TrustDisableVerification || controllerTLS.Get("verification").Text() == "none" ||
+			(controllerTLS.Has("verify") && !controllerTLS.Get("verify").Bool()) ||
+			(bmc.Has("address") && !strings.HasPrefix(bmc.Get("address").Text(), "https://")) {
+			issues = add(issues, issue(path+".virtualMedia.tls.enableVerification", "enabling media verification requires verified HTTPS BMC access and importCertificate or established trust"))
+		}
 	}
 	return issues
 }

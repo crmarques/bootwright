@@ -50,6 +50,7 @@ spec:
         virtualMedia:
           tls:
             trust: importCertificate
+            enableVerification: true
             removeCertificateAfterBoot: false
       nics:
         - nicRef: eno1
@@ -93,6 +94,7 @@ spec:
         virtualMedia:
           tls:
             trust: importCertificate
+            enableVerification: true
             removeCertificateAfterBoot: false
       nics:
         - nicRef: eno1
@@ -135,6 +137,7 @@ spec:
         virtualMedia:
           tls:
             trust: importCertificate
+            enableVerification: true
             removeCertificateAfterBoot: false
       nics:
         - nicRef: eno1
@@ -177,6 +180,7 @@ spec:
         virtualMedia:
           tls:
             trust: importCertificate
+            enableVerification: true
             removeCertificateAfterBoot: false
       nics:
         - nicRef: eno1
@@ -219,6 +223,7 @@ spec:
         virtualMedia:
           tls:
             trust: importCertificate
+            enableVerification: true
             removeCertificateAfterBoot: false
       nics:
         - nicRef: eno1
@@ -301,6 +306,7 @@ spec:
         virtualMedia:
           tls:
             trust: importCertificate
+            enableVerification: true
             removeCertificateAfterBoot: false
   segments:
     - name: lab-metal

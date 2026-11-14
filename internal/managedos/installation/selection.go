@@ -582,6 +582,7 @@ func targetFor(catalog api.Catalog, machine api.Object, contextName, controllerM
 			TrustBundleRef:  derived.Controller.TrustBundleRef,
 			TLSVerification: derived.Controller.TLSVerification,
 			VirtualMedia: VirtualMedia{
+				EnableVerification:  derived.Controller.VirtualMedia.EnableVerification,
 				RemoveCertificate:   derived.Controller.VirtualMedia.RemoveCertificate,
 				RestoreVerification: derived.Controller.VirtualMedia.RestoreVerification,
 				Trust:               derived.Controller.VirtualMedia.Trust,
@@ -696,14 +697,6 @@ func refusedTarget(machine api.Object, target substrate.Target, private bool) (r
 		return "a physical installation compares its root disk's serial number inside the installer, and the serialNumber the Machine declares is not one it can compare",
 			"set spec.substrate.baremetal.rootDevice.serialNumber on " + machine.Identity() +
 				" to the disk's serial number, at most 256 ASCII letters, digits and ._:+/=- characters, or remove it"
-	}
-	// A controller that fetches without verifying the artifact server boots
-	// whatever image answers, and the installer it boots is what receives the
-	// private material, so the exception is refused for every private
-	// installation.
-	if private && target.Controller.VirtualMedia.Trust == substrate.TrustDisableVerification {
-		return "a Machine that delivers private material through its installation cannot let its BMC fetch without verifying the artifact server",
-			"declare substrate.baremetal.bmc.virtualMedia.tls.trust: importCertificate on " + machine.Identity() + ", or established when its BMC already trusts the server"
 	}
 	// The controller is handed the tokenized URL of the private installer
 	// image, so whoever answers or reads the controller leg holds the token.

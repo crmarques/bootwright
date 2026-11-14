@@ -41,7 +41,8 @@ def validate(request, digest, binding):
         or not request["controller"]["endpoint"].startswith("https://")
     ):
         raise ValueError("discovery controller TLS")
-    if request["controller"]["virtualMedia"]["trust"] not in ("established", "importCertificate") or not request["private"]["url"].startswith("https://"):
+    if (request["controller"]["virtualMedia"]["trust"] not in ("established", "importCertificate", "disableVerification")
+            or not request["private"]["url"].startswith("https://")):
         raise ValueError("discovery private media TLS")
     if request["deadlineSeconds"] != 1800 or binding.get("requestDigest") != digest:
         raise ValueError("discovery binding")
@@ -379,7 +380,8 @@ class Controller:
         self.phase = "media-delivery"
         listener_probe(url, certificate)
         self.phase = "media-insertion"
-        client.insert(url, self.request["controller"]["virtualMedia"]["trust"], certificate, private=True)
+        virtual = self.request["controller"]["virtualMedia"]
+        client.insert(url, virtual["trust"], certificate, private=True, enable_verification=virtual["enableVerification"])
         self.phase = "boot-selection"
         client.boot_once("Cd")
         self.phase = "power-on"

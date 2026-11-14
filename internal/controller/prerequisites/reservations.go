@@ -108,6 +108,7 @@ func UseDiagnostic(c Conflict) diagnostics.Diagnostic {
 	object := conflictObject(c.Wanted)
 	used := map[string]string{
 		"bmc":        "the management controller endpoint " + object + " is driven through",
+		"bmc-media":  "the management controller's shared media and verification settings " + object + " uses",
 		"bmc-system": "the system UUID " + object + "'s pin records",
 		"bmc-mac":    "a MAC address " + object + " declares",
 	}[class]

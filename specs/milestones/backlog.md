@@ -9065,3 +9065,24 @@ removes reader-version negotiation and historical migration guidance, and keeps
 strict current-shape validation and safety proofs. This supersedes D241's
 increment-on-change rule. External product and dependency versions are outside
 the reset. No host operation or push is authorized.
+
+### D268
+
+**owner** (2026-11-14): requests declarative authorization for apply to enable
+BMC media-fetch certificate verification. Authorizes X462 (M1, B1394), including
+the shared media client, typed intent, explicit persistent manager-wide effect,
+scope reservations and all existing physical-media consumers. Omission keeps
+the current behavior. Use narrowly focused checks before local integration;
+no real-host operation or push is authorized.
+
+### D269
+
+**owner** (2026-11-14): explicitly requests unverified BMC media download for
+the physical test, while requiring automatic verified trust setup by default.
+Extends X462 with B1395 and authorizes the per-Machine exception for private
+boot media, with its weaker bootstrap provenance made explicit in frozen
+requests, plans and documentation. Management identity and other TLS legs
+remain verified. Authorizes a separate downstream chart update with a secure
+default and local ignored test values opting out. This supersedes the blanket
+private-media refusal only for the explicit policy; no real-host operation or
+push is authorized.

@@ -52,6 +52,7 @@
       image_url_file: '{{ bootwright_run_scratch }}/cluster-insert-{{ containercluster_install_agent_index }}'
       private: '{{ containercluster_install_agent_node.physical }}'
       trust: '{{ containercluster_install_agent_node.controller.virtualMedia.trust }}'
+      enable_verification: '{{ containercluster_install_agent_node.controller.virtualMedia.enableVerification }}'
       certificate: '{{ bootwright_cluster_install_material.artifactCertificate | default("") }}'
 
     containercluster_install_agent_pushed_insert:

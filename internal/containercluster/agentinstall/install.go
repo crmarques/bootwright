@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/desiredstate/compilation"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -70,7 +71,7 @@ func (c InstallCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 			// dependency is named rather than resolved from an API object:
 			// both blocks realize the same cluster.
 			Dependencies:   []string{MediaBlockID(request.Identity.Cluster)},
-			Exclusive:      []string{"container-cluster-install"},
+			Exclusive:      installMediaReservations(request),
 			Requires:       installRequires(requirements[index]),
 			Impacts:        installImpacts(input.Verb, request),
 			Groups:         installGroups(input.Verb, request),
@@ -89,6 +90,11 @@ func (c InstallCapability) Plan(ctx context.Context, input lifecycle.PlanInput) 
 		}
 		plan.Definitions = append(plan.Definitions, definition)
 		plan.Secrets = append(plan.Secrets, request.SecretReferences()...)
+		if keys := controllerMediaKeys(request); len(keys) > 0 {
+			plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
+				Context: input.Context.Name, Kind: "cluster-install", Service: request.Identity.Cluster, ObjectKind: Kind, Keys: keys,
+			})
+		}
 	}
 	slices.Sort(plan.Secrets)
 	plan.Secrets = slices.Compact(plan.Secrets)
@@ -130,12 +136,38 @@ func installImpacts(verb reconciliation.Verb, request InstallRequest) []string {
 			continue
 		}
 		impacts = append(impacts, "install-cluster "+node.Machine, "power-on "+node.Machine)
+		if node.Controller.VirtualMedia.EnableVerification {
+			impacts = append(impacts, "enable-bmc-media-verification "+node.Machine+" (BMC-wide; retained)")
+		}
+		if node.Controller.VirtualMedia.Trust == substrate.TrustDisableVerification {
+			impacts = append(impacts, "fetch-private-media-without-certificate-verification "+node.Machine)
+			if node.Controller.VirtualMedia.RestoreVerification {
+				impacts = append(impacts, "restore-bmc-media-verification-after-boot "+node.Machine)
+			}
+		}
 		if node.Firmware.enforced() {
 			impacts = append(impacts, "configure-firmware "+node.Machine)
 		}
 	}
 	slices.Sort(impacts)
 	return slices.Compact(impacts)
+}
+
+func installMediaReservations(request InstallRequest) []string {
+	keys := append([]string{"container-cluster-install"}, controllerMediaKeys(request)...)
+	slices.Sort(keys)
+	return keys
+}
+
+func controllerMediaKeys(request InstallRequest) []string {
+	var keys []string
+	for _, node := range request.Nodes {
+		if node.Physical {
+			keys = append(keys, substrate.ControllerMediaReservationKey(node.Controller.Endpoint))
+		}
+	}
+	slices.Sort(keys)
+	return slices.Compact(keys)
 }
 
 func installGroups(verb reconciliation.Verb, request InstallRequest) []reconciliation.Group {

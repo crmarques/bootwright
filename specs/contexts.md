@@ -594,8 +594,8 @@ Secrets limits additionally bound their trees.
 | Blocks in one lifecycle plan | 256 | `MaxBlocks` in `internal/reconciliation/plan.go` |
 | Groups in one lifecycle block | 32 | `MaxGroups` in `internal/reconciliation/plan.go` |
 | Machines in one lifecycle group | 512 | `MaxMachines` in `internal/reconciliation/plan.go` |
-| Impacts in one lifecycle block | 128 | `MaxImpacts` in `internal/reconciliation/plan.go` |
-| Exclusive resources in one lifecycle block | 8 | `MaxExclusive` in `internal/reconciliation/plan.go` |
+| Impacts in one lifecycle block | 256 | `MaxImpacts` in `internal/reconciliation/plan.go` |
+| Exclusive resources in one lifecycle block | 64 | `MaxExclusive` in `internal/reconciliation/plan.go` |
 | Characters in a lifecycle identifier | 63 | `maxIdentifier` in `internal/reconciliation/plan.go` |
 | Bytes in one canonical lifecycle request | 256 KiB | `MaxRequestBytes` in `internal/reconciliation/plan.go` |
 | Canonical request bytes in one lifecycle plan | 4 MiB | `MaxPlanRequestBytes` in `internal/reconciliation/plan.go` |

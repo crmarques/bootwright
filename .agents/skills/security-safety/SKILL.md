@@ -31,7 +31,11 @@ Each is, or must become, an executable guard. Check every one a change touches.
   arm, and a task named for a proof never mutates. The structural tests live in
   `ansible/collections/ansible_collections/bootwright/core/tests/unit/test_role_task_order.py`.
 - No secret or capability-bearing value (a token, a private URL, a key) enters a
-  publicly served artifact. Private material travels only over verified TLS.
+  publicly served artifact. Private transport follows the
+  [security exceptions](../../../specs/security.md#network-remote-systems-and-privilege):
+  verified TLS by default, with an explicit per-Machine unverified-media policy
+  carrying weaker bootstrap provenance. That policy never relaxes management
+  TLS, private placement, hardware proofs or worker connection pinning.
 - Concurrent blocks share no mutable file: roles use the runner's per-invocation
   scratch, never a fixed host path.
 - A durable write stages and renames, and removes its own stage when it fails; no

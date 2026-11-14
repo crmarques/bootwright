@@ -107,6 +107,17 @@ func TestDiscoveryInventoryBecomesAnExactInstallerTarget(t *testing.T) {
 	input.AppliedEvidence = func(context.Context, string, string) ([]lifecycle.BlockEvidence, error) {
 		return []lifecycle.BlockEvidence{{Operation: op, Block: block, Kind: Kind, Object: block.Object, Implementation: DiscoveryImplementation, Verb: reconciliation.Apply, State: reconciliation.BlockDone, Evidence: runner.evidence}}, nil
 	}
+	t.Run("inventory cannot cross a media verification policy change", func(t *testing.T) {
+		request, err := DecodeDiscoveryRequest(block.Request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Controller.VirtualMedia.Trust = "disableVerification"
+		request.Controller.VirtualMedia.EnableVerification = false
+		if _, found, err := owner.completedInventory(ctx, input, request); err != nil || found {
+			t.Fatalf("inventory crossed verification policy: found=%v err=%v", found, err)
+		}
+	})
 	t.Run("automatic preparation reuses raw evidence despite selection failure", func(t *testing.T) {
 		pending, err := owner.AutomaticPreparation(ctx, input, reconciliation.Selection{})
 		if err != nil || len(pending) != 0 {

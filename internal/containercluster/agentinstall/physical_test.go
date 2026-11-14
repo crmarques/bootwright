@@ -18,7 +18,7 @@ func physicalWithController(change func(api.Value) api.Value) api.Catalog {
 	return api.NewCatalog(objects)
 }
 
-func TestPhysicalPrivateDeliveryRequiresVerifiedTLSOnBothLegs(t *testing.T) {
+func TestPhysicalPrivateDeliveryRequiresVerifiedManagementAndAnExplicitFetchPolicy(t *testing.T) {
 	for name, test := range map[string]struct {
 		change func(api.Value) api.Value
 		want   string
@@ -30,7 +30,7 @@ func TestPhysicalPrivateDeliveryRequiresVerifiedTLSOnBothLegs(t *testing.T) {
 		"unverified controller": {func(v api.Value) api.Value { return v.WithPath(api.BoolValue(false), "tls", "verify") }, "verifies"},
 		"unverified fetch": {func(v api.Value) api.Value {
 			return v.WithPath(api.StringValue("disableVerification"), "virtualMedia", "tls", "trust")
-		}, "verification"},
+		}, ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			catalog := physicalWithController(test.change)

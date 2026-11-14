@@ -11,6 +11,7 @@ import (
 	"time"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/machine/diskselection"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
@@ -104,12 +105,24 @@ func (c DiscoveryCapability) Plan(ctx context.Context, input lifecycle.PlanInput
 		if err != nil {
 			return plan, err
 		}
-		prerequisites := requires(requirements[index])
-		prerequisites[0].Family = substrate.MachineFamily
+		dependencies := requires(requirements[index])
+		dependencies[0].Family = substrate.MachineFamily
 		plan.Definitions = append(plan.Definitions, reconciliation.BlockDefinition{ID: r.Identity.Block, Kind: Kind, Object: r.Identity.Object, Family: DiscoveryFamily, Implementation: DiscoveryImplementation, ContentDigest: DiscoveryContentDigest(), Stage: reconciliation.StageMachines, Request: wire,
 			Description: "inventory Linux-visible disks of " + r.Identity.Object + " in RAM, then power off",
 			Impacts:     []string{"boot-readonly-disk-inventory " + r.Identity.Object, "power-off " + r.Identity.Object},
-			Requires:    prerequisites, Exclusive: []string{substrate.ControllerReservationKey(r.Controller.Endpoint)}})
+			Requires:    dependencies, Exclusive: []string{substrate.ControllerMediaReservationKey(r.Controller.Endpoint), substrate.ControllerReservationKey(r.Controller.Endpoint)}})
+		if r.Controller.VirtualMedia.EnableVerification {
+			plan.Definitions[len(plan.Definitions)-1].Impacts = append(plan.Definitions[len(plan.Definitions)-1].Impacts,
+				"enable-bmc-media-verification "+r.Identity.Object+" (BMC-wide; retained)")
+		}
+		if r.Controller.VirtualMedia.Trust == substrate.TrustDisableVerification {
+			plan.Definitions[len(plan.Definitions)-1].Impacts = append(plan.Definitions[len(plan.Definitions)-1].Impacts,
+				"fetch-private-media-without-certificate-verification "+r.Identity.Object)
+			if r.Controller.VirtualMedia.RestoreVerification {
+				plan.Definitions[len(plan.Definitions)-1].Impacts = append(plan.Definitions[len(plan.Definitions)-1].Impacts,
+					"restore-bmc-media-verification-after-boot "+r.Identity.Object)
+			}
+		}
 		if input.Verb == reconciliation.Destroy {
 			last := &plan.Definitions[len(plan.Definitions)-1]
 			removal, err := c.Removal(ctx, reconciliation.Block{BlockDefinition: *last})
@@ -119,6 +132,10 @@ func (c DiscoveryCapability) Plan(ctx context.Context, input lifecycle.PlanInput
 			last.Description, last.Impacts = removal.Description, removal.Impacts
 		}
 		plan.Secrets = append(plan.Secrets, r.SecretReferences()...)
+		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
+			Context: input.Context.Name, Kind: DiscoveryFamily, Service: r.Identity.Object, ObjectKind: Kind,
+			Keys: []string{substrate.ControllerMediaReservationKey(r.Controller.Endpoint)},
+		})
 		media = append(media, r.BootMedia.Name)
 	}
 	if claim, ok := mediaReservation(input.Context.Name, media); ok {

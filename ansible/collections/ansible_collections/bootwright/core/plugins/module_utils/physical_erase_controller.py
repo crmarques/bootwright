@@ -331,7 +331,8 @@ class Controller:
 
         if phase == "start":
             image = self.request["install"]["private"]["url"] + "/" + state["token"] + "/erase.iso"
-            redfish.start(factory, self.worker_request, image, config["virtualMedia"]["trust"], certificate)
+            redfish.start(factory, self.worker_request, image, config["virtualMedia"]["trust"], certificate,
+                          enable_verification=config["virtualMedia"]["enableVerification"])
         elif phase == "stop-proof":
             if self.receipt() is None:
                 raise worker.Refusal("receipt-missing")

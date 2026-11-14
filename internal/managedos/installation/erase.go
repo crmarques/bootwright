@@ -12,6 +12,7 @@ import (
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
 	"github.com/crmarques/bootwright/internal/canonicaljson"
+	"github.com/crmarques/bootwright/internal/controller/prerequisites"
 	"github.com/crmarques/bootwright/internal/reconciliation"
 	"github.com/crmarques/bootwright/internal/reconciliation/lifecycle"
 	"github.com/crmarques/bootwright/internal/secrets"
@@ -103,6 +104,10 @@ func (c EraseCapability) Plan(ctx context.Context, input lifecycle.PlanInput) (l
 		}
 		plan.Definitions = append(plan.Definitions, definition)
 		plan.Secrets = append(plan.Secrets, install.SecretReferences()...)
+		plan.Reservations = append(plan.Reservations, prerequisites.HostReservation{
+			Context: input.Context.Name, Kind: EraseFamily, Service: machine.Name(), ObjectKind: Kind,
+			Keys: []string{substrate.ControllerMediaReservationKey(install.Target.Controller.Endpoint)},
+		})
 	}
 	if len(selected) > 0 {
 		return plan, refusal("api.invariant", "eraseOnRemoval requires a Bootwright-installed physical Machine", "omit eraseOnRemoval on provided or virtual Machines")
@@ -124,6 +129,15 @@ const eraseDescription = "overwrite and read back the declared physical disks of
 
 func eraseImpacts(request EraseRequest) []string {
 	impacts := []string{"boot-offline-erase " + request.Install.Identity.Object}
+	if request.Install.Target.Controller.VirtualMedia.EnableVerification {
+		impacts = append(impacts, "enable-bmc-media-verification "+request.Install.Identity.Object+" (BMC-wide; retained)")
+	}
+	if request.Install.Target.Controller.VirtualMedia.Trust == substrate.TrustDisableVerification {
+		impacts = append(impacts, "fetch-private-media-without-certificate-verification "+request.Install.Identity.Object)
+		if request.Install.Target.Controller.VirtualMedia.RestoreVerification {
+			impacts = append(impacts, "restore-bmc-media-verification-after-boot "+request.Install.Identity.Object)
+		}
+	}
 	for _, target := range request.Targets {
 		verb := "logical-overwrite "
 		if target.Method == EraseMetadataClear {

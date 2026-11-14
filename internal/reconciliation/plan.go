@@ -19,8 +19,8 @@ const (
 	MaxBlocks           = 256
 	MaxGroups           = 32
 	MaxMachines         = 512
-	MaxImpacts          = 128
-	MaxExclusive        = 8
+	MaxImpacts          = 256
+	MaxExclusive        = 64
 	MaxRequestBytes     = 256 << 10
 	MaxPlanRequestBytes = 4 << 20
 	maxDescription      = 200

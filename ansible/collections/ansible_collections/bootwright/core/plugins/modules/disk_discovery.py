@@ -126,7 +126,7 @@ def diagnostic(error, controller):
     elif isinstance(error, custody.redfish_control.ControllerError):
         cause = getattr(error, "cause", "request")
         known = (
-            "media-verification", "privilege", "trust-chain", "trust-inventory", "trust-metadata",
+            "media-verification", "media-verification-config", "privilege", "trust-chain", "trust-inventory", "trust-metadata",
             "trust-conflict", "trust-unproved", "trust-request", "media-fetch",
         )
         code = "bmc-" + cause if isinstance(cause, str) and cause in known else "bmc-request"

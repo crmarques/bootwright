@@ -55,6 +55,7 @@ request-schema:
   nodes[].controller.tlsVerify bool
   nodes[].controller.trustBundleRef string omitempty
   nodes[].controller.virtualMedia struct agentinstall.VirtualMedia
+  nodes[].controller.virtualMedia.enableVerification bool
   nodes[].controller.virtualMedia.removeCertificate bool
   nodes[].controller.virtualMedia.restoreVerification bool
   nodes[].controller.virtualMedia.trust string

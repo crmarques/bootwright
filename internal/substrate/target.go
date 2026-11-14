@@ -83,6 +83,7 @@ type Controller struct {
 // to trust the server it fetches published media from.
 type VirtualMedia struct {
 	Trust               string
+	EnableVerification  bool
 	RestoreVerification bool
 	RemoveCertificate   bool
 }
@@ -338,6 +339,7 @@ func virtualMediaTrust(tls api.Value) VirtualMedia {
 	if media.Trust == "" {
 		media.Trust = TrustImportCertificate
 	}
+	media.EnableVerification = media.Trust != TrustDisableVerification && (!tls.Has("enableVerification") || tls.Get("enableVerification").Bool())
 	switch media.Trust {
 	case TrustDisableVerification:
 		media.RestoreVerification = !tls.Has("restoreVerificationAfterBoot") || tls.Get("restoreVerificationAfterBoot").Bool()
@@ -428,6 +430,20 @@ func ControllerReservationKey(endpoint string) string {
 	if err != nil {
 		return "bmc:" + endpoint
 	}
+	return "bmc:" + controllerAuthority(parsed) + strings.TrimPrefix(parsed.Path, "/redfish/v1/Systems")
+}
+
+// ControllerMediaReservationKey serializes media and shared security settings
+// across Systems on the same BMC origin, within and across contexts.
+func ControllerMediaReservationKey(endpoint string) string {
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return "bmc-media:" + endpoint
+	}
+	return "bmc-media:" + controllerAuthority(parsed)
+}
+
+func controllerAuthority(parsed *url.URL) string {
 	host := parsed.Host
 	if parsed.Port() == "" {
 		port := "80"
@@ -436,7 +452,7 @@ func ControllerReservationKey(endpoint string) string {
 		}
 		host = bracketed(parsed.Hostname()) + ":" + port
 	}
-	return "bmc:" + host + strings.TrimPrefix(parsed.Path, "/redfish/v1/Systems")
+	return host
 }
 
 func SystemReservationKey(uuid string) string {

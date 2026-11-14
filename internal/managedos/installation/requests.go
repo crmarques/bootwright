@@ -58,6 +58,7 @@ type Controller struct {
 // VirtualMedia is how the controller is made to trust the artifact server it
 // fetches published media from.
 type VirtualMedia struct {
+	EnableVerification  bool   `json:"enableVerification"`
 	RemoveCertificate   bool   `json:"removeCertificate"`
 	RestoreVerification bool   `json:"restoreVerification"`
 	Trust               string `json:"trust"`
@@ -344,6 +345,9 @@ func (r Request) MediaNames() []string {
 // replacement of what it names.
 func (r Request) ReservationKeys() []string {
 	var keys []string
+	if r.Target.Physical {
+		keys = append(keys, substrate.ControllerMediaReservationKey(r.Target.Controller.Endpoint))
+	}
 	if r.Image != nil {
 		keys = append(keys, "path:"+r.Image.Path)
 	}
@@ -355,8 +359,14 @@ func (r Request) ReservationKeys() []string {
 	return slices.Compact(keys)
 }
 
-// ExclusiveKeys is empty: shared package trees have their own publication block.
-func (r Request) ExclusiveKeys() []string { return nil }
+// ExclusiveKeys serializes physical-media work on shared BMC managers.
+// Shared package trees have their own publication block.
+func (r Request) ExclusiveKeys() []string {
+	if r.Target.Physical {
+		return []string{substrate.ControllerMediaReservationKey(r.Target.Controller.Endpoint)}
+	}
+	return nil
+}
 
 // SecretReferences names every declaration this request's execution needs
 // bound, so the operation freezes them before it registers.

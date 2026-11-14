@@ -198,8 +198,9 @@ also owns the qualified SecurityService path when the device has no collection.
   every published switch on.
 - `disableVerification` writes `VerifyCertificate` `false` only when it reads
   `true`; a refused write fails, because verification stays on. Where a manager
-  publishes `HttpsTransferCertVerification` it refuses before any write,
-  naming that switch (D121, [B447](../../specs/milestones/delivered.md#x47--verified-emulated-controller-trust-and-bounds)).
+  publishes `HttpsTransferCertVerification` the current Machine contract uses
+  a conditional manager write when explicitly disabled, with read-back under
+  the [Machine media contract](../../specs/api/machines.md#bmc-and-root-device-shape).
 - There is **no fallback**. A member without `Certificates`, or a
   `VerifyCertificate` write answered 501, 400 or 405, fails the import naming
   the two exceptions an operator may declare instead, and a post refused while

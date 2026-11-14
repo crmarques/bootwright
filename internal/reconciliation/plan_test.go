@@ -60,6 +60,18 @@ func TestPlanOrderAndDigestIgnoreInputOrder(t *testing.T) {
 	}
 }
 
+func TestOneClusterCanHoldItsExecutionKeyAndEightBMCOrigins(t *testing.T) {
+	block := definition("cluster")
+	block.Exclusive = []string{"container-cluster-install"}
+	for index := range 8 {
+		block.Exclusive = append(block.Exclusive, "bmc-media:bmc-"+string(rune('a'+index))+".example.test:443")
+	}
+	slices.Sort(block.Exclusive)
+	if _, err := NewPlan(Apply, []BlockDefinition{block}); err != nil {
+		t.Fatalf("the existing eight-node topology cannot hold its media scope: %v", err)
+	}
+}
+
 func TestPlanDigestChangesWithEveryFrozenField(t *testing.T) {
 	base, err := NewPlan(Apply, []BlockDefinition{definition("alpha")})
 	if err != nil {

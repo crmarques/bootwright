@@ -203,14 +203,11 @@ a `.repo` file carries a proxy URL and nothing else; it refuses the same way,
 saying the Proxy declares no proxy URL, when that Proxy declares neither URL.
 A credentialed Proxy reaches nothing when no repository is configured, and is
 accepted then. Every refusal names the Machine that selects the installation, with the
-reason and remedy the [refusal table](#refusal-table) states. A Machine whose
-installation delivers private material refuses
-`disableVerification` virtual-media trust before registration, ahead of its
-[unverified-BMC-leg refusal](#physical-installation), because a BMC that
-fetches the installer without verifying the artifact server boots whatever
-image answers, and that installer is what receives the private material; its
-remedy is `importCertificate`, or `established` when the BMC already
-trusts the server. `importCertificate` needs the installer image served over
+reason and remedy the [refusal table](#refusal-table) states. The media trust
+policy is secure by default and permits the explicit
+per-Machine [unverified-fetch exception](api/machines.md#bmc-and-root-device-shape)
+for private media, with its weaker bootstrap provenance frozen in the request.
+`importCertificate` needs the installer image served over
 https and the certificate its server presents, and refuses naming the Machine
 without either. The trust is set by the installation's insert and settled by
 its ejects after the installer's power-off
@@ -1355,7 +1352,8 @@ rather than frozen in the plan, and the Kickstart fetches the key once,
 verifying the artifact server's certificate against the bound public
 certificate rather than disabling verification. The insert
 carries the token URL, so the controller-to-BMC leg is `https` and verified,
-and the BMC-to-artifact leg refuses `disableVerification`. The first byte of
+and the BMC-to-artifact leg follows its explicit frozen media policy. The
+first byte of
 the image, `identity` and `identity.pub` is fetched through the listener before
 the insert, with the token redacted from any refusal, so a key the installer
 could not fetch fails before the disk is cleared. The private subtree is
@@ -1483,8 +1481,12 @@ Both entry points use the same request derivation, runner and native procedure.
 Private media delivery verifies the bound serving leaf through the shared full
 TLS verifier on every supported Python runtime. Delivery refusals distinguish
 HTTP, certificate and connection causes without exposing the private URL.
-The procedure requires verified BMC and media delivery, qualified RHEL boot media,
+The procedure requires verified BMC access, qualified RHEL boot media,
 complete machine identity, and an already powered-off non-controller target.
+Media delivery is verified by default; the explicit per-Machine unverified
+fetch policy follows the [BMC contract](api/machines.md#bmc-and-root-device-shape).
+Its weaker bootstrap provenance is bound into the request and inventory proof,
+so it cannot satisfy a later verified-policy request.
 It reserves the same hardware as power and lifecycle effects. Boot and media
 changes are explicit effects; the disk inventory makes no storage writes.
 
@@ -2145,7 +2147,6 @@ the length of that many bytes in base64url without padding.
 | A physical Machine naming no root device | on a Machine on a `baremetal` provider, none of the forms of the [root-device rule](api/machines.md#bmc-and-root-device-shape); a serial number without its size included | `a physical installation erases only a root disk named by its wwn, by its serial number and exact size, or by a volumeRef or bootVolume logical volume, and the Machine names none of them` | `set spec.substrate.baremetal.rootDevice.wwn on <machine> to the disk's WWN, 0x and 16 or 32 lowercase hexadecimal digits, or its serialNumber and sizeBytes to the disk's serial number and exact capacity, or its volumeRef to an existing logical volume, or remove every root hint to default to bootVolume; a device path such as /dev/sda is refused` |
 | A root-device hint other than deviceName | any `spec.hardware.rootDevice` field but a virtual Machine's `deviceName`, or `spec.substrate.baremetal.rootDevice.hctl`; a Machine on a `baremetal` provider may declare `wwn`, `serialNumber`, `sizeBytes`, `volumeRef` and `bootVolume` | `a managed-OS installation selects its root disk by deviceName on a virtual Machine or, on a physical Machine, by wwn, serialNumber and sizeBytes or a volumeRef or bootVolume logical volume, and cannot carry the other root-device hints the Machine declares` | `remove <hints> from <machine>` |
 | A root-device serial number the installer cannot compare | a `spec.substrate.baremetal.rootDevice.serialNumber` other than 1 to 256 characters drawn from ASCII letters, digits, `.`, `_`, `:`, `+`, `/`, `=` and `-` | `a physical installation compares its root disk's serial number inside the installer, and the serialNumber the Machine declares is not one it can compare` | `set spec.substrate.baremetal.rootDevice.serialNumber on <machine> to the disk's serial number, at most 256 ASCII letters, digits and ._:+/=- characters, or remove it` |
-| An unverified fetch of private material | `spec.substrate.baremetal.bmc.virtualMedia.tls.trust: disableVerification` on a Machine whose installation delivers private material (a delivered host key or an encrypted root disk's recovery passphrase) | `a Machine that delivers private material through its installation cannot let its BMC fetch without verifying the artifact server` | `declare substrate.baremetal.bmc.virtualMedia.tls.trust: importCertificate on <machine>, or established when its BMC already trusts the server` |
 | An unverified BMC leg for private delivery | a Machine whose installation delivers private material (a delivered host key or an encrypted root disk's recovery passphrase), with a non-https `spec.substrate.baremetal.bmc.address` or `tls.verify: false` | `a Machine whose installation delivers private material hands its BMC the private installer image URL, so the BMC must be reached over https with its certificate verified` | `address the BMC of <machine> with an https:// spec.substrate.baremetal.bmc.address and remove the tls.verify opt-out on <machine> or in spec.baremetal.defaults.bmc of <provider>; name the authority that issued its certificate in tls.trustBundleRef when the system trust store does not hold it` |
 | A DHCP-only install | an effective `spec.network.installAddressRef` naming no `spec.network.addresses` entry with an `interface` and an IPv4 address; admission refuses it first, so no validated graph reaches this row | `a managed-OS installation configures one static IPv4 install address, and the Machine selects none; DHCP installation is not supported` | `assign an IPv4 address to the install interface in spec.network.addresses of <machine> and select it with spec.network.installAddressRef` |
 | A kernel-style interface name | any available composed `ethernet` interface whose `name` matches `^eth[0-9]+$`, on any substrate | `a managed-OS installation names each ethernet interface after its hardware address, and a kernel-style name such as <name> can collide with the names the kernel assigns` | `rename interface <name> in the network of <machine> to a name outside the kernel's ethN scheme, such as its predictable name` |

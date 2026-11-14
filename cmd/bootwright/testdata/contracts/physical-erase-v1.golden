@@ -107,6 +107,7 @@ request-schema:
   install.target.controller.tlsVerify bool
   install.target.controller.trustBundleRef string omitempty
   install.target.controller.virtualMedia struct installation.VirtualMedia
+  install.target.controller.virtualMedia.enableVerification bool
   install.target.controller.virtualMedia.removeCertificate bool
   install.target.controller.virtualMedia.restoreVerification bool
   install.target.controller.virtualMedia.trust string

@@ -108,7 +108,7 @@ def test_discovery_reports_the_exact_refused_boot_step_without_starting_later_st
     instance.target = Mock(return_value="Off")
     instance.publication = lambda: (Path("/fixture"), "https://example.test/owned.iso")
     instance.publish = Mock()
-    instance.request = {"controller": {"virtualMedia": {"trust": "importCertificate"}}}
+    instance.request = {"controller": {"virtualMedia": {"trust": "importCertificate", "enableVerification": False}}}
     instance.material = {"artifactCertificate": "/fixture/certificate.pem"}
     monkeypatch.setattr(controller.records, "read", lambda path: b"synthetic certificate")
     monkeypatch.setattr(controller, "listener_probe", Mock())

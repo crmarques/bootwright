@@ -80,6 +80,10 @@
         HttpsTransferCertVerification on every declaring manager, or device
         VerifyCertificate when no manager publishes that setting
       bmc-privilege: the BMC account lacks the required privilege; certificate import requires security-configuration privilege
+      bmc-media-verification-config: >-
+        declared media verification setup was refused or not proved; check
+        security-configuration privilege, writable boolean properties and resource
+        ETags, then retry without deleting custody; partial changes remain recorded
       bmc-trust-chain: SecurityService import requires the artifact server certificate and its issuer chain
       bmc-trust-inventory: the BMC certificate-slot inventory is unavailable, incomplete or ambiguous
       bmc-trust-metadata: the BMC does not advertise one usable certificate-import action and its required parameters

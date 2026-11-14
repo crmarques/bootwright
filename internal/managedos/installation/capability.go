@@ -221,6 +221,15 @@ func impacts(verb reconciliation.Verb, request Request) []string {
 		impacts = append(impacts, "publish-content "+path)
 	}
 	if verb != reconciliation.Destroy {
+		if request.Target.Controller.VirtualMedia.EnableVerification {
+			impacts = append(impacts, "enable-bmc-media-verification "+request.Identity.Object+" (BMC-wide; retained)")
+		}
+		if request.Target.Controller.VirtualMedia.Trust == substrate.TrustDisableVerification {
+			impacts = append(impacts, "fetch-private-media-without-certificate-verification "+request.Identity.Object)
+			if request.Target.Controller.VirtualMedia.RestoreVerification {
+				impacts = append(impacts, "restore-bmc-media-verification-after-boot "+request.Identity.Object)
+			}
+		}
 		impacts = append(impacts,
 			"install-operating-system "+request.Identity.Object,
 			"power-on "+request.Identity.Object,

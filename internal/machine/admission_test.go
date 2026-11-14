@@ -78,6 +78,28 @@ func TestBaremetalNormalizationPreservesDeclarations(t *testing.T) {
 	}
 }
 
+func TestMediaVerificationSetupInheritsAsExplicitProviderIntent(t *testing.T) {
+	machine, catalog := fixture()
+	objects := catalog.Objects()
+	for index, object := range objects {
+		if object.Kind() == api.InfraProvider {
+			objects[index] = object.WithSpec(object.Spec().
+				WithPath(api.BoolValue(true), "baremetal", "defaults", "bmc", "tls", "verify").
+				WithPath(api.BoolValue(true), "baremetal", "defaults", "bmc", "virtualMedia", "tls", "enableVerification"))
+		}
+	}
+	catalog = api.NewCatalog(objects)
+	normalized, issues := Normalize(machine, catalog)
+	if len(issues) != 0 || !normalized.Spec().Get("substrate", "baremetal", "bmc", "virtualMedia", "tls", "enableVerification").Bool() {
+		t.Fatalf("provider intent lost: %v %v", normalized.Spec(), issues)
+	}
+	local := machine.WithSpec(machine.Spec().WithPath(api.BoolValue(false), "substrate", "baremetal", "bmc", "virtualMedia", "tls", "enableVerification"))
+	normalized, issues = Normalize(local, catalog)
+	if len(issues) != 0 || normalized.Spec().Get("substrate", "baremetal", "bmc", "virtualMedia", "tls", "enableVerification").Bool() {
+		t.Fatalf("local opt-out lost: %v %v", normalized.Spec(), issues)
+	}
+}
+
 func TestNativeCompositionRejectsHiddenAndConflictingInputs(t *testing.T) {
 	o, c := fixture()
 	cases := map[string]api.Value{

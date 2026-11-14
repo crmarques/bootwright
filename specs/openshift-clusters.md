@@ -152,7 +152,6 @@ every selected `OpenShiftCluster`, and both belong to the
 | A node's provider with no emulated BMC credential | a virtual node whose provider declares no `spec.libvirt.bmcEmulation.auth.credentialsRef` | `node <node> (<machine>): the provider declares no emulated BMC credential` | `set spec.libvirt.bmcEmulation.auth.credentialsRef on <provider>` |
 | A physical node with an HTTP BMC | a physical node's BMC uses HTTP | `a physical node's private boot image requires an HTTPS management controller` | `set spec.substrate.baremetal.bmc.address on <machine> to an HTTPS ComputerSystem endpoint` |
 | A physical node with unverified BMC TLS | a physical node disables BMC TLS verification | `a physical node's private boot image requires a BMC connection that verifies its certificate` | `enable spec.substrate.baremetal.bmc.tls.verify on <machine> and declare its trust bundle when needed` |
-| A physical node with unverified media TLS | a physical node selects disableVerification | `a physical node's private boot image requires virtual-media TLS verification` | `set spec.substrate.baremetal.bmc.virtualMedia.tls.trust on <machine> to importCertificate or established` |
 | A physical node without a stable root selector | a physical node names its root in none of the forms of the [root-device rule](api/machines.md#bmc-and-root-device-shape), declares a malformed selector, or a `volumeRef` or `bootVolume` beside another root hint | `a physical agent installation requires a stable root selector: a wwn, serialNumber with exact sizeBytes, or a volumeRef or bootVolume logical volume` | `set spec.substrate.baremetal.rootDevice.wwn on <machine> to the disk's WWN, 0x and 16 or 32 lowercase hexadecimal digits, or its serialNumber and sizeBytes to the disk's serial number and exact capacity, or its volumeRef to an existing logical volume, or remove every root hint to default to bootVolume` |
 | A physical node's root named by a device path | any `hardware.rootDevice.deviceName` on a physical node | `a bare-metal Machine an installer writes names its root WWN as spec.substrate.baremetal.rootDevice.wwn, never by spec.hardware.rootDevice.deviceName` | `<remedy>` |
 | A root device the installer cannot name | a virtual node's `spec.hardware.rootDevice.deviceName` other than `/dev/<name>` or `/dev/disk/by-path/<name>` | `the agent installer names a root device only as /dev/<name> or /dev/disk/by-path/<name>` | `set spec.hardware.rootDevice.deviceName on <machine> to such a path` |
@@ -177,10 +176,11 @@ through the cluster role exactly as the managed-OS installation does: the
 BMC leg's bundle to the pre-boot, boot and disk-boot entry points, and
 the virtual-media trust, the server's certificate part, private delivery and
 the restore and removal settings to the insert and the eject. Because the image
-is private, a physical node whose BMC leg is `http` or does not verify,
-or whose virtual-media trust is `disableVerification`, refuses before
-registration, and an insert under `established` refuses where the manager's
-deciding setting reads false.
+is private, a physical node whose BMC leg is `http` or does not verify refuses
+before registration. Media trust is verified and configured by default, with
+the explicit per-Machine [unverified-fetch exception](api/machines.md#bmc-and-root-device-shape)
+recorded in the request and plan. An insert under `established` requires the
+deciding setting on, enabling it by default when permitted.
 
 A virtual node's emulated BMC on the Machine its artifact server is placed on
 keeps `established`: its unverified fetch never leaves that host. One on

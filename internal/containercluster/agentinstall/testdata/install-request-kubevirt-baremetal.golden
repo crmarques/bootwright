@@ -39,6 +39,7 @@
         "endpoint": "kubevirt:bootwright-guests/kubevirt-01-ba334887",
         "tlsVerify": true,
         "virtualMedia": {
+          "enableVerification": false,
           "removeCertificate": false,
           "restoreVerification": false,
           "trust": ""
@@ -59,6 +60,7 @@
         "endpoint": "kubevirt:bootwright-guests/kubevirt-02-6fcb7dda",
         "tlsVerify": true,
         "virtualMedia": {
+          "enableVerification": false,
           "removeCertificate": false,
           "restoreVerification": false,
           "trust": ""
@@ -79,6 +81,7 @@
         "endpoint": "kubevirt:bootwright-guests/kubevirt-03-de2dd99d",
         "tlsVerify": true,
         "virtualMedia": {
+          "enableVerification": false,
           "removeCertificate": false,
           "restoreVerification": false,
           "trust": ""
@@ -99,6 +102,7 @@
         "endpoint": "kubevirt:bootwright-guests/kubevirt-04-2f8d7320",
         "tlsVerify": true,
         "virtualMedia": {
+          "enableVerification": false,
           "removeCertificate": false,
           "restoreVerification": false,
           "trust": ""
@@ -119,6 +123,7 @@
         "endpoint": "kubevirt:bootwright-guests/kubevirt-05-e81c3834",
         "tlsVerify": true,
         "virtualMedia": {
+          "enableVerification": false,
           "removeCertificate": false,
           "restoreVerification": false,
           "trust": ""

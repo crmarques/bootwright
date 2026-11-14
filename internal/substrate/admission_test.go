@@ -1,6 +1,7 @@
 package substrate
 
 import (
+	"slices"
 	"testing"
 
 	api "github.com/crmarques/bootwright/api/v1alpha1"
@@ -228,8 +229,23 @@ func TestVirtualMediaTrustDefaultsToImportCertificate(t *testing.T) {
 	if fields := fieldsOf(ValidateBMCDefaults(m("virtualMedia", m("tls", m("restoreVerificationAfterBoot", true))), "$.bmc", true)); len(fields) != 1 || fields[0] != "$.bmc.virtualMedia.tls.restoreVerificationAfterBoot" {
 		t.Fatalf("restoring verification under the default trust: issues at %v", fields)
 	}
-	if media := virtualMediaTrust(m()); media != (VirtualMedia{Trust: TrustImportCertificate}) {
+	if media := virtualMediaTrust(m()); media != (VirtualMedia{Trust: TrustImportCertificate, EnableVerification: true}) {
 		t.Fatalf("frozen trust = %+v", media)
+	}
+}
+
+func TestEnablingMediaVerificationRequiresVerifiedBMCAndCompatibleTrust(t *testing.T) {
+	for name, bmc := range map[string]api.Value{
+		"unverified BMC":    m("tls", m("verify", false), "virtualMedia", m("tls", m("enableVerification", true))),
+		"disabled trust":    m("virtualMedia", m("tls", m("trust", TrustDisableVerification, "enableVerification", true))),
+		"none verification": m("tls", m("verification", "none"), "virtualMedia", m("tls", m("enableVerification", true))),
+	} {
+		t.Run(name, func(t *testing.T) {
+			issues := ValidateBMCDefaults(bmc, "$.bmc", true)
+			if !slices.Contains(fieldsOf(issues), "$.bmc.virtualMedia.tls.enableVerification") {
+				t.Fatalf("incompatible verification setup was admitted: %v", issues)
+			}
+		})
 	}
 }
 
@@ -275,10 +291,11 @@ func TestRestoreVerificationFreezesOnlyUnderDisableVerification(t *testing.T) {
 	}{
 		"disableVerification":             {m("trust", TrustDisableVerification), VirtualMedia{Trust: TrustDisableVerification, RestoreVerification: true}},
 		"disableVerification, kept off":   {m("trust", TrustDisableVerification, "restoreVerificationAfterBoot", false), VirtualMedia{Trust: TrustDisableVerification}},
-		"importCertificate":               {m("trust", TrustImportCertificate), VirtualMedia{Trust: TrustImportCertificate}},
-		"importCertificate, then removed": {m("trust", TrustImportCertificate, "removeCertificateAfterBoot", true), VirtualMedia{Trust: TrustImportCertificate, RemoveCertificate: true}},
-		"established":                     {m("trust", TrustEstablished), VirtualMedia{Trust: TrustEstablished}},
-		"the default":                     {m(), VirtualMedia{Trust: TrustImportCertificate}},
+		"importCertificate":               {m("trust", TrustImportCertificate), VirtualMedia{Trust: TrustImportCertificate, EnableVerification: true}},
+		"importCertificate, then removed": {m("trust", TrustImportCertificate, "removeCertificateAfterBoot", true), VirtualMedia{Trust: TrustImportCertificate, RemoveCertificate: true, EnableVerification: true}},
+		"established":                     {m("trust", TrustEstablished), VirtualMedia{Trust: TrustEstablished, EnableVerification: true}},
+		"the default":                     {m(), VirtualMedia{Trust: TrustImportCertificate, EnableVerification: true}},
+		"preconfigured verification":      {m("trust", TrustEstablished, "enableVerification", false), VirtualMedia{Trust: TrustEstablished}},
 	} {
 		if media := virtualMediaTrust(test.tls); media != test.want {
 			t.Fatalf("%s: frozen %+v, want %+v", name, media, test.want)
