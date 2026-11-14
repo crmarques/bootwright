@@ -15872,3 +15872,18 @@ credential disclosure, with no change to custody or its access boundaries.
 tests, the CLI suite, documentation checks and the full verification gate.
 Tests cover wrapped output, muted notes, control-character escaping and the
 default hidden password. No operator acceptance gate is required.
+
+## X462 — Discovery diagnostic collection on the Python floor
+
+**Owner:** Verification; **item:** B1394 (defect); **authority:** the blocking
+verification defect rule in [AGENTS.md](../../AGENTS.md).
+
+Explicit pytest parameter IDs prevent Python-floor `HTTPError` objects from
+being inspected for generated case names. Existing private-value redaction and
+delivery-cause assertions collect and execute unchanged on both runtimes,
+meeting the [architecture verification](../architecture.md#architecture-verification)
+requirement. Runtime behavior and contracts are unchanged.
+
+**Exit evidence:** the delivering commit records the failed floor collection,
+the pinned units suite on controller and floor runtimes, and focused checks.
+The final version-reset integration runs the full gate on the combined tree.

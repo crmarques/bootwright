@@ -66,7 +66,7 @@ def test_publication_capacity_and_copy_diagnostics_are_safe_and_actionable(error
     (urllib.error.URLError(TimeoutError("SECRET")), "media-timeout"),
     (urllib.error.URLError(ConnectionRefusedError("SECRET")), "media-refused"),
     (urllib.error.URLError(OSError("SECRET")), "media-connection"),
-])
+], ids=["http-forbidden", "http-missing", "redirect", "certificate", "handshake", "dns", "timeout", "refused", "connection"])
 def test_delivery_diagnostics_classify_causes_without_private_values(error, expected):
     result = module.diagnostic(error, SimpleNamespace(phase="media-delivery"))
     assert result == {"discovery_failure": expected, "discovery_phase": "media-delivery"}
