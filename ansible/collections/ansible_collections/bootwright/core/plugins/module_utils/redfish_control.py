@@ -185,10 +185,13 @@ class ControllerError(Exception):
     only from those and cut to one printable line, so it never carries user
     information, the credential or a response body. A remedy, always one of
     this module's fixed texts and never the controller's, follows the line.
+    The cause is static procedure metadata; consumers allowlist it instead of
+    parsing or publishing firmware text.
     """
 
-    def __init__(self, line, remedy=""):
+    def __init__(self, line, remedy="", *, cause="request"):
         super().__init__(_printable(line, LINE_LIMIT, " ") + ("; " + remedy if remedy else ""))
+        self.cause = cause
 
 
 class UnverifiedCertificate(ControllerError):
@@ -569,7 +572,7 @@ class Client:
                 return True
             if attempt + 1 < INSERT_ATTEMPTS and self._release(member)[1]:
                 raise ControllerError("the device was not released after " + reason)
-        raise ControllerError(reason, FETCH_CAUSES if fetch_failed else "")
+        raise ControllerError(reason, FETCH_CAUSES if fetch_failed else "", cause="media-fetch" if fetch_failed else "request")
 
     def _verified_fetch(self, member):
         """Prove by reading alone that the controller verifies the server it
@@ -586,7 +589,7 @@ class Client:
         device = self._device(member, doing)
         if device.get("VerifyCertificate") is not True:
             raise ControllerError("%s %s: VerifyCertificate reads %s" % (
-                doing, _shown(member), "false" if "VerifyCertificate" in device else "nothing"), NO_VERIFIED_FETCH)
+                doing, _shown(member), "false" if "VerifyCertificate" in device else "nothing"), NO_VERIFIED_FETCH, cause="media-verification")
 
     def _manager_verification(self, doing):
         """Read every published authoritative switch without changing one."""
@@ -608,7 +611,7 @@ class Client:
         for url, value in settings:
             if value is not True:
                 raise ControllerError("verifying the fetch %s: %s reads false" % (
-                    _shown(url), redfish_discovery.TRANSFER_VERIFICATION), NO_VERIFIED_FETCH)
+                    _shown(url), redfish_discovery.TRANSFER_VERIFICATION), NO_VERIFIED_FETCH, cause="media-verification")
         return bool(settings)
 
     def _attach(self, member, image):
@@ -806,7 +809,7 @@ class Client:
         try:
             return redfish_remote_ca.RemoteCA(self).apply(certificate, remove=remove)
         except redfish_remote_ca.TrustError as error:
-            raise ControllerError(str(error)) from None
+            raise ControllerError(str(error), cause=error.cause) from None
 
     def _certificates(self, member, doing):
         """The certificate collection a device links and each member's URL and
@@ -1163,7 +1166,7 @@ def _failure(doing, reference, status, body=None, detail=""):
     if detail:
         line += ", " + detail
     found = redfish_discovery.message_id(body)
-    return ControllerError(line + (" (%s)" % found if found else ""))
+    return ControllerError(line + (" (%s)" % found if found else ""), cause="privilege" if redfish_remote_ca.denied(status, body) else "request")
 
 
 def _shown(reference):

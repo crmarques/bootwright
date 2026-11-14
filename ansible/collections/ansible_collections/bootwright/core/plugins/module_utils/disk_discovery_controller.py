@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import errno
 import fcntl
 import hashlib
 import json
@@ -253,7 +254,6 @@ class Controller:
         del unused
         self.publication_directories(destination)
         target = destination / "discovery.iso"
-        target.unlink(missing_ok=True)
         publish_image(image, target, media.publication_bound(self.request["bootMedia"]["size"]))
         media.native(["/usr/bin/chcon", "--reference", str(destination.parents[4]), "--recursive", str(destination)])
         os.fsync(self.lock)
@@ -373,9 +373,11 @@ class Controller:
         certificate = records.read(Path(self.material["artifactCertificate"])).decode()
         self.phase = "media-delivery"
         listener_probe(url, certificate)
-        self.phase = "boot"
+        self.phase = "media-insertion"
         client.insert(url, self.request["controller"]["virtualMedia"]["trust"], certificate, private=True)
+        self.phase = "boot-selection"
         client.boot_once("Cd")
+        self.phase = "power-on"
         client.power("On", "On")
 
     def cleanup(self, acknowledged):
@@ -510,10 +512,17 @@ def publish_image(source, destination, maximum):
             raise ValueError("discovery publication file")
         if not 0 < info.st_size <= maximum:
             raise ValueError("discovery publication size")
+        capacity = os.statvfs(destination.parent)
+        if capacity.f_bavail * (capacity.f_frsize or capacity.f_bsize) < info.st_size:
+            raise OSError(errno.ENOSPC, "discovery publication capacity")
         target_fd = os.open(stage, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o640)
         while chunk := os.read(source_fd, 1 << 20):
-            if os.write(target_fd, chunk) != len(chunk):
-                raise ValueError("discovery publication copy")
+            pending = memoryview(chunk)
+            while pending:
+                written = os.write(target_fd, pending)
+                if written <= 0:
+                    raise ValueError("discovery publication copy")
+                pending = pending[written:]
         os.fchmod(target_fd, 0o640)
         os.fsync(target_fd)
         os.replace(stage, destination)

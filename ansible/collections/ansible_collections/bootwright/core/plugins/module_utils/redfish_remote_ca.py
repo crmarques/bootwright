@@ -23,6 +23,10 @@ PRIVILEGE_MESSAGES = ("InsufficientPrivilege", "InsufficientPermission", "Proper
 class TrustError(Exception):
     """A bounded refusal containing neither certificate nor response body."""
 
+    def __init__(self, line, *, cause="trust-request"):
+        super().__init__(line)
+        self.cause = cause
+
 
 def denied(status, body):
     """A privilege response retains its meaning even on HTTP 400 firmware."""
@@ -45,11 +49,14 @@ def authority(chain):
     """The terminal issuer and its SHA256; a serving leaf alone is insufficient."""
     blocks = re.findall(r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", chain, re.DOTALL)
     if not 2 <= len(blocks) <= 8:
-        raise TrustError("SecurityService media trust requires the artifact server's leaf and issuer chain; serve that chain or configure established trust")
+        raise TrustError(
+            "SecurityService media trust requires the artifact server's leaf and issuer chain; serve that chain or configure established trust",
+            cause="trust-chain",
+        )
     try:
         ders = [ssl.PEM_cert_to_DER_cert(block) for block in blocks]
     except ValueError:
-        raise TrustError("SecurityService media trust received an invalid certificate chain") from None
+        raise TrustError("SecurityService media trust received an invalid certificate chain", cause="trust-chain") from None
     return blocks[-1] + "\n", hashlib.sha256(ders[-1]).hexdigest()
 
 
@@ -57,19 +64,19 @@ def inventory(resource):
     """Read every occupied slot; an unrecognized row never proves a free slot."""
     rows = resource.get(INVENTORY)
     if not isinstance(rows, list) or len(rows) > 8:
-        raise TrustError("SecurityService certificate-slot inventory is unavailable or exceeds eight slots")
+        raise TrustError("SecurityService certificate-slot inventory is unavailable or exceeds eight slots", cause="trust-inventory")
     found = {}
     for row in rows:
         if not isinstance(row, dict):
-            raise TrustError("SecurityService certificate-slot inventory is incomplete")
+            raise TrustError("SecurityService certificate-slot inventory is incomplete", cause="trust-inventory")
         slot, usage = row.get("CertId"), row.get("Usage")
         if not isinstance(slot, int) or isinstance(slot, bool) or not 1 <= slot <= 8 or slot in found:
-            raise TrustError("SecurityService certificate-slot identity is ambiguous")
+            raise TrustError("SecurityService certificate-slot identity is ambiguous", cause="trust-inventory")
         expected = "FileTransfer" if slot >= 5 else "EventSubscription"
         certificate = row.get("ServerCert")
         fingerprint = certificate.get("FingerPrint") if isinstance(certificate, dict) else None
         if usage != expected or not isinstance(fingerprint, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", fingerprint):
-            raise TrustError("SecurityService certificate-slot usage or SHA256 fingerprint is unknown")
+            raise TrustError("SecurityService certificate-slot usage or SHA256 fingerprint is unknown", cause="trust-inventory")
         found[slot] = (usage, fingerprint.lower())
     return found
 
@@ -83,7 +90,7 @@ class RemoteCA:
     def resource(self):
         links = {link for _manager, body in self.client._managers for link in redfish_discovery.security_services(body)}
         if len(links) != 1:
-            raise TrustError("SecurityService media trust needs one unambiguous discovered security service")
+            raise TrustError("SecurityService media trust needs one unambiguous discovered security service", cause="trust-metadata")
         url = self.client._own(links.pop(), "reading media trust")
         body, slots = self.state(url)
         return url, body, slots
@@ -91,38 +98,38 @@ class RemoteCA:
     def state(self, url):
         body, _headers = self.client._read(url, "reading media trust")
         if body.get(redfish_discovery.TRANSFER_VERIFICATION) is not True:
-            raise TrustError("SecurityService media trust requires HttpsTransferCertVerification enabled by the operator")
+            raise TrustError("SecurityService media trust requires HttpsTransferCertVerification enabled by the operator", cause="media-verification")
         return body, inventory(body)
 
     def target(self, resource, action, payload):
         candidates = redfish_discovery.actions(resource, action)
         if len(candidates) != 1 or not candidates[0]["actionInfo"]:
-            raise TrustError("SecurityService media trust action or its parameter metadata is unavailable or ambiguous")
+            raise TrustError("SecurityService media trust action or its parameter metadata is unavailable or ambiguous", cause="trust-metadata")
         candidate = candidates[0]
         target = self.client._own(candidate["target"], "checking media trust action")
         info = self.client._own(candidate["actionInfo"], "checking media trust parameters")
         parameters = self.client._read(info, "checking media trust parameters")[0].get("Parameters")
         if not isinstance(parameters, list):
-            raise TrustError("SecurityService media trust action has no readable parameter metadata")
+            raise TrustError("SecurityService media trust action has no readable parameter metadata", cause="trust-metadata")
         names = set()
         for parameter in parameters:
             if not isinstance(parameter, dict) or not isinstance(parameter.get("Name"), str):
-                raise TrustError("SecurityService media trust parameter metadata is incomplete")
+                raise TrustError("SecurityService media trust parameter metadata is incomplete", cause="trust-metadata")
             name = parameter["Name"]
             if name in names or parameter.get("Required") is True and name not in payload:
-                raise TrustError("SecurityService media trust action requires unsupported parameters")
+                raise TrustError("SecurityService media trust action requires unsupported parameters", cause="trust-metadata")
             names.add(name)
             allowed = parameter.get("AllowableValues")
             if name in payload and isinstance(allowed, list) and payload[name] not in allowed:
-                raise TrustError("SecurityService media trust action does not admit the required parameter value")
+                raise TrustError("SecurityService media trust action does not admit the required parameter value", cause="trust-metadata")
         if not set(payload) <= names:
-            raise TrustError("SecurityService media trust action does not declare the required parameters")
+            raise TrustError("SecurityService media trust action does not declare the required parameters", cause="trust-metadata")
         return target
 
     def write(self, target, payload):
         status, body, _headers = self.client.fetch(target, "POST", payload, doing="updating media trust")
         if denied(status, body):
-            raise TrustError("SecurityService media trust: HTTP %d; the account needs security-configuration privilege" % status)
+            raise TrustError("SecurityService media trust: HTTP %d; the account needs security-configuration privilege" % status, cause="privilege")
         message = redfish_discovery.message_id(body)
         if status not in (0, 200, 204) or isinstance(body, dict) and "error" in body and not message.endswith(".Success"):
             raise TrustError("SecurityService media trust action did not complete: HTTP %d" % status)
@@ -132,29 +139,32 @@ class RemoteCA:
         pem, fingerprint = authority(chain)
         matches = [slot for slot, entry in slots.items() if entry == ("FileTransfer", fingerprint)]
         if len(matches) > 1:
-            raise TrustError("SecurityService media authority occupies ambiguous slots")
+            raise TrustError("SecurityService media authority occupies ambiguous slots", cause="trust-inventory")
         selected = matches[0] if matches else None
         if remove and not matches or not remove and matches:
             self.client.last_trust_slot = matches[0] if matches else None
             return False
         payload = {"RootCertId": matches[0]} if remove else {"Type": "text", "Content": pem, "Usage": "FileTransfer"}
         if not remove and any(usage == "FileTransfer" for usage, _fingerprint in slots.values()):
-            raise TrustError("SecurityService already holds another file-transfer authority; remove it out of band after checking its users")
+            raise TrustError(
+                "SecurityService already holds another file-transfer authority; remove it out of band after checking its users",
+                cause="trust-conflict",
+            )
         target = self.target(resource, DELETE if remove else IMPORT, payload)
         _resource, fresh = self.state(url)
         if fresh != slots:
-            raise TrustError("SecurityService certificate slots changed before the write; no trust write was sent")
+            raise TrustError("SecurityService certificate slots changed before the write; no trust write was sent", cause="trust-conflict")
         self.write(target, payload)
         _resource, after = self.state(url)
         matches = [slot for slot, entry in after.items() if entry == ("FileTransfer", fingerprint)]
         if remove and matches or not remove and len(matches) != 1:
-            raise TrustError("SecurityService did not prove the requested authority's presence or removal")
+            raise TrustError("SecurityService did not prove the requested authority's presence or removal", cause="trust-unproved")
         expected = dict(slots)
         if remove:
             del expected[selected]
         else:
             expected[matches[0]] = ("FileTransfer", fingerprint)
         if after != expected:
-            raise TrustError("SecurityService changed unrelated certificate slots; trust effects are unknown")
+            raise TrustError("SecurityService changed unrelated certificate slots; trust effects are unknown", cause="trust-unproved")
         self.client.last_trust_slot = selected if remove else matches[0]
         return True

@@ -59,6 +59,7 @@ discovery_phase:
   type: str
 """
 
+import errno
 import socket
 import ssl
 import urllib.error
@@ -107,6 +108,7 @@ def diagnostic(error, controller):
         "discovery publication size": "publication-size",
         "discovery publication file": "publication-file",
         "discovery publication path": "publication-path",
+        "discovery publication copy": "publication-copy",
         "discovery source size bound": "source-size",
         "RHEL initrd lacks discovery bootstrap tools": "initrd-tools",
         "unqualified discovery initrd layout": "initrd-layout",
@@ -122,11 +124,18 @@ def diagnostic(error, controller):
     elif isinstance(error, custody.redfish_control.UnverifiedCertificate):
         code = "bmc-tls"
     elif isinstance(error, custody.redfish_control.ControllerError):
-        code = "bmc-request"
+        cause = getattr(error, "cause", "request")
+        known = (
+            "media-verification", "privilege", "trust-chain", "trust-inventory", "trust-metadata",
+            "trust-conflict", "trust-unproved", "trust-request", "media-fetch",
+        )
+        code = "bmc-" + cause if isinstance(cause, str) and cause in known else "bmc-request"
     elif getattr(controller, "phase", "") == "media-delivery" and isinstance(error, OSError):
         code = delivery_code(error)
     elif isinstance(error, FileNotFoundError):
         code = "missing-file"
+    elif isinstance(error, OSError) and error.errno in (errno.ENOSPC, errno.EDQUOT):
+        code = "publication-space" if getattr(controller, "phase", "") == "publication" else "filesystem"
     elif isinstance(error, OSError):
         code = "filesystem"
     elif isinstance(error, bounded_process.Failure):
@@ -134,7 +143,11 @@ def diagnostic(error, controller):
     elif isinstance(error, ValueError):
         code = refusals.get(str(error), "contract")
     phase = getattr(controller, "phase", "custody")
-    if phase not in ("custody", "controller", "media", "publication", "tls", "media-delivery", "boot", "inventory", "acknowledgement", "cleanup"):
+    phases = (
+        "custody", "controller", "media", "publication", "tls", "media-delivery", "boot",
+        "media-insertion", "boot-selection", "power-on", "inventory", "acknowledgement", "cleanup",
+    )
+    if phase not in phases:
         phase = "custody"
     return {"discovery_failure": code, "discovery_phase": phase}
 

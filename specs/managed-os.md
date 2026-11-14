@@ -1512,6 +1512,12 @@ only the frozen private machine subtree. Retry repairs restrictive directory
 creation residue there without changing unrelated ancestors or other safe modes.
 Published ISO permissions are set explicitly before atomic publication,
 independently of the caller's umask.
+Publication completes short writes and checks available space before copying;
+the capacity check reserves no space. A failed copy removes its stage and
+preserves any previous publication. Space and quota refusals name the capacity
+problem without exposing private paths. BMC boot refusals identify media
+insertion, boot selection or power-on and a bounded trust, privilege or fetch
+cause without exposing firmware text or private URLs.
 
 Selection and installation planning validate protected-disk constraints as well
 as the policy fingerprint. Policy and unowned OSD-device selectors may be refined

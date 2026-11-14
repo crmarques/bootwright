@@ -9046,3 +9046,11 @@ after publication. Authorizes X459 (M1, B1389, B1390) to diagnose and correct
 that boundary, preserving certificate verification and frozen recovery. Use
 focused checks for the interactive fix cycle. No real-host operation or push
 is authorized.
+
+### D266
+
+**owner** (2026-11-14): reports distinct publication and BMC boot refusals.
+Authorizes X460 (M1, B1391, B1392) to correct publication copying and expose
+actionable boot causes while preserving verified trust, target identity and
+recovery. Use focused checks before local integration. No real-host operation
+or push is authorized.

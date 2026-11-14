@@ -1,5 +1,6 @@
 """Inventory boot/receipt boundaries never authorize data disk writes."""
 
+import errno
 import hashlib
 import io
 import os
@@ -94,6 +95,32 @@ def test_controller_refuses_to_boot_or_stop_an_unowned_running_machine():
         instance.cleanup(False)
     client.power.assert_not_called()
     client.insert.assert_not_called()
+
+
+@pytest.mark.parametrize("failed_step, phase", [
+    ("insert", "media-insertion"), ("boot_once", "boot-selection"), ("power", "power-on"),
+])
+def test_discovery_reports_the_exact_refused_boot_step_without_starting_later_steps(monkeypatch, failed_step, phase):
+    instance = controller.Controller.__new__(controller.Controller)
+    client = Mock()
+    client.inserted.return_value = ""
+    instance.client = lambda: client
+    instance.target = Mock(return_value="Off")
+    instance.publication = lambda: (Path("/fixture"), "https://example.test/owned.iso")
+    instance.publish = Mock()
+    instance.request = {"controller": {"virtualMedia": {"trust": "importCertificate"}}}
+    instance.material = {"artifactCertificate": "/fixture/certificate.pem"}
+    monkeypatch.setattr(controller.records, "read", lambda path: b"synthetic certificate")
+    monkeypatch.setattr(controller, "listener_probe", Mock())
+    getattr(client, failed_step).side_effect = controller.redfish_control.ControllerError("SECRET")
+    with pytest.raises(controller.redfish_control.ControllerError):
+        instance.start()
+    assert instance.phase == phase
+    assert instance.target.call_count == 2
+    if failed_step == "insert":
+        client.boot_once.assert_not_called()
+    if failed_step != "power":
+        client.power.assert_not_called()
 
 
 def test_foreign_or_noncanonical_report_never_reaches_a_durable_receipt():
@@ -379,6 +406,7 @@ def test_publication_accepts_the_qualified_initramfs_growth(tmp_path, monkeypatc
         return observed
 
     monkeypatch.setattr(controller.os, "fstat", remastered_size)
+    monkeypatch.setattr(controller.os, "statvfs", lambda path: SimpleNamespace(f_bavail=1 << 20, f_frsize=4096, f_bsize=4096))
     instance.lock = os.open(instance.root, os.O_RDONLY | os.O_DIRECTORY)
     try:
         if layout in ("unsafe-parent", "linked-parent", "writable-child", "linked-child", "foreign-child"):
@@ -443,6 +471,67 @@ def test_published_iso_has_serving_permissions_independent_of_umask(tmp_path, ma
         os.umask(previous)
     assert target.read_bytes() == content
     assert target.stat().st_mode & 0o777 == 0o640
+
+
+def test_publication_completes_valid_short_writes(tmp_path, monkeypatch):
+    source, target = tmp_path / "image.iso", tmp_path / "published.iso"
+    content = b"synthetic discovery ISO" * 500
+    source.write_bytes(content)
+    original = os.write
+    writes = []
+
+    def short_write(fd, data):
+        writes.append(len(data))
+        return original(fd, data[:37])
+
+    monkeypatch.setattr(controller.os, "write", short_write)
+    controller.publish_image(source, target, len(content))
+    assert len(writes) > 1
+    assert target.read_bytes() == content
+    assert not list(tmp_path.glob(".stage-*"))
+
+
+def test_publication_checks_available_space_before_creating_a_stage(tmp_path, monkeypatch):
+    source, target = tmp_path / "image.iso", tmp_path / "published.iso"
+    source.write_bytes(b"synthetic discovery ISO")
+    target.write_bytes(b"previous publication")
+    monkeypatch.setattr(controller.os, "statvfs", lambda path: SimpleNamespace(f_bavail=1, f_frsize=1, f_bsize=4096))
+    writer = Mock(side_effect=AssertionError("copy started without capacity"))
+    monkeypatch.setattr(controller.os, "write", writer)
+    with pytest.raises(OSError) as caught:
+        controller.publish_image(source, target, source.stat().st_size)
+    assert caught.value.errno == errno.ENOSPC
+    assert target.read_bytes() == b"previous publication"
+    assert not list(tmp_path.glob(".stage-*"))
+    writer.assert_not_called()
+
+
+@pytest.mark.parametrize("failure", (0, errno.ENOSPC, errno.EDQUOT))
+def test_failed_publication_preserves_the_destination_and_removes_its_stage(tmp_path, monkeypatch, failure):
+    source, target = tmp_path / "image.iso", tmp_path / "published.iso"
+    source.write_bytes(b"synthetic discovery ISO")
+    target.write_bytes(b"previous publication")
+    original = os.write
+    calls = []
+
+    def fail_after_progress(fd, data):
+        calls.append(len(data))
+        if len(calls) == 1:
+            return original(fd, data[:3])
+        if failure:
+            raise OSError(failure, "SECRET filesystem detail")
+        return 0
+
+    monkeypatch.setattr(controller.os, "write", fail_after_progress)
+    with pytest.raises(OSError if failure else ValueError) as caught:
+        controller.publish_image(source, target, source.stat().st_size)
+    if failure:
+        assert caught.value.errno == failure
+    else:
+        assert str(caught.value) == "discovery publication copy"
+    assert len(calls) == 2
+    assert target.read_bytes() == b"previous publication"
+    assert not list(tmp_path.glob(".stage-*"))
 
 
 def test_publication_still_refuses_images_beyond_the_component_bound(tmp_path):

@@ -79,6 +79,25 @@ def client(monkeypatch, recorder, endpoint=ENDPOINT):
     return redfish_control.Client(endpoint, "operator", "p4ssw0rd")
 
 
+@pytest.mark.parametrize("status, body", [
+    (401, {}), (403, {}), (400, {"error": {"@Message.ExtendedInfo": [{"MessageId": "Base.1.0.PropertyModificationNeedPrivilege"}]}}),
+])
+def test_privilege_failures_have_static_cause_metadata(status, body):
+    failure = redfish_control._failure("SECRET operation", "/redfish/v1/SECRET", status, body)
+    assert failure.cause == "privilege"
+
+
+def test_remote_trust_preserves_a_static_failure_cause(monkeypatch):
+    def refuse(*args, **kwargs):
+        raise redfish_control.redfish_remote_ca.TrustError("SECRET", cause="trust-chain")
+
+    monkeypatch.setattr(redfish_control.redfish_remote_ca.RemoteCA, "apply", refuse)
+    instance = redfish_control.Client.__new__(redfish_control.Client)
+    with pytest.raises(redfish_control.ControllerError) as caught:
+        instance._remote_trust("SECRET")
+    assert caught.value.cause == "trust-chain"
+
+
 # The credential goes to the one endpoint the frozen request names. A reference
 # the controller returns that names anything else is refused before a request,
 # and so before an Authorization header, exists.

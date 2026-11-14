@@ -24,6 +24,9 @@
       tls: private inventory TLS preparation
       media-delivery: private HTTPS media delivery
       boot: owned virtual-media boot
+      media-insertion: verified virtual-media trust and insertion
+      boot-selection: one-time virtual-media boot selection
+      power-on: owned discovery power-on
       inventory: authenticated inventory transfer
       acknowledgement: inventory acknowledgement
       cleanup: owned media and power cleanup
@@ -60,6 +63,10 @@
       publication-size: the remastered ISO exceeds its derived component size bound
       publication-file: the remastered ISO is not a regular file
       publication-path: the private publication path does not match the frozen machine namespace
+      publication-copy: the ISO copy made no progress; the incomplete stage was removed
+      publication-space: >-
+        insufficient free space or quota for the private ISO; free space on the
+        hosted filesystem without deleting discovery custody, then repeat the recorded command
       source-size: the source ISO exceeds the installer-media store bound
       initrd-tools: the RHEL initramfs lacks required discovery tools
       initrd-layout: the source ISO initramfs layout is unqualified
@@ -68,6 +75,18 @@
       custody-mode: a private custody directory has an unexpected mode
       custody-file: a private record failed its type, ownership, mode or size proof
       bmc-request: a management-controller request failed
+      bmc-media-verification: >-
+        media-fetch certificate verification is disabled or unproved; enable
+        HttpsTransferCertVerification on every declaring manager, or device
+        VerifyCertificate when no manager publishes that setting
+      bmc-privilege: the BMC account lacks the required privilege; certificate import requires security-configuration privilege
+      bmc-trust-chain: SecurityService import requires the artifact server certificate and its issuer chain
+      bmc-trust-inventory: the BMC certificate-slot inventory is unavailable, incomplete or ambiguous
+      bmc-trust-metadata: the BMC does not advertise one usable certificate-import action and its required parameters
+      bmc-trust-conflict: certificate slots changed or contain another authority; inspect their users before changing trust
+      bmc-trust-unproved: certificate import or removal did not preserve and prove the expected slots
+      bmc-trust-request: the BMC certificate-import or removal request did not complete
+      bmc-media-fetch: the BMC could not fetch the ISO; check TLS compatibility, trust, route, DNS and firewall from the BMC network
       missing-file: a required runtime file or executable is missing
       filesystem: a filesystem or TLS socket operation failed
       native-process: a bounded native process did not complete
