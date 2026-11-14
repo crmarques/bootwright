@@ -243,9 +243,10 @@ The 4096-name bound applies to active or reserved contexts, not past creations.
 A `registry.json` of any other format version than `RegistryVersion` is
 refused rather than converted, as state this build cannot read, with the
 other-build guidance below, and nothing in that store is rewritten. There is
-no fallback from corrupt state to older metadata. A store whose host-wide state
-lies outside `controller/` carries an earlier `RegistryVersion`, so it meets this
-refusal (`TestAStoreWithTheEarlierLayoutIsAnotherBuilds`).
+no fallback from corrupt state to older metadata. Earlier development stores
+are unsupported under the
+[development policy](project.md#design-priorities-and-non-goals); a version
+alone proves no layout compatibility.
 
 The production root is `/var/lib/bootwright`. Its host-wide state lives in one
 `controller/` directory: the Controller subtree `controller/record/` follows

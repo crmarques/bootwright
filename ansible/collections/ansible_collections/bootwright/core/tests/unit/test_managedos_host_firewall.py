@@ -679,7 +679,7 @@ def test_a_proved_realization_publishes_exactly_the_evidence_the_engine_reads(mo
     assert result == {"changed": False}
     assert published == [{"phase": "completed", "outcome": "changed", "evidence": {
         "ready": True, "absent": False, "postcondition": True, "request": DIGEST, "services": evidence(RGW, NFS),
-        "version": "os-host-firewall-evidence-v2"}}]
+        "version": "os-host-firewall-evidence-v1"}}]
     assert list(published[0]["evidence"]) == ["ready", "absent", "postcondition", "request", "services", "version"]
 
 
@@ -698,7 +698,7 @@ def test_a_removal_is_proved_only_when_every_service_is_absent_and_held_by_no_zo
     gone = [entry(RGW, "absent", False, ()), entry(NFS, "absent", False, ())]
     _result, published = publish(completed(services=gone, removed=True), monkeypatch)
     assert published[0]["evidence"] == {"ready": True, "absent": True, "postcondition": True, "request": DIGEST, "services": gone,
-                                        "version": "os-host-firewall-evidence-v2"}
+                                        "version": "os-host-firewall-evidence-v1"}
     for left in (dict(gone[0], memberships=[{"interface": "", "zone": "drop"}]), dict(evidence(RGW)[0])):
         result, published = publish(completed(services=[left], removed=True), monkeypatch)
         assert result["failed"] is True and published == []
@@ -763,7 +763,7 @@ def calls(name, fqcn):
 
 def variables(**extra):
     services = [service(), service(NFS, port=2049)]
-    request = {"version": "os-host-firewall-v2", "direct": False, "preparation": False, "address": "192.0.2.10", "user": "fleet", "fleetKeyRef": "fleet-key",
+    request = {"version": "os-host-firewall-v1", "direct": False, "preparation": False, "address": "192.0.2.10", "user": "fleet", "fleetKeyRef": "fleet-key",
                "identity": {"block": "os-firewall-ceph-01", "context": "lab", "object": "ceph-01"},
                "placement": {"connection": "ssh"}, "services": [{"name": RGW}, {"name": NFS}]}
     values = dict(DEFAULTS, bootwright_run_scratch="/var/tmp/bootwright-scratch-1-1", bootwright_os_firewall_request=request,
@@ -808,7 +808,7 @@ def test_the_argument_specification_declares_the_same_request_for_every_entry_po
     assert all(declared[name]["options"] == options for name in declared)
     request = options["bootwright_os_firewall_request"]["options"]
     assert sorted(request) == ["address", "direct", "fleetKeyRef", "identity", "placement", "preparation", "services", "user", "version"]
-    assert request["version"]["choices"] == ["os-host-firewall-v2"]
+    assert request["version"]["choices"] == ["os-host-firewall-v1"]
     assert options["bootwright_os_firewall_digest"]["type"] == "str" and options["bootwright_os_firewall_material"]["type"] == "dict"
 
 

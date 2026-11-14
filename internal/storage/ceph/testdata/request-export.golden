@@ -56,5 +56,5 @@
     }
   },
   "providedMachines": [],
-  "version": "ceph-export-request-v2"
+  "version": "ceph-export-request-v1"
 }

@@ -1,6 +1,6 @@
 implementation: substrate-host-libvirt-v1
-content-digest: 851ddd4c810c5dd66d8a95e3ceaa91e323f568ea9da0ab54f76904c0b7ae55e3
-request-version: substrate-host-libvirt-v3
+content-digest: 8e372972481cf79cb1f5756fb88b4f3940138d6125b616721b64efc8041c2f94
+request-version: substrate-host-libvirt-v1
 automation-formats: https://bootwright.io/substrate/v1
 mark-formats: Bootwright carrier reload, Bootwright owned VLAN carrier, Bootwright owned VLAN refusal, Bootwright owned readiness barrier, Bootwright owned routing, Description=Bootwright managed network firewall, bootwright.io.context, bootwright.io.network, bootwright.io.provider, bootwright.io.role, bootwright.substrate.libvirt.connection-v1, device-bootwright-, device-bootwright-%s, https://bootwright.io/substrate/v1
 proof-ids: none
@@ -11,7 +11,7 @@ effect-pins:
   bootwright
   virtqemud.service,virtnetworkd.service,virtstoraged.service
   bridge-use-claim
-  vlan-refusal-v2
+  vlan-refusal-v1
   nm-trunk-legs-v1
   routing-table-v1
   nm-unfrozen-connections-v1

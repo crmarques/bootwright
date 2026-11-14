@@ -48,7 +48,7 @@ def scope(transport="native"):
               "devices": [{"path": "/dev/sda", "serial": "drive-scsi" + str(i), "sizeBytes": 1024 ** 3}], "labels": [], "location": {},
               "sshKeyRef": "fleet-key"} for i in range(1, 4)]
     names = [host["name"] for host in hosts]
-    return {"controller": "controller", "version": "ceph-core-v3", "cluster": "example", "owner": OWNER, "fsid": FSID,
+    return {"controller": "controller", "version": "ceph-core-v1", "cluster": "example", "owner": OWNER, "fsid": FSID,
             "image": "registry.example.test/example/ceph@sha256:" + "a" * 64,
             "cephadm": {"path": "/usr/sbin/cephadm", "packageVersion": "synthetic-package"},
             "release": "synthetic-release", "ansiblePackageVersion": "synthetic-ansible", "packageRepository": "https://publisher.example.test/ceph",
@@ -67,7 +67,7 @@ def service(hosts=("node-1", "node-2"), clustered=False):
 def request(resource_type, transport="native", **served):
     """One completed request of a resource type, as the Go SMB capability completes it."""
     base = {"cluster": "example", "controller": "controller", "machines": ["machine-1", "machine-2", "machine-3"],
-            "object": "smb-" + resource_type.split(".")[-1], "resourceType": resource_type, "scope": scope(transport), "version": "ceph-smb-v2",
+            "object": "smb-" + resource_type.split(".")[-1], "resourceType": resource_type, "scope": scope(transport), "version": "ceph-smb-v1",
             "bindings": [], "hostSecretRefs": ["fleet-key"]}
     if resource_type == "ceph.smb.cluster":
         native = {"resource_type": resource_type, "cluster_id": "files", "auth_mode": "user", "placement": {"count": 2, "hosts": ["node-2", "node-1"]},
@@ -820,7 +820,7 @@ def test_smb_worker_ships_after_its_imports():
 
 
 def test_core_keeps_the_smb_names_as_aliases():
-    assert ceph_core.SMB_VERSION == ceph_smb_native.VERSION == "ceph-smb-v2"
+    assert ceph_core.SMB_VERSION == ceph_smb_native.VERSION == "ceph-smb-v1"
     assert ceph_core.SMB_EVIDENCE_VERSION == ceph_smb_native.EVIDENCE_VERSION == "ceph-smb-evidence-v1"
     assert ceph_core.SMB_TYPES is ceph_smb_native.TYPES
     value = request("ceph.smb.share")

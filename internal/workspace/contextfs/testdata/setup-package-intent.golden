@@ -1,5 +1,5 @@
 {
-  "format": "bootwright.setup-state-v3",
+  "format": "bootwright.setup-state-v1",
   "pending": {
     "requested": [
       "podman",

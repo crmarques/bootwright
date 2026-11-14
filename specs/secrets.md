@@ -589,18 +589,11 @@ JSON containing `keyId`, `nonce` and `ciphertext`. Its authenticated header
 selects the exact backend and binds metadata to the expected context. Resolve
 only catalog implementations; backend selection cannot authorize acquisition
 or effects beyond the current command. Unsupported IDs refuse before session
-acquisition. The encrypted metadata contains `minReader`, `activeKey`, `keys`,
-`versions`, `current`, `bindings` and `produced`. `minReader` is the oldest
-reader version that can read it, written by every publication as the writing
-build's `readerVersion`; a reader admits any value from 1 to its own
-`readerVersion` and checks it before
-decoding the rest, and metadata naming a newer reader refuses
-`secret.store.newer`, saying the store is intact and naming the newer build as
-its remedy, never a restore or purge
-(`TestMetadataForANewerReaderRefusesAsNewerNotCorrupt`). A member a newer build
-adds raises `minReader` rather than `formatVersion`, so a build that does not
-know the member refuses by version, never as `secret.store.corrupt`
-([version skew](../.agents/knowledge/keyring-reader-version-skew.md)).
+acquisition. The encrypted metadata contains `activeKey`, `keys`, `versions`,
+`current`, `bindings` and `produced`. It has one closed current shape, with no
+minimum-reader member or reader-version negotiation. Unknown members refuse under strict
+canonical decoding (`TestMetadataRejectsReaderNegotiation`), following the
+[development policy](project.md#design-priorities-and-non-goals).
 
 Each key record stores `id` and committed `seals`; presentation derives its
 active/retired state. Each immutable version stores `id`, a `sequence` of at

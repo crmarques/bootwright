@@ -23,7 +23,6 @@ import (
 
 const (
 	formatVersion       = 1
-	readerVersion       = 1
 	algorithm           = "AES-256-GCM"
 	selectorPath        = secretstore.RecordPath
 	selectorMaximum     = 64 << 10
@@ -55,7 +54,6 @@ type indexRecord struct {
 	FormatVersion int                    `json:"-"`
 	Algorithm     string                 `json:"-"`
 	Selector      secretstore.Selector   `json:"-"`
-	MinReader     int                    `json:"minReader"`
 	ActiveKey     string                 `json:"activeKey"`
 	Keys          []storedKey            `json:"keys"`
 	Versions      []storedVersion        `json:"versions"`

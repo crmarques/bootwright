@@ -60,12 +60,12 @@ lock continues with no `controller install`.
 - An exhausted image pull continues too: each host preparation run makes up
   to three bounded pull attempts of its own, and the retained `pull-attempt-N`
   records serve crash diagnosis and recovery only (B648, X102).
-- A destroy is needed when the fix moves a version or a pin, which moves the
-  content digest: the continuation then refuses naming the first block that
-  differs. The contract guard in `cmd/bootwright` fails the build when a request
-  or evidence schema or a persisted automation format changes with the digest
-  unmoved; it cannot see a change of meaning under an unmoved version, so a fix
-  that changes what an effect is must move the implementation's version.
+- A destroy is needed when planning the current build no longer freezes the
+  same blocks, including a changed request or effect pin. The contract goldens
+  in `cmd/bootwright` pin the current shape and are regenerated after review.
+  Versions remain fixed under the
+  [development policy](../../specs/project.md#design-priorities-and-non-goals);
+  they do not establish compatibility with existing development effects.
 - An add-on package's rendering change, such as another object, field or
   approval rule in what a package's program renders, changes that instance's
   request, so another build does not continue the operation: the continuation

@@ -6,7 +6,7 @@
       - bootwright_os_firewall_request.preparation is boolean
       - not bootwright_os_firewall_request.preparation or bootwright_os_firewall_request.direct
       - not bootwright_os_firewall_request.direct or bootwright_os_firewall_request.placement.connection in ['local', 'ssh']
-      - bootwright_os_firewall_request.version == 'os-host-firewall-v2'
+      - bootwright_os_firewall_request.version == 'os-host-firewall-v1'
       - bootwright_os_firewall_request.identity.context is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
       - bootwright_os_firewall_request.identity.object is match('^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$(?!\n)')
       - bootwright_os_firewall_digest is match('^[0-9a-f]{64}$(?!\n)')

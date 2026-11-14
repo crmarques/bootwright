@@ -10,7 +10,7 @@ import (
 // Every version but the one this build writes refuses, and the refusal names
 // it so the remedy is the executable that registered the operation.
 func TestAFrozenHostRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"substrate-host-libvirt-v1", "substrate-host-libvirt-v2", "substrate-host-libvirt-v4", "substrate-host-libvirt-v5", "substrate-host-libvirt-v6", ""} {
+	for _, version := range []string{"substrate-host-libvirt-v0", "substrate-host-libvirt-v2", ""} {
 		_, err := DecodeHostRequest([]byte(`{"version":"` + version + `"}`))
 		if err == nil {
 			t.Fatalf("version %q was accepted", version)
@@ -28,7 +28,7 @@ func TestAFrozenHostRequestOfAnyOtherVersionRefuses(t *testing.T) {
 // A machine request of any version but the one this build writes refuses by its
 // version.
 func TestAFrozenMachineRequestOfAnyOtherVersionRefuses(t *testing.T) {
-	for _, version := range []string{"machine-libvirt-v1", "machine-libvirt-v2", "machine-libvirt-v4", "machine-libvirt-v5", "machine-libvirt-v6", "machine-libvirt-v7", "machine-libvirt-v8", ""} {
+	for _, version := range []string{"machine-libvirt-v0", "machine-libvirt-v2", ""} {
 		_, err := DecodeMachineRequest([]byte(`{"version":"` + version + `"}`))
 		if reported := diagnostics.Of(err); err == nil || len(reported) == 0 || !strings.Contains(reported[0].Message, "unsupported version") {
 			t.Fatalf("version %q was not refused by its version: %v", version, err)
@@ -105,14 +105,14 @@ func TestAHostRequestOfAnotherVersionRefusesByItsVersion(t *testing.T) {
 		Networks: []Network{{Bridge: "virbr-lab", Managed: true, Name: "bootwright-lab-rhel-lab-guests"}},
 		Packages: HypervisorPackages(), PoolName: "bootwright-lab-rhel-lab-vmedia",
 		PoolPath: "/var/lib/bootwright-hosted/lab-rhel/services/vmedia", Provisioned: true,
-		Services: ServiceUnits(), URI: "qemu:///system", Version: "substrate-host-libvirt-v1",
+		Services: ServiceUnits(), URI: "qemu:///system", Version: "substrate-host-libvirt-v2",
 	}
 	data, err := other.Canonical()
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = DecodeHostRequest(withAnUndeclaredField(t, data))
-	expectVersionRefusal(t, err, "provider host", "substrate-host-libvirt-v1")
+	expectVersionRefusal(t, err, "provider host", "substrate-host-libvirt-v2")
 }
 
 func TestAMachineRequestOfAnotherVersionRefusesByItsVersion(t *testing.T) {
@@ -121,11 +121,11 @@ func TestAMachineRequestOfAnotherVersionRefusesByItsVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	other := requests[0]
-	other.Version = "machine-libvirt-v1"
+	other.Version = "machine-libvirt-v2"
 	data, err := other.Canonical()
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = DecodeMachineRequest(withAnUndeclaredField(t, data))
-	expectVersionRefusal(t, err, "machine", "machine-libvirt-v1")
+	expectVersionRefusal(t, err, "machine", "machine-libvirt-v2")
 }

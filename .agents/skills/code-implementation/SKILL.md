@@ -5,8 +5,8 @@ description: Deliver any authorized Bootwright tracked change, including specs, 
 
 # Code Implementation
 
-Owns verification, commits and integration for tracked changes. It authorizes
-no push, release, product scope or command with effects.
+Owns verification, commits and integration. Authorizes no push, release, extra
+scope or effect.
 
 ## Before editing
 
@@ -41,8 +41,8 @@ omits.
 - Verify by the [tiers](references/verification.md); take the
   [integration reservation](references/git-integration.md#integration-reservation)
   before the gate.
-- A change to what an effect is moves its content digest (Go and Ansible
-  references).
+- A contract change follows the fixed development version policy and updates
+  its contract golden (Go and Ansible references).
 - Record exact commands and results; failed, skipped, flaky, unavailable and
   unrun gates are not passes.
 - Before committing, review the whole diff and run `git diff --cached --check`.

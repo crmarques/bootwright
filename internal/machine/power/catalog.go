@@ -36,6 +36,6 @@ const (
 
 // RequestVersion and ReadRequestVersion identify frozen command inputs.
 const (
-	RequestVersion     = "machine-power-v2"
-	ReadRequestVersion = "machine-power-read-v2"
+	RequestVersion     = "machine-power-v1"
+	ReadRequestVersion = "machine-power-read-v1"
 )

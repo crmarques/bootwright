@@ -207,7 +207,7 @@ func TestDifferingBlockIgnoresOnlyPresentationWords(t *testing.T) {
 		{"no exclusive against empty", func(d *reconciliation.BlockDefinition) { d.Exclusive = []string{} }, ""},
 		{"a request", func(d *reconciliation.BlockDefinition) { d.Request = json.RawMessage(`{"name":"a","x":1}`) }, "a"},
 		{"a content digest", func(d *reconciliation.BlockDefinition) { d.ContentDigest = strings.Repeat("8", 64) }, "a"},
-		{"an implementation", func(d *reconciliation.BlockDefinition) { d.Implementation = "artifact-server-nginx-v2" }, "a"},
+		{"an implementation", func(d *reconciliation.BlockDefinition) { d.Implementation = "another-artifact-server-v1" }, "a"},
 		{"an object", func(d *reconciliation.BlockDefinition) { d.Object = "other" }, "a"},
 		{"a stage", func(d *reconciliation.BlockDefinition) { d.Stage = reconciliation.StageClusters }, "a"},
 		{"an exclusive claim", func(d *reconciliation.BlockDefinition) { d.Exclusive = []string{"port:80"} }, "a"},

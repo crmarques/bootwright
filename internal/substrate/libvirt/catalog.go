@@ -57,8 +57,8 @@ func ServiceUnits() []string { return append([]string(nil), serviceUnits...) }
 const domainOff = "shut off"
 
 const (
-	hostRequestVersion    = "substrate-host-libvirt-v3"
-	machineRequestVersion = "machine-libvirt-v3"
+	hostRequestVersion    = "substrate-host-libvirt-v1"
+	machineRequestVersion = "machine-libvirt-v1"
 )
 
 // HostBlockID and MachineBlockID name the blocks each capability contributes.
@@ -74,7 +74,7 @@ func MachineBlockID(machine string) string { return reconciliation.BlockIdentity
 // the host layout invalidates a frozen plan.
 func HostContentDigest() string {
 	return contentDigest("bootwright.substrate.libvirt.host-v1", HostImplementation, hostRequestVersion,
-		strings.Join(hypervisorPackages, ","), substrate.ImagePrefix, substrate.Prefix, strings.Join(serviceUnits, ","), "bridge-use-claim", "vlan-refusal-v2", "nm-trunk-legs-v1", "routing-table-v1", "nm-unfrozen-connections-v1", "routing-ruleset-file-v1", "nm-carrier-policy-v1", "/etc/NetworkManager/conf.d")
+		strings.Join(hypervisorPackages, ","), substrate.ImagePrefix, substrate.Prefix, strings.Join(serviceUnits, ","), "bridge-use-claim", "vlan-refusal-v1", "nm-trunk-legs-v1", "routing-table-v1", "nm-unfrozen-connections-v1", "routing-ruleset-file-v1", "nm-carrier-policy-v1", "/etc/NetworkManager/conf.d")
 }
 
 func MachineContentDigest() string {

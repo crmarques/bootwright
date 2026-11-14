@@ -152,21 +152,30 @@ input copies it into the Bootwright store, later commands read only that copy,
 and a recorded source location is provenance, never identity, uniqueness or a
 read path.
 
-Before 1.0, Bootwright carries no backward compatibility for what earlier
-builds already wrote (D241): no converter, adoption, fallback or tailored
-refusal for an earlier record, request or input field. Every internal version
-starts at 1 and moves by one when a change would make what an earlier build
-wrote mean something else, and a reader refuses any version it does not read
-by naming it and the remedy. Forward from 1, a later build keeps reading what
-an earlier one wrote while its version stands: an optional member its owning
-spec admits keeps the version, a keyring names the oldest reader it needs,
-and a later build continues an operation when it
-[freezes the same blocks](state-reconciliation.md#dependency-safety-during-recovery)
-and removes what an earlier build applied while it reads that build's frozen
-requests. A change that makes a build refuse what an earlier build
-left, a moved contract or store format version, is announced in its commit as
-a breaking change that names what it refuses and the remedy
-([commit convention](../.agents/skills/code-implementation/references/git-integration.md#breaking-changes)).
+Bootwright has no production deployment. Until the owner explicitly declares it
+production-ready and authorizes a different policy, all Bootwright-owned
+versions stay fixed at their development baseline: internal request, evidence,
+protocol, marker and durable-format versions stay at 1; the embedded collection
+and input charts stay at `0.1.0`; the public input API stays at
+`bootwright.io/v1alpha1` ([D267](milestones/backlog.md#d267)). Do not bump these
+versions for schema, effect or implementation changes. External dependency,
+tool, operating-system and product release pins keep their own versions;
+commit identities and content digests continue identifying actual content.
+
+Support only the current development shape. Add no backward-compatibility code,
+converters, migrations, aliases, older readers, reader-version negotiation,
+fallbacks for retired fields or tailored refusals for historical shapes.
+Change code, schemas, examples, charts, tests and contract goldens together.
+Strict decoding, canonical encoding, identity and ownership proofs, content
+checks and refusal of unsupported input remain required. Contract goldens pin
+the current shape and are explicitly reviewed and regenerated without a
+version bump; they promise no compatibility across builds. A breaking change
+still names its impact and remedy in its commit. Existing development stores
+and installations may require finishing or removing with the build that
+created them and then recreating with the current build; do not discard
+ownership evidence or operate on hosts merely to reset a version. Production
+upgrade, migration and backward-compatibility support require the owner's
+explicit authorization after production readiness.
 
 Day-2 operations are outside the current scope, including ongoing drift repair
 and publication of application or fleet GitOps content. Bootwright's lifecycle

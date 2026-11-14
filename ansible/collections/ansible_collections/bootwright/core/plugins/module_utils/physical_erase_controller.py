@@ -23,7 +23,7 @@ from ansible_collections.bootwright.core.plugins.module_utils import physical_er
 from ansible_collections.bootwright.core.plugins.module_utils import ssh_key_policy
 
 ROOT = Path(hosted_area.ROOT)
-REQUEST_VERSION = "physical-erase-v5"
+REQUEST_VERSION = "physical-erase-v1"
 MEDIA = Path("/var/lib/bootwright/media")
 
 

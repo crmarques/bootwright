@@ -18,7 +18,7 @@ import (
 )
 
 const ConsumerImplementation = "ceph-export-v1"
-const ConsumerVersion = "ceph-export-request-v2"
+const ConsumerVersion = "ceph-export-request-v1"
 const ConsumerEvidenceVersion = "ceph-export-evidence-v1"
 const ConsumerOutput = "external-details"
 

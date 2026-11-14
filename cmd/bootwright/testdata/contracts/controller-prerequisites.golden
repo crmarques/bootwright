@@ -1,6 +1,6 @@
 implementation: controller-prerequisites
-content-digest: 78e3e9a71e60370f076976047be21be23a002c0ec545bc1199428955d5d36931
-request-version: controller-clients-v6
+content-digest: d3a2b16a74e0a6bec87b04a72745a571687edb5caf26414a3c1d119081925714
+request-version: controller-clients-v1
 automation-formats: none
 mark-formats: none
 proof-ids: none

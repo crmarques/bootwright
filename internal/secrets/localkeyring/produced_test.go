@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crmarques/bootwright/internal/diagnostics"
 	"github.com/crmarques/bootwright/internal/secrets"
 	"github.com/crmarques/bootwright/internal/secrets/secretstore"
 )
@@ -30,7 +29,7 @@ func fullIndex() (indexRecord, secretstore.Selector) {
 		return []storedPart{{Part: secrets.ValuePart, BlobID: fixedID("blob-", blob), KeyID: fixedID("key-", key), Generation: fixedID("gen-", 2), Size: size}}
 	}
 	return indexRecord{
-		FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, MinReader: readerVersion, ActiveKey: fixedID("key-", 2),
+		FormatVersion: formatVersion, Algorithm: algorithm, Selector: selector, ActiveKey: fixedID("key-", 2),
 		Keys: []storedKey{{ID: fixedID("key-", 1), Seals: 4}, {ID: fixedID("key-", 2), Seals: 3}},
 		Versions: []storedVersion{
 			{ID: fixedID("ver-", 1), Sequence: 2, Declaration: summary("registry-token", "token", "contextStore"), Parts: part(1, 2, 24)},
@@ -156,11 +155,9 @@ func TestAProducedVersionTakesNoOrdinalFromASecretOfTheSameName(t *testing.T) {
 	}
 }
 
-// Metadata a newer build wrote for newer readers refuses secret.store.newer,
-// saying the store is intact, before strict decoding would call it corrupt;
-// metadata naming no reader, or one other than this build's, is invalid.
-func TestMetadataForANewerReaderRefusesAsNewerNotCorrupt(t *testing.T) {
-	index, selector := fullIndex()
+// Metadata is one closed development shape; reader negotiation is unsupported.
+func TestMetadataRejectsReaderNegotiation(t *testing.T) {
+	index, _ := fullIndex()
 	current, err := encodeCanonical(index, indexMaximum)
 	if err != nil {
 		t.Fatal(err)
@@ -168,24 +165,14 @@ func TestMetadataForANewerReaderRefusesAsNewerNotCorrupt(t *testing.T) {
 	if _, err := decodeIndexPlaintext(current); err != nil {
 		t.Fatalf("this build's metadata is refused: %v", err)
 	}
-	if _, err := decodeIndexPlaintext(bytes.Replace(current, []byte(`"minReader":1,`), nil, 1)); err == nil {
-		t.Fatal("metadata naming no reader was admitted")
-	}
-	for _, reader := range []string{"0", "-1"} {
-		other, err := decodeIndexPlaintext(bytes.Replace(current, []byte(`"minReader":1,`), []byte(`"minReader":`+reader+`,`), 1))
-		if err != nil || validateIndex(withHeader(other, selector), selector) == nil {
-			t.Fatalf("metadata naming reader %s validated (%v)", reader, err)
+	for _, reader := range []string{"0", "1", "2"} {
+		other := bytes.Replace(current, []byte(`{"activeKey":`), []byte(`{"minReader":`+reader+`,"activeKey":`), 1)
+		if bytes.Equal(other, current) {
+			t.Fatal("the fixture has no activeKey member")
 		}
-	}
-	newer := bytes.Replace(current, []byte(`"minReader":1,`), []byte(`"minReader":2,`), 1)
-	newer = bytes.Replace(newer, []byte(`"produced":[`), []byte(`"futureMember":true,"produced":[`), 1)
-	if bytes.Equal(newer, current) {
-		t.Fatal("the fixture names no reader to raise")
-	}
-	_, err = decodeIndexPlaintext(newer)
-	if reported := diagnostics.Of(err); len(reported) != 1 || reported[0].Code != "secret.store.newer" || !strings.Contains(reported[0].Message, "intact") ||
-		!strings.Contains(reported[0].Remediation, "do not restore or purge") {
-		t.Fatalf("metadata for a newer reader = %#v", reported)
+		if _, err := decodeIndexPlaintext(other); err == nil {
+			t.Fatalf("metadata naming reader %s was admitted", reader)
+		}
 	}
 }
 

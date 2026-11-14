@@ -5,7 +5,7 @@ from ansible.plugins.action import ActionBase
 from ansible_collections.bootwright.core.plugins.module_utils import adapter_protocol, managedos_firewall_worker as worker
 from ansible_collections.bootwright.core.plugins.module_utils.controller_channel import emit
 
-VERSION = "os-host-firewall-evidence-v2"
+VERSION = "os-host-firewall-evidence-v1"
 
 
 def proves(services, removed):

@@ -4771,7 +4771,7 @@ build`, `bootwright setup`, then `bootwright apply` with the same `--stage`, as
 the [continuation knowledge
 page](../../.agents/knowledge/continuation-after-a-fix.md) records.
 
-**Guard tests:** `TestEveryImplementationMovesItsContentDigestWithItsContract`
+**Guard tests:** `TestEveryImplementationContractMatchesItsGolden`
 and `TestEveryAutomationVersionLiteralIsClassified` in `cmd/bootwright`, with
 the fifteen goldens under `cmd/bootwright/testdata/contracts`, scanning every
 `.py`, `.yml`, `.yaml` and `.j2` file of the collection's plugins and roles; the
@@ -5770,7 +5770,7 @@ and `TestARemovalLocatesItsRuntimeOnce`; `internal/workspace/contextfs`:
 `TestTheFirstBindingRefusesBeforeSetupCompletes`; `cmd/bootwright`:
 `TestEveryStoreFormatIsClassified`,
 `TestComposedBaselineDryRunReadsNoSetupState` and the moved
-`TestEveryImplementationMovesItsContentDigestWithItsContract` goldens.
+`TestEveryImplementationContractMatchesItsGolden` goldens.
 
 **Gates:** in the x88 worktree after merging main b81240b62 (X91), as its
 commit records: `make check` passes (mod verify, tidy, `go test ./...`, vet,
@@ -7652,7 +7652,7 @@ mutation check for each test they added.
 **Constraints left behind:** the frozen controller request moved from
 `controller-clients-v3` to `controller-clients-v4` with the `nmstate` closure,
 and its content digest moved with it
-(`TestEveryImplementationMovesItsContentDigestWithItsContract`); X117 moves it
+(`TestEveryImplementationContractMatchesItsGolden`); X117 moves it
 again. There is no older-version reader, so an incomplete operation or context
 whose controller block an earlier build planned is finished or destroyed with
 that build first, before this build touches it (D172, session clause 10). No
@@ -7953,7 +7953,7 @@ and `test_observation_never_sweeps_or_removes_a_link`, with
 `test_a_rendezvous_service_that_never_answers_is_named_with_the_reach_causes`,
 `test_the_rendezvous_service_is_proved_only_when_its_node_was_booted_in_this_attempt`
 and `test_a_reach_failure_names_its_causes_and_never_promises_another_boot`. The
-contract guard is `TestEveryImplementationMovesItsContentDigestWithItsContract`
+contract guard is `TestEveryImplementationContractMatchesItsGolden`
 with the request goldens `TestFrozenRequestsMatchTheirGoldens`. Each carries a
 mutation check recorded in its commit body.
 
@@ -8689,7 +8689,7 @@ no change.
 
 Each contract golden now carries `request-version`, `mark-formats`,
 `proof-ids`, `fixed-places`, `effect-pins` and `request-identity` sections,
-and `TestEveryImplementationMovesItsContentDigestWithItsContract` fails when
+and `TestEveryImplementationContractMatchesItsGolden` fails when
 any of them changes without the content digest moving; a changed fixed place
 also needs a request-version move, and a missing section counts as a change.
 `TestEveryAutomationVersionLiteralIsClassified` scans every embedded
@@ -15887,3 +15887,19 @@ requirement. Runtime behavior and contracts are unchanged.
 **Exit evidence:** the delivering commit records the failed floor collection,
 the pinned units suite on controller and floor runtimes, and focused checks.
 The final version-reset integration runs the full gate on the combined tree.
+
+## X461 — Fixed development versions
+
+**Owner:** Architecture; **item:** B1393 (safety); **authority:** [D267](backlog.md#d267).
+
+The [development policy](../project.md#design-priorities-and-non-goals) resets
+Bootwright-owned contract and durable-format versions and keeps them fixed.
+Contract goldens describe only the current shape; they no longer require
+version increments. The keyring drops minimum-reader negotiation. Input-chart
+artifact resets and instructions are delivered in their own repository.
+
+**Exit evidence:** the delivering commit records current-shape, unsupported-input
+and contract tests, documentation checks, the full gate, race checks and an
+independent safety review. Existing development state has no cross-build
+compatibility guarantee. No host state is changed and no production acceptance
+is claimed.

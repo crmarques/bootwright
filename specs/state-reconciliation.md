@@ -521,7 +521,8 @@ tree, which [the log root](contexts.md#log-root) places and bounds.
 `replaces`, `predecessor`, `prerequisites`, `failure`, `warnings` and `removal`
 are optional members: adding one does not move its record's version, because a
 record that omits it means no such member. A member whose omission would mean
-anything else is required and moves its record's version. An optional member
+anything else is required; the [development policy](project.md#design-priorities-and-non-goals)
+keeps its version fixed without promising older records remain readable. An optional member
 is compatible one way only: a build that does not know it decodes records
 closed and refuses one that carries it as malformed or unsupported, so that
 build cannot continue or remove an operation a build that writes the member has
@@ -1408,14 +1409,12 @@ there, never from the build in hand. The automation values that are exceptions,
 a host path, name prefix, mark or proof identifier the automation fixes outside
 the request, are an exact list of the literals the
 [contract guard](#continuation-and-removal) sees, which it holds to each
-implementation's contract, and a changed fixed place also moves the
-implementation's request version, so a removal under the new build refuses the
-old block's request instead of looking for its effects in the new place. A
-change that loosens what an observation accepts as this context's own moves
-the request version the same way, since the moved digest protects only an
-apply continuation, unless it admits only effects earlier builds of that
-version made, under a key their request already freezes, so their removals
-receive the fix.
+implementation's contract, and a changed fixed place updates that current contract golden. The
+[development policy](project.md#design-priorities-and-non-goals) keeps request
+versions fixed and promises no cross-build removal compatibility. An operator
+finishes or removes existing development effects using the build that created
+them before adopting an incompatible current build. Identity, ownership and
+safe-removal proofs remain mandatory.
 
 That re-proof, with the controller setup and host binding a continuation also
 re-proves ([controller-host protection](#controller-host-protection)), runs
@@ -1784,35 +1783,29 @@ its apply acknowledged.
 
 Reading a frozen request is what makes a context removable without re-deriving
 it. A capability reads exactly the request version it writes; the frozen digest
-identifies the bytes that were frozen. Any change to what a request encodes is
-a new version, including adding or renaming one field, because the bytes a
-version froze are proved canonical against the shape that wrote them: a shape
-that changed without its version refuses its own frozen bytes. No conversion
-exists. A decoder reads the version a request holds before its shape, so a
-request whose version removed or renamed a field still refuses by naming that
-version, with the remedy to destroy it with the build that applied it. A request of any other version, or one whose implementation this
+identifies the bytes that were frozen. Changes to the current request shape follow the
+[development policy](project.md#design-priorities-and-non-goals): keep its
+version fixed, regenerate its golden and support only that shape. There is no
+conversion or historical reader. Canonical decoding and digest checks still
+refuse bytes the current shape cannot read. A decoder reads the version before
+the shape and refuses an unsupported version without decoding it. A request of any other version, or one whose implementation this
 executable no longer provides, refuses before anything is registered and names
 the block, the version it holds and the executable identity its operation
 recorded, so the remedy is the command to run rather than the obstacle that
 stopped it.
 
-A capability's content digest moves when its automation changes what a block's
-effect is rather than how the effect is reached: the objects it creates, their
+A capability's current contract records what a block's effect is: the objects it creates, their
 names and places, the mark that proves them this context's own, the host
 resources it claims, or what its observation proves. An apply continuation under
 another build compares content digests and never automation bytes, so automation
 that moves no content digest reaches the blocks a continuation still runs, and a
 removal still reads the request its apply froze. A mechanical guard,
-`TestEveryImplementationMovesItsContentDigestWithItsContract`, keeps one
-contract golden per implementation and fails the build when any of its
-sections changes while its content digest does not: the Go request and
-evidence schemas, the persisted format versions quoted in the collection's
-embedded plugins, roles and playbooks, the marks, proof identifiers and places
-its automation fixes outside the frozen request, the effect pins its digest
-hashes (the golden's recipe must reproduce the digest) and the request members
-that carry its effects' identity. A changed fixed place fails even under a
-moved digest until the request version moves, since only a request the new
-build cannot read keeps a removal from looking in the new place.
+`TestEveryImplementationContractMatchesItsGolden`, pins each implementation's
+current request and evidence schemas, persisted automation formats, fixed
+marks, proofs and places, effect pins (whose recipe reproduces the content
+digest), and request identity members. Intentional changes require explicit
+review and golden regeneration, with versions fixed under the development
+policy; no previous golden or build becomes a supported compatibility target.
 `TestEveryAutomationVersionLiteralIsClassified` requires every quoted literal
 ending in a version, every token naming a `bootwright.io` URI or key or a
 Bootwright host path, name prefix or mark, and every capitalized `Bootwright`
@@ -1829,11 +1822,12 @@ carry, as an opaque leaf, and sees no dynamically built value, no value naming
 no Bootwright token, no marker name built only from values and no unversioned
 format; the schema nested in such a
 member, and what a record or mark means beyond its shape and declared version,
-stay the author's to move. A mark changed without moving the
+stay the author's to review and record in the current contract. A mark changed without moving the
 digest fails closed: a removal under the new build reads the objects the old
 mark proves as foreign and refuses, leaving them in place, so its cost is a
 stuck or partial destroy. A change loosening what an observation accepts as
-this context's own has no such backstop, so it moves the request version.
+this context's own has no such backstop, so it requires explicit safety review
+and updated current contract evidence under the development policy.
 
 A fresh removal uses the secret material its apply bound, by reopening that
 operation's own binding rather than binding what the current declarations name.

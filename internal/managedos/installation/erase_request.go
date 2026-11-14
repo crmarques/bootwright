@@ -16,7 +16,7 @@ import (
 )
 
 const EraseImplementation = "physical-erase-v1"
-const eraseRequestVersion = "physical-erase-v5"
+const eraseRequestVersion = "physical-erase-v1"
 const eraseVariable = "bootwright_physical_erase"
 
 const (
@@ -53,7 +53,7 @@ func EraseBlockID(machine string) string {
 }
 
 func EraseContentDigest() string {
-	digest := sha256.Sum256([]byte(EraseImplementation + ":" + eraseRequestVersion + ":descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v2"))
+	digest := sha256.Sum256([]byte(EraseImplementation + ":" + eraseRequestVersion + ":descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v1"))
 	return hex.EncodeToString(digest[:])
 }
 

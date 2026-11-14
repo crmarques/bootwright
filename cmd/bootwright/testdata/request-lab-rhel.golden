@@ -41,7 +41,7 @@
         "virtstoraged.service"
       ],
       "uri": "qemu:///system",
-      "version": "substrate-host-libvirt-v3",
+      "version": "substrate-host-libvirt-v1",
       "vlanRefusalUnit": "bootwright-lab-lab-libvirt-vlan-refusal.service"
     }
   ],
@@ -93,7 +93,7 @@
       "uri": "qemu:///system",
       "uuid": "7b9ec716-85d4-8e28-84d3-f0d571d55f15",
       "vcpu": 4,
-      "version": "machine-libvirt-v3"
+      "version": "machine-libvirt-v1"
     }
   ],
   "installations": [
@@ -235,7 +235,7 @@
         "size": 13107200000
       },
       "user": "bootwright",
-      "version": "os-install-anaconda-v4"
+      "version": "os-install-anaconda-v1"
     }
   ]
 }

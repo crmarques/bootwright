@@ -52,7 +52,7 @@ const (
 type digestPart struct{ role, value string }
 
 // digestRecipe is what one content digest hashes, in order, joined by its
-// separator. TestEveryImplementationMovesItsContentDigestWithItsContract holds
+// separator. TestEveryImplementationContractMatchesItsGolden holds
 // it to the digest the implementation computes, so its effect pins are
 // exactly the ones the contract golden lists.
 type digestRecipe struct {
@@ -107,15 +107,15 @@ func (r digestRecipe) pins() []string {
 // restated here.
 func contractRecipes() map[string]digestRecipe {
 	recipes := map[string]digestRecipe{
-		instance.Implementation: digestOf(partImplementation(instance.Implementation), partRequest("addon-instance-request-v1"), partVersion("addon-instance-evidence-v2"),
+		instance.Implementation: digestOf(partImplementation(instance.Implementation), partRequest("addon-instance-request-v1"), partVersion("addon-instance-evidence-v1"),
 			partVersion(clusterobjects.Version), partPin(clusterobjects.OwnerDomain), partPin(clusterobjects.ObjectDomain), partPin(clusterobjects.ExactRule),
 			partPin(clusterobjects.OperatorManagedRule), partPin(clusterobjects.DependentExactRule)),
-		networking.Implementation: digestOf(partImplementation(networking.Implementation), partRequest("cluster-network-request-v1"), partVersion("cluster-network-evidence-v2"),
+		networking.Implementation: digestOf(partImplementation(networking.Implementation), partRequest("cluster-network-request-v1"), partVersion("cluster-network-evidence-v1"),
 			partVersion(clusterobjects.Version)),
 		clients.Implementation: digestOf(partDomain("bootwright.controller.client-stage-v1"), partImplementation(clients.Implementation), partRequest(clients.Version)),
-		libvirt.HostImplementation: digestOf(partDomain("bootwright.substrate.libvirt.host-v1"), partImplementation(libvirt.HostImplementation), partRequest("substrate-host-libvirt-v3"),
-			partPin(strings.Join(libvirt.HypervisorPackages(), ",")), partPin(substrate.ImagePrefix), partPin(substrate.Prefix), partPin(strings.Join(libvirt.ServiceUnits(), ",")), partPin("bridge-use-claim"), partPin("vlan-refusal-v2"), partPin("nm-trunk-legs-v1"), partPin("routing-table-v1"), partPin("nm-unfrozen-connections-v1"), partPin("routing-ruleset-file-v1"), partPin("nm-carrier-policy-v1"), partPin("/etc/NetworkManager/conf.d")),
-		libvirt.MachineImplementation: digestOf(partDomain("bootwright.substrate.libvirt.machine-v1"), partImplementation(libvirt.MachineImplementation), partRequest("machine-libvirt-v3"),
+		libvirt.HostImplementation: digestOf(partDomain("bootwright.substrate.libvirt.host-v1"), partImplementation(libvirt.HostImplementation), partRequest("substrate-host-libvirt-v1"),
+			partPin(strings.Join(libvirt.HypervisorPackages(), ",")), partPin(substrate.ImagePrefix), partPin(substrate.Prefix), partPin(strings.Join(libvirt.ServiceUnits(), ",")), partPin("bridge-use-claim"), partPin("vlan-refusal-v1"), partPin("nm-trunk-legs-v1"), partPin("routing-table-v1"), partPin("nm-unfrozen-connections-v1"), partPin("routing-ruleset-file-v1"), partPin("nm-carrier-policy-v1"), partPin("/etc/NetworkManager/conf.d")),
+		libvirt.MachineImplementation: digestOf(partDomain("bootwright.substrate.libvirt.machine-v1"), partImplementation(libvirt.MachineImplementation), partRequest("machine-libvirt-v1"),
 			partPin("quay.io/metal3-io/sushy-tools@sha256:f760343718e1175343f230ec43496a4f0d850f1d0a3139b92db1e475ac91d11e"),
 			partPin(substrate.ImagePrefix), partPin(substrate.Prefix), partPin("data-media-ssd-scsi-v1"), partPin("shared-bmc-claim"), partPin("attached-disk-evidence-v1")),
 		kubevirt.HostImplementation: digestOf(partDomain("bootwright.substrate.kubevirt.host-v1"), partImplementation(kubevirt.HostImplementation), partRequest("substrate-host-kubevirt-v1"),
@@ -126,7 +126,7 @@ func contractRecipes() map[string]digestRecipe {
 			partVersion("machine-kubevirt-evidence-v1"), partPin("run-strategy-manual"), partPin("efi-no-secure-boot"), partPin("evict-live-migrate"), partPin("bridge-binding"),
 			partPin("root-template-blank"), partPin("owner-annotation-mark"), partPin("substrate-access-kubevirt-v1"), partPin("substrate-access-kubevirt-evidence-v1"),
 			partPin("spread-preferred-anti-affinity"), partPin("lend-bound-secret")),
-		baremetal.Implementation: digestOf(partDomain("bootwright.substrate.baremetal.machine-v1"), partImplementation(baremetal.Implementation), partRequest("machine-baremetal-v2"),
+		baremetal.Implementation: digestOf(partDomain("bootwright.substrate.baremetal.machine-v1"), partImplementation(baremetal.Implementation), partRequest("machine-baremetal-v1"),
 			partPin("identity+exact-addresses+power+system-claim+every-mac-claim+logical-volume")),
 		installation.TreeImplementation: digestOf(partImplementation(installation.TreeImplementation), partVersion(installation.TreeEvidenceVersion)),
 		mirrorfill.FilesImplementation: digestOf(partDomain("bootwright.infrastructureservices.mirror-fill-v1"), partImplementation(mirrorfill.FilesImplementation),
@@ -137,20 +137,20 @@ func contractRecipes() map[string]digestRecipe {
 			partVersion(mirrorfill.ImagesEvidenceVersion)),
 		mirrorfill.ReleaseImplementation: digestOf(partDomain("bootwright.infrastructureservices.mirror-fill-v1"), partImplementation(mirrorfill.ReleaseImplementation),
 			partVersion(mirrorfill.ReleaseEvidenceVersion)),
-		installation.DiscoveryImplementation: {separator: ":", parts: []digestPart{partImplementation(installation.DiscoveryImplementation), partRequest("os-disk-discovery-v1"), partPin("private-custom-init-readonly-inventory-pinned-tls-receipt-cleanup-v3")}},
-		installation.EraseImplementation:     {separator: ":", parts: []digestPart{partImplementation(installation.EraseImplementation), partRequest("physical-erase-v5"), partPin("descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v2")}},
+		installation.DiscoveryImplementation: {separator: ":", parts: []digestPart{partImplementation(installation.DiscoveryImplementation), partRequest("os-disk-discovery-v1"), partPin("private-custom-init-readonly-inventory-pinned-tls-receipt-cleanup-v1")}},
+		installation.EraseImplementation:     {separator: ":", parts: []digestPart{partImplementation(installation.EraseImplementation), partRequest("physical-erase-v1"), partPin("descriptor-diskseq-method-regions-readback-dm-release-by-number-parallel-paced-union-scan-receipt-v1")}},
 		installation.FirewallImplementation: digestOf(partDomain("bootwright.managedos.host-firewall-v1"), partImplementation(installation.FirewallImplementation),
 			partVersion(installation.FirewallEvidenceVersion), partPin(installation.FirewallServiceRoot),
 			partPin("bootwright-host-firewall context=context block=os-firewall-machine apply=operation"), partPin("bootwright-context-publisher"),
 			partPin("e04c153c9c84d6a73bfb3f05e09e0e7b4f4104332ee1d318cc4b3021570dc1a5")),
-		installation.Implementation: digestOf(partDomain("bootwright.managedos.install-anaconda-v1"), partImplementation(installation.Implementation), partRequest("os-install-anaconda-v4"),
-			partVersion("kickstart-anaconda-v2"), partPin("os"), partPin("private"), partPin("public"), partPin(installation.MarkerPath), partPin(installation.HostKeyPath),
+		installation.Implementation: digestOf(partDomain("bootwright.managedos.install-anaconda-v1"), partImplementation(installation.Implementation), partRequest("os-install-anaconda-v1"),
+			partVersion("kickstart-anaconda-v1"), partPin("os"), partPin("private"), partPin("public"), partPin(installation.MarkerPath), partPin(installation.HostKeyPath),
 			partPin(installation.NetworkDocumentPath), partPin(installation.NetworkMarkerPath), partPin(strconv.Itoa(300)), partPin("proved-installation-disk-boot,replay-safe-unread-registration,bond-permanent-lower-links")),
 		agentinstall.MediaImplementation: digestOf(partDomain("bootwright.containercluster.media-agent-v1"), partImplementation(agentinstall.MediaImplementation), partRequest("cluster-media-agent-v1"),
 			partPin("clusters"), partPin(agentinstall.ImageFile), partPin("/var/lib/bootwright-hosted"), partPin("clusters"), partPin("openshift-install"), partPin("rebuild-never-over-insert")),
-		agentinstall.InstallImplementation: digestOf(partDomain("bootwright.containercluster.install-agent-v1"), partImplementation(agentinstall.InstallImplementation), partRequest("cluster-install-agent-v2"),
+		agentinstall.InstallImplementation: digestOf(partDomain("bootwright.containercluster.install-agent-v1"), partImplementation(agentinstall.InstallImplementation), partRequest("cluster-install-agent-v1"),
 			partPin("clusters"), partPin(agentinstall.ImageFile), partPin("/var/lib/bootwright-hosted"), partPin("clusters"), partPin("openshift-install"), partPin("openshift-clients"), partPin("substrate-access-kubevirt-v1"), partPin("lend-bound-secret"), partPin("booted-never-no-effect"), partPin("insert-recorded-before-media")),
-		artifactserver.Implementation: digestOf(partDomain("bootwright.infrastructureservices.artifact-server-v1"), partImplementation(artifactserver.Implementation), partRequest("artifact-server-nginx-v2"),
+		artifactserver.Implementation: digestOf(partDomain("bootwright.infrastructureservices.artifact-server-v1"), partImplementation(artifactserver.Implementation), partRequest("artifact-server-nginx-v1"),
 			partPin("registry.access.redhat.com/ubi9/nginx-124@sha256:bff0f204cfef8af0b21a2e683a9d1231da98a429d856ee29ebd0e2691d919b56"),
 			partPin("/var/lib/bootwright-hosted"), partPin("services"), partPin("bootwright")),
 		ceph.Implementation: digestOf(partImplementation(ceph.Implementation), partRequest(ceph.Version), partVersion(ceph.EvidenceVersion), partVersion(ceph.PackageVersion),

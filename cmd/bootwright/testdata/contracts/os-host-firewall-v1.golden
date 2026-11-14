@@ -1,6 +1,6 @@
-implementation: os-host-firewall-v2
-content-digest: 57c43ef135d2e05f0b0214e3aadc70a9786756c5efa88516f97027f3419a21b7
-request-version: os-host-firewall-v2
+implementation: os-host-firewall-v1
+content-digest: ef74fbe8098b01389b0dcef264da682b89702c0bc590db7d5a40412626a3c9cd
+request-version: os-host-firewall-v1
 automation-formats: none
 mark-formats: none
 proof-ids: none

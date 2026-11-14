@@ -21,7 +21,7 @@ const (
 	Implementation         = "controller-prerequisites"
 	BlockID                = "controller-prerequisites"
 	MirroredClientsBlockID = "controller-mirrored-clients"
-	Version                = "controller-clients-v6"
+	Version                = "controller-clients-v1"
 )
 
 const (

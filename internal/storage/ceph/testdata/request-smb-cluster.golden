@@ -60,5 +60,5 @@
     ],
     "name": "smb.files"
   },
-  "version": "ceph-smb-v2"
+  "version": "ceph-smb-v1"
 }

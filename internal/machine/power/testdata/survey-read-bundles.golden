@@ -44,5 +44,5 @@
       "userVariable": "controllerUser2"
     }
   ],
-  "version": "machine-power-read-v2"
+  "version": "machine-power-read-v1"
 }

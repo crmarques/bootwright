@@ -18,7 +18,7 @@ import (
 	"github.com/crmarques/bootwright/internal/storage/cephcluster"
 )
 
-const ReplicationVersion = "ceph-replication-v2"
+const ReplicationVersion = "ceph-replication-v1"
 const ReplicationImplementation = "storage-ceph-replication-v1"
 const ReplicationEvidenceVersion = "ceph-replication-evidence-v1"
 

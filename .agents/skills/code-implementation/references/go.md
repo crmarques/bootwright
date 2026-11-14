@@ -119,25 +119,16 @@ so they only shrink: an entry leaves with the fix that makes it pass.
 owns when a capability's content digest moves. Before committing a change to a
 capability's request, evidence, observation or ownership code:
 
-- Decide whether it alters what an effect is: the objects it creates, their
-  names and places, the ownership mark, the host resources it claims or what
-  its observation proves. If it does, move the implementation's version, which
-  moves its content digest, and name the implementation in the commit's
+- Follow the [development version policy](../../../../specs/project.md#design-priorities-and-non-goals):
+  versions stay fixed. Decide whether the current contract changes and name
+  each affected implementation in the commit's
   [`Contract:` line](git-integration.md#contract-line); otherwise write
-  `Contract: unchanged`.
-- `TestEveryImplementationMovesItsContentDigestWithItsContract` in
-  `cmd/bootwright/contract_versions_test.go` fails when a section of the
-  implementation's contract golden changes with the digest unmoved: its Go
-  request or evidence schema, a persisted format version the collection
-  quotes, a mark, proof identifier or place its automation fixes outside the
-  request, an effect pin or a request identity member. A changed fixed place
-  also needs the request version to move. It cannot see a change of meaning
-  under an unmoved version, so the author moves the request version for a
-  change that loosens what an observation accepts as the context's own: a
-  removal compares no digest. The
-  [exception](../../../../specs/state-reconciliation.md#dependency-safety-during-recovery)
-  leaves it for a change that admits only effects earlier builds of that
-  version made, under a key their request already freezes.
+  `Contract: unchanged`. Content and effect pins still identify actual content.
+- `TestEveryImplementationContractMatchesItsGolden` in
+  `cmd/bootwright/contract_versions_test.go` pins each implementation's request
+  and evidence schemas, persisted automation formats, fixed marks, proofs and
+  places, effect pins and request identity members. Review an intentional
+  change and regenerate its golden with `-update`; keep its version fixed.
 - `contractRecipes` in `cmd/bootwright/contract_identity_test.go` restates what
   each content digest hashes, effect pins included, and must reproduce it;
   `requestIdentities` there names the request members that carry an effect's
@@ -150,7 +141,7 @@ capability's request, evidence, observation or ownership code:
   `cephMarkerNames`. A removal reads its target's identity from the frozen
   request; a value it reads from the build in hand instead is a `fixed`
   classification.
-- A version starts at 1 and moves by one. A moved version refuses a record of
-  the old one by name (D142, D241): add no converter, older reader, fallback
-  for an absent member or tailored refusal of a retired field, and mark the
-  commit as a [breaking change](git-integration.md#breaking-changes).
+- Add no compatibility reader, converter, migration, retired-field fallback or
+  reader-version negotiation. Keep strict decoding and effect proofs. A
+  development breaking change still follows the
+  [commit convention](git-integration.md#breaking-changes).

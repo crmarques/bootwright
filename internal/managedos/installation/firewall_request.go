@@ -20,8 +20,8 @@ const (
 	InstallFamily           = machineref.InstallFamily
 	EraseFamily             = "physical-erase"
 	FirewallFamily          = machineref.FirewallFamily
-	FirewallImplementation  = "os-host-firewall-v2"
-	FirewallEvidenceVersion = "os-host-firewall-evidence-v2"
+	FirewallImplementation  = "os-host-firewall-v1"
+	FirewallEvidenceVersion = "os-host-firewall-evidence-v1"
 	FirewallServiceRoot     = "/etc/firewalld/services"
 	firewallVariable        = "bootwright_os_firewall"
 	firewallServicePrefix   = "bootwright-"

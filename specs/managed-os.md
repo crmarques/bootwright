@@ -1711,8 +1711,8 @@ spec.customizations.security.diskEncryption.unlock.tpm2.pcrIds on <profile>,
 or set spec.updates.policy to none on <profile>`.
 
 **Frozen request.** The installation request freezes `update`, `{policy,
-release}`, omitted for `none`; it moves the installation request version
-(`requestVersion` in `internal/managedos/installation/catalog.go`). A change
+release}`, omitted for `none`; its version stays fixed under the
+[development policy](project.md#design-priorities-and-non-goals). A change
 of either changes the request and so the marker, so it is another
 installation: the context is taken back with `bootwright destroy` and applied
 again, as for [registration](#registration).

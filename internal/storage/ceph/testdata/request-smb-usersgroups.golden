@@ -37,5 +37,5 @@
   },
   "object": "smb-users",
   "resourceType": "ceph.smb.usersgroups",
-  "version": "ceph-smb-v2"
+  "version": "ceph-smb-v1"
 }

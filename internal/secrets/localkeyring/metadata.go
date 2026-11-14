@@ -1,7 +1,6 @@
 package localkeyring
 
 import (
-	"encoding/json"
 	"io"
 	"slices"
 
@@ -90,27 +89,9 @@ func decodeMetadataPayload(payload []byte, wrapped *metadataEnvelope) error {
 }
 
 func decodeIndexPlaintext(plaintext []byte) (indexRecord, error) {
-	if err := readable(plaintext); err != nil {
-		return indexRecord{}, err
-	}
 	var index indexRecord
 	if decodeCanonical(plaintext, indexMaximum, maxIndexItems, &index) != nil {
 		return indexRecord{}, secretstore.Failure("store.corrupt", "decrypted secret metadata is invalid")
 	}
 	return index, nil
-}
-
-func readable(plaintext []byte) error {
-	var probe struct {
-		MinReader json.Number `json:"minReader"`
-	}
-	if json.Unmarshal(plaintext, &probe) != nil {
-		return nil
-	}
-	if reader, err := probe.MinReader.Int64(); err != nil || reader <= readerVersion {
-		return nil
-	}
-	return diagnostics.NewFailureWithRemediation("secret.store.newer",
-		"the secret store was written by a newer Bootwright build that this build cannot read; the store is intact",
-		"", "run the Bootwright build that wrote the store, or a newer one; do not restore or purge it")
 }

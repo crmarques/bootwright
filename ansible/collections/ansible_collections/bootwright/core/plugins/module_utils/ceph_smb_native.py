@@ -30,7 +30,7 @@ import re
 from ansible_collections.bootwright.core.plugins.module_utils import ceph_native, ceph_native_nfs, ceph_native_resources
 from ansible_collections.bootwright.core.plugins.module_utils.ceph_native import NativeFailure, Refusal, canonical, named, require, unique_object
 
-VERSION = "ceph-smb-v2"
+VERSION = "ceph-smb-v1"
 EVIDENCE_VERSION = "ceph-smb-evidence-v1"
 # Each SMB manager resource type with the native member naming its identity.
 TYPES = {"ceph.smb.cluster": "cluster_id", "ceph.smb.share": "share_id", "ceph.smb.join.auth": "auth_id", "ceph.smb.usersgroups": "users_groups_id"}

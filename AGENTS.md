@@ -1,7 +1,6 @@
 # Agent Guidance
 
-Bootwright coordinates declarative day-0 platform bootstrap through qualified
-native tools and adapters. Route to each fact's owner; do not bulk-read.
+Route to each fact's owner; do not bulk-read.
 
 - [specs/index.md](specs/index.md) names the spec that owns each question. Load
   only the owning sections.
@@ -12,19 +11,20 @@ native tools and adapters. Route to each fact's owner; do not bulk-read.
 - [.agents/knowledge/index.md](.agents/knowledge/index.md): search it by symptom,
   symbol or error text before investigating, then open only matching pages.
 
-Specs own required behavior; milestones own delivery state and deferred work;
-knowledge owns lessons; skills own procedure. Keep each fact in one place and
-link to it.
+Keep versions fixed and add no backward compatibility until the owner changes
+the [development policy](specs/project.md#design-priorities-and-non-goals).
 
-Implement only what the prompt authorizes: an active slice's open work, or an
-explicitly requested slice or item. With no active slice, only an explicit
-request authorizes a tracked edit; a spec or backlog entry never does. Record
+Specs own behavior; milestones own delivery and deferred work; knowledge owns
+lessons; skills own procedure. Keep one owner per fact and link to it.
+
+Implement only authorized work: an active slice's open work or an explicit
+request. With no active slice, a tracked edit needs an explicit request; specs
+and backlog entries authorize none. Record
 other discovered work as an item of the earliest fitting milestone, or parked,
 instead of doing it. Report a pre-existing defect you find; fix one that
 blocks the authorized outcome or its gates only in its own commit, after
-recording it as an item the Refs line names. Update the owning spec with any
-intentional contract change; add future detail when a requested feature needs
-it.
+recording it as an item the Refs line names. Update the owning spec for a
+contract change; add future detail only when a requested feature needs it.
 
 Agents never run `ansible-playbook` against a host, or a Bootwright command the
 [catalog](specs/cli/commands.md#command-and-flag-catalog) marks as asked, unless

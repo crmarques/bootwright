@@ -174,5 +174,5 @@
       }
     }
   ],
-  "version": "ceph-core-v3"
+  "version": "ceph-core-v1"
 }

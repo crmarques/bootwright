@@ -25,5 +25,5 @@
   },
   "object": "smb-join",
   "resourceType": "ceph.smb.join.auth",
-  "version": "ceph-smb-v2"
+  "version": "ceph-smb-v1"
 }

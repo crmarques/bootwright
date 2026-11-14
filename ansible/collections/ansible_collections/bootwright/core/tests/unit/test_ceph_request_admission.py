@@ -124,7 +124,7 @@ CORE = {
     "services": [{"placement": {"count": 2, "hosts": ["node-1"]}, "service_type": "mgr"}],
     "settings": {"modules": ["nfs"]},
     "subvolume": {"filesystem": "files", "gid": 0, "group": "", "mode": "755", "name": "docs", "pool": "files-data", "sizeBytes": 0, "uid": 0},
-    "version": "ceph-core-v3",
+    "version": "ceph-core-v1",
 }
 
 IMAGE = {
@@ -160,7 +160,7 @@ SMB = {
     "resourceType": "ceph.smb.share",
     "scope": HOST["cluster"],
     "service": {"clustered": False, "hosts": ["node-1"], "name": "smb.files"},
-    "version": "ceph-smb-v2",
+    "version": "ceph-smb-v1",
 }
 
 # Role, its entry points, the request variable and the request carrying every

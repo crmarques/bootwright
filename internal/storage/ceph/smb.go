@@ -19,7 +19,7 @@ import (
 
 const (
 	SMBImplementation  = "storage-ceph-smb-v1"
-	SMBVersion         = "ceph-smb-v2"
+	SMBVersion         = "ceph-smb-v1"
 	SMBEvidenceVersion = "ceph-smb-evidence-v1"
 	SMBManagerModule   = "smb"
 )

@@ -20,7 +20,7 @@ const (
 
 // RegistryVersion is the durable context-registry format; a store of any other
 // version is refused, never converted.
-const RegistryVersion = 3
+const RegistryVersion = 1
 
 // Registry is an atomic context snapshot. A context's name is its identity, so
 // the registry holds no separate identifier and needs no allocation state.

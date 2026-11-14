@@ -153,7 +153,7 @@ func automationFormats() map[string]automationFormat {
 	host, core := persistedBy(ceph.HostImplementation), persistedBy(ceph.Implementation)
 	formats := map[string]automationFormat{
 		"addon-instance-request-v1":  {class: formatMirrored},
-		"ceph-export-request-v2":     {class: formatMirrored},
+		"ceph-export-request-v1":     {class: formatMirrored},
 		"ceph-export-evidence-v1":    {class: formatMirrored},
 		"cluster-network-request-v1": {class: formatMirrored},
 		"cluster-objects-v1":         {class: formatMirrored},
@@ -227,25 +227,25 @@ func automationFormats() map[string]automationFormat {
 		"ceph-host-v1":                 {class: formatMirrored},
 		"ceph-host-evidence-v1":        {class: formatMirrored},
 		"ceph-monitoring-template-v1":  persistedBy(ceph.Implementation),
-		"ceph-core-v3":                 {class: formatMirrored},
+		"ceph-core-v1":                 {class: formatMirrored},
 		"ceph-core-evidence-v1":        {class: formatMirrored},
 		"ceph-tiebreaker-evidence-v1":  {class: formatMirrored},
 		"ceph-host-reading-v1":         {class: formatMirrored},
 		"ceph-packages-v1":             {class: formatMirrored},
 		"ceph-image-v1":                {class: formatMirrored},
-		"ceph-smb-v2":                  {class: formatMirrored},
+		"ceph-smb-v1":                  {class: formatMirrored},
 		"ceph-smb-evidence-v1":         {class: formatMirrored},
 		"os-package-tree-evidence-v1":  {class: formatMirrored},
 		"mirror-files-evidence-v1":     {class: formatMirrored},
 		"mirror-images-evidence-v1":    {class: formatMirrored},
 		"mirror-release-evidence-v1":   {class: formatMirrored},
 		"machine-hardware-evidence-v1": {class: formatMirrored},
-		"ceph-replication-v2":          {class: formatMirrored},
+		"ceph-replication-v1":          {class: formatMirrored},
 		"ceph-replication-evidence-v1": {class: formatMirrored},
 		// The request versions each role refuses unless its request names.
-		"substrate-host-libvirt-v3":  {class: formatMirrored},
-		"machine-libvirt-v3":         {class: formatMirrored},
-		"machine-baremetal-v2":       {class: formatMirrored},
+		"substrate-host-libvirt-v1":  {class: formatMirrored},
+		"machine-libvirt-v1":         {class: formatMirrored},
+		"machine-baremetal-v1":       {class: formatMirrored},
 		"substrate-host-kubevirt-v1": {class: formatMirrored},
 		"machine-kubevirt-v1":        {class: formatMirrored},
 		// The lend a hosted KubeVirt provider's runs take their access from:
@@ -259,19 +259,18 @@ func automationFormats() map[string]automationFormat {
 		"machine-hardware-v1":                   {class: formatMirrored},
 		"os-disk-discovery-v1":                  {class: formatMirrored},
 		"machine-disk-inventory-v1":             {class: formatMirrored},
-		"os-install-anaconda-v4":                {class: formatMirrored},
-		"physical-erase-v5":                     {class: formatMirrored},
+		"os-install-anaconda-v1":                {class: formatMirrored},
 		"physical-erase-v1":                     {class: formatMirrored},
-		"os-host-firewall-v2":                   {class: formatMirrored},
-		"os-host-firewall-evidence-v2":          {class: formatMirrored},
+		"os-host-firewall-v1":                   {class: formatMirrored},
+		"os-host-firewall-evidence-v1":          {class: formatMirrored},
 		"cluster-media-agent-v1":                {class: formatMirrored},
-		"cluster-install-agent-v2":              {class: formatMirrored},
-		"artifact-server-nginx-v2":              {class: formatMirrored},
-		"managed-service-v4":                    {class: formatMirrored},
+		"cluster-install-agent-v1":              {class: formatMirrored},
+		"artifact-server-nginx-v1":              {class: formatMirrored},
+		"managed-service-v1":                    {class: formatMirrored},
 		// Power is no plan block: each run binds its request to the power
 		// content digest these implementations feed, and nothing is retained.
-		"machine-power-v2":      {class: formatMirrored},
-		"machine-power-read-v2": {class: formatMirrored},
+		"machine-power-v1":      {class: formatMirrored},
+		"machine-power-read-v1": {class: formatMirrored},
 
 		"controller-prerequisites-v1": {class: formatController, reason: "the controller stage's request, which setup applies and no plan block retains"},
 	}
@@ -528,7 +527,7 @@ func TestEveryStoreFormatIsClassified(t *testing.T) {
 		}
 	}
 	for literal, want := range map[string]string{
-		prerequisites.SetupStateFormat:     "bootwright.setup-state-v3",
+		prerequisites.SetupStateFormat:     "bootwright.setup-state-v1",
 		runtimelock.Format:                 "bootwright.controller.runtime-lock-v1",
 		prerequisites.RuntimeFormat:        "bootwright.controller.runtime-v1",
 		prerequisites.RuntimeClosureFormat: "bootwright.controller.execution-closure-v1",
@@ -673,24 +672,10 @@ func TestEveryAutomationVersionLiteralIsClassified(t *testing.T) {
 	}
 }
 
-// TestEveryImplementationMovesItsContentDigestWithItsContract holds each
-// implementation's contract to its content digest: its Go request and
-// evidence schemas, the formats its automation persists on a host, the marks,
-// proof identifiers and places its automation fixes outside the frozen
-// request, the effect pins its digest hashes and the request members that
-// carry its effects' identity. The digest is what a continuation under another
-// build compares, so a contract that changes under the same digest would let
-// another build continue work half done under the old contract. Such a change
-// fails and -update refuses it: move the implementation's version. A moved
-// digest is rewritten by -update, except that a changed place also needs the
-// request version to move, because a removal compares no digest: only a
-// request this build cannot read keeps a removal from looking for the old
-// blocks' effects in the new place. A raw-JSON, interface or map[string]any
-// member is fingerprinted as an opaque leaf, so the schema nested in one, such
-// as the raw cluster services the Ceph core and host requests carry or the
-// agent media's install and agent configurations, is the author's to move;
-// re-planning still compares its bytes.
-func TestEveryImplementationMovesItsContentDigestWithItsContract(t *testing.T) {
+// TestEveryImplementationContractMatchesItsGolden pins the current development
+// contract. Intentional changes update the golden without moving its version;
+// the pre-production policy promises no compatibility with earlier builds.
+func TestEveryImplementationContractMatchesItsGolden(t *testing.T) {
 	versions := contractVersions()
 	contractOfferedImplementations(t, versions)
 	recipes, identities := contractRecipes(), requestIdentities()
@@ -819,11 +804,6 @@ func contractOfferedImplementations(t *testing.T, versions []contractVersion) {
 	}
 }
 
-// contractSections is the order of a contract golden's sections. A section a
-// recorded golden lacks, or one it carries beyond them, is a changed section.
-var contractSections = []string{"implementation", "content-digest", "request-version", "automation-formats", "mark-formats", "proof-ids",
-	"fixed-places", "effect-pins", "request-identity", "request-schema", "evidence-schema"}
-
 // contractListSections are the sections that list values one per line.
 var contractListSections = []string{"effect-pins", "request-identity", "request-schema", "evidence-schema"}
 
@@ -851,22 +831,6 @@ func contractText(version contractVersion, requestVersion string, listed map[str
 	return text.String()
 }
 
-// contractSectionsOf splits a contract golden into its sections by name.
-func contractSectionsOf(text string) map[string]string {
-	sections := map[string]string{}
-	current := ""
-	for line := range strings.SplitSeq(strings.TrimSuffix(text, "\n"), "\n") {
-		if !strings.HasPrefix(line, "  ") {
-			name, value, _ := strings.Cut(line, ":")
-			current = name
-			sections[current] = strings.TrimSpace(value)
-			continue
-		}
-		sections[current] += "\n" + line
-	}
-	return sections
-}
-
 func contractHoldGolden(t *testing.T, version contractVersion, path, text string) {
 	t.Helper()
 	golden, err := os.ReadFile(path)
@@ -881,31 +845,8 @@ func contractHoldGolden(t *testing.T, version contractVersion, path, text string
 	if string(golden) == text {
 		return
 	}
-	recorded, current := contractSectionsOf(string(golden)), contractSectionsOf(text)
-	var changed []string
-	for _, section := range contractSections {
-		if value, ok := recorded[section]; !ok || value != current[section] {
-			changed = append(changed, section)
-		}
-	}
-	for section := range recorded {
-		if !slices.Contains(contractSections, section) {
-			changed = append(changed, section)
-		}
-	}
-	_, digested := recorded["content-digest"]
-	if (!digested || recorded["content-digest"] == current["content-digest"]) && len(changed) != 0 {
-		t.Errorf("%s: its %s changed while its content digest did not, so another build would continue its blocks under the old contract: move %s's version, which moves its content digest (-update refuses to record this):\n%s",
-			version.implementation, strings.Join(changed, " and "), version.implementation, lineDiff(string(golden), text))
-		return
-	}
-	if requestVersion, ok := recorded["request-version"]; recorded["fixed-places"] != current["fixed-places"] && (!ok || requestVersion == current["request-version"]) {
-		t.Errorf("%s: its fixed places changed while its request version did not, so a removal under this build would look for the old blocks' effects in the new place: move its request version (-update refuses to record this):\n%s",
-			version.implementation, lineDiff(string(golden), text))
-		return
-	}
 	if !*update {
-		t.Errorf("%s: its content digest moved; rerun with -update to record its contract:\n%s", version.implementation, lineDiff(string(golden), text))
+		t.Errorf("%s: its development contract changed; review and rerun with -update:\n%s", version.implementation, lineDiff(string(golden), text))
 		return
 	}
 	contractWriteGolden(t, path, text)

@@ -375,7 +375,7 @@ func entryNames(ctx context.Context, area secretstore.Area, directory string) (m
 }
 
 func validateIndex(index indexRecord, selector secretstore.Selector) error {
-	if index.FormatVersion != formatVersion || index.MinReader < 1 || index.MinReader > readerVersion || index.Algorithm != algorithm || index.Selector != selector || !validID(index.ActiveKey, "key-") || index.Keys == nil || index.Versions == nil || index.Current == nil || index.Bindings == nil || index.Produced == nil || len(index.Keys) == 0 || len(index.Versions) > secrets.MaxVersions || len(index.Bindings) > maxBindings || len(index.Produced) > secrets.MaxVersions {
+	if index.FormatVersion != formatVersion || index.Algorithm != algorithm || index.Selector != selector || !validID(index.ActiveKey, "key-") || index.Keys == nil || index.Versions == nil || index.Current == nil || index.Bindings == nil || index.Produced == nil || len(index.Keys) == 0 || len(index.Versions) > secrets.MaxVersions || len(index.Bindings) > maxBindings || len(index.Produced) > secrets.MaxVersions {
 		return errors.New("invalid index header")
 	}
 	keys := make(map[string]storedKey, len(index.Keys))

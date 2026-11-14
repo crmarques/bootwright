@@ -1158,9 +1158,10 @@ such, and an unknown fact selects the general variant there too. Seams never
 sit in trust, host-key, signature, redaction or credential code. A specialization never changes a block's intent, ordering, authorization
 or ownership proofs, and never removes a trust refusal. Specialization
 identities never enter block intents or content digests. A specialization may
-ship without a version move only when the general flow cannot have completed
-the step on any build it matches. A specialization never encodes a version
-pairing or compatibility rule between components; Bootwright registers and
+ship with the current fixed version under the
+[development policy](project.md#design-priorities-and-non-goals); update its
+current contract evidence when its effect changes. A specialization never
+encodes a version pairing or compatibility rule between components; Bootwright registers and
 enforces none, and choosing versions is the operator's responsibility (D163).
 A release difference that would change a block's request, evidence shape,
 plan, intent or ordering is not a specialization: it is a new implementation

@@ -1,6 +1,6 @@
 implementation: registry-distribution-v1
-content-digest: 27a519ca9d13ead9fb8eb3f0abf373babab1986ee2fcd83c4f4d975c582485f6
-request-version: managed-service-v4
+content-digest: ab7691f481d99811bee30ccdff566e66b40cd54ecb12e76346b31808b59d9241
+request-version: managed-service-v1
 automation-formats: none
 mark-formats: none
 proof-ids: none
