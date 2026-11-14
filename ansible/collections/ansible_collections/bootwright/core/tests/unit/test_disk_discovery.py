@@ -5,6 +5,7 @@ import io
 import os
 import signal
 import time
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import Mock
@@ -300,21 +301,72 @@ def test_publication_deletion_is_durable_before_completion(tmp_path, monkeypatch
     assert events.index(("fsync", str(parent))) < events.index(("write", "completed.json"))
 
 
-def test_publication_accepts_the_qualified_initramfs_growth(tmp_path, monkeypatch):
+def root_owned_tree(tmp_path, monkeypatch, foreign_inode=None):
+    # Tests run without root. Keep real mkdir, lstat, modes, file publication
+    # and fsync; simulate only root ownership and a safe fixture ancestry.
+    original_lstat = Path.lstat
+
+    def observed(path, *args, **kwargs):
+        fields = list(original_lstat(path, *args, **kwargs))
+        fields[4] = 0
+        if path != tmp_path and tmp_path not in path.parents:
+            fields[0] &= ~0o022
+        return os.stat_result(fields)
+
+    monkeypatch.setattr(Path, "lstat", observed)
+    original_fstat = os.fstat
+
+    def owned(fd):
+        fields = list(original_fstat(fd))
+        fields[4] = 1 if fields[1] == foreign_inode else 0
+        return os.stat_result(fields)
+
+    monkeypatch.setattr(os, "fstat", owned)
+
+
+@pytest.mark.parametrize("layout", [
+    "existing", "new", "unsafe-parent", "linked-parent", "writable-child", "linked-child", "foreign-child", "wrong-suffix", *range(1, 6),
+])
+def test_publication_accepts_the_qualified_initramfs_growth(tmp_path, monkeypatch, layout):
     instance = controller.Controller.__new__(controller.Controller)
     instance.root = tmp_path / "custody"
     instance.root.mkdir()
     image = tmp_path / "remastered.iso"
     image.write_bytes(b"synthetic private ISO")
-    destination = tmp_path / "served" / "private" / "os" / "node" / "attempt"
-    destination.mkdir(parents=True)
-    instance.request = {"bootMedia": {"size": 64 << 20}}
+    serving = tmp_path / "served"
+    serving.mkdir(mode=0o700)
+    components = ("private", "os", "node", "discovery", "a" * 64)
+    destination = serving.joinpath(*components)
+    if layout == "existing":
+        destination.mkdir(parents=True)
+    elif layout == "unsafe-parent":
+        serving.chmod(0o777)
+    elif layout == "linked-parent":
+        serving.rmdir()
+        (tmp_path / "elsewhere").mkdir(mode=0o700)
+        serving.symlink_to(tmp_path / "elsewhere", target_is_directory=True)
+    elif layout == "writable-child":
+        (serving / "private").mkdir(mode=0o700)
+        (serving / "private").chmod(0o777)
+    elif layout == "linked-child":
+        (tmp_path / "elsewhere").mkdir(mode=0o700)
+        (serving / "private").symlink_to(tmp_path / "elsewhere", target_is_directory=True)
+    elif layout == "foreign-child":
+        (serving / "private").mkdir(mode=0o700)
+    elif isinstance(layout, int):
+        for index in range(layout):
+            serving.joinpath(*components[:index + 1]).mkdir(mode=0o700 if index == layout - 1 else 0o711)
+    instance.binding = {"machine": "node"}
+    instance.request = {"bootMedia": {"size": 64 << 20}, "private": {"path": str(destination.parent)}}
+    if layout == "wrong-suffix":
+        instance.request["private"]["path"] = str(serving / "other")
     instance.load = lambda: {"token": "a" * 64}
     instance.payload = lambda: {}
     instance.publication = lambda: (destination, "https://example.test/private/discovery.iso")
     monkeypatch.setattr(controller.media, "build", lambda *args: image)
     monkeypatch.setattr(controller.media, "native", Mock(return_value=b""))
-    monkeypatch.setattr(controller.records, "directory", lambda *args: None)
+    foreign_inode = (serving / "private").stat().st_ino if layout == "foreign-child" else None
+    root_owned_tree(tmp_path, monkeypatch, foreign_inode)
     original_fstat = os.fstat
     inode = image.stat().st_ino
 
@@ -329,10 +381,54 @@ def test_publication_accepts_the_qualified_initramfs_growth(tmp_path, monkeypatc
     monkeypatch.setattr(controller.os, "fstat", remastered_size)
     instance.lock = os.open(instance.root, os.O_RDONLY | os.O_DIRECTORY)
     try:
+        if layout in ("unsafe-parent", "linked-parent", "writable-child", "linked-child", "foreign-child"):
+            with pytest.raises((controller.records.Refused, OSError)):
+                instance.publish()
+            assert not (destination / "discovery.iso").exists()
+            if layout in ("linked-parent", "linked-child"):
+                assert list((tmp_path / "elsewhere").iterdir()) == []
+            if layout == "writable-child":
+                assert (serving / "private").stat().st_mode & 0o777 == 0o777
+            if layout == "foreign-child":
+                assert (serving / "private").stat().st_mode & 0o777 == 0o700
+            return
+        if layout == "wrong-suffix":
+            with pytest.raises(ValueError, match="discovery publication path"):
+                instance.publish()
+            assert list(serving.iterdir()) == []
+            return
+        instance.publish()
+        assert instance.phase == "publication"
+        assert (destination / "discovery.iso").read_bytes() == b"synthetic private ISO"
+        if layout != "existing":
+            for index in range(1, 6):
+                assert serving.joinpath(*components[:index]).stat().st_mode & 0o777 == 0o711
+        assert serving.stat().st_mode & 0o777 == 0o700
         instance.publish()
         assert (destination / "discovery.iso").read_bytes() == b"synthetic private ISO"
     finally:
         os.close(instance.lock)
+
+
+def test_parallel_discoveries_share_only_the_proved_publication_parents(tmp_path, monkeypatch):
+    serving = tmp_path / "served"
+    serving.mkdir(mode=0o700)
+    root_owned_tree(tmp_path, monkeypatch)
+
+    def directories(number):
+        instance = controller.Controller.__new__(controller.Controller)
+        instance.binding = {"machine": "node-" + str(number)}
+        private = serving / "private" / "os" / instance.binding["machine"] / "discovery"
+        instance.request = {"private": {"path": str(private)}}
+        destination = private / (str(number) * 64)
+        instance.publication_directories(destination)
+        return destination
+
+    with ThreadPoolExecutor(max_workers=3) as workers:
+        destinations = list(workers.map(directories, (1, 2, 3)))
+    for destination in destinations:
+        assert destination.stat().st_mode & 0o777 == 0o711
+    assert serving.stat().st_mode & 0o777 == 0o700
 
 
 def test_publication_still_refuses_images_beyond_the_component_bound(tmp_path):

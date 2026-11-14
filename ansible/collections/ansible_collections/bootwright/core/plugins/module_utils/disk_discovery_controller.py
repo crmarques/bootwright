@@ -249,21 +249,53 @@ class Controller:
         for name in ("patched.iso", "discovery.iso", "initrd-0", "initrd-1"):
             (self.root / name).unlink(missing_ok=True)
         image = media.build(self.request, self.root, self.payload())
+        self.phase = "publication"
         destination, unused = self.publication()
         del unused
-        # Descend from the existing served root. Every new component is a
-        # root-owned, non-writable directory with no followed links.
-        for path in reversed([destination, *destination.parents]):
-            if path.exists():
-                records.directory(path, False, None)
-            else:
-                records.directory(path, True, None)
-                os.chmod(path, 0o711)
+        self.publication_directories(destination)
         target = destination / "discovery.iso"
         target.unlink(missing_ok=True)
         publish_image(image, target, media.publication_bound(self.request["bootMedia"]["size"]))
         media.native(["/usr/bin/chcon", "--reference", str(destination.parents[4]), "--recursive", str(destination)])
         os.fsync(self.lock)
+
+    def publication_directories(self, destination):
+        private = Path(self.request["private"]["path"])
+        suffix = ("private", "os", self.binding["machine"], "discovery")
+        if (
+            not private.is_absolute() or ".." in private.parts or private.parts[-4:] != suffix
+            or destination.parent != private or re.fullmatch(r"[0-9a-f]{64}", destination.name) is None
+        ):
+            raise ValueError("discovery publication path")
+        serving = private.parents[3]
+        # Never create or chmod the serving root or its unrelated ancestors.
+        records.directory(serving, False, None)
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+        parent = os.open(serving, flags)
+        try:
+            for name in (*suffix, destination.name):
+                try:
+                    os.mkdir(name, 0o700, dir_fd=parent)
+                except FileExistsError:
+                    pass
+                child = os.open(name, flags, dir_fd=parent)
+                try:
+                    info = os.fstat(child)
+                    if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+                        raise records.Refused("custody-directory")
+                    # Resume a crash after restrictive creation, only inside
+                    # the frozen private subtree. Preserve other safe modes.
+                    if stat.S_IMODE(info.st_mode) == 0o700:
+                        os.fchmod(child, 0o711)
+                    os.fsync(child)
+                    os.fsync(parent)
+                except BaseException:
+                    os.close(child)
+                    raise
+                os.close(parent)
+                parent = child
+        finally:
+            os.close(parent)
 
     def client(self):
         config = self.request["controller"]

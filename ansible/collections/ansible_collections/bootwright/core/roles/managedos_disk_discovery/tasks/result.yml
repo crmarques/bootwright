@@ -20,6 +20,7 @@
       custody: request and private custody validation
       controller: management-controller inspection
       media: private discovery media construction
+      publication: private discovery media publication
       tls: private inventory TLS preparation
       media-delivery: private HTTPS media delivery
       boot: owned virtual-media boot
@@ -41,6 +42,7 @@
       media-digest: the local source ISO checksum did not match
       publication-size: the remastered ISO exceeds its derived component size bound
       publication-file: the remastered ISO is not a regular file
+      publication-path: the private publication path does not match the frozen machine namespace
       source-size: the source ISO exceeds the installer-media store bound
       initrd-tools: the RHEL initramfs lacks required discovery tools
       initrd-layout: the source ISO initramfs layout is unqualified

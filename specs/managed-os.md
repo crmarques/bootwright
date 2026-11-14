@@ -1504,6 +1504,9 @@ The private ISO publication limit derives from the pinned source size, both
 qualified initramfs members and overlays, and bounded boot metadata, through
 [`publication_bound`](../ansible/collections/ansible_collections/bootwright/core/plugins/module_utils/disk_discovery_media.py).
 Publication proves a regular no-follow source within that limit.
+It proves the existing serving root without changing its mode, then creates
+only the frozen private machine subtree. Retry repairs restrictive directory
+creation residue there without changing unrelated ancestors or other safe modes.
 
 Selection and installation planning validate protected-disk constraints as well
 as the policy fingerprint. Policy and unowned OSD-device selectors may be refined

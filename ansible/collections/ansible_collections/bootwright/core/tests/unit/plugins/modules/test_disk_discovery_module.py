@@ -34,3 +34,8 @@ def test_native_failure_drops_stdout_and_arguments(monkeypatch):
         module.custody.media.native(["/usr/bin/xorriso", "SECRET-url"])
     assert caught.value.tool == "xorriso" and caught.value.code == 7
     assert "SECRET" not in str(caught.value)
+
+
+def test_publication_refusals_are_distinct_from_media_construction():
+    result = module.diagnostic(ValueError("custody-directory"), SimpleNamespace(phase="publication"))
+    assert result == {"discovery_failure": "custody-directory", "discovery_phase": "publication"}

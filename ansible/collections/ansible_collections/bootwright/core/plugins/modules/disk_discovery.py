@@ -81,6 +81,7 @@ def diagnostic(error, controller):
         "discovery source image digest": "media-digest",
         "discovery publication size": "publication-size",
         "discovery publication file": "publication-file",
+        "discovery publication path": "publication-path",
         "discovery source size bound": "source-size",
         "RHEL initrd lacks discovery bootstrap tools": "initrd-tools",
         "unqualified discovery initrd layout": "initrd-layout",
@@ -105,7 +106,7 @@ def diagnostic(error, controller):
     elif isinstance(error, ValueError):
         code = refusals.get(str(error), "contract")
     phase = getattr(controller, "phase", "custody")
-    if phase not in ("custody", "controller", "media", "tls", "media-delivery", "boot", "inventory", "acknowledgement", "cleanup"):
+    if phase not in ("custody", "controller", "media", "publication", "tls", "media-delivery", "boot", "inventory", "acknowledgement", "cleanup"):
         phase = "custody"
     return {"discovery_failure": code, "discovery_phase": phase}
 
