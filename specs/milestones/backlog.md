@@ -9033,8 +9033,8 @@ manual discovery use the existing native procedure.
 ### D264
 
 **owner** (2026-11-14): requests investigation and correction of apparent
-mutation during plan and a discovery media refusal. X458 (M1, B1386, B1387)
+mutation during plan and a discovery media refusal. X458 (M1, B1386 to B1388)
 proves the read-only boundary, clarifies preview output and corrects private
-publication directory creation. Keep manual and automatic discovery on the
+publication directory creation and serving permissions. Keep manual and automatic discovery on the
 same native procedure and preserve frozen-operation recovery. No real-host
 operation or push is authorized.

@@ -1507,6 +1507,8 @@ Publication proves a regular no-follow source within that limit.
 It proves the existing serving root without changing its mode, then creates
 only the frozen private machine subtree. Retry repairs restrictive directory
 creation residue there without changing unrelated ancestors or other safe modes.
+Published ISO permissions are set explicitly before atomic publication,
+independently of the caller's umask.
 
 Selection and installation planning validate protected-disk constraints as well
 as the policy fingerprint. Policy and unowned OSD-device selectors may be refined

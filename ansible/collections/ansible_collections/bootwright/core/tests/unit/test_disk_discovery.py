@@ -431,6 +431,20 @@ def test_parallel_discoveries_share_only_the_proved_publication_parents(tmp_path
     assert serving.stat().st_mode & 0o777 == 0o700
 
 
+@pytest.mark.parametrize("mask", (0o022, 0o077, 0o777))
+def test_published_iso_has_serving_permissions_independent_of_umask(tmp_path, mask):
+    source, target = tmp_path / "source.iso", tmp_path / "published.iso"
+    content = b"synthetic private discovery ISO"
+    source.write_bytes(content)
+    previous = os.umask(mask)
+    try:
+        controller.publish_image(source, target, len(content))
+    finally:
+        os.umask(previous)
+    assert target.read_bytes() == content
+    assert target.stat().st_mode & 0o777 == 0o640
+
+
 def test_publication_still_refuses_images_beyond_the_component_bound(tmp_path):
     source, target = tmp_path / "image.iso", tmp_path / "published.iso"
     source.write_bytes(b"oversized synthetic media")

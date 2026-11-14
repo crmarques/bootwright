@@ -515,6 +515,7 @@ def publish_image(source, destination, maximum):
         while chunk := os.read(source_fd, 1 << 20):
             if os.write(target_fd, chunk) != len(chunk):
                 raise ValueError("discovery publication copy")
+        os.fchmod(target_fd, 0o640)
         os.fsync(target_fd)
         os.replace(stage, destination)
         directory = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
