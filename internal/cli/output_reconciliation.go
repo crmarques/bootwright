@@ -310,6 +310,7 @@ func startSummary(result lifecycle.PlanResult) string {
 func writeLifecyclePlan(out io.Writer, result *lifecycle.PlanResult) error {
 	var text display
 	text.headline("", lifecycleHeadline(*result))
+	text.lines([]string{"Preview only; no changes have been made."})
 	if result.Finalizes {
 		text.section("")
 		text.lines([]string{"Nothing to run: every block is done, so bootwright " + result.Verb + " only completes this operation's interrupted finalization."})

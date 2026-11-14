@@ -9029,3 +9029,12 @@ after inventory. Keep the explicit discovery command for inspection.
 The same delivery corrects the bounded remaster publication defect (B1385)
 and its concealed diagnostics (B1384), in separate commits. Both apply and
 manual discovery use the existing native procedure.
+
+### D264
+
+**owner** (2026-11-14): requests investigation and correction of apparent
+mutation during plan and a discovery media refusal. X458 (M1, B1386, B1387)
+proves the read-only boundary, clarifies preview output and corrects private
+publication directory creation. Keep manual and automatic discovery on the
+same native procedure and preserve frozen-operation recovery. No real-host
+operation or push is authorized.

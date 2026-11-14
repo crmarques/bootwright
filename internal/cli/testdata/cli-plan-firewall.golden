@@ -1,4 +1,5 @@
   Apply plan
+    Preview only; no changes have been made.
 
   Controller listener firewall
     DNSServer/resolver 192.0.2.1:53/udp: open (interface synthetic0, zone public); explicit

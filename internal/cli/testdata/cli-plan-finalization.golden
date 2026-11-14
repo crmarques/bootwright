@@ -1,4 +1,5 @@
   Apply finalization
+    Preview only; no changes have been made.
 
     Nothing to run: every block is done, so bootwright apply only completes this operation's
     interrupted finalization.

@@ -11,8 +11,8 @@ func (d PreparationDefinition) admitsCommand(command string) bool {
 	return command == d.Command || command == string(reconciliation.Apply) && d.Automatic != nil
 }
 
-func (s Service) automaticPreparation(ctx context.Context, name string, selection reconciliation.Selection) (Service, bool, error) {
-	if s.preparation != nil || !slices.ContainsFunc(s.options.Preparations, func(d PreparationDefinition) bool { return d.Automatic != nil }) {
+func (s Service) automaticPreparation(ctx context.Context, name string, selection reconciliation.Selection, preview bool) (Service, bool, error) {
+	if s.preparation != nil || len(s.options.Preparations) == 0 {
 		return s, false, nil
 	}
 	var scope *reconciliation.PreparationScope
@@ -32,7 +32,7 @@ func (s Service) automaticPreparation(ctx context.Context, name string, selectio
 				if err != nil {
 					return err
 				}
-				if operation.Verb == reconciliation.Apply && frozen.Preparation != nil && frozen.Preparation.Command == string(reconciliation.Apply) {
+				if operation.Verb == reconciliation.Apply && frozen.Preparation != nil && (preview || frozen.Preparation.Command == string(reconciliation.Apply)) {
 					scope = frozen.Preparation
 				}
 				return nil
@@ -78,7 +78,7 @@ func (s Service) automaticPreparation(ctx context.Context, name string, selectio
 }
 
 func (s Service) applyPrepared(ctx context.Context, request ApplyRequest, selection reconciliation.Selection) (*OperationResult, error) {
-	prepared, automatic, err := s.automaticPreparation(ctx, request.ContextName, selection)
+	prepared, automatic, err := s.automaticPreparation(ctx, request.ContextName, selection, false)
 	if err != nil {
 		return nil, err
 	}

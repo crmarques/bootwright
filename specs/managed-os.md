@@ -1522,6 +1522,8 @@ selected machine stage may boot inventory. Interrupted automatic preparation
 continues through `apply` with its frozen target set, while an unfinished manual
 discovery retains its explicit command. After preparation completes, `apply`
 builds and presents the installation plan and requires its own authorization.
+`plan` previews an unfinished manual discovery's frozen scope without converting
+it to an automatic preparation or performing its continuation.
 Unused authorization refuses before preparation, so a token for an unresolved
 disk is never carried forward. `--yes` skips ordinary confirmation only.
 An unattended installation still requires the digest of its resolved disk

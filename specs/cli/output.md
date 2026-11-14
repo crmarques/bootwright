@@ -66,6 +66,9 @@ All fields are required. Statuses and count semantics follow
 
 ## Human output
 
+Lifecycle previews explicitly state that no changes have been made; the plan
+presented by a mutation before confirmation carries no such statement.
+
 The shared renderer presents status meaning, resource identity, grouped facts,
 and the next safe action. Successful headlines use `✓`, pending or unchanged
 headlines use `○`, and failed or unknown headlines use `!`; `--ascii` selects

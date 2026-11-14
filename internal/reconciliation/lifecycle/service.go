@@ -119,7 +119,7 @@ func (s Service) Plan(ctx context.Context, request PlanRequest) (*PlanResult, er
 	if err != nil {
 		return nil, err
 	}
-	s, _, err = s.automaticPreparation(ctx, name, selection)
+	s, _, err = s.automaticPreparation(ctx, name, selection, true)
 	if err != nil {
 		return nil, err
 	}
