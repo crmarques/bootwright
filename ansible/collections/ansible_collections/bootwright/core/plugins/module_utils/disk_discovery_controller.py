@@ -244,19 +244,24 @@ class Controller:
         return parent / state["token"], self.request["private"]["url"] + "/" + state["token"] + "/discovery.iso"
 
     def publish(self):
-        self.phase = "media"
-        state = self.load()
-        for name in ("patched.iso", "discovery.iso", "initrd-0", "initrd-1"):
-            (self.root / name).unlink(missing_ok=True)
-        image = media.build(self.request, self.root, self.payload())
+        self.load()
         self.phase = "publication"
         destination, unused = self.publication()
         del unused
         self.publication_directories(destination)
-        target = destination / "discovery.iso"
-        publish_image(image, target, media.publication_bound(self.request["bootMedia"]["size"]))
-        media.native(["/usr/bin/chcon", "--reference", str(destination.parents[4]), "--recursive", str(destination)])
-        os.fsync(self.lock)
+        reap_publication_stages(destination)
+        media.reap_intermediates(self.root)
+        (self.root / "discovery.iso").unlink(missing_ok=True)
+        self.phase = "media"
+        with media.construction(ROOT, self.root, destination, self.request["bootMedia"]["size"]):
+            try:
+                image = media.build(self.request, self.root, self.payload())
+                self.phase = "publication"
+                publish_image(image, destination / "discovery.iso", media.publication_bound(self.request["bootMedia"]["size"]))
+                media.native(["/usr/bin/chcon", "--reference", str(destination.parents[4]), "--recursive", str(destination)])
+                os.fsync(self.lock)
+            finally:
+                (self.root / "discovery.iso").unlink(missing_ok=True)
 
     def publication_directories(self, destination):
         private = Path(self.request["private"]["path"])
@@ -404,6 +409,7 @@ class Controller:
         (directory / "discovery.iso").unlink(missing_ok=True)
         if directory.exists():
             records.directory(directory, False, None)
+            reap_publication_stages(directory)
             directory.rmdir()
         if directory.parent.exists():
             records.directory(directory.parent, False, None)
@@ -434,6 +440,7 @@ class Controller:
         return self.evidence()
 
     def reap(self):
+        media.reap_intermediates(self.root)
         self.reap_tls_stages()
         tls = self.root / "tls"
         if tls.exists():
@@ -504,29 +511,31 @@ class Controller:
 
 def publish_image(source, destination, maximum):
     stage = destination.parent / (".stage-" + secrets.token_hex(16))
-    source_fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    source_fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
     target_fd = None
     try:
         info = os.fstat(source_fd)
-        if not stat.S_ISREG(info.st_mode):
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
             raise ValueError("discovery publication file")
         if not 0 < info.st_size <= maximum:
             raise ValueError("discovery publication size")
-        capacity = os.statvfs(destination.parent)
-        if capacity.f_bavail * (capacity.f_frsize or capacity.f_bsize) < info.st_size:
-            raise OSError(errno.ENOSPC, "discovery publication capacity")
-        target_fd = os.open(stage, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o640)
-        while chunk := os.read(source_fd, 1 << 20):
-            pending = memoryview(chunk)
-            while pending:
-                written = os.write(target_fd, pending)
-                if written <= 0:
-                    raise ValueError("discovery publication copy")
-                pending = pending[written:]
-        os.fchmod(target_fd, 0o640)
-        os.fsync(target_fd)
+        try:
+            os.rename(source, stage)
+        except OSError as error:
+            if error.errno != errno.EXDEV:
+                raise
+            target_fd = copy_image(source_fd, stage, info.st_size)
+        completed = source_fd if target_fd is None else target_fd
+        os.fchmod(completed, 0o640)
+        os.fsync(completed)
         os.replace(stage, destination)
         directory = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+        source.unlink(missing_ok=True)
+        directory = os.open(source.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
             os.fsync(directory)
         finally:
@@ -536,6 +545,47 @@ def publish_image(source, destination, maximum):
         if target_fd is not None:
             os.close(target_fd)
         stage.unlink(missing_ok=True)
+
+
+def copy_image(source_fd, stage, size):
+    capacity = os.statvfs(stage.parent)
+    if capacity.f_bavail * (capacity.f_frsize or capacity.f_bsize) < size:
+        raise OSError(errno.ENOSPC, "discovery publication capacity")
+    fd = os.open(stage, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o640)
+    try:
+        remaining = size
+        while remaining:
+            chunk = os.read(source_fd, min(remaining, 1 << 20))
+            if not chunk:
+                raise ValueError("discovery publication size")
+            remaining -= len(chunk)
+            pending = memoryview(chunk)
+            while pending:
+                written = os.write(fd, pending)
+                if written <= 0:
+                    raise ValueError("discovery publication copy")
+                pending = pending[written:]
+        if os.read(source_fd, 1):
+            raise ValueError("discovery publication size")
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def reap_publication_stages(directory):
+    with os.scandir(directory) as entries:
+        names = [entry.name for entry in islice(entries, 4097)]
+    if len(names) > 4096:
+        raise ValueError("discovery publication entry bound")
+    for name in names:
+        if re.fullmatch(r"\.stage-[0-9a-f]{32}", name) is None:
+            continue
+        path = directory / name
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1:
+            raise ValueError("discovery publication stage")
+        path.unlink()
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):

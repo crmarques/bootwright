@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import hashlib
+import errno
+import fcntl
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import shlex
 import stat
 import re
 import posixpath
+import shutil
 
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_boot as boot
 from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
@@ -39,8 +43,11 @@ def publication_bound(source_size):
     return source_size + len(SUPPORTED_INITRDS) * (MAX_INITRD + boot.MAX_OVERLAY) + MAX_BOOT_GROWTH
 
 
-def native(argv, timeout=60, limit=65536):
-    result = bounded_process.run(argv, timeout=timeout, limit=limit, environment=ENV, capture_stderr=False)
+def native(argv, timeout=60, limit=65536, temporary=None):
+    environment = dict(ENV)
+    if temporary is not None:
+        environment["TMPDIR"] = str(temporary)
+    result = bounded_process.run(argv, timeout=timeout, limit=limit, environment=environment, capture_stderr=False)
     if result.code:
         raise CommandFailure(Path(argv[0]).name, result.code)
     return result.stdout
@@ -126,11 +133,43 @@ def build(request, root, payload):
 
 
 def remaster(held, root, payload):
+    reap_intermediates(root)
+    scratch = root / "media-work"
+    private_records.directory(scratch, True)
+    image = root / "discovery.iso"
+    complete = False
+    try:
+        additions = patched_initrds(held, scratch, payload)
+        # Lorax merges these directories and updates BIOS, GRUB and embedded
+        # EFI configuration in one supported --add operation. No intermediate ISO.
+        native(
+            [
+                "/usr/bin/mkksiso",
+                "--cmdline", " ".join(boot.ARGUMENTS),
+                "--rm-args",
+                "init rdinit root rootfstype inst.stage2 inst.ks inst.rescue rd.break rd.live.overlay rd.overlay rootflags rd.writable.fsimg",
+                *[value for path in additions for value in ("--add", str(path))],
+                held, str(image),
+            ],
+            timeout=900, temporary=scratch,
+        )
+        complete = True
+        return image
+    finally:
+        reap_intermediates(root)
+        if not complete:
+            image.unlink(missing_ok=True)
+
+
+def patched_initrds(held, scratch, payload):
     overlay = boot.overlay(payload)
     paths = initrd_paths(held)
-    arguments = ["/usr/bin/xorriso", "-indev", held, "-outdev", str(root / "patched.iso")]
-    for index, path in enumerate(paths):
-        original = root / ("initrd-" + str(index))
+    additions = set()
+    for path in paths:
+        original = scratch / path.lstrip("/")
+        for parent in reversed(original.relative_to(scratch).parents):
+            if parent != Path("."):
+                private_records.directory(scratch / parent, True)
         extract(held, path, original)
         digest_file(original, MAX_INITRD)
         qualified_initrd(original)
@@ -139,20 +178,39 @@ def remaster(held, root, payload):
             # is the kernel's supported concatenated initramfs format.
             destination.write(b"\0" * (-destination.tell() % 4))
             destination.write(overlay)
-        arguments.extend(("-map", str(original), path))
-    arguments.extend(("-boot_image", "any", "replay", "-commit"))
-    native(arguments, timeout=900)
-    # Lorax updates the BIOS/GRUB configurations and the embedded EFI image.
-    native(
-        [
-            "/usr/bin/mkksiso",
-            "--cmdline",
-            " ".join(boot.ARGUMENTS),
-            "--rm-args",
-            "init rdinit root rootfstype inst.stage2 inst.ks inst.rescue rd.break rd.live.overlay rd.overlay rootflags rd.writable.fsimg",
-            str(root / "patched.iso"),
-            str(root / "discovery.iso"),
-        ],
-        timeout=900,
-    )
-    return root / "discovery.iso"
+        additions.add(scratch / original.relative_to(scratch).parts[0])
+    return sorted(additions)
+
+
+def reap_intermediates(root):
+    scratch = root / "media-work"
+    if scratch.exists() or scratch.is_symlink():
+        private_records.directory(scratch, False)
+        # Linux's descriptor-based rmtree never follows a substituted link.
+        if not shutil.rmtree.avoids_symlink_attacks:
+            raise ValueError("discovery scratch cleanup is unsupported")
+        shutil.rmtree(scratch)
+    for name in ("patched.iso", "initrd-0", "initrd-1"):
+        (root / name).unlink(missing_ok=True)
+
+
+@contextmanager
+def construction(lock_root, work, destination, source_size):
+    # Serialize only construction/publication across contexts. Published images
+    # remain allocated while other nodes boot, so the next check includes them.
+    private_records.directory(lock_root, False)
+    fd = os.open(lock_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        maximum = publication_bound(source_size)
+        intermediates = len(SUPPORTED_INITRDS) * (MAX_INITRD + boot.MAX_OVERLAY) + MAX_BOOT_GROWTH
+        budgets = {work.stat().st_dev: (work, maximum + intermediates)}
+        if destination.stat().st_dev not in budgets:
+            budgets[destination.stat().st_dev] = (destination, maximum)
+        for path, required in budgets.values():
+            capacity = os.statvfs(path)
+            if capacity.f_bavail * (capacity.f_frsize or capacity.f_bsize) < required:
+                raise OSError(errno.ENOSPC, "discovery construction capacity")
+        yield
+    finally:
+        os.close(fd)

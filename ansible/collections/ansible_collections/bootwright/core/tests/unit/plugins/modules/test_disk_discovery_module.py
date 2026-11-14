@@ -50,9 +50,10 @@ def test_publication_refusals_are_distinct_from_media_construction():
     (OSError(errno.ENOSPC, "SECRET"), "publication-space"),
     (OSError(errno.EDQUOT, "SECRET"), "publication-space"),
 ])
-def test_publication_capacity_and_copy_diagnostics_are_safe_and_actionable(error, expected):
-    result = module.diagnostic(error, SimpleNamespace(phase="publication"))
-    assert result == {"discovery_failure": expected, "discovery_phase": "publication"}
+@pytest.mark.parametrize("phase", ("publication", "media"))
+def test_publication_capacity_and_copy_diagnostics_are_safe_and_actionable(error, expected, phase):
+    result = module.diagnostic(error, SimpleNamespace(phase=phase))
+    assert result == {"discovery_failure": expected, "discovery_phase": phase}
     assert "SECRET" not in repr(result)
 
 

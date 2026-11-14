@@ -332,6 +332,7 @@ def root_owned_tree(tmp_path, monkeypatch, foreign_inode=None):
     # Tests run without root. Keep real mkdir, lstat, modes, file publication
     # and fsync; simulate only root ownership and a safe fixture ancestry.
     original_lstat = Path.lstat
+    monkeypatch.setattr(controller, "ROOT", tmp_path)
 
     def observed(path, *args, **kwargs):
         fields = list(original_lstat(path, *args, **kwargs))
@@ -390,7 +391,12 @@ def test_publication_accepts_the_qualified_initramfs_growth(tmp_path, monkeypatc
     instance.load = lambda: {"token": "a" * 64}
     instance.payload = lambda: {}
     instance.publication = lambda: (destination, "https://example.test/private/discovery.iso")
-    monkeypatch.setattr(controller.media, "build", lambda *args: image)
+
+    def build(*args):
+        image.write_bytes(b"synthetic private ISO")
+        return image
+
+    monkeypatch.setattr(controller.media, "build", build)
     monkeypatch.setattr(controller.media, "native", Mock(return_value=b""))
     foreign_inode = (serving / "private").stat().st_ino if layout == "foreign-child" else None
     root_owned_tree(tmp_path, monkeypatch, foreign_inode)
@@ -485,6 +491,7 @@ def test_publication_completes_valid_short_writes(tmp_path, monkeypatch):
         return original(fd, data[:37])
 
     monkeypatch.setattr(controller.os, "write", short_write)
+    monkeypatch.setattr(controller.os, "rename", Mock(side_effect=OSError(errno.EXDEV, "synthetic filesystem boundary")))
     controller.publish_image(source, target, len(content))
     assert len(writes) > 1
     assert target.read_bytes() == content
@@ -498,6 +505,7 @@ def test_publication_checks_available_space_before_creating_a_stage(tmp_path, mo
     monkeypatch.setattr(controller.os, "statvfs", lambda path: SimpleNamespace(f_bavail=1, f_frsize=1, f_bsize=4096))
     writer = Mock(side_effect=AssertionError("copy started without capacity"))
     monkeypatch.setattr(controller.os, "write", writer)
+    monkeypatch.setattr(controller.os, "rename", Mock(side_effect=OSError(errno.EXDEV, "synthetic filesystem boundary")))
     with pytest.raises(OSError) as caught:
         controller.publish_image(source, target, source.stat().st_size)
     assert caught.value.errno == errno.ENOSPC
@@ -523,6 +531,7 @@ def test_failed_publication_preserves_the_destination_and_removes_its_stage(tmp_
         return 0
 
     monkeypatch.setattr(controller.os, "write", fail_after_progress)
+    monkeypatch.setattr(controller.os, "rename", Mock(side_effect=OSError(errno.EXDEV, "synthetic filesystem boundary")))
     with pytest.raises(OSError if failure else ValueError) as caught:
         controller.publish_image(source, target, source.stat().st_size)
     if failure:
@@ -556,10 +565,12 @@ def test_publication_bound_comes_from_the_qualified_components():
 
 def test_exact_publication_limit_is_accepted_but_the_next_byte_is_refused(tmp_path):
     source, target = tmp_path / "image.iso", tmp_path / "published.iso"
-    source.write_bytes(b"synthetic media at its bound")
+    content = b"synthetic media at its bound"
+    source.write_bytes(content)
     controller.publish_image(source, target, source.stat().st_size)
-    assert target.read_bytes() == source.read_bytes()
+    assert target.read_bytes() == content
     target.unlink()
+    source.write_bytes(content)
     with pytest.raises(ValueError, match="publication size"):
         controller.publish_image(source, target, source.stat().st_size - 1)
     assert not target.exists()

@@ -135,7 +135,7 @@ def diagnostic(error, controller):
     elif isinstance(error, FileNotFoundError):
         code = "missing-file"
     elif isinstance(error, OSError) and error.errno in (errno.ENOSPC, errno.EDQUOT):
-        code = "publication-space" if getattr(controller, "phase", "") == "publication" else "filesystem"
+        code = "publication-space" if getattr(controller, "phase", "") in ("media", "publication") else "filesystem"
     elif isinstance(error, OSError):
         code = "filesystem"
     elif isinstance(error, bounded_process.Failure):

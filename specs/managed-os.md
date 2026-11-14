@@ -1512,10 +1512,27 @@ only the frozen private machine subtree. Retry repairs restrictive directory
 creation residue there without changing unrelated ancestors or other safe modes.
 Published ISO permissions are set explicitly before atomic publication,
 independently of the caller's umask.
-Publication completes short writes and checks available space before copying;
-the capacity check reserves no space. A failed copy removes its stage and
-preserves any previous publication. Space and quota refusals name the capacity
-problem without exposing private paths. BMC boot refusals identify media
+Discovery builds one private image directly from the held source through
+Lorax's documented `mkksiso --add` directory merge. Only the qualified patched
+initramfs members enter those directories; the existing BIOS and EFI boot
+configuration updates and signed boot components are retained. The package
+tree and installer second stage are not extracted per node. No private
+payload or mutable patched component is shared between machines or operations.
+Construction and publication hold one controller-wide kernel lock, released
+before network boot and inventory collection. Under it, capacity checks include
+the bounded image, initramfs and native-tool scratch on the work filesystem,
+and a publication copy when it uses another filesystem. Earlier published
+images remain allocated and count against the next builder's available space.
+The checks reserve no space against unrelated writers or quotas.
+Publication transfers the completed single-link image by atomic rename when
+the filesystem permits it. Cross-filesystem rename detection selects an
+exact-size copy with short-write handling and a fresh capacity check. Both
+paths set permissions and sync before atomic replacement. A failed transfer
+removes its stage and preserves any previous publication. Rebuild and removal
+reclaim only attributed scratch and regular publication stages; immutable
+receipts and active boot media remain under their existing ownership rules.
+Space and quota refusals name the capacity problem without exposing private
+paths. BMC boot refusals identify media
 insertion, boot selection or power-on and a bounded trust, privilege or fetch
 cause without exposing firmware text or private URLs.
 
