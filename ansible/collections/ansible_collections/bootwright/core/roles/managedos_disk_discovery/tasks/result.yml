@@ -32,6 +32,23 @@
       binding: the attempt binding was refused
       bmc-tls: the management controller certificate was refused
       media-tls: private media TLS policy was refused
+      media-certificate: the artifact listener certificate did not verify against the bound serving certificate
+      media-handshake: the artifact listener TLS handshake failed
+      media-redirect: the artifact listener attempted a redirect; private URLs are never forwarded
+      media-http-400: the artifact listener returned HTTP 400
+      media-http-401: the artifact listener returned HTTP 401
+      media-http-403: the artifact listener returned HTTP 403; check serving permissions and SELinux labels
+      media-http-404: the artifact listener returned HTTP 404; check the published file and served root
+      media-http-416: the artifact listener refused the first-byte range with HTTP 416
+      media-http-500: the artifact listener returned HTTP 500
+      media-http-502: the artifact listener returned HTTP 502
+      media-http-503: the artifact listener returned HTTP 503
+      media-http: the artifact listener refused the HTTP request
+      media-dns: the artifact listener name could not be resolved
+      media-timeout: the artifact listener connection or first-byte response timed out
+      media-refused: the artifact listener TCP connection was refused
+      media-connection: the artifact listener connection failed
+      media-response: the artifact listener did not return a successful first byte
       hardware-identity: the complete machine UUID and MAC identity was not proved
       external-ownership: discovery requires a powered-off target with no attached virtual media before initial custody
       publication-ownership: the private publication has unresolved ownership

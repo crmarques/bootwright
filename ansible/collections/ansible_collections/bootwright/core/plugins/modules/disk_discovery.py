@@ -59,9 +59,34 @@ discovery_phase:
   type: str
 """
 
+import socket
+import ssl
+import urllib.error
+
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.bootwright.core.plugins.module_utils import bounded_process
 from ansible_collections.bootwright.core.plugins.module_utils import disk_discovery_controller as custody
+
+
+def delivery_code(error):
+    if isinstance(error, urllib.error.HTTPError):
+        status = error.code
+        if not isinstance(status, int) or isinstance(status, bool):
+            return "media-http"
+        if 300 <= status < 400:
+            return "media-redirect"
+        return {
+            400: "media-http-400", 401: "media-http-401", 403: "media-http-403", 404: "media-http-404",
+            416: "media-http-416", 500: "media-http-500", 502: "media-http-502", 503: "media-http-503",
+        }.get(status, "media-http")
+    reason = error.reason if isinstance(error, urllib.error.URLError) else error
+    for kind, code in (
+        (ssl.SSLCertVerificationError, "media-certificate"), (ssl.SSLError, "media-handshake"),
+        (socket.gaierror, "media-dns"), (TimeoutError, "media-timeout"), (ConnectionRefusedError, "media-refused"),
+    ):
+        if isinstance(reason, kind):
+            return code
+    return "media-connection"
 
 
 def diagnostic(error, controller):
@@ -86,6 +111,7 @@ def diagnostic(error, controller):
         "RHEL initrd lacks discovery bootstrap tools": "initrd-tools",
         "unqualified discovery initrd layout": "initrd-layout",
         "discovery report deadline": "inventory-timeout",
+        "private discovery listener unavailable": "media-response",
         "custody-directory": "custody-directory",
         "custody-mode": "custody-mode",
         "custody-file": "custody-file",
@@ -97,6 +123,8 @@ def diagnostic(error, controller):
         code = "bmc-tls"
     elif isinstance(error, custody.redfish_control.ControllerError):
         code = "bmc-request"
+    elif getattr(controller, "phase", "") == "media-delivery" and isinstance(error, OSError):
+        code = delivery_code(error)
     elif isinstance(error, FileNotFoundError):
         code = "missing-file"
     elif isinstance(error, OSError):

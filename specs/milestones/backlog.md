@@ -9038,3 +9038,11 @@ proves the read-only boundary, clarifies preview output and corrects private
 publication directory creation and serving permissions. Keep manual and automatic discovery on the
 same native procedure and preserve frozen-operation recovery. No real-host
 operation or push is authorized.
+
+### D265
+
+**owner** (2026-11-14): reports discovery failing during private HTTPS delivery
+after publication. Authorizes X459 (M1, B1389, B1390) to diagnose and correct
+that boundary, preserving certificate verification and frozen recovery. Use
+focused checks for the interactive fix cycle. No real-host operation or push
+is authorized.

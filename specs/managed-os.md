@@ -1480,6 +1480,8 @@ Linux-visible disk identities through a confirmed inventory boot. `apply`
 automatically prepares missing inventory before it plans installation; the
 explicit `machine discover` command runs the same preparation independently.
 Both entry points use the same request derivation, runner and native procedure.
+Private media delivery refusals distinguish HTTP, certificate and connection
+causes without exposing the private URL.
 The procedure requires verified BMC and media delivery, qualified RHEL boot media,
 complete machine identity, and an already powered-off non-controller target.
 It reserves the same hardware as power and lifecycle effects. Boot and media
