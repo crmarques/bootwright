@@ -12,10 +12,13 @@ tests/unit/plugins, so these checks live here.
 
 from __future__ import annotations
 
+import ast
 import pathlib
 
 from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
+
+from ansible_collections.bootwright.core.plugins.module_utils import redfish_media_verification
 
 ROLE = pathlib.Path(__file__).resolve().parents[2] / "roles" / "substrate_libvirt_machine"
 LOADER = DataLoader()
@@ -68,4 +71,15 @@ def test_the_controller_reaches_the_pool_by_name_through_its_libvirt_connection(
 
 
 def test_the_emulator_starts_with_media_verification_enabled():
-    assert settings(render("emulator.conf.j2"), "SUSHY_EMULATOR_VMEDIA_VERIFY_SSL") == [' True']
+    configuration = {
+        statement.targets[0].id: ast.literal_eval(statement.value)
+        for statement in ast.parse(render("emulator.conf.j2")).body
+    }
+    assert configuration["SUSHY_EMULATOR_VMEDIA_VERIFY_SSL"] is True
+    device = configuration["SUSHY_EMULATOR_VMEDIA_DEVICES"]["Cd"]
+    # The pinned driver's get_device_image_info reports this device value,
+    # not the global fallback used when fetching an image.
+    reported = {"VerifyCertificate": device.get("Verify", False)}
+    member = "/redfish/v1/Systems/%s/VirtualMedia/Cd" % REQUEST["uuid"]
+    row = redfish_media_verification.setting(member, "VerifyCertificate", reported, {}, True)
+    assert row[2] is True

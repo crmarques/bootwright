@@ -59,6 +59,19 @@ on 2026-09-28:
   [B743](../../specs/milestones/delivered.md#x294--a-fips-cluster-built-from-a-controller-off-its-libvirt-host). Its first accepted run drove that
   surface against the image: the import, the verified fetch, a refused
   unrelated certificate and the removal at eject all behaved as read.
+- Initial device verification, checked against the same pinned source on
+  2026-11-14: `BaseDriver.get_device_image_info` reports the device's `Verify`
+  value, defaulting to false. `insert_image` instead falls back to
+  `SUSHY_EMULATOR_VMEDIA_VERIFY_SSL` when that device key is absent. The global
+  setting alone therefore leaves the Redfish response false even when the
+  fetch would verify. The
+  [emulator configuration](../../ansible/collections/ansible_collections/bootwright/core/roles/substrate_libvirt_machine/templates/emulator.conf.j2)
+  sets both the global fallback and `Cd.Verify` to true. The
+  [configuration regression](../../ansible/collections/ansible_collections/bootwright/core/tests/unit/test_substrate_libvirt_controller_mounts.py)
+  drives that reported initial state through the shared verification preflight
+  without an ETag. This implements the existing
+  [verified-media contract](../../specs/substrates.md#identity-and-power-operations)
+  at emulator initialization; it grants no exception for a later false value.
 - The TLS half of that trust was driven against the pinned image on
   2026-11-04, without network: a leaf shaped like Bootwright's
   `tlsCertificate` output (CA:FALSE, critical `digitalSignature`, `serverAuth`,
